@@ -123,7 +123,7 @@ cpu = 'wasm32'
 endian = 'little'
 
 [properties]
-longdouble_format = 'IEEE_DOUBLE_LE'
+longdouble_format = 'IEEE_QUAD_LE'
 
 [built-in options]
 c_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']

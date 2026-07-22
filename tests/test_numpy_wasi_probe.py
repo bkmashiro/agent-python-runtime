@@ -27,6 +27,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("-Dlapack=none", script)
         self.assertIn("-Ddisable-threading=true", script)
         self.assertIn("-Ddisable-optimization=true", script)
+        self.assertIn("longdouble_format = 'IEEE_QUAD_LE'", script)
+        self.assertNotIn("longdouble_format = 'IEEE_DOUBLE_LE'", script)
         self.assertIn('outcome = "setup_failed"', script)
         self.assertIn('outcome = "compile_failed"', script)
         self.assertIn("TARGET_PYTHON_ADAPTER", script)

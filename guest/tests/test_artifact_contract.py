@@ -48,6 +48,8 @@ class ArtifactVerifierTests(unittest.TestCase):
                     "alloc",
                     "dealloc",
                     "execute",
+                    "__internal_wasi_vfs_pack_fs",
+                    "__internal_wasi_vfs_rt_init",
                 ],
             },
         }

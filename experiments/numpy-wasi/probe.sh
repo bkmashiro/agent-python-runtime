@@ -46,6 +46,21 @@ PYTHONPATH="${PROBE_DIR}/cython" exec python3 "${PROBE_DIR}/cython/cython.py" "\
 EOF
 chmod 0755 "${CYTHON_WRAPPER}"
 
+export PROBE_DIR TARGET_PYTHON
+python3 - <<'PY'
+import os
+from pathlib import Path
+
+meson_build = Path(os.environ["PROBE_DIR"]) / "numpy" / "meson.build"
+text = meson_build.read_text()
+old = "py = import('python').find_installation(pure: false)"
+if text.count(old) != 1:
+    raise SystemExit("expected exactly one NumPy target-Python Meson seam")
+target_python = os.environ["TARGET_PYTHON"]
+new = f"py = import('python').find_installation({target_python!r}, pure: false)"
+meson_build.write_text(text.replace(old, new))
+PY
+
 CROSS_FILE="${PROBE_DIR}/wasi-cross.ini"
 cat >"${CROSS_FILE}" <<EOF
 [binaries]

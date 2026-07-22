@@ -29,6 +29,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("-Ddisable-optimization=true", script)
         self.assertIn('outcome = "setup_failed"', script)
         self.assertIn('outcome = "compile_failed"', script)
+        self.assertIn("expected exactly one NumPy target-Python Meson seam", script)
+        self.assertIn("find_installation({target_python!r}, pure: false)", script)
         self.assertIn("CYTHON_WRAPPER_DIR", script)
         self.assertIn('PATH="${CYTHON_WRAPPER_DIR}:${PATH}"', script)
         self.assertIn("diagnostic only", script)

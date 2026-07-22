@@ -11,15 +11,16 @@ import (
 )
 
 type concurrencyFetcher struct {
-	mu          sync.Mutex
-	active      int
-	maxActive   int
-	calls       int
-	waitFor     int
-	started     chan struct{}
-	startedOnce sync.Once
-	delays      map[string]time.Duration
-	bodies      map[string]string
+	mu               sync.Mutex
+	active           int
+	maxActive        int
+	calls            int
+	waitFor          int
+	started          chan struct{}
+	startedOnce      sync.Once
+	delays           map[string]time.Duration
+	bodies           map[string]string
+	blockUntilCancel bool
 }
 
 func (fetcher *concurrencyFetcher) Fetch(ctx context.Context, request capability.ResolvedRequest, _ uint32) (capability.FetchOutput, error) {
@@ -46,6 +47,10 @@ func (fetcher *concurrencyFetcher) Fetch(ctx context.Context, request capability
 			return capability.FetchOutput{}, ctx.Err()
 		case <-fetcher.started:
 		}
+	}
+	if fetcher.blockUntilCancel {
+		<-ctx.Done()
+		return capability.FetchOutput{}, ctx.Err()
 	}
 	if delay > 0 {
 		timer := time.NewTimer(delay)
@@ -148,7 +153,7 @@ func TestConcurrentByteAdmissionIsIndependentOfCompletionOrder(t *testing.T) {
 }
 
 func TestConcurrentFetchCancellationJoinsWorkers(t *testing.T) {
-	fetcher := &concurrencyFetcher{waitFor: 2, started: make(chan struct{})}
+	fetcher := &concurrencyFetcher{waitFor: 2, started: make(chan struct{}), blockUntilCancel: true}
 	grant := testGrant()
 	grant.MaxRequestsPerCall = 4
 	grant.MaxTotalRequests = 4

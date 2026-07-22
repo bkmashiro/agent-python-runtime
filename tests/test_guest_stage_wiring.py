@@ -13,11 +13,15 @@ class GuestStageEvidenceWiringTests(unittest.TestCase):
         self.assertIn('tools/write_guest_stage_evidence.py" evidence', script)
         self.assertLess(
             script.index('tools/write_guest_stage_evidence.py" manifest'),
-            script.index('"${WASI_VFS}" pack'),
+            script.index('pack_guest "${FINAL_GUEST}"'),
         )
+        self.assertIn('pack_guest "${FINAL_GUEST}"', script)
+        self.assertIn('pack_guest "${REPEAT_PACKED_GUEST}"', script)
+        self.assertIn('"${WASM_TOOLS}" validate "${REPEAT_PACKED_GUEST}"', script)
         for argument in (
             '--raw-wasm "${RAW_GUEST}"',
             '--final-wasm "${FINAL_GUEST}"',
+            '--repeat-packed-wasm "${REPEAT_PACKED_GUEST}"',
             '--patched-wasi-vfs-archive "${WASI_VFS_LIB}"',
             '--linked-storage-object "${WASI_VFS_STORAGE_OBJECT}"',
             '--wasi-vfs-cli "${WASI_VFS}"',

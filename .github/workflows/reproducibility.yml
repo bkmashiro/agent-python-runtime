@@ -173,8 +173,10 @@ jobs:
               raise SystemExit("retained build-stage evidence is invalid")
           print(json.dumps({
               "outcome": report["outcome"],
+              "repeat_pack_outcome": report["repeat_pack_outcome"],
               "raw_wasm_match": report["raw_wasm_match"],
               "final_wasm_match": report["final_wasm_match"],
+              "same_runner_pack_matches": report["same_runner_pack_matches"],
               "pack_input_matches": report["pack_input_matches"],
           }, sort_keys=True))
           PY

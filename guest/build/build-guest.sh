@@ -289,9 +289,20 @@ if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
     --output "${REPRO_VFS_MANIFEST}"
 fi
 
-"${WASI_VFS}" pack "${RAW_GUEST}" \
-  --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
-  -o "${FINAL_GUEST}"
+pack_guest() {
+  local output=$1
+  "${WASI_VFS}" pack "${RAW_GUEST}" \
+    --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
+    -o "${output}"
+}
+
+REPEAT_PACKED_GUEST=
+pack_guest "${FINAL_GUEST}"
+if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
+  REPEAT_PACKED_GUEST="${WORK_DIR}/agent-python-runtime.pack-b.wasm"
+  pack_guest "${REPEAT_PACKED_GUEST}"
+  "${WASM_TOOLS}" validate "${REPEAT_PACKED_GUEST}"
+fi
 
 "${WASM_TOOLS}" validate "${FINAL_GUEST}"
 "${WASM_TOOLS}" print "${FINAL_GUEST}" > "${DIST_DIR}/agent-python-runtime.wat"
@@ -347,6 +358,7 @@ if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
     --evidence-dir "${AGENT_RUNTIME_REPRO_EVIDENCE_DIR}" \
     --raw-wasm "${RAW_GUEST}" \
     --final-wasm "${FINAL_GUEST}" \
+    --repeat-packed-wasm "${REPEAT_PACKED_GUEST}" \
     --patched-wasi-vfs-archive "${WASI_VFS_LIB}" \
     --linked-storage-object "${WASI_VFS_STORAGE_OBJECT}" \
     --wasi-vfs-cli "${WASI_VFS}" \

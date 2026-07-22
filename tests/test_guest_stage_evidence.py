@@ -33,6 +33,7 @@ class GuestStageEvidenceTests(unittest.TestCase):
             payloads = {
                 "raw.wasm": b"raw-wasm",
                 "final.wasm": b"final-wasm",
+                "repeat.wasm": b"repeat-wasm",
                 "libwasi_vfs.a": b"patched-archive",
                 "linked_storage.o": b"linked-object",
                 "wasi-vfs": b"locked-cli",
@@ -53,6 +54,7 @@ class GuestStageEvidenceTests(unittest.TestCase):
                     evidence_dir=evidence,
                     raw_wasm=inputs / "raw.wasm",
                     final_wasm=inputs / "final.wasm",
+                    repeat_packed_wasm=inputs / "repeat.wasm",
                     patched_wasi_vfs_archive=inputs / "libwasi_vfs.a",
                     linked_storage_object=inputs / "linked_storage.o",
                     wasi_vfs_cli=inputs / "wasi-vfs",
@@ -79,6 +81,7 @@ class GuestStageEvidenceTests(unittest.TestCase):
             report_path = evidence / "stage-evidence.json"
             manifest_path = evidence / "vfs-manifest.json"
             self.assertEqual(report, json.loads(report_path.read_text()))
+            self.assertEqual(report["schema_version"], 2)
             serialized = report_path.read_text()
             self.assertNotIn("excluded-value", serialized)
             self.assertNotIn("UNRELATED_ENV", serialized)
@@ -86,6 +89,7 @@ class GuestStageEvidenceTests(unittest.TestCase):
             retained = {
                 "raw_wasm": ("agent-python-runtime.raw.wasm", payloads["raw.wasm"]),
                 "final_wasm": ("agent-python-runtime.wasm", payloads["final.wasm"]),
+                "repeat_packed_wasm": ("agent-python-runtime.pack-b.wasm", payloads["repeat.wasm"]),
                 "patched_wasi_vfs_archive": ("libwasi_vfs.patched.a", payloads["libwasi_vfs.a"]),
                 "linked_storage_object": ("linked_storage.o", payloads["linked_storage.o"]),
                 "source_lock": ("sources.lock.json", payloads["sources.lock.json"]),
@@ -122,6 +126,8 @@ class GuestStageEvidenceTests(unittest.TestCase):
             self.assertEqual(report["build_identity"]["github"]["replica"], "one")
             self.assertEqual(report["pack_command"][1], "pack")
             self.assertEqual(report["pack_command"][3:5], ["--dir", "/dev/shm/agent-runtime-vfs::/usr/lib/python3.14"])
+            self.assertEqual(report["repeat_pack_command"][1], "pack")
+            self.assertTrue(report["repeat_pack_command"][-1].endswith("repeat.wasm"))
 
     def test_rejects_invalid_build_identity_before_writing(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -139,6 +145,7 @@ class GuestStageEvidenceTests(unittest.TestCase):
                     evidence_dir=evidence,
                     raw_wasm=inputs / "raw",
                     final_wasm=inputs / "final",
+                    repeat_packed_wasm=inputs / "final",
                     patched_wasi_vfs_archive=inputs / "archive",
                     linked_storage_object=inputs / "object",
                     wasi_vfs_cli=inputs / "cli",

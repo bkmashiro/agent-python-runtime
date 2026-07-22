@@ -15,6 +15,7 @@ from typing import Any
 RETAINED_NAMES = {
     "raw_wasm": "agent-python-runtime.raw.wasm",
     "final_wasm": "agent-python-runtime.wasm",
+    "repeat_packed_wasm": "agent-python-runtime.pack-b.wasm",
     "patched_wasi_vfs_archive": "libwasi_vfs.patched.a",
     "linked_storage_object": "linked_storage.o",
     "source_lock": "sources.lock.json",
@@ -94,6 +95,7 @@ def write_evidence(
     evidence_dir: pathlib.Path,
     raw_wasm: pathlib.Path,
     final_wasm: pathlib.Path,
+    repeat_packed_wasm: pathlib.Path,
     patched_wasi_vfs_archive: pathlib.Path,
     linked_storage_object: pathlib.Path,
     wasi_vfs_cli: pathlib.Path,
@@ -115,6 +117,7 @@ def write_evidence(
     inputs = {
         "raw_wasm": pathlib.Path(raw_wasm),
         "final_wasm": pathlib.Path(final_wasm),
+        "repeat_packed_wasm": pathlib.Path(repeat_packed_wasm),
         "patched_wasi_vfs_archive": pathlib.Path(patched_wasi_vfs_archive),
         "linked_storage_object": pathlib.Path(linked_storage_object),
         "wasi_vfs_cli": pathlib.Path(wasi_vfs_cli),
@@ -164,9 +167,10 @@ def write_evidence(
 
     raw_path = str(inputs["raw_wasm"])
     final_path = str(inputs["final_wasm"])
+    repeat_path = str(inputs["repeat_packed_wasm"])
     cli_path = str(inputs["wasi_vfs_cli"])
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "evidence_type": "guest-reproducibility-stage-identities",
         "build_identity": {
             "repository_commit": repository_commit,
@@ -194,6 +198,15 @@ def write_evidence(
             "-o",
             final_path,
         ],
+        "repeat_pack_command": [
+            cli_path,
+            "pack",
+            raw_path,
+            "--dir",
+            f"{configured_vfs_root}::/usr/lib/python3.14",
+            "-o",
+            repeat_path,
+        ],
         "files": files,
     }
     report_path = evidence_dir / "stage-evidence.json"
@@ -213,6 +226,7 @@ def main() -> int:
     evidence_parser.add_argument("--evidence-dir", required=True, type=pathlib.Path)
     evidence_parser.add_argument("--raw-wasm", required=True, type=pathlib.Path)
     evidence_parser.add_argument("--final-wasm", required=True, type=pathlib.Path)
+    evidence_parser.add_argument("--repeat-packed-wasm", required=True, type=pathlib.Path)
     evidence_parser.add_argument("--patched-wasi-vfs-archive", required=True, type=pathlib.Path)
     evidence_parser.add_argument("--linked-storage-object", required=True, type=pathlib.Path)
     evidence_parser.add_argument("--wasi-vfs-cli", required=True, type=pathlib.Path)
@@ -239,6 +253,7 @@ def main() -> int:
         evidence_dir=args.evidence_dir,
         raw_wasm=args.raw_wasm,
         final_wasm=args.final_wasm,
+        repeat_packed_wasm=args.repeat_packed_wasm,
         patched_wasi_vfs_archive=args.patched_wasi_vfs_archive,
         linked_storage_object=args.linked_storage_object,
         wasi_vfs_cli=args.wasi_vfs_cli,

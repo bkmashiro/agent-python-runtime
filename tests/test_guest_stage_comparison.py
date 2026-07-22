@@ -19,7 +19,9 @@ COMPARE_SPEC.loader.exec_module(COMPARE)
 
 
 class GuestStageComparisonTests(unittest.TestCase):
-    def write_stage(self, root, replica, raw, final, vfs_payload=b"same-vfs", cli=b"same-cli"):
+    def write_stage(self, root, replica, raw, final, repeat=None, vfs_payload=b"same-vfs", cli=b"same-cli"):
+        if repeat is None:
+            repeat = final
         inputs = root / f"inputs-{replica}"
         inputs.mkdir()
         vfs = root / f"vfs-{replica}"
@@ -28,6 +30,7 @@ class GuestStageComparisonTests(unittest.TestCase):
         values = {
             "raw": raw,
             "final": final,
+            "repeat": repeat,
             "archive": b"same-archive",
             "object": b"same-object",
             "cli": cli,
@@ -42,6 +45,7 @@ class GuestStageComparisonTests(unittest.TestCase):
             evidence_dir=evidence,
             raw_wasm=inputs / "raw",
             final_wasm=inputs / "final",
+            repeat_packed_wasm=inputs / "repeat",
             patched_wasi_vfs_archive=inputs / "archive",
             linked_storage_object=inputs / "object",
             wasi_vfs_cli=inputs / "cli",
@@ -68,10 +72,16 @@ class GuestStageComparisonTests(unittest.TestCase):
             right = self.write_stage(root, "two", b"same-raw", b"final-two")
             report = COMPARE.compare_stage_evidence(left, right)
 
+        self.assertEqual(report["schema_version"], 2)
         self.assertEqual(report["outcome"], "pack-stage drift established")
         self.assertTrue(report["raw_wasm_match"])
         self.assertFalse(report["final_wasm_match"])
         self.assertTrue(all(report["pack_input_matches"].values()))
+        self.assertEqual(report["same_runner_pack_matches"], {"left": True, "right": True})
+        self.assertEqual(
+            report["repeat_pack_outcome"],
+            "same-run packs match; cross-runner final drift remains",
+        )
         self.assertEqual(report["validation_errors"], [])
 
     def test_different_raw_localizes_first_observed_drift_to_raw_or_earlier(self):
@@ -85,6 +95,17 @@ class GuestStageComparisonTests(unittest.TestCase):
         self.assertFalse(report["raw_wasm_match"])
         self.assertEqual(report["validation_errors"], [])
 
+    def test_same_runner_repeat_drift_is_reported_as_sufficient(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            left = self.write_stage(root, "one", b"same-raw", b"final-one", repeat=b"repeat-one")
+            right = self.write_stage(root, "two", b"same-raw", b"final-two", repeat=b"final-two")
+            report = COMPARE.compare_stage_evidence(left, right)
+
+        self.assertEqual(report["outcome"], "pack-stage drift established")
+        self.assertEqual(report["same_runner_pack_matches"], {"left": False, "right": True})
+        self.assertEqual(report["repeat_pack_outcome"], "same-run pack drift established")
+
     def test_changed_pack_input_blocks_pack_stage_attribution(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
@@ -94,6 +115,20 @@ class GuestStageComparisonTests(unittest.TestCase):
 
         self.assertEqual(report["outcome"], "inconclusive due to mismatched pack inputs")
         self.assertFalse(report["pack_input_matches"]["vfs_manifest"])
+
+    def test_old_stage_schema_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            left = self.write_stage(root, "one", b"same-raw", b"final-one")
+            right = self.write_stage(root, "two", b"same-raw", b"final-two")
+            path = left / "stage-evidence.json"
+            evidence = json.loads(path.read_text())
+            evidence["schema_version"] = 1
+            path.write_text(json.dumps(evidence))
+            report = COMPARE.compare_stage_evidence(left, right)
+
+        self.assertEqual(report["outcome"], "inconclusive due to missing or invalid evidence")
+        self.assertTrue(any("schema/type is invalid" in error for error in report["validation_errors"]))
 
     def test_tampered_retained_file_fails_validation(self):
         with tempfile.TemporaryDirectory() as temp:

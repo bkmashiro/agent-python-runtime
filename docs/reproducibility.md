@@ -23,6 +23,24 @@ Run `29933187448` on signed candidate `3c12d77` normalized VFS staging at fixed 
 
 The current candidate hash-locks that exact upstream C source, fail-closed replaces its four struct allocations with `calloc`, recompiles only the C object with the already pinned wasi-sdk, and replaces the one matching member in the already locked static archive. It does not introduce a Rust toolchain or weaken exact comparison. Exact reproducibility is **not yet claimed** until another controlled run passes.
 
+### Stage-localization research result
+
+Run [`29946939524`](https://github.com/bkmashiro/agent-python-runtime/actions/runs/29946939524) on signed research commit `760a57e16bc2211d8b254c216f9842f70c489051` retained the immediately pre-pack artifact and pack inputs from two independent clean Linux/X64 jobs (`89014626273` and `89014626132`). The retained evidence validated without errors, and a local replay produced the exact CI stage-report SHA-256 `8cfd1ba7a453315e95969328b498271f7187a4c1baf24768ee8de7f05453aa34`.
+
+The two jobs produced identical:
+
+- raw Wasm: `c94b81a91af602e62c2947a4dbae0a4cb6b42db2630ecd006566043bd0d59f12`;
+- patched wasi-vfs archive: `6f5825ac030338e385850437c23d810cae012bd2b90897eaf3b24325cfa08b6b`;
+- replacement `linked_storage.o`: `e5652ea632ded0f54b75fec4da7f870694fe387c0e7d26acea37d104695f0b15`;
+- pre-pack VFS manifest: `bb1b718aed298d9a01852804e02aeceb4b1dc53e56a17d40d6978f208d68328c`;
+- extracted wasi-vfs CLI: `52766ec613b4dc80fbed612b8db6c896358a988a32d6b7cdb80e48e574edb7cb`.
+
+The final Wasm files were equal in size but differed in SHA-256 (`7d7c9e96e99acc35e56bea43d1258abf4b6e3ac5ab11d7009ea133cbd3861023` versus `2ffe4c6025aa17e1b6e2c98a0cc5fff78bddb949e069151f85aa8b197e7f9c53`). Only Core Wasm section `11` differed. Manifest, SPDX, notices, and checksum-file differences were derived from the final artifact digest rather than separate producer drift.
+
+**Supported conclusion:** the first observed drift stage is wasi-vfs/Wizer packing. Compile/link/static-data drift is excluded for this run.
+
+**Not yet supported:** the evidence does not identify the specific pack-time object, entropy source, allocator range, or serializer behavior. The next single falsification experiment runs two fresh wasi-vfs processes against one raw Wasm and one frozen VFS tree on the same runner.
+
 ## Running the controlled workflow
 
 Run the controlled workflow on the private repository with:

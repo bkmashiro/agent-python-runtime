@@ -21,8 +21,8 @@ REQUIRED_EXPORTS = {
 ALLOWED_SUPPORT_EXPORTS = {
     "__data_end",
     "__heap_base",
-    "__internal_wasi_vfs_pack_fs",
-    "__internal_wasi_vfs_rt_init",
+    "__wasi_vfs_rt_init",
+    "wasi_vfs_pack_fs",
 }
 ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1"}
 

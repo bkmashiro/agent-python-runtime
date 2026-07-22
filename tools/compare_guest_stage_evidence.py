@@ -14,6 +14,7 @@ from typing import Any
 RETAINED_ROLES = {
     "raw_wasm",
     "final_wasm",
+    "repeat_packed_wasm",
     "patched_wasi_vfs_archive",
     "linked_storage_object",
     "source_lock",
@@ -37,7 +38,7 @@ def read_and_validate(directory: pathlib.Path, label: str) -> tuple[dict[str, An
         report = json.loads(report_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         return {}, [f"{label} stage report is unreadable: {error}"]
-    if report.get("schema_version") != 1 or report.get("evidence_type") != "guest-reproducibility-stage-identities":
+    if report.get("schema_version") != 2 or report.get("evidence_type") != "guest-reproducibility-stage-identities":
         errors.append(f"{label} stage report schema/type is invalid")
     files = report.get("files")
     if not isinstance(files, dict):
@@ -99,6 +100,12 @@ def compare_stage_evidence(left_dir: pathlib.Path, right_dir: pathlib.Path) -> d
 
     raw_match = _digest(left, "raw_wasm") is not None and _digest(left, "raw_wasm") == _digest(right, "raw_wasm")
     final_match = _digest(left, "final_wasm") is not None and _digest(left, "final_wasm") == _digest(right, "final_wasm")
+    same_runner_pack_matches = {
+        "left": _digest(left, "final_wasm") is not None
+        and _digest(left, "final_wasm") == _digest(left, "repeat_packed_wasm"),
+        "right": _digest(right, "final_wasm") is not None
+        and _digest(right, "final_wasm") == _digest(right, "repeat_packed_wasm"),
+    }
     pack_input_matches = {
         role: _digest(left, role) is not None and _digest(left, role) == _digest(right, role)
         for role in sorted(PACK_INPUT_ROLES)
@@ -115,12 +122,27 @@ def compare_stage_evidence(left_dir: pathlib.Path, right_dir: pathlib.Path) -> d
     else:
         outcome = "pack-stage drift established"
 
+    if errors:
+        repeat_pack_outcome = "inconclusive due to missing or invalid evidence"
+    elif not raw_match:
+        repeat_pack_outcome = "not evaluated because raw Wasm differs"
+    elif not all(pack_input_matches.values()):
+        repeat_pack_outcome = "inconclusive due to mismatched pack inputs"
+    elif not all(same_runner_pack_matches.values()):
+        repeat_pack_outcome = "same-run pack drift established"
+    elif not final_match:
+        repeat_pack_outcome = "same-run packs match; cross-runner final drift remains"
+    else:
+        repeat_pack_outcome = "same-run and cross-runner packs match"
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "comparison_type": "guest-reproducibility-stage-comparison",
         "outcome": outcome,
+        "repeat_pack_outcome": repeat_pack_outcome,
         "raw_wasm_match": raw_match,
         "final_wasm_match": final_match,
+        "same_runner_pack_matches": same_runner_pack_matches,
         "pack_input_matches": pack_input_matches,
         "left_build_identity": left_identity,
         "right_build_identity": right_identity,
@@ -149,8 +171,10 @@ def main() -> int:
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps({
         "outcome": report["outcome"],
+        "repeat_pack_outcome": report["repeat_pack_outcome"],
         "raw_wasm_match": report["raw_wasm_match"],
         "final_wasm_match": report["final_wasm_match"],
+        "same_runner_pack_matches": report["same_runner_pack_matches"],
         "validation_errors": report["validation_errors"],
     }, sort_keys=True))
     return 1 if report["validation_errors"] else 0

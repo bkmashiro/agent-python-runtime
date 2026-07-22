@@ -40,7 +40,7 @@ class GuestSourceContractTests(unittest.TestCase):
             "wasi-sdk-linux-x86_64",
             "wasmtime-linux-x86_64",
             "wasi-vfs-cli-linux-x86_64",
-            "wasi-vfs-lib-wasm32-wasip1",
+            "wasi-vfs-static-library",
         ]:
             self.assertIn(source_id, text)
         self.assertIn("-mexec-model=reactor", text)

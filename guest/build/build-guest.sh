@@ -25,7 +25,7 @@ fetch wasi-sdk-linux-x86_64 wasi-sdk.tar.gz
 fetch wasm-tools-linux-x86_64 wasm-tools.tar.gz
 fetch wasmtime-linux-x86_64 wasmtime.tar.xz
 fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
-fetch wasi-vfs-lib-wasm32-wasip1 wasi-vfs-lib.zip
+fetch wasi-vfs-static-library wasi-vfs-lib.zip
 
 mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
   "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"

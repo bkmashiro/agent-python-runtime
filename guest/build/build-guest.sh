@@ -36,11 +36,19 @@ case ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} in
     exit 14
     ;;
 esac
+case ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} in
+  0|1) ;;
+  *)
+    echo "AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK must be 0 or 1" >&2
+    exit 15
+    ;;
+esac
 REBUILD_WASI_VFS_FROM_SOURCE=0
 if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} == 1 \
   || ${AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA:-0} == 1 \
   || ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} == 1 \
-  || ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} == 1 ]]; then
+  || ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} == 1 \
+  || ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
   REBUILD_WASI_VFS_FROM_SOURCE=1
 fi
 
@@ -138,12 +146,29 @@ if [[ ${REBUILD_WASI_VFS_FROM_SOURCE} == 1 ]]; then
     mv "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched" \
       "${WASI_VFS_SOURCE_DIR}/src/lib.rs"
   fi
+  if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
+    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_deterministic_pack_clock.py" \
+      "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs" \
+      "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs.patched"
+    mv "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs.patched" \
+      "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs"
+  fi
   (
     cd "${WASI_VFS_SOURCE_DIR}"
     CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasip1 --sysroot=${WASI_SDK_PATH}/share/wasi-sysroot" \
       cargo +1.92.0 build --locked --release --target wasm32-unknown-unknown -p wasi-vfs
+    if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
+      cargo +1.92.0 build --locked --release -p wasi-vfs-cli
+    fi
   )
   WASI_VFS_LIB="${WASI_VFS_SOURCE_DIR}/target/wasm32-unknown-unknown/release/libwasi_vfs.a"
+  if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
+    WASI_VFS="${WASI_VFS_SOURCE_DIR}/target/release/wasi-vfs"
+    if [[ ! -x ${WASI_VFS} ]]; then
+      echo "deterministic pack-clock CLI was not produced" >&2
+      exit 16
+    fi
+  fi
   if [[ ! -f ${WASI_VFS_LIB} ]]; then
     echo "experimental wasi-vfs archive was not produced" >&2
     exit 11

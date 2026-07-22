@@ -37,10 +37,14 @@ class GuestStageEvidenceWiringTests(unittest.TestCase):
         self.assertIn('AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA: "1"', workflow)
         self.assertIn('AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING: "1"', workflow)
         self.assertIn('AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER: "1"', workflow)
+        self.assertIn('AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK: "1"', workflow)
         self.assertIn("REBUILD_WASI_VFS_FROM_SOURCE", script)
         self.assertIn("tools/patch_wasi_vfs_pack_file_size.py", script)
         self.assertIn("tools/patch_wasi_vfs_dirent_padding.py", script)
         self.assertIn("tools/patch_wasi_vfs_dirent_buffer_cleanup.py", script)
+        self.assertIn("tools/patch_wasi_vfs_deterministic_pack_clock.py", script)
+        self.assertIn('cargo +1.92.0 build --locked --release -p wasi-vfs-cli', script)
+        self.assertIn('WASI_VFS="${WASI_VFS_SOURCE_DIR}/target/release/wasi-vfs"', script)
         self.assertIn(
             "rustup toolchain install 1.92.0 --profile minimal --target wasm32-unknown-unknown",
             workflow,

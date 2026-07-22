@@ -147,6 +147,43 @@ func TestArbitraryDestinationAndAuthorityBearingPathsAreDenied(t *testing.T) {
 	}
 }
 
+func TestDuplicateRequestIDsFailBeforeProviderExecution(t *testing.T) {
+	fetcher := &fakeFetcher{}
+	grant := testGrant()
+	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
+	response := call(t, broker, "duplicate-ids", capability.FetchManyCapability, []map[string]string{
+		{"request_id": "same", "target": "fixture", "path": "/one"},
+		{"request_id": "same", "target": "fixture", "path": "/two"},
+	})
+	if response.Status != capability.StatusError || response.Error == nil || response.Error.Code != "invalid_arguments" {
+		t.Fatalf("duplicate request IDs were not rejected: %#v", response)
+	}
+	if len(fetcher.calls) != 0 || broker.CallCount() != 0 || len(broker.Receipts()) != 0 {
+		t.Fatalf("invalid batch consumed authority: calls=%d count=%d receipts=%d", len(fetcher.calls), broker.CallCount(), len(broker.Receipts()))
+	}
+}
+
+func TestGuestHeadersAreRejectedBeforeProviderExecution(t *testing.T) {
+	fetcher := &fakeFetcher{}
+	grant := testGrant()
+	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
+	payload := []byte(`{"call_id":"host-header","capability":"fetch_many","arguments":{"requests":[{"request_id":"r1","target":"fixture","path":"/ok","headers":{"Host":"evil.invalid"}}]}}`)
+	responseBytes, err := broker.Call(context.Background(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response capability.ToolResponse
+	if err := json.Unmarshal(responseBytes, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Status != capability.StatusError || response.Error == nil || response.Error.Code != "invalid_arguments" {
+		t.Fatalf("guest headers were not strictly rejected: %#v", response)
+	}
+	if len(fetcher.calls) != 0 || broker.CallCount() != 0 {
+		t.Fatalf("malformed request consumed authority: calls=%d count=%d", len(fetcher.calls), broker.CallCount())
+	}
+}
+
 func TestCallAndRequestBudgetsFailClosed(t *testing.T) {
 	fetcher := &fakeFetcher{}
 	grant := testGrant()

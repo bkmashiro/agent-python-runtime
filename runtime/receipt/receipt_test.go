@@ -8,31 +8,35 @@ import (
 )
 
 func TestReceiptIdentityIsDeterministicAndBindsOperation(t *testing.T) {
-	first := receipt.New("host-run", "call-1", "fetch_many", 0, "https://api.example.test/data?token=secret", "ok", 42)
-	repeated := receipt.New("host-run", "call-1", "fetch_many", 0, "https://api.example.test/data?token=secret", "error", 0)
-	if first.ID != repeated.ID {
-		t.Fatalf("outcome changed operation identity: %q != %q", first.ID, repeated.ID)
+	target := "https://api.example.test/data?token=secret"
+	first := receipt.New("host-run", "call-1", "fetch_many", 0, target, "ok", []byte("first"))
+	repeated := receipt.New("host-run", "call-1", "fetch_many", 0, target, "error", nil)
+	if first.ReceiptID != repeated.ReceiptID {
+		t.Fatalf("outcome changed operation identity: %q != %q", first.ReceiptID, repeated.ReceiptID)
 	}
 	changed := []receipt.Receipt{
-		receipt.New("other-run", "call-1", "fetch_many", 0, "https://api.example.test/data?token=secret", "ok", 42),
-		receipt.New("host-run", "other-call", "fetch_many", 0, "https://api.example.test/data?token=secret", "ok", 42),
-		receipt.New("host-run", "call-1", "fetch_many", 1, "https://api.example.test/data?token=secret", "ok", 42),
-		receipt.New("host-run", "call-1", "fetch_many", 0, "https://api.example.test/other", "ok", 42),
+		receipt.New("other-run", "call-1", "fetch_many", 0, target, "ok", nil),
+		receipt.New("host-run", "other-call", "fetch_many", 0, target, "ok", nil),
+		receipt.New("host-run", "call-1", "fetch_many", 1, target, "ok", nil),
+		receipt.New("host-run", "call-1", "fetch_many", 0, "https://api.example.test/other", "ok", nil),
 	}
 	for _, candidate := range changed {
-		if candidate.ID == first.ID {
+		if candidate.ReceiptID == first.ReceiptID {
 			t.Fatalf("distinct operation reused receipt ID: %#v", candidate)
 		}
 	}
 }
 
-func TestReceiptStoresDigestNotRawTarget(t *testing.T) {
+func TestReceiptStoresDigestsNotRawTargetOrResponse(t *testing.T) {
 	target := "https://api.example.test/data?token=secret"
-	got := receipt.New("host-run", "call-1", "fetch_many", 0, target, "ok", 42)
-	if strings.Contains(got.TargetDigest, "secret") || strings.Contains(got.ID, "secret") {
-		t.Fatalf("receipt leaked target: %#v", got)
+	response := []byte("secret response")
+	got := receipt.New("host-run", "call-1", "fetch_many", 0, target, "ok", response)
+	for _, value := range []string{got.RequestSHA256, got.ResponseSHA256, got.ReceiptID} {
+		if strings.Contains(value, "secret") {
+			t.Fatalf("receipt leaked input: %#v", got)
+		}
 	}
-	if !strings.HasPrefix(got.TargetDigest, "sha256:") || !strings.HasPrefix(got.ID, "rcpt_") {
-		t.Fatalf("receipt identity format is not versioned: %#v", got)
+	if len(got.RequestSHA256) != 64 || len(got.ResponseSHA256) != 64 || !strings.HasPrefix(got.ReceiptID, "rcpt_") {
+		t.Fatalf("receipt digest format is invalid: %#v", got)
 	}
 }

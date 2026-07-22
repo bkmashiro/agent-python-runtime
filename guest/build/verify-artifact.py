@@ -24,7 +24,8 @@ ALLOWED_SUPPORT_EXPORTS = {
     "__wasi_vfs_rt_init",
     "wasi_vfs_pack_fs",
 }
-ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1"}
+ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v1"}
+REQUIRED_CUSTOM_IMPORTS = {("agent_runtime_v1", "host_call")}
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -61,10 +62,20 @@ def verify(artifact: pathlib.Path, manifest: dict[str, Any]) -> None:
     if unexpected:
         raise ValueError(f"unexpected exports: {', '.join(unexpected)}")
 
-    import_modules = {item.get("module") for item in wasm.get("imports", [])}
+    imports = {
+        (item.get("module"), item.get("name")) for item in wasm.get("imports", [])
+    }
+    import_modules = {module for module, _ in imports}
     forbidden_modules = sorted(import_modules - ALLOWED_IMPORT_MODULES)
     if forbidden_modules:
         raise ValueError(f"forbidden import module: {', '.join(forbidden_modules)}")
+    custom_imports = {item for item in imports if item[0] != "wasi_snapshot_preview1"}
+    forbidden_imports = sorted(custom_imports - REQUIRED_CUSTOM_IMPORTS)
+    if forbidden_imports:
+        raise ValueError(f"forbidden import: {forbidden_imports}")
+    missing_imports = sorted(REQUIRED_CUSTOM_IMPORTS - custom_imports)
+    if missing_imports:
+        raise ValueError(f"missing required import: {missing_imports}")
 
 
 def main() -> int:

@@ -38,7 +38,8 @@ class ArtifactVerifierTests(unittest.TestCase):
             },
             "wasm": {
                 "imports": [
-                    {"module": "wasi_snapshot_preview1", "name": "fd_write"}
+                    {"module": "wasi_snapshot_preview1", "name": "fd_write"},
+                    {"module": "agent_runtime_v1", "name": "host_call"},
                 ],
                 "exports": [
                     "_initialize",
@@ -67,6 +68,12 @@ class ArtifactVerifierTests(unittest.TestCase):
         manifest = copy.deepcopy(self.manifest)
         manifest["wasm"]["imports"].append({"module": "env", "name": "socket"})
         with self.assertRaisesRegex(ValueError, "import module"):
+            self.verifier.verify(self.artifact, manifest)
+
+    def test_rejects_forbidden_import_name_in_capability_module(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["wasm"]["imports"].append({"module": "agent_runtime_v1", "name": "raw_socket"})
+        with self.assertRaisesRegex(ValueError, "forbidden import"):
             self.verifier.verify(self.artifact, manifest)
 
     def test_rejects_missing_required_export(self):

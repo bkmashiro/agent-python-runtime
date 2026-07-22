@@ -1,5 +1,6 @@
 #include "agent_runtime_v1.h"
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 
 #define AGENT_RUNTIME_REQUEST_MAX (1024 * 1024)
 #define AGENT_RUNTIME_RESPONSE_MAX (1024 * 1024)
+#define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)
 
 static uint8_t response_buffer[AGENT_RUNTIME_RESPONSE_MAX + 4];
 static PyObject *runtime_module = NULL;
@@ -32,9 +34,65 @@ static uint32_t write_internal_error(void) {
     return (uint32_t)(uintptr_t)response_buffer;
 }
 
+static PyObject *python_host_call(PyObject *self, PyObject *args) {
+    (void)self;
+    const char *request = NULL;
+    Py_ssize_t request_len = 0;
+    if (!PyArg_ParseTuple(args, "s#:call", &request, &request_len)) {
+        return NULL;
+    }
+    if (request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
+        PyErr_SetString(PyExc_ValueError, "Host call request exceeds the guest bound");
+        return NULL;
+    }
+    char *response = malloc(AGENT_RUNTIME_TOOL_RESPONSE_MAX);
+    if (response == NULL) {
+        return PyErr_NoMemory();
+    }
+    int32_t response_len = agent_runtime_host_call(
+        request,
+        (int32_t)request_len,
+        response,
+        AGENT_RUNTIME_TOOL_RESPONSE_MAX);
+    if (response_len < 0) {
+        free(response);
+        PyErr_SetString(PyExc_RuntimeError, "Host capability bridge rejected the call");
+        return NULL;
+    }
+    if (response_len > AGENT_RUNTIME_TOOL_RESPONSE_MAX) {
+        free(response);
+        PyErr_SetString(PyExc_RuntimeError, "Host capability response exceeds the guest bound");
+        return NULL;
+    }
+    PyObject *result = PyUnicode_DecodeUTF8(response, response_len, "strict");
+    free(response);
+    return result;
+}
+
+static PyMethodDef agent_runtime_host_methods[] = {
+    {"call", python_host_call, METH_VARARGS, "Perform a bounded Host capability call."},
+    {NULL, NULL, 0, NULL},
+};
+
+static struct PyModuleDef agent_runtime_host_module = {
+    PyModuleDef_HEAD_INIT,
+    "_agent_runtime_host",
+    NULL,
+    -1,
+    agent_runtime_host_methods,
+};
+
+PyMODINIT_FUNC PyInit__agent_runtime_host(void) {
+    return PyModule_Create(&agent_runtime_host_module);
+}
+
 static int32_t ensure_interpreter(void) {
     if (Py_IsInitialized()) {
         return 0;
+    }
+
+    if (PyImport_AppendInittab("_agent_runtime_host", PyInit__agent_runtime_host) != 0) {
+        return -1;
     }
 
     PyStatus status;

@@ -46,8 +46,8 @@ type fetchRequest struct {
 }
 
 func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
-	if config.RunIdentity == "" {
-		return nil, errors.New("Host run identity is required")
+	if config.RunIdentity == "" || len(config.RunIdentity) > 128 {
+		return nil, errors.New("Host run identity must be a bounded non-empty string")
 	}
 	if fetcher == nil {
 		return nil, errors.New("fetcher is required")
@@ -66,6 +66,14 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 		calls:         map[string]uint32{},
 		totalRequests: map[string]uint32{},
 	}, nil
+}
+
+func (broker *Broker) CallCount() uint32 {
+	var total uint32
+	for _, count := range broker.calls {
+		total += count
+	}
+	return total
 }
 
 func (broker *Broker) Receipts() []receipt.Receipt {
@@ -135,7 +143,7 @@ func (broker *Broker) fetchOne(
 			Status:    StatusDenied,
 			Error:     &Error{Code: "target_denied", Message: "target or path is not granted"},
 		}
-		broker.record(callID, operationIndex, targetIdentity, result.Status, 0)
+		broker.record(callID, operationIndex, targetIdentity, result.Status, nil)
 		return result
 	}
 	remaining := grant.MaxResponseBytes - *responseBytes
@@ -155,7 +163,7 @@ func (broker *Broker) fetchOne(
 			message = "Host fetch timed out"
 		}
 		result := FetchItem{RequestID: item.RequestID, Status: status, Error: &Error{Code: code, Message: message}}
-		broker.record(callID, operationIndex, targetIdentity, result.Status, 0)
+		broker.record(callID, operationIndex, targetIdentity, result.Status, nil)
 		return result
 	}
 	if uint64(len(output.Body)) > uint64(remaining) {
@@ -164,7 +172,7 @@ func (broker *Broker) fetchOne(
 			Status:    StatusError,
 			Error:     &Error{Code: "response_too_large", Message: "Host response byte budget exceeded"},
 		}
-		broker.record(callID, operationIndex, targetIdentity, result.Status, 0)
+		broker.record(callID, operationIndex, targetIdentity, result.Status, nil)
 		return result
 	}
 	bodyBytes := uint32(len(output.Body))
@@ -177,11 +185,11 @@ func (broker *Broker) fetchOne(
 		ContentType: output.ContentType,
 		Error:       nil,
 	}
-	broker.record(callID, operationIndex, targetIdentity, result.Status, bodyBytes)
+	broker.record(callID, operationIndex, targetIdentity, result.Status, output.Body)
 	return result
 }
 
-func (broker *Broker) record(callID string, operationIndex uint32, target string, status Status, responseBytes uint32) {
+func (broker *Broker) record(callID string, operationIndex uint32, target string, status Status, response []byte) {
 	broker.receipts = append(broker.receipts, receipt.New(
 		broker.config.RunIdentity,
 		callID,
@@ -189,7 +197,7 @@ func (broker *Broker) record(callID string, operationIndex uint32, target string
 		operationIndex,
 		target,
 		string(status),
-		responseBytes,
+		response,
 	))
 }
 

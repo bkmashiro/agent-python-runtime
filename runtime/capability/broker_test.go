@@ -114,7 +114,7 @@ func TestMatchingGrantResolvesHostOwnedTargetAndHeaders(t *testing.T) {
 	if fetcher.calls[0].Headers["Authorization"] != "Host secret" {
 		t.Fatalf("Host header missing: %#v", fetcher.calls[0].Headers)
 	}
-	if len(broker.Receipts()) != 2 || broker.Receipts()[0].ID == "" {
+	if len(broker.Receipts()) != 2 || broker.Receipts()[0].ReceiptID == "" {
 		t.Fatalf("missing receipts: %#v", broker.Receipts())
 	}
 }
@@ -189,7 +189,7 @@ func TestResponseByteBudgetReturnsStablePartialError(t *testing.T) {
 	if item.Status != capability.StatusError || item.Error == nil || item.Error.Code != "response_too_large" {
 		t.Fatalf("unexpected oversized response: %#v", item)
 	}
-	if broker.Receipts()[0].ResponseBytes != 0 {
+	if broker.Receipts()[0].ResponseSHA256 != "" {
 		t.Fatalf("oversized bytes must not be admitted: %#v", broker.Receipts()[0])
 	}
 }
@@ -212,7 +212,7 @@ func TestPartialFailureAndReceiptIdentityAreStable(t *testing.T) {
 			t.Fatalf("partial statuses not preserved: %#v", response.Result.Items)
 		}
 		receipts := broker.Receipts()
-		ids := []string{receipts[0].ID, receipts[1].ID}
+		ids := []string{receipts[0].ReceiptID, receipts[1].ReceiptID}
 		if iteration == 0 {
 			firstIDs = ids
 		} else if ids[0] != firstIDs[0] || ids[1] != firstIDs[1] {

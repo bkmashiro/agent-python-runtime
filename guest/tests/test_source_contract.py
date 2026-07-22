@@ -6,6 +6,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 HEADER = ROOT / "guest" / "include" / "agent_runtime_v1.h"
 SOURCE = ROOT / "guest" / "src" / "runtime.c"
 BOOTSTRAP = ROOT / "guest" / "bootstrap" / "agent_runtime" / "__init__.py"
+TOOLS = ROOT / "guest" / "bootstrap" / "agent_runtime" / "tools.py"
 BUILD_SCRIPT = ROOT / "guest" / "build" / "build-guest.sh"
 
 
@@ -53,6 +54,18 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("site-packages/agent_runtime", text)
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())
+
+    def test_host_call_import_is_narrow_and_bounded(self):
+        header = HEADER.read_text()
+        source = SOURCE.read_text()
+        tools = TOOLS.read_text()
+        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v1", "host_call")', header)
+        self.assertIn("agent_runtime_host_call", header)
+        self.assertIn('PyImport_AppendInittab("_agent_runtime_host"', source)
+        self.assertIn("AGENT_RUNTIME_TOOL_RESPONSE_MAX", source)
+        self.assertIn('"capability": "fetch_many"', tools)
+        self.assertNotIn('"url"', tools)
+        self.assertNotIn('"headers"', tools)
 
     def test_response_buffer_has_explicit_bound(self):
         text = SOURCE.read_text()

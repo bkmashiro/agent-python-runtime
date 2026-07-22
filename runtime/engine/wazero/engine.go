@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -11,19 +12,27 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+// BrokerFactory returns a new per-Run capability broker. Returning nil leaves
+// the bridge fail-closed for Runs without Host grants.
+type BrokerFactory func(context.Context) (*capability.Broker, error)
+
 // Factory constructs wazero-backed runners behind the neutral engine contract.
-type Factory struct{}
+type Factory struct {
+	BrokerFactory BrokerFactory
+}
 
 func (Factory) Name() string { return "wazero" }
 
-func (Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
-	return New(ctx, wasm, config)
+func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
+	return NewWithBrokerFactory(ctx, wasm, config, factory.BrokerFactory)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -32,12 +41,22 @@ var _ enginecontract.Runner = (*Engine)(nil)
 // Engine owns a compiled guest module. V1 creates a fresh module instance for
 // each Run; pooling and snapshot restoration are intentionally deferred.
 type Engine struct {
-	runtime  wazerort.Runtime
-	compiled wazerort.CompiledModule
-	config   runtimeconfig.RunConfig
+	runtime       wazerort.Runtime
+	compiled      wazerort.CompiledModule
+	config        runtimeconfig.RunConfig
+	brokerFactory BrokerFactory
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
+	return NewWithBrokerFactory(ctx, wasm, config, nil)
+}
+
+func NewWithBrokerFactory(
+	ctx context.Context,
+	wasm []byte,
+	config runtimeconfig.RunConfig,
+	brokerFactory BrokerFactory,
+) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
@@ -53,12 +72,21 @@ func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Eng
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("instantiate WASI imports: %w", err)
 	}
+	if err := instantiateCapabilityHost(ctx, wasmRuntime); err != nil {
+		_ = wasmRuntime.Close(ctx)
+		return nil, fmt.Errorf("instantiate capability imports: %w", err)
+	}
 	compiled, err := wasmRuntime.CompileModule(ctx, wasm)
 	if err != nil {
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
-	return &Engine{runtime: wasmRuntime, compiled: compiled, config: config}, nil
+	return &Engine{
+		runtime:       wasmRuntime,
+		compiled:      compiled,
+		config:        config,
+		brokerFactory: brokerFactory,
+	}, nil
 }
 
 func (engine *Engine) Properties() enginecontract.Properties {
@@ -85,6 +113,18 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
+	var broker *capability.Broker
+	if engine.brokerFactory != nil {
+		var err error
+		broker, err = engine.brokerFactory(runContext)
+		if err != nil {
+			return nil, fmt.Errorf("create capability broker: %w", err)
+		}
+		if broker == nil {
+			return nil, errors.New("capability broker factory returned nil")
+		}
+		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
+	}
 	var guestStderr bytes.Buffer
 	module, err := engine.runtime.InstantiateModule(
 		runContext,
@@ -111,7 +151,102 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
+	if broker != nil {
+		payload, err = mergeHostEvidence(payload, broker.Receipts(), broker.CallCount(), engine.config.MaxResponseBytes)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return payload, nil
+}
+
+type brokerContextKey struct{}
+
+const hostCallPayloadMax = 1024 * 1024
+
+func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) error {
+	_, err := runtime.NewHostModuleBuilder("agent_runtime_v1").
+		NewFunctionBuilder().
+		WithFunc(hostCall).
+		Export("host_call").
+		Instantiate(ctx)
+	return err
+}
+
+func hostCall(
+	ctx context.Context,
+	module api.Module,
+	requestPointer uint32,
+	requestLength uint32,
+	responsePointer uint32,
+	responseCapacity uint32,
+) int32 {
+	if requestLength == 0 || requestLength > hostCallPayloadMax ||
+		responseCapacity == 0 || responseCapacity > hostCallPayloadMax {
+		return -1
+	}
+	broker, ok := ctx.Value(brokerContextKey{}).(*capability.Broker)
+	if !ok || broker == nil {
+		return -1
+	}
+	requestView, ok := module.Memory().Read(requestPointer, requestLength)
+	if !ok {
+		return -1
+	}
+	request := append([]byte(nil), requestView...)
+	response, err := broker.Call(ctx, request)
+	if err != nil || len(response) > int(responseCapacity) {
+		return -1
+	}
+	if !module.Memory().Write(responsePointer, response) {
+		return -1
+	}
+	return int32(len(response))
+}
+
+func mergeHostEvidence(
+	payload []byte,
+	receipts []receipt.Receipt,
+	capabilityCalls uint32,
+	maxResponse uint32,
+) ([]byte, error) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return nil, fmt.Errorf("decode guest response for Host evidence: %w", err)
+	}
+	if envelope == nil {
+		return nil, errors.New("guest response is not an object")
+	}
+	if receipts == nil {
+		receipts = []receipt.Receipt{}
+	}
+	encodedReceipts, err := json.Marshal(receipts)
+	if err != nil {
+		return nil, fmt.Errorf("encode Host receipts: %w", err)
+	}
+	envelope["receipts"] = encodedReceipts
+	var metrics map[string]json.RawMessage
+	if raw, ok := envelope["metrics"]; !ok || json.Unmarshal(raw, &metrics) != nil || metrics == nil {
+		return nil, errors.New("guest response metrics are invalid")
+	}
+	encodedCalls, err := json.Marshal(capabilityCalls)
+	if err != nil {
+		return nil, err
+	}
+	metrics["capability_calls"] = encodedCalls
+	encodedMetrics, err := json.Marshal(metrics)
+	if err != nil {
+		return nil, fmt.Errorf("encode Host metrics: %w", err)
+	}
+	envelope["metrics"] = encodedMetrics
+	merged, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, fmt.Errorf("encode response with Host evidence: %w", err)
+	}
+	if uint64(len(merged)) > uint64(maxResponse) {
+		return nil, errors.New("response with Host evidence exceeds configured bounds")
+	}
+	return merged, nil
 }
 
 func callNoArgs(ctx context.Context, module api.Module, name string) error {

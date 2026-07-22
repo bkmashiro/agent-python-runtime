@@ -8,22 +8,30 @@ import (
 )
 
 type Receipt struct {
-	ID             string `json:"id"`
+	ReceiptID      string `json:"receipt_id"`
+	RunID          string `json:"run_id"`
 	Capability     string `json:"capability"`
-	CallID         string `json:"call_id"`
 	OperationIndex uint32 `json:"operation_index"`
-	TargetDigest   string `json:"target_digest"`
-	Status         string `json:"status"`
-	ResponseBytes  uint32 `json:"response_bytes"`
+	RequestSHA256  string `json:"request_sha256,omitempty"`
+	ResponseSHA256 string `json:"response_sha256,omitempty"`
+	Outcome        string `json:"outcome"`
 }
 
-func TargetDigest(target string) string {
-	digest := sha256.Sum256([]byte(target))
-	return "sha256:" + hex.EncodeToString(digest[:])
+func digest(value []byte) string {
+	hashed := sha256.Sum256(value)
+	return hex.EncodeToString(hashed[:])
 }
 
-func New(runIdentity, callID, capability string, operationIndex uint32, target, status string, responseBytes uint32) Receipt {
-	targetDigest := TargetDigest(target)
+func New(
+	runIdentity,
+	callID,
+	capability string,
+	operationIndex uint32,
+	requestIdentity,
+	outcome string,
+	response []byte,
+) Receipt {
+	requestDigest := digest([]byte(requestIdentity))
 	identity := sha256.New()
 	for _, field := range []string{
 		"agent-python-runtime-receipt-v1",
@@ -31,18 +39,21 @@ func New(runIdentity, callID, capability string, operationIndex uint32, target, 
 		callID,
 		capability,
 		strconv.FormatUint(uint64(operationIndex), 10),
-		targetDigest,
+		requestDigest,
 	} {
 		identity.Write([]byte(field))
 		identity.Write([]byte{0})
 	}
-	return Receipt{
-		ID:             "rcpt_" + hex.EncodeToString(identity.Sum(nil)),
+	receipt := Receipt{
+		ReceiptID:      "rcpt_" + hex.EncodeToString(identity.Sum(nil)),
+		RunID:          runIdentity,
 		Capability:     capability,
-		CallID:         callID,
 		OperationIndex: operationIndex,
-		TargetDigest:   targetDigest,
-		Status:         status,
-		ResponseBytes:  responseBytes,
+		RequestSHA256:  requestDigest,
+		Outcome:        outcome,
 	}
+	if response != nil {
+		receipt.ResponseSHA256 = digest(response)
+	}
+	return receipt
 }

@@ -28,6 +28,7 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 
 ## Documentation
 
+- [Active autonomous mega-goal](docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md)
 - [Implementation status and evidence](docs/status.md)
 - [Standalone implementation handoff](docs/plans/2026-07-22-agent-python-runtime-handoff.md)
 - [Implementation plan](docs/plans/2026-07-22-agent-python-runtime-implementation-plan.md)

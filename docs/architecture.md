@@ -8,6 +8,8 @@ This document defines the target architecture. A component is not implemented un
 
 Agent Python Runtime executes one bounded generated-Python run. It is not an agent planner, tool selector, MCP marketplace, package installer, general Linux sandbox, or external-effect transaction system.
 
+V1 remains read-only. A possible future Host-owned side-effect layer is discussed separately in [Effect Plane: playback, COMMIT, and APPROVE](effect-plane.md); it does not expand the current implementation scope.
+
 ```text
 Agent harness
   │ RunRequest + Host-owned RunConfig

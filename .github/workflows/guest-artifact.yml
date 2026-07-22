@@ -8,6 +8,8 @@ on:
       - 'abi/**'
       - 'runtime/**'
       - 'integration/**'
+      - 'cmd/apyrun-benchmark/**'
+      - 'benchmark/**'
       - 'go.mod'
       - 'go.sum'
       - 'tools/fetch_locked_source.py'
@@ -21,6 +23,8 @@ on:
       - 'abi/**'
       - 'runtime/**'
       - 'integration/**'
+      - 'cmd/apyrun-benchmark/**'
+      - 'benchmark/**'
       - 'go.mod'
       - 'go.sum'
       - 'tools/fetch_locked_source.py'
@@ -135,10 +139,31 @@ jobs:
             "${{ runner.temp }}/runtime-production-safe-linux-amd64.json" \
             >/dev/null
 
+      - name: Record production-safe prepared benchmark
+        run: |
+          go run ./cmd/apyrun-benchmark \
+            -artifact "${{ runner.temp }}/agent-runtime-dist/agent-python-runtime.wasm" \
+            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
+            -output "${{ runner.temp }}/prepared-production-safe-linux-amd64.json" \
+            -class production-safe \
+            -strategy single-use-preinitialized \
+            -samples 3
+          python3 -m json.tool \
+            "${{ runner.temp }}/prepared-production-safe-linux-amd64.json" \
+            >/dev/null
+
       - name: Upload production-safe runtime benchmark
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runtime-benchmark-production-safe-${{ github.sha }}
           path: ${{ runner.temp }}/runtime-production-safe-linux-amd64.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload production-safe prepared benchmark
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prepared-benchmark-production-safe-${{ github.sha }}
+          path: ${{ runner.temp }}/prepared-production-safe-linux-amd64.json
           if-no-files-found: error
           retention-days: 7

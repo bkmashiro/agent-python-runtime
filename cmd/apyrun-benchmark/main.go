@@ -69,6 +69,7 @@ type benchmarkOptions struct {
 	ManifestPath string
 	OutputPath   string
 	Class        string
+	Strategy     string
 	Samples      int
 }
 
@@ -87,25 +88,45 @@ func runMain(args []string) error {
 	flags.StringVar(&options.ManifestPath, "manifest", "", "matching artifact manifest")
 	flags.StringVar(&options.OutputPath, "output", "", "JSON evidence output")
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe or full")
+	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh or single-use-preinitialized")
 	flags.IntVar(&options.Samples, "samples", 3, "sample count (3-20)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
-		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full] [-samples 3]")
+		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full] [-strategy fresh|single-use-preinitialized] [-samples 3]")
 	}
 	if options.Class != "production-safe" && options.Class != "full" {
 		return errors.New("benchmark class must be production-safe or full")
 	}
+	if options.Strategy != "fresh" && options.Strategy != "single-use-preinitialized" {
+		return errors.New("benchmark strategy must be fresh or single-use-preinitialized")
+	}
 	if options.Samples < 3 || options.Samples > 20 {
 		return errors.New("samples must be between 3 and 20")
 	}
-	evidence, err := runBenchmark(options)
-	if err != nil {
-		return err
-	}
-	if err := evidence.Validate(); err != nil {
-		return fmt.Errorf("validate benchmark evidence: %w", err)
+	var evidence any
+	var sourceCommit string
+	if options.Strategy == "single-use-preinitialized" {
+		prepared, err := runPreparedBenchmark(options)
+		if err != nil {
+			return err
+		}
+		if err := prepared.Validate(); err != nil {
+			return fmt.Errorf("validate prepared benchmark evidence: %w", err)
+		}
+		evidence = prepared
+		sourceCommit = prepared.Artifact.SourceCommit
+	} else {
+		fresh, err := runBenchmark(options)
+		if err != nil {
+			return err
+		}
+		if err := fresh.Validate(); err != nil {
+			return fmt.Errorf("validate benchmark evidence: %w", err)
+		}
+		evidence = fresh
+		sourceCommit = fresh.Artifact.SourceCommit
 	}
 	encoded, err := json.MarshalIndent(evidence, "", "  ")
 	if err != nil {
@@ -115,7 +136,7 @@ func runMain(args []string) error {
 	if err := writeAtomic(options.OutputPath, encoded); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "{\"output\":%q,\"source_commit\":%q}\n", options.OutputPath, evidence.Artifact.SourceCommit)
+	_, _ = fmt.Fprintf(os.Stdout, "{\"output\":%q,\"source_commit\":%q}\n", options.OutputPath, sourceCommit)
 	return nil
 }
 

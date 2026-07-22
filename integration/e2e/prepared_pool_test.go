@@ -43,9 +43,15 @@ func TestSingleUsePreparedPoolSkipsRequestInitAndPreservesFreshness(t *testing.T
 	phases := &phaseLog{}
 	factory := wazeroengine.Factory{PreparedCapacity: 1, Observer: phases.observe}
 	instance := newEngineWithFactory(t, runtime.DefaultRunConfig(), factory)
-	ready, ok := instance.(interface{ PreparedReady() int })
-	if !ok || ready.PreparedReady() != 1 {
-		t.Fatalf("prepared instance was not ready: ready=%v properties=%#v", ok, instance.Properties())
+	ready, ok := instance.(interface {
+		PreparedReady() int
+		PreparedRetainedGuestMemoryBytes() uint64
+	})
+	if !ok {
+		t.Fatalf("prepared diagnostics unavailable: properties=%#v", instance.Properties())
+	}
+	if ready.PreparedReady() != 1 || ready.PreparedRetainedGuestMemoryBytes() != 128*1024*1024 {
+		t.Fatalf("prepared instance was not ready: retained=%d properties=%#v", ready.PreparedRetainedGuestMemoryBytes(), instance.Properties())
 	}
 	if instance.Properties().ResetMode != enginecontract.ResetModeFreshInstance {
 		t.Fatalf("single-use pool widened reset claim: %#v", instance.Properties())
@@ -129,7 +135,10 @@ func TestPreparedPoolMissFallsBackToExclusiveFreshInstance(t *testing.T) {
 func TestPreparedPoolCloseCancelsAndJoinsRefill(t *testing.T) {
 	factory := wazeroengine.Factory{PreparedCapacity: 1}
 	instance := newEngineWithFactory(t, runtime.DefaultRunConfig(), factory)
-	ready := instance.(interface{ PreparedReady() int })
+	ready := instance.(interface {
+		PreparedReady() int
+		PreparedRetainedGuestMemoryBytes() uint64
+	})
 	response := run(t, instance, "prepared-close", "result = 42", map[string]any{})
 	if response.Status != "ok" || response.Result != float64(42) {
 		t.Fatalf("warm Run failed before close: %#v", response)
@@ -139,8 +148,8 @@ func TestPreparedPoolCloseCancelsAndJoinsRefill(t *testing.T) {
 	if err := instance.Close(closeContext); err != nil {
 		t.Fatalf("close failed while refill was active: %v", err)
 	}
-	if ready.PreparedReady() != 0 {
-		t.Fatalf("prepared instances remained after close: %d", ready.PreparedReady())
+	if ready.PreparedReady() != 0 || ready.PreparedRetainedGuestMemoryBytes() != 0 {
+		t.Fatalf("prepared state remained after close: ready=%d retained=%d", ready.PreparedReady(), ready.PreparedRetainedGuestMemoryBytes())
 	}
 }
 

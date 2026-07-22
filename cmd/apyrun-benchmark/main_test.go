@@ -67,6 +67,92 @@ func compileRepositoryEvidenceSchema(t *testing.T) *jsonschema.Schema {
 	return schema
 }
 
+func compilePreparedEvidenceSchema(t *testing.T) *jsonschema.Schema {
+	t.Helper()
+	schemaBytes, err := os.ReadFile("../../benchmark/v1/prepared-evidence.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document any
+	if err := json.Unmarshal(schemaBytes, &document); err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	const schemaURL = "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/prepared-evidence.schema.json"
+	if err := compiler.AddResource(schemaURL, document); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile(schemaURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return schema
+}
+
+func TestPreparedEvidenceSeparatesReadyFirstSteadyAndNoCopy(t *testing.T) {
+	sample := preparedSampleEvidence{
+		PoolHitNS: 1, PrepareNS: 1, ExecuteNS: 1, RunTotalNS: 1,
+		RefillInstantiateGuestNS: 1, RefillInitializeNS: 1, RefillRuntimeInitNS: 1,
+		RequestBytes: 1, ResultBytes: 1, RetainedGuestMemoryBytes: 128 * 1024 * 1024,
+	}
+	capabilitySample := sample
+	capabilitySample.CapabilityNS = 1
+	evidence := preparedBenchmarkEvidence{
+		SchemaVersion: 1, EvidenceKind: "single-use-preinitialized", EvidenceClass: "production-safe",
+		Artifact:    artifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), Size: 1, SourceCommit: strings.Repeat("b", 40), Target: "wasm32-wasip1", Execution: "reactor"},
+		HostSource:  hostSourceIdentity{Revision: strings.Repeat("c", 40)},
+		Backend:     backendIdentity{Name: "wazero", ResetMode: "fresh-instance"},
+		Environment: environmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.24"},
+		Fixture:     preparedFixtureIdentity{Samples: 3, CapabilityOperations: 1, ProviderDelayNanoseconds: 2_000_000, PreparedCapacity: 1},
+		CompileOnce: compileEvidence{InstantiateHostNS: 1, CompileNS: 1},
+		Readiness:   preparedReadinessEvidence{FactoryNewTotalNS: 1, InstantiateGuestNS: 1, InitializeNS: 1, RuntimeInitNS: 1, ReadyInstances: 1, RetainedGuestMemoryBytes: 128 * 1024 * 1024},
+		StateCopy:   stateCopyEvidence{Applicable: false, Reason: "single-use instances are never restored"},
+		Workloads:   preparedWorkloadEvidence{FirstExecute: sample, SteadyExecute: []preparedSampleEvidence{sample, sample, sample}, SteadyCapability: []preparedSampleEvidence{capabilitySample, capabilitySample, capabilitySample}},
+		Limitations: []string{"fixture"},
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(evidence)
+	var instance any
+	_ = json.Unmarshal(encoded, &instance)
+	if err := compilePreparedEvidenceSchema(t).Validate(instance); err != nil {
+		t.Fatal(err)
+	}
+	invalid := evidence
+	invalid.StateCopy.Applicable = true
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("prepared evidence claimed an unsupported state copy")
+	}
+}
+
+func TestPreparedBenchmarkWithRealGuestArtifact(t *testing.T) {
+	artifact := os.Getenv("AGENT_RUNTIME_GUEST")
+	if artifact == "" {
+		t.Skip("AGENT_RUNTIME_GUEST is not set")
+	}
+	evidence, err := runPreparedBenchmarkWithHostSource(benchmarkOptions{
+		ArtifactPath: artifact,
+		ManifestPath: filepath.Join(filepath.Dir(artifact), "manifest.json"),
+		Class:        "production-safe", Strategy: "single-use-preinitialized", Samples: 3,
+	}, hostSourceIdentity{Revision: strings.Repeat("d", 40)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if evidence.Readiness.RetainedGuestMemoryBytes != 128*1024*1024 || evidence.Backend.ResetMode != "fresh-instance" || evidence.StateCopy.Applicable {
+		t.Fatalf("prepared evidence widened or drifted: %#v", evidence)
+	}
+	encoded, _ := json.Marshal(evidence)
+	var instance any
+	_ = json.Unmarshal(encoded, &instance)
+	if err := compilePreparedEvidenceSchema(t).Validate(instance); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
 	schema := compileRepositoryEvidenceSchema(t)
 	sample := sampleEvidence{

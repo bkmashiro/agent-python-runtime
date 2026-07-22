@@ -13,6 +13,20 @@ go run ./cmd/apyrun-benchmark \
 
 The output must validate against [`benchmark/v1/evidence.schema.json`](../benchmark/v1/evidence.schema.json).
 
+For the opt-in single-use preinitialized strategy, use the same command with a distinct evidence contract:
+
+```bash
+go run ./cmd/apyrun-benchmark \
+  -artifact /path/to/agent-python-runtime.wasm \
+  -manifest /path/to/manifest.json \
+  -output /path/to/prepared-runtime-benchmark.json \
+  -class production-safe \
+  -strategy single-use-preinitialized \
+  -samples 3
+```
+
+Prepared output validates against [`benchmark/v1/prepared-evidence.schema.json`](../benchmark/v1/prepared-evidence.schema.json). The default strategy remains `fresh`, so existing commands and evidence are unchanged.
+
 ## Provenance
 
 The command fails before measurement unless:
@@ -39,6 +53,19 @@ The JSON records Guest artifact identity and Host source identity separately. Th
 
 The capability duration is observed inside the Host broker. It is nested within `execute_ns`; the two values must not be added together.
 
+### Prepared strategy phases
+
+Prepared evidence keeps startup and request paths separate:
+
+- `compile_once` remains Host-import instantiation plus one Wasm compile;
+- `readiness` records total `Factory.New` wall time, the initial candidate's instantiate/`_initialize`/`runtime_init`, ready count, and actual queued guest linear-memory bytes;
+- `first_execute` records the first exclusive pool hit;
+- `steady_execute` and `steady_capability` contain repeated hits after refill;
+- every sample records `pool_hit`, request-specific prepare/execute, refill instantiate/init costs, post-Run refill wait, and retained queued memory;
+- `state_copy.applicable` is always `false`: the strategy never copies, restores, or reuses a served module, so copy cost is not reported as zero.
+
+Background refill can overlap request execution. `refill_ready_after_run_ns` measures only the remaining wait after the Run returns; the three refill phase durations report the full observed replacement work. Queued-memory evidence covers guest linear memory, not process RSS, compiled code, Go heap, WASI, or other Host overhead.
+
 ## Evidence classes
 
 - `production-safe`: three or more execute samples and one-operation capability samples, with small deterministic integer work.
@@ -60,3 +87,14 @@ python3 tools/compare_runtime_benchmarks.py \
 ```
 
 The tool reports medians and candidate/baseline ratios while deliberately emitting no pass/fail or threshold. A threshold requires a separately reviewed product budget and repeated same-environment evidence; cross-platform ratios are descriptive only.
+
+Compare same-run fresh and single-use prepared evidence with the dedicated strict identity/fixture check:
+
+```bash
+python3 tools/compare_prepared_benchmarks.py \
+  /path/to/runtime-production-safe-linux-amd64.json \
+  /path/to/prepared-production-safe-linux-amd64.json \
+  --output /tmp/prepared-comparison.json
+```
+
+This reports fresh versus prepared first/steady Run ratios, refill `runtime_init`, startup readiness, retained guest memory, and the explicit state-copy N/A record. It also has no threshold or pass/fail field.

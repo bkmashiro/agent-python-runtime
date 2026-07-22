@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	wazerort "github.com/tetratelabs/wazero"
@@ -14,8 +15,9 @@ import (
 const maxPreparedCapacity uint32 = 4
 
 type preparedInstance struct {
-	module api.Module
-	stderr *bytes.Buffer
+	module      api.Module
+	stderr      *bytes.Buffer
+	memoryBytes uint64
 }
 
 type preparedPool struct {
@@ -23,9 +25,10 @@ type preparedPool struct {
 	context context.Context
 	cancel  context.CancelFunc
 
-	mutex  sync.Mutex
-	closed bool
-	refill sync.WaitGroup
+	mutex    sync.Mutex
+	closed   bool
+	refill   sync.WaitGroup
+	retained atomic.Uint64
 }
 
 func (engine *Engine) initializePreparedPool(capacity uint32) {
@@ -44,6 +47,7 @@ func (engine *Engine) initializePreparedPool(capacity uint32) {
 		if err != nil {
 			continue
 		}
+		pool.retained.Add(instance.memoryBytes)
 		pool.ready <- instance
 	}
 }
@@ -53,6 +57,7 @@ func (engine *Engine) checkoutModule(ctx context.Context) (*preparedInstance, er
 		started := time.Now()
 		select {
 		case instance := <-engine.pool.ready:
+			subtractRetained(engine.pool, instance.memoryBytes)
 			observe(engine.observer, "pool_hit", started, nil)
 			engine.schedulePreparedRefill()
 			return instance, nil
@@ -102,7 +107,7 @@ func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (
 	}
 	guestStderr.Reset()
 	failed = false
-	return &preparedInstance{module: module, stderr: guestStderr}, nil
+	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(module.Memory().Size())}, nil
 }
 
 func (engine *Engine) schedulePreparedRefill() {
@@ -129,9 +134,11 @@ func (engine *Engine) schedulePreparedRefill() {
 			_ = instance.module.Close(context.Background())
 			return
 		}
+		pool.retained.Add(instance.memoryBytes)
 		select {
 		case pool.ready <- instance:
 		default:
+			subtractRetained(pool, instance.memoryBytes)
 			_ = instance.module.Close(context.Background())
 		}
 	}()
@@ -144,6 +151,21 @@ func (engine *Engine) PreparedReady() int {
 		return 0
 	}
 	return len(engine.pool.ready)
+}
+
+// PreparedRetainedGuestMemoryBytes reports queued candidates' current linear
+// memory size. It excludes in-flight Runs and Host/runtime overhead.
+func (engine *Engine) PreparedRetainedGuestMemoryBytes() uint64 {
+	if engine == nil || engine.pool == nil {
+		return 0
+	}
+	return engine.pool.retained.Load()
+}
+
+func subtractRetained(pool *preparedPool, bytes uint64) {
+	if bytes > 0 {
+		pool.retained.Add(^uint64(bytes - 1))
+	}
 }
 
 func (engine *Engine) closePreparedPool() {
@@ -163,6 +185,7 @@ func (engine *Engine) closePreparedPool() {
 	for {
 		select {
 		case instance := <-pool.ready:
+			subtractRetained(pool, instance.memoryBytes)
 			_ = instance.module.Close(context.Background())
 		default:
 			return

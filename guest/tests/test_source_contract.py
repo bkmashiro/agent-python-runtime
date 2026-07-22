@@ -42,6 +42,8 @@ class GuestSourceContractTests(unittest.TestCase):
             "wasi-sdk-linux-x86_64",
             "wasmtime-linux-x86_64",
             "wasi-vfs-cli-linux-x86_64",
+            "wasi-vfs-source",
+            "wasi-vfs-wasi-submodule-source",
             "wasi-vfs-static-library",
             "wasi-vfs-linked-storage-source",
             "spdx-2.3-json-schema",

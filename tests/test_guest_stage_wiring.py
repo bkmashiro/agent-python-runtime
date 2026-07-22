@@ -30,6 +30,30 @@ class GuestStageEvidenceWiringTests(unittest.TestCase):
         ):
             self.assertIn(argument, script)
 
+    def test_experiment_rebuilds_only_guest_archive_with_deterministic_hasher(self):
+        script = (ROOT / "guest" / "build" / "build-guest.sh").read_text()
+        workflow = (ROOT / ".github" / "workflows" / "reproducibility.yml").read_text()
+        self.assertIn('AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER: "1"', workflow)
+        self.assertIn(
+            "rustup toolchain install 1.92.0 --profile minimal --target wasm32-unknown-unknown",
+            workflow,
+        )
+        self.assertIn("fetch wasi-vfs-source wasi-vfs-source.tar.gz", script)
+        self.assertIn("fetch wasi-vfs-wasi-submodule-source wasi-spec-source.tar.gz", script)
+        self.assertIn("tools/patch_wasi_vfs_deterministic_hasher.py", script)
+        self.assertIn(
+            'CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasip1 --sysroot=${WASI_SDK_PATH}/share/wasi-sysroot"',
+            script,
+        )
+        self.assertIn(
+            "cargo +1.92.0 build --locked --release --target wasm32-unknown-unknown -p wasi-vfs",
+            script,
+        )
+        self.assertIn(
+            'WASI_VFS_LIB="${WASI_VFS_SOURCE_DIR}/target/wasm32-unknown-unknown/release/libwasi_vfs.a"',
+            script,
+        )
+
     def test_workflow_uploads_and_compares_stage_evidence(self):
         workflow = (ROOT / ".github" / "workflows" / "reproducibility.yml").read_text()
         self.assertIn("python3 -m unittest discover -s tests -v", workflow)

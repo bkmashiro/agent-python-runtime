@@ -53,7 +53,7 @@ Run [`29952871249`](https://github.com/bkmashiro/agent-python-runtime/actions/ru
 
 **Supported conclusion:** the default hasher of `EmbeddedFs.opens` is not the sole necessary source of the pack-stage drift, and replacing it is insufficient to restore exact reproducibility. This experiment does not exclude a secondary contribution from that map.
 
-A local fail-fast preflight also showed that replacing the pack-only WASI secure RNG with an empty deterministic source did not trap and did not remove section-11 drift. That falsifies the host `WasiCtxBuilder.secure_random` lane for this pack entry point; the research workflow therefore does not stub `random_get`.
+A local fail-fast preflight also showed that replacing the pack-only WASI secure RNG with an empty deterministic source did not trap and did not remove section-11 drift at that stage. This established only that secure RNG was not then the sole source; later experiments removed independent directory-buffer drift, so the RNG lane must be retested cumulatively rather than treated as excluded.
 
 A local vanilla-CLI probe then packed the retained treatment raw Wasm twice against the same manifest-identical VFS with `WASI_VFS_VERBOSE=1`. The two 2,390-line file traces, including their root node identifier, were byte-identical while the packed Wasm files still differed. That makes file traversal order an unsupported next treatment rather than the leading hypothesis.
 
@@ -69,7 +69,13 @@ Run [`29957428056`](https://github.com/bkmashiro/agent-python-runtime/actions/ru
 
 **Supported conclusion:** undefined `Dirent` tail padding is a real contributor to the pack-stage drift, but it is not the only source. Complete-entry cleanup leaves residue in six stable memory ranges.
 
-The next candidate addresses only the lifetime of wasi-vfs's reusable 4 KiB `fd_readdir` scratch buffer. Complete-entry cleanup cannot cover truncated entries or bytes beyond the latest returned capacity, and one remaining changed byte occurs at offset 4,075 inside a larger heap range. The next treatment should volatile-zero the full scratch buffer immediately before it is dropped, without changing logical directory fields, traversal order, or allocator behavior.
+The fifth candidate addressed only the lifetime of wasi-vfs's reusable 4 KiB `fd_readdir` scratch buffer. Complete-entry cleanup could not cover truncated entries or bytes beyond the latest returned capacity, so the treatment volatile-zeroed the full live buffer immediately before each `walk_dir` returned, without changing logical directory fields, traversal order, or allocator behavior.
+
+Run [`29959139449`](https://github.com/bkmashiro/agent-python-runtime/actions/runs/29959139449) on signed research commit `02fa476e131bab3b41141dc3f5d55e96aeba959e` still produced same-run and cross-run section-11 drift. It removed the sixth changed segment and all section-size outliers: all four outputs had equal size, and every pair differed in the same five segment indices by 101–104 bytes.
+
+**Supported conclusion:** live scratch-buffer residue is another real but small contributor, not the remaining root. The directory path is now bounded to five stable ranges.
+
+A raw-versus-packed memory comparison identifies the dominant remainder more directly. A 96-byte high-entropy heap region that is nearly zero in the raw module appears beside the ASCII constant `expand 32-byte k` after packing, identifying ChaCha/arc4random state. The next experiment should therefore rebuild the pack-only wasi-vfs CLI from the same locked source and configure `WasiCtxBuilder::secure_random` with a deterministic zero-byte generator on top of all current producer cleanups. This changes only pack-time entropy; production runtime randomness remains untouched.
 
 ## Running the controlled workflow
 

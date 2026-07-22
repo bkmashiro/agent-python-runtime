@@ -34,7 +34,9 @@ jobs:
         run: python3 tools/verify_sources_lock.py
 
       - name: Python contract tests
-        run: python3 -m unittest discover -s tests -v
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 -m unittest discover -s guest/tests -v
 
       - name: Go tests
         run: go test ./...

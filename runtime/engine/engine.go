@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -63,10 +65,11 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
+	var guestStderr bytes.Buffer
 	module, err := engine.runtime.InstantiateModule(
 		runContext,
 		engine.compiled,
-		wazero.NewModuleConfig().WithName(""),
+		wazero.NewModuleConfig().WithName("").WithStderr(&guestStderr),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("instantiate guest: %w", err)
@@ -74,17 +77,21 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	defer module.Close(context.Background())
 
 	if err := callNoArgs(runContext, module, "_initialize"); err != nil {
-		return nil, err
+		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
 	if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
-		return nil, err
+		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
 	if trustedPrepare != "" {
 		if err := callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare)); err != nil {
-			return nil, err
+			return nil, withGuestDiagnostic(err, guestStderr.String())
 		}
 	}
-	return callExecute(runContext, module, request, engine.config.MaxResponseBytes)
+	payload, err := callExecute(runContext, module, request, engine.config.MaxResponseBytes)
+	if err != nil {
+		return nil, withGuestDiagnostic(err, guestStderr.String())
+	}
+	return payload, nil
 }
 
 func callNoArgs(ctx context.Context, module api.Module, name string) error {
@@ -180,4 +187,17 @@ func readGuestResponse(memory api.Memory, pointer uint32, maxResponse uint32) ([
 		return nil, errors.New("response frame is out of bounds")
 	}
 	return decodeLengthPrefixedResponse(frame, maxResponse)
+}
+
+const guestDiagnosticMax = 16 * 1024
+
+func withGuestDiagnostic(base error, diagnostic string) error {
+	diagnostic = strings.TrimSpace(diagnostic)
+	if diagnostic == "" {
+		return base
+	}
+	if len(diagnostic) > guestDiagnosticMax {
+		diagnostic = diagnostic[len(diagnostic)-guestDiagnosticMax:]
+	}
+	return fmt.Errorf("%w; guest stderr: %s", base, diagnostic)
 }

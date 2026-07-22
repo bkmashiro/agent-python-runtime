@@ -64,7 +64,7 @@ def build_manifest(
         ],
         "limitations": [
             "NumPy is not included in the core artifact",
-            "Host capabilities are not implemented in the core guest",
+            "fetch_many is the only supported capability and requires explicit Host grants",
             "WASI execution evidence is recorded separately",
         ],
     }

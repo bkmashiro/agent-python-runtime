@@ -68,6 +68,9 @@ class ManifestWriterTests(unittest.TestCase):
                 manifest["wasm"]["imports"],
             )
             self.assertEqual(["memory", "runtime_init"], manifest["wasm"]["exports"])
+            limitations = "\n".join(manifest["limitations"])
+            self.assertNotIn("capabilities are not implemented", limitations)
+            self.assertIn("fetch_many", limitations)
 
 
 if __name__ == "__main__":

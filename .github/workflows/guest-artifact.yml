@@ -106,19 +106,39 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: agent-python-runtime-core-${{ github.sha }}
-          path: dist
+          path: ${{ runner.temp }}/agent-runtime-dist
 
       - name: Reverify artifact binding
         run: |
           python3 guest/build/verify-artifact.py \
-            dist/agent-python-runtime.wasm \
-            dist/manifest.json
+            "${{ runner.temp }}/agent-runtime-dist/agent-python-runtime.wasm" \
+            "${{ runner.temp }}/agent-runtime-dist/manifest.json"
           (
-            cd dist
+            cd "${{ runner.temp }}/agent-runtime-dist"
             sha256sum --check SHA256SUMS
           )
 
       - name: Run real Host/guest E2E
         env:
-          AGENT_RUNTIME_GUEST: ${{ github.workspace }}/dist/agent-python-runtime.wasm
+          AGENT_RUNTIME_GUEST: ${{ runner.temp }}/agent-runtime-dist/agent-python-runtime.wasm
         run: go test ./integration/e2e -v -count=1
+
+      - name: Record production-safe runtime benchmark
+        run: |
+          go run ./cmd/apyrun-benchmark \
+            -artifact "${{ runner.temp }}/agent-runtime-dist/agent-python-runtime.wasm" \
+            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
+            -output "${{ runner.temp }}/runtime-production-safe-linux-amd64.json" \
+            -class production-safe \
+            -samples 3
+          python3 -m json.tool \
+            "${{ runner.temp }}/runtime-production-safe-linux-amd64.json" \
+            >/dev/null
+
+      - name: Upload production-safe runtime benchmark
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-benchmark-production-safe-${{ github.sha }}
+          path: ${{ runner.temp }}/runtime-production-safe-linux-amd64.json
+          if-no-files-found: error
+          retention-days: 7

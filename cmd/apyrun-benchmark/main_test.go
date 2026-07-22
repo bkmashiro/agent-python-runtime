@@ -45,7 +45,8 @@ func TestLoadArtifactIdentityBindsManifestToBytes(t *testing.T) {
 	}
 }
 
-func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
+func compileRepositoryEvidenceSchema(t *testing.T) *jsonschema.Schema {
+	t.Helper()
 	schemaBytes, err := os.ReadFile("../../benchmark/v1/evidence.schema.json")
 	if err != nil {
 		t.Fatal(err)
@@ -63,6 +64,11 @@ func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return schema
+}
+
+func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
+	schema := compileRepositoryEvidenceSchema(t)
 	sample := sampleEvidence{
 		InstantiateGuestNS: 1, InitializeNS: 1, RuntimeInitNS: 1, PrepareNS: 1,
 		ExecuteNS: 1, RunTotalNS: 1, RequestBytes: 1, ResultBytes: 1,
@@ -97,6 +103,34 @@ func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
 	}
 	if err := schema.Validate(instance); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCheckedInBenchmarkEvidenceValidates(t *testing.T) {
+	paths, err := filepath.Glob("../../docs/benchmarks/runtime-*.json")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("checked-in benchmark evidence missing: paths=%v err=%v", paths, err)
+	}
+	schema := compileRepositoryEvidenceSchema(t)
+	for _, path := range paths {
+		encoded, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var evidence benchmarkEvidence
+		if err := json.Unmarshal(encoded, &evidence); err != nil {
+			t.Fatal(err)
+		}
+		if err := evidence.Validate(); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		var instance any
+		if err := json.Unmarshal(encoded, &instance); err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.Validate(instance); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
 	}
 }
 

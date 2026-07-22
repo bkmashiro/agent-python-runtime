@@ -87,7 +87,9 @@ The first output is an extension/object inventory and exact failure report, not 
 
 ### F2 — Static-extension feasibility
 
-Because CPython WASI rejects dynamic linking, enumerate every extension initializer required by the minimal import path. Prove that they can be statically linked into the existing reactor and registered with `PyImport_AppendInittab` before `Py_InitializeFromConfig` without changing Host authority or ABI exports.
+Because CPython WASI rejects explicit dynamic-linking support, enumerate every extension initializer required by the minimal import path. Source inspection of NumPy 2.5.1 narrows the eager core path to `numpy._core._multiarray_umath`: `numpy._core` imports its pure-Python `multiarray` and `umath` wrappers, while top-level `linalg`, `fft`, and `random` are lazy. The broader source tree still defines linalg, FFT, random, SIMD, and test extensions, so this is only a scope hypothesis, not proof that Meson can omit them or that one static module is sufficient.
+
+Prove that the required initializer can be built as a static archive, linked into the existing reactor, and registered with `PyImport_AppendInittab` before `Py_InitializeFromConfig` without changing Host authority or ABI exports. The manual-only `.github/workflows/numpy-wasi-probe.yml` first runs NumPy's vendored Meson against the exact experimental source lock and retains structured setup/compile logs; a compiler failure is diagnostic evidence rather than a support claim.
 
 Stop for a toolchain/scope decision if this requires a broad NumPy fork, opaque binary inputs, unsupported runtime dynamic linking, or an unbounded extension graph. Do not silently replace static integration with a wheel copied into VFS.
 

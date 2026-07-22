@@ -28,6 +28,20 @@ The current stable PyPI source distribution selected for the bounded spike is:
 
 The sdist itself is the only NumPy source candidate. No pre-release wheel, wasi-wheels binary, or copied third-party build recipe is allowed. It enters the production source lock only when a build step actually consumes it; recording an unused source as packaged evidence would be false provenance.
 
+## Prior implementation audit
+
+The earlier Shimmy/WLR line contains a real, relevant static-extension implementation rather than only a wheel experiment:
+
+- `bkmashiro/wasi-wheels` commit `184cce0b537088be76e1e8a06d6fe742e2f29ff4`, with NumPy gitlink `7bc18034031f32e5d03bb646c472dabd1623e9d5` (`1.26.0b1`), intercepted distutils shared-library link steps, archived the extension object files, and emitted a pure-Python tree plus static archives;
+- `bkmashiro/webassembly-language-runtimes` commit `3afe48cd282d37d86643f26f92db0880deef8b2d` linked the NumPy archives monolithically with CPython 3.14, registered core initializers through `PyImport_AppendInittab` before `Py_Initialize`, and packed the Python tree through wasi-vfs;
+- `shimmy-wasm` commit `1a4743d1959e982b9b459195fe10ff930849cf34` retains real NumPy array/reduction/matrix/error/isolation E2E and points to WLR as the artifact source of truth.
+
+The reusable architecture is: compile extension objects for `wasm32-wasip1` → retain them as deterministic static archives rather than dynamically loaded side modules → link the bounded archive set into the reactor → register exact `PyInit_*` functions as built-ins → route dotted built-in submodule imports to `BuiltinImporter` → pack only the matching pure-Python tree into the immutable VFS. This directly matches the current Core Wasm/no-`dlopen` boundary.
+
+The old implementation is evidence and a design reference, not a source dependency. It cannot be copied verbatim because it consumes mutable `latest` release assets, lacks a root LICENSE file despite a README MIT statement, uses NumPy's removed distutils build path, carries `-D__EMSCRIPTEN__`, patches CPython toward dynamic linking elsewhere in the repository, and includes broad test/random stubs and snapshot assumptions outside this product's security model. The current project must independently implement the narrow mechanism from the locked official NumPy source, pin every host helper, preserve fresh instantiate/discard, and fail closed on extension/archive/initializer drift.
+
+For NumPy 2.5.1, the old linker-interception concept may be adapted only as a project-owned Meson probe: expose the pinned host Cython command, let Meson compile with the locked WASI C/C++ toolchain, intercept only extension-link outputs to archive the exact object list, and require a machine-readable mapping from module name to archive and `PyInit_*` symbol. A fallback to official NumPy 1.26 source is a separate owner decision, not an automatic downgrade.
+
 ## Minimal promised vertical slice
 
 A successful first slice must support, on the real immutable Guest artifact:

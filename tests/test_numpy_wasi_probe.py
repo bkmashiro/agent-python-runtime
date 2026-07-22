@@ -29,6 +29,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("-Ddisable-optimization=true", script)
         self.assertIn('outcome = "setup_failed"', script)
         self.assertIn('outcome = "compile_failed"', script)
+        self.assertIn("CYTHON_WRAPPER_DIR", script)
+        self.assertIn('PATH="${CYTHON_WRAPPER_DIR}:${PATH}"', script)
         self.assertIn("diagnostic only", script)
         self.assertNotIn("pip install", script)
         self.assertNotIn("wasi-wheels", script.lower())

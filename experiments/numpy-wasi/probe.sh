@@ -37,7 +37,9 @@ for required in \
   fi
 done
 
-CYTHON_WRAPPER="${PROBE_DIR}/cython-host"
+CYTHON_WRAPPER_DIR="${PROBE_DIR}/host-bin"
+CYTHON_WRAPPER="${CYTHON_WRAPPER_DIR}/cython"
+mkdir -p "${CYTHON_WRAPPER_DIR}"
 cat >"${CYTHON_WRAPPER}" <<EOF
 #!/usr/bin/env bash
 PYTHONPATH="${PROBE_DIR}/cython" exec python3 "${PROBE_DIR}/cython/cython.py" "\$@"
@@ -74,7 +76,7 @@ EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
 set +e
-PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
+PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
   "${PROBE_DIR}/build" "${PROBE_DIR}/numpy" \
   --cross-file "${CROSS_FILE}" \
   -Dallow-noblas=true \
@@ -90,7 +92,7 @@ PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
 SETUP_EXIT=$?
 COMPILE_EXIT=-1
 if [[ ${SETUP_EXIT} -eq 0 ]]; then
-  PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
+  PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
     -C "${PROBE_DIR}/build" -j 2 \
     >"${PROBE_DIR}/logs/compile.log" 2>&1
   COMPILE_EXIT=$?

@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
-	"runtime/debug"
-	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -320,30 +320,24 @@ func makeRequest(runID, code string, inputs any) ([]byte, error) {
 }
 
 func currentHostSource() (hostSourceIdentity, error) {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return hostSourceIdentity{}, errors.New("Host VCS build information is unavailable")
+	revisionCommand := exec.Command("git", "rev-parse", "HEAD")
+	revisionBytes, err := revisionCommand.Output()
+	if err != nil {
+		return hostSourceIdentity{}, errors.New("Host Git revision is unavailable")
 	}
-	identity := hostSourceIdentity{}
-	for _, setting := range info.Settings {
-		switch setting.Key {
-		case "vcs.revision":
-			identity.Revision = setting.Value
-		case "vcs.modified":
-			modified, err := strconv.ParseBool(setting.Value)
-			if err != nil {
-				return hostSourceIdentity{}, errors.New("Host VCS modified flag is invalid")
-			}
-			identity.Modified = modified
-		}
+	revision := strings.TrimSpace(string(revisionBytes))
+	if len(revision) != 40 {
+		return hostSourceIdentity{}, errors.New("Host Git revision is invalid")
 	}
-	if identity.Revision == "" {
-		return hostSourceIdentity{}, errors.New("Host VCS revision is unavailable")
+	statusCommand := exec.Command("git", "status", "--porcelain", "--untracked-files=normal")
+	statusBytes, err := statusCommand.Output()
+	if err != nil {
+		return hostSourceIdentity{}, errors.New("Host Git status is unavailable")
 	}
-	if identity.Modified {
+	if len(statusBytes) != 0 {
 		return hostSourceIdentity{}, errors.New("benchmark evidence requires a clean Host source revision")
 	}
-	return identity, nil
+	return hostSourceIdentity{Revision: revision, Modified: false}, nil
 }
 
 func writeAtomic(path string, content []byte) error {

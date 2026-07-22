@@ -19,8 +19,8 @@ The command fails before measurement unless:
 
 - artifact filename, size, and SHA-256 match the supplied manifest;
 - the manifest declares `wasm32-wasip1` and reactor execution;
-- Go VCS build information contains a revision;
-- the Host source tree was clean when the command was built.
+- the Host Git worktree resolves to an exact revision;
+- the Host Git worktree is clean before measurement begins.
 
 The JSON records Guest artifact identity and Host source identity separately. They may differ during an intentional cross-version experiment; consumers must not silently treat such evidence as same-commit evidence.
 

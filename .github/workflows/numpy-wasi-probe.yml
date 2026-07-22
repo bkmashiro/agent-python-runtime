@@ -73,6 +73,10 @@ jobs:
             echo '--- meson compile tail ---'
             tail -n 120 "${PROBE_DIR}/logs/compile.log"
           fi
+          if [[ -f "${PROBE_DIR}/logs/link.log" ]]; then
+            echo '--- monolithic link tail ---'
+            tail -n 120 "${PROBE_DIR}/logs/link.log"
+          fi
 
       - name: Upload diagnostic evidence
         if: always()

@@ -173,26 +173,96 @@ PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAP
   >"${PROBE_DIR}/logs/setup.log" 2>&1
 SETUP_EXIT=$?
 COMPILE_EXIT=-1
+LINK_EXIT=-1
+LINK_PROBE="${PROBE_DIR}/numpy-core-link-probe.wasm"
 if [[ ${SETUP_EXIT} -eq 0 ]]; then
   PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
     -C "${PROBE_DIR}/build" -j 2 \
     >"${PROBE_DIR}/logs/compile.log" 2>&1
   COMPILE_EXIT=$?
 fi
+if [[ ${COMPILE_EXIT} -eq 0 ]]; then
+  CORE_MANIFEST="${STATIC_MANIFEST_DIR}/numpy/_core/_multiarray_umath.json"
+  if [[ ! -f ${CORE_MANIFEST} ]]; then
+    echo "missing NumPy core static-extension manifest" >&2
+    exit 12
+  fi
+  mapfile -t NUMPY_CORE_LINK_INPUTS < <(python3 - "${CORE_MANIFEST}" "${PROBE_DIR}/build" <<'PY'
+import json, pathlib, sys
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
+build = pathlib.Path(sys.argv[2])
+for value in [manifest["archive"], *manifest["static_inputs"]]:
+    path = pathlib.Path(value)
+    print(path if path.is_absolute() else build / path)
+PY
+  )
+  if [[ ${#NUMPY_CORE_LINK_INPUTS[@]} -ne 4 ]]; then
+    echo "expected NumPy core archive plus exactly three static inputs" >&2
+    exit 13
+  fi
+  for required in "${NUMPY_CORE_LINK_INPUTS[@]}"; do
+    if [[ ! -f ${required} ]]; then
+      echo "missing NumPy core link input: ${required}" >&2
+      exit 14
+    fi
+  done
+  mapfile -t PYTHON_LIBS < <(find "${WASI_BUILD_DIR}" -maxdepth 2 -type f -name 'libpython3.14.a')
+  if [[ ${#PYTHON_LIBS[@]} -ne 1 ]]; then
+    echo "expected exactly one CPython WASI static library" >&2
+    exit 15
+  fi
+  MPDEC_LIB="${WASI_BUILD_DIR}/Modules/_decimal/libmpdec/libmpdec.a"
+  EXPAT_LIB="${WASI_BUILD_DIR}/Modules/expat/libexpat.a"
+  HACL_LIBS=("${WASI_BUILD_DIR}"/Modules/_hacl/libHacl_*.a)
+  for required in "${MPDEC_LIB}" "${EXPAT_LIB}" "${HACL_LIBS[@]}"; do
+    if [[ ! -f ${required} ]]; then
+      echo "missing CPython static dependency: ${required}" >&2
+      exit 16
+    fi
+  done
+  LINK_PROBE_OBJECT="${PROBE_DIR}/numpy-core-link-probe.o"
+  "${WASI_SDK_PATH}/bin/clang" --target=wasm32-wasip1 \
+    --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" -O2 \
+    -I"${CPYTHON_DIR}/Include" -I"${WASI_BUILD_DIR}" \
+    -c "${ROOT_DIR}/experiments/numpy-wasi/link_probe.c" \
+    -o "${LINK_PROBE_OBJECT}" >"${PROBE_DIR}/logs/link.log" 2>&1
+  LINK_COMPILE_EXIT=$?
+  if [[ ${LINK_COMPILE_EXIT} -eq 0 ]]; then
+    "${WASI_SDK_PATH}/bin/clang++" --target=wasm32-wasip1 \
+      --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" -mexec-model=reactor \
+      "${LINK_PROBE_OBJECT}" \
+      -Wl,--whole-archive "${NUMPY_CORE_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
+      "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" \
+      -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
+      -lpthread -lm \
+      -Wl,--export=numpy_link_probe \
+      -Wl,--export-memory \
+      -Wl,--initial-memory=134217728 \
+      -Wl,--max-memory=536870912 \
+      -Wl,-z,stack-size=16777216 \
+      -o "${LINK_PROBE}" >>"${PROBE_DIR}/logs/link.log" 2>&1
+    LINK_EXIT=$?
+  else
+    LINK_EXIT=${LINK_COMPILE_EXIT}
+  fi
+fi
 set -e
 
-export PROBE_DIR SETUP_EXIT COMPILE_EXIT TARGET_PYTHON
+export PROBE_DIR SETUP_EXIT COMPILE_EXIT LINK_EXIT LINK_PROBE TARGET_PYTHON
 python3 - <<'PY'
 import hashlib, json, os, pathlib
 root = pathlib.Path(os.environ["PROBE_DIR"])
 setup_exit = int(os.environ["SETUP_EXIT"])
 compile_exit = int(os.environ["COMPILE_EXIT"])
+link_exit = int(os.environ["LINK_EXIT"])
 if setup_exit:
     outcome = "setup_failed"
 elif compile_exit:
     outcome = "compile_failed"
+elif link_exit:
+    outcome = "link_failed"
 else:
-    outcome = "compile_succeeded"
+    outcome = "link_succeeded"
 modules = []
 static_extensions = []
 build_root = root / "build"
@@ -222,29 +292,47 @@ for manifest_path in sorted((root / "static-extension-manifests").rglob("*.json"
         "manifest": str(manifest_path.relative_to(root)),
     })
 static_extensions.sort(key=lambda item: item["output"])
-evidence_error = compile_exit == 0 and not static_extensions
+link_probe = pathlib.Path(os.environ["LINK_PROBE"])
+monolithic_link = None
+if link_probe.is_file():
+    digest = hashlib.sha256()
+    with link_probe.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    monolithic_link = {
+        "filename": link_probe.name,
+        "sha256": digest.hexdigest(),
+        "size": link_probe.stat().st_size,
+        "executed": False,
+    }
+evidence_error = (
+    (compile_exit == 0 and not static_extensions)
+    or (link_exit == 0 and monolithic_link is None)
+)
 if evidence_error:
     outcome = "evidence_failed"
 report = {
-    "schema_version": 2,
+    "schema_version": 3,
     "target": "wasm32-wasip1",
     "numpy_version": "2.5.1",
     "numpy_source_sha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
     "cython_version": "3.2.8",
     "setup_exit": setup_exit,
     "compile_exit": compile_exit,
+    "link_exit": link_exit,
     "outcome": outcome,
     "target_python_wrapper": pathlib.Path(os.environ["TARGET_PYTHON"]).name,
     "meson_target_python_adapter": pathlib.Path(os.environ["TARGET_PYTHON_ADAPTER"]).name,
     "extension_outputs": modules,
     "static_extension_count": len(static_extensions),
     "static_extensions": static_extensions,
-    "claim": "diagnostic only; static archives are not yet linked, registered, or importable",
+    "monolithic_link": monolithic_link,
+    "claim": "diagnostic link-only probe; the module is not registered, executed, packaged, or importable",
 }
 (root / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 print(json.dumps(report, sort_keys=True))
 if evidence_error:
-    raise SystemExit("compile succeeded without static extension evidence")
+    raise SystemExit("successful stage did not produce its required evidence")
 PY
 
 # A compiler failure is diagnostic evidence. Missing/invalid locked inputs and

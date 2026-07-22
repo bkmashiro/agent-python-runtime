@@ -5,6 +5,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LOCK = ROOT / "experiments" / "numpy-wasi" / "sources.lock.json"
 PROBE = ROOT / "experiments" / "numpy-wasi" / "probe.sh"
+LINK_PROBE = ROOT / "experiments" / "numpy-wasi" / "link_probe.c"
 WORKFLOW = ROOT / ".github" / "workflows" / "numpy-wasi-probe.yml"
 
 
@@ -41,13 +42,21 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("find_program('python3', native: true)", script)
         self.assertIn("tools/archive_wasm_extension.py", script)
         self.assertIn("STATIC_MANIFEST_DIR", script)
-        self.assertIn('"schema_version": 2', script)
+        self.assertIn('"schema_version": 3', script)
         self.assertIn('"static_extension_count"', script)
+        self.assertIn('outcome = "link_failed"', script)
+        self.assertIn('outcome = "link_succeeded"', script)
+        self.assertIn("expected NumPy core archive plus exactly three static inputs", script)
+        self.assertIn("--whole-archive", script)
+        self.assertIn("--export=numpy_link_probe", script)
         self.assertIn("expected exactly one NumPy target-Python Meson seam", script)
         self.assertIn("find_installation({target_python!r}, pure: false)", script)
         self.assertIn("CYTHON_WRAPPER_DIR", script)
         self.assertIn('PATH="${CYTHON_WRAPPER_DIR}:${PATH}"', script)
-        self.assertIn("diagnostic only", script)
+        self.assertIn("diagnostic link-only probe", script)
+        link_source = LINK_PROBE.read_text()
+        self.assertIn("PyInit__multiarray_umath", link_source)
+        self.assertIn('export_name("numpy_link_probe")', link_source)
         self.assertNotIn("pip install", script)
         self.assertNotIn("wasi-wheels", script.lower())
 

@@ -3,6 +3,14 @@
   "target": "wasm32-wasip1",
   "sources": [
     {
+      "id": "actionlint-linux-amd64",
+      "version": "1.7.12",
+      "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz",
+      "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+      "license": "MIT",
+      "role": "build-tool"
+    },
+    {
       "id": "cpython-source",
       "version": "3.14.0",
       "url": "https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz",
@@ -23,6 +31,14 @@
       "version": "1.254.0",
       "url": "https://github.com/bytecodealliance/wasm-tools/releases/download/v1.254.0/wasm-tools-1.254.0-x86_64-linux.tar.gz",
       "sha256": "d0efb16c9c859137b7ab3e99151c299cd47caee106ed4594561002f7a04945bd",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "role": "build-tool"
+    },
+    {
+      "id": "wasmtime-linux-x86_64",
+      "version": "44.0.1",
+      "url": "https://github.com/bytecodealliance/wasmtime/releases/download/v44.0.1/wasmtime-v44.0.1-x86_64-linux.tar.xz",
+      "sha256": "afd58715f105e3a7f454169daed22168c5736ec5f225fb04c4ac62c54c9508a3",
       "license": "Apache-2.0 WITH LLVM-exception",
       "role": "build-tool"
     },

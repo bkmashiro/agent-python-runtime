@@ -35,6 +35,31 @@ BenchmarkFetchManySequential/operations=20-2 10  4000 ns/op 20.00 operations/bat
         self.assertEqual(200, evidence["results"][1]["median_ns_per_operation"])
         self.assertEqual(2_000_000, evidence["fixture"]["provider_delay_ns_per_operation"])
 
+    def test_parses_sequential_parallel_comparison(self):
+        lines = ["goos: linux", "goarch: amd64", "cpu: fixture cpu"]
+        for operations, sequential, parallel, concurrency in [
+            (1, [300, 100, 200], [100, 120, 110], 1),
+            (5, [1000, 900, 1100], [220, 200, 210], 5),
+            (20, [4000, 3900, 4100], [700, 600, 650], 8),
+        ]:
+            for value in sequential:
+                lines.append(
+                    "BenchmarkFetchManySequential/operations=%d-2 10 %d ns/op %.3f operations/batch 2000000 provider-delay-ns/operation"
+                    % (operations, value, operations)
+                )
+            for value in parallel:
+                lines.append(
+                    "BenchmarkFetchManyParallel/operations=%d-2 10 %d ns/op %.3f max-concurrency %.3f operations/batch 2000000 provider-delay-ns/operation"
+                    % (operations, value, concurrency, operations)
+                )
+        evidence = benchmark_fetch_many.parse_comparison_output("\n".join(lines), "cafebabe")
+        self.assertEqual("sequential-vs-bounded-parallel", evidence["mode"])
+        self.assertEqual([1, 5, 20], [row["operations"] for row in evidence["results"]])
+        self.assertEqual(1000, evidence["results"][1]["sequential_median_ns_per_batch"])
+        self.assertEqual(210, evidence["results"][1]["parallel_median_ns_per_batch"])
+        self.assertEqual(5, evidence["results"][1]["max_concurrency"])
+        self.assertAlmostEqual(1000 / 210, evidence["results"][1]["speedup"])
+
     def test_rejects_missing_or_drifted_fixture_rows(self):
         incomplete = """
 goos: linux

@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -22,20 +23,23 @@ type importRecord struct {
 }
 
 type report struct {
-	SchemaVersion       int            `json:"schema_version"`
-	Backend             string         `json:"backend"`
-	Outcome             string         `json:"outcome"`
-	WasmSHA256          string         `json:"wasm_sha256"`
-	WasmSize            int            `json:"wasm_size"`
-	Imports             []importRecord `json:"imports"`
-	Exports             []string       `json:"exports"`
-	CInitializeCalled   bool           `json:"c_initialize_called"`
-	RegistrationCalled  bool           `json:"registration_called"`
-	RegistrationExit    *uint64        `json:"registration_exit"`
-	PythonInitialized   bool           `json:"python_initialized"`
-	InitializerExecuted bool           `json:"initializer_executed"`
-	ModuleImported      bool           `json:"module_imported"`
-	Error               string         `json:"error,omitempty"`
+	SchemaVersion        int            `json:"schema_version"`
+	Backend              string         `json:"backend"`
+	Outcome              string         `json:"outcome"`
+	WasmSHA256           string         `json:"wasm_sha256"`
+	WasmSize             int            `json:"wasm_size"`
+	Imports              []importRecord `json:"imports"`
+	Exports              []string       `json:"exports"`
+	CInitializeCalled    bool           `json:"c_initialize_called"`
+	RegistrationCalled   bool           `json:"registration_called"`
+	RegistrationExit     *uint64        `json:"registration_exit"`
+	ImportCalled         bool           `json:"import_called"`
+	ImportExit           *uint64        `json:"import_exit"`
+	PythonInitialized    bool           `json:"python_initialized"`
+	InitializerExecution string         `json:"initializer_execution"`
+	ModuleImported       bool           `json:"module_imported"`
+	GuestStderr          string         `json:"guest_stderr,omitempty"`
+	Error                string         `json:"error,omitempty"`
 }
 
 func main() {
@@ -54,13 +58,14 @@ func main() {
 	}
 	digest := sha256.Sum256(wasm)
 	result := report{
-		SchemaVersion: 1,
-		Backend:       "wazero",
-		Outcome:       "registration_failed",
-		WasmSHA256:    hex.EncodeToString(digest[:]),
-		WasmSize:      len(wasm),
-		Imports:       []importRecord{},
-		Exports:       []string{},
+		SchemaVersion:        2,
+		Backend:              "wazero",
+		Outcome:              "registration_failed",
+		WasmSHA256:           hex.EncodeToString(digest[:]),
+		WasmSize:             len(wasm),
+		Imports:              []importRecord{},
+		Exports:              []string{},
+		InitializerExecution: "not_attempted",
 	}
 	if err := runProbe(context.Background(), wasm, &result); err != nil {
 		result.Error = boundedError(err)
@@ -106,8 +111,12 @@ func runProbe(ctx context.Context, wasm []byte, result *report) error {
 	for name := range compiled.ExportedMemories() {
 		result.Exports = append(result.Exports, name)
 	}
+	sort.Strings(result.Exports)
 
 	stderr := &bytes.Buffer{}
+	defer func() {
+		result.GuestStderr = boundedText(stderr.String())
+	}()
 	module, err := runtime.InstantiateModule(
 		ctx,
 		compiled,
@@ -144,15 +153,50 @@ func runProbe(ctx context.Context, wasm []byte, result *report) error {
 	if registrationExit != 0 {
 		return fmt.Errorf("PyImport_AppendInittab returned %d", registrationExit)
 	}
-	result.Outcome = "registration_succeeded"
+	result.Outcome = "import_failed"
+
+	importProbe := module.ExportedFunction("numpy_import_probe")
+	if importProbe == nil {
+		return errors.New("missing numpy_import_probe export")
+	}
+	values, err = importProbe.Call(ctx)
+	result.ImportCalled = true
+	result.InitializerExecution = "attempted_or_unknown"
+	if err != nil {
+		return fmt.Errorf("call numpy_import_probe: %w", err)
+	}
+	if len(values) != 1 {
+		return fmt.Errorf("import returned %d values, want 1", len(values))
+	}
+	importExit := values[0]
+	result.ImportExit = &importExit
+
+	initialized := module.ExportedFunction("numpy_python_initialized_probe")
+	if initialized == nil {
+		return errors.New("missing numpy_python_initialized_probe export")
+	}
+	initializedValues, err := initialized.Call(ctx)
+	if err != nil || len(initializedValues) != 1 {
+		return fmt.Errorf("read Python initialization state: values=%d err=%v", len(initializedValues), err)
+	}
+	result.PythonInitialized = initializedValues[0] != 0
+	if importExit != 0 {
+		return fmt.Errorf("numpy_import_probe returned %d", importExit)
+	}
+	result.InitializerExecution = "succeeded"
+	result.ModuleImported = true
+	result.Outcome = "import_succeeded"
 	return nil
 }
 
-func boundedError(err error) string {
+func boundedText(text string) string {
 	const limit = 1000
-	text := err.Error()
 	if len(text) <= limit {
 		return text
 	}
 	return text[:limit]
+}
+
+func boundedError(err error) string {
+	return boundedText(err.Error())
 }

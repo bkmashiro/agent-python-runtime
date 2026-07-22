@@ -8,6 +8,16 @@ LOCK="${ROOT_DIR}/experiments/numpy-wasi/sources.lock.json"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 WASI_BUILD_DIR="${CPYTHON_DIR}/cross-build/wasm32-wasip1"
 WASI_SDK_PATH="${WORK_DIR}/tools/wasi-sdk"
+BASE_VFS_DIR=${AGENT_RUNTIME_VFS_ROOT:-"${WORK_DIR}/vfs-python"}
+SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" HEAD)}
+mapfile -t WASI_VFS_TOOLS < <(find "${WORK_DIR}/tools/wasi-vfs-cli" -type f -name wasi-vfs -perm -u+x -print)
+mapfile -t WASI_VFS_LIBS < <(find "${WORK_DIR}/tools/wasi-vfs-lib" -type f -name '*.a' -print)
+if [[ ${#WASI_VFS_TOOLS[@]} -ne 1 || ${#WASI_VFS_LIBS[@]} -ne 1 ]]; then
+  echo "expected exactly one wasi-vfs tool and static library" >&2
+  exit 9
+fi
+WASI_VFS=${WASI_VFS_TOOLS[0]}
+WASI_VFS_LIB=${WASI_VFS_LIBS[0]}
 
 rm -rf "${PROBE_DIR}"
 mkdir -p "${PROBE_DIR}/downloads" "${PROBE_DIR}/numpy" "${PROBE_DIR}/cython" "${PROBE_DIR}/logs"
@@ -47,7 +57,12 @@ for required in \
   "${WASI_SDK_PATH}/bin/llvm-ar" \
   "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py" \
   "${PROBE_DIR}/cython/cython.py" \
-  "${ROOT_DIR}/tools/archive_wasm_extension.py"; do
+  "${ROOT_DIR}/tools/archive_wasm_extension.py" \
+  "${ROOT_DIR}/tools/stage_numpy_wasi_package.py" \
+  "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+  "${WASI_VFS}" \
+  "${WASI_VFS_LIB}" \
+  "${BASE_VFS_DIR}"; do
   if [[ ! -e ${required} ]]; then
     echo "missing probe input: ${required}" >&2
     exit 11
@@ -182,13 +197,41 @@ PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAP
   >"${PROBE_DIR}/logs/setup.log" 2>&1
 SETUP_EXIT=$?
 COMPILE_EXIT=-1
+INSTALL_EXIT=-1
+STAGE_EXIT=-1
 LINK_EXIT=-1
+PACK_EXIT=-1
 LINK_PROBE="${PROBE_DIR}/numpy-core-link-probe.wasm"
+IMPORT_PROBE="${PROBE_DIR}/numpy-import-probe.wasm"
+NUMPY_INSTALL_ROOT="${PROBE_DIR}/numpy-install"
+PROBE_VFS_DIR="${PROBE_DIR}/vfs-python"
+PACKAGE_MANIFEST="${PROBE_DIR}/numpy-package-manifest.json"
 if [[ ${SETUP_EXIT} -eq 0 ]]; then
   PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
     -C "${PROBE_DIR}/build" -j 2 \
     >"${PROBE_DIR}/logs/compile.log" 2>&1
   COMPILE_EXIT=$?
+fi
+if [[ ${COMPILE_EXIT} -eq 0 ]]; then
+  PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" install --no-rebuild \
+    -C "${PROBE_DIR}/build" --destdir "${NUMPY_INSTALL_ROOT}" --tags python-runtime \
+    >"${PROBE_DIR}/logs/install.log" 2>&1
+  INSTALL_EXIT=$?
+fi
+if [[ ${INSTALL_EXIT} -eq 0 ]]; then
+  python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+    "${BASE_VFS_DIR}" "${PROBE_VFS_DIR}" --epoch "${SOURCE_DATE_EPOCH}" \
+    >"${PROBE_DIR}/logs/stage.log" 2>&1
+  BASE_STAGE_EXIT=$?
+  if [[ ${BASE_STAGE_EXIT} -eq 0 ]]; then
+    python3 "${ROOT_DIR}/tools/stage_numpy_wasi_package.py" \
+      "${NUMPY_INSTALL_ROOT}" "${PROBE_VFS_DIR}/site-packages/numpy" \
+      --epoch "${SOURCE_DATE_EPOCH}" --manifest "${PACKAGE_MANIFEST}" \
+      >>"${PROBE_DIR}/logs/stage.log" 2>&1
+    STAGE_EXIT=$?
+  else
+    STAGE_EXIT=${BASE_STAGE_EXIT}
+  fi
 fi
 if [[ ${COMPILE_EXIT} -eq 0 ]]; then
   CORE_MANIFEST="${STATIC_MANIFEST_DIR}/numpy/_core/_multiarray_umath.json"
@@ -243,10 +286,12 @@ PY
       -mexec-model=reactor \
       "${LINK_PROBE_OBJECT}" \
       -Wl,--whole-archive "${NUMPY_CORE_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
-      "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" \
+      "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
       -lpthread -lm \
       -Wl,--export=numpy_register_probe \
+      -Wl,--export=numpy_import_probe \
+      -Wl,--export=numpy_python_initialized_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \
       -Wl,--max-memory=536870912 \
@@ -257,23 +302,38 @@ PY
     LINK_EXIT=${LINK_COMPILE_EXIT}
   fi
 fi
+if [[ ${LINK_EXIT} -eq 0 && ${STAGE_EXIT} -eq 0 ]]; then
+  "${WASI_VFS}" pack "${LINK_PROBE}" \
+    --dir "${PROBE_VFS_DIR}::/usr/lib/python3.14" \
+    -o "${IMPORT_PROBE}" >"${PROBE_DIR}/logs/pack.log" 2>&1
+  PACK_EXIT=$?
+fi
 set -e
 
-export PROBE_DIR SETUP_EXIT COMPILE_EXIT LINK_EXIT LINK_PROBE TARGET_PYTHON
+export PROBE_DIR SETUP_EXIT COMPILE_EXIT INSTALL_EXIT STAGE_EXIT LINK_EXIT PACK_EXIT LINK_PROBE IMPORT_PROBE PACKAGE_MANIFEST TARGET_PYTHON
 python3 - <<'PY'
 import hashlib, json, os, pathlib
 root = pathlib.Path(os.environ["PROBE_DIR"])
 setup_exit = int(os.environ["SETUP_EXIT"])
 compile_exit = int(os.environ["COMPILE_EXIT"])
+install_exit = int(os.environ["INSTALL_EXIT"])
+stage_exit = int(os.environ["STAGE_EXIT"])
 link_exit = int(os.environ["LINK_EXIT"])
+pack_exit = int(os.environ["PACK_EXIT"])
 if setup_exit:
     outcome = "setup_failed"
 elif compile_exit:
     outcome = "compile_failed"
+elif install_exit:
+    outcome = "install_failed"
+elif stage_exit:
+    outcome = "stage_failed"
 elif link_exit:
     outcome = "link_failed"
+elif pack_exit:
+    outcome = "pack_failed"
 else:
-    outcome = "link_succeeded"
+    outcome = "pack_succeeded"
 modules = []
 static_extensions = []
 build_root = root / "build"
@@ -303,28 +363,40 @@ for manifest_path in sorted((root / "static-extension-manifests").rglob("*.json"
         "manifest": str(manifest_path.relative_to(root)),
     })
 static_extensions.sort(key=lambda item: item["output"])
-link_probe = pathlib.Path(os.environ["LINK_PROBE"])
-monolithic_link = None
-if link_probe.is_file():
+def artifact(path):
+    if not path.is_file():
+        return None
     digest = hashlib.sha256()
-    with link_probe.open("rb") as stream:
+    with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
-    monolithic_link = {
-        "filename": link_probe.name,
-        "sha256": digest.hexdigest(),
-        "size": link_probe.stat().st_size,
-        "initializer_executed": False,
-        "module_imported": False,
+    return {"filename": path.name, "sha256": digest.hexdigest(), "size": path.stat().st_size}
+
+link_probe = pathlib.Path(os.environ["LINK_PROBE"])
+monolithic_link = artifact(link_probe)
+if monolithic_link is not None:
+    monolithic_link.update({"initializer_executed": False, "module_imported": False})
+import_probe = artifact(pathlib.Path(os.environ["IMPORT_PROBE"]))
+package_manifest_path = pathlib.Path(os.environ["PACKAGE_MANIFEST"])
+package_staging = None
+if package_manifest_path.is_file():
+    package = json.loads(package_manifest_path.read_text())
+    package_staging = {
+        "manifest": package_manifest_path.name,
+        "manifest_sha256": artifact(package_manifest_path)["sha256"],
+        "file_count": package["file_count"],
+        "source": package["source"],
     }
 evidence_error = (
     (compile_exit == 0 and not static_extensions)
+    or (stage_exit == 0 and package_staging is None)
     or (link_exit == 0 and monolithic_link is None)
+    or (pack_exit == 0 and import_probe is None)
 )
 if evidence_error:
     outcome = "evidence_failed"
 report = {
-    "schema_version": 4,
+    "schema_version": 5,
     "target": "wasm32-wasip1",
     "cxx_exception_mode": "selective-disabled",
     "cxx_exception_adaptation": {
@@ -338,15 +410,20 @@ report = {
     "cython_version": "3.2.8",
     "setup_exit": setup_exit,
     "compile_exit": compile_exit,
+    "install_exit": install_exit,
+    "stage_exit": stage_exit,
     "link_exit": link_exit,
+    "pack_exit": pack_exit,
     "outcome": outcome,
     "target_python_wrapper": pathlib.Path(os.environ["TARGET_PYTHON"]).name,
     "meson_target_python_adapter": pathlib.Path(os.environ["TARGET_PYTHON_ADAPTER"]).name,
     "extension_outputs": modules,
     "static_extension_count": len(static_extensions),
     "static_extensions": static_extensions,
+    "package_staging": package_staging,
     "monolithic_link": monolithic_link,
-    "claim": "diagnostic link artifact; builtin registration is reported separately, and the NumPy initializer and module import are not executed",
+    "import_probe": import_probe,
+    "claim": "diagnostic packed import probe; initializer/import execution is reported separately and is not production qualification",
 }
 (root / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 print(json.dumps(report, sort_keys=True))

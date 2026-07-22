@@ -54,6 +54,7 @@ jobs:
       - name: Run diagnostic NumPy compile probe
         env:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
+          AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
           NUMPY_WASI_PROBE_DIR: ${{ runner.temp }}/numpy-wasi-probe
         run: bash experiments/numpy-wasi/probe.sh
 
@@ -61,9 +62,9 @@ jobs:
         env:
           PROBE_DIR: ${{ runner.temp }}/numpy-wasi-probe
         run: |
-          if [[ -f "${PROBE_DIR}/numpy-core-link-probe.wasm" ]]; then
+          if [[ -f "${PROBE_DIR}/numpy-import-probe.wasm" ]]; then
             go run ./cmd/validate-numpy-link-probe \
-              -wasm "${PROBE_DIR}/numpy-core-link-probe.wasm" \
+              -wasm "${PROBE_DIR}/numpy-import-probe.wasm" \
               -output "${PROBE_DIR}/registration-report.json"
           fi
 
@@ -87,9 +88,21 @@ jobs:
             echo '--- meson compile tail ---'
             tail -n 120 "${PROBE_DIR}/logs/compile.log"
           fi
+          if [[ -f "${PROBE_DIR}/logs/install.log" ]]; then
+            echo '--- meson install tail ---'
+            tail -n 120 "${PROBE_DIR}/logs/install.log"
+          fi
+          if [[ -f "${PROBE_DIR}/logs/stage.log" ]]; then
+            echo '--- package staging tail ---'
+            tail -n 120 "${PROBE_DIR}/logs/stage.log"
+          fi
           if [[ -f "${PROBE_DIR}/logs/link.log" ]]; then
             echo '--- monolithic link tail ---'
             tail -n 120 "${PROBE_DIR}/logs/link.log"
+          fi
+          if [[ -f "${PROBE_DIR}/logs/pack.log" ]]; then
+            echo '--- wasi-vfs pack tail ---'
+            tail -n 120 "${PROBE_DIR}/logs/pack.log"
           fi
 
       - name: Upload diagnostic evidence
@@ -101,6 +114,8 @@ jobs:
             ${{ runner.temp }}/numpy-wasi-probe/report.json
             ${{ runner.temp }}/numpy-wasi-probe/registration-report.json
             ${{ runner.temp }}/numpy-wasi-probe/numpy-core-link-probe.wasm
+            ${{ runner.temp }}/numpy-wasi-probe/numpy-import-probe.wasm
+            ${{ runner.temp }}/numpy-wasi-probe/numpy-package-manifest.json
             ${{ runner.temp }}/numpy-wasi-probe/wasi-cross.ini
             ${{ runner.temp }}/numpy-wasi-probe/logs/
             ${{ runner.temp }}/numpy-wasi-probe/static-extension-manifests/

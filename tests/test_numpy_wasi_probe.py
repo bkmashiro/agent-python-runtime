@@ -8,7 +8,8 @@ PROBE = ROOT / "experiments" / "numpy-wasi" / "probe.sh"
 NOEH_PATCHER = ROOT / "tools" / "patch_numpy_noeh_unique.py"
 LINK_PROBE = ROOT / "experiments" / "numpy-wasi" / "link_probe.c"
 WORKFLOW = ROOT / ".github" / "workflows" / "numpy-wasi-probe.yml"
-
+REGISTRATION_VERIFIER = ROOT / "cmd" / "validate-numpy-link-probe" / "main.go"
+LOCK = ROOT / "experiments" / "numpy-wasi" / "sources.lock.json"
 
 class NumPyWASIProbeContractTests(unittest.TestCase):
     def test_probe_uses_isolated_exact_sources_and_bounded_features(self):
@@ -43,10 +44,17 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("find_program('python3', native: true)", script)
         self.assertIn("tools/archive_wasm_extension.py", script)
         self.assertIn("STATIC_MANIFEST_DIR", script)
-        self.assertIn('"schema_version": 4', script)
+        self.assertIn('"schema_version": 5', script)
+        self.assertIn('"install_exit"', script)
+        self.assertIn("install --no-rebuild", script)
+        self.assertIn("--tags python-runtime", script)
+        self.assertIn("tools/stage_numpy_wasi_package.py", script)
+        self.assertIn("numpy-package-manifest.json", script)
+        self.assertIn("wasi-vfs", script)
+        self.assertIn("numpy-import-probe.wasm", script)
         self.assertIn('"static_extension_count"', script)
         self.assertIn('outcome = "link_failed"', script)
-        self.assertIn('outcome = "link_succeeded"', script)
+        self.assertIn('outcome = "pack_succeeded"', script)
         self.assertIn("CPYTHON_DIR=\"${WORK_DIR}/cpython\"", script)
         self.assertIn("expected NumPy core archive plus exactly three static inputs", script)
         self.assertIn("--whole-archive", script)
@@ -66,12 +74,19 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("find_installation({target_python!r}, pure: false)", script)
         self.assertIn("CYTHON_WRAPPER_DIR", script)
         self.assertIn('PATH="${CYTHON_WRAPPER_DIR}:${PATH}"', script)
-        self.assertIn("builtin registration is reported separately", script)
+        self.assertIn("initializer/import execution is reported separately", script)
         link_source = LINK_PROBE.read_text()
         self.assertIn("PyInit__multiarray_umath", link_source)
         self.assertIn('PyImport_AppendInittab("numpy._core._multiarray_umath"', link_source)
         self.assertIn('export_name("numpy_register_probe")', link_source)
+        self.assertIn('export_name("numpy_import_probe")', link_source)
+        self.assertIn("Py_InitializeFromConfig", link_source)
+        self.assertIn("_imp.is_builtin", link_source)
+        self.assertIn('PyImport_ImportModule("numpy")', link_source)
         self.assertNotIn("return PyInit__multiarray_umath()", link_source)
+        verifier = REGISTRATION_VERIFIER.read_text()
+        self.assertIn('ExportedFunction("numpy_import_probe")', verifier)
+        self.assertIn('"import_succeeded"', verifier)
         self.assertNotIn("pip install", script)
         self.assertNotIn("wasi-wheels", script.lower())
 
@@ -84,6 +99,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("numpy-wasi-probe-${{ github.sha }}", text)
         self.assertIn("static-extension-manifests/", text)
         self.assertIn("numpy-core-link-probe.wasm", text)
+        self.assertIn("numpy-import-probe.wasm", text)
+        self.assertIn("numpy-package-manifest.json", text)
         self.assertIn("go run ./cmd/validate-numpy-link-probe", text)
         self.assertIn("registration-report.json", text)
         self.assertRegex(text, r"actions/checkout@[0-9a-f]{40}")

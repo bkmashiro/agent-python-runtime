@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,9 +168,18 @@ func TestTimeoutDiscardsInstanceAndNextRunRecovers(t *testing.T) {
 }
 
 func TestFetchManyUsesHostOwnedTargetsAndInjectsReceipts(t *testing.T) {
-	requestCount := 0
+	var requestCount atomic.Int32
+	bothStarted := make(chan struct{})
+	var releaseOnce sync.Once
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		requestCount++
+		if requestCount.Add(1) == 2 {
+			releaseOnce.Do(func() { close(bothStarted) })
+		}
+		select {
+		case <-bothStarted:
+		case <-request.Context().Done():
+			return
+		}
 		if request.Header.Get("Authorization") != "Host secret" {
 			t.Errorf("Host credential missing")
 		}
@@ -193,6 +204,7 @@ func TestFetchManyUsesHostOwnedTargetsAndInjectsReceipts(t *testing.T) {
 					MaxCalls:           1,
 					MaxRequestsPerCall: 5,
 					MaxTotalRequests:   5,
+					MaxConcurrency:     2,
 					MaxResponseBytes:   4096,
 					PerRequestTimeout:  time.Second,
 					Targets: map[string]capability.TargetGrant{
@@ -219,10 +231,11 @@ result = {"sum": sum(json.loads(item["body"])["value"] for item in items), "stat
 		t.Fatalf("fetch_many guest error: %#v", response.Error)
 	}
 	result := response.Result.(map[string]any)
-	if result["sum"] != float64(42) || requestCount != 2 {
-		t.Fatalf("unexpected compound result: result=%#v requests=%d", result, requestCount)
+	if result["sum"] != float64(42) || requestCount.Load() != 2 {
+		t.Fatalf("unexpected compound result: result=%#v requests=%d", result, requestCount.Load())
 	}
-	if len(response.Receipts) != 2 || response.Receipts[0].RunID != "host-fetch-run" {
+	if len(response.Receipts) != 2 || response.Receipts[0].RunID != "host-fetch-run" ||
+		response.Receipts[0].OperationIndex != 0 || response.Receipts[1].OperationIndex != 1 {
 		t.Fatalf("Host receipts missing or guest run ID trusted: %#v", response.Receipts)
 	}
 	if response.Metrics["capability_calls"] != float64(1) {

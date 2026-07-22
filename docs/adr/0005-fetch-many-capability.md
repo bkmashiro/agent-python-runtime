@@ -25,6 +25,7 @@ The Host grant bounds:
 
 - capability calls per run;
 - requests per call and per run;
+- concurrent provider operations per wave;
 - aggregate admitted response bytes;
 - per-request timeout;
 - exact target aliases and origins.
@@ -32,6 +33,10 @@ The Host grant bounds:
 HTTPS is required except for explicitly granted loopback HTTP fixtures. The built-in HTTP transport performs GET only, injects Host headers, does not follow redirects, and streams through a byte limit.
 
 A batch-level accepted call returns ordered structured items. Individual items may be `ok`, `denied`, `error`, or `timeout`; one failure does not erase other results. Invalid envelopes or exhausted call-level budgets fail before provider execution.
+
+Provider operations execute in fixed input-order waves bounded by the Host grant's `max_concurrency` (hard ceiling 16). Workers only produce private candidates. After every wave joins, a single ordered reducer applies the aggregate byte budget, shapes results, and appends receipts in operation-index order. Completion order therefore cannot change which response bodies are admitted or the receipt sequence. Cancellation joins the active wave and prevents later waves from reaching the provider.
+
+A provider call can temporarily hold at most the total response budget; wave execution therefore bounds retained candidate bodies to `max_concurrency × max_response_bytes` rather than launching the entire batch. This is a conservative V1 bound, not streaming multiplexing.
 
 ## Receipts
 

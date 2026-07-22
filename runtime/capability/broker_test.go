@@ -35,6 +35,7 @@ func testGrant() capability.Grant {
 		MaxCalls:           2,
 		MaxRequestsPerCall: 3,
 		MaxTotalRequests:   4,
+		MaxConcurrency:     1,
 		MaxResponseBytes:   4096,
 		PerRequestTimeout:  time.Second,
 		Targets: map[string]capability.TargetGrant{

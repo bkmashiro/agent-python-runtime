@@ -15,6 +15,7 @@ const (
 	hardMaxCalls           = 64
 	hardMaxRequestsPerCall = 64
 	hardMaxTotalRequests   = 256
+	hardMaxConcurrency     = 16
 	hardMaxResponseBytes   = 16 * 1024 * 1024
 	hardMaxRequestTimeout  = 30 * time.Second
 )
@@ -30,6 +31,7 @@ type Grant struct {
 	MaxCalls           uint32
 	MaxRequestsPerCall uint32
 	MaxTotalRequests   uint32
+	MaxConcurrency     uint32
 	MaxResponseBytes   uint32
 	PerRequestTimeout  time.Duration
 }
@@ -46,6 +48,9 @@ func (grant Grant) Validate() error {
 	}
 	if grant.MaxTotalRequests == 0 || grant.MaxTotalRequests > hardMaxTotalRequests {
 		return errors.New("max total requests is outside the hard bound")
+	}
+	if grant.MaxConcurrency == 0 || grant.MaxConcurrency > hardMaxConcurrency {
+		return errors.New("max concurrency is outside the hard bound")
 	}
 	if grant.MaxResponseBytes == 0 || grant.MaxResponseBytes > hardMaxResponseBytes {
 		return errors.New("max response bytes is outside the hard bound")

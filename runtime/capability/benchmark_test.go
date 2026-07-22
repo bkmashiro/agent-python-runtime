@@ -38,7 +38,7 @@ func TestCanonicalSequentialBenchmarkFixtures(t *testing.T) {
 	}
 	for _, operations := range canonicalOperationCounts {
 		payload := canonicalFetchPayload(t, operations)
-		broker := canonicalBroker(t, operations)
+		broker := canonicalBroker(t, operations, 1)
 		responseBytes, err := broker.Call(context.Background(), payload)
 		if err != nil {
 			t.Fatal(err)
@@ -59,12 +59,34 @@ func BenchmarkFetchManySequential(b *testing.B) {
 			payload := canonicalFetchPayload(b, operations)
 			b.ResetTimer()
 			for iteration := 0; iteration < b.N; iteration++ {
-				broker := canonicalBroker(b, operations)
+				broker := canonicalBroker(b, operations, 1)
 				if _, err := broker.Call(context.Background(), payload); err != nil {
 					b.Fatal(err)
 				}
 			}
 			b.ReportMetric(float64(operations), "operations/batch")
+			b.ReportMetric(float64(canonicalProviderDelay.Nanoseconds()), "provider-delay-ns/operation")
+		})
+	}
+}
+
+func BenchmarkFetchManyParallel(b *testing.B) {
+	for _, operations := range canonicalOperationCounts {
+		b.Run(fmt.Sprintf("operations=%d", operations), func(b *testing.B) {
+			concurrency := operations
+			if concurrency > 8 {
+				concurrency = 8
+			}
+			payload := canonicalFetchPayload(b, operations)
+			b.ResetTimer()
+			for iteration := 0; iteration < b.N; iteration++ {
+				broker := canonicalBroker(b, operations, concurrency)
+				if _, err := broker.Call(context.Background(), payload); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.ReportMetric(float64(operations), "operations/batch")
+			b.ReportMetric(float64(concurrency), "max-concurrency")
 			b.ReportMetric(float64(canonicalProviderDelay.Nanoseconds()), "provider-delay-ns/operation")
 		})
 	}
@@ -91,13 +113,14 @@ func canonicalFetchPayload(tb testing.TB, operations int) []byte {
 	return payload
 }
 
-func canonicalBroker(tb testing.TB, operations int) *capability.Broker {
+func canonicalBroker(tb testing.TB, operations, concurrency int) *capability.Broker {
 	tb.Helper()
 	grant := capability.Grant{
 		Name:               capability.FetchManyCapability,
 		MaxCalls:           1,
 		MaxRequestsPerCall: uint32(operations),
 		MaxTotalRequests:   uint32(operations),
+		MaxConcurrency:     uint32(concurrency),
 		MaxResponseBytes:   1024 * 1024,
 		PerRequestTimeout:  time.Second,
 		Targets: map[string]capability.TargetGrant{

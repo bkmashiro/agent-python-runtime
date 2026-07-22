@@ -38,6 +38,7 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
     "max_calls": 2,
     "max_requests_per_call": 8,
     "max_total_requests": 16,
+    "max_concurrency": 4,
     "max_response_bytes": 1048576,
     "per_request_timeout_ms": 5000,
     "targets": {
@@ -54,7 +55,7 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
 
 The Host maps the opaque guest target `catalog` to the configured origin. A target base URL must be an HTTPS origin with no path, query, fragment, or user info. Plain HTTP is accepted only for explicit IP-loopback test fixtures. Redirects are not followed. V1 performs GET only.
 
-`fetch_many` limits are additionally constrained by compiled hard ceilings. The CLI rejects the entire operator config before compiling the guest if any resource or capability bound is invalid.
+`fetch_many` limits are additionally constrained by compiled hard ceilings. `max_concurrency` is Host-owned, capped at 16, and limits each fixed input-order wave; byte admission and receipts remain ordered after every wave joins. The CLI rejects the entire operator config before compiling the guest if any resource or capability bound is invalid.
 
 ## Minimal request
 

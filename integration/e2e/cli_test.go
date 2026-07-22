@@ -76,7 +76,7 @@ func TestOperatorCLIWithRealGuestArtifact(t *testing.T) {
 		config, err := json.Marshal(map[string]any{
 			"fetch_many": map[string]any{
 				"max_calls": 1, "max_requests_per_call": 1, "max_total_requests": 1,
-				"max_response_bytes": 1024, "per_request_timeout_ms": 1000,
+				"max_concurrency": 1, "max_response_bytes": 1024, "per_request_timeout_ms": 1000,
 				"targets": map[string]any{
 					"fixture": map[string]any{
 						"base_url": server.URL,

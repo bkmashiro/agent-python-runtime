@@ -24,6 +24,7 @@ type fetchManyConfig struct {
 	MaxCalls            uint32                  `json:"max_calls"`
 	MaxRequestsPerCall  uint32                  `json:"max_requests_per_call"`
 	MaxTotalRequests    uint32                  `json:"max_total_requests"`
+	MaxConcurrency      uint32                  `json:"max_concurrency"`
 	MaxResponseBytes    uint32                  `json:"max_response_bytes"`
 	PerRequestTimeoutMS int64                   `json:"per_request_timeout_ms"`
 	Targets             map[string]targetConfig `json:"targets"`
@@ -80,6 +81,7 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, *capability.Gra
 		MaxCalls:           config.FetchMany.MaxCalls,
 		MaxRequestsPerCall: config.FetchMany.MaxRequestsPerCall,
 		MaxTotalRequests:   config.FetchMany.MaxTotalRequests,
+		MaxConcurrency:     config.FetchMany.MaxConcurrency,
 		MaxResponseBytes:   config.FetchMany.MaxResponseBytes,
 		PerRequestTimeout:  time.Duration(config.FetchMany.PerRequestTimeoutMS) * time.Millisecond,
 	}

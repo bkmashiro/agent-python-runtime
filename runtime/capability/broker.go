@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
@@ -117,8 +118,38 @@ func (broker *Broker) Call(ctx context.Context, payload []byte) ([]byte, error) 
 
 	result := FetchManyResult{Items: make([]FetchItem, len(arguments.Requests))}
 	var responseBytes uint32
-	for index, item := range arguments.Requests {
-		result.Items[index] = broker.fetchOne(ctx, grant, request.CallID, uint32(index), item, &responseBytes)
+	waveSize := int(grant.MaxConcurrency)
+	for start := 0; start < len(arguments.Requests); start += waveSize {
+		end := start + waveSize
+		if end > len(arguments.Requests) {
+			end = len(arguments.Requests)
+		}
+		candidates := make([]fetchCandidate, end-start)
+		if contextErr := ctx.Err(); contextErr != nil {
+			for offset, item := range arguments.Requests[start:end] {
+				candidates[offset] = canceledCandidate(grant, item, contextErr)
+			}
+		} else {
+			var workers sync.WaitGroup
+			for offset, item := range arguments.Requests[start:end] {
+				workers.Add(1)
+				go func(offset int, item fetchRequest) {
+					defer workers.Done()
+					candidates[offset] = broker.fetchCandidate(ctx, grant, item)
+				}(offset, item)
+			}
+			workers.Wait()
+		}
+		for offset, candidate := range candidates {
+			index := start + offset
+			result.Items[index] = broker.admitCandidate(
+				grant,
+				request.CallID,
+				uint32(index),
+				candidate,
+				&responseBytes,
+			)
+		}
 	}
 	return encodeResponse(ToolResponse{
 		CallID: request.CallID,
@@ -128,64 +159,102 @@ func (broker *Broker) Call(ctx context.Context, payload []byte) ([]byte, error) 
 	})
 }
 
-func (broker *Broker) fetchOne(
-	ctx context.Context,
+type fetchCandidate struct {
+	request        fetchRequest
+	targetIdentity string
+	output         FetchOutput
+	err            error
+	denied         bool
+	timedOut       bool
+}
+
+func canceledCandidate(grant Grant, item fetchRequest, contextErr error) fetchCandidate {
+	_, targetIdentity, resolveErr := resolveRequest(grant, item)
+	if resolveErr != nil {
+		return fetchCandidate{
+			request:        item,
+			targetIdentity: targetIdentity,
+			err:            resolveErr,
+			denied:         true,
+		}
+	}
+	return fetchCandidate{
+		request:        item,
+		targetIdentity: targetIdentity,
+		err:            contextErr,
+		timedOut:       errors.Is(contextErr, context.DeadlineExceeded),
+	}
+}
+
+func (broker *Broker) fetchCandidate(ctx context.Context, grant Grant, item fetchRequest) fetchCandidate {
+	candidate := fetchCandidate{request: item}
+	resolved, targetIdentity, err := resolveRequest(grant, item)
+	candidate.targetIdentity = targetIdentity
+	if err != nil {
+		candidate.err = err
+		candidate.denied = true
+		return candidate
+	}
+	requestContext, cancel := context.WithTimeout(ctx, grant.PerRequestTimeout)
+	defer cancel()
+	candidate.output, candidate.err = broker.fetcher.Fetch(requestContext, resolved, grant.MaxResponseBytes)
+	candidate.timedOut = errors.Is(candidate.err, context.DeadlineExceeded) || errors.Is(requestContext.Err(), context.DeadlineExceeded)
+	return candidate
+}
+
+func (broker *Broker) admitCandidate(
 	grant Grant,
 	callID string,
 	operationIndex uint32,
-	item fetchRequest,
+	candidate fetchCandidate,
 	responseBytes *uint32,
 ) FetchItem {
-	resolved, targetIdentity, err := resolveRequest(grant, item)
-	if err != nil {
+	if candidate.denied {
 		result := FetchItem{
-			RequestID: item.RequestID,
+			RequestID: candidate.request.RequestID,
 			Status:    StatusDenied,
 			Error:     &Error{Code: "target_denied", Message: "target or path is not granted"},
 		}
-		broker.record(callID, operationIndex, targetIdentity, result.Status, nil)
+		broker.record(callID, operationIndex, candidate.targetIdentity, result.Status, nil)
 		return result
 	}
-	remaining := grant.MaxResponseBytes - *responseBytes
-	requestContext, cancel := context.WithTimeout(ctx, grant.PerRequestTimeout)
-	defer cancel()
-	output, err := broker.fetcher.Fetch(requestContext, resolved, remaining)
-	if err != nil {
+	if candidate.err != nil {
 		status := StatusError
 		code := "fetch_failed"
 		message := "Host fetch failed"
-		if errors.Is(err, ErrResponseTooLarge) {
+		if errors.Is(candidate.err, ErrResponseTooLarge) {
 			code = "response_too_large"
 			message = "Host response byte budget exceeded"
-		} else if errors.Is(err, context.DeadlineExceeded) || errors.Is(requestContext.Err(), context.DeadlineExceeded) {
+		} else if candidate.timedOut {
 			status = StatusTimeout
 			code = "fetch_timeout"
 			message = "Host fetch timed out"
 		}
-		result := FetchItem{RequestID: item.RequestID, Status: status, Error: &Error{Code: code, Message: message}}
-		broker.record(callID, operationIndex, targetIdentity, result.Status, nil)
+		result := FetchItem{RequestID: candidate.request.RequestID, Status: status, Error: &Error{Code: code, Message: message}}
+		broker.record(callID, operationIndex, candidate.targetIdentity, result.Status, nil)
 		return result
 	}
-	if uint64(len(output.Body)) > uint64(remaining) {
+	remaining := grant.MaxResponseBytes - *responseBytes
+	if uint64(len(candidate.output.Body)) > uint64(remaining) {
 		result := FetchItem{
-			RequestID: item.RequestID,
+			RequestID: candidate.request.RequestID,
 			Status:    StatusError,
 			Error:     &Error{Code: "response_too_large", Message: "Host response byte budget exceeded"},
 		}
-		broker.record(callID, operationIndex, targetIdentity, result.Status, nil)
+		broker.record(callID, operationIndex, candidate.targetIdentity, result.Status, nil)
 		return result
 	}
-	bodyBytes := uint32(len(output.Body))
+	bodyBytes := uint32(len(candidate.output.Body))
 	*responseBytes += bodyBytes
 	result := FetchItem{
-		RequestID:   item.RequestID,
+		RequestID:   candidate.request.RequestID,
 		Status:      StatusOK,
-		HTTPStatus:  output.StatusCode,
-		Body:        string(output.Body),
-		ContentType: output.ContentType,
+		HTTPStatus:  candidate.output.StatusCode,
+		Body:        string(candidate.output.Body),
+		ContentType: candidate.output.ContentType,
 		Error:       nil,
 	}
-	broker.record(callID, operationIndex, targetIdentity, result.Status, output.Body)
+	broker.record(callID, operationIndex, candidate.targetIdentity, result.Status, candidate.output.Body)
 	return result
 }
 

@@ -53,7 +53,7 @@ def build_index(
     if manifest.get("build", {}).get("repository_commit") != commit:
         raise ValueError("manifest commit does not match evidence commit")
     if (
-        expected.get("name") != artifact_identity["name"]
+        expected.get("filename") != artifact_identity["name"]
         or expected.get("size") != artifact_identity["size_bytes"]
         or expected.get("sha256") != artifact_identity["sha256"]
     ):

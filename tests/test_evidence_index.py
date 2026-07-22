@@ -24,7 +24,7 @@ class EvidenceIndexTests(unittest.TestCase):
         artifact_hash = sha256(wasm.read_bytes())
         manifest = root / "manifest.json"
         manifest.write_text(json.dumps({
-            "artifact": {"name": wasm.name, "size": wasm.stat().st_size, "sha256": artifact_hash},
+            "artifact": {"filename": wasm.name, "size": wasm.stat().st_size, "sha256": artifact_hash},
             "build": {"repository_commit": "a" * 40},
             "target": "wasm32-wasip1",
         }))

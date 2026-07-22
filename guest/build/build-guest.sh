@@ -56,10 +56,18 @@ case ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} in
     exit 13
     ;;
 esac
+case ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} in
+  0|1) ;;
+  *)
+    echo "AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER must be 0 or 1" >&2
+    exit 14
+    ;;
+esac
 REBUILD_WASI_VFS_FROM_SOURCE=0
 if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} == 1 \
   || ${AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA:-0} == 1 \
-  || ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} == 1 ]]; then
+  || ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} == 1 \
+  || ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} == 1 ]]; then
   REBUILD_WASI_VFS_FROM_SOURCE=1
 fi
 
@@ -146,6 +154,13 @@ if [[ ${REBUILD_WASI_VFS_FROM_SOURCE} == 1 ]]; then
   fi
   if [[ ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} == 1 ]]; then
     python3 "${ROOT_DIR}/tools/patch_wasi_vfs_dirent_padding.py" \
+      "${WASI_VFS_SOURCE_DIR}/src/lib.rs" \
+      "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched"
+    mv "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched" \
+      "${WASI_VFS_SOURCE_DIR}/src/lib.rs"
+  fi
+  if [[ ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} == 1 ]]; then
+    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_dirent_buffer_cleanup.py" \
       "${WASI_VFS_SOURCE_DIR}/src/lib.rs" \
       "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched"
     mv "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched" \

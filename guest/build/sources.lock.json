@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "target": "wasm32-wasip1",
+  "sources": [
+    {
+      "id": "cpython-source",
+      "version": "3.14.0",
+      "url": "https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz",
+      "sha256": "88d2da4eed42fa9a5f42ff58a8bc8988881bd6c547e297e46682c2687638a851",
+      "license": "PSF-2.0",
+      "role": "runtime-source"
+    },
+    {
+      "id": "wasi-sdk-linux-x86_64",
+      "version": "33.0",
+      "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sdk-33.0-x86_64-linux.tar.gz",
+      "sha256": "0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "role": "toolchain"
+    },
+    {
+      "id": "wasm-tools-linux-x86_64",
+      "version": "1.254.0",
+      "url": "https://github.com/bytecodealliance/wasm-tools/releases/download/v1.254.0/wasm-tools-1.254.0-x86_64-linux.tar.gz",
+      "sha256": "d0efb16c9c859137b7ab3e99151c299cd47caee106ed4594561002f7a04945bd",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "role": "build-tool"
+    },
+    {
+      "id": "wasi-vfs-cli-linux-x86_64",
+      "version": "0.6.3",
+      "url": "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-unknown-linux-gnu.zip",
+      "sha256": "c9ee8179f6f0882abc37024fbe0cd678311aa8a29083fa364915ed4d29a69485",
+      "license": "Apache-2.0",
+      "role": "build-tool"
+    },
+    {
+      "id": "wasi-vfs-static-library",
+      "version": "0.6.3",
+      "url": "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/libwasi_vfs-wasm32-unknown-unknown.zip",
+      "sha256": "f94dc7fdabdefc0fed78b70f1ab100207db0558cbabb004dd9e5a0bdeec4256f",
+      "license": "Apache-2.0",
+      "role": "link-library"
+    }
+  ]
+}

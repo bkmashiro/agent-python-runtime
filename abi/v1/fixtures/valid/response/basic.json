@@ -1,0 +1,7 @@
+{
+  "status": "ok",
+  "result": {"count": 3},
+  "receipts": [],
+  "metrics": {"guest_time_ms": 1.25, "capability_calls": 0, "result_bytes": 11},
+  "error": null
+}

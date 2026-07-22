@@ -1,0 +1,5 @@
+{
+  "call_id": "run-001:0",
+  "capability": "fetch_many",
+  "arguments": {"requests": [{"resource": "weather/london"}]}
+}

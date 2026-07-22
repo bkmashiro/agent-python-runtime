@@ -78,11 +78,17 @@ exec python3 "${ROOT_DIR}/tools/archive_wasm_extension.py" \\
 EOF
 cat >"${STATIC_CXX_WRAPPER}" <<EOF
 #!/usr/bin/env bash
+extra_args=()
+for arg in "\$@"; do
+  case "\${arg}" in
+    */numpy/_core/src/multiarray/unique.cpp) extra_args=(-fno-exceptions) ;;
+  esac
+done
 exec python3 "${ROOT_DIR}/tools/archive_wasm_extension.py" \\
   --real-compiler "${WASI_SDK_PATH}/bin/clang++" \\
   --archiver "${WASI_SDK_PATH}/bin/llvm-ar" \\
   --manifest-dir "${STATIC_MANIFEST_DIR}" \\
-  --build-root "${PROBE_DIR}/build" -- "\$@"
+  --build-root "${PROBE_DIR}/build" -- "\$@" "\${extra_args[@]}"
 EOF
 chmod 0755 "${STATIC_C_WRAPPER}" "${STATIC_CXX_WRAPPER}"
 
@@ -154,9 +160,9 @@ longdouble_format = 'IEEE_QUAD_LE'
 
 [built-in options]
 c_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
-cpp_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fno-exceptions']
+cpp_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
 c_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
-cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fno-exceptions']
+cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
 EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
@@ -319,7 +325,7 @@ if evidence_error:
 report = {
     "schema_version": 3,
     "target": "wasm32-wasip1",
-    "cxx_exception_mode": "disabled",
+    "cxx_exception_mode": "selective-disabled",
     "cxx_exception_adaptation": {
         "source": "numpy/_core/src/multiarray/unique.cpp",
         "explicit_string_load_error_preserved": True,

@@ -46,6 +46,21 @@ PYTHONPATH="${PROBE_DIR}/cython" exec python3 "${PROBE_DIR}/cython/cython.py" "\
 EOF
 chmod 0755 "${CYTHON_WRAPPER}"
 
+PKG_CONFIG_BIN=$(command -v pkg-config)
+TARGET_PKGCONFIG_DIR="${PROBE_DIR}/target-pkgconfig"
+mkdir -p "${TARGET_PKGCONFIG_DIR}"
+cat >"${TARGET_PKGCONFIG_DIR}/python3.pc" <<EOF
+prefix=${WORK_DIR}/cpython
+includedir=\${prefix}/Include
+buildincludedir=${WASI_BUILD_DIR}
+
+Name: Python target development headers
+Description: CPython 3.14 wasm32-wasip1 compile-only dependency
+Version: 3.14.0
+Cflags: -I\${includedir} -I\${buildincludedir}
+Libs:
+EOF
+
 export PROBE_DIR TARGET_PYTHON
 python3 - <<'PY'
 import os
@@ -70,7 +85,7 @@ ar = '${WASI_SDK_PATH}/bin/llvm-ar'
 strip = '${WASI_SDK_PATH}/bin/llvm-strip'
 python = '${TARGET_PYTHON}'
 cython = '${CYTHON_WRAPPER}'
-pkg-config = 'false'
+pkg-config = '${PKG_CONFIG_BIN}'
 cmake = 'false'
 
 [host_machine]
@@ -91,7 +106,7 @@ EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
 set +e
-PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
+PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
   "${PROBE_DIR}/build" "${PROBE_DIR}/numpy" \
   --cross-file "${CROSS_FILE}" \
   -Dallow-noblas=true \
@@ -107,7 +122,7 @@ PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@
 SETUP_EXIT=$?
 COMPILE_EXIT=-1
 if [[ ${SETUP_EXIT} -eq 0 ]]; then
-  PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
+  PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
     -C "${PROBE_DIR}/build" -j 2 \
     >"${PROBE_DIR}/logs/compile.log" 2>&1
   COMPILE_EXIT=$?

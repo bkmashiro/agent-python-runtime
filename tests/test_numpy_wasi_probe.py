@@ -5,6 +5,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LOCK = ROOT / "experiments" / "numpy-wasi" / "sources.lock.json"
 PROBE = ROOT / "experiments" / "numpy-wasi" / "probe.sh"
+NOEH_PATCHER = ROOT / "tools" / "patch_numpy_noeh_unique.py"
 LINK_PROBE = ROOT / "experiments" / "numpy-wasi" / "link_probe.c"
 WORKFLOW = ROOT / ".github" / "workflows" / "numpy-wasi-probe.yml"
 
@@ -49,10 +50,16 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("CPYTHON_DIR=\"${WORK_DIR}/cpython\"", script)
         self.assertIn("expected NumPy core archive plus exactly three static inputs", script)
         self.assertIn("--whole-archive", script)
-        self.assertEqual(script.count("-fwasm-exceptions"), 3)
-        self.assertEqual(script.count("-wasm-use-legacy-eh=false"), 3)
-        self.assertIn("-lpthread -lm -lunwind", script)
-        self.assertIn('"cxx_exception_mode": "wasm"', script)
+        self.assertEqual(script.count("-fno-exceptions"), 3)
+        self.assertNotIn("-fwasm-exceptions", script)
+        self.assertNotIn("-lunwind", script)
+        self.assertIn('"cxx_exception_mode": "disabled"', script)
+        self.assertIn('"explicit_string_load_error_preserved": True', script)
+        self.assertIn('"bad_alloc_translation": False', script)
+        self.assertIn("tools/patch_numpy_noeh_unique.py", script)
+        noeh_patcher = NOEH_PATCHER.read_text()
+        self.assertIn("expected exactly one NumPy no-exception unique hash", noeh_patcher)
+        self.assertIn("unexpected C++ exception syntax remains", noeh_patcher)
         self.assertIn("--export=numpy_link_probe", script)
         self.assertIn("expected exactly one NumPy target-Python Meson seam", script)
         self.assertIn("find_installation({target_python!r}, pure: false)", script)
@@ -73,6 +80,7 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("run: bash experiments/numpy-wasi/probe.sh", text)
         self.assertIn("numpy-wasi-probe-${{ github.sha }}", text)
         self.assertIn("static-extension-manifests/", text)
+        self.assertIn("numpy-core-link-probe.wasm", text)
         self.assertRegex(text, r"actions/checkout@[0-9a-f]{40}")
         self.assertRegex(text, r"actions/setup-python@[0-9a-f]{40}")
         self.assertRegex(text, r"actions/setup-go@[0-9a-f]{40}")

@@ -128,6 +128,8 @@ core_text = core_text.replace(anchor, "build_py = find_program('python3', native
 core_text = core_text.replace(command_seam, "command: [build_py, '-m', 'code_generators.")
 core_meson.write_text(core_text)
 PY
+python3 "${ROOT_DIR}/tools/patch_numpy_noeh_unique.py" \
+  "${PROBE_DIR}/numpy/numpy/_core/src/multiarray/unique.cpp"
 
 CROSS_FILE="${PROBE_DIR}/wasi-cross.ini"
 cat >"${CROSS_FILE}" <<EOF
@@ -152,9 +154,9 @@ longdouble_format = 'IEEE_QUAD_LE'
 
 [built-in options]
 c_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
-cpp_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fwasm-exceptions', '-mllvm', '-wasm-use-legacy-eh=false']
+cpp_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fno-exceptions']
 c_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
-cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fwasm-exceptions', '-mllvm', '-wasm-use-legacy-eh=false']
+cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fno-exceptions']
 EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
@@ -231,13 +233,13 @@ PY
   if [[ ${LINK_COMPILE_EXIT} -eq 0 ]]; then
     "${WASI_SDK_PATH}/bin/clang++" --target=wasm32-wasip1 \
       --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" \
-      -fwasm-exceptions -mllvm -wasm-use-legacy-eh=false \
+      -fno-exceptions \
       -mexec-model=reactor \
       "${LINK_PROBE_OBJECT}" \
       -Wl,--whole-archive "${NUMPY_CORE_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
       "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
-      -lpthread -lm -lunwind \
+      -lpthread -lm \
       -Wl,--export=numpy_link_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \
@@ -317,7 +319,13 @@ if evidence_error:
 report = {
     "schema_version": 3,
     "target": "wasm32-wasip1",
-    "cxx_exception_mode": "wasm",
+    "cxx_exception_mode": "disabled",
+    "cxx_exception_adaptation": {
+        "source": "numpy/_core/src/multiarray/unique.cpp",
+        "explicit_string_load_error_preserved": True,
+        "bad_alloc_translation": False,
+        "production_qualified": False,
+    },
     "numpy_version": "2.5.1",
     "numpy_source_sha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
     "cython_version": "3.2.8",

@@ -85,6 +85,7 @@ jobs:
           name: numpy-wasi-probe-${{ github.sha }}
           path: |
             ${{ runner.temp }}/numpy-wasi-probe/report.json
+            ${{ runner.temp }}/numpy-wasi-probe/numpy-core-link-probe.wasm
             ${{ runner.temp }}/numpy-wasi-probe/wasi-cross.ini
             ${{ runner.temp }}/numpy-wasi-probe/logs/
             ${{ runner.temp }}/numpy-wasi-probe/static-extension-manifests/

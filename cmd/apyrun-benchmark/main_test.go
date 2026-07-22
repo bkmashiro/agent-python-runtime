@@ -220,6 +220,34 @@ func TestCheckedInBenchmarkEvidenceValidates(t *testing.T) {
 	}
 }
 
+func TestCheckedInPreparedBenchmarkEvidenceValidates(t *testing.T) {
+	paths, err := filepath.Glob("../../docs/benchmarks/prepared-production-safe-*.json")
+	if err != nil || len(paths) < 2 {
+		t.Fatalf("checked-in prepared evidence missing: paths=%v err=%v", paths, err)
+	}
+	schema := compilePreparedEvidenceSchema(t)
+	for _, path := range paths {
+		encoded, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var evidence preparedBenchmarkEvidence
+		if err := json.Unmarshal(encoded, &evidence); err != nil {
+			t.Fatal(err)
+		}
+		if err := evidence.Validate(); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		var instance any
+		if err := json.Unmarshal(encoded, &instance); err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.Validate(instance); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+}
+
 func TestEvidenceValidationRequiresCanonicalPhasesAndClasses(t *testing.T) {
 	sample := sampleEvidence{
 		InstantiateGuestNS: 1,

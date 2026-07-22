@@ -39,6 +39,9 @@ func TestRunConfigValidation(t *testing.T) {
 	if config.Timeout <= 0 || config.MaxRequestBytes <= 0 || config.MaxResponseBytes <= 0 {
 		t.Fatalf("defaults must be bounded: %#v", config)
 	}
+	if config.Timeout < 10*time.Second {
+		t.Fatalf("default timeout cannot cover measured cold initialization: %s", config.Timeout)
+	}
 
 	for name, mutate := range map[string]func(*runtime.RunConfig){
 		"timeout":  func(c *runtime.RunConfig) { c.Timeout = 0 },

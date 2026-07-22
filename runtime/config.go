@@ -30,7 +30,7 @@ type CapabilityGrant struct {
 
 func DefaultRunConfig() RunConfig {
 	return RunConfig{
-		Timeout:          5 * time.Second,
+		Timeout:          20 * time.Second,
 		MaxRequestBytes:  1024 * 1024,
 		MaxResponseBytes: 1024 * 1024,
 		MemoryLimitPages: 8192,

@@ -6,6 +6,10 @@ on:
     paths:
       - 'guest/**'
       - 'abi/**'
+      - 'runtime/**'
+      - 'integration/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'tools/fetch_locked_source.py'
       - 'tools/verify_sources_lock.py'
       - 'NOTICE.md'
@@ -15,6 +19,10 @@ on:
     paths:
       - 'guest/**'
       - 'abi/**'
+      - 'runtime/**'
+      - 'integration/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'tools/fetch_locked_source.py'
       - 'tools/verify_sources_lock.py'
       - 'NOTICE.md'

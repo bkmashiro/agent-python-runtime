@@ -31,7 +31,10 @@ def checksum(value: str) -> dict[str, str]:
 
 
 def vfs_files(vfs_root: pathlib.Path) -> list[pathlib.Path]:
-    return sorted(path for path in vfs_root.rglob("*") if path.is_file())
+    return sorted(
+        (path for path in vfs_root.rglob("*") if path.is_file()),
+        key=lambda path: f"/usr/lib/python3.14/{path.relative_to(vfs_root).as_posix()}",
+    )
 
 
 def build_notices(

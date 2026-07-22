@@ -67,6 +67,9 @@ class SupplyChainWriterTests(unittest.TestCase):
         (vfs / "site-packages" / "agent_runtime").mkdir(parents=True)
         (vfs / "site-packages" / "agent_runtime" / "__init__.py").write_text("VERSION = 1\n")
         (vfs / "json.py").write_text("# stdlib\n")
+        (vfs / "a_test.py").write_text("# sibling\n")
+        (vfs / "a_test").mkdir()
+        (vfs / "a_test" / "empty").write_text("")
         return artifact, manifest_path, lock_path, vfs
 
     def test_outputs_are_deterministic_and_bind_actual_inputs(self):
@@ -94,7 +97,7 @@ class SupplyChainWriterTests(unittest.TestCase):
         self.assertEqual(first_notices, second_notices)
         self.assertEqual("SPDX-2.3", first_sbom["spdxVersion"])
         self.assertEqual("CC0-1.0", first_sbom["dataLicense"])
-        self.assertEqual(2, len(first_sbom["files"]))
+        self.assertEqual(4, len(first_sbom["files"]))
         self.assertEqual(sorted(row["fileName"] for row in first_sbom["files"]), [row["fileName"] for row in first_sbom["files"]])
         package_names = {row["name"] for row in first_sbom["packages"]}
         self.assertEqual({"guest.wasm", "builder", "cpython-source"}, package_names)

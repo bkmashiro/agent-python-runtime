@@ -151,6 +151,14 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
   --epoch "${SOURCE_DATE_EPOCH}"
 
+REPRO_VFS_MANIFEST=
+if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
+  REPRO_VFS_MANIFEST="${WORK_DIR}/vfs-manifest.prepack.json"
+  python3 "${ROOT_DIR}/tools/write_guest_stage_evidence.py" manifest \
+    --vfs-root "${VFS_PYTHON_DIR}" \
+    --output "${REPRO_VFS_MANIFEST}"
+fi
+
 "${WASI_VFS}" pack "${RAW_GUEST}" \
   --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
   -o "${FINAL_GUEST}"
@@ -192,6 +200,33 @@ rm "${DIST_DIR}/agent-python-runtime.wat"
     sbom.spdx.json \
     THIRD_PARTY_NOTICES.md > SHA256SUMS
 )
+
+if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
+  REPRO_REPOSITORY_COMMIT=${GITHUB_SHA:-}
+  if [[ -z ${REPRO_REPOSITORY_COMMIT} ]]; then
+    REPRO_REPOSITORY_COMMIT=$(git -C "${ROOT_DIR}" rev-parse HEAD)
+  fi
+  python3 "${ROOT_DIR}/tools/write_guest_stage_evidence.py" evidence \
+    --evidence-dir "${AGENT_RUNTIME_REPRO_EVIDENCE_DIR}" \
+    --raw-wasm "${RAW_GUEST}" \
+    --final-wasm "${FINAL_GUEST}" \
+    --patched-wasi-vfs-archive "${WASI_VFS_LIB}" \
+    --linked-storage-object "${WASI_VFS_STORAGE_OBJECT}" \
+    --wasi-vfs-cli "${WASI_VFS}" \
+    --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+    --vfs-manifest "${REPRO_VFS_MANIFEST}" \
+    --repository-commit "${REPRO_REPOSITORY_COMMIT}" \
+    --source-date-epoch "${SOURCE_DATE_EPOCH}" \
+    --run-id "${GITHUB_RUN_ID:-local}" \
+    --run-attempt "${GITHUB_RUN_ATTEMPT:-local}" \
+    --job "${GITHUB_JOB:-local}" \
+    --replica "${AGENT_RUNTIME_REPRO_REPLICA:-local}" \
+    --runner-os "${RUNNER_OS:-$(uname -s)}" \
+    --runner-arch "${RUNNER_ARCH:-$(uname -m)}" \
+    --build-dir "${WORK_DIR}" \
+    --dist-dir "${DIST_DIR}" \
+    --configured-vfs-root "${VFS_PYTHON_DIR}"
+fi
 
 printf 'guest artifact: %s\n' "${FINAL_GUEST}"
 printf 'artifact sha256: '

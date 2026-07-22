@@ -28,7 +28,7 @@ func productionDependencies() dependencies {
 		readFile:    os.ReadFile,
 		newIdentity: randomRunIdentity,
 		newFactory:  newWazeroFactory,
-		httpClient:  &http.Client{},
+		httpClient:  capability.NewPublicHTTPClient(),
 	}
 }
 

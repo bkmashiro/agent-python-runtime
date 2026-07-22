@@ -30,7 +30,7 @@ The Host grant bounds:
 - per-request timeout;
 - exact target aliases and origins.
 
-HTTPS is required except for explicitly granted loopback HTTP fixtures. The built-in HTTP transport performs GET only, injects Host headers, does not follow redirects, and streams through a byte limit.
+HTTPS is required except for explicitly granted IP-loopback HTTP fixtures. The built-in HTTP transport performs GET only, injects Host headers, does not follow redirects, and streams through a byte limit. The production-style client ignores ambient proxies, validates every DNS result at dial time, rejects mixed or non-public results, and connects to the validated IP directly. DNS names cannot opt into loopback fixtures, and private-network targets are not supported.
 
 A batch-level accepted call returns ordered structured items. Individual items may be `ok`, `denied`, `error`, or `timeout`; one failure does not erase other results. Invalid envelopes or exhausted call-level budgets fail before provider execution.
 

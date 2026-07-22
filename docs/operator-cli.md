@@ -53,7 +53,7 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
 }
 ```
 
-The Host maps the opaque guest target `catalog` to the configured origin. A target base URL must be an HTTPS origin with no path, query, fragment, or user info. Plain HTTP is accepted only for explicit IP-loopback test fixtures. Redirects are not followed. V1 performs GET only.
+The Host maps the opaque guest target `catalog` to the configured origin. A target base URL must be an HTTPS origin with no path, query, fragment, or user info. Plain HTTP is accepted only for explicit IP-loopback test fixtures. Redirects are not followed. The production CLI ignores ambient proxy settings, validates all DNS answers at dial time, rejects mixed or non-public answers, and dials a validated IP directly. Private-network targets and DNS names resolving to loopback are not supported. V1 performs GET only.
 
 `fetch_many` limits are additionally constrained by compiled hard ceilings. `max_concurrency` is Host-owned, capped at 16, and limits each fixed input-order wave; byte admission and receipts remain ordered after every wave joins. The CLI rejects the entire operator config before compiling the guest if any resource or capability bound is invalid.
 

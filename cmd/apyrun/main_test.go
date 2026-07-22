@@ -40,6 +40,14 @@ func (factory *fakeFactory) New(_ context.Context, wasm []byte, config runtimeco
 	return factory.runner, nil
 }
 
+func TestProductionDependenciesUseFailClosedEgressClient(t *testing.T) {
+	dependencies := productionDependencies()
+	transport, ok := dependencies.httpClient.Transport.(*http.Transport)
+	if !ok || transport.Proxy != nil || transport.DialContext == nil {
+		t.Fatalf("production CLI lacks fail-closed egress transport: %#v", dependencies.httpClient.Transport)
+	}
+}
+
 func TestDecodeOperatorConfigIsStrictAndHostOwned(t *testing.T) {
 	config, err := decodeOperatorConfig([]byte(`{
 		"timeout_ms": 1500,

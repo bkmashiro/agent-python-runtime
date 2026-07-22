@@ -69,11 +69,11 @@ Control: impose limits while reading/copying, not after an unbounded buffer has 
 
 ### State contamination
 
-Control: snapshot only after trusted initialization returns. Restore after success and structured error. Trap/cancel/reset failure causes close and replacement. Test Python globals, modules, random state, buffers, memory growth, and concurrent reuse.
+Control: instantiate a fresh guest for every Run and discard it after success, structured error, trap, or cancellation. Any future prepared-state optimization must restore Python globals, modules, random state, buffers, memory growth, globals/tables, and Host resources; reset failure must close the instance.
 
 ### Host capability abuse
 
-Control: resolve only pre-granted capability IDs; enforce destination allowlists, per-call timeout, per-call byte cap, and total-call budget. Credentials never enter guest memory. Direct guest network access remains unavailable.
+Control: resolve only pre-granted capability IDs; enforce destination allowlists, per-call timeout, per-call byte cap, and total-call budget. Credentials never enter guest memory. Direct guest network access remains unavailable. The production-style client ignores ambient proxies, resolves hostnames at dial time, rejects the whole resolution if any address is private, loopback, link-local, unspecified, multicast, or reserved, and dials a validated IP directly. Only an IP-loopback literal is accepted as an explicit local fixture; DNS names resolving to loopback are denied.
 
 ### Evidence forgery
 

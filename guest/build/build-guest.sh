@@ -146,6 +146,14 @@ mkdir -p "${VFS_PYTHON_DIR}/site-packages"
 python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${CPYTHON_DIR}/Lib" "${VFS_PYTHON_DIR}" \
   --epoch "${SOURCE_DATE_EPOCH}"
+mapfile -t TARGET_SYSCONFIG_DATA < <(find "${WASI_BUILD_DIR}" -type f -name '_sysconfigdata_*.py' -print)
+if [[ ${#TARGET_SYSCONFIG_DATA[@]} -ne 1 ]]; then
+  echo "expected exactly one target sysconfigdata file, found ${#TARGET_SYSCONFIG_DATA[@]}" >&2
+  exit 9
+fi
+TARGET_SYSCONFIG_DEST="${VFS_PYTHON_DIR}/$(basename "${TARGET_SYSCONFIG_DATA[0]}")"
+install -m 0644 "${TARGET_SYSCONFIG_DATA[0]}" "${TARGET_SYSCONFIG_DEST}"
+touch -d "@${SOURCE_DATE_EPOCH}" "${TARGET_SYSCONFIG_DEST}"
 python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \

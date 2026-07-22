@@ -56,6 +56,8 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("copy_tree_deterministic.py", text)
         self.assertIn("patch_wasi_vfs_storage.py", text)
         self.assertIn('"${LLVM_AR}" d', text)
+        self.assertIn("_sysconfigdata_*.py", text)
+        self.assertIn("expected exactly one target sysconfigdata file", text)
         self.assertNotIn('cp -R "${CPYTHON_DIR}/Lib', text)
         self.assertIn("site-packages/agent_runtime", text)
         self.assertNotIn("latest", text.lower())

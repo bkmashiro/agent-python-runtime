@@ -112,6 +112,31 @@ func TestCoreGuestExecutesNeutralRequest(t *testing.T) {
 	}
 }
 
+func TestCoreGuestExposesTargetSysconfig(t *testing.T) {
+	response := run(
+		t,
+		newEngine(t),
+		"target-sysconfig",
+		"import sysconfig\nresult = {'platform': sysconfig.get_platform(), 'ext_suffix': sysconfig.get_config_var('EXT_SUFFIX'), 'dynamic_loading': sysconfig.get_config_var('HAVE_DYNAMIC_LOADING')}",
+		map[string]any{},
+	)
+	if response.Status != "ok" {
+		t.Fatalf("target sysconfig unavailable: %#v", response.Error)
+	}
+	result := response.Result.(map[string]any)
+	platform, _ := result["platform"].(string)
+	if !strings.Contains(platform, "wasi") {
+		t.Fatalf("unexpected target platform: %#v", result)
+	}
+	extSuffix, _ := result["ext_suffix"].(string)
+	if !strings.Contains(extSuffix, "wasm32-wasi") {
+		t.Fatalf("unexpected extension ABI: %#v", result)
+	}
+	if dynamic, ok := result["dynamic_loading"].(float64); !ok || dynamic != 0 {
+		t.Fatalf("WASI dynamic loading must remain disabled: %#v", result)
+	}
+}
+
 func TestFreshInstanceDoesNotLeakPythonGlobals(t *testing.T) {
 	instance := newEngine(t)
 	first := run(t, instance, "fresh-1", "import builtins\nbuiltins._agent_runtime_leak = 1\nresult = True", map[string]any{})

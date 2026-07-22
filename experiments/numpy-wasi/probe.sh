@@ -5,7 +5,8 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK_DIR=${AGENT_RUNTIME_BUILD_DIR:?AGENT_RUNTIME_BUILD_DIR must point at a completed guest build}
 PROBE_DIR=${NUMPY_WASI_PROBE_DIR:-"${RUNNER_TEMP:-/tmp}/numpy-wasi-probe"}
 LOCK="${ROOT_DIR}/experiments/numpy-wasi/sources.lock.json"
-WASI_BUILD_DIR="${WORK_DIR}/cpython/cross-build/wasm32-wasip1"
+CPYTHON_DIR="${WORK_DIR}/cpython"
+WASI_BUILD_DIR="${CPYTHON_DIR}/cross-build/wasm32-wasip1"
 WASI_SDK_PATH="${WORK_DIR}/tools/wasi-sdk"
 
 rm -rf "${PROBE_DIR}"

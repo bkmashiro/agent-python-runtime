@@ -46,6 +46,7 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn('"static_extension_count"', script)
         self.assertIn('outcome = "link_failed"', script)
         self.assertIn('outcome = "link_succeeded"', script)
+        self.assertIn("CPYTHON_DIR=\"${WORK_DIR}/cpython\"", script)
         self.assertIn("expected NumPy core archive plus exactly three static inputs", script)
         self.assertIn("--whole-archive", script)
         self.assertIn("--export=numpy_link_probe", script)

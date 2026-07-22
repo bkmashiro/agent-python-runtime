@@ -50,7 +50,7 @@ func TestOperatorCLIWithRealGuestArtifact(t *testing.T) {
 	}
 
 	t.Run("no grant", func(t *testing.T) {
-		exit, stdout, stderr := run(t, "", `{"run_id":"guest-label","code":"result = inputs['value'] + 1","inputs":{"value":41}}`)
+		exit, stdout, stderr := run(t, `{"prepared_capacity":1}`, `{"run_id":"guest-label","code":"result = inputs['value'] + 1","inputs":{"value":41}}`)
 		if exit != 0 || len(stderr) != 0 {
 			t.Fatalf("exit=%d stderr=%q", exit, stderr)
 		}

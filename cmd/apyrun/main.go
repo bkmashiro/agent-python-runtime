@@ -133,21 +133,23 @@ func newWazeroFactory(config operatorConfig, hostIdentity string, client *http.C
 	if err != nil {
 		return nil, err
 	}
+	factory := wazeroengine.Factory{PreparedCapacity: config.PreparedCapacity}
 	if grant == nil {
-		return wazeroengine.Factory{}, nil
+		return factory, nil
 	}
 	if client == nil {
 		client = &http.Client{}
 	}
 	fetcher := capability.NewHTTPFetcher(client)
-	return wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{
 			RunIdentity: hostIdentity,
 			Grants: map[string]capability.Grant{
 				capability.FetchManyCapability: *grant,
 			},
 		}, fetcher)
-	}}, nil
+	}
+	return factory, nil
 }
 
 func randomRunIdentity() (string, error) {

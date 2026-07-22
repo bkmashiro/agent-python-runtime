@@ -95,6 +95,18 @@ A backend may claim `prepared-restore` only if every row is proven for the exact
 - Properties continue to report `fresh-instance` until a distinct, evidence-backed neutral mode is defined. The optimization changes when trusted initialization occurs, not the one-Run lifetime.
 - Benchmark warm hit, pool miss, refill cost, memory footprint, and failure recovery separately.
 
-## Remaining proof before enabling capacity above zero
+## Verified spike
 
-The spike must add RED/GREEN conformance for success, structured error, timeout, trap, cancellation, oversized output, Host-call success/failure, trusted-prepare isolation, exclusive checkout, pool miss fallback, refill failure, and Engine shutdown. Any uncertainty closes the candidate and preserves capacity-zero behavior.
+The optional wazero adapter seam now implements the constrained strategy above:
+
+- `PreparedCapacity` defaults to zero and is rejected above four before guest compilation;
+- startup prepares never-served candidates under the Host timeout;
+- checkout is exclusive, immediately schedules bounded replacement, and never re-enqueues the served module;
+- pool miss invokes the unchanged synchronous initialization path;
+- Engine shutdown cancels and joins refills, drains queued modules, and only then closes the Runtime;
+- the local CLI exposes capacity only through Host-owned operator config; `RunRequest` cannot request it;
+- adapter properties remain `fresh-instance`.
+
+RED/GREEN coverage uses both the exact CPython artifact and small ABI-compatible trap/hanging-init fixtures. It proves success, trusted-prepare and execute-global isolation, structured Python error, deadline, explicit cancellation, Wasm trap, oversized output, Host-call success and denial with fresh broker/receipts, exclusive concurrent checkout, non-blocking miss fallback, candidate-init timeout, refill, and shutdown. Focused exact-artifact race tests exercise concurrent checkout/refill and Close. Every served or uncertain module is closed.
+
+Capacity above zero remains opt-in because each queued exact-artifact candidate retains at least 128 MiB, refill adds CPU work, and the ready/first/steady benchmark is still pending. No prepared-restore mode or linear-memory copy strategy was implemented.

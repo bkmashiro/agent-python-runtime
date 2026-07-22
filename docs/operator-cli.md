@@ -34,6 +34,7 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
   "max_request_bytes": 1048576,
   "max_response_bytes": 1048576,
   "memory_limit_pages": 8192,
+  "prepared_capacity": 1,
   "fetch_many": {
     "max_calls": 2,
     "max_requests_per_call": 8,
@@ -52,6 +53,8 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
   }
 }
 ```
+
+`prepared_capacity` is an optional wazero-adapter optimization. `0` preserves synchronous fresh initialization. Values `1`–`4` preinitialize that many never-served instances; each checkout serves exactly one Run and is then closed, while a miss falls back to the synchronous fresh path. The exact current artifact starts at 128 MiB of guest memory per candidate, so capacity remains Host-owned and hard-capped. This is not snapshot/restore and does not change the reported `fresh-instance` safety mode.
 
 The Host maps the opaque guest target `catalog` to the configured origin. A target base URL must be an HTTPS origin with no path, query, fragment, or user info. Plain HTTP is accepted only for explicit IP-loopback test fixtures. Redirects are not followed. The production CLI ignores ambient proxy settings, validates all DNS answers at dial time, rejects mixed or non-public answers, and dials a validated IP directly. Private-network targets and DNS names resolving to loopback are not supported. V1 performs GET only.
 

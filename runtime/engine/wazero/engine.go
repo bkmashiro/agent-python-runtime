@@ -1,7 +1,6 @@
 package wazero
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -34,31 +33,37 @@ type Observer func(Observation)
 
 // Factory constructs wazero-backed runners behind the neutral engine contract.
 type Factory struct {
-	BrokerFactory BrokerFactory
-	Observer      Observer
+	BrokerFactory    BrokerFactory
+	Observer         Observer
+	PreparedCapacity uint32
 }
 
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer)
+	if factory.PreparedCapacity > maxPreparedCapacity {
+		return nil, fmt.Errorf("prepared capacity %d exceeds hard bound %d", factory.PreparedCapacity, maxPreparedCapacity)
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.PreparedCapacity)
 }
 
 var _ enginecontract.Factory = Factory{}
 var _ enginecontract.Runner = (*Engine)(nil)
 
-// Engine owns a compiled guest module. V1 creates a fresh module instance for
-// each Run; pooling and snapshot restoration are intentionally deferred.
+// Engine owns a compiled guest module. V1 either initializes synchronously per
+// Run or checks out a never-served, single-use initialized module; every served
+// module is closed instead of restored or returned to a pool.
 type Engine struct {
 	runtime       wazerort.Runtime
 	compiled      wazerort.CompiledModule
 	config        runtimeconfig.RunConfig
 	brokerFactory BrokerFactory
 	observer      Observer
+	pool          *preparedPool
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil)
+	return newEngine(ctx, wasm, config, nil, nil, 0)
 }
 
 func NewWithBrokerFactory(
@@ -67,7 +72,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, 0)
 }
 
 func newEngine(
@@ -76,6 +81,7 @@ func newEngine(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 	observer Observer,
+	preparedCapacity uint32,
 ) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
@@ -107,13 +113,15 @@ func newEngine(
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
-	return &Engine{
+	engine := &Engine{
 		runtime:       wasmRuntime,
 		compiled:      compiled,
 		config:        config,
 		brokerFactory: brokerFactory,
 		observer:      observer,
-	}, nil
+	}
+	engine.initializePreparedPool(preparedCapacity)
+	return engine, nil
 }
 
 func (engine *Engine) Properties() enginecontract.Properties {
@@ -127,6 +135,7 @@ func (engine *Engine) Close(ctx context.Context) error {
 	if engine == nil || engine.runtime == nil {
 		return nil
 	}
+	engine.closePreparedPool()
 	return engine.runtime.Close(ctx)
 }
 
@@ -152,31 +161,14 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
-	var guestStderr bytes.Buffer
-	instantiateStarted := time.Now()
-	module, err := engine.runtime.InstantiateModule(
-		runContext,
-		engine.compiled,
-		wazerort.NewModuleConfig().WithName("").WithStderr(&guestStderr),
-	)
-	observe(engine.observer, "instantiate_guest", instantiateStarted, err)
+	instance, err := engine.checkoutModule(runContext)
 	if err != nil {
-		return nil, fmt.Errorf("instantiate guest: %w", err)
+		return nil, err
 	}
+	module := instance.module
+	guestStderr := instance.stderr
 	defer module.Close(context.Background())
 
-	initializeStarted := time.Now()
-	err = callNoArgs(runContext, module, "_initialize")
-	observe(engine.observer, "_initialize", initializeStarted, err)
-	if err != nil {
-		return nil, withGuestDiagnostic(err, guestStderr.String())
-	}
-	runtimeInitStarted := time.Now()
-	err = callStatusWithBytes(runContext, module, "runtime_init", []byte("{}"))
-	observe(engine.observer, "runtime_init", runtimeInitStarted, err)
-	if err != nil {
-		return nil, withGuestDiagnostic(err, guestStderr.String())
-	}
 	if trustedPrepare != "" {
 		prepareStarted := time.Now()
 		err = callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare))

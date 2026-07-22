@@ -54,6 +54,7 @@ func TestDecodeOperatorConfigIsStrictAndHostOwned(t *testing.T) {
 		"max_request_bytes": 4096,
 		"max_response_bytes": 8192,
 		"memory_limit_pages": 128,
+		"prepared_capacity": 2,
 		"fetch_many": {
 			"max_calls": 2,
 			"max_requests_per_call": 5,
@@ -78,6 +79,9 @@ func TestDecodeOperatorConfigIsStrictAndHostOwned(t *testing.T) {
 	}
 	if runConfig.Timeout.Milliseconds() != 1500 || runConfig.MaxRequestBytes != 4096 || runConfig.MaxResponseBytes != 8192 || runConfig.MemoryLimitPages != 128 {
 		t.Fatalf("unexpected run config: %#v", runConfig)
+	}
+	if config.PreparedCapacity != 2 {
+		t.Fatalf("prepared capacity was not decoded: %#v", config)
 	}
 	if grant == nil || grant.MaxConcurrency != 3 || grant.Targets["catalog"].Headers["Authorization"] != "Bearer host-owned" {
 		t.Fatalf("Host grant was not resolved: %#v", grant)

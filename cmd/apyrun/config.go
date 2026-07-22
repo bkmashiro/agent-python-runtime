@@ -17,6 +17,7 @@ type operatorConfig struct {
 	MaxRequestBytes  uint32           `json:"max_request_bytes,omitempty"`
 	MaxResponseBytes uint32           `json:"max_response_bytes,omitempty"`
 	MemoryLimitPages uint32           `json:"memory_limit_pages,omitempty"`
+	PreparedCapacity uint32           `json:"prepared_capacity,omitempty"`
 	FetchMany        *fetchManyConfig `json:"fetch_many,omitempty"`
 }
 

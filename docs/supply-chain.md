@@ -19,6 +19,8 @@ Build-generated `__pycache__`, `.pyc`, and `.pyo` files are excluded from the st
 
 The locked wasi-vfs prebuilt static archive is accompanied by the exact upstream `linked_storage.c` at commit `0f4db4b…`. The build applies one fail-closed local patch that zero-initializes four allocated structs before Wizer snapshots linear memory, recompiles only that C object with the pinned wasi-sdk, and replaces the unique old archive member. Both the prebuilt archive and patched source appear as linked SBOM inputs.
 
+The locked wasi-vfs static archive is accompanied by the exact upstream `linked_storage.c` at commit `0f4db4b…`. The build applies one fail-closed local patch that zero-initializes four allocated structs before Wizer snapshots linear memory, recompiles only that C object with the pinned wasi-sdk, and replaces the unique old archive member. Both the release archive and patched source appear as linked SBOM inputs.
+
 ## Validation
 
 The producer performs three checks before writing `SHA256SUMS`:

@@ -30,3 +30,9 @@ The producer performs three checks before writing `SHA256SUMS`:
 The artifact consumer repeats bundle identity/source-lock/notice validation without trusting producer staging, refetches the hash-locked official schema, and repeats schema validation. `SHA256SUMS` covers the Wasm, manifest, SPDX document, and generated notices.
 
 The generated notice separates packaged/linked components from build-only tools. It records immutable source URLs, versions, archive digests, and license identifiers. License identifiers are provenance metadata, not legal advice or a substitute for upstream license texts.
+
+## Consumer evidence index
+
+After downloaded-bundle verification, exact-artifact E2E, and both canonical benchmark commands pass, the artifact workflow writes `evidence-index.json`. Its strict v1 schema binds the workflow run/commit to the artifact, manifest, SPDX document, notices, and completed test classes. Its limitations explicitly preserve the unresolved exact-reproducibility failure and synthetic-benchmark scope.
+
+The index is uploaded as a separate consumer-side artifact. It is intentionally not inserted into the Core Guest bundle: the workflow run ID is evidence about a particular CI execution and would itself make two otherwise identical producer bundles differ.

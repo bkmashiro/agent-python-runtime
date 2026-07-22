@@ -17,6 +17,8 @@ on:
       - 'tools/source_date_epoch.py'
       - 'tools/copy_tree_deterministic.py'
       - 'tools/patch_wasi_vfs_storage.py'
+      - 'tools/write_evidence_index.py'
+      - 'evidence/**'
       - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
@@ -36,6 +38,8 @@ on:
       - 'tools/source_date_epoch.py'
       - 'tools/copy_tree_deterministic.py'
       - 'tools/patch_wasi_vfs_storage.py'
+      - 'tools/write_evidence_index.py'
+      - 'evidence/**'
       - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
@@ -181,6 +185,29 @@ jobs:
           python3 -m json.tool \
             "${{ runner.temp }}/prepared-production-safe-linux-amd64.json" \
             >/dev/null
+
+      - name: Write machine-readable evidence index
+        run: |
+          python3 tools/write_evidence_index.py \
+            --artifact "${{ runner.temp }}/agent-runtime-dist/agent-python-runtime.wasm" \
+            --manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
+            --sbom "${{ runner.temp }}/agent-runtime-dist/sbom.spdx.json" \
+            --notices "${{ runner.temp }}/agent-runtime-dist/THIRD_PARTY_NOTICES.md" \
+            --commit "${GITHUB_SHA}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --output "${{ runner.temp }}/evidence-index.json"
+          go run ./cmd/validate-json-schema \
+            evidence/v1/index.schema.json \
+            "${{ runner.temp }}/evidence-index.json"
+
+      - name: Upload machine-readable evidence index
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-evidence-index-${{ github.sha }}
+          path: ${{ runner.temp }}/evidence-index.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload production-safe runtime benchmark
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -47,9 +47,15 @@ Run [`29948829462`](https://github.com/bkmashiro/agent-python-runtime/actions/ru
 
 **Supported conclusion:** cross-runner environment differences are not necessary. Fresh wasi-vfs/Wizer process startup is sufficient to reproduce the data-section drift from one raw Wasm and one frozen VFS tree.
 
-The next candidate changes only `EmbeddedFs.opens`. wasi-vfs 0.6.3 defines it as a default Rust `HashMap`; Rust 1.92's `wasm32-unknown-unknown` `RandomState` derives keys from guest stack and heap allocation addresses because that target has no supported random-data backend. The experiment replaces only that map's hasher with `BuildHasherDefault<DefaultHasher>` while leaving directory traversal order, the pack CLI, Wizer, and the exact comparator unchanged.
+The second candidate changed only `EmbeddedFs.opens`. wasi-vfs 0.6.3 defines it as a default Rust `HashMap`; Rust 1.92's `wasm32-unknown-unknown` `RandomState` derives keys from guest stack and heap allocation addresses because that target has no supported random-data backend. The treatment replaced only that map's hasher with `BuildHasherDefault<DefaultHasher>` while leaving directory traversal order, the pack CLI, Wizer, and the exact comparator unchanged.
+
+Run [`29952871249`](https://github.com/bkmashiro/agent-python-runtime/actions/runs/29952871249) on signed research commit `3ad3360c50bc9660fddd06658b9fe9114dc2efd6` falsified that candidate as a sufficient fix. The two builders produced identical patched wasi-vfs archives, linked-storage objects, raw Wasm files, VFS manifests, source locks, and host CLIs, but both same-run pack pairs still differed. All four packed Wasm digests were unique, and all six pairwise comparisons differed only in Core Wasm section `11`.
+
+**Supported conclusion:** the default hasher of `EmbeddedFs.opens` is not the sole necessary source of the pack-stage drift, and replacing it is insufficient to restore exact reproducibility. This experiment does not exclude a secondary contribution from that map.
 
 A local fail-fast preflight also showed that replacing the pack-only WASI secure RNG with an empty deterministic source did not trap and did not remove section-11 drift. That falsifies the host `WasiCtxBuilder.secure_random` lane for this pack entry point; the research workflow therefore does not stub `random_get`.
+
+The next diagnostic should retain and compare the ordered `fd_readdir` traversal trace, including packed paths and allocation-derived node identifiers, from two fresh pack processes. That observation separates traversal-order drift from allocator/address drift before changing either behavior.
 
 ## Running the controlled workflow
 

@@ -49,3 +49,14 @@ Both classes use a local IP-loopback provider with a fixed 2 ms delay per operat
 ## Interpretation
 
 Raw samples are canonical. Derived medians, deltas, and thresholds must name the artifact SHA-256, Host revision, OS/architecture, Go version, backend, reset mode, evidence class, and sample count. Cross-platform comparisons must use the same schema and fixture; thresholds are added only after a verified Linux baseline exists.
+
+Use the descriptive comparison tool for equal-class/equal-fixture sample sets:
+
+```bash
+python3 tools/compare_runtime_benchmarks.py \
+  docs/benchmarks/runtime-production-safe-darwin-arm64.json \
+  docs/benchmarks/runtime-production-safe-linux-amd64.json \
+  --output /tmp/runtime-comparison.json
+```
+
+The tool reports medians and candidate/baseline ratios while deliberately emitting no pass/fail or threshold. A threshold requires a separately reviewed product budget and repeated same-environment evidence; cross-platform ratios are descriptive only.

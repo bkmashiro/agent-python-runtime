@@ -57,7 +57,13 @@ A local fail-fast preflight also showed that replacing the pack-only WASI secure
 
 A local vanilla-CLI probe then packed the retained treatment raw Wasm twice against the same manifest-identical VFS with `WASI_VFS_VERBOSE=1`. The two 2,390-line file traces, including their root node identifier, were byte-identical while the packed Wasm files still differed. That makes file traversal order an unsupported next treatment rather than the leading hypothesis.
 
-The next candidate removes unused host filesystem metadata from the packing snapshot. `visit_file` calls `fd_filestat_get` but consumes only `size`; the returned inode and timestamps can differ between reconstructed filesystems, and access time can change after the first read. The experiment obtains regular-file size with `fd_seek(END)`, resets to `fd_seek(SET)`, and leaves the read loop, directory traversal, deterministic-hasher treatment, Wizer, and exact comparator unchanged.
+The third candidate removed unused host filesystem metadata from the packing snapshot. `visit_file` called `fd_filestat_get` but consumed only `size`; the treatment instead obtained regular-file size with `fd_seek(END)`, reset to `fd_seek(SET)`, and left the read loop, directory traversal, deterministic-hasher treatment, Wizer, and exact comparator unchanged.
+
+Run [`29955452502`](https://github.com/bkmashiro/agent-python-runtime/actions/runs/29955452502) on signed research commit `83caeabc5395a59bf495509e444437941876c758` also falsified this candidate as a sufficient fix. Both builders produced identical experimental archives, linked-storage objects, raw Wasm files, VFS manifests, source locks, and host CLIs, but both same-run pairs still differed. All four packed Wasm digests were unique, and all six comparisons differed only in Core Wasm section `11`.
+
+**Supported conclusion:** unused `fd_filestat_get` metadata is not the sole necessary source, and avoiding it is insufficient to restore exact reproducibility. The experiment does not exclude a secondary contribution from that metadata.
+
+The next candidate is narrower and is supported by an explicit byte path. In wasmtime-wasi 40.0.4, Preview 1 `fd_readdir` constructs a `#[repr(C)]` `Dirent` and raw-copies its complete host representation into guest memory. Its `u64`, `u64`, `u32`, and `u8` fields end at byte 21, while C layout rounds the structure to 24 bytes, leaving three tail-padding bytes that the field initializer does not define. Those bytes enter wasi-vfs's 4 KiB directory scratch buffer and can then be retained by Wizer. The next treatment should zero only those three bytes for each returned directory entry before wasi-vfs reads the structure; it should not sort traversal or change logical directory data.
 
 ## Running the controlled workflow
 

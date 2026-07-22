@@ -75,6 +75,7 @@ Version: 3.14.0
 Cflags: -I\${includedir} -I\${buildincludedir}
 Libs:
 EOF
+cp "${TARGET_PKGCONFIG_DIR}/python3.pc" "${TARGET_PKGCONFIG_DIR}/python-3.14.pc"
 
 export PROBE_DIR TARGET_PYTHON TARGET_PYTHON_ADAPTER TARGET_PYTHON_SCRIPT_DIR TARGET_PYTHON_SCRIPT_GUEST
 python3 - <<'PY'

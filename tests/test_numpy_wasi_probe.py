@@ -32,6 +32,7 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("TARGET_PYTHON_ADAPTER", script)
         self.assertIn('TARGET_PYTHON_SCRIPT_GUEST="/.numpy-wasi-probe/python_info.py"', script)
         self.assertIn('[[ $# -eq 1 && -f $1 && ${1##*/} == python_info.py ]]', script)
+        self.assertIn('python-3.14.pc', script)
         self.assertIn("python3.pc", script)
         self.assertIn('PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}"', script)
         self.assertIn("expected exactly one NumPy target-Python Meson seam", script)

@@ -70,6 +70,8 @@ ModuleNotFoundError: No module named '_sysconfigdata__wasi_wasm32-wasi'
 
 The current VFS copies `CPython/Lib` but not the generated target `_sysconfigdata_*.py` from the cross-build directory. Package that generated target file deterministically and add exact-artifact E2E before attempting NumPy.
 
+After packaging it, the first real artifact reported `platform = wasi-0.0.0-wasm32`, `EXT_SUFFIX = .cpython-314-wasm32-wasi.so`, and `HAVE_DYNAMIC_LOADING = 1`. That last configure variable is not proof that WASI side modules work: CPython's explicit WASI dynamic-linking configure option remains rejected. F2 must perform a real load attempt instead of treating either the suffix list or this macro as capability evidence.
+
 ### F1 — Official-source compile probe
 
 Create a Linux-only, fail-closed probe from the pinned NumPy sdist using:

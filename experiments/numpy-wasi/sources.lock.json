@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "target": "wasm32-wasip1",
+  "sources": [
+    {
+      "id": "numpy-source",
+      "version": "2.5.1",
+      "url": "https://files.pythonhosted.org/packages/22/fd/89965aa4ac08c74998539fcbf24fa3540f3e15237fbeb6bcf9c908f4aade/numpy-2.5.1.tar.gz",
+      "sha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "role": "runtime-source",
+      "artifact_relation": "build-only"
+    },
+    {
+      "id": "cython-host-wheel-linux-x86_64-cp313",
+      "version": "3.2.8",
+      "url": "https://files.pythonhosted.org/packages/ff/3f/ce32b14ee64c5f5923fcd207a82b86c2531fae1dc3a964a32cfd7bc72ecf/cython-3.2.8-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "e2221be06b6aa92486d7c3644c18cb3643b3e794600f0d6c8555a523e959a069",
+      "license": "Apache-2.0",
+      "role": "build-tool",
+      "artifact_relation": "build-only"
+    }
+  ]
+}

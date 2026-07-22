@@ -33,9 +33,9 @@ Build a standalone Go/wazero runtime around a versioned CPython WASI guest.
 
 Rejected because it does not provide the selected WASI capability boundary and would require a separate OS sandbox design.
 
-### Reusing Shimmy's guest protocol
+### Reusing a domain-specific guest protocol
 
-Rejected because its evaluator-specific request shape, compatibility exports, and product semantics are not neutral Agent runtime contracts.
+Rejected because domain-specific request shapes, compatibility exports, and product semantics are not neutral Agent runtime contracts.
 
 ### Pyodide resident worker
 

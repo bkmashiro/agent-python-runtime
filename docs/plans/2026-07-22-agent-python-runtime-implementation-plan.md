@@ -17,7 +17,7 @@
 3. GitHub Actions may build/test/package artifacts. Do not deploy, publish a package, create a public release, or use paid infrastructure.
 4. Keep producer and host in this repository for v1. Do not create a separate artifact service or producer repository.
 5. Do not commit the large canonical `.wasm`; transfer it between CI jobs as an Actions artifact. Keep only tiny synthetic ABI fixtures in Git.
-6. Do not copy `webassembly-language-runtimes/python/reactor/py_reactor.c`: it contains Shimmy/Lambda Feedback semantics and compatibility exports.
+6. Do not copy `webassembly-language-runtimes/python/reactor/py_reactor.c`: it contains unrelated domain-specific semantics and compatibility exports.
 7. Do not copy `wasi-wheels` build scripts while its repository lacks an explicit root license. Prefer a clean implementation from official CPython/NumPy/WASI SDK sources. If unavoidable build knowledge cannot be independently reproduced, stop for a provenance decision.
 8. CI must never consume mutable `latest` assets without an independently pinned SHA-256. Source tags/commits, tool versions, action SHAs, and downloaded asset hashes are lock data.
 9. Start with pure CPython. Add NumPy only after the neutral guest and host path pass.
@@ -195,7 +195,7 @@ A filename or successful upload is not sufficient evidence.
 
 ### Task 4: Build a neutral pure-CPython WASI guest in CI
 
-**Objective:** Produce a real callable reactor artifact without Shimmy/evaluator-domain semantics.
+**Objective:** Produce a real callable reactor artifact without unrelated domain semantics.
 
 **Files:**
 
@@ -219,7 +219,7 @@ dealloc(ptr)
 execute(ptr, len) -> response_ptr
 ```
 
-The response pointer addresses `[u32 little-endian length][JSON bytes]`. No export or Python handler may mention Shimmy, Lambda Feedback, `evaluation_function`, `preview_function`, or their request shape.
+The response pointer addresses `[u32 little-endian length][JSON bytes]`. No export or Python handler may contain product-specific operation names, compatibility fields, or domain request shapes.
 
 **Behavior tests:**
 

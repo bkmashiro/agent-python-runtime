@@ -10,7 +10,7 @@ Read the canonical documents before changing runtime behavior:
 4. `docs/threat-model.md`
 5. `docs/adr/`
 
-The project is independent from Shimmy and Lambda Feedback. Do not introduce their evaluator protocol, compatibility exports, or product-specific request fields.
+The project is independent from prior domain-specific runtime experiments. Do not introduce unrelated protocols, compatibility exports, or product-specific request fields.
 
 ## Local cheap gates
 

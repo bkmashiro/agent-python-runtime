@@ -21,7 +21,7 @@ A large Python WASI artifact combines a compiler toolchain, CPython, packed stan
 
 ## Existing references
 
-`webassembly-language-runtimes` is an Apache-2.0 artifact-build reference, but its current reactor guest contains Shimmy/Lambda Feedback semantics and is not copied.
+`webassembly-language-runtimes` is an Apache-2.0 artifact-build reference, but its current reactor guest contains unrelated domain-specific semantics and is not copied.
 
 `bkmashiro/wasi-wheels` currently provides useful build evidence and assets, but its repository has no root LICENSE/NOTICE despite a README MIT statement. Its scripts are not copied unless licensing/provenance is resolved. Mutable `latest` assets are never trusted without a pinned digest and are not the preferred clean-build source.
 

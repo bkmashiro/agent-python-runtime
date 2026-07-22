@@ -105,9 +105,14 @@ FINAL_GUEST="${DIST_DIR}/agent-python-runtime.wasm"
   -Wl,--strip-all \
   -o "${RAW_GUEST}"
 
+VFS_PYTHON_DIR="${WORK_DIR}/vfs-python"
+mkdir -p "${VFS_PYTHON_DIR}/site-packages"
+cp -R "${CPYTHON_DIR}/Lib/." "${VFS_PYTHON_DIR}/"
+cp -R "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
+  "${VFS_PYTHON_DIR}/site-packages/agent_runtime"
+
 "${WASI_VFS}" pack "${RAW_GUEST}" \
-  --dir "${CPYTHON_DIR}/Lib::/usr/lib/python3.14" \
-  --dir "${ROOT_DIR}/guest/bootstrap/agent_runtime::/usr/lib/python3.14/site-packages/agent_runtime" \
+  --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
   -o "${FINAL_GUEST}"
 
 "${WASM_TOOLS}" validate "${FINAL_GUEST}"

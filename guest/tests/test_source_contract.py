@@ -48,6 +48,9 @@ class GuestSourceContractTests(unittest.TestCase):
             self.assertIn(static_dependency, text)
         self.assertNotIn("--export=wasi_vfs_pack_fs", text)
         self.assertIn("--max-memory=536870912", text)
+        self.assertEqual(1, text.count('--dir "'))
+        self.assertIn("VFS_PYTHON_DIR", text)
+        self.assertIn("site-packages/agent_runtime", text)
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())
 

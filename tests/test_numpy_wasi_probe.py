@@ -35,6 +35,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn('python-3.14.pc', script)
         self.assertIn("python3.pc", script)
         self.assertIn('PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}"', script)
+        self.assertIn("expected exactly four NumPy host codegen command seams", script)
+        self.assertIn("find_program('python3', native: true)", script)
         self.assertIn("expected exactly one NumPy target-Python Meson seam", script)
         self.assertIn("find_installation({target_python!r}, pure: false)", script)
         self.assertIn("CYTHON_WRAPPER_DIR", script)

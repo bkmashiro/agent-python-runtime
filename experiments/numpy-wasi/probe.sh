@@ -90,6 +90,18 @@ if text.count(old) != 1:
 target_python = os.environ["TARGET_PYTHON_ADAPTER"]
 new = f"py = import('python').find_installation({target_python!r}, pure: false)"
 meson_build.write_text(text.replace(old, new))
+
+core_meson = Path(os.environ["PROBE_DIR"]) / "numpy" / "numpy" / "_core" / "meson.build"
+core_text = core_meson.read_text()
+anchor = "codegen_env = {"
+command_seam = "command: [py, '-m', 'code_generators."
+if core_text.count(anchor) != 1:
+    raise SystemExit("expected exactly one NumPy codegen environment seam")
+if core_text.count(command_seam) != 4:
+    raise SystemExit("expected exactly four NumPy host codegen command seams")
+core_text = core_text.replace(anchor, "build_py = find_program('python3', native: true)\n\n" + anchor)
+core_text = core_text.replace(command_seam, "command: [build_py, '-m', 'code_generators.")
+core_meson.write_text(core_text)
 PY
 
 CROSS_FILE="${PROBE_DIR}/wasi-cross.ini"

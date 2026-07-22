@@ -16,12 +16,12 @@ AGENT_RUNTIME_EXPORT("runtime_prepare")
 int32_t runtime_prepare(const char *source, int32_t source_len);
 
 AGENT_RUNTIME_EXPORT("alloc")
-void *agent_runtime_alloc(int32_t size);
+void *alloc(int32_t size);
 
 AGENT_RUNTIME_EXPORT("dealloc")
-void agent_runtime_dealloc(void *ptr);
+void dealloc(void *ptr);
 
 AGENT_RUNTIME_EXPORT("execute")
-uint32_t agent_runtime_execute(const char *request, int32_t request_len);
+uint32_t execute(const char *request, int32_t request_len);
 
 #endif

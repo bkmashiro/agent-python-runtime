@@ -65,6 +65,15 @@ if [[ -z ${PYTHON_LIB} ]]; then
   echo "CPython WASI static library was not produced" >&2
   exit 4
 fi
+MPDEC_LIB="${WASI_BUILD_DIR}/Modules/_decimal/libmpdec/libmpdec.a"
+EXPAT_LIB="${WASI_BUILD_DIR}/Modules/expat/libexpat.a"
+HACL_LIBS=("${WASI_BUILD_DIR}"/Modules/_hacl/libHacl_*.a)
+for required in "${MPDEC_LIB}" "${EXPAT_LIB}" "${HACL_LIBS[@]}"; do
+  if [[ ! -f ${required} ]]; then
+    echo "missing CPython static dependency: ${required}" >&2
+    exit 5
+  fi
+done
 
 CLANG="${WASI_SDK_PATH}/bin/clang"
 SYSROOT="${WASI_SDK_PATH}/share/wasi-sysroot"
@@ -80,13 +89,16 @@ FINAL_GUEST="${DIST_DIR}/agent-python-runtime.wasm"
 
 "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
   -mexec-model=reactor \
-  "${RUNTIME_OBJECT}" "${PYTHON_LIB}" "${WASI_VFS_LIB}" \
-  -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
+  "${RUNTIME_OBJECT}" "${PYTHON_LIB}" \
+  "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
+  -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
+  -lpthread -lm \
   -Wl,--export=runtime_init \
   -Wl,--export=runtime_prepare \
   -Wl,--export=alloc \
   -Wl,--export=dealloc \
   -Wl,--export=execute \
+  -Wl,--export=wasi_vfs_pack_fs \
   -Wl,--export-memory \
   -Wl,--initial-memory=134217728 \
   -Wl,--max-memory=1073741824 \

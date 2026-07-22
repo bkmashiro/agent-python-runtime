@@ -235,27 +235,54 @@ if [[ ${INSTALL_EXIT} -eq 0 ]]; then
   fi
 fi
 if [[ ${COMPILE_EXIT} -eq 0 ]]; then
-  CORE_MANIFEST="${STATIC_MANIFEST_DIR}/numpy/_core/_multiarray_umath.json"
-  if [[ ! -f ${CORE_MANIFEST} ]]; then
-    echo "missing NumPy core static-extension manifest" >&2
-    exit 12
-  fi
-  mapfile -t NUMPY_CORE_LINK_INPUTS < <(python3 - "${CORE_MANIFEST}" "${PROBE_DIR}/build" <<'PY'
+  SELECTED_MANIFESTS=(
+    "${STATIC_MANIFEST_DIR}/numpy/_core/_multiarray_umath.json"
+    "${STATIC_MANIFEST_DIR}/numpy/linalg/_umath_linalg.json"
+  )
+  for manifest in "${SELECTED_MANIFESTS[@]}"; do
+    if [[ ! -f ${manifest} ]]; then
+      echo "missing selected NumPy static-extension manifest: ${manifest}" >&2
+      exit 12
+    fi
+  done
+  mapfile -t NUMPY_LINK_INPUTS < <(python3 - "${SELECTED_MANIFESTS[@]}" "${PROBE_DIR}/build" <<'PY'
 import json, pathlib, sys
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
-build = pathlib.Path(sys.argv[2])
-for value in [manifest["archive"], *manifest["static_inputs"]]:
-    path = pathlib.Path(value)
-    print(path if path.is_absolute() else build / path)
+manifest_paths = [pathlib.Path(value) for value in sys.argv[1:-1]]
+build = pathlib.Path(sys.argv[-1])
+expected_archives = [
+    "numpy/_core/_multiarray_umath.a",
+    "numpy/linalg/_umath_linalg.a",
+]
+expected_static = {
+    "numpy/_core/libnpymath.a",
+    "numpy/_core/libunique_hash.a",
+    "numpy/_core/lib_multiarray_umath_mtargets.a",
+}
+seen = set()
+static_inputs = set()
+for manifest_path, expected_archive in zip(manifest_paths, expected_archives):
+    manifest = json.loads(manifest_path.read_text())
+    if manifest["archive"] != expected_archive:
+        raise SystemExit(f"unexpected selected archive: {manifest['archive']}")
+    static_inputs.update(manifest["static_inputs"])
+    for value in [manifest["archive"], *manifest["static_inputs"]]:
+        path = pathlib.Path(value)
+        path = path if path.is_absolute() else build / path
+        path = path.resolve()
+        if path not in seen:
+            seen.add(path)
+            print(path)
+if static_inputs != expected_static:
+    raise SystemExit(f"unexpected selected static inputs: {sorted(static_inputs)}")
 PY
   )
-  if [[ ${#NUMPY_CORE_LINK_INPUTS[@]} -ne 4 ]]; then
-    echo "expected NumPy core archive plus exactly three static inputs" >&2
+  if [[ ${#NUMPY_LINK_INPUTS[@]} -ne 5 ]]; then
+    echo "expected two selected extension archives plus exactly three unique static inputs" >&2
     exit 13
   fi
-  for required in "${NUMPY_CORE_LINK_INPUTS[@]}"; do
+  for required in "${NUMPY_LINK_INPUTS[@]}"; do
     if [[ ! -f ${required} ]]; then
-      echo "missing NumPy core link input: ${required}" >&2
+      echo "missing selected NumPy link input: ${required}" >&2
       exit 14
     fi
   done
@@ -287,7 +314,7 @@ PY
       -fno-exceptions \
       -mexec-model=reactor \
       "${LINK_PROBE_OBJECT}" \
-      -Wl,--whole-archive "${NUMPY_CORE_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
+      -Wl,--whole-archive "${NUMPY_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
       "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
       -lpthread -lm -lc-printscan-long-double \
@@ -423,6 +450,10 @@ report = {
     "extension_outputs": modules,
     "static_extension_count": len(static_extensions),
     "static_extensions": static_extensions,
+    "selected_builtin_modules": [
+        "numpy._core._multiarray_umath",
+        "numpy.linalg._umath_linalg",
+    ],
     "package_staging": package_staging,
     "monolithic_link": monolithic_link,
     "import_probe": import_probe,

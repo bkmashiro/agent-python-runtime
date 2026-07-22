@@ -2,6 +2,7 @@
 #include <Python.h>
 
 extern PyObject *PyInit__multiarray_umath(void);
+extern PyObject *PyInit__umath_linalg(void);
 
 static int numpy_registered = 0;
 
@@ -35,18 +36,22 @@ static const char *NUMPY_FINDER_SCRIPT =
     "_sys.meta_path.append(_WasiVFSFinder())\n"
     "_sys.meta_path.append(_ilm.PathFinder)\n";
 
-/* Records the initializer pointer without executing NumPy or Python imports. */
+/* Records the initializer pointers without executing NumPy or Python imports. */
 __attribute__((export_name("numpy_register_probe")))
 int numpy_register_probe(void) {
     if (numpy_registered) {
         return 0;
     }
-    int result = PyImport_AppendInittab("numpy._core._multiarray_umath",
-                                       PyInit__multiarray_umath);
-    if (result == 0) {
-        numpy_registered = 1;
+    if (PyImport_AppendInittab("numpy._core._multiarray_umath",
+                               PyInit__multiarray_umath) != 0) {
+        return 1;
     }
-    return result;
+    if (PyImport_AppendInittab("numpy.linalg._umath_linalg",
+                               PyInit__umath_linalg) != 0) {
+        return 2;
+    }
+    numpy_registered = 1;
+    return 0;
 }
 
 /*

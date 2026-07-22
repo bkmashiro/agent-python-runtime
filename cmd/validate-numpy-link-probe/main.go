@@ -190,7 +190,7 @@ func runProbe(ctx context.Context, wasm []byte, result *report) error {
 }
 
 func boundedText(text string) string {
-	const limit = 1000
+	const limit = 8192
 	if len(text) <= limit {
 		return text
 	}

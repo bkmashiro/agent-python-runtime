@@ -83,5 +83,6 @@ jobs:
             ${{ runner.temp }}/numpy-wasi-probe/report.json
             ${{ runner.temp }}/numpy-wasi-probe/wasi-cross.ini
             ${{ runner.temp }}/numpy-wasi-probe/logs/
+            ${{ runner.temp }}/numpy-wasi-probe/static-extension-manifests/
           if-no-files-found: error
           retention-days: 7

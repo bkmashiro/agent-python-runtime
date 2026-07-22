@@ -94,10 +94,10 @@ Create a Linux-only, fail-closed probe from the pinned NumPy sdist using:
 - NumPy's vendored Meson;
 - pinned host-side Cython/build requirements;
 - a project-owned Meson cross file;
-- `longdouble_format = 'IEEE_DOUBLE_LE'` as documented by NumPy;
+- `longdouble_format = 'IEEE_QUAD_LE'`, matching Meson's measured 16-byte `long double` and the WebAssembly C ABI's little-endian IEEE binary128 representation;
 - no BLAS/LAPACK, threading, SIMD, Highway, or Intel sort.
 
-The first output is an extension/object inventory and exact failure report, not a wheel claim.
+The first output is an extension/object inventory and exact failure report, not a wheel claim. Run `29949728945` completed setup and compiled through step 293/331 before the first `py.extension_module` dynamic link failed on unresolved CPython symbols. This establishes broad source/object compilation feasibility for the bounded configuration, but not a complete build or importable artifact.
 
 ### F2 — Static-extension feasibility
 

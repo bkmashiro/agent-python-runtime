@@ -45,7 +45,8 @@ for required in \
   "${WASI_SDK_PATH}/bin/clang++" \
   "${WASI_SDK_PATH}/bin/llvm-ar" \
   "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py" \
-  "${PROBE_DIR}/cython/cython.py"; do
+  "${PROBE_DIR}/cython/cython.py" \
+  "${ROOT_DIR}/tools/archive_wasm_extension.py"; do
   if [[ ! -e ${required} ]]; then
     echo "missing probe input: ${required}" >&2
     exit 11
@@ -60,6 +61,29 @@ cat >"${CYTHON_WRAPPER}" <<EOF
 PYTHONPATH="${PROBE_DIR}/cython" exec python3 "${PROBE_DIR}/cython/cython.py" "\$@"
 EOF
 chmod 0755 "${CYTHON_WRAPPER}"
+
+STATIC_WRAPPER_DIR="${PROBE_DIR}/static-link-wrappers"
+STATIC_MANIFEST_DIR="${PROBE_DIR}/static-extension-manifests"
+STATIC_C_WRAPPER="${STATIC_WRAPPER_DIR}/clang"
+STATIC_CXX_WRAPPER="${STATIC_WRAPPER_DIR}/clang++"
+mkdir -p "${STATIC_WRAPPER_DIR}" "${STATIC_MANIFEST_DIR}"
+cat >"${STATIC_C_WRAPPER}" <<EOF
+#!/usr/bin/env bash
+exec python3 "${ROOT_DIR}/tools/archive_wasm_extension.py" \\
+  --real-compiler "${WASI_SDK_PATH}/bin/clang" \\
+  --archiver "${WASI_SDK_PATH}/bin/llvm-ar" \\
+  --manifest-dir "${STATIC_MANIFEST_DIR}" \\
+  --build-root "${PROBE_DIR}/build" -- "\$@"
+EOF
+cat >"${STATIC_CXX_WRAPPER}" <<EOF
+#!/usr/bin/env bash
+exec python3 "${ROOT_DIR}/tools/archive_wasm_extension.py" \\
+  --real-compiler "${WASI_SDK_PATH}/bin/clang++" \\
+  --archiver "${WASI_SDK_PATH}/bin/llvm-ar" \\
+  --manifest-dir "${STATIC_MANIFEST_DIR}" \\
+  --build-root "${PROBE_DIR}/build" -- "\$@"
+EOF
+chmod 0755 "${STATIC_C_WRAPPER}" "${STATIC_CXX_WRAPPER}"
 
 PKG_CONFIG_BIN=$(command -v pkg-config)
 TARGET_PKGCONFIG_DIR="${PROBE_DIR}/target-pkgconfig"
@@ -107,8 +131,8 @@ PY
 CROSS_FILE="${PROBE_DIR}/wasi-cross.ini"
 cat >"${CROSS_FILE}" <<EOF
 [binaries]
-c = '${WASI_SDK_PATH}/bin/clang'
-cpp = '${WASI_SDK_PATH}/bin/clang++'
+c = '${STATIC_C_WRAPPER}'
+cpp = '${STATIC_CXX_WRAPPER}'
 ar = '${WASI_SDK_PATH}/bin/llvm-ar'
 strip = '${WASI_SDK_PATH}/bin/llvm-strip'
 python = '${TARGET_PYTHON_ADAPTER}'
@@ -159,7 +183,7 @@ set -e
 
 export PROBE_DIR SETUP_EXIT COMPILE_EXIT TARGET_PYTHON
 python3 - <<'PY'
-import json, os, pathlib
+import hashlib, json, os, pathlib
 root = pathlib.Path(os.environ["PROBE_DIR"])
 setup_exit = int(os.environ["SETUP_EXIT"])
 compile_exit = int(os.environ["COMPILE_EXIT"])
@@ -170,10 +194,39 @@ elif compile_exit:
 else:
     outcome = "compile_succeeded"
 modules = []
-if (root / "build").is_dir():
-    modules = sorted(str(p.relative_to(root / "build")) for p in (root / "build").rglob("*.so"))
+static_extensions = []
+build_root = root / "build"
+if build_root.is_dir():
+    modules = sorted(str(p.relative_to(build_root)) for p in build_root.rglob("*.so"))
+for manifest_path in sorted((root / "static-extension-manifests").rglob("*.json")):
+    manifest = json.loads(manifest_path.read_text())
+    output = manifest["output"]
+    if not output.startswith("numpy/"):
+        continue
+    archive = pathlib.Path(manifest["archive"])
+    if not archive.is_absolute():
+        archive = build_root / archive
+    archive = archive.resolve()
+    archive.relative_to(build_root.resolve())
+    digest = hashlib.sha256()
+    with archive.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    static_extensions.append({
+        "output": output,
+        "archive": str(archive.relative_to(build_root.resolve())),
+        "archive_sha256": digest.hexdigest(),
+        "archive_size": archive.stat().st_size,
+        "objects": len(manifest["objects"]),
+        "static_inputs": manifest["static_inputs"],
+        "manifest": str(manifest_path.relative_to(root)),
+    })
+static_extensions.sort(key=lambda item: item["output"])
+evidence_error = compile_exit == 0 and not static_extensions
+if evidence_error:
+    outcome = "evidence_failed"
 report = {
-    "schema_version": 1,
+    "schema_version": 2,
     "target": "wasm32-wasip1",
     "numpy_version": "2.5.1",
     "numpy_source_sha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
@@ -184,10 +237,14 @@ report = {
     "target_python_wrapper": pathlib.Path(os.environ["TARGET_PYTHON"]).name,
     "meson_target_python_adapter": pathlib.Path(os.environ["TARGET_PYTHON_ADAPTER"]).name,
     "extension_outputs": modules,
-    "claim": "diagnostic only; success does not establish a loadable NumPy WASI artifact",
+    "static_extension_count": len(static_extensions),
+    "static_extensions": static_extensions,
+    "claim": "diagnostic only; static archives are not yet linked, registered, or importable",
 }
 (root / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 print(json.dumps(report, sort_keys=True))
+if evidence_error:
+    raise SystemExit("compile succeeded without static extension evidence")
 PY
 
 # A compiler failure is diagnostic evidence. Missing/invalid locked inputs and

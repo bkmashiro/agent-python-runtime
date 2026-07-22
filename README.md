@@ -26,6 +26,7 @@ The first version is not a general Linux sandbox, agent framework, MCP marketpla
 - [Implementation plan](docs/plans/2026-07-22-agent-python-runtime-implementation-plan.md)
 - [Architecture](docs/architecture.md)
 - [Threat model](docs/threat-model.md)
+- [Future Effect Plane: playback, COMMIT, and APPROVE](docs/effect-plane.md)
 - [Development and gates](docs/development.md)
 - [Runtime boundary ADR](docs/adr/0001-runtime-boundaries.md)
 - [Guest ABI ADR](docs/adr/0002-guest-abi-v1.md)

@@ -26,15 +26,15 @@ fi
 TARGET_PYTHON=${TARGET_PYTHONS[0]}
 TARGET_PYTHON_ADAPTER_DIR="${PROBE_DIR}/target-python-adapter"
 TARGET_PYTHON_ADAPTER="${TARGET_PYTHON_ADAPTER_DIR}/python"
-TARGET_PYTHON_SCRIPT_DIR="${TARGET_PYTHON_ADAPTER_DIR}/script"
-mkdir -p "${TARGET_PYTHON_SCRIPT_DIR}"
+TARGET_PYTHON_SCRIPT_DIR="${WORK_DIR}/cpython/.numpy-wasi-probe"
+TARGET_PYTHON_SCRIPT_GUEST="/.numpy-wasi-probe/python_info.py"
+mkdir -p "${TARGET_PYTHON_ADAPTER_DIR}" "${TARGET_PYTHON_SCRIPT_DIR}"
 cat >"${TARGET_PYTHON_ADAPTER}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $# -eq 1 && -f $1 && ${1##*/} == python_info.py ]]; then
   cp -- "$1" "${TARGET_PYTHON_SCRIPT_DIR}/python_info.py"
-  cd "${TARGET_PYTHON_SCRIPT_DIR}"
-  exec "${TARGET_PYTHON}" python_info.py
+  exec "${TARGET_PYTHON}" "${TARGET_PYTHON_SCRIPT_GUEST}"
 fi
 exec "${TARGET_PYTHON}" "$@"
 EOF
@@ -76,7 +76,7 @@ Cflags: -I\${includedir} -I\${buildincludedir}
 Libs:
 EOF
 
-export PROBE_DIR TARGET_PYTHON TARGET_PYTHON_ADAPTER TARGET_PYTHON_SCRIPT_DIR
+export PROBE_DIR TARGET_PYTHON TARGET_PYTHON_ADAPTER TARGET_PYTHON_SCRIPT_DIR TARGET_PYTHON_SCRIPT_GUEST
 python3 - <<'PY'
 import os
 from pathlib import Path

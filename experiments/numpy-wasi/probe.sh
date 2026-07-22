@@ -24,6 +24,21 @@ if [[ ${#TARGET_PYTHONS[@]} -ne 1 ]]; then
   exit 10
 fi
 TARGET_PYTHON=${TARGET_PYTHONS[0]}
+TARGET_PYTHON_ADAPTER_DIR="${PROBE_DIR}/target-python-adapter"
+TARGET_PYTHON_ADAPTER="${TARGET_PYTHON_ADAPTER_DIR}/python"
+TARGET_PYTHON_SCRIPT_DIR="${TARGET_PYTHON_ADAPTER_DIR}/script"
+mkdir -p "${TARGET_PYTHON_SCRIPT_DIR}"
+cat >"${TARGET_PYTHON_ADAPTER}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 1 && -f $1 && ${1##*/} == python_info.py ]]; then
+  cp -- "$1" "${TARGET_PYTHON_SCRIPT_DIR}/python_info.py"
+  cd "${TARGET_PYTHON_SCRIPT_DIR}"
+  exec "${TARGET_PYTHON}" python_info.py
+fi
+exec "${TARGET_PYTHON}" "$@"
+EOF
+chmod 0755 "${TARGET_PYTHON_ADAPTER}"
 for required in \
   "${TARGET_PYTHON}" \
   "${WASI_SDK_PATH}/bin/clang" \
@@ -61,7 +76,7 @@ Cflags: -I\${includedir} -I\${buildincludedir}
 Libs:
 EOF
 
-export PROBE_DIR TARGET_PYTHON
+export PROBE_DIR TARGET_PYTHON TARGET_PYTHON_ADAPTER TARGET_PYTHON_SCRIPT_DIR
 python3 - <<'PY'
 import os
 from pathlib import Path
@@ -71,7 +86,7 @@ text = meson_build.read_text()
 old = "py = import('python').find_installation(pure: false)"
 if text.count(old) != 1:
     raise SystemExit("expected exactly one NumPy target-Python Meson seam")
-target_python = os.environ["TARGET_PYTHON"]
+target_python = os.environ["TARGET_PYTHON_ADAPTER"]
 new = f"py = import('python').find_installation({target_python!r}, pure: false)"
 meson_build.write_text(text.replace(old, new))
 PY
@@ -83,7 +98,7 @@ c = '${WASI_SDK_PATH}/bin/clang'
 cpp = '${WASI_SDK_PATH}/bin/clang++'
 ar = '${WASI_SDK_PATH}/bin/llvm-ar'
 strip = '${WASI_SDK_PATH}/bin/llvm-strip'
-python = '${TARGET_PYTHON}'
+python = '${TARGET_PYTHON_ADAPTER}'
 cython = '${CYTHON_WRAPPER}'
 pkg-config = '${PKG_CONFIG_BIN}'
 cmake = 'false'
@@ -154,6 +169,7 @@ report = {
     "compile_exit": compile_exit,
     "outcome": outcome,
     "target_python_wrapper": pathlib.Path(os.environ["TARGET_PYTHON"]).name,
+    "meson_target_python_adapter": pathlib.Path(os.environ["TARGET_PYTHON_ADAPTER"]).name,
     "extension_outputs": modules,
     "claim": "diagnostic only; success does not establish a loadable NumPy WASI artifact",
 }

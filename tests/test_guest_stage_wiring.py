@@ -36,9 +36,11 @@ class GuestStageEvidenceWiringTests(unittest.TestCase):
         self.assertIn('AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER: "1"', workflow)
         self.assertIn('AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA: "1"', workflow)
         self.assertIn('AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING: "1"', workflow)
+        self.assertIn('AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER: "1"', workflow)
         self.assertIn("REBUILD_WASI_VFS_FROM_SOURCE", script)
         self.assertIn("tools/patch_wasi_vfs_pack_file_size.py", script)
         self.assertIn("tools/patch_wasi_vfs_dirent_padding.py", script)
+        self.assertIn("tools/patch_wasi_vfs_dirent_buffer_cleanup.py", script)
         self.assertIn(
             "rustup toolchain install 1.92.0 --profile minimal --target wasm32-unknown-unknown",
             workflow,

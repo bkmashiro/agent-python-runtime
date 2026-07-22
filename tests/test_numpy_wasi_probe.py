@@ -38,7 +38,7 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", text)
         self.assertNotIn("pull_request:", text)
         self.assertNotIn("\n  push:", text)
-        self.assertIn("experiments/numpy-wasi/probe.sh", text)
+        self.assertIn("run: bash experiments/numpy-wasi/probe.sh", text)
         self.assertIn("numpy-wasi-probe-${{ github.sha }}", text)
         self.assertRegex(text, r"actions/checkout@[0-9a-f]{40}")
         self.assertRegex(text, r"actions/setup-python@[0-9a-f]{40}")

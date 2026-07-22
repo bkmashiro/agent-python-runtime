@@ -55,7 +55,7 @@ jobs:
         env:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
           NUMPY_WASI_PROBE_DIR: ${{ runner.temp }}/numpy-wasi-probe
-        run: experiments/numpy-wasi/probe.sh
+        run: bash experiments/numpy-wasi/probe.sh
 
       - name: Print diagnostic result
         if: always()

@@ -18,7 +18,12 @@ REQUIRED_EXPORTS = {
     "dealloc",
     "execute",
 }
-ALLOWED_SUPPORT_EXPORTS = {"__data_end", "__heap_base", "wasi_vfs_pack_fs"}
+ALLOWED_SUPPORT_EXPORTS = {
+    "__data_end",
+    "__heap_base",
+    "__internal_wasi_vfs_pack_fs",
+    "__internal_wasi_vfs_rt_init",
+}
 ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1"}
 
 

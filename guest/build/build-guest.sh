@@ -98,10 +98,9 @@ FINAL_GUEST="${DIST_DIR}/agent-python-runtime.wasm"
   -Wl,--export=alloc \
   -Wl,--export=dealloc \
   -Wl,--export=execute \
-  -Wl,--export=wasi_vfs_pack_fs \
   -Wl,--export-memory \
   -Wl,--initial-memory=134217728 \
-  -Wl,--max-memory=1073741824 \
+  -Wl,--max-memory=536870912 \
   -Wl,-z,stack-size=16777216 \
   -Wl,--strip-all \
   -o "${RAW_GUEST}"

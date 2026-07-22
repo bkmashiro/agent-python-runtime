@@ -1,0 +1,6 @@
+{
+  "run_id": "run-001",
+  "code": "result = {'count': len(inputs['rows'])}",
+  "inputs": {"rows": [1, 2, 3]},
+  "output_schema": {"type": "object"}
+}

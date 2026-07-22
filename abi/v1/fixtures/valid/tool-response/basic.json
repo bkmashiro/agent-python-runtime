@@ -1,0 +1,6 @@
+{
+  "call_id": "run-001:0",
+  "status": "ok",
+  "result": {"items": [{"status": 200, "body": {"temperature": 20}}]},
+  "error": null
+}

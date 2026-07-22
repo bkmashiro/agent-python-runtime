@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-runtime.dev/abi/v1/tool-request.schema.json",
+  "title": "Agent Python Runtime Host Tool Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["call_id", "capability", "arguments"],
+  "properties": {
+    "call_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "capability": {"type": "string", "minLength": 1, "maxLength": 128},
+    "arguments": {"type": "object"}
+  }
+}

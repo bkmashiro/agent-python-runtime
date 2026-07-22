@@ -32,6 +32,7 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 ## Documentation
 
 - [Local operator CLI](docs/operator-cli.md)
+- [Runtime benchmark evidence](docs/benchmarking.md)
 - [Active autonomous mega-goal](docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md)
 - [Implementation status and evidence](docs/status.md)
 - [Standalone implementation handoff](docs/plans/2026-07-22-agent-python-runtime-handoff.md)

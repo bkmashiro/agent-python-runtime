@@ -80,6 +80,32 @@ func call(t *testing.T, broker *capability.Broker, callID, name string, requests
 	return response
 }
 
+func TestBrokerObserverRecordsBoundedCall(t *testing.T) {
+	var observations []capability.Observation
+	grant := testGrant()
+	broker, err := capability.NewBroker(capability.Config{
+		RunIdentity: "observed-run",
+		Grants:      map[string]capability.Grant{grant.Name: grant},
+		Observer: func(observation capability.Observation) {
+			observations = append(observations, observation)
+		},
+	}, &fakeFetcher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := call(t, broker, "observed-call", capability.FetchManyCapability, []map[string]string{
+		{"request_id": "r1", "target": "fixture", "path": "/ok"},
+	})
+	if response.Status != capability.StatusOK || len(observations) != 1 {
+		t.Fatalf("observation missing: response=%#v observations=%#v", response, observations)
+	}
+	observation := observations[0]
+	if observation.Capability != capability.FetchManyCapability || observation.Duration <= 0 ||
+		observation.RequestBytes == 0 || observation.ResponseBytes == 0 || !observation.Success {
+		t.Fatalf("invalid observation: %#v", observation)
+	}
+}
+
 func TestNoGrantAndWrongCapabilityAreDenied(t *testing.T) {
 	fetcher := &fakeFetcher{}
 	broker := newBroker(t, nil, fetcher)

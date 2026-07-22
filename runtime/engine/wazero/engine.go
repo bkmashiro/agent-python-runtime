@@ -24,15 +24,24 @@ import (
 // the bridge fail-closed for Runs without Host grants.
 type BrokerFactory func(context.Context) (*capability.Broker, error)
 
+type Observation struct {
+	Phase    string
+	Duration time.Duration
+	Success  bool
+}
+
+type Observer func(Observation)
+
 // Factory constructs wazero-backed runners behind the neutral engine contract.
 type Factory struct {
 	BrokerFactory BrokerFactory
+	Observer      Observer
 }
 
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
-	return NewWithBrokerFactory(ctx, wasm, config, factory.BrokerFactory)
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -45,10 +54,11 @@ type Engine struct {
 	compiled      wazerort.CompiledModule
 	config        runtimeconfig.RunConfig
 	brokerFactory BrokerFactory
+	observer      Observer
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return NewWithBrokerFactory(ctx, wasm, config, nil)
+	return newEngine(ctx, wasm, config, nil, nil)
 }
 
 func NewWithBrokerFactory(
@@ -56,6 +66,16 @@ func NewWithBrokerFactory(
 	wasm []byte,
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
+) (*Engine, error) {
+	return newEngine(ctx, wasm, config, brokerFactory, nil)
+}
+
+func newEngine(
+	ctx context.Context,
+	wasm []byte,
+	config runtimeconfig.RunConfig,
+	brokerFactory BrokerFactory,
+	observer Observer,
 ) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
@@ -68,15 +88,21 @@ func NewWithBrokerFactory(
 		WithCloseOnContextDone(true).
 		WithMemoryLimitPages(config.MemoryLimitPages)
 	wasmRuntime := wazerort.NewRuntimeWithConfig(ctx, runtimeConfig)
+	hostStarted := time.Now()
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, wasmRuntime); err != nil {
+		observe(observer, "instantiate_host", hostStarted, err)
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("instantiate WASI imports: %w", err)
 	}
 	if err := instantiateCapabilityHost(ctx, wasmRuntime); err != nil {
+		observe(observer, "instantiate_host", hostStarted, err)
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("instantiate capability imports: %w", err)
 	}
+	observe(observer, "instantiate_host", hostStarted, nil)
+	compileStarted := time.Now()
 	compiled, err := wasmRuntime.CompileModule(ctx, wasm)
+	observe(observer, "compile", compileStarted, err)
 	if err != nil {
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("compile guest: %w", err)
@@ -86,6 +112,7 @@ func NewWithBrokerFactory(
 		compiled:      compiled,
 		config:        config,
 		brokerFactory: brokerFactory,
+		observer:      observer,
 	}, nil
 }
 
@@ -126,28 +153,41 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
 	var guestStderr bytes.Buffer
+	instantiateStarted := time.Now()
 	module, err := engine.runtime.InstantiateModule(
 		runContext,
 		engine.compiled,
 		wazerort.NewModuleConfig().WithName("").WithStderr(&guestStderr),
 	)
+	observe(engine.observer, "instantiate_guest", instantiateStarted, err)
 	if err != nil {
 		return nil, fmt.Errorf("instantiate guest: %w", err)
 	}
 	defer module.Close(context.Background())
 
-	if err := callNoArgs(runContext, module, "_initialize"); err != nil {
+	initializeStarted := time.Now()
+	err = callNoArgs(runContext, module, "_initialize")
+	observe(engine.observer, "_initialize", initializeStarted, err)
+	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
-	if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
+	runtimeInitStarted := time.Now()
+	err = callStatusWithBytes(runContext, module, "runtime_init", []byte("{}"))
+	observe(engine.observer, "runtime_init", runtimeInitStarted, err)
+	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
 	if trustedPrepare != "" {
-		if err := callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare)); err != nil {
+		prepareStarted := time.Now()
+		err = callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare))
+		observe(engine.observer, "prepare", prepareStarted, err)
+		if err != nil {
 			return nil, withGuestDiagnostic(err, guestStderr.String())
 		}
 	}
+	executeStarted := time.Now()
 	payload, err := callExecute(runContext, module, request, engine.config.MaxResponseBytes)
+	observe(engine.observer, "execute", executeStarted, err)
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
@@ -342,6 +382,14 @@ func readGuestResponse(memory api.Memory, pointer uint32, maxResponse uint32) ([
 		return nil, errors.New("response frame is out of bounds")
 	}
 	return enginecontract.DecodeLengthPrefixedResponse(frame, maxResponse)
+}
+
+func observe(observer Observer, phase string, started time.Time, err error) {
+	if observer == nil {
+		return
+	}
+	duration := time.Since(started)
+	observer(Observation{Phase: phase, Duration: duration, Success: err == nil})
 }
 
 const guestDiagnosticMax = 16 * 1024

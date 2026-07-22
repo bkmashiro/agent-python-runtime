@@ -11,15 +11,27 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
 
+type Observation struct {
+	Capability    string
+	Duration      time.Duration
+	RequestBytes  int
+	ResponseBytes int
+	Success       bool
+}
+
+type Observer func(Observation)
+
 type Config struct {
 	RunIdentity string
 	Grants      map[string]Grant
+	Observer    Observer
 }
 
 type Broker struct {
@@ -83,8 +95,20 @@ func (broker *Broker) Receipts() []receipt.Receipt {
 	return copied
 }
 
-func (broker *Broker) Call(ctx context.Context, payload []byte) ([]byte, error) {
+func (broker *Broker) Call(ctx context.Context, payload []byte) (response []byte, err error) {
+	started := time.Now()
 	var request toolRequest
+	defer func() {
+		if broker.config.Observer != nil {
+			broker.config.Observer(Observation{
+				Capability:    request.Capability,
+				Duration:      time.Since(started),
+				RequestBytes:  len(payload),
+				ResponseBytes: len(response),
+				Success:       err == nil,
+			})
+		}
+	}()
 	if err := decodeStrict(payload, &request); err != nil {
 		return nil, fmt.Errorf("invalid tool request: %w", err)
 	}

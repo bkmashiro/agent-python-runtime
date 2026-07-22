@@ -30,10 +30,13 @@ class GuestStageEvidenceWiringTests(unittest.TestCase):
         ):
             self.assertIn(argument, script)
 
-    def test_experiment_rebuilds_only_guest_archive_with_deterministic_hasher(self):
+    def test_experiment_rebuilds_guest_archive_with_explicit_treatments(self):
         script = (ROOT / "guest" / "build" / "build-guest.sh").read_text()
         workflow = (ROOT / ".github" / "workflows" / "reproducibility.yml").read_text()
         self.assertIn('AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER: "1"', workflow)
+        self.assertIn('AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA: "1"', workflow)
+        self.assertIn("REBUILD_WASI_VFS_FROM_SOURCE", script)
+        self.assertIn("tools/patch_wasi_vfs_pack_file_size.py", script)
         self.assertIn(
             "rustup toolchain install 1.92.0 --profile minimal --target wasm32-unknown-unknown",
             workflow,

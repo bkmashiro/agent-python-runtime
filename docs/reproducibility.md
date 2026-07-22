@@ -55,7 +55,9 @@ Run [`29952871249`](https://github.com/bkmashiro/agent-python-runtime/actions/ru
 
 A local fail-fast preflight also showed that replacing the pack-only WASI secure RNG with an empty deterministic source did not trap and did not remove section-11 drift. That falsifies the host `WasiCtxBuilder.secure_random` lane for this pack entry point; the research workflow therefore does not stub `random_get`.
 
-The next diagnostic should retain and compare the ordered `fd_readdir` traversal trace, including packed paths and allocation-derived node identifiers, from two fresh pack processes. That observation separates traversal-order drift from allocator/address drift before changing either behavior.
+A local vanilla-CLI probe then packed the retained treatment raw Wasm twice against the same manifest-identical VFS with `WASI_VFS_VERBOSE=1`. The two 2,390-line file traces, including their root node identifier, were byte-identical while the packed Wasm files still differed. That makes file traversal order an unsupported next treatment rather than the leading hypothesis.
+
+The next candidate removes unused host filesystem metadata from the packing snapshot. `visit_file` calls `fd_filestat_get` but consumes only `size`; the returned inode and timestamps can differ between reconstructed filesystems, and access time can change after the first read. The experiment obtains regular-file size with `fd_seek(END)`, resets to `fd_seek(SET)`, and leaves the read loop, directory traversal, deterministic-hasher treatment, Wizer, and exact comparator unchanged.
 
 ## Running the controlled workflow
 

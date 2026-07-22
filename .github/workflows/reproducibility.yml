@@ -56,6 +56,7 @@ jobs:
           AGENT_RUNTIME_REPRO_EVIDENCE_DIR: ${{ runner.temp }}/agent-runtime-repro-evidence
           AGENT_RUNTIME_REPRO_REPLICA: ${{ matrix.replica }}
           AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER: "1"
+          AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA: "1"
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH

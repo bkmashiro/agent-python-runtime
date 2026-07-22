@@ -3,11 +3,13 @@
 extern PyObject *PyInit__multiarray_umath(void);
 
 /*
- * Link-only probe. The workflow never executes this export. Keeping the exact
- * initializer reference forces the static NumPy core and its CPython API
- * dependencies through the real wasm-ld monolithic link.
+ * Registration-only probe. PyImport_AppendInittab records the exact initializer
+ * pointer before interpreter initialization; it does not execute NumPy or import
+ * any module. The workflow invokes this export only after the reactor's C runtime
+ * initializer has run.
  */
-__attribute__((export_name("numpy_link_probe")))
-PyObject *numpy_link_probe(void) {
-    return PyInit__multiarray_umath();
+__attribute__((export_name("numpy_register_probe")))
+int numpy_register_probe(void) {
+    return PyImport_AppendInittab("numpy._core._multiarray_umath",
+                                 PyInit__multiarray_umath);
 }

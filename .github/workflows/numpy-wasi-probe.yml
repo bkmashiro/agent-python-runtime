@@ -57,6 +57,16 @@ jobs:
           NUMPY_WASI_PROBE_DIR: ${{ runner.temp }}/numpy-wasi-probe
         run: bash experiments/numpy-wasi/probe.sh
 
+      - name: Run diagnostic NumPy builtin registration probe
+        env:
+          PROBE_DIR: ${{ runner.temp }}/numpy-wasi-probe
+        run: |
+          if [[ -f "${PROBE_DIR}/numpy-core-link-probe.wasm" ]]; then
+            go run ./cmd/validate-numpy-link-probe \
+              -wasm "${PROBE_DIR}/numpy-core-link-probe.wasm" \
+              -output "${PROBE_DIR}/registration-report.json"
+          fi
+
       - name: Print diagnostic result
         if: always()
         env:
@@ -64,6 +74,10 @@ jobs:
         run: |
           if [[ -f "${PROBE_DIR}/report.json" ]]; then
             cat "${PROBE_DIR}/report.json"
+          fi
+          if [[ -f "${PROBE_DIR}/registration-report.json" ]]; then
+            echo '--- builtin registration result ---'
+            cat "${PROBE_DIR}/registration-report.json"
           fi
           if [[ -f "${PROBE_DIR}/logs/setup.log" ]]; then
             echo '--- meson setup tail ---'
@@ -85,6 +99,7 @@ jobs:
           name: numpy-wasi-probe-${{ github.sha }}
           path: |
             ${{ runner.temp }}/numpy-wasi-probe/report.json
+            ${{ runner.temp }}/numpy-wasi-probe/registration-report.json
             ${{ runner.temp }}/numpy-wasi-probe/numpy-core-link-probe.wasm
             ${{ runner.temp }}/numpy-wasi-probe/wasi-cross.ini
             ${{ runner.temp }}/numpy-wasi-probe/logs/

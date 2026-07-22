@@ -246,7 +246,7 @@ PY
       "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
       -lpthread -lm \
-      -Wl,--export=numpy_link_probe \
+      -Wl,--export=numpy_register_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \
       -Wl,--max-memory=536870912 \
@@ -314,7 +314,8 @@ if link_probe.is_file():
         "filename": link_probe.name,
         "sha256": digest.hexdigest(),
         "size": link_probe.stat().st_size,
-        "executed": False,
+        "initializer_executed": False,
+        "module_imported": False,
     }
 evidence_error = (
     (compile_exit == 0 and not static_extensions)
@@ -323,7 +324,7 @@ evidence_error = (
 if evidence_error:
     outcome = "evidence_failed"
 report = {
-    "schema_version": 3,
+    "schema_version": 4,
     "target": "wasm32-wasip1",
     "cxx_exception_mode": "selective-disabled",
     "cxx_exception_adaptation": {
@@ -345,7 +346,7 @@ report = {
     "static_extension_count": len(static_extensions),
     "static_extensions": static_extensions,
     "monolithic_link": monolithic_link,
-    "claim": "diagnostic link-only probe; the module is not registered, executed, packaged, or importable",
+    "claim": "diagnostic link artifact; builtin registration is reported separately, and the NumPy initializer and module import are not executed",
 }
 (root / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 print(json.dumps(report, sort_keys=True))

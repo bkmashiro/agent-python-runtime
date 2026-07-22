@@ -44,7 +44,12 @@ def plan_shared_archive(args: Sequence[str], cwd: Path) -> Optional[ArchivePlan]
             output_arg = args[index + 1]
             output_indexes.update((index, index + 1))
 
-    if output_arg is None or "-shared" not in args or not output_arg.endswith(".so"):
+    if (
+        output_arg is None
+        or "-shared" not in args
+        or "-c" in args
+        or not output_arg.endswith(".so")
+    ):
         return None
 
     output = _resolve(output_arg, cwd)

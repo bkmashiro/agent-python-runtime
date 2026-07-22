@@ -24,6 +24,20 @@ class ArchiveWasmExtensionTests(unittest.TestCase):
             )
         )
 
+    def test_passes_compile_only_shared_named_output_through(self):
+        self.assertIsNone(
+            MODULE.plan_shared_archive(
+                [
+                    "-c",
+                    "sanity_check_for_cython.c",
+                    "-o",
+                    "sanity_check_for_cython_cross.so",
+                    "-shared",
+                ],
+                Path("/build"),
+            )
+        )
+
     def test_plans_deterministic_archive_and_manifest_inputs(self):
         plan = MODULE.plan_shared_archive(
             [

@@ -152,9 +152,9 @@ longdouble_format = 'IEEE_QUAD_LE'
 
 [built-in options]
 c_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
-cpp_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
+cpp_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fwasm-exceptions', '-mllvm', '-wasm-use-legacy-eh=false']
 c_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
-cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot']
+cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot', '-fwasm-exceptions', '-mllvm', '-wasm-use-legacy-eh=false']
 EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
@@ -230,12 +230,14 @@ PY
   LINK_COMPILE_EXIT=$?
   if [[ ${LINK_COMPILE_EXIT} -eq 0 ]]; then
     "${WASI_SDK_PATH}/bin/clang++" --target=wasm32-wasip1 \
-      --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" -mexec-model=reactor \
+      --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" \
+      -fwasm-exceptions -mllvm -wasm-use-legacy-eh=false \
+      -mexec-model=reactor \
       "${LINK_PROBE_OBJECT}" \
       -Wl,--whole-archive "${NUMPY_CORE_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
       "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
-      -lpthread -lm \
+      -lpthread -lm -lunwind \
       -Wl,--export=numpy_link_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \
@@ -315,6 +317,7 @@ if evidence_error:
 report = {
     "schema_version": 3,
     "target": "wasm32-wasip1",
+    "cxx_exception_mode": "wasm",
     "numpy_version": "2.5.1",
     "numpy_source_sha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
     "cython_version": "3.2.8",

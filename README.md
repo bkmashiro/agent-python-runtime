@@ -2,27 +2,29 @@
 
 A capability-controlled Python execution runtime for AI agents.
 
-The runtime is intended for compound data workflows where an agent benefits from running generated Python, processing Host-mediated tool results locally, and returning only a bounded final result. Guest code receives no ambient filesystem, environment, network, process, or secret authority. Future external operations must cross Host-enforced capabilities with explicit budgets and receipts.
+The runtime is intended for compound data workflows where an agent benefits from running generated Python, processing Host-mediated tool results locally, and returning only a bounded final result. Guest code receives no ambient filesystem, environment, network, process, or secret authority. External reads cross the Host-enforced, read-only `fetch_many` capability with explicit grants, budgets, and receipts; guest code never receives raw network authority.
 
 ## Status
 
-A neutral CPython 3.14 `wasm32-wasip1` core vertical slice is implemented and verified in private GitHub Actions. The same pinned-source artifact is built, checked, uploaded, downloaded by an independent job, and executed by the Go/wazero Host. Real E2E gates cover neutral execution, fresh-instance isolation, trusted prepare behavior, timeout recovery, and ambient-authority denial.
+A neutral CPython 3.14 `wasm32-wasip1` core and one read-only `fetch_many` vertical slice are implemented and verified in private GitHub Actions. The same pinned-source artifact is built, checked, uploaded, downloaded by an independent job, and executed through the backend-neutral Go `Runner` contract with the wazero V1 adapter. Real E2E gates cover neutral execution, Host-owned capability mediation and receipts, fresh-instance isolation, trusted prepare behavior, timeout recovery, and ambient-authority denial.
 
-The runtime is not released or deployed. NumPy, Host capability mediation, receipts, prepared snapshots, reproducibility double-builds, and production hardening remain future work. See [implementation status and evidence](docs/status.md) for exact run links, artifact identity, proven properties, and exclusions.
+The runtime is not released or deployed. NumPy, prepared snapshots, deterministic double-build evidence, production egress policy, and production hardening remain future work. See [implementation status and evidence](docs/status.md) for exact run links, artifact identity, proven properties, and exclusions.
 
 ## Current core
 
 - CPython 3.14 built from a SHA-256-locked official source for `wasm32-wasip1`;
 - neutral `runtime_init` / `runtime_prepare` / `alloc` / `dealloc` / `execute` ABI;
 - strict JSON request/result schemas and negative fixtures;
-- Go Host built on wazero with Host-owned time, memory, request, and response bounds;
+- backend-neutral Go `Runner`/`Factory` boundary with a wazero V1 adapter;
+- Host-owned time, memory, request, response, and capability bounds;
+- read-only `fetch_many` target aliases, Host-owned credentials, partial results, and receipts;
 - fresh instance per request, bounded cancellation, and failure recovery;
 - provenance manifest, checksums, reviewed imports/exports, and private CI artifact;
 - Linux/WASI execution and denial gates.
 
 ## Roadmap boundary
 
-The next product slice is one real read-only Host capability. NumPy and prepared snapshot optimization follow only after their source, license, state-restoration, and failure-recovery gates are proven.
+The current product frontier is one safe local operator entry point, followed by measured `fetch_many` concurrency and reproducibility evidence. NumPy and prepared-state optimization proceed only after their source, license, benchmark, state-restoration, and failure-recovery gates justify them.
 
 The project is not a general Linux sandbox, agent framework, MCP marketplace, arbitrary PyPI environment, or write/effect execution system.
 

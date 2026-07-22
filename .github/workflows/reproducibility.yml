@@ -43,7 +43,7 @@ jobs:
         run: |
           python3 tools/verify_sources_lock.py
           python3 -m unittest discover -s guest/tests -v
-          python3 -m unittest tests/test_source_date_epoch.py tests/test_deterministic_copy.py tests/test_patch_wasi_vfs_storage.py -v
+          python3 -m unittest discover -s tests -v
           go test ./cmd/validate-json-schema
           bash -n guest/build/build-guest.sh
 
@@ -52,6 +52,8 @@ jobs:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
           AGENT_RUNTIME_DIST_DIR: ${{ runner.temp }}/agent-runtime-dist
           AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
+          AGENT_RUNTIME_REPRO_EVIDENCE_DIR: ${{ runner.temp }}/agent-runtime-repro-evidence
+          AGENT_RUNTIME_REPRO_REPLICA: ${{ matrix.replica }}
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH
@@ -71,6 +73,15 @@ jobs:
           path: ${{ runner.temp }}/agent-runtime-dist/
           if-no-files-found: error
           retention-days: 7
+          compression-level: 0
+
+      - name: Upload stage evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reproducibility-stage-evidence-${{ matrix.replica }}-${{ github.sha }}
+          path: ${{ runner.temp }}/agent-runtime-repro-evidence/
+          if-no-files-found: error
+          retention-days: 30
           compression-level: 0
 
   compare:
@@ -99,6 +110,27 @@ jobs:
           name: reproducibility-two-${{ github.sha }}
           path: ${{ runner.temp }}/build-two
 
+      - name: Download stage evidence one
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: reproducibility-stage-evidence-one-${{ github.sha }}
+          path: ${{ runner.temp }}/stage-one
+
+      - name: Download stage evidence two
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: reproducibility-stage-evidence-two-${{ github.sha }}
+          path: ${{ runner.temp }}/stage-two
+
+      - name: Compare retained build stages
+        id: compare-stages
+        continue-on-error: true
+        run: |
+          python3 tools/compare_guest_stage_evidence.py \
+            "${{ runner.temp }}/stage-one" \
+            "${{ runner.temp }}/stage-two" \
+            --output "${{ runner.temp }}/reproducibility-stage-report.json"
+
       - name: Compare exact bytes with diagnostics
         id: compare
         continue-on-error: true
@@ -117,6 +149,35 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+      - name: Upload reproducibility stage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reproducibility-stage-report-${{ github.sha }}
+          path: ${{ runner.temp }}/reproducibility-stage-report.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Require valid stage evidence
+        if: always()
+        run: |
+          python3 - "${{ runner.temp }}/reproducibility-stage-report.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          if report.get("validation_errors"):
+              raise SystemExit("retained build-stage evidence is invalid")
+          print(json.dumps({
+              "outcome": report["outcome"],
+              "raw_wasm_match": report["raw_wasm_match"],
+              "final_wasm_match": report["final_wasm_match"],
+              "pack_input_matches": report["pack_input_matches"],
+          }, sort_keys=True))
+          PY
 
       - name: Enforce exact equality
         if: always()

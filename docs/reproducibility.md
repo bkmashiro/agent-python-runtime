@@ -63,7 +63,13 @@ Run [`29955452502`](https://github.com/bkmashiro/agent-python-runtime/actions/ru
 
 **Supported conclusion:** unused `fd_filestat_get` metadata is not the sole necessary source, and avoiding it is insufficient to restore exact reproducibility. The experiment does not exclude a secondary contribution from that metadata.
 
-The next candidate is narrower and is supported by an explicit byte path. In wasmtime-wasi 40.0.4, Preview 1 `fd_readdir` constructs a `#[repr(C)]` `Dirent` and raw-copies its complete host representation into guest memory. Its `u64`, `u64`, `u32`, and `u8` fields end at byte 21, while C layout rounds the structure to 24 bytes, leaving three tail-padding bytes that the field initializer does not define. Those bytes enter wasi-vfs's 4 KiB directory scratch buffer and can then be retained by Wizer. The next treatment should zero only those three bytes for each returned directory entry before wasi-vfs reads the structure; it should not sort traversal or change logical directory data.
+The fourth candidate followed that explicit byte path. In wasmtime-wasi 40.0.4, Preview 1 `fd_readdir` constructs a `#[repr(C)]` `Dirent` and raw-copies its complete host representation into guest memory. Its `u64`, `u64`, `u32`, and `u8` fields end at byte 21, while C layout rounds the structure to 24 bytes, leaving three tail-padding bytes that the field initializer does not define. The treatment used volatile writes to zero only bytes 21 through 23 of each complete directory entry before wasi-vfs read the structure; it did not sort traversal or change inode, name, type, or cookie fields.
+
+Run [`29957428056`](https://github.com/bkmashiro/agent-python-runtime/actions/runs/29957428056) on signed research commit `97fe9e51ea3c931f332e9647e3f358d9b565cb56` still produced same-run and cross-run section-11 drift, so tail-padding cleanup alone is not sufficient. It did, however, reduce the normal three-output cluster from 27–28 changed data segments and 379–438 changed bytes in the preceding experiment to the same six segment indices and 104–106 changed bytes. The fourth output was a 15-byte section-size outlier whose shifted Wizer segmentation made raw segment-count comparison misleading.
+
+**Supported conclusion:** undefined `Dirent` tail padding is a real contributor to the pack-stage drift, but it is not the only source. Complete-entry cleanup leaves residue in six stable memory ranges.
+
+The next candidate addresses only the lifetime of wasi-vfs's reusable 4 KiB `fd_readdir` scratch buffer. Complete-entry cleanup cannot cover truncated entries or bytes beyond the latest returned capacity, and one remaining changed byte occurs at offset 4,075 inside a larger heap range. The next treatment should volatile-zero the full scratch buffer immediately before it is dropped, without changing logical directory fields, traversal order, or allocator behavior.
 
 ## Running the controlled workflow
 

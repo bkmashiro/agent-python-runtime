@@ -2,24 +2,31 @@
 
 A capability-controlled Python execution runtime for AI agents.
 
-The runtime is intended for compound data workflows where an agent benefits from running generated Python, processing several tool results locally, and returning only a bounded final result. Guest code runs without ambient filesystem, environment, network, process, or secret access. External operations are mediated by host-enforced capabilities with explicit budgets and receipts.
+The runtime is intended for compound data workflows where an agent benefits from running generated Python, processing several Host-mediated tool results locally, and returning only a bounded final result. Guest code receives no ambient filesystem, environment, network, process, or secret authority. External operations cross Host-enforced capabilities with explicit budgets and receipts.
 
 ## Status
 
-Planning and handoff only. No runtime code, remote repository, release, deployment, or hosted service exists yet.
+Tranche 0 contracts and provenance gates are implemented. Runtime/guest execution is not yet implemented, released, or deployed. Passing schema or source-lock tests is not WASI execution evidence.
 
 ## Initial scope
 
-- CPython 3.14 and a verified NumPy subset compiled for `wasm32-wasip1`
-- Go host built on wazero
-- prepared runtime pool with request-local state reset
-- strict memory, time, output, and tool-call budgets
-- one real read-only batch capability
-- JSON request/result ABI and deterministic execution receipts
-- Linux/WASI artifact and denial gates
+- CPython 3.14 and a verified NumPy subset compiled for `wasm32-wasip1`;
+- Go Host built on wazero;
+- prepared runtime pool with request-local state reset;
+- strict memory, wall-time, output, and tool-call budgets;
+- one real read-only batch capability;
+- JSON request/result ABI and deterministic execution receipts;
+- Linux/WASI artifact and denial gates.
 
-The first version is not a general Linux sandbox, an agent framework, an MCP marketplace, or an arbitrary PyPI environment.
+The first version is not a general Linux sandbox, agent framework, MCP marketplace, or arbitrary PyPI environment.
 
-## Source of truth
+## Documentation
 
-Read [`docs/plans/2026-07-22-agent-python-runtime-handoff.md`](docs/plans/2026-07-22-agent-python-runtime-handoff.md) before implementation.
+- [Standalone implementation handoff](docs/plans/2026-07-22-agent-python-runtime-handoff.md)
+- [Implementation plan](docs/plans/2026-07-22-agent-python-runtime-implementation-plan.md)
+- [Architecture](docs/architecture.md)
+- [Threat model](docs/threat-model.md)
+- [Development and gates](docs/development.md)
+- [Runtime boundary ADR](docs/adr/0001-runtime-boundaries.md)
+- [Guest ABI ADR](docs/adr/0002-guest-abi-v1.md)
+- [Artifact provenance ADR](docs/adr/0003-artifact-provenance.md)

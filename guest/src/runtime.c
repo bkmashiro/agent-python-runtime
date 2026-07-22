@@ -116,18 +116,18 @@ int32_t runtime_prepare(const char *source, int32_t source_len) {
     return 0;
 }
 
-void *agent_runtime_alloc(int32_t size) {
+void *alloc(int32_t size) {
     if (size <= 0 || size > AGENT_RUNTIME_REQUEST_MAX) {
         return NULL;
     }
     return malloc((size_t)size);
 }
 
-void agent_runtime_dealloc(void *ptr) {
+void dealloc(void *ptr) {
     free(ptr);
 }
 
-uint32_t agent_runtime_execute(const char *request, int32_t request_len) {
+uint32_t execute(const char *request, int32_t request_len) {
     if (!Py_IsInitialized() || runtime_module == NULL || request == NULL ||
         request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
         return write_internal_error();

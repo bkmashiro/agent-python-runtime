@@ -44,6 +44,9 @@ class GuestSourceContractTests(unittest.TestCase):
         ]:
             self.assertIn(source_id, text)
         self.assertIn("-mexec-model=reactor", text)
+        for static_dependency in ["libmpdec.a", "libHacl_", "libexpat.a", "-ldl"]:
+            self.assertIn(static_dependency, text)
+        self.assertIn("--export=wasi_vfs_pack_fs", text)
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())
 

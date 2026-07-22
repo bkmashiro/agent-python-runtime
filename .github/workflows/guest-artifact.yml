@@ -78,3 +78,39 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+  host-e2e:
+    name: Consume artifact with Go/wazero
+    needs: build-core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.24.x'
+          cache: true
+
+      - name: Download exact guest bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agent-python-runtime-core-${{ github.sha }}
+          path: dist
+
+      - name: Reverify artifact binding
+        run: |
+          python3 guest/build/verify-artifact.py \
+            dist/agent-python-runtime.wasm \
+            dist/manifest.json
+          (
+            cd dist
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Run real Host/guest E2E
+        env:
+          AGENT_RUNTIME_GUEST: ${{ github.workspace }}/dist/agent-python-runtime.wasm
+        run: go test ./integration/e2e -v -count=1

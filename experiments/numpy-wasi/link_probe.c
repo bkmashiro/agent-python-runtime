@@ -5,6 +5,7 @@ extern PyObject *PyInit__multiarray_umath(void);
 extern PyObject *PyInit__umath_linalg(void);
 
 static int numpy_registered = 0;
+static int numpy_imported = 0;
 
 static const char *NUMPY_FINDER_SCRIPT =
     "import sys as _sys, importlib.util as _ilu, importlib.machinery as _ilm, _imp as _imp\n"
@@ -35,6 +36,19 @@ static const char *NUMPY_FINDER_SCRIPT =
     "_sys.meta_path = [finder for finder in _sys.meta_path if finder is not _ilm.PathFinder]\n"
     "_sys.meta_path.append(_WasiVFSFinder())\n"
     "_sys.meta_path.append(_ilm.PathFinder)\n";
+
+static const char *NUMPY_NUMERIC_SCRIPT =
+    "import numpy as _np\n"
+    "_a = _np.array([1, 2, 3], dtype=_np.int64)\n"
+    "assert _a.tolist() == [1, 2, 3]\n"
+    "assert int(_a.sum()) == 6\n"
+    "_one = _np.longdouble('1')\n"
+    "_ld = _np.longdouble('1.0000000000000000000000000000000002')\n"
+    "assert _ld > _one\n"
+    "assert float(_ld) == 1.0\n"
+    "_matrix = _np.array([[1.0, 2.0], [3.0, 4.0]])\n"
+    "_det = _np.linalg.det(_matrix)\n"
+    "assert abs(float(_det) + 2.0) < 1e-12\n";
 
 /* Records the initializer pointers without executing NumPy or Python imports. */
 __attribute__((export_name("numpy_register_probe")))
@@ -108,6 +122,20 @@ int numpy_import_probe(void) {
     Py_DECREF(numpy);
     if (!matches) {
         return 60;
+    }
+    numpy_imported = 1;
+    return 0;
+}
+
+/* Executes bounded deterministic numeric checks after a successful import. */
+__attribute__((export_name("numpy_numeric_probe")))
+int numpy_numeric_probe(void) {
+    if (!numpy_imported) {
+        return 70;
+    }
+    if (PyRun_SimpleString(NUMPY_NUMERIC_SCRIPT) != 0) {
+        PyErr_Print();
+        return 80;
     }
     return 0;
 }

@@ -320,6 +320,7 @@ PY
       -lpthread -lm -lc-printscan-long-double \
       -Wl,--export=numpy_register_probe \
       -Wl,--export=numpy_import_probe \
+      -Wl,--export=numpy_numeric_probe \
       -Wl,--export=numpy_python_initialized_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \
@@ -457,7 +458,7 @@ report = {
     "package_staging": package_staging,
     "monolithic_link": monolithic_link,
     "import_probe": import_probe,
-    "claim": "diagnostic packed import probe; initializer/import execution is reported separately and is not production qualification",
+    "claim": "diagnostic packed runtime probe; initializer/import/numeric execution is reported separately and is not production qualification",
 }
 (root / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 print(json.dumps(report, sort_keys=True))

@@ -38,6 +38,9 @@ type report struct {
 	PythonInitialized    bool           `json:"python_initialized"`
 	InitializerExecution string         `json:"initializer_execution"`
 	ModuleImported       bool           `json:"module_imported"`
+	NumericCalled        bool           `json:"numeric_called"`
+	NumericExit          *uint64        `json:"numeric_exit"`
+	NumericValidated     bool           `json:"numeric_validated"`
 	GuestStderr          string         `json:"guest_stderr,omitempty"`
 	Error                string         `json:"error,omitempty"`
 }
@@ -58,7 +61,7 @@ func main() {
 	}
 	digest := sha256.Sum256(wasm)
 	result := report{
-		SchemaVersion:        2,
+		SchemaVersion:        3,
 		Backend:              "wazero",
 		Outcome:              "registration_failed",
 		WasmSHA256:           hex.EncodeToString(digest[:]),
@@ -185,7 +188,27 @@ func runProbe(ctx context.Context, wasm []byte, result *report) error {
 	}
 	result.InitializerExecution = "succeeded"
 	result.ModuleImported = true
-	result.Outcome = "import_succeeded"
+	result.Outcome = "numeric_failed"
+
+	numericProbe := module.ExportedFunction("numpy_numeric_probe")
+	if numericProbe == nil {
+		return errors.New("missing numpy_numeric_probe export")
+	}
+	values, err = numericProbe.Call(ctx)
+	result.NumericCalled = true
+	if err != nil {
+		return fmt.Errorf("call numpy_numeric_probe: %w", err)
+	}
+	if len(values) != 1 {
+		return fmt.Errorf("numeric probe returned %d values, want 1", len(values))
+	}
+	numericExit := values[0]
+	result.NumericExit = &numericExit
+	if numericExit != 0 {
+		return fmt.Errorf("numpy_numeric_probe returned %d", numericExit)
+	}
+	result.NumericValidated = true
+	result.Outcome = "numeric_succeeded"
 	return nil
 }
 

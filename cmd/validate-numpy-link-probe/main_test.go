@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -23,5 +24,29 @@ func TestBoundedTextPreservesDiagnosticTraceback(t *testing.T) {
 	traceback := strings.Repeat("traceback line\n", 400)
 	if got := boundedText(traceback); got != traceback {
 		t.Fatalf("boundedText truncated %d-byte diagnostic", len(traceback))
+	}
+}
+
+func TestNumericReportSchema(t *testing.T) {
+	exit := uint64(0)
+	encoded, err := json.Marshal(report{
+		SchemaVersion:    3,
+		Outcome:          "numeric_succeeded",
+		NumericCalled:    true,
+		NumericExit:      &exit,
+		NumericValidated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["schema_version"] != float64(3) || decoded["outcome"] != "numeric_succeeded" {
+		t.Fatalf("unexpected schema identity: %s", encoded)
+	}
+	if decoded["numeric_called"] != true || decoded["numeric_exit"] != float64(0) || decoded["numeric_validated"] != true {
+		t.Fatalf("unexpected numeric evidence: %s", encoded)
 	}
 }

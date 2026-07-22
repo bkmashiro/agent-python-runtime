@@ -18,6 +18,7 @@ The runtime is not released or deployed. NumPy, prepared snapshots, deterministi
 - backend-neutral Go `Runner`/`Factory` boundary with a wazero V1 adapter;
 - Host-owned time, memory, request, response, and capability bounds;
 - read-only `fetch_many` target aliases, Host-owned credentials, partial results, and receipts;
+- one local/development `apyrun` CLI with separate Host policy and untrusted RunRequest stdin;
 - fresh instance per request, bounded cancellation, and failure recovery;
 - provenance manifest, checksums, reviewed imports/exports, and private CI artifact;
 - Linux/WASI execution and denial gates.
@@ -30,6 +31,7 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 
 ## Documentation
 
+- [Local operator CLI](docs/operator-cli.md)
 - [Active autonomous mega-goal](docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md)
 - [Implementation status and evidence](docs/status.md)
 - [Standalone implementation handoff](docs/plans/2026-07-22-agent-python-runtime-handoff.md)

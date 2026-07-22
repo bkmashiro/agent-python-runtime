@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "request_id": "weather-1",
+      "status": "ok",
+      "http_status": 200,
+      "body": "{\"temperature\":21}",
+      "content_type": "application/json",
+      "error": null
+    },
+    {
+      "request_id": "weather-2",
+      "status": "timeout",
+      "error": {"code": "fetch_timeout", "message": "Host fetch timed out"}
+    }
+  ]
+}

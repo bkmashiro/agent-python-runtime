@@ -70,7 +70,7 @@ func decodeFixture(t *testing.T, path string) any {
 }
 
 func TestABIV1Fixtures(t *testing.T) {
-	for _, name := range []string{"request", "response", "tool-request", "tool-response"} {
+	for _, name := range []string{"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result"} {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			schema := compileSchema(t, name)
@@ -113,7 +113,7 @@ func TestRunRequestRejectsAuthorityBearingAliases(t *testing.T) {
 }
 
 func TestSchemasHaveStableIDs(t *testing.T) {
-	for _, name := range []string{"request", "response", "tool-request", "tool-response"} {
+	for _, name := range []string{"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result"} {
 		path := filepath.Join(abiRoot(t), name+".schema.json")
 		data, err := os.ReadFile(path)
 		if err != nil {

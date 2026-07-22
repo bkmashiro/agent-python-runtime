@@ -1,0 +1,6 @@
+{
+  "requests": [
+    {"request_id": "weather-1", "target": "weather", "path": "/v1/current?city=Tokyo"},
+    {"request_id": "weather-2", "target": "weather", "path": "/v1/current?city=Paris"}
+  ]
+}

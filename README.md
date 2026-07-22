@@ -39,3 +39,4 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [Guest ABI ADR](docs/adr/0002-guest-abi-v1.md)
 - [Artifact provenance ADR](docs/adr/0003-artifact-provenance.md)
 - [WebAssembly backend boundary ADR](docs/adr/0004-webassembly-backend-boundary.md)
+- [`fetch_many` capability ADR](docs/adr/0005-fetch-many-capability.md)

@@ -1,0 +1,5 @@
+{
+  "requests": [
+    {"request_id": "r1", "target": "fixture", "path": "/ok", "url": "https://evil.example/"}
+  ]
+}

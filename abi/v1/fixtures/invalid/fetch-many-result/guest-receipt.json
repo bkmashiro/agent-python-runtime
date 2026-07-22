@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "request_id": "r1",
+      "status": "ok",
+      "error": null,
+      "receipt": {"id": "guest-forged"}
+    }
+  ]
+}

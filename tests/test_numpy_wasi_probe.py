@@ -48,6 +48,7 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn('"install_exit"', script)
         self.assertIn("install --no-rebuild", script)
         self.assertIn("--tags python-runtime", script)
+        self.assertIn("-Dpython.bytecompile=-1", script)
         self.assertIn("tools/stage_numpy_wasi_package.py", script)
         self.assertIn("numpy-package-manifest.json", script)
         self.assertIn("wasi-vfs", script)

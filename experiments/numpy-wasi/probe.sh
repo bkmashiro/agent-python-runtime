@@ -194,6 +194,7 @@ PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAP
   -Ddisable-intel-sort=true \
   -Dcpu-baseline=none \
   -Dcpu-dispatch=none \
+  -Dpython.bytecompile=-1 \
   >"${PROBE_DIR}/logs/setup.log" 2>&1
 SETUP_EXIT=$?
 COMPILE_EXIT=-1

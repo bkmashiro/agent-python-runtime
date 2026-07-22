@@ -17,6 +17,8 @@ Each Core Guest build emits two deterministic supply-chain files beside the Wasm
 
 Build-generated `__pycache__`, `.pyc`, and `.pyo` files are excluded from the staged VFS. The SBOM therefore describes source files actually supplied to wasi-vfs, not an aspirational package list. NumPy is absent until an actual locked package is bundled. Host-side wazero is not represented as a Guest component.
 
+The locked wasi-vfs static archive is accompanied by the exact upstream `linked_storage.c` at commit `0f4db4b…`. The build applies one fail-closed local patch that zero-initializes four allocated structs before Wizer snapshots linear memory, recompiles only that C object with the pinned wasi-sdk, and replaces the unique old archive member. Both the release archive and patched source appear as linked SBOM inputs.
+
 ## Validation
 
 The producer performs three checks before writing `SHA256SUMS`:

@@ -42,6 +42,7 @@ class GuestSourceContractTests(unittest.TestCase):
             "wasmtime-linux-x86_64",
             "wasi-vfs-cli-linux-x86_64",
             "wasi-vfs-static-library",
+            "wasi-vfs-linked-storage-source",
             "spdx-2.3-json-schema",
         ]:
             self.assertIn(source_id, text)
@@ -53,6 +54,8 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertEqual(1, text.count('--dir "'))
         self.assertIn("VFS_PYTHON_DIR", text)
         self.assertIn("copy_tree_deterministic.py", text)
+        self.assertIn("patch_wasi_vfs_storage.py", text)
+        self.assertIn('"${LLVM_AR}" d', text)
         self.assertNotIn('cp -R "${CPYTHON_DIR}/Lib', text)
         self.assertIn("site-packages/agent_runtime", text)
         self.assertNotIn("latest", text.lower())

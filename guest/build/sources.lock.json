@@ -57,6 +57,15 @@
       "artifact_relation": "linked"
     },
     {
+      "id": "wasi-vfs-linked-storage-source",
+      "version": "0.6.3@0f4db4b64882db50ef8c04018e7e98bf59a63f92",
+      "url": "https://raw.githubusercontent.com/kateinoigakukun/wasi-vfs/0f4db4b64882db50ef8c04018e7e98bf59a63f92/src/embed/linked_storage.c",
+      "sha256": "ea0e01d818839d2605153a738e2ee3e3a28f32a3b0b1e9f85dbb3f218d3d086a",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "role": "link-library",
+      "artifact_relation": "linked"
+    },
+    {
       "id": "spdx-2.3-json-schema",
       "version": "2.3@aadf3b0b8dbbabdb4d880b0fc714255fea436ff7",
       "url": "https://raw.githubusercontent.com/spdx/spdx-spec/aadf3b0b8dbbabdb4d880b0fc714255fea436ff7/schemas/spdx-schema.json",

@@ -43,7 +43,7 @@ jobs:
         run: |
           python3 tools/verify_sources_lock.py
           python3 -m unittest discover -s guest/tests -v
-          python3 -m unittest tests/test_source_date_epoch.py tests/test_deterministic_copy.py -v
+          python3 -m unittest tests/test_source_date_epoch.py tests/test_deterministic_copy.py tests/test_patch_wasi_vfs_storage.py -v
           go test ./cmd/validate-json-schema
           bash -n guest/build/build-guest.sh
 

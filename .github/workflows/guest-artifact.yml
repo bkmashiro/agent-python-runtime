@@ -16,6 +16,7 @@ on:
       - 'tools/verify_sources_lock.py'
       - 'tools/source_date_epoch.py'
       - 'tools/copy_tree_deterministic.py'
+      - 'tools/patch_wasi_vfs_storage.py'
       - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
@@ -34,6 +35,7 @@ on:
       - 'tools/verify_sources_lock.py'
       - 'tools/source_date_epoch.py'
       - 'tools/copy_tree_deterministic.py'
+      - 'tools/patch_wasi_vfs_storage.py'
       - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
@@ -74,7 +76,7 @@ jobs:
         run: |
           python3 tools/verify_sources_lock.py
           python3 -m unittest discover -s guest/tests -v
-          python3 -m unittest tests/test_deterministic_copy.py -v
+          python3 -m unittest tests/test_deterministic_copy.py tests/test_patch_wasi_vfs_storage.py -v
           go test ./cmd/validate-json-schema
           bash -n guest/build/build-guest.sh
 

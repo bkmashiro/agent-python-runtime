@@ -26,6 +26,7 @@ fetch wasm-tools-linux-x86_64 wasm-tools.tar.gz
 fetch wasmtime-linux-x86_64 wasmtime.tar.xz
 fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
 fetch wasi-vfs-static-library wasi-vfs-lib.zip
+fetch wasi-vfs-linked-storage-source wasi-vfs-linked-storage.c
 fetch spdx-2.3-json-schema spdx-2.3-schema.json
 
 mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
@@ -84,7 +85,33 @@ for required in "${MPDEC_LIB}" "${EXPAT_LIB}" "${HACL_LIBS[@]}"; do
 done
 
 CLANG="${WASI_SDK_PATH}/bin/clang"
+LLVM_AR="${WASI_SDK_PATH}/bin/llvm-ar"
+LLVM_NM="${WASI_SDK_PATH}/bin/llvm-nm"
 SYSROOT="${WASI_SDK_PATH}/share/wasi-sysroot"
+PATCHED_WASI_VFS_SOURCE="${WORK_DIR}/wasi-vfs-linked-storage.c"
+python3 "${ROOT_DIR}/tools/patch_wasi_vfs_storage.py" \
+  "${DOWNLOAD_DIR}/wasi-vfs-linked-storage.c" "${PATCHED_WASI_VFS_SOURCE}"
+mapfile -t WASI_VFS_STORAGE_MEMBERS < <("${LLVM_AR}" t "${WASI_VFS_LIB}" | grep 'linked_storage\.o$')
+if [[ ${#WASI_VFS_STORAGE_MEMBERS[@]} -ne 1 ]]; then
+  echo "expected exactly one linked_storage.o archive member" >&2
+  exit 7
+fi
+WASI_VFS_STORAGE_MEMBER=${WASI_VFS_STORAGE_MEMBERS[0]}
+WASI_VFS_STORAGE_OBJECT_DIR="${WORK_DIR}/wasi-vfs-object"
+mkdir -p "${WASI_VFS_STORAGE_OBJECT_DIR}"
+WASI_VFS_STORAGE_OBJECT="${WASI_VFS_STORAGE_OBJECT_DIR}/${WASI_VFS_STORAGE_MEMBER}"
+"${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 -DNDEBUG \
+  -c "${PATCHED_WASI_VFS_SOURCE}" -o "${WASI_VFS_STORAGE_OBJECT}"
+"${LLVM_AR}" d "${WASI_VFS_LIB}" "${WASI_VFS_STORAGE_MEMBER}"
+(
+  cd "${WASI_VFS_STORAGE_OBJECT_DIR}"
+  "${LLVM_AR}" rcsD "${WASI_VFS_LIB}" "${WASI_VFS_STORAGE_MEMBER}"
+)
+WASI_VFS_STORAGE_SYMBOLS=$("${LLVM_NM}" -A "${WASI_VFS_LIB}" | grep -c ' T wasi_vfs_embed_linked_storage_new$' || true)
+if [[ ${WASI_VFS_STORAGE_SYMBOLS} -ne 1 ]]; then
+  echo "patched wasi-vfs archive has ${WASI_VFS_STORAGE_SYMBOLS} linked-storage definitions" >&2
+  exit 8
+fi
 RUNTIME_OBJECT="${WORK_DIR}/runtime.o"
 RAW_GUEST="${WORK_DIR}/agent-python-runtime.raw.wasm"
 FINAL_GUEST="${DIST_DIR}/agent-python-runtime.wasm"

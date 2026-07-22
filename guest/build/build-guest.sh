@@ -52,7 +52,14 @@ done
 chmod +x "${WASMTIME}" "${WASM_TOOLS}" "${WASI_VFS}"
 export WASI_SDK_PATH WASMTIME
 export PATH="$(dirname "${WASMTIME}"):${PATH}"
-export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1784692800}
+if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
+  SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" HEAD)
+fi
+if [[ ! ${SOURCE_DATE_EPOCH} =~ ^[1-9][0-9]*$ ]]; then
+  echo "SOURCE_DATE_EPOCH must be a positive integer" >&2
+  exit 6
+fi
+export SOURCE_DATE_EPOCH
 
 (
   cd "${CPYTHON_DIR}"

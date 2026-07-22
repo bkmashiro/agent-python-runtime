@@ -14,6 +14,7 @@ on:
       - 'go.sum'
       - 'tools/fetch_locked_source.py'
       - 'tools/verify_sources_lock.py'
+      - 'tools/source_date_epoch.py'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
   push:
@@ -29,6 +30,7 @@ on:
       - 'go.sum'
       - 'tools/fetch_locked_source.py'
       - 'tools/verify_sources_lock.py'
+      - 'tools/source_date_epoch.py'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
 
@@ -68,7 +70,7 @@ jobs:
         env:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
         run: |
-          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+          SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH
           guest/build/build-guest.sh
 

@@ -11,6 +11,7 @@ import (
 
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
 type guestResponse struct {
@@ -32,18 +33,19 @@ func guestArtifact(t *testing.T) string {
 	return absolute
 }
 
-func newEngine(t *testing.T) *engine.Engine {
+func newEngine(t *testing.T) engine.Runner {
 	t.Helper()
 	return newEngineWithConfig(t, runtime.DefaultRunConfig())
 }
 
-func newEngineWithConfig(t *testing.T, config runtime.RunConfig) *engine.Engine {
+func newEngineWithConfig(t *testing.T, config runtime.RunConfig) engine.Runner {
 	t.Helper()
 	wasm, err := os.ReadFile(guestArtifact(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	instance, err := engine.New(context.Background(), wasm, config)
+	factory := wazeroengine.Factory{}
+	instance, err := factory.New(context.Background(), wasm, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,12 +57,12 @@ func newEngineWithConfig(t *testing.T, config runtime.RunConfig) *engine.Engine 
 	return instance
 }
 
-func run(t *testing.T, instance *engine.Engine, runID, code string, inputs any) guestResponse {
+func run(t *testing.T, instance engine.Runner, runID, code string, inputs any) guestResponse {
 	t.Helper()
 	return runWithPrepare(t, instance, runID, code, inputs, "")
 }
 
-func runWithPrepare(t *testing.T, instance *engine.Engine, runID, code string, inputs any, trustedPrepare string) guestResponse {
+func runWithPrepare(t *testing.T, instance engine.Runner, runID, code string, inputs any, trustedPrepare string) guestResponse {
 	t.Helper()
 	request, err := json.Marshal(map[string]any{
 		"run_id": runID,

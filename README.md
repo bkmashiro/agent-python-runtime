@@ -38,3 +38,4 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [Runtime boundary ADR](docs/adr/0001-runtime-boundaries.md)
 - [Guest ABI ADR](docs/adr/0002-guest-abi-v1.md)
 - [Artifact provenance ADR](docs/adr/0003-artifact-provenance.md)
+- [WebAssembly backend boundary ADR](docs/adr/0004-webassembly-backend-boundary.md)

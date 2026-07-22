@@ -16,7 +16,8 @@ Agent harness
   ▼
 Go Runtime
   ├─ request/schema validation
-  ├─ wazero engine and instance pool
+  ├─ backend-neutral Runner/Factory contract
+  ├─ wazero V1 adapter and fresh-instance isolation
   ├─ lifecycle, cancellation, and limits
   ├─ snapshot/restore or instance discard
   ├─ capability broker
@@ -129,7 +130,8 @@ Directories are added only with tested behavior:
 abi/v1/                 JSON contracts and fixtures
 guest/                  neutral CPython/WASI producer
 runtime/abi/             ABI validation and memory protocol
-runtime/engine/          wazero integration and hard limits
+runtime/engine/          backend-neutral Runner/Factory and ABI framing
+runtime/engine/wazero/   current wazero adapter and hard limits
 runtime/pool/            lifecycle and health
 runtime/snapshot/        prepared-state capture/reset
 runtime/capability/      Host-owned grants and broker

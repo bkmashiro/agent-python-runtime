@@ -6,7 +6,8 @@ import (
 	"fmt"
 )
 
-func decodeLengthPrefixedResponse(frame []byte, maxPayload uint32) ([]byte, error) {
+// DecodeLengthPrefixedResponse validates and copies a guest-owned response frame.
+func DecodeLengthPrefixedResponse(frame []byte, maxPayload uint32) ([]byte, error) {
 	if len(frame) < 4 {
 		return nil, errors.New("response frame is shorter than the length prefix")
 	}

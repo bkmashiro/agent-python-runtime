@@ -1,11 +1,11 @@
-package engine_test
+package wazero_test
 
 import (
 	"context"
 	"testing"
 
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
-	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	engine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
 func TestNewRejectsInvalidConfig(t *testing.T) {

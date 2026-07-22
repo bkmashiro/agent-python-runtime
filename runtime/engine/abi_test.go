@@ -13,7 +13,7 @@ func framed(payload []byte) []byte {
 }
 
 func TestDecodeLengthPrefixedResponse(t *testing.T) {
-	payload, err := decodeLengthPrefixedResponse(framed([]byte(`{"status":"ok"}`)), 1024)
+	payload, err := DecodeLengthPrefixedResponse(framed([]byte(`{"status":"ok"}`)), 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestDecodeLengthPrefixedResponseRejectsInvalidFrames(t *testing.T) {
 			if name != "oversized" {
 				max = 1024
 			}
-			if _, err := decodeLengthPrefixedResponse(frame, max); err == nil {
+			if _, err := DecodeLengthPrefixedResponse(frame, max); err == nil {
 				t.Fatal("expected frame rejection")
 			}
 		})

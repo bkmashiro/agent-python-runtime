@@ -1,4 +1,4 @@
-package engine
+package wazero
 
 import (
 	"bytes"
@@ -11,16 +11,29 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
-	"github.com/tetratelabs/wazero"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+// Factory constructs wazero-backed runners behind the neutral engine contract.
+type Factory struct{}
+
+func (Factory) Name() string { return "wazero" }
+
+func (Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
+	return New(ctx, wasm, config)
+}
+
+var _ enginecontract.Factory = Factory{}
+var _ enginecontract.Runner = (*Engine)(nil)
+
 // Engine owns a compiled guest module. V1 creates a fresh module instance for
 // each Run; pooling and snapshot restoration are intentionally deferred.
 type Engine struct {
-	runtime  wazero.Runtime
-	compiled wazero.CompiledModule
+	runtime  wazerort.Runtime
+	compiled wazerort.CompiledModule
 	config   runtimeconfig.RunConfig
 }
 
@@ -32,10 +45,10 @@ func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Eng
 		return nil, errors.New("guest module is too short")
 	}
 
-	runtimeConfig := wazero.NewRuntimeConfig().
+	runtimeConfig := wazerort.NewRuntimeConfig().
 		WithCloseOnContextDone(true).
 		WithMemoryLimitPages(config.MemoryLimitPages)
-	wasmRuntime := wazero.NewRuntimeWithConfig(ctx, runtimeConfig)
+	wasmRuntime := wazerort.NewRuntimeWithConfig(ctx, runtimeConfig)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, wasmRuntime); err != nil {
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("instantiate WASI imports: %w", err)
@@ -46,6 +59,13 @@ func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Eng
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
 	return &Engine{runtime: wasmRuntime, compiled: compiled, config: config}, nil
+}
+
+func (engine *Engine) Properties() enginecontract.Properties {
+	return enginecontract.Properties{
+		Backend:   "wazero",
+		ResetMode: enginecontract.ResetModeFreshInstance,
+	}
 }
 
 func (engine *Engine) Close(ctx context.Context) error {
@@ -69,7 +89,7 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	module, err := engine.runtime.InstantiateModule(
 		runContext,
 		engine.compiled,
-		wazero.NewModuleConfig().WithName("").WithStderr(&guestStderr),
+		wazerort.NewModuleConfig().WithName("").WithStderr(&guestStderr),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("instantiate guest: %w", err)
@@ -186,7 +206,7 @@ func readGuestResponse(memory api.Memory, pointer uint32, maxResponse uint32) ([
 	if !ok {
 		return nil, errors.New("response frame is out of bounds")
 	}
-	return decodeLengthPrefixedResponse(frame, maxResponse)
+	return enginecontract.DecodeLengthPrefixedResponse(frame, maxResponse)
 }
 
 const guestDiagnosticMax = 16 * 1024

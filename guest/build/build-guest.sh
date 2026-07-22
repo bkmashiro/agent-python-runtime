@@ -8,6 +8,14 @@ DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 
+case ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} in
+  0|1) ;;
+  *)
+    echo "AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER must be 0 or 1" >&2
+    exit 9
+    ;;
+esac
+
 if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
   exit 2
@@ -28,6 +36,10 @@ fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
 fetch wasi-vfs-static-library wasi-vfs-lib.zip
 fetch wasi-vfs-linked-storage-source wasi-vfs-linked-storage.c
 fetch spdx-2.3-json-schema spdx-2.3-schema.json
+if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} == 1 ]]; then
+  fetch wasi-vfs-source wasi-vfs-source.tar.gz
+  fetch wasi-vfs-wasi-submodule-source wasi-spec-source.tar.gz
+fi
 
 mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
   "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"
@@ -54,6 +66,39 @@ done
 chmod +x "${WASMTIME}" "${WASM_TOOLS}" "${WASI_VFS}"
 export WASI_SDK_PATH WASMTIME
 export PATH="$(dirname "${WASMTIME}"):${PATH}"
+
+if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} == 1 ]]; then
+  for required_command in cargo rustup; do
+    if ! command -v "${required_command}" >/dev/null; then
+      echo "missing experimental archive build command: ${required_command}" >&2
+      exit 10
+    fi
+  done
+  WASI_VFS_SOURCE_DIR="${WORK_DIR}/wasi-vfs-source"
+  mkdir -p "${WASI_VFS_SOURCE_DIR}"
+  tar xzf "${DOWNLOAD_DIR}/wasi-vfs-source.tar.gz" \
+    -C "${WASI_VFS_SOURCE_DIR}" --strip-components=1
+  WASI_SPEC_SOURCE_DIR="${WASI_VFS_SOURCE_DIR}/crates/wasi-libc-trampoline-bindgen/WASI"
+  mkdir -p "${WASI_SPEC_SOURCE_DIR}"
+  tar xzf "${DOWNLOAD_DIR}/wasi-spec-source.tar.gz" \
+    -C "${WASI_SPEC_SOURCE_DIR}" --strip-components=1
+  python3 "${ROOT_DIR}/tools/patch_wasi_vfs_deterministic_hasher.py" \
+    "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs" \
+    "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs.patched"
+  mv "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs.patched" \
+    "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs"
+  (
+    cd "${WASI_VFS_SOURCE_DIR}"
+    CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasip1 --sysroot=${WASI_SDK_PATH}/share/wasi-sysroot" \
+      cargo +1.92.0 build --locked --release --target wasm32-unknown-unknown -p wasi-vfs
+  )
+  WASI_VFS_LIB="${WASI_VFS_SOURCE_DIR}/target/wasm32-unknown-unknown/release/libwasi_vfs.a"
+  if [[ ! -f ${WASI_VFS_LIB} ]]; then
+    echo "deterministic-hasher wasi-vfs archive was not produced" >&2
+    exit 11
+  fi
+fi
+
 if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
   SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" HEAD)
 fi

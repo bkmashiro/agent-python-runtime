@@ -38,6 +38,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential pkg-config unzip xz-utils
+          rustup toolchain install 1.92.0 --profile minimal --target wasm32-unknown-unknown
 
       - name: Verify producer contracts
         run: |
@@ -54,6 +55,7 @@ jobs:
           AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
           AGENT_RUNTIME_REPRO_EVIDENCE_DIR: ${{ runner.temp }}/agent-runtime-repro-evidence
           AGENT_RUNTIME_REPRO_REPLICA: ${{ matrix.replica }}
+          AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER: "1"
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH

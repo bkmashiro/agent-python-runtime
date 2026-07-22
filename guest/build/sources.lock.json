@@ -48,6 +48,24 @@
       "artifact_relation": "build-only"
     },
     {
+      "id": "wasi-vfs-source",
+      "version": "0.6.3@0f4db4b64882db50ef8c04018e7e98bf59a63f92",
+      "url": "https://codeload.github.com/kateinoigakukun/wasi-vfs/tar.gz/0f4db4b64882db50ef8c04018e7e98bf59a63f92",
+      "sha256": "9b927e61bd6f6a151400a2a81217a0050d429d96b82ae30c99234dcb18232e0e",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "role": "link-library",
+      "artifact_relation": "linked"
+    },
+    {
+      "id": "wasi-vfs-wasi-submodule-source",
+      "version": "326dee685d352bc3845b999099f28b0a48734d46",
+      "url": "https://codeload.github.com/WebAssembly/WASI/tar.gz/326dee685d352bc3845b999099f28b0a48734d46",
+      "sha256": "5882000c717efc87348cf353ae505a3038fc4dd821d470a1292de12dc8887dcb",
+      "license": "Apache-2.0",
+      "role": "build-tool",
+      "artifact_relation": "build-only"
+    },
+    {
       "id": "wasi-vfs-static-library",
       "version": "0.6.3",
       "url": "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/libwasi_vfs-wasm32-unknown-unknown.zip",

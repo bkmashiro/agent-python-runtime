@@ -39,7 +39,17 @@ The final Wasm files were equal in size but differed in SHA-256 (`7d7c9e96e99acc
 
 **Supported conclusion:** the first observed drift stage is wasi-vfs/Wizer packing. Compile/link/static-data drift is excluded for this run.
 
-**Not yet supported:** the evidence does not identify the specific pack-time object, entropy source, allocator range, or serializer behavior. The next single falsification experiment runs two fresh wasi-vfs processes against one raw Wasm and one frozen VFS tree on the same runner.
+**Not yet supported:** the evidence does not identify the specific pack-time object, entropy source, allocator range, or serializer behavior.
+
+### Same-run process-isolation result
+
+Run [`29948829462`](https://github.com/bkmashiro/agent-python-runtime/actions/runs/29948829462) on signed research commit `9aa721bbb5fa039e2b7c0f94f9168fbe1ed2ac96` packed each builder's one retained raw Wasm twice through two fresh wasi-vfs processes. Both same-run comparisons differed (`left: false`, `right: false`), all four valid final Wasm files had unique SHA-256 digests, and every one of the six pairwise comparisons differed only in same-size Core Wasm section `11`. A local replay exactly matched the CI stage-report SHA-256 `6f9b31008f210ad6db2d6e92cae2d021d382a0f76bf6c2ce4de1551e9601943a`.
+
+**Supported conclusion:** cross-runner environment differences are not necessary. Fresh wasi-vfs/Wizer process startup is sufficient to reproduce the data-section drift from one raw Wasm and one frozen VFS tree.
+
+The next candidate changes only `EmbeddedFs.opens`. wasi-vfs 0.6.3 defines it as a default Rust `HashMap`; Rust 1.92's `wasm32-unknown-unknown` `RandomState` derives keys from guest stack and heap allocation addresses because that target has no supported random-data backend. The experiment replaces only that map's hasher with `BuildHasherDefault<DefaultHasher>` while leaving directory traversal order, the pack CLI, Wizer, and the exact comparator unchanged.
+
+A local fail-fast preflight also showed that replacing the pack-only WASI secure RNG with an empty deterministic source did not trap and did not remove section-11 drift. That falsifies the host `WasiCtxBuilder.secure_random` lane for this pack entry point; the research workflow therefore does not stub `random_get`.
 
 ## Running the controlled workflow
 

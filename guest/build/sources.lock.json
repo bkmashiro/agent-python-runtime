@@ -8,7 +8,8 @@
       "url": "https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz",
       "sha256": "88d2da4eed42fa9a5f42ff58a8bc8988881bd6c547e297e46682c2687638a851",
       "license": "PSF-2.0",
-      "role": "runtime-source"
+      "role": "runtime-source",
+      "artifact_relation": "packaged"
     },
     {
       "id": "wasi-sdk-linux-x86_64",
@@ -16,7 +17,8 @@
       "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sdk-33.0-x86_64-linux.tar.gz",
       "sha256": "0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce",
       "license": "Apache-2.0 WITH LLVM-exception",
-      "role": "toolchain"
+      "role": "toolchain",
+      "artifact_relation": "linked"
     },
     {
       "id": "wasm-tools-linux-x86_64",
@@ -24,7 +26,8 @@
       "url": "https://github.com/bytecodealliance/wasm-tools/releases/download/v1.254.0/wasm-tools-1.254.0-x86_64-linux.tar.gz",
       "sha256": "d0efb16c9c859137b7ab3e99151c299cd47caee106ed4594561002f7a04945bd",
       "license": "Apache-2.0 WITH LLVM-exception",
-      "role": "build-tool"
+      "role": "build-tool",
+      "artifact_relation": "build-only"
     },
     {
       "id": "wasmtime-linux-x86_64",
@@ -32,7 +35,8 @@
       "url": "https://github.com/bytecodealliance/wasmtime/releases/download/v44.0.1/wasmtime-v44.0.1-x86_64-linux.tar.xz",
       "sha256": "afd58715f105e3a7f454169daed22168c5736ec5f225fb04c4ac62c54c9508a3",
       "license": "Apache-2.0 WITH LLVM-exception",
-      "role": "build-tool"
+      "role": "build-tool",
+      "artifact_relation": "build-only"
     },
     {
       "id": "wasi-vfs-cli-linux-x86_64",
@@ -40,7 +44,8 @@
       "url": "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-unknown-linux-gnu.zip",
       "sha256": "c9ee8179f6f0882abc37024fbe0cd678311aa8a29083fa364915ed4d29a69485",
       "license": "Apache-2.0",
-      "role": "build-tool"
+      "role": "build-tool",
+      "artifact_relation": "build-only"
     },
     {
       "id": "wasi-vfs-static-library",
@@ -48,7 +53,17 @@
       "url": "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/libwasi_vfs-wasm32-unknown-unknown.zip",
       "sha256": "f94dc7fdabdefc0fed78b70f1ab100207db0558cbabb004dd9e5a0bdeec4256f",
       "license": "Apache-2.0",
-      "role": "link-library"
+      "role": "link-library",
+      "artifact_relation": "linked"
+    },
+    {
+      "id": "spdx-2.3-json-schema",
+      "version": "2.3@aadf3b0b8dbbabdb4d880b0fc714255fea436ff7",
+      "url": "https://raw.githubusercontent.com/spdx/spdx-spec/aadf3b0b8dbbabdb4d880b0fc714255fea436ff7/schemas/spdx-schema.json",
+      "sha256": "239208b7ac287b3cf5d9a9af23f9d69863971102a5e1587a27a398b43490b89b",
+      "license": "CC-BY-3.0",
+      "role": "build-tool",
+      "artifact_relation": "build-only"
     }
   ]
 }

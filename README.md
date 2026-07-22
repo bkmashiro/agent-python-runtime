@@ -35,6 +35,7 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [Runtime benchmark evidence](docs/benchmarking.md)
 - [Prepared-state safety audit](docs/prepared-state-audit.md)
 - [Guest artifact reproducibility](docs/reproducibility.md)
+- [Guest supply-chain evidence](docs/supply-chain.md)
 - [Active autonomous mega-goal](docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md)
 - [Implementation status and evidence](docs/status.md)
 - [Standalone implementation handoff](docs/plans/2026-07-22-agent-python-runtime-handoff.md)

@@ -26,6 +26,7 @@ fetch wasm-tools-linux-x86_64 wasm-tools.tar.gz
 fetch wasmtime-linux-x86_64 wasmtime.tar.xz
 fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
 fetch wasi-vfs-static-library wasi-vfs-lib.zip
+fetch spdx-2.3-json-schema spdx-2.3-schema.json
 
 mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
   "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"
@@ -112,11 +113,16 @@ FINAL_GUEST="${DIST_DIR}/agent-python-runtime.wasm"
   -Wl,--strip-all \
   -o "${RAW_GUEST}"
 
-VFS_PYTHON_DIR="${WORK_DIR}/vfs-python"
+VFS_PYTHON_DIR=${AGENT_RUNTIME_VFS_ROOT:-"${WORK_DIR}/vfs-python"}
+rm -rf "${VFS_PYTHON_DIR}"
 mkdir -p "${VFS_PYTHON_DIR}/site-packages"
-cp -R "${CPYTHON_DIR}/Lib/." "${VFS_PYTHON_DIR}/"
-cp -R "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
-  "${VFS_PYTHON_DIR}/site-packages/agent_runtime"
+python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+  "${CPYTHON_DIR}/Lib" "${VFS_PYTHON_DIR}" \
+  --epoch "${SOURCE_DATE_EPOCH}"
+python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+  "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
+  "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
+  --epoch "${SOURCE_DATE_EPOCH}"
 
 "${WASI_VFS}" pack "${RAW_GUEST}" \
   --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
@@ -129,12 +135,36 @@ python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --wat "${DIST_DIR}/agent-python-runtime.wat" \
   --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
   --output "${DIST_DIR}/manifest.json"
+python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
+  --artifact "${FINAL_GUEST}" \
+  --manifest "${DIST_DIR}/manifest.json" \
+  --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+  --vfs-root "${VFS_PYTHON_DIR}" \
+  --sbom "${DIST_DIR}/sbom.spdx.json" \
+  --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md"
+python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
+  --artifact "${FINAL_GUEST}" \
+  --manifest "${DIST_DIR}/manifest.json" \
+  --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+  --vfs-root "${VFS_PYTHON_DIR}" \
+  --sbom "${DIST_DIR}/sbom.spdx.json" \
+  --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \
+  --verify
+(
+  cd "${ROOT_DIR}"
+  go run ./cmd/validate-json-schema \
+    "${DOWNLOAD_DIR}/spdx-2.3-schema.json" \
+    "${DIST_DIR}/sbom.spdx.json"
+)
 rm "${DIST_DIR}/agent-python-runtime.wat"
 (
   cd "${DIST_DIR}"
-  sha256sum agent-python-runtime.wasm manifest.json > SHA256SUMS
+  sha256sum \
+    agent-python-runtime.wasm \
+    manifest.json \
+    sbom.spdx.json \
+    THIRD_PARTY_NOTICES.md > SHA256SUMS
 )
-cp "${ROOT_DIR}/NOTICE.md" "${DIST_DIR}/THIRD_PARTY_NOTICES.md"
 
 printf 'guest artifact: %s\n' "${FINAL_GUEST}"
 printf 'artifact sha256: '

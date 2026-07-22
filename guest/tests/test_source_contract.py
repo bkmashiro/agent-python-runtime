@@ -42,6 +42,7 @@ class GuestSourceContractTests(unittest.TestCase):
             "wasmtime-linux-x86_64",
             "wasi-vfs-cli-linux-x86_64",
             "wasi-vfs-static-library",
+            "spdx-2.3-json-schema",
         ]:
             self.assertIn(source_id, text)
         self.assertIn("-mexec-model=reactor", text)
@@ -51,6 +52,8 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("--max-memory=536870912", text)
         self.assertEqual(1, text.count('--dir "'))
         self.assertIn("VFS_PYTHON_DIR", text)
+        self.assertIn("copy_tree_deterministic.py", text)
+        self.assertNotIn('cp -R "${CPYTHON_DIR}/Lib', text)
         self.assertIn("site-packages/agent_runtime", text)
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())

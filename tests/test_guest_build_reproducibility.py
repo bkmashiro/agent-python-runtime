@@ -29,7 +29,13 @@ def write_bundle(directory, wasm, epoch="1784729528", limitation="same"):
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
     (directory / "agent-python-runtime.wasm").write_bytes(wasm)
     (directory / "manifest.json").write_bytes(manifest_bytes)
-    sums = f"{sha256(wasm)}  agent-python-runtime.wasm\n{sha256(manifest_bytes)}  manifest.json\n"
+    sbom_bytes = b"{}\n"
+    (directory / "sbom.spdx.json").write_bytes(sbom_bytes)
+    sums = (
+        f"{sha256(wasm)}  agent-python-runtime.wasm\n"
+        f"{sha256(manifest_bytes)}  manifest.json\n"
+        f"{sha256(sbom_bytes)}  sbom.spdx.json\n"
+    )
     (directory / "SHA256SUMS").write_text(sums)
     (directory / "THIRD_PARTY_NOTICES.md").write_text("locked notices\n")
 

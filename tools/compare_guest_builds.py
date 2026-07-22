@@ -12,6 +12,7 @@ REQUIRED_FILES = {
     "agent-python-runtime.wasm",
     "manifest.json",
     "SHA256SUMS",
+    "sbom.spdx.json",
     "THIRD_PARTY_NOTICES.md",
 }
 

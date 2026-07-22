@@ -15,6 +15,8 @@ on:
       - 'tools/fetch_locked_source.py'
       - 'tools/verify_sources_lock.py'
       - 'tools/source_date_epoch.py'
+      - 'tools/copy_tree_deterministic.py'
+      - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
   push:
@@ -31,6 +33,8 @@ on:
       - 'tools/fetch_locked_source.py'
       - 'tools/verify_sources_lock.py'
       - 'tools/source_date_epoch.py'
+      - 'tools/copy_tree_deterministic.py'
+      - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
       - '.github/workflows/guest-artifact.yml'
 
@@ -55,6 +59,12 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.24.0'
+          cache: true
+
       - name: Install host build prerequisites
         run: |
           sudo apt-get update
@@ -64,11 +74,14 @@ jobs:
         run: |
           python3 tools/verify_sources_lock.py
           python3 -m unittest discover -s guest/tests -v
+          python3 -m unittest tests/test_deterministic_copy.py -v
+          go test ./cmd/validate-json-schema
           bash -n guest/build/build-guest.sh
 
       - name: Build core guest from locked sources
         env:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
+          AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH
@@ -123,6 +136,19 @@ jobs:
             cd "${{ runner.temp }}/agent-runtime-dist"
             sha256sum --check SHA256SUMS
           )
+          python3 guest/build/write-supply-chain.py \
+            --artifact "${{ runner.temp }}/agent-runtime-dist/agent-python-runtime.wasm" \
+            --manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
+            --source-lock guest/build/sources.lock.json \
+            --sbom "${{ runner.temp }}/agent-runtime-dist/sbom.spdx.json" \
+            --notices "${{ runner.temp }}/agent-runtime-dist/THIRD_PARTY_NOTICES.md" \
+            --verify
+          python3 tools/fetch_locked_source.py \
+            spdx-2.3-json-schema \
+            "${{ runner.temp }}/spdx-2.3-schema.json"
+          go run ./cmd/validate-json-schema \
+            "${{ runner.temp }}/spdx-2.3-schema.json" \
+            "${{ runner.temp }}/agent-runtime-dist/sbom.spdx.json"
 
       - name: Run real Host/guest E2E
         env:

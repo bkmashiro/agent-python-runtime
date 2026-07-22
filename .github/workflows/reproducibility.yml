@@ -28,6 +28,12 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.24.0'
+          cache: true
+
       - name: Install host build prerequisites
         run: |
           sudo apt-get update
@@ -37,13 +43,15 @@ jobs:
         run: |
           python3 tools/verify_sources_lock.py
           python3 -m unittest discover -s guest/tests -v
-          python3 -m unittest tests/test_source_date_epoch.py -v
+          python3 -m unittest tests/test_source_date_epoch.py tests/test_deterministic_copy.py -v
+          go test ./cmd/validate-json-schema
           bash -n guest/build/build-guest.sh
 
       - name: Build exact bundle
         env:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
           AGENT_RUNTIME_DIST_DIR: ${{ runner.temp }}/agent-runtime-dist
+          AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH

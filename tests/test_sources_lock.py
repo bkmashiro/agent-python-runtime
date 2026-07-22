@@ -34,6 +34,7 @@ class SourcesLockTests(unittest.TestCase):
                     "sha256": "a" * 64,
                     "license": "Apache-2.0",
                     "role": "build-tool",
+                    "artifact_relation": "build-only",
                 }
             ],
         }
@@ -64,6 +65,14 @@ class SourcesLockTests(unittest.TestCase):
         lock = self.valid_lock()
         lock["sources"][0]["license"] = ""
         self.assert_invalid(lock, "license")
+
+    def test_rejects_missing_or_unknown_artifact_relation(self):
+        lock = self.valid_lock()
+        del lock["sources"][0]["artifact_relation"]
+        self.assert_invalid(lock, "artifact_relation")
+        lock = self.valid_lock()
+        lock["sources"][0]["artifact_relation"] = "maybe"
+        self.assert_invalid(lock, "artifact_relation")
 
     def test_rejects_duplicate_source_ids(self):
         lock = self.valid_lock()

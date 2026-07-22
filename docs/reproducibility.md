@@ -9,10 +9,19 @@ A run succeeds only when both clean builds have the same file set and every file
 - `agent-python-runtime.wasm`;
 - `manifest.json`;
 - `SHA256SUMS`;
+- `sbom.spdx.json`;
 - `THIRD_PARTY_NOTICES.md`;
 - any future file added to either bundle.
 
 Manifest equality alone is insufficient. The comparator never ignores custom sections, timestamps, VFS bytes, notices, or unknown extra files.
+
+## Verification status
+
+Run `29930351468` on signed commit `9502d7d` correctly failed exact comparison. Both clean builds succeeded, but the Wasm data section differed while every non-Wasm bundle file matched. Inspection of locked wasi-vfs `v0.6.3` source showed that its packer consumes `fd_readdir` order directly without sorting; the downloaded artifacts showed identical Python payload text with different VFS metadata/order. This negative control proves the workflow detects producer nondeterminism.
+
+The current candidate stages VFS input at fixed `/dev/shm/agent-runtime-vfs`, creates entries in sorted relative-path order, normalizes modes and timestamps, and excludes build-generated `__pycache__`/bytecode. Exact reproducibility is **not yet claimed** until a second manual run passes.
+
+## Running the controlled workflow
 
 Run the controlled workflow on the private repository with:
 

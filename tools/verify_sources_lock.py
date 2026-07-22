@@ -12,7 +12,16 @@ from typing import Any
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 ALLOWED_ROLES = {"runtime-source", "toolchain", "build-tool", "link-library"}
-REQUIRED_SOURCE_FIELDS = {"id", "version", "url", "sha256", "license", "role"}
+ALLOWED_ARTIFACT_RELATIONS = {"packaged", "linked", "build-only"}
+REQUIRED_SOURCE_FIELDS = {
+    "id",
+    "version",
+    "url",
+    "sha256",
+    "license",
+    "role",
+    "artifact_relation",
+}
 
 
 def validate_lock(document: Any) -> list[str]:
@@ -66,6 +75,13 @@ def validate_lock(document: Any) -> list[str]:
         role = source.get("role")
         if role not in ALLOWED_ROLES:
             errors.append(f"{prefix}.role must be one of {sorted(ALLOWED_ROLES)}")
+
+        relation = source.get("artifact_relation")
+        if relation not in ALLOWED_ARTIFACT_RELATIONS:
+            errors.append(
+                f"{prefix}.artifact_relation must be one of "
+                f"{sorted(ALLOWED_ARTIFACT_RELATIONS)}"
+            )
 
     return errors
 

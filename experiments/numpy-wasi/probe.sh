@@ -266,8 +266,9 @@ PY
   fi
   MPDEC_LIB="${WASI_BUILD_DIR}/Modules/_decimal/libmpdec/libmpdec.a"
   EXPAT_LIB="${WASI_BUILD_DIR}/Modules/expat/libexpat.a"
+  LONG_DOUBLE_LIB="${WASI_SDK_PATH}/share/wasi-sysroot/lib/wasm32-wasip1/libc-printscan-long-double.a"
   HACL_LIBS=("${WASI_BUILD_DIR}"/Modules/_hacl/libHacl_*.a)
-  for required in "${MPDEC_LIB}" "${EXPAT_LIB}" "${HACL_LIBS[@]}"; do
+  for required in "${MPDEC_LIB}" "${EXPAT_LIB}" "${LONG_DOUBLE_LIB}" "${HACL_LIBS[@]}"; do
     if [[ ! -f ${required} ]]; then
       echo "missing CPython static dependency: ${required}" >&2
       exit 16
@@ -289,7 +290,7 @@ PY
       -Wl,--whole-archive "${NUMPY_CORE_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
       "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
-      -lpthread -lm \
+      -lpthread -lm -lc-printscan-long-double \
       -Wl,--export=numpy_register_probe \
       -Wl,--export=numpy_import_probe \
       -Wl,--export=numpy_python_initialized_probe \
@@ -400,6 +401,7 @@ report = {
     "schema_version": 5,
     "target": "wasm32-wasip1",
     "cxx_exception_mode": "selective-disabled",
+    "long_double_runtime": "wasi-sdk-33 libc-printscan-long-double",
     "cxx_exception_adaptation": {
         "source": "numpy/_core/src/multiarray/unique.cpp",
         "explicit_string_load_error_preserved": True,

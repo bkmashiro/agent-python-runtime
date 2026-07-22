@@ -109,7 +109,9 @@ Stop for a toolchain/scope decision if this requires a broad NumPy fork, opaque 
 
 ### F3 — Product E2E and evidence
 
-Only after F2 succeeds:
+Only after F2 succeeds, first cross the initializer/import boundary in an experiment-only artifact. Run `29964718389` performed a real Meson install, deterministically staged 381 NumPy package files, packed the CPython standard library plus that tree, registered the core builtin, and entered its initializer under current wazero. The first runtime trap was the locked WASI SDK 33 default `strtold_l` path explicitly aborting because long-double print/scan support was not linked. The next probe enables the SDK's own `libc-printscan-long-double.a` through `-lc-printscan-long-double`, preserving the measured 16-byte `long double` / `IEEE_QUAD_LE` target ABI. It does not use the historical `--wrap=strtold` shim that parsed through 64-bit `double`. This remains diagnostic until the runtime report records a completed initializer and actual import.
+
+Only after that succeeds:
 
 - place NumPy pure-Python/package metadata in the immutable VFS;
 - bind the exact source and license expression into manifest/SBOM/notices;

@@ -70,6 +70,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         noeh_patcher = NOEH_PATCHER.read_text()
         self.assertIn("expected exactly one NumPy no-exception unique hash", noeh_patcher)
         self.assertIn("unexpected C++ exception syntax remains", noeh_patcher)
+        self.assertIn("-lc-printscan-long-double", script)
+        self.assertNotIn("--wrap=strtold", script)
         self.assertIn("--export=numpy_register_probe", script)
         self.assertIn("expected exactly one NumPy target-Python Meson seam", script)
         self.assertIn("find_installation({target_python!r}, pure: false)", script)

@@ -106,7 +106,7 @@ EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
 set +e
-PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
+PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
   "${PROBE_DIR}/build" "${PROBE_DIR}/numpy" \
   --cross-file "${CROSS_FILE}" \
   -Dallow-noblas=true \
@@ -122,7 +122,7 @@ PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}"
 SETUP_EXIT=$?
 COMPILE_EXIT=-1
 if [[ ${SETUP_EXIT} -eq 0 ]]; then
-  PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
+  PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
     -C "${PROBE_DIR}/build" -j 2 \
     >"${PROBE_DIR}/logs/compile.log" 2>&1
   COMPILE_EXIT=$?

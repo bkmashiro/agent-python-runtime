@@ -30,8 +30,11 @@ func validateLifecycleDensityOptions(options benchmarkOptions, child bool, goos 
 	if options.Kind != "lifecycle-density" || options.ArtifactPath == "" || options.ManifestPath == "" {
 		return errors.New("lifecycle-density kind, artifact, and manifest are required")
 	}
-	if (options.Class != "production-safe" && options.Class != "preinitialization-spike") || options.Strategy != "single-use-preinitialized" {
-		return errors.New("lifecycle-density benchmark requires production-safe or preinitialization-spike single-use-preinitialized base strategy")
+	validProduction := options.Class == "production-safe" && options.Strategy == "single-use-preinitialized"
+	validSpike := options.Class == "preinitialization-spike" &&
+		(options.Strategy == "single-use-preinitialized" || options.Strategy == "single-use-preinitialized-shared-cache")
+	if !validProduction && !validSpike {
+		return errors.New("lifecycle-density benchmark requires production-safe single-use-preinitialized or an explicit preinitialization-spike strategy")
 	}
 	if options.MaxRSSBytes == 0 || options.MaxRSSBytes > 1<<50 || options.ChildTimeout <= 0 || options.ChildTimeout > 24*time.Hour {
 		return errors.New("lifecycle-density RSS guard or child timeout is missing or outside its hard bound")
@@ -193,6 +196,11 @@ func assembleLifecycleDensityEvidence(
 			"The parent samples child RSS and kills above the configured threshold; this is a bounded safety guard, not a kernel memory reservation.",
 			"V1 cgroup counters remain unavailable unless isolation is independently proven; shared or unverified totals are not attributed to this process.",
 		},
+	}
+	if benchmarkClass == "preinitialization-spike" && specs[0].Strategy == "single-use-preinitialized-shared-cache" {
+		evidence.Limitations = append(evidence.Limitations,
+			"The first shard populates one borrowed in-memory compilation cache before followers start; every shard still owns a separate wazero runtime and closes before the cache owner.",
+		)
 	}
 	if benchmarkClass == "preinitialization-spike" {
 		evidence.Limitations = append(evidence.Limitations,

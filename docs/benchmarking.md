@@ -109,6 +109,8 @@ This reports fresh versus prepared first/steady Run ratios, refill `runtime_init
 
 One file binds one exact artifact/profile, clean Host revision, backend/version, environment, requested strategy, workload, and complete sweep. The initial canonical slot sequence is `1,2,4,8,16`; `32` and `64` may be appended only after an external memory guard proves they are safe. Every `(N, repeat)` row must come from a fresh process and remain in canonical order.
 
+`phases.compile_ns` is an optional backward-compatible v1 field so archived evidence remains valid. New prepared-density producers record the aggregate per-shard `CompileModule` observations. The experimental `single-use-preinitialized-shared-cache` strategy requires positive measured `compile_ns` in every sample plus explicit first-shard/cache-ownership and no-production limitations; `production-safe` CLI evidence continues to reject that strategy.
+
 Run the initial base-profile lane from a clean Linux checkout with an explicit RSS kill threshold and per-child timeout:
 
 ```bash

@@ -22,12 +22,55 @@ type preparedDensityShardResult struct {
 	err          error
 }
 
+type preparedDensityShardFactory func(index int, capacity uint32) preparedDensityShardResult
+
+func createPreparedDensityShards(
+	capacities []uint32,
+	strategy string,
+	create preparedDensityShardFactory,
+) ([]preparedDensityShardResult, error) {
+	if len(capacities) == 0 || create == nil {
+		return nil, errors.New("prepared density shard plan is incomplete")
+	}
+	sharedCache := strategy == "single-use-preinitialized-shared-cache"
+	if !sharedCache && strategy != "single-use-preinitialized" {
+		return nil, fmt.Errorf("unsupported prepared density shard strategy %q", strategy)
+	}
+	shards := make([]preparedDensityShardResult, len(capacities))
+	firstFollower := 0
+	if sharedCache {
+		shards[0] = create(0, capacities[0])
+		if shards[0].err != nil {
+			return shards, nil
+		}
+		firstFollower = 1
+	}
+	results := make(chan struct {
+		index int
+		shard preparedDensityShardResult
+	}, len(capacities)-firstFollower)
+	for index := firstFollower; index < len(capacities); index++ {
+		capacity := capacities[index]
+		go func() {
+			results <- struct {
+				index int
+				shard preparedDensityShardResult
+			}{index: index, shard: create(index, capacity)}
+		}()
+	}
+	for index := firstFollower; index < len(capacities); index++ {
+		result := <-results
+		shards[result.index] = result.shard
+	}
+	return shards, nil
+}
+
 func collectPreparedDensityChild(parent context.Context, artifactPath, manifestPath string, spec densitySweepSpec) (densityChildEnvelope, error) {
 	if runtime.GOOS != "linux" {
 		return densityChildEnvelope{}, errors.New("lifecycle-density collection is Linux-only")
 	}
-	if spec.Strategy != "single-use-preinitialized" {
-		return densityChildEnvelope{}, errors.New("prepared lifecycle-density child requires single-use-preinitialized strategy")
+	if spec.Strategy != "single-use-preinitialized" && spec.Strategy != "single-use-preinitialized-shared-cache" {
+		return densityChildEnvelope{}, errors.New("prepared lifecycle-density child requires a supported single-use preinitialized strategy")
 	}
 	artifact, wasm, err := loadArtifactIdentity(artifactPath, manifestPath)
 	if err != nil {
@@ -44,16 +87,23 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 	defer cancel()
 
 	started := time.Now()
-	results := make(chan struct {
-		index int
-		shard preparedDensityShardResult
-	}, len(capacities))
-	for index, capacity := range capacities {
-		go func() {
+	var compilationCache *wazeroengine.CompilationCache
+	if spec.Strategy == "single-use-preinitialized-shared-cache" {
+		compilationCache = wazeroengine.NewCompilationCache()
+		defer compilationCache.Close(context.Background())
+	}
+	shards, err := createPreparedDensityShards(
+		capacities,
+		spec.Strategy,
+		func(_ int, capacity uint32) preparedDensityShardResult {
 			collector := &lifecycleCollector{}
 			config := runtimeconfig.DefaultRunConfig()
 			config.Timeout = spec.Timeout
-			neutralRunner, err := (wazeroengine.Factory{PreparedCapacity: capacity, Observer: collector.observe}).New(ctx, wasm, config)
+			neutralRunner, err := (wazeroengine.Factory{
+				PreparedCapacity: capacity,
+				Observer:         collector.observe,
+				CompilationCache: compilationCache,
+			}).New(ctx, wasm, config)
 			shard := preparedDensityShardResult{capacity: capacity, observations: collector.drain(), err: err}
 			if err == nil {
 				var ok bool
@@ -63,16 +113,11 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 					_ = neutralRunner.Close(context.Background())
 				}
 			}
-			results <- struct {
-				index int
-				shard preparedDensityShardResult
-			}{index: index, shard: shard}
-		}()
-	}
-	shards := make([]preparedDensityShardResult, len(capacities))
-	for range capacities {
-		result := <-results
-		shards[result.index] = result.shard
+			return shard
+		},
+	)
+	if err != nil {
+		return densityChildEnvelope{}, err
 	}
 	readyElapsed := time.Since(started)
 	for index := range shards {
@@ -147,6 +192,7 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 	var instantiateNS uint64
 	var initializeNS uint64
 	var runtimeInitNS uint64
+	var compileNS uint64
 	for shardIndex, shard := range shards {
 		wantCounts := map[string]uint32{
 			"instantiate_host":               1,
@@ -164,6 +210,11 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 			seen[observation.Phase]++
 			value := uint64(observation.Duration.Nanoseconds())
 			switch observation.Phase {
+			case "compile":
+				if math.MaxUint64-compileNS < value {
+					return runtimeevidence.PhaseTimings{}, errors.New("prepared compile duration overflow")
+				}
+				compileNS += value
 			case "pool_prepare_instantiate_guest":
 				if math.MaxUint64-instantiateNS < value {
 					return runtimeevidence.PhaseTimings{}, errors.New("prepared instantiate duration overflow")
@@ -188,8 +239,10 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 		}
 	}
 	totalNS := uint64(readyElapsed.Nanoseconds())
+	compileMetric := densityMeasured(compileNS)
 	return runtimeevidence.PhaseTimings{
 		QueueNS:       densityUnavailable(runtimeevidence.MetricSkipped, runtimeevidence.ReasonNotApplicable),
+		CompileNS:     &compileMetric,
 		InstantiateNS: densityMeasured(instantiateNS),
 		InitializeNS:  densityMeasured(initializeNS),
 		RuntimeInitNS: densityMeasured(runtimeInitNS),

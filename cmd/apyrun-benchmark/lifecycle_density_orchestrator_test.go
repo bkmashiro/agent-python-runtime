@@ -37,6 +37,18 @@ func TestDensitySweepSpecsUseCanonicalOrderAndFreshProcessPerSample(t *testing.T
 	}
 }
 
+func TestDensitySweepSpecsAcceptSharedCacheOnlyAsExplicitStrategy(t *testing.T) {
+	specs, err := densitySweepSpecs("single-use-preinitialized-shared-cache", 1, 512*1024*1024, 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range specs {
+		if spec.Strategy != "single-use-preinitialized-shared-cache" {
+			t.Fatalf("shared-cache strategy drifted: %#v", spec)
+		}
+	}
+}
+
 func TestDensitySweepSpecsRejectMissingBoundsAndUnknownStrategy(t *testing.T) {
 	for name, invoke := range map[string]func() error{
 		"unknown strategy": func() error {
@@ -77,6 +89,16 @@ func TestValidateLifecycleDensityCLIOptionsSeparatesParentAndChild(t *testing.T)
 	spike.Class = "preinitialization-spike"
 	if err := validateLifecycleDensityOptions(spike, false, "linux"); err != nil {
 		t.Fatalf("preinitialization spike density rejected: %v", err)
+	}
+	sharedCacheSpike := spike
+	sharedCacheSpike.Strategy = "single-use-preinitialized-shared-cache"
+	if err := validateLifecycleDensityOptions(sharedCacheSpike, false, "linux"); err != nil {
+		t.Fatalf("preinitialization shared-cache density rejected: %v", err)
+	}
+	sharedCacheProduction := parent
+	sharedCacheProduction.Strategy = "single-use-preinitialized-shared-cache"
+	if err := validateLifecycleDensityOptions(sharedCacheProduction, false, "linux"); err == nil {
+		t.Fatal("production-safe density accepted experimental shared cache")
 	}
 	child := parent
 	child.OutputPath = ""
@@ -130,6 +152,75 @@ func TestPreparedDensityShardCapacitiesPreserveProductionHardCap(t *testing.T) {
 	}
 }
 
+func TestPreparedDensitySharedCacheWarmsBeforeFollowers(t *testing.T) {
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	followerStarted := make(chan int, 3)
+	done := make(chan error, 1)
+	go func() {
+		_, err := createPreparedDensityShards(
+			[]uint32{4, 4, 4, 4},
+			"single-use-preinitialized-shared-cache",
+			func(index int, capacity uint32) preparedDensityShardResult {
+				if index == 0 {
+					close(firstStarted)
+					<-releaseFirst
+				} else {
+					followerStarted <- index
+				}
+				return preparedDensityShardResult{capacity: capacity}
+			},
+		)
+		done <- err
+	}()
+	<-firstStarted
+	select {
+	case index := <-followerStarted:
+		t.Fatalf("follower %d started before cache warm-up completed", index)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(releaseFirst)
+	for range 3 {
+		<-followerStarted
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPreparedDensityDefaultStartsShardsConcurrently(t *testing.T) {
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	followerStarted := make(chan int, 1)
+	done := make(chan error, 1)
+	go func() {
+		_, err := createPreparedDensityShards(
+			[]uint32{4, 4},
+			"single-use-preinitialized",
+			func(index int, capacity uint32) preparedDensityShardResult {
+				if index == 0 {
+					close(firstStarted)
+					<-releaseFirst
+				} else {
+					followerStarted <- index
+				}
+				return preparedDensityShardResult{capacity: capacity}
+			},
+		)
+		done <- err
+	}()
+	<-firstStarted
+	select {
+	case <-followerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("default density strategy serialized shards")
+	}
+	close(releaseFirst)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDensityChildEnvelopeBindsArtifactStrategyAndRequestedSlots(t *testing.T) {
 	specs, err := densitySweepSpecs("single-use-preinitialized", 1, 4*1024*1024*1024, 2*time.Minute)
 	if err != nil {
@@ -164,7 +255,7 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 		Filename: "guest.wasm", SHA256: hex.EncodeToString(digest[:]), Size: int64(len(artifactBytes)),
 		SourceCommit: strings.Repeat("a", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", Execution: "reactor",
 	}
-	specs, err := densitySweepSpecs("single-use-preinitialized", 1, 4*1024*1024*1024, 2*time.Minute)
+	specs, err := densitySweepSpecs("single-use-preinitialized-shared-cache", 1, 4*1024*1024*1024, 2*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,6 +280,15 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 	}
 	if !strings.Contains(evidence.Limitations[len(evidence.Limitations)-1], "does not approve") {
 		t.Fatal("preinitialization lifecycle density lacks its experimental limitation")
+	}
+	sharedCacheBoundary := false
+	for _, limitation := range evidence.Limitations {
+		if strings.Contains(limitation, "first shard") && strings.Contains(limitation, "separate wazero runtime") {
+			sharedCacheBoundary = true
+		}
+	}
+	if !sharedCacheBoundary {
+		t.Fatal("shared-cache lifecycle density lacks its ownership and warm-up limitation")
 	}
 	if err := runtimeevidence.ValidateLifecycleDensityJSON(encoded); err != nil {
 		t.Fatal(err)
@@ -256,7 +356,8 @@ func TestPreparedDensityPhasesRequireEveryReadySlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *phases.InstantiateNS.Value != 6 || *phases.InitializeNS.Value != 10 || *phases.RuntimeInitNS.Value != 14 || *phases.TotalNS.Value != 20 {
+	if phases.CompileNS == nil || *phases.CompileNS.Value != 2 || *phases.InstantiateNS.Value != 6 ||
+		*phases.InitializeNS.Value != 10 || *phases.RuntimeInitNS.Value != 14 || *phases.TotalNS.Value != 20 {
 		t.Fatalf("prepared phase aggregation drifted: %#v", phases)
 	}
 	missing := observations[:len(observations)-1]
@@ -448,7 +549,7 @@ func validDensityChildEnvelope(spec densitySweepSpec, artifact artifactIdentity)
 			ObservedAtUnixNS: runtimeevidence.Metric{Status: runtimeevidence.MetricTimestampObserved, Value: ptrForTest(uint64(1))},
 			Pool:             runtimeevidence.PoolState{TargetCapacity: spec.RequestedSlots, Ready: spec.RequestedSlots, AccountedSlots: spec.RequestedSlots},
 			Phases: runtimeevidence.PhaseTimings{
-				QueueNS: skipped(runtimeevidence.ReasonNotApplicable), InstantiateNS: measured(1), InitializeNS: measured(1),
+				QueueNS: skipped(runtimeevidence.ReasonNotApplicable), CompileNS: ptrForTest(measured(1)), InstantiateNS: measured(1), InitializeNS: measured(1),
 				RuntimeInitNS: measured(1), PrepareNS: skipped(runtimeevidence.ReasonWorkloadNotRun), ExecuteNS: skipped(runtimeevidence.ReasonWorkloadNotRun),
 				CapabilityNS: skipped(runtimeevidence.ReasonWorkloadNotRun), TotalNS: measured(1),
 			},

@@ -10,6 +10,8 @@ import statistics
 
 
 CANONICAL_SLOTS = [1, 2, 4, 8, 16]
+DEFAULT_STRATEGY = "single-use-preinitialized"
+SHARED_CACHE_STRATEGY = "single-use-preinitialized-shared-cache"
 
 
 def _measured(sample: dict, section: str, metric: str) -> int:
@@ -19,7 +21,7 @@ def _measured(sample: dict, section: str, metric: str) -> int:
     return value["value"]
 
 
-def _validate_document(document: dict, label: str) -> None:
+def _validate_document(document: dict, label: str, expected_strategy: str) -> None:
     if document.get("schema_version") != 1 or document.get("evidence_class") != "lifecycle-density":
         raise ValueError(f"{label} is not lifecycle-density v1 evidence")
     artifact = document.get("artifact", {})
@@ -30,8 +32,8 @@ def _validate_document(document: dict, label: str) -> None:
         raise ValueError(f"{label} artifact and clean Host revision are not exact")
     strategy = document.get("strategy", {})
     if strategy != {
-        "requested": "single-use-preinitialized",
-        "active": "single-use-preinitialized",
+        "requested": expected_strategy,
+        "active": expected_strategy,
         "fallback": False,
     }:
         raise ValueError(f"{label} strategy drifted or fell back")
@@ -46,7 +48,7 @@ def _validate_document(document: dict, label: str) -> None:
         raise ValueError(f"{label} sample order drifted")
 
 
-def _medians(document: dict, slots: int) -> dict[str, int]:
+def _medians(document: dict, slots: int, include_compile: bool = False) -> dict[str, int]:
     samples = [sample for sample in document["samples"] if sample["requested_slots"] == slots]
     selectors = {
         "ready_wall_median_ns": ("phases", "total_ns"),
@@ -54,6 +56,8 @@ def _medians(document: dict, slots: int) -> dict[str, int]:
         "runtime_init_median_ns": ("phases", "runtime_init_ns"),
         "ready_rss_median_bytes": ("process", "rss_bytes"),
     }
+    if include_compile:
+        selectors["compile_median_ns"] = ("phases", "compile_ns")
     return {
         name: int(statistics.median(_measured(sample, section, metric) for sample in samples))
         for name, (section, metric) in selectors.items()
@@ -66,45 +70,75 @@ def _ratio(numerator: int, denominator: int, label: str) -> float:
     return numerator / denominator
 
 
-def compare(baseline: dict, candidate: dict) -> dict:
-    _validate_document(baseline, "baseline")
-    _validate_document(candidate, "candidate")
-    for key in ("host_source", "backend", "environment", "strategy", "plan"):
+def compare(baseline: dict, candidate: dict, intervention: str = "build-time-preinitialization") -> dict:
+    if intervention == "build-time-preinitialization":
+        baseline_strategy = DEFAULT_STRATEGY
+        candidate_strategy = DEFAULT_STRATEGY
+        experiment = "build-time-python-preinitialization-lifecycle-density"
+    elif intervention == "shared-compilation-cache":
+        baseline_strategy = DEFAULT_STRATEGY
+        candidate_strategy = SHARED_CACHE_STRATEGY
+        experiment = "shared-wazero-compilation-cache-lifecycle-density"
+    else:
+        raise ValueError(f"unsupported intervention {intervention!r}")
+    if intervention == "shared-compilation-cache" and baseline.get("strategy") == candidate.get("strategy"):
+        raise ValueError("shared-cache comparison lacks the required strategy transition")
+    _validate_document(baseline, "baseline", baseline_strategy)
+    _validate_document(candidate, "candidate", candidate_strategy)
+    for key in ("host_source", "backend", "environment", "plan"):
         if baseline.get(key) != candidate.get(key):
             raise ValueError(f"baseline/candidate {key} drifted")
-    if baseline["artifact"]["sha256"] == candidate["artifact"]["sha256"]:
-        raise ValueError("baseline and candidate artifacts must be distinct")
-    if not any("Preinitialization-spike" in item for item in candidate.get("limitations", [])):
-        raise ValueError("candidate lacks the preinitialization-spike limitation")
+    same_artifact = baseline["artifact"]["sha256"] == candidate["artifact"]["sha256"]
+    if intervention == "build-time-preinitialization":
+        if baseline.get("strategy") != candidate.get("strategy"):
+            raise ValueError("baseline/candidate strategy drifted")
+        if same_artifact:
+            raise ValueError("baseline and candidate artifacts must be distinct")
+        if not any("Preinitialization-spike" in item for item in candidate.get("limitations", [])):
+            raise ValueError("candidate lacks the preinitialization-spike limitation")
+    else:
+        if baseline_strategy == candidate_strategy or baseline.get("strategy") == candidate.get("strategy"):
+            raise ValueError("shared-cache comparison lacks the required strategy transition")
+        if not same_artifact:
+            raise ValueError("shared-cache baseline and candidate must bind the same artifact")
+        limitations = candidate.get("limitations", [])
+        if not any("first shard" in item and "separate wazero runtime" in item for item in limitations):
+            raise ValueError("shared-cache candidate lacks its warm-up and runtime ownership limitation")
+        if not any("does not approve" in item for item in limitations):
+            raise ValueError("shared-cache candidate lacks its no-production limitation")
 
     rows = []
     for slots in CANONICAL_SLOTS:
-        base = _medians(baseline, slots)
-        transformed = _medians(candidate, slots)
-        rows.append(
-            {
-                "requested_slots": slots,
-                "baseline": base,
-                "candidate": transformed,
-                "ready_wall_speedup": _ratio(
-                    base["ready_wall_median_ns"], transformed["ready_wall_median_ns"], "ready wall"
-                ),
-                "runtime_init_speedup": _ratio(
-                    base["runtime_init_median_ns"], transformed["runtime_init_median_ns"], "runtime init"
-                ),
-                "instantiate_ratio_candidate_over_baseline": _ratio(
-                    transformed["instantiate_median_ns"], base["instantiate_median_ns"], "instantiate"
-                ),
-                "ready_rss_ratio_candidate_over_baseline": _ratio(
-                    transformed["ready_rss_median_bytes"], base["ready_rss_median_bytes"], "ready RSS"
-                ),
-                "ready_rss_delta_bytes": transformed["ready_rss_median_bytes"] - base["ready_rss_median_bytes"],
-            }
-        )
+        include_compile = intervention == "shared-compilation-cache"
+        base = _medians(baseline, slots, include_compile=include_compile)
+        transformed = _medians(candidate, slots, include_compile=include_compile)
+        row = {
+            "requested_slots": slots,
+            "baseline": base,
+            "candidate": transformed,
+            "ready_wall_speedup": _ratio(
+                base["ready_wall_median_ns"], transformed["ready_wall_median_ns"], "ready wall"
+            ),
+            "runtime_init_speedup": _ratio(
+                base["runtime_init_median_ns"], transformed["runtime_init_median_ns"], "runtime init"
+            ),
+            "instantiate_ratio_candidate_over_baseline": _ratio(
+                transformed["instantiate_median_ns"], base["instantiate_median_ns"], "instantiate"
+            ),
+            "ready_rss_ratio_candidate_over_baseline": _ratio(
+                transformed["ready_rss_median_bytes"], base["ready_rss_median_bytes"], "ready RSS"
+            ),
+            "ready_rss_delta_bytes": transformed["ready_rss_median_bytes"] - base["ready_rss_median_bytes"],
+        }
+        if include_compile:
+            row["compile_speedup"] = _ratio(
+                base["compile_median_ns"], transformed["compile_median_ns"], "compile"
+            )
+        rows.append(row)
 
     return {
         "schema_version": 1,
-        "experiment": "build-time-python-preinitialization-lifecycle-density",
+        "experiment": experiment,
         "comparison": "descriptive",
         "baseline_artifact": baseline["artifact"],
         "candidate_artifact": candidate["artifact"],
@@ -112,6 +146,8 @@ def compare(baseline: dict, candidate: dict) -> dict:
         "backend": baseline["backend"],
         "environment": baseline["environment"],
         "plan": baseline["plan"],
+        "baseline_strategy": baseline["strategy"],
+        "candidate_strategy": candidate["strategy"],
         "per_slot": rows,
         "headline_n16": rows[-1],
         "limitations": [
@@ -127,10 +163,16 @@ def main() -> None:
     parser.add_argument("--baseline", required=True, type=pathlib.Path)
     parser.add_argument("--candidate", required=True, type=pathlib.Path)
     parser.add_argument("--output", required=True, type=pathlib.Path)
+    parser.add_argument(
+        "--intervention",
+        choices=("build-time-preinitialization", "shared-compilation-cache"),
+        default="build-time-preinitialization",
+    )
     args = parser.parse_args()
     report = compare(
         json.loads(args.baseline.read_text()),
         json.loads(args.candidate.read_text()),
+        intervention=args.intervention,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

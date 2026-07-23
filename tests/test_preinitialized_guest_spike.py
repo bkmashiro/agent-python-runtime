@@ -54,7 +54,13 @@ def runtime_evidence(artifact_sha: str, runtime_init_ns: int, run_total_ns: int)
     }
 
 
-def density_evidence(artifact_sha: str, ready_ns: int, runtime_init_ns: int, rss_bytes: int) -> dict:
+def density_evidence(
+    artifact_sha: str,
+    ready_ns: int,
+    runtime_init_ns: int,
+    rss_bytes: int,
+    strategy: str = "single-use-preinitialized",
+) -> dict:
     samples = []
     for sample_index, slots in enumerate(slot for slot in [1, 2, 4, 8, 16] for _ in range(3)):
         samples.append(
@@ -64,6 +70,7 @@ def density_evidence(artifact_sha: str, ready_ns: int, runtime_init_ns: int, rss
                 "requested_slots": slots,
                 "phases": {
                     "total_ns": {"status": "measured", "value": ready_ns * slots},
+                    "compile_ns": {"status": "measured", "value": ready_ns * slots},
                     "instantiate_ns": {"status": "measured", "value": 10 * slots},
                     "runtime_init_ns": {"status": "measured", "value": runtime_init_ns * slots},
                 },
@@ -93,8 +100,8 @@ def density_evidence(artifact_sha: str, ready_ns: int, runtime_init_ns: int, rss
             "cgroup_version": "v2",
         },
         "strategy": {
-            "requested": "single-use-preinitialized",
-            "active": "single-use-preinitialized",
+            "requested": strategy,
+            "active": strategy,
             "fallback": False,
         },
         "plan": {
@@ -106,7 +113,13 @@ def density_evidence(artifact_sha: str, ready_ns: int, runtime_init_ns: int, rss
             "child_timeout_ns": 180_000_000_000,
         },
         "samples": samples,
-        "limitations": ["Preinitialization-spike fixture"],
+        "limitations": [
+            "Preinitialization-spike fixture",
+            "The first shard populates one borrowed cache; every shard keeps a separate wazero runtime."
+            if strategy == "single-use-preinitialized-shared-cache"
+            else "No shared compilation cache.",
+            "This experimental strategy does not approve production use.",
+        ],
     }
 
 
@@ -214,8 +227,11 @@ class PreinitializedGuestSpikeTests(unittest.TestCase):
 
     def test_candidate_density_uses_the_exact_canonical_safety_plan(self):
         workflow = (ROOT / ".github" / "workflows" / "guest-artifact.yml").read_text()
-        self.assertEqual(2, workflow.count("-max-rss-bytes 5368709120"))
-        self.assertEqual(2, workflow.count("-child-timeout 3m"))
+        self.assertEqual(3, workflow.count("-max-rss-bytes 5368709120"))
+        self.assertEqual(3, workflow.count("-child-timeout 3m"))
+        self.assertIn("-strategy single-use-preinitialized-shared-cache", workflow)
+        self.assertIn("lifecycle-density-shared-cache-candidate.json", workflow)
+        self.assertIn("--intervention shared-compilation-cache", workflow)
         self.assertNotIn("-max-rss-bytes 4294967296", workflow)
 
     def test_density_compare_reports_exact_n16_speed_and_rss_tradeoff(self):
@@ -235,6 +251,51 @@ class PreinitializedGuestSpikeTests(unittest.TestCase):
         candidate["plan"]["child_timeout_ns"] = 1
         with self.assertRaisesRegex(ValueError, "plan drifted"):
             self.density_compare_module.compare(baseline, candidate)
+
+    def test_density_compare_isolates_shared_cache_on_the_same_artifact(self):
+        artifact_sha = "1" * 64
+        report = self.density_compare_module.compare(
+            density_evidence(artifact_sha, 100, 1, 1000),
+            density_evidence(
+                artifact_sha,
+                25,
+                1,
+                900,
+                strategy="single-use-preinitialized-shared-cache",
+            ),
+            intervention="shared-compilation-cache",
+        )
+        self.assertEqual("shared-wazero-compilation-cache-lifecycle-density", report["experiment"])
+        self.assertEqual(4, report["headline_n16"]["ready_wall_speedup"])
+        self.assertEqual(4, report["headline_n16"]["compile_speedup"])
+
+    def test_density_compare_rejects_shared_cache_without_strategy_transition(self):
+        artifact_sha = "1" * 64
+        with self.assertRaisesRegex(ValueError, "strategy transition"):
+            self.density_compare_module.compare(
+                density_evidence(artifact_sha, 100, 1, 1000),
+                density_evidence(artifact_sha, 25, 1, 900),
+                intervention="shared-compilation-cache",
+            )
+
+    def test_density_compare_rejects_shared_cache_without_no_production_boundary(self):
+        artifact_sha = "1" * 64
+        candidate = density_evidence(
+            artifact_sha,
+            25,
+            1,
+            900,
+            strategy="single-use-preinitialized-shared-cache",
+        )
+        candidate["limitations"] = [
+            limitation for limitation in candidate["limitations"] if "does not approve" not in limitation
+        ]
+        with self.assertRaisesRegex(ValueError, "no-production"):
+            self.density_compare_module.compare(
+                density_evidence(artifact_sha, 100, 1, 1000),
+                candidate,
+                intervention="shared-compilation-cache",
+            )
 
 
 if __name__ == "__main__":

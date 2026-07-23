@@ -165,14 +165,15 @@ type PoolState struct {
 }
 
 type PhaseTimings struct {
-	QueueNS       Metric `json:"queue_ns"`
-	InstantiateNS Metric `json:"instantiate_ns"`
-	InitializeNS  Metric `json:"initialize_ns"`
-	RuntimeInitNS Metric `json:"runtime_init_ns"`
-	PrepareNS     Metric `json:"prepare_ns"`
-	ExecuteNS     Metric `json:"execute_ns"`
-	CapabilityNS  Metric `json:"capability_ns"`
-	TotalNS       Metric `json:"total_ns"`
+	QueueNS       Metric  `json:"queue_ns"`
+	CompileNS     *Metric `json:"compile_ns,omitempty"`
+	InstantiateNS Metric  `json:"instantiate_ns"`
+	InitializeNS  Metric  `json:"initialize_ns"`
+	RuntimeInitNS Metric  `json:"runtime_init_ns"`
+	PrepareNS     Metric  `json:"prepare_ns"`
+	ExecuteNS     Metric  `json:"execute_ns"`
+	CapabilityNS  Metric  `json:"capability_ns"`
+	TotalNS       Metric  `json:"total_ns"`
 }
 
 type GoRuntimeMetrics struct {
@@ -360,6 +361,17 @@ func (evidence LifecycleDensityEvidence) validateIdentity() error {
 	if !validStrategy(evidence.Strategy.Requested) || evidence.Strategy.Active != evidence.Strategy.Requested || evidence.Strategy.Fallback {
 		return invalidDensity("requested strategy was not proven active without fallback")
 	}
+	if evidence.Strategy.Active == "single-use-preinitialized-shared-cache" {
+		cacheBoundary := false
+		noProductionApproval := false
+		for _, limitation := range evidence.Limitations {
+			cacheBoundary = cacheBoundary || (strings.Contains(limitation, "first shard") && strings.Contains(limitation, "separate wazero runtime"))
+			noProductionApproval = noProductionApproval || strings.Contains(limitation, "does not approve")
+		}
+		if !cacheBoundary || !noProductionApproval {
+			return invalidDensity("shared compilation cache strategy lacks its ownership or no-production limitation")
+		}
+	}
 	return nil
 }
 
@@ -439,6 +451,16 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 		if err := validateRawMetric(named.metric); err != nil {
 			return fmt.Errorf("%s metric: %w", named.name, err)
 		}
+	}
+	if sample.Phases.CompileNS != nil {
+		if err := validateRawMetric(*sample.Phases.CompileNS); err != nil {
+			return fmt.Errorf("compile metric: %w", err)
+		}
+	}
+	if evidence.Strategy.Active == "single-use-preinitialized-shared-cache" &&
+		(sample.Phases.CompileNS == nil || sample.Phases.CompileNS.Status != MetricMeasured ||
+			sample.Phases.CompileNS.Value == nil || *sample.Phases.CompileNS.Value == 0) {
+		return errors.New("shared compilation cache strategy requires positive measured compile evidence")
 	}
 	if err := sample.GoRuntime.SchedulerLatency.Validate(); err != nil {
 		return fmt.Errorf("scheduler latency: %w", err)
@@ -559,7 +581,8 @@ func lowerHex(value string, length int) bool {
 }
 
 func validStrategy(strategy string) bool {
-	return strategy == "fresh-instance" || strategy == "single-use-preinitialized"
+	return strategy == "fresh-instance" || strategy == "single-use-preinitialized" ||
+		strategy == "single-use-preinitialized-shared-cache"
 }
 
 func invalidDensity(message string) error {

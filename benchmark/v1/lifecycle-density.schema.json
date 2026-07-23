@@ -108,6 +108,16 @@
             "active": {"const": "single-use-preinitialized"},
             "fallback": {"const": false}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested", "active", "fallback"],
+          "properties": {
+            "requested": {"const": "single-use-preinitialized-shared-cache"},
+            "active": {"const": "single-use-preinitialized-shared-cache"},
+            "fallback": {"const": false}
+          }
         }
       ]
     },
@@ -278,6 +288,7 @@
       "required": ["queue_ns", "instantiate_ns", "initialize_ns", "runtime_init_ns", "prepare_ns", "execute_ns", "capability_ns", "total_ns"],
       "properties": {
         "queue_ns": {"$ref": "#/$defs/rawMetric"},
+        "compile_ns": {"$ref": "#/$defs/rawMetric"},
         "instantiate_ns": {"$ref": "#/$defs/rawMetric"},
         "initialize_ns": {"$ref": "#/$defs/rawMetric"},
         "runtime_init_ns": {"$ref": "#/$defs/rawMetric"},

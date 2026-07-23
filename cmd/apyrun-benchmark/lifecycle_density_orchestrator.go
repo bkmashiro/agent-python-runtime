@@ -36,6 +36,8 @@ func densitySweepSpecs(strategy string, repeats uint32, maxRSSBytes uint64, time
 		activeStrategy = "fresh-instance"
 	case "single-use-preinitialized":
 		activeStrategy = strategy
+	case "single-use-preinitialized-shared-cache":
+		activeStrategy = strategy
 	default:
 		return nil, fmt.Errorf("unsupported lifecycle-density strategy %q", strategy)
 	}

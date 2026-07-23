@@ -145,6 +145,60 @@ func TestLifecycleDensityEvidenceAcceptsCanonicalSweepAndArtifactBinding(t *test
 	}
 }
 
+func TestLifecycleDensityEvidenceAcceptsExplicitSharedCompilationCacheStrategy(t *testing.T) {
+	evidence, _ := validLifecycleDensityEvidence()
+	evidence.Strategy.Requested = "single-use-preinitialized-shared-cache"
+	evidence.Strategy.Active = "single-use-preinitialized-shared-cache"
+	evidence.Limitations = append(evidence.Limitations,
+		"The first shard populates one borrowed cache and each shard retains a separate wazero runtime.",
+		"This experimental strategy does not approve production use.",
+	)
+	for index := range evidence.Samples {
+		compile := metric(MetricMeasured, uint64(index+1))
+		evidence.Samples[index].Phases.CompileNS = &compile
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatalf("shared compilation cache strategy rejected: %v", err)
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var canonical any
+	if err := json.Unmarshal(encoded, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileLifecycleDensitySchema(t).Validate(canonical); err != nil {
+		t.Fatalf("shared compilation cache evidence rejected by schema: %v", err)
+	}
+}
+
+func TestLifecycleDensityEvidenceRejectsSharedCacheWithoutCompileEvidence(t *testing.T) {
+	evidence, _ := validLifecycleDensityEvidence()
+	evidence.Strategy.Requested = "single-use-preinitialized-shared-cache"
+	evidence.Strategy.Active = "single-use-preinitialized-shared-cache"
+	evidence.Limitations = append(evidence.Limitations,
+		"The first shard populates one borrowed cache and each shard retains a separate wazero runtime.",
+		"This experimental strategy does not approve production use.",
+	)
+	if err := evidence.Validate(); err == nil || !strings.Contains(err.Error(), "compile") {
+		t.Fatalf("shared cache without compile evidence was accepted: %v", err)
+	}
+}
+
+func TestLifecycleDensityEvidenceRejectsSharedCacheWithoutExperimentalLimitations(t *testing.T) {
+	evidence, _ := validLifecycleDensityEvidence()
+	evidence.Strategy.Requested = "single-use-preinitialized-shared-cache"
+	evidence.Strategy.Active = "single-use-preinitialized-shared-cache"
+	for index := range evidence.Samples {
+		compile := metric(MetricMeasured, uint64(index+1))
+		evidence.Samples[index].Phases.CompileNS = &compile
+	}
+	if err := evidence.Validate(); err == nil || !strings.Contains(err.Error(), "limitation") {
+		t.Fatalf("shared cache without experimental limitations was accepted: %v", err)
+	}
+}
+
 func TestLifecycleDensityEvidenceRejectsDirtyFallbackMismatchAndFabricatedDerivedValues(t *testing.T) {
 	base, artifactBytes := validLifecycleDensityEvidence()
 	cases := map[string]func(*LifecycleDensityEvidence){

@@ -495,6 +495,21 @@ jobs:
             -samples 3 \
             -max-rss-bytes 5368709120 \
             -child-timeout 3m
+          go run ./cmd/apyrun-benchmark \
+            -kind lifecycle-density \
+            -artifact "${ROOT}/candidate/agent-python-runtime.wasm" \
+            -manifest "${ROOT}/candidate/manifest.json" \
+            -output "${ROOT}/evidence/lifecycle-density-shared-cache-candidate.json" \
+            -class preinitialization-spike \
+            -strategy single-use-preinitialized-shared-cache \
+            -samples 3 \
+            -max-rss-bytes 5368709120 \
+            -child-timeout 3m
+          python3 experiments/preinitialized-guest/compare_density.py \
+            --baseline "${ROOT}/evidence/lifecycle-density-candidate.json" \
+            --candidate "${ROOT}/evidence/lifecycle-density-shared-cache-candidate.json" \
+            --intervention shared-compilation-cache \
+            --output "${ROOT}/evidence/lifecycle-density-shared-cache-comparison.json"
           python3 experiments/preinitialized-guest/compare.py \
             --baseline "${ROOT}/evidence/runtime-baseline.json" \
             --candidate "${ROOT}/evidence/runtime-candidate.json" \
@@ -509,7 +524,11 @@ jobs:
           go run ./cmd/validate-json-schema \
             benchmark/v1/lifecycle-density.schema.json \
             "${ROOT}/evidence/lifecycle-density-candidate.json"
+          go run ./cmd/validate-json-schema \
+            benchmark/v1/lifecycle-density.schema.json \
+            "${ROOT}/evidence/lifecycle-density-shared-cache-candidate.json"
           python3 -m json.tool "${ROOT}/evidence/verdict.json" >/dev/null
+          python3 -m json.tool "${ROOT}/evidence/lifecycle-density-shared-cache-comparison.json" >/dev/null
 
       - name: Upload preinitialization spike evidence
         if: always()

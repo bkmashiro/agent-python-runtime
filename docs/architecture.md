@@ -68,6 +68,12 @@ Generated-code globals, imported modules, arrays, temporary buffers, capability 
 
 Deferred. V1 returns bounded JSON/bytes plus a digest. It does not persist an interpreter heap or arbitrary Pickle.
 
+### Future stateful sessions
+
+Stateful sessions are a separate future Host-owned lifecycle contract, not an extension of untrusted `RunRequest` and not a relaxation of V1 freshness. A durable session may be represented by an explicitly bound live module, an exact-build memory capsule, or a Guest-defined logical capsule only after the complete mutable state and external-resource boundary is proven. Dirty linear-memory pages alone are partial state.
+
+See [ADR 0006](adr/0006-execution-session-lifecycle.md) and the [planned successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). That roadmap is inactive until the current NumPy artifact-profile and truthful-closeout tracks finish or the owner explicitly reprioritizes them.
+
 ## Guest lifecycle
 
 ```text
@@ -84,6 +90,22 @@ compile artifact once
 ```
 
 A trap, cancellation, unsupported memory shape, or failed reset makes the instance unhealthy. It is closed, not returned to the pool.
+
+The implemented optional prepared pool is more conservative than the lifecycle sketch above: each candidate is independently prepared, served at most once, and then discarded. No served-instance restore or reuse is currently claimed.
+
+## Execution slots versus durable sessions
+
+Execution capacity and session durability are distinct resources:
+
+```text
+trusted immutable base(s)
+        ├── bounded sessionless hot execution slots
+        ├── explicitly bound live sessions when latency requires them
+        ├── compressed warm capsules
+        └── versioned/encrypted cold capsules
+```
+
+Hot-slot count follows active concurrency and resume requirements, not total session count. Shared bases are created only from trusted deterministic preparation and never from arbitrary user session memory. Exact-memory capsules bind the Guest artifact, profile, trusted preparation recipe, backend/runtime ABI, architecture, page size, and complete state schema. Logical capsules require an explicit Guest export/import contract; arbitrary Python objects are not assumed to be portable.
 
 ## Reset claim boundary
 

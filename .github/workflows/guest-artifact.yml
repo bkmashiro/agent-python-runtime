@@ -415,20 +415,50 @@ jobs:
             "${SPIKE_WASM_TOOLS}" parse \
               experiments/preinitialized-guest/host-call-stub.wat \
               -o "${ROOT}/host-call-stub.wasm"
-            "${SPIKE_WASMTIME}" wizer \
-              -S cli=y \
-              -f runtime_preinitialize \
-              -r _initialize=runtime_preinitialized_initialize \
-              --preload "agent_runtime_v1=${ROOT}/host-call-stub.wasm" \
-              "${INPUT}" \
-              -o "${CANDIDATE_DIR}/agent-python-runtime.wasm"
-            "${SPIKE_WASMTIME}" wizer \
-              -S cli=y \
-              -f runtime_preinitialize \
-              -r _initialize=runtime_preinitialized_initialize \
-              --preload "agent_runtime_v1=${ROOT}/host-call-stub.wasm" \
-              "${INPUT}" \
-              -o "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm"
+            run_variant() {
+              local init_func=$1
+              local output=$2
+              local log=$3
+              "${SPIKE_WASMTIME}" wizer \
+                -S cli=y \
+                -S inherit-stderr=y \
+                -f "${init_func}" \
+                -r _initialize=runtime_preinitialized_initialize \
+                --preload "agent_runtime_v1=${ROOT}/host-call-stub.wasm" \
+                "${INPUT}" \
+                -o "${output}" \
+                2>&1 | tee "${log}"
+              local status=${PIPESTATUS[0]}
+              return "${status}"
+            }
+
+            EXPLICIT_REACTOR_STATUS=0
+            run_variant \
+              runtime_preinitialize \
+              "${ROOT}/candidate.explicit-reactor.wasm" \
+              "${EVIDENCE_DIR}/explicit-reactor.log" || EXPLICIT_REACTOR_STATUS=$?
+            WITHOUT_REACTOR_STATUS=0
+            run_variant \
+              runtime_preinitialize_without_reactor \
+              "${ROOT}/candidate.without-reactor.wasm" \
+              "${EVIDENCE_DIR}/without-reactor.log" || WITHOUT_REACTOR_STATUS=$?
+
+            if [[ ${EXPLICIT_REACTOR_STATUS} -eq 0 ]]; then
+              SELECTED_INIT_FUNC=runtime_preinitialize
+              SELECTED_CANDIDATE="${ROOT}/candidate.explicit-reactor.wasm"
+            elif [[ ${WITHOUT_REACTOR_STATUS} -eq 0 ]]; then
+              SELECTED_INIT_FUNC=runtime_preinitialize_without_reactor
+              SELECTED_CANDIDATE="${ROOT}/candidate.without-reactor.wasm"
+            else
+              echo "both preinitialization variants failed: explicit=${EXPLICIT_REACTOR_STATUS} without=${WITHOUT_REACTOR_STATUS}" >&2
+              exit 1
+            fi
+            cp "${SELECTED_CANDIDATE}" "${CANDIDATE_DIR}/agent-python-runtime.wasm"
+            run_variant \
+              "${SELECTED_INIT_FUNC}" \
+              "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm" \
+              "${EVIDENCE_DIR}/selected-repeat.log"
+            rm -f "${ROOT}/candidate.explicit-reactor.wasm" "${ROOT}/candidate.without-reactor.wasm"
             "${SPIKE_WASM_TOOLS}" validate "${CANDIDATE_DIR}/agent-python-runtime.wasm"
             "${SPIKE_WASM_TOOLS}" validate "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm"
 
@@ -458,6 +488,9 @@ jobs:
               --repeat-candidate "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm" \
               --tool-version "${TOOL_VERSION}" \
               --host-revision "${GITHUB_SHA}" \
+              --init-func "${SELECTED_INIT_FUNC}" \
+              --explicit-reactor-status "${EXPLICIT_REACTOR_STATUS}" \
+              --without-reactor-status "${WITHOUT_REACTOR_STATUS}" \
               --output "${EVIDENCE_DIR}/transform-receipt.json"
           } 2>&1 | tee "${EVIDENCE_DIR}/transform.log"
 

@@ -180,13 +180,34 @@ int32_t runtime_init(const char *config, int32_t config_len) {
 #ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
 extern void _initialize(void);
 
-__attribute__((export_name("runtime_preinitialize")))
-void runtime_preinitialize(void) {
+static void preinitialize_python_or_trap(int initialize_reactor) {
     static const char config[] = "{}";
-    _initialize();
-    if (runtime_init(config, (int32_t)(sizeof(config) - 1)) != 0) {
+    fprintf(stderr, "preinitialization-spike: begin reactor=%d\n", initialize_reactor);
+    fflush(stderr);
+    if (initialize_reactor) {
+        _initialize();
+        fprintf(stderr, "preinitialization-spike: reactor initialized\n");
+        fflush(stderr);
+    }
+    int32_t status = runtime_init(config, (int32_t)(sizeof(config) - 1));
+    fprintf(stderr,
+            "preinitialization-spike: runtime_init status=%d python_initialized=%d\n",
+            status,
+            Py_IsInitialized());
+    fflush(stderr);
+    if (status != 0) {
         __builtin_trap();
     }
+}
+
+__attribute__((export_name("runtime_preinitialize")))
+void runtime_preinitialize(void) {
+    preinitialize_python_or_trap(1);
+}
+
+__attribute__((export_name("runtime_preinitialize_without_reactor")))
+void runtime_preinitialize_without_reactor(void) {
+    preinitialize_python_or_trap(0);
 }
 
 __attribute__((export_name("runtime_preinitialized_initialize")))

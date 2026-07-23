@@ -21,6 +21,12 @@ The production artifact, ABI header, manifest, and default runtime path are unch
 5. `runtime_init` median improves by at least 10x and fresh-run total median by at least 2x.
 6. The candidate remains at or below 512 MiB.
 
+## Iteration evidence
+
+Exact run `30002337205` at signed commit `643e9e9e244c94d430544c4b7d1b410fe595835d` kept the production boundary intact: the locked producer and normal downloaded-artifact wazero consumer passed, while only the exploratory transform job failed. Wasmtime instantiated the exact experimental input, entered `runtime_preinitialize`, spent about 4.8 seconds in initialization, and then observed the wrapper's fail-closed `unreachable` because `runtime_init` returned nonzero. No candidate was emitted or benchmarked. This invalidates the first wrapper shape only; it does not establish whether the failure was caused by explicitly repeating reactor initialization or by CPython/VFS initialization under Wizer.
+
+The next iteration therefore runs and records both an explicit-reactor and a no-explicit-reactor entry point with inherited bounded stderr. Only a successful variant can be selected and repeated for determinism.
+
 ## Verdict: PENDING
 
-No production recommendation is made until the Linux artifact job produces and independently validates the raw transform receipt, both runtime evidence files, and the comparison report.
+No production recommendation is made until a Linux artifact job produces and independently validates the raw transform receipt, both runtime evidence files, and the comparison report.

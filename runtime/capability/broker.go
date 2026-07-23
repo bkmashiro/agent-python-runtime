@@ -17,6 +17,7 @@ import (
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+var catalogDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type Observation struct {
 	Capability    string
@@ -29,23 +30,45 @@ type Observation struct {
 type Observer func(Observation)
 
 type Config struct {
-	RunIdentity string
-	Grants      map[string]Grant
-	Observer    Observer
+	RunIdentity   string
+	Grants        map[string]Grant
+	Observer      Observer
+	CatalogDigest string
+	Registry      *Registry
+	Binder        CallBinder
+	ToolGrants    map[string]ToolGrant
+}
+
+type ToolGrant struct {
+	ToolID         string
+	HandlerVersion string
+	EffectClass    string
+	Policy         string
+	MaxCalls       uint32
 }
 
 type Broker struct {
+	mu            sync.Mutex
 	config        Config
 	fetcher       Fetcher
 	calls         map[string]uint32
 	totalRequests map[string]uint32
 	receipts      []receipt.Receipt
+	typedCalls    map[string]typedCallReplay
+}
+
+type typedCallReplay struct {
+	RequestDigest string
+	Response      []byte
 }
 
 type toolRequest struct {
-	CallID     string          `json:"call_id"`
-	Capability string          `json:"capability"`
-	Arguments  json.RawMessage `json:"arguments"`
+	CallID         string          `json:"call_id"`
+	Capability     string          `json:"capability"`
+	CatalogDigest  *string         `json:"catalog_digest,omitempty"`
+	HandlerVersion *string         `json:"handler_version,omitempty"`
+	Arguments      json.RawMessage `json:"arguments"`
+	EnvelopeDigest string          `json:"-"`
 }
 
 type fetchManyArguments struct {
@@ -65,6 +88,25 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 	if fetcher == nil {
 		return nil, errors.New("fetcher is required")
 	}
+	config.Grants = cloneGrants(config.Grants)
+	config.ToolGrants = cloneToolGrants(config.ToolGrants)
+	if len(config.ToolGrants) > 0 {
+		if config.Registry == nil || config.Binder == nil || !catalogDigestPattern.MatchString(config.CatalogDigest) {
+			return nil, errors.New("typed tool grants require a registry, transaction binder, and bounded catalog digest")
+		}
+		config.Registry = config.Registry.snapshot()
+		for name, grant := range config.ToolGrants {
+			if name != grant.ToolID || !validIdentifier(grant.ToolID) ||
+				!validIdentifier(grant.HandlerVersion) || grant.EffectClass != "read_only" ||
+				grant.Policy != "AUTO_COMMIT" || grant.MaxCalls == 0 || grant.MaxCalls > 1024 {
+				return nil, fmt.Errorf("invalid or not-yet-qualified typed tool grant %q", name)
+			}
+			handler, exists := config.Registry.lookup(name)
+			if !exists || handler.spec.HandlerVersion != grant.HandlerVersion {
+				return nil, fmt.Errorf("typed tool grant %q has no matching frozen handler", name)
+			}
+		}
+	}
 	for name, grant := range config.Grants {
 		if name != grant.Name {
 			return nil, fmt.Errorf("grant key %q does not match name %q", name, grant.Name)
@@ -78,10 +120,43 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 		fetcher:       fetcher,
 		calls:         map[string]uint32{},
 		totalRequests: map[string]uint32{},
+		typedCalls:    map[string]typedCallReplay{},
 	}, nil
 }
 
+func cloneGrants(source map[string]Grant) map[string]Grant {
+	cloned := make(map[string]Grant, len(source))
+	for name, grant := range source {
+		grant.Targets = cloneTargets(grant.Targets)
+		cloned[name] = grant
+	}
+	return cloned
+}
+
+func cloneTargets(source map[string]TargetGrant) map[string]TargetGrant {
+	cloned := make(map[string]TargetGrant, len(source))
+	for name, target := range source {
+		headers := make(map[string]string, len(target.Headers))
+		for header, value := range target.Headers {
+			headers[header] = value
+		}
+		target.Headers = headers
+		cloned[name] = target
+	}
+	return cloned
+}
+
+func cloneToolGrants(source map[string]ToolGrant) map[string]ToolGrant {
+	cloned := make(map[string]ToolGrant, len(source))
+	for name, grant := range source {
+		cloned[name] = grant
+	}
+	return cloned
+}
+
 func (broker *Broker) CallCount() uint32 {
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
 	var total uint32
 	for _, count := range broker.calls {
 		total += count
@@ -90,6 +165,8 @@ func (broker *Broker) CallCount() uint32 {
 }
 
 func (broker *Broker) Receipts() []receipt.Receipt {
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
 	copied := make([]receipt.Receipt, len(broker.receipts))
 	copy(copied, broker.receipts)
 	return copied
@@ -97,10 +174,13 @@ func (broker *Broker) Receipts() []receipt.Receipt {
 
 func (broker *Broker) Call(ctx context.Context, payload []byte) (response []byte, err error) {
 	started := time.Now()
+	observer := broker.config.Observer
+	broker.mu.Lock()
 	var request toolRequest
 	defer func() {
-		if broker.config.Observer != nil {
-			broker.config.Observer(Observation{
+		broker.mu.Unlock()
+		if observer != nil {
+			observer(Observation{
 				Capability:    request.Capability,
 				Duration:      time.Since(started),
 				RequestBytes:  len(payload),
@@ -112,8 +192,15 @@ func (broker *Broker) Call(ctx context.Context, payload []byte) (response []byte
 	if err := decodeStrict(payload, &request); err != nil {
 		return nil, fmt.Errorf("invalid tool request: %w", err)
 	}
+	request.EnvelopeDigest = digestBytes(payload)
 	if !validIdentifier(request.CallID) || !validIdentifier(request.Capability) {
 		return encodeResponse(denied(request.CallID, "invalid_request", "invalid call or capability identifier"))
+	}
+	if request.Capability != FetchManyCapability {
+		return broker.callRegistered(ctx, request)
+	}
+	if request.CatalogDigest != nil || request.HandlerVersion != nil {
+		return encodeResponse(denied(request.CallID, "invalid_request", "legacy capability request contains typed-tool fields"))
 	}
 	grant, granted := broker.config.Grants[request.Capability]
 	if request.Capability != FetchManyCapability || !granted {

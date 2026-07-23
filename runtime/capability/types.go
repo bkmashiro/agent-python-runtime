@@ -50,3 +50,9 @@ type FetchOutput struct {
 type Fetcher interface {
 	Fetch(ctx context.Context, request ResolvedRequest, maxResponseBytes uint32) (FetchOutput, error)
 }
+
+type FetcherFunc func(context.Context, ResolvedRequest, uint32) (FetchOutput, error)
+
+func (function FetcherFunc) Fetch(ctx context.Context, request ResolvedRequest, maxResponseBytes uint32) (FetchOutput, error) {
+	return function(ctx, request, maxResponseBytes)
+}

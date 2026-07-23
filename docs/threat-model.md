@@ -34,7 +34,7 @@ V1 does not promise:
 - defense equivalent to a hardened microVM or separate kernel;
 - arbitrary native extensions;
 - full POSIX, shell, PTY, daemon, or background-process behavior;
-- write-side external effects or rollback;
+- currently implemented write-side external effects or rollback; the active MCP transactional-workflow roadmap is implementation work, not an existing V1 claim;
 - arbitrary MCP/plugin installation;
 - distributed scheduling or multi-host isolation;
 - instruction-count CPU metering if wazero cannot enforce it.
@@ -74,6 +74,30 @@ Control: use a synchronously instantiated fresh guest by default. The optional p
 ### Host capability abuse
 
 Control: resolve only pre-granted capability IDs; enforce destination allowlists, per-call timeout, per-call byte cap, and total-call budget. Credentials never enter guest memory. Direct guest network access remains unavailable. The production-style client ignores ambient proxies, resolves hostnames at dial time, rejects the whole resolution if any address is private, loopback, link-local, unspecified, multicast, or reserved, and dials a validated IP directly. Only an IP-loopback literal is accepted as an explicit local fixture; DNS names resolving to loopback are denied.
+
+### Dynamic catalog and schema confusion
+
+Control: canonical MCP JSON Schema is normalized under bounded depth/count/size limits, then combined with a Host-owned grant and effect-policy overlay. Python annotations/docstrings and the model-visible SDK summary are projections from one immutable per-Run catalog digest. Duplicate normalized names, unsupported/lossy schema features outside policy, code/docstring injection, stale catalog digests, and next-Run grant revocation fail closed. MCP annotations never grant authority.
+
+### Transaction identity, replay, and confused deputy
+
+Control: direct calls receive single-operation Host transactions and Python workflows receive one multi-operation Host transaction. Run, transaction, operation, attempt, lease, provider request, undo, compensation, approval, and receipt identities are Host-authored and ownership-scoped. Guest-selected identities, duplicate calls, stale leases, changed argument digests, and cross-transaction commands are rejected. Provider dispatch identity is persisted before external dispatch; lease expiry never authorizes blind retry.
+
+### Rollback and compensation integrity
+
+Control: an exact-reversible adapter must verify the current resource version/projection still matches its recorded post-apply state before idempotent reverse-order undo. Concurrent drift blocks mutation. A compensatable adapter creates a separate effect and receipt; it never reports exact rollback. Mixed transactions derive their weakest terminal guarantee from operation evidence. Partial undo/compensation and unknown outcomes remain explicit.
+
+### Irreversible effect authority
+
+Control: commit policy is Host-owned. Generated Python cannot select `AUTO_COMMIT`, approve itself, or receive commit authority in the staging Run. `AGENT_COMMIT_REQUIRED` uses a later Agent turn and new Host phase grant; `USER_APPROVAL_REQUIRED` originates in a trusted control plane. Commit/approval binds an immutable manifest digest, policy version, actor, issue/expiry, and one-time authority. Changed arguments require a new intent.
+
+### Ambiguous provider completion
+
+Control: every external apply, rollback, and compensation has a separate attempt identity, expected prior state, lease, and bounded observation. A crash/timeout after dispatch enters reconciliation unless validated provider idempotency or readback proves the outcome. Reconciliation blocks normal retry, commit, rollback, and compensation. Provider errors are reduced to bounded codes; secrets and arbitrary raw text are not persisted.
+
+### Audit leakage and tampering
+
+Control: the canonical operation/attempt ledger is append-only at its API boundary; corrections append transitions. Business mutation and audit are atomic only in a qualified shared store. Credentials, headers, unrestricted URLs, approval tokens, full sensitive payloads, and raw provider errors are omitted or replaced by bounded digests. Hash chaining detects accidental mutation only and is not claimed to resist an actor with the same Host storage/signing authority.
 
 ### Evidence forgery
 

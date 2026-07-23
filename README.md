@@ -35,7 +35,7 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [Local operator CLI](docs/operator-cli.md)
 - [Runtime benchmark evidence](docs/benchmarking.md)
 - [Prepared-state safety audit](docs/prepared-state-audit.md)
-- [Planned MCP transactional Python workflows roadmap](docs/plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md)
+- [Active MCP transactional Python workflows roadmap](docs/plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md)
 - [Closed lifecycle-density and deferred session roadmap](docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md)
 - [Stateful session lifecycle contract](docs/session-lifecycle-contract.md)
 - [Guest artifact reproducibility](docs/reproducibility.md)
@@ -54,3 +54,4 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [WebAssembly backend boundary ADR](docs/adr/0004-webassembly-backend-boundary.md)
 - [`fetch_many` capability ADR](docs/adr/0005-fetch-many-capability.md)
 - [Execution slots and stateful session lifecycle ADR](docs/adr/0006-execution-session-lifecycle.md)
+- [MCP transactional tool workflows ADR](docs/adr/0007-mcp-transactional-tool-workflows.md)

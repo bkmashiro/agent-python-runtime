@@ -69,6 +69,10 @@ No external authority. Replay may execute deterministically or reuse a recorded 
 
 Observes external state without intentionally mutating it. Reads may be replayed from a journal for deterministic testing or recovery, but the result must be labelled historical rather than fresh.
 
+### Exact-reversible write
+
+Mutates a declared business projection but provides an adapter-owned idempotent undo operation. Exact rollback requires the current resource version/projection to match the recorded post-apply state; concurrent drift fails before mutation. The original apply and rollback receipts remain in the audit history even when the declared business projection is restored.
+
 ### Compensatable write
 
 Has an explicit follow-up operation that may reduce or reverse its practical impact, such as deleting a newly created calendar event.
@@ -378,11 +382,13 @@ provider outcome unknown                  -> RECONCILIATION_REQUIRED
 
 The actual policy belongs to the Host/user configuration and must be tested independently from generated Python.
 
-## Relationship to V1
+## Relationship to V1 and the active implementation roadmap
 
-V1 remains read-only. This design must not expand the initial runtime milestone.
+The currently verified V1 remains read-only. The active [MCP transactional Python workflows roadmap](plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md) now implements this Host-owned layer incrementally; activation alone does not make writes, rollback, compensation, approval, or durable audit implemented claims. Each claim requires its contract, denial, local fixture, persistence, and real Linux/WASI gates.
 
-A future implementation should begin only after V1 proves:
+The roadmap adds one exact-reversible class and a Run-level transaction coordinator above this per-effect design. It preserves this document's `DENY`, `AUTO_COMMIT`, `AGENT_COMMIT_REQUIRED`, and `USER_APPROVAL_REQUIRED` policy outcomes. Direct calls become single-operation transactions; one Python workflow becomes a multi-operation transaction; per-effect application and receipts remain independently truthful.
+
+Implementation may proceed only because the read-only runtime already proves:
 
 1. Host-enforced capability grants;
 2. real denial of ambient network, filesystem, environment, and process authority;

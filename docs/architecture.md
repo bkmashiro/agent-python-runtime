@@ -126,6 +126,8 @@ rows = tools.fetch_many(requests)
 
 The SDK serializes a bounded request to a versioned Host import. The Host resolves a pre-granted capability, applies endpoint and call budgets, performs I/O with Host-owned credentials, writes a bounded response into guest memory, and emits one receipt per internal operation.
 
+The active [MCP transactional tool workflows ADR](adr/0007-mcp-transactional-tool-workflows.md) and [roadmap](plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md) preserve this single import while planning dynamic typed tool projection and Host-owned transaction/effect handling. Those capabilities remain unimplemented until their exact contract and Linux/WASI gates pass.
+
 The guest never receives a raw socket or credential.
 
 ## Artifact boundary

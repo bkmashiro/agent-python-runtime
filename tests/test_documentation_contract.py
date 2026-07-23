@@ -88,6 +88,41 @@ class PublicDocumentationContractTests(unittest.TestCase):
         self.assertNotIn("This is the active `/goal`", session_roadmap)
         self.assertNotIn("session-lifecycle successor is now active", self.read("README.md"))
 
+    def test_active_transactional_workflow_docs_share_authority_vocabulary(self):
+        roadmap = self.read(
+            "docs/plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md"
+        )
+        effect_plane = self.read("docs/effect-plane.md")
+        adr = self.read("docs/adr/0007-mcp-transactional-tool-workflows.md")
+        status = self.read("docs/status.md")
+
+        for policy in (
+            "DENY",
+            "AUTO_COMMIT",
+            "AGENT_COMMIT_REQUIRED",
+            "USER_APPROVAL_REQUIRED",
+        ):
+            with self.subTest(policy=policy):
+                self.assertIn(policy, roadmap)
+                self.assertIn(policy, effect_plane)
+                self.assertIn(policy, adr)
+
+        for effect_class in (
+            "read_only",
+            "reversible",
+            "compensatable",
+            "irreversible",
+        ):
+            with self.subTest(effect_class=effect_class):
+                self.assertIn(effect_class, roadmap)
+                self.assertIn(effect_class, adr)
+
+        self.assertIn("same-Run Agent commit is always denied", roadmap)
+        self.assertIn("same Python run", effect_plane)
+        self.assertIn("active implementation pointer", status)
+        self.assertIn("None of those write/effect capabilities is an implemented V1 claim", status)
+        self.assertIn("owner deferred live Agent Direct/Python/Hybrid evaluation", status)
+
 
 if __name__ == "__main__":
     unittest.main()

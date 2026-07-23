@@ -83,10 +83,13 @@ func call(t *testing.T, broker *capability.Broker, callID, name string, requests
 func TestBrokerObserverRecordsBoundedCall(t *testing.T) {
 	var observations []capability.Observation
 	grant := testGrant()
+	var broker *capability.Broker
 	broker, err := capability.NewBroker(capability.Config{
 		RunIdentity: "observed-run",
 		Grants:      map[string]capability.Grant{grant.Name: grant},
 		Observer: func(observation capability.Observation) {
+			_ = broker.CallCount()
+			_ = broker.Receipts()
 			observations = append(observations, observation)
 		},
 	}, &fakeFetcher{})
@@ -124,7 +127,13 @@ func TestNoGrantAndWrongCapabilityAreDenied(t *testing.T) {
 func TestMatchingGrantResolvesHostOwnedTargetAndHeaders(t *testing.T) {
 	fetcher := &fakeFetcher{}
 	grant := testGrant()
-	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
+	grants := map[string]capability.Grant{grant.Name: grant}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "test-run", Grants: grants}, fetcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(grants, grant.Name)
+	grant.Targets["fixture"].Headers["Authorization"] = "Mutated secret"
 	response := call(t, broker, "call-ok", capability.FetchManyCapability, []map[string]string{
 		{"request_id": "r1", "target": "fixture", "path": "/one?x=1"},
 		{"request_id": "r2", "target": "fixture", "path": "/two"},

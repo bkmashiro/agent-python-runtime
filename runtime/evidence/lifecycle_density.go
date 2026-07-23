@@ -150,6 +150,8 @@ type SweepPlan struct {
 	SlotCounts            []uint32 `json:"slot_counts"`
 	RepeatsPerSlot        uint32   `json:"repeats_per_slot"`
 	FreshProcessPerSample bool     `json:"fresh_process_per_sample"`
+	MaxProcessRSSBytes    uint64   `json:"max_process_rss_bytes"`
+	ChildTimeoutNS        uint64   `json:"child_timeout_ns"`
 }
 
 type PoolState struct {
@@ -210,17 +212,18 @@ type CgroupMetrics struct {
 }
 
 type LifecycleDensitySample struct {
-	SampleIndex       uint32           `json:"sample_index"`
-	RepeatIndex       uint32           `json:"repeat_index"`
-	RequestedSlots    uint32           `json:"requested_slots"`
-	RuntimeShards     uint32           `json:"runtime_shards"`
-	ActiveConcurrency uint32           `json:"active_concurrency"`
-	ObservedAtUnixNS  Metric           `json:"observed_at_unix_ns"`
-	Pool              PoolState        `json:"pool"`
-	Phases            PhaseTimings     `json:"phases"`
-	GoRuntime         GoRuntimeMetrics `json:"go_runtime"`
-	Process           ProcessMetrics   `json:"process"`
-	Cgroup            CgroupMetrics    `json:"cgroup"`
+	SampleIndex           uint32           `json:"sample_index"`
+	RepeatIndex           uint32           `json:"repeat_index"`
+	RequestedSlots        uint32           `json:"requested_slots"`
+	RuntimeShards         uint32           `json:"runtime_shards"`
+	ActiveConcurrency     uint32           `json:"active_concurrency"`
+	ProcessInstanceSHA256 string           `json:"process_instance_sha256"`
+	ObservedAtUnixNS      Metric           `json:"observed_at_unix_ns"`
+	Pool                  PoolState        `json:"pool"`
+	Phases                PhaseTimings     `json:"phases"`
+	GoRuntime             GoRuntimeMetrics `json:"go_runtime"`
+	Process               ProcessMetrics   `json:"process"`
+	Cgroup                CgroupMetrics    `json:"cgroup"`
 }
 
 type DerivedSummary struct {
@@ -282,6 +285,7 @@ func (evidence LifecycleDensityEvidence) Validate() error {
 	if len(evidence.Samples) != expectedSamples || evidence.Summary.SampleCount != expectedSamples {
 		return invalidDensity("sample count does not match the sweep plan")
 	}
+	processInstances := make(map[string]struct{}, len(evidence.Samples))
 	for index := range evidence.Samples {
 		expectedSlotIndex := index / int(evidence.Plan.RepeatsPerSlot)
 		expectedRepeat := index % int(evidence.Plan.RepeatsPerSlot)
@@ -290,6 +294,13 @@ func (evidence LifecycleDensityEvidence) Validate() error {
 			sample.RequestedSlots != evidence.Plan.SlotCounts[expectedSlotIndex] {
 			return invalidDensity("sample order or slot/repeat identity drifted")
 		}
+		if !lowerHex(sample.ProcessInstanceSHA256, 64) {
+			return invalidDensity("sample process instance identity is missing")
+		}
+		if _, duplicate := processInstances[sample.ProcessInstanceSHA256]; duplicate {
+			return invalidDensity("sample process instance identity was reused")
+		}
+		processInstances[sample.ProcessInstanceSHA256] = struct{}{}
 		if err := evidence.validateSample(sample); err != nil {
 			return fmt.Errorf("%w: sample %d: %v", ErrInvalidLifecycleDensityEvidence, index, err)
 		}
@@ -367,6 +378,10 @@ func (evidence LifecycleDensityEvidence) validatePlan() error {
 	}
 	if evidence.Plan.RepeatsPerSlot == 0 || evidence.Plan.RepeatsPerSlot > 1000 || !evidence.Plan.FreshProcessPerSample {
 		return invalidDensity("repeat count or fresh-process isolation is invalid")
+	}
+	if evidence.Plan.MaxProcessRSSBytes == 0 || evidence.Plan.MaxProcessRSSBytes > 1<<50 ||
+		evidence.Plan.ChildTimeoutNS == 0 || evidence.Plan.ChildTimeoutNS > 86_400_000_000_000 {
+		return invalidDensity("child RSS or timeout guard is missing or outside its hard bound")
 	}
 	return nil
 }

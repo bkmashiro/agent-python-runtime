@@ -114,7 +114,7 @@
     "plan": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workload", "slot_counts", "repeats_per_slot", "fresh_process_per_sample"],
+      "required": ["workload", "slot_counts", "repeats_per_slot", "fresh_process_per_sample", "max_process_rss_bytes", "child_timeout_ns"],
       "properties": {
         "workload": {"enum": ["idle-ready", "execute", "capability"]},
         "slot_counts": {
@@ -143,7 +143,9 @@
           ]
         },
         "repeats_per_slot": {"type": "integer", "minimum": 1, "maximum": 1000},
-        "fresh_process_per_sample": {"const": true}
+        "fresh_process_per_sample": {"const": true},
+        "max_process_rss_bytes": {"type": "integer", "minimum": 1, "maximum": 1125899906842624},
+        "child_timeout_ns": {"type": "integer", "minimum": 1, "maximum": 86400000000000}
       }
     },
     "rawMetric": {
@@ -389,13 +391,14 @@
     "sample": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sample_index", "repeat_index", "requested_slots", "runtime_shards", "active_concurrency", "observed_at_unix_ns", "pool", "phases", "go_runtime", "process", "cgroup"],
+      "required": ["sample_index", "repeat_index", "requested_slots", "runtime_shards", "active_concurrency", "process_instance_sha256", "observed_at_unix_ns", "pool", "phases", "go_runtime", "process", "cgroup"],
       "properties": {
         "sample_index": {"type": "integer", "minimum": 0},
         "repeat_index": {"type": "integer", "minimum": 0, "maximum": 999},
         "requested_slots": {"enum": [1, 2, 4, 8, 16, 32, 64]},
         "runtime_shards": {"type": "integer", "minimum": 1, "maximum": 64},
         "active_concurrency": {"type": "integer", "minimum": 0, "maximum": 64},
+        "process_instance_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "observed_at_unix_ns": {"$ref": "#/$defs/timestampMetric"},
         "pool": {"$ref": "#/$defs/pool"},
         "phases": {"$ref": "#/$defs/phases"},

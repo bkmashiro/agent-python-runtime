@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,13 +30,15 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 	samples := make([]LifecycleDensitySample, 0, len(slots))
 	for index, count := range slots {
 		n := uint64(count)
+		processDigest := sha256.Sum256([]byte(fmt.Sprintf("process-%d", index)))
 		samples = append(samples, LifecycleDensitySample{
-			SampleIndex:       uint32(index),
-			RepeatIndex:       0,
-			RequestedSlots:    count,
-			RuntimeShards:     1,
-			ActiveConcurrency: 0,
-			ObservedAtUnixNS:  metric(MetricTimestampObserved, uint64(index+1)),
+			SampleIndex:           uint32(index),
+			RepeatIndex:           0,
+			RequestedSlots:        count,
+			RuntimeShards:         1,
+			ActiveConcurrency:     0,
+			ProcessInstanceSHA256: hex.EncodeToString(processDigest[:]),
+			ObservedAtUnixNS:      metric(MetricTimestampObserved, uint64(index+1)),
 			Pool: PoolState{
 				TargetCapacity: count,
 				Ready:          count,
@@ -118,6 +121,8 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 			SlotCounts:            slots,
 			RepeatsPerSlot:        1,
 			FreshProcessPerSample: true,
+			MaxProcessRSSBytes:    4 * 1024 * 1024 * 1024,
+			ChildTimeoutNS:        120_000_000_000,
 		},
 		Samples: samples,
 		Summary: DerivedSummary{
@@ -152,7 +157,12 @@ func TestLifecycleDensityEvidenceRejectsDirtyFallbackMismatchAndFabricatedDerive
 		"missing canonical N":   func(value *LifecycleDensityEvidence) { value.Plan.SlotCounts = []uint32{1, 2, 4, 8} },
 		"sample distribution":   func(value *LifecycleDensityEvidence) { value.Samples[4].RequestedSlots = 8 },
 		"missing runtime shard": func(value *LifecycleDensityEvidence) { value.Samples[0].RuntimeShards = 0 },
-		"pool accounting":       func(value *LifecycleDensityEvidence) { value.Samples[0].Pool.AccountedSlots = 2 },
+		"missing RSS guard":     func(value *LifecycleDensityEvidence) { value.Plan.MaxProcessRSSBytes = 0 },
+		"missing child timeout": func(value *LifecycleDensityEvidence) { value.Plan.ChildTimeoutNS = 0 },
+		"reused process instance": func(value *LifecycleDensityEvidence) {
+			value.Samples[1].ProcessInstanceSHA256 = value.Samples[0].ProcessInstanceSHA256
+		},
+		"pool accounting": func(value *LifecycleDensityEvidence) { value.Samples[0].Pool.AccountedSlots = 2 },
 		"cgroup identity drift": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Cgroup.Version = "none"
 		},

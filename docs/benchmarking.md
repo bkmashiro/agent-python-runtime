@@ -104,13 +104,30 @@ This reports fresh versus prepared first/steady Run ratios, refill `runtime_init
 
 ## Lifecycle-density evidence contract
 
-[`benchmark/v1/lifecycle-density.schema.json`](../benchmark/v1/lifecycle-density.schema.json) and `runtime/evidence.LifecycleDensityEvidence` define the separate Phase 1 capacity/pressure evidence class. The JSON Schema is the structural gate; every producer and consumer must also call `runtime/evidence.ValidateLifecycleDensityJSON` for cross-sample ordering, histogram shape, derived values, and other semantic relations JSON Schema cannot express. This contract does not replace the fresh or prepared latency schemas above. `runtime/evidence` now has bounded Go-runtime and Linux `/proc`/cgroup-v2 raw collectors with fixture tests and a Linux live smoke gate, but no fresh-process orchestrator or checked-in N-sweep evidence exists yet.
+[`benchmark/v1/lifecycle-density.schema.json`](../benchmark/v1/lifecycle-density.schema.json) and `runtime/evidence.LifecycleDensityEvidence` define the separate Phase 1 capacity/pressure evidence class. The JSON Schema is the structural gate; every producer and consumer must also call `runtime/evidence.ValidateLifecycleDensityJSON` for cross-sample ordering, histogram shape, derived values, and other semantic relations JSON Schema cannot express. This contract does not replace the fresh or prepared latency schemas above. `apyrun-benchmark -kind lifecycle-density` now orchestrates the initial Linux-only, prepared, idle-ready lane; the fresh-instance active baseline is still a separate unfinished lane.
 
 One file binds one exact artifact/profile, clean Host revision, backend/version, environment, requested strategy, workload, and complete sweep. The initial canonical slot sequence is `1,2,4,8,16`; `32` and `64` may be appended only after an external memory guard proves they are safe. Every `(N, repeat)` row must come from a fresh process and remain in canonical order.
 
+Run the initial base-profile lane from a clean Linux checkout with an explicit RSS kill threshold and per-child timeout:
+
+```bash
+go run ./cmd/apyrun-benchmark \
+  -kind lifecycle-density \
+  -artifact /path/to/agent-runtime-base.wasm \
+  -manifest /path/to/manifest.json \
+  -output /tmp/lifecycle-density.json \
+  -class production-safe \
+  -strategy single-use-preinitialized \
+  -samples 1 \
+  -max-rss-bytes 5368709120 \
+  -child-timeout 3m
+```
+
+`-samples` is repeats per canonical N, not a request to truncate the sweep. The parent launches a distinct bounded child for every row, rejects backend/environment/artifact drift, generates a unique process-instance digest from the observed launch identity, and writes only after object validation, artifact-byte binding, and canonical semantic JSON validation succeed. The RSS threshold is a sampled kill guard rather than a kernel reservation; the evidence records that limitation explicitly.
+
 Each raw row records:
 
-- runtime-shard count plus pool target and initializing/ready/leased/unhealthy/retiring accounting, so duplicated compiled/runtime owners are not misattributed to slot cost;
+- process-instance digest, runtime-shard count, configured RSS/timeout guards, and pool target plus initializing/ready/leased/unhealthy/retiring accounting, so reused processes and duplicated compiled/runtime owners are not misattributed to slot cost;
 - active concurrency and queue/instantiate/initialize/runtime-init/prepare/execute/capability/total phases;
 - Go heap live/goal, GC cycles/pause, goroutines, and scheduler-latency histogram;
 - process RSS/virtual/PSS/private/swap, minor/major faults, FD count, and VMA count;
@@ -118,4 +135,4 @@ Each raw row records:
 
 Metric shapes distinguish `measured`, `timestamp_observed`, `model_estimated`, `unsupported`, and `skipped`. Unavailable fields carry a bounded reason code rather than a fake zero. Raw measurements cannot be labeled model estimates; optional fixed/per-slot estimates are separate summary fields. Canonical Go validation recomputes sample count, sample order, pool accounting, histogram shape, and measured peaks from raw rows.
 
-Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. A future cgroup measurement contract must provide an auditable isolation and baseline witness; adding a boolean or observing one PID in the leaf is insufficient. Optional Linux sources use bounded unavailable reason codes rather than zero; malformed required `/proc` state fails collection. The next Phase 1B slice must implement the fresh-process artifact orchestrator and produce real raw rows; schemas and raw collectors alone are not benchmark evidence.
+Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, reused process identity, missing guards, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. A future cgroup measurement contract must provide an auditable isolation and baseline witness; adding a boolean or observing one PID in the leaf is insufficient. Optional Linux sources use bounded unavailable reason codes rather than zero; malformed required `/proc` state fails collection. The next Phase 1B work is to preserve the first exact-CI prepared raw artifact, add repeated samples, implement a lifecycle-fair fresh-instance baseline, and fit costs only after both lanes are valid.

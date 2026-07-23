@@ -32,6 +32,23 @@ def sha256(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+def locked_source_version(lock: dict[str, Any], source_id: str) -> str:
+    sources = lock.get("sources")
+    rows = (
+        [row for row in sources if isinstance(row, dict) and row.get("id") == source_id]
+        if isinstance(sources, list)
+        else []
+    )
+    version = rows[0].get("version") if len(rows) == 1 else None
+    if (
+        not isinstance(version, str)
+        or not version
+        or version.strip() != version
+    ):
+        raise ValueError(f"source lock requires exactly one versioned {source_id}")
+    return version
+
+
 def build_manifest(
     *,
     artifact: pathlib.Path,
@@ -83,7 +100,11 @@ def build_manifest(
     ]
     exports = EXPORT_RE.findall(wat_text)
     packages = [
-        {"name": "cpython", "version": "3.14.0", "status": "core"},
+        {
+            "name": "cpython",
+            "version": locked_source_version(lock, "cpython-source"),
+            "status": "core",
+        },
     ]
     limitations = [
         "fetch_many is the only supported capability and requires explicit Host grants",
@@ -93,7 +114,11 @@ def build_manifest(
         limitations.insert(0, "NumPy is not included in the core artifact")
     else:
         packages.append(
-            {"name": "numpy", "version": "2.5.1", "status": "selected-core"}
+            {
+                "name": "numpy",
+                "version": locked_source_version(lock, "numpy-source"),
+                "status": "selected-core",
+            }
         )
         limitations.insert(0, "NumPy random and FFT are not included")
 

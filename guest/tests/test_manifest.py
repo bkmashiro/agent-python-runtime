@@ -39,7 +39,13 @@ class ManifestWriterTests(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "target": "wasm32-wasip1",
-                        "sources": [{"id": "source", "sha256": "a" * 64}],
+                        "sources": [
+                            {
+                                "id": "cpython-source",
+                                "version": "3.14.test",
+                                "sha256": "a" * 64,
+                            }
+                        ],
                     }
                 )
             )
@@ -65,7 +71,16 @@ class ManifestWriterTests(unittest.TestCase):
             self.assertEqual("abc123", manifest["build"]["repository_commit"])
             self.assertEqual("1234567890", manifest["build"]["source_date_epoch"])
             self.assertEqual("wasm32-wasip1", manifest["target"])
-            self.assertEqual([{"id": "source", "sha256": "a" * 64}], manifest["sources"])
+            self.assertEqual(
+                [
+                    {
+                        "id": "cpython-source",
+                        "version": "3.14.test",
+                        "sha256": "a" * 64,
+                    }
+                ],
+                manifest["sources"],
+            )
             self.assertEqual(
                 [{"module": "wasi_snapshot_preview1", "name": "fd_write"}],
                 manifest["wasm"]["imports"],
@@ -76,7 +91,7 @@ class ManifestWriterTests(unittest.TestCase):
             self.assertIn("fetch_many", limitations)
             self.assertIn("NumPy is not included", limitations)
             self.assertEqual(
-                [{"name": "cpython", "version": "3.14.0", "status": "core"}],
+                [{"name": "cpython", "version": "3.14.test", "status": "core"}],
                 manifest["packages"],
             )
 
@@ -88,7 +103,13 @@ class ManifestWriterTests(unittest.TestCase):
             wat = root / "guest.wat"
             wat.write_text('(module (export "memory" (memory 0)))')
             lock = root / "sources.lock.json"
-            lock.write_text(json.dumps({"target": "wasm32-wasip1", "sources": []}))
+            lock.write_text(json.dumps({
+                "target": "wasm32-wasip1",
+                "sources": [
+                    {"id": "cpython-source", "version": "3.14.test"},
+                    {"id": "numpy-source", "version": "2.5.test"},
+                ],
+            }))
             selection = root / "selection-report.json"
             selection.write_text(json.dumps({
                 "schema_version": 1,
@@ -113,7 +134,13 @@ class ManifestWriterTests(unittest.TestCase):
             self.assertEqual("numpy-core", manifest["artifact_profile"])
             self.assertEqual("core", manifest["extension_profile"]["profile"])
             self.assertEqual(2, len(manifest["extension_profile"]["modules"]))
-            self.assertEqual("numpy", manifest["packages"][1]["name"])
+            self.assertEqual(
+                [
+                    {"name": "cpython", "version": "3.14.test", "status": "core"},
+                    {"name": "numpy", "version": "2.5.test", "status": "selected-core"},
+                ],
+                manifest["packages"],
+            )
             self.assertNotIn("NumPy is not included", "\n".join(manifest["limitations"]))
             self.assertIn("NumPy random and FFT are not included", "\n".join(manifest["limitations"]))
 
@@ -141,6 +168,40 @@ class ManifestWriterTests(unittest.TestCase):
                     artifact_profile="unknown",
                     extension_selection=None,
                 )
+    def test_locked_source_version_requires_one_versioned_source(self):
+        cases = {
+            "missing": {"sources": []},
+            "duplicate": {
+                "sources": [
+                    {"id": "cpython-source", "version": "3.14.0"},
+                    {"id": "cpython-source", "version": "3.14.0"},
+                ]
+            },
+            "versionless": {"sources": [{"id": "cpython-source"}]},
+            "empty-version": {
+                "sources": [{"id": "cpython-source", "version": ""}]
+            },
+            "whitespace-version": {
+                "sources": [{"id": "cpython-source", "version": "   "}]
+            },
+        }
+        for name, lock in cases.items():
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, "exactly one versioned cpython-source"):
+                    self.writer.locked_source_version(lock, "cpython-source")
+
+        self.assertEqual(
+            "3.14.test",
+            self.writer.locked_source_version(
+                {
+                    "sources": [
+                        {"id": "other", "version": "1"},
+                        {"id": "cpython-source", "version": "3.14.test"},
+                    ]
+                },
+                "cpython-source",
+            ),
+        )
 
 
 if __name__ == "__main__":

@@ -54,11 +54,68 @@ def runtime_evidence(artifact_sha: str, runtime_init_ns: int, run_total_ns: int)
     }
 
 
+def density_evidence(artifact_sha: str, ready_ns: int, runtime_init_ns: int, rss_bytes: int) -> dict:
+    samples = []
+    for sample_index, slots in enumerate(slot for slot in [1, 2, 4, 8, 16] for _ in range(3)):
+        samples.append(
+            {
+                "sample_index": sample_index,
+                "repeat_index": sample_index % 3,
+                "requested_slots": slots,
+                "phases": {
+                    "total_ns": {"status": "measured", "value": ready_ns * slots},
+                    "instantiate_ns": {"status": "measured", "value": 10 * slots},
+                    "runtime_init_ns": {"status": "measured", "value": runtime_init_ns * slots},
+                },
+                "process": {"rss_bytes": {"status": "measured", "value": rss_bytes * slots}},
+            }
+        )
+    return {
+        "schema_version": 1,
+        "evidence_class": "lifecycle-density",
+        "artifact": {
+            "filename": "agent-python-runtime.wasm",
+            "sha256": artifact_sha,
+            "size_bytes": 100,
+            "source_commit": "a" * 40,
+            "artifact_profile": "base",
+            "target": "wasm32-wasip1",
+            "execution_model": "reactor",
+        },
+        "host_source": {"revision": "a" * 40, "modified": False},
+        "backend": {"name": "wazero", "version": "v1.11.0", "reset_mode": "fresh-instance"},
+        "environment": {
+            "goos": "linux",
+            "goarch": "amd64",
+            "go_version": "go1.24.13",
+            "kernel_release": "fixture",
+            "page_size_bytes": 4096,
+            "cgroup_version": "v2",
+        },
+        "strategy": {
+            "requested": "single-use-preinitialized",
+            "active": "single-use-preinitialized",
+            "fallback": False,
+        },
+        "plan": {
+            "workload": "idle-ready",
+            "slot_counts": [1, 2, 4, 8, 16],
+            "repeats_per_slot": 3,
+            "fresh_process_per_sample": True,
+            "max_process_rss_bytes": 5 * 1024 * 1024 * 1024,
+            "child_timeout_ns": 180_000_000_000,
+        },
+        "samples": samples,
+        "limitations": ["Preinitialization-spike fixture"],
+    }
+
+
 class PreinitializedGuestSpikeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.receipt_module = load_module("preinit_receipt", "write_transform_receipt.py")
         cls.compare_module = load_module("preinit_compare", "compare.py")
+        cls.density_compare_module = load_module("preinit_density_compare", "compare_density.py")
 
     def test_transform_receipt_binds_input_and_repeat_determinism(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -160,6 +217,24 @@ class PreinitializedGuestSpikeTests(unittest.TestCase):
         self.assertEqual(2, workflow.count("-max-rss-bytes 5368709120"))
         self.assertEqual(2, workflow.count("-child-timeout 3m"))
         self.assertNotIn("-max-rss-bytes 4294967296", workflow)
+
+    def test_density_compare_reports_exact_n16_speed_and_rss_tradeoff(self):
+        report = self.density_compare_module.compare(
+            density_evidence("1" * 64, ready_ns=100, runtime_init_ns=50, rss_bytes=1000),
+            density_evidence("2" * 64, ready_ns=10, runtime_init_ns=1, rss_bytes=1100),
+        )
+        headline = report["headline_n16"]
+        self.assertEqual("descriptive", report["comparison"])
+        self.assertEqual(10, headline["ready_wall_speedup"])
+        self.assertEqual(50, headline["runtime_init_speedup"])
+        self.assertEqual(1.1, headline["ready_rss_ratio_candidate_over_baseline"])
+
+    def test_density_compare_rejects_plan_drift(self):
+        baseline = density_evidence("1" * 64, 100, 50, 1000)
+        candidate = density_evidence("2" * 64, 10, 1, 1100)
+        candidate["plan"]["child_timeout_ns"] = 1
+        with self.assertRaisesRegex(ValueError, "plan drifted"):
+            self.density_compare_module.compare(baseline, candidate)
 
 
 if __name__ == "__main__":

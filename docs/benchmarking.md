@@ -128,6 +128,17 @@ go run ./cmd/apyrun-benchmark \
 
 The checked-in three-repeat base-profile artifact is [`docs/benchmarks/lifecycle-density-production-safe-linux-amd64.json`](benchmarks/lifecycle-density-production-safe-linux-amd64.json). It binds Host revision `5921411c3716f6ce37caee26a10cff5b036e99a9` and remains raw prepared idle-ready evidence, not a fresh/prepared comparison or capacity model.
 
+The exact build-time-preinitialization experiment archives its raw baseline and candidate as `docs/benchmarks/preinitialization-spike-lifecycle-density-{baseline,candidate}-linux-amd64.json`. Reproduce its strict same-plan comparison with:
+
+```bash
+python3 experiments/preinitialized-guest/compare_density.py \
+  --baseline docs/benchmarks/preinitialization-spike-lifecycle-density-baseline-linux-amd64.json \
+  --candidate docs/benchmarks/preinitialization-spike-lifecycle-density-candidate-linux-amd64.json \
+  --output /tmp/preinitialization-density-comparison.json
+```
+
+The comparator rejects Host/backend/environment/strategy/plan drift and reports per-N ready wall, aggregate runtime-init work, instantiation, and ready RSS. Its output is descriptive and intentionally has no production approval threshold.
+
 Each raw row records:
 
 - process-instance digest, runtime-shard count, configured RSS/timeout guards, and pool target plus initializing/ready/leased/unhealthy/retiring accounting, so reused processes and duplicated compiled/runtime owners are not misattributed to slot cost;

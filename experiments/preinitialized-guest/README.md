@@ -39,6 +39,18 @@ Across six Linux execute/capability samples, median `runtime_init` fell from 4,3
 
 This validates build-time Python preinitialization for exact fresh-instance execution. It does not validate session restore, post-request reset, cross-node portability, capacity, or production use of a fixed shared Python hash seed.
 
-## Lifecycle-density verdict: PENDING
+## Lifecycle-density verdict: VALIDATED FOR PERFORMANCE, NOT PRODUCTION
 
-The next exact Linux run measures the same transformed candidate at canonical `N={1,2,4,8,16}` with three fresh-process repeats. No claim that the original 63-second N=16 ready wall is solved is made until that artifact passes both structural and `ValidateLifecycleDensityJSON` semantic gates.
+Exact Linux run `30007986419` at verified signed commit `911817eab15f6413e32cb7e45d35af9e16c9bf81` measured both artifacts under the same backend, kernel, clean Host revision, `N={1,2,4,8,16}` plan, three fresh-process repeats, 5 GiB RSS guard, and three-minute child timeout. Both raw documents passed the structural schema and an independent Go `ValidateLifecycleDensityJSON` semantic gate; the transformed candidate also passed artifact-byte binding and repeated-transform equality.
+
+| Ready slots | Baseline median | Candidate median | Speedup | Ready RSS delta |
+|---:|---:|---:|---:|---:|
+| 1 | 7.94 s | 2.88 s | 2.76x | +5.6 MiB |
+| 2 | 12.33 s | 2.87 s | 4.29x | +7.9 MiB |
+| 4 | 21.32 s | 2.89 s | 7.37x | +5.7 MiB |
+| 8 | 31.33 s | 4.58 s | 6.84x | +84.2 MiB |
+| 16 | 62.23 s | 9.34 s | 6.66x | +231.8 MiB |
+
+At N=16, aggregate diagnostic `runtime_init` work fell from 202.02 s to 2.72 ms (74,179x), while all 16 instantiations totaled 0.303 s. The stable 9.30–9.40 s ready wall is therefore dominated by four concurrent shard compilations and resource contention, not Python initialization or Wasm instantiation. Ready RSS increased from 1,975.0 MiB to 2,206.8 MiB (+11.7%).
+
+The raw baseline, candidate, and deterministic descriptive comparison are archived under `docs/benchmarks/preinitialization-spike-lifecycle-density-*-linux-amd64.json`. This validates that build-time preinitialization removes the original N=16 startup wall as the dominant bottleneck. Production promotion remains blocked by the fixed shared Python hash seed, release/cross-node portability qualification, and the absence of an opt-in artifact contract. The next bounded performance slice is shared wazero compilation caching across the four hard-capped prepared shards; it must remain independent of the hash-seed safety decision.

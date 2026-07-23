@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -24,11 +25,9 @@ func TestLinuxCollectorReadsProcessAndCgroupV2Metrics(t *testing.T) {
 	}
 	writeFixture(t, filepath.Join(procRoot, "self/cgroup"), "0::/user.slice/agent.scope\n")
 	leaf := filepath.Join(cgroupRoot, "user.slice/agent.scope")
+	writeFixture(t, filepath.Join(leaf, "cgroup.procs"), strconv.Itoa(os.Getpid())+"\n")
 	writeFixture(t, filepath.Join(leaf, "memory.current"), "2048\n")
-	writeFixture(t, filepath.Join(leaf, "memory.peak"), "4096\n")
 	writeFixture(t, filepath.Join(leaf, "memory.swap.current"), "0\n")
-	writeFixture(t, filepath.Join(leaf, "memory.events"), "low 0\nhigh 2\nmax 3\noom 4\noom_kill 1\n")
-	writeFixture(t, filepath.Join(leaf, "memory.pressure"), "some avg10=0.00 avg60=0.00 avg300=0.00 total=99\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=7\n")
 
 	snapshot, err := (LinuxCollector{ProcRoot: procRoot, CgroupRoot: cgroupRoot}).Collect()
 	if err != nil {
@@ -50,13 +49,37 @@ func TestLinuxCollectorReadsProcessAndCgroupV2Metrics(t *testing.T) {
 	if snapshot.Cgroup.Version != "v2" {
 		t.Fatalf("cgroup version = %q", snapshot.Cgroup.Version)
 	}
+	if snapshot.Cgroup.Scope != "process-dedicated" || snapshot.Cgroup.MembershipSHA256 == "" || snapshot.Cgroup.CumulativeBaseline {
+		t.Fatalf("cgroup scope identity = %#v", snapshot.Cgroup)
+	}
 	assertMeasured(t, snapshot.Cgroup.MemoryCurrentBytes, 2048)
-	assertMeasured(t, snapshot.Cgroup.MemoryPeakBytes, 4096)
-	assertMeasured(t, snapshot.Cgroup.MemoryEventsHighTotal, 2)
-	assertMeasured(t, snapshot.Cgroup.MemoryEventsOOMTotal, 4)
-	assertMeasured(t, snapshot.Cgroup.MemoryEventsOOMKillTotal, 1)
-	assertMeasured(t, snapshot.Cgroup.PressureSomeTotalUS, 99)
-	assertMeasured(t, snapshot.Cgroup.PressureFullTotalUS, 7)
+	assertMeasured(t, snapshot.Cgroup.MemorySwapCurrentBytes, 0)
+	assertUnavailable(t, snapshot.Cgroup.MemoryPeakBytes, MetricSkipped, ReasonBaselineRequired)
+	assertUnavailable(t, snapshot.Cgroup.MemoryEventsHighTotal, MetricSkipped, ReasonBaselineRequired)
+	assertUnavailable(t, snapshot.Cgroup.MemoryEventsOOMTotal, MetricSkipped, ReasonBaselineRequired)
+	assertUnavailable(t, snapshot.Cgroup.MemoryEventsOOMKillTotal, MetricSkipped, ReasonBaselineRequired)
+	assertUnavailable(t, snapshot.Cgroup.PressureSomeTotalUS, MetricSkipped, ReasonBaselineRequired)
+	assertUnavailable(t, snapshot.Cgroup.PressureFullTotalUS, MetricSkipped, ReasonBaselineRequired)
+}
+
+func TestLinuxCollectorDoesNotAttributeSharedCgroupMetricsToProcess(t *testing.T) {
+	root := t.TempDir()
+	procRoot := filepath.Join(root, "proc")
+	cgroupRoot := filepath.Join(root, "cgroup")
+	writeFixture(t, filepath.Join(procRoot, "self/cgroup"), "0::/shared.scope\n")
+	leaf := filepath.Join(cgroupRoot, "shared.scope")
+	writeFixture(t, filepath.Join(leaf, "cgroup.procs"), strconv.Itoa(os.Getpid())+"\n999999\n")
+	writeFixture(t, filepath.Join(leaf, "memory.current"), "2048\n")
+
+	metrics, err := (LinuxCollector{ProcRoot: procRoot, CgroupRoot: cgroupRoot}).collectCgroup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.Scope != "shared" || metrics.CumulativeBaseline {
+		t.Fatalf("shared scope identity = %#v", metrics)
+	}
+	assertUnavailable(t, metrics.MemoryCurrentBytes, MetricSkipped, ReasonNonisolatedScope)
+	assertUnavailable(t, metrics.MemoryEventsOOMTotal, MetricSkipped, ReasonNonisolatedScope)
 }
 
 func TestLinuxCollectorMarksOptionalSourcesUnavailableWithoutFakeZero(t *testing.T) {

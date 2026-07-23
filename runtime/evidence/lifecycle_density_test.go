@@ -77,6 +77,9 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 			},
 			Cgroup: CgroupMetrics{
 				Version:                  "v2",
+				Scope:                    "process-dedicated",
+				MembershipSHA256:         strings.Repeat("c", 64),
+				CumulativeBaseline:       true,
 				MemoryCurrentBytes:       metric(MetricMeasured, 2_000*n),
 				MemoryPeakBytes:          metric(MetricMeasured, 2_100*n),
 				MemorySwapCurrentBytes:   metric(MetricMeasured, 0),
@@ -153,6 +156,9 @@ func TestLifecycleDensityEvidenceRejectsDirtyFallbackMismatchAndFabricatedDerive
 		"pool accounting":       func(value *LifecycleDensityEvidence) { value.Samples[0].Pool.AccountedSlots = 2 },
 		"cgroup identity drift": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Cgroup.Version = "none"
+		},
+		"shared cgroup measured as process evidence": func(value *LifecycleDensityEvidence) {
+			value.Samples[0].Cgroup.Scope = "shared"
 		},
 		"mixed metric availability": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Process.RSSBytes = unavailable(MetricUnsupported, ReasonPlatformUnsupported)
@@ -247,6 +253,9 @@ func TestLifecycleDensityJSONSchemaAcceptsCanonicalAndRejectsInvalidClaims(t *te
 		"unknown authority field": func(object map[string]any) {
 			object["credentials"] = map[string]any{"token": "forbidden"}
 		},
+		"runtime shards exceed requested slots": func(object map[string]any) {
+			object["samples"].([]any)[0].(map[string]any)["runtime_shards"] = float64(2)
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -257,6 +266,56 @@ func TestLifecycleDensityJSONSchemaAcceptsCanonicalAndRejectsInvalidClaims(t *te
 			mutate(candidate)
 			if err := schema.Validate(candidate); err == nil {
 				t.Fatal("schema accepted an invalid lifecycle-density claim")
+			}
+		})
+	}
+}
+
+func TestValidateLifecycleDensityJSONRejectsCrossFieldAndHistogramDrift(t *testing.T) {
+	base, _ := validLifecycleDensityEvidence()
+	canonical, err := json.Marshal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateLifecycleDensityJSON(canonical); err != nil {
+		t.Fatalf("canonical semantic JSON was rejected: %v", err)
+	}
+	if err := ValidateLifecycleDensityJSON(append(canonical, []byte(" {}")...)); !errors.Is(err, ErrInvalidLifecycleDensityEvidence) {
+		t.Fatalf("trailing JSON was accepted: %v", err)
+	}
+	var unknown map[string]any
+	if err := json.Unmarshal(canonical, &unknown); err != nil {
+		t.Fatal(err)
+	}
+	unknown["credentials"] = "forbidden"
+	encodedUnknown, err := json.Marshal(unknown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateLifecycleDensityJSON(encodedUnknown); !errors.Is(err, ErrInvalidLifecycleDensityEvidence) {
+		t.Fatalf("unknown field was accepted: %v", err)
+	}
+	cases := map[string]func(*LifecycleDensityEvidence){
+		"runtime shards exceed requested slots": func(value *LifecycleDensityEvidence) {
+			value.Samples[0].RuntimeShards = 2
+		},
+		"histogram lengths differ": func(value *LifecycleDensityEvidence) {
+			value.Samples[0].GoRuntime.SchedulerLatency.Counts = []uint64{1}
+		},
+		"sample order drifts": func(value *LifecycleDensityEvidence) {
+			value.Samples[0].SampleIndex = 1
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			candidate := deepCopy(t, base)
+			mutate(&candidate)
+			encoded, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateLifecycleDensityJSON(encoded); !errors.Is(err, ErrInvalidLifecycleDensityEvidence) {
+				t.Fatalf("semantic JSON validator accepted drift: %v", err)
 			}
 		})
 	}

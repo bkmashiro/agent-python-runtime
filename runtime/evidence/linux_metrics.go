@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -172,22 +173,59 @@ func (collector LinuxCollector) collectCgroup() (CgroupMetrics, error) {
 	if err != nil {
 		return CgroupMetrics{}, err
 	}
+	membershipDigest := sha256.Sum256([]byte(path.Clean("/" + strings.TrimPrefix(cgroupPath, "/"))))
+	membershipSHA256 := fmt.Sprintf("%x", membershipDigest)
+	scope, scopeReason := classifyCgroupScope(filepath.Join(leaf, "cgroup.procs"))
+	if scopeReason != "" {
+		return unavailableScopedCgroup("v2", "unverified", membershipSHA256, MetricUnsupported, scopeReason), nil
+	}
+	if scope == "shared" {
+		return unavailableScopedCgroup("v2", scope, membershipSHA256, MetricSkipped, ReasonNonisolatedScope), nil
+	}
 	current := collectScalarMetric(filepath.Join(leaf, "memory.current"))
-	peak := collectScalarMetric(filepath.Join(leaf, "memory.peak"))
 	swap := collectScalarMetric(filepath.Join(leaf, "memory.swap.current"))
-	high, oom, oomKill := collectMemoryEvents(filepath.Join(leaf, "memory.events"))
-	some, full := collectMemoryPressure(filepath.Join(leaf, "memory.pressure"))
+	cumulative := unavailableMetricWithStatus(MetricSkipped, ReasonBaselineRequired)
 	return CgroupMetrics{
 		Version:                  "v2",
+		Scope:                    scope,
+		MembershipSHA256:         membershipSHA256,
+		CumulativeBaseline:       false,
 		MemoryCurrentBytes:       current,
-		MemoryPeakBytes:          peak,
+		MemoryPeakBytes:          cumulative,
 		MemorySwapCurrentBytes:   swap,
-		MemoryEventsHighTotal:    high,
-		MemoryEventsOOMTotal:     oom,
-		MemoryEventsOOMKillTotal: oomKill,
-		PressureSomeTotalUS:      some,
-		PressureFullTotalUS:      full,
+		MemoryEventsHighTotal:    cumulative,
+		MemoryEventsOOMTotal:     cumulative,
+		MemoryEventsOOMKillTotal: cumulative,
+		PressureSomeTotalUS:      cumulative,
+		PressureFullTotalUS:      cumulative,
 	}, nil
+}
+
+func classifyCgroupScope(filename string) (string, UnavailableReason) {
+	content, err := readLinuxMetricFile(filename)
+	if err != nil {
+		return "unverified", reasonFromSourceError(err)
+	}
+	pids := map[uint64]struct{}{}
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		pid, err := strconv.ParseUint(strings.TrimSpace(line), 10, 64)
+		if err != nil || pid == 0 {
+			return "unverified", ReasonCollectionError
+		}
+		pids[pid] = struct{}{}
+	}
+	if len(pids) == 0 {
+		return "unverified", ReasonCollectionError
+	}
+	if len(pids) == 1 {
+		if _, current := pids[uint64(os.Getpid())]; current {
+			return "process-dedicated", ""
+		}
+	}
+	return "shared", ""
 }
 
 func parseProcStatus(content string) (map[string]string, error) {
@@ -245,64 +283,6 @@ func collectScalarMetric(filename string) Metric {
 	}
 	value, err := strconv.ParseUint(strings.TrimSpace(content), 10, 64)
 	if err != nil {
-		return collectionErrorMetric()
-	}
-	return measuredMetric(value)
-}
-
-func collectMemoryEvents(filename string) (Metric, Metric, Metric) {
-	content, err := readLinuxMetricFile(filename)
-	if err != nil {
-		reason := reasonFromSourceError(err)
-		return unavailableMetricValue(reason), unavailableMetricValue(reason), unavailableMetricValue(reason)
-	}
-	values := parseNamedCounters(content)
-	return namedCounterMetric(values, "high"), namedCounterMetric(values, "oom"), namedCounterMetric(values, "oom_kill")
-}
-
-func collectMemoryPressure(filename string) (Metric, Metric) {
-	content, err := readLinuxMetricFile(filename)
-	if err != nil {
-		reason := reasonFromSourceError(err)
-		return unavailableMetricValue(reason), unavailableMetricValue(reason)
-	}
-	values := map[string]uint64{}
-	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		for _, field := range fields[1:] {
-			if !strings.HasPrefix(field, "total=") {
-				continue
-			}
-			value, err := strconv.ParseUint(strings.TrimPrefix(field, "total="), 10, 64)
-			if err == nil {
-				values[fields[0]] = value
-			}
-		}
-	}
-	return namedCounterMetric(values, "some"), namedCounterMetric(values, "full")
-}
-
-func parseNamedCounters(content string) map[string]uint64 {
-	values := map[string]uint64{}
-	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 2 {
-			continue
-		}
-		value, err := strconv.ParseUint(fields[1], 10, 64)
-		if err == nil {
-			values[fields[0]] = value
-		}
-	}
-	return values
-}
-
-func namedCounterMetric(values map[string]uint64, name string) Metric {
-	value, ok := values[name]
-	if !ok {
 		return collectionErrorMetric()
 	}
 	return measuredMetric(value)
@@ -376,7 +356,11 @@ func measuredMetric(value uint64) Metric {
 }
 
 func unavailableMetricValue(reason UnavailableReason) Metric {
-	return Metric{Status: MetricUnsupported, ReasonCode: reason}
+	return unavailableMetricWithStatus(MetricUnsupported, reason)
+}
+
+func unavailableMetricWithStatus(status MetricStatus, reason UnavailableReason) Metric {
+	return Metric{Status: status, ReasonCode: reason}
 }
 
 func collectionErrorMetric() Metric {
@@ -394,9 +378,16 @@ func reasonFromSourceError(err error) UnavailableReason {
 }
 
 func unavailableCgroup(version string, reason UnavailableReason) CgroupMetrics {
-	metric := unavailableMetricValue(reason)
+	return unavailableScopedCgroup(version, "unverified", "", MetricUnsupported, reason)
+}
+
+func unavailableScopedCgroup(version, scope, membershipSHA256 string, status MetricStatus, reason UnavailableReason) CgroupMetrics {
+	metric := unavailableMetricWithStatus(status, reason)
 	return CgroupMetrics{
 		Version:                  version,
+		Scope:                    scope,
+		MembershipSHA256:         membershipSHA256,
+		CumulativeBaseline:       false,
 		MemoryCurrentBytes:       metric,
 		MemoryPeakBytes:          metric,
 		MemorySwapCurrentBytes:   metric,

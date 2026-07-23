@@ -1,10 +1,13 @@
 package evidence
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -33,6 +36,8 @@ const (
 	ReasonCollectionError     UnavailableReason = "collection_error"
 	ReasonSafetyGuard         UnavailableReason = "safety_guard"
 	ReasonWorkloadNotRun      UnavailableReason = "workload_not_run"
+	ReasonNonisolatedScope    UnavailableReason = "nonisolated_scope"
+	ReasonBaselineRequired    UnavailableReason = "baseline_required"
 )
 
 type Metric struct {
@@ -69,7 +74,7 @@ func validModel(model string) bool {
 func validUnavailableReason(reason UnavailableReason) bool {
 	switch reason {
 	case ReasonSourceUnavailable, ReasonPermissionDenied, ReasonNotApplicable, ReasonPlatformUnsupported,
-		ReasonCollectionError, ReasonSafetyGuard, ReasonWorkloadNotRun:
+		ReasonCollectionError, ReasonSafetyGuard, ReasonWorkloadNotRun, ReasonNonisolatedScope, ReasonBaselineRequired:
 		return true
 	default:
 		return false
@@ -192,6 +197,9 @@ type ProcessMetrics struct {
 
 type CgroupMetrics struct {
 	Version                  string `json:"version"`
+	Scope                    string `json:"scope"`
+	MembershipSHA256         string `json:"membership_sha256,omitempty"`
+	CumulativeBaseline       bool   `json:"cumulative_baseline"`
 	MemoryCurrentBytes       Metric `json:"memory_current_bytes"`
 	MemoryPeakBytes          Metric `json:"memory_peak_bytes"`
 	MemorySwapCurrentBytes   Metric `json:"memory_swap_current_bytes"`
@@ -237,6 +245,20 @@ type LifecycleDensityEvidence struct {
 	Samples       []LifecycleDensitySample `json:"samples"`
 	Summary       DerivedSummary           `json:"summary"`
 	Limitations   []string                 `json:"limitations"`
+}
+
+func ValidateLifecycleDensityJSON(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var evidence LifecycleDensityEvidence
+	if err := decoder.Decode(&evidence); err != nil {
+		return fmt.Errorf("%w: decode JSON: %v", ErrInvalidLifecycleDensityEvidence, err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return invalidDensity("JSON contains trailing data")
+	}
+	return evidence.Validate()
 }
 
 func (evidence LifecycleDensityEvidence) Validate() error {
@@ -410,16 +432,57 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 	if sample.Cgroup.Version != evidence.Environment.CgroupVersion {
 		return errors.New("sample cgroup version differs from environment identity")
 	}
+	allCgroupMetrics := []Metric{
+		sample.Cgroup.MemoryCurrentBytes, sample.Cgroup.MemoryPeakBytes, sample.Cgroup.MemorySwapCurrentBytes,
+		sample.Cgroup.MemoryEventsHighTotal, sample.Cgroup.MemoryEventsOOMTotal, sample.Cgroup.MemoryEventsOOMKillTotal,
+		sample.Cgroup.PressureSomeTotalUS, sample.Cgroup.PressureFullTotalUS,
+	}
 	if sample.Cgroup.Version == "none" {
-		for _, metric := range []Metric{
-			sample.Cgroup.MemoryCurrentBytes, sample.Cgroup.MemoryPeakBytes, sample.Cgroup.MemorySwapCurrentBytes,
-			sample.Cgroup.MemoryEventsHighTotal, sample.Cgroup.MemoryEventsOOMTotal, sample.Cgroup.MemoryEventsOOMKillTotal,
-			sample.Cgroup.PressureSomeTotalUS, sample.Cgroup.PressureFullTotalUS,
-		} {
+		if sample.Cgroup.Scope != "unverified" || sample.Cgroup.MembershipSHA256 != "" || sample.Cgroup.CumulativeBaseline {
+			return errors.New("cgroup=none carries scoped identity")
+		}
+		for _, metric := range allCgroupMetrics {
 			if metric.Status != MetricUnsupported && metric.Status != MetricSkipped {
 				return errors.New("cgroup=none cannot carry measured cgroup metrics")
 			}
 		}
+		return nil
+	}
+	if !lowerHex(sample.Cgroup.MembershipSHA256, 64) {
+		return errors.New("cgroup v2 membership identity is missing")
+	}
+	switch sample.Cgroup.Scope {
+	case "shared":
+		if sample.Cgroup.CumulativeBaseline {
+			return errors.New("shared cgroup cannot claim a process baseline")
+		}
+		for _, metric := range allCgroupMetrics {
+			if metric.Status != MetricSkipped || metric.ReasonCode != ReasonNonisolatedScope {
+				return errors.New("shared cgroup metrics must be skipped as nonisolated")
+			}
+		}
+	case "unverified":
+		if sample.Cgroup.CumulativeBaseline {
+			return errors.New("unverified cgroup cannot claim a baseline")
+		}
+		for _, metric := range allCgroupMetrics {
+			if metric.Status != MetricUnsupported && metric.Status != MetricSkipped {
+				return errors.New("unverified cgroup cannot carry measured metrics")
+			}
+		}
+	case "process-dedicated":
+		if !sample.Cgroup.CumulativeBaseline {
+			for _, metric := range []Metric{
+				sample.Cgroup.MemoryPeakBytes, sample.Cgroup.MemoryEventsHighTotal, sample.Cgroup.MemoryEventsOOMTotal,
+				sample.Cgroup.MemoryEventsOOMKillTotal, sample.Cgroup.PressureSomeTotalUS, sample.Cgroup.PressureFullTotalUS,
+			} {
+				if metric.Status != MetricSkipped || metric.ReasonCode != ReasonBaselineRequired {
+					return errors.New("cumulative cgroup metric requires an explicit baseline")
+				}
+			}
+		}
+	default:
+		return errors.New("unknown cgroup scope")
 	}
 	return nil
 }

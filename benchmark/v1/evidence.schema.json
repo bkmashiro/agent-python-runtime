@@ -7,7 +7,7 @@
   "required": ["schema_version", "evidence_class", "artifact", "host_source", "backend", "environment", "fixture", "compile_once", "workloads", "limitations"],
   "properties": {
     "schema_version": {"const": 1},
-    "evidence_class": {"enum": ["production-safe", "full", "profile-candidate"]},
+    "evidence_class": {"enum": ["production-safe", "full", "profile-candidate", "preinitialization-spike"]},
     "artifact": {
       "type": "object",
       "additionalProperties": false,
@@ -84,6 +84,10 @@
     {
       "if": {"properties": {"evidence_class": {"const": "profile-candidate"}}},
       "then": {"properties": {"artifact": {"required": ["artifact_profile"], "properties": {"artifact_profile": {"const": "numpy-core"}}}}}
+    },
+    {
+      "if": {"properties": {"evidence_class": {"const": "preinitialization-spike"}}},
+      "then": {"properties": {"artifact": {"required": ["artifact_profile"], "properties": {"artifact_profile": {"const": "base"}}}}}
     },
     {
       "if": {"properties": {"evidence_class": {"enum": ["production-safe", "full"]}}},

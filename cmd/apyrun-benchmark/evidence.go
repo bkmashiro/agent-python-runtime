@@ -87,6 +87,10 @@ func validateEvidenceClassProfile(class, profile string) error {
 		if profile != "numpy-core" {
 			return errors.New("profile-candidate evidence requires numpy-core artifact profile")
 		}
+	case "preinitialization-spike":
+		if profile != "base" {
+			return errors.New("preinitialization-spike evidence requires base artifact profile")
+		}
 	default:
 		return errors.New("unsupported evidence class")
 	}

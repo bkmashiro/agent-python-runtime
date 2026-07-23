@@ -242,6 +242,21 @@ func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
 	if err := schema.Validate(instance); err == nil {
 		t.Fatal("schema accepted profile-candidate evidence for base artifact")
 	}
+	spike := evidence
+	spike.EvidenceClass = "preinitialization-spike"
+	spike.Artifact.ArtifactProfile = "base"
+	if err := spike.Validate(); err != nil {
+		t.Fatalf("valid preinitialization spike rejected: %v", err)
+	}
+	encoded, _ = json.Marshal(spike)
+	_ = json.Unmarshal(encoded, &instance)
+	if err := schema.Validate(instance); err != nil {
+		t.Fatalf("preinitialization spike rejected by schema: %v", err)
+	}
+	spike.Artifact.ArtifactProfile = "numpy-core"
+	if err := spike.Validate(); err == nil {
+		t.Fatal("numpy-core artifact was accepted as a preinitialization spike")
+	}
 	mislabeled := evidence
 	mislabeled.Artifact.ArtifactProfile = "numpy-core"
 	encoded, _ = json.Marshal(mislabeled)

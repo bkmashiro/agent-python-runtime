@@ -8,6 +8,7 @@ DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
+PREINITIALIZATION_SPIKE=${AGENT_RUNTIME_PREINITIALIZATION_SPIKE:-0}
 case "${ARTIFACT_PROFILE}" in
   base)
     SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
@@ -22,6 +23,17 @@ case "${ARTIFACT_PROFILE}" in
     exit 10
     ;;
 esac
+case "${PREINITIALIZATION_SPIKE}" in
+  0|1) ;;
+  *)
+    echo "AGENT_RUNTIME_PREINITIALIZATION_SPIKE must be 0 or 1" >&2
+    exit 12
+    ;;
+esac
+if [[ ${PREINITIALIZATION_SPIKE} == 1 && ${ARTIFACT_PROFILE} != base ]]; then
+  echo "preinitialization spike is restricted to the base artifact profile" >&2
+  exit 13
+fi
 
 if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
@@ -226,6 +238,47 @@ if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
     -Wl,-z,stack-size=16777216 \
     -Wl,--strip-all \
     -o "${RAW_GUEST}"
+fi
+
+if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
+  PREINITIALIZATION_SPIKE_DIR="${WORK_DIR}/preinitialize-spike"
+  PREINITIALIZATION_INPUT_DIR="${PREINITIALIZATION_SPIKE_DIR}/input"
+  PREINITIALIZATION_RUNTIME_OBJECT="${PREINITIALIZATION_SPIKE_DIR}/runtime.o"
+  PREINITIALIZATION_RAW_GUEST="${PREINITIALIZATION_SPIKE_DIR}/agent-python-runtime.raw.wasm"
+  PREINITIALIZATION_INPUT_GUEST="${PREINITIALIZATION_INPUT_DIR}/agent-python-runtime.wasm"
+  mkdir -p "${PREINITIALIZATION_INPUT_DIR}"
+
+  "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
+    -DAGENT_RUNTIME_PREINITIALIZATION_SPIKE=1 \
+    -I"${ROOT_DIR}/guest/include" \
+    -I"${CPYTHON_DIR}/Include" \
+    -I"${WASI_BUILD_DIR}" \
+    -c "${ROOT_DIR}/guest/src/runtime.c" -o "${PREINITIALIZATION_RUNTIME_OBJECT}"
+
+  "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
+    -mexec-model=reactor \
+    "${PREINITIALIZATION_RUNTIME_OBJECT}" "${PYTHON_LIB}" \
+    "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
+    -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
+    -lpthread -lm \
+    -Wl,--export=runtime_init \
+    -Wl,--export=runtime_prepare \
+    -Wl,--export=runtime_preinitialize \
+    -Wl,--export=runtime_preinitialized_initialize \
+    -Wl,--export=alloc \
+    -Wl,--export=dealloc \
+    -Wl,--export=execute \
+    -Wl,--export-memory \
+    -Wl,--initial-memory=134217728 \
+    -Wl,--max-memory=536870912 \
+    -Wl,-z,stack-size=16777216 \
+    -Wl,--strip-all \
+    -o "${PREINITIALIZATION_RAW_GUEST}"
+
+  "${WASI_VFS}" pack "${PREINITIALIZATION_RAW_GUEST}" \
+    --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
+    -o "${PREINITIALIZATION_INPUT_GUEST}"
+  "${WASM_TOOLS}" validate "${PREINITIALIZATION_INPUT_GUEST}"
 fi
 
 "${WASI_VFS}" pack "${RAW_GUEST}" \

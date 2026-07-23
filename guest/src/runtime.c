@@ -177,6 +177,22 @@ int32_t runtime_init(const char *config, int32_t config_len) {
     return 0;
 }
 
+#ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
+extern void _initialize(void);
+
+__attribute__((export_name("runtime_preinitialize")))
+void runtime_preinitialize(void) {
+    static const char config[] = "{}";
+    _initialize();
+    if (runtime_init(config, (int32_t)(sizeof(config) - 1)) != 0) {
+        __builtin_trap();
+    }
+}
+
+__attribute__((export_name("runtime_preinitialized_initialize")))
+void runtime_preinitialized_initialize(void) {}
+#endif
+
 int32_t runtime_prepare(const char *source, int32_t source_len) {
     if (!Py_IsInitialized() || runtime_module == NULL) {
         return -1;

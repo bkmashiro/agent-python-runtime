@@ -52,7 +52,7 @@ class GuestSourceContractTests(unittest.TestCase):
             self.assertIn(static_dependency, text)
         self.assertNotIn("--export=wasi_vfs_pack_fs", text)
         self.assertIn("--max-memory=536870912", text)
-        self.assertEqual(1, text.count('--dir "'))
+        self.assertEqual(2, text.count('--dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14"'))
         self.assertIn("VFS_PYTHON_DIR", text)
         self.assertIn("copy_tree_deterministic.py", text)
         self.assertIn("patch_wasi_vfs_storage.py", text)
@@ -112,6 +112,21 @@ class GuestSourceContractTests(unittest.TestCase):
         if match is None:
             self.fail("AGENT_RUNTIME_RESPONSE_MAX is missing")
         self.assertLessEqual(int(match.group(1)), 1024)
+
+    def test_preinitialization_spike_is_build_only_and_base_scoped(self):
+        source = SOURCE.read_text()
+        build = BUILD_SCRIPT.read_text()
+        self.assertIn("#ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE", source)
+        self.assertIn('export_name("runtime_preinitialize")', source)
+        self.assertIn('export_name("runtime_preinitialized_initialize")', source)
+        self.assertIn("_initialize();", source)
+        self.assertIn('runtime_init(config, (int32_t)(sizeof(config) - 1))', source)
+        self.assertNotIn("runtime_preinitialize", HEADER.read_text())
+        self.assertIn("AGENT_RUNTIME_PREINITIALIZATION_SPIKE must be 0 or 1", build)
+        self.assertIn("preinitialization spike is restricted to the base artifact profile", build)
+        self.assertEqual(1, build.count("-DAGENT_RUNTIME_PREINITIALIZATION_SPIKE=1"))
+        self.assertIn('PREINITIALIZATION_INPUT_DIR="${PREINITIALIZATION_SPIKE_DIR}/input"', build)
+        self.assertIn('PREINITIALIZATION_INPUT_GUEST="${PREINITIALIZATION_INPUT_DIR}/agent-python-runtime.wasm"', build)
 
 
 if __name__ == "__main__":

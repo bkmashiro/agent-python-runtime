@@ -92,7 +92,7 @@ func runMain(args []string) error {
 	flags.StringVar(&options.ArtifactPath, "artifact", "", "verified guest artifact")
 	flags.StringVar(&options.ManifestPath, "manifest", "", "matching artifact manifest")
 	flags.StringVar(&options.OutputPath, "output", "", "JSON evidence output")
-	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, or profile-candidate")
+	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh or single-use-preinitialized")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
 	flags.StringVar(&options.Kind, "kind", "runtime", "runtime or lifecycle-density")
@@ -130,13 +130,16 @@ func runMain(args []string) error {
 		return errors.New("benchmark kind must be runtime or lifecycle-density")
 	}
 	if options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
-		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full|profile-candidate] [-strategy fresh|single-use-preinitialized] [-samples 3]")
+		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full|profile-candidate|preinitialization-spike] [-strategy fresh|single-use-preinitialized] [-samples 3]")
 	}
-	if options.Class != "production-safe" && options.Class != "full" && options.Class != "profile-candidate" {
-		return errors.New("benchmark class must be production-safe, full, or profile-candidate")
+	if options.Class != "production-safe" && options.Class != "full" && options.Class != "profile-candidate" && options.Class != "preinitialization-spike" {
+		return errors.New("benchmark class must be production-safe, full, profile-candidate, or preinitialization-spike")
 	}
 	if options.Strategy != "fresh" && options.Strategy != "single-use-preinitialized" {
 		return errors.New("benchmark strategy must be fresh or single-use-preinitialized")
+	}
+	if options.Class == "preinitialization-spike" && (options.Kind != "runtime" || options.Strategy != "fresh") {
+		return errors.New("preinitialization-spike evidence requires the fresh runtime benchmark")
 	}
 	if options.Samples < 3 || options.Samples > 20 {
 		return errors.New("samples must be between 3 and 20")
@@ -270,6 +273,11 @@ func runBenchmark(options benchmarkOptions) (benchmarkEvidence, error) {
 	if options.Class == "profile-candidate" {
 		evidence.Limitations = append(evidence.Limitations,
 			"Profile-candidate evidence is descriptive and does not approve this artifact profile for default, release, deployment, or production-safe status.",
+		)
+	}
+	if options.Class == "preinitialization-spike" {
+		evidence.Limitations = append(evidence.Limitations,
+			"Preinitialization-spike evidence is exploratory and does not approve this artifact for default, release, deployment, or production-safe status.",
 		)
 	}
 

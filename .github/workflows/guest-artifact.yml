@@ -31,6 +31,7 @@ on:
       - 'tools/resolve_wasm_extension_profile.py'
       - 'tools/stage_numpy_wasi_package.py'
       - 'experiments/numpy-wasi/**'
+      - 'experiments/preinitialized-guest/**'
       - 'evidence/**'
       - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
@@ -56,6 +57,7 @@ on:
       - 'tools/resolve_wasm_extension_profile.py'
       - 'tools/stage_numpy_wasi_package.py'
       - 'experiments/numpy-wasi/**'
+      - 'experiments/preinitialized-guest/**'
       - 'evidence/**'
       - 'cmd/validate-json-schema/**'
       - 'NOTICE.md'
@@ -109,6 +111,7 @@ jobs:
         env:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
           AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
+          AGENT_RUNTIME_PREINITIALIZATION_SPIKE: ${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base' && '1' || '0' }}
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH
@@ -130,6 +133,16 @@ jobs:
         with:
           name: agent-python-runtime-${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE }}-${{ github.sha }}
           path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload exact preinitialization transform input
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preinitialized-guest-input-${{ github.sha }}
+          path: ${{ runner.temp }}/agent-runtime-build/preinitialize-spike/input/
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
@@ -339,3 +352,154 @@ jobs:
           path: ${{ runner.temp }}/lifecycle-density-production-safe-linux-amd64.json
           if-no-files-found: error
           retention-days: 7
+
+  preinitialize-spike:
+    name: Explore build-time Python preinitialization
+    if: ${{ (inputs.artifact_profile || 'base') == 'base' }}
+    needs: build-core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.24.x'
+          cache: true
+
+      - name: Download exact transform input
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: preinitialized-guest-input-${{ github.sha }}
+          path: ${{ runner.temp }}/preinitialized-guest/input
+
+      - name: Fetch locked Wasmtime and wasm-tools
+        run: |
+          ROOT="${{ runner.temp }}/preinitialized-guest"
+          mkdir -p "${ROOT}/downloads" "${ROOT}/tools/wasmtime" "${ROOT}/tools/wasm-tools"
+          python3 tools/fetch_locked_source.py \
+            wasmtime-linux-x86_64 \
+            "${ROOT}/downloads/wasmtime.tar.xz" \
+            --lock guest/build/sources.lock.json
+          python3 tools/fetch_locked_source.py \
+            wasm-tools-linux-x86_64 \
+            "${ROOT}/downloads/wasm-tools.tar.gz" \
+            --lock guest/build/sources.lock.json
+          tar -xJf "${ROOT}/downloads/wasmtime.tar.xz" -C "${ROOT}/tools/wasmtime"
+          tar -xzf "${ROOT}/downloads/wasm-tools.tar.gz" -C "${ROOT}/tools/wasm-tools"
+          WASMTIME=$(find "${ROOT}/tools/wasmtime" -type f -name wasmtime -print -quit)
+          WASM_TOOLS=$(find "${ROOT}/tools/wasm-tools" -type f -name wasm-tools -print -quit)
+          test -n "${WASMTIME}" && test -n "${WASM_TOOLS}"
+          chmod +x "${WASMTIME}" "${WASM_TOOLS}"
+          echo "SPIKE_WASMTIME=${WASMTIME}" >> "${GITHUB_ENV}"
+          echo "SPIKE_WASM_TOOLS=${WASM_TOOLS}" >> "${GITHUB_ENV}"
+
+      - name: Transform exact post-runtime-init candidate twice
+        run: |
+          set -o pipefail
+          ROOT="${{ runner.temp }}/preinitialized-guest"
+          INPUT="${ROOT}/input/agent-python-runtime.wasm"
+          CANDIDATE_DIR="${ROOT}/candidate"
+          EVIDENCE_DIR="${ROOT}/evidence"
+          mkdir -p "${CANDIDATE_DIR}" "${EVIDENCE_DIR}"
+          {
+            "${SPIKE_WASMTIME}" --version
+            "${SPIKE_WASMTIME}" wizer --help
+            "${SPIKE_WASM_TOOLS}" parse \
+              experiments/preinitialized-guest/host-call-stub.wat \
+              -o "${ROOT}/host-call-stub.wasm"
+            "${SPIKE_WASMTIME}" wizer \
+              -S cli=y \
+              -f runtime_preinitialize \
+              -r _initialize=runtime_preinitialized_initialize \
+              --preload "agent_runtime_v1=${ROOT}/host-call-stub.wasm" \
+              "${INPUT}" \
+              -o "${CANDIDATE_DIR}/agent-python-runtime.wasm"
+            "${SPIKE_WASMTIME}" wizer \
+              -S cli=y \
+              -f runtime_preinitialize \
+              -r _initialize=runtime_preinitialized_initialize \
+              --preload "agent_runtime_v1=${ROOT}/host-call-stub.wasm" \
+              "${INPUT}" \
+              -o "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm"
+            "${SPIKE_WASM_TOOLS}" validate "${CANDIDATE_DIR}/agent-python-runtime.wasm"
+            "${SPIKE_WASM_TOOLS}" validate "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm"
+
+            export SOURCE_DATE_EPOCH
+            SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
+            "${SPIKE_WASM_TOOLS}" print "${INPUT}" > "${ROOT}/input.wat"
+            python3 guest/build/write-manifest.py \
+              --artifact "${INPUT}" \
+              --wat "${ROOT}/input.wat" \
+              --source-lock guest/build/sources.lock.json \
+              --artifact-profile base \
+              --output "${ROOT}/input/manifest.json"
+            "${SPIKE_WASM_TOOLS}" print "${CANDIDATE_DIR}/agent-python-runtime.wasm" > "${ROOT}/candidate.wat"
+            python3 guest/build/write-manifest.py \
+              --artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
+              --wat "${ROOT}/candidate.wat" \
+              --source-lock guest/build/sources.lock.json \
+              --artifact-profile base \
+              --output "${CANDIDATE_DIR}/manifest.json"
+            python3 guest/build/verify-artifact.py \
+              "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
+              "${CANDIDATE_DIR}/manifest.json"
+            TOOL_VERSION=$("${SPIKE_WASMTIME}" --version)
+            python3 experiments/preinitialized-guest/write_transform_receipt.py \
+              --input "${INPUT}" \
+              --candidate "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
+              --repeat-candidate "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm" \
+              --tool-version "${TOOL_VERSION}" \
+              --host-revision "${GITHUB_SHA}" \
+              --output "${EVIDENCE_DIR}/transform-receipt.json"
+          } 2>&1 | tee "${EVIDENCE_DIR}/transform.log"
+
+      - name: Execute exact baseline and candidate through wazero
+        run: |
+          ROOT="${{ runner.temp }}/preinitialized-guest"
+          AGENT_RUNTIME_GUEST="${ROOT}/candidate/agent-python-runtime.wasm" \
+            go test ./integration/e2e -v -count=1
+          go run ./cmd/apyrun-benchmark \
+            -artifact "${ROOT}/input/agent-python-runtime.wasm" \
+            -manifest "${ROOT}/input/manifest.json" \
+            -output "${ROOT}/evidence/runtime-baseline.json" \
+            -class preinitialization-spike \
+            -samples 3
+          go run ./cmd/apyrun-benchmark \
+            -artifact "${ROOT}/candidate/agent-python-runtime.wasm" \
+            -manifest "${ROOT}/candidate/manifest.json" \
+            -output "${ROOT}/evidence/runtime-candidate.json" \
+            -class preinitialization-spike \
+            -samples 3
+          python3 experiments/preinitialized-guest/compare.py \
+            --baseline "${ROOT}/evidence/runtime-baseline.json" \
+            --candidate "${ROOT}/evidence/runtime-candidate.json" \
+            --receipt "${ROOT}/evidence/transform-receipt.json" \
+            --output "${ROOT}/evidence/verdict.json"
+          go run ./cmd/validate-json-schema \
+            benchmark/v1/evidence.schema.json \
+            "${ROOT}/evidence/runtime-baseline.json"
+          go run ./cmd/validate-json-schema \
+            benchmark/v1/evidence.schema.json \
+            "${ROOT}/evidence/runtime-candidate.json"
+          python3 -m json.tool "${ROOT}/evidence/verdict.json" >/dev/null
+
+      - name: Upload preinitialization spike evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preinitialized-guest-spike-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/preinitialized-guest/candidate/*.wasm
+            ${{ runner.temp }}/preinitialized-guest/candidate/manifest.json
+            ${{ runner.temp }}/preinitialized-guest/evidence/
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 6

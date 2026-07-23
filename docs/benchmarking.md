@@ -73,6 +73,7 @@ Background refill can overlap request execution. `refill_ready_after_run_ns` mea
 - `production-safe`: three or more execute samples and one-operation capability samples, with small deterministic integer work; accepted only for the default `base` profile (legacy checked-in evidence predates the explicit profile field).
 - `full`: the same schema and lifecycle with larger deterministic integer work and 20 capability operations at Host concurrency 8; accepted only for `base`.
 - `profile-candidate`: the same bounded small synthetic workload as `production-safe`, but accepted only when the manifest and evidence both bind `artifact_profile: numpy-core`. It is descriptive candidate evidence and does not approve default selection, release, deployment, or production-safe status.
+- `preinitialization-spike`: the bounded fresh-runtime workload for an exact `base` artifact transformed by the build-time Python preinitialization experiment. It is rejected for prepared and lifecycle-density strategies and never approves default selection, release, deployment, or production-safe status.
 
 All classes use a local IP-loopback provider with a fixed 2 ms delay per operation. They do not measure production DNS, TCP, TLS, provider rate limits, or provider variance. The class labels separate recurring base measurement, fuller exploratory evidence, and opt-in profile-candidate evidence; none turns synthetic results into a production latency claim. A class/profile mismatch fails before benchmark samples run.
 

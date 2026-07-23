@@ -183,7 +183,7 @@ if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
   NUMPY_WASI_PROBE_DIR="${NUMPY_PROFILE_DIR}" \
   NUMPY_WASI_FEATURE_PROFILE=core \
   NUMPY_WASI_SOURCE_LOCK="${SOURCE_LOCK}" \
-    "${ROOT_DIR}/experiments/numpy-wasi/probe.sh"
+    bash "${ROOT_DIR}/experiments/numpy-wasi/probe.sh"
 
   PROFILE_OUTPUT_DIR="${NUMPY_PROFILE_DIR}/extension-profile"
   PROFILE_SELECTION="${PROFILE_OUTPUT_DIR}/selection-report.json"

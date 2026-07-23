@@ -209,7 +209,7 @@
             "safety_guard",
             "workload_not_run",
             "nonisolated_scope",
-            "baseline_required"
+            "isolation_unproven"
           ]
         }
       }
@@ -223,13 +223,22 @@
         "reason_code": {"const": "nonisolated_scope"}
       }
     },
-    "baselineRequiredMetric": {
+    "isolationUnprovenMetric": {
       "type": "object",
       "additionalProperties": false,
       "required": ["status", "reason_code"],
       "properties": {
         "status": {"const": "skipped"},
-        "reason_code": {"const": "baseline_required"}
+        "reason_code": {"const": "isolation_unproven"}
+      }
+    },
+    "notApplicableMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason_code"],
+      "properties": {
+        "status": {"const": "unsupported"},
+        "reason_code": {"const": "not_applicable"}
       }
     },
     "histogram": {
@@ -309,12 +318,11 @@
     "cgroup": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "scope", "cumulative_baseline", "memory_current_bytes", "memory_peak_bytes", "memory_swap_current_bytes", "memory_events_high_total", "memory_events_oom_total", "memory_events_oom_kill_total", "pressure_some_total_us", "pressure_full_total_us"],
+      "required": ["version", "scope", "memory_current_bytes", "memory_peak_bytes", "memory_swap_current_bytes", "memory_events_high_total", "memory_events_oom_total", "memory_events_oom_kill_total", "pressure_some_total_us", "pressure_full_total_us"],
       "properties": {
         "version": {"enum": ["v2", "none"]},
-        "scope": {"enum": ["process-dedicated", "shared", "unverified"]},
+        "scope": {"enum": ["shared", "unverified"]},
         "membership_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "cumulative_baseline": {"type": "boolean"},
         "memory_current_bytes": {"$ref": "#/$defs/rawMetric"},
         "memory_peak_bytes": {"$ref": "#/$defs/rawMetric"},
         "memory_swap_current_bytes": {"$ref": "#/$defs/rawMetric"},
@@ -332,7 +340,17 @@
         {
           "if": {"properties": {"version": {"const": "none"}}},
           "then": {
-            "properties": {"scope": {"const": "unverified"}, "cumulative_baseline": {"const": false}},
+            "properties": {
+              "scope": {"const": "unverified"},
+              "memory_current_bytes": {"$ref": "#/$defs/notApplicableMetric"},
+              "memory_peak_bytes": {"$ref": "#/$defs/notApplicableMetric"},
+              "memory_swap_current_bytes": {"$ref": "#/$defs/notApplicableMetric"},
+              "memory_events_high_total": {"$ref": "#/$defs/notApplicableMetric"},
+              "memory_events_oom_total": {"$ref": "#/$defs/notApplicableMetric"},
+              "memory_events_oom_kill_total": {"$ref": "#/$defs/notApplicableMetric"},
+              "pressure_some_total_us": {"$ref": "#/$defs/notApplicableMetric"},
+              "pressure_full_total_us": {"$ref": "#/$defs/notApplicableMetric"}
+            },
             "not": {"required": ["membership_sha256"]}
           }
         },
@@ -340,7 +358,6 @@
           "if": {"properties": {"scope": {"const": "shared"}}},
           "then": {
             "properties": {
-              "cumulative_baseline": {"const": false},
               "memory_current_bytes": {"$ref": "#/$defs/nonisolatedMetric"},
               "memory_peak_bytes": {"$ref": "#/$defs/nonisolatedMetric"},
               "memory_swap_current_bytes": {"$ref": "#/$defs/nonisolatedMetric"},
@@ -353,15 +370,17 @@
           }
         },
         {
-          "if": {"properties": {"scope": {"const": "process-dedicated"}, "cumulative_baseline": {"const": false}}},
+          "if": {"properties": {"version": {"const": "v2"}, "scope": {"const": "unverified"}}},
           "then": {
             "properties": {
-              "memory_peak_bytes": {"$ref": "#/$defs/baselineRequiredMetric"},
-              "memory_events_high_total": {"$ref": "#/$defs/baselineRequiredMetric"},
-              "memory_events_oom_total": {"$ref": "#/$defs/baselineRequiredMetric"},
-              "memory_events_oom_kill_total": {"$ref": "#/$defs/baselineRequiredMetric"},
-              "pressure_some_total_us": {"$ref": "#/$defs/baselineRequiredMetric"},
-              "pressure_full_total_us": {"$ref": "#/$defs/baselineRequiredMetric"}
+              "memory_current_bytes": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "memory_peak_bytes": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "memory_swap_current_bytes": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "memory_events_high_total": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "memory_events_oom_total": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "memory_events_oom_kill_total": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "pressure_some_total_us": {"$ref": "#/$defs/isolationUnprovenMetric"},
+              "pressure_full_total_us": {"$ref": "#/$defs/isolationUnprovenMetric"}
             }
           }
         }

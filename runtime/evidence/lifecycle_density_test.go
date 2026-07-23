@@ -77,17 +77,16 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 			},
 			Cgroup: CgroupMetrics{
 				Version:                  "v2",
-				Scope:                    "process-dedicated",
+				Scope:                    "unverified",
 				MembershipSHA256:         strings.Repeat("c", 64),
-				CumulativeBaseline:       true,
-				MemoryCurrentBytes:       metric(MetricMeasured, 2_000*n),
-				MemoryPeakBytes:          metric(MetricMeasured, 2_100*n),
-				MemorySwapCurrentBytes:   metric(MetricMeasured, 0),
-				MemoryEventsHighTotal:    metric(MetricMeasured, 0),
-				MemoryEventsOOMTotal:     metric(MetricMeasured, 0),
-				MemoryEventsOOMKillTotal: metric(MetricMeasured, 0),
-				PressureSomeTotalUS:      metric(MetricMeasured, n),
-				PressureFullTotalUS:      metric(MetricMeasured, 0),
+				MemoryCurrentBytes:       unavailable(MetricSkipped, ReasonIsolationUnproven),
+				MemoryPeakBytes:          unavailable(MetricSkipped, ReasonIsolationUnproven),
+				MemorySwapCurrentBytes:   unavailable(MetricSkipped, ReasonIsolationUnproven),
+				MemoryEventsHighTotal:    unavailable(MetricSkipped, ReasonIsolationUnproven),
+				MemoryEventsOOMTotal:     unavailable(MetricSkipped, ReasonIsolationUnproven),
+				MemoryEventsOOMKillTotal: unavailable(MetricSkipped, ReasonIsolationUnproven),
+				PressureSomeTotalUS:      unavailable(MetricSkipped, ReasonIsolationUnproven),
+				PressureFullTotalUS:      unavailable(MetricSkipped, ReasonIsolationUnproven),
 			},
 		})
 	}
@@ -124,7 +123,7 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 		Summary: DerivedSummary{
 			SampleCount:                  len(samples),
 			PeakProcessRSSBytes:          metric(MetricMeasured, 16_000),
-			PeakCgroupMemoryCurrentBytes: metric(MetricMeasured, 32_000),
+			PeakCgroupMemoryCurrentBytes: unavailable(MetricSkipped, ReasonIsolationUnproven),
 			PeakGoHeapLiveBytes:          metric(MetricMeasured, 1_600),
 		},
 		Limitations: []string{"fixture evidence only"},
@@ -157,8 +156,11 @@ func TestLifecycleDensityEvidenceRejectsDirtyFallbackMismatchAndFabricatedDerive
 		"cgroup identity drift": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Cgroup.Version = "none"
 		},
-		"shared cgroup measured as process evidence": func(value *LifecycleDensityEvidence) {
+		"shared cgroup reason mismatch": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Cgroup.Scope = "shared"
+		},
+		"process-dedicated cgroup claim in v1": func(value *LifecycleDensityEvidence) {
+			value.Samples[0].Cgroup.Scope = "process-dedicated"
 		},
 		"mixed metric availability": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Process.RSSBytes = unavailable(MetricUnsupported, ReasonPlatformUnsupported)
@@ -255,6 +257,15 @@ func TestLifecycleDensityJSONSchemaAcceptsCanonicalAndRejectsInvalidClaims(t *te
 		},
 		"runtime shards exceed requested slots": func(object map[string]any) {
 			object["samples"].([]any)[0].(map[string]any)["runtime_shards"] = float64(2)
+		},
+		"process-dedicated cgroup claim": func(object map[string]any) {
+			object["samples"].([]any)[0].(map[string]any)["cgroup"].(map[string]any)["scope"] = "process-dedicated"
+		},
+		"legacy baseline boolean": func(object map[string]any) {
+			object["samples"].([]any)[0].(map[string]any)["cgroup"].(map[string]any)["cumulative_baseline"] = true
+		},
+		"unverified measured cgroup": func(object map[string]any) {
+			object["samples"].([]any)[0].(map[string]any)["cgroup"].(map[string]any)["memory_current_bytes"] = map[string]any{"status": "measured", "value": float64(1)}
 		},
 	}
 	for name, mutate := range cases {

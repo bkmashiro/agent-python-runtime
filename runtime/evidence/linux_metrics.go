@@ -177,28 +177,12 @@ func (collector LinuxCollector) collectCgroup() (CgroupMetrics, error) {
 	membershipSHA256 := fmt.Sprintf("%x", membershipDigest)
 	scope, scopeReason := classifyCgroupScope(filepath.Join(leaf, "cgroup.procs"))
 	if scopeReason != "" {
-		return unavailableScopedCgroup("v2", "unverified", membershipSHA256, MetricUnsupported, scopeReason), nil
+		return unavailableScopedCgroup("v2", "unverified", membershipSHA256, MetricSkipped, ReasonIsolationUnproven), nil
 	}
 	if scope == "shared" {
 		return unavailableScopedCgroup("v2", scope, membershipSHA256, MetricSkipped, ReasonNonisolatedScope), nil
 	}
-	current := collectScalarMetric(filepath.Join(leaf, "memory.current"))
-	swap := collectScalarMetric(filepath.Join(leaf, "memory.swap.current"))
-	cumulative := unavailableMetricWithStatus(MetricSkipped, ReasonBaselineRequired)
-	return CgroupMetrics{
-		Version:                  "v2",
-		Scope:                    scope,
-		MembershipSHA256:         membershipSHA256,
-		CumulativeBaseline:       false,
-		MemoryCurrentBytes:       current,
-		MemoryPeakBytes:          cumulative,
-		MemorySwapCurrentBytes:   swap,
-		MemoryEventsHighTotal:    cumulative,
-		MemoryEventsOOMTotal:     cumulative,
-		MemoryEventsOOMKillTotal: cumulative,
-		PressureSomeTotalUS:      cumulative,
-		PressureFullTotalUS:      cumulative,
-	}, nil
+	return unavailableScopedCgroup("v2", "unverified", membershipSHA256, MetricSkipped, ReasonIsolationUnproven), nil
 }
 
 func classifyCgroupScope(filename string) (string, UnavailableReason) {
@@ -222,7 +206,7 @@ func classifyCgroupScope(filename string) (string, UnavailableReason) {
 	}
 	if len(pids) == 1 {
 		if _, current := pids[uint64(os.Getpid())]; current {
-			return "process-dedicated", ""
+			return "unverified", ""
 		}
 	}
 	return "shared", ""
@@ -274,18 +258,6 @@ func optionalKBMetric(values map[string]string, key string) (Metric, error) {
 		return Metric{}, err
 	}
 	return measuredMetric(value), nil
-}
-
-func collectScalarMetric(filename string) Metric {
-	content, err := readLinuxMetricFile(filename)
-	if err != nil {
-		return unavailableMetricValue(reasonFromSourceError(err))
-	}
-	value, err := strconv.ParseUint(strings.TrimSpace(content), 10, 64)
-	if err != nil {
-		return collectionErrorMetric()
-	}
-	return measuredMetric(value)
 }
 
 func confinedCgroupPath(root, membership string) (string, error) {
@@ -387,7 +359,6 @@ func unavailableScopedCgroup(version, scope, membershipSHA256 string, status Met
 		Version:                  version,
 		Scope:                    scope,
 		MembershipSHA256:         membershipSHA256,
-		CumulativeBaseline:       false,
 		MemoryCurrentBytes:       metric,
 		MemoryPeakBytes:          metric,
 		MemorySwapCurrentBytes:   metric,

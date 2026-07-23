@@ -37,7 +37,7 @@ const (
 	ReasonSafetyGuard         UnavailableReason = "safety_guard"
 	ReasonWorkloadNotRun      UnavailableReason = "workload_not_run"
 	ReasonNonisolatedScope    UnavailableReason = "nonisolated_scope"
-	ReasonBaselineRequired    UnavailableReason = "baseline_required"
+	ReasonIsolationUnproven   UnavailableReason = "isolation_unproven"
 )
 
 type Metric struct {
@@ -74,7 +74,7 @@ func validModel(model string) bool {
 func validUnavailableReason(reason UnavailableReason) bool {
 	switch reason {
 	case ReasonSourceUnavailable, ReasonPermissionDenied, ReasonNotApplicable, ReasonPlatformUnsupported,
-		ReasonCollectionError, ReasonSafetyGuard, ReasonWorkloadNotRun, ReasonNonisolatedScope, ReasonBaselineRequired:
+		ReasonCollectionError, ReasonSafetyGuard, ReasonWorkloadNotRun, ReasonNonisolatedScope, ReasonIsolationUnproven:
 		return true
 	default:
 		return false
@@ -199,7 +199,6 @@ type CgroupMetrics struct {
 	Version                  string `json:"version"`
 	Scope                    string `json:"scope"`
 	MembershipSHA256         string `json:"membership_sha256,omitempty"`
-	CumulativeBaseline       bool   `json:"cumulative_baseline"`
 	MemoryCurrentBytes       Metric `json:"memory_current_bytes"`
 	MemoryPeakBytes          Metric `json:"memory_peak_bytes"`
 	MemorySwapCurrentBytes   Metric `json:"memory_swap_current_bytes"`
@@ -438,12 +437,12 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 		sample.Cgroup.PressureSomeTotalUS, sample.Cgroup.PressureFullTotalUS,
 	}
 	if sample.Cgroup.Version == "none" {
-		if sample.Cgroup.Scope != "unverified" || sample.Cgroup.MembershipSHA256 != "" || sample.Cgroup.CumulativeBaseline {
+		if sample.Cgroup.Scope != "unverified" || sample.Cgroup.MembershipSHA256 != "" {
 			return errors.New("cgroup=none carries scoped identity")
 		}
 		for _, metric := range allCgroupMetrics {
-			if metric.Status != MetricUnsupported && metric.Status != MetricSkipped {
-				return errors.New("cgroup=none cannot carry measured cgroup metrics")
+			if metric.Status != MetricUnsupported || metric.ReasonCode != ReasonNotApplicable {
+				return errors.New("cgroup=none metrics must be unsupported as not applicable")
 			}
 		}
 		return nil
@@ -451,38 +450,19 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 	if !lowerHex(sample.Cgroup.MembershipSHA256, 64) {
 		return errors.New("cgroup v2 membership identity is missing")
 	}
+	var expectedReason UnavailableReason
 	switch sample.Cgroup.Scope {
 	case "shared":
-		if sample.Cgroup.CumulativeBaseline {
-			return errors.New("shared cgroup cannot claim a process baseline")
-		}
-		for _, metric := range allCgroupMetrics {
-			if metric.Status != MetricSkipped || metric.ReasonCode != ReasonNonisolatedScope {
-				return errors.New("shared cgroup metrics must be skipped as nonisolated")
-			}
-		}
+		expectedReason = ReasonNonisolatedScope
 	case "unverified":
-		if sample.Cgroup.CumulativeBaseline {
-			return errors.New("unverified cgroup cannot claim a baseline")
-		}
-		for _, metric := range allCgroupMetrics {
-			if metric.Status != MetricUnsupported && metric.Status != MetricSkipped {
-				return errors.New("unverified cgroup cannot carry measured metrics")
-			}
-		}
-	case "process-dedicated":
-		if !sample.Cgroup.CumulativeBaseline {
-			for _, metric := range []Metric{
-				sample.Cgroup.MemoryPeakBytes, sample.Cgroup.MemoryEventsHighTotal, sample.Cgroup.MemoryEventsOOMTotal,
-				sample.Cgroup.MemoryEventsOOMKillTotal, sample.Cgroup.PressureSomeTotalUS, sample.Cgroup.PressureFullTotalUS,
-			} {
-				if metric.Status != MetricSkipped || metric.ReasonCode != ReasonBaselineRequired {
-					return errors.New("cumulative cgroup metric requires an explicit baseline")
-				}
-			}
-		}
+		expectedReason = ReasonIsolationUnproven
 	default:
-		return errors.New("unknown cgroup scope")
+		return errors.New("lifecycle-density v1 does not accept cgroup isolation claims")
+	}
+	for _, metric := range allCgroupMetrics {
+		if metric.Status != MetricSkipped || metric.ReasonCode != expectedReason {
+			return errors.New("cgroup v2 metrics lack the required fail-closed scope reason")
+		}
 	}
 	return nil
 }

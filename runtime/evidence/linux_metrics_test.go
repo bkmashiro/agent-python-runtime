@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestLinuxCollectorReadsProcessAndCgroupV2Metrics(t *testing.T) {
+func TestLinuxCollectorDoesNotInferIsolationFromSingleLeafPID(t *testing.T) {
 	root := t.TempDir()
 	procRoot := filepath.Join(root, "proc")
 	cgroupRoot := filepath.Join(root, "cgroup")
@@ -26,8 +26,6 @@ func TestLinuxCollectorReadsProcessAndCgroupV2Metrics(t *testing.T) {
 	writeFixture(t, filepath.Join(procRoot, "self/cgroup"), "0::/user.slice/agent.scope\n")
 	leaf := filepath.Join(cgroupRoot, "user.slice/agent.scope")
 	writeFixture(t, filepath.Join(leaf, "cgroup.procs"), strconv.Itoa(os.Getpid())+"\n")
-	writeFixture(t, filepath.Join(leaf, "memory.current"), "2048\n")
-	writeFixture(t, filepath.Join(leaf, "memory.swap.current"), "0\n")
 
 	snapshot, err := (LinuxCollector{ProcRoot: procRoot, CgroupRoot: cgroupRoot}).Collect()
 	if err != nil {
@@ -49,17 +47,17 @@ func TestLinuxCollectorReadsProcessAndCgroupV2Metrics(t *testing.T) {
 	if snapshot.Cgroup.Version != "v2" {
 		t.Fatalf("cgroup version = %q", snapshot.Cgroup.Version)
 	}
-	if snapshot.Cgroup.Scope != "process-dedicated" || snapshot.Cgroup.MembershipSHA256 == "" || snapshot.Cgroup.CumulativeBaseline {
+	if snapshot.Cgroup.Scope != "unverified" || snapshot.Cgroup.MembershipSHA256 == "" {
 		t.Fatalf("cgroup scope identity = %#v", snapshot.Cgroup)
 	}
-	assertMeasured(t, snapshot.Cgroup.MemoryCurrentBytes, 2048)
-	assertMeasured(t, snapshot.Cgroup.MemorySwapCurrentBytes, 0)
-	assertUnavailable(t, snapshot.Cgroup.MemoryPeakBytes, MetricSkipped, ReasonBaselineRequired)
-	assertUnavailable(t, snapshot.Cgroup.MemoryEventsHighTotal, MetricSkipped, ReasonBaselineRequired)
-	assertUnavailable(t, snapshot.Cgroup.MemoryEventsOOMTotal, MetricSkipped, ReasonBaselineRequired)
-	assertUnavailable(t, snapshot.Cgroup.MemoryEventsOOMKillTotal, MetricSkipped, ReasonBaselineRequired)
-	assertUnavailable(t, snapshot.Cgroup.PressureSomeTotalUS, MetricSkipped, ReasonBaselineRequired)
-	assertUnavailable(t, snapshot.Cgroup.PressureFullTotalUS, MetricSkipped, ReasonBaselineRequired)
+	assertUnavailable(t, snapshot.Cgroup.MemoryCurrentBytes, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.MemorySwapCurrentBytes, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.MemoryPeakBytes, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.MemoryEventsHighTotal, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.MemoryEventsOOMTotal, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.MemoryEventsOOMKillTotal, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.PressureSomeTotalUS, MetricSkipped, ReasonIsolationUnproven)
+	assertUnavailable(t, snapshot.Cgroup.PressureFullTotalUS, MetricSkipped, ReasonIsolationUnproven)
 }
 
 func TestLinuxCollectorDoesNotAttributeSharedCgroupMetricsToProcess(t *testing.T) {
@@ -75,7 +73,7 @@ func TestLinuxCollectorDoesNotAttributeSharedCgroupMetricsToProcess(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metrics.Scope != "shared" || metrics.CumulativeBaseline {
+	if metrics.Scope != "shared" {
 		t.Fatalf("shared scope identity = %#v", metrics)
 	}
 	assertUnavailable(t, metrics.MemoryCurrentBytes, MetricSkipped, ReasonNonisolatedScope)

@@ -30,8 +30,8 @@ func validateLifecycleDensityOptions(options benchmarkOptions, child bool, goos 
 	if options.Kind != "lifecycle-density" || options.ArtifactPath == "" || options.ManifestPath == "" {
 		return errors.New("lifecycle-density kind, artifact, and manifest are required")
 	}
-	if options.Class != "production-safe" || options.Strategy != "single-use-preinitialized" {
-		return errors.New("initial lifecycle-density benchmark requires production-safe single-use-preinitialized base strategy")
+	if (options.Class != "production-safe" && options.Class != "preinitialization-spike") || options.Strategy != "single-use-preinitialized" {
+		return errors.New("lifecycle-density benchmark requires production-safe or preinitialization-spike single-use-preinitialized base strategy")
 	}
 	if options.MaxRSSBytes == 0 || options.MaxRSSBytes > 1<<50 || options.ChildTimeout <= 0 || options.ChildTimeout > 24*time.Hour {
 		return errors.New("lifecycle-density RSS guard or child timeout is missing or outside its hard bound")
@@ -77,9 +77,9 @@ func runLifecycleDensityMain(options benchmarkOptions) error {
 	}
 	runner := boundedChildRunner{executable: executable}
 	evidence, encoded, err := assembleLifecycleDensityEvidence(
-		context.Background(), artifact, artifactBytes, hostSource, specs, nonce,
+		context.Background(), artifact, artifactBytes, hostSource, options.Class, specs, nonce,
 		func(ctx context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
-			return invokeOSDensityChild(ctx, runner, options.ArtifactPath, options.ManifestPath, spec)
+			return invokeOSDensityChild(ctx, runner, options.ArtifactPath, options.ManifestPath, options.Class, spec)
 		},
 	)
 	if err != nil {
@@ -97,11 +97,13 @@ func assembleLifecycleDensityEvidence(
 	artifact artifactIdentity,
 	artifactBytes []byte,
 	hostSource hostSourceIdentity,
+	benchmarkClass string,
 	specs []densitySweepSpec,
 	nonce []byte,
 	invoke densityChildInvoker,
 ) (runtimeevidence.LifecycleDensityEvidence, []byte, error) {
-	if len(nonce) != 32 || invoke == nil || len(specs) == 0 || len(specs)%5 != 0 {
+	if len(nonce) != 32 || invoke == nil || len(specs) == 0 || len(specs)%5 != 0 ||
+		(benchmarkClass != "production-safe" && benchmarkClass != "preinitialization-spike") {
 		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("lifecycle-density parent configuration is incomplete")
 	}
 	repeats := uint32(len(specs) / 5)
@@ -192,6 +194,11 @@ func assembleLifecycleDensityEvidence(
 			"V1 cgroup counters remain unavailable unless isolation is independently proven; shared or unverified totals are not attributed to this process.",
 		},
 	}
+	if benchmarkClass == "preinitialization-spike" {
+		evidence.Limitations = append(evidence.Limitations,
+			"Preinitialization-spike lifecycle density is exploratory and does not approve the transformed artifact for default, release, deployment, or production-safe status.",
+		)
+	}
 	if err := evidence.Validate(); err != nil {
 		return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("validate lifecycle-density evidence: %w", err)
 	}
@@ -244,12 +251,14 @@ func invokeOSDensityChild(
 	runner boundedChildRunner,
 	artifactPath string,
 	manifestPath string,
+	benchmarkClass string,
 	spec densitySweepSpec,
 ) (densityChildInvocation, error) {
 	result, err := runner.run(ctx, boundedChildSpec{
 		args: []string{
 			"-lifecycle-density-child",
 			"-kind", "lifecycle-density",
+			"-class", benchmarkClass,
 			"-artifact", artifactPath,
 			"-manifest", manifestPath,
 			"-strategy", spec.Strategy,

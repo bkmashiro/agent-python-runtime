@@ -485,6 +485,16 @@ jobs:
             -output "${ROOT}/evidence/runtime-candidate.json" \
             -class preinitialization-spike \
             -samples 3
+          go run ./cmd/apyrun-benchmark \
+            -kind lifecycle-density \
+            -artifact "${ROOT}/candidate/agent-python-runtime.wasm" \
+            -manifest "${ROOT}/candidate/manifest.json" \
+            -output "${ROOT}/evidence/lifecycle-density-candidate.json" \
+            -class preinitialization-spike \
+            -strategy single-use-preinitialized \
+            -samples 3 \
+            -max-rss-bytes 4294967296 \
+            -child-timeout 2m
           python3 experiments/preinitialized-guest/compare.py \
             --baseline "${ROOT}/evidence/runtime-baseline.json" \
             --candidate "${ROOT}/evidence/runtime-candidate.json" \
@@ -496,6 +506,9 @@ jobs:
           go run ./cmd/validate-json-schema \
             benchmark/v1/evidence.schema.json \
             "${ROOT}/evidence/runtime-candidate.json"
+          go run ./cmd/validate-json-schema \
+            benchmark/v1/lifecycle-density.schema.json \
+            "${ROOT}/evidence/lifecycle-density-candidate.json"
           python3 -m json.tool "${ROOT}/evidence/verdict.json" >/dev/null
 
       - name: Upload preinitialization spike evidence

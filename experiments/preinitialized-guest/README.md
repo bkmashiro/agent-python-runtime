@@ -31,6 +31,14 @@ The first candidate nevertheless passed the complete real wazero E2E suite from 
 
 The third iteration removes the diagnostic export and sets CPython's hash seed to the fixed experiment-only value `0xa9e17f5d` before build-time initialization. This is intended to test whether Python hash randomization caused the output mismatch. A fixed shared hash seed is a security and multi-tenant collision-risk trade-off and cannot be promoted merely because it makes the artifact reproducible.
 
-## Verdict: PENDING
+## Fresh-runtime verdict: VALIDATED
 
-No production recommendation is made until a Linux artifact job produces and independently validates the raw transform receipt, both runtime evidence files, and the comparison report.
+Exact Linux run `30005614619` at signed commit `9a571176bb58c2d6a41312d01ad789abdd6b82e6` passed both Wizer transforms, byte determinism, the production artifact ABI verifier, the complete real wazero E2E suite, exact baseline/candidate fresh-runtime benchmarks, structural schemas, and the independent semantic comparison. The candidate SHA-256 is `053934218445c897d2b6323800225625d9b6feabe3f07068774a2adf4ce52cab`; both transforms produced exactly 61,056,572 bytes.
+
+Across six Linux execute/capability samples, median `runtime_init` fell from 4,385,950,839 ns to 120,980 ns (36,253.37x), and median fresh-run total fell from 4,417,702,155 ns to 31,805,114 ns (138.90x). The artifact increased by 8,471,658 bytes (16.11%). The raw transform receipt, baseline, candidate, and verdict are archived under `docs/benchmarks/preinitialization-spike-*-linux-amd64.json`.
+
+This validates build-time Python preinitialization for exact fresh-instance execution. It does not validate session restore, post-request reset, cross-node portability, capacity, or production use of a fixed shared Python hash seed.
+
+## Lifecycle-density verdict: PENDING
+
+The next exact Linux run measures the same transformed candidate at canonical `N={1,2,4,8,16}` with three fresh-process repeats. No claim that the original 63-second N=16 ready wall is solved is made until that artifact passes both structural and `ValidateLifecycleDensityJSON` semantic gates.

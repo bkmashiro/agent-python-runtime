@@ -73,6 +73,11 @@ func TestValidateLifecycleDensityCLIOptionsSeparatesParentAndChild(t *testing.T)
 	if err := validateLifecycleDensityOptions(parent, false, "linux"); err != nil {
 		t.Fatal(err)
 	}
+	spike := parent
+	spike.Class = "preinitialization-spike"
+	if err := validateLifecycleDensityOptions(spike, false, "linux"); err != nil {
+		t.Fatalf("preinitialization spike density rejected: %v", err)
+	}
 	child := parent
 	child.OutputPath = ""
 	child.LifecycleDensityChild = true
@@ -86,6 +91,7 @@ func TestValidateLifecycleDensityCLIOptionsSeparatesParentAndChild(t *testing.T)
 		"missing guard":   func(value *benchmarkOptions) { value.MaxRSSBytes = 0 },
 		"missing output":  func(value *benchmarkOptions) { value.OutputPath = "" },
 		"invalid repeats": func(value *benchmarkOptions) { value.Samples = 0 },
+		"invalid class":   func(value *benchmarkOptions) { value.Class = "full" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := parent
@@ -165,7 +171,7 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 	invocations := 0
 	evidence, encoded, err := assembleLifecycleDensityEvidence(
 		context.Background(), artifact, artifactBytes,
-		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, specs,
+		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "preinitialization-spike", specs,
 		[]byte("01234567890123456789012345678901"),
 		func(_ context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
 			invocations++
@@ -180,6 +186,9 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 	}
 	if invocations != 5 || len(evidence.Samples) != 5 || evidence.Summary.SampleCount != 5 {
 		t.Fatalf("canonical child sweep incomplete: invocations=%d evidence=%#v", invocations, evidence)
+	}
+	if !strings.Contains(evidence.Limitations[len(evidence.Limitations)-1], "does not approve") {
+		t.Fatal("preinitialization lifecycle density lacks its experimental limitation")
 	}
 	if err := runtimeevidence.ValidateLifecycleDensityJSON(encoded); err != nil {
 		t.Fatal(err)
@@ -203,7 +212,7 @@ func TestAssembleLifecycleDensityEvidenceRejectsEnvironmentDrift(t *testing.T) {
 	invocations := 0
 	_, _, err = assembleLifecycleDensityEvidence(
 		context.Background(), artifact, artifactBytes,
-		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, specs,
+		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "production-safe", specs,
 		[]byte("01234567890123456789012345678901"),
 		func(_ context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
 			invocations++

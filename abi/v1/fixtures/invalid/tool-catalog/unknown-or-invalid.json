@@ -1,0 +1,26 @@
+{
+  "catalog_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "discovered_at": "2026-07-23T12:00:00Z",
+  "revision": 1,
+  "snapshot_id": "catalog_1",
+  "tools": [
+    {
+      "effect_class": "read_only",
+      "grant_version": "grant_v1",
+      "max_calls": 4,
+      "handler_version": "v1",
+      "input_schema": {
+        "type": "object"
+      },
+      "name": "echo",
+      "output_schema": {
+        "type": "object"
+      },
+      "policy": "AUTO_COMMIT",
+      "projection": "exact",
+      "server_id": "server_1",
+      "tool_id": "demo.echo"
+    }
+  ],
+  "unexpected_authority": "forged"
+}

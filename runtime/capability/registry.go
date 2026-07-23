@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
+	"github.com/bkmashiro/agent-python-runtime/runtime/toolcatalog"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -83,14 +84,45 @@ type registeredHandler struct {
 }
 
 type Registry struct {
-	mu       sync.RWMutex
-	handlers map[string]registeredHandler
+	mu            sync.RWMutex
+	handlers      map[string]registeredHandler
+	catalogDigest string
 }
 
 const registryMaxPayloadBytes = 1024 * 1024
 
 func NewRegistry() *Registry {
-	return &Registry{handlers: make(map[string]registeredHandler)}
+	return &Registry{handlers: map[string]registeredHandler{}}
+}
+
+func BuildRegistryFromSnapshot(snapshot toolcatalog.Snapshot, handlers map[string]Handler) (*Registry, map[string]ToolGrant, error) {
+	if !catalogDigestPattern.MatchString(snapshot.Digest()) || snapshot.Revision() == 0 {
+		return nil, nil, errors.New("tool catalog snapshot is empty or invalid")
+	}
+	tools := snapshot.Tools()
+	if len(tools) == 0 || len(handlers) != len(tools) {
+		return nil, nil, errors.New("handler set does not exactly match the frozen tool catalog")
+	}
+	registry := NewRegistry()
+	registry.catalogDigest = snapshot.Digest()
+	grants := make(map[string]ToolGrant, len(tools))
+	for _, tool := range tools {
+		handler, exists := handlers[tool.ToolID]
+		if !exists || handler == nil {
+			return nil, nil, fmt.Errorf("catalog tool %q has no Host handler", tool.ToolID)
+		}
+		if err := registry.Register(HandlerSpec{
+			ToolID: tool.ToolID, HandlerVersion: tool.HandlerVersion,
+			InputSchema: tool.InputSchema, OutputSchema: tool.OutputSchema, Handler: handler,
+		}); err != nil {
+			return nil, nil, err
+		}
+		grants[tool.ToolID] = ToolGrant{
+			ToolID: tool.ToolID, HandlerVersion: tool.HandlerVersion,
+			EffectClass: tool.EffectClass, Policy: tool.Policy, MaxCalls: tool.MaxCalls,
+		}
+	}
+	return registry, grants, nil
 }
 
 func (registry *Registry) Register(spec HandlerSpec) error {
@@ -120,6 +152,7 @@ func (registry *Registry) Register(spec HandlerSpec) error {
 
 func compileRegisteredSchema(name string, raw []byte) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
+	compiler.AssertFormat()
 	resource := "mem:///" + url.PathEscape(name) + ".json"
 	var document any
 	if err := json.Unmarshal(raw, &document); err != nil {
@@ -137,7 +170,7 @@ func (registry *Registry) snapshot() *Registry {
 	}
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
-	cloned := &Registry{handlers: make(map[string]registeredHandler, len(registry.handlers))}
+	cloned := &Registry{handlers: make(map[string]registeredHandler, len(registry.handlers)), catalogDigest: registry.catalogDigest}
 	for id, handler := range registry.handlers {
 		handler.spec.InputSchema = append([]byte(nil), handler.spec.InputSchema...)
 		handler.spec.OutputSchema = append([]byte(nil), handler.spec.OutputSchema...)

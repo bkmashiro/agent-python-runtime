@@ -1,0 +1,12 @@
+{
+  "actor_id": "agent_1",
+  "authority_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "command_id": "cmd_1",
+  "expires_at": "2026-07-23T12:01:00Z",
+  "manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "operation_id": "op_1",
+  "phase_grant_id": "phase_1",
+  "source": "agent",
+  "source_run_id": "later_run",
+  "transaction_id": "tx_1"
+}

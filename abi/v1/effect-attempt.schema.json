@@ -1,0 +1,88 @@
+{
+  "$id": "https://agent-runtime.dev/abi/v1/effect-attempt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attempt_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "expected_operation_state": {
+      "enum": [
+        "ready",
+        "rolling_back",
+        "compensating"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "apply",
+        "rollback",
+        "compensate"
+      ]
+    },
+    "lease_expires_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "lease_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "operation_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "ordinal": {
+      "maximum": 1024,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "provider_request_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "leased",
+        "dispatching",
+        "succeeded",
+        "failed",
+        "ambiguous",
+        "expired"
+      ]
+    },
+    "transaction_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "transaction_id",
+    "operation_id",
+    "kind",
+    "ordinal",
+    "state",
+    "expected_operation_state",
+    "lease_id",
+    "lease_expires_at",
+    "provider_request_digest",
+    "version",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}

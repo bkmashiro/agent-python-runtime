@@ -1,0 +1,108 @@
+{
+  "$id": "https://agent-runtime.dev/abi/v1/effect-operation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "argument_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "effect_class": {
+      "enum": [
+        "read_only",
+        "reversible",
+        "compensatable",
+        "irreversible"
+      ]
+    },
+    "handler_version": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "index": {
+      "maximum": 4096,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "manifest_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "operation_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "policy": {
+      "enum": [
+        "DENY",
+        "AUTO_COMMIT",
+        "AGENT_COMMIT_REQUIRED",
+        "USER_APPROVAL_REQUIRED"
+      ]
+    },
+    "policy_version": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "proposed",
+        "staged",
+        "awaiting_agent_commit",
+        "awaiting_user_approval",
+        "ready",
+        "applying",
+        "applied",
+        "failed_retryable",
+        "failed_terminal",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed",
+        "compensation_required",
+        "compensating",
+        "compensated",
+        "compensation_failed",
+        "denied",
+        "expired",
+        "reconciliation_required"
+      ]
+    },
+    "tool_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "transaction_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "operation_id",
+    "transaction_id",
+    "index",
+    "tool_id",
+    "handler_version",
+    "effect_class",
+    "policy",
+    "policy_version",
+    "state",
+    "argument_digest",
+    "manifest_digest",
+    "version",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}

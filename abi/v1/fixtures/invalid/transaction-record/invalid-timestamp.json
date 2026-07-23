@@ -1,0 +1,10 @@
+{
+  "transaction_id": "tx_bad_time",
+  "run_id": "run_1",
+  "catalog_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "mode": "workflow",
+  "state": "open",
+  "version": 1,
+  "created_at": "not-a-time",
+  "updated_at": "2026-07-23T12:00:00Z"
+}

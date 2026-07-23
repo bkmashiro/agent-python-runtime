@@ -13,6 +13,27 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
     },
     "capability": {"type": "string", "minLength": 1, "maxLength": 128},
+    "catalog_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "handler_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
     "arguments": {"type": "object"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"capability": {"const": "fetch_many"}}},
+      "then": {
+        "not": {
+          "anyOf": [
+            {"required": ["catalog_digest"]},
+            {"required": ["handler_version"]}
+          ]
+        }
+      },
+      "else": {"required": ["catalog_digest", "handler_version"]}
+    }
+  ]
 }

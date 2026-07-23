@@ -1,0 +1,7 @@
+{
+  "call_id": "legacy-with-typed-binding",
+  "capability": "fetch_many",
+  "catalog_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "handler_version": "v1",
+  "arguments": {"requests": []}
+}

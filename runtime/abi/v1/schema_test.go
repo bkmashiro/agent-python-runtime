@@ -11,6 +11,11 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+var schemaNames = []string{
+	"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
+	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "commit-command", "audit-evidence",
+}
+
 func abiRoot(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
@@ -32,6 +37,7 @@ func compileSchema(t *testing.T, name string) *jsonschema.Schema {
 		t.Fatalf("decode %s schema: %v", name, err)
 	}
 	compiler := jsonschema.NewCompiler()
+	compiler.AssertFormat()
 	url := "https://agent-runtime.dev/abi/v1/" + name + ".schema.json"
 	if err := compiler.AddResource(url, document); err != nil {
 		t.Fatalf("add %s: %v", name, err)
@@ -70,7 +76,7 @@ func decodeFixture(t *testing.T, path string) any {
 }
 
 func TestABIV1Fixtures(t *testing.T) {
-	for _, name := range []string{"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result"} {
+	for _, name := range schemaNames {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			schema := compileSchema(t, name)
@@ -113,7 +119,7 @@ func TestRunRequestRejectsAuthorityBearingAliases(t *testing.T) {
 }
 
 func TestSchemasHaveStableIDs(t *testing.T) {
-	for _, name := range []string{"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result"} {
+	for _, name := range schemaNames {
 		path := filepath.Join(abiRoot(t), name+".schema.json")
 		data, err := os.ReadFile(path)
 		if err != nil {

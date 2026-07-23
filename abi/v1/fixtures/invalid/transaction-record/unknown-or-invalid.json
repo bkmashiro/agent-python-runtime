@@ -1,0 +1,11 @@
+{
+  "catalog_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-07-23T12:00:00Z",
+  "mode": "workflow",
+  "run_id": "run_1",
+  "state": "open",
+  "transaction_id": "tx_1",
+  "unexpected_authority": "forged",
+  "updated_at": "2026-07-23T12:00:00Z",
+  "version": 1
+}

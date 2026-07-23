@@ -95,6 +95,9 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 			return nil, errors.New("typed tool grants require a registry, transaction binder, and bounded catalog digest")
 		}
 		config.Registry = config.Registry.snapshot()
+		if config.Registry.catalogDigest != "" && config.Registry.catalogDigest != config.CatalogDigest {
+			return nil, errors.New("typed registry catalog digest does not match Broker catalog binding")
+		}
 		for name, grant := range config.ToolGrants {
 			if name != grant.ToolID || !validIdentifier(grant.ToolID) ||
 				!validIdentifier(grant.HandlerVersion) || grant.EffectClass != "read_only" ||

@@ -1,0 +1,21 @@
+{
+  "snapshot_id": "catalog_bad_schema",
+  "revision": 1,
+  "catalog_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "discovered_at": "2026-07-23T12:00:00Z",
+  "tools": [
+    {
+      "tool_id": "demo.echo",
+      "server_id": "demo",
+      "name": "echo",
+      "handler_version": "v1",
+      "input_schema": {"type": "not-a-json-schema-type"},
+      "output_schema": {"type": "object"},
+      "projection": "unsupported",
+      "effect_class": "read_only",
+      "policy": "AUTO_COMMIT",
+      "grant_version": "grant_v1",
+      "max_calls": 1
+    }
+  ]
+}

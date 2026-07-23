@@ -138,6 +138,48 @@ result = {
 	}
 }
 
+func TestNumPyCoreProfileErrorsAndStateAreFreshAcrossRuns(t *testing.T) {
+	if os.Getenv("AGENT_RUNTIME_ARTIFACT_PROFILE") != "numpy-core" {
+		t.Skip("numpy-core artifact profile is not selected")
+	}
+	instance := newEngine(t)
+	first := run(t, instance, "numpy-error-fresh-1", `
+import numpy as np
+np._agent_runtime_profile_marker = "first-run"
+try:
+    np.arange(4).reshape((3, 2))
+except ValueError as error:
+    result = {"error_type": type(error).__name__, "message_present": bool(str(error))}
+else:
+    result = {"error_type": "missing", "message_present": False}
+`, map[string]any{})
+	if first.Status != "ok" {
+		t.Fatalf("NumPy error probe failed: %#v", first.Error)
+	}
+	firstResult := first.Result.(map[string]any)
+	if firstResult["error_type"] != "ValueError" || firstResult["message_present"] != true {
+		t.Fatalf("unexpected NumPy error contract: %#v", firstResult)
+	}
+
+	second := run(t, instance, "numpy-error-fresh-2", `
+import numpy as np
+values = np.arange(6).reshape((2, 3))
+result = {
+    "marker_present": hasattr(np, "_agent_runtime_profile_marker"),
+    "shape": [int(value) for value in values.shape],
+    "sum": int(values.sum()),
+}
+`, map[string]any{})
+	if second.Status != "ok" {
+		t.Fatalf("second NumPy run failed: %#v", second.Error)
+	}
+	secondResult := second.Result.(map[string]any)
+	shape := secondResult["shape"].([]any)
+	if secondResult["marker_present"] != false || len(shape) != 2 || shape[0] != float64(2) || shape[1] != float64(3) || secondResult["sum"] != float64(15) {
+		t.Fatalf("NumPy state leaked or fresh numeric execution drifted: %#v", secondResult)
+	}
+}
+
 func TestCoreGuestExposesTargetSysconfig(t *testing.T) {
 	response := run(
 		t,

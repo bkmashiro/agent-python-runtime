@@ -2,7 +2,7 @@
 
 ## Status
 
-This document defines the Host-owned lifecycle boundary selected by [ADR 0006](adr/0006-execution-session-lifecycle.md). It is an active design contract, not an implementation claim. The repository still has no stateful session manager, capsule payload, persistence, restore, or migration path.
+This document defines the Host-owned lifecycle boundary selected by [ADR 0006](adr/0006-execution-session-lifecycle.md). It is a retained accepted design boundary, not an active implementation queue or implementation claim. The repository still has no stateful session manager, capsule payload, persistence, restore, or migration path.
 
 The existing backend-neutral `engine.Runner.Run` remains stateless. Fresh-instance remains its portable fail-closed baseline, and every served prepared module remains single-use.
 

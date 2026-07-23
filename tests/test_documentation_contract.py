@@ -70,12 +70,23 @@ class PublicDocumentationContractTests(unittest.TestCase):
                     failures.append(f"{document.relative_to(ROOT)} -> {target}")
         self.assertEqual([], failures)
 
-    def test_closed_execution_roadmap_has_no_unchecked_items(self):
-        roadmap = self.read(
-            "docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md"
+    def test_closed_execution_roadmaps_have_no_unchecked_items(self):
+        closed_roadmaps = {
+            "docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md": "No unchecked executable item remains",
+            "docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md": "**No active implementation pointer.**",
+        }
+        for path, closeout_marker in closed_roadmaps.items():
+            with self.subTest(path=path):
+                roadmap = self.read(path)
+                self.assertIsNone(re.search(r"^- \[ \]", roadmap, flags=re.MULTILINE))
+                self.assertIn(closeout_marker, roadmap)
+
+        session_roadmap = self.read(
+            "docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md"
         )
-        self.assertIsNone(re.search(r"^- \[ \]", roadmap, flags=re.MULTILINE))
-        self.assertIn("No unchecked executable item remains", roadmap)
+        self.assertIn("- [deferred]", session_roadmap)
+        self.assertNotIn("This is the active `/goal`", session_roadmap)
+        self.assertNotIn("session-lifecycle successor is now active", self.read("README.md"))
 
 
 if __name__ == "__main__":

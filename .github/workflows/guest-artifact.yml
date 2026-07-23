@@ -138,7 +138,7 @@ jobs:
     name: Consume artifact with Go/wazero
     needs: build-core
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -233,7 +233,7 @@ jobs:
             -output "${{ runner.temp }}/lifecycle-density-production-safe-linux-amd64.json" \
             -class production-safe \
             -strategy single-use-preinitialized \
-            -samples 1 \
+            -samples 3 \
             -max-rss-bytes 5368709120 \
             -child-timeout 3m
           python3 -m json.tool \

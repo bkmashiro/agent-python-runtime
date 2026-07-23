@@ -101,3 +101,21 @@ python3 tools/compare_prepared_benchmarks.py \
 ```
 
 This reports fresh versus prepared first/steady Run ratios, refill `runtime_init`, startup readiness, retained guest memory, and the explicit state-copy N/A record. It also has no threshold or pass/fail field.
+
+## Lifecycle-density evidence contract
+
+[`benchmark/v1/lifecycle-density.schema.json`](../benchmark/v1/lifecycle-density.schema.json) and `runtime/evidence.LifecycleDensityEvidence` define the separate Phase 1 capacity/pressure evidence class. This contract does not replace the fresh or prepared latency schemas above, and no lifecycle-density collector or checked-in N-sweep evidence exists yet.
+
+One file binds one exact artifact/profile, clean Host revision, backend/version, environment, requested strategy, workload, and complete sweep. The initial canonical slot sequence is `1,2,4,8,16`; `32` and `64` may be appended only after an external memory guard proves they are safe. Every `(N, repeat)` row must come from a fresh process and remain in canonical order.
+
+Each raw row records:
+
+- pool target and initializing/ready/leased/unhealthy/retiring accounting;
+- active concurrency and queue/instantiate/initialize/runtime-init/prepare/execute/capability/total phases;
+- Go heap live/goal, GC cycles/pause, goroutines, and scheduler-latency histogram;
+- process RSS/virtual/PSS/private/swap, minor/major faults, FD count, and VMA count;
+- cgroup v2 current/peak/swap, high/OOM/OOM-kill events, and memory-pressure totals when available.
+
+Metric shapes distinguish `measured`, `timestamp_observed`, `model_estimated`, `unsupported`, and `skipped`. Unavailable fields carry a bounded reason code rather than a fake zero. Raw measurements cannot be labeled model estimates; optional fixed/per-slot estimates are separate summary fields. Go validation recomputes sample count, pool accounting, and measured peaks from raw rows.
+
+Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. The next Phase 1B slice must implement the collector/orchestrator and produce real raw rows; this schema alone is not benchmark evidence.

@@ -23,6 +23,11 @@ fi
 WASI_VFS=${WASI_VFS_TOOLS[0]}
 WASI_VFS_LIB=${WASI_VFS_LIBS[0]}
 
+now_ns() {
+  python3 -c 'import time; print(time.time_ns())'
+}
+PROBE_START_NS=$(now_ns)
+
 rm -rf "${PROBE_DIR}"
 mkdir -p "${PROBE_DIR}/downloads" "${PROBE_DIR}/numpy" "${PROBE_DIR}/cython" "${PROBE_DIR}/logs"
 python3 "${ROOT_DIR}/tools/verify_sources_lock.py" "${LOCK}"
@@ -187,7 +192,15 @@ cpp_link_args = ['--target=wasm32-wasip1', '--sysroot=${WASI_SDK_PATH}/share/was
 EOF
 
 MESON=(python3 "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py")
+SETUP_DURATION_NS=0
+COMPILE_DURATION_NS=0
+INSTALL_DURATION_NS=0
+STAGE_DURATION_NS=0
+PROFILE_DURATION_NS=0
+LINK_DURATION_NS=0
+PACK_DURATION_NS=0
 set +e
+SETUP_STARTED_NS=$(now_ns)
 PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" setup \
   "${PROBE_DIR}/build" "${PROBE_DIR}/numpy" \
   --cross-file "${CROSS_FILE}" \
@@ -203,6 +216,7 @@ PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAP
   -Dpython.bytecompile=-1 \
   >"${PROBE_DIR}/logs/setup.log" 2>&1
 SETUP_EXIT=$?
+SETUP_DURATION_NS=$(($(now_ns) - SETUP_STARTED_NS))
 COMPILE_EXIT=-1
 INSTALL_EXIT=-1
 STAGE_EXIT=-1
@@ -214,18 +228,23 @@ NUMPY_INSTALL_ROOT="${PROBE_DIR}/numpy-install"
 PROBE_VFS_DIR="${PROBE_DIR}/vfs-python"
 PACKAGE_MANIFEST="${PROBE_DIR}/numpy-package-manifest.json"
 if [[ ${SETUP_EXIT} -eq 0 ]]; then
+  COMPILE_STARTED_NS=$(now_ns)
   PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" compile \
     -C "${PROBE_DIR}/build" -j 2 \
     >"${PROBE_DIR}/logs/compile.log" 2>&1
   COMPILE_EXIT=$?
+  COMPILE_DURATION_NS=$(($(now_ns) - COMPILE_STARTED_NS))
 fi
 if [[ ${COMPILE_EXIT} -eq 0 ]]; then
+  INSTALL_STARTED_NS=$(now_ns)
   PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="${TARGET_PKGCONFIG_DIR}" PATH="${CYTHON_WRAPPER_DIR}:${PATH}" PYTHONPATH="${PROBE_DIR}/cython" "${MESON[@]}" install --no-rebuild \
     -C "${PROBE_DIR}/build" --destdir "${NUMPY_INSTALL_ROOT}" --tags python-runtime \
     >"${PROBE_DIR}/logs/install.log" 2>&1
   INSTALL_EXIT=$?
+  INSTALL_DURATION_NS=$(($(now_ns) - INSTALL_STARTED_NS))
 fi
 if [[ ${INSTALL_EXIT} -eq 0 ]]; then
+  STAGE_STARTED_NS=$(now_ns)
   python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
     "${BASE_VFS_DIR}" "${PROBE_VFS_DIR}" --epoch "${SOURCE_DATE_EPOCH}" \
     >"${PROBE_DIR}/logs/stage.log" 2>&1
@@ -239,8 +258,10 @@ if [[ ${INSTALL_EXIT} -eq 0 ]]; then
   else
     STAGE_EXIT=${BASE_STAGE_EXIT}
   fi
+  STAGE_DURATION_NS=$(($(now_ns) - STAGE_STARTED_NS))
 fi
 if [[ ${COMPILE_EXIT} -eq 0 ]]; then
+  PROFILE_STARTED_NS=$(now_ns)
   python3 "${ROOT_DIR}/tools/resolve_wasm_extension_profile.py" \
     --config "${PROFILE_CONFIG}" \
     --profile "${FEATURE_PROFILE}" \
@@ -249,6 +270,7 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
     --output-dir "${PROFILE_OUTPUT_DIR}" \
     >"${PROBE_DIR}/logs/profile.log" 2>&1
   PROFILE_EXIT=$?
+  PROFILE_DURATION_NS=$(($(now_ns) - PROFILE_STARTED_NS))
   if [[ ${PROFILE_EXIT} -ne 0 ]]; then
     echo "failed to resolve extension feature profile: ${FEATURE_PROFILE}" >&2
     exit 12
@@ -281,6 +303,7 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
       exit 16
     fi
   done
+  LINK_STARTED_NS=$(now_ns)
   LINK_PROBE_OBJECT="${PROBE_DIR}/numpy-core-link-probe.o"
   "${WASI_SDK_PATH}/bin/clang" --target=wasm32-wasip1 \
     --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" -O2 \
@@ -304,6 +327,8 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
       -Wl,--export=numpy_numeric_probe \
       -Wl,--export=numpy_random_probe \
       -Wl,--export=numpy_entropy_probe \
+      -Wl,--export=numpy_freshness_probe \
+      -Wl,--export=numpy_freshness_word_probe \
       -Wl,--export=numpy_python_initialized_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \
@@ -314,16 +339,21 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
   else
     LINK_EXIT=${LINK_COMPILE_EXIT}
   fi
+  LINK_DURATION_NS=$(($(now_ns) - LINK_STARTED_NS))
 fi
 if [[ ${LINK_EXIT} -eq 0 && ${STAGE_EXIT} -eq 0 ]]; then
+  PACK_STARTED_NS=$(now_ns)
   "${WASI_VFS}" pack "${LINK_PROBE}" \
     --dir "${PROBE_VFS_DIR}::/usr/lib/python3.14" \
     -o "${IMPORT_PROBE}" >"${PROBE_DIR}/logs/pack.log" 2>&1
   PACK_EXIT=$?
+  PACK_DURATION_NS=$(($(now_ns) - PACK_STARTED_NS))
 fi
 set -e
+TOTAL_DURATION_NS=$(($(now_ns) - PROBE_START_NS))
 
 export PROBE_DIR SETUP_EXIT COMPILE_EXIT INSTALL_EXIT STAGE_EXIT LINK_EXIT PACK_EXIT LINK_PROBE IMPORT_PROBE PACKAGE_MANIFEST TARGET_PYTHON PROFILE_SELECTION FEATURE_PROFILE
+export TOTAL_DURATION_NS SETUP_DURATION_NS COMPILE_DURATION_NS INSTALL_DURATION_NS STAGE_DURATION_NS PROFILE_DURATION_NS LINK_DURATION_NS PACK_DURATION_NS
 python3 - <<'PY'
 import hashlib, json, os, pathlib
 root = pathlib.Path(os.environ["PROBE_DIR"])
@@ -333,6 +363,16 @@ install_exit = int(os.environ["INSTALL_EXIT"])
 stage_exit = int(os.environ["STAGE_EXIT"])
 link_exit = int(os.environ["LINK_EXIT"])
 pack_exit = int(os.environ["PACK_EXIT"])
+durations_ns = {
+    "total": int(os.environ["TOTAL_DURATION_NS"]),
+    "setup": int(os.environ["SETUP_DURATION_NS"]),
+    "compile": int(os.environ["COMPILE_DURATION_NS"]),
+    "install": int(os.environ["INSTALL_DURATION_NS"]),
+    "stage": int(os.environ["STAGE_DURATION_NS"]),
+    "profile": int(os.environ["PROFILE_DURATION_NS"]),
+    "link": int(os.environ["LINK_DURATION_NS"]),
+    "pack": int(os.environ["PACK_DURATION_NS"]),
+}
 if setup_exit:
     outcome = "setup_failed"
 elif compile_exit:
@@ -421,7 +461,7 @@ evidence_error = (
 if evidence_error:
     outcome = "evidence_failed"
 report = {
-    "schema_version": 5,
+    "schema_version": 6,
     "target": "wasm32-wasip1",
     "cxx_exception_mode": "selective-disabled",
     "long_double_runtime": "wasi-sdk-33 libc-printscan-long-double",
@@ -440,6 +480,7 @@ report = {
     "stage_exit": stage_exit,
     "link_exit": link_exit,
     "pack_exit": pack_exit,
+    "durations_ns": durations_ns,
     "outcome": outcome,
     "target_python_wrapper": pathlib.Path(os.environ["TARGET_PYTHON"]).name,
     "meson_target_python_adapter": pathlib.Path(os.environ["TARGET_PYTHON_ADAPTER"]).name,

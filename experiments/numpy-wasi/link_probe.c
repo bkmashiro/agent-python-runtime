@@ -1,9 +1,11 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <stdint.h>
 #include "builtin-registry.h"
 
 static int numpy_registered = 0;
 static int numpy_imported = 0;
+static uint64_t numpy_freshness_word = 0;
 
 static const char *NUMPY_FINDER_SCRIPT =
     "import sys as _sys, importlib.util as _ilu, importlib.machinery as _ilm, _imp as _imp\n"
@@ -68,6 +70,12 @@ static const char *NUMPY_ENTROPY_SCRIPT =
     "_entropy_bytes = _np.random.default_rng().bytes(32)\n"
     "assert len(_entropy_bytes) == 32\n"
     "assert any(_entropy_bytes)\n";
+
+static const char *NUMPY_FRESHNESS_SCRIPT =
+    "import builtins as _builtins, numpy as _np\n"
+    "assert not hasattr(_builtins, '_numpy_wasi_fresh_marker')\n"
+    "_builtins._numpy_wasi_fresh_marker = True\n"
+    "_builtins._numpy_wasi_fresh_word = int(_np.random.default_rng().bit_generator.random_raw())\n";
 
 /* Records the initializer pointers without executing NumPy or Python imports. */
 __attribute__((export_name("numpy_register_probe")))
@@ -179,6 +187,42 @@ int numpy_entropy_probe(void) {
         return 120;
     }
     return 0;
+}
+
+/* Fails if this Wasm instance inherited the marker from an earlier instance. */
+__attribute__((export_name("numpy_freshness_probe")))
+int numpy_freshness_probe(void) {
+    if (!numpy_imported) {
+        return 130;
+    }
+    if (PyRun_SimpleString(NUMPY_FRESHNESS_SCRIPT) != 0) {
+        PyErr_Print();
+        return 140;
+    }
+    PyObject *builtins = PyImport_ImportModule("builtins");
+    if (builtins == NULL) {
+        PyErr_Print();
+        return 150;
+    }
+    PyObject *word = PyObject_GetAttrString(builtins, "_numpy_wasi_fresh_word");
+    Py_DECREF(builtins);
+    if (word == NULL) {
+        PyErr_Print();
+        return 160;
+    }
+    unsigned long long raw = PyLong_AsUnsignedLongLong(word);
+    Py_DECREF(word);
+    if (PyErr_Occurred()) {
+        PyErr_Print();
+        return 170;
+    }
+    numpy_freshness_word = (uint64_t)raw;
+    return 0;
+}
+
+__attribute__((export_name("numpy_freshness_word_probe")))
+uint64_t numpy_freshness_word_probe(void) {
+    return numpy_freshness_word;
 }
 
 __attribute__((export_name("numpy_python_initialized_probe")))

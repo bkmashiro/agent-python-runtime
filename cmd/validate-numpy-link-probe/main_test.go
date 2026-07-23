@@ -30,19 +30,29 @@ func TestBoundedTextPreservesDiagnosticTraceback(t *testing.T) {
 func TestFeatureProfileReportSchema(t *testing.T) {
 	exit := uint64(0)
 	encoded, err := json.Marshal(report{
-		SchemaVersion:    5,
-		FeatureProfile:   "random",
-		Outcome:          "entropy_succeeded",
-		NumericCalled:    true,
-		NumericExit:      &exit,
-		NumericValidated: true,
-		RandomCalled:     true,
-		RandomExit:       &exit,
-		RandomValidated:  true,
-		EntropySource:    "host_crypto_rand",
-		EntropyCalled:    true,
-		EntropyExit:      &exit,
-		EntropyValidated: true,
+		SchemaVersion:       6,
+		FeatureProfile:      "random",
+		Outcome:             "freshness_succeeded",
+		CompileDurationNS:   11,
+		RuntimeDurationNS:   22,
+		HostHeapAllocBytes:  33,
+		HostHeapSysBytes:    44,
+		HostTotalAllocBytes: 55,
+		NumericCalled:       true,
+		NumericExit:         &exit,
+		NumericValidated:    true,
+		RandomCalled:        true,
+		RandomExit:          &exit,
+		RandomValidated:     true,
+		EntropySource:       "host_crypto_rand",
+		EntropyCalled:       true,
+		EntropyExit:         &exit,
+		EntropyValidated:    true,
+		FreshInstances: []instanceEvidence{
+			{Index: 1, FullValidation: true, MemoryBytes: 134217728, FreshnessExit: &exit, EntropyWord: 1},
+			{Index: 2, FullValidation: false, MemoryBytes: 134217728, FreshnessExit: &exit, EntropyWord: 2},
+		},
+		FreshInstancesValidated: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +61,7 @@ func TestFeatureProfileReportSchema(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded["schema_version"] != float64(5) || decoded["feature_profile"] != "random" || decoded["outcome"] != "entropy_succeeded" {
+	if decoded["schema_version"] != float64(6) || decoded["feature_profile"] != "random" || decoded["outcome"] != "freshness_succeeded" {
 		t.Fatalf("unexpected schema identity: %s", encoded)
 	}
 	if decoded["numeric_called"] != true || decoded["numeric_exit"] != float64(0) || decoded["numeric_validated"] != true {
@@ -62,5 +72,12 @@ func TestFeatureProfileReportSchema(t *testing.T) {
 	}
 	if decoded["entropy_source"] != "host_crypto_rand" || decoded["entropy_called"] != true || decoded["entropy_exit"] != float64(0) || decoded["entropy_validated"] != true {
 		t.Fatalf("unexpected entropy evidence: %s", encoded)
+	}
+	if decoded["compile_duration_ns"] != float64(11) || decoded["runtime_duration_ns"] != float64(22) || decoded["host_heap_alloc_bytes"] != float64(33) || decoded["fresh_instances_validated"] != true {
+		t.Fatalf("unexpected resource/freshness evidence: %s", encoded)
+	}
+	instances, ok := decoded["fresh_instances"].([]any)
+	if !ok || len(instances) != 2 {
+		t.Fatalf("unexpected fresh instances: %s", encoded)
 	}
 }

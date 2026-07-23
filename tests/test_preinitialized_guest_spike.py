@@ -76,15 +76,13 @@ class PreinitializedGuestSpikeTests(unittest.TestCase):
                 second_path=second_path,
                 tool_version="wasmtime 44.0.1",
                 host_revision="a" * 40,
-                init_func="runtime_preinitialize",
-                explicit_reactor_status=0,
-                without_reactor_status=134,
             )
 
             self.assertEqual(1, receipt["schema_version"])
             self.assertTrue(receipt["repeat_deterministic"])
             self.assertEqual("runtime_preinitialize", receipt["transform"]["init_func"])
-            self.assertEqual(134, receipt["transform"]["variant_exit_statuses"]["runtime_preinitialize_without_reactor"])
+            self.assertEqual("wizer-owned", receipt["transform"]["reactor_initialization"])
+            self.assertEqual("fixed-experiment-only:0xa9e17f5d", receipt["transform"]["python_hash_seed"])
             self.assertEqual(
                 hashlib.sha256(first_path.read_bytes()).hexdigest(),
                 receipt["candidate"]["sha256"],

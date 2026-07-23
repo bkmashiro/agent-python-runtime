@@ -113,6 +113,10 @@ static int32_t ensure_interpreter(void) {
     config.site_import = 0;
     config.write_bytecode = 0;
     config.module_search_paths_set = 1;
+#ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
+    config.use_hash_seed = 1;
+    config.hash_seed = 0xa9e17f5dUL;
+#endif
 
     status = PyWideStringList_Append(&config.module_search_paths,
                                      L"/usr/lib/python3.14");
@@ -178,17 +182,10 @@ int32_t runtime_init(const char *config, int32_t config_len) {
 }
 
 #ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
-extern void _initialize(void);
-
-static void preinitialize_python_or_trap(int initialize_reactor) {
+static void preinitialize_python_or_trap(void) {
     static const char config[] = "{}";
-    fprintf(stderr, "preinitialization-spike: begin reactor=%d\n", initialize_reactor);
+    fprintf(stderr, "preinitialization-spike: begin\n");
     fflush(stderr);
-    if (initialize_reactor) {
-        _initialize();
-        fprintf(stderr, "preinitialization-spike: reactor initialized\n");
-        fflush(stderr);
-    }
     int32_t status = runtime_init(config, (int32_t)(sizeof(config) - 1));
     fprintf(stderr,
             "preinitialization-spike: runtime_init status=%d python_initialized=%d\n",
@@ -202,12 +199,7 @@ static void preinitialize_python_or_trap(int initialize_reactor) {
 
 __attribute__((export_name("runtime_preinitialize")))
 void runtime_preinitialize(void) {
-    preinitialize_python_or_trap(1);
-}
-
-__attribute__((export_name("runtime_preinitialize_without_reactor")))
-void runtime_preinitialize_without_reactor(void) {
-    preinitialize_python_or_trap(0);
+    preinitialize_python_or_trap();
 }
 
 __attribute__((export_name("runtime_preinitialized_initialize")))

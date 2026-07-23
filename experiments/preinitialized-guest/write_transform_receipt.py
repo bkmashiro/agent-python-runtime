@@ -12,10 +12,6 @@ import tempfile
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REVISION = re.compile(r"^[0-9a-f]{40}$")
-_INIT_FUNCS = {
-    "runtime_preinitialize",
-    "runtime_preinitialize_without_reactor",
-}
 
 
 def artifact_record(path: pathlib.Path) -> dict[str, object]:
@@ -36,25 +32,13 @@ def build_receipt(
     second_path: pathlib.Path,
     tool_version: str,
     host_revision: str,
-    init_func: str,
-    explicit_reactor_status: int,
-    without_reactor_status: int,
 ) -> dict[str, object]:
     if not _REVISION.fullmatch(host_revision):
         raise ValueError("host revision must be a 40-character lowercase Git SHA")
     version = tool_version.strip()
     if "44.0.1" not in version or "wasmtime" not in version.lower():
         raise ValueError("spike requires locked Wasmtime 44.0.1")
-    if init_func not in _INIT_FUNCS:
-        raise ValueError("unsupported preinitialization function")
-    statuses = {
-        "runtime_preinitialize": explicit_reactor_status,
-        "runtime_preinitialize_without_reactor": without_reactor_status,
-    }
-    if any(not isinstance(status, int) or status < 0 or status > 255 for status in statuses.values()):
-        raise ValueError("variant exit statuses must be bytes")
-    if statuses[init_func] != 0:
-        raise ValueError("selected preinitialization function did not succeed")
+
     source = artifact_record(input_path)
     candidate = artifact_record(first_path)
     repeat = artifact_record(second_path)
@@ -70,11 +54,12 @@ def build_receipt(
         "repeat_candidate": repeat,
         "repeat_deterministic": candidate["sha256"] == repeat["sha256"],
         "transform": {
-            "init_func": init_func,
-            "variant_exit_statuses": statuses,
+            "init_func": "runtime_preinitialize",
             "function_rename": "_initialize=runtime_preinitialized_initialize",
             "wasi_cli": True,
             "host_call_stub": "fail-closed",
+            "reactor_initialization": "wizer-owned",
+            "python_hash_seed": "fixed-experiment-only:0xa9e17f5d",
         },
     }
 
@@ -95,9 +80,6 @@ def main() -> int:
     parser.add_argument("--repeat-candidate", required=True, type=pathlib.Path)
     parser.add_argument("--tool-version", required=True)
     parser.add_argument("--host-revision", required=True)
-    parser.add_argument("--init-func", required=True, choices=sorted(_INIT_FUNCS))
-    parser.add_argument("--explicit-reactor-status", required=True, type=int)
-    parser.add_argument("--without-reactor-status", required=True, type=int)
     parser.add_argument("--output", required=True, type=pathlib.Path)
     args = parser.parse_args()
     receipt = build_receipt(
@@ -106,9 +88,6 @@ def main() -> int:
         second_path=args.repeat_candidate,
         tool_version=args.tool_version,
         host_revision=args.host_revision,
-        init_func=args.init_func,
-        explicit_reactor_status=args.explicit_reactor_status,
-        without_reactor_status=args.without_reactor_status,
     )
     write_json_atomic(args.output, receipt)
     print(json.dumps({"output": str(args.output), "repeat_deterministic": receipt["repeat_deterministic"]}))

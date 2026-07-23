@@ -264,7 +264,6 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
     -Wl,--export=runtime_init \
     -Wl,--export=runtime_prepare \
     -Wl,--export=runtime_preinitialize \
-    -Wl,--export=runtime_preinitialize_without_reactor \
     -Wl,--export=runtime_preinitialized_initialize \
     -Wl,--export=alloc \
     -Wl,--export=dealloc \

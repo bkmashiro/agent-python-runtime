@@ -16,7 +16,7 @@ Build a standalone Go/wazero runtime around a versioned CPython WASI guest.
 - Host-owned `RunConfig` contains capability grants and enforceable budgets.
 - External operations cross a named Host capability broker.
 - Guest code has no inherited filesystem, environment, network, subprocess, or credentials.
-- The Host owns lifecycle, pooling, cancellation, reset, and receipts.
+- The Host owns lifecycle, pooling, cancellation, instance discard, and receipts; any future reset mode requires separate evidence.
 - V1 supports read-only capabilities only.
 
 ## Consequences

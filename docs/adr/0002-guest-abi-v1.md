@@ -1,6 +1,6 @@
 # ADR 0002: Guest ABI v1
 
-- Status: Accepted direction; identifiers freeze when fixtures and real artifact tests pass
+- Status: Accepted and verified for V1
 - Date: 2026-07-22
 
 ## Context
@@ -26,7 +26,7 @@ execute(ptr: i32, len: i32) -> i32
 
 The Host validates pointer arithmetic, memory bounds, configured maximum length, UTF-8, and response schema before accepting the result.
 
-`runtime_prepare` is trusted and optional at the Host API level. It may load approved evaluator/package state before the prepared snapshot. Generated code cannot invoke it through `RunRequest`.
+`runtime_prepare` is trusted and optional at the Host API level. It loads approved evaluator/package state into the module assigned to that Run. The optional prepared pool completes only `_initialize` and `runtime_init` before admission; request-specific `runtime_prepare` runs once after checkout. Generated code cannot invoke it through `RunRequest`.
 
 ## Capability import direction
 
@@ -44,7 +44,7 @@ The Host does not allocate through a re-entrant guest export during an import.
 
 - Guest owns buffers returned by `alloc` and frees them with `dealloc`.
 - Host writes only within validated guest-provided buffers.
-- The response returned by `execute` remains guest-owned and valid only until the next guest call/reset.
+- The response returned by `execute` remains guest-owned; the Host validates and copies it before any later guest call or module close.
 - V1 has explicit request, result, Host-call request, and Host-call response byte maxima.
 
 ## JSON behavior
@@ -60,6 +60,6 @@ The Host does not allocate through a re-entrant guest export during an import.
 
 V1 contains no `py_exec`, `resp_buf`, `resp_len`, evaluator/preview names, or product-specific operation semantics. ABI changes require a version change or explicit compatibility contract.
 
-## Reset boundary
+## Isolation boundary
 
-Snapshot capture occurs only after `_initialize`, `runtime_init`, and optional `runtime_prepare` return. A trap, cancellation, pointer violation, or unsupported memory/global/table mutation makes the instance unhealthy.
+The default path creates a fresh instance for the Run. The optional prepared path admits a never-served module only after `_initialize` and `runtime_init` return, runs request-specific trusted prepare after exclusive checkout, serves one Run, and closes the module on every outcome. No snapshot/reset or served-instance reuse is implemented. A trap, cancellation, pointer violation, preparation failure, or unsupported state makes the instance unhealthy and requires discard.

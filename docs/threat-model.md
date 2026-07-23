@@ -69,7 +69,7 @@ Control: impose limits while reading/copying, not after an unbounded buffer has 
 
 ### State contamination
 
-Control: instantiate a fresh guest for every Run and discard it after success, structured error, trap, or cancellation. Any future prepared-state optimization must restore Python globals, modules, random state, buffers, memory growth, globals/tables, and Host resources; reset failure must close the instance.
+Control: use a synchronously instantiated fresh guest by default. The optional prepared pool admits only never-served instances that completed trusted initialization; each checkout serves exactly one Run and is then closed on success, structured error, trap, cancellation, or any uncertainty. A miss falls back to synchronous fresh instantiation. No served instance is reset, restored, or returned to the pool. Any future restore/reuse design must separately prove complete reset of Python globals, modules, random state, buffers, memory size/content, mutable globals/tables, WASI resources, and Host state.
 
 ### Host capability abuse
 
@@ -88,10 +88,11 @@ Control: build from an immutable source lock with SHA-256 and license metadata. 
 Close/discard the instance on:
 
 - trap or deadline cancellation;
-- memory shape drift outside the reset contract;
+- memory shape drift outside configured bounds or observed lifecycle assumptions;
 - malformed or out-of-bounds response pointers;
 - unsupported capability import;
-- reset failure;
+- preparation, refill, or pool health failure;
+- any future reset/restore failure;
 - Host import protocol violation;
 - output cap violation where continued instance health is uncertain.
 

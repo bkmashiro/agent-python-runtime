@@ -109,7 +109,7 @@ Exact-memory migration requires an exact compatibility tuple, integrity verifica
 
 ## Activation dependency
 
-The session-lifecycle implementation roadmap is a planned successor. It must not preempt the active NumPy artifact-profile and final-hardening tracks unless the owner explicitly reprioritizes them. Phase 0 design documentation may land now; runtime implementation begins only from the successor roadmap's activation gate.
+The session-lifecycle implementation roadmap is a planned successor. It must not preempt the active final-hardening/truthful-closeout Track G unless the owner explicitly reprioritizes it. The NumPy artifact-profile dependency is complete without promotion to default or production-safe status. Phase 0 design documentation may land now; runtime implementation begins only from the successor roadmap's activation gate.
 
 ## Consequences
 

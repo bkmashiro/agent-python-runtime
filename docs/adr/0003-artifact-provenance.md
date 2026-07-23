@@ -9,7 +9,7 @@ A large Python WASI artifact combines a compiler toolchain, CPython, packed stan
 
 ## Decision
 
-- Build the guest in this repository's GitHub Actions from `guest/build/sources.lock.json`.
+- Build each guest profile in this repository's GitHub Actions from its explicit selected lock: `guest/build/sources.lock.json` for `base` and `guest/build/sources.numpy-core.lock.json` for `numpy-core`.
 - Prefer official source distributions and independently written build scripts.
 - Require immutable version identity, HTTPS URL, SHA-256, license, and role for each downloaded input.
 - Reject mutable `latest` URLs.
@@ -27,7 +27,7 @@ A large Python WASI artifact combines a compiler toolchain, CPython, packed stan
 
 ## Manifest minima
 
-The manifest records repository/run identity, ABI version, source/toolchain locks, compile/link flags, exact imports/exports, bundled packages, limitations, byte size, artifact SHA-256, and smoke outcomes.
+The schema-2 manifest records repository commit, stable source epoch, ABI and artifact profile, selected-lock sources, target/execution model, exact imports/exports, lock-derived bundled-package versions, limitations, byte size, artifact SHA-256, and—when applicable—the exact extension-selection identity. Workflow run identity and test/benchmark outcomes are consumer evidence and remain outside the producer manifest.
 
 ## Reproducibility
 

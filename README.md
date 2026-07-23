@@ -8,7 +8,7 @@ The runtime is intended for compound data workflows where an agent benefits from
 
 A neutral CPython 3.14 `wasm32-wasip1` core and one read-only `fetch_many` vertical slice are implemented and verified in private GitHub Actions. The same pinned-source artifact is built, checked, uploaded, downloaded by an independent job, and executed through the backend-neutral Go `Runner` contract with the wazero V1 adapter. Real E2E gates cover neutral execution, Host-owned capability mediation and receipts, fresh-instance isolation, trusted prepare behavior, timeout recovery, and ambient-authority denial.
 
-The runtime is not released or deployed. NumPy, prepared snapshots, deterministic double-build evidence, production egress policy, and production hardening remain future work. See [implementation status and evidence](docs/status.md) for exact run links, artifact identity, proven properties, and exclusions.
+The runtime is not released or deployed. An explicit manual-only `numpy-core` artifact profile, an opt-in bounded pool of never-served single-use prepared instances, and fail-closed public-target egress policy are implemented and separately gated. They do not imply arbitrary package support, served-instance snapshot/restore, private-network access, production sandboxing, release, or deployment. Exact double-build reproducibility remains unclaimed. See [implementation status and evidence](docs/status.md) for exact run links, artifact identity, proven properties, measurements, and exclusions.
 
 ## Current core
 
@@ -19,13 +19,14 @@ The runtime is not released or deployed. NumPy, prepared snapshots, deterministi
 - Host-owned time, memory, request, response, and capability bounds;
 - read-only `fetch_many` target aliases, Host-owned credentials, partial results, and receipts;
 - one local/development `apyrun` CLI with separate Host policy and untrusted RunRequest stdin;
-- fresh instance per request, bounded cancellation, and failure recovery;
+- fresh instance per request by default; optional never-served single-use prepared candidates, bounded cancellation, and failure recovery;
+- explicit manual-only `numpy-core` artifact profile with selected arrays/reductions/linalg, error, and cross-Run freshness evidence;
 - provenance manifest, checksums, reviewed imports/exports, and private CI artifact;
 - Linux/WASI execution and denial gates.
 
 ## Roadmap boundary
 
-The current product frontier is one safe local operator entry point, followed by measured `fetch_many` concurrency and reproducibility evidence. NumPy and prepared-state optimization proceed only after their source, license, benchmark, state-restoration, and failure-recovery gates justify them.
+The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, and explicit `numpy-core` vertical slices. The active frontier is truthful closeout: keep `base` automatic, keep `numpy-core` manual-only, preserve fresh-instance fallback, and reconcile every public claim and command before activating the separate session-lifecycle successor roadmap.
 
 The project is not a general Linux sandbox, agent framework, MCP marketplace, arbitrary PyPI environment, or write/effect execution system.
 

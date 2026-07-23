@@ -19,12 +19,12 @@ Go Runtime
   ├─ backend-neutral Runner/Factory contract
   ├─ wazero V1 adapter and fresh-instance isolation
   ├─ lifecycle, cancellation, and limits
-  ├─ snapshot/restore or instance discard
+  ├─ fresh instantiate/discard or never-served single-use prepared candidate
   ├─ capability broker
   └─ receipts and metrics
   │ versioned core-WASM ABI
   ▼
-CPython/NumPy WASI guest
+CPython WASI guest with optional selected NumPy profile
   ├─ trusted runtime bootstrap
   ├─ optional trusted preparation
   ├─ generated-code execution
@@ -58,7 +58,7 @@ Authority-bearing fields are not accepted from `RunRequest`.
 
 ### Prepared base
 
-Created only by trusted bootstrap/preparation code. Snapshot capture occurs after the exported call returns to the Host, at a quiescent boundary.
+Created only by trusted bootstrap/preparation code. The implemented optimization admits a never-served initialized instance to a bounded Host pool, checks it out once, and discards it after that Run. No snapshot capture, restore, or served-instance reuse is implemented.
 
 ### Run-local
 
@@ -72,26 +72,23 @@ Deferred. V1 returns bounded JSON/bytes plus a digest. It does not persist an in
 
 Stateful sessions are a separate future Host-owned lifecycle contract, not an extension of untrusted `RunRequest` and not a relaxation of V1 freshness. A durable session may be represented by an explicitly bound live module, an exact-build memory capsule, or a Guest-defined logical capsule only after the complete mutable state and external-resource boundary is proven. Dirty linear-memory pages alone are partial state.
 
-See [ADR 0006](adr/0006-execution-session-lifecycle.md) and the [planned successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). That roadmap is inactive until the current NumPy artifact-profile and truthful-closeout tracks finish or the owner explicitly reprioritizes them.
+See [ADR 0006](adr/0006-execution-session-lifecycle.md) and the [planned successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). That roadmap is inactive until the current truthful-closeout Track G finishes or the owner explicitly reprioritizes it.
 
 ## Guest lifecycle
 
 ```text
 compile artifact once
-→ instantiate with deny-by-default WASI context
-→ runtime_init(trusted config)
-→ optional runtime_prepare(trusted code/data)
-→ capture prepared state
-→ checkout instance
+→ either instantiate synchronously for this Run
+  or checkout one never-served instance that already completed _initialize/runtime_init
+→ attach a fresh Host-owned per-Run broker
+→ runtime_prepare(request-specific trusted code/data)
 → execute(untrusted request)
 → validate bounded response
-→ restore prepared state OR discard instance
-→ return healthy instance to pool
+→ close and discard the served instance on every outcome
+→ refill the bounded prepared pool in the background when enabled
 ```
 
-A trap, cancellation, unsupported memory shape, or failed reset makes the instance unhealthy. It is closed, not returned to the pool.
-
-The implemented optional prepared pool is more conservative than the lifecycle sketch above: each candidate is independently prepared, served at most once, and then discarded. No served-instance restore or reuse is currently claimed.
+No dirty instance returns to the pool. A trap, cancellation, failed preparation, unsupported memory shape, or refill failure closes/discards the affected instance; a pool miss uses the synchronous fresh path.
 
 ## Execution slots versus durable sessions
 
@@ -149,20 +146,19 @@ The Go E2E job consumes the exact artifact produced in the same workflow. Native
 Directories are added only with tested behavior:
 
 ```text
-abi/v1/                 JSON contracts and fixtures
-guest/                  neutral CPython/WASI producer
-runtime/abi/             ABI validation and memory protocol
-runtime/engine/          backend-neutral Runner/Factory and ABI framing
-runtime/engine/wazero/   current wazero adapter and hard limits
-runtime/pool/            lifecycle and health
-runtime/snapshot/        prepared-state capture/reset
-runtime/capability/      Host-owned grants and broker
-runtime/receipt/         bounded operation evidence
-integration/e2e/         real artifact consumer tests
-cmd/apyrun/              eventual single CLI entry
-docs/evidence/           canonical JSON and generated reports
+abi/v1/                   JSON contracts and fixtures
+guest/                    neutral CPython/WASI producer and optional selected profile
+runtime/abi/              ABI validation and memory protocol
+runtime/engine/           backend-neutral Runner/Factory and ABI framing
+runtime/engine/wazero/    current wazero adapter, fresh path, and single-use prepared pool
+runtime/capability/       Host-owned grants and broker
+runtime/receipt/          bounded operation evidence
+integration/e2e/          real artifact consumer tests
+cmd/apyrun/               implemented local/development CLI
+cmd/apyrun-benchmark/     fresh/prepared evidence command
+benchmark/ and docs/benchmarks/  evidence schemas and checked-in samples
 ```
 
-## First vertical slice
+## Completed initial vertical slice
 
-The first milestone is a pure-CPython guest built from pinned licensed sources and consumed by a Go/wazero Host in Linux CI. It must prove bounded execution, denial of ambient authority, cancellation, error handling, and next-run freshness before NumPy or external capabilities are added.
+The first milestone was a pure-CPython guest built from pinned licensed sources and consumed by a Go/wazero Host in Linux CI. It proved bounded execution, denial of ambient authority, cancellation, error handling, and next-run freshness before the later bounded `fetch_many`, prepared-candidate, and explicit `numpy-core` slices were admitted.

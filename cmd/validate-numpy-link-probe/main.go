@@ -24,6 +24,7 @@ type importRecord struct {
 
 type report struct {
 	SchemaVersion        int            `json:"schema_version"`
+	FeatureProfile       string         `json:"feature_profile"`
 	Backend              string         `json:"backend"`
 	Outcome              string         `json:"outcome"`
 	WasmSHA256           string         `json:"wasm_sha256"`
@@ -41,6 +42,9 @@ type report struct {
 	NumericCalled        bool           `json:"numeric_called"`
 	NumericExit          *uint64        `json:"numeric_exit"`
 	NumericValidated     bool           `json:"numeric_validated"`
+	RandomCalled         bool           `json:"random_called"`
+	RandomExit           *uint64        `json:"random_exit"`
+	RandomValidated      bool           `json:"random_validated"`
 	GuestStderr          string         `json:"guest_stderr,omitempty"`
 	Error                string         `json:"error,omitempty"`
 }
@@ -48,9 +52,10 @@ type report struct {
 func main() {
 	wasmPath := flag.String("wasm", "", "path to the link-probe Wasm")
 	outputPath := flag.String("output", "", "path for the JSON report")
+	profile := flag.String("profile", "", "resolved feature profile (core or random)")
 	flag.Parse()
-	if *wasmPath == "" || *outputPath == "" {
-		fmt.Fprintln(os.Stderr, "-wasm and -output are required")
+	if *wasmPath == "" || *outputPath == "" || (*profile != "core" && *profile != "random") {
+		fmt.Fprintln(os.Stderr, "-wasm, -output, and -profile={core|random} are required")
 		os.Exit(2)
 	}
 
@@ -61,7 +66,8 @@ func main() {
 	}
 	digest := sha256.Sum256(wasm)
 	result := report{
-		SchemaVersion:        3,
+		SchemaVersion:        4,
+		FeatureProfile:       *profile,
 		Backend:              "wazero",
 		Outcome:              "registration_failed",
 		WasmSHA256:           hex.EncodeToString(digest[:]),
@@ -70,7 +76,7 @@ func main() {
 		Exports:              []string{},
 		InitializerExecution: "not_attempted",
 	}
-	if err := runProbe(context.Background(), wasm, &result); err != nil {
+	if err := runProbe(context.Background(), wasm, *profile, &result); err != nil {
 		result.Error = boundedError(err)
 	}
 	encoded, err := json.MarshalIndent(result, "", "  ")
@@ -86,7 +92,7 @@ func main() {
 	_, _ = os.Stdout.Write(encoded)
 }
 
-func runProbe(ctx context.Context, wasm []byte, result *report) error {
+func runProbe(ctx context.Context, wasm []byte, profile string, result *report) error {
 	runtimeConfig := wazero.NewRuntimeConfig().
 		WithCloseOnContextDone(true).
 		WithMemoryLimitPages(8192)
@@ -209,6 +215,30 @@ func runProbe(ctx context.Context, wasm []byte, result *report) error {
 	}
 	result.NumericValidated = true
 	result.Outcome = "numeric_succeeded"
+	if profile != "random" {
+		return nil
+	}
+
+	result.Outcome = "random_failed"
+	randomProbe := module.ExportedFunction("numpy_random_probe")
+	if randomProbe == nil {
+		return errors.New("missing numpy_random_probe export")
+	}
+	values, err = randomProbe.Call(ctx)
+	result.RandomCalled = true
+	if err != nil {
+		return fmt.Errorf("call numpy_random_probe: %w", err)
+	}
+	if len(values) != 1 {
+		return fmt.Errorf("random probe returned %d values, want 1", len(values))
+	}
+	randomExit := values[0]
+	result.RandomExit = &randomExit
+	if randomExit != 0 {
+		return fmt.Errorf("numpy_random_probe returned %d", randomExit)
+	}
+	result.RandomValidated = true
+	result.Outcome = "random_succeeded"
 	return nil
 }
 

@@ -48,6 +48,21 @@ static const char *NUMPY_NUMERIC_SCRIPT =
     "_det = _np.linalg.det(_matrix)\n"
     "assert abs(float(_det) + 2.0) < 1e-12\n";
 
+static const char *NUMPY_RANDOM_SCRIPT =
+    "import numpy as _np\n"
+    "_rng1 = _np.random.default_rng(123456789)\n"
+    "_rng2 = _np.random.default_rng(123456789)\n"
+    "_r1 = _rng1.integers(0, 2147483647, size=32, dtype=_np.int64)\n"
+    "_r2 = _rng2.integers(0, 2147483647, size=32, dtype=_np.int64)\n"
+    "assert _np.array_equal(_r1, _r2)\n"
+    "for _bitgen in (_np.random.MT19937, _np.random.PCG64, _np.random.Philox, _np.random.SFC64):\n"
+    "    _g1 = _np.random.Generator(_bitgen(24680))\n"
+    "    _g2 = _np.random.Generator(_bitgen(24680))\n"
+    "    assert _np.array_equal(_g1.random(8), _g2.random(8))\n"
+    "_legacy1 = _np.random.RandomState(13579)\n"
+    "_legacy2 = _np.random.RandomState(13579)\n"
+    "assert _np.array_equal(_legacy1.randint(0, 1000, size=8), _legacy2.randint(0, 1000, size=8))\n";
+
 /* Records the initializer pointers without executing NumPy or Python imports. */
 __attribute__((export_name("numpy_register_probe")))
 int numpy_register_probe(void) {
@@ -130,6 +145,19 @@ int numpy_numeric_probe(void) {
     if (PyRun_SimpleString(NUMPY_NUMERIC_SCRIPT) != 0) {
         PyErr_Print();
         return 80;
+    }
+    return 0;
+}
+
+/* Executes explicit-seed random checks after a successful import. */
+__attribute__((export_name("numpy_random_probe")))
+int numpy_random_probe(void) {
+    if (!numpy_imported) {
+        return 90;
+    }
+    if (PyRun_SimpleString(NUMPY_RANDOM_SCRIPT) != 0) {
+        PyErr_Print();
+        return 100;
     }
     return 0;
 }

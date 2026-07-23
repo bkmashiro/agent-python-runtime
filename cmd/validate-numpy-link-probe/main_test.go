@@ -27,14 +27,18 @@ func TestBoundedTextPreservesDiagnosticTraceback(t *testing.T) {
 	}
 }
 
-func TestNumericReportSchema(t *testing.T) {
+func TestFeatureProfileReportSchema(t *testing.T) {
 	exit := uint64(0)
 	encoded, err := json.Marshal(report{
-		SchemaVersion:    3,
-		Outcome:          "numeric_succeeded",
+		SchemaVersion:    4,
+		FeatureProfile:   "random",
+		Outcome:          "random_succeeded",
 		NumericCalled:    true,
 		NumericExit:      &exit,
 		NumericValidated: true,
+		RandomCalled:     true,
+		RandomExit:       &exit,
+		RandomValidated:  true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -43,10 +47,13 @@ func TestNumericReportSchema(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded["schema_version"] != float64(3) || decoded["outcome"] != "numeric_succeeded" {
+	if decoded["schema_version"] != float64(4) || decoded["feature_profile"] != "random" || decoded["outcome"] != "random_succeeded" {
 		t.Fatalf("unexpected schema identity: %s", encoded)
 	}
 	if decoded["numeric_called"] != true || decoded["numeric_exit"] != float64(0) || decoded["numeric_validated"] != true {
 		t.Fatalf("unexpected numeric evidence: %s", encoded)
+	}
+	if decoded["random_called"] != true || decoded["random_exit"] != float64(0) || decoded["random_validated"] != true {
+		t.Fatalf("unexpected random evidence: %s", encoded)
 	}
 }

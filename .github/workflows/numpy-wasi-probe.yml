@@ -2,6 +2,15 @@ name: NumPy WASI official-source probe
 
 on:
   workflow_dispatch:
+    inputs:
+      feature_profile:
+        description: Static NumPy feature profile to link and validate
+        required: true
+        default: core
+        type: choice
+        options:
+          - core
+          - random
 
 permissions:
   contents: read
@@ -56,6 +65,7 @@ jobs:
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
           AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
           NUMPY_WASI_PROBE_DIR: ${{ runner.temp }}/numpy-wasi-probe
+          NUMPY_WASI_FEATURE_PROFILE: ${{ inputs.feature_profile }}
         run: bash experiments/numpy-wasi/probe.sh
 
       - name: Run diagnostic NumPy runtime probe
@@ -65,6 +75,7 @@ jobs:
           if [[ -f "${PROBE_DIR}/numpy-import-probe.wasm" ]]; then
             go run ./cmd/validate-numpy-link-probe \
               -wasm "${PROBE_DIR}/numpy-import-probe.wasm" \
+              -profile "${{ inputs.feature_profile }}" \
               -output "${PROBE_DIR}/runtime-report.json"
           fi
 

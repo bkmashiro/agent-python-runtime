@@ -299,6 +299,7 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
       -Wl,--export=numpy_register_probe \
       -Wl,--export=numpy_import_probe \
       -Wl,--export=numpy_numeric_probe \
+      -Wl,--export=numpy_random_probe \
       -Wl,--export=numpy_python_initialized_probe \
       -Wl,--export-memory \
       -Wl,--initial-memory=134217728 \

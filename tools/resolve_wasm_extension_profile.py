@@ -98,8 +98,10 @@ def resolve_profile(
     raw_modules = _expand_profile(profiles, profile_name)
     modules: List[Dict[str, object]] = []
     module_names = set()
-    link_inputs: List[Path] = []
-    seen_inputs = set()
+    extension_archives: List[Path] = []
+    static_inputs: List[Path] = []
+    seen_extensions = set()
+    seen_static_inputs = set()
     manifest_root = manifest_dir.resolve()
     build_root = build_root.resolve()
 
@@ -143,10 +145,13 @@ def resolve_profile(
                 raise ValueError(f"missing static input: {relative}")
             static_paths.append(path)
 
-        for path in [archive_path, *static_paths]:
-            if path not in seen_inputs:
-                seen_inputs.add(path)
-                link_inputs.append(path)
+        if archive_path not in seen_extensions:
+            seen_extensions.add(archive_path)
+            extension_archives.append(archive_path)
+        for path in static_paths:
+            if path not in seen_static_inputs:
+                seen_static_inputs.add(path)
+                static_inputs.append(path)
         modules.append(
             {
                 "module": module_name,
@@ -161,11 +166,15 @@ def resolve_profile(
 
     if not modules:
         raise ValueError(f"profile {profile_name} selects no modules")
+    static_inputs = [path for path in static_inputs if path not in seen_extensions]
+    link_inputs = [*extension_archives, *static_inputs]
     return {
         "schema_version": 1,
         "package": package,
         "profile": profile_name,
         "modules": modules,
+        "extension_archives": extension_archives,
+        "static_inputs": static_inputs,
         "link_inputs": link_inputs,
         "build_root": build_root,
     }
@@ -217,10 +226,12 @@ def selection_report(result: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     link_inputs = []
+    extension_set = set(result["extension_archives"])
     for path in result["link_inputs"]:
         link_inputs.append(
             {
                 "path": path.relative_to(build_root).as_posix(),
+                "role": "extension" if path in extension_set else "support",
                 "sha256": _sha256(path),
                 "size": path.stat().st_size,
             }
@@ -246,8 +257,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     result = resolve_profile(args.config, args.profile, args.manifest_dir, args.build_root)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "builtin-registry.h").write_text(render_registry_header(result))
-    (args.output_dir / "link-inputs.txt").write_text(
-        "".join(f"{path}\n" for path in result["link_inputs"])
+    (args.output_dir / "extension-archives.txt").write_text(
+        "".join(f"{path}\n" for path in result["extension_archives"])
+    )
+    (args.output_dir / "static-inputs.txt").write_text(
+        "".join(f"{path}\n" for path in result["static_inputs"])
     )
     (args.output_dir / "selection-report.json").write_text(
         json.dumps(selection_report(result), indent=2, sort_keys=True) + "\n"

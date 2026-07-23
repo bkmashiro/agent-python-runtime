@@ -90,8 +90,16 @@ class WasmExtensionProfileTests(unittest.TestCase):
                 ["pkg._core", "pkg._extra"],
             )
             self.assertEqual(
+                [Path(value).relative_to(build.resolve()).as_posix() for value in result["extension_archives"]],
+                ["pkg/core.a", "pkg/extra.a"],
+            )
+            self.assertEqual(
+                [Path(value).relative_to(build.resolve()).as_posix() for value in result["static_inputs"]],
+                ["pkg/shared.a"],
+            )
+            self.assertEqual(
                 [Path(value).relative_to(build.resolve()).as_posix() for value in result["link_inputs"]],
-                ["pkg/core.a", "pkg/shared.a", "pkg/extra.a"],
+                ["pkg/core.a", "pkg/extra.a", "pkg/shared.a"],
             )
             header = tool.render_registry_header(result)
             self.assertIn("extern PyObject *PyInit__core(void);", header)

@@ -253,11 +253,13 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
     echo "failed to resolve extension feature profile: ${FEATURE_PROFILE}" >&2
     exit 12
   fi
-  mapfile -t NUMPY_LINK_INPUTS <"${PROFILE_OUTPUT_DIR}/link-inputs.txt"
-  if [[ ${#NUMPY_LINK_INPUTS[@]} -eq 0 ]]; then
-    echo "extension feature profile selected no link inputs" >&2
+  mapfile -t NUMPY_EXTENSION_ARCHIVES <"${PROFILE_OUTPUT_DIR}/extension-archives.txt"
+  mapfile -t NUMPY_STATIC_INPUTS <"${PROFILE_OUTPUT_DIR}/static-inputs.txt"
+  if [[ ${#NUMPY_EXTENSION_ARCHIVES[@]} -eq 0 ]]; then
+    echo "extension feature profile selected no extension archives" >&2
     exit 13
   fi
+  NUMPY_LINK_INPUTS=("${NUMPY_EXTENSION_ARCHIVES[@]}" "${NUMPY_STATIC_INPUTS[@]}")
   for required in "${NUMPY_LINK_INPUTS[@]}"; do
     if [[ ! -f ${required} ]]; then
       echo "missing selected NumPy link input: ${required}" >&2
@@ -292,7 +294,8 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
       -fno-exceptions \
       -mexec-model=reactor \
       "${LINK_PROBE_OBJECT}" \
-      -Wl,--whole-archive "${NUMPY_LINK_INPUTS[@]}" -Wl,--no-whole-archive \
+      -Wl,--whole-archive "${NUMPY_EXTENSION_ARCHIVES[@]}" -Wl,--no-whole-archive \
+      "${NUMPY_STATIC_INPUTS[@]}" \
       "${PYTHON_LIBS[0]}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
       -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
       -lpthread -lm -lc-printscan-long-double \

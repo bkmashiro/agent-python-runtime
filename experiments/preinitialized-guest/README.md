@@ -41,22 +41,34 @@ This validates build-time Python preinitialization for exact fresh-instance exec
 
 ## Lifecycle-density verdict: VALIDATED FOR PERFORMANCE, NOT PRODUCTION
 
-Exact Linux run `30007986419` at verified signed commit `911817eab15f6413e32cb7e45d35af9e16c9bf81` measured both artifacts under the same backend, kernel, clean Host revision, `N={1,2,4,8,16}` plan, three fresh-process repeats, 5 GiB RSS guard, and three-minute child timeout. Both raw documents passed the structural schema and an independent Go `ValidateLifecycleDensityJSON` semantic gate; the transformed candidate also passed artifact-byte binding and repeated-transform equality.
+Exact Linux run `30012386233` at verified signed commit `7e4084fa0a55624737421a599dce3408924c475c` measured the ordinary and transformed artifacts under the same backend, kernel, clean Host revision, `N={1,2,4,8,16}` plan, three fresh-process repeats, 5 GiB RSS guard, and three-minute child timeout. All raw documents passed the structural schema and an independent Go `ValidateLifecycleDensityJSON` semantic gate; the transformed candidate also passed artifact-byte binding and repeated-transform equality.
 
 | Ready slots | Baseline median | Candidate median | Speedup | Ready RSS delta |
 |---:|---:|---:|---:|---:|
-| 1 | 7.94 s | 2.88 s | 2.76x | +5.6 MiB |
-| 2 | 12.33 s | 2.87 s | 4.29x | +7.9 MiB |
-| 4 | 21.32 s | 2.89 s | 7.37x | +5.7 MiB |
-| 8 | 31.33 s | 4.58 s | 6.84x | +84.2 MiB |
-| 16 | 62.23 s | 9.34 s | 6.66x | +231.8 MiB |
+| 1 | 7.82 s | 2.93 s | 2.66x | +7.8 MiB |
+| 2 | 12.71 s | 2.95 s | 4.30x | +5.9 MiB |
+| 4 | 22.54 s | 2.96 s | 7.61x | +8.0 MiB |
+| 8 | 31.57 s | 4.82 s | 6.55x | +74.0 MiB |
+| 16 | 63.66 s | 9.81 s | 6.49x | +140.6 MiB |
 
-At N=16, aggregate diagnostic `runtime_init` work fell from 202.02 s to 2.72 ms (74,179x), while all 16 instantiations totaled 0.303 s. The stable 9.30–9.40 s ready wall is therefore dominated by four concurrent shard compilations and resource contention, not Python initialization or Wasm instantiation. Ready RSS increased from 1,975.0 MiB to 2,206.8 MiB (+11.7%).
+At N=16, the transformed candidate's three ready-wall samples were 9.71–9.82 s. Aggregate compile work was 38.58 s while aggregate `runtime_init` work was only 2.55 ms, confirming that four concurrent shard compilations and resource contention had become the dominant bottleneck.
 
-The raw baseline, candidate, and deterministic descriptive comparison are archived under `docs/benchmarks/preinitialization-spike-lifecycle-density-*-linux-amd64.json`. This validates that build-time preinitialization removes the original N=16 startup wall as the dominant bottleneck. Production promotion remains blocked by the fixed shared Python hash seed, release/cross-node portability qualification, and the absence of an opt-in artifact contract. The next bounded performance slice is shared wazero compilation caching across the four hard-capped prepared shards; it must remain independent of the hash-seed safety decision.
+The raw baseline, candidate, and deterministic descriptive comparison are archived under `docs/benchmarks/preinitialization-spike-lifecycle-density-*-linux-amd64.json`. This validates that build-time preinitialization removes Python initialization as the original N=16 startup wall. Production promotion remains blocked by the fixed shared Python hash seed, release/cross-node portability qualification, and the absence of an opt-in artifact contract.
 
-## Shared compilation-cache verdict: PENDING
+## Shared compilation-cache verdict: VALIDATED AT MULTI-SHARD DENSITY, EXPERIMENTAL ONLY
 
 The experimental `single-use-preinitialized-shared-cache` strategy keeps one explicitly owned in-memory wazero compilation cache across otherwise separate hard-capped runtimes. The first shard completes compilation before follower shards start, because wazero does not deduplicate concurrent first-time cache misses. Runner closure does not close the borrowed cache; the owner closes it only after all shard runners, and cache closure waits for active compile borrowers.
 
-The exact spike runs both the existing preinitialized candidate and this shared-cache strategy against the same artifact, Host commit, backend, environment, canonical `N={1,2,4,8,16}` plan, three fresh-process repeats, 5 GiB RSS guard, and three-minute child timeout. `compile_ns` records aggregate per-shard compile observations so any ready-wall change can be attributed rather than inferred. The strict comparator rejects artifact, commit, environment, or plan drift and accepts only the explicit normal-to-shared-cache strategy transition. No production threshold or approval is attached.
+The exact spike ran both strategies against the same transformed artifact, Host commit, backend, environment, canonical plan, and safety bounds. `compile_ns` records aggregate per-shard compile observations, and the strict comparator rejects artifact, commit, environment, or plan drift while accepting only the explicit normal-to-shared-cache strategy transition.
+
+| Ready slots | Preinitialized | Shared cache | Ready speedup | Compile-work speedup | Ready RSS delta |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 2.93 s | 2.93 s | 1.00x | 1.00x | +73.9 MiB |
+| 2 | 2.95 s | 2.93 s | 1.01x | 1.01x | +15.9 MiB |
+| 4 | 2.96 s | 2.94 s | 1.01x | 1.01x | +13.8 MiB |
+| 8 | 4.82 s | 3.07 s | 1.57x | 3.16x | -300.9 MiB |
+| 16 | 9.81 s | 3.33 s | 2.95x | 10.65x | -799.7 MiB |
+
+At N=16, shared-cache ready wall was 3.22–3.41 s, aggregate compile work fell from 38.58 s to 3.62 s, and ready RSS fell from 2,176.5 MiB to 1,376.9 MiB. Relative to the ordinary untransformed artifact in the same exact run, the combined build-time preinitialization plus shared-cache path reduced N=16 ready wall from 63.66 s to 3.33 s (19.12x) and ready RSS by 659.1 MiB. N=1–4 show no ready-wall benefit and modest RSS overhead, so the intervention is specifically a multi-shard density optimization rather than a universal startup win.
+
+The same real artifact on Darwin reduced aggregate compile work 4.25x but left wall time statistically unchanged in a narrow one-run smoke, reinforcing that wall benefit is CPU/platform dependent. No production threshold or approval is attached. The transformed artifact remains blocked by the fixed experiment-only Python hash seed; a production path would need a trusted deployment-time transform with a non-public per-deployment seed, one attested artifact distributed to all nodes, and cross-node qualification before the shared cache can be promoted with it.

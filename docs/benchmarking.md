@@ -139,16 +139,26 @@ python3 experiments/preinitialized-guest/compare_density.py \
   --output /tmp/preinitialization-density-comparison.json
 ```
 
-The comparator rejects Host/backend/environment/strategy/plan drift and reports per-N ready wall, aggregate runtime-init work, instantiation, and ready RSS. Its output is descriptive and intentionally has no production approval threshold.
+The shared-cache intervention adds `docs/benchmarks/preinitialization-spike-lifecycle-density-shared-cache-{candidate,comparison}-linux-amd64.json`. Reproduce the same-artifact strategy transition with:
+
+```bash
+python3 experiments/preinitialized-guest/compare_density.py \
+  --baseline docs/benchmarks/preinitialization-spike-lifecycle-density-candidate-linux-amd64.json \
+  --candidate docs/benchmarks/preinitialization-spike-lifecycle-density-shared-cache-candidate-linux-amd64.json \
+  --intervention shared-compilation-cache \
+  --output /tmp/shared-cache-density-comparison.json
+```
+
+The comparator rejects Host/backend/environment/plan drift. Default mode also requires identical strategies and distinct artifacts; shared-cache mode instead requires the same artifact, the exact normal-to-shared strategy transition, measured compile work, and explicit ownership/no-production limitations. Reports are descriptive and intentionally have no production approval threshold.
 
 Each raw row records:
 
 - process-instance digest, runtime-shard count, configured RSS/timeout guards, and pool target plus initializing/ready/leased/unhealthy/retiring accounting, so reused processes and duplicated compiled/runtime owners are not misattributed to slot cost;
-- active concurrency and queue/instantiate/initialize/runtime-init/prepare/execute/capability/total phases;
+- active concurrency and queue/optional compile/instantiate/initialize/runtime-init/prepare/execute/capability/total phases;
 - Go heap live/goal, GC cycles/pause, goroutines, and scheduler-latency histogram;
 - process RSS/virtual/PSS/private/swap, minor/major faults, FD count, and VMA count;
 - cgroup v2 scope and anonymized membership identity. V1 does not accept a process-dedicated claim or any measured cgroup counter: known shared scope skips as `nonisolated_scope`, and every other v2 scope skips as `isolation_unproven`.
 
 Metric shapes distinguish `measured`, `timestamp_observed`, `model_estimated`, `unsupported`, and `skipped`. Unavailable fields carry a bounded reason code rather than a fake zero. Raw measurements cannot be labeled model estimates; optional fixed/per-slot estimates are separate summary fields. Canonical Go validation recomputes sample count, sample order, pool accounting, histogram shape, and measured peaks from raw rows.
 
-Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, reused process identity, missing guards, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. A future cgroup measurement contract must provide an auditable isolation and baseline witness; adding a boolean or observing one PID in the leaf is insufficient. Optional Linux sources use bounded unavailable reason codes rather than zero; malformed required `/proc` state fails collection. The next Phase 1B work is to preserve the first exact-CI prepared raw artifact, add repeated samples, implement a lifecycle-fair fresh-instance baseline, and fit costs only after both lanes are valid.
+Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, reused process identity, missing guards, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. A future cgroup measurement contract must provide an auditable isolation and baseline witness; adding a boolean or observing one PID in the leaf is insufficient. Optional Linux sources use bounded unavailable reason codes rather than zero; malformed required `/proc` state fails collection. Build-time preinitialization and shared-cache evidence remain experimental; production promotion is blocked on a non-public per-deployment hash seed, one attested transformed artifact distributed across nodes, and cross-node qualification.

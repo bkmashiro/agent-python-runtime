@@ -108,6 +108,7 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn('ExportedFunction("numpy_import_probe")', verifier_source)
         self.assertIn('ExportedFunction("numpy_numeric_probe")', verifier_source)
         self.assertIn('ExportedFunction("numpy_random_probe")', verifier_source)
+        self.assertIn("WithRandSource(cryptorand.Reader)", verifier_source)
         self.assertIn('"numeric_succeeded"', verifier_source)
         self.assertIn('"random_succeeded"', verifier_source)
 

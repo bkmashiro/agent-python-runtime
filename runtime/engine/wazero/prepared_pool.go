@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
 
@@ -80,7 +79,7 @@ func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (
 	module, err := engine.runtime.InstantiateModule(
 		ctx,
 		engine.compiled,
-		wazerort.NewModuleConfig().WithName("").WithStderr(guestStderr),
+		newModuleConfig(guestStderr),
 	)
 	observe(engine.observer, prefix+"instantiate_guest", instantiateStarted, err)
 	if err != nil {

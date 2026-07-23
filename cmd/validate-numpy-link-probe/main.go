@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -129,7 +130,7 @@ func runProbe(ctx context.Context, wasm []byte, profile string, result *report) 
 	module, err := runtime.InstantiateModule(
 		ctx,
 		compiled,
-		wazero.NewModuleConfig().WithName("").WithStderr(stderr),
+		wazero.NewModuleConfig().WithName("").WithStderr(stderr).WithRandSource(cryptorand.Reader),
 	)
 	if err != nil {
 		return fmt.Errorf("instantiate module: %w", err)

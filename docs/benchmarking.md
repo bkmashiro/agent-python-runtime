@@ -104,7 +104,7 @@ This reports fresh versus prepared first/steady Run ratios, refill `runtime_init
 
 ## Lifecycle-density evidence contract
 
-[`benchmark/v1/lifecycle-density.schema.json`](../benchmark/v1/lifecycle-density.schema.json) and `runtime/evidence.LifecycleDensityEvidence` define the separate Phase 1 capacity/pressure evidence class. This contract does not replace the fresh or prepared latency schemas above, and no lifecycle-density collector or checked-in N-sweep evidence exists yet.
+[`benchmark/v1/lifecycle-density.schema.json`](../benchmark/v1/lifecycle-density.schema.json) and `runtime/evidence.LifecycleDensityEvidence` define the separate Phase 1 capacity/pressure evidence class. This contract does not replace the fresh or prepared latency schemas above. `runtime/evidence` now has bounded Go-runtime and Linux `/proc`/cgroup-v2 raw collectors with fixture tests and a Linux live smoke gate, but no fresh-process orchestrator or checked-in N-sweep evidence exists yet.
 
 One file binds one exact artifact/profile, clean Host revision, backend/version, environment, requested strategy, workload, and complete sweep. The initial canonical slot sequence is `1,2,4,8,16`; `32` and `64` may be appended only after an external memory guard proves they are safe. Every `(N, repeat)` row must come from a fresh process and remain in canonical order.
 
@@ -118,4 +118,4 @@ Each raw row records:
 
 Metric shapes distinguish `measured`, `timestamp_observed`, `model_estimated`, `unsupported`, and `skipped`. Unavailable fields carry a bounded reason code rather than a fake zero. Raw measurements cannot be labeled model estimates; optional fixed/per-slot estimates are separate summary fields. Go validation recomputes sample count, pool accounting, and measured peaks from raw rows.
 
-Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. The next Phase 1B slice must implement the collector/orchestrator and produce real raw rows; this schema alone is not benchmark evidence.
+Evidence fails closed for a dirty Host worktree, strategy fallback, noncanonical N/sample distribution, artifact byte mismatch, cgroup/environment drift, pool counter overflow, mixed metric availability, and fabricated measured summaries. Optional Linux sources use bounded unavailable reason codes rather than zero; malformed required `/proc` state fails collection. The next Phase 1B slice must implement the fresh-process artifact orchestrator and produce real raw rows; schemas and raw collectors alone are not benchmark evidence.

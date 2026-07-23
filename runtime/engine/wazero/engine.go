@@ -36,6 +36,7 @@ type Factory struct {
 	BrokerFactory    BrokerFactory
 	Observer         Observer
 	PreparedCapacity uint32
+	CompilationCache *CompilationCache
 }
 
 func (Factory) Name() string { return "wazero" }
@@ -44,7 +45,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.PreparedCapacity > maxPreparedCapacity {
 		return nil, fmt.Errorf("prepared capacity %d exceeds hard bound %d", factory.PreparedCapacity, maxPreparedCapacity)
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.PreparedCapacity)
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.PreparedCapacity, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -63,7 +64,7 @@ type Engine struct {
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, 0)
+	return newEngine(ctx, wasm, config, nil, nil, 0, nil)
 }
 
 func NewWithBrokerFactory(
@@ -72,7 +73,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, 0)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, 0, nil)
 }
 
 func newEngine(
@@ -82,6 +83,7 @@ func newEngine(
 	brokerFactory BrokerFactory,
 	observer Observer,
 	preparedCapacity uint32,
+	compilationCache *CompilationCache,
 ) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
@@ -93,6 +95,20 @@ func newEngine(
 	runtimeConfig := wazerort.NewRuntimeConfig().
 		WithCloseOnContextDone(true).
 		WithMemoryLimitPages(config.MemoryLimitPages)
+	var releaseCompilationCache func()
+	if compilationCache != nil {
+		inner, release, err := compilationCache.acquire()
+		if err != nil {
+			return nil, err
+		}
+		releaseCompilationCache = release
+		defer func() {
+			if releaseCompilationCache != nil {
+				releaseCompilationCache()
+			}
+		}()
+		runtimeConfig = runtimeConfig.WithCompilationCache(inner)
+	}
 	wasmRuntime := wazerort.NewRuntimeWithConfig(ctx, runtimeConfig)
 	hostStarted := time.Now()
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, wasmRuntime); err != nil {
@@ -109,6 +125,10 @@ func newEngine(
 	compileStarted := time.Now()
 	compiled, err := wasmRuntime.CompileModule(ctx, wasm)
 	observe(observer, "compile", compileStarted, err)
+	if releaseCompilationCache != nil {
+		releaseCompilationCache()
+		releaseCompilationCache = nil
+	}
 	if err != nil {
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("compile guest: %w", err)

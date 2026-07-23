@@ -18,6 +18,37 @@ func TestPreparedCapacityHardBoundFailsBeforeCompile(t *testing.T) {
 	}
 }
 
+func TestFactoryBorrowsCompilationCacheUntilOwnerCloses(t *testing.T) {
+	ctx := context.Background()
+	cache := engine.NewCompilationCache()
+	factory := engine.Factory{CompilationCache: cache}
+	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+
+	first, err := factory.New(ctx, wasm, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	second, err := factory.New(ctx, wasm, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatalf("runner close also closed borrowed compilation cache: %v", err)
+	}
+	if err := second.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := factory.New(ctx, wasm, runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "compilation cache is closed") {
+		t.Fatalf("closed compilation cache was accepted: %v", err)
+	}
+	if err := cache.Close(ctx); err != nil {
+		t.Fatalf("repeated compilation cache close failed: %v", err)
+	}
+}
+
 func TestPreparedPoolDiscardsTrappedModule(t *testing.T) {
 	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
 	if err != nil {

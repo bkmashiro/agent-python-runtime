@@ -28,8 +28,6 @@ The runtime is not released or deployed. An explicit manual-only `numpy-core` ar
 
 The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, explicit `numpy-core`, and truthful-closeout tracks. `base` remains automatic and `numpy-core` remains manual-only; fresh-instance fallback and all non-release boundaries remain intact. The session-lifecycle successor completed its bounded observability and lifecycle-density evidence, then closed as an active queue after the owner's product-value decision. Session managers, capsules, COW, persistence, migration, and UFFD remain explicitly deferred until a concrete stateful use case, target host, workload, and SLO justify them.
 
-The owner later approved a separate [manual-only QEMU system compatibility spike](docs/plans/2026-07-23-qemu-system-compatibility-spike.md). That plan is an experimental stateless comparator: it does not reactivate the session roadmap, add a QEMU production backend, or change the default wazero runtime.
-
 The project is not a general Linux sandbox, agent framework, MCP marketplace, arbitrary PyPI environment, or write/effect execution system.
 
 ## Documentation
@@ -38,7 +36,6 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [Runtime benchmark evidence](docs/benchmarking.md)
 - [Prepared-state safety audit](docs/prepared-state-audit.md)
 - [Closed lifecycle-density and deferred session roadmap](docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md)
-- [Planned QEMU system compatibility spike](docs/plans/2026-07-23-qemu-system-compatibility-spike.md)
 - [Stateful session lifecycle contract](docs/session-lifecycle-contract.md)
 - [Guest artifact reproducibility](docs/reproducibility.md)
 - [Guest supply-chain evidence](docs/supply-chain.md)

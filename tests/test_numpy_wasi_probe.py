@@ -101,6 +101,8 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertNotIn("default_rng()", link_source)
         self.assertIn("np.longdouble", link_source)
         self.assertIn("np.linalg.det", link_source)
+        self.assertEqual(script.count("-DCYTHON_COMPRESS_STRINGS=0"), 2)
+        self.assertNotIn('PyImport_AppendInittab("zlib"', link_source)
         self.assertNotIn("return PyInit__multiarray_umath()", link_source)
         verifier_source = REGISTRATION_VERIFIER.read_text()
         self.assertIn('ExportedFunction("numpy_import_probe")', verifier_source)

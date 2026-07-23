@@ -125,6 +125,8 @@ go run ./cmd/apyrun-benchmark \
 
 `-samples` is repeats per canonical N, not a request to truncate the sweep. The parent launches a distinct bounded child for every row, rejects backend/environment/artifact drift, generates a unique process-instance digest from the observed launch identity, and writes only after object validation, artifact-byte binding, and canonical semantic JSON validation succeed. The RSS threshold is a sampled kill guard rather than a kernel reservation; the evidence records that limitation explicitly.
 
+The checked-in three-repeat base-profile artifact is [`docs/benchmarks/lifecycle-density-production-safe-linux-amd64.json`](benchmarks/lifecycle-density-production-safe-linux-amd64.json). It binds Host revision `5921411c3716f6ce37caee26a10cff5b036e99a9` and remains raw prepared idle-ready evidence, not a fresh/prepared comparison or capacity model.
+
 Each raw row records:
 
 - process-instance digest, runtime-shard count, configured RSS/timeout guards, and pool target plus initializing/ready/leased/unhealthy/retiring accounting, so reused processes and duplicated compiled/runtime owners are not misattributed to slot cost;

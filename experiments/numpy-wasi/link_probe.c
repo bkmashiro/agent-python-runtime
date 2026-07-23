@@ -63,6 +63,12 @@ static const char *NUMPY_RANDOM_SCRIPT =
     "_legacy2 = _np.random.RandomState(13579)\n"
     "assert _np.array_equal(_legacy1.randint(0, 1000, size=8), _legacy2.randint(0, 1000, size=8))\n";
 
+static const char *NUMPY_ENTROPY_SCRIPT =
+    "import numpy as _np\n"
+    "_entropy_bytes = _np.random.default_rng().bytes(32)\n"
+    "assert len(_entropy_bytes) == 32\n"
+    "assert any(_entropy_bytes)\n";
+
 /* Records the initializer pointers without executing NumPy or Python imports. */
 __attribute__((export_name("numpy_register_probe")))
 int numpy_register_probe(void) {
@@ -158,6 +164,19 @@ int numpy_random_probe(void) {
     if (PyRun_SimpleString(NUMPY_RANDOM_SCRIPT) != 0) {
         PyErr_Print();
         return 100;
+    }
+    return 0;
+}
+
+/* Executes unseeded generation only with Host-provided entropy. */
+__attribute__((export_name("numpy_entropy_probe")))
+int numpy_entropy_probe(void) {
+    if (!numpy_imported) {
+        return 110;
+    }
+    if (PyRun_SimpleString(NUMPY_ENTROPY_SCRIPT) != 0) {
+        PyErr_Print();
+        return 120;
     }
     return 0;
 }

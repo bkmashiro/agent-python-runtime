@@ -46,6 +46,10 @@ type report struct {
 	RandomCalled         bool           `json:"random_called"`
 	RandomExit           *uint64        `json:"random_exit"`
 	RandomValidated      bool           `json:"random_validated"`
+	EntropySource        string         `json:"entropy_source"`
+	EntropyCalled        bool           `json:"entropy_called"`
+	EntropyExit          *uint64        `json:"entropy_exit"`
+	EntropyValidated     bool           `json:"entropy_validated"`
 	GuestStderr          string         `json:"guest_stderr,omitempty"`
 	Error                string         `json:"error,omitempty"`
 }
@@ -67,9 +71,10 @@ func main() {
 	}
 	digest := sha256.Sum256(wasm)
 	result := report{
-		SchemaVersion:        4,
+		SchemaVersion:        5,
 		FeatureProfile:       *profile,
 		Backend:              "wazero",
+		EntropySource:        "host_crypto_rand",
 		Outcome:              "registration_failed",
 		WasmSHA256:           hex.EncodeToString(digest[:]),
 		WasmSize:             len(wasm),
@@ -240,6 +245,27 @@ func runProbe(ctx context.Context, wasm []byte, profile string, result *report) 
 	}
 	result.RandomValidated = true
 	result.Outcome = "random_succeeded"
+
+	result.Outcome = "entropy_failed"
+	entropyProbe := module.ExportedFunction("numpy_entropy_probe")
+	if entropyProbe == nil {
+		return errors.New("missing numpy_entropy_probe export")
+	}
+	values, err = entropyProbe.Call(ctx)
+	result.EntropyCalled = true
+	if err != nil {
+		return fmt.Errorf("call numpy_entropy_probe: %w", err)
+	}
+	if len(values) != 1 {
+		return fmt.Errorf("entropy probe returned %d values, want 1", len(values))
+	}
+	entropyExit := values[0]
+	result.EntropyExit = &entropyExit
+	if entropyExit != 0 {
+		return fmt.Errorf("numpy_entropy_probe returned %d", entropyExit)
+	}
+	result.EntropyValidated = true
+	result.Outcome = "entropy_succeeded"
 	return nil
 }
 

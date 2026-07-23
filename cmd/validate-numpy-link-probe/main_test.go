@@ -30,15 +30,19 @@ func TestBoundedTextPreservesDiagnosticTraceback(t *testing.T) {
 func TestFeatureProfileReportSchema(t *testing.T) {
 	exit := uint64(0)
 	encoded, err := json.Marshal(report{
-		SchemaVersion:    4,
+		SchemaVersion:    5,
 		FeatureProfile:   "random",
-		Outcome:          "random_succeeded",
+		Outcome:          "entropy_succeeded",
 		NumericCalled:    true,
 		NumericExit:      &exit,
 		NumericValidated: true,
 		RandomCalled:     true,
 		RandomExit:       &exit,
 		RandomValidated:  true,
+		EntropySource:    "host_crypto_rand",
+		EntropyCalled:    true,
+		EntropyExit:      &exit,
+		EntropyValidated: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +51,7 @@ func TestFeatureProfileReportSchema(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded["schema_version"] != float64(4) || decoded["feature_profile"] != "random" || decoded["outcome"] != "random_succeeded" {
+	if decoded["schema_version"] != float64(5) || decoded["feature_profile"] != "random" || decoded["outcome"] != "entropy_succeeded" {
 		t.Fatalf("unexpected schema identity: %s", encoded)
 	}
 	if decoded["numeric_called"] != true || decoded["numeric_exit"] != float64(0) || decoded["numeric_validated"] != true {
@@ -55,5 +59,8 @@ func TestFeatureProfileReportSchema(t *testing.T) {
 	}
 	if decoded["random_called"] != true || decoded["random_exit"] != float64(0) || decoded["random_validated"] != true {
 		t.Fatalf("unexpected random evidence: %s", encoded)
+	}
+	if decoded["entropy_source"] != "host_crypto_rand" || decoded["entropy_called"] != true || decoded["entropy_exit"] != float64(0) || decoded["entropy_validated"] != true {
+		t.Fatalf("unexpected entropy evidence: %s", encoded)
 	}
 }

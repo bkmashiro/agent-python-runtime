@@ -109,11 +109,13 @@ Stop for a toolchain/scope decision if this requires a broad NumPy fork, opaque 
 
 ### F3 — Product E2E and evidence
 
-Only after F2 succeeds, first cross the initializer/import boundary in an experiment-only artifact. Run `29964718389` performed a real Meson install, deterministically staged 381 NumPy package files, packed the CPython standard library plus that tree, registered the core builtin, and entered its initializer under current wazero. Its first runtime trap was resolved with the locked SDK's own `libc-printscan-long-double.a`, preserving the measured 16-byte `long double` / `IEEE_QUAD_LE` target ABI instead of using the historical `--wrap=strtold` binary64 shim. Run `29965554161` then initialized Python and crossed that core initializer path; its complete traceback identified the required second builtin, `numpy.linalg._umath_linalg`. Run `29966525059` linked only that manifest-bound archive and its deduplicated inputs, then completed an actual top-level `import numpy` with version `2.5.1` under current wazero. Import success remains diagnostic rather than production qualification. The next schema-3 runtime gate separately checks integer array/reduction behavior, a binary128 value distinguishable from `double`, and a 2×2 determinant through the selected linalg implementation.
+Only after F2 succeeds, first cross the initializer/import boundary in an experiment-only artifact. Run `29964718389` performed a real Meson install, deterministically staged 381 NumPy package files, packed the CPython standard library plus that tree, registered the core builtin, and entered its initializer under current wazero. Its first runtime trap was resolved with the locked SDK's own `libc-printscan-long-double.a`, preserving the measured 16-byte `long double` / `IEEE_QUAD_LE` target ABI instead of using the historical `--wrap=strtold` binary64 shim. Run `29965554161` then initialized Python and crossed that core initializer path; its complete traceback identified the required second builtin, `numpy.linalg._umath_linalg`. Run `29966525059` linked only that manifest-bound archive and its deduplicated inputs, then completed an actual top-level `import numpy` with version `2.5.1` under current wazero. Run `29967618919` additionally passed deterministic integer array/reduction checks, demonstrated a `long double` value above one that rounds to one as `double`, and computed the expected 2×2 determinant through `_umath_linalg`. Schema-3 runtime evidence reports `numeric_succeeded` with no guest stderr.
 
-Only after that succeeds:
+This closes bounded feasibility, not production qualification. The probe still has an unqualified no-EH allocation-error adaptation, supports only the observed core/linalg graph, has not reported fresh multi-instance behavior, and is not part of the production manifest/SBOM/consumer-verification or size-policy path.
 
-- place NumPy pure-Python/package metadata in the immutable VFS;
+If production promotion is approved:
+
+- integrate the verified NumPy pure-Python/package tree into the production immutable VFS;
 - bind the exact source and license expression into manifest/SBOM/notices;
 - add the real-artifact vertical-slice and freshness tests;
 - record artifact size, build time, ready/first/steady latency, retained memory, and unsupported APIs;

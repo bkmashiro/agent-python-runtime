@@ -8,6 +8,11 @@
 #include <string.h>
 #include <wchar.h>
 
+#ifdef AGENT_RUNTIME_EXTENSION_PROFILE
+#include "builtin-registry.h"
+#include "wasm_extension_finder.h"
+#endif
+
 #define AGENT_RUNTIME_REQUEST_MAX (1024 * 1024)
 #define AGENT_RUNTIME_RESPONSE_MAX (1024 * 1024)
 #define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)
@@ -94,6 +99,11 @@ static int32_t ensure_interpreter(void) {
     if (PyImport_AppendInittab("_agent_runtime_host", PyInit__agent_runtime_host) != 0) {
         return -1;
     }
+#ifdef AGENT_RUNTIME_EXTENSION_PROFILE
+    if (register_selected_builtins() != 0) {
+        return -1;
+    }
+#endif
 
     PyStatus status;
     PyConfig config;
@@ -117,6 +127,12 @@ static int32_t ensure_interpreter(void) {
     if (PyStatus_Exception(status)) {
         return -1;
     }
+#ifdef AGENT_RUNTIME_EXTENSION_PROFILE
+    if (PyRun_SimpleString(AGENT_RUNTIME_WASM_EXTENSION_FINDER_SCRIPT) != 0) {
+        PyErr_Print();
+        return -1;
+    }
+#endif
 
     runtime_module = PyImport_ImportModule("agent_runtime");
     if (runtime_module == NULL) {

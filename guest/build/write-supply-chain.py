@@ -266,6 +266,8 @@ def validate_bundle_outputs(
         errors.append("manifest artifact identity does not match artifact")
     if manifest.get("target") != lock.get("target"):
         errors.append("manifest and source-lock targets differ")
+    if manifest.get("sources") != lock.get("sources"):
+        errors.append("manifest sources do not match source lock")
     try:
         created = datetime.datetime.fromtimestamp(
             int(epoch_text), tz=datetime.timezone.utc

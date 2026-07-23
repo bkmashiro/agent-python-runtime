@@ -7,9 +7,9 @@ LOCK = ROOT / "experiments" / "numpy-wasi" / "sources.lock.json"
 PROBE = ROOT / "experiments" / "numpy-wasi" / "probe.sh"
 NOEH_PATCHER = ROOT / "tools" / "patch_numpy_noeh_unique.py"
 LINK_PROBE = ROOT / "experiments" / "numpy-wasi" / "link_probe.c"
+FINDER_HEADER = ROOT / "guest" / "include" / "wasm_extension_finder.h"
 WORKFLOW = ROOT / ".github" / "workflows" / "numpy-wasi-probe.yml"
 REGISTRATION_VERIFIER = ROOT / "cmd" / "validate-numpy-link-probe" / "main.go"
-LOCK = ROOT / "experiments" / "numpy-wasi" / "sources.lock.json"
 
 class NumPyWASIProbeContractTests(unittest.TestCase):
     def test_probe_uses_isolated_exact_sources_and_bounded_features(self):
@@ -99,7 +99,11 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         self.assertIn('export_name("numpy_register_probe")', link_source)
         self.assertIn('export_name("numpy_import_probe")', link_source)
         self.assertIn("Py_InitializeFromConfig", link_source)
-        self.assertIn("_imp.is_builtin", link_source)
+        self.assertIn('#include "wasm_extension_finder.h"', link_source)
+        self.assertNotIn("_imp.is_builtin", link_source)
+        finder_source = FINDER_HEADER.read_text()
+        self.assertIn("_imp.is_builtin", finder_source)
+        self.assertIn("_AgentRuntimeWasiVFSFinder", finder_source)
         self.assertIn('PyImport_ImportModule("numpy")', link_source)
         self.assertIn('export_name("numpy_python_initialized_probe")', link_source)
         self.assertIn('export_name("numpy_numeric_probe")', link_source)

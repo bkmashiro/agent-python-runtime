@@ -37,7 +37,6 @@ class SupplyChainWriterTests(unittest.TestCase):
             "target": "wasm32-wasip1",
         }
         manifest_path = root / "manifest.json"
-        manifest_path.write_text(json.dumps(manifest))
         lock = {
             "target": "wasm32-wasip1",
             "sources": [
@@ -61,6 +60,8 @@ class SupplyChainWriterTests(unittest.TestCase):
                 },
             ],
         }
+        manifest["sources"] = lock["sources"]
+        manifest_path.write_text(json.dumps(manifest))
         lock_path = root / "lock.json"
         lock_path.write_text(json.dumps(lock))
         vfs = root / "vfs"
@@ -108,6 +109,21 @@ class SupplyChainWriterTests(unittest.TestCase):
         self.assertEqual([], validation_errors)
         self.assertEqual([], bundle_validation_errors)
         self.assertTrue(any("locked source" in error for error in tamper_errors))
+
+    def test_bundle_validation_rejects_manifest_source_lock_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact, manifest, lock, vfs = self.fixture(root)
+            sbom, notices = self.writer.build_outputs(
+                artifact=artifact, manifest_path=manifest, source_lock=lock, vfs_root=vfs
+            )
+            manifest_data = json.loads(manifest.read_text())
+            manifest_data["sources"][0]["sha256"] = "d" * 64
+            manifest.write_text(json.dumps(manifest_data))
+            errors = self.writer.validate_bundle_outputs(
+                sbom, notices, artifact, manifest, lock
+            )
+            self.assertTrue(any("manifest sources" in error for error in errors), errors)
 
     def test_validation_rejects_artifact_or_vfs_tamper(self):
         with tempfile.TemporaryDirectory() as directory:

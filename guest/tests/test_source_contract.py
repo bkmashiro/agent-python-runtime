@@ -8,6 +8,7 @@ SOURCE = ROOT / "guest" / "src" / "runtime.c"
 BOOTSTRAP = ROOT / "guest" / "bootstrap" / "agent_runtime" / "__init__.py"
 TOOLS = ROOT / "guest" / "bootstrap" / "agent_runtime" / "tools.py"
 BUILD_SCRIPT = ROOT / "guest" / "build" / "build-guest.sh"
+ARTIFACT_WORKFLOW = ROOT / ".github" / "workflows" / "guest-artifact.yml"
 
 
 class GuestSourceContractTests(unittest.TestCase):
@@ -62,6 +63,29 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("site-packages/agent_runtime", text)
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())
+
+    def test_artifact_profile_is_explicit_and_base_remains_default(self):
+        build = BUILD_SCRIPT.read_text()
+        workflow = ARTIFACT_WORKFLOW.read_text()
+        self.assertIn("AGENT_RUNTIME_ARTIFACT_PROFILE", build)
+        self.assertIn("${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}", build)
+        self.assertIn("base)", build)
+        self.assertIn("numpy-core)", build)
+        self.assertIn("unsupported artifact profile", build)
+        self.assertIn("--artifact-profile", build)
+        self.assertIn("--extension-selection", build)
+        self.assertIn("artifact_profile:", workflow)
+        self.assertIn("default: base", workflow)
+        self.assertIn("- base", workflow)
+        self.assertIn("- numpy-core", workflow)
+        self.assertIn("AGENT_RUNTIME_ARTIFACT_PROFILE", workflow)
+        self.assertIn("${{ github.ref }}-${{ inputs.artifact_profile || 'base' }}", workflow)
+        self.assertGreaterEqual(
+            workflow.count("if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'"), 6
+        )
+        self.assertIn('register_selected_builtins()', SOURCE.read_text())
+        self.assertIn('AGENT_RUNTIME_WASM_EXTENSION_FINDER_SCRIPT', SOURCE.read_text())
+        self.assertIn('wasm_extension_finder.h', SOURCE.read_text())
 
     def test_host_call_import_is_narrow_and_bounded(self):
         header = HEADER.read_text()

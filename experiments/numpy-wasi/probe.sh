@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK_DIR=${AGENT_RUNTIME_BUILD_DIR:?AGENT_RUNTIME_BUILD_DIR must point at a completed guest build}
 PROBE_DIR=${NUMPY_WASI_PROBE_DIR:-"${RUNNER_TEMP:-/tmp}/numpy-wasi-probe"}
-LOCK="${ROOT_DIR}/experiments/numpy-wasi/sources.lock.json"
+LOCK=${NUMPY_WASI_SOURCE_LOCK:-"${ROOT_DIR}/experiments/numpy-wasi/sources.lock.json"}
 FEATURE_PROFILE=${NUMPY_WASI_FEATURE_PROFILE:-core}
 PROFILE_CONFIG="${ROOT_DIR}/experiments/numpy-wasi/feature-profiles.json"
 PROFILE_OUTPUT_DIR="${PROBE_DIR}/extension-profile"
@@ -308,6 +308,7 @@ if [[ ${COMPILE_EXIT} -eq 0 ]]; then
   "${WASI_SDK_PATH}/bin/clang" --target=wasm32-wasip1 \
     --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" -O2 \
     -I"${CPYTHON_DIR}/Include" -I"${WASI_BUILD_DIR}" -I"${PROFILE_OUTPUT_DIR}" \
+    -I"${ROOT_DIR}/guest/include" \
     -c "${ROOT_DIR}/experiments/numpy-wasi/link_probe.c" \
     -o "${LINK_PROBE_OBJECT}" >"${PROBE_DIR}/logs/link.log" 2>&1
   LINK_COMPILE_EXIT=$?

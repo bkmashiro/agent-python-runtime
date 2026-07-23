@@ -112,6 +112,32 @@ func TestCoreGuestExecutesNeutralRequest(t *testing.T) {
 	}
 }
 
+func TestNumPyCoreProfileExecutesSelectedNumericClosure(t *testing.T) {
+	if os.Getenv("AGENT_RUNTIME_ARTIFACT_PROFILE") != "numpy-core" {
+		t.Skip("numpy-core artifact profile is not selected")
+	}
+	code := `
+import numpy as np
+values = np.array([1, 2, 3, 4], dtype=np.int64)
+matrix = np.array([[1.0, 2.0], [3.0, 4.0]])
+result = {
+    "version": np.__version__,
+    "sum": int(values.sum()),
+    "determinant": round(float(np.linalg.det(matrix))),
+    "longdouble_wider": bool(np.finfo(np.longdouble).nmant > np.finfo(np.double).nmant),
+}
+`
+	response := run(t, newEngine(t), "numpy-core", code, map[string]any{})
+	if response.Status != "ok" {
+		t.Fatalf("NumPy core guest returned error: %#v", response.Error)
+	}
+	result := response.Result.(map[string]any)
+	if result["version"] != "2.5.1" || result["sum"] != float64(10) ||
+		result["determinant"] != float64(-2) || result["longdouble_wider"] != true {
+		t.Fatalf("unexpected NumPy core result: %#v", result)
+	}
+}
+
 func TestCoreGuestExposesTargetSysconfig(t *testing.T) {
 	response := run(
 		t,

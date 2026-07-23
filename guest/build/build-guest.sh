@@ -7,6 +7,21 @@ DIST_DIR=${AGENT_RUNTIME_DIST_DIR:-"${ROOT_DIR}/dist"}
 DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
+ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
+case "${ARTIFACT_PROFILE}" in
+  base)
+    SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
+    ARTIFACT_FILENAME="agent-python-runtime.wasm"
+    ;;
+  numpy-core)
+    SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.numpy-core.lock.json"
+    ARTIFACT_FILENAME="agent-python-runtime-numpy-core.wasm"
+    ;;
+  *)
+    echo "unsupported artifact profile: ${ARTIFACT_PROFILE}" >&2
+    exit 10
+    ;;
+esac
 
 if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
@@ -17,7 +32,8 @@ rm -rf "${WORK_DIR}" "${DIST_DIR}"
 mkdir -p "${DOWNLOAD_DIR}" "${TOOLS_DIR}" "${DIST_DIR}"
 
 fetch() {
-  python3 "${ROOT_DIR}/tools/fetch_locked_source.py" "$1" "${DOWNLOAD_DIR}/$2"
+  python3 "${ROOT_DIR}/tools/fetch_locked_source.py" "$1" "${DOWNLOAD_DIR}/$2" \
+    --lock "${SOURCE_LOCK}"
 }
 
 fetch cpython-source cpython.tgz
@@ -114,7 +130,7 @@ if [[ ${WASI_VFS_STORAGE_SYMBOLS} -ne 1 ]]; then
 fi
 RUNTIME_OBJECT="${WORK_DIR}/runtime.o"
 RAW_GUEST="${WORK_DIR}/agent-python-runtime.raw.wasm"
-FINAL_GUEST="${DIST_DIR}/agent-python-runtime.wasm"
+FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
 
 "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
   -I"${ROOT_DIR}/guest/include" \
@@ -159,6 +175,59 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
   --epoch "${SOURCE_DATE_EPOCH}"
 
+MANIFEST_EXTENSION_ARGS=()
+if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
+  NUMPY_PROFILE_DIR="${WORK_DIR}/numpy-core-profile"
+  AGENT_RUNTIME_BUILD_DIR="${WORK_DIR}" \
+  AGENT_RUNTIME_VFS_ROOT="${VFS_PYTHON_DIR}" \
+  NUMPY_WASI_PROBE_DIR="${NUMPY_PROFILE_DIR}" \
+  NUMPY_WASI_FEATURE_PROFILE=core \
+  NUMPY_WASI_SOURCE_LOCK="${SOURCE_LOCK}" \
+    "${ROOT_DIR}/experiments/numpy-wasi/probe.sh"
+
+  PROFILE_OUTPUT_DIR="${NUMPY_PROFILE_DIR}/extension-profile"
+  PROFILE_SELECTION="${PROFILE_OUTPUT_DIR}/selection-report.json"
+  mapfile -t NUMPY_EXTENSION_ARCHIVES <"${PROFILE_OUTPUT_DIR}/extension-archives.txt"
+  mapfile -t NUMPY_STATIC_INPUTS <"${PROFILE_OUTPUT_DIR}/static-inputs.txt"
+  if [[ ${#NUMPY_EXTENSION_ARCHIVES[@]} -ne 2 ]]; then
+    echo "numpy-core profile must select exactly two extension archives" >&2
+    exit 11
+  fi
+  install -m 0644 "${PROFILE_SELECTION}" "${DIST_DIR}/extension-selection.json"
+  touch -d "@${SOURCE_DATE_EPOCH}" "${DIST_DIR}/extension-selection.json"
+  MANIFEST_EXTENSION_ARGS=(--extension-selection "${DIST_DIR}/extension-selection.json")
+  VFS_PYTHON_DIR="${NUMPY_PROFILE_DIR}/vfs-python"
+
+  "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
+    -DAGENT_RUNTIME_EXTENSION_PROFILE=1 \
+    -I"${ROOT_DIR}/guest/include" \
+    -I"${CPYTHON_DIR}/Include" \
+    -I"${WASI_BUILD_DIR}" \
+    -I"${PROFILE_OUTPUT_DIR}" \
+    -c "${ROOT_DIR}/guest/src/runtime.c" -o "${RUNTIME_OBJECT}"
+
+  "${WASI_SDK_PATH}/bin/clang++" --target=wasm32-wasip1 --sysroot="${SYSROOT}" \
+    -fno-exceptions \
+    -mexec-model=reactor \
+    "${RUNTIME_OBJECT}" \
+    -Wl,--whole-archive "${NUMPY_EXTENSION_ARCHIVES[@]}" -Wl,--no-whole-archive \
+    "${NUMPY_STATIC_INPUTS[@]}" \
+    "${PYTHON_LIB}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
+    -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
+    -lpthread -lm -lc-printscan-long-double \
+    -Wl,--export=runtime_init \
+    -Wl,--export=runtime_prepare \
+    -Wl,--export=alloc \
+    -Wl,--export=dealloc \
+    -Wl,--export=execute \
+    -Wl,--export-memory \
+    -Wl,--initial-memory=134217728 \
+    -Wl,--max-memory=536870912 \
+    -Wl,-z,stack-size=16777216 \
+    -Wl,--strip-all \
+    -o "${RAW_GUEST}"
+fi
+
 "${WASI_VFS}" pack "${RAW_GUEST}" \
   --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
   -o "${FINAL_GUEST}"
@@ -168,19 +237,21 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
 python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --artifact "${FINAL_GUEST}" \
   --wat "${DIST_DIR}/agent-python-runtime.wat" \
-  --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+  --source-lock "${SOURCE_LOCK}" \
+  --artifact-profile "${ARTIFACT_PROFILE}" \
+  "${MANIFEST_EXTENSION_ARGS[@]}" \
   --output "${DIST_DIR}/manifest.json"
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --artifact "${FINAL_GUEST}" \
   --manifest "${DIST_DIR}/manifest.json" \
-  --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+  --source-lock "${SOURCE_LOCK}" \
   --vfs-root "${VFS_PYTHON_DIR}" \
   --sbom "${DIST_DIR}/sbom.spdx.json" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md"
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --artifact "${FINAL_GUEST}" \
   --manifest "${DIST_DIR}/manifest.json" \
-  --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+  --source-lock "${SOURCE_LOCK}" \
   --vfs-root "${VFS_PYTHON_DIR}" \
   --sbom "${DIST_DIR}/sbom.spdx.json" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \
@@ -194,11 +265,16 @@ python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
 rm "${DIST_DIR}/agent-python-runtime.wat"
 (
   cd "${DIST_DIR}"
-  sha256sum \
-    agent-python-runtime.wasm \
-    manifest.json \
-    sbom.spdx.json \
-    THIRD_PARTY_NOTICES.md > SHA256SUMS
+  SUM_FILES=(
+    "${ARTIFACT_FILENAME}"
+    manifest.json
+    sbom.spdx.json
+    THIRD_PARTY_NOTICES.md
+  )
+  if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
+    SUM_FILES+=(extension-selection.json)
+  fi
+  sha256sum "${SUM_FILES[@]}" > SHA256SUMS
 )
 
 printf 'guest artifact: %s\n' "${FINAL_GUEST}"

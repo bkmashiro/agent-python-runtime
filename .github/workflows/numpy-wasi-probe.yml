@@ -116,6 +116,7 @@ jobs:
             ${{ runner.temp }}/numpy-wasi-probe/numpy-core-link-probe.wasm
             ${{ runner.temp }}/numpy-wasi-probe/numpy-import-probe.wasm
             ${{ runner.temp }}/numpy-wasi-probe/numpy-package-manifest.json
+            ${{ runner.temp }}/numpy-wasi-probe/extension-profile/selection-report.json
             ${{ runner.temp }}/numpy-wasi-probe/wasi-cross.ini
             ${{ runner.temp }}/numpy-wasi-probe/logs/
             ${{ runner.temp }}/numpy-wasi-probe/static-extension-manifests/

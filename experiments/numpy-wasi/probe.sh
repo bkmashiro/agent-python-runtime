@@ -5,6 +5,10 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK_DIR=${AGENT_RUNTIME_BUILD_DIR:?AGENT_RUNTIME_BUILD_DIR must point at a completed guest build}
 PROBE_DIR=${NUMPY_WASI_PROBE_DIR:-"${RUNNER_TEMP:-/tmp}/numpy-wasi-probe"}
 LOCK="${ROOT_DIR}/experiments/numpy-wasi/sources.lock.json"
+FEATURE_PROFILE=${NUMPY_WASI_FEATURE_PROFILE:-core}
+PROFILE_CONFIG="${ROOT_DIR}/experiments/numpy-wasi/feature-profiles.json"
+PROFILE_OUTPUT_DIR="${PROBE_DIR}/extension-profile"
+PROFILE_SELECTION="${PROFILE_OUTPUT_DIR}/selection-report.json"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 WASI_BUILD_DIR="${CPYTHON_DIR}/cross-build/wasm32-wasip1"
 WASI_SDK_PATH="${WORK_DIR}/tools/wasi-sdk"
@@ -58,6 +62,8 @@ for required in \
   "${PROBE_DIR}/numpy/vendored-meson/meson/meson.py" \
   "${PROBE_DIR}/cython/cython.py" \
   "${ROOT_DIR}/tools/archive_wasm_extension.py" \
+  "${ROOT_DIR}/tools/resolve_wasm_extension_profile.py" \
+  "${PROFILE_CONFIG}" \
   "${ROOT_DIR}/tools/stage_numpy_wasi_package.py" \
   "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${WASI_VFS}" \
@@ -235,49 +241,21 @@ if [[ ${INSTALL_EXIT} -eq 0 ]]; then
   fi
 fi
 if [[ ${COMPILE_EXIT} -eq 0 ]]; then
-  SELECTED_MANIFESTS=(
-    "${STATIC_MANIFEST_DIR}/numpy/_core/_multiarray_umath.json"
-    "${STATIC_MANIFEST_DIR}/numpy/linalg/_umath_linalg.json"
-  )
-  for manifest in "${SELECTED_MANIFESTS[@]}"; do
-    if [[ ! -f ${manifest} ]]; then
-      echo "missing selected NumPy static-extension manifest: ${manifest}" >&2
-      exit 12
-    fi
-  done
-  mapfile -t NUMPY_LINK_INPUTS < <(python3 - "${SELECTED_MANIFESTS[@]}" "${PROBE_DIR}/build" <<'PY'
-import json, pathlib, sys
-manifest_paths = [pathlib.Path(value) for value in sys.argv[1:-1]]
-build = pathlib.Path(sys.argv[-1])
-expected_archives = [
-    "numpy/_core/_multiarray_umath.a",
-    "numpy/linalg/_umath_linalg.a",
-]
-expected_static = {
-    "numpy/_core/libnpymath.a",
-    "numpy/_core/libunique_hash.a",
-    "numpy/_core/lib_multiarray_umath_mtargets.a",
-}
-seen = set()
-static_inputs = set()
-for manifest_path, expected_archive in zip(manifest_paths, expected_archives):
-    manifest = json.loads(manifest_path.read_text())
-    if manifest["archive"] != expected_archive:
-        raise SystemExit(f"unexpected selected archive: {manifest['archive']}")
-    static_inputs.update(manifest["static_inputs"])
-    for value in [manifest["archive"], *manifest["static_inputs"]]:
-        path = pathlib.Path(value)
-        path = path if path.is_absolute() else build / path
-        path = path.resolve()
-        if path not in seen:
-            seen.add(path)
-            print(path)
-if static_inputs != expected_static:
-    raise SystemExit(f"unexpected selected static inputs: {sorted(static_inputs)}")
-PY
-  )
-  if [[ ${#NUMPY_LINK_INPUTS[@]} -ne 5 ]]; then
-    echo "expected two selected extension archives plus exactly three unique static inputs" >&2
+  python3 "${ROOT_DIR}/tools/resolve_wasm_extension_profile.py" \
+    --config "${PROFILE_CONFIG}" \
+    --profile "${FEATURE_PROFILE}" \
+    --manifest-dir "${STATIC_MANIFEST_DIR}" \
+    --build-root "${PROBE_DIR}/build" \
+    --output-dir "${PROFILE_OUTPUT_DIR}" \
+    >"${PROBE_DIR}/logs/profile.log" 2>&1
+  PROFILE_EXIT=$?
+  if [[ ${PROFILE_EXIT} -ne 0 ]]; then
+    echo "failed to resolve extension feature profile: ${FEATURE_PROFILE}" >&2
+    exit 12
+  fi
+  mapfile -t NUMPY_LINK_INPUTS <"${PROFILE_OUTPUT_DIR}/link-inputs.txt"
+  if [[ ${#NUMPY_LINK_INPUTS[@]} -eq 0 ]]; then
+    echo "extension feature profile selected no link inputs" >&2
     exit 13
   fi
   for required in "${NUMPY_LINK_INPUTS[@]}"; do
@@ -304,7 +282,7 @@ PY
   LINK_PROBE_OBJECT="${PROBE_DIR}/numpy-core-link-probe.o"
   "${WASI_SDK_PATH}/bin/clang" --target=wasm32-wasip1 \
     --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" -O2 \
-    -I"${CPYTHON_DIR}/Include" -I"${WASI_BUILD_DIR}" \
+    -I"${CPYTHON_DIR}/Include" -I"${WASI_BUILD_DIR}" -I"${PROFILE_OUTPUT_DIR}" \
     -c "${ROOT_DIR}/experiments/numpy-wasi/link_probe.c" \
     -o "${LINK_PROBE_OBJECT}" >"${PROBE_DIR}/logs/link.log" 2>&1
   LINK_COMPILE_EXIT=$?
@@ -340,7 +318,7 @@ if [[ ${LINK_EXIT} -eq 0 && ${STAGE_EXIT} -eq 0 ]]; then
 fi
 set -e
 
-export PROBE_DIR SETUP_EXIT COMPILE_EXIT INSTALL_EXIT STAGE_EXIT LINK_EXIT PACK_EXIT LINK_PROBE IMPORT_PROBE PACKAGE_MANIFEST TARGET_PYTHON
+export PROBE_DIR SETUP_EXIT COMPILE_EXIT INSTALL_EXIT STAGE_EXIT LINK_EXIT PACK_EXIT LINK_PROBE IMPORT_PROBE PACKAGE_MANIFEST TARGET_PYTHON PROFILE_SELECTION FEATURE_PROFILE
 python3 - <<'PY'
 import hashlib, json, os, pathlib
 root = pathlib.Path(os.environ["PROBE_DIR"])
@@ -417,8 +395,20 @@ if package_manifest_path.is_file():
         "file_count": package["file_count"],
         "source": package["source"],
     }
+profile_selection_path = pathlib.Path(os.environ["PROFILE_SELECTION"])
+selection = {"profile": os.environ["FEATURE_PROFILE"], "modules": [], "link_inputs": []}
+profile_selection = None
+if profile_selection_path.is_file():
+    selection = json.loads(profile_selection_path.read_text())
+    if selection["profile"] != os.environ["FEATURE_PROFILE"]:
+        raise SystemExit("resolved feature profile does not match requested profile")
+    profile_selection = {
+        "manifest": str(profile_selection_path.relative_to(root)),
+        "manifest_sha256": artifact(profile_selection_path)["sha256"],
+        "link_input_count": len(selection["link_inputs"]),
+    }
 evidence_error = (
-    (compile_exit == 0 and not static_extensions)
+    (compile_exit == 0 and (not static_extensions or profile_selection is None))
     or (stage_exit == 0 and package_staging is None)
     or (link_exit == 0 and monolithic_link is None)
     or (pack_exit == 0 and import_probe is None)
@@ -451,10 +441,9 @@ report = {
     "extension_outputs": modules,
     "static_extension_count": len(static_extensions),
     "static_extensions": static_extensions,
-    "selected_builtin_modules": [
-        "numpy._core._multiarray_umath",
-        "numpy.linalg._umath_linalg",
-    ],
+    "feature_profile": selection["profile"],
+    "profile_selection": profile_selection,
+    "selected_builtin_modules": [item["module"] for item in selection["modules"]],
     "package_staging": package_staging,
     "monolithic_link": monolithic_link,
     "import_probe": import_probe,

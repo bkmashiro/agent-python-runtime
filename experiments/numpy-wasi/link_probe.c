@@ -1,8 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-
-extern PyObject *PyInit__multiarray_umath(void);
-extern PyObject *PyInit__umath_linalg(void);
+#include "builtin-registry.h"
 
 static int numpy_registered = 0;
 static int numpy_imported = 0;
@@ -56,13 +54,9 @@ int numpy_register_probe(void) {
     if (numpy_registered) {
         return 0;
     }
-    if (PyImport_AppendInittab("numpy._core._multiarray_umath",
-                               PyInit__multiarray_umath) != 0) {
-        return 1;
-    }
-    if (PyImport_AppendInittab("numpy.linalg._umath_linalg",
-                               PyInit__umath_linalg) != 0) {
-        return 2;
+    int result = register_selected_builtins();
+    if (result != 0) {
+        return result;
     }
     numpy_registered = 1;
     return 0;

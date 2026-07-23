@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "operation": "capture",
+  "code": "mutable_state_unsupported",
+  "state_class": "mutable_global"
+}

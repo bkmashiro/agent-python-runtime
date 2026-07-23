@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "operation": "resume",
+  "code": "capsule_invalid",
+  "message": "free-form details are not part of the stable envelope"
+}

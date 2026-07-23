@@ -26,7 +26,7 @@ The runtime is not released or deployed. An explicit manual-only `numpy-core` ar
 
 ## Roadmap boundary
 
-The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, explicit `numpy-core`, and truthful-closeout tracks. `base` remains automatic and `numpy-core` remains manual-only; fresh-instance fallback and all non-release boundaries remain intact. A separate session-lifecycle successor roadmap is documented, but this closeout does not silently activate that larger scope.
+The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, explicit `numpy-core`, and truthful-closeout tracks. `base` remains automatic and `numpy-core` remains manual-only; fresh-instance fallback and all non-release boundaries remain intact. The separate session-lifecycle successor is now active at signed baseline `444dc6f`, beginning with measurement contracts rather than COW, persistence, or restore.
 
 The project is not a general Linux sandbox, agent framework, MCP marketplace, arbitrary PyPI environment, or write/effect execution system.
 
@@ -35,10 +35,11 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [Local operator CLI](docs/operator-cli.md)
 - [Runtime benchmark evidence](docs/benchmarking.md)
 - [Prepared-state safety audit](docs/prepared-state-audit.md)
-- [Planned execution/session lifecycle successor roadmap](docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md)
+- [Active execution/session lifecycle roadmap](docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md)
+- [Stateful session lifecycle contract](docs/session-lifecycle-contract.md)
 - [Guest artifact reproducibility](docs/reproducibility.md)
 - [Guest supply-chain evidence](docs/supply-chain.md)
-- [Active autonomous mega-goal](docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md)
+- [Completed bounded execution-runtime roadmap](docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md)
 - [Implementation status and evidence](docs/status.md)
 - [Standalone implementation handoff](docs/plans/2026-07-22-agent-python-runtime-handoff.md)
 - [Implementation plan](docs/plans/2026-07-22-agent-python-runtime-implementation-plan.md)

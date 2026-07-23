@@ -22,9 +22,10 @@ func TestLoadArtifactIdentityBindsManifestToBytes(t *testing.T) {
 	}
 	digest := sha256.Sum256(wasm)
 	manifest := map[string]any{
-		"artifact": map[string]any{"filename": "guest.wasm", "sha256": hex.EncodeToString(digest[:]), "size": len(wasm)},
-		"build":    map[string]any{"repository_commit": "0123456789012345678901234567890123456789", "compiler_target": "wasm32-wasip1", "execution_model": "reactor"},
-		"target":   "wasm32-wasip1",
+		"artifact_profile": "base",
+		"artifact":         map[string]any{"filename": "guest.wasm", "sha256": hex.EncodeToString(digest[:]), "size": len(wasm)},
+		"build":            map[string]any{"repository_commit": "0123456789012345678901234567890123456789", "compiler_target": "wasm32-wasip1", "execution_model": "reactor"},
+		"target":           "wasm32-wasip1",
 	}
 	encoded, _ := json.Marshal(manifest)
 	if err := os.WriteFile(manifestPath, encoded, 0o600); err != nil {
@@ -34,7 +35,7 @@ func TestLoadArtifactIdentityBindsManifestToBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(artifact) != string(wasm) || identity.SHA256 != hex.EncodeToString(digest[:]) || identity.SourceCommit != manifest["build"].(map[string]any)["repository_commit"] {
+	if string(artifact) != string(wasm) || identity.SHA256 != hex.EncodeToString(digest[:]) || identity.SourceCommit != manifest["build"].(map[string]any)["repository_commit"] || identity.ArtifactProfile != "base" {
 		t.Fatalf("identity mismatch: %#v", identity)
 	}
 	if err := os.WriteFile(artifactPath, []byte("tampered"), 0o600); err != nil {
@@ -113,11 +114,40 @@ func TestPreparedEvidenceSeparatesReadyFirstSteadyAndNoCopy(t *testing.T) {
 	if err := evidence.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	candidate := evidence
+	candidate.EvidenceClass = "profile-candidate"
+	candidate.Artifact.ArtifactProfile = "numpy-core"
+	if err := candidate.Validate(); err != nil {
+		t.Fatalf("valid prepared profile candidate rejected: %v", err)
+	}
+	candidate.Artifact.ArtifactProfile = "base"
+	if err := candidate.Validate(); err == nil {
+		t.Fatal("base artifact was accepted as a prepared profile candidate")
+	}
+	candidate.Artifact.ArtifactProfile = "numpy-core"
 	encoded, _ := json.Marshal(evidence)
 	var instance any
 	_ = json.Unmarshal(encoded, &instance)
 	if err := compilePreparedEvidenceSchema(t).Validate(instance); err != nil {
 		t.Fatal(err)
+	}
+	candidateEncoded, _ := json.Marshal(candidate)
+	_ = json.Unmarshal(candidateEncoded, &instance)
+	if err := compilePreparedEvidenceSchema(t).Validate(instance); err != nil {
+		t.Fatalf("prepared candidate evidence rejected by schema: %v", err)
+	}
+	candidate.Artifact.ArtifactProfile = "base"
+	candidateEncoded, _ = json.Marshal(candidate)
+	_ = json.Unmarshal(candidateEncoded, &instance)
+	if err := compilePreparedEvidenceSchema(t).Validate(instance); err == nil {
+		t.Fatal("prepared schema accepted profile-candidate evidence for base artifact")
+	}
+	mislabeled := evidence
+	mislabeled.Artifact.ArtifactProfile = "numpy-core"
+	candidateEncoded, _ = json.Marshal(mislabeled)
+	_ = json.Unmarshal(candidateEncoded, &instance)
+	if err := compilePreparedEvidenceSchema(t).Validate(instance); err == nil {
+		t.Fatal("prepared schema accepted production-safe evidence for numpy-core artifact")
 	}
 	invalid := evidence
 	invalid.StateCopy.Applicable = true
@@ -131,10 +161,18 @@ func TestPreparedBenchmarkWithRealGuestArtifact(t *testing.T) {
 	if artifact == "" {
 		t.Skip("AGENT_RUNTIME_GUEST is not set")
 	}
+	class := "production-safe"
+	identity, _, err := loadArtifactIdentity(artifact, filepath.Join(filepath.Dir(artifact), "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.ArtifactProfile == "numpy-core" {
+		class = "profile-candidate"
+	}
 	evidence, err := runPreparedBenchmarkWithHostSource(benchmarkOptions{
 		ArtifactPath: artifact,
 		ManifestPath: filepath.Join(filepath.Dir(artifact), "manifest.json"),
-		Class:        "production-safe", Strategy: "single-use-preinitialized", Samples: 3,
+		Class:        class, Strategy: "single-use-preinitialized", Samples: 3,
 	}, hostSourceIdentity{Revision: strings.Repeat("d", 40)})
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +180,7 @@ func TestPreparedBenchmarkWithRealGuestArtifact(t *testing.T) {
 	if err := evidence.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if evidence.Readiness.RetainedGuestMemoryBytes != 128*1024*1024 || evidence.Backend.ResetMode != "fresh-instance" || evidence.StateCopy.Applicable {
+	if evidence.Readiness.RetainedGuestMemoryBytes != 128*1024*1024 || evidence.Backend.ResetMode != "fresh-instance" || evidence.StateCopy.Applicable || evidence.EvidenceClass != class || evidence.Artifact.ArtifactProfile != identity.ArtifactProfile {
 		t.Fatalf("prepared evidence widened or drifted: %#v", evidence)
 	}
 	encoded, _ := json.Marshal(evidence)
@@ -189,6 +227,27 @@ func TestRepositoryJSONSchemaAcceptsCanonicalEvidence(t *testing.T) {
 	}
 	if err := schema.Validate(instance); err != nil {
 		t.Fatal(err)
+	}
+	candidate := evidence
+	candidate.EvidenceClass = "profile-candidate"
+	candidate.Artifact.ArtifactProfile = "numpy-core"
+	encoded, _ = json.Marshal(candidate)
+	_ = json.Unmarshal(encoded, &instance)
+	if err := schema.Validate(instance); err != nil {
+		t.Fatalf("candidate evidence rejected by schema: %v", err)
+	}
+	candidate.Artifact.ArtifactProfile = "base"
+	encoded, _ = json.Marshal(candidate)
+	_ = json.Unmarshal(encoded, &instance)
+	if err := schema.Validate(instance); err == nil {
+		t.Fatal("schema accepted profile-candidate evidence for base artifact")
+	}
+	mislabeled := evidence
+	mislabeled.Artifact.ArtifactProfile = "numpy-core"
+	encoded, _ = json.Marshal(mislabeled)
+	_ = json.Unmarshal(encoded, &instance)
+	if err := schema.Validate(instance); err == nil {
+		t.Fatal("schema accepted production-safe evidence for numpy-core artifact")
 	}
 }
 
@@ -277,6 +336,21 @@ func TestEvidenceValidationRequiresCanonicalPhasesAndClasses(t *testing.T) {
 	}
 	if err := evidence.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	candidate := evidence
+	candidate.EvidenceClass = "profile-candidate"
+	candidate.Artifact.ArtifactProfile = "numpy-core"
+	if err := candidate.Validate(); err != nil {
+		t.Fatalf("valid profile candidate rejected: %v", err)
+	}
+	candidate.Artifact.ArtifactProfile = "base"
+	if err := candidate.Validate(); err == nil {
+		t.Fatal("base artifact was accepted as a profile candidate")
+	}
+	mislabeled := evidence
+	mislabeled.Artifact.ArtifactProfile = "numpy-core"
+	if err := mislabeled.Validate(); err == nil {
+		t.Fatal("numpy-core artifact was accepted as production-safe evidence")
 	}
 	for _, invalidClass := range []string{"", "production", "unsafe"} {
 		invalid := evidence

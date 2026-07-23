@@ -87,17 +87,17 @@ func runMain(args []string) error {
 	flags.StringVar(&options.ArtifactPath, "artifact", "", "verified guest artifact")
 	flags.StringVar(&options.ManifestPath, "manifest", "", "matching artifact manifest")
 	flags.StringVar(&options.OutputPath, "output", "", "JSON evidence output")
-	flags.StringVar(&options.Class, "class", "production-safe", "production-safe or full")
+	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, or profile-candidate")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh or single-use-preinitialized")
 	flags.IntVar(&options.Samples, "samples", 3, "sample count (3-20)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
-		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full] [-strategy fresh|single-use-preinitialized] [-samples 3]")
+		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full|profile-candidate] [-strategy fresh|single-use-preinitialized] [-samples 3]")
 	}
-	if options.Class != "production-safe" && options.Class != "full" {
-		return errors.New("benchmark class must be production-safe or full")
+	if options.Class != "production-safe" && options.Class != "full" && options.Class != "profile-candidate" {
+		return errors.New("benchmark class must be production-safe, full, or profile-candidate")
 	}
 	if options.Strategy != "fresh" && options.Strategy != "single-use-preinitialized" {
 		return errors.New("benchmark strategy must be fresh or single-use-preinitialized")
@@ -143,6 +143,9 @@ func runMain(args []string) error {
 func runBenchmark(options benchmarkOptions) (benchmarkEvidence, error) {
 	identity, wasm, err := loadArtifactIdentity(options.ArtifactPath, options.ManifestPath)
 	if err != nil {
+		return benchmarkEvidence{}, err
+	}
+	if err := validateEvidenceClassProfile(options.Class, identity.ArtifactProfile); err != nil {
 		return benchmarkEvidence{}, err
 	}
 	hostSource, err := currentHostSource()
@@ -227,6 +230,11 @@ func runBenchmark(options benchmarkOptions) (benchmarkEvidence, error) {
 			"Compile is measured once; every workload sample still uses a fresh guest instance.",
 			"Measurements are evidence for this artifact, backend, host, class, and command only.",
 		},
+	}
+	if options.Class == "profile-candidate" {
+		evidence.Limitations = append(evidence.Limitations,
+			"Profile-candidate evidence is descriptive and does not approve this artifact profile for default, release, deployment, or production-safe status.",
+		)
 	}
 
 	for sample := 0; sample < options.Samples; sample++ {

@@ -11,12 +11,13 @@ import (
 )
 
 type artifactIdentity struct {
-	Filename     string `json:"filename"`
-	SHA256       string `json:"sha256"`
-	Size         int64  `json:"size_bytes"`
-	SourceCommit string `json:"source_commit"`
-	Target       string `json:"target"`
-	Execution    string `json:"execution_model"`
+	Filename        string `json:"filename"`
+	SHA256          string `json:"sha256"`
+	Size            int64  `json:"size_bytes"`
+	SourceCommit    string `json:"source_commit"`
+	ArtifactProfile string `json:"artifact_profile,omitempty"`
+	Target          string `json:"target"`
+	Execution       string `json:"execution_model"`
 }
 
 type backendIdentity struct {
@@ -76,12 +77,28 @@ type benchmarkEvidence struct {
 	Limitations   []string            `json:"limitations"`
 }
 
+func validateEvidenceClassProfile(class, profile string) error {
+	switch class {
+	case "production-safe", "full":
+		if profile != "" && profile != "base" {
+			return errors.New("non-base artifact cannot use production-safe or full evidence class")
+		}
+	case "profile-candidate":
+		if profile != "numpy-core" {
+			return errors.New("profile-candidate evidence requires numpy-core artifact profile")
+		}
+	default:
+		return errors.New("unsupported evidence class")
+	}
+	return nil
+}
+
 func (evidence benchmarkEvidence) Validate() error {
 	if evidence.SchemaVersion != 1 {
 		return errors.New("unsupported benchmark schema version")
 	}
-	if evidence.EvidenceClass != "production-safe" && evidence.EvidenceClass != "full" {
-		return errors.New("unsupported evidence class")
+	if err := validateEvidenceClassProfile(evidence.EvidenceClass, evidence.Artifact.ArtifactProfile); err != nil {
+		return err
 	}
 	if evidence.Artifact.SHA256 == "" || evidence.Artifact.Size <= 0 || evidence.Artifact.SourceCommit == "" || evidence.Artifact.Target != "wasm32-wasip1" {
 		return errors.New("artifact identity is incomplete")
@@ -135,7 +152,8 @@ func validateSample(sample sampleEvidence, requireCapability bool) error {
 }
 
 type artifactManifest struct {
-	Artifact struct {
+	ArtifactProfile string `json:"artifact_profile"`
+	Artifact        struct {
 		Filename string `json:"filename"`
 		SHA256   string `json:"sha256"`
 		Size     int64  `json:"size"`
@@ -166,15 +184,19 @@ func loadArtifactIdentity(artifactPath, manifestPath string) (artifactIdentity, 
 	if manifest.Artifact.Filename != filepath.Base(artifactPath) || manifest.Artifact.SHA256 != digestHex || manifest.Artifact.Size != int64(len(artifact)) {
 		return artifactIdentity{}, nil, errors.New("artifact bytes do not match manifest identity")
 	}
+	if manifest.ArtifactProfile != "base" && manifest.ArtifactProfile != "numpy-core" {
+		return artifactIdentity{}, nil, errors.New("manifest artifact profile is missing or unsupported")
+	}
 	if manifest.Build.RepositoryCommit == "" || manifest.Target != "wasm32-wasip1" || manifest.Build.CompilerTarget != "wasm32-wasip1" || manifest.Build.ExecutionModel != "reactor" {
 		return artifactIdentity{}, nil, errors.New("manifest build identity is incomplete")
 	}
 	return artifactIdentity{
-		Filename:     manifest.Artifact.Filename,
-		SHA256:       digestHex,
-		Size:         int64(len(artifact)),
-		SourceCommit: manifest.Build.RepositoryCommit,
-		Target:       manifest.Target,
-		Execution:    manifest.Build.ExecutionModel,
+		Filename:        manifest.Artifact.Filename,
+		SHA256:          digestHex,
+		Size:            int64(len(artifact)),
+		SourceCommit:    manifest.Build.RepositoryCommit,
+		ArtifactProfile: manifest.ArtifactProfile,
+		Target:          manifest.Target,
+		Execution:       manifest.Build.ExecutionModel,
 	}, artifact, nil
 }

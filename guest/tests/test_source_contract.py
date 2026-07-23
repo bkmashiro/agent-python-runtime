@@ -84,6 +84,12 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertGreaterEqual(
             workflow.count("if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'"), 6
         )
+        self.assertEqual(
+            4, workflow.count("if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'")
+        )
+        self.assertIn("-class profile-candidate", workflow)
+        self.assertIn("runtime-profile-candidate-linux-amd64.json", workflow)
+        self.assertIn("prepared-profile-candidate-linux-amd64.json", workflow)
         self.assertIn('register_selected_builtins()', SOURCE.read_text())
         self.assertIn('AGENT_RUNTIME_WASM_EXTENSION_FINDER_SCRIPT', SOURCE.read_text())
         self.assertIn('wasm_extension_finder.h', SOURCE.read_text())

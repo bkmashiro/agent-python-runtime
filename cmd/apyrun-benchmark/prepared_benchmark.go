@@ -35,6 +35,9 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 	if err != nil {
 		return preparedBenchmarkEvidence{}, err
 	}
+	if err := validateEvidenceClassProfile(options.Class, identity.ArtifactProfile); err != nil {
+		return preparedBenchmarkEvidence{}, err
+	}
 	operations := 1
 	integerWork := 1_000
 	if options.Class == "full" {
@@ -104,6 +107,11 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 			"No state copy or restore exists, so copy cost is not applicable rather than measured as zero.",
 			"Measurements are evidence for this artifact, backend, host, class, and command only.",
 		},
+	}
+	if options.Class == "profile-candidate" {
+		evidence.Limitations = append(evidence.Limitations,
+			"Profile-candidate evidence is descriptive and does not approve this artifact profile for default, release, deployment, or production-safe status.",
+		)
 	}
 
 	executeRequest, err := makeRequest("prepared-first-execute", `result = {"prepared": prepared, "sum": sum(range(inputs["integer_work"]))}`, map[string]any{"integer_work": integerWork})

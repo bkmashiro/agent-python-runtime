@@ -7,7 +7,7 @@
   "required": ["schema_version", "evidence_class", "artifact", "host_source", "backend", "environment", "fixture", "compile_once", "workloads", "limitations"],
   "properties": {
     "schema_version": {"const": 1},
-    "evidence_class": {"enum": ["production-safe", "full"]},
+    "evidence_class": {"enum": ["production-safe", "full", "profile-candidate"]},
     "artifact": {
       "type": "object",
       "additionalProperties": false,
@@ -17,6 +17,7 @@
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "size_bytes": {"type": "integer", "minimum": 1},
         "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "artifact_profile": {"enum": ["base", "numpy-core"]},
         "target": {"const": "wasm32-wasip1"},
         "execution_model": {"const": "reactor"}
       }
@@ -79,6 +80,16 @@
     },
     "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"evidence_class": {"const": "profile-candidate"}}},
+      "then": {"properties": {"artifact": {"required": ["artifact_profile"], "properties": {"artifact_profile": {"const": "numpy-core"}}}}}
+    },
+    {
+      "if": {"properties": {"evidence_class": {"enum": ["production-safe", "full"]}}},
+      "then": {"properties": {"artifact": {"properties": {"artifact_profile": {"const": "base"}}}}}
+    }
+  ],
   "$defs": {
     "executeSample": {
       "type": "object",

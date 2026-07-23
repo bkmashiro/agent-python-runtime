@@ -219,6 +219,33 @@ jobs:
             "${{ runner.temp }}/prepared-production-safe-linux-amd64.json" \
             >/dev/null
 
+      - name: Record NumPy profile-candidate runtime benchmark
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
+        run: |
+          go run ./cmd/apyrun-benchmark \
+            -artifact "${AGENT_RUNTIME_GUEST}" \
+            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
+            -output "${{ runner.temp }}/runtime-profile-candidate-linux-amd64.json" \
+            -class profile-candidate \
+            -samples 3
+          python3 -m json.tool \
+            "${{ runner.temp }}/runtime-profile-candidate-linux-amd64.json" \
+            >/dev/null
+
+      - name: Record NumPy profile-candidate prepared benchmark
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
+        run: |
+          go run ./cmd/apyrun-benchmark \
+            -artifact "${AGENT_RUNTIME_GUEST}" \
+            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
+            -output "${{ runner.temp }}/prepared-profile-candidate-linux-amd64.json" \
+            -class profile-candidate \
+            -strategy single-use-preinitialized \
+            -samples 3
+          python3 -m json.tool \
+            "${{ runner.temp }}/prepared-profile-candidate-linux-amd64.json" \
+            >/dev/null
+
       - name: Write machine-readable evidence index
         if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
         run: |
@@ -241,6 +268,24 @@ jobs:
         with:
           name: runtime-evidence-index-${{ github.sha }}
           path: ${{ runner.temp }}/evidence-index.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload NumPy profile-candidate runtime benchmark
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-benchmark-profile-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/runtime-profile-candidate-linux-amd64.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload NumPy profile-candidate prepared benchmark
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prepared-benchmark-profile-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/prepared-profile-candidate-linux-amd64.json
           if-no-files-found: error
           retention-days: 7
 

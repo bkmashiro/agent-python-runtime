@@ -27,12 +27,14 @@ go run ./cmd/apyrun-benchmark \
 
 Prepared output validates against [`benchmark/v1/prepared-evidence.schema.json`](../benchmark/v1/prepared-evidence.schema.json). The default strategy remains `fresh`, so existing commands and evidence are unchanged.
 
+For an explicit `numpy-core` artifact, replace the class with `-class profile-candidate`; use the same switch for fresh and prepared strategies. The command rejects `profile-candidate` for `base` and rejects `production-safe|full` for `numpy-core` before collecting samples.
+
 ## Provenance
 
 The command fails before measurement unless:
 
 - artifact filename, size, and SHA-256 match the supplied manifest;
-- the manifest declares `wasm32-wasip1` and reactor execution;
+- the manifest declares a supported `base|numpy-core` artifact profile, `wasm32-wasip1`, and reactor execution;
 - the Host Git worktree resolves to an exact revision;
 - the Host Git worktree is clean before measurement begins.
 
@@ -68,10 +70,11 @@ Background refill can overlap request execution. `refill_ready_after_run_ns` mea
 
 ## Evidence classes
 
-- `production-safe`: three or more execute samples and one-operation capability samples, with small deterministic integer work.
-- `full`: the same schema and lifecycle with larger deterministic integer work and 20 capability operations at Host concurrency 8.
+- `production-safe`: three or more execute samples and one-operation capability samples, with small deterministic integer work; accepted only for the default `base` profile (legacy checked-in evidence predates the explicit profile field).
+- `full`: the same schema and lifecycle with larger deterministic integer work and 20 capability operations at Host concurrency 8; accepted only for `base`.
+- `profile-candidate`: the same bounded small synthetic workload as `production-safe`, but accepted only when the manifest and evidence both bind `artifact_profile: numpy-core`. It is descriptive candidate evidence and does not approve default selection, release, deployment, or production-safe status.
 
-Both classes use a local IP-loopback provider with a fixed 2 ms delay per operation. They do not measure production DNS, TCP, TLS, provider rate limits, or provider variance. The class labels keep production-safe recurring measurement distinct from fuller exploratory evidence; they do not turn synthetic results into production latency claims.
+All classes use a local IP-loopback provider with a fixed 2 ms delay per operation. They do not measure production DNS, TCP, TLS, provider rate limits, or provider variance. The class labels separate recurring base measurement, fuller exploratory evidence, and opt-in profile-candidate evidence; none turns synthetic results into a production latency claim. A class/profile mismatch fails before benchmark samples run.
 
 ## Interpretation
 

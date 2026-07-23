@@ -67,8 +67,8 @@ func (evidence preparedBenchmarkEvidence) Validate() error {
 	if evidence.SchemaVersion != 1 || evidence.EvidenceKind != "single-use-preinitialized" {
 		return errors.New("unsupported prepared benchmark schema or kind")
 	}
-	if evidence.EvidenceClass != "production-safe" && evidence.EvidenceClass != "full" {
-		return errors.New("unsupported evidence class")
+	if err := validateEvidenceClassProfile(evidence.EvidenceClass, evidence.Artifact.ArtifactProfile); err != nil {
+		return err
 	}
 	if evidence.Artifact.SHA256 == "" || evidence.Artifact.Size <= 0 || evidence.Artifact.SourceCommit == "" || evidence.Artifact.Target != "wasm32-wasip1" || evidence.Artifact.Execution != "reactor" {
 		return errors.New("artifact identity is incomplete")

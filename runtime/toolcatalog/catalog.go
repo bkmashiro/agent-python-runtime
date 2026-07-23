@@ -57,28 +57,42 @@ type BuildOptions struct {
 }
 
 type Parameter struct {
+	Name          string
+	PythonName    string
+	Annotation    string
+	Required      bool
+	HasDefault    bool
+	DefaultPython string
+}
+
+type TypeField struct {
 	Name       string
-	PythonName string
 	Annotation string
 	Required   bool
 }
 
+type TypeDefinition struct {
+	Name   string
+	Fields []TypeField
+}
+
 type Tool struct {
-	ToolID         string
-	ServerID       string
-	Name           string
-	PythonName     string
-	Description    string
-	HandlerVersion string
-	InputSchema    json.RawMessage
-	OutputSchema   json.RawMessage
-	Projection     Projection
-	EffectClass    string
-	Policy         string
-	GrantVersion   string
-	MaxCalls       uint32
-	Parameters     []Parameter
-	ReturnType     string
+	ToolID          string
+	ServerID        string
+	Name            string
+	PythonName      string
+	Description     string
+	HandlerVersion  string
+	InputSchema     json.RawMessage
+	OutputSchema    json.RawMessage
+	Projection      Projection
+	EffectClass     string
+	Policy          string
+	GrantVersion    string
+	MaxCalls        uint32
+	TypeDefinitions []TypeDefinition
+	Parameters      []Parameter
+	ReturnType      string
 }
 
 type Snapshot struct {
@@ -140,7 +154,7 @@ func BuildSnapshot(discovered []DiscoveredTool, grants map[string]Grant, options
 		if err != nil {
 			return Snapshot{}, fmt.Errorf("tool %q output schema: %w", source.ToolID, err)
 		}
-		parameters, inputProjection := projectInput(inputDocument)
+		parameters, typeDefinitions, inputProjection := projectInput(inputDocument, pythonName)
 		returnType, outputProjection := projectType(outputDocument, 0)
 		projection := mergeProjection(inputProjection, outputProjection)
 		tool := Tool{
@@ -148,12 +162,19 @@ func BuildSnapshot(discovered []DiscoveredTool, grants map[string]Grant, options
 			Description: source.Description, HandlerVersion: source.HandlerVersion,
 			InputSchema: inputCanonical, OutputSchema: outputCanonical, Projection: projection,
 			EffectClass: grant.EffectClass, Policy: grant.Policy, GrantVersion: grant.GrantVersion, MaxCalls: grant.MaxCalls,
-			Parameters: parameters, ReturnType: returnType,
+			TypeDefinitions: typeDefinitions, Parameters: parameters, ReturnType: returnType,
 		}
 		tools = append(tools, tool)
 	}
 	if len(grants) != len(seenIDs) {
 		return Snapshot{}, errors.New("Host grants contain stale or undiscovered tools")
+	}
+	for _, tool := range tools {
+		for _, other := range tools {
+			if tool.ToolID != other.ToolID && tool.PythonName == other.ToolID {
+				return Snapshot{}, fmt.Errorf("cross-namespace catalog collision %q", tool.PythonName)
+			}
+		}
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].ToolID < tools[j].ToolID })
 	digest, err := catalogDigest(options.Revision, tools)
@@ -216,8 +237,14 @@ func normalizePythonIdentifier(value string) (string, error) {
 	return result, nil
 }
 
+var forbiddenAuthorityProperty = map[string]bool{
+	"credential": true, "credentials": true, "password": true, "secret": true,
+	"api_key": true, "api-key": true, "authorization": true, "headers": true,
+}
+
 var generatedPythonReserved = map[string]bool{
 	"fetch_many": true, "_call": true, "_UNSET": true, "_arguments": true,
+	"_json": true, "_TOOL_METADATA": true,
 	"CATALOG_DIGEST": true, "CATALOG_REVISION": true,
 	"Any": true, "Literal": true, "describe_tools": true, "describe_tool": true,
 }
@@ -247,6 +274,9 @@ func canonicalSchema(raw json.RawMessage) (json.RawMessage, map[string]any, erro
 	if len(document) == 0 {
 		return nil, nil, errors.New("schema is empty")
 	}
+	if err := validateSchemaBounds(document, 0, new(int)); err != nil {
+		return nil, nil, err
+	}
 	canonical, err := json.Marshal(document)
 	if err != nil {
 		return nil, nil, err
@@ -262,6 +292,62 @@ func canonicalSchema(raw json.RawMessage) (json.RawMessage, map[string]any, erro
 		return nil, nil, fmt.Errorf("invalid JSON Schema: %w", err)
 	}
 	return canonical, document, nil
+}
+
+func validateSchemaBounds(value any, depth int, nodes *int) error {
+	if depth > maxProjectionDepth {
+		return errors.New("schema depth exceeds bound")
+	}
+	*nodes++
+	if *nodes > 4096 {
+		return errors.New("schema node count exceeds bound")
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		if len(typed) > 256 {
+			return errors.New("schema object keyword count exceeds bound")
+		}
+		for key, child := range typed {
+			switch key {
+			case "properties":
+				if properties, ok := child.(map[string]any); ok {
+					if len(properties) > 128 {
+						return errors.New("schema property count exceeds bound")
+					}
+					for name := range properties {
+						if forbiddenAuthorityProperty[strings.ToLower(name)] {
+							return fmt.Errorf("schema property %q would expose ambient authority", name)
+						}
+					}
+				}
+			case "required":
+				if required, ok := child.([]any); ok && len(required) > 128 {
+					return errors.New("schema required count exceeds bound")
+				}
+			case "enum":
+				if values, ok := child.([]any); ok && len(values) > 64 {
+					return errors.New("schema enum count exceeds bound")
+				}
+			case "oneOf", "anyOf", "allOf":
+				if alternatives, ok := child.([]any); ok && len(alternatives) > 8 {
+					return errors.New("schema composition count exceeds bound")
+				}
+			}
+			if err := validateSchemaBounds(child, depth+1, nodes); err != nil {
+				return err
+			}
+		}
+	case []any:
+		if len(typed) > 512 {
+			return errors.New("schema array exceeds bound")
+		}
+		for _, child := range typed {
+			if err := validateSchemaBounds(child, depth+1, nodes); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func catalogDigest(revision uint64, tools []Tool) (string, error) {
@@ -294,6 +380,12 @@ func catalogDigest(revision uint64, tools []Tool) (string, error) {
 func cloneTool(tool Tool) Tool {
 	tool.InputSchema = append(json.RawMessage(nil), tool.InputSchema...)
 	tool.OutputSchema = append(json.RawMessage(nil), tool.OutputSchema...)
+	definitions := tool.TypeDefinitions
+	tool.TypeDefinitions = make([]TypeDefinition, len(definitions))
+	for index, definition := range definitions {
+		tool.TypeDefinitions[index] = definition
+		tool.TypeDefinitions[index].Fields = append([]TypeField(nil), definition.Fields...)
+	}
 	tool.Parameters = append([]Parameter(nil), tool.Parameters...)
 	return tool
 }

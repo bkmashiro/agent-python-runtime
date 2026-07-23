@@ -28,3 +28,21 @@ func TestProjectionNeverClaimsExactForUnrepresentedCompositionConstraints(t *tes
 		t.Fatalf("nullable optional annotation = %+v", tool.Parameters)
 	}
 }
+
+func TestNestedDefaultsAreTruthfullyLossy(t *testing.T) {
+	discovered := []DiscoveredTool{{
+		ToolID: "demo.nested", ServerID: "demo", Name: "nested", HandlerVersion: "v1",
+		InputSchema:  raw(`{"type":"object","additionalProperties":false,"properties":{"options":{"type":"object","additionalProperties":false,"properties":{"limit":{"type":"integer","default":5}}}}}`),
+		OutputSchema: raw(`{"type":"string"}`),
+	}}
+	grants := map[string]Grant{
+		"demo.nested": {ToolID: "demo.nested", EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: "g1", MaxCalls: 1},
+	}
+	snapshot, err := BuildSnapshot(discovered, grants, BuildOptions{Revision: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshot.Tools()[0].Projection; got != ProjectionLossy {
+		t.Fatalf("nested default projection = %q, want lossy", got)
+	}
+}

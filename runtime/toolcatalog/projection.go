@@ -1,6 +1,7 @@
 package toolcatalog
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -9,27 +10,27 @@ import (
 
 const maxProjectionDepth = 8
 
-func projectInput(schema map[string]any) ([]Parameter, Projection) {
+func projectInput(schema map[string]any, toolPythonName string) ([]Parameter, []TypeDefinition, Projection) {
 	if schema["$ref"] != nil || schemaType(schema) != "object" {
-		return nil, ProjectionUnsupported
+		return nil, nil, ProjectionUnsupported
 	}
 	properties, ok := schema["properties"].(map[string]any)
 	if !ok {
 		if len(schema) == 1 {
-			return nil, ProjectionLossy
+			return nil, nil, ProjectionLossy
 		}
-		return nil, ProjectionUnsupported
+		return nil, nil, ProjectionUnsupported
 	}
 	required := map[string]bool{}
 	if rawRequired, exists := schema["required"]; exists {
 		values, ok := rawRequired.([]any)
 		if !ok {
-			return nil, ProjectionUnsupported
+			return nil, nil, ProjectionUnsupported
 		}
 		for _, value := range values {
 			name, ok := value.(string)
 			if !ok {
-				return nil, ProjectionUnsupported
+				return nil, nil, ProjectionUnsupported
 			}
 			required[name] = true
 		}
@@ -39,29 +40,42 @@ func projectInput(schema map[string]any) ([]Parameter, Projection) {
 		projection = ProjectionLossy
 	}
 	parameters := make([]Parameter, 0, len(properties))
+	definitions := make([]TypeDefinition, 0)
+	definitionNames := map[string]bool{}
 	pythonNames := map[string]bool{}
 	for name, rawProperty := range properties {
 		property, ok := rawProperty.(map[string]any)
 		if !ok || name == "" || len(name) > maxName {
-			return nil, ProjectionUnsupported
+			return nil, nil, ProjectionUnsupported
 		}
 		pythonName, err := normalizePythonIdentifier(name)
 		if err != nil || pythonNames[pythonName] {
-			return nil, ProjectionUnsupported
+			return nil, nil, ProjectionUnsupported
 		}
 		pythonNames[pythonName] = true
 		annotation, projected := projectType(property, 1)
-		projection = mergeProjection(projection, projected)
-		if projected == ProjectionUnsupported {
-			return nil, ProjectionUnsupported
+		if schemaType(property) == "object" {
+			definition, typedProjection := projectTypedDict(toolPythonName, pythonName, property)
+			if typedProjection == ProjectionUnsupported || definitionNames[definition.Name] {
+				return nil, nil, ProjectionUnsupported
+			}
+			definitionNames[definition.Name] = true
+			definitions = append(definitions, definition)
+			annotation, projected = definition.Name, typedProjection
+		}
+		defaultPython, hasDefault, defaultProjection := projectDefault(property)
+		projection = mergeProjection(projection, projected, defaultProjection)
+		if projected == ProjectionUnsupported || defaultProjection == ProjectionUnsupported {
+			return nil, nil, ProjectionUnsupported
 		}
 		parameters = append(parameters, Parameter{
 			Name: name, PythonName: pythonName, Annotation: annotation, Required: required[name],
+			HasDefault: hasDefault && !required[name], DefaultPython: defaultPython,
 		})
 	}
 	for name := range required {
 		if _, exists := properties[name]; !exists {
-			return nil, ProjectionUnsupported
+			return nil, nil, ProjectionUnsupported
 		}
 	}
 	sort.Slice(parameters, func(i, j int) bool {
@@ -73,7 +87,74 @@ func projectInput(schema map[string]any) ([]Parameter, Projection) {
 	projection = mergeProjection(projection, constraintProjection(
 		schema, "type", "properties", "required", "additionalProperties", "description", "title", "default",
 	))
-	return parameters, projection
+	return parameters, definitions, projection
+}
+
+func projectTypedDict(toolName, parameterName string, schema map[string]any) (TypeDefinition, Projection) {
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok || len(properties) == 0 {
+		return TypeDefinition{}, ProjectionUnsupported
+	}
+	required := map[string]bool{}
+	if rawRequired, exists := schema["required"]; exists {
+		values, ok := rawRequired.([]any)
+		if !ok {
+			return TypeDefinition{}, ProjectionUnsupported
+		}
+		for _, raw := range values {
+			name, ok := raw.(string)
+			if !ok {
+				return TypeDefinition{}, ProjectionUnsupported
+			}
+			required[name] = true
+		}
+	}
+	definition := TypeDefinition{Name: pascalIdentifier(toolName) + pascalIdentifier(parameterName) + "Input"}
+	projection := ProjectionExact
+	if additional, ok := schema["additionalProperties"].(bool); !ok || additional {
+		projection = ProjectionLossy
+	}
+	for name, raw := range properties {
+		fieldSchema, ok := raw.(map[string]any)
+		if !ok {
+			return TypeDefinition{}, ProjectionUnsupported
+		}
+		annotation, projected := projectType(fieldSchema, 2)
+		if projected == ProjectionUnsupported {
+			return TypeDefinition{}, projected
+		}
+		projection = mergeProjection(projection, projected)
+		if _, hasDefault := fieldSchema["default"]; hasDefault {
+			projection = mergeProjection(projection, ProjectionLossy)
+		}
+		definition.Fields = append(definition.Fields, TypeField{Name: name, Annotation: annotation, Required: required[name]})
+	}
+	for name := range required {
+		if _, exists := properties[name]; !exists {
+			return TypeDefinition{}, ProjectionUnsupported
+		}
+	}
+	sort.Slice(definition.Fields, func(i, j int) bool { return definition.Fields[i].Name < definition.Fields[j].Name })
+	projection = mergeProjection(projection, constraintProjection(
+		schema, "type", "properties", "required", "additionalProperties", "description", "title", "default",
+	))
+	return definition, projection
+}
+
+func pascalIdentifier(value string) string {
+	parts := strings.FieldsFunc(value, func(character rune) bool { return character == '_' || character == '-' || character == '.' })
+	var builder strings.Builder
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		builder.WriteString(strings.ToUpper(part[:1]))
+		builder.WriteString(part[1:])
+	}
+	if builder.Len() == 0 {
+		return "Tool"
+	}
+	return builder.String()
 }
 
 func projectType(schema map[string]any, depth int) (string, Projection) {
@@ -163,6 +244,67 @@ func projectUnion(alternatives []any, depth int) (string, Projection) {
 	}
 	sort.Strings(annotations)
 	return strings.Join(annotations, " | "), projection
+}
+
+func projectDefault(schema map[string]any) (string, bool, Projection) {
+	raw, exists := schema["default"]
+	if !exists {
+		return "", false, ProjectionExact
+	}
+	switch schemaType(schema) {
+	case "string":
+		value, ok := raw.(string)
+		if !ok {
+			return "", false, ProjectionUnsupported
+		}
+		if values, ok := schema["enum"].([]any); ok {
+			matched := false
+			for _, candidate := range values {
+				if candidate == value {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return "", false, ProjectionUnsupported
+			}
+		}
+		return strconv.Quote(value), true, ProjectionExact
+	case "integer":
+		value, ok := raw.(json.Number)
+		if !ok || strings.ContainsAny(value.String(), ".eE") {
+			return "", false, ProjectionUnsupported
+		}
+		if _, err := value.Int64(); err != nil {
+			return "", false, ProjectionUnsupported
+		}
+		return value.String(), true, ProjectionExact
+	case "number":
+		value, ok := raw.(json.Number)
+		if !ok {
+			return "", false, ProjectionUnsupported
+		}
+		if _, err := value.Float64(); err != nil {
+			return "", false, ProjectionUnsupported
+		}
+		return value.String(), true, ProjectionExact
+	case "boolean":
+		value, ok := raw.(bool)
+		if !ok {
+			return "", false, ProjectionUnsupported
+		}
+		if value {
+			return "True", true, ProjectionExact
+		}
+		return "False", true, ProjectionExact
+	case "null":
+		if raw != nil {
+			return "", false, ProjectionUnsupported
+		}
+		return "None", true, ProjectionExact
+	default:
+		return "", false, ProjectionLossy
+	}
 }
 
 func schemaType(schema map[string]any) string {

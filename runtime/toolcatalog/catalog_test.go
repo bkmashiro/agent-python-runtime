@@ -74,6 +74,17 @@ func TestBuildSnapshotRejectsMissingGrantCollisionAndMalformedSchema(t *testing.
 	if _, err := BuildSnapshot([]DiscoveredTool{base, other}, grants, BuildOptions{Revision: 1}); err == nil {
 		t.Fatal("Python name collision was accepted")
 	}
+	crossA := base
+	crossA.ToolID, crossA.Name = "server.alpha", "shared"
+	crossB := base
+	crossB.ToolID, crossB.Name = "shared", "other"
+	crossGrants := map[string]Grant{
+		crossA.ToolID: {ToolID: crossA.ToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: "g1", MaxCalls: 1},
+		crossB.ToolID: {ToolID: crossB.ToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: "g1", MaxCalls: 1},
+	}
+	if _, err := BuildSnapshot([]DiscoveredTool{crossA, crossB}, crossGrants, BuildOptions{Revision: 1}); err == nil {
+		t.Fatal("cross tool-id/Python-name collision was accepted")
+	}
 	base.InputSchema = raw(`{"type":"object",`)
 	if _, err := BuildSnapshot([]DiscoveredTool{base}, map[string]Grant{base.ToolID: grants[base.ToolID]}, BuildOptions{Revision: 1}); err == nil {
 		t.Fatal("malformed schema was accepted")
@@ -91,13 +102,18 @@ func TestBuildSnapshotRejectsMissingGrantCollisionAndMalformedSchema(t *testing.
 	if _, err := BuildSnapshot([]DiscoveredTool{base}, map[string]Grant{base.ToolID: {ToolID: base.ToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: "g1", MaxCalls: 1}}, BuildOptions{Revision: 1}); err == nil {
 		t.Fatal("generated Python reserved name was accepted")
 	}
+	base.ToolID, base.Name = "server.credentials", "credentials-tool"
+	base.InputSchema = raw(`{"type":"object","properties":{"credentials":{"type":"string"}}}`)
+	if _, err := BuildSnapshot([]DiscoveredTool{base}, map[string]Grant{base.ToolID: {ToolID: base.ToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: "g1", MaxCalls: 1}}, BuildOptions{Revision: 1}); err == nil {
+		t.Fatal("authority-bearing schema property was accepted")
+	}
 }
 
 func TestProjectionAndGeneratedSurfacesShareOneIR(t *testing.T) {
 	discovered := []DiscoveredTool{
 		{
-			ToolID: "demo.echo", ServerID: "demo", Name: "echo", Description: "Echo a value.\nNo authority.", HandlerVersion: "v7",
-			InputSchema:  raw(`{"type":"object","additionalProperties":false,"required":["text","mode"],"properties":{"text":{"type":"string"},"mode":{"type":"string","enum":["short","long"]},"tags":{"type":"array","items":{"type":"string"}}}}`),
+			ToolID: "demo.echo", ServerID: "demo", Name: "echo", Description: "Echo \\\"\\\"\\\" a value.\n__import__('os')\x00", HandlerVersion: "v7",
+			InputSchema:  raw(`{"type":"object","additionalProperties":false,"required":["text","mode"],"properties":{"text":{"type":"string"},"mode":{"type":"string","enum":["short","long"]},"limit":{"type":"integer","default":5},"options":{"type":"object","additionalProperties":false,"required":["case-sensitive"],"properties":{"case-sensitive":{"type":"boolean"},"note":{"anyOf":[{"type":"string"},{"type":"null"}]},"prefix":{"type":"string"}}},"tags":{"type":"array","items":{"type":"string"}}}}`),
 			OutputSchema: raw(`{"type":"string"}`),
 		},
 		{
@@ -123,7 +139,7 @@ func TestProjectionAndGeneratedSurfacesShareOneIR(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, surface := range []string{runtimeSource, stub} {
-		for _, expected := range []string{"def echo(", "text: str", `Literal["short", "long"]`, "tags: list[str]", "-> str", snapshot.Digest(), "v7"} {
+		for _, expected := range []string{"def echo(", "text: str", `Literal["short", "long"]`, "limit: int = 5", "options: EchoOptionsInput", "EchoOptionsInput = TypedDict", `"case-sensitive": bool`, `"note": NotRequired[None | str]`, `"prefix": NotRequired[str]`, "tags: list[str]", "-> str", snapshot.Digest(), "v7", "read_only", "AUTO_COMMIT", "max_calls=4", "describe_tools", "describe_tool"} {
 			if !strings.Contains(surface, expected) {
 				t.Fatalf("generated surface missing %q:\n%s", expected, surface)
 			}
@@ -147,7 +163,7 @@ func TestProjectionAndGeneratedSurfacesShareOneIR(t *testing.T) {
 	if output, err := exec.Command("python3", "-m", "py_compile", runtimePath, stubPath).CombinedOutput(); err != nil {
 		t.Fatalf("generated Python failed compilation: %v\n%s", err, output)
 	}
-	probe := `import importlib.util, json, sys
+	probe := `import importlib.util, inspect, json, sys
 spec = importlib.util.spec_from_file_location("generated_tools", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -156,9 +172,15 @@ module._call = lambda *args: seen.append(args) or "ok"
 assert module.echo(text="hello", mode="short") == "ok"
 tool, digest, version, arguments = seen[0]
 assert tool == "demo.echo" and digest == module.CATALOG_DIGEST and version == "v7"
-assert arguments == {"text": "hello", "mode": "short"}
+assert arguments == {"text": "hello", "mode": "short", "limit": 5}
+signature = inspect.signature(module.echo)
+assert signature.parameters["limit"].default == 5
+assert signature.parameters["tags"].default is module._UNSET
+metadata = module.describe_tool("demo.echo")
+assert metadata["effect_class"] == "read_only" and metadata["max_calls"] == 4
+assert len(module.describe_tools()) == 2
 assert module.echo(text="hello", mode="short", tags=None) == "ok"
-assert seen[1][3] == {"text": "hello", "mode": "short", "tags": None}
+assert seen[1][3] == {"text": "hello", "mode": "short", "limit": 5, "tags": None}
 print(json.dumps(arguments, sort_keys=True))
 `
 	if output, err := exec.Command("python3", "-c", probe, runtimePath).CombinedOutput(); err != nil {

@@ -37,6 +37,9 @@ class PublicDocumentationContractTests(unittest.TestCase):
             "Accepted direction; identifiers freeze when fixtures and real artifact tests pass",
             "Snapshot capture occurs only after",
             "active NumPy artifact-profile and final-hardening tracks",
+            "active frontier is truthful closeout",
+            "inactive until the current truthful-closeout Track G finishes",
+            "active final-hardening/truthful-closeout Track G",
         ):
             with self.subTest(stale=stale):
                 self.assertNotIn(stale, documents)
@@ -66,6 +69,13 @@ class PublicDocumentationContractTests(unittest.TestCase):
                 if relative and not (document.parent / relative).resolve().exists():
                     failures.append(f"{document.relative_to(ROOT)} -> {target}")
         self.assertEqual([], failures)
+
+    def test_closed_execution_roadmap_has_no_unchecked_items(self):
+        roadmap = self.read(
+            "docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md"
+        )
+        self.assertIsNone(re.search(r"^- \[ \]", roadmap, flags=re.MULTILINE))
+        self.assertIn("No unchecked executable item remains", roadmap)
 
 
 if __name__ == "__main__":

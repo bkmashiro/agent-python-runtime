@@ -26,7 +26,7 @@ The runtime is not released or deployed. An explicit manual-only `numpy-core` ar
 
 ## Roadmap boundary
 
-The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, and explicit `numpy-core` vertical slices. The active frontier is truthful closeout: keep `base` automatic, keep `numpy-core` manual-only, preserve fresh-instance fallback, and reconcile every public claim and command before activating the separate session-lifecycle successor roadmap.
+The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, explicit `numpy-core`, and truthful-closeout tracks. `base` remains automatic and `numpy-core` remains manual-only; fresh-instance fallback and all non-release boundaries remain intact. A separate session-lifecycle successor roadmap is documented, but this closeout does not silently activate that larger scope.
 
 The project is not a general Linux sandbox, agent framework, MCP marketplace, arbitrary PyPI environment, or write/effect execution system.
 

@@ -72,7 +72,7 @@ Deferred. V1 returns bounded JSON/bytes plus a digest. It does not persist an in
 
 Stateful sessions are a separate future Host-owned lifecycle contract, not an extension of untrusted `RunRequest` and not a relaxation of V1 freshness. A durable session may be represented by an explicitly bound live module, an exact-build memory capsule, or a Guest-defined logical capsule only after the complete mutable state and external-resource boundary is proven. Dirty linear-memory pages alone are partial state.
 
-See [ADR 0006](adr/0006-execution-session-lifecycle.md) and the [planned successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). That roadmap is inactive until the current truthful-closeout Track G finishes or the owner explicitly reprioritizes it.
+See [ADR 0006](adr/0006-execution-session-lifecycle.md) and the [planned successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). The execution-runtime dependency is complete; session implementation remains a separate, not-yet-activated mega-goal rather than an implicit extension of this runtime closeout.
 
 ## Guest lifecycle
 

@@ -493,8 +493,8 @@ jobs:
             -class preinitialization-spike \
             -strategy single-use-preinitialized \
             -samples 3 \
-            -max-rss-bytes 4294967296 \
-            -child-timeout 2m
+            -max-rss-bytes 5368709120 \
+            -child-timeout 3m
           python3 experiments/preinitialized-guest/compare.py \
             --baseline "${ROOT}/evidence/runtime-baseline.json" \
             --candidate "${ROOT}/evidence/runtime-candidate.json" \

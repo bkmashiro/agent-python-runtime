@@ -155,6 +155,12 @@ class PreinitializedGuestSpikeTests(unittest.TestCase):
                 receipt,
             )
 
+    def test_candidate_density_uses_the_exact_canonical_safety_plan(self):
+        workflow = (ROOT / ".github" / "workflows" / "guest-artifact.yml").read_text()
+        self.assertEqual(2, workflow.count("-max-rss-bytes 5368709120"))
+        self.assertEqual(2, workflow.count("-child-timeout 3m"))
+        self.assertNotIn("-max-rss-bytes 4294967296", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

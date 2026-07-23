@@ -206,6 +206,7 @@ type LifecycleDensitySample struct {
 	SampleIndex       uint32           `json:"sample_index"`
 	RepeatIndex       uint32           `json:"repeat_index"`
 	RequestedSlots    uint32           `json:"requested_slots"`
+	RuntimeShards     uint32           `json:"runtime_shards"`
 	ActiveConcurrency uint32           `json:"active_concurrency"`
 	ObservedAtUnixNS  Metric           `json:"observed_at_unix_ns"`
 	Pool              PoolState        `json:"pool"`
@@ -350,6 +351,9 @@ func (evidence LifecycleDensityEvidence) validatePlan() error {
 }
 
 func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensitySample) error {
+	if sample.RuntimeShards == 0 || sample.RuntimeShards > sample.RequestedSlots {
+		return errors.New("runtime shard count is outside the requested slot bound")
+	}
 	if sample.ActiveConcurrency > sample.RequestedSlots {
 		return errors.New("active concurrency exceeds requested slots")
 	}

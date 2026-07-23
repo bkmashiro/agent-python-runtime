@@ -110,7 +110,7 @@ One file binds one exact artifact/profile, clean Host revision, backend/version,
 
 Each raw row records:
 
-- pool target and initializing/ready/leased/unhealthy/retiring accounting;
+- runtime-shard count plus pool target and initializing/ready/leased/unhealthy/retiring accounting, so duplicated compiled/runtime owners are not misattributed to slot cost;
 - active concurrency and queue/instantiate/initialize/runtime-init/prepare/execute/capability/total phases;
 - Go heap live/goal, GC cycles/pause, goroutines, and scheduler-latency histogram;
 - process RSS/virtual/PSS/private/swap, minor/major faults, FD count, and VMA count;

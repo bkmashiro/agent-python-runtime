@@ -33,6 +33,7 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 			SampleIndex:       uint32(index),
 			RepeatIndex:       0,
 			RequestedSlots:    count,
+			RuntimeShards:     1,
 			ActiveConcurrency: 0,
 			ObservedAtUnixNS:  metric(MetricTimestampObserved, uint64(index+1)),
 			Pool: PoolState{
@@ -145,10 +146,11 @@ func TestLifecycleDensityEvidenceRejectsDirtyFallbackMismatchAndFabricatedDerive
 			value.Strategy.Active = "fresh-instance"
 			value.Strategy.Fallback = true
 		},
-		"sample count":        func(value *LifecycleDensityEvidence) { value.Summary.SampleCount-- },
-		"missing canonical N": func(value *LifecycleDensityEvidence) { value.Plan.SlotCounts = []uint32{1, 2, 4, 8} },
-		"sample distribution": func(value *LifecycleDensityEvidence) { value.Samples[4].RequestedSlots = 8 },
-		"pool accounting":     func(value *LifecycleDensityEvidence) { value.Samples[0].Pool.AccountedSlots = 2 },
+		"sample count":          func(value *LifecycleDensityEvidence) { value.Summary.SampleCount-- },
+		"missing canonical N":   func(value *LifecycleDensityEvidence) { value.Plan.SlotCounts = []uint32{1, 2, 4, 8} },
+		"sample distribution":   func(value *LifecycleDensityEvidence) { value.Samples[4].RequestedSlots = 8 },
+		"missing runtime shard": func(value *LifecycleDensityEvidence) { value.Samples[0].RuntimeShards = 0 },
+		"pool accounting":       func(value *LifecycleDensityEvidence) { value.Samples[0].Pool.AccountedSlots = 2 },
 		"cgroup identity drift": func(value *LifecycleDensityEvidence) {
 			value.Samples[0].Cgroup.Version = "none"
 		},

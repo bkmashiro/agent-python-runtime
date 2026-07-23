@@ -304,11 +304,12 @@
     "sample": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sample_index", "repeat_index", "requested_slots", "active_concurrency", "observed_at_unix_ns", "pool", "phases", "go_runtime", "process", "cgroup"],
+      "required": ["sample_index", "repeat_index", "requested_slots", "runtime_shards", "active_concurrency", "observed_at_unix_ns", "pool", "phases", "go_runtime", "process", "cgroup"],
       "properties": {
         "sample_index": {"type": "integer", "minimum": 0},
         "repeat_index": {"type": "integer", "minimum": 0, "maximum": 999},
         "requested_slots": {"enum": [1, 2, 4, 8, 16, 32, 64]},
+        "runtime_shards": {"type": "integer", "minimum": 1, "maximum": 64},
         "active_concurrency": {"type": "integer", "minimum": 0, "maximum": 64},
         "observed_at_unix_ns": {"$ref": "#/$defs/timestampMetric"},
         "pool": {"$ref": "#/$defs/pool"},

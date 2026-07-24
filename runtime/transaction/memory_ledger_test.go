@@ -148,10 +148,18 @@ func TestMemoryLedgerAttemptIdentityLeaseAndTerminalReplay(t *testing.T) {
 	if err := ledger.createAttempt(duplicate); !errors.Is(err, ErrAlreadyExists) {
 		t.Fatalf("duplicate operation/kind/ordinal error = %v, want ErrAlreadyExists even when provider digest changes", err)
 	}
+	duplicateProvider := attempt
+	duplicateProvider.ID = "att_provider_duplicate"
+	duplicateProvider.Ordinal = 3
+	duplicateProvider.LeaseID = "lease_provider_duplicate"
+	if err := ledger.createAttempt(duplicateProvider); !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("duplicate provider request error = %v, want ErrAlreadyExists", err)
+	}
 	expiring := attempt
 	expiring.ID = "att_expiring"
 	expiring.Ordinal = 4
 	expiring.LeaseID = "lease_4"
+	expiring.ProviderRequestDigest = testDigest("expiring-provider-request")
 	expiring.LeaseExpiresAt = time.Unix(6, 0).UTC()
 	if err := ledger.createAttempt(expiring); err != nil {
 		t.Fatal(err)

@@ -8,23 +8,25 @@ import (
 )
 
 type MemoryLedger struct {
-	mu             sync.RWMutex
-	transactions   map[string]Transaction
-	operations     map[string]Operation
-	attempts       map[string]Attempt
-	operationIndex map[string]string
-	attemptKeys    map[string]string
-	transitions    map[string][]Transition
+	mu               sync.RWMutex
+	transactions     map[string]Transaction
+	operations       map[string]Operation
+	attempts         map[string]Attempt
+	operationIndex   map[string]string
+	attemptKeys      map[string]string
+	providerRequests map[string]string
+	transitions      map[string][]Transition
 }
 
 func NewMemoryLedger() *MemoryLedger {
 	return &MemoryLedger{
-		transactions:   make(map[string]Transaction),
-		operations:     make(map[string]Operation),
-		attempts:       make(map[string]Attempt),
-		operationIndex: make(map[string]string),
-		attemptKeys:    make(map[string]string),
-		transitions:    make(map[string][]Transition),
+		transactions:     make(map[string]Transaction),
+		operations:       make(map[string]Operation),
+		attempts:         make(map[string]Attempt),
+		operationIndex:   make(map[string]string),
+		attemptKeys:      make(map[string]string),
+		providerRequests: make(map[string]string),
+		transitions:      make(map[string][]Transition),
 	}
 }
 
@@ -175,9 +177,14 @@ func (ledger *MemoryLedger) createAttempt(value Attempt) error {
 	if _, exists := ledger.attemptKeys[stableKey]; exists {
 		return ErrAlreadyExists
 	}
+	providerKey := value.TransactionID + ":" + value.ProviderRequestDigest
+	if _, exists := ledger.providerRequests[providerKey]; exists {
+		return ErrAlreadyExists
+	}
 	value.Version = 1
 	ledger.attempts[value.ID] = value
 	ledger.attemptKeys[stableKey] = value.ID
+	ledger.providerRequests[providerKey] = value.ID
 	ledger.appendTransition(value.TransactionID, "attempt", value.ID, "", string(value.State), value.CreatedAt)
 	return nil
 }
@@ -224,21 +231,15 @@ func (ledger *MemoryLedger) ListAttempts(transactionID string) ([]Attempt, error
 func (ledger *MemoryLedger) findAttemptByProviderRequest(transactionID, providerRequestDigest string) (Attempt, error) {
 	ledger.mu.RLock()
 	defer ledger.mu.RUnlock()
-	var found Attempt
-	matches := 0
-	for _, value := range ledger.attempts {
-		if value.TransactionID == transactionID && value.ProviderRequestDigest == providerRequestDigest {
-			found = value
-			matches++
-		}
-	}
-	if matches == 0 {
+	id, exists := ledger.providerRequests[transactionID+":"+providerRequestDigest]
+	if !exists {
 		return Attempt{}, ErrNotFound
 	}
-	if matches != 1 {
+	value, exists := ledger.attempts[id]
+	if !exists {
 		return Attempt{}, ErrConflict
 	}
-	return found, nil
+	return value, nil
 }
 
 func (ledger *MemoryLedger) transitionAttempt(id string, version uint64, from, to AttemptState, observedAt time.Time) (Attempt, error) {

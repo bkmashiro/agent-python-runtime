@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,12 +9,13 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 var schemaNames = []string{
 	"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
-	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "commit-command", "audit-evidence",
+	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "commit-command", "audit-evidence", "transaction-evidence",
 }
 
 func abiRoot(t *testing.T) string {
@@ -97,6 +99,25 @@ func TestABIV1Fixtures(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestTransactionEvidenceFixturesHaveCanonicalDigest(t *testing.T) {
+	for _, path := range fixtureCases(t, "valid", "transaction-evidence") {
+		encoded, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := transaction.DecodeAndVerifyTransactionEvidence(encoded); err != nil {
+			t.Fatalf("fixture digest is not canonical: %s: %v", path, err)
+		}
+		tampered := bytes.Replace(encoded, []byte(`"run_id": "run_fixture"`), []byte(`"run_id": "run_tampered"`), 1)
+		if bytes.Equal(tampered, encoded) {
+			t.Fatal("tamper seam missing")
+		}
+		if _, err := transaction.DecodeAndVerifyTransactionEvidence(tampered); err == nil {
+			t.Fatal("tampered evidence digest accepted")
+		}
 	}
 }
 

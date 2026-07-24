@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -16,7 +17,7 @@ import (
 )
 
 const (
-	sqliteSchemaVersion        = 1
+	sqliteSchemaVersion        = 2
 	sqliteSchemaV1ExpectedHash = "sha256:46d6a0239a4dbf91166ad517810eed112d67cb2d05fe0fb4f0b9ef1294055eec"
 )
 
@@ -137,9 +138,10 @@ func (ledger *SQLiteLedger) migrate() error {
 		if digest != sqliteSchemaV1ExpectedHash {
 			return ErrUnsupportedSchema
 		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at_ns, schema_digest) VALUES(?, ?, ?)`, sqliteSchemaVersion, time.Now().UTC().UnixNano(), sqliteSchemaV1ExpectedHash); err != nil {
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at_ns, schema_digest) VALUES(1, ?, ?)`, time.Now().UTC().UnixNano(), sqliteSchemaV1ExpectedHash); err != nil {
 			return sqliteFailure("record migration v1", err)
 		}
+		version = 1
 		storedDigest = sqliteSchemaV1ExpectedHash
 	}
 	actualDigest, err := computeSQLiteSchemaDigest(tx)
@@ -147,6 +149,21 @@ func (ledger *SQLiteLedger) migrate() error {
 		return err
 	}
 	if storedDigest != sqliteSchemaV1ExpectedHash || actualDigest != sqliteSchemaV1ExpectedHash {
+		return ErrUnsupportedSchema
+	}
+	if version == 1 {
+		if _, err := tx.Exec(`UPDATE operations SET updated_at_ns=created_at_ns WHERE updated_at_ns=0`); err != nil {
+			return sqliteFailure("backfill operation timestamps v2", err)
+		}
+		if _, err := tx.Exec(`UPDATE attempts SET updated_at_ns=created_at_ns WHERE updated_at_ns=0`); err != nil {
+			return sqliteFailure("backfill attempt timestamps v2", err)
+		}
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at_ns, schema_digest) VALUES(2, ?, ?)`, time.Now().UTC().UnixNano(), sqliteSchemaV1ExpectedHash); err != nil {
+			return sqliteFailure("record migration v2", err)
+		}
+		version = 2
+	}
+	if version != sqliteSchemaVersion {
 		return ErrUnsupportedSchema
 	}
 	if err := tx.Commit(); err != nil {
@@ -321,6 +338,7 @@ func (ledger *SQLiteLedger) createOperation(value Operation) error {
 	}
 	value.Version = 1
 	value.CreatedAt = value.CreatedAt.UTC()
+	value.UpdatedAt = value.CreatedAt
 	if _, err := tx.Exec(`INSERT INTO operations(id,transaction_id,operation_index,tool_id,handler_version,effect_class,policy,policy_version,state,argument_digest,manifest_digest,version,created_at_ns,updated_at_ns) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		value.ID, value.TransactionID, value.Index, value.ToolID, value.HandlerVersion, value.EffectClass, value.Policy, value.PolicyVersion,
 		value.State, value.ArgumentDigest, value.ManifestDigest, value.Version, timeNS(value.CreatedAt), timeNS(value.UpdatedAt)); err != nil {
@@ -423,6 +441,7 @@ func (ledger *SQLiteLedger) createAttempt(value Attempt) error {
 	}
 	value.Version = 1
 	value.CreatedAt = value.CreatedAt.UTC()
+	value.UpdatedAt = value.CreatedAt
 	value.LeaseExpiresAt = value.LeaseExpiresAt.UTC()
 	if _, err := tx.Exec(`INSERT INTO attempts(id,transaction_id,operation_id,kind,ordinal,state,expected_operation_state,lease_id,lease_expires_at_ns,provider_request_digest,version,created_at_ns,updated_at_ns) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		value.ID, value.TransactionID, value.OperationID, value.Kind, value.Ordinal, value.State, value.ExpectedOperationState, value.LeaseID,
@@ -549,6 +568,101 @@ func (ledger *SQLiteLedger) transitionAttempt(id string, version uint64, from, t
 		return Attempt{}, err
 	}
 	return value, nil
+}
+
+func (ledger *SQLiteLedger) Snapshot(transactionID string) (JournalSnapshot, error) {
+	if !validIdentifier(transactionID) {
+		return JournalSnapshot{}, ErrInvalidInput
+	}
+	tx, err := ledger.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return JournalSnapshot{}, sqliteFailure("begin journal snapshot", err)
+	}
+	defer tx.Rollback()
+	snapshot := JournalSnapshot{Operations: make([]Operation, 0), Attempts: make([]Attempt, 0), Transitions: make([]Transition, 0)}
+	snapshot.Transaction, err = scanSQLiteTransaction(tx.QueryRow(`SELECT id,run_id,catalog_digest,mode,state,version,created_at_ns,updated_at_ns FROM transactions WHERE id=?`, transactionID))
+	if err != nil {
+		return JournalSnapshot{}, err
+	}
+	operationRows, err := tx.Query(operationSelect+` WHERE transaction_id=? ORDER BY operation_index`, transactionID)
+	if err != nil {
+		return JournalSnapshot{}, sqliteFailure("snapshot operations", err)
+	}
+	for operationRows.Next() {
+		operation, scanErr := scanSQLiteOperation(operationRows)
+		if scanErr != nil {
+			operationRows.Close()
+			return JournalSnapshot{}, scanErr
+		}
+		snapshot.Operations = append(snapshot.Operations, operation)
+	}
+	if err := operationRows.Err(); err != nil {
+		operationRows.Close()
+		return JournalSnapshot{}, sqliteFailure("iterate snapshot operations", err)
+	}
+	if err := operationRows.Close(); err != nil {
+		return JournalSnapshot{}, sqliteFailure("close snapshot operations", err)
+	}
+	attemptRows, err := tx.Query(attemptSelect+` WHERE transaction_id=? ORDER BY operation_id,kind,ordinal,id`, transactionID)
+	if err != nil {
+		return JournalSnapshot{}, sqliteFailure("snapshot attempts", err)
+	}
+	for attemptRows.Next() {
+		attempt, scanErr := scanSQLiteAttempt(attemptRows)
+		if scanErr != nil {
+			attemptRows.Close()
+			return JournalSnapshot{}, scanErr
+		}
+		snapshot.Attempts = append(snapshot.Attempts, attempt)
+	}
+	if err := attemptRows.Err(); err != nil {
+		attemptRows.Close()
+		return JournalSnapshot{}, sqliteFailure("iterate snapshot attempts", err)
+	}
+	if err := attemptRows.Close(); err != nil {
+		return JournalSnapshot{}, sqliteFailure("close snapshot attempts", err)
+	}
+	transitionRows, err := tx.Query(`SELECT sequence,transaction_id,entity_type,entity_id,from_state,to_state,observed_at_ns FROM transitions WHERE transaction_id=? ORDER BY sequence`, transactionID)
+	if err != nil {
+		return JournalSnapshot{}, sqliteFailure("snapshot transitions", err)
+	}
+	for transitionRows.Next() {
+		var transition Transition
+		var observed int64
+		if err := transitionRows.Scan(&transition.Sequence, &transition.TransactionID, &transition.EntityType, &transition.EntityID, &transition.From, &transition.To, &observed); err != nil {
+			transitionRows.Close()
+			return JournalSnapshot{}, sqliteFailure("scan snapshot transition", err)
+		}
+		transition.ObservedAt = timeFromNS(observed)
+		snapshot.Transitions = append(snapshot.Transitions, transition)
+	}
+	if err := transitionRows.Err(); err != nil {
+		transitionRows.Close()
+		return JournalSnapshot{}, sqliteFailure("iterate snapshot transitions", err)
+	}
+	if err := transitionRows.Close(); err != nil {
+		return JournalSnapshot{}, sqliteFailure("close snapshot transitions", err)
+	}
+	operationIndexes := make(map[string]uint32, len(snapshot.Operations))
+	for _, operation := range snapshot.Operations {
+		operationIndexes[operation.ID] = operation.Index
+	}
+	sort.Slice(snapshot.Attempts, func(left, right int) bool {
+		if operationIndexes[snapshot.Attempts[left].OperationID] != operationIndexes[snapshot.Attempts[right].OperationID] {
+			return operationIndexes[snapshot.Attempts[left].OperationID] < operationIndexes[snapshot.Attempts[right].OperationID]
+		}
+		if snapshot.Attempts[left].Kind != snapshot.Attempts[right].Kind {
+			return snapshot.Attempts[left].Kind < snapshot.Attempts[right].Kind
+		}
+		if snapshot.Attempts[left].Ordinal != snapshot.Attempts[right].Ordinal {
+			return snapshot.Attempts[left].Ordinal < snapshot.Attempts[right].Ordinal
+		}
+		return snapshot.Attempts[left].ID < snapshot.Attempts[right].ID
+	})
+	if err := tx.Commit(); err != nil {
+		return JournalSnapshot{}, sqliteFailure("commit journal snapshot", err)
+	}
+	return snapshot, nil
 }
 
 func (ledger *SQLiteLedger) ListTransitions(transactionID string) ([]Transition, error) {

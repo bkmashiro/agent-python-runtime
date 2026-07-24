@@ -100,6 +100,8 @@ func (ledger *MemoryLedger) createOperation(value Operation) error {
 		return ErrAlreadyExists
 	}
 	value.Version = 1
+	value.CreatedAt = value.CreatedAt.UTC()
+	value.UpdatedAt = value.CreatedAt
 	ledger.operations[value.ID] = value
 	ledger.operationIndex[indexKey] = value.ID
 	ledger.appendTransition(value.TransactionID, "operation", value.ID, "", string(value.State), value.CreatedAt)
@@ -182,6 +184,9 @@ func (ledger *MemoryLedger) createAttempt(value Attempt) error {
 		return ErrAlreadyExists
 	}
 	value.Version = 1
+	value.CreatedAt = value.CreatedAt.UTC()
+	value.UpdatedAt = value.CreatedAt
+	value.LeaseExpiresAt = value.LeaseExpiresAt.UTC()
 	ledger.attempts[value.ID] = value
 	ledger.attemptKeys[stableKey] = value.ID
 	ledger.providerRequests[providerKey] = value.ID
@@ -283,6 +288,51 @@ func (ledger *MemoryLedger) ListTransitions(transactionID string) ([]Transition,
 	}
 	values := ledger.transitions[transactionID]
 	return append([]Transition(nil), values...), nil
+}
+
+func (ledger *MemoryLedger) Snapshot(transactionID string) (JournalSnapshot, error) {
+	ledger.mu.RLock()
+	defer ledger.mu.RUnlock()
+	transactionValue, exists := ledger.transactions[transactionID]
+	if !exists {
+		return JournalSnapshot{}, ErrNotFound
+	}
+	snapshot := JournalSnapshot{
+		Transaction: transactionValue,
+		Operations:  make([]Operation, 0),
+		Attempts:    make([]Attempt, 0),
+		Transitions: append([]Transition(nil), ledger.transitions[transactionID]...),
+	}
+	for _, operation := range ledger.operations {
+		if operation.TransactionID == transactionID {
+			snapshot.Operations = append(snapshot.Operations, operation)
+		}
+	}
+	sort.Slice(snapshot.Operations, func(left, right int) bool {
+		return snapshot.Operations[left].Index < snapshot.Operations[right].Index
+	})
+	operationIndexes := make(map[string]uint32, len(snapshot.Operations))
+	for _, operation := range snapshot.Operations {
+		operationIndexes[operation.ID] = operation.Index
+	}
+	for _, attempt := range ledger.attempts {
+		if attempt.TransactionID == transactionID {
+			snapshot.Attempts = append(snapshot.Attempts, attempt)
+		}
+	}
+	sort.Slice(snapshot.Attempts, func(left, right int) bool {
+		if operationIndexes[snapshot.Attempts[left].OperationID] != operationIndexes[snapshot.Attempts[right].OperationID] {
+			return operationIndexes[snapshot.Attempts[left].OperationID] < operationIndexes[snapshot.Attempts[right].OperationID]
+		}
+		if snapshot.Attempts[left].Kind != snapshot.Attempts[right].Kind {
+			return snapshot.Attempts[left].Kind < snapshot.Attempts[right].Kind
+		}
+		if snapshot.Attempts[left].Ordinal != snapshot.Attempts[right].Ordinal {
+			return snapshot.Attempts[left].Ordinal < snapshot.Attempts[right].Ordinal
+		}
+		return snapshot.Attempts[left].ID < snapshot.Attempts[right].ID
+	})
+	return snapshot, nil
 }
 
 func (ledger *MemoryLedger) appendTransition(transactionID, entityType, entityID, from, to string, observedAt time.Time) {

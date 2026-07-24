@@ -71,7 +71,7 @@ func TestSQLiteLedgerRejectsNewerSchemaAndUsesPrivateFileMode(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode=%v", info.Mode().Perm())
 	}
-	if _, err := ledger.db.Exec(`INSERT INTO schema_migrations(version,applied_at_ns,schema_digest) VALUES(2,?,?)`, time.Now().UTC().UnixNano(), testDigest("future-schema")); err != nil {
+	if _, err := ledger.db.Exec(`INSERT INTO schema_migrations(version,applied_at_ns,schema_digest) VALUES(3,?,?)`, time.Now().UTC().UnixNano(), testDigest("future-schema")); err != nil {
 		t.Fatal(err)
 	}
 	if err := ledger.Close(); err != nil {
@@ -79,6 +79,38 @@ func TestSQLiteLedgerRejectsNewerSchemaAndUsesPrivateFileMode(t *testing.T) {
 	}
 	if _, err := OpenSQLiteLedger(path); !errors.Is(err, ErrUnsupportedSchema) {
 		t.Fatalf("newer schema error=%v", err)
+	}
+}
+
+func TestSQLiteLedgerMigratesV1ZeroUpdateTimestamps(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migration-v1.db")
+	ledger, err := OpenSQLiteLedger(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedSQLiteLedger(t, ledger)
+	if _, err := ledger.db.Exec(`UPDATE operations SET updated_at_ns=0; UPDATE attempts SET updated_at_ns=0; DELETE FROM schema_migrations WHERE version=2`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenSQLiteLedger(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	snapshot, err := reopened.Snapshot("tx_sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Operations) != 1 || len(snapshot.Attempts) != 1 || snapshot.Operations[0].UpdatedAt.IsZero() || snapshot.Attempts[0].UpdatedAt.IsZero() ||
+		!snapshot.Operations[0].UpdatedAt.Equal(snapshot.Operations[0].CreatedAt) || !snapshot.Attempts[0].UpdatedAt.Equal(snapshot.Attempts[0].CreatedAt) {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	var version int
+	if err := reopened.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 2 {
+		t.Fatalf("version=%d err=%v", version, err)
 	}
 }
 

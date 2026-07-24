@@ -1,0 +1,31 @@
+{
+  "schema_version": "transaction-evidence/v2",
+  "evidence_digest": "sha256:eb119db0e900c8049bd4cfda2231e95aeaa5b1507bd1a4aeccaba57783dc3f72",
+  "correlation_id": "corr_0123456789abcdef0123456789abcdef",
+  "generated_at": "2026-07-24T02:00:00Z",
+  "transaction": {
+    "transaction_id": "tx_fixture",
+    "run_id": "run_fixture",
+    "catalog_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "mode": "workflow",
+    "state": "open",
+    "version": 1,
+    "created_at": "2026-07-24T01:59:00Z",
+    "updated_at": "2026-07-24T01:59:00Z"
+  },
+  "operations": [],
+  "attempts": [],
+  "transitions": [],
+  "metrics": {
+    "operation_total": 0,
+    "attempt_total": 0,
+    "transition_total": 0,
+    "dispatching_attempts": 0,
+    "ambiguous_attempts": 0,
+    "applied_operations": 0,
+    "rollback_failed": 0,
+    "compensation_failed": 0,
+    "reconciliation_required": 0,
+    "reconciled_attempts": 0
+  }
+}

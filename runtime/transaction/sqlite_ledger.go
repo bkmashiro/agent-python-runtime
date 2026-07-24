@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	sqliteSchemaVersion        = 2
+	sqliteSchemaVersion        = 3
 	sqliteSchemaV1ExpectedHash = "sha256:46d6a0239a4dbf91166ad517810eed112d67cb2d05fe0fb4f0b9ef1294055eec"
+	sqliteSchemaV3ExpectedHash = "sha256:819cf3b5cb29f1d23d7f481d48473a0a6f46eb3ae1f39dff9f30d9a65dd2d708"
 )
 
 var ErrUnsupportedSchema = errors.New("unsupported transaction ledger schema")
@@ -148,7 +149,11 @@ func (ledger *SQLiteLedger) migrate() error {
 	if err != nil {
 		return err
 	}
-	if storedDigest != sqliteSchemaV1ExpectedHash || actualDigest != sqliteSchemaV1ExpectedHash {
+	expectedDigest := sqliteSchemaV1ExpectedHash
+	if version == 3 {
+		expectedDigest = sqliteSchemaV3ExpectedHash
+	}
+	if storedDigest != expectedDigest || actualDigest != expectedDigest {
 		return ErrUnsupportedSchema
 	}
 	if version == 1 {
@@ -162,6 +167,19 @@ func (ledger *SQLiteLedger) migrate() error {
 			return sqliteFailure("record migration v2", err)
 		}
 		version = 2
+	}
+	if version == 2 {
+		if _, err := tx.Exec(`ALTER TABLE attempts ADD COLUMN reconciliation_digest TEXT NOT NULL DEFAULT ''`); err != nil {
+			return sqliteFailure("add reconciliation digest v3", err)
+		}
+		actualDigest, err = computeSQLiteSchemaDigest(tx)
+		if err != nil || actualDigest != sqliteSchemaV3ExpectedHash {
+			return ErrUnsupportedSchema
+		}
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at_ns, schema_digest) VALUES(3, ?, ?)`, time.Now().UTC().UnixNano(), sqliteSchemaV3ExpectedHash); err != nil {
+			return sqliteFailure("record migration v3", err)
+		}
+		version = 3
 	}
 	if version != sqliteSchemaVersion {
 		return ErrUnsupportedSchema
@@ -454,7 +472,7 @@ func (ledger *SQLiteLedger) createAttempt(value Attempt) error {
 	return commitSQLite(tx, "create attempt")
 }
 
-const attemptSelect = `SELECT id,transaction_id,operation_id,kind,ordinal,state,expected_operation_state,lease_id,lease_expires_at_ns,provider_request_digest,version,created_at_ns,updated_at_ns FROM attempts`
+const attemptSelect = `SELECT id,transaction_id,operation_id,kind,ordinal,state,expected_operation_state,lease_id,lease_expires_at_ns,provider_request_digest,reconciliation_digest,version,created_at_ns,updated_at_ns FROM attempts`
 
 func (ledger *SQLiteLedger) GetAttempt(id string) (Attempt, error) {
 	if !validIdentifier(id) {
@@ -565,6 +583,47 @@ func (ledger *SQLiteLedger) transitionAttempt(id string, version uint64, from, t
 		return Attempt{}, err
 	}
 	if err := commitSQLite(tx, "attempt CAS"); err != nil {
+		return Attempt{}, err
+	}
+	return value, nil
+}
+
+func (ledger *SQLiteLedger) reconcileAttempt(id string, version uint64, target AttemptState, observationDigest string, observedAt time.Time) (Attempt, error) {
+	if !validIdentifier(id) || !digestPattern.MatchString(observationDigest) || observedAt.IsZero() ||
+		(target != AttemptSucceeded && target != AttemptFailed) {
+		return Attempt{}, ErrInvalidInput
+	}
+	tx, err := ledger.db.Begin()
+	if err != nil {
+		return Attempt{}, sqliteFailure("begin attempt reconciliation", err)
+	}
+	defer tx.Rollback()
+	current, err := scanSQLiteAttempt(tx.QueryRow(attemptSelect+` WHERE id=?`, id))
+	if err != nil {
+		return Attempt{}, err
+	}
+	if current.State == target && current.ReconciliationDigest == observationDigest {
+		return current, nil
+	}
+	if current.Version != version || current.State != AttemptAmbiguous || current.ReconciliationDigest != "" {
+		return Attempt{}, ErrConflict
+	}
+	result, err := tx.Exec(`UPDATE attempts SET state=?,reconciliation_digest=?,version=version+1,updated_at_ns=? WHERE id=? AND version=? AND state=? AND reconciliation_digest=''`,
+		target, observationDigest, timeNS(observedAt), id, version, AttemptAmbiguous)
+	if err != nil {
+		return Attempt{}, sqliteFailure("reconcile attempt", err)
+	}
+	if err := requireSQLiteUpdate(tx, result, "attempts", id); err != nil {
+		return Attempt{}, err
+	}
+	value, err := scanSQLiteAttempt(tx.QueryRow(attemptSelect+` WHERE id=?`, id))
+	if err != nil {
+		return Attempt{}, err
+	}
+	if err := appendSQLiteTransition(tx, value.TransactionID, "attempt", id, string(AttemptAmbiguous), string(target), observedAt); err != nil {
+		return Attempt{}, err
+	}
+	if err := commitSQLite(tx, "attempt reconciliation"); err != nil {
 		return Attempt{}, err
 	}
 	return value, nil
@@ -723,7 +782,7 @@ func scanSQLiteAttempt(scanner sqliteScanner) (Attempt, error) {
 	var value Attempt
 	var lease, created, updated int64
 	if err := scanner.Scan(&value.ID, &value.TransactionID, &value.OperationID, &value.Kind, &value.Ordinal, &value.State,
-		&value.ExpectedOperationState, &value.LeaseID, &lease, &value.ProviderRequestDigest, &value.Version, &created, &updated); err != nil {
+		&value.ExpectedOperationState, &value.LeaseID, &lease, &value.ProviderRequestDigest, &value.ReconciliationDigest, &value.Version, &created, &updated); err != nil {
 		return Attempt{}, sqliteScanFailure("attempt", err)
 	}
 	value.LeaseExpiresAt, value.CreatedAt, value.UpdatedAt = timeFromNS(lease), timeFromNS(created), timeFromNS(updated)

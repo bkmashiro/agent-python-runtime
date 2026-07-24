@@ -15,7 +15,7 @@ import (
 
 var schemaNames = []string{
 	"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
-	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "commit-command", "audit-evidence", "transaction-evidence",
+	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "commit-command", "audit-evidence", "transaction-evidence", "transaction-evidence-v2",
 }
 
 func abiRoot(t *testing.T) string {
@@ -103,7 +103,7 @@ func TestABIV1Fixtures(t *testing.T) {
 }
 
 func TestTransactionEvidenceFixturesHaveCanonicalDigest(t *testing.T) {
-	for _, path := range fixtureCases(t, "valid", "transaction-evidence") {
+	for _, path := range fixtureCases(t, "valid", "transaction-evidence-v2") {
 		encoded, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

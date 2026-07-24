@@ -15,6 +15,7 @@ func TestTransactionTransitionsRejectTerminalReplayAndImpossibleStrengthening(t 
 		{TransactionCompensating, TransactionCompensated},
 		{TransactionPendingApproval, TransactionCommitting},
 		{TransactionCommitting, TransactionCommitted},
+		{TransactionReconciliationRequired, TransactionRollingBack},
 	}
 	for _, transition := range valid {
 		if err := ValidateTransactionTransition(transition[0], transition[1]); err != nil {
@@ -28,7 +29,7 @@ func TestTransactionTransitionsRejectTerminalReplayAndImpossibleStrengthening(t 
 		{TransactionCompensated, TransactionRolledBack},
 		{TransactionOpen, TransactionRolledBack},
 		{TransactionPendingApproval, TransactionCommitted},
-		{TransactionReconciliationRequired, TransactionRollingBack},
+		{TransactionReconciliationRequired, TransactionPendingApproval},
 	}
 	for _, transition := range invalid {
 		if err := ValidateTransactionTransition(transition[0], transition[1]); err == nil {

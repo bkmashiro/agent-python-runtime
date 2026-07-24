@@ -280,6 +280,31 @@ func (ledger *MemoryLedger) transitionAttempt(id string, version uint64, from, t
 	return value, nil
 }
 
+func (ledger *MemoryLedger) reconcileAttempt(id string, version uint64, target AttemptState, observationDigest string, observedAt time.Time) (Attempt, error) {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if !digestPattern.MatchString(observationDigest) || observedAt.IsZero() || (target != AttemptSucceeded && target != AttemptFailed) {
+		return Attempt{}, ErrInvalidInput
+	}
+	value, exists := ledger.attempts[id]
+	if !exists {
+		return Attempt{}, ErrNotFound
+	}
+	if value.State == target && value.ReconciliationDigest == observationDigest {
+		return value, nil
+	}
+	if value.Version != version || value.State != AttemptAmbiguous || value.ReconciliationDigest != "" {
+		return Attempt{}, ErrConflict
+	}
+	value.State = target
+	value.ReconciliationDigest = observationDigest
+	value.Version++
+	value.UpdatedAt = observedAt.UTC()
+	ledger.attempts[id] = value
+	ledger.appendTransition(value.TransactionID, "attempt", id, string(AttemptAmbiguous), string(target), value.UpdatedAt)
+	return value, nil
+}
+
 func (ledger *MemoryLedger) ListTransitions(transactionID string) ([]Transition, error) {
 	ledger.mu.RLock()
 	defer ledger.mu.RUnlock()

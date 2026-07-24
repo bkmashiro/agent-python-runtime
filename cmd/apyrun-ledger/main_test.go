@@ -56,7 +56,7 @@ func TestExecuteExportsStrictDigestOnlyEvidence(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
 		t.Fatal(err)
 	}
-	schemaData, err := os.ReadFile("../../abi/v1/transaction-evidence.schema.json")
+	schemaData, err := os.ReadFile("../../abi/v1/transaction-evidence-v2.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestExecuteExportsStrictDigestOnlyEvidence(t *testing.T) {
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.AssertFormat()
-	const schemaURL = "https://agent-runtime.dev/abi/v1/transaction-evidence.schema.json"
+	const schemaURL = "https://agent-runtime.dev/abi/v1/transaction-evidence-v2.schema.json"
 	if err := compiler.AddResource(schemaURL, schemaDocument); err != nil {
 		t.Fatal(err)
 	}

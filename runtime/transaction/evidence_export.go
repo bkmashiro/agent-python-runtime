@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	TransactionEvidenceSchemaVersion        = "transaction-evidence/v1"
+	TransactionEvidenceSchemaVersion        = "transaction-evidence/v2"
 	maxEvidenceOperations                   = 1024
 	maxEvidenceAttempts                     = 4096
 	maxEvidenceTransitions                  = 16384
@@ -74,6 +74,7 @@ type EvidenceAttempt struct {
 	LeaseID                string         `json:"lease_id"`
 	LeaseExpiresAt         time.Time      `json:"lease_expires_at"`
 	ProviderRequestDigest  string         `json:"provider_request_digest"`
+	ReconciliationDigest   string         `json:"reconciliation_digest"`
 	Version                uint64         `json:"version"`
 	CreatedAt              time.Time      `json:"created_at"`
 	UpdatedAt              time.Time      `json:"updated_at"`
@@ -99,6 +100,7 @@ type TransactionEvidenceMetric struct {
 	RollbackFailed         uint32 `json:"rollback_failed"`
 	CompensationFailed     uint32 `json:"compensation_failed"`
 	ReconciliationRequired uint32 `json:"reconciliation_required"`
+	ReconciledAttempts     uint32 `json:"reconciled_attempts"`
 }
 
 func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt time.Time) (TransactionEvidence, error) {
@@ -184,6 +186,7 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 		}
 	}
 	attemptIDs := make(map[string]struct{}, len(attempts))
+	reconciledAttemptIDs := make(map[string]struct{})
 	for index, attempt := range attempts {
 		if _, ok := operationIDs[attempt.OperationID]; !ok || !validEvidenceAttempt(attempt, transaction.ID) {
 			return TransactionEvidence{}, ErrInvalidEvidence
@@ -197,7 +200,12 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 			Kind: attempt.Kind, Ordinal: attempt.Ordinal, State: attempt.State,
 			ExpectedOperationState: attempt.ExpectedOperationState, LeaseID: attempt.LeaseID,
 			LeaseExpiresAt: attempt.LeaseExpiresAt.UTC(), ProviderRequestDigest: attempt.ProviderRequestDigest,
-			Version: attempt.Version, CreatedAt: attempt.CreatedAt.UTC(), UpdatedAt: attempt.UpdatedAt.UTC(),
+			ReconciliationDigest: attempt.ReconciliationDigest,
+			Version:              attempt.Version, CreatedAt: attempt.CreatedAt.UTC(), UpdatedAt: attempt.UpdatedAt.UTC(),
+		}
+		if attempt.ReconciliationDigest != "" {
+			reconciledAttemptIDs[attempt.ID] = struct{}{}
+			value.Metrics.ReconciledAttempts++
 		}
 		switch attempt.State {
 		case AttemptDispatching:
@@ -209,7 +217,7 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 	var priorObservedAt time.Time
 	latestStates := make(map[string]string, 1+len(operations)+len(attempts))
 	for index, transition := range transitions {
-		if !validEvidenceTransition(transition, transaction.ID, uint64(index+1), operationIDs, attemptIDs) ||
+		if !validEvidenceTransition(transition, transaction.ID, uint64(index+1), operationIDs, attemptIDs, reconciledAttemptIDs) ||
 			(!priorObservedAt.IsZero() && transition.ObservedAt.Before(priorObservedAt)) {
 			return TransactionEvidence{}, ErrInvalidEvidence
 		}
@@ -309,13 +317,15 @@ func validEvidenceOperation(value Operation, transactionID string) bool {
 }
 
 func validEvidenceAttempt(value Attempt, transactionID string) bool {
-	return value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
+	reconciliationValid := value.ReconciliationDigest == "" ||
+		(digestPattern.MatchString(value.ReconciliationDigest) && (value.State == AttemptSucceeded || value.State == AttemptFailed))
+	return reconciliationValid && value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
 		value.Ordinal > 0 && value.Ordinal <= maxEvidenceAttemptOrdinal && validAttemptState(value.State) && validOperationState(value.ExpectedOperationState) && validIdentifier(value.LeaseID) &&
 		value.LeaseExpiresAt.After(value.CreatedAt) && digestPattern.MatchString(value.ProviderRequestDigest) && value.Version > 0 && value.Version <= maxEvidenceInteger &&
 		!value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)
 }
 
-func validEvidenceTransition(value Transition, transactionID string, sequence uint64, operationIDs, attemptIDs map[string]struct{}) bool {
+func validEvidenceTransition(value Transition, transactionID string, sequence uint64, operationIDs, attemptIDs, reconciledAttemptIDs map[string]struct{}) bool {
 	if value.TransactionID != transactionID || value.Sequence != sequence || value.Sequence > maxEvidenceTransitions ||
 		!validIdentifier(value.EntityID) || len(value.From) > 128 || value.To == "" || len(value.To) > 128 || value.ObservedAt.IsZero() {
 		return false
@@ -343,6 +353,10 @@ func validEvidenceTransition(value Transition, transactionID string, sequence ui
 		}
 		if value.From == "" {
 			return AttemptState(value.To) == AttemptLeased
+		}
+		if AttemptState(value.From) == AttemptAmbiguous {
+			_, reconciled := reconciledAttemptIDs[value.EntityID]
+			return reconciled && (AttemptState(value.To) == AttemptSucceeded || AttemptState(value.To) == AttemptFailed)
 		}
 		return ValidateAttemptTransition(AttemptState(value.From), AttemptState(value.To)) == nil
 	default:

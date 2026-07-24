@@ -75,6 +75,10 @@ var transactionTransitions = map[TransactionState]map[TransactionState]struct{}{
 	),
 	TransactionPendingApproval: states(TransactionCommitting, TransactionRejected, TransactionExpired),
 	TransactionCommitting:      states(TransactionCommitted, TransactionRejected, TransactionReconciliationRequired),
+	TransactionReconciliationRequired: states(
+		TransactionOpen, TransactionAborting, TransactionRollingBack, TransactionPartiallyReverted,
+		TransactionCompensating, TransactionPartiallyCompensated, TransactionCommitted, TransactionRejected,
+	),
 }
 
 var operationTransitions = map[OperationState]map[OperationState]struct{}{
@@ -107,6 +111,10 @@ var operationTransitions = map[OperationState]map[OperationState]struct{}{
 		OperationCompensated, OperationCompensationFailed, OperationReconciliationRequired,
 	),
 	OperationCompensationFailed: operationStates(OperationCompensating, OperationReconciliationRequired),
+	OperationReconciliationRequired: operationStates(
+		OperationApplied, OperationFailedTerminal, OperationRolledBack, OperationRollbackFailed,
+		OperationCompensated, OperationCompensationFailed,
+	),
 }
 
 var attemptTransitions = map[AttemptState]map[AttemptState]struct{}{

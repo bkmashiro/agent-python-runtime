@@ -71,7 +71,7 @@ func TestSQLiteLedgerRejectsNewerSchemaAndUsesPrivateFileMode(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode=%v", info.Mode().Perm())
 	}
-	if _, err := ledger.db.Exec(`INSERT INTO schema_migrations(version,applied_at_ns,schema_digest) VALUES(3,?,?)`, time.Now().UTC().UnixNano(), testDigest("future-schema")); err != nil {
+	if _, err := ledger.db.Exec(`INSERT INTO schema_migrations(version,applied_at_ns,schema_digest) VALUES(4,?,?)`, time.Now().UTC().UnixNano(), testDigest("future-schema")); err != nil {
 		t.Fatal(err)
 	}
 	if err := ledger.Close(); err != nil {
@@ -89,7 +89,7 @@ func TestSQLiteLedgerMigratesV1ZeroUpdateTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedSQLiteLedger(t, ledger)
-	if _, err := ledger.db.Exec(`UPDATE operations SET updated_at_ns=0; UPDATE attempts SET updated_at_ns=0; DELETE FROM schema_migrations WHERE version=2`); err != nil {
+	if _, err := ledger.db.Exec(`UPDATE operations SET updated_at_ns=0; UPDATE attempts SET updated_at_ns=0; DELETE FROM schema_migrations WHERE version>=2; ALTER TABLE attempts DROP COLUMN reconciliation_digest`); err != nil {
 		t.Fatal(err)
 	}
 	if err := ledger.Close(); err != nil {
@@ -109,8 +109,57 @@ func TestSQLiteLedgerMigratesV1ZeroUpdateTimestamps(t *testing.T) {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 	var version int
-	if err := reopened.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 2 {
+	if err := reopened.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 3 {
 		t.Fatalf("version=%d err=%v", version, err)
+	}
+}
+
+func TestSQLiteLedgerPersistsReconciliationObservationAcrossReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "reconcile.db")
+	ledger, err := OpenSQLiteLedger(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(40, 0).UTC()
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
+	tx, err := coordinator.Begin(BeginRequest{RunID: "run-sql-reconcile", CatalogDigest: testDigest("catalog"), Mode: TransactionModeDirect})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err := coordinator.Propose(ProposeRequest{TransactionID: tx.ID, ToolID: "demo.read", HandlerVersion: "v1", EffectClass: EffectReadOnly, Policy: PolicyAutoCommit, PolicyVersion: "policy-v1", ArgumentDigest: testDigest("args")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatch, err := coordinator.BeginDispatch(DispatchRequest{OperationID: op.ID, Kind: AttemptApply, Ordinal: 1, LeaseDuration: time.Minute, ProviderRequestDigest: testDigest("provider")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coordinator.CompleteDispatch(CompleteDispatchRequest{OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchAmbiguous}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenSQLiteLedger(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	now = time.Unix(41, 0).UTC()
+	recovered := NewCoordinator(reopened, &sequenceIDs{}, func() time.Time { return now }, nil)
+	completion, err := recovered.ReconcileDispatch(ReconcileDispatchRequest{OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded, ObservationDigest: testDigest("readback")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completion.Attempt.ReconciliationDigest != testDigest("readback") || completion.Transaction.State != TransactionCommitted {
+		t.Fatalf("completion=%+v", completion)
+	}
+	evidence, err := BuildTransactionEvidence(reopened, tx.ID, time.Unix(42, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence.Metrics.ReconciledAttempts != 1 || evidence.Attempts[0].ReconciliationDigest != testDigest("readback") {
+		t.Fatalf("evidence=%+v", evidence)
 	}
 }
 

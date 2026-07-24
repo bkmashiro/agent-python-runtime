@@ -90,6 +90,7 @@ type Attempt struct {
 	LeaseID                string
 	LeaseExpiresAt         time.Time
 	ProviderRequestDigest  string
+	ReconciliationDigest   string
 	Version                uint64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time

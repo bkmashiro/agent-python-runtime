@@ -27,6 +27,7 @@ type coordinatorLedger interface {
 	createAttempt(Attempt) error
 	findAttemptByProviderRequest(string, string) (Attempt, error)
 	transitionAttempt(string, uint64, AttemptState, AttemptState, time.Time) (Attempt, error)
+	reconcileAttempt(string, uint64, AttemptState, string, time.Time) (Attempt, error)
 	transitionTransaction(string, uint64, TransactionState, TransactionState, time.Time) (Transaction, error)
 	transitionOperation(string, uint64, OperationState, OperationState, time.Time) (Operation, error)
 }
@@ -354,6 +355,93 @@ func (coordinator *Coordinator) CompleteDispatch(request CompleteDispatchRequest
 		}
 	}
 	return DispatchCompletion{Transaction: transaction, Operation: operation, Attempt: attempt}, nil
+}
+
+type ReconcileDispatchRequest struct {
+	OperationID       string
+	AttemptID         string
+	Outcome           DispatchOutcome
+	ObservationDigest string
+}
+
+func (coordinator *Coordinator) ReconcileDispatch(request ReconcileDispatchRequest) (DispatchCompletion, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if !validIdentifier(request.OperationID) || !validIdentifier(request.AttemptID) || !digestPattern.MatchString(request.ObservationDigest) ||
+		(request.Outcome != DispatchSucceeded && request.Outcome != DispatchFailed) {
+		return DispatchCompletion{}, ErrInvalidInput
+	}
+	operation, err := coordinator.ledger.GetOperation(request.OperationID)
+	if err != nil {
+		return DispatchCompletion{}, err
+	}
+	attempt, err := coordinator.ledger.GetAttempt(request.AttemptID)
+	if err != nil || attempt.OperationID != operation.ID || attempt.TransactionID != operation.TransactionID {
+		return DispatchCompletion{}, ErrNotFound
+	}
+	transaction, err := coordinator.ledger.GetTransaction(operation.TransactionID)
+	if err != nil {
+		return DispatchCompletion{}, err
+	}
+	attemptTarget, operationTarget, ok := completionStates(attempt.Kind, request.Outcome)
+	if !ok {
+		return DispatchCompletion{}, ErrInvalidInput
+	}
+	now := coordinator.now().UTC()
+	if attempt.State == AttemptAmbiguous {
+		attempt, err = coordinator.ledger.reconcileAttempt(attempt.ID, attempt.Version, attemptTarget, request.ObservationDigest, now)
+		if err != nil {
+			return DispatchCompletion{}, err
+		}
+	} else if attempt.State != attemptTarget || attempt.ReconciliationDigest != request.ObservationDigest {
+		return DispatchCompletion{}, ErrConflict
+	}
+	if operation.State == OperationReconciliationRequired {
+		operation, err = coordinator.ledger.transitionOperation(operation.ID, operation.Version, OperationReconciliationRequired, operationTarget, now)
+		if err != nil {
+			return DispatchCompletion{}, err
+		}
+	} else if operation.State != operationTarget {
+		return DispatchCompletion{}, ErrConflict
+	}
+	transactionTarget := reconciliationTransactionTarget(transaction.Mode, attempt.Kind, request.Outcome)
+	if transaction.State == TransactionReconciliationRequired {
+		transaction, err = coordinator.ledger.transitionTransaction(transaction.ID, transaction.Version, TransactionReconciliationRequired, transactionTarget, now)
+		if err != nil {
+			return DispatchCompletion{}, err
+		}
+	} else if transaction.State != transactionTarget {
+		return DispatchCompletion{}, ErrConflict
+	}
+	return DispatchCompletion{Transaction: transaction, Operation: operation, Attempt: attempt}, nil
+}
+
+func reconciliationTransactionTarget(mode TransactionMode, kind AttemptKind, outcome DispatchOutcome) TransactionState {
+	if mode == TransactionModeDirect {
+		if outcome == DispatchSucceeded {
+			return TransactionCommitted
+		}
+		return TransactionRejected
+	}
+	switch kind {
+	case AttemptApply:
+		if outcome == DispatchSucceeded {
+			return TransactionOpen
+		}
+		return TransactionAborting
+	case AttemptRollback:
+		if outcome == DispatchSucceeded {
+			return TransactionRollingBack
+		}
+		return TransactionPartiallyReverted
+	case AttemptCompensate:
+		if outcome == DispatchSucceeded {
+			return TransactionCompensating
+		}
+		return TransactionPartiallyCompensated
+	default:
+		return TransactionReconciliationRequired
+	}
 }
 
 func transactionCompletionTarget(value Transaction, outcome DispatchOutcome) TransactionState {

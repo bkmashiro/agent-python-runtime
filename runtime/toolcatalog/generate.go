@@ -40,9 +40,37 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 	stubHeader := "from __future__ import annotations\n\nimport json as _json\nfrom typing import Any, Literal, NotRequired, TypedDict\n\n" + constants
 	runtimeBuilder.WriteString(runtimeHeader)
 	stubBuilder.WriteString(stubHeader)
-	runtimeBuilder.WriteString("_UNSET = object()\n\n")
+	runtimeBuilder.WriteString("_UNSET = object()\n_CALL_COUNTER = 0\n\n")
+	runtimeBuilder.WriteString("class HostToolError(RuntimeError):\n")
+	runtimeBuilder.WriteString("    def __init__(self, code: str, message: str) -> None:\n")
+	runtimeBuilder.WriteString("        self.code = str(code)[:128]\n")
+	runtimeBuilder.WriteString("        super().__init__(str(message)[:4096])\n\n")
 	runtimeBuilder.WriteString("def _call(tool_id: str, catalog_digest: str, handler_version: str, arguments: dict[str, Any]) -> Any:\n")
-	runtimeBuilder.WriteString("    raise RuntimeError(\"Host tool binding is not installed\")\n\n")
+	runtimeBuilder.WriteString("    global _CALL_COUNTER\n")
+	runtimeBuilder.WriteString("    _CALL_COUNTER += 1\n")
+	runtimeBuilder.WriteString("    _call_id = f\"typed:{_CALL_COUNTER}\"\n")
+	runtimeBuilder.WriteString("    _envelope = {\"call_id\": _call_id, \"capability\": tool_id, \"catalog_digest\": catalog_digest, \"handler_version\": handler_version, \"arguments\": arguments}\n")
+	runtimeBuilder.WriteString("    from _agent_runtime_host import call as _host_call\n")
+	runtimeBuilder.WriteString("    try:\n")
+	runtimeBuilder.WriteString("        _payload = _host_call(_json.dumps(_envelope, ensure_ascii=False, separators=(\",\", \":\"), allow_nan=False))\n")
+	runtimeBuilder.WriteString("        if not isinstance(_payload, str):\n            raise ValueError(\"non-string response\")\n")
+	runtimeBuilder.WriteString("        _response = _json.loads(_payload)\n")
+	runtimeBuilder.WriteString("    except HostToolError:\n        raise\n")
+	runtimeBuilder.WriteString("    except Exception as _error:\n        raise HostToolError(\"protocol_error\", \"Host tool response is invalid\") from _error\n")
+	runtimeBuilder.WriteString("    if not isinstance(_response, dict) or set(_response) != {\"call_id\", \"status\", \"result\", \"error\"} or _response[\"call_id\"] != _call_id:\n")
+	runtimeBuilder.WriteString("        raise HostToolError(\"protocol_error\", \"Host tool response envelope is invalid\")\n")
+	runtimeBuilder.WriteString("    if _response[\"status\"] not in {\"ok\", \"denied\", \"error\", \"timeout\"}:\n")
+	runtimeBuilder.WriteString("        raise HostToolError(\"protocol_error\", \"Host tool response status is invalid\")\n")
+	runtimeBuilder.WriteString("    if _response[\"status\"] != \"ok\":\n")
+	runtimeBuilder.WriteString("        _error = _response[\"error\"]\n")
+	runtimeBuilder.WriteString("        if not isinstance(_error, dict) or set(_error) != {\"code\", \"message\"}:\n            raise HostToolError(\"protocol_error\", \"Host tool error envelope is invalid\")\n")
+	runtimeBuilder.WriteString("        _code, _message = _error[\"code\"], _error[\"message\"]\n")
+	runtimeBuilder.WriteString("        if not isinstance(_code, str) or not _code or len(_code) > 128 or not isinstance(_message, str) or len(_message) > 4096:\n")
+	runtimeBuilder.WriteString("            raise HostToolError(\"protocol_error\", \"Host tool error fields are invalid\")\n")
+	runtimeBuilder.WriteString("        raise HostToolError(_code, _message)\n")
+	runtimeBuilder.WriteString("    if _response[\"error\"] is not None:\n        raise HostToolError(\"protocol_error\", \"Successful Host tool response contains an error\")\n")
+	runtimeBuilder.WriteString("    return _response[\"result\"]\n\n")
+	stubBuilder.WriteString("class HostToolError(RuntimeError):\n    code: str\n\n")
 	stubBuilder.WriteString("def _call(tool_id: str, catalog_digest: str, handler_version: str, arguments: dict[str, Any]) -> Any: ...\n\n")
 	metadataSource := "_TOOL_METADATA = _json.loads(" + metadataLiteral + ")\n\n"
 	runtimeBuilder.WriteString(metadataSource)
@@ -104,7 +132,7 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 		stubBuilder.WriteString("# " + tool.ToolID + " | catalog=" + snapshot.digest + " | handler=" + tool.HandlerVersion + " | projection=" + string(tool.Projection) + " | effect=" + tool.EffectClass + " | policy=" + tool.Policy + " | max_calls=" + fmt.Sprintf("%d", tool.MaxCalls) + " | errors=capability_denied,stale_catalog,handler_version_mismatch,invalid_arguments,call_budget_exceeded,result_schema_mismatch\n\n")
 		emitted++
 	}
-	if emitted == 0 {
+	if emitted == 0 && len(snapshot.tools) > 0 {
 		return "", "", errors.New("snapshot has no Python-projectable granted tools")
 	}
 	runtimeResult, stubResult := runtimeBuilder.String(), stubBuilder.String()
@@ -112,6 +140,25 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 		return "", "", errors.New("generated Python surface exceeds bounded size")
 	}
 	return runtimeResult, stubResult, nil
+}
+
+func (snapshot Snapshot) GenerateTrustedPrepare() (string, error) {
+	runtimeSource, _, err := snapshot.GeneratePython()
+	if err != nil {
+		return "", err
+	}
+	quoted := strconv.Quote(runtimeSource)
+	prepare := "import sys as _host_sys\n" +
+		"import types as _host_types\n" +
+		"_host_module = _host_types.ModuleType(\"host_tools\")\n" +
+		"_host_module.__package__ = \"\"\n" +
+		"exec(compile(" + quoted + ", \"<host_tools>\", \"exec\"), _host_module.__dict__)\n" +
+		"_host_sys.modules[\"host_tools\"] = _host_module\n" +
+		"del _host_module, _host_types, _host_sys\n"
+	if len(prepare) > maxGeneratedRuntimeBytes+4096 {
+		return "", errors.New("trusted Python preparation exceeds bounded size")
+	}
+	return prepare, nil
 }
 
 func pythonSignature(tool Tool, optionalDefault string) string {

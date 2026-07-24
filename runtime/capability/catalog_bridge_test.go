@@ -66,6 +66,27 @@ func TestBuildRegistryFromSnapshotBindsSchemasAuthorityAndBudgets(t *testing.T) 
 	}
 }
 
+func TestBuildRegistryFromEmptySnapshotInstallsAuthoritativeEmptyCatalog(t *testing.T) {
+	snapshot, err := toolcatalog.BuildSnapshot(nil, nil, toolcatalog.BuildOptions{Revision: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, grants, err := capability.BuildRegistryFromSnapshot(snapshot, map[string]capability.Handler{})
+	if err != nil || len(grants) != 0 {
+		t.Fatalf("empty registry err=%v grants=%+v", err, grants)
+	}
+	if _, err := capability.NewBroker(capability.Config{RunIdentity: "run-empty", CatalogDigest: snapshot.Digest(), Registry: registry}, capability.FetcherFunc(func(context.Context, capability.ResolvedRequest, uint32) (capability.FetchOutput, error) {
+		return capability.FetchOutput{}, nil
+	})); err != nil {
+		t.Fatalf("authoritative empty catalog was not installable: %v", err)
+	}
+	if _, err := capability.NewBroker(capability.Config{RunIdentity: "run-empty-stale", CatalogDigest: digestForTest("stale-empty"), Registry: registry}, capability.FetcherFunc(func(context.Context, capability.ResolvedRequest, uint32) (capability.FetchOutput, error) {
+		return capability.FetchOutput{}, nil
+	})); err == nil {
+		t.Fatal("empty registry accepted a different catalog digest")
+	}
+}
+
 func TestBuildRegistryFromSnapshotRejectsStaleOrExtraHandlers(t *testing.T) {
 	snapshot, err := toolcatalog.BuildSnapshot([]toolcatalog.DiscoveredTool{{
 		ToolID: "demo.echo", ServerID: "demo", Name: "echo", HandlerVersion: "v1",

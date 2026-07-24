@@ -102,7 +102,7 @@ func BuildRegistryFromSnapshot(snapshot toolcatalog.Snapshot, handlers map[strin
 		return nil, nil, errors.New("tool catalog snapshot is empty or invalid")
 	}
 	tools := snapshot.Tools()
-	if len(tools) == 0 || len(handlers) != len(tools) {
+	if len(handlers) != len(tools) {
 		return nil, nil, errors.New("handler set does not exactly match the frozen tool catalog")
 	}
 	registry := NewRegistry()

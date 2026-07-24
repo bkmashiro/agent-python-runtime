@@ -91,13 +91,18 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 	}
 	config.Grants = cloneGrants(config.Grants)
 	config.ToolGrants = cloneToolGrants(config.ToolGrants)
-	if len(config.ToolGrants) > 0 {
-		if config.Registry == nil || config.Binder == nil || !catalogDigestPattern.MatchString(config.CatalogDigest) {
-			return nil, errors.New("typed tool grants require a registry, transaction binder, and bounded catalog digest")
+	if config.Registry != nil {
+		if !catalogDigestPattern.MatchString(config.CatalogDigest) {
+			return nil, errors.New("typed registry requires a bounded catalog digest")
 		}
 		config.Registry = config.Registry.snapshot()
 		if config.Registry.catalogDigest != "" && config.Registry.catalogDigest != config.CatalogDigest {
 			return nil, errors.New("typed registry catalog digest does not match Broker catalog binding")
+		}
+	}
+	if len(config.ToolGrants) > 0 {
+		if config.Registry == nil || config.Binder == nil {
+			return nil, errors.New("typed tool grants require a registry and transaction binder")
 		}
 		for name, grant := range config.ToolGrants {
 			if name != grant.ToolID || !validIdentifier(grant.ToolID) ||

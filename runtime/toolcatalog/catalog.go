@@ -117,7 +117,7 @@ func (snapshot Snapshot) Tools() []Tool {
 }
 
 func BuildSnapshot(discovered []DiscoveredTool, grants map[string]Grant, options BuildOptions) (Snapshot, error) {
-	if options.Revision == 0 || len(discovered) == 0 || len(discovered) > maxTools {
+	if options.Revision == 0 || len(discovered) > maxTools {
 		return Snapshot{}, errors.New("catalog revision and discovered tool count are outside bounds")
 	}
 	seenIDs := make(map[string]struct{}, len(discovered))

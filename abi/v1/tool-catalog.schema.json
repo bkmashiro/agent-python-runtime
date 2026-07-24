@@ -107,7 +107,7 @@
         "type": "object"
       },
       "maxItems": 128,
-      "minItems": 1,
+      "minItems": 0,
       "type": "array"
     }
   },

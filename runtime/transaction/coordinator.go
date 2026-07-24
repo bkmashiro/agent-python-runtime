@@ -28,9 +28,13 @@ type coordinatorLedger interface {
 	createAttempt(Attempt) error
 	findAttemptByProviderRequest(string, string) (Attempt, error)
 	transitionAttempt(string, uint64, AttemptState, AttemptState, time.Time) (Attempt, error)
+	completeAttempt(string, uint64, AttemptState, string, time.Time) (Attempt, error)
 	reconcileAttempt(string, uint64, AttemptState, string, time.Time) (Attempt, error)
 	transitionTransaction(string, uint64, TransactionState, TransactionState, time.Time) (Transaction, error)
 	transitionOperation(string, uint64, OperationState, OperationState, time.Time) (Operation, error)
+	registerApproval(approvalRecord) error
+	findApproval(string) (approvalRecord, error)
+	consumeApprovalAndAuthorize(string, time.Time) (Operation, approvalRecord, error)
 }
 
 type Coordinator struct {
@@ -82,6 +86,25 @@ type AuthorityVerifier interface {
 	Consume(token string) error
 }
 
+type ApprovalEvidence struct {
+	AuthorityID    string
+	TransactionID  string
+	OperationID    string
+	ManifestDigest string
+	Source         CommitSource
+	SourceRunID    string
+	ActorID        string
+	PhaseGrantID   string
+	ExpiresAt      time.Time
+	RegisteredAt   time.Time
+	ConsumedAt     time.Time
+}
+
+type approvalRecord struct {
+	ApprovalEvidence
+	TokenDigest string
+}
+
 type CommitCredential struct {
 	Token string
 }
@@ -97,6 +120,12 @@ func (coordinator *Coordinator) InspectTransaction(id string) (Transaction, erro
 		return Transaction{}, ErrInvalidInput
 	}
 	return coordinator.ledger.GetTransaction(id)
+}
+
+func (coordinator *Coordinator) InspectAttempt(id string) (Attempt, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	return coordinator.ledger.GetAttempt(id)
 }
 
 func (coordinator *Coordinator) InspectOperation(id string) (Operation, error) {
@@ -250,9 +279,10 @@ const (
 )
 
 type CompleteDispatchRequest struct {
-	OperationID string
-	AttemptID   string
-	Outcome     DispatchOutcome
+	OperationID           string
+	AttemptID             string
+	Outcome               DispatchOutcome
+	ProviderReceiptDigest string
 }
 
 type DispatchCompletion struct {
@@ -525,6 +555,18 @@ func (coordinator *Coordinator) completeDispatchLocked(request CompleteDispatchR
 	if operation.State != attempt.ExpectedOperationState && operation.State != operationActive && operation.State != operationTarget {
 		return DispatchCompletion{}, ErrConflict
 	}
+	if request.ProviderReceiptDigest != "" && !digestPattern.MatchString(request.ProviderReceiptDigest) {
+		return DispatchCompletion{}, ErrInvalidInput
+	}
+	if request.Outcome != DispatchSucceeded && request.ProviderReceiptDigest != "" {
+		return DispatchCompletion{}, ErrInvalidInput
+	}
+	if request.Outcome == DispatchSucceeded && operation.EffectClass == EffectIrreversible {
+		return DispatchCompletion{}, ErrAuthorityDenied
+	}
+	if attempt.State == attemptTarget && attempt.ProviderReceiptDigest != request.ProviderReceiptDigest {
+		return DispatchCompletion{}, ErrConflict
+	}
 	transactionTarget := transactionCompletionTarget(transaction, attempt.Kind, request.Outcome)
 	if transactionTarget != "" && transaction.State != transactionTarget {
 		if err := ValidateTransactionTransition(transaction.State, transactionTarget); err != nil {
@@ -533,7 +575,7 @@ func (coordinator *Coordinator) completeDispatchLocked(request CompleteDispatchR
 	}
 	now := coordinator.now().UTC()
 	if attempt.State == AttemptDispatching {
-		attempt, err = coordinator.ledger.transitionAttempt(attempt.ID, attempt.Version, AttemptDispatching, attemptTarget, now)
+		attempt, err = coordinator.ledger.completeAttempt(attempt.ID, attempt.Version, attemptTarget, request.ProviderReceiptDigest, now)
 		if err != nil {
 			return DispatchCompletion{}, err
 		}
@@ -580,6 +622,9 @@ func (coordinator *Coordinator) ReconcileDispatch(request ReconcileDispatchReque
 	operation, err := coordinator.ledger.GetOperation(request.OperationID)
 	if err != nil {
 		return DispatchCompletion{}, err
+	}
+	if operation.EffectClass == EffectIrreversible && request.Outcome == DispatchSucceeded {
+		return DispatchCompletion{}, ErrAuthorityDenied
 	}
 	attempt, err := coordinator.ledger.GetAttempt(request.AttemptID)
 	if err != nil || attempt.OperationID != operation.ID || attempt.TransactionID != operation.TransactionID {
@@ -738,65 +783,127 @@ func dispatchOutcomeMatchesAttempt(outcome DispatchOutcome, state AttemptState) 
 		outcome == DispatchAmbiguous && state == AttemptAmbiguous
 }
 
-func (coordinator *Coordinator) Authorize(credential CommitCredential) (Operation, error) {
+func (coordinator *Coordinator) RegisterApproval(credential CommitCredential, claims AuthorityClaims) (ApprovalEvidence, error) {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
-	if coordinator.authority == nil || credential.Token == "" {
-		return Operation{}, ErrAuthorityDenied
+	if len(credential.Token) < 32 || len(credential.Token) > 512 || claims.Consumed ||
+		!validIdentifier(claims.AuthorityID) || !validIdentifier(claims.ActorID) ||
+		!validIdentifier(claims.TransactionID) || !validIdentifier(claims.OperationID) ||
+		!digestPattern.MatchString(claims.ManifestDigest) {
+		return ApprovalEvidence{}, ErrAuthorityDenied
 	}
-	claims, err := coordinator.authority.Verify(credential.Token)
-	if err != nil || !validIdentifier(claims.AuthorityID) || !validIdentifier(claims.ActorID) ||
-		!validIdentifier(claims.TransactionID) || !validIdentifier(claims.OperationID) {
-		return Operation{}, ErrAuthorityDenied
+	now := coordinator.now().UTC()
+	tokenDigest := approvalTokenDigest(credential.Token)
+	if prior, findErr := coordinator.ledger.findApproval(tokenDigest); findErr == nil {
+		if !approvalRecordMatchesClaims(prior, claims) {
+			return ApprovalEvidence{}, ErrConflict
+		}
+		return prior.ApprovalEvidence, nil
+	} else if !errors.Is(findErr, ErrNotFound) {
+		return ApprovalEvidence{}, findErr
+	}
+	if !claims.ExpiresAt.After(now) {
+		return ApprovalEvidence{}, ErrExpired
 	}
 	transaction, err := coordinator.ledger.GetTransaction(claims.TransactionID)
 	if err != nil {
-		return Operation{}, ErrAuthorityDenied
+		return ApprovalEvidence{}, ErrAuthorityDenied
 	}
 	operation, err := coordinator.ledger.GetOperation(claims.OperationID)
 	if err != nil || operation.TransactionID != transaction.ID {
-		return Operation{}, ErrAuthorityDenied
+		return ApprovalEvidence{}, ErrAuthorityDenied
 	}
-	if claims.Consumed {
-		if operation.State == OperationReady {
-			return operation, nil
-		}
-		return Operation{}, ErrAuthorityDenied
+	if claims.ManifestDigest != operation.ManifestDigest {
+		return ApprovalEvidence{}, ErrDigestMismatch
 	}
-	if operation.State == OperationReady {
-		return Operation{}, ErrAlreadyAuthorized
-	}
-	if claims.ManifestDigest != operation.ManifestDigest || !digestPattern.MatchString(claims.ManifestDigest) {
-		return Operation{}, ErrDigestMismatch
-	}
-	now := coordinator.now().UTC()
-	if !claims.ExpiresAt.After(now) {
-		return Operation{}, ErrExpired
-	}
-
 	switch operation.State {
 	case OperationAwaitingAgentCommit:
-		if claims.Source != CommitSourceAgent || !validIdentifier(claims.SourceRunID) ||
-			!validIdentifier(claims.PhaseGrantID) {
-			return Operation{}, ErrAuthorityDenied
+		if claims.Source != CommitSourceAgent || !validIdentifier(claims.SourceRunID) || !validIdentifier(claims.PhaseGrantID) {
+			return ApprovalEvidence{}, ErrAuthorityDenied
 		}
 		if claims.SourceRunID == transaction.RunID {
-			return Operation{}, ErrSameRunCommit
+			return ApprovalEvidence{}, ErrSameRunCommit
 		}
 	case OperationAwaitingUserApproval:
 		if claims.Source != CommitSourceUser || claims.SourceRunID != "" || claims.PhaseGrantID != "" {
-			return Operation{}, ErrAuthorityDenied
+			return ApprovalEvidence{}, ErrAuthorityDenied
 		}
 	default:
-		return Operation{}, ErrAuthorityDenied
+		return ApprovalEvidence{}, ErrAuthorityDenied
 	}
+	evidence := ApprovalEvidence{
+		AuthorityID: claims.AuthorityID, TransactionID: claims.TransactionID, OperationID: claims.OperationID,
+		ManifestDigest: claims.ManifestDigest, Source: claims.Source, SourceRunID: claims.SourceRunID,
+		ActorID: claims.ActorID, PhaseGrantID: claims.PhaseGrantID, ExpiresAt: claims.ExpiresAt.UTC(), RegisteredAt: now,
+	}
+	record := approvalRecord{ApprovalEvidence: evidence, TokenDigest: tokenDigest}
+	if err := coordinator.ledger.registerApproval(record); err != nil {
+		return ApprovalEvidence{}, err
+	}
+	return evidence, nil
+}
 
-	if err := coordinator.authority.Consume(credential.Token); err != nil {
+func (coordinator *Coordinator) Authorize(credential CommitCredential) (Operation, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if credential.Token == "" {
 		return Operation{}, ErrAuthorityDenied
 	}
-	return coordinator.ledger.transitionOperation(
-		operation.ID, operation.Version, operation.State, OperationReady, now,
-	)
+	tokenDigest := approvalTokenDigest(credential.Token)
+	if _, err := coordinator.ledger.findApproval(tokenDigest); err == nil {
+		operation, _, consumeErr := coordinator.ledger.consumeApprovalAndAuthorize(tokenDigest, coordinator.now().UTC())
+		return operation, consumeErr
+	} else if !errors.Is(err, ErrNotFound) {
+		return Operation{}, err
+	}
+	return Operation{}, ErrAuthorityDenied
+}
+
+func approvalTokenDigest(token string) string {
+	sum := sha256.Sum256([]byte("approval-token\x00" + token))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func approvalExpectedState(source CommitSource) OperationState {
+	if source == CommitSourceAgent {
+		return OperationAwaitingAgentCommit
+	}
+	if source == CommitSourceUser {
+		return OperationAwaitingUserApproval
+	}
+	return ""
+}
+
+func validateApprovalRecord(record approvalRecord) error {
+	if !validIdentifier(record.AuthorityID) || !validIdentifier(record.TransactionID) ||
+		!validIdentifier(record.OperationID) || !validIdentifier(record.ActorID) ||
+		!digestPattern.MatchString(record.ManifestDigest) || !digestPattern.MatchString(record.TokenDigest) ||
+		record.RegisteredAt.IsZero() || !record.ExpiresAt.After(record.RegisteredAt) || !record.ConsumedAt.IsZero() ||
+		approvalExpectedState(record.Source) == "" {
+		return ErrInvalidInput
+	}
+	if record.Source == CommitSourceUser && (record.SourceRunID != "" || record.PhaseGrantID != "") {
+		return ErrInvalidInput
+	}
+	if record.Source == CommitSourceAgent && (!validIdentifier(record.SourceRunID) || !validIdentifier(record.PhaseGrantID)) {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
+func approvalRecordMatchesClaims(record approvalRecord, claims AuthorityClaims) bool {
+	return record.AuthorityID == claims.AuthorityID && record.TransactionID == claims.TransactionID &&
+		record.OperationID == claims.OperationID && record.ManifestDigest == claims.ManifestDigest && record.Source == claims.Source &&
+		record.SourceRunID == claims.SourceRunID && record.ActorID == claims.ActorID && record.PhaseGrantID == claims.PhaseGrantID &&
+		record.ExpiresAt.Equal(claims.ExpiresAt.UTC()) && !claims.Consumed
+}
+
+func sameApprovalGrant(left, right approvalRecord) bool {
+	return left.TokenDigest == right.TokenDigest && approvalRecordMatchesClaims(left, AuthorityClaims{
+		AuthorityID: right.AuthorityID, TransactionID: right.TransactionID, OperationID: right.OperationID,
+		ManifestDigest: right.ManifestDigest, Source: right.Source, SourceRunID: right.SourceRunID,
+		ActorID: right.ActorID, PhaseGrantID: right.PhaseGrantID, ExpiresAt: right.ExpiresAt,
+	})
 }
 
 func stateForPolicy(policy PolicyOutcome) OperationState {

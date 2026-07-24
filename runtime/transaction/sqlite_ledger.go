@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	sqliteSchemaVersion        = 3
+	sqliteSchemaVersion        = 4
 	sqliteSchemaV1ExpectedHash = "sha256:46d6a0239a4dbf91166ad517810eed112d67cb2d05fe0fb4f0b9ef1294055eec"
 	sqliteSchemaV3ExpectedHash = "sha256:819cf3b5cb29f1d23d7f481d48473a0a6f46eb3ae1f39dff9f30d9a65dd2d708"
+	sqliteSchemaV4ExpectedHash = "sha256:845db336575a9e5d602877aaf40d65e4da9f99bb6422654b143c81871358151c"
 )
 
 var ErrUnsupportedSchema = errors.New("unsupported transaction ledger schema")
@@ -152,6 +153,8 @@ func (ledger *SQLiteLedger) migrate() error {
 	expectedDigest := sqliteSchemaV1ExpectedHash
 	if version == 3 {
 		expectedDigest = sqliteSchemaV3ExpectedHash
+	} else if version == 4 {
+		expectedDigest = sqliteSchemaV4ExpectedHash
 	}
 	if storedDigest != expectedDigest || actualDigest != expectedDigest {
 		return ErrUnsupportedSchema
@@ -180,6 +183,21 @@ func (ledger *SQLiteLedger) migrate() error {
 			return sqliteFailure("record migration v3", err)
 		}
 		version = 3
+	}
+	if version == 3 {
+		for _, statement := range sqliteSchemaV4 {
+			if _, err := tx.Exec(statement); err != nil {
+				return sqliteFailure("apply migration v4", err)
+			}
+		}
+		actualDigest, err = computeSQLiteSchemaDigest(tx)
+		if err != nil || actualDigest != sqliteSchemaV4ExpectedHash {
+			return ErrUnsupportedSchema
+		}
+		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at_ns, schema_digest) VALUES(4, ?, ?)`, time.Now().UTC().UnixNano(), sqliteSchemaV4ExpectedHash); err != nil {
+			return sqliteFailure("record migration v4", err)
+		}
+		version = 4
 	}
 	if version != sqliteSchemaVersion {
 		return ErrUnsupportedSchema
@@ -249,6 +267,25 @@ var sqliteSchemaV1 = []string{
 	`CREATE INDEX attempts_transaction_order ON attempts(transaction_id, operation_id, kind, ordinal, id)`,
 }
 
+var sqliteSchemaV4 = []string{
+	`ALTER TABLE attempts ADD COLUMN provider_receipt_digest TEXT NOT NULL DEFAULT ''`,
+	`CREATE TABLE approvals (
+		authority_id TEXT PRIMARY KEY,
+		token_digest TEXT NOT NULL UNIQUE,
+		transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE RESTRICT,
+		operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE RESTRICT,
+		manifest_digest TEXT NOT NULL,
+		source TEXT NOT NULL,
+		source_run_id TEXT NOT NULL,
+		actor_id TEXT NOT NULL,
+		phase_grant_id TEXT NOT NULL,
+		expires_at_ns INTEGER NOT NULL,
+		registered_at_ns INTEGER NOT NULL,
+		consumed_at_ns INTEGER NOT NULL DEFAULT 0
+	) STRICT`,
+	`CREATE INDEX approvals_transaction_order ON approvals(transaction_id, registered_at_ns, authority_id)`,
+}
+
 func computeSQLiteSchemaDigest(tx *sql.Tx) (string, error) {
 	rows, err := tx.Query(`SELECT type,name,tbl_name,COALESCE(sql,'') FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name`)
 	if err != nil {
@@ -271,7 +308,7 @@ func computeSQLiteSchemaDigest(tx *sql.Tx) (string, error) {
 	if err := rows.Err(); err != nil {
 		return "", sqliteFailure("iterate SQLite schema", err)
 	}
-	if objects != 7 {
+	if objects != 7 && objects != 9 {
 		return "", ErrUnsupportedSchema
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
@@ -432,6 +469,145 @@ func (ledger *SQLiteLedger) transitionOperation(id string, version uint64, from,
 	return value, nil
 }
 
+const approvalSelect = `SELECT authority_id,token_digest,transaction_id,operation_id,manifest_digest,source,source_run_id,actor_id,phase_grant_id,expires_at_ns,registered_at_ns,consumed_at_ns FROM approvals`
+
+func (ledger *SQLiteLedger) registerApproval(record approvalRecord) error {
+	if err := validateApprovalRecord(record); err != nil {
+		return err
+	}
+	tx, err := ledger.db.Begin()
+	if err != nil {
+		return sqliteFailure("begin register approval", err)
+	}
+	defer tx.Rollback()
+	prior, priorErr := scanSQLiteApproval(tx.QueryRow(approvalSelect+` WHERE token_digest=? OR authority_id=? LIMIT 1`, record.TokenDigest, record.AuthorityID))
+	if priorErr == nil {
+		if sameApprovalGrant(prior, record) {
+			return nil
+		}
+		return ErrAlreadyExists
+	}
+	if !errors.Is(priorErr, ErrNotFound) {
+		return priorErr
+	}
+	operation, err := scanSQLiteOperation(tx.QueryRow(operationSelect+` WHERE id=?`, record.OperationID))
+	if err != nil || operation.TransactionID != record.TransactionID || operation.ManifestDigest != record.ManifestDigest || operation.State != approvalExpectedState(record.Source) {
+		return ErrConflict
+	}
+	_, err = tx.Exec(`INSERT INTO approvals(authority_id,token_digest,transaction_id,operation_id,manifest_digest,source,source_run_id,actor_id,phase_grant_id,expires_at_ns,registered_at_ns,consumed_at_ns) VALUES(?,?,?,?,?,?,?,?,?,?,?,0)`,
+		record.AuthorityID, record.TokenDigest, record.TransactionID, record.OperationID, record.ManifestDigest, record.Source,
+		record.SourceRunID, record.ActorID, record.PhaseGrantID, timeNS(record.ExpiresAt), timeNS(record.RegisteredAt))
+	if err != nil {
+		prior, scanErr := scanSQLiteApproval(tx.QueryRow(approvalSelect+` WHERE token_digest=? OR authority_id=? LIMIT 1`, record.TokenDigest, record.AuthorityID))
+		if scanErr == nil && sameApprovalGrant(prior, record) {
+			return nil
+		}
+		return sqliteConstraintOrFailure("register approval", err)
+	}
+	return commitSQLite(tx, "register approval")
+}
+
+func (ledger *SQLiteLedger) findApproval(tokenDigest string) (approvalRecord, error) {
+	if !digestPattern.MatchString(tokenDigest) {
+		return approvalRecord{}, ErrInvalidInput
+	}
+	return scanSQLiteApproval(ledger.db.QueryRow(approvalSelect+` WHERE token_digest=?`, tokenDigest))
+}
+
+func (ledger *SQLiteLedger) ListApprovals(transactionID string) ([]ApprovalEvidence, error) {
+	if !validIdentifier(transactionID) {
+		return nil, ErrInvalidInput
+	}
+	if !sqliteEntityExists(ledger.db, "transactions", transactionID) {
+		return nil, ErrNotFound
+	}
+	rows, err := ledger.db.Query(approvalSelect+` WHERE transaction_id=? ORDER BY registered_at_ns,authority_id`, transactionID)
+	if err != nil {
+		return nil, sqliteFailure("list approvals", err)
+	}
+	defer rows.Close()
+	values := make([]ApprovalEvidence, 0)
+	for rows.Next() {
+		record, err := scanSQLiteApproval(rows)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, record.ApprovalEvidence)
+	}
+	return values, sqliteFailure("iterate approvals", rows.Err())
+}
+
+func (ledger *SQLiteLedger) consumeApprovalAndAuthorize(tokenDigest string, observedAt time.Time) (Operation, approvalRecord, error) {
+	if !digestPattern.MatchString(tokenDigest) || observedAt.IsZero() {
+		return Operation{}, approvalRecord{}, ErrInvalidInput
+	}
+	tx, err := ledger.db.Begin()
+	if err != nil {
+		return Operation{}, approvalRecord{}, sqliteFailure("begin consume approval", err)
+	}
+	defer tx.Rollback()
+	record, err := scanSQLiteApproval(tx.QueryRow(approvalSelect+` WHERE token_digest=?`, tokenDigest))
+	if err != nil {
+		return Operation{}, approvalRecord{}, err
+	}
+	operation, err := scanSQLiteOperation(tx.QueryRow(operationSelect+` WHERE id=?`, record.OperationID))
+	if err != nil || operation.TransactionID != record.TransactionID || operation.ManifestDigest != record.ManifestDigest {
+		return Operation{}, approvalRecord{}, ErrConflict
+	}
+	if !record.ConsumedAt.IsZero() {
+		if operation.State != OperationReady {
+			return Operation{}, approvalRecord{}, ErrConflict
+		}
+		return operation, record, nil
+	}
+	if !record.ExpiresAt.After(observedAt) {
+		return Operation{}, approvalRecord{}, ErrExpired
+	}
+	from := approvalExpectedState(record.Source)
+	if operation.State != from || ValidateOperationTransition(from, OperationReady) != nil {
+		return Operation{}, approvalRecord{}, ErrConflict
+	}
+	result, err := tx.Exec(`UPDATE approvals SET consumed_at_ns=? WHERE authority_id=? AND consumed_at_ns=0`, timeNS(observedAt), record.AuthorityID)
+	if err != nil {
+		return Operation{}, approvalRecord{}, sqliteFailure("consume approval", err)
+	}
+	if err := requireSQLiteUpdate(tx, result, "approvals", record.AuthorityID); err != nil {
+		return Operation{}, approvalRecord{}, err
+	}
+	result, err = tx.Exec(`UPDATE operations SET state=?,version=version+1,updated_at_ns=? WHERE id=? AND version=? AND state=?`, OperationReady, timeNS(observedAt), operation.ID, operation.Version, from)
+	if err != nil {
+		return Operation{}, approvalRecord{}, sqliteFailure("authorize operation", err)
+	}
+	if err := requireSQLiteUpdate(tx, result, "operations", operation.ID); err != nil {
+		return Operation{}, approvalRecord{}, err
+	}
+	operation, err = scanSQLiteOperation(tx.QueryRow(operationSelect+` WHERE id=?`, operation.ID))
+	if err != nil {
+		return Operation{}, approvalRecord{}, err
+	}
+	if err := appendSQLiteTransition(tx, operation.TransactionID, "operation", operation.ID, string(from), string(OperationReady), observedAt); err != nil {
+		return Operation{}, approvalRecord{}, err
+	}
+	record.ConsumedAt = observedAt.UTC()
+	if err := commitSQLite(tx, "consume approval"); err != nil {
+		return Operation{}, approvalRecord{}, err
+	}
+	return operation, record, nil
+}
+
+func scanSQLiteApproval(scanner sqliteScanner) (approvalRecord, error) {
+	var record approvalRecord
+	var source string
+	var expiresAt, registeredAt, consumedAt int64
+	if err := scanner.Scan(&record.AuthorityID, &record.TokenDigest, &record.TransactionID, &record.OperationID, &record.ManifestDigest,
+		&source, &record.SourceRunID, &record.ActorID, &record.PhaseGrantID, &expiresAt, &registeredAt, &consumedAt); err != nil {
+		return approvalRecord{}, sqliteScanFailure("approval", err)
+	}
+	record.Source = CommitSource(source)
+	record.ExpiresAt, record.RegisteredAt, record.ConsumedAt = timeFromNS(expiresAt), timeFromNS(registeredAt), timeFromNS(consumedAt)
+	return record, nil
+}
+
 func (ledger *SQLiteLedger) createAttempt(value Attempt) error {
 	if !validIdentifier(value.ID) || !validIdentifier(value.TransactionID) || !validIdentifier(value.OperationID) ||
 		!validIdentifier(value.LeaseID) || value.Ordinal == 0 || value.State != AttemptLeased || !validAttemptKind(value.Kind) ||
@@ -472,7 +648,7 @@ func (ledger *SQLiteLedger) createAttempt(value Attempt) error {
 	return commitSQLite(tx, "create attempt")
 }
 
-const attemptSelect = `SELECT id,transaction_id,operation_id,kind,ordinal,state,expected_operation_state,lease_id,lease_expires_at_ns,provider_request_digest,reconciliation_digest,version,created_at_ns,updated_at_ns FROM attempts`
+const attemptSelect = `SELECT id,transaction_id,operation_id,kind,ordinal,state,expected_operation_state,lease_id,lease_expires_at_ns,provider_request_digest,provider_receipt_digest,reconciliation_digest,version,created_at_ns,updated_at_ns FROM attempts`
 
 func (ledger *SQLiteLedger) GetAttempt(id string) (Attempt, error) {
 	if !validIdentifier(id) {
@@ -588,6 +764,49 @@ func (ledger *SQLiteLedger) transitionAttempt(id string, version uint64, from, t
 	return value, nil
 }
 
+func (ledger *SQLiteLedger) completeAttempt(id string, version uint64, target AttemptState, receiptDigest string, observedAt time.Time) (Attempt, error) {
+	if !validIdentifier(id) || observedAt.IsZero() || (receiptDigest != "" && !digestPattern.MatchString(receiptDigest)) ||
+		(target != AttemptSucceeded && target != AttemptFailed && target != AttemptAmbiguous) || (target != AttemptSucceeded && receiptDigest != "") {
+		return Attempt{}, ErrInvalidInput
+	}
+	tx, err := ledger.db.Begin()
+	if err != nil {
+		return Attempt{}, sqliteFailure("begin complete attempt", err)
+	}
+	defer tx.Rollback()
+	current, err := scanSQLiteAttempt(tx.QueryRow(attemptSelect+` WHERE id=?`, id))
+	if err != nil {
+		return Attempt{}, err
+	}
+	if current.State == target && attemptTerminal(target) {
+		if current.ProviderReceiptDigest == receiptDigest {
+			return current, nil
+		}
+		return Attempt{}, ErrConflict
+	}
+	if current.Version != version || current.State != AttemptDispatching || ValidateAttemptTransition(AttemptDispatching, target) != nil {
+		return Attempt{}, ErrConflict
+	}
+	result, err := tx.Exec(`UPDATE attempts SET state=?,provider_receipt_digest=?,version=version+1,updated_at_ns=? WHERE id=? AND version=? AND state=?`, target, receiptDigest, timeNS(observedAt), id, version, AttemptDispatching)
+	if err != nil {
+		return Attempt{}, sqliteFailure("complete attempt", err)
+	}
+	if err := requireSQLiteUpdate(tx, result, "attempts", id); err != nil {
+		return Attempt{}, err
+	}
+	value, err := scanSQLiteAttempt(tx.QueryRow(attemptSelect+` WHERE id=?`, id))
+	if err != nil {
+		return Attempt{}, err
+	}
+	if err := appendSQLiteTransition(tx, value.TransactionID, "attempt", id, string(AttemptDispatching), string(target), observedAt); err != nil {
+		return Attempt{}, err
+	}
+	if err := commitSQLite(tx, "complete attempt"); err != nil {
+		return Attempt{}, err
+	}
+	return value, nil
+}
+
 func (ledger *SQLiteLedger) reconcileAttempt(id string, version uint64, target AttemptState, observationDigest string, observedAt time.Time) (Attempt, error) {
 	if !validIdentifier(id) || !digestPattern.MatchString(observationDigest) || observedAt.IsZero() ||
 		(target != AttemptSucceeded && target != AttemptFailed) {
@@ -638,7 +857,7 @@ func (ledger *SQLiteLedger) Snapshot(transactionID string) (JournalSnapshot, err
 		return JournalSnapshot{}, sqliteFailure("begin journal snapshot", err)
 	}
 	defer tx.Rollback()
-	snapshot := JournalSnapshot{Operations: make([]Operation, 0), Attempts: make([]Attempt, 0), Transitions: make([]Transition, 0)}
+	snapshot := JournalSnapshot{Operations: make([]Operation, 0), Attempts: make([]Attempt, 0), Approvals: make([]ApprovalEvidence, 0), Transitions: make([]Transition, 0)}
 	snapshot.Transaction, err = scanSQLiteTransaction(tx.QueryRow(`SELECT id,run_id,catalog_digest,mode,state,version,created_at_ns,updated_at_ns FROM transactions WHERE id=?`, transactionID))
 	if err != nil {
 		return JournalSnapshot{}, err
@@ -680,6 +899,25 @@ func (ledger *SQLiteLedger) Snapshot(transactionID string) (JournalSnapshot, err
 	}
 	if err := attemptRows.Close(); err != nil {
 		return JournalSnapshot{}, sqliteFailure("close snapshot attempts", err)
+	}
+	approvalRows, err := tx.Query(approvalSelect+` WHERE transaction_id=? ORDER BY registered_at_ns,authority_id`, transactionID)
+	if err != nil {
+		return JournalSnapshot{}, sqliteFailure("snapshot approvals", err)
+	}
+	for approvalRows.Next() {
+		record, scanErr := scanSQLiteApproval(approvalRows)
+		if scanErr != nil {
+			approvalRows.Close()
+			return JournalSnapshot{}, scanErr
+		}
+		snapshot.Approvals = append(snapshot.Approvals, record.ApprovalEvidence)
+	}
+	if err := approvalRows.Err(); err != nil {
+		approvalRows.Close()
+		return JournalSnapshot{}, sqliteFailure("iterate snapshot approvals", err)
+	}
+	if err := approvalRows.Close(); err != nil {
+		return JournalSnapshot{}, sqliteFailure("close snapshot approvals", err)
 	}
 	transitionRows, err := tx.Query(`SELECT sequence,transaction_id,entity_type,entity_id,from_state,to_state,observed_at_ns FROM transitions WHERE transaction_id=? ORDER BY sequence`, transactionID)
 	if err != nil {
@@ -782,7 +1020,7 @@ func scanSQLiteAttempt(scanner sqliteScanner) (Attempt, error) {
 	var value Attempt
 	var lease, created, updated int64
 	if err := scanner.Scan(&value.ID, &value.TransactionID, &value.OperationID, &value.Kind, &value.Ordinal, &value.State,
-		&value.ExpectedOperationState, &value.LeaseID, &lease, &value.ProviderRequestDigest, &value.ReconciliationDigest, &value.Version, &created, &updated); err != nil {
+		&value.ExpectedOperationState, &value.LeaseID, &lease, &value.ProviderRequestDigest, &value.ProviderReceiptDigest, &value.ReconciliationDigest, &value.Version, &created, &updated); err != nil {
 		return Attempt{}, sqliteScanFailure("attempt", err)
 	}
 	value.LeaseExpiresAt, value.CreatedAt, value.UpdatedAt = timeFromNS(lease), timeFromNS(created), timeFromNS(updated)
@@ -813,11 +1051,14 @@ func requireSQLiteUpdate(tx *sql.Tx, result sql.Result, table, id string) error 
 }
 
 func sqliteEntityExists(queryer sqliteQueryer, table, id string) bool {
-	if table != "transactions" && table != "operations" && table != "attempts" {
+	column := "id"
+	if table == "approvals" {
+		column = "authority_id"
+	} else if table != "transactions" && table != "operations" && table != "attempts" {
 		return false
 	}
 	var marker int
-	return queryer.QueryRow(`SELECT 1 FROM `+table+` WHERE id=?`, id).Scan(&marker) == nil
+	return queryer.QueryRow(`SELECT 1 FROM `+table+` WHERE `+column+`=?`, id).Scan(&marker) == nil
 }
 
 func commitSQLite(tx *sql.Tx, operation string) error {

@@ -19,7 +19,7 @@ The runtime is not released or deployed. An explicit manual-only `numpy-core` ar
 - Host-owned time, memory, request, response, and capability bounds;
 - read-only `fetch_many` target aliases, Host-owned credentials, partial results, and receipts;
 - one local/development `apyrun` CLI with separate Host policy and untrusted RunRequest stdin;
-- Host-owned transaction coordinator with an optional private SQLite WAL journal, atomic evidence snapshots, and digest-only `transaction-evidence/v2`;
+- Host-owned transaction coordinator with an optional private SQLite WAL journal, atomic evidence snapshots, durable digest-only approval records, and strict `transaction-evidence/v3` export;
 - `apyrun-ledger -db <absolute.db> -transaction <id>` for strict, bounded operator inspection without exposing raw arguments, headers, tokens, or provider text;
 - fresh instance per request by default; optional never-served single-use prepared candidates, bounded cancellation, and failure recovery;
 - explicit manual-only `numpy-core` artifact profile with selected arrays/reductions/linalg, error, and cross-Run freshness evidence;

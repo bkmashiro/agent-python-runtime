@@ -1,0 +1,615 @@
+{
+  "$id": "https://agent-runtime.dev/abi/v1/transaction-evidence-v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "attempt": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "created_at": {
+          "$ref": "#/$defs/time"
+        },
+        "expected_operation_state": {
+          "$ref": "#/$defs/operation_state"
+        },
+        "kind": {
+          "enum": [
+            "apply",
+            "rollback",
+            "compensate"
+          ]
+        },
+        "lease_expires_at": {
+          "$ref": "#/$defs/time"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "ordinal": {
+          "maximum": 1024,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "provider_request_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "reconciliation_digest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/digest"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "leased",
+            "dispatching",
+            "succeeded",
+            "failed",
+            "ambiguous",
+            "expired"
+          ]
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/id"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/time"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "provider_receipt_digest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/digest"
+            }
+          ]
+        },
+        "effect_class": {
+          "enum": [
+            "read_only",
+            "reversible",
+            "compensatable",
+            "irreversible"
+          ]
+        }
+      },
+      "required": [
+        "attempt_id",
+        "transaction_id",
+        "operation_id",
+        "effect_class",
+        "kind",
+        "ordinal",
+        "state",
+        "expected_operation_state",
+        "lease_id",
+        "lease_expires_at",
+        "provider_request_digest",
+        "provider_receipt_digest",
+        "reconciliation_digest",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider_receipt_digest": {
+                "not": {
+                  "const": ""
+                }
+              }
+            },
+            "required": [
+              "provider_receipt_digest"
+            ]
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "const": "succeeded"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "effect_class": {
+                "const": "irreversible"
+              },
+              "state": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "effect_class",
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "provider_receipt_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "minLength": 71
+              }
+            },
+            "required": [
+              "provider_receipt_digest"
+            ]
+          }
+        }
+      ]
+    },
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "ambiguous_attempts": {
+          "$ref": "#/$defs/count"
+        },
+        "applied_operations": {
+          "$ref": "#/$defs/count"
+        },
+        "attempt_total": {
+          "$ref": "#/$defs/count"
+        },
+        "compensation_failed": {
+          "$ref": "#/$defs/count"
+        },
+        "dispatching_attempts": {
+          "$ref": "#/$defs/count"
+        },
+        "operation_total": {
+          "$ref": "#/$defs/count"
+        },
+        "reconciliation_required": {
+          "$ref": "#/$defs/count"
+        },
+        "reconciled_attempts": {
+          "$ref": "#/$defs/count"
+        },
+        "rollback_failed": {
+          "$ref": "#/$defs/count"
+        },
+        "transition_total": {
+          "$ref": "#/$defs/count"
+        },
+        "approval_total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024
+        },
+        "consumed_approvals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024
+        }
+      },
+      "required": [
+        "operation_total",
+        "attempt_total",
+        "consumed_approvals",
+        "approval_total",
+        "transition_total",
+        "dispatching_attempts",
+        "ambiguous_attempts",
+        "applied_operations",
+        "rollback_failed",
+        "compensation_failed",
+        "reconciliation_required",
+        "reconciled_attempts"
+      ],
+      "type": "object"
+    },
+    "count": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "operation": {
+      "additionalProperties": false,
+      "properties": {
+        "argument_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "created_at": {
+          "$ref": "#/$defs/time"
+        },
+        "effect_class": {
+          "enum": [
+            "read_only",
+            "reversible",
+            "compensatable",
+            "irreversible"
+          ]
+        },
+        "handler_version": {
+          "$ref": "#/$defs/id"
+        },
+        "index": {
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "policy": {
+          "enum": [
+            "DENY",
+            "AUTO_COMMIT",
+            "AGENT_COMMIT_REQUIRED",
+            "USER_APPROVAL_REQUIRED"
+          ]
+        },
+        "policy_version": {
+          "$ref": "#/$defs/id"
+        },
+        "state": {
+          "$ref": "#/$defs/operation_state"
+        },
+        "tool_id": {
+          "$ref": "#/$defs/id"
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/id"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/time"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "operation_id",
+        "transaction_id",
+        "index",
+        "tool_id",
+        "handler_version",
+        "effect_class",
+        "policy",
+        "policy_version",
+        "state",
+        "argument_digest",
+        "manifest_digest",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "operation_state": {
+      "enum": [
+        "proposed",
+        "staged",
+        "awaiting_agent_commit",
+        "awaiting_user_approval",
+        "ready",
+        "applying",
+        "applied",
+        "failed_retryable",
+        "failed_terminal",
+        "reconciliation_required",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed",
+        "compensation_required",
+        "compensating",
+        "compensated",
+        "compensation_failed",
+        "denied",
+        "expired"
+      ]
+    },
+    "time": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "transaction": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "created_at": {
+          "$ref": "#/$defs/time"
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "workflow"
+          ]
+        },
+        "run_id": {
+          "$ref": "#/$defs/id"
+        },
+        "state": {
+          "enum": [
+            "open",
+            "aborting",
+            "aborted",
+            "rolling_back",
+            "rolled_back",
+            "partially_reverted",
+            "compensating",
+            "compensated",
+            "partially_compensated",
+            "pending_approval",
+            "committing",
+            "committed",
+            "reconciliation_required",
+            "rejected",
+            "expired"
+          ]
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/id"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/time"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "transaction_id",
+        "run_id",
+        "catalog_digest",
+        "mode",
+        "state",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "transition": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "$ref": "#/$defs/id"
+        },
+        "entity_type": {
+          "enum": [
+            "transaction",
+            "operation",
+            "attempt"
+          ]
+        },
+        "from": {
+          "maxLength": 128,
+          "type": "string"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/time"
+        },
+        "sequence": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "to": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "sequence",
+        "transaction_id",
+        "entity_type",
+        "entity_id",
+        "from",
+        "to",
+        "observed_at"
+      ],
+      "type": "object"
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_id",
+        "transaction_id",
+        "operation_id",
+        "manifest_digest",
+        "source",
+        "source_run_id",
+        "actor_id",
+        "phase_grant_id",
+        "expires_at",
+        "registered_at"
+      ],
+      "properties": {
+        "authority_id": {
+          "$ref": "#/$defs/id"
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ]
+        },
+        "source_run_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "actor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "phase_grant_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "registered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "consumed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "user"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "source_run_id": {
+                "const": ""
+              },
+              "phase_grant_id": {
+                "const": ""
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "source_run_id": {
+                "$ref": "#/$defs/id"
+              },
+              "phase_grant_id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempts": {
+      "items": {
+        "$ref": "#/$defs/attempt"
+      },
+      "maxItems": 4096,
+      "type": "array"
+    },
+    "correlation_id": {
+      "pattern": "^corr_[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "generated_at": {
+      "$ref": "#/$defs/time"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/operation"
+      },
+      "maxItems": 1024,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "transaction-evidence/v3"
+    },
+    "transaction": {
+      "$ref": "#/$defs/transaction"
+    },
+    "transitions": {
+      "items": {
+        "$ref": "#/$defs/transition"
+      },
+      "maxItems": 16384,
+      "type": "array"
+    },
+    "approvals": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/approval"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "evidence_digest",
+    "correlation_id",
+    "generated_at",
+    "transaction",
+    "operations",
+    "attempts",
+    "approvals",
+    "transitions",
+    "metrics"
+  ],
+  "type": "object"
+}

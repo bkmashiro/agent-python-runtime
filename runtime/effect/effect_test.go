@@ -2,10 +2,13 @@ package effect_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/effect"
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
 func TestConfigApplyRollbackIsIdempotentAndBlocksVersionDrift(t *testing.T) {
@@ -94,46 +97,45 @@ func TestReservationCompensationIsDistinctAndPreservesOriginalHistory(t *testing
 	}
 }
 
+type effectIDs struct{ next int }
+
+func (ids *effectIDs) New(prefix string) (string, error) {
+	ids.next++
+	return fmt.Sprintf("%s_%d", prefix, ids.next), nil
+}
+
 func TestIrreversibleOutboxRequiresExactApprovalAndCommitsOnce(t *testing.T) {
+	now := time.Unix(1900, 0).UTC()
+	coordinator := transaction.NewCoordinator(transaction.NewMemoryLedger(), &effectIDs{}, func() time.Time { return now }, nil)
+	tx, err := coordinator.Begin(transaction.BeginRequest{RunID: "run_outbox", CatalogDigest: effect.Digest("catalog"), Mode: transaction.TransactionModeWorkflow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := coordinator.Propose(transaction.ProposeRequest{TransactionID: tx.ID, ToolID: "mail.send", HandlerVersion: "v1", EffectClass: transaction.EffectIrreversible, Policy: transaction.PolicyUserApprovalRequired, PolicyVersion: "policy_v1", ArgumentDigest: effect.Digest("args")})
+	if err != nil {
+		t.Fatal(err)
+	}
 	outbox := effect.NewOutbox()
-	if _, err := outbox.Prepare("prepare_bad", "user@example.com", "body"); !errors.Is(err, effect.ErrRecipientDenied) {
+	if _, err := outbox.PrepareIrreversible(coordinator, operation.ID, "user@example.com", "body"); !errors.Is(err, effect.ErrRecipientDenied) {
 		t.Fatalf("real recipient err=%v", err)
 	}
-	staged, err := outbox.Prepare("prepare_1", "user@example.invalid", "body")
-	if err != nil {
-		t.Fatal(err)
+	staged, err := outbox.PrepareIrreversible(coordinator, operation.ID, "user@example.invalid", "body")
+	if err != nil || staged.ManifestDigest != operation.ManifestDigest {
+		t.Fatalf("staged=%+v err=%v", staged, err)
 	}
-	if _, err := outbox.Prepare("prepare_1", "user@example.invalid", "changed"); !errors.Is(err, effect.ErrConflict) {
+	if _, err := outbox.PrepareIrreversible(coordinator, operation.ID, "user@example.invalid", "changed"); !errors.Is(err, effect.ErrConflict) {
 		t.Fatalf("changed staged arguments err=%v", err)
 	}
-	if _, err := outbox.Commit("commit_1", staged.ManifestDigest, false); !errors.Is(err, effect.ErrAuthorityDenied) {
-		t.Fatalf("forged authority err=%v", err)
+	if outbox.CommittedCount() != 0 {
+		t.Fatal("prepare-only outbox produced an irreversible event")
 	}
-	if _, err := outbox.Commit("commit_1", effect.Digest("changed"), true); !errors.Is(err, effect.ErrManifestMismatch) {
-		t.Fatalf("changed manifest err=%v", err)
-	}
-	committed, err := outbox.Commit("commit_1", staged.ManifestDigest, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := outbox.Commit("commit_2", staged.ManifestDigest, true); !errors.Is(err, effect.ErrConflict) {
-		t.Fatalf("commit identity drift err=%v", err)
-	}
-	second, err := outbox.Prepare("prepare_2", "user@example.invalid", "correction")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := outbox.Commit("commit_2", second.ManifestDigest, true); !errors.Is(err, effect.ErrConflict) {
-		t.Fatalf("burned commit identity was reused err=%v", err)
-	}
-	if _, err := outbox.Commit("commit_3", second.ManifestDigest, true); err != nil {
-		t.Fatal(err)
-	}
-	replayed, err := outbox.Commit("commit_1", staged.ManifestDigest, true)
-	if err != nil || replayed != committed || outbox.CommittedCount() != 2 {
-		t.Fatalf("commit replay=%+v count=%d err=%v", replayed, outbox.CommittedCount(), err)
+	if _, exists := reflect.TypeOf(outbox).MethodByName("CommitDispatch"); exists {
+		t.Fatal("outbox exposes executable irreversible dispatch without provider contract")
 	}
 	if _, exists := reflect.TypeOf(outbox).MethodByName("Rollback"); exists {
 		t.Fatal("irreversible outbox exposes Rollback")
+	}
+	if _, exists := reflect.TypeOf(outbox).MethodByName("Commit"); exists {
+		t.Fatal("outbox exposes caller-asserted authority commit")
 	}
 }

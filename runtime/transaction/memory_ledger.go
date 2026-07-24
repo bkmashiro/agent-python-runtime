@@ -15,6 +15,8 @@ type MemoryLedger struct {
 	operationIndex   map[string]string
 	attemptKeys      map[string]string
 	providerRequests map[string]string
+	approvals        map[string]approvalRecord
+	authorityIndex   map[string]string
 	transitions      map[string][]Transition
 }
 
@@ -26,6 +28,8 @@ func NewMemoryLedger() *MemoryLedger {
 		operationIndex:   make(map[string]string),
 		attemptKeys:      make(map[string]string),
 		providerRequests: make(map[string]string),
+		approvals:        make(map[string]approvalRecord),
+		authorityIndex:   make(map[string]string),
 		transitions:      make(map[string][]Transition),
 	}
 }
@@ -155,6 +159,101 @@ func (ledger *MemoryLedger) transitionOperation(id string, version uint64, from,
 	return value, nil
 }
 
+func (ledger *MemoryLedger) registerApproval(record approvalRecord) error {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if err := validateApprovalRecord(record); err != nil {
+		return err
+	}
+	if priorDigest, exists := ledger.authorityIndex[record.AuthorityID]; exists {
+		prior := ledger.approvals[priorDigest]
+		if sameApprovalGrant(prior, record) {
+			return nil
+		}
+		return ErrAlreadyExists
+	}
+	if prior, exists := ledger.approvals[record.TokenDigest]; exists {
+		if sameApprovalGrant(prior, record) {
+			return nil
+		}
+		return ErrAlreadyExists
+	}
+	operation, exists := ledger.operations[record.OperationID]
+	if !exists || operation.TransactionID != record.TransactionID || operation.ManifestDigest != record.ManifestDigest || operation.State != approvalExpectedState(record.Source) {
+		return ErrConflict
+	}
+	record.RegisteredAt = record.RegisteredAt.UTC()
+	record.ExpiresAt = record.ExpiresAt.UTC()
+	ledger.approvals[record.TokenDigest] = record
+	ledger.authorityIndex[record.AuthorityID] = record.TokenDigest
+	return nil
+}
+
+func (ledger *MemoryLedger) findApproval(tokenDigest string) (approvalRecord, error) {
+	ledger.mu.RLock()
+	defer ledger.mu.RUnlock()
+	record, exists := ledger.approvals[tokenDigest]
+	if !exists {
+		return approvalRecord{}, ErrNotFound
+	}
+	return record, nil
+}
+
+func (ledger *MemoryLedger) ListApprovals(transactionID string) ([]ApprovalEvidence, error) {
+	ledger.mu.RLock()
+	defer ledger.mu.RUnlock()
+	if _, exists := ledger.transactions[transactionID]; !exists {
+		return nil, ErrNotFound
+	}
+	values := make([]ApprovalEvidence, 0)
+	for _, record := range ledger.approvals {
+		if record.TransactionID == transactionID {
+			values = append(values, record.ApprovalEvidence)
+		}
+	}
+	sort.Slice(values, func(left, right int) bool {
+		if !values[left].RegisteredAt.Equal(values[right].RegisteredAt) {
+			return values[left].RegisteredAt.Before(values[right].RegisteredAt)
+		}
+		return values[left].AuthorityID < values[right].AuthorityID
+	})
+	return values, nil
+}
+
+func (ledger *MemoryLedger) consumeApprovalAndAuthorize(tokenDigest string, observedAt time.Time) (Operation, approvalRecord, error) {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	record, exists := ledger.approvals[tokenDigest]
+	if !exists {
+		return Operation{}, approvalRecord{}, ErrNotFound
+	}
+	operation, exists := ledger.operations[record.OperationID]
+	if !exists || operation.TransactionID != record.TransactionID || operation.ManifestDigest != record.ManifestDigest {
+		return Operation{}, approvalRecord{}, ErrConflict
+	}
+	if !record.ConsumedAt.IsZero() {
+		if operation.State == OperationReady {
+			return operation, record, nil
+		}
+		return Operation{}, approvalRecord{}, ErrConflict
+	}
+	if !record.ExpiresAt.After(observedAt) {
+		return Operation{}, approvalRecord{}, ErrExpired
+	}
+	from := approvalExpectedState(record.Source)
+	if operation.State != from || ValidateOperationTransition(from, OperationReady) != nil {
+		return Operation{}, approvalRecord{}, ErrConflict
+	}
+	operation.State = OperationReady
+	operation.Version++
+	operation.UpdatedAt = observedAt.UTC()
+	record.ConsumedAt = operation.UpdatedAt
+	ledger.operations[operation.ID] = operation
+	ledger.approvals[tokenDigest] = record
+	ledger.appendTransition(operation.TransactionID, "operation", operation.ID, string(from), string(OperationReady), operation.UpdatedAt)
+	return operation, record, nil
+}
+
 func (ledger *MemoryLedger) createAttempt(value Attempt) error {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
@@ -280,6 +379,36 @@ func (ledger *MemoryLedger) transitionAttempt(id string, version uint64, from, t
 	return value, nil
 }
 
+func (ledger *MemoryLedger) completeAttempt(id string, version uint64, target AttemptState, receiptDigest string, observedAt time.Time) (Attempt, error) {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if observedAt.IsZero() || (receiptDigest != "" && !digestPattern.MatchString(receiptDigest)) ||
+		(target != AttemptSucceeded && target != AttemptFailed && target != AttemptAmbiguous) ||
+		(target != AttemptSucceeded && receiptDigest != "") {
+		return Attempt{}, ErrInvalidInput
+	}
+	value, exists := ledger.attempts[id]
+	if !exists {
+		return Attempt{}, ErrNotFound
+	}
+	if value.State == target && attemptTerminal(target) {
+		if value.ProviderReceiptDigest == receiptDigest {
+			return value, nil
+		}
+		return Attempt{}, ErrConflict
+	}
+	if value.Version != version || value.State != AttemptDispatching || ValidateAttemptTransition(AttemptDispatching, target) != nil {
+		return Attempt{}, ErrConflict
+	}
+	value.State = target
+	value.ProviderReceiptDigest = receiptDigest
+	value.Version++
+	value.UpdatedAt = observedAt.UTC()
+	ledger.attempts[id] = value
+	ledger.appendTransition(value.TransactionID, "attempt", id, string(AttemptDispatching), string(target), value.UpdatedAt)
+	return value, nil
+}
+
 func (ledger *MemoryLedger) reconcileAttempt(id string, version uint64, target AttemptState, observationDigest string, observedAt time.Time) (Attempt, error) {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
@@ -326,6 +455,7 @@ func (ledger *MemoryLedger) Snapshot(transactionID string) (JournalSnapshot, err
 		Transaction: transactionValue,
 		Operations:  make([]Operation, 0),
 		Attempts:    make([]Attempt, 0),
+		Approvals:   make([]ApprovalEvidence, 0),
 		Transitions: append([]Transition(nil), ledger.transitions[transactionID]...),
 	}
 	for _, operation := range ledger.operations {
@@ -356,6 +486,17 @@ func (ledger *MemoryLedger) Snapshot(transactionID string) (JournalSnapshot, err
 			return snapshot.Attempts[left].Ordinal < snapshot.Attempts[right].Ordinal
 		}
 		return snapshot.Attempts[left].ID < snapshot.Attempts[right].ID
+	})
+	for _, approval := range ledger.approvals {
+		if approval.TransactionID == transactionID {
+			snapshot.Approvals = append(snapshot.Approvals, approval.ApprovalEvidence)
+		}
+	}
+	sort.Slice(snapshot.Approvals, func(left, right int) bool {
+		if !snapshot.Approvals[left].RegisteredAt.Equal(snapshot.Approvals[right].RegisteredAt) {
+			return snapshot.Approvals[left].RegisteredAt.Before(snapshot.Approvals[right].RegisteredAt)
+		}
+		return snapshot.Approvals[left].AuthorityID < snapshot.Approvals[right].AuthorityID
 	})
 	return snapshot, nil
 }

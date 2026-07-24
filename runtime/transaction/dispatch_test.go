@@ -9,7 +9,7 @@ import (
 func TestCoordinatorDispatchJournalsAttemptBeforeApplyAndCommitsDirectRead(t *testing.T) {
 	now := time.Unix(500, 0).UTC()
 	ledger := NewMemoryLedger()
-	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, newFakeAuthorityVerifier())
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
 	tx, err := coordinator.Begin(BeginRequest{RunID: "run_dispatch", CatalogDigest: testDigest("catalog"), Mode: TransactionModeDirect})
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestCoordinatorDispatchJournalsAttemptBeforeApplyAndCommitsDirectRead(t *te
 func TestCoordinatorDispatchReplayRepairsTerminalAttemptPartialState(t *testing.T) {
 	now := time.Unix(550, 0).UTC()
 	ledger := NewMemoryLedger()
-	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, newFakeAuthorityVerifier())
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
 	tx, err := coordinator.Begin(BeginRequest{RunID: "run_partial", CatalogDigest: testDigest("catalog"), Mode: TransactionModeDirect})
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestCompleteDispatchPrevalidatesTransactionTargetBeforeMutation(t *testing.
 func TestCoordinatorDispatchRejectsInvalidLeaseAndMovesAmbiguousWorkflowToReconciliation(t *testing.T) {
 	now := time.Unix(600, 0).UTC()
 	ledger := NewMemoryLedger()
-	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, newFakeAuthorityVerifier())
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
 	tx, err := coordinator.Begin(BeginRequest{RunID: "run_workflow", CatalogDigest: testDigest("catalog"), Mode: TransactionModeWorkflow})
 	if err != nil {
 		t.Fatal(err)

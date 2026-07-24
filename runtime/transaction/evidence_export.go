@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	TransactionEvidenceSchemaVersion        = "transaction-evidence/v2"
+	TransactionEvidenceSchemaVersion        = "transaction-evidence/v3"
 	maxEvidenceOperations                   = 1024
 	maxEvidenceAttempts                     = 4096
+	maxEvidenceApprovals                    = 1024
 	maxEvidenceTransitions                  = 16384
 	maxEvidenceOperationIndex               = 4096
 	maxEvidenceAttemptOrdinal               = 1024
@@ -31,6 +32,7 @@ type TransactionEvidence struct {
 	Transaction    EvidenceTransaction       `json:"transaction"`
 	Operations     []EvidenceOperation       `json:"operations"`
 	Attempts       []EvidenceAttempt         `json:"attempts"`
+	Approvals      []EvidenceApproval        `json:"approvals"`
 	Transitions    []EvidenceTransition      `json:"transitions"`
 	Metrics        TransactionEvidenceMetric `json:"metrics"`
 }
@@ -67,6 +69,7 @@ type EvidenceAttempt struct {
 	ID                     string         `json:"attempt_id"`
 	TransactionID          string         `json:"transaction_id"`
 	OperationID            string         `json:"operation_id"`
+	EffectClass            EffectClass    `json:"effect_class"`
 	Kind                   AttemptKind    `json:"kind"`
 	Ordinal                uint32         `json:"ordinal"`
 	State                  AttemptState   `json:"state"`
@@ -74,10 +77,25 @@ type EvidenceAttempt struct {
 	LeaseID                string         `json:"lease_id"`
 	LeaseExpiresAt         time.Time      `json:"lease_expires_at"`
 	ProviderRequestDigest  string         `json:"provider_request_digest"`
+	ProviderReceiptDigest  string         `json:"provider_receipt_digest"`
 	ReconciliationDigest   string         `json:"reconciliation_digest"`
 	Version                uint64         `json:"version"`
 	CreatedAt              time.Time      `json:"created_at"`
 	UpdatedAt              time.Time      `json:"updated_at"`
+}
+
+type EvidenceApproval struct {
+	AuthorityID    string       `json:"authority_id"`
+	TransactionID  string       `json:"transaction_id"`
+	OperationID    string       `json:"operation_id"`
+	ManifestDigest string       `json:"manifest_digest"`
+	Source         CommitSource `json:"source"`
+	SourceRunID    string       `json:"source_run_id"`
+	ActorID        string       `json:"actor_id"`
+	PhaseGrantID   string       `json:"phase_grant_id"`
+	ExpiresAt      time.Time    `json:"expires_at"`
+	RegisteredAt   time.Time    `json:"registered_at"`
+	ConsumedAt     *time.Time   `json:"consumed_at,omitempty"`
 }
 
 type EvidenceTransition struct {
@@ -93,6 +111,8 @@ type EvidenceTransition struct {
 type TransactionEvidenceMetric struct {
 	OperationTotal         uint32 `json:"operation_total"`
 	AttemptTotal           uint32 `json:"attempt_total"`
+	ApprovalTotal          uint32 `json:"approval_total"`
+	ConsumedApprovals      uint32 `json:"consumed_approvals"`
 	TransitionTotal        uint32 `json:"transition_total"`
 	DispatchingAttempts    uint32 `json:"dispatching_attempts"`
 	AmbiguousAttempts      uint32 `json:"ambiguous_attempts"`
@@ -114,6 +134,7 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 	transaction := snapshot.Transaction
 	operations := append([]Operation(nil), snapshot.Operations...)
 	attempts := append([]Attempt(nil), snapshot.Attempts...)
+	approvals := append([]ApprovalEvidence(nil), snapshot.Approvals...)
 	transitions := append([]Transition(nil), snapshot.Transitions...)
 	sort.Slice(operations, func(left, right int) bool {
 		if operations[left].Index != operations[right].Index {
@@ -138,7 +159,7 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 		return attempts[left].ID < attempts[right].ID
 	})
 	sort.Slice(transitions, func(left, right int) bool { return transitions[left].Sequence < transitions[right].Sequence })
-	if len(operations) > maxEvidenceOperations || len(attempts) > maxEvidenceAttempts || len(transitions) > maxEvidenceTransitions ||
+	if len(operations) > maxEvidenceOperations || len(attempts) > maxEvidenceAttempts || len(approvals) > maxEvidenceApprovals || len(transitions) > maxEvidenceTransitions ||
 		!validEvidenceTransaction(transaction) {
 		return TransactionEvidence{}, ErrInvalidEvidence
 	}
@@ -154,9 +175,11 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 		},
 		Operations:  make([]EvidenceOperation, len(operations)),
 		Attempts:    make([]EvidenceAttempt, len(attempts)),
+		Approvals:   make([]EvidenceApproval, len(approvals)),
 		Transitions: make([]EvidenceTransition, len(transitions)),
 	}
 	operationIDs := make(map[string]struct{}, len(operations))
+	operationEffects := make(map[string]EffectClass, len(operations))
 	var priorIndex uint32
 	for index, operation := range operations {
 		if !validEvidenceOperation(operation, transaction.ID) || operation.Index <= priorIndex {
@@ -167,6 +190,7 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 		}
 		priorIndex = operation.Index
 		operationIDs[operation.ID] = struct{}{}
+		operationEffects[operation.ID] = operation.EffectClass
 		value.Operations[index] = EvidenceOperation{
 			ID: operation.ID, TransactionID: operation.TransactionID, Index: operation.Index,
 			ToolID: operation.ToolID, HandlerVersion: operation.HandlerVersion, EffectClass: operation.EffectClass,
@@ -185,10 +209,36 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 			value.Metrics.ReconciliationRequired++
 		}
 	}
+	approvalIDs := make(map[string]struct{}, len(approvals))
+	for index, approval := range approvals {
+		if !validEvidenceApproval(approval, transaction.ID, operationIDs) {
+			return TransactionEvidence{}, ErrInvalidEvidence
+		}
+		if _, duplicate := approvalIDs[approval.AuthorityID]; duplicate {
+			return TransactionEvidence{}, ErrInvalidEvidence
+		}
+		approvalIDs[approval.AuthorityID] = struct{}{}
+		var consumedAt *time.Time
+		if !approval.ConsumedAt.IsZero() {
+			value := approval.ConsumedAt.UTC()
+			consumedAt = &value
+		}
+		value.Approvals[index] = EvidenceApproval{
+			AuthorityID: approval.AuthorityID, TransactionID: approval.TransactionID, OperationID: approval.OperationID,
+			ManifestDigest: approval.ManifestDigest, Source: approval.Source, SourceRunID: approval.SourceRunID,
+			ActorID: approval.ActorID, PhaseGrantID: approval.PhaseGrantID, ExpiresAt: approval.ExpiresAt.UTC(),
+			RegisteredAt: approval.RegisteredAt.UTC(), ConsumedAt: consumedAt,
+		}
+		if !approval.ConsumedAt.IsZero() {
+			value.Metrics.ConsumedApprovals++
+		}
+	}
 	attemptIDs := make(map[string]struct{}, len(attempts))
 	reconciledAttemptIDs := make(map[string]struct{})
 	for index, attempt := range attempts {
-		if _, ok := operationIDs[attempt.OperationID]; !ok || !validEvidenceAttempt(attempt, transaction.ID) {
+		effectClass := operationEffects[attempt.OperationID]
+		if _, ok := operationIDs[attempt.OperationID]; !ok || !validEvidenceAttempt(attempt, transaction.ID) ||
+			(effectClass == EffectIrreversible && attempt.State == AttemptSucceeded && attempt.ProviderReceiptDigest == "") {
 			return TransactionEvidence{}, ErrInvalidEvidence
 		}
 		if _, duplicate := attemptIDs[attempt.ID]; duplicate {
@@ -196,12 +246,12 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 		}
 		attemptIDs[attempt.ID] = struct{}{}
 		value.Attempts[index] = EvidenceAttempt{
-			ID: attempt.ID, TransactionID: attempt.TransactionID, OperationID: attempt.OperationID,
+			ID: attempt.ID, TransactionID: attempt.TransactionID, OperationID: attempt.OperationID, EffectClass: effectClass,
 			Kind: attempt.Kind, Ordinal: attempt.Ordinal, State: attempt.State,
 			ExpectedOperationState: attempt.ExpectedOperationState, LeaseID: attempt.LeaseID,
 			LeaseExpiresAt: attempt.LeaseExpiresAt.UTC(), ProviderRequestDigest: attempt.ProviderRequestDigest,
-			ReconciliationDigest: attempt.ReconciliationDigest,
-			Version:              attempt.Version, CreatedAt: attempt.CreatedAt.UTC(), UpdatedAt: attempt.UpdatedAt.UTC(),
+			ProviderReceiptDigest: attempt.ProviderReceiptDigest, ReconciliationDigest: attempt.ReconciliationDigest,
+			Version: attempt.Version, CreatedAt: attempt.CreatedAt.UTC(), UpdatedAt: attempt.UpdatedAt.UTC(),
 		}
 		if attempt.ReconciliationDigest != "" {
 			reconciledAttemptIDs[attempt.ID] = struct{}{}
@@ -250,6 +300,7 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 	}
 	value.Metrics.OperationTotal = uint32(len(value.Operations))
 	value.Metrics.AttemptTotal = uint32(len(value.Attempts))
+	value.Metrics.ApprovalTotal = uint32(len(value.Approvals))
 	value.Metrics.TransitionTotal = uint32(len(value.Transitions))
 	if transaction.State == TransactionReconciliationRequired {
 		value.Metrics.ReconciliationRequired++
@@ -273,7 +324,7 @@ func ComputeTransactionEvidenceDigest(value TransactionEvidence) (string, error)
 }
 
 func VerifyTransactionEvidenceDigest(value TransactionEvidence) error {
-	if !digestPattern.MatchString(value.EvidenceDigest) {
+	if value.SchemaVersion != TransactionEvidenceSchemaVersion || !digestPattern.MatchString(value.EvidenceDigest) {
 		return ErrInvalidEvidence
 	}
 	expected, err := ComputeTransactionEvidenceDigest(value)
@@ -316,10 +367,28 @@ func validEvidenceOperation(value Operation, transactionID string) bool {
 		value.Version > 0 && value.Version <= maxEvidenceInteger && !value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)
 }
 
+func validEvidenceApproval(value ApprovalEvidence, transactionID string, operationIDs map[string]struct{}) bool {
+	if value.TransactionID != transactionID || !validIdentifier(value.AuthorityID) || !validIdentifier(value.OperationID) ||
+		!validIdentifier(value.ActorID) || !digestPattern.MatchString(value.ManifestDigest) ||
+		value.RegisteredAt.IsZero() || !value.ExpiresAt.After(value.RegisteredAt) ||
+		(!value.ConsumedAt.IsZero() && value.ConsumedAt.Before(value.RegisteredAt)) {
+		return false
+	}
+	if _, exists := operationIDs[value.OperationID]; !exists {
+		return false
+	}
+	if value.Source == CommitSourceUser {
+		return value.SourceRunID == "" && value.PhaseGrantID == ""
+	}
+	return value.Source == CommitSourceAgent && validIdentifier(value.SourceRunID) && validIdentifier(value.PhaseGrantID)
+}
+
 func validEvidenceAttempt(value Attempt, transactionID string) bool {
+	receiptValid := value.ProviderReceiptDigest == "" ||
+		(digestPattern.MatchString(value.ProviderReceiptDigest) && value.State == AttemptSucceeded)
 	reconciliationValid := value.ReconciliationDigest == "" ||
 		(digestPattern.MatchString(value.ReconciliationDigest) && (value.State == AttemptSucceeded || value.State == AttemptFailed))
-	return reconciliationValid && value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
+	return receiptValid && reconciliationValid && value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
 		value.Ordinal > 0 && value.Ordinal <= maxEvidenceAttemptOrdinal && validAttemptState(value.State) && validOperationState(value.ExpectedOperationState) && validIdentifier(value.LeaseID) &&
 		value.LeaseExpiresAt.After(value.CreatedAt) && digestPattern.MatchString(value.ProviderRequestDigest) && value.Version > 0 && value.Version <= maxEvidenceInteger &&
 		!value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)

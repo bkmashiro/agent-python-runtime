@@ -4,6 +4,7 @@ type JournalSnapshot struct {
 	Transaction Transaction
 	Operations  []Operation
 	Attempts    []Attempt
+	Approvals   []ApprovalEvidence
 	Transitions []Transition
 }
 
@@ -16,6 +17,7 @@ type Ledger interface {
 	ListOperations(string) ([]Operation, error)
 	GetAttempt(string) (Attempt, error)
 	ListAttempts(string) ([]Attempt, error)
+	ListApprovals(string) ([]ApprovalEvidence, error)
 	ListTransitions(string) ([]Transition, error)
 	Snapshot(string) (JournalSnapshot, error)
 }

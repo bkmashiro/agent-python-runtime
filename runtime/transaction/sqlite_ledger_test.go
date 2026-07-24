@@ -71,7 +71,7 @@ func TestSQLiteLedgerRejectsNewerSchemaAndUsesPrivateFileMode(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode=%v", info.Mode().Perm())
 	}
-	if _, err := ledger.db.Exec(`INSERT INTO schema_migrations(version,applied_at_ns,schema_digest) VALUES(4,?,?)`, time.Now().UTC().UnixNano(), testDigest("future-schema")); err != nil {
+	if _, err := ledger.db.Exec(`INSERT INTO schema_migrations(version,applied_at_ns,schema_digest) VALUES(5,?,?)`, time.Now().UTC().UnixNano(), testDigest("future-schema")); err != nil {
 		t.Fatal(err)
 	}
 	if err := ledger.Close(); err != nil {
@@ -89,7 +89,7 @@ func TestSQLiteLedgerMigratesV1ZeroUpdateTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedSQLiteLedger(t, ledger)
-	if _, err := ledger.db.Exec(`UPDATE operations SET updated_at_ns=0; UPDATE attempts SET updated_at_ns=0; DELETE FROM schema_migrations WHERE version>=2; ALTER TABLE attempts DROP COLUMN reconciliation_digest`); err != nil {
+	if _, err := ledger.db.Exec(`UPDATE operations SET updated_at_ns=0; UPDATE attempts SET updated_at_ns=0; DELETE FROM schema_migrations WHERE version>=2; DROP INDEX approvals_transaction_order; DROP TABLE approvals; ALTER TABLE attempts DROP COLUMN provider_receipt_digest; ALTER TABLE attempts DROP COLUMN reconciliation_digest`); err != nil {
 		t.Fatal(err)
 	}
 	if err := ledger.Close(); err != nil {
@@ -109,7 +109,7 @@ func TestSQLiteLedgerMigratesV1ZeroUpdateTimestamps(t *testing.T) {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 	var version int
-	if err := reopened.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 3 {
+	if err := reopened.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 4 {
 		t.Fatalf("version=%d err=%v", version, err)
 	}
 }

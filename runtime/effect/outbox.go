@@ -3,6 +3,8 @@ package effect
 import (
 	"strings"
 	"sync"
+
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
 type StagedOutbox struct {
@@ -58,12 +60,42 @@ func (outbox *Outbox) Prepare(prepareID, recipient, body string) (StagedOutbox, 
 	return staged, nil
 }
 
-func (outbox *Outbox) Commit(commitID, manifestDigest string, hostAuthority bool) (OutboxCommitReceipt, error) {
+func (outbox *Outbox) PrepareIrreversible(coordinator *transaction.Coordinator, operationID, recipient, body string) (StagedOutbox, error) {
+	if coordinator == nil {
+		return StagedOutbox{}, ErrAuthorityDenied
+	}
+	operation, err := coordinator.InspectOperation(operationID)
+	if err != nil || operation.EffectClass != transaction.EffectIrreversible ||
+		(operation.State != transaction.OperationAwaitingUserApproval && operation.State != transaction.OperationAwaitingAgentCommit) {
+		return StagedOutbox{}, ErrAuthorityDenied
+	}
 	outbox.mu.Lock()
 	defer outbox.mu.Unlock()
-	if !hostAuthority {
-		return OutboxCommitReceipt{}, ErrAuthorityDenied
+	at := strings.LastIndex(recipient, "@")
+	if at <= 0 || !strings.HasSuffix(strings.ToLower(recipient[at+1:]), ".invalid") || strings.ContainsAny(recipient, "\r\n") {
+		return StagedOutbox{}, ErrRecipientDenied
 	}
+	prepareID := "prepare_" + operation.ID
+	manifest := operation.ManifestDigest
+	key := Digest(manifest + "\x00" + recipient + "\x00" + body)
+	if prior, ok := outbox.byPrepare[prepareID]; ok {
+		if prior != key {
+			return StagedOutbox{}, ErrConflict
+		}
+		return outbox.intents[manifest].Staged, nil
+	}
+	if _, exists := outbox.intents[manifest]; exists {
+		return StagedOutbox{}, ErrConflict
+	}
+	staged := StagedOutbox{PrepareID: prepareID, ManifestDigest: manifest, RecipientDigest: Digest(recipient), PayloadDigest: Digest(body)}
+	outbox.byPrepare[prepareID] = key
+	outbox.intents[manifest] = &outboxIntent{Staged: staged, Recipient: recipient, Body: body}
+	return staged, nil
+}
+
+func (outbox *Outbox) commit(commitID, manifestDigest string) (OutboxCommitReceipt, error) {
+	outbox.mu.Lock()
+	defer outbox.mu.Unlock()
 	if prior, ok := outbox.commits[commitID]; ok {
 		if outbox.commitKeys[commitID] != manifestDigest {
 			return OutboxCommitReceipt{}, ErrConflict

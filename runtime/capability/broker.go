@@ -106,8 +106,8 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 		}
 		for name, grant := range config.ToolGrants {
 			if name != grant.ToolID || !validIdentifier(grant.ToolID) ||
-				!validIdentifier(grant.HandlerVersion) || !validIdentifier(grant.PolicyVersion) || grant.EffectClass != "read_only" ||
-				grant.Policy != "AUTO_COMMIT" || grant.MaxCalls == 0 || grant.MaxCalls > 1024 {
+				!validIdentifier(grant.HandlerVersion) || !validIdentifier(grant.PolicyVersion) || !qualifiedTypedGrant(grant) ||
+				grant.MaxCalls == 0 || grant.MaxCalls > 1024 {
 				return nil, fmt.Errorf("invalid or not-yet-qualified typed tool grant %q", name)
 			}
 			handler, exists := config.Registry.lookup(name)
@@ -429,6 +429,18 @@ func validateRequests(requests []fetchRequest) error {
 		seen[request.RequestID] = struct{}{}
 	}
 	return nil
+}
+
+func qualifiedTypedGrant(grant ToolGrant) bool {
+	if grant.Policy != "AUTO_COMMIT" {
+		return false
+	}
+	switch grant.EffectClass {
+	case "read_only", "reversible", "compensatable":
+		return true
+	default:
+		return false
+	}
 }
 
 func validIdentifier(value string) bool {

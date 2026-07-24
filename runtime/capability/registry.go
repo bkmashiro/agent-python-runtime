@@ -248,6 +248,9 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 	if broker.calls[grant.ToolID] >= grant.MaxCalls {
 		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "call_budget_exceeded", "capability call budget exhausted")
 	}
+	if broker.transactionCalls >= broker.config.MaxTransactionCalls {
+		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "transaction_call_budget_exceeded", "transaction call budget exhausted")
+	}
 	argumentDigest := digestBytes(request.Arguments)
 	bound, bindErr := broker.config.Binder.Begin(ctx, BoundCall{
 		RunIdentity: broker.config.RunIdentity, CallID: request.CallID, ToolID: request.Capability,
@@ -267,6 +270,7 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 	}
 	admitted = true
 	broker.calls[grant.ToolID]++
+	broker.transactionCalls++
 	result, handlerErr := handler.spec.Handler.Handle(ctx, HostCall{
 		RunIdentity: broker.config.RunIdentity, CallID: request.CallID, ToolID: request.Capability,
 		CatalogDigest: broker.config.CatalogDigest, HandlerVersion: *request.HandlerVersion,

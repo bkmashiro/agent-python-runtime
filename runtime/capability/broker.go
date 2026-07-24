@@ -30,13 +30,14 @@ type Observation struct {
 type Observer func(Observation)
 
 type Config struct {
-	RunIdentity   string
-	Grants        map[string]Grant
-	Observer      Observer
-	CatalogDigest string
-	Registry      *Registry
-	Binder        CallBinder
-	ToolGrants    map[string]ToolGrant
+	RunIdentity         string
+	Grants              map[string]Grant
+	Observer            Observer
+	CatalogDigest       string
+	Registry            *Registry
+	Binder              CallBinder
+	ToolGrants          map[string]ToolGrant
+	MaxTransactionCalls uint32
 }
 
 type ToolGrant struct {
@@ -49,13 +50,14 @@ type ToolGrant struct {
 }
 
 type Broker struct {
-	mu            sync.Mutex
-	config        Config
-	fetcher       Fetcher
-	calls         map[string]uint32
-	totalRequests map[string]uint32
-	receipts      []receipt.Receipt
-	typedCalls    map[string]typedCallReplay
+	mu               sync.Mutex
+	config           Config
+	fetcher          Fetcher
+	calls            map[string]uint32
+	totalRequests    map[string]uint32
+	receipts         []receipt.Receipt
+	typedCalls       map[string]typedCallReplay
+	transactionCalls uint32
 }
 
 type typedCallReplay struct {
@@ -101,9 +103,10 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 		}
 	}
 	if len(config.ToolGrants) > 0 {
-		if config.Registry == nil || config.Binder == nil {
-			return nil, errors.New("typed tool grants require a registry and transaction binder")
+		if config.Registry == nil || config.Binder == nil || len(config.ToolGrants) > 1024 {
+			return nil, errors.New("typed tool grants require a bounded registry and transaction binder")
 		}
+		var inferredTransactionCalls uint64
 		for name, grant := range config.ToolGrants {
 			if name != grant.ToolID || !validIdentifier(grant.ToolID) ||
 				!validIdentifier(grant.HandlerVersion) || !validIdentifier(grant.PolicyVersion) || !qualifiedTypedGrant(grant) ||
@@ -114,6 +117,15 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 			if !exists || handler.spec.HandlerVersion != grant.HandlerVersion {
 				return nil, fmt.Errorf("typed tool grant %q has no matching frozen handler", name)
 			}
+			inferredTransactionCalls += uint64(grant.MaxCalls)
+		}
+		if config.MaxTransactionCalls == 0 {
+			if inferredTransactionCalls > 4096 {
+				inferredTransactionCalls = 4096
+			}
+			config.MaxTransactionCalls = uint32(inferredTransactionCalls)
+		} else if config.MaxTransactionCalls > 4096 {
+			return nil, errors.New("transaction call budget exceeds Host limit")
 		}
 	}
 	for name, grant := range config.Grants {

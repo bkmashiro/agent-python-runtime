@@ -24,7 +24,7 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 			"handler_version": tool.HandlerVersion, "projection": tool.Projection,
 			"effect_class": tool.EffectClass, "policy": tool.Policy, "max_calls": tool.MaxCalls,
 			"catalog_digest":  snapshot.digest,
-			"expected_errors": []string{"capability_denied", "stale_catalog", "handler_version_mismatch", "invalid_arguments", "call_budget_exceeded", "result_schema_mismatch"},
+			"expected_errors": []string{"capability_denied", "stale_catalog", "handler_version_mismatch", "invalid_arguments", "call_budget_exceeded", "transaction_call_budget_exceeded", "result_schema_mismatch"},
 		}
 	}
 	metadataJSON, err := json.Marshal(metadata)
@@ -114,7 +114,7 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 		if doc == "" {
 			doc = "Host-mediated tool " + tool.ToolID + "."
 		}
-		doc = doc + "\n\nCatalog: " + snapshot.digest + "; handler: " + tool.HandlerVersion + "; projection: " + string(tool.Projection) + "; effect: " + tool.EffectClass + "; policy: " + tool.Policy + "; max_calls=" + fmt.Sprintf("%d", tool.MaxCalls) + ".\nExpected errors: capability_denied, stale_catalog, handler_version_mismatch, invalid_arguments, call_budget_exceeded, result_schema_mismatch."
+		doc = doc + "\n\nCatalog: " + snapshot.digest + "; handler: " + tool.HandlerVersion + "; projection: " + string(tool.Projection) + "; effect: " + tool.EffectClass + "; policy: " + tool.Policy + "; max_calls=" + fmt.Sprintf("%d", tool.MaxCalls) + ".\nExpected errors: capability_denied, stale_catalog, handler_version_mismatch, invalid_arguments, call_budget_exceeded, transaction_call_budget_exceeded, result_schema_mismatch."
 		runtimeBuilder.WriteString(runtimeSignature + ":\n")
 		runtimeBuilder.WriteString("    " + strconv.Quote(doc) + "\n")
 		runtimeBuilder.WriteString("    _arguments: dict[str, Any] = {}\n")
@@ -129,7 +129,7 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 		runtimeBuilder.WriteString("    return _call(" + strconv.Quote(tool.ToolID) + ", CATALOG_DIGEST, " + strconv.Quote(tool.HandlerVersion) + ", _arguments)\n\n")
 
 		stubBuilder.WriteString(stubSignature + ": ...\n")
-		stubBuilder.WriteString("# " + tool.ToolID + " | catalog=" + snapshot.digest + " | handler=" + tool.HandlerVersion + " | projection=" + string(tool.Projection) + " | effect=" + tool.EffectClass + " | policy=" + tool.Policy + " | max_calls=" + fmt.Sprintf("%d", tool.MaxCalls) + " | errors=capability_denied,stale_catalog,handler_version_mismatch,invalid_arguments,call_budget_exceeded,result_schema_mismatch\n\n")
+		stubBuilder.WriteString("# " + tool.ToolID + " | catalog=" + snapshot.digest + " | handler=" + tool.HandlerVersion + " | projection=" + string(tool.Projection) + " | effect=" + tool.EffectClass + " | policy=" + tool.Policy + " | max_calls=" + fmt.Sprintf("%d", tool.MaxCalls) + " | errors=capability_denied,stale_catalog,handler_version_mismatch,invalid_arguments,call_budget_exceeded,transaction_call_budget_exceeded,result_schema_mismatch\n\n")
 		emitted++
 	}
 	if emitted == 0 && len(snapshot.tools) > 0 {

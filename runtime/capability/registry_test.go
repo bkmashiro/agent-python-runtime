@@ -113,6 +113,70 @@ func TestBrokerDispatchesRegisteredTypedToolWithCatalogAndHandlerBinding(t *test
 	}
 }
 
+func TestBrokerEnforcesPerTransactionBudgetAcrossTools(t *testing.T) {
+	registry := capability.NewRegistry()
+	calls := 0
+	for _, toolID := range []string{"demo.first", "demo.second"} {
+		if err := registry.Register(capability.HandlerSpec{ToolID: toolID, HandlerVersion: "v1", InputSchema: []byte(`{"type":"object","additionalProperties":false}`), OutputSchema: []byte(`{"type":"object","additionalProperties":false}`), Handler: capability.HandlerFunc(func(context.Context, capability.HostCall) (json.RawMessage, error) {
+			calls++
+			return json.RawMessage(`{}`), nil
+		})}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalogDigest := digestForTest("transaction-budget")
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "run-budget", CatalogDigest: catalogDigest, Registry: registry, Binder: &recordingBinder{}, MaxTransactionCalls: 1, ToolGrants: map[string]capability.ToolGrant{
+		"demo.first":  {ToolID: "demo.first", HandlerVersion: "v1", EffectClass: "read_only", Policy: "AUTO_COMMIT", PolicyVersion: "policy_v1", MaxCalls: 2},
+		"demo.second": {ToolID: "demo.second", HandlerVersion: "v1", EffectClass: "read_only", Policy: "AUTO_COMMIT", PolicyVersion: "policy_v1", MaxCalls: 2},
+	}}, capability.FetcherFunc(func(context.Context, capability.ResolvedRequest, uint32) (capability.FetchOutput, error) {
+		return capability.FetchOutput{}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, toolID := range []string{"demo.first", "demo.second"} {
+		payload := []byte(`{"call_id":"budget-` + toolID + `","capability":"` + toolID + `","catalog_digest":"` + catalogDigest + `","handler_version":"v1","arguments":{}}`)
+		response, err := broker.Call(context.Background(), payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded struct {
+			Status capability.Status `json:"status"`
+			Error  *capability.Error `json:"error"`
+		}
+		if err := json.Unmarshal(response, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if index == 0 && decoded.Status != capability.StatusOK {
+			t.Fatalf("first call=%s", response)
+		}
+		if index == 1 && (decoded.Error == nil || decoded.Error.Code != "transaction_call_budget_exceeded") {
+			t.Fatalf("second call=%s", response)
+		}
+	}
+	firstPayload := []byte(`{"call_id":"budget-demo.first","capability":"demo.first","catalog_digest":"` + catalogDigest + `","handler_version":"v1","arguments":{}}`)
+	replayed, err := broker.Call(context.Background(), firstPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var replay struct {
+		Status capability.Status `json:"status"`
+	}
+	if err := json.Unmarshal(replayed, &replay); err != nil || replay.Status != capability.StatusOK {
+		t.Fatalf("budget replay=%s err=%v", replayed, err)
+	}
+	if calls != 1 {
+		t.Fatalf("handler calls=%d", calls)
+	}
+	if _, err := capability.NewBroker(capability.Config{RunIdentity: "run-invalid-budget", CatalogDigest: catalogDigest, Registry: registry, Binder: &recordingBinder{}, MaxTransactionCalls: 4097, ToolGrants: map[string]capability.ToolGrant{
+		"demo.first": {ToolID: "demo.first", HandlerVersion: "v1", EffectClass: "read_only", Policy: "AUTO_COMMIT", PolicyVersion: "policy_v1", MaxCalls: 2},
+	}}, capability.FetcherFunc(func(context.Context, capability.ResolvedRequest, uint32) (capability.FetchOutput, error) {
+		return capability.FetchOutput{}, nil
+	})); err == nil {
+		t.Fatal("transaction budget above Host limit accepted")
+	}
+}
+
 func TestBrokerRejectsEffectfulTypedGrantUntilTransactionalBinderIsQualified(t *testing.T) {
 	registry := capability.NewRegistry()
 	if err := registry.Register(capability.HandlerSpec{

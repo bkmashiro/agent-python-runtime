@@ -100,6 +100,7 @@
     "effect_class",
     "policy",
     "manifest_digest",
+    "provider_request_digest",
     "request_digest",
     "outcome",
     "observed_at"

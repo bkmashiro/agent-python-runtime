@@ -60,7 +60,7 @@ const (
 var transactionTransitions = map[TransactionState]map[TransactionState]struct{}{
 	TransactionOpen: states(
 		TransactionAborting, TransactionPendingApproval, TransactionCommitting,
-		TransactionCommitted, TransactionRejected, TransactionExpired,
+		TransactionCommitted, TransactionRejected, TransactionExpired, TransactionReconciliationRequired,
 	),
 	TransactionAborting: states(
 		TransactionAborted, TransactionRollingBack, TransactionCompensating,

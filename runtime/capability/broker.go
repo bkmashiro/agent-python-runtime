@@ -44,6 +44,7 @@ type ToolGrant struct {
 	HandlerVersion string
 	EffectClass    string
 	Policy         string
+	PolicyVersion  string
 	MaxCalls       uint32
 }
 
@@ -100,7 +101,7 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 		}
 		for name, grant := range config.ToolGrants {
 			if name != grant.ToolID || !validIdentifier(grant.ToolID) ||
-				!validIdentifier(grant.HandlerVersion) || grant.EffectClass != "read_only" ||
+				!validIdentifier(grant.HandlerVersion) || !validIdentifier(grant.PolicyVersion) || grant.EffectClass != "read_only" ||
 				grant.Policy != "AUTO_COMMIT" || grant.MaxCalls == 0 || grant.MaxCalls > 1024 {
 				return nil, fmt.Errorf("invalid or not-yet-qualified typed tool grant %q", name)
 			}

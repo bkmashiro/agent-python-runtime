@@ -8,6 +8,7 @@
   "operation_id": "op_1",
   "outcome": "ok",
   "policy": "AUTO_COMMIT",
+  "provider_request_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "receipt_id": "rcpt_1",
   "request_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "run_id": "run_1",

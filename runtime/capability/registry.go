@@ -30,14 +30,16 @@ type HostCall struct {
 }
 
 type BoundCall struct {
-	RunIdentity    string
-	CallID         string
-	ToolID         string
-	CatalogDigest  string
-	HandlerVersion string
-	EffectClass    string
-	Policy         string
-	ArgumentDigest string
+	RunIdentity     string
+	CallID          string
+	ToolID          string
+	CatalogDigest   string
+	HandlerVersion  string
+	EffectClass     string
+	Policy          string
+	PolicyVersion   string
+	ArgumentsDigest string
+	RequestDigest   string
 }
 
 type BoundOperation struct {
@@ -119,7 +121,7 @@ func BuildRegistryFromSnapshot(snapshot toolcatalog.Snapshot, handlers map[strin
 		}
 		grants[tool.ToolID] = ToolGrant{
 			ToolID: tool.ToolID, HandlerVersion: tool.HandlerVersion,
-			EffectClass: tool.EffectClass, Policy: tool.Policy, MaxCalls: tool.MaxCalls,
+			EffectClass: tool.EffectClass, Policy: tool.Policy, PolicyVersion: tool.GrantVersion, MaxCalls: tool.MaxCalls,
 		}
 	}
 	return registry, grants, nil
@@ -247,12 +249,19 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "call_budget_exceeded", "capability call budget exhausted")
 	}
 	argumentDigest := digestBytes(request.Arguments)
-	bound, err := broker.config.Binder.Begin(ctx, BoundCall{
+	bound, bindErr := broker.config.Binder.Begin(ctx, BoundCall{
 		RunIdentity: broker.config.RunIdentity, CallID: request.CallID, ToolID: request.Capability,
 		CatalogDigest: broker.config.CatalogDigest, HandlerVersion: *request.HandlerVersion,
-		EffectClass: grant.EffectClass, Policy: grant.Policy, ArgumentDigest: argumentDigest,
+		EffectClass: grant.EffectClass, Policy: grant.Policy, PolicyVersion: grant.PolicyVersion,
+		ArgumentsDigest: argumentDigest, RequestDigest: request.EnvelopeDigest,
 	})
-	if err != nil || !validIdentifier(bound.TransactionID) || !validIdentifier(bound.OperationID) ||
+	if bindErr != nil {
+		if errors.Is(bindErr, ErrReplayRequiresReconciliation) {
+			return encodeRegisteredResponse(request.CallID, StatusError, nil, "reconciliation_required", "prior admitted call requires reconciliation")
+		}
+		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "transaction_not_ready", "Host transaction binder denied dispatch")
+	}
+	if !validIdentifier(bound.TransactionID) || !validIdentifier(bound.OperationID) ||
 		!validIdentifier(bound.AttemptID) || bound.OperationIndex == 0 || !catalogDigestPattern.MatchString(bound.ManifestDigest) {
 		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "transaction_not_ready", "Host transaction binder denied dispatch")
 	}
@@ -275,7 +284,7 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 	}
 	if len(result) == 0 || len(result) > registryMaxPayloadBytes || !json.Valid(result) ||
 		validateHandlerArguments(handler.outputSchema, result) != nil {
-		return broker.finishRegistered(ctx, request, bound, StatusError, nil, "invalid_handler_result", "Host tool handler returned a result outside its registered schema")
+		return broker.finishRegistered(ctx, request, bound, StatusError, nil, "result_schema_mismatch", "Host tool handler returned a result outside its registered schema")
 	}
 	return broker.finishRegistered(ctx, request, bound, StatusOK, result, "", "")
 }
@@ -312,7 +321,7 @@ func (broker *Broker) recordRegistered(request toolRequest, bound BoundOperation
 		broker.config.RunIdentity, request.CallID, request.Capability, bound.OperationIndex,
 		bound.TransactionID, bound.OperationID, bound.AttemptID,
 		broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
-		target, string(status), response,
+		request.EnvelopeDigest, target, string(status), response,
 	))
 }
 

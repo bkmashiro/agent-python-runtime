@@ -41,7 +41,7 @@ func TestBrokerDispatchesRegisteredTypedToolWithCatalogAndHandlerBinding(t *test
 	toolGrants := map[string]capability.ToolGrant{
 		"demo.echo": {
 			ToolID: "demo.echo", HandlerVersion: "v1", MaxCalls: 1,
-			EffectClass: "read_only", Policy: "AUTO_COMMIT",
+			EffectClass: "read_only", Policy: "AUTO_COMMIT", PolicyVersion: "policy_v1",
 		},
 	}
 	broker, err := capability.NewBroker(capability.Config{
@@ -58,7 +58,7 @@ func TestBrokerDispatchesRegisteredTypedToolWithCatalogAndHandlerBinding(t *test
 	}
 	toolGrants["demo.echo"] = capability.ToolGrant{
 		ToolID: "demo.echo", HandlerVersion: "v1", MaxCalls: 99,
-		EffectClass: "irreversible", Policy: "USER_APPROVAL_REQUIRED",
+		EffectClass: "irreversible", Policy: "USER_APPROVAL_REQUIRED", PolicyVersion: "policy_v1",
 	}
 
 	payload := []byte(`{"call_id":"call-1","capability":"demo.echo","catalog_digest":"` + catalogDigest + `","handler_version":"v1","arguments":{"text":"hello"}}`)
@@ -127,7 +127,7 @@ func TestBrokerRejectsEffectfulTypedGrantUntilTransactionalBinderIsQualified(t *
 	_, err := capability.NewBroker(capability.Config{
 		RunIdentity: "run-registry", CatalogDigest: digestForTest("catalog"), Registry: registry, Binder: &recordingBinder{},
 		ToolGrants: map[string]capability.ToolGrant{
-			"demo.write": {ToolID: "demo.write", HandlerVersion: "v1", EffectClass: "irreversible", Policy: "USER_APPROVAL_REQUIRED", MaxCalls: 1},
+			"demo.write": {ToolID: "demo.write", HandlerVersion: "v1", EffectClass: "irreversible", Policy: "USER_APPROVAL_REQUIRED", PolicyVersion: "policy_v1", MaxCalls: 1},
 		},
 	}, capability.FetcherFunc(func(context.Context, capability.ResolvedRequest, uint32) (capability.FetchOutput, error) {
 		return capability.FetchOutput{}, nil
@@ -158,7 +158,7 @@ func TestBrokerRejectsTypedToolBindingAndSchemaFailuresBeforeHandler(t *testing.
 		ToolGrants: map[string]capability.ToolGrant{
 			"demo.echo": {
 				ToolID: "demo.echo", HandlerVersion: "v1", MaxCalls: 2,
-				EffectClass: "read_only", Policy: "AUTO_COMMIT",
+				EffectClass: "read_only", Policy: "AUTO_COMMIT", PolicyVersion: "policy_v1",
 			},
 		},
 	}, capability.FetcherFunc(func(context.Context, capability.ResolvedRequest, uint32) (capability.FetchOutput, error) {

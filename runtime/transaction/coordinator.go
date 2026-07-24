@@ -21,13 +21,10 @@ type IDSource interface {
 }
 
 type coordinatorLedger interface {
+	Ledger
 	createTransaction(Transaction) error
-	GetTransaction(string) (Transaction, error)
 	createOperation(Operation) error
-	GetOperation(string) (Operation, error)
-	ListOperations(string) ([]Operation, error)
 	createAttempt(Attempt) error
-	GetAttempt(string) (Attempt, error)
 	findAttemptByProviderRequest(string, string) (Attempt, error)
 	transitionAttempt(string, uint64, AttemptState, AttemptState, time.Time) (Attempt, error)
 	transitionTransaction(string, uint64, TransactionState, TransactionState, time.Time) (Transaction, error)
@@ -107,6 +104,43 @@ func (coordinator *Coordinator) InspectOperation(id string) (Operation, error) {
 		return Operation{}, ErrInvalidInput
 	}
 	return coordinator.ledger.GetOperation(id)
+}
+
+type Inspection struct {
+	Transaction Transaction
+	Operations  []Operation
+	Attempts    []Attempt
+	Transitions []Transition
+	AbortPlan   AbortPlan
+}
+
+func (coordinator *Coordinator) Inspect(transactionID string, autoCompensateTools map[string]bool) (Inspection, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if !validIdentifier(transactionID) {
+		return Inspection{}, ErrInvalidInput
+	}
+	value, err := coordinator.ledger.GetTransaction(transactionID)
+	if err != nil {
+		return Inspection{}, err
+	}
+	operations, err := coordinator.ledger.ListOperations(transactionID)
+	if err != nil {
+		return Inspection{}, err
+	}
+	attempts, err := coordinator.ledger.ListAttempts(transactionID)
+	if err != nil {
+		return Inspection{}, err
+	}
+	transitions, err := coordinator.ledger.ListTransitions(transactionID)
+	if err != nil {
+		return Inspection{}, err
+	}
+	plan, err := BuildAbortPlan(operations, autoCompensateTools)
+	if err != nil {
+		return Inspection{}, err
+	}
+	return Inspection{Transaction: value, Operations: operations, Attempts: attempts, Transitions: transitions, AbortPlan: plan}, nil
 }
 
 func (coordinator *Coordinator) FindDispatch(transactionID, providerRequestDigest string) (DispatchCompletion, error) {

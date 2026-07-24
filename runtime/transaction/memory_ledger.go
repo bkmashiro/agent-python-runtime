@@ -192,6 +192,35 @@ func (ledger *MemoryLedger) GetAttempt(id string) (Attempt, error) {
 	return value, nil
 }
 
+func (ledger *MemoryLedger) ListAttempts(transactionID string) ([]Attempt, error) {
+	ledger.mu.RLock()
+	defer ledger.mu.RUnlock()
+	if _, exists := ledger.transactions[transactionID]; !exists {
+		return nil, ErrNotFound
+	}
+	result := make([]Attempt, 0)
+	for _, attempt := range ledger.attempts {
+		if attempt.TransactionID == transactionID {
+			result = append(result, attempt)
+		}
+	}
+	sort.Slice(result, func(left, right int) bool {
+		leftIndex := ledger.operations[result[left].OperationID].Index
+		rightIndex := ledger.operations[result[right].OperationID].Index
+		if leftIndex != rightIndex {
+			return leftIndex < rightIndex
+		}
+		if result[left].Kind != result[right].Kind {
+			return result[left].Kind < result[right].Kind
+		}
+		if result[left].Ordinal != result[right].Ordinal {
+			return result[left].Ordinal < result[right].Ordinal
+		}
+		return result[left].ID < result[right].ID
+	})
+	return result, nil
+}
+
 func (ledger *MemoryLedger) findAttemptByProviderRequest(transactionID, providerRequestDigest string) (Attempt, error) {
 	ledger.mu.RLock()
 	defer ledger.mu.RUnlock()

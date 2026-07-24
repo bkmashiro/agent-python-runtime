@@ -42,6 +42,15 @@ func TestCoordinatorDispatchJournalsAttemptBeforeApplyAndCommitsDirectRead(t *te
 	if completed.Operation.State != OperationApplied || completed.Attempt.State != AttemptSucceeded || completed.Transaction.State != TransactionCommitted {
 		t.Fatalf("unexpected direct completion: %+v", completed)
 	}
+	inspection, err := coordinator.Inspect(tx.ID, nil)
+	if err != nil || len(inspection.Operations) != 1 || len(inspection.Attempts) != 1 || len(inspection.Transitions) == 0 || inspection.AbortPlan.Disposition != AbortWithoutUndo {
+		t.Fatalf("inspection = %+v, %v", inspection, err)
+	}
+	inspection.Operations[0].State = OperationRolledBack
+	reinspected, err := coordinator.Inspect(tx.ID, nil)
+	if err != nil || reinspected.Operations[0].State != OperationApplied {
+		t.Fatalf("inspection leaked mutable state: %+v, %v", reinspected, err)
+	}
 	replayed, err := coordinator.CompleteDispatch(CompleteDispatchRequest{
 		OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded,
 	})

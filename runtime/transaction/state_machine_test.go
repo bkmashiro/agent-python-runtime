@@ -12,6 +12,7 @@ func TestTransactionTransitionsRejectTerminalReplayAndImpossibleStrengthening(t 
 		{TransactionAborting, TransactionCompensating},
 		{TransactionAborting, TransactionAborted},
 		{TransactionRollingBack, TransactionRolledBack},
+		{TransactionRollingBack, TransactionCompensating},
 		{TransactionCompensating, TransactionCompensated},
 		{TransactionPendingApproval, TransactionCommitting},
 		{TransactionCommitting, TransactionCommitted},

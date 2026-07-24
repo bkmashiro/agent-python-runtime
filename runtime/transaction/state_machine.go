@@ -68,7 +68,7 @@ var transactionTransitions = map[TransactionState]map[TransactionState]struct{}{
 		TransactionReconciliationRequired, TransactionRejected,
 	),
 	TransactionRollingBack: states(
-		TransactionRolledBack, TransactionPartiallyReverted, TransactionReconciliationRequired,
+		TransactionRolledBack, TransactionCompensating, TransactionPartiallyReverted, TransactionReconciliationRequired,
 	),
 	TransactionCompensating: states(
 		TransactionCompensated, TransactionPartiallyCompensated, TransactionReconciliationRequired,

@@ -3,6 +3,7 @@ package transaction
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -263,6 +264,13 @@ type DispatchCompletion struct {
 func (coordinator *Coordinator) BeginDispatch(request DispatchRequest) (Dispatch, error) {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
+	return coordinator.beginDispatchLocked(request, false)
+}
+
+func (coordinator *Coordinator) beginDispatchLocked(request DispatchRequest, undoAuthorized bool) (Dispatch, error) {
+	if request.Kind != AttemptApply && !undoAuthorized {
+		return Dispatch{}, ErrAuthorityDenied
+	}
 	if !validIdentifier(request.OperationID) || request.Ordinal == 0 || request.LeaseDuration <= 0 ||
 		request.LeaseDuration > 5*time.Minute || !digestPattern.MatchString(request.ProviderRequestDigest) {
 		return Dispatch{}, ErrInvalidInput
@@ -271,8 +279,8 @@ func (coordinator *Coordinator) BeginDispatch(request DispatchRequest) (Dispatch
 	if err != nil {
 		return Dispatch{}, err
 	}
-	expected, active, ok := dispatchStates(request.Kind)
-	if !ok || operation.State != expected {
+	expected, active, ok := dispatchStates(request.Kind, operation.State)
+	if !ok {
 		return Dispatch{}, ErrConflict
 	}
 	attemptID, err := coordinator.ids.New("att")
@@ -310,9 +318,190 @@ func (coordinator *Coordinator) BeginDispatch(request DispatchRequest) (Dispatch
 	return Dispatch{Operation: operation, Attempt: attempt}, nil
 }
 
+type AbortStepRequest struct {
+	TransactionID          string
+	AutoCompensateTools    map[string]bool
+	CompensationAuthorized bool
+	Ordinal                uint32
+	LeaseDuration          time.Duration
+	ProviderRequestDigest  string
+}
+
+type AbortStep struct {
+	Transaction     Transaction
+	Plan            AbortPlan
+	Dispatch        *Dispatch
+	PriorCompletion *DispatchCompletion
+	Done            bool
+}
+
+func (coordinator *Coordinator) BeginAbortStep(request AbortStepRequest) (AbortStep, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if !validIdentifier(request.TransactionID) || request.Ordinal == 0 || request.LeaseDuration <= 0 ||
+		request.LeaseDuration > 5*time.Minute || !digestPattern.MatchString(request.ProviderRequestDigest) || len(request.AutoCompensateTools) > 1024 {
+		return AbortStep{}, ErrInvalidInput
+	}
+	for toolID, allowed := range request.AutoCompensateTools {
+		if !allowed || !validIdentifier(toolID) {
+			return AbortStep{}, ErrInvalidInput
+		}
+	}
+	value, err := coordinator.ledger.GetTransaction(request.TransactionID)
+	if err != nil {
+		return AbortStep{}, err
+	}
+	if value.Mode != TransactionModeWorkflow {
+		return AbortStep{}, ErrConflict
+	}
+	priorAttempt, findErr := coordinator.ledger.findAttemptByProviderRequest(value.ID, request.ProviderRequestDigest)
+	if findErr == nil {
+		return coordinator.resumeAbortStepLocked(value, priorAttempt)
+	}
+	if !errors.Is(findErr, ErrNotFound) {
+		return AbortStep{}, findErr
+	}
+	if value.State != TransactionOpen && value.State != TransactionAborting &&
+		value.State != TransactionRollingBack && value.State != TransactionCompensating {
+		return AbortStep{}, ErrConflict
+	}
+	operations, err := coordinator.ledger.ListOperations(value.ID)
+	if err != nil {
+		return AbortStep{}, err
+	}
+	plan, err := BuildAbortPlan(operations, request.AutoCompensateTools)
+	if err != nil {
+		return AbortStep{}, err
+	}
+	if plan.Disposition == AbortReconciliationRequired || plan.Disposition == AbortIrreversibleCommitted {
+		return AbortStep{}, ErrConflict
+	}
+	if len(plan.CompensationOperationIDs) > 0 && !plan.AutoCompensate && !request.CompensationAuthorized {
+		return AbortStep{Transaction: value, Plan: plan}, ErrCompensationAuthorizationRequired
+	}
+	now := coordinator.now().UTC()
+	if value.State == TransactionOpen {
+		value, err = coordinator.ledger.transitionTransaction(value.ID, value.Version, TransactionOpen, TransactionAborting, now)
+		if err != nil {
+			return AbortStep{}, err
+		}
+	}
+	if len(plan.RollbackOperationIDs) > 0 {
+		if value.State == TransactionAborting {
+			value, err = coordinator.ledger.transitionTransaction(value.ID, value.Version, TransactionAborting, TransactionRollingBack, now)
+			if err != nil {
+				return AbortStep{}, err
+			}
+		}
+		operation, getErr := coordinator.ledger.GetOperation(plan.RollbackOperationIDs[0])
+		if getErr != nil {
+			return AbortStep{}, getErr
+		}
+		if operation.State != OperationApplied && operation.State != OperationRollbackFailed {
+			return AbortStep{}, ErrConflict
+		}
+		dispatch, dispatchErr := coordinator.beginDispatchLocked(DispatchRequest{OperationID: operation.ID, Kind: AttemptRollback, Ordinal: request.Ordinal, LeaseDuration: request.LeaseDuration, ProviderRequestDigest: request.ProviderRequestDigest}, true)
+		if dispatchErr != nil {
+			return AbortStep{}, dispatchErr
+		}
+		return AbortStep{Transaction: value, Plan: plan, Dispatch: &dispatch}, nil
+	}
+	if len(plan.CompensationOperationIDs) > 0 {
+		if value.State == TransactionAborting || value.State == TransactionRollingBack {
+			from := value.State
+			value, err = coordinator.ledger.transitionTransaction(value.ID, value.Version, from, TransactionCompensating, now)
+			if err != nil {
+				return AbortStep{}, err
+			}
+		}
+		operation, getErr := coordinator.ledger.GetOperation(plan.CompensationOperationIDs[0])
+		if getErr != nil {
+			return AbortStep{}, getErr
+		}
+		if operation.State == OperationApplied {
+			operation, err = coordinator.ledger.transitionOperation(operation.ID, operation.Version, OperationApplied, OperationCompensationRequired, now)
+			if err != nil {
+				return AbortStep{}, err
+			}
+		}
+		if operation.State != OperationCompensationRequired && operation.State != OperationCompensationFailed {
+			return AbortStep{}, ErrConflict
+		}
+		dispatch, dispatchErr := coordinator.beginDispatchLocked(DispatchRequest{OperationID: operation.ID, Kind: AttemptCompensate, Ordinal: request.Ordinal, LeaseDuration: request.LeaseDuration, ProviderRequestDigest: request.ProviderRequestDigest}, true)
+		if dispatchErr != nil {
+			return AbortStep{}, dispatchErr
+		}
+		return AbortStep{Transaction: value, Plan: plan, Dispatch: &dispatch}, nil
+	}
+	target := TransactionAborted
+	switch value.State {
+	case TransactionRollingBack:
+		target = TransactionRolledBack
+	case TransactionCompensating:
+		target = TransactionCompensated
+	}
+	if value.State != target {
+		value, err = coordinator.ledger.transitionTransaction(value.ID, value.Version, value.State, target, now)
+		if err != nil {
+			return AbortStep{}, err
+		}
+	}
+	return AbortStep{Transaction: value, Plan: plan, Done: true}, nil
+}
+
+func (coordinator *Coordinator) resumeAbortStepLocked(value Transaction, attempt Attempt) (AbortStep, error) {
+	if attempt.TransactionID != value.ID || (attempt.Kind != AttemptRollback && attempt.Kind != AttemptCompensate) {
+		return AbortStep{}, ErrConflict
+	}
+	operation, err := coordinator.ledger.GetOperation(attempt.OperationID)
+	if err != nil || operation.TransactionID != value.ID {
+		return AbortStep{}, ErrConflict
+	}
+	now := coordinator.now().UTC()
+	switch attempt.State {
+	case AttemptLeased:
+		_, active, ok := dispatchStates(attempt.Kind, attempt.ExpectedOperationState)
+		if !ok || operation.State != attempt.ExpectedOperationState {
+			return AbortStep{}, ErrConflict
+		}
+		attempt, err = coordinator.ledger.transitionAttempt(attempt.ID, attempt.Version, AttemptLeased, AttemptDispatching, now)
+		if err != nil {
+			return AbortStep{}, err
+		}
+		operation, err = coordinator.ledger.transitionOperation(operation.ID, operation.Version, operation.State, active, now)
+		if err != nil {
+			return AbortStep{}, err
+		}
+		dispatch := Dispatch{Operation: operation, Attempt: attempt}
+		return AbortStep{Transaction: value, Dispatch: &dispatch}, nil
+	case AttemptDispatching:
+		completion, completeErr := coordinator.completeDispatchLocked(CompleteDispatchRequest{OperationID: operation.ID, AttemptID: attempt.ID, Outcome: DispatchAmbiguous})
+		if completeErr != nil {
+			return AbortStep{}, completeErr
+		}
+		return AbortStep{Transaction: completion.Transaction, PriorCompletion: &completion}, ErrConflict
+	case AttemptSucceeded, AttemptFailed:
+		outcome := DispatchSucceeded
+		if attempt.State == AttemptFailed {
+			outcome = DispatchFailed
+		}
+		completion, completeErr := coordinator.completeDispatchLocked(CompleteDispatchRequest{OperationID: operation.ID, AttemptID: attempt.ID, Outcome: outcome})
+		if completeErr != nil {
+			return AbortStep{}, completeErr
+		}
+		return AbortStep{Transaction: completion.Transaction, PriorCompletion: &completion}, nil
+	default:
+		return AbortStep{}, ErrConflict
+	}
+}
+
 func (coordinator *Coordinator) CompleteDispatch(request CompleteDispatchRequest) (DispatchCompletion, error) {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
+	return coordinator.completeDispatchLocked(request)
+}
+
+func (coordinator *Coordinator) completeDispatchLocked(request CompleteDispatchRequest) (DispatchCompletion, error) {
 	operation, err := coordinator.ledger.GetOperation(request.OperationID)
 	if err != nil {
 		return DispatchCompletion{}, err
@@ -329,6 +518,19 @@ func (coordinator *Coordinator) CompleteDispatch(request CompleteDispatchRequest
 	if !ok {
 		return DispatchCompletion{}, ErrInvalidInput
 	}
+	_, operationActive, dispatchKnown := dispatchStates(attempt.Kind, attempt.ExpectedOperationState)
+	if !dispatchKnown {
+		return DispatchCompletion{}, ErrInvalidInput
+	}
+	if operation.State != attempt.ExpectedOperationState && operation.State != operationActive && operation.State != operationTarget {
+		return DispatchCompletion{}, ErrConflict
+	}
+	transactionTarget := transactionCompletionTarget(transaction, attempt.Kind, request.Outcome)
+	if transactionTarget != "" && transaction.State != transactionTarget {
+		if err := ValidateTransactionTransition(transaction.State, transactionTarget); err != nil {
+			return DispatchCompletion{}, err
+		}
+	}
 	now := coordinator.now().UTC()
 	if attempt.State == AttemptDispatching {
 		attempt, err = coordinator.ledger.transitionAttempt(attempt.ID, attempt.Version, AttemptDispatching, attemptTarget, now)
@@ -338,7 +540,12 @@ func (coordinator *Coordinator) CompleteDispatch(request CompleteDispatchRequest
 	} else if attempt.State != attemptTarget {
 		return DispatchCompletion{}, ErrConflict
 	}
-	_, operationActive, _ := dispatchStates(attempt.Kind)
+	if operation.State == attempt.ExpectedOperationState {
+		operation, err = coordinator.ledger.transitionOperation(operation.ID, operation.Version, operation.State, operationActive, now)
+		if err != nil {
+			return DispatchCompletion{}, err
+		}
+	}
 	if operation.State == operationActive {
 		operation, err = coordinator.ledger.transitionOperation(operation.ID, operation.Version, operation.State, operationTarget, now)
 		if err != nil {
@@ -347,7 +554,6 @@ func (coordinator *Coordinator) CompleteDispatch(request CompleteDispatchRequest
 	} else if operation.State != operationTarget {
 		return DispatchCompletion{}, ErrConflict
 	}
-	transactionTarget := transactionCompletionTarget(transaction, request.Outcome)
 	if transactionTarget != "" && transaction.State != transactionTarget {
 		transaction, err = coordinator.ledger.transitionTransaction(transaction.ID, transaction.Version, transaction.State, transactionTarget, now)
 		if err != nil {
@@ -444,9 +650,21 @@ func reconciliationTransactionTarget(mode TransactionMode, kind AttemptKind, out
 	}
 }
 
-func transactionCompletionTarget(value Transaction, outcome DispatchOutcome) TransactionState {
+func transactionCompletionTarget(value Transaction, kind AttemptKind, outcome DispatchOutcome) TransactionState {
 	if outcome == DispatchAmbiguous {
 		return TransactionReconciliationRequired
+	}
+	if kind == AttemptRollback {
+		if outcome == DispatchFailed {
+			return TransactionPartiallyReverted
+		}
+		return ""
+	}
+	if kind == AttemptCompensate {
+		if outcome == DispatchFailed {
+			return TransactionPartiallyCompensated
+		}
+		return ""
 	}
 	if outcome == DispatchFailed {
 		if value.Mode == TransactionModeDirect {
@@ -460,17 +678,28 @@ func transactionCompletionTarget(value Transaction, outcome DispatchOutcome) Tra
 	return ""
 }
 
-func dispatchStates(kind AttemptKind) (OperationState, OperationState, bool) {
+func dispatchStates(kind AttemptKind, state OperationState) (OperationState, OperationState, bool) {
 	switch kind {
 	case AttemptApply:
-		return OperationReady, OperationApplying, true
+		if state == OperationReady || state == OperationFailedRetryable {
+			return state, OperationApplying, true
+		}
 	case AttemptRollback:
-		return OperationRollingBack, OperationRollingBack, true
+		if state == OperationApplied || state == OperationRollbackFailed {
+			return state, OperationRollingBack, true
+		}
+		if state == OperationRollingBack {
+			return state, state, true
+		}
 	case AttemptCompensate:
-		return OperationCompensating, OperationCompensating, true
-	default:
-		return "", "", false
+		if state == OperationCompensationRequired || state == OperationCompensationFailed {
+			return state, OperationCompensating, true
+		}
+		if state == OperationCompensating {
+			return state, state, true
+		}
 	}
+	return "", "", false
 }
 
 func completionStates(kind AttemptKind, outcome DispatchOutcome) (AttemptState, OperationState, bool) {

@@ -143,6 +143,121 @@ func TestCoordinatorReconcilesAmbiguousDispatchWithoutReplay(t *testing.T) {
 	}
 }
 
+func TestCoordinatorResumesLeasedAbortAttemptWithoutMintingDuplicate(t *testing.T) {
+	now := time.Unix(800, 0).UTC()
+	ledger := NewMemoryLedger()
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
+	tx, err := coordinator.Begin(BeginRequest{RunID: "run_leased_abort", CatalogDigest: testDigest("catalog"), Mode: TransactionModeWorkflow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err := coordinator.Propose(ProposeRequest{TransactionID: tx.ID, ToolID: "config.set", HandlerVersion: "v1", EffectClass: EffectReversible, Policy: PolicyAutoCommit, PolicyVersion: "policy_v1", ArgumentDigest: testDigest("args")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	apply, err := coordinator.BeginDispatch(DispatchRequest{OperationID: op.ID, Kind: AttemptApply, Ordinal: 1, LeaseDuration: time.Minute, ProviderRequestDigest: testDigest("apply")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coordinator.CompleteDispatch(CompleteDispatchRequest{OperationID: op.ID, AttemptID: apply.Attempt.ID, Outcome: DispatchSucceeded}); err != nil {
+		t.Fatal(err)
+	}
+	currentTx, _ := ledger.GetTransaction(tx.ID)
+	currentTx, err = ledger.transitionTransaction(tx.ID, currentTx.Version, TransactionOpen, TransactionAborting, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.transitionTransaction(tx.ID, currentTx.Version, TransactionAborting, TransactionRollingBack, now); err != nil {
+		t.Fatal(err)
+	}
+	attempt := Attempt{ID: "att_leased_abort", TransactionID: tx.ID, OperationID: op.ID, Kind: AttemptRollback, Ordinal: 2, State: AttemptLeased, ExpectedOperationState: OperationApplied, LeaseID: "lease_leased_abort", LeaseExpiresAt: now.Add(time.Minute), ProviderRequestDigest: testDigest("rollback"), CreatedAt: now, UpdatedAt: now}
+	if err := ledger.createAttempt(attempt); err != nil {
+		t.Fatal(err)
+	}
+	step, err := coordinator.BeginAbortStep(AbortStepRequest{TransactionID: tx.ID, AutoCompensateTools: map[string]bool{}, Ordinal: 2, LeaseDuration: time.Minute, ProviderRequestDigest: testDigest("rollback")})
+	if err != nil || step.Dispatch == nil || step.Dispatch.Attempt.ID != attempt.ID || step.Dispatch.Attempt.State != AttemptDispatching || step.Dispatch.Operation.State != OperationRollingBack {
+		t.Fatalf("leased resume=%+v err=%v", step, err)
+	}
+	attempts, err := ledger.ListAttempts(tx.ID)
+	if err != nil || len(attempts) != 2 {
+		t.Fatalf("leased resume attempts=%+v err=%v", attempts, err)
+	}
+}
+
+func TestCompleteDispatchRejectsUnknownPersistedSemanticsBeforeMutation(t *testing.T) {
+	now := time.Unix(850, 0).UTC()
+	ledger := NewMemoryLedger()
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
+	tx, err := coordinator.Begin(BeginRequest{RunID: "run_corrupt_attempt", CatalogDigest: testDigest("catalog"), Mode: TransactionModeWorkflow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err := coordinator.Propose(ProposeRequest{TransactionID: tx.ID, ToolID: "demo.read", HandlerVersion: "v1", EffectClass: EffectReadOnly, Policy: PolicyAutoCommit, PolicyVersion: "policy_v1", ArgumentDigest: testDigest("args")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatch, err := coordinator.BeginDispatch(DispatchRequest{OperationID: op.ID, Kind: AttemptApply, Ordinal: 1, LeaseDuration: time.Minute, ProviderRequestDigest: testDigest("provider")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.mu.Lock()
+	corrupt := ledger.attempts[dispatch.Attempt.ID]
+	corrupt.ExpectedOperationState = OperationDenied
+	ledger.attempts[dispatch.Attempt.ID] = corrupt
+	ledger.mu.Unlock()
+	if _, err := coordinator.CompleteDispatch(CompleteDispatchRequest{OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("corrupt completion error=%v", err)
+	}
+	persisted, err := ledger.GetAttempt(dispatch.Attempt.ID)
+	if err != nil || persisted.State != AttemptDispatching || persisted.Version != dispatch.Attempt.Version {
+		t.Fatalf("corrupt completion mutated attempt=%+v err=%v", persisted, err)
+	}
+	ledger.mu.Lock()
+	persisted.ExpectedOperationState = OperationReady
+	ledger.attempts[dispatch.Attempt.ID] = persisted
+	corruptOperation := ledger.operations[op.ID]
+	corruptOperation.State = OperationDenied
+	ledger.operations[op.ID] = corruptOperation
+	ledger.mu.Unlock()
+	if _, err := coordinator.CompleteDispatch(CompleteDispatchRequest{OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("corrupt operation completion error=%v", err)
+	}
+	persisted, _ = ledger.GetAttempt(dispatch.Attempt.ID)
+	if persisted.State != AttemptDispatching || persisted.Version != dispatch.Attempt.Version {
+		t.Fatalf("corrupt operation completion mutated attempt=%+v", persisted)
+	}
+}
+
+func TestCompleteDispatchPrevalidatesTransactionTargetBeforeMutation(t *testing.T) {
+	now := time.Unix(860, 0).UTC()
+	ledger := NewMemoryLedger()
+	coordinator := NewCoordinator(ledger, &sequenceIDs{}, func() time.Time { return now }, nil)
+	tx, err := coordinator.Begin(BeginRequest{RunID: "run_corrupt_transaction", CatalogDigest: testDigest("catalog"), Mode: TransactionModeDirect})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err := coordinator.Propose(ProposeRequest{TransactionID: tx.ID, ToolID: "demo.read", HandlerVersion: "v1", EffectClass: EffectReadOnly, Policy: PolicyAutoCommit, PolicyVersion: "policy_v1", ArgumentDigest: testDigest("args")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatch, err := coordinator.BeginDispatch(DispatchRequest{OperationID: op.ID, Kind: AttemptApply, Ordinal: 1, LeaseDuration: time.Minute, ProviderRequestDigest: testDigest("provider")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.mu.Lock()
+	corruptTx := ledger.transactions[tx.ID]
+	corruptTx.State = TransactionPendingApproval
+	ledger.transactions[tx.ID] = corruptTx
+	ledger.mu.Unlock()
+	if _, err := coordinator.CompleteDispatch(CompleteDispatchRequest{OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded}); err == nil {
+		t.Fatal("invalid transaction completion target accepted")
+	}
+	persisted, err := ledger.GetAttempt(dispatch.Attempt.ID)
+	if err != nil || persisted.State != AttemptDispatching || persisted.Version != dispatch.Attempt.Version {
+		t.Fatalf("invalid transaction target mutated attempt=%+v err=%v", persisted, err)
+	}
+}
+
 func TestCoordinatorDispatchRejectsInvalidLeaseAndMovesAmbiguousWorkflowToReconciliation(t *testing.T) {
 	now := time.Unix(600, 0).UTC()
 	ledger := NewMemoryLedger()

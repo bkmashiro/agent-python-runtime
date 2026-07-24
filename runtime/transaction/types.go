@@ -6,16 +6,17 @@ import (
 )
 
 var (
-	ErrAlreadyExists          = errors.New("transaction record already exists")
-	ErrNotFound               = errors.New("transaction record not found")
-	ErrConflict               = errors.New("transaction record version or state conflict")
-	ErrInvalidInput           = errors.New("invalid transaction input")
-	ErrDirectTransactionLimit = errors.New("direct transaction permits exactly one operation")
-	ErrAuthorityDenied        = errors.New("commit authority denied")
-	ErrSameRunCommit          = errors.New("same-run agent commit denied")
-	ErrDigestMismatch         = errors.New("manifest digest mismatch")
-	ErrExpired                = errors.New("authority expired")
-	ErrAlreadyAuthorized      = errors.New("operation already authorized")
+	ErrAlreadyExists                     = errors.New("transaction record already exists")
+	ErrNotFound                          = errors.New("transaction record not found")
+	ErrConflict                          = errors.New("transaction record version or state conflict")
+	ErrInvalidInput                      = errors.New("invalid transaction input")
+	ErrDirectTransactionLimit            = errors.New("direct transaction permits exactly one operation")
+	ErrAuthorityDenied                   = errors.New("commit authority denied")
+	ErrSameRunCommit                     = errors.New("same-run agent commit denied")
+	ErrDigestMismatch                    = errors.New("manifest digest mismatch")
+	ErrExpired                           = errors.New("authority expired")
+	ErrAlreadyAuthorized                 = errors.New("operation already authorized")
+	ErrCompensationAuthorizationRequired = errors.New("compensation requires Host authorization")
 )
 
 type TransactionMode string

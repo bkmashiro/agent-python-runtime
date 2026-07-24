@@ -138,7 +138,7 @@ func TestMemoryLedgerAttemptIdentityLeaseAndTerminalReplay(t *testing.T) {
 	wrongPriorState.ID = "att_wrong_state"
 	wrongPriorState.Ordinal = 3
 	wrongPriorState.Kind = AttemptRollback
-	wrongPriorState.ExpectedOperationState = OperationRollingBack
+	wrongPriorState.ExpectedOperationState = OperationApplied
 	if err := ledger.createAttempt(wrongPriorState); !errors.Is(err, ErrConflict) {
 		t.Fatalf("wrong expected operation state error = %v, want ErrConflict", err)
 	}

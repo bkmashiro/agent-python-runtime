@@ -385,11 +385,11 @@ func validAttemptKind(kind AttemptKind) bool {
 func validAttemptPriorState(kind AttemptKind, state OperationState) bool {
 	switch kind {
 	case AttemptApply:
-		return state == OperationReady
+		return state == OperationReady || state == OperationFailedRetryable
 	case AttemptRollback:
-		return state == OperationRollingBack
+		return state == OperationApplied || state == OperationRollbackFailed
 	case AttemptCompensate:
-		return state == OperationCompensating
+		return state == OperationCompensationRequired || state == OperationCompensationFailed
 	default:
 		return false
 	}

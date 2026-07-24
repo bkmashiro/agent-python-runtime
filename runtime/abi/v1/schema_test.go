@@ -15,7 +15,7 @@ import (
 
 var schemaNames = []string{
 	"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
-	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "commit-command", "audit-evidence", "transaction-evidence", "transaction-evidence-v2",
+	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "effect-attempt-v2", "commit-command", "audit-evidence", "transaction-evidence", "transaction-evidence-v2",
 }
 
 func abiRoot(t *testing.T) string {

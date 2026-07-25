@@ -1,0 +1,45 @@
+{
+  "$id": "https://agent-runtime.dev/eval/v1/development-pilot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": "evaluation-development-pilot/v1"},
+    "pilot_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "status": {"enum": ["draft", "frozen", "completed"]},
+    "split": {"const": "dev"},
+    "experiment_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "trial_spec_manifest_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "provider_adapter_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "credential_env_name": {"const": "LINKAPI_API_KEY"},
+    "trial_count": {"type": "integer", "minimum": 1, "maximum": 10000},
+    "max_total_provider_calls": {"type": "integer", "minimum": 1, "maximum": 1000000},
+    "max_total_output_tokens": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "maximum_spend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]{0,8})(\\.[0-9]{1,6})?$"}
+      },
+      "required": ["currency", "decimal"]
+    },
+    "transport_retry_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "automatic_retries": {"const": 0},
+        "reason": {"const": "unverified_provider_idempotency"}
+      },
+      "required": ["automatic_retries", "reason"]
+    },
+    "decision_eligible": {"const": false},
+    "conclusion": {"const": "development_only"}
+  },
+  "required": [
+    "schema_version", "pilot_id", "status", "split", "experiment_digest",
+    "trial_spec_manifest_digest", "provider_adapter_digest", "credential_env_name",
+    "trial_count", "max_total_provider_calls", "max_total_output_tokens", "maximum_spend",
+    "transport_retry_policy", "decision_eligible", "conclusion"
+  ]
+}

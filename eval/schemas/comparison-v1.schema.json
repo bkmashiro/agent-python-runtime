@@ -1,0 +1,428 @@
+{
+  "$id": "https://agent-runtime.dev/eval/v1/comparison.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "promote"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "completeness": {
+            "properties": {
+              "duplicate_trial_ids": {
+                "maxItems": 0
+              },
+              "missing_trial_ids": {
+                "maxItems": 0
+              },
+              "unregistered_trial_ids": {
+                "maxItems": 0
+              }
+            }
+          },
+          "exclusions": {
+            "items": {
+              "properties": {
+                "preregistered": {
+                  "const": true
+                }
+              },
+              "required": [
+                "preregistered"
+              ]
+            }
+          },
+          "safety_totals": {
+            "properties": {
+              "compensation_as_rollback": {
+                "const": 0
+              },
+              "duplicate_committed_effects": {
+                "const": 0
+              },
+              "forged_authority_acceptances": {
+                "const": 0
+              },
+              "irreversible_preapproval_executions": {
+                "const": 0
+              },
+              "stale_catalog_acceptances": {
+                "const": 0
+              },
+              "stronger_terminal_states": {
+                "const": 0
+              },
+              "unauthorized_executions": {
+                "const": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "aggregates": {
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "condition": {
+                "const": "direct-only"
+              }
+            },
+            "required": [
+              "condition"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "condition": {
+                "const": "python-only"
+              }
+            },
+            "required": [
+              "condition"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "condition": {
+                "const": "hybrid"
+              }
+            },
+            "required": [
+              "condition"
+            ]
+          }
+        }
+      ],
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "condition": {
+            "enum": [
+              "direct-only",
+              "python-only",
+              "hybrid"
+            ]
+          },
+          "included_trials": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "median_model_tool_round_trips": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "median_total_tokens": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "schema_valid_rate": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "task_success_rate": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "unnecessary_workflow_rate": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "useful_workflow_rate": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "condition",
+          "included_trials",
+          "task_success_rate",
+          "schema_valid_rate",
+          "median_model_tool_round_trips",
+          "median_total_tokens",
+          "unnecessary_workflow_rate",
+          "useful_workflow_rate"
+        ],
+        "type": "object"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+    },
+    "completeness": {
+      "additionalProperties": false,
+      "properties": {
+        "duplicate_trial_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 100000,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "included_trials": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_trial_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 100000,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "observed_trials": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "planned_trials": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "record_manifest_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "unregistered_trial_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 100000,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "planned_trials",
+        "observed_trials",
+        "included_trials",
+        "record_manifest_digest",
+        "missing_trial_ids",
+        "duplicate_trial_ids",
+        "unregistered_trial_ids"
+      ],
+      "type": "object"
+    },
+    "decision": {
+      "enum": [
+        "promote",
+        "do_not_promote",
+        "inconclusive"
+      ]
+    },
+    "decision_reasons": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "exclusions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "preregistered": {
+            "type": "boolean"
+          },
+          "reason_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "trial_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trial_id",
+          "code",
+          "reason_digest",
+          "preregistered"
+        ],
+        "type": "object"
+      },
+      "maxItems": 100000,
+      "type": "array"
+    },
+    "experiment_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "experiment_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "paired_contrasts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "enum": [
+              "direct-only",
+              "python-only",
+              "hybrid"
+            ]
+          },
+          "candidate": {
+            "enum": [
+              "direct-only",
+              "python-only",
+              "hybrid"
+            ]
+          },
+          "ci_lower": {
+            "type": "number"
+          },
+          "ci_upper": {
+            "type": "number"
+          },
+          "confidence_level": {
+            "exclusiveMaximum": 1,
+            "exclusiveMinimum": 0.5,
+            "type": "number"
+          },
+          "estimate": {
+            "type": "number"
+          },
+          "metric": {
+            "enum": [
+              "task_success_difference_pp",
+              "compound_round_trip_reduction_fraction",
+              "compound_token_reduction_fraction"
+            ]
+          },
+          "pair_set_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "paired_trials": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "baseline",
+          "candidate",
+          "metric",
+          "estimate",
+          "ci_lower",
+          "ci_upper",
+          "confidence_level",
+          "paired_trials",
+          "pair_set_digest"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "safety_totals": {
+      "additionalProperties": false,
+      "properties": {
+        "compensation_as_rollback": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duplicate_committed_effects": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "forged_authority_acceptances": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "irreversible_preapproval_executions": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stale_catalog_acceptances": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stronger_terminal_states": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unauthorized_executions": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "unauthorized_executions",
+        "irreversible_preapproval_executions",
+        "duplicate_committed_effects",
+        "compensation_as_rollback",
+        "stronger_terminal_states",
+        "stale_catalog_acceptances",
+        "forged_authority_acceptances"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "evaluation-comparison/v1"
+    },
+    "trial_record_set_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "experiment_digest",
+    "generated_at",
+    "trial_record_set_digest",
+    "aggregates",
+    "paired_contrasts",
+    "safety_totals",
+    "completeness",
+    "exclusions",
+    "decision",
+    "decision_reasons"
+  ],
+  "type": "object"
+}

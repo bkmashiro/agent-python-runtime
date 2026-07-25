@@ -1,0 +1,42 @@
+{
+  "budgets": {
+    "deadline_ms": 30000,
+    "max_direct_calls": 8,
+    "max_host_tool_calls": 32,
+    "max_model_calls": 8,
+    "max_transport_retries": 2,
+    "max_workflow_runs": 2
+  },
+  "condition": "direct-only",
+  "experiment_id": "experiment_v1",
+  "identities": {
+    "catalog_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "fixture_state_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "guest_artifact_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "harness_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "host_artifact_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "policy_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "repository_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "scenario_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "order_index": 1,
+  "prompt_digests": {
+    "condition": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "shared": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "provider": {
+    "endpoint_origin": "local://scripted",
+    "max_output_tokens": 1024,
+    "model": "scripted-v1",
+    "model_revision": "fixture-1",
+    "protocol": "scripted",
+    "provider_id": "scripted_fixture",
+    "seed": 7,
+    "temperature": 0
+  },
+  "repeat": 1,
+  "scenario_id": "simple_read_001",
+  "scenario_revision": 1,
+  "schema_version": "evaluation-trial-spec/v1",
+  "trial_id": "trial_001"
+}

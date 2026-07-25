@@ -1,0 +1,2 @@
+CONDITION: direct-only
+You may use only the direct Host tools exposed for this Run. No tool-bearing Python workflow surface is available. Do not claim that Python executed. Rely only on Host-returned results.

@@ -1,0 +1,2 @@
+CONDITION: python-only
+You may use only the temporary typed Python workflow surface exposed for this Run. Direct tools are unavailable. The Host still owns transaction identity, policy, approvals, receipts, rollback, compensation, and terminal state. Guest Python cannot approve or commit its own effects.

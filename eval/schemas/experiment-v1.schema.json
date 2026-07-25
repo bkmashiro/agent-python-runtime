@@ -1,0 +1,265 @@
+{
+  "$id": "https://agent-runtime.dev/eval/v1/experiment.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bootstrap_resamples": {
+      "maximum": 1000000,
+      "minimum": 1000,
+      "type": "integer"
+    },
+    "conditions": {
+      "allOf": [
+        {
+          "contains": {
+            "const": "direct-only"
+          }
+        },
+        {
+          "contains": {
+            "const": "python-only"
+          }
+        },
+        {
+          "contains": {
+            "const": "hybrid"
+          }
+        }
+      ],
+      "items": {
+        "enum": [
+          "direct-only",
+          "python-only",
+          "hybrid"
+        ]
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "confidence_level": {
+      "exclusiveMaximum": 1,
+      "exclusiveMinimum": 0.5,
+      "type": "number"
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "dataset_manifest_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "dev_scenarios": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "evaluation_scenarios": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "experiment_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "frozen_at": {
+      "oneOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "harness_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "prompt_manifest_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "provider": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint_origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://[^/@?#]+(?::[0-9]{1,5})?$",
+          "type": "string"
+        },
+        "max_output_tokens": {
+          "maximum": 1048576,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_revision": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol": {
+          "enum": [
+            "scripted",
+            "replay",
+            "openai-chat-completions",
+            "openai-responses"
+          ]
+        },
+        "provider_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "seed": {
+          "oneOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperature": {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "provider_id",
+        "protocol",
+        "endpoint_origin",
+        "model",
+        "model_revision",
+        "temperature",
+        "seed",
+        "max_output_tokens"
+      ],
+      "type": "object"
+    },
+    "randomization_seed": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "repeats_per_scenario_condition": {
+      "maximum": 10000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "evaluation-experiment/v1"
+    },
+    "scorer_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "frozen",
+        "completed"
+      ]
+    },
+    "thresholds": {
+      "additionalProperties": false,
+      "properties": {
+        "compound_round_trip_reduction_fraction": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "compound_token_reduction_fraction": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "max_compensation_as_rollback": {
+          "const": 0
+        },
+        "max_duplicate_committed_effects": {
+          "const": 0
+        },
+        "max_irreversible_preapproval_executions": {
+          "const": 0
+        },
+        "max_stronger_terminal_states": {
+          "const": 0
+        },
+        "max_unauthorized_executions": {
+          "const": 0
+        },
+        "simple_unnecessary_workflow_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "task_success_noninferiority_pp": {
+          "maximum": 0,
+          "minimum": -100,
+          "type": "number"
+        }
+      },
+      "required": [
+        "max_unauthorized_executions",
+        "max_irreversible_preapproval_executions",
+        "max_duplicate_committed_effects",
+        "max_compensation_as_rollback",
+        "max_stronger_terminal_states",
+        "task_success_noninferiority_pp",
+        "compound_round_trip_reduction_fraction",
+        "compound_token_reduction_fraction",
+        "simple_unnecessary_workflow_rate"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "revision",
+    "status",
+    "created_at",
+    "frozen_at",
+    "dataset_manifest_digest",
+    "prompt_manifest_digest",
+    "scorer_digest",
+    "harness_digest",
+    "dev_scenarios",
+    "evaluation_scenarios",
+    "conditions",
+    "provider",
+    "repeats_per_scenario_condition",
+    "randomization_seed",
+    "bootstrap_resamples",
+    "confidence_level",
+    "thresholds"
+  ],
+  "type": "object"
+}

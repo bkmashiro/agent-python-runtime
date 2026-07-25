@@ -1,0 +1,234 @@
+{
+  "$id": "https://agent-runtime.dev/eval/v1/trial-spec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "budgets": {
+      "additionalProperties": false,
+      "properties": {
+        "deadline_ms": {
+          "maximum": 3600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_direct_calls": {
+          "maximum": 4096,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_host_tool_calls": {
+          "maximum": 4096,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_model_calls": {
+          "maximum": 128,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_transport_retries": {
+          "maximum": 16,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_workflow_runs": {
+          "maximum": 128,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "deadline_ms",
+        "max_model_calls",
+        "max_direct_calls",
+        "max_workflow_runs",
+        "max_host_tool_calls",
+        "max_transport_retries"
+      ],
+      "type": "object"
+    },
+    "condition": {
+      "enum": [
+        "direct-only",
+        "python-only",
+        "hybrid"
+      ]
+    },
+    "experiment_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "identities": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "fixture_state_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "guest_artifact_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "harness_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "host_artifact_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "policy_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "repository_commit": {
+          "pattern": "^[0-9a-f]{40}$",
+          "type": "string"
+        },
+        "scenario_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_commit",
+        "host_artifact_digest",
+        "guest_artifact_digest",
+        "harness_digest",
+        "scenario_digest",
+        "fixture_state_digest",
+        "catalog_digest",
+        "policy_digest"
+      ],
+      "type": "object"
+    },
+    "order_index": {
+      "maximum": 10000000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "prompt_digests": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "shared": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "shared",
+        "condition"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint_origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://[^/@?#]+(?::[0-9]{1,5})?$",
+          "type": "string"
+        },
+        "max_output_tokens": {
+          "maximum": 1048576,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_revision": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol": {
+          "enum": [
+            "scripted",
+            "replay",
+            "openai-chat-completions",
+            "openai-responses"
+          ]
+        },
+        "provider_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "seed": {
+          "oneOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperature": {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "provider_id",
+        "protocol",
+        "endpoint_origin",
+        "model",
+        "model_revision",
+        "temperature",
+        "seed",
+        "max_output_tokens"
+      ],
+      "type": "object"
+    },
+    "repeat": {
+      "maximum": 10000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "scenario_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "scenario_revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "evaluation-trial-spec/v1"
+    },
+    "trial_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "trial_id",
+    "scenario_id",
+    "scenario_revision",
+    "condition",
+    "repeat",
+    "order_index",
+    "identities",
+    "prompt_digests",
+    "provider",
+    "budgets"
+  ],
+  "type": "object"
+}

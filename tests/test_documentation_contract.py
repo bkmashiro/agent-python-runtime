@@ -121,7 +121,8 @@ class PublicDocumentationContractTests(unittest.TestCase):
         self.assertIn("same Python run", effect_plane)
         self.assertIn("active implementation pointer", status)
         self.assertIn("None of those write/effect capabilities is an implemented V1 claim", status)
-        self.assertIn("owner deferred live Agent Direct/Python/Hybrid evaluation", status)
+        self.assertIn("Track I Phase 1 now freezes evaluation and prompt contracts only", status)
+        self.assertIn("no dataset, harness run, live-model comparison", status)
 
 
 if __name__ == "__main__":

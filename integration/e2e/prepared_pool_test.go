@@ -90,13 +90,27 @@ func TestSingleUsePreparedPoolSkipsRequestInitAndPreservesFreshness(t *testing.T
 func TestPreparedPoolMissFallsBackToExclusiveFreshInstance(t *testing.T) {
 	phases := &phaseLog{}
 	hit := make(chan struct{})
+	refillBlocked := make(chan struct{})
+	releaseRefill := make(chan struct{})
 	var hitOnce sync.Once
+	var refillOnce sync.Once
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseRefill) }) }
+	defer release()
 	factory := wazeroengine.Factory{
 		PreparedCapacity: 1,
 		Observer: func(observation wazeroengine.Observation) {
 			phases.observe(observation)
 			if observation.Phase == "pool_hit" {
 				hitOnce.Do(func() { close(hit) })
+			}
+			if observation.Phase == "pool_prepare_instantiate_guest" {
+				select {
+				case <-hit:
+					refillOnce.Do(func() { close(refillBlocked) })
+					<-releaseRefill
+				default:
+				}
 			}
 		},
 	}
@@ -114,10 +128,16 @@ func TestPreparedPoolMissFallsBackToExclusiveFreshInstance(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("first Run did not check out prepared instance")
 	}
+	select {
+	case <-refillBlocked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("prepared refill did not reach deterministic block")
+	}
 	second := run(t, instance, "pool-exclusive-2", "result = 'exclusive_marker' in globals()", map[string]any{})
 	if second.Status != "ok" || second.Result != false {
 		t.Fatalf("pool miss shared an in-flight instance: %#v", second)
 	}
+	release()
 	cancelFirst()
 	if err := <-firstResult; err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("first in-flight Run did not cancel cleanly: %v", err)

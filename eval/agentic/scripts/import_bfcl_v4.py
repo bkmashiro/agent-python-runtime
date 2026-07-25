@@ -69,6 +69,50 @@ def contains_sensitive(value: Any) -> bool:
     return isinstance(value, str) and bool(SENSITIVE_VALUE.search(value))
 
 
+def supported_schema(schema: Any) -> bool:
+    if not isinstance(schema, dict) or "$ref" in schema:
+        return False
+    allowed_types = {"array", "boolean", "integer", "null", "number", "object", "string"}
+    type_value = schema.get("type")
+    if type_value is not None:
+        if isinstance(type_value, str):
+            if type_value not in allowed_types:
+                return False
+        elif isinstance(type_value, list):
+            if not type_value or any(not isinstance(item, str) or item not in allowed_types for item in type_value):
+                return False
+        else:
+            return False
+    properties = schema.get("properties", {})
+    if not isinstance(properties, dict) or any(not supported_schema(value) for value in properties.values()):
+        return False
+    items = schema.get("items")
+    if items is not None:
+        if isinstance(items, list):
+            if any(not supported_schema(value) for value in items):
+                return False
+        elif not supported_schema(items):
+            return False
+    for keyword in ("allOf", "anyOf", "oneOf", "prefixItems"):
+        value = schema.get(keyword, [])
+        if not isinstance(value, list) or any(not supported_schema(item) for item in value):
+            return False
+    additional = schema.get("additionalProperties")
+    if isinstance(additional, dict) and not supported_schema(additional):
+        return False
+    return True
+
+
+def safe_function_tools(row: dict[str, Any]) -> bool:
+    tools = row.get("function")
+    return isinstance(tools, list) and bool(tools) and all(
+        isinstance(tool, dict)
+        and isinstance(tool.get("parameters"), dict)
+        and supported_schema(normalize_schema(tool["parameters"]))
+        for tool in tools
+    )
+
+
 def rank(track: str, source_id: str) -> str:
     material = f"agent-python-runtime/bfcl-v4/{track}/v1:{source_id}".encode()
     return hashlib.sha256(material).hexdigest()
@@ -145,7 +189,7 @@ def main() -> None:
         "stateless_function_calling",
         lambda row: row.get("id") in stateless_answer_by_id
         and not contains_sensitive(row)
-        and isinstance(row.get("function"), list),
+        and safe_function_tools(row),
     )
 
     stateful_rows, _ = load_jsonl(data / "BFCL_v4_multi_turn_base.json")

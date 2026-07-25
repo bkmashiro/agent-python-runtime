@@ -73,7 +73,7 @@
     "source_id": "parallel_multiple_177",
     "version": "v4"
   },
-  "split": "evaluation",
+  "split": "dev",
   "tools": [
     {
       "description": "Retrieve the current market value of a particular sculpture by a specific artist.",

@@ -1,6 +1,7 @@
 package agentic
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -81,6 +82,45 @@ func TestLoadRejectsTaskSymlink(t *testing.T) {
 	}
 	if _, err := Load(root); err == nil {
 		t.Fatal("expected symlink rejection")
+	}
+}
+
+func TestLoadRejectsExternalToolSchemaReference(t *testing.T) {
+	root := copyDataset(t)
+	manifest, err := LoadManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := &manifest.Tasks[0]
+	path := filepath.Join(root, filepath.FromSlash(entry.Path))
+	var task map[string]any
+	data, err := os.ReadFile(path)
+	if err != nil || json.Unmarshal(data, &task) != nil {
+		t.Fatal("load task")
+	}
+	tools := task["tools"].([]any)
+	tool := tools[0].(map[string]any)
+	tool["parameters"] = map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"value": map[string]any{"$ref": "https://attacker.invalid/schema.json"}},
+	}
+	data, err = json.Marshal(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entry.SHA256 = digest(data)
+	manifestData, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "manifest.json"), manifestData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(root); err == nil {
+		t.Fatal("expected external schema reference rejection")
 	}
 }
 

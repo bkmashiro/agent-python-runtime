@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 var ErrDataset = errors.New("invalid external agentic dataset")
@@ -183,9 +185,33 @@ func validateTask(task Task, entry ManifestTask, sources []ManifestSource) error
 			return ErrDataset
 		}
 		var schema map[string]any
-		if json.Unmarshal(tool.Parameters, &schema) != nil || schema["type"] != "object" {
+		if json.Unmarshal(tool.Parameters, &schema) != nil || schema["type"] != "object" || compileToolSchema(tool.Parameters) != nil {
 			return ErrDataset
 		}
+	}
+	return nil
+}
+
+type denyExternalSchemaLoader struct{}
+
+func (denyExternalSchemaLoader) Load(string) (any, error) {
+	return nil, errors.New("external schema resources are disabled")
+}
+
+func compileToolSchema(raw json.RawMessage) error {
+	var document any
+	if json.Unmarshal(raw, &document) != nil {
+		return ErrDataset
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.AssertFormat()
+	compiler.UseLoader(denyExternalSchemaLoader{})
+	const resource = "mem:///external-agentic-tool-parameters.json"
+	if compiler.AddResource(resource, document) != nil {
+		return ErrDataset
+	}
+	if _, err := compiler.Compile(resource); err != nil {
+		return ErrDataset
 	}
 	return nil
 }

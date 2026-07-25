@@ -1,0 +1,150 @@
+{
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "bfcl-v4-stateless-function-calling-parallel_multiple_168",
+  "interaction": {
+    "mode": "single_turn",
+    "turns": [
+      [
+        {
+          "content": "\"Could you help me with a two-part request? First, I'd like to know if there were any lawsuits filed against the company 'TechCorp' in the location 'San Francisco' in the year 2018, specifically civil cases. Secondly, I'm planning a trip and need to check the availability of Hilton hotels in 'New York City' for the check-in date '2022-10-15' and check-out date '2022-10-20' for 2 adults. Could you assist me with these?\"",
+          "role": "user"
+        }
+      ]
+    ]
+  },
+  "oracle": {
+    "kind": "expected_call_trace",
+    "turns": [
+      {
+        "lawsuits_search": {
+          "case_type": [
+            "civil"
+          ],
+          "company_name": [
+            "TechCorp"
+          ],
+          "location": [
+            "San Francisco",
+            "SF"
+          ],
+          "year": [
+            2018
+          ]
+        }
+      },
+      {
+        "hilton_hotel.check_availability": {
+          "check_in_date": [
+            "2022-10-15",
+            "10/15/2022",
+            "Oct. 15, 2022"
+          ],
+          "check_out_date": [
+            "2022-10-20",
+            "10/20/2022",
+            "Oct. 20, 2022"
+          ],
+          "hotel_chain": [
+            "Hilton",
+            ""
+          ],
+          "location": [
+            "New York City",
+            "NYC"
+          ],
+          "no_of_adults": [
+            2
+          ]
+        }
+      }
+    ]
+  },
+  "safety": {
+    "credentials": "none",
+    "network_disabled": true,
+    "real_world_effects": false
+  },
+  "source": {
+    "adaptation": "Normalized JSON Schema aliases; selected by fixed hash before any model run; no task semantics changed.",
+    "benchmark": "BFCL",
+    "license": "Apache-2.0",
+    "record_sha256": "sha256:98903c3253c87c20d1c4066fd6cca6d1960529cc46c9a3d2e4b3d4fb1a58734b",
+    "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+    "source_id": "parallel_multiple_168",
+    "version": "v4"
+  },
+  "split": "dev",
+  "tools": [
+    {
+      "description": "Check hotel availability for a specific location and time frame.",
+      "name": "hilton_hotel.check_availability",
+      "parameters": {
+        "properties": {
+          "check_in_date": {
+            "description": "The check-in date in the format YYYY-MM-DD.",
+            "type": "string"
+          },
+          "check_out_date": {
+            "description": "The check-out date in the format YYYY-MM-DD.",
+            "type": "string"
+          },
+          "hotel_chain": {
+            "default": "Hilton",
+            "description": "The hotel chain where you want to book the hotel.",
+            "type": "string"
+          },
+          "location": {
+            "description": "The city where you want to check hotel availability.",
+            "type": "string"
+          },
+          "no_of_adults": {
+            "description": "The number of adults for the hotel booking.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location",
+          "check_in_date",
+          "check_out_date",
+          "no_of_adults"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Search for lawsuits against a specific company within a specific time and location.",
+      "name": "lawsuits_search",
+      "parameters": {
+        "properties": {
+          "case_type": {
+            "description": "The type of the case. Options include: 'civil', 'criminal', 'small_claims', etc. If not specified, default to search for all types.",
+            "type": "string"
+          },
+          "company_name": {
+            "description": "The name of the company.",
+            "type": "string"
+          },
+          "location": {
+            "description": "The location where the lawsuit was filed.",
+            "type": "string"
+          },
+          "year": {
+            "description": "The year when the lawsuit was filed.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "company_name",
+          "location",
+          "year"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "track": "stateless_function_calling",
+  "version": "external-agentic-task/v1"
+}

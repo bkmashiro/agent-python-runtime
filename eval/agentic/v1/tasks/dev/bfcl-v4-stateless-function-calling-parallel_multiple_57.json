@@ -1,0 +1,147 @@
+{
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "bfcl-v4-stateless-function-calling-parallel_multiple_57",
+  "interaction": {
+    "mode": "single_turn",
+    "turns": [
+      [
+        {
+          "content": "Find hotels in Paris, France and New York, USA with at least 4 stars rating. Also I prefer hotels with amenities like free WiFi, breakfast included, and gym facility",
+          "role": "user"
+        }
+      ]
+    ]
+  },
+  "oracle": {
+    "kind": "expected_call_trace",
+    "turns": [
+      {
+        "hotel.find": {
+          "amenities": [
+            [
+              "Free WiFi",
+              "Breakfast Included",
+              "Gym"
+            ]
+          ],
+          "location": [
+            "Paris",
+            "Paris, France",
+            "France"
+          ],
+          "stars": [
+            4
+          ]
+        }
+      },
+      {
+        "hotel.find": {
+          "amenities": [
+            [
+              "Free WiFi",
+              "Breakfast Included",
+              "Gym"
+            ]
+          ],
+          "location": [
+            "New York",
+            "New York, USA",
+            "NY",
+            "NY, USA",
+            "USA"
+          ],
+          "stars": [
+            4
+          ]
+        }
+      }
+    ]
+  },
+  "safety": {
+    "credentials": "none",
+    "network_disabled": true,
+    "real_world_effects": false
+  },
+  "source": {
+    "adaptation": "Normalized JSON Schema aliases; selected by fixed hash before any model run; no task semantics changed.",
+    "benchmark": "BFCL",
+    "license": "Apache-2.0",
+    "record_sha256": "sha256:17cc7d924dee9ff53025f88578f6bb4eeb1e274d89e7e60e08bae41bef01d367",
+    "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+    "source_id": "parallel_multiple_57",
+    "version": "v4"
+  },
+  "split": "dev",
+  "tools": [
+    {
+      "description": "Search for hotels given the location, minimum stars and specific amenities.",
+      "name": "hotel.find",
+      "parameters": {
+        "properties": {
+          "amenities": {
+            "description": "List of preferred amenities in hotel. Default to empty array",
+            "items": {
+              "description": "Preferred amenities in hotel. Here are a list of possible option : 'Free WiFi', 'Breakfast Included', 'Gym', 'Free Parking'",
+              "enum": [
+                "Free WiFi",
+                "Breakfast Included",
+                "Gym",
+                "Free Parking"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "location": {
+            "description": "The city where you want to find the hotel",
+            "type": "string"
+          },
+          "stars": {
+            "description": "Minimum number of stars the hotel should have. Default 1",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location",
+          "stars"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Search for flights given the origin, destination, date, and number of passengers.",
+      "name": "flight.search",
+      "parameters": {
+        "properties": {
+          "date": {
+            "description": "The date of the flight. Default ''",
+            "type": "any"
+          },
+          "destination": {
+            "description": "The destination of the flight",
+            "type": "string"
+          },
+          "origin": {
+            "description": "The origin of the flight",
+            "type": "string"
+          },
+          "passengers": {
+            "default": 1,
+            "description": "The number of passengers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "origin",
+          "destination"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "track": "stateless_function_calling",
+  "version": "external-agentic-task/v1"
+}

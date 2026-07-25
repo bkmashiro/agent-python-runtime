@@ -1,0 +1,141 @@
+{
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "bfcl-v4-stateless-function-calling-parallel_multiple_177",
+  "interaction": {
+    "mode": "single_turn",
+    "turns": [
+      [
+        {
+          "content": "\"Can you first find out the key historical events related to 'War' and 'Economy' that took place in France between the years 1800 and 1900? After that, could you please tell me the current market value of the sculpture 'The Thinker' created by the artist 'Auguste Rodin'? Lastly, I would also like to know the market value of the sculpture 'The Kiss', also created by 'Auguste Rodin', in the year 1882.\"",
+          "role": "user"
+        }
+      ]
+    ]
+  },
+  "oracle": {
+    "kind": "expected_call_trace",
+    "turns": [
+      {
+        "history.get_key_events": {
+          "country": [
+            "France"
+          ],
+          "end_year": [
+            1900
+          ],
+          "event_type": [
+            [
+              "War",
+              "Economy"
+            ]
+          ],
+          "start_year": [
+            1800
+          ]
+        }
+      },
+      {
+        "get_sculpture_value": {
+          "artist": [
+            "Auguste Rodin"
+          ],
+          "sculpture": [
+            "The Thinker"
+          ]
+        }
+      },
+      {
+        "get_sculpture_value": {
+          "artist": [
+            "Auguste Rodin"
+          ],
+          "sculpture": [
+            "The Kiss"
+          ]
+        }
+      }
+    ]
+  },
+  "safety": {
+    "credentials": "none",
+    "network_disabled": true,
+    "real_world_effects": false
+  },
+  "source": {
+    "adaptation": "Normalized JSON Schema aliases; selected by fixed hash before any model run; no task semantics changed.",
+    "benchmark": "BFCL",
+    "license": "Apache-2.0",
+    "record_sha256": "sha256:da87d5fe07a89c77c29193f855343be4334e83d6887b9a202ade166227c20f52",
+    "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+    "source_id": "parallel_multiple_177",
+    "version": "v4"
+  },
+  "split": "evaluation",
+  "tools": [
+    {
+      "description": "Retrieve the current market value of a particular sculpture by a specific artist.",
+      "name": "get_sculpture_value",
+      "parameters": {
+        "properties": {
+          "artist": {
+            "description": "The name of the artist who created the sculpture.",
+            "type": "string"
+          },
+          "sculpture": {
+            "description": "The name of the sculpture.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sculpture",
+          "artist"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Retrieve key historical events within a specific period for a certain country.",
+      "name": "history.get_key_events",
+      "parameters": {
+        "properties": {
+          "country": {
+            "description": "The name of the country for which history is queried.",
+            "type": "string"
+          },
+          "end_year": {
+            "description": "End year of the period for which history is queried.",
+            "type": "integer"
+          },
+          "event_type": {
+            "description": "Types of event. If none is provided, default that all types will be considered.",
+            "items": {
+              "enum": [
+                "War",
+                "Revolutions",
+                "Diplomacy",
+                "Economy"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "start_year": {
+            "description": "Start year of the period for which history is queried.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "country",
+          "start_year",
+          "end_year"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "track": "stateless_function_calling",
+  "version": "external-agentic-task/v1"
+}

@@ -1,0 +1,183 @@
+{
+  "dataset_id": "agentic-external-bfcl-v4-safe-subset-v1",
+  "selection_policy": "Before model execution, rank source IDs by SHA-256 with a fixed public salt; select ten stateless parallel/multiple tasks and ten credential-free, network-free, non-destructive GorillaFileSystem tasks; first five per track are dev and remaining five evaluation.",
+  "sources": [
+    {
+      "benchmark": "BFCL",
+      "license": "Apache-2.0",
+      "license_url": "https://github.com/ShishirPatil/gorilla/blob/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/LICENSE",
+      "repository": "https://github.com/ShishirPatil/gorilla",
+      "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+      "source_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_parallel_multiple.json",
+          "sha256": "sha256:8863ea8433239f55c5f016154cf0830853c89f693c6ea270396a2fa121960579"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/possible_answer/BFCL_v4_parallel_multiple.json",
+          "sha256": "sha256:5ebf24f458c1f16300c05505d83d6f0a1b68b79be273a033febd0d4f840507e3"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_base.json",
+          "sha256": "sha256:1a21a995d06fd6f20ba55de7bced30ef953ec35e998f502ec2ecf4d66ef1c43a"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/possible_answer/BFCL_v4_multi_turn_base.json",
+          "sha256": "sha256:1fee67823b317571649177dd89d63969feaae4e810cc7448ee55ba797fb7c8fc"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/multi_turn_func_doc/gorilla_file_system.json",
+          "sha256": "sha256:c4c1b741c71e2a17c97a5dc9c4a91d89978c4eaece56494d14272d5df6c650e9"
+        }
+      ],
+      "version": "v4"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_12",
+      "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_12.json",
+      "sha256": "sha256:8bd75736bc75344379abaa169534febf2362796f32769f0050971c46f43798b4",
+      "split": "dev",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_29",
+      "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_29.json",
+      "sha256": "sha256:62b13a7e7eb7047fe2cafc59e914fe4a787bc4c5ab465b8e060761637a548a9b",
+      "split": "dev",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_37",
+      "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_37.json",
+      "sha256": "sha256:0475617ab498d1d1d1c642da6ec257e4e0d266bbbec0c0c22852f5cb25e1c546",
+      "split": "dev",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_39",
+      "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_39.json",
+      "sha256": "sha256:0cbbe7673b078e5c3e08e0291658c5351b741c484f7b6ec4ebf3a8a52afdaca7",
+      "split": "dev",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_9",
+      "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_9.json",
+      "sha256": "sha256:06be18350ec209e199dd6f5efcacf43e62600904db20b097b0b21ba2371e9629",
+      "split": "dev",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_112",
+      "path": "tasks/dev/bfcl-v4-stateless-function-calling-parallel_multiple_112.json",
+      "sha256": "sha256:b9da0fe95cbe59ad171faa69807be9a69467e9474a9300a665d711b676aac36b",
+      "split": "dev",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_147",
+      "path": "tasks/dev/bfcl-v4-stateless-function-calling-parallel_multiple_147.json",
+      "sha256": "sha256:ac99c76b3f68d707dece61dc38f419fc147106c21eb078420a95f891fa130e35",
+      "split": "dev",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_168",
+      "path": "tasks/dev/bfcl-v4-stateless-function-calling-parallel_multiple_168.json",
+      "sha256": "sha256:cb045ac712427b736b8d5105c10325d16feecf6486aa1df58a6ca7f1e89471b0",
+      "split": "dev",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_57",
+      "path": "tasks/dev/bfcl-v4-stateless-function-calling-parallel_multiple_57.json",
+      "sha256": "sha256:e4471a13b51bdaa8116850253d11f55b05e762e698b38957db6461b7ea0cec14",
+      "split": "dev",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_91",
+      "path": "tasks/dev/bfcl-v4-stateless-function-calling-parallel_multiple_91.json",
+      "sha256": "sha256:9cdacf229832014a08353f93f1c0b62c47a976550ee1784c85920a17ab3e069d",
+      "split": "dev",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_1",
+      "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_1.json",
+      "sha256": "sha256:1ab3980d54ed8d4ac8b47f60ddb1bdc7f3abf1c8b08c3b1a6f1e7ac37382db09",
+      "split": "evaluation",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_10",
+      "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_10.json",
+      "sha256": "sha256:9f8c910daf7f8b6b51bcc52043e265812a5a47ceb8a4107ddd909be0b56d4e91",
+      "split": "evaluation",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_25",
+      "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_25.json",
+      "sha256": "sha256:454ca4b2e6d331f06e56d4fc08551021d5e848a1a291cd1d0a2b3d3f9401f5b3",
+      "split": "evaluation",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_26",
+      "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_26.json",
+      "sha256": "sha256:e883a26cd6a0877af89f618c9e97e64ef345ff83366f3f97e5c92f9aa7d4bc65",
+      "split": "evaluation",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateful-local-tools-multi_turn_base_3",
+      "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_3.json",
+      "sha256": "sha256:a28d0a4d682167a47046cdc8a518eb92b22f291ce91e0f3d77a487677e6159af",
+      "split": "evaluation",
+      "track": "stateful_local_tools"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_156",
+      "path": "tasks/evaluation/bfcl-v4-stateless-function-calling-parallel_multiple_156.json",
+      "sha256": "sha256:76eb6d24a56288d5120ceeb2bc3aad29e762e93807076d6ca08dddf67da01251",
+      "split": "evaluation",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_157",
+      "path": "tasks/evaluation/bfcl-v4-stateless-function-calling-parallel_multiple_157.json",
+      "sha256": "sha256:030539b13d2a8a6ffacd35bd2b21372aba2178420acc08a1ac1e1a56bc404bbc",
+      "split": "evaluation",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_177",
+      "path": "tasks/evaluation/bfcl-v4-stateless-function-calling-parallel_multiple_177.json",
+      "sha256": "sha256:1a2bea929b6f04c064078e9cb668ad37df5f7363a64a90e24b16fa06fcc5534f",
+      "split": "evaluation",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_2",
+      "path": "tasks/evaluation/bfcl-v4-stateless-function-calling-parallel_multiple_2.json",
+      "sha256": "sha256:7b8ede6be56fee7227018e540fdedded0b66e8da78502b3c62ac28b8f8ff66a3",
+      "split": "evaluation",
+      "track": "stateless_function_calling"
+    },
+    {
+      "id": "bfcl-v4-stateless-function-calling-parallel_multiple_62",
+      "path": "tasks/evaluation/bfcl-v4-stateless-function-calling-parallel_multiple_62.json",
+      "sha256": "sha256:d80d8e47a03982050c3e340f117f88cb8808e13a81c947133d52c07202470503",
+      "split": "evaluation",
+      "track": "stateless_function_calling"
+    }
+  ],
+  "version": "external-agentic-dataset-manifest/v1"
+}

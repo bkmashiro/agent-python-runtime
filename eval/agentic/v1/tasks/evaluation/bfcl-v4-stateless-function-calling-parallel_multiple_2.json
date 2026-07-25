@@ -1,0 +1,109 @@
+{
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "bfcl-v4-stateless-function-calling-parallel_multiple_2",
+  "interaction": {
+    "mode": "single_turn",
+    "turns": [
+      [
+        {
+          "content": "Find the area and perimeter of a circle with a radius of 5 and also find the circumference of a circle with diameter of 10.",
+          "role": "user"
+        }
+      ]
+    ]
+  },
+  "oracle": {
+    "kind": "expected_call_trace",
+    "turns": [
+      {
+        "circle.calculate_area": {
+          "radius": [
+            5
+          ]
+        }
+      },
+      {
+        "circle.calculate_circumference": {
+          "diameter": [
+            10
+          ]
+        }
+      }
+    ]
+  },
+  "safety": {
+    "credentials": "none",
+    "network_disabled": true,
+    "real_world_effects": false
+  },
+  "source": {
+    "adaptation": "Normalized JSON Schema aliases; selected by fixed hash before any model run; no task semantics changed.",
+    "benchmark": "BFCL",
+    "license": "Apache-2.0",
+    "record_sha256": "sha256:f3b4dcde868286c93c54027b3f614dbdc74da122eded3be7136a101016c0bce3",
+    "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+    "source_id": "parallel_multiple_2",
+    "version": "v4"
+  },
+  "split": "evaluation",
+  "tools": [
+    {
+      "description": "Calculate the circumference of a circle based on the diameter.",
+      "name": "circle.calculate_circumference",
+      "parameters": {
+        "properties": {
+          "diameter": {
+            "description": "The diameter of the circle.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "diameter"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Calculate the area of a circle based on the radius.",
+      "name": "circle.calculate_area",
+      "parameters": {
+        "properties": {
+          "radius": {
+            "description": "The radius of the circle.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "radius"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Calculate the perimeter of a rectangle based on the length and breadth.",
+      "name": "rectangle.calculate_perimeter",
+      "parameters": {
+        "properties": {
+          "breadth": {
+            "description": "The breadth of the rectangle.",
+            "type": "integer"
+          },
+          "length": {
+            "description": "The length of the rectangle.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "length",
+          "breadth"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "track": "stateless_function_calling",
+  "version": "external-agentic-task/v1"
+}

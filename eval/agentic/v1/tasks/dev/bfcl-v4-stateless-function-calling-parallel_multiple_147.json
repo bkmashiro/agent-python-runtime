@@ -1,0 +1,212 @@
+{
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "bfcl-v4-stateless-function-calling-parallel_multiple_147",
+  "interaction": {
+    "mode": "single_turn",
+    "turns": [
+      [
+        {
+          "content": "\"Can you help me plan a day out? I want to start by having lunch at a restaurant in San Francisco that serves Italian food. I would like to see 5 options and I am a vegan. After lunch, I want to catch a match of the Golden State Warriors. Can you tell me their next 3 match schedules in the NBA? Later in the evening, I am thinking of buying some stocks. Can you provide me a detailed information about the Apple Inc. stocks in the NASDAQ market? And finally, I am thinking of buying a guitar. I have a budget of $500. Can you find me a Fender guitar within my budget?\"",
+          "role": "user"
+        }
+      ]
+    ]
+  },
+  "oracle": {
+    "kind": "expected_call_trace",
+    "turns": [
+      {
+        "find_restaurants": {
+          "dietary_requirements": [
+            [
+              "vegan"
+            ]
+          ],
+          "food_type": [
+            "Italian"
+          ],
+          "location": [
+            "San Francisco",
+            "SF",
+            "San Francisco, California",
+            "San Francisco, CA"
+          ],
+          "number": [
+            5
+          ]
+        }
+      },
+      {
+        "sports.match_schedule": {
+          "league": [
+            "NBA",
+            ""
+          ],
+          "num_matches": [
+            3
+          ],
+          "team_name": [
+            "Golden State Warriors"
+          ]
+        }
+      },
+      {
+        "get_stock_info": {
+          "company_name": [
+            "Apple Inc."
+          ],
+          "detail_level": [
+            "detailed"
+          ],
+          "market": [
+            "NASDAQ",
+            ""
+          ]
+        }
+      },
+      {
+        "find_instrument": {
+          "budget": [
+            500
+          ],
+          "make": [
+            "Fender"
+          ],
+          "type": [
+            "guitar"
+          ]
+        }
+      }
+    ]
+  },
+  "safety": {
+    "credentials": "none",
+    "network_disabled": true,
+    "real_world_effects": false
+  },
+  "source": {
+    "adaptation": "Normalized JSON Schema aliases; selected by fixed hash before any model run; no task semantics changed.",
+    "benchmark": "BFCL",
+    "license": "Apache-2.0",
+    "record_sha256": "sha256:b58c080051418462f58ebfbbc4a6f9b0dd47c5609b4ba21a4d98a7ad19dc794c",
+    "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+    "source_id": "parallel_multiple_147",
+    "version": "v4"
+  },
+  "split": "dev",
+  "tools": [
+    {
+      "description": "Locate nearby restaurants based on location and food preferences.",
+      "name": "find_restaurants",
+      "parameters": {
+        "properties": {
+          "dietary_requirements": {
+            "description": "Special dietary requirements, e.g. vegan, gluten-free. Default is all if not specified.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "food_type": {
+            "description": "The type of food preferred.",
+            "type": "string"
+          },
+          "location": {
+            "description": "The specific location or area.",
+            "type": "string"
+          },
+          "number": {
+            "description": "Number of results to return.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location",
+          "food_type",
+          "number"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Retrieve the match schedule for a specific sports team.",
+      "name": "sports.match_schedule",
+      "parameters": {
+        "properties": {
+          "league": {
+            "description": "The sports league of the team. This is an optional parameter. Default is 'NBA'",
+            "type": "string"
+          },
+          "num_matches": {
+            "description": "The number of upcoming matches you want to get.",
+            "type": "integer"
+          },
+          "team_name": {
+            "description": "The name of the sports team.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "team_name",
+          "num_matches"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Search for a musical instrument within specified budget and of specific type.",
+      "name": "find_instrument",
+      "parameters": {
+        "properties": {
+          "budget": {
+            "description": "Your budget for the instrument.",
+            "type": "integer"
+          },
+          "make": {
+            "description": "Maker of the instrument, Optional parameter. Default is all if not specified.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type of the instrument",
+            "type": "string"
+          }
+        },
+        "required": [
+          "budget",
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Retrieves information about a specific stock based on company's name.",
+      "name": "get_stock_info",
+      "parameters": {
+        "properties": {
+          "company_name": {
+            "description": "The name of the company.",
+            "type": "string"
+          },
+          "detail_level": {
+            "description": "Level of detail for stock information. Can be 'summary' or 'detailed'.",
+            "type": "string"
+          },
+          "market": {
+            "description": "The stock market of interest. Default is 'NASDAQ'",
+            "type": "string"
+          }
+        },
+        "required": [
+          "company_name",
+          "detail_level"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "track": "stateless_function_calling",
+  "version": "external-agentic-task/v1"
+}

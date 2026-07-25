@@ -11,6 +11,9 @@ import (
 	goruntime "runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
 func TestOperatorCLIWithRealGuestArtifact(t *testing.T) {
@@ -73,7 +76,9 @@ func TestOperatorCLIWithRealGuestArtifact(t *testing.T) {
 			_, _ = writer.Write([]byte(`{"value":42}`))
 		}))
 		defer server.Close()
+		journalPath := filepath.Join(t.TempDir(), "transactions.db")
 		config, err := json.Marshal(map[string]any{
+			"transaction_journal_path": journalPath,
 			"fetch_many": map[string]any{
 				"max_calls": 1, "max_requests_per_call": 1, "max_total_requests": 1,
 				"max_concurrency": 1, "max_response_bytes": 1024, "per_request_timeout_ms": 1000,
@@ -102,6 +107,20 @@ func TestOperatorCLIWithRealGuestArtifact(t *testing.T) {
 		}
 		if !strings.HasPrefix(response.Receipts[0].RunID, "host-") || response.Receipts[0].RunID == "guest-cannot-author-receipt-id" {
 			t.Fatalf("receipt did not use Host identity: %#v", response.Receipts[0])
+		}
+		receipt := response.Receipts[0]
+		if receipt.TransactionID == "" || receipt.OperationID == "" || receipt.AttemptID == "" || receipt.CatalogDigest == "" || receipt.HandlerVersion != "builtin-fetch-many-v1" || receipt.EffectClass != "read_only" || receipt.Policy != "AUTO_COMMIT" {
+			t.Fatalf("receipt lacks frozen transaction binding: %#v", receipt)
+		}
+		ledger, err := transaction.OpenSQLiteLedger(journalPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ledger.Close()
+		coordinator := transaction.NewCoordinator(ledger, transaction.RandomIDSource{}, time.Now, nil)
+		inspection, err := coordinator.Inspect(receipt.TransactionID, nil)
+		if err != nil || inspection.Transaction.State != transaction.TransactionCommitted || len(inspection.Operations) != 1 || len(inspection.Attempts) != 1 {
+			t.Fatalf("durable inspection=%+v err=%v", inspection, err)
 		}
 	})
 

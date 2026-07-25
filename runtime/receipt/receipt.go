@@ -67,6 +67,34 @@ func New(
 	return receipt
 }
 
+func NewBoundFromRequestDigest(
+	runIdentity, callID, capability string,
+	operationIndex uint32,
+	transactionID, operationID, attemptID, catalogDigest, handlerVersion, effectClass, policy, manifestDigest, providerRequestDigest, requestDigest, outcome string,
+	response []byte,
+) Receipt {
+	identity := sha256.New()
+	for _, field := range []string{
+		"agent-python-runtime-receipt-v2-bound",
+		runIdentity, callID, capability, strconv.FormatUint(uint64(operationIndex), 10),
+		transactionID, operationID, attemptID,
+		catalogDigest, handlerVersion, effectClass, policy, manifestDigest, providerRequestDigest, requestDigest,
+	} {
+		identity.Write([]byte(field))
+		identity.Write([]byte{0})
+	}
+	receipt := Receipt{
+		ReceiptID: "rcpt_" + hex.EncodeToString(identity.Sum(nil)), RunID: runIdentity, Capability: capability,
+		OperationIndex: operationIndex, TransactionID: transactionID, OperationID: operationID, AttemptID: attemptID,
+		CatalogDigest: catalogDigest, HandlerVersion: handlerVersion, EffectClass: effectClass, Policy: policy,
+		ManifestDigest: manifestDigest, ProviderRequestDigest: providerRequestDigest, RequestSHA256: requestDigest, Outcome: outcome,
+	}
+	if response != nil {
+		receipt.ResponseSHA256 = digest(response)
+	}
+	return receipt
+}
+
 func NewBound(
 	runIdentity,
 	callID,

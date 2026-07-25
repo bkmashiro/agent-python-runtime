@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
@@ -38,6 +39,8 @@ type Config struct {
 	Binder              CallBinder
 	ToolGrants          map[string]ToolGrant
 	MaxTransactionCalls uint32
+	AutoCompensateTools map[string]bool
+	CloseJournal        func() error
 }
 
 type ToolGrant struct {
@@ -93,6 +96,15 @@ func NewBroker(config Config, fetcher Fetcher) (*Broker, error) {
 	}
 	config.Grants = cloneGrants(config.Grants)
 	config.ToolGrants = cloneToolGrants(config.ToolGrants)
+	config.AutoCompensateTools = cloneAutoCompensate(config.AutoCompensateTools)
+	if len(config.AutoCompensateTools) > 1024 {
+		return nil, errors.New("auto-compensation tool set exceeds Host limit")
+	}
+	for toolID, allowed := range config.AutoCompensateTools {
+		if !allowed || !validIdentifier(toolID) {
+			return nil, errors.New("invalid auto-compensation tool binding")
+		}
+	}
 	if config.Registry != nil {
 		if !catalogDigestPattern.MatchString(config.CatalogDigest) {
 			return nil, errors.New("typed registry requires a bounded catalog digest")
@@ -175,6 +187,102 @@ func cloneToolGrants(source map[string]ToolGrant) map[string]ToolGrant {
 	return cloned
 }
 
+func (broker *Broker) CloseJournal() error {
+	if broker == nil {
+		return nil
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	closeJournal := broker.config.CloseJournal
+	broker.config.CloseJournal = nil
+	if closeJournal == nil {
+		return nil
+	}
+	return closeJournal()
+}
+
+func (broker *Broker) CurrentTransactionID() string {
+	if broker == nil {
+		return ""
+	}
+	binder, _ := broker.config.Binder.(*CoordinatorBinder)
+	return binder.CurrentTransactionID()
+}
+
+func (broker *Broker) InspectTransaction() (transaction.Inspection, error) {
+	if broker == nil {
+		return transaction.Inspection{}, errors.New("capability broker is nil")
+	}
+	binder, ok := broker.config.Binder.(*CoordinatorBinder)
+	if !ok {
+		return transaction.Inspection{}, errors.New("capability broker has no Host transaction controller")
+	}
+	return binder.Inspect(broker.config.AutoCompensateTools)
+}
+
+func (broker *Broker) RollbackCurrentTransaction(ctx context.Context, reason string) error {
+	if broker == nil {
+		return errors.New("capability broker is nil")
+	}
+	binder, ok := broker.config.Binder.(*CoordinatorBinder)
+	if !ok {
+		return errors.New("capability broker has no Host transaction controller")
+	}
+	_, err := binder.Abort(ctx, broker.config.Registry, map[string]bool{}, reason)
+	return err
+}
+
+func (broker *Broker) CompensateCurrentTransaction(ctx context.Context, reason string) error {
+	if broker == nil || len(broker.config.AutoCompensateTools) == 0 {
+		return errors.New("current transaction has no Host-authorized compensation policy")
+	}
+	binder, ok := broker.config.Binder.(*CoordinatorBinder)
+	if !ok {
+		return errors.New("capability broker has no Host transaction controller")
+	}
+	_, err := binder.Abort(ctx, broker.config.Registry, broker.config.AutoCompensateTools, reason)
+	return err
+}
+
+func (broker *Broker) FinalizeRun(ctx context.Context, success bool, reason string) error {
+	if broker == nil {
+		return errors.New("capability broker is nil")
+	}
+	binder, ok := broker.config.Binder.(*CoordinatorBinder)
+	if !ok {
+		return nil
+	}
+	inspection, err := binder.Inspect(broker.config.AutoCompensateTools)
+	if err != nil {
+		return err
+	}
+	if inspection.Transaction.Mode == transaction.TransactionModeDirect {
+		if success && inspection.Transaction.State == transaction.TransactionCommitted ||
+			!success && (inspection.Transaction.State == transaction.TransactionRejected || inspection.Transaction.State == transaction.TransactionCommitted) {
+			return nil
+		}
+		return transaction.ErrConflict
+	}
+	if success {
+		if inspection.Transaction.State == transaction.TransactionCommitted {
+			return nil
+		}
+		_, err = binder.FinalizeWorkflow()
+		if err != nil {
+			_, abortErr := binder.Abort(ctx, broker.config.Registry, broker.config.AutoCompensateTools, "finalize_failed")
+			return errors.Join(err, abortErr)
+		}
+		return nil
+	}
+	switch inspection.Transaction.State {
+	case transaction.TransactionAborted, transaction.TransactionRolledBack, transaction.TransactionCompensated,
+		transaction.TransactionPartiallyReverted, transaction.TransactionPartiallyCompensated:
+		return nil
+	}
+	_, err = binder.Abort(ctx, broker.config.Registry, broker.config.AutoCompensateTools, reason)
+	return err
+}
+
 func (broker *Broker) CallCount() uint32 {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
@@ -219,6 +327,9 @@ func (broker *Broker) Call(ctx context.Context, payload []byte) (response []byte
 	}
 	if request.Capability != FetchManyCapability {
 		return broker.callRegistered(ctx, request)
+	}
+	if _, typed := broker.config.ToolGrants[FetchManyCapability]; typed {
+		return broker.callBuiltinFetchMany(ctx, request)
 	}
 	if request.CatalogDigest != nil || request.HandlerVersion != nil {
 		return encodeResponse(denied(request.CallID, "invalid_request", "legacy capability request contains typed-tool fields"))
@@ -289,6 +400,40 @@ func (broker *Broker) Call(ctx context.Context, payload []byte) (response []byte
 		Result: result,
 		Error:  nil,
 	})
+}
+
+func (broker *Broker) callBuiltinFetchMany(ctx context.Context, request toolRequest) ([]byte, error) {
+	if request.CatalogDigest != nil || request.HandlerVersion != nil {
+		return encodeResponse(denied(request.CallID, "invalid_request", "builtin capability request contains Guest-supplied binding fields"))
+	}
+	grant, granted := broker.config.Grants[FetchManyCapability]
+	toolGrant, typed := broker.config.ToolGrants[FetchManyCapability]
+	if !granted || !typed || broker.config.Registry == nil || broker.config.Binder == nil {
+		return encodeResponse(denied(request.CallID, "capability_denied", "capability is not granted"))
+	}
+	var arguments fetchManyArguments
+	if decodeStrict(request.Arguments, &arguments) != nil || validateRequests(arguments.Requests) != nil {
+		return encodeResponse(failed(request.CallID, "invalid_arguments", "fetch_many arguments are invalid"))
+	}
+	requestCount := uint32(len(arguments.Requests))
+	catalogDigest, handlerVersion := broker.config.CatalogDigest, toolGrant.HandlerVersion
+	request.CatalogDigest, request.HandlerVersion = &catalogDigest, &handlerVersion
+	if _, replayed := broker.typedCalls[request.CallID]; replayed {
+		return broker.callRegistered(ctx, request)
+	}
+	if requestCount > grant.MaxRequestsPerCall {
+		return encodeResponse(denied(request.CallID, "request_budget_exceeded", "per-call request budget exceeded"))
+	}
+	used := broker.totalRequests[FetchManyCapability]
+	if used > grant.MaxTotalRequests || requestCount > grant.MaxTotalRequests-used {
+		return encodeResponse(denied(request.CallID, "request_budget_exceeded", "total request budget exhausted"))
+	}
+	priorCalls := broker.calls[FetchManyCapability]
+	response, err := broker.callRegistered(ctx, request)
+	if broker.calls[FetchManyCapability] > priorCalls {
+		broker.totalRequests[FetchManyCapability] += requestCount
+	}
+	return response, err
 }
 
 type fetchCandidate struct {

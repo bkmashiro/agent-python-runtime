@@ -286,6 +286,18 @@ func (binder *recordingBinder) Complete(_ context.Context, operation capability.
 	return nil
 }
 
+func TestRegistryRejectsExternalSchemaReferencesWithoutLoading(t *testing.T) {
+	registry := capability.NewRegistry()
+	err := registry.Register(capability.HandlerSpec{
+		ToolID: "demo.external", HandlerVersion: "v1",
+		InputSchema: []byte(`{"$ref":"https://example.invalid/input.json"}`), OutputSchema: []byte(`{}`),
+		Handler: capability.HandlerFunc(func(context.Context, capability.HostCall) (json.RawMessage, error) { return json.RawMessage(`{}`), nil }),
+	})
+	if err == nil {
+		t.Fatal("external schema reference accepted")
+	}
+}
+
 func digestForTest(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return "sha256:" + hex.EncodeToString(sum[:])

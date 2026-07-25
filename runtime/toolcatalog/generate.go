@@ -75,6 +75,9 @@ func (snapshot Snapshot) GeneratePython() (runtimeSource string, stub string, er
 	metadataSource := "_TOOL_METADATA = _json.loads(" + metadataLiteral + ")\n\n"
 	runtimeBuilder.WriteString(metadataSource)
 	stubBuilder.WriteString(metadataSource)
+	transactionProjection := "def current_transaction() -> dict[str, str]:\n    \"\"\"Return an opaque view of the current Host transaction; no IDs or control authority are exposed.\"\"\"\n    return {\"scope\": \"current\", \"authority\": \"host-owned\", \"lifecycle\": \"host-managed\", \"catalog_digest\": CATALOG_DIGEST}\n\n"
+	runtimeBuilder.WriteString(transactionProjection)
+	stubBuilder.WriteString("def current_transaction() -> dict[str, str]: ...\n\n")
 	runtimeBuilder.WriteString("if TYPE_CHECKING:\n    from typing import NotRequired\n")
 	for _, tool := range snapshot.tools {
 		for _, definition := range tool.TypeDefinitions {

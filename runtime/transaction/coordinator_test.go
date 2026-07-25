@@ -118,3 +118,26 @@ func TestCoordinatorRequiresTrustedExactUnexpiredUserApproval(t *testing.T) {
 		t.Fatalf("approval replay = %+v, %v", replayed, err)
 	}
 }
+
+func TestCoordinatorFinalizesOnlyReadyWorkflowEvidence(t *testing.T) {
+	now := time.Unix(350, 0).UTC()
+	coordinator := NewCoordinator(NewMemoryLedger(), &sequenceIDs{}, func() time.Time { return now }, nil)
+	empty, err := coordinator.Begin(BeginRequest{RunID: "empty_run", CatalogDigest: testDigest("catalog"), Mode: TransactionModeWorkflow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	committed, err := coordinator.FinalizeWorkflow(empty.ID)
+	if err != nil || committed.State != TransactionCommitted {
+		t.Fatalf("empty finalize=%+v err=%v", committed, err)
+	}
+	pending, err := coordinator.Begin(BeginRequest{RunID: "pending_run", CatalogDigest: testDigest("catalog"), Mode: TransactionModeWorkflow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coordinator.Propose(ProposeRequest{TransactionID: pending.ID, ToolID: "mail.send", HandlerVersion: "v1", EffectClass: EffectIrreversible, Policy: PolicyUserApprovalRequired, PolicyVersion: "policy-v1", ArgumentDigest: testDigest("args")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coordinator.FinalizeWorkflow(pending.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("pending workflow finalize error=%v", err)
+	}
+}

@@ -4,12 +4,22 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return function(request)
+}
 
 type fakeRunner struct {
 	response []byte
@@ -182,6 +192,55 @@ func TestExecuteEnforcesResponseBoundOutsideBackend(t *testing.T) {
 	exit := execute([]string{"-artifact", "guest.wasm", "-config", "host.json"}, strings.NewReader(`{"run_id":"guest","code":"result=1","inputs":{}}`), &stdout, &stderr, deps)
 	if exit == 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "response exceeds configured bounds") {
 		t.Fatalf("response bound not enforced: exit=%d stdout=%q stderr=%q", exit, stdout.String(), stderr.String())
+	}
+}
+
+func TestWazeroFactoryPersistsBuiltinFetchTransactionJournal(t *testing.T) {
+	journalPath := filepath.Join(t.TempDir(), "transactions.db")
+	config := operatorConfig{TransactionJournalPath: journalPath, FetchMany: &fetchManyConfig{
+		MaxCalls: 1, MaxRequestsPerCall: 1, MaxTotalRequests: 1, MaxConcurrency: 1,
+		MaxResponseBytes: 1024, PerRequestTimeoutMS: 1000,
+		Targets: map[string]targetConfig{"api": {BaseURL: "https://example.test"}},
+	}}
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: http.NoBody, Request: request}, nil
+	})}
+	built, err := newWazeroFactory(config, "host-run", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory, ok := built.(wazeroengine.Factory)
+	if !ok || factory.BrokerFactory == nil {
+		t.Fatalf("factory=%T", built)
+	}
+	broker, err := factory.BrokerFactory(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"fetch:1","capability":"fetch_many","arguments":{"requests":[{"request_id":"one","target":"api","path":"item"}]}}`))
+	if err != nil || !strings.Contains(string(response), `"status":"ok"`) {
+		t.Fatalf("response=%s err=%v", response, err)
+	}
+	receipts := broker.Receipts()
+	if len(receipts) != 1 || receipts[0].TransactionID == "" {
+		t.Fatalf("receipts=%+v", receipts)
+	}
+	transactionID := receipts[0].TransactionID
+	if err := broker.FinalizeRun(context.Background(), true, "success"); err != nil {
+		t.Fatal(err)
+	}
+	if err := broker.CloseJournal(); err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := transaction.OpenSQLiteLedger(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ledger.Close()
+	coordinator := transaction.NewCoordinator(ledger, transaction.RandomIDSource{}, time.Now, nil)
+	inspection, err := coordinator.Inspect(transactionID, nil)
+	if err != nil || inspection.Transaction.State != transaction.TransactionCommitted || len(inspection.Operations) != 1 || len(inspection.Attempts) != 1 {
+		t.Fatalf("inspection=%+v err=%v", inspection, err)
 	}
 }
 

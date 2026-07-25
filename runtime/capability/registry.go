@@ -67,6 +67,22 @@ type Handler interface {
 
 type HandlerFunc func(context.Context, HostCall) (json.RawMessage, error)
 
+type ReceiptDraft struct {
+	RequestIdentity string
+	RequestSHA256   string
+	Outcome         Status
+	Response        []byte
+}
+
+type HandlerEvidence struct {
+	Result   json.RawMessage
+	Receipts []ReceiptDraft
+}
+
+type EvidenceHandler interface {
+	HandleWithEvidence(context.Context, HostCall) (HandlerEvidence, error)
+}
+
 func (function HandlerFunc) Handle(ctx context.Context, call HostCall) (json.RawMessage, error) {
 	return function(ctx, call)
 }
@@ -89,6 +105,7 @@ type Registry struct {
 	mu            sync.RWMutex
 	handlers      map[string]registeredHandler
 	catalogDigest string
+	sealed        bool
 }
 
 const registryMaxPayloadBytes = 1024 * 1024
@@ -124,6 +141,7 @@ func BuildRegistryFromSnapshot(snapshot toolcatalog.Snapshot, handlers map[strin
 			EffectClass: tool.EffectClass, Policy: tool.Policy, PolicyVersion: tool.GrantVersion, MaxCalls: tool.MaxCalls,
 		}
 	}
+	registry.sealed = true
 	return registry, grants, nil
 }
 
@@ -143,6 +161,9 @@ func (registry *Registry) Register(spec HandlerSpec) error {
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
+	if registry.sealed {
+		return errors.New("Host tool registry is sealed")
+	}
 	if _, exists := registry.handlers[spec.ToolID]; exists {
 		return errors.New("handler already registered")
 	}
@@ -152,9 +173,16 @@ func (registry *Registry) Register(spec HandlerSpec) error {
 	return nil
 }
 
+type denyExternalSchemaLoader struct{}
+
+func (denyExternalSchemaLoader) Load(string) (any, error) {
+	return nil, errors.New("external schema resources are disabled")
+}
+
 func compileRegisteredSchema(name string, raw []byte) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.AssertFormat()
+	compiler.UseLoader(denyExternalSchemaLoader{})
 	resource := "mem:///" + url.PathEscape(name) + ".json"
 	var document any
 	if err := json.Unmarshal(raw, &document); err != nil {
@@ -172,7 +200,7 @@ func (registry *Registry) snapshot() *Registry {
 	}
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
-	cloned := &Registry{handlers: make(map[string]registeredHandler, len(registry.handlers)), catalogDigest: registry.catalogDigest}
+	cloned := &Registry{handlers: make(map[string]registeredHandler, len(registry.handlers)), catalogDigest: registry.catalogDigest, sealed: true}
 	for id, handler := range registry.handlers {
 		handler.spec.InputSchema = append([]byte(nil), handler.spec.InputSchema...)
 		handler.spec.OutputSchema = append([]byte(nil), handler.spec.OutputSchema...)
@@ -271,12 +299,21 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 	admitted = true
 	broker.calls[grant.ToolID]++
 	broker.transactionCalls++
-	result, handlerErr := handler.spec.Handler.Handle(ctx, HostCall{
+	hostCall := HostCall{
 		RunIdentity: broker.config.RunIdentity, CallID: request.CallID, ToolID: request.Capability,
 		CatalogDigest: broker.config.CatalogDigest, HandlerVersion: *request.HandlerVersion,
 		TransactionID: bound.TransactionID, OperationID: bound.OperationID, AttemptID: bound.AttemptID,
 		Arguments: append(json.RawMessage(nil), request.Arguments...),
-	})
+	}
+	var result json.RawMessage
+	var drafts []ReceiptDraft
+	var handlerErr error
+	if evidenceHandler, ok := handler.spec.Handler.(EvidenceHandler); ok {
+		evidence, evidenceErr := evidenceHandler.HandleWithEvidence(ctx, hostCall)
+		result, drafts, handlerErr = evidence.Result, evidence.Receipts, evidenceErr
+	} else {
+		result, handlerErr = handler.spec.Handler.Handle(ctx, hostCall)
+	}
 	if handlerErr != nil {
 		status := StatusError
 		code := "handler_failed"
@@ -284,16 +321,19 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 		if errors.Is(handlerErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status, code, message = StatusTimeout, "handler_timeout", "Host tool handler timed out"
 		}
-		return broker.finishRegistered(ctx, request, bound, status, nil, code, message)
+		return broker.finishRegistered(ctx, request, bound, status, nil, nil, code, message)
 	}
 	if len(result) == 0 || len(result) > registryMaxPayloadBytes || !json.Valid(result) ||
 		validateHandlerArguments(handler.outputSchema, result) != nil {
-		return broker.finishRegistered(ctx, request, bound, StatusError, nil, "result_schema_mismatch", "Host tool handler returned a result outside its registered schema")
+		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, "result_schema_mismatch", "Host tool handler returned a result outside its registered schema")
 	}
-	return broker.finishRegistered(ctx, request, bound, StatusOK, result, "", "")
+	if !validReceiptDrafts(drafts) {
+		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, "handler_evidence_invalid", "Host tool handler returned invalid receipt evidence")
+	}
+	return broker.finishRegistered(ctx, request, bound, StatusOK, result, drafts, "", "")
 }
 
-func (broker *Broker) finishRegistered(ctx context.Context, request toolRequest, bound BoundOperation, status Status, result json.RawMessage, code, message string) ([]byte, error) {
+func (broker *Broker) finishRegistered(ctx context.Context, request toolRequest, bound BoundOperation, status Status, result json.RawMessage, drafts []ReceiptDraft, code, message string) ([]byte, error) {
 	outcome := BoundOutcome{Status: status, ErrorCode: code}
 	if result != nil {
 		outcome.ResultDigest = digestBytes(result)
@@ -303,7 +343,11 @@ func (broker *Broker) finishRegistered(ctx context.Context, request toolRequest,
 		receiptStatus = Status("reconciliation_required")
 		status, result, code, message = StatusError, nil, "reconciliation_required", "Host transaction completion requires reconciliation"
 	}
-	broker.recordRegistered(request, bound, receiptStatus, result)
+	if len(drafts) == 0 {
+		broker.recordRegistered(request, bound, receiptStatus, result)
+	} else {
+		broker.recordRegisteredDrafts(request, bound, drafts, receiptStatus == Status("reconciliation_required"))
+	}
 	return encodeRegisteredResponse(request.CallID, status, result, code, message)
 }
 
@@ -327,6 +371,53 @@ func (broker *Broker) recordRegistered(request toolRequest, bound BoundOperation
 		broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
 		request.EnvelopeDigest, target, string(status), response,
 	))
+}
+
+func validReceiptDrafts(drafts []ReceiptDraft) bool {
+	if len(drafts) > 4096 {
+		return false
+	}
+	var total uint64
+	for _, draft := range drafts {
+		digestBytes, digestErr := hex.DecodeString(draft.RequestSHA256)
+		identityValid := draft.RequestIdentity != "" && len(draft.RequestIdentity) <= 2048 && draft.RequestSHA256 == ""
+		digestValid := draft.RequestIdentity == "" && digestErr == nil && len(digestBytes) == sha256.Size
+		if (!identityValid && !digestValid) ||
+			(draft.Outcome != StatusOK && draft.Outcome != StatusDenied && draft.Outcome != StatusError && draft.Outcome != StatusTimeout) ||
+			len(draft.Response) > registryMaxPayloadBytes {
+			return false
+		}
+		total += uint64(len(draft.Response))
+		if total > registryMaxPayloadBytes {
+			return false
+		}
+	}
+	return true
+}
+
+func (broker *Broker) recordRegisteredDrafts(request toolRequest, bound BoundOperation, drafts []ReceiptDraft, reconciliation bool) {
+	grant := broker.config.ToolGrants[request.Capability]
+	for _, draft := range drafts {
+		status := draft.Outcome
+		if reconciliation {
+			status = Status("reconciliation_required")
+		}
+		if draft.RequestSHA256 != "" {
+			broker.receipts = append(broker.receipts, receipt.NewBoundFromRequestDigest(
+				broker.config.RunIdentity, request.CallID, request.Capability, bound.OperationIndex,
+				bound.TransactionID, bound.OperationID, bound.AttemptID,
+				broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
+				request.EnvelopeDigest, draft.RequestSHA256, string(status), draft.Response,
+			))
+			continue
+		}
+		broker.receipts = append(broker.receipts, receipt.NewBound(
+			broker.config.RunIdentity, request.CallID, request.Capability, bound.OperationIndex,
+			bound.TransactionID, bound.OperationID, bound.AttemptID,
+			broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
+			request.EnvelopeDigest, draft.RequestIdentity, string(status), draft.Response,
+		))
+	}
 }
 
 func digestBytes(value []byte) string {

@@ -159,11 +159,12 @@ func (engine *Engine) Close(ctx context.Context) error {
 	return engine.runtime.Close(ctx)
 }
 
-func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
+func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) (payload []byte, runErr error) {
 	if len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
 		return nil, errors.New("request exceeds configured bounds")
 	}
-	if _, err := runtimeconfig.DecodeRunRequest(request); err != nil {
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
 		return nil, err
 	}
 
@@ -180,6 +181,34 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 			return nil, errors.New("capability broker factory returned nil")
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
+	}
+	runSucceeded := false
+	finalizeReason := "execution_failed"
+	if broker != nil {
+		defer func() {
+			if errors.Is(runContext.Err(), context.DeadlineExceeded) {
+				finalizeReason = "timeout"
+			} else if errors.Is(runContext.Err(), context.Canceled) {
+				finalizeReason = "cancelled"
+			}
+			finalizeTimeout := engine.config.Timeout
+			if finalizeTimeout < 5*time.Second {
+				finalizeTimeout = 5 * time.Second
+			}
+			if finalizeTimeout > time.Minute {
+				finalizeTimeout = time.Minute
+			}
+			finalizeContext, finalizeCancel := context.WithTimeout(context.Background(), finalizeTimeout)
+			defer finalizeCancel()
+			if finalizeErr := broker.FinalizeRun(finalizeContext, runSucceeded, finalizeReason); finalizeErr != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("finalize Host transaction: %w", finalizeErr))
+				payload = nil
+			}
+			if closeErr := broker.CloseJournal(); closeErr != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("close Host transaction journal: %w", closeErr))
+				payload = nil
+			}
+		}()
 	}
 	instance, err := engine.checkoutModule(runContext)
 	if err != nil {
@@ -198,10 +227,18 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		}
 	}
 	executeStarted := time.Now()
-	payload, err := callExecute(runContext, module, request, engine.config.MaxResponseBytes)
+	payload, err = callExecute(runContext, module, request, engine.config.MaxResponseBytes)
 	observe(engine.observer, "execute", executeStarted, err)
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
+	}
+	decodedResponse, validationErr := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload)
+	if validationErr != nil {
+		finalizeReason = "invalid_output"
+		return nil, validationErr
+	}
+	if decodedResponse.Status == runtimeconfig.RunResponseError {
+		finalizeReason = "guest_error"
 	}
 	if broker != nil {
 		payload, err = mergeHostEvidence(payload, broker.Receipts(), broker.CallCount(), engine.config.MaxResponseBytes)
@@ -209,6 +246,7 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 			return nil, err
 		}
 	}
+	runSucceeded = decodedResponse.Status == runtimeconfig.RunResponseOK
 	return payload, nil
 }
 

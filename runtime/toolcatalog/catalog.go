@@ -247,6 +247,7 @@ var generatedPythonReserved = map[string]bool{
 	"_json": true, "_TOOL_METADATA": true,
 	"CATALOG_DIGEST": true, "CATALOG_REVISION": true,
 	"Any": true, "Literal": true, "describe_tools": true, "describe_tool": true,
+	"current_transaction": true,
 }
 
 var pythonKeywords = map[string]bool{

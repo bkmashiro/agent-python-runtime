@@ -34,7 +34,10 @@ def call(payload):
 host.call=call
 sys.modules["_agent_runtime_host"]=host
 runpy.run_path(sys.argv[1])
-from host_tools import echo, CATALOG_DIGEST
+from host_tools import echo, CATALOG_DIGEST, current_transaction
+transaction = current_transaction()
+assert transaction == {"scope":"current","authority":"host-owned","lifecycle":"host-managed","catalog_digest":CATALOG_DIGEST}
+assert not any(key.endswith("_id") for key in transaction)
 assert echo(text="hello") == {"text":"hello"}
 assert seen == [{"call_id":"typed:1","capability":"demo.echo","catalog_digest":CATALOG_DIGEST,"handler_version":"v1","arguments":{"text":"hello"}}]
 def denied(payload):

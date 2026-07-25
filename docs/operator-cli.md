@@ -35,6 +35,7 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
   "max_response_bytes": 1048576,
   "memory_limit_pages": 8192,
   "prepared_capacity": 1,
+  "transaction_journal_path": "/absolute/private/path/transactions.db",
   "fetch_many": {
     "max_calls": 2,
     "max_requests_per_call": 8,
@@ -56,9 +57,11 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
 
 `prepared_capacity` is an optional wazero-adapter optimization. `0` preserves synchronous fresh initialization. Values `1`–`4` preinitialize that many never-served instances; each checkout serves exactly one Run and is then closed, while a miss falls back to the synchronous fresh path. The exact current artifact starts at 128 MiB of guest memory per candidate, so capacity remains Host-owned and hard-capped. This is not snapshot/restore and does not change the reported `fresh-instance` safety mode.
 
+`transaction_journal_path` is an optional clean absolute path to the Host-owned SQLite/WAL transaction journal. With it, the production CLI creates a workflow transaction before Guest execution, journals every admitted `fetch_many` call as an operation+attempt, finalizes successful Runs, and supports reopen inspection with `apyrun-ledger`. Without it, the same Registry/Coordinator path uses `MemoryLedger` for backward compatibility and must not be presented as durable evidence. The journal rejects symlinks and uses private file permissions.
+
 The Host maps the opaque guest target `catalog` to the configured origin. A target base URL must be an HTTPS origin with no path, query, fragment, or user info. Plain HTTP is accepted only for explicit IP-loopback test fixtures. Redirects are not followed. The production CLI ignores ambient proxy settings, validates all DNS answers at dial time, rejects mixed or non-public answers, and dials a validated IP directly. Private-network targets and DNS names resolving to loopback are not supported. V1 performs GET only.
 
-`fetch_many` limits are additionally constrained by compiled hard ceilings. `max_concurrency` is Host-owned, capped at 16, and limits each fixed input-order wave; byte admission and receipts remain ordered after every wave joins. The CLI rejects the entire operator config before compiling the guest if any resource or capability bound is invalid.
+`fetch_many` limits are additionally constrained by compiled hard ceilings. `max_concurrency` is Host-owned, capped at 16, and limits each fixed input-order wave; byte admission and receipts remain ordered after every wave joins. The legacy Python call envelope is Host-adapted into a sealed builtin Registry entry, so Guest code cannot choose the catalog digest or handler version. Bound receipts retain per-request digests and add transaction, operation, attempt, catalog, handler, effect, and policy identity. The CLI rejects the entire operator config before compiling the guest if any resource or capability bound is invalid.
 
 ## Minimal request
 
@@ -73,8 +76,8 @@ The Host maps the opaque guest target `catalog` to the configured origin. A targ
 }
 ```
 
-The response retains the normal strict execution envelope. If Host capabilities were used, Host-authored receipts and capability-call metrics overwrite any guest claims before stdout is written.
+The response retains the normal strict execution envelope. Before committing the workflow, the Host strictly validates the envelope and the requested `output_schema`. Guest error, timeout/cancellation, invalid output, or failed transaction finalization triggers bounded Host abort; compensation is never automatic unless the Host configured the relevant adapter policy. If Host capabilities were used, Host-authored receipts and capability-call metrics overwrite any guest claims before stdout is written.
 
 ## Verification boundary
 
-`go test ./cmd/apyrun` covers strict config decoding, authority separation, response bounds, stream behavior, lifecycle, and credential-safe diagnostics. `TestOperatorCLIWithRealGuestArtifact` builds the actual binary and exercises no-grant execution, Host-granted localhost fetch with a Host-owned credential, Host receipt identity, and timeout against the exact artifact selected by `AGENT_RUNTIME_GUEST`.
+`go test ./cmd/apyrun` covers strict config decoding, authority separation, response bounds, stream behavior, lifecycle, SQLite reopen, and credential-safe diagnostics. `TestOperatorCLIWithRealGuestArtifact` builds the actual binary and exercises no-grant execution, Host-granted localhost fetch with a Host-owned credential, transaction-bound receipts, committed-journal reopen, and timeout against the exact artifact selected by `AGENT_RUNTIME_GUEST`.

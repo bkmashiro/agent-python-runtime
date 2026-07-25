@@ -9,11 +9,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
 type dependencies struct {
@@ -141,13 +143,46 @@ func newWazeroFactory(config operatorConfig, hostIdentity string, client *http.C
 		client = &http.Client{}
 	}
 	fetcher := capability.NewHTTPFetcher(client)
+	registry, toolGrant, catalogDigest, err := capability.BuildBuiltinFetchManyRegistry(*grant, fetcher)
+	if err != nil {
+		return nil, err
+	}
 	factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{
-			RunIdentity: hostIdentity,
-			Grants: map[string]capability.Grant{
-				capability.FetchManyCapability: *grant,
-			},
+		var coordinator *transaction.Coordinator
+		var closeJournal func() error
+		if config.TransactionJournalPath != "" {
+			ledger, openErr := transaction.OpenSQLiteLedger(config.TransactionJournalPath)
+			if openErr != nil {
+				return nil, openErr
+			}
+			closeJournal = ledger.Close
+			coordinator = transaction.NewCoordinator(ledger, transaction.RandomIDSource{}, time.Now, nil)
+		} else {
+			coordinator = transaction.NewCoordinator(transaction.NewMemoryLedger(), transaction.RandomIDSource{}, time.Now, nil)
+		}
+		tx, beginErr := coordinator.Begin(transaction.BeginRequest{RunID: hostIdentity, CatalogDigest: catalogDigest, Mode: transaction.TransactionModeWorkflow})
+		if beginErr != nil {
+			if closeJournal != nil {
+				_ = closeJournal()
+			}
+			return nil, beginErr
+		}
+		binder, bindErr := capability.NewCoordinatorBinder(coordinator, tx.ID, time.Minute)
+		if bindErr != nil {
+			if closeJournal != nil {
+				_ = closeJournal()
+			}
+			return nil, bindErr
+		}
+		broker, brokerErr := capability.NewBroker(capability.Config{
+			RunIdentity: hostIdentity, Grants: map[string]capability.Grant{capability.FetchManyCapability: *grant},
+			CatalogDigest: catalogDigest, Registry: registry, Binder: binder,
+			ToolGrants: map[string]capability.ToolGrant{capability.FetchManyCapability: toolGrant}, CloseJournal: closeJournal,
 		}, fetcher)
+		if brokerErr != nil && closeJournal != nil {
+			_ = closeJournal()
+		}
+		return broker, brokerErr
 	}
 	return factory, nil
 }

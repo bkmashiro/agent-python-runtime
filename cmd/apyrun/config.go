@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -13,12 +14,13 @@ import (
 )
 
 type operatorConfig struct {
-	TimeoutMS        int64            `json:"timeout_ms,omitempty"`
-	MaxRequestBytes  uint32           `json:"max_request_bytes,omitempty"`
-	MaxResponseBytes uint32           `json:"max_response_bytes,omitempty"`
-	MemoryLimitPages uint32           `json:"memory_limit_pages,omitempty"`
-	PreparedCapacity uint32           `json:"prepared_capacity,omitempty"`
-	FetchMany        *fetchManyConfig `json:"fetch_many,omitempty"`
+	TimeoutMS              int64            `json:"timeout_ms,omitempty"`
+	MaxRequestBytes        uint32           `json:"max_request_bytes,omitempty"`
+	MaxResponseBytes       uint32           `json:"max_response_bytes,omitempty"`
+	MemoryLimitPages       uint32           `json:"memory_limit_pages,omitempty"`
+	PreparedCapacity       uint32           `json:"prepared_capacity,omitempty"`
+	TransactionJournalPath string           `json:"transaction_journal_path,omitempty"`
+	FetchMany              *fetchManyConfig `json:"fetch_many,omitempty"`
 }
 
 type fetchManyConfig struct {
@@ -70,7 +72,13 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, *capability.Gra
 	if err := runConfig.Validate(); err != nil {
 		return runtimeconfig.RunConfig{}, nil, fmt.Errorf("invalid operator resource bounds: %w", err)
 	}
+	if config.TransactionJournalPath != "" && (!filepath.IsAbs(config.TransactionJournalPath) || filepath.Clean(config.TransactionJournalPath) != config.TransactionJournalPath) {
+		return runtimeconfig.RunConfig{}, nil, errors.New("transaction_journal_path must be a clean absolute path")
+	}
 	if config.FetchMany == nil {
+		if config.TransactionJournalPath != "" {
+			return runtimeconfig.RunConfig{}, nil, errors.New("transaction_journal_path requires a capability grant")
+		}
 		return runConfig, nil, nil
 	}
 	if config.FetchMany.PerRequestTimeoutMS <= 0 {

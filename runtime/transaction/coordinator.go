@@ -217,6 +217,31 @@ func (coordinator *Coordinator) Begin(request BeginRequest) (Transaction, error)
 	return coordinator.ledger.GetTransaction(id)
 }
 
+func (coordinator *Coordinator) FinalizeWorkflow(transactionID string) (Transaction, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if !validIdentifier(transactionID) {
+		return Transaction{}, ErrInvalidInput
+	}
+	value, err := coordinator.ledger.GetTransaction(transactionID)
+	if err != nil {
+		return Transaction{}, err
+	}
+	if value.Mode != TransactionModeWorkflow || value.State != TransactionOpen {
+		return Transaction{}, ErrConflict
+	}
+	operations, err := coordinator.ledger.ListOperations(transactionID)
+	if err != nil {
+		return Transaction{}, err
+	}
+	for _, operation := range operations {
+		if operation.State != OperationApplied {
+			return Transaction{}, ErrConflict
+		}
+	}
+	return coordinator.ledger.transitionTransaction(value.ID, value.Version, TransactionOpen, TransactionCommitted, coordinator.now().UTC())
+}
+
 func (coordinator *Coordinator) Propose(request ProposeRequest) (Operation, error) {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()

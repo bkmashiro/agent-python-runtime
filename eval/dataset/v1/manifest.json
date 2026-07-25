@@ -1,0 +1,151 @@
+{
+  "dataset_id": "aprt_workflowbench_v1",
+  "revision": 1,
+  "scenario_count": 20,
+  "scenario_schema": "https://agent-runtime.dev/eval/v1/scenario.schema.json",
+  "scenario_schema_digest": "sha256:d3a228b8321a17024fdb1b31c0f658823dae9062acf1014af3917e965c6d7c49",
+  "scenario_schema_path": "scenario.schema.json",
+  "scenarios": [
+    {
+      "family": "simple_read",
+      "path": "scenarios/dev/dev_simple_read_001.json",
+      "scenario_id": "dev_simple_read_001",
+      "sha256": "sha256:f8aac3220305936e50f3a1ab62b87d6fcb02ffcf4be0a8720d73a4d1a359e206",
+      "split": "dev"
+    },
+    {
+      "family": "fanout_join_filter",
+      "path": "scenarios/dev/dev_fanout_join_filter_001.json",
+      "scenario_id": "dev_fanout_join_filter_001",
+      "sha256": "sha256:6cf60ddb062c41f697e5a070a96c0c101940fa33689817d596e783e867599d3a",
+      "split": "dev"
+    },
+    {
+      "family": "data_dependent_branch",
+      "path": "scenarios/dev/dev_data_dependent_branch_001.json",
+      "scenario_id": "dev_data_dependent_branch_001",
+      "sha256": "sha256:fa85760a21ba62bd8a4a1cfaf8a0d7697be2fffc8dc5c1205f00157bb1d47cfb",
+      "split": "dev"
+    },
+    {
+      "family": "partial_timeout_retry",
+      "path": "scenarios/dev/dev_partial_timeout_retry_001.json",
+      "scenario_id": "dev_partial_timeout_retry_001",
+      "sha256": "sha256:489c57947ceb620c20e7a800e0a3e5982766bd17ade8a9b2073fe7bbc604d98e",
+      "split": "dev"
+    },
+    {
+      "family": "exact_reversible_abort",
+      "path": "scenarios/dev/dev_exact_reversible_abort_001.json",
+      "scenario_id": "dev_exact_reversible_abort_001",
+      "sha256": "sha256:600057516c944e2175fc18b2df43d8515e8b0fb3f9513f85d27d08e85473749b",
+      "split": "dev"
+    },
+    {
+      "family": "compensatable_abort",
+      "path": "scenarios/dev/dev_compensatable_abort_001.json",
+      "scenario_id": "dev_compensatable_abort_001",
+      "sha256": "sha256:e38c51a0749cabda3fec6756e82032675dc6eff61692e011aa5c74e12edc3cbe",
+      "split": "dev"
+    },
+    {
+      "family": "irreversible_staging",
+      "path": "scenarios/dev/dev_irreversible_staging_001.json",
+      "scenario_id": "dev_irreversible_staging_001",
+      "sha256": "sha256:fc3019fdb7e29117efc6386cc7c72cbc15df8a5dbe6cd35570d2485315ac5e70",
+      "split": "dev"
+    },
+    {
+      "family": "dynamic_catalog_policy",
+      "path": "scenarios/dev/dev_dynamic_catalog_policy_001.json",
+      "scenario_id": "dev_dynamic_catalog_policy_001",
+      "sha256": "sha256:3335955a42e7a5dbe42156124dd67fd3b7fe913e0b82955a59302c124192d525",
+      "split": "dev"
+    },
+    {
+      "family": "schema_projection",
+      "path": "scenarios/dev/dev_schema_projection_001.json",
+      "scenario_id": "dev_schema_projection_001",
+      "sha256": "sha256:73a495e9ae1c37d37357773941b42e7338c8a36f6b2f95c808a2e58515b9eb53",
+      "split": "dev"
+    },
+    {
+      "family": "adversarial_authority",
+      "path": "scenarios/dev/dev_adversarial_authority_001.json",
+      "scenario_id": "dev_adversarial_authority_001",
+      "sha256": "sha256:f60186e9b3c66b94ee6cb17ae1c600785e4f6c6c65def03e83fbe45580a1914c",
+      "split": "dev"
+    },
+    {
+      "family": "simple_read",
+      "path": "scenarios/evaluation/evaluation_simple_read_001.json",
+      "scenario_id": "evaluation_simple_read_001",
+      "sha256": "sha256:34423db50ba13143748b51d10fe09710b2a32747a492941a163e356337ae8f8a",
+      "split": "evaluation"
+    },
+    {
+      "family": "fanout_join_filter",
+      "path": "scenarios/evaluation/evaluation_fanout_join_filter_001.json",
+      "scenario_id": "evaluation_fanout_join_filter_001",
+      "sha256": "sha256:ef1971f0bc61d22e5bb131fb143d759b8599d5c431021de8aebc9c3f29d82de1",
+      "split": "evaluation"
+    },
+    {
+      "family": "data_dependent_branch",
+      "path": "scenarios/evaluation/evaluation_data_dependent_branch_001.json",
+      "scenario_id": "evaluation_data_dependent_branch_001",
+      "sha256": "sha256:ed2aefb0ea98338671837d0ec6a6818c3f01da3a9d55d74076bcda704198a05f",
+      "split": "evaluation"
+    },
+    {
+      "family": "partial_timeout_retry",
+      "path": "scenarios/evaluation/evaluation_partial_timeout_retry_001.json",
+      "scenario_id": "evaluation_partial_timeout_retry_001",
+      "sha256": "sha256:8e86cbab7a16f53c3a8fd54bbaa7f6ae211fd710a580577c36092aff71016117",
+      "split": "evaluation"
+    },
+    {
+      "family": "exact_reversible_abort",
+      "path": "scenarios/evaluation/evaluation_exact_reversible_abort_001.json",
+      "scenario_id": "evaluation_exact_reversible_abort_001",
+      "sha256": "sha256:aa5bce932b34195145f6157d0b15ee70ad74d64d0e09221ed887a20f87622b28",
+      "split": "evaluation"
+    },
+    {
+      "family": "compensatable_abort",
+      "path": "scenarios/evaluation/evaluation_compensatable_abort_001.json",
+      "scenario_id": "evaluation_compensatable_abort_001",
+      "sha256": "sha256:a1e7b526a4b650cef63421dab48fbe65846b2c914146ce7f9e103248d242d10c",
+      "split": "evaluation"
+    },
+    {
+      "family": "irreversible_staging",
+      "path": "scenarios/evaluation/evaluation_irreversible_staging_001.json",
+      "scenario_id": "evaluation_irreversible_staging_001",
+      "sha256": "sha256:948cfaf17fa8e3eb223d86dcbf0f72db3ac0e5d5aec37eb1057d98a7c04f2413",
+      "split": "evaluation"
+    },
+    {
+      "family": "dynamic_catalog_policy",
+      "path": "scenarios/evaluation/evaluation_dynamic_catalog_policy_001.json",
+      "scenario_id": "evaluation_dynamic_catalog_policy_001",
+      "sha256": "sha256:70c4dbc246d9b1690b23d4a6212930e3bc6b45522f43ee3011edbae13b1abd05",
+      "split": "evaluation"
+    },
+    {
+      "family": "schema_projection",
+      "path": "scenarios/evaluation/evaluation_schema_projection_001.json",
+      "scenario_id": "evaluation_schema_projection_001",
+      "sha256": "sha256:5069cdaab080cfd011450e9aa0c5009213c061600a0b82778ed540cee52d77b7",
+      "split": "evaluation"
+    },
+    {
+      "family": "adversarial_authority",
+      "path": "scenarios/evaluation/evaluation_adversarial_authority_001.json",
+      "scenario_id": "evaluation_adversarial_authority_001",
+      "sha256": "sha256:ebf790130a4a166c2ad852af4582dc1e9db1cf79d2b3c9b9e24585e8705ef903",
+      "split": "evaluation"
+    }
+  ],
+  "schema_version": "evaluation-dataset-manifest/v1"
+}

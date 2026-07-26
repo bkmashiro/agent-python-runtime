@@ -48,6 +48,7 @@ func testTrialLimits() TrialLimits {
 func TestResponsesSessionParsesCallsAndKeepsRawProtocolInMemoryOnly(t *testing.T) {
 	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{
 		"id":"response-private",
+		"status":"completed",
 		"output":[{"type":"function_call","id":"item-private","status":"completed","call_id":"call-private","name":"pwd","arguments":"{}"}]
 	}`, 20, 5)}}
 	session, err := NewResponsesSession(adapter, "gpt-5.4", testTrialLimits())
@@ -74,7 +75,7 @@ func TestResponsesSessionParsesCallsAndKeepsRawProtocolInMemoryOnly(t *testing.T
 }
 
 func TestResponsesSessionStopsPermanentlyAfterMissingUsage(t *testing.T) {
-	response := responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 1, 1)
+	response := responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 1, 1)
 	response.Usage = nil
 	adapter := &scriptedAdapter{responses: []provider.Response{response}}
 	session, err := NewResponsesSession(adapter, "gpt-5.4", testTrialLimits())
@@ -96,8 +97,8 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 	limits := testTrialLimits()
 	limits.MaxOutputTokens = 70
 	adapter := &scriptedAdapter{responses: []provider.Response{
-		responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"one"}]}]}`, 10, 60),
-		responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"two"}]}]}`, 10, 11),
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"one"}]}]}`, 10, 60),
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"two"}]}]}`, 10, 11),
 	}}
 	session, err := NewResponsesSession(adapter, "gpt-5.4", limits)
 	if err != nil {
@@ -123,8 +124,8 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 
 func TestResponsesSessionCapsOutputByRemainingTotalBudget(t *testing.T) {
 	adapter := &scriptedAdapter{responses: []provider.Response{
-		responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"one"}]}]}`, 90, 5),
-		responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"two"}]}]}`, 1, 1),
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"one"}]}]}`, 90, 5),
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"two"}]}]}`, 1, 1),
 	}}
 	limits := TrialLimits{MaxProviderCalls: 2, MaxToolCalls: 1, MaxPythonRuns: 1, MaxInputTokens: 100, MaxOutputTokens: 100, MaxTotalTokens: 100, MaxOutputTokensPerCall: 50}
 	session, err := NewResponsesSession(adapter, developmentModel, limits)
@@ -143,15 +144,27 @@ func TestResponsesSessionCapsOutputByRemainingTotalBudget(t *testing.T) {
 	}
 }
 
+func TestParseResponsesAllowsMissingItemStatusOnlyWhenEnvelopeCompleted(t *testing.T) {
+	completed := json.RawMessage(`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`)
+	parsed, err := ParseResponsesOutput(completed, map[string]string{"pwd": "pwd"})
+	if err != nil || len(parsed.Calls) != 1 {
+		t.Fatalf("completed parsed=%+v err=%v", parsed, err)
+	}
+	inProgress := json.RawMessage(`{"status":"in_progress","output":[{"type":"function_call","status":"completed","call_id":"c1","name":"pwd","arguments":"{}"}]}`)
+	if _, err := ParseResponsesOutput(inProgress, map[string]string{"pwd": "pwd"}); err == nil {
+		t.Fatal("in-progress response accepted")
+	}
+}
+
 func TestParseResponsesOutputRejectsUnknownDuplicateAndLeakyMarshal(t *testing.T) {
 	invalid := []string{
-		`{"output":[],"output":[]}`,
-		`{"output":[{"type":"function_call","call_id":"c1","name":"unknown","arguments":"{}"}]}`,
-		`{"output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"},{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`,
-		`{"output":[{"type":"function_call","status":"completed","call_id":"c1","name":"pwd","arguments":"{\"x\":1,\"x\":2}"}]}`,
-		`{"output":[{"type":"function_call","status":"in_progress","call_id":"c1","name":"pwd","arguments":"{}"}]}`,
-		`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text"}]}]}`,
-		`{"output":[{"type":"message","role":"assistant","content":[{"type":"refusal"}]}]}`,
+		`{"status":"completed","output":[],"output":[]}`,
+		`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"unknown","arguments":"{}"}]}`,
+		`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"},{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`,
+		`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"c1","name":"pwd","arguments":"{\"x\":1,\"x\":2}"}]}`,
+		`{"status":"completed","output":[{"type":"function_call","status":"in_progress","call_id":"c1","name":"pwd","arguments":"{}"}]}`,
+		`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text"}]}]}`,
+		`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"refusal"}]}]}`,
 	}
 	for _, body := range invalid {
 		if _, err := ParseResponsesOutput(json.RawMessage(body), map[string]string{"pwd": "pwd"}); err == nil {
@@ -162,6 +175,7 @@ func TestParseResponsesOutputRejectsUnknownDuplicateAndLeakyMarshal(t *testing.T
 
 func TestParseResponsesRefusalUsesOfficialField(t *testing.T) {
 	parsed, err := ParseResponsesOutput(json.RawMessage(`{
+		"status":"completed",
 		"output":[{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"cannot comply"}]}]
 	}`), nil)
 	if err != nil || !parsed.HasMessage || !parsed.Refused || parsed.TextDigest == "" || len(parsed.replayItems) != 1 {

@@ -178,9 +178,10 @@ func ParseResponsesOutput(body json.RawMessage, providerToCanonical map[string]s
 		return ParsedResponse{}, ErrAgenticRun
 	}
 	var envelope struct {
+		Status string            `json:"status"`
 		Output []json.RawMessage `json:"output"`
 	}
-	if json.Unmarshal(body, &envelope) != nil || len(envelope.Output) == 0 || len(envelope.Output) > maxFunctionCalls*2 {
+	if json.Unmarshal(body, &envelope) != nil || envelope.Status != "completed" || len(envelope.Output) == 0 || len(envelope.Output) > maxFunctionCalls*2 {
 		return ParsedResponse{}, ErrAgenticRun
 	}
 	parsed := ParsedResponse{}
@@ -230,8 +231,10 @@ func ParseResponsesOutput(body json.RawMessage, providerToCanonical map[string]s
 
 func parseFunctionCall(header map[string]json.RawMessage, mapping map[string]string) (ResponseCall, map[string]any, error) {
 	var callID, name, arguments, status string
-	if json.Unmarshal(header["status"], &status) != nil || status != "completed" ||
-		json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil ||
+	if rawStatus, exists := header["status"]; exists && (json.Unmarshal(rawStatus, &status) != nil || status != "completed") {
+		return ResponseCall{}, nil, ErrAgenticRun
+	}
+	if json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil ||
 		!validProtocolID(callID) || !providerToolNamePattern.MatchString(name) || len(arguments) == 0 || len(arguments) > maxArgumentsBytes {
 		return ResponseCall{}, nil, ErrAgenticRun
 	}

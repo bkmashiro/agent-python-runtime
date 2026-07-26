@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
+	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
 func adapterForStatefulOracle(t *testing.T, task Task, providerName func(string) string) *scriptedAdapter {
@@ -81,7 +82,8 @@ func (workflow *oracleWorkflow) Execute(ctx context.Context, _ string, code stri
 	workflow.turn++
 	return PythonRunResult{
 		Success: true, CapabilityCalls: uint32(after - before), RequestDigest: digest([]byte(code)),
-		ResponseDigest: digest([]byte("{}")), ResultDigest: digest([]byte("{}")), Observation: json.RawMessage(`{}`),
+		ResponseDigest: digest([]byte("{}")), ResultDigest: digest([]byte("{}")), Backend: "oracle-test",
+		ResetMode: engine.ResetModeFreshInstance, Observation: json.RawMessage(`{}`),
 	}, nil
 }
 func (*oracleWorkflow) Close(context.Context) error { return nil }
@@ -119,12 +121,20 @@ func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 		workflow = &oracleWorkflow{tools: tools, oracle: oracle}
 		return workflow, nil
 	}
-	result, err := RunDevelopmentTrial(context.Background(), adapter, task, ConditionPython, developmentTrialLimits(len(task.Interaction.Turns)), factory)
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapter, task, ConditionPython, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, factory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !result.Passed || result.ProviderCalls != 3 || result.PythonRuns != 3 || result.ToolCalls != 4 || len(result.PythonEvidence) != 3 || workflow == nil || len(workflow.codes) != 3 {
 		t.Fatalf("result=%+v workflow=%+v", result, workflow)
+	}
+	if err := ValidateTrialResult(result); err != nil {
+		t.Fatalf("successful Python trial is not artifact-safe: %v", err)
 	}
 	encoded, _ := json.Marshal(result)
 	if containsBytes(encoded, []byte("private code")) || containsBytes(encoded, []byte("python-private")) {

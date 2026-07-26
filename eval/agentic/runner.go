@@ -208,6 +208,8 @@ func RunDevelopmentTrialWithIdentity(
 					result.ErrorCode = "python_engine_failure"
 					break
 				}
+				observation = append(json.RawMessage(nil), pythonResult.Observation...)
+				pythonResult.Observation = nil
 				result.PythonEvidence = append(result.PythonEvidence, pythonResult)
 				result.PythonRuns++
 				afterCalls := countStatefulCalls(tools.Trace())
@@ -215,7 +217,6 @@ func RunDevelopmentTrialWithIdentity(
 					result.ErrorCode = "python_trace_mismatch"
 					break
 				}
-				observation = append(json.RawMessage(nil), pythonResult.Observation...)
 				if !pythonResult.Success {
 					result.ErrorCode = "python_guest_error"
 				}

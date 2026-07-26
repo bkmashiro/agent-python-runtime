@@ -77,6 +77,55 @@ func TestToolRuntimeDirectCallsUseHostTransactionsAndTrace(t *testing.T) {
 	}
 }
 
+func TestToolRuntimePromotesFilesystemApplicationErrorsToFailedReceipts(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.SetTurn(0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.InvokeDirect(context.Background(), "run-setup", "call-setup", "cd", json.RawMessage(`{"folder":"Documents"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.SetTurn(1); err != nil {
+		t.Fatal(err)
+	}
+	before := runtime.FileSystem().Digest()
+	broker, err := runtime.NewWorkflowBroker("run-failed-cd", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := toolByID(t, runtime.Snapshot(), "cd")
+	payload, err := json.Marshal(map[string]any{
+		"call_id": "typed:failed-cd", "capability": "cd", "catalog_digest": runtime.Snapshot().Digest(),
+		"handler_version": tool.HandlerVersion, "arguments": json.RawMessage(`{"folder":"Documents"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), payload)
+	var envelope struct {
+		Status capability.Status `json:"status"`
+		Error  *capability.Error `json:"error"`
+	}
+	if err != nil || json.Unmarshal(response, &envelope) != nil || envelope.Status != capability.StatusError || envelope.Error == nil || envelope.Error.Code != "handler_failed" {
+		t.Fatalf("response=%s envelope=%+v err=%v", response, envelope, err)
+	}
+	receipts := broker.Receipts()
+	if len(receipts) != 1 || receipts[0].Outcome != string(capability.StatusError) || receipts[0].ResponseSHA256 != "" {
+		t.Fatalf("failed receipt=%+v", receipts)
+	}
+	if runtime.FileSystem().Digest() != before {
+		t.Fatalf("failed cd changed state: before=%s after=%s", before, runtime.FileSystem().Digest())
+	}
+	raw := runtime.RawTrace()
+	if len(raw[1]) != 1 || raw[1][0].Name != "cd" || raw[1][0].Error == "" || !strings.Contains(string(raw[1][0].Output), "No such file or directory") {
+		t.Fatalf("raw trace=%+v", raw)
+	}
+}
+
 func TestToolRuntimeWorkflowRollbackRestoresState(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	runtime, err := NewToolRuntime(task)

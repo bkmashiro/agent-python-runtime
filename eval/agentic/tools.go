@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +19,8 @@ const (
 	benchmarkHandlerVersion = "bfcl-v4-handler-v1"
 	benchmarkGrantVersion   = "bfcl-v4-grant-v1"
 )
+
+var ErrBenchmarkToolOperation = errors.New("benchmark Host tool operation failed")
 
 var reversibleFilesystemTools = map[string]bool{
 	"cd": true, "cp": true, "echo": true, "mkdir": true, "mv": true, "touch": true,
@@ -258,6 +261,10 @@ func (handler *benchmarkHandler) Handle(_ context.Context, call capability.HostC
 		handler.runtime.finishRecord(turn, index, nil, err)
 		return nil, err
 	}
+	if operationErr := benchmarkToolOperationError(output); operationErr != nil {
+		handler.runtime.finishRecord(turn, index, output, operationErr)
+		return nil, operationErr
+	}
 	if string(output) == "null" {
 		output = json.RawMessage(`{}`)
 	}
@@ -271,6 +278,22 @@ func (handler *benchmarkHandler) Handle(_ context.Context, call capability.HostC
 	}
 	handler.runtime.finishRecord(turn, index, output, nil)
 	return output, nil
+}
+
+func benchmarkToolOperationError(output json.RawMessage) error {
+	var envelope map[string]json.RawMessage
+	if decodeStrict(output, &envelope) != nil {
+		return nil
+	}
+	raw, exists := envelope["error"]
+	if !exists {
+		return nil
+	}
+	var message string
+	if json.Unmarshal(raw, &message) != nil || strings.TrimSpace(message) == "" {
+		return ErrBenchmarkToolOperation
+	}
+	return fmt.Errorf("%w: %s", ErrBenchmarkToolOperation, message)
 }
 
 func (handler *benchmarkHandler) Rollback(_ context.Context, call capability.AbortCall) error {

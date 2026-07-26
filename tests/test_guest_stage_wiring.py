@@ -25,10 +25,14 @@ class GuestStageEvidenceWiringTests(unittest.TestCase):
             '--patched-wasi-vfs-archive "${WASI_VFS_LIB}"',
             '--linked-storage-object "${WASI_VFS_STORAGE_OBJECT}"',
             '--wasi-vfs-cli "${WASI_VFS}"',
+            '--source-lock "${SOURCE_LOCK}"',
             '--vfs-root "${VFS_PYTHON_DIR}"',
             '--vfs-manifest "${REPRO_VFS_MANIFEST}"',
         ):
             self.assertIn(argument, script)
+        self.assertNotIn(
+            '--source-lock "${ROOT_DIR}/guest/build/sources.lock.json"', script
+        )
 
     def test_experiment_rebuilds_guest_archive_with_explicit_treatments(self):
         script = (ROOT / "guest" / "build" / "build-guest.sh").read_text()

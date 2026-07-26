@@ -483,7 +483,7 @@ if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
     --patched-wasi-vfs-archive "${WASI_VFS_LIB}" \
     --linked-storage-object "${WASI_VFS_STORAGE_OBJECT}" \
     --wasi-vfs-cli "${WASI_VFS}" \
-    --source-lock "${ROOT_DIR}/guest/build/sources.lock.json" \
+    --source-lock "${SOURCE_LOCK}" \
     --vfs-manifest "${REPRO_VFS_MANIFEST}" \
     --repository-commit "${REPRO_REPOSITORY_COMMIT}" \
     --source-date-epoch "${SOURCE_DATE_EPOCH}" \

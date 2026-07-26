@@ -138,6 +138,28 @@ func TestRunDevelopmentTrialForModelBindsGemini36FlashRequestAndArtifact(t *test
 	}
 }
 
+func TestRunDevelopmentTrialForModelBindsGrok420RequestAndArtifact(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_112")
+	response := responseFixture(`{"model":"grok-4.20-0309-non-reasoning","status":"completed","output":[]}`, 10, 2)
+	adapter := &scriptedAdapter{responses: []provider.Response{response}}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
+	}
+	model := "grok-4.20-0309-non-reasoning"
+	result, err := RunDevelopmentTrialForModelWithIdentity(context.Background(), adapter, task, ConditionDirect, model, 0, developmentTrialLimits(1), identity, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Model != model || len(adapter.requests) != 1 || !strings.Contains(string(adapter.requests[0].Payload), `"model":"grok-4.20-0309-non-reasoning"`) {
+		t.Fatalf("result=%+v request=%s", result, adapter.requests[0].Payload)
+	}
+	if err := ValidateTrialResult(result); err != nil {
+		t.Fatalf("grok result is not artifact-safe: %v", err)
+	}
+}
+
 func TestRunDevelopmentTrialForModelRejectsUnapprovedModelBeforeProviderCall(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_112")
 	adapter := &scriptedAdapter{}

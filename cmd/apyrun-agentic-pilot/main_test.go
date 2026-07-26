@@ -14,6 +14,14 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 )
 
+func TestPilotSummaryCarriesTreatmentScopeBounds(t *testing.T) {
+	summary := pilotSummary{Bounds: executionBounds{TrialCount: 1, MaxProviderAttempts: 4, MaxPythonRuns: 4, MaxTotalTokens: 84_000}}
+	encoded, err := json.Marshal(summary)
+	if err != nil || !strings.Contains(string(encoded), `"max_provider_attempts":4`) || !strings.Contains(string(encoded), `"max_python_runs":4`) {
+		t.Fatalf("encoded=%s err=%v", encoded, err)
+	}
+}
+
 func TestPilotSummaryAggregatesOutcomeAndStrictSeparately(t *testing.T) {
 	summary := pilotSummary{}
 	results := []agentic.TrialResult{
@@ -53,7 +61,7 @@ func TestPilotRejectsUnimplementedOrBaselineTreatmentOverrideBeforeExecution(t *
 		"--activation", "unused", "--guest", "unused", "--out", filepath.Join(t.TempDir(), "out"),
 		"--repository-commit", strings.Repeat("a", 40),
 	}
-	for _, file := range []string{"python-safe-repair-v1.json", "hybrid-two-stage-router-v1.json", "baseline-v1.json"} {
+	for _, file := range []string{"hybrid-two-stage-router-v1.json", "baseline-v1.json"} {
 		args := append(append([]string(nil), baseArgs...), "--treatment", filepath.Join(dataset, "treatments", file))
 		if err := run(context.Background(), args, dependencies{}); !errors.Is(err, agentic.ErrDevelopmentTreatment) {
 			t.Fatalf("file=%s err=%v", file, err)
@@ -188,6 +196,41 @@ func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
 	}
 	if _, err := selectExecutionScope(plan, dataset, false, "missing-task", ""); !errors.Is(err, agentic.ErrPilotPlan) {
 		t.Fatalf("unknown diagnostic task err=%v", err)
+	}
+}
+
+func TestApplyTreatmentBoundsAddsOneRepairOnlyToPythonCapableTrials(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "python-safe-repair-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		condition    agentic.Condition
+		wantPython   uint32
+		wantProvider uint32
+	}{
+		{agentic.ConditionDirect, 0, 12},
+		{agentic.ConditionPython, 4, 4},
+		{agentic.ConditionHybrid, 4, 13},
+	} {
+		scope, err := selectExecutionScope(plan, dataset, false, taskID, test.condition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scope, err = applyTreatmentBounds(plan, scope, treatment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scope.Bounds.MaxPythonRuns != test.wantPython || scope.Bounds.MaxProviderAttempts != test.wantProvider {
+			t.Fatalf("condition=%s bounds=%+v", test.condition, scope.Bounds)
+		}
 	}
 }
 

@@ -15,7 +15,7 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 	}{
 		{"baseline-v1.json", TreatmentBaselineV1, true},
 		{"structured-host-context-v1.json", TreatmentStructuredHostContextV1, true},
-		{"python-safe-repair-v1.json", TreatmentPythonSafeRepairV1, false},
+		{"python-safe-repair-v1.json", TreatmentPythonSafeRepairV1, true},
 		{"hybrid-two-stage-router-v1.json", TreatmentHybridTwoStageRouterV1, false},
 	} {
 		treatment, err := LoadDevelopmentTreatment(filepath.Join(root, "treatments", test.file))

@@ -15,20 +15,21 @@ const (
 )
 
 const (
-	baselineTreatmentJSON              = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"baseline-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1"}`
-	structuredHostContextTreatmentJSON = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"structured-host-context-v1","host_context_policy":"prior-successful-effects","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1"}`
-	pythonSafeRepairTreatmentJSON      = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"python-safe-repair-v1","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"combined-surface-v1"}`
-	hybridTwoStageRouterTreatmentJSON  = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-router-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"two-stage-v1"}`
+	baselineTreatmentJSON              = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"baseline-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0}`
+	structuredHostContextTreatmentJSON = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"structured-host-context-v1","host_context_policy":"prior-successful-effects","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0}`
+	pythonSafeRepairTreatmentJSON      = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"python-safe-repair-v1","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":1}`
+	hybridTwoStageRouterTreatmentJSON  = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-router-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":0}`
 )
 
 type DevelopmentTreatment struct {
-	SchemaVersion      string `json:"schema_version"`
-	Status             string `json:"status"`
-	ID                 string `json:"id"`
-	HostContextPolicy  string `json:"host_context_policy"`
-	PythonRepairPolicy string `json:"python_repair_policy"`
-	HybridStrategy     string `json:"hybrid_strategy"`
-	Digest             string `json:"-"`
+	SchemaVersion            string `json:"schema_version"`
+	Status                   string `json:"status"`
+	ID                       string `json:"id"`
+	HostContextPolicy        string `json:"host_context_policy"`
+	PythonRepairPolicy       string `json:"python_repair_policy"`
+	HybridStrategy           string `json:"hybrid_strategy"`
+	MaxPythonRepairsPerTrial uint32 `json:"max_python_repairs_per_trial"`
+	Digest                   string `json:"-"`
 }
 
 func BaselineTreatment() DevelopmentTreatment {
@@ -65,13 +66,13 @@ func (treatment DevelopmentTreatment) validPolicy() bool {
 	}
 	switch treatment.ID {
 	case TreatmentBaselineV1:
-		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1"
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0
 	case TreatmentStructuredHostContextV1:
-		return treatment.HostContextPolicy == "prior-successful-effects" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1"
+		return treatment.HostContextPolicy == "prior-successful-effects" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0
 	case TreatmentPythonSafeRepairV1:
-		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "combined-surface-v1"
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 1
 	case TreatmentHybridTwoStageRouterV1:
-		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "two-stage-v1"
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "two-stage-v1" && treatment.MaxPythonRepairsPerTrial == 0
 	default:
 		return false
 	}
@@ -98,9 +99,13 @@ func expectedTreatmentDocument(id string) string {
 }
 
 func (treatment DevelopmentTreatment) Implemented() bool {
-	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1)
+	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1 || treatment.ID == TreatmentPythonSafeRepairV1)
 }
 
 func (treatment DevelopmentTreatment) UsesStructuredHostContext() bool {
 	return treatment.Implemented() && treatment.HostContextPolicy == "prior-successful-effects"
+}
+
+func (treatment DevelopmentTreatment) AllowsPythonRepair() bool {
+	return treatment.Implemented() && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.MaxPythonRepairsPerTrial == 1
 }

@@ -48,6 +48,16 @@ type FailureDetail struct {
 	RetryEligible         bool         `json:"retry_eligible"`
 }
 
+type PythonRepairEvidence struct {
+	Offered               bool         `json:"offered"`
+	Attempted             bool         `json:"attempted"`
+	Succeeded             bool         `json:"succeeded"`
+	Turn                  int          `json:"turn"`
+	OriginalFailureClass  FailureClass `json:"original_failure_class"`
+	OriginalFailureDigest string       `json:"original_failure_digest"`
+	CapabilityCallsBefore uint32       `json:"capability_calls_before_failure"`
+}
+
 func failureDetailForPython(result PythonRunResult) *FailureDetail {
 	return &FailureDetail{
 		Class: result.FailureClass, Turn: result.Turn, CapabilityCallsBefore: result.CapabilityCalls,
@@ -56,41 +66,42 @@ func failureDetailForPython(result PythonRunResult) *FailureDetail {
 }
 
 type TrialResult struct {
-	Version            string             `json:"version"`
-	TrialID            string             `json:"trial_id"`
-	SpecDigest         string             `json:"spec_digest"`
-	TaskID             string             `json:"task_id"`
-	TaskDigest         string             `json:"task_digest"`
-	SourceRecordDigest string             `json:"source_record_digest"`
-	Condition          Condition          `json:"condition"`
-	Model              string             `json:"model"`
-	Identity           ExecutionIdentity  `json:"identity"`
-	Replicate          uint32             `json:"replicate"`
-	Limits             TrialLimits        `json:"limits"`
-	PromptDigest       string             `json:"prompt_digest"`
-	SurfaceDigest      string             `json:"surface_digest"`
-	TreatmentID        string             `json:"treatment_id,omitempty"`
-	TreatmentDigest    string             `json:"treatment_digest,omitempty"`
-	Passed             bool               `json:"passed"`
-	Metrics            *TrialMetrics      `json:"metrics,omitempty"`
-	ErrorCode          string             `json:"error_code,omitempty"`
-	FailureDetail      *FailureDetail     `json:"failure_detail,omitempty"`
-	ProviderAttempts   uint32             `json:"provider_attempts"`
-	ProviderCalls      uint32             `json:"provider_calls"`
-	ToolCalls          int                `json:"tool_calls"`
-	PythonAttempts     uint32             `json:"python_attempts"`
-	PythonRuns         uint32             `json:"python_runs"`
-	Usage              provider.Usage     `json:"usage"`
-	CatalogDigest      string             `json:"catalog_digest"`
-	InitialStateDigest string             `json:"initial_state_digest,omitempty"`
-	FinalStateDigest   string             `json:"final_state_digest,omitempty"`
-	TextDigests        []string           `json:"text_digests,omitempty"`
-	HostContextDigests []string           `json:"host_context_digests,omitempty"`
-	Exchanges          []ExchangeEvidence `json:"exchanges"`
-	PythonEvidence     []PythonRunResult  `json:"python_evidence,omitempty"`
-	StatelessScore     *CallScore         `json:"stateless_score,omitempty"`
-	StatefulScore      *StatefulScore     `json:"stateful_score,omitempty"`
-	RawDebug           *TrialRawDebug     `json:"-"`
+	Version            string                `json:"version"`
+	TrialID            string                `json:"trial_id"`
+	SpecDigest         string                `json:"spec_digest"`
+	TaskID             string                `json:"task_id"`
+	TaskDigest         string                `json:"task_digest"`
+	SourceRecordDigest string                `json:"source_record_digest"`
+	Condition          Condition             `json:"condition"`
+	Model              string                `json:"model"`
+	Identity           ExecutionIdentity     `json:"identity"`
+	Replicate          uint32                `json:"replicate"`
+	Limits             TrialLimits           `json:"limits"`
+	PromptDigest       string                `json:"prompt_digest"`
+	SurfaceDigest      string                `json:"surface_digest"`
+	TreatmentID        string                `json:"treatment_id,omitempty"`
+	TreatmentDigest    string                `json:"treatment_digest,omitempty"`
+	Passed             bool                  `json:"passed"`
+	Metrics            *TrialMetrics         `json:"metrics,omitempty"`
+	ErrorCode          string                `json:"error_code,omitempty"`
+	FailureDetail      *FailureDetail        `json:"failure_detail,omitempty"`
+	Repair             *PythonRepairEvidence `json:"python_repair,omitempty"`
+	ProviderAttempts   uint32                `json:"provider_attempts"`
+	ProviderCalls      uint32                `json:"provider_calls"`
+	ToolCalls          int                   `json:"tool_calls"`
+	PythonAttempts     uint32                `json:"python_attempts"`
+	PythonRuns         uint32                `json:"python_runs"`
+	Usage              provider.Usage        `json:"usage"`
+	CatalogDigest      string                `json:"catalog_digest"`
+	InitialStateDigest string                `json:"initial_state_digest,omitempty"`
+	FinalStateDigest   string                `json:"final_state_digest,omitempty"`
+	TextDigests        []string              `json:"text_digests,omitempty"`
+	HostContextDigests []string              `json:"host_context_digests,omitempty"`
+	Exchanges          []ExchangeEvidence    `json:"exchanges"`
+	PythonEvidence     []PythonRunResult     `json:"python_evidence,omitempty"`
+	StatelessScore     *CallScore            `json:"stateless_score,omitempty"`
+	StatefulScore      *StatefulScore        `json:"stateful_score,omitempty"`
+	RawDebug           *TrialRawDebug        `json:"-"`
 }
 
 type TrialRawDebug struct {
@@ -270,13 +281,25 @@ func runDevelopmentTrialForModelWithIdentity(
 	}
 	history := []any{map[string]any{"role": "developer", "content": prompt}}
 	directOrdinal := 0
+	repairUsed := false
+	repairEnabled := treatment.AllowsPythonRepair() && condition != ConditionDirect
 	providerAttemptsPerTurn := uint32(1)
-	if continueWithinTurn {
+	if continueWithinTurn || repairEnabled {
 		turns := uint32(len(task.Interaction.Turns))
-		if turns == 0 || limits.MaxProviderCalls%turns != 0 {
+		baseProviderCalls := limits.MaxProviderCalls
+		if repairEnabled {
+			if baseProviderCalls == 0 {
+				return TrialResult{}, ErrAgenticRun
+			}
+			baseProviderCalls--
+		}
+		if turns == 0 || baseProviderCalls%turns != 0 {
 			return TrialResult{}, ErrAgenticRun
 		}
-		providerAttemptsPerTurn = limits.MaxProviderCalls / turns
+		providerAttemptsPerTurn = baseProviderCalls / turns
+		if repairEnabled {
+			providerAttemptsPerTurn++
+		}
 		if providerAttemptsPerTurn < 2 {
 			return TrialResult{}, ErrAgenticRun
 		}
@@ -307,7 +330,9 @@ func runDevelopmentTrialForModelWithIdentity(
 		turnHadCalls := false
 		turnComplete := false
 		pythonAttemptsThisTurn := uint32(0)
+		repairPending := false
 		for attempt := uint32(0); attempt < providerAttemptsPerTurn; attempt++ {
+			repairOfferedThisAttempt := false
 			toolChoice := "auto"
 			if attempt == 0 {
 				toolChoice = "required"
@@ -326,17 +351,27 @@ func runDevelopmentTrialForModelWithIdentity(
 			}
 			history = append(history, parsed.replayItems...)
 			if len(parsed.Calls) == 0 {
+				if repairPending {
+					result.ErrorCode = "python_repair_not_attempted"
+					break
+				}
 				if !turnHadCalls {
 					result.ErrorCode = "no_tool_calls"
 				}
 				turnComplete = result.ErrorCode == ""
 				break
 			}
+			if repairPending && (len(parsed.Calls) != 1 || parsed.Calls[0].CanonicalName != "run_python") {
+				result.ErrorCode = "python_repair_protocol_error"
+				break
+			}
 			outputs := make([]any, 0, len(parsed.Calls))
 			for _, call := range parsed.Calls {
 				var observation json.RawMessage
+				pythonRunSucceeded := false
 				if call.CanonicalName == "run_python" {
-					if workflow == nil || pythonAttemptsThisTurn >= 1 || result.PythonAttempts >= limits.MaxPythonRuns {
+					isRepair := repairPending
+					if workflow == nil || (pythonAttemptsThisTurn >= 1 && !isRepair) || result.PythonAttempts >= limits.MaxPythonRuns {
 						result.ErrorCode = "python_run_budget_exceeded"
 						break
 					}
@@ -354,6 +389,13 @@ func runDevelopmentTrialForModelWithIdentity(
 					}
 					pythonAttemptsThisTurn++
 					result.PythonAttempts++
+					if isRepair {
+						if result.Repair == nil {
+							return TrialResult{}, ErrAgenticRun
+						}
+						result.Repair.Attempted = true
+						repairPending = false
+					}
 					rawPython := RawPythonRun{Turn: turnIndex, Code: arguments.Code}
 					pythonResult, runErr := workflow.Execute(
 						ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
@@ -370,6 +412,7 @@ func runDevelopmentTrialForModelWithIdentity(
 						break
 					}
 					observation = append(json.RawMessage(nil), pythonResult.Observation...)
+					pythonRunSucceeded = pythonResult.Success
 					pythonResult.Turn = turnIndex
 					if result.RawDebug != nil {
 						rawPython.Observation = append(json.RawMessage(nil), pythonResult.Observation...)
@@ -387,9 +430,27 @@ func runDevelopmentTrialForModelWithIdentity(
 						result.ErrorCode = "python_trace_mismatch"
 						break
 					}
-					if !pythonResult.Success {
-						result.FailureDetail = failureDetailForPython(pythonResult)
-						result.ErrorCode = "python_guest_error"
+					if isRepair {
+						if !pythonResult.Success {
+							result.FailureDetail = failureDetailForPython(pythonResult)
+							result.ErrorCode = "python_guest_error"
+						}
+					} else if !pythonResult.Success {
+						detail := failureDetailForPython(pythonResult)
+						if repairEnabled && !repairUsed && detail.RetryEligible && len(parsed.Calls) == 1 {
+							formalBytes, marshalErr := json.Marshal(pythonResult)
+							if marshalErr != nil {
+								return TrialResult{}, ErrAgenticRun
+							}
+							result.Repair = &PythonRepairEvidence{
+								Offered: true, Turn: turnIndex, OriginalFailureClass: pythonResult.FailureClass,
+								OriginalFailureDigest: digest(formalBytes), CapabilityCallsBefore: pythonResult.CapabilityCalls,
+							}
+							repairUsed, repairPending, repairOfferedThisAttempt = true, true, true
+						} else {
+							result.FailureDetail = detail
+							result.ErrorCode = "python_guest_error"
+						}
 					}
 				} else {
 					if condition == ConditionPython || countStatefulCalls(tools.Trace()) >= int(limits.MaxToolCalls) {
@@ -417,11 +478,25 @@ func runDevelopmentTrialForModelWithIdentity(
 				outputs = append(outputs, map[string]any{
 					"type": "function_call_output", "call_id": call.CallID, "output": string(observation),
 				})
+				if call.CanonicalName == "run_python" && result.Repair != nil && result.Repair.Attempted && !repairPending && pythonRunSucceeded {
+					result.Repair.Succeeded = true
+				}
 				if result.ErrorCode != "" {
+					break
+				}
+				if repairOfferedThisAttempt {
 					break
 				}
 			}
 			history = append(history, outputs...)
+			if repairOfferedThisAttempt {
+				history = append(history, map[string]any{
+					"role":    "developer",
+					"content": "The previous Python run failed before any Host capability call. Issue exactly one corrected run_python call now. This is the only repair attempt; do not call direct Host tools or emit multiple calls.",
+				})
+				turnHadCalls = true
+				continue
+			}
 			if result.ErrorCode != "" {
 				break
 			}

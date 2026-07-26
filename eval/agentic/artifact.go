@@ -86,6 +86,7 @@ func ValidateTrialResult(result TrialResult) error {
 		return ErrTrialArtifact
 	}
 	previousPythonTurn := -1
+	duplicatePythonTurns := 0
 	for _, evidence := range result.PythonEvidence {
 		if evidence.CapabilityCalls > result.Limits.MaxToolCalls || !validDigest(evidence.RequestDigest) ||
 			!validDigest(evidence.ResponseDigest) || !validDigest(evidence.ResultDigest) ||
@@ -94,8 +95,11 @@ func ValidateTrialResult(result TrialResult) error {
 			(!evidence.Success && result.Version == "agentic-development-trial/v1" && evidence.FailureClass != "") ||
 			(!evidence.Success && result.Version == "agentic-development-trial/v2" && evidence.FailureClass != "" && !evidence.FailureClass.valid()) ||
 			(!evidence.Success && result.Version == "agentic-development-trial/v3" && !evidence.FailureClass.valid()) ||
-			(result.Version == "agentic-development-trial/v3" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn <= previousPythonTurn)) {
+			(result.Version == "agentic-development-trial/v3" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn < previousPythonTurn)) {
 			return ErrTrialArtifact
+		}
+		if result.Version == "agentic-development-trial/v3" && evidence.Turn == previousPythonTurn {
+			duplicatePythonTurns++
 		}
 		previousPythonTurn = evidence.Turn
 	}
@@ -115,6 +119,53 @@ func ValidateTrialResult(result TrialResult) error {
 		}
 	} else if result.FailureDetail != nil {
 		return ErrTrialArtifact
+	}
+	if result.TreatmentID != TreatmentPythonSafeRepairV1 {
+		if result.Repair != nil || duplicatePythonTurns != 0 {
+			return ErrTrialArtifact
+		}
+	} else if result.Repair == nil {
+		if duplicatePythonTurns != 0 {
+			return ErrTrialArtifact
+		}
+	} else {
+		repair := result.Repair
+		if !repair.Offered || repair.Succeeded && !repair.Attempted || repair.Turn < 0 || repair.Turn >= 32 ||
+			!repair.OriginalFailureClass.valid() || repair.OriginalFailureClass == FailureClassHostToolError ||
+			repair.CapabilityCallsBefore != 0 || !validDigest(repair.OriginalFailureDigest) {
+			return ErrTrialArtifact
+		}
+		originalIndex := -1
+		for index, evidence := range result.PythonEvidence {
+			encoded, err := json.Marshal(evidence)
+			if err == nil && digest(encoded) == repair.OriginalFailureDigest {
+				if originalIndex != -1 {
+					return ErrTrialArtifact
+				}
+				originalIndex = index
+			}
+		}
+		if originalIndex < 0 {
+			return ErrTrialArtifact
+		}
+		original := result.PythonEvidence[originalIndex]
+		if original.Success || original.Turn != repair.Turn || original.FailureClass != repair.OriginalFailureClass || original.CapabilityCalls != 0 {
+			return ErrTrialArtifact
+		}
+		if repair.Attempted {
+			if originalIndex+1 < len(result.PythonEvidence) && result.PythonEvidence[originalIndex+1].Turn == repair.Turn {
+				repaired := result.PythonEvidence[originalIndex+1]
+				failedAfterGuestSuccess := !repair.Succeeded && repaired.Success && originalIndex+1 == len(result.PythonEvidence)-1 &&
+					(result.ErrorCode == "python_trace_mismatch" || result.ErrorCode == "invalid_tool_observation")
+				if duplicatePythonTurns != 1 || (repair.Succeeded != repaired.Success && !failedAfterGuestSuccess) {
+					return ErrTrialArtifact
+				}
+			} else if duplicatePythonTurns != 0 || result.ErrorCode != "python_engine_failure" || repair.Succeeded {
+				return ErrTrialArtifact
+			}
+		} else if duplicatePythonTurns != 0 || repair.Succeeded {
+			return ErrTrialArtifact
+		}
 	}
 	stateful := result.StatefulScore != nil
 	stateless := result.StatelessScore != nil

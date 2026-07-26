@@ -43,6 +43,7 @@ type pilotSummary struct {
 	ActivationDigest        string          `json:"activation_digest"`
 	TreatmentID             string          `json:"treatment_id"`
 	TreatmentDigest         string          `json:"treatment_digest"`
+	Bounds                  executionBounds `json:"bounds"`
 	TrialCount              uint32          `json:"trial_count"`
 	OutcomeSuccessfulTrials uint32          `json:"outcome_successful_trials"`
 	StrictPassedTrials      uint32          `json:"strict_passed_trials"`
@@ -73,13 +74,13 @@ var representativeCanaryTasks = []string{
 }
 
 type executionBounds struct {
-	TrialCount          uint32
-	MaxProviderAttempts uint32
-	MaxInputTokens      uint64
-	MaxOutputTokens     uint64
-	MaxTotalTokens      uint64
-	MaxToolCalls        uint32
-	MaxPythonRuns       uint32
+	TrialCount          uint32 `json:"trial_count"`
+	MaxProviderAttempts uint32 `json:"max_provider_attempts"`
+	MaxInputTokens      uint64 `json:"max_input_tokens"`
+	MaxOutputTokens     uint64 `json:"max_output_tokens"`
+	MaxTotalTokens      uint64 `json:"max_total_tokens"`
+	MaxToolCalls        uint32 `json:"max_tool_calls"`
+	MaxPythonRuns       uint32 `json:"max_python_runs"`
 }
 
 type executionScope struct {
@@ -120,6 +121,10 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		}
 	}
 	scope, err := selectExecutionScope(plan, dataset, *canary, *diagnosticTask, agentic.Condition(*diagnosticCondition))
+	if err != nil {
+		return err
+	}
+	scope, err = applyTreatmentBounds(plan, scope, treatment)
 	if err != nil {
 		return err
 	}
@@ -181,6 +186,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	summary := pilotSummary{
 		Version: "agentic-development-pilot-result/v3", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
 		PlanDigest: plan.Digest, ActivationDigest: activation.Digest, TreatmentID: treatment.ID, TreatmentDigest: treatment.Digest,
+		Bounds:    scope.Bounds,
 		Artifacts: make([]artifactEntry, 0, scope.Bounds.TrialCount),
 	}
 	for _, taskID := range scope.TaskIDs {
@@ -299,6 +305,35 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 		}
 	}
 	return selectCanaryScope(plan, dataset, taskIDs, conditions)
+}
+
+func applyTreatmentBounds(plan agentic.DevelopmentPilotPlan, scope executionScope, treatment agentic.DevelopmentTreatment) (executionScope, error) {
+	if !treatment.AllowsPythonRepair() {
+		return scope, nil
+	}
+	eligibleConditions := uint64(0)
+	for _, condition := range scope.Conditions {
+		if condition == agentic.ConditionPython || condition == agentic.ConditionHybrid {
+			eligibleConditions++
+		}
+	}
+	additional := eligibleConditions * uint64(len(scope.TaskIDs)) * uint64(len(scope.Replicates)) * uint64(treatment.MaxPythonRepairsPerTrial)
+	if additional > uint64(^uint32(0))-uint64(scope.Bounds.MaxPythonRuns) || additional > uint64(^uint32(0))-uint64(scope.Bounds.MaxProviderAttempts) ||
+		additional > (^uint64(0)-scope.Bounds.MaxInputTokens)/plan.PerTrial.MaxInputTokensPerAttempt ||
+		additional > (^uint64(0)-scope.Bounds.MaxOutputTokens)/plan.PerTrial.MaxOutputTokensPerAttempt ||
+		additional > (^uint64(0)-scope.Bounds.MaxTotalTokens)/(plan.PerTrial.MaxInputTokensPerAttempt+plan.PerTrial.MaxOutputTokensPerAttempt) {
+		return executionScope{}, agentic.ErrPilotPlan
+	}
+	scope.Bounds.MaxPythonRuns += uint32(additional)
+	scope.Bounds.MaxProviderAttempts += uint32(additional)
+	scope.Bounds.MaxInputTokens += additional * plan.PerTrial.MaxInputTokensPerAttempt
+	scope.Bounds.MaxOutputTokens += additional * plan.PerTrial.MaxOutputTokensPerAttempt
+	scope.Bounds.MaxTotalTokens += additional * (plan.PerTrial.MaxInputTokensPerAttempt + plan.PerTrial.MaxOutputTokensPerAttempt)
+	if scope.Bounds.MaxPythonRuns > plan.GlobalBounds.MaxPythonRuns || scope.Bounds.MaxProviderAttempts > plan.GlobalBounds.MaxProviderAttempts ||
+		scope.Bounds.MaxInputTokens > plan.GlobalBounds.MaxInputTokens || scope.Bounds.MaxOutputTokens > plan.GlobalBounds.MaxOutputTokens || scope.Bounds.MaxTotalTokens > plan.GlobalBounds.MaxTotalTokens {
+		return executionScope{}, agentic.ErrPilotPlan
+	}
+	return scope, nil
 }
 
 func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, taskIDs []string, conditions []agentic.Condition) (executionScope, error) {

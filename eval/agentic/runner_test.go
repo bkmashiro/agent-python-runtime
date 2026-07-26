@@ -293,6 +293,136 @@ func (workflow *guestFailureWorkflow) Execute(ctx context.Context, _ string, cod
 }
 func (*guestFailureWorkflow) Close(context.Context) error { return nil }
 
+type repairOracleWorkflow struct {
+	oracle *oracleWorkflow
+	calls  int
+}
+
+func (workflow *repairOracleWorkflow) Execute(ctx context.Context, runID, code string, maxCalls uint32) (PythonRunResult, error) {
+	workflow.calls++
+	if workflow.calls == 1 {
+		return PythonRunResult{
+			Success: false, ErrorCode: "python_exception", FailureClass: FailureClassPythonException,
+			RequestDigest: digest([]byte(code)), ResponseDigest: digest([]byte(`{"status":"error"}`)), ResultDigest: digest([]byte(`null`)),
+			Backend: "repair-test", ResetMode: engine.ResetModeFreshInstance,
+			Observation: json.RawMessage(`{"error_code":"python_exception","status":"error"}`),
+		}, nil
+	}
+	return workflow.oracle.Execute(ctx, runID, code, maxCalls)
+}
+func (workflow *repairOracleWorkflow) Close(context.Context) error { return nil }
+
+func TestPythonRepairTreatmentRetriesOneZeroCallFailure(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	call := func(id, code string) provider.Response {
+		return responseFixture(fmt.Sprintf(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":%q,"name":"run_python","arguments":%q}]}`, id, `{"code":`+fmt.Sprintf("%q", code)+`}`), 10, 3)
+	}
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		call("repair-first", "private broken code"), call("repair-second", "private repaired code"),
+		call("repair-turn-2", "private turn 2"), call("repair-turn-3", "private turn 3"),
+	}}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "python-safe-repair-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	var workflow *repairOracleWorkflow
+	factory := func(tools *ToolRuntime) (PythonWorkflow, error) {
+		var oracle StatefulOracle
+		if decodeStrict(task.Oracle, &oracle) != nil {
+			return nil, ErrDataset
+		}
+		workflow = &repairOracleWorkflow{oracle: &oracleWorkflow{tools: tools, oracle: oracle}}
+		return workflow, nil
+	}
+	limits := developmentTrialLimits(len(task.Interaction.Turns))
+	limits.MaxPythonRuns++
+	limits.MaxProviderCalls++
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+		context.Background(), adapter, task, ConditionPython, developmentModel, 0, limits, identity, treatment, factory,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Passed || result.ProviderCalls != 4 || result.PythonRuns != 4 || result.Repair == nil || !result.Repair.Offered || !result.Repair.Attempted || !result.Repair.Succeeded ||
+		result.Repair.Turn != 0 || result.Repair.OriginalFailureClass != FailureClassPythonException || result.Repair.OriginalFailureDigest == "" || result.FailureDetail != nil || workflow.calls != 4 {
+		t.Fatalf("result=%+v workflow=%+v", result, workflow)
+	}
+	if !strings.Contains(string(adapter.requests[1].Payload), "exactly one corrected run_python") || ValidateTrialResult(result) != nil {
+		t.Fatalf("repair request/result invalid: %s result=%+v", adapter.requests[1].Payload, result)
+	}
+	tampered := result
+	repair := *result.Repair
+	repair.OriginalFailureDigest = "sha256:" + strings.Repeat("0", 64)
+	tampered.Repair = &repair
+	if ValidateTrialResult(tampered) == nil {
+		t.Fatal("tampered original failure digest accepted")
+	}
+	encoded, _ := json.Marshal(result)
+	for _, forbidden := range []string{"private broken code", "private repaired code", "ValueError", "traceback"} {
+		if containsBytes(encoded, []byte(forbidden)) {
+			t.Fatalf("formal repair evidence leaked %q: %s", forbidden, encoded)
+		}
+	}
+}
+
+type engineFailureWorkflow struct{}
+
+func (*engineFailureWorkflow) Execute(context.Context, string, string, uint32) (PythonRunResult, error) {
+	return PythonRunResult{RawRequest: json.RawMessage(`{"private":"request"}`), RawResponse: json.RawMessage(`{"private":"response"}`)}, errors.New("private engine failure")
+}
+func (*engineFailureWorkflow) Close(context.Context) error { return nil }
+
+func TestPythonRepairTreatmentRejectsEngineFailure(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"repair-engine","name":"run_python","arguments":"{\"code\":\"private\"}"}]}`, 5, 5)}}
+	treatment, _ := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "python-safe-repair-v1.json"))
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	limits := developmentTrialLimits(len(task.Interaction.Turns))
+	limits.MaxPythonRuns++
+	limits.MaxProviderCalls++
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(context.Background(), adapter, task, ConditionPython, developmentModel, 0, limits, identity, treatment, func(*ToolRuntime) (PythonWorkflow, error) {
+		return &engineFailureWorkflow{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "python_engine_failure" || result.Repair != nil || result.ProviderCalls != 1 || result.PythonAttempts != 1 || result.PythonRuns != 0 || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestPythonRepairTreatmentRejectsHostToolFailure(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"repair-host","name":"run_python","arguments":"{\"code\":\"private\"}"}]}`, 5, 5)}}
+	treatment, _ := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "python-safe-repair-v1.json"))
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	limits := developmentTrialLimits(len(task.Interaction.Turns))
+	limits.MaxPythonRuns++
+	limits.MaxProviderCalls++
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(context.Background(), adapter, task, ConditionPython, developmentModel, 0, limits, identity, treatment, func(tools *ToolRuntime) (PythonWorkflow, error) {
+		return &guestFailureWorkflow{tools: tools, failureClass: FailureClassHostToolError, invokeHost: true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "python_guest_error" || result.Repair != nil || result.ProviderCalls != 1 || result.PythonRuns != 1 || result.FailureDetail == nil || result.FailureDetail.RetryEligible {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestRunnerRecordsBoundedGuestFailureDetail(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	identity := ExecutionIdentity{

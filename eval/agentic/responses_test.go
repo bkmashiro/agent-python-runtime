@@ -26,7 +26,18 @@ func (adapter *scriptedAdapter) Exchange(_ context.Context, request provider.Req
 	if index < len(adapter.errors) {
 		err = adapter.errors[index]
 	}
-	return adapter.responses[index], err
+	response := adapter.responses[index]
+	var requestDocument map[string]json.RawMessage
+	var responseDocument map[string]json.RawMessage
+	if json.Unmarshal(request.Payload, &requestDocument) == nil && json.Unmarshal(response.Body, &responseDocument) == nil {
+		if instructions, exists := requestDocument["instructions"]; exists {
+			if _, explicit := responseDocument["instructions"]; !explicit {
+				responseDocument["instructions"] = instructions
+				response.Body, _ = json.Marshal(responseDocument)
+			}
+		}
+	}
+	return response, err
 }
 
 func responseFixture(body string, input, output uint64) provider.Response {
@@ -60,6 +71,7 @@ func TestResponsesSessionUsesVerifiedResponsesWire(t *testing.T) {
 		t.Fatal(err)
 	}
 	history := []any{
+		map[string]any{"role": "developer", "content": "use tools"},
 		map[string]any{"role": "user", "content": "inspect"},
 		map[string]any{"type": "function_call", "status": "completed", "call_id": "call-1", "name": "pwd", "arguments": "{}"},
 		map[string]any{"type": "function_call_output", "call_id": "call-1", "output": `{"path":"/"}`},
@@ -72,11 +84,11 @@ func TestResponsesSessionUsesVerifiedResponsesWire(t *testing.T) {
 	if len(adapter.requests) != 1 || json.Unmarshal(adapter.requests[0].Payload, &payload) != nil {
 		t.Fatal("decode payload")
 	}
-	if payload["input"] == nil || payload["max_output_tokens"] != float64(64) || payload["stream"] != false || payload["background"] != false || payload["parallel_tool_calls"] != false || payload["messages"] != nil || payload["max_tokens"] != nil {
+	if payload["instructions"] != "use tools" || payload["input"] == nil || payload["max_output_tokens"] != float64(64) || payload["stream"] != false || payload["background"] != false || payload["parallel_tool_calls"] != false || payload["messages"] != nil || payload["max_tokens"] != nil {
 		t.Fatalf("payload=%s", adapter.requests[0].Payload)
 	}
 	wireInput := payload["input"].([]any)
-	if len(wireInput) != len(history) || wireInput[1].(map[string]any)["type"] != "function_call" || wireInput[2].(map[string]any)["type"] != "function_call_output" {
+	if len(wireInput) != len(history)-1 || wireInput[1].(map[string]any)["type"] != "function_call" || wireInput[2].(map[string]any)["type"] != "function_call_output" {
 		t.Fatalf("input=%#v", wireInput)
 	}
 	wireTool := payload["tools"].([]any)[0].(map[string]any)

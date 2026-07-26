@@ -101,9 +101,16 @@ func (session *ResponsesSession) Exchange(
 	if remainingTotal < perCallOutput {
 		perCallOutput = remainingTotal
 	}
+	wireInput, instructions, err := promoteResponseInstructions(input)
+	if err != nil {
+		return ParsedResponse{}, err
+	}
 	payloadDocument := map[string]any{
-		"model": session.model, "input": input, "max_output_tokens": perCallOutput,
+		"model": session.model, "input": wireInput, "max_output_tokens": perCallOutput,
 		"stream": false, "background": false,
+	}
+	if instructions != "" {
+		payloadDocument["instructions"] = instructions
 	}
 	if len(tools) > 0 {
 		payloadDocument["tools"] = tools
@@ -132,7 +139,7 @@ func (session *ResponsesSession) Exchange(
 		session.closed = true
 		return ParsedResponse{}, fmt.Errorf("%w: provider exchange", ErrAgenticRun)
 	}
-	if identityErr := validateResponseIdentity(response.Body, session.model); identityErr != nil {
+	if identityErr := validateResponseIdentity(response.Body, session.model, instructions); identityErr != nil {
 		session.markLatestProtocolInvalid()
 		session.closed = true
 		return ParsedResponse{}, identityErr
@@ -167,7 +174,39 @@ func (session *ResponsesSession) markLatestProtocolInvalid() {
 	}
 }
 
-func validateResponseIdentity(body json.RawMessage, expectedModel string) error {
+func promoteResponseInstructions(input any) (any, string, error) {
+	items, ok := input.([]any)
+	if !ok || len(items) == 0 {
+		return input, "", nil
+	}
+	wireInput := make([]any, 0, len(items))
+	var instructions strings.Builder
+	for _, item := range items {
+		message, messageOK := item.(map[string]any)
+		if !messageOK || message["role"] != "developer" {
+			wireInput = append(wireInput, item)
+			continue
+		}
+		content, contentOK := message["content"].(string)
+		if !contentOK || content == "" || !utf8.ValidString(content) {
+			return nil, "", ErrAgenticRun
+		}
+		separator := 0
+		if instructions.Len() > 0 {
+			separator = 2
+		}
+		if instructions.Len()+separator+len(content) > 64*1024 {
+			return nil, "", ErrAgenticRun
+		}
+		if separator != 0 {
+			instructions.WriteString("\n\n")
+		}
+		instructions.WriteString(content)
+	}
+	return wireInput, instructions.String(), nil
+}
+
+func validateResponseIdentity(body json.RawMessage, expectedModel, expectedInstructions string) error {
 	if expectedModel == "" || len(body) == 0 || len(body) > 1024*1024 {
 		return ErrProviderIdentityMismatch
 	}
@@ -178,7 +217,15 @@ func validateResponseIdentity(body json.RawMessage, expectedModel string) error 
 	if json.Unmarshal(body, &envelope) != nil || envelope.Model != expectedModel {
 		return ErrProviderIdentityMismatch
 	}
-	if instructions := bytes.TrimSpace(envelope.Instructions); len(instructions) != 0 && !bytes.Equal(instructions, []byte("null")) {
+	instructions := bytes.TrimSpace(envelope.Instructions)
+	if expectedInstructions == "" {
+		if len(instructions) != 0 && !bytes.Equal(instructions, []byte("null")) {
+			return ErrProviderIdentityMismatch
+		}
+		return nil
+	}
+	var echoed string
+	if len(instructions) == 0 || json.Unmarshal(instructions, &echoed) != nil || echoed != expectedInstructions {
 		return ErrProviderIdentityMismatch
 	}
 	return nil

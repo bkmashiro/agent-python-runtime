@@ -81,7 +81,7 @@ func TestResponsesSessionUsesLinkAPIDocumentedWireDialect(t *testing.T) {
 			t.Fatalf("legacy field %q leaked: %s", forbidden, adapter.requests[0].Payload)
 		}
 	}
-	if payload["max_tokens"] != float64(64) || payload["stream"] != false || payload["parallel_tool_calls"] != false {
+	if payload["max_tokens"] != float64(64) || payload["stream"] != false || payload["parallel_tool_calls"] != nil {
 		t.Fatalf("payload=%s", adapter.requests[0].Payload)
 	}
 	messages, ok := payload["messages"].([]any)

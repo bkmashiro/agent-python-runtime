@@ -269,7 +269,6 @@ func marshalLinkAPIWirePayload(model string, input any, tools []map[string]any, 
 	if len(wireTools) > 0 {
 		document["tools"] = wireTools
 		document["tool_choice"] = toolChoice
-		document["parallel_tool_calls"] = parallelToolCalls
 	}
 	return json.Marshal(document)
 }

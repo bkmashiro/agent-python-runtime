@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	LinkAPIResponsesProtocol = "linkapi-messages-responses-v2"
+	LinkAPIResponsesProtocol = "linkapi-messages-responses-v3"
 	LinkAPIResponsesEndpoint = "https://linkapi.ai/v1/responses"
 	maxExchangeBytes         = 1024 * 1024
 )

@@ -33,6 +33,49 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	}
 }
 
+func TestLoadDevelopmentPilotPlanAcceptsExplicitGPT41Model(t *testing.T) {
+	root := datasetRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, "development-pilot-plan.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if json.Unmarshal(content, &document) != nil {
+		t.Fatal("decode plan")
+	}
+	document["model"] = "gpt-4.1"
+	mutated, _ := json.Marshal(document)
+	path := filepath.Join(t.TempDir(), "gpt-4.1-plan.json")
+	if os.WriteFile(path, mutated, 0o600) != nil {
+		t.Fatal("write plan")
+	}
+	plan, _, err := LoadDevelopmentPilotPlan(path, root)
+	if err != nil || plan.Model != "gpt-4.1" {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
+func TestLoadDevelopmentPilotPlanRejectsUnapprovedModel(t *testing.T) {
+	root := datasetRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, "development-pilot-plan.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if json.Unmarshal(content, &document) != nil {
+		t.Fatal("decode plan")
+	}
+	document["model"] = "arbitrary-provider-alias"
+	mutated, _ := json.Marshal(document)
+	path := filepath.Join(t.TempDir(), "unapproved-model-plan.json")
+	if os.WriteFile(path, mutated, 0o600) != nil {
+		t.Fatal("write plan")
+	}
+	if _, _, err := LoadDevelopmentPilotPlan(path, root); err == nil {
+		t.Fatal("unapproved model accepted")
+	}
+}
+
 func TestSealedEvaluationPlanRecomputesBoundsAndLatinSquare(t *testing.T) {
 	root := datasetRoot(t)
 	content, err := os.ReadFile(filepath.Join(root, "evaluation-plan.sealed.json"))

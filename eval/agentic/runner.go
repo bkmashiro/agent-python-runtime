@@ -11,9 +11,14 @@ import (
 )
 
 const (
-	developmentModel     = "gpt-5.4"
-	maxPythonPromptBytes = 16 * 1024
+	developmentModel      = "gpt-5.4"
+	gpt41DevelopmentModel = "gpt-4.1"
+	maxPythonPromptBytes  = 16 * 1024
 )
+
+func supportedDevelopmentModel(model string) bool {
+	return model == developmentModel || model == gpt41DevelopmentModel
+}
 
 type PythonWorkflow interface {
 	Execute(context.Context, string, string, uint32) (PythonRunResult, error)
@@ -102,7 +107,22 @@ func RunDevelopmentTrialWithIdentity(
 	identity ExecutionIdentity,
 	pythonFactory PythonWorkflowFactory,
 ) (TrialResult, error) {
+	return RunDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, developmentModel, replicate, limits, identity, pythonFactory)
+}
+
+func RunDevelopmentTrialForModelWithIdentity(
+	ctx context.Context,
+	adapter provider.Adapter,
+	task Task,
+	condition Condition,
+	model string,
+	replicate uint32,
+	limits TrialLimits,
+	identity ExecutionIdentity,
+	pythonFactory PythonWorkflowFactory,
+) (TrialResult, error) {
 	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 ||
+		!supportedDevelopmentModel(model) ||
 		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) ||
 		(condition == ConditionDirect && pythonFactory != nil) ||
 		(condition != ConditionDirect && pythonFactory == nil) {
@@ -117,7 +137,7 @@ func RunDevelopmentTrialWithIdentity(
 	if err != nil {
 		return TrialResult{}, err
 	}
-	session, err := NewResponsesSession(adapter, developmentModel, limits)
+	session, err := NewResponsesSession(adapter, model, limits)
 	if err != nil {
 		return TrialResult{}, err
 	}
@@ -130,7 +150,7 @@ func RunDevelopmentTrialWithIdentity(
 	promptDigest, surfaceDigest := digest([]byte(prompt)), digest(surfaceBytes)
 	specBytes, specErr := json.Marshal(map[string]any{
 		"version": "agentic-development-trial-spec/v1", "task_digest": taskDigest,
-		"condition": condition, "model": developmentModel, "replicate": replicate, "limits": limits, "identity": identity,
+		"condition": condition, "model": model, "replicate": replicate, "limits": limits, "identity": identity,
 		"catalog_digest": tools.Snapshot().Digest(), "prompt_digest": promptDigest, "surface_digest": surfaceDigest,
 	})
 	if specErr != nil {
@@ -140,7 +160,7 @@ func RunDevelopmentTrialWithIdentity(
 	result := TrialResult{
 		Version: "agentic-development-trial/v1", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
-		Condition: condition, Model: developmentModel, Identity: identity, Replicate: replicate, Limits: limits,
+		Condition: condition, Model: model, Identity: identity, Replicate: replicate, Limits: limits,
 		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, CatalogDigest: tools.Snapshot().Digest(),
 	}
 	if tools.FileSystem() != nil {

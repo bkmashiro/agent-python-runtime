@@ -12,7 +12,7 @@ import (
 var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
 
 func ValidateTrialResult(result TrialResult) error {
-	if result.Version != "agentic-development-trial/v1" || result.Model != developmentModel ||
+	if result.Version != "agentic-development-trial/v1" || !supportedDevelopmentModel(result.Model) ||
 		!result.Condition.valid() || !result.Limits.valid() || !validExecutionIdentity(result.Identity, result.Condition) || result.Replicate > 1000 ||
 		!validDigest(result.SpecDigest) || result.TrialID != "dev_"+strings.TrimPrefix(result.SpecDigest, "sha256:")[:32] ||
 		result.TaskID == "" || !validDigest(result.TaskDigest) || !validDigest(result.SourceRecordDigest) ||

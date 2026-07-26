@@ -165,7 +165,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 						return agentic.NewWASIPythonExecutor(ctx, guestBytes, plan.RuntimeConfig(), tools)
 					}
 				}
-				result, err := agentic.RunDevelopmentTrialWithIdentity(ctx, adapter, task, condition, replicate, limits, identity, factory)
+				result, err := agentic.RunDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, factory)
 				if err != nil {
 					return err
 				}

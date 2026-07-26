@@ -86,7 +86,7 @@ func LoadDevelopmentPilotPlan(path, datasetRoot string) (DevelopmentPilotPlan, *
 
 func validateDevelopmentPlan(plan DevelopmentPilotPlan, dataset *Dataset) error {
 	if dataset == nil || plan.SchemaVersion != "agentic-development-pilot-plan/v1" || plan.Status != "frozen" || plan.Split != "dev" ||
-		plan.Model != developmentModel || plan.DecisionEligible || !validDigest(plan.DatasetManifestDigest) ||
+		!supportedDevelopmentModel(plan.Model) || plan.DecisionEligible || !validDigest(plan.DatasetManifestDigest) ||
 		plan.CredentialEnvName != "LINKAPI_API_KEY" || plan.TransportRetryPolicy.AutomaticRetries != 0 ||
 		plan.TransportRetryPolicy.Reason != "unverified_provider_idempotency" || plan.CostGate.Status != "awaiting_owner_approval" || !plan.CostGate.ActivationRequired ||
 		len(plan.Conditions) != 3 || plan.Conditions[0] != ConditionDirect || plan.Conditions[1] != ConditionPython || plan.Conditions[2] != ConditionHybrid ||

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-runtime.dev/eval/v1/agentic-development-trial.schema.json",
+  "title": "Agentic development trial artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "trial_id", "spec_digest", "task_id", "task_digest", "source_record_digest",
+    "condition", "model", "replicate", "limits", "prompt_digest", "surface_digest", "passed",
+    "provider_calls", "tool_calls", "python_runs", "usage", "catalog_digest", "exchanges"
+  ],
+  "properties": {
+    "version": {"const": "agentic-development-trial/v1"},
+    "trial_id": {"type": "string", "pattern": "^dev_[0-9a-f]{32}$"},
+    "spec_digest": {"$ref": "#/$defs/digest"},
+    "task_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "task_digest": {"$ref": "#/$defs/digest"},
+    "source_record_digest": {"$ref": "#/$defs/digest"},
+    "condition": {"enum": ["direct", "python", "hybrid"]},
+    "model": {"const": "gpt-5.4"},
+    "replicate": {"type": "integer", "minimum": 0, "maximum": 1000},
+    "limits": {"$ref": "#/$defs/limits"},
+    "prompt_digest": {"$ref": "#/$defs/digest"},
+    "surface_digest": {"$ref": "#/$defs/digest"},
+    "passed": {"type": "boolean"},
+    "error_code": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "provider_calls": {"type": "integer", "minimum": 0, "maximum": 64},
+    "tool_calls": {"type": "integer", "minimum": 0, "maximum": 256},
+    "python_runs": {"type": "integer", "minimum": 0, "maximum": 256},
+    "usage": {"$ref": "#/$defs/usage"},
+    "catalog_digest": {"$ref": "#/$defs/digest"},
+    "initial_state_digest": {"$ref": "#/$defs/digest"},
+    "final_state_digest": {"$ref": "#/$defs/digest"},
+    "text_digests": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/digest"}},
+    "exchanges": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/exchange"}},
+    "python_evidence": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/pythonEvidence"}},
+    "stateless_score": {"$ref": "#/$defs/statelessScore"},
+    "stateful_score": {"$ref": "#/$defs/statefulScore"}
+  },
+  "oneOf": [
+    {
+      "required": ["stateless_score"],
+      "not": {"anyOf": [{"required": ["stateful_score"]}, {"required": ["initial_state_digest"]}, {"required": ["final_state_digest"]}]}
+    },
+    {
+      "required": ["stateful_score", "initial_state_digest", "final_state_digest"],
+      "not": {"required": ["stateless_score"]}
+    }
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "usage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["input_tokens", "output_tokens", "total_tokens"],
+      "properties": {
+        "input_tokens": {"type": "integer", "minimum": 0},
+        "output_tokens": {"type": "integer", "minimum": 0},
+        "total_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_provider_calls", "max_tool_calls", "max_python_runs", "max_input_tokens", "max_output_tokens", "max_total_tokens", "max_output_tokens_per_call"],
+      "properties": {
+        "max_provider_calls": {"type": "integer", "minimum": 1, "maximum": 64},
+        "max_tool_calls": {"type": "integer", "minimum": 1, "maximum": 256},
+        "max_python_runs": {"type": "integer", "minimum": 0, "maximum": 256},
+        "max_input_tokens": {"type": "integer", "minimum": 1},
+        "max_output_tokens": {"type": "integer", "minimum": 1},
+        "max_total_tokens": {"type": "integer", "minimum": 1},
+        "max_output_tokens_per_call": {"type": "integer", "minimum": 1, "maximum": 8192}
+      }
+    },
+    "exchange": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status_code", "request_digest", "response_digest", "usage"],
+      "properties": {
+        "status_code": {"type": "integer", "minimum": 100, "maximum": 599},
+        "request_digest": {"$ref": "#/$defs/digest"},
+        "response_digest": {"$ref": "#/$defs/digest"},
+        "usage": {"$ref": "#/$defs/usage"}
+      }
+    },
+    "pythonEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["success", "capability_calls", "request_digest", "backend", "reset_mode"],
+      "properties": {
+        "success": {"type": "boolean"},
+        "error_code": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+        "capability_calls": {"type": "integer", "minimum": 0, "maximum": 256},
+        "request_digest": {"$ref": "#/$defs/digest"},
+        "response_digest": {"$ref": "#/$defs/digest"},
+        "result_digest": {"$ref": "#/$defs/digest"},
+        "backend": {"type": "string", "minLength": 1, "maxLength": 64},
+        "reset_mode": {"const": "fresh-instance"}
+      }
+    },
+    "statelessScore": {
+      "type": "object", "additionalProperties": false, "required": ["passed"],
+      "properties": {"passed": {"type": "boolean"}, "error_code": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"}}
+    },
+    "statefulScore": {
+      "type": "object", "additionalProperties": false,
+      "required": ["passed", "trace_passed", "final_state_passed", "expected_calls", "actual_calls", "expected_state_digest", "actual_state_digest"],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "trace_passed": {"type": "boolean"},
+        "final_state_passed": {"type": "boolean"},
+        "expected_calls": {"type": "integer", "minimum": 0},
+        "actual_calls": {"type": "integer", "minimum": 0},
+        "expected_state_digest": {"$ref": "#/$defs/digest"},
+        "actual_state_digest": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

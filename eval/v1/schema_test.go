@@ -15,7 +15,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-var contractNames = []string{"comparison", "development-pilot", "experiment", "scenario", "trial-record", "trial-spec"}
+var contractNames = []string{"agentic-development-trial", "comparison", "development-pilot", "experiment", "scenario", "trial-record", "trial-spec"}
 
 func evalRoot(t *testing.T) string {
 	t.Helper()

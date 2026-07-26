@@ -1,0 +1,135 @@
+package agentic
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
+
+func ValidateTrialResult(result TrialResult) error {
+	if result.Version != "agentic-development-trial/v1" || result.Model != developmentModel ||
+		!result.Condition.valid() || !result.Limits.valid() || result.Replicate > 1000 ||
+		!validDigest(result.SpecDigest) || result.TrialID != "dev_"+strings.TrimPrefix(result.SpecDigest, "sha256:")[:32] ||
+		result.TaskID == "" || !validDigest(result.TaskDigest) || !validDigest(result.SourceRecordDigest) ||
+		!validDigest(result.PromptDigest) || !validDigest(result.SurfaceDigest) ||
+		!validDigest(result.CatalogDigest) || result.ProviderCalls != uint32(len(result.Exchanges)) ||
+		result.ProviderCalls > result.Limits.MaxProviderCalls || result.ToolCalls < 0 || result.ToolCalls > int(result.Limits.MaxToolCalls) ||
+		result.PythonRuns > result.Limits.MaxPythonRuns || len(result.TextDigests) > int(result.ProviderCalls) {
+		return ErrTrialArtifact
+	}
+	for _, value := range result.TextDigests {
+		if !validDigest(value) {
+			return ErrTrialArtifact
+		}
+	}
+	var usage = result.Usage
+	declaredTotal, declaredOK := checkedAdd(usage.InputTokens, usage.OutputTokens)
+	if !declaredOK || usage.TotalTokens != declaredTotal || usage.InputTokens > result.Limits.MaxInputTokens ||
+		usage.OutputTokens > result.Limits.MaxOutputTokens || usage.TotalTokens > result.Limits.MaxTotalTokens {
+		return ErrTrialArtifact
+	}
+	var summedInput, summedOutput, summedTotal uint64
+	for _, exchange := range result.Exchanges {
+		exchangeTotal, exchangeOK := checkedAdd(exchange.Usage.InputTokens, exchange.Usage.OutputTokens)
+		if !exchangeOK || exchange.StatusCode < 100 || exchange.StatusCode > 599 || !validDigest(exchange.RequestDigest) || !validDigest(exchange.ResponseDigest) ||
+			exchange.Usage.TotalTokens != exchangeTotal {
+			return ErrTrialArtifact
+		}
+		var ok bool
+		if summedInput, ok = checkedAdd(summedInput, exchange.Usage.InputTokens); !ok {
+			return ErrTrialArtifact
+		}
+		if summedOutput, ok = checkedAdd(summedOutput, exchange.Usage.OutputTokens); !ok {
+			return ErrTrialArtifact
+		}
+		if summedTotal, ok = checkedAdd(summedTotal, exchange.Usage.TotalTokens); !ok {
+			return ErrTrialArtifact
+		}
+	}
+	if summedInput != usage.InputTokens || summedOutput != usage.OutputTokens || summedTotal != usage.TotalTokens {
+		return ErrTrialArtifact
+	}
+	if result.Condition == ConditionDirect {
+		if result.PythonRuns != 0 || len(result.PythonEvidence) != 0 {
+			return ErrTrialArtifact
+		}
+	} else if result.PythonRuns != uint32(len(result.PythonEvidence)) {
+		return ErrTrialArtifact
+	}
+	for _, evidence := range result.PythonEvidence {
+		if evidence.CapabilityCalls > result.Limits.MaxToolCalls || !validDigest(evidence.RequestDigest) ||
+			!validDigest(evidence.ResponseDigest) || !validDigest(evidence.ResultDigest) ||
+			evidence.Backend == "" || evidence.ResetMode != "fresh-instance" || len(evidence.Observation) != 0 ||
+			evidence.Success != (evidence.ErrorCode == "") {
+			return ErrTrialArtifact
+		}
+	}
+	stateful := result.StatefulScore != nil
+	stateless := result.StatelessScore != nil
+	if stateful == stateless {
+		return ErrTrialArtifact
+	}
+	scorePassed := false
+	if stateful {
+		if !validDigest(result.InitialStateDigest) || !validDigest(result.FinalStateDigest) ||
+			result.StatefulScore.ExpectedCalls < 0 || result.StatefulScore.ActualCalls != result.ToolCalls ||
+			!validDigest(result.StatefulScore.ExpectedStateDigest) || !validDigest(result.StatefulScore.ActualStateDigest) ||
+			result.StatefulScore.ActualStateDigest != result.FinalStateDigest ||
+			result.StatefulScore.FinalStatePassed != (result.StatefulScore.ExpectedStateDigest == result.StatefulScore.ActualStateDigest) ||
+			result.StatefulScore.Passed != (result.StatefulScore.TracePassed && result.StatefulScore.FinalStatePassed) {
+			return ErrTrialArtifact
+		}
+		scorePassed = result.StatefulScore.Passed
+	} else {
+		if result.InitialStateDigest != "" || result.FinalStateDigest != "" ||
+			result.StatelessScore.Passed != (result.StatelessScore.ErrorCode == "") {
+			return ErrTrialArtifact
+		}
+		scorePassed = result.StatelessScore.Passed
+	}
+	if result.Passed != (result.ErrorCode == "" && scorePassed) || (result.ErrorCode != "" && !providerToolNamePattern.MatchString(result.ErrorCode)) {
+		return ErrTrialArtifact
+	}
+	return nil
+}
+
+func WriteTrialArtifact(path string, result TrialResult) (string, error) {
+	if path == "" || ValidateTrialResult(result) != nil {
+		return "", ErrTrialArtifact
+	}
+	content, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "", ErrTrialArtifact
+	}
+	content = append(content, '\n')
+	parent := filepath.Dir(path)
+	if info, err := os.Lstat(parent); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", ErrTrialArtifact
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", err
+	}
+	remove := true
+	defer func() {
+		_ = file.Close()
+		if remove {
+			_ = os.Remove(path)
+		}
+	}()
+	if _, err := file.Write(content); err != nil {
+		return "", err
+	}
+	if err := file.Sync(); err != nil {
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	remove = false
+	return digest(content), nil
+}

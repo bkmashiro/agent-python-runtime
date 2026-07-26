@@ -459,6 +459,9 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 	}
 	sdk := compactPythonSDK(runtime)
 	prompt := "Use only the exposed tools and do not fabricate results. Do not add exploratory, precondition, or verification calls unless the user requests them or they are required to compute a later argument. Treat successful Host-tool observations as authoritative."
+	if condition != ConditionDirect {
+		prompt += " Each Python Guest run starts fresh, but Host-tool state persists across user turns. Do not replay state-changing setup already completed in earlier turns; use prior successful Host observations as current state unless the user asks to change it."
+	}
 	if condition == ConditionDirect {
 		if continueWithinTurn {
 			prompt += " Complete each user turn before moving to the next. Emit all calls whose arguments are already known together in dependency-safe order; the Host executes them in output order. Continue after tool output only when a later call requires returned data."

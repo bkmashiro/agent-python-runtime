@@ -324,6 +324,10 @@ func TestPythonSurfaceExplainsMinimalWorkflowWithoutRepeatingSDK(t *testing.T) {
 	if strings.Contains(prompt, sdk) || !strings.Contains(prompt, "Do not add exploratory, precondition, or verification calls") {
 		t.Fatalf("prompt=%q", prompt)
 	}
+	if !strings.Contains(prompt, "Host-tool state persists across user turns") ||
+		!strings.Contains(prompt, "Do not replay state-changing setup") {
+		t.Fatalf("Python prompt omits the Guest/Host state boundary: %s", prompt)
+	}
 	if len(surface) != 1 {
 		t.Fatalf("surface=%v", surface)
 	}

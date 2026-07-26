@@ -209,6 +209,18 @@ func (fs *GorillaFileSystem) Call(name string, arguments json.RawMessage) (json.
 	return marshalOutput(output)
 }
 
+func (fs *GorillaFileSystem) CurrentWorkingDirectory() (string, error) {
+	if fs == nil {
+		return "", ErrFileSystem
+	}
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if fs.cwd == nil {
+		return "", ErrFileSystem
+	}
+	return absolutePath(fs.cwd), nil
+}
+
 func (fs *GorillaFileSystem) callLocked(name string, raw json.RawMessage) (any, bool, error) {
 	switch name {
 	case "pwd":

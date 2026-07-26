@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,6 +39,48 @@ func developmentTrialLimits(turns int) TrialLimits {
 	return TrialLimits{
 		MaxProviderCalls: uint32(turns * 3), MaxToolCalls: 32, MaxPythonRuns: uint32(turns),
 		MaxInputTokens: 10_000, MaxOutputTokens: 2_000, MaxTotalTokens: 12_000, MaxOutputTokensPerCall: 512,
+	}
+}
+
+func TestStructuredHostContextTreatmentAppearsBeforeLaterTurns(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := adapterForStatefulOracle(t, task, func(name string) string { return name })
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "structured-host-context-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
+	}
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+		context.Background(), adapter, task, ConditionDirect, developmentModel, 0,
+		developmentTrialLimits(len(task.Interaction.Turns)), identity, treatment, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Passed || len(result.HostContextDigests) != 2 || result.RawDebug == nil || len(result.RawDebug.HostContexts) != 2 {
+		t.Fatalf("result=%+v raw=%+v", result, result.RawDebug)
+	}
+	if strings.Contains(string(adapter.requests[0].Payload), "agentic-host-context/v1") || strings.Contains(string(adapter.requests[1].Payload), "agentic-host-context/v1") {
+		t.Fatal("first turn received Host context")
+	}
+	for _, index := range []int{2, 4} {
+		payload := string(adapter.requests[index].Payload)
+		if !strings.Contains(payload, "agentic-host-context/v1") || !strings.Contains(payload, "successful_effects") || !strings.Contains(payload, "/alex/Documents") {
+			t.Fatalf("request %d missing context: %s", index, payload)
+		}
+	}
+	encoded, _ := json.Marshal(result)
+	for _, forbidden := range []string{"summary.txt", "/alex/Documents", "successful_effects"} {
+		if containsBytes(encoded, []byte(forbidden)) {
+			t.Fatalf("formal result leaked %q: %s", forbidden, encoded)
+		}
+	}
+	if ValidateTrialResult(result) != nil {
+		t.Fatal("structured context result failed artifact validation")
 	}
 }
 

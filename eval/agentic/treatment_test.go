@@ -14,7 +14,7 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 		implemented bool
 	}{
 		{"baseline-v1.json", TreatmentBaselineV1, true},
-		{"structured-host-context-v1.json", TreatmentStructuredHostContextV1, false},
+		{"structured-host-context-v1.json", TreatmentStructuredHostContextV1, true},
 		{"python-safe-repair-v1.json", TreatmentPythonSafeRepairV1, false},
 		{"hybrid-two-stage-router-v1.json", TreatmentHybridTwoStageRouterV1, false},
 	} {

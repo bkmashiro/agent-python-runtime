@@ -35,6 +35,18 @@ func ValidateTrialResult(result TrialResult) error {
 			return ErrTrialArtifact
 		}
 	}
+	if result.TreatmentID == TreatmentStructuredHostContextV1 {
+		if len(result.HostContextDigests) > 31 {
+			return ErrTrialArtifact
+		}
+		for _, value := range result.HostContextDigests {
+			if !validDigest(value) {
+				return ErrTrialArtifact
+			}
+		}
+	} else if len(result.HostContextDigests) != 0 {
+		return ErrTrialArtifact
+	}
 	var usage = result.Usage
 	declaredTotal, declaredOK := checkedAdd(usage.InputTokens, usage.OutputTokens)
 	if !declaredOK || usage.TotalTokens != declaredTotal {

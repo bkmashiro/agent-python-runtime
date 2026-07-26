@@ -53,7 +53,7 @@ func TestPilotRejectsUnimplementedOrBaselineTreatmentOverrideBeforeExecution(t *
 		"--activation", "unused", "--guest", "unused", "--out", filepath.Join(t.TempDir(), "out"),
 		"--repository-commit", strings.Repeat("a", 40),
 	}
-	for _, file := range []string{"structured-host-context-v1.json", "baseline-v1.json"} {
+	for _, file := range []string{"python-safe-repair-v1.json", "hybrid-two-stage-router-v1.json", "baseline-v1.json"} {
 		args := append(append([]string(nil), baseArgs...), "--treatment", filepath.Join(dataset, "treatments", file))
 		if err := run(context.Background(), args, dependencies{}); !errors.Is(err, agentic.ErrDevelopmentTreatment) {
 			t.Fatalf("file=%s err=%v", file, err)

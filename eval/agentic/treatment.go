@@ -98,5 +98,9 @@ func expectedTreatmentDocument(id string) string {
 }
 
 func (treatment DevelopmentTreatment) Implemented() bool {
-	return treatment.valid() && treatment.ID == TreatmentBaselineV1
+	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1)
+}
+
+func (treatment DevelopmentTreatment) UsesStructuredHostContext() bool {
+	return treatment.Implemented() && treatment.HostContextPolicy == "prior-successful-effects"
 }

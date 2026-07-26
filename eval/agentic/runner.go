@@ -85,6 +85,7 @@ type TrialResult struct {
 	InitialStateDigest string             `json:"initial_state_digest,omitempty"`
 	FinalStateDigest   string             `json:"final_state_digest,omitempty"`
 	TextDigests        []string           `json:"text_digests,omitempty"`
+	HostContextDigests []string           `json:"host_context_digests,omitempty"`
 	Exchanges          []ExchangeEvidence `json:"exchanges"`
 	PythonEvidence     []PythonRunResult  `json:"python_evidence,omitempty"`
 	StatelessScore     *CallScore         `json:"stateless_score,omitempty"`
@@ -98,6 +99,7 @@ type TrialRawDebug struct {
 	ProviderExchanges []RawProviderExchange `json:"provider_exchanges"`
 	PythonRuns        []RawPythonRun        `json:"python_runs,omitempty"`
 	ToolCalls         [][]RawToolCall       `json:"tool_calls"`
+	HostContexts      []json.RawMessage     `json:"host_contexts,omitempty"`
 }
 
 type RawPythonRun struct {
@@ -282,6 +284,18 @@ func runDevelopmentTrialForModelWithIdentity(
 	for turnIndex, rawTurn := range task.Interaction.Turns {
 		if err := tools.SetTurn(turnIndex); err != nil {
 			return TrialResult{}, err
+		}
+		if treatment.UsesStructuredHostContext() && turnIndex > 0 {
+			_, contextBytes, contextErr := BuildHostContext(tools, turnIndex)
+			if contextErr != nil {
+				return TrialResult{}, contextErr
+			}
+			contextMessage := "Authoritative Host execution context from successful prior model effects. It contains no read observations, tool outputs, or initial directory contents. Do not repeat completed effects: " + string(contextBytes)
+			history = append(history, map[string]any{"role": "developer", "content": contextMessage})
+			result.HostContextDigests = append(result.HostContextDigests, digest(contextBytes))
+			if result.RawDebug != nil {
+				result.RawDebug.HostContexts = append(result.RawDebug.HostContexts, append(json.RawMessage(nil), contextBytes...))
+			}
 		}
 		messages, err := decodeBenchmarkTurn(rawTurn)
 		if err != nil {

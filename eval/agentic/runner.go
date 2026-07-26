@@ -16,12 +16,13 @@ const (
 	gpt4oDevelopmentModel         = "gpt-4o"
 	gemini36FlashDevelopmentModel = "gemini-3.6-flash"
 	grok420DevelopmentModel       = "grok-4.20-0309-non-reasoning"
+	luna56DevelopmentModel        = "gpt-5.6-luna"
 	maxPythonPromptBytes          = 16 * 1024
 )
 
 func supportedDevelopmentModel(model string) bool {
 	return model == developmentModel || model == gpt41DevelopmentModel || model == gpt4oDevelopmentModel ||
-		model == gemini36FlashDevelopmentModel || model == grok420DevelopmentModel
+		model == gemini36FlashDevelopmentModel || model == grok420DevelopmentModel || model == luna56DevelopmentModel
 }
 
 type PythonWorkflow interface {

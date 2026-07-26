@@ -19,9 +19,29 @@ const maxPythonCodeBytes = 64 * 1024
 
 var pythonRunIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
+type FailureClass string
+
+const (
+	FailureClassPythonException           FailureClass = "python_exception"
+	FailureClassHostToolError             FailureClass = "host_tool_error"
+	FailureClassGuestOutputSchemaMismatch FailureClass = "guest_output_schema_mismatch"
+	FailureClassGuestContractError        FailureClass = "guest_contract_error"
+)
+
+func (class FailureClass) valid() bool {
+	switch class {
+	case FailureClassPythonException, FailureClassHostToolError, FailureClassGuestOutputSchemaMismatch, FailureClassGuestContractError:
+		return true
+	default:
+		return false
+	}
+}
+
 type PythonRunResult struct {
+	Turn            int              `json:"turn"`
 	Success         bool             `json:"success"`
 	ErrorCode       string           `json:"error_code,omitempty"`
+	FailureClass    FailureClass     `json:"failure_class,omitempty"`
 	CapabilityCalls uint32           `json:"capability_calls"`
 	RequestDigest   string           `json:"request_digest"`
 	ResponseDigest  string           `json:"response_digest,omitempty"`
@@ -146,6 +166,7 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 			result.ResponseDigest = digest(payload)
 			result.CapabilityCalls = response.Metrics.CapabilityCalls
 			result.ErrorCode = "guest_output_schema_mismatch"
+			result.FailureClass = FailureClassGuestOutputSchemaMismatch
 			result.ResultDigest = digest(response.Result)
 			result.Observation, _ = json.Marshal(map[string]any{"error_code": result.ErrorCode, "status": "error"})
 			return result, nil
@@ -165,6 +186,7 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 		return result, nil
 	}
 	result.ErrorCode = safeGuestErrorCode(response.Error.Code)
+	result.FailureClass = classifyGuestFailure(response.Error.Code, response.Error.ErrorType)
 	result.ResultDigest = digest(response.Result)
 	observation, _ := json.Marshal(map[string]any{"error_code": result.ErrorCode, "status": "error"})
 	result.Observation = observation
@@ -172,10 +194,22 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 }
 
 func safeGuestErrorCode(value string) string {
-	if providerToolNamePattern.MatchString(value) {
+	switch value {
+	case "invalid_request", "python_exception", "result_not_json":
 		return value
+	default:
+		return "guest_error"
 	}
-	return "guest_error"
+}
+
+func classifyGuestFailure(code string, errorType *string) FailureClass {
+	if code == "python_exception" {
+		if errorType != nil && *errorType == "HostToolError" {
+			return FailureClassHostToolError
+		}
+		return FailureClassPythonException
+	}
+	return FailureClassGuestContractError
 }
 
 func (executor *PythonExecutor) Close(ctx context.Context) error {

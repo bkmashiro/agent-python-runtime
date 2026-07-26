@@ -41,6 +41,20 @@ type ExecutionIdentity struct {
 	GuestProfile              string `json:"guest_profile,omitempty"`
 }
 
+type FailureDetail struct {
+	Class                 FailureClass `json:"class"`
+	Turn                  int          `json:"turn"`
+	CapabilityCallsBefore uint32       `json:"capability_calls_before_failure"`
+	RetryEligible         bool         `json:"retry_eligible"`
+}
+
+func failureDetailForPython(result PythonRunResult) *FailureDetail {
+	return &FailureDetail{
+		Class: result.FailureClass, Turn: result.Turn, CapabilityCallsBefore: result.CapabilityCalls,
+		RetryEligible: result.CapabilityCalls == 0 && result.FailureClass.valid() && result.FailureClass != FailureClassHostToolError,
+	}
+}
+
 type TrialResult struct {
 	Version            string             `json:"version"`
 	TrialID            string             `json:"trial_id"`
@@ -58,6 +72,7 @@ type TrialResult struct {
 	Passed             bool               `json:"passed"`
 	Metrics            *TrialMetrics      `json:"metrics,omitempty"`
 	ErrorCode          string             `json:"error_code,omitempty"`
+	FailureDetail      *FailureDetail     `json:"failure_detail,omitempty"`
 	ProviderAttempts   uint32             `json:"provider_attempts"`
 	ProviderCalls      uint32             `json:"provider_calls"`
 	ToolCalls          int                `json:"tool_calls"`
@@ -318,6 +333,7 @@ func runDevelopmentTrialForModelWithIdentity(
 						break
 					}
 					observation = append(json.RawMessage(nil), pythonResult.Observation...)
+					pythonResult.Turn = turnIndex
 					if result.RawDebug != nil {
 						rawPython.Observation = append(json.RawMessage(nil), pythonResult.Observation...)
 						rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
@@ -335,6 +351,7 @@ func runDevelopmentTrialForModelWithIdentity(
 						break
 					}
 					if !pythonResult.Success {
+						result.FailureDetail = failureDetailForPython(pythonResult)
 						result.ErrorCode = "python_guest_error"
 					}
 				} else {

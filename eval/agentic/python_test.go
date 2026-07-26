@@ -79,14 +79,14 @@ func TestPythonExecutorProjectsGuestErrorsWithoutTraceback(t *testing.T) {
 	tools, _ := NewToolRuntime(task)
 	runner := &fakeGuestRunner{props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}, payload: []byte(`{
 		"status":"error","result":null,"receipts":[],"metrics":{"capability_calls":1,"result_bytes":4},
-		"error":{"code":"execution_error","message":"private message","error_type":"ValueError","traceback":"private traceback"}
+		"error":{"code":"python_exception","message":"private message","error_type":"ValueError","traceback":"private traceback"}
 	}`)}
 	executor, err := NewPythonExecutor(runner, tools)
 	if err != nil {
 		t.Fatal(err)
 	}
 	result, err := executor.Execute(context.Background(), "python-error-1", "raise ValueError('private')", 2)
-	if err != nil || result.Success || result.ErrorCode != "execution_error" || string(result.Observation) != `{"error_code":"execution_error","status":"error"}` {
+	if err != nil || result.Success || result.ErrorCode != "python_exception" || result.FailureClass != FailureClassPythonException || string(result.Observation) != `{"error_code":"python_exception","status":"error"}` {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	encoded, _ := json.Marshal(result)
@@ -94,6 +94,47 @@ func TestPythonExecutorProjectsGuestErrorsWithoutTraceback(t *testing.T) {
 		if containsBytes(encoded, []byte(forbidden)) {
 			t.Fatalf("serialized result leaked %q: %s", forbidden, encoded)
 		}
+	}
+}
+
+func TestPythonExecutorClassifiesHostToolErrorsWithoutLeakingDetails(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	tools, _ := NewToolRuntime(task)
+	runner := &fakeGuestRunner{props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}, payload: []byte(`{
+		"status":"error","result":null,"receipts":[],"metrics":{"capability_calls":1,"result_bytes":0},
+		"error":{"code":"python_exception","message":"private Host message","error_type":"HostToolError","traceback":"private Host traceback"}
+	}`)}
+	executor, err := NewPythonExecutor(runner, tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.Execute(context.Background(), "python-host-error-1", "result = {}", 2)
+	if err != nil || result.Success || result.FailureClass != FailureClassHostToolError {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	encoded, _ := json.Marshal(result)
+	for _, forbidden := range []string{"private Host message", "private Host traceback", "HostToolError"} {
+		if containsBytes(encoded, []byte(forbidden)) {
+			t.Fatalf("serialized result leaked %q: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestPythonExecutorClassifiesOutputSchemaMismatch(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	tools, _ := NewToolRuntime(task)
+	runner := &fakeGuestRunner{
+		props:   engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance},
+		payload: []byte(`{"status":"ok","result":null,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":4},"error":null}`),
+		err:     runtimeconfig.ErrRunResultSchemaMismatch,
+	}
+	executor, err := NewPythonExecutor(runner, tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.Execute(context.Background(), "python-schema-1", "print('missing result')", 2)
+	if err != nil || result.Success || result.ErrorCode != "guest_output_schema_mismatch" || result.FailureClass != FailureClassGuestOutputSchemaMismatch {
+		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
 

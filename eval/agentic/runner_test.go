@@ -227,6 +227,76 @@ func (workflow *oracleWorkflow) Execute(ctx context.Context, _ string, code stri
 }
 func (*oracleWorkflow) Close(context.Context) error { return nil }
 
+type guestFailureWorkflow struct {
+	tools        *ToolRuntime
+	failureClass FailureClass
+	invokeHost   bool
+}
+
+func (workflow *guestFailureWorkflow) Execute(ctx context.Context, _ string, code string, _ uint32) (PythonRunResult, error) {
+	calls := uint32(0)
+	if workflow.invokeHost {
+		if _, err := workflow.tools.InvokeDirect(ctx, "guest-failure-host-1", "guest:failure:1", "pwd", json.RawMessage(`{}`)); err != nil {
+			return PythonRunResult{}, err
+		}
+		calls = 1
+	}
+	return PythonRunResult{
+		Success: false, ErrorCode: "python_exception", FailureClass: workflow.failureClass, CapabilityCalls: calls,
+		RequestDigest: digest([]byte(code)), ResponseDigest: digest([]byte(`{"status":"error"}`)), ResultDigest: digest([]byte(`null`)),
+		Backend: "failure-test", ResetMode: engine.ResetModeFreshInstance,
+		Observation: json.RawMessage(`{"error_code":"python_exception","status":"error"}`),
+	}, nil
+}
+func (*guestFailureWorkflow) Close(context.Context) error { return nil }
+
+func TestRunnerRecordsBoundedGuestFailureDetail(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	for _, test := range []struct {
+		name          string
+		failureClass  FailureClass
+		invokeHost    bool
+		retryEligible bool
+		calls         uint32
+	}{
+		{name: "zero-call-python", failureClass: FailureClassPythonException, retryEligible: true},
+		{name: "Host-tool", failureClass: FailureClassHostToolError, invokeHost: true, retryEligible: false, calls: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"py1","name":"run_python","arguments":"{\"code\":\"result = {}\"}"}]}`, 5, 5)}}
+			result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapter, task, ConditionPython, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, func(tools *ToolRuntime) (PythonWorkflow, error) {
+				return &guestFailureWorkflow{tools: tools, failureClass: test.failureClass, invokeHost: test.invokeHost}, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.ErrorCode != "python_guest_error" || result.FailureDetail == nil || result.FailureDetail.Class != test.failureClass ||
+				result.FailureDetail.Turn != 0 || result.FailureDetail.CapabilityCallsBefore != test.calls || result.FailureDetail.RetryEligible != test.retryEligible || ValidateTrialResult(result) != nil {
+				t.Fatalf("result=%+v", result)
+			}
+			tampered := result
+			detail := *result.FailureDetail
+			detail.RetryEligible = !detail.RetryEligible
+			tampered.FailureDetail = &detail
+			if ValidateTrialResult(tampered) == nil {
+				t.Fatal("tampered retry eligibility accepted")
+			}
+			tampered = result
+			detail = *result.FailureDetail
+			detail.Turn++
+			tampered.FailureDetail = &detail
+			if ValidateTrialResult(tampered) == nil {
+				t.Fatal("tampered failure turn accepted")
+			}
+		})
+	}
+}
+
 func TestDevelopmentReplicateChangesSpecIdentity(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	limits := developmentTrialLimits(len(task.Interaction.Turns))

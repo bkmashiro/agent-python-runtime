@@ -65,13 +65,35 @@ func ValidateTrialResult(result TrialResult) error {
 	} else if result.PythonRuns != uint32(len(result.PythonEvidence)) {
 		return ErrTrialArtifact
 	}
+	previousPythonTurn := -1
 	for _, evidence := range result.PythonEvidence {
 		if evidence.CapabilityCalls > result.Limits.MaxToolCalls || !validDigest(evidence.RequestDigest) ||
 			!validDigest(evidence.ResponseDigest) || !validDigest(evidence.ResultDigest) ||
 			evidence.Backend == "" || evidence.ResetMode != "fresh-instance" || len(evidence.Observation) != 0 ||
-			evidence.Success != (evidence.ErrorCode == "") {
+			evidence.Success != (evidence.ErrorCode == "") || (evidence.Success && evidence.FailureClass != "") ||
+			(!evidence.Success && result.Version == "agentic-development-trial/v2" && !evidence.FailureClass.valid()) ||
+			(!evidence.Success && result.Version == "agentic-development-trial/v1" && evidence.FailureClass != "") ||
+			(result.Version == "agentic-development-trial/v2" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn <= previousPythonTurn)) {
 			return ErrTrialArtifact
 		}
+		previousPythonTurn = evidence.Turn
+	}
+	if result.Version == "agentic-development-trial/v1" {
+		if result.FailureDetail != nil {
+			return ErrTrialArtifact
+		}
+	} else if result.ErrorCode == "python_guest_error" {
+		if result.FailureDetail == nil || !result.FailureDetail.Class.valid() || result.FailureDetail.Turn < 0 || result.FailureDetail.Turn >= 32 || len(result.PythonEvidence) == 0 {
+			return ErrTrialArtifact
+		}
+		failure := result.PythonEvidence[len(result.PythonEvidence)-1]
+		expected := failureDetailForPython(failure)
+		if failure.Success || result.FailureDetail.Turn != failure.Turn || result.FailureDetail.Class != failure.FailureClass ||
+			result.FailureDetail.CapabilityCallsBefore != failure.CapabilityCalls || result.FailureDetail.RetryEligible != expected.RetryEligible {
+			return ErrTrialArtifact
+		}
+	} else if result.FailureDetail != nil {
+		return ErrTrialArtifact
 	}
 	stateful := result.StatefulScore != nil
 	stateless := result.StatelessScore != nil

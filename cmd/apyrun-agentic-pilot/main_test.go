@@ -22,6 +22,12 @@ func TestPilotSummaryCarriesTreatmentScopeBounds(t *testing.T) {
 	}
 }
 
+func TestCanaryAndDiagnosticsCapturePrivateRawEvidence(t *testing.T) {
+	if !shouldCaptureRawEvidence(true, "") || !shouldCaptureRawEvidence(false, "task") || shouldCaptureRawEvidence(false, "") {
+		t.Fatal("raw evidence scope drifted")
+	}
+}
+
 func TestPilotSummaryAggregatesOutcomeAndStrictSeparately(t *testing.T) {
 	summary := pilotSummary{}
 	results := []agentic.TrialResult{

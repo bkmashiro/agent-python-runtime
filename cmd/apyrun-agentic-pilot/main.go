@@ -173,7 +173,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		return err
 	}
 	debugRoot := ""
-	if *diagnosticTask != "" {
+	if shouldCaptureRawEvidence(*canary, *diagnosticTask) {
 		debugRoot = filepath.Join(*outputRoot, "debug")
 		if err := os.Mkdir(debugRoot, 0o700); err != nil {
 			return err
@@ -277,6 +277,10 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	manifestSum := sha256.Sum256(summaryBytes)
 	_, err = fmt.Fprintf(os.Stdout, `{"status":"complete","mode":%q,"trial_count":%d,"manifest_digest":"sha256:%s"}`+"\n", summary.Mode, summary.TrialCount, hex.EncodeToString(manifestSum[:]))
 	return err
+}
+
+func shouldCaptureRawEvidence(canary bool, diagnosticTask string) bool {
+	return canary || diagnosticTask != ""
 }
 
 func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, canary bool, diagnosticTask string, diagnosticCondition agentic.Condition) (executionScope, error) {

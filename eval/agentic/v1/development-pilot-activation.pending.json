@@ -1,6 +1,7 @@
 {
   "schema_version": "agentic-pilot-activation/v1",
   "status": "pending_owner_approval",
+  "execution_mode": "REPLACE_WITH_canary_OR_pilot",
   "plan_digest": "sha256:4af5cf83231fbc9fc3a5e9a09b9a330e0ca49ae21aacbdd24491f6e60140dc3a",
   "repository_commit": "REPLACE_WITH_40_HEX_COMMIT",
   "host_artifact_digest": "REPLACE_WITH_SHA256_DIGEST",

@@ -11,6 +11,7 @@ var ErrPilotActivation = errors.New("invalid agentic pilot activation")
 type PilotActivation struct {
 	SchemaVersion             string            `json:"schema_version"`
 	Status                    string            `json:"status"`
+	ExecutionMode             string            `json:"execution_mode"`
 	PlanDigest                string            `json:"plan_digest"`
 	RepositoryCommit          string            `json:"repository_commit"`
 	HostArtifactDigest        string            `json:"host_artifact_digest"`
@@ -39,6 +40,7 @@ func LoadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDig
 	approvedAt, timeErr := time.Parse(time.RFC3339, activation.ApprovedAt)
 	catalogObservedAt, catalogTimeErr := time.Parse(time.RFC3339, activation.ProviderCatalogObservedAt)
 	if activation.SchemaVersion != "agentic-pilot-activation/v1" || activation.Status != "approved" ||
+		(activation.ExecutionMode != "canary" && activation.ExecutionMode != "pilot") ||
 		activation.PlanDigest != plan.Digest || !validLowerHex(activation.RepositoryCommit, 40) ||
 		activation.HostArtifactDigest != hostArtifactDigest || activation.DatasetManifestDigest != plan.DatasetManifestDigest ||
 		!validDigest(activation.ProviderCatalogDigest) || catalogTimeErr != nil || catalogObservedAt.Location() != time.UTC ||

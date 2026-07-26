@@ -38,7 +38,7 @@ func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 	}
 	hostDigest, _ := fileDigest(host, 1024)
 	activationDocument := map[string]any{
-		"schema_version": "agentic-pilot-activation/v1", "status": "approved", "plan_digest": plan.Digest,
+		"schema_version": "agentic-pilot-activation/v1", "status": "approved", "execution_mode": "pilot", "plan_digest": plan.Digest,
 		"repository_commit": strings.Repeat("a", 40), "host_artifact_digest": hostDigest,
 		"dataset_manifest_digest": plan.DatasetManifestDigest,
 		"provider_catalog_digest": "sha256:" + strings.Repeat("d", 64), "provider_catalog_observed_at": "2026-07-26T11:00:00Z",
@@ -86,6 +86,20 @@ func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 	}
 	if _, statErr := os.Lstat(out); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("output created before credential gate: %v", statErr)
+	}
+
+	t.Setenv("LINKAPI_API_KEY", "test-only")
+	adapterCalled = false
+	out = filepath.Join(t.TempDir(), "out")
+	err = run(context.Background(), []string{
+		"--canary", "--dataset", dataset, "--plan", planPath, "--activation", validActivation, "--guest", guest,
+		"--out", out, "--repository-commit", strings.Repeat("a", 40),
+	}, deps)
+	if !errors.Is(err, agentic.ErrPilotActivation) || adapterCalled {
+		t.Fatalf("mode mismatch err=%v adapter_called=%v", err, adapterCalled)
+	}
+	if _, statErr := os.Lstat(out); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("output created before mode gate: %v", statErr)
 	}
 }
 

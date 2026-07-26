@@ -102,7 +102,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		return fmt.Errorf("digest Host artifact: %w", err)
 	}
 	activation, err := agentic.LoadPilotActivation(*activationPath, plan, hostDigest)
-	if err != nil || activation.RepositoryCommit != *repositoryCommit {
+	if err != nil || activation.RepositoryCommit != *repositoryCommit || activation.ExecutionMode != scope.Mode {
 		return agentic.ErrPilotActivation
 	}
 	guestBytes, err := readRegularBounded(*guestPath, 256*1024*1024)

@@ -43,8 +43,9 @@ func (condition Condition) valid() bool {
 }
 
 type ExchangeEvidence struct {
-	StatusCode     int            `json:"status_code"`
-	RequestDigest  string         `json:"request_digest"`
-	ResponseDigest string         `json:"response_digest"`
-	Usage          provider.Usage `json:"usage"`
+	StatusCode      int            `json:"status_code"`
+	RequestDigest   string         `json:"request_digest"`
+	ResponseDigest  string         `json:"response_digest"`
+	Usage           provider.Usage `json:"usage"`
+	ProtocolInvalid bool           `json:"protocol_invalid,omitempty"`
 }

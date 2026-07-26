@@ -69,15 +69,18 @@ func ValidateTrialResult(result TrialResult) error {
 	overBudget := usage.InputTokens > result.Limits.MaxInputTokens || usage.OutputTokens > result.Limits.MaxOutputTokens || usage.TotalTokens > result.Limits.MaxTotalTokens
 	budgetExhausted := overBudget || usage.InputTokens >= result.Limits.MaxInputTokens || usage.OutputTokens >= result.Limits.MaxOutputTokens || usage.TotalTokens >= result.Limits.MaxTotalTokens || result.ProviderAttempts >= result.Limits.MaxProviderCalls
 	providerOutputOvershoot := false
+	protocolInvalid := false
 	for _, exchange := range result.Exchanges {
 		if exchange.Usage.OutputTokens > result.Limits.MaxOutputTokensPerCall {
 			providerOutputOvershoot = true
 		}
+		protocolInvalid = protocolInvalid || exchange.ProtocolInvalid
 	}
-	if (providerOutputOvershoot && result.ErrorCode != "provider_output_limit_exceeded") ||
-		(overBudget && result.ErrorCode != "provider_budget_exceeded" && result.ErrorCode != "provider_output_limit_exceeded") ||
+	if (protocolInvalid && result.ErrorCode != "provider_or_protocol_failure" && result.ErrorCode != "provider_identity_mismatch") ||
+		(providerOutputOvershoot && !protocolInvalid && result.ErrorCode != "provider_output_limit_exceeded") ||
+		(overBudget && !protocolInvalid && result.ErrorCode != "provider_budget_exceeded" && result.ErrorCode != "provider_output_limit_exceeded") ||
 		(result.ErrorCode == "provider_budget_exceeded" && !budgetExhausted) ||
-		(result.ErrorCode == "provider_output_limit_exceeded" && !providerOutputOvershoot && !overBudget) {
+		(result.ErrorCode == "provider_output_limit_exceeded" && (protocolInvalid || (!providerOutputOvershoot && !overBudget))) {
 		return ErrTrialArtifact
 	}
 	var summedInput, summedOutput, summedTotal uint64

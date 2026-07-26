@@ -95,7 +95,8 @@
         "status_code": {"type": "integer", "minimum": 100, "maximum": 599},
         "request_digest": {"$ref": "#/$defs/digest"},
         "response_digest": {"$ref": "#/$defs/digest"},
-        "usage": {"$ref": "#/$defs/usage"}
+        "usage": {"$ref": "#/$defs/usage"},
+        "protocol_invalid": {"type": "boolean"}
       }
     },
     "pythonEvidence": {

@@ -53,6 +53,81 @@ func testTrialLimits() TrialLimits {
 	}
 }
 
+func TestResponsesSessionUsesLinkAPIDocumentedWireDialect(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := []any{
+		map[string]any{"role": "developer", "content": "use tools"},
+		map[string]any{"role": "user", "content": "inspect"},
+		map[string]any{"type": "function_call", "status": "completed", "call_id": "call-1", "name": "pwd", "arguments": "{}"},
+		map[string]any{"type": "function_call_output", "call_id": "call-1", "output": `{"path":"/"}`},
+	}
+	tools := []map[string]any{{"type": "function", "name": "pwd", "description": "working directory", "parameters": map[string]any{"type": "object"}, "strict": false}}
+	if _, err := session.Exchange(context.Background(), history, tools, "required", false, map[string]string{"pwd": "pwd"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(adapter.requests) != 1 {
+		t.Fatalf("requests=%d", len(adapter.requests))
+	}
+	var payload map[string]any
+	if json.Unmarshal(adapter.requests[0].Payload, &payload) != nil {
+		t.Fatal("decode payload")
+	}
+	for _, forbidden := range []string{"input", "max_output_tokens", "background"} {
+		if _, exists := payload[forbidden]; exists {
+			t.Fatalf("legacy field %q leaked: %s", forbidden, adapter.requests[0].Payload)
+		}
+	}
+	if payload["max_tokens"] != float64(64) || payload["stream"] != false || payload["parallel_tool_calls"] != false {
+		t.Fatalf("payload=%s", adapter.requests[0].Payload)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) != 4 {
+		t.Fatalf("messages=%#v", payload["messages"])
+	}
+	assistant := messages[2].(map[string]any)
+	toolMessage := messages[3].(map[string]any)
+	if assistant["role"] != "assistant" || len(assistant["tool_calls"].([]any)) != 1 || toolMessage["role"] != "tool" || toolMessage["tool_call_id"] != "call-1" {
+		t.Fatalf("assistant=%#v tool=%#v", assistant, toolMessage)
+	}
+	wireTools, ok := payload["tools"].([]any)
+	if !ok || len(wireTools) != 1 {
+		t.Fatalf("tools=%#v", payload["tools"])
+	}
+	wireTool := wireTools[0].(map[string]any)
+	if wireTool["type"] != "function" || wireTool["function"].(map[string]any)["name"] != "pwd" {
+		t.Fatalf("wire tool=%#v", wireTool)
+	}
+}
+
+func TestResponsesSessionRejectsMalformedLinkAPIHistoryBeforeExchange(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[]}`, 1, 1)}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = session.Exchange(context.Background(), []any{map[string]any{"type": "function_call_output", "call_id": "missing-call", "output": "{}"}}, nil, "auto", false, nil)
+	if err == nil || len(adapter.requests) != 0 {
+		t.Fatalf("err=%v requests=%d", err, len(adapter.requests))
+	}
+}
+
+func TestResponsesSessionClassifiesIncompleteResponseBeforeUsageOvershoot(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}`, 10, 80)}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = session.Exchange(context.Background(), []any{map[string]any{"role": "user", "content": "x"}}, nil, "auto", false, nil)
+	evidence := session.Evidence()
+	if !errors.Is(err, ErrAgenticRun) || errors.Is(err, ErrProviderOutputLimitExceeded) || session.ProviderCalls() != 1 || session.Usage().OutputTokens != 80 || len(evidence) != 1 || !evidence[0].ProtocolInvalid {
+		t.Fatalf("err=%v calls=%d usage=%+v", err, session.ProviderCalls(), session.Usage())
+	}
+}
+
 func TestResponsesSessionRejectsResponseModelDrift(t *testing.T) {
 	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"model":"gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)}}
 	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
@@ -180,8 +255,8 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 	if json.Unmarshal(adapter.requests[0].Payload, &first) != nil || json.Unmarshal(adapter.requests[1].Payload, &second) != nil {
 		t.Fatal("decode requests")
 	}
-	if first["max_output_tokens"] != float64(64) || second["max_output_tokens"] != float64(10) {
-		t.Fatalf("max outputs first=%v second=%v", first["max_output_tokens"], second["max_output_tokens"])
+	if first["max_tokens"] != float64(64) || second["max_tokens"] != float64(10) {
+		t.Fatalf("max outputs first=%v second=%v", first["max_tokens"], second["max_tokens"])
 	}
 	if session.Usage().OutputTokens != 71 || session.ProviderCalls() != 2 {
 		t.Fatalf("usage=%+v calls=%d", session.Usage(), session.ProviderCalls())
@@ -221,7 +296,7 @@ func TestResponsesSessionCapsOutputByRemainingTotalBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	var payload map[string]any
-	if json.Unmarshal(adapter.requests[1].Payload, &payload) != nil || payload["max_output_tokens"].(float64) != 5 {
+	if json.Unmarshal(adapter.requests[1].Payload, &payload) != nil || payload["max_tokens"].(float64) != 5 {
 		t.Fatalf("payload=%s", adapter.requests[1].Payload)
 	}
 }

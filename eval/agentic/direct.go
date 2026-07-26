@@ -63,11 +63,7 @@ func RunDirectStateless(ctx context.Context, adapter provider.Adapter, task Task
 			"parameters": parameters, "strict": false,
 		})
 	}
-	payload, err := json.Marshal(map[string]any{
-		"model": model, "input": input, "tools": tools, "tool_choice": "required",
-		"parallel_tool_calls": true, "max_output_tokens": maxOutputTokens,
-		"stream": false, "background": false,
-	})
+	payload, err := marshalLinkAPIWirePayload(model, input, tools, "required", true, maxOutputTokens)
 	if err != nil {
 		return DirectResult{}, ErrAgenticRun
 	}

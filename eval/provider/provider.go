@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	LinkAPIResponsesProtocol = "openai-responses-v1"
-	LinkAPIResponsesEndpoint = "https://api.linkapi.ai/v1/responses"
+	LinkAPIResponsesProtocol = "linkapi-messages-responses-v2"
+	LinkAPIResponsesEndpoint = "https://linkapi.ai/v1/responses"
 	maxExchangeBytes         = 1024 * 1024
 )
 
@@ -100,8 +100,14 @@ func (adapter *LinkAPIResponses) Exchange(ctx context.Context, request Request) 
 		return Response{}, fmt.Errorf("%w: invalid Responses payload", ErrExchange)
 	}
 	stream, hasStream := envelope["stream"]
-	background, hasBackground := envelope["background"]
-	if (hasStream && stream != false) || (hasBackground && background != false) {
+	messages, hasMessages := envelope["messages"].([]any)
+	maxTokens, hasMaxTokens := envelope["max_tokens"].(json.Number)
+	_, hasInput := envelope["input"]
+	_, hasLegacyMax := envelope["max_output_tokens"]
+	_, hasBackground := envelope["background"]
+	parsedMaxTokens, maxTokensErr := parseUint(maxTokens)
+	if !hasMessages || len(messages) == 0 || !hasMaxTokens || maxTokensErr != nil || parsedMaxTokens == 0 ||
+		hasInput || hasLegacyMax || hasBackground || (hasStream && stream != false) {
 		return Response{}, fmt.Errorf("%w: invalid Responses payload", ErrExchange)
 	}
 	token, exists := adapter.credential()

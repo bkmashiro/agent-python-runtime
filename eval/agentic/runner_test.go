@@ -276,7 +276,20 @@ func TestRunDevelopmentTrialDirectUsesBoundedResponsesLoopAndScores(t *testing.T
 	if !strings.Contains(string(adapter.requests[0].Payload), "the target file must already exist; echo does not create missing files") {
 		t.Fatalf("direct request omits the Host echo error contract: %s", adapter.requests[0].Payload)
 	}
-	if !strings.Contains(string(adapter.requests[1].Payload), "function_call_output") {
+	var continuation struct {
+		Messages []struct {
+			Role       string `json:"role"`
+			ToolCallID string `json:"tool_call_id"`
+		} `json:"messages"`
+	}
+	if json.Unmarshal(adapter.requests[1].Payload, &continuation) != nil {
+		t.Fatal("decode continuation")
+	}
+	hasToolResult := false
+	for _, message := range continuation.Messages {
+		hasToolResult = hasToolResult || message.Role == "tool" && message.ToolCallID != ""
+	}
+	if !hasToolResult {
 		t.Fatal("next turn omitted prior Host tool outputs")
 	}
 	encoded, _ := json.Marshal(result)

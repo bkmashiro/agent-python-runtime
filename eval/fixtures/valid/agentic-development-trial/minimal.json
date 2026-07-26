@@ -10,7 +10,9 @@
   "identity": {
     "repository_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "host_artifact_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "dataset_manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    "dataset_manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "provider_catalog_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "provider_catalog_observed_at": "2026-07-26T11:00:00Z"
   },
   "replicate": 0,
   "limits": {
@@ -28,6 +30,7 @@
   "provider_attempts": 1,
   "provider_calls": 1,
   "tool_calls": 1,
+  "python_attempts": 0,
   "python_runs": 0,
   "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3},
   "catalog_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

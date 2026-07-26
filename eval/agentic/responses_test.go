@@ -121,7 +121,29 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 	}
 }
 
-func TestParseResponsesRejectsUnknownDuplicateAndAmbiguousCalls(t *testing.T) {
+func TestResponsesSessionCapsOutputByRemainingTotalBudget(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"one"}]}]}`, 90, 5),
+		responseFixture(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"two"}]}]}`, 1, 1),
+	}}
+	limits := TrialLimits{MaxProviderCalls: 2, MaxToolCalls: 1, MaxPythonRuns: 1, MaxInputTokens: 100, MaxOutputTokens: 100, MaxTotalTokens: 100, MaxOutputTokensPerCall: 50}
+	session, err := NewResponsesSession(adapter, developmentModel, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if json.Unmarshal(adapter.requests[1].Payload, &payload) != nil || payload["max_output_tokens"].(float64) != 5 {
+		t.Fatalf("payload=%s", adapter.requests[1].Payload)
+	}
+}
+
+func TestParseResponsesOutputRejectsUnknownDuplicateAndLeakyMarshal(t *testing.T) {
 	invalid := []string{
 		`{"output":[],"output":[]}`,
 		`{"output":[{"type":"function_call","call_id":"c1","name":"unknown","arguments":"{}"}]}`,

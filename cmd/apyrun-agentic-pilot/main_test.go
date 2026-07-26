@@ -41,9 +41,10 @@ func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 		"schema_version": "agentic-pilot-activation/v1", "status": "approved", "plan_digest": plan.Digest,
 		"repository_commit": strings.Repeat("a", 40), "host_artifact_digest": hostDigest,
 		"dataset_manifest_digest": plan.DatasetManifestDigest,
-		"guest_artifacts":         map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
-		"maximum_spend":           map[string]any{"currency": "USD", "decimal": "5.00"},
-		"approved_by":             "owner", "approved_at": "2026-07-26T12:00:00Z",
+		"provider_catalog_digest": "sha256:" + strings.Repeat("d", 64), "provider_catalog_observed_at": "2026-07-26T11:00:00Z",
+		"guest_artifacts": map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
+		"maximum_spend":   map[string]any{"currency": "USD", "decimal": "5.00"},
+		"approved_by":     "owner", "approved_at": "2026-07-26T12:00:00Z",
 	}
 	activationBytes, _ := json.Marshal(activationDocument)
 	activation := filepath.Join(t.TempDir(), "activation.json")
@@ -65,5 +66,26 @@ func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 	}
 	if _, statErr := os.Lstat(out); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("output created before gate: %v", statErr)
+	}
+
+	guestDigest, _ := fileDigest(guest, 1024)
+	activationDocument["guest_artifacts"] = map[string]any{"core": guestDigest}
+	activationBytes, _ = json.Marshal(activationDocument)
+	validActivation := filepath.Join(t.TempDir(), "activation.json")
+	if os.WriteFile(validActivation, activationBytes, 0o600) != nil {
+		t.Fatal("write valid activation")
+	}
+	t.Setenv("LINKAPI_API_KEY", "   ")
+	adapterCalled = false
+	out = filepath.Join(t.TempDir(), "out")
+	err = run(context.Background(), []string{
+		"--dataset", dataset, "--plan", planPath, "--activation", validActivation, "--guest", guest,
+		"--out", out, "--repository-commit", strings.Repeat("a", 40),
+	}, deps)
+	if err == nil || !strings.Contains(err.Error(), "credential") || adapterCalled {
+		t.Fatalf("err=%v adapter_called=%v", err, adapterCalled)
+	}
+	if _, statErr := os.Lstat(out); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("output created before credential gate: %v", statErr)
 	}
 }

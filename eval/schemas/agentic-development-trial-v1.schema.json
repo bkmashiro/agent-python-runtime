@@ -7,7 +7,7 @@
   "required": [
     "version", "trial_id", "spec_digest", "task_id", "task_digest", "source_record_digest",
     "condition", "model", "identity", "replicate", "limits", "prompt_digest", "surface_digest", "passed",
-    "provider_attempts", "provider_calls", "tool_calls", "python_runs", "usage", "catalog_digest", "exchanges"
+    "provider_attempts", "provider_calls", "tool_calls", "python_attempts", "python_runs", "usage", "catalog_digest", "exchanges"
   ],
   "properties": {
     "version": {"const": "agentic-development-trial/v1"},
@@ -28,6 +28,7 @@
     "provider_attempts": {"type": "integer", "minimum": 0, "maximum": 64},
     "provider_calls": {"type": "integer", "minimum": 0, "maximum": 64},
     "tool_calls": {"type": "integer", "minimum": 0, "maximum": 256},
+    "python_attempts": {"type": "integer", "minimum": 0, "maximum": 256},
     "python_runs": {"type": "integer", "minimum": 0, "maximum": 256},
     "usage": {"$ref": "#/$defs/usage"},
     "catalog_digest": {"$ref": "#/$defs/digest"},
@@ -53,11 +54,13 @@
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "identity": {
       "type": "object", "additionalProperties": false,
-      "required": ["repository_commit", "host_artifact_digest", "dataset_manifest_digest"],
+      "required": ["repository_commit", "host_artifact_digest", "dataset_manifest_digest", "provider_catalog_digest", "provider_catalog_observed_at"],
       "properties": {
         "repository_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "host_artifact_digest": {"$ref": "#/$defs/digest"},
         "dataset_manifest_digest": {"$ref": "#/$defs/digest"},
+        "provider_catalog_digest": {"$ref": "#/$defs/digest"},
+        "provider_catalog_observed_at": {"type": "string", "format": "date-time"},
         "guest_artifact_digest": {"$ref": "#/$defs/digest"},
         "guest_profile": {"enum": ["core", "numpy-core"]}
       },

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ func validTrialResult(t *testing.T) TrialResult {
 	identity := ExecutionIdentity{
 		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
+		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
 	}
 	result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapterForStatefulOracle(t, task, func(name string) string { return name }), task, ConditionDirect, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, nil)
 	if err != nil {
@@ -43,6 +45,48 @@ func TestValidateTrialResultBindsUsageConditionAndScores(t *testing.T) {
 	}
 }
 
+type failingPythonWorkflow struct{}
+
+func (failingPythonWorkflow) Execute(context.Context, string, string, uint32) (PythonRunResult, error) {
+	return PythonRunResult{}, errors.New("engine unavailable")
+}
+func (failingPythonWorkflow) Close(context.Context) error { return nil }
+
+func TestProviderUsageOvershootProducesValidAbortArtifact(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	response := responseFixture(`{"output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 5, 4_000)
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
+		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
+	}
+	result, err := RunDevelopmentTrialWithIdentity(context.Background(), &scriptedAdapter{responses: []provider.Response{response}}, task, ConditionDirect, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "provider_budget_exceeded" || result.ProviderAttempts != 1 || result.ProviderCalls != 1 || result.Usage.OutputTokens != 4_000 || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestPythonEngineFailureProducesValidAttemptOnlyArtifact(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"output":[{"type":"function_call","call_id":"py1","name":"run_python","arguments":"{\"code\":\"result = {}\"}"}]}`, 5, 5)}}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
+		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
+		GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapter, task, ConditionPython, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, func(*ToolRuntime) (PythonWorkflow, error) { return failingPythonWorkflow{}, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "python_engine_failure" || result.PythonAttempts != 1 || result.PythonRuns != 0 || len(result.PythonEvidence) != 0 || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMissingUsageProducesValidFailureArtifactWithoutInventedUsage(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	response := responseFixture(`{"output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 1, 1)
@@ -50,6 +94,7 @@ func TestMissingUsageProducesValidFailureArtifactWithoutInventedUsage(t *testing
 	identity := ExecutionIdentity{
 		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
+		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
 	}
 	result, err := RunDevelopmentTrialWithIdentity(context.Background(), &scriptedAdapter{responses: []provider.Response{response}}, task, ConditionDirect, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, nil)
 	if err != nil {
@@ -64,6 +109,7 @@ func TestExecutionIdentityRequiresGuestOnlyForPythonSurfaces(t *testing.T) {
 	base := ExecutionIdentity{
 		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
+		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
 	}
 	if !validExecutionIdentity(base, ConditionDirect) || validExecutionIdentity(base, ConditionPython) {
 		t.Fatal("base identity condition boundary failed")

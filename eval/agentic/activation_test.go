@@ -14,9 +14,10 @@ func writeActivation(t *testing.T, plan DevelopmentPilotPlan, hostDigest string)
 		"schema_version": "agentic-pilot-activation/v1", "status": "approved", "plan_digest": plan.Digest,
 		"repository_commit": strings.Repeat("a", 40), "host_artifact_digest": hostDigest,
 		"dataset_manifest_digest": plan.DatasetManifestDigest,
-		"guest_artifacts":         map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
-		"maximum_spend":           map[string]any{"currency": "USD", "decimal": "5.00"},
-		"approved_by":             "owner", "approved_at": "2026-07-26T12:00:00Z",
+		"provider_catalog_digest": "sha256:" + strings.Repeat("d", 64), "provider_catalog_observed_at": "2026-07-26T11:00:00Z",
+		"guest_artifacts": map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
+		"maximum_spend":   map[string]any{"currency": "USD", "decimal": "5.00"},
+		"approved_by":     "owner", "approved_at": "2026-07-26T12:00:00Z",
 	}
 	content, _ := json.Marshal(document)
 	path := filepath.Join(t.TempDir(), "activation.json")

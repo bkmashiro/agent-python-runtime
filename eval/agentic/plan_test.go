@@ -29,6 +29,67 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	}
 }
 
+func TestSealedEvaluationPlanRecomputesBoundsAndLatinSquare(t *testing.T) {
+	root := datasetRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, "evaluation-plan.sealed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan struct {
+		Status                  string                 `json:"status"`
+		Split                   string                 `json:"split"`
+		Model                   string                 `json:"model"`
+		CurrentDecisionEligible bool                   `json:"current_decision_eligible"`
+		TaskIDs                 []string               `json:"task_ids"`
+		Replicates              []uint32               `json:"replicates"`
+		ConditionOrder          map[string][]Condition `json:"condition_order_by_replicate"`
+		Global                  struct {
+			TrialCount          uint32 `json:"trial_count"`
+			MaxProviderAttempts uint32 `json:"max_provider_attempts"`
+			MaxInputTokens      uint64 `json:"max_input_tokens"`
+			MaxOutputTokens     uint64 `json:"max_output_tokens"`
+			MaxTotalTokens      uint64 `json:"max_total_tokens"`
+			MaxToolCalls        uint32 `json:"max_tool_calls"`
+			MaxPythonRuns       uint32 `json:"max_python_runs"`
+		} `json:"global_bounds"`
+	}
+	if json.Unmarshal(content, &plan) != nil || plan.Status != "sealed_not_runnable" || plan.Split != "evaluation" || plan.Model != developmentModel || plan.CurrentDecisionEligible || len(plan.TaskIDs) != 10 || len(plan.Replicates) != 3 {
+		t.Fatalf("plan=%+v", plan)
+	}
+	dataset, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluation := map[string]Task{}
+	for _, task := range dataset.Tasks {
+		if task.Split == "evaluation" {
+			evaluation[task.ID] = task
+		}
+	}
+	turns := 0
+	for _, id := range plan.TaskIDs {
+		task, exists := evaluation[id]
+		if !exists {
+			t.Fatalf("unknown evaluation task %s", id)
+		}
+		turns += len(task.Interaction.Turns)
+	}
+	attempts := uint32(turns * 3 * 3)
+	if plan.Global.TrialCount != 90 || plan.Global.MaxProviderAttempts != attempts || plan.Global.MaxInputTokens != uint64(attempts)*20_000 || plan.Global.MaxOutputTokens != uint64(attempts)*1_024 || plan.Global.MaxTotalTokens != plan.Global.MaxInputTokens+plan.Global.MaxOutputTokens || plan.Global.MaxToolCalls != 90*32 || plan.Global.MaxPythonRuns != uint32(turns*2*3) {
+		t.Fatalf("turns=%d global=%+v", turns, plan.Global)
+	}
+	for _, replicate := range []string{"0", "1", "2"} {
+		order := plan.ConditionOrder[replicate]
+		seen := map[Condition]bool{}
+		for _, condition := range order {
+			seen[condition] = true
+		}
+		if len(order) != 3 || !seen[ConditionDirect] || !seen[ConditionPython] || !seen[ConditionHybrid] {
+			t.Fatalf("replicate %s order=%v", replicate, order)
+		}
+	}
+}
+
 func TestLoadDevelopmentPilotPlanRejectsTamperedGlobalBound(t *testing.T) {
 	root := datasetRoot(t)
 	content, err := os.ReadFile(filepath.Join(root, "development-pilot-plan.json"))

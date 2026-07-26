@@ -50,7 +50,7 @@ func TestAgenticPythonExecutorUsesRealGuestAndRollsBackFailure(t *testing.T) {
 	committed, err := executor.Execute(context.Background(), "agentic-e2e-commit", `
 from host_tools import cd, touch
 cd(folder="Documents")
-touch(name="agentic-e2e.txt")
+touch(file_name="agentic-e2e.txt")
 result = {"ok": True}
 `, 4)
 	if err != nil || !committed.Success || committed.CapabilityCalls != 2 || tools.FileSystem().Digest() == initial {

@@ -5,6 +5,8 @@
   "repository_commit": "REPLACE_WITH_40_HEX_COMMIT",
   "host_artifact_digest": "REPLACE_WITH_SHA256_DIGEST",
   "dataset_manifest_digest": "sha256:f84c8ba172c80ce1e64644391faef7d97f4c9581c72c100deb3664fc532c86e6",
+  "provider_catalog_digest": "REPLACE_WITH_SHA256_DIGEST",
+  "provider_catalog_observed_at": "REPLACE_WITH_RFC3339_UTC_TIMESTAMP",
   "guest_artifacts": {"core": "REPLACE_WITH_SHA256_DIGEST"},
   "maximum_spend": {"currency": "USD", "decimal": "REQUIRES_OWNER_DECISION"},
   "approved_by": "pending",

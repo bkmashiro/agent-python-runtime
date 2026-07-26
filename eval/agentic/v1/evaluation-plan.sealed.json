@@ -1,0 +1,92 @@
+{
+  "schema_version": "agentic-evaluation-plan/v1",
+  "status": "sealed_not_runnable",
+  "split": "evaluation",
+  "model": "gpt-5.4",
+  "current_decision_eligible": false,
+  "dataset_manifest_digest": "sha256:f84c8ba172c80ce1e64644391faef7d97f4c9581c72c100deb3664fc532c86e6",
+  "development_plan_digest": "sha256:4af5cf83231fbc9fc3a5e9a09b9a330e0ca49ae21aacbdd24491f6e60140dc3a",
+  "credential_env_name": "LINKAPI_API_KEY",
+  "transport_retry_policy": {"automatic_retries": 0, "reason": "unverified_provider_idempotency"},
+  "cost_gate": {"status": "awaiting_owner_approval", "separate_activation_required": true},
+  "promotion_prerequisites": [
+    "complete_30_trial_development_manifest",
+    "zero_development_infrastructure_failures",
+    "manual_review_of_development_artifacts",
+    "exact_source_host_guest_dataset_and_provider_identity_lock",
+    "separate_owner_approved_evaluation_spend_cap",
+    "explicit_code_change_enabling_evaluation_split"
+  ],
+  "conditions": ["direct", "python", "hybrid"],
+  "replicates": [0, 1, 2],
+  "condition_order_by_replicate": {
+    "0": ["direct", "python", "hybrid"],
+    "1": ["python", "hybrid", "direct"],
+    "2": ["hybrid", "direct", "python"]
+  },
+  "guest_profiles": ["core"],
+  "task_ids": [
+    "bfcl-v4-stateful-local-tools-multi_turn_base_1",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_10",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_25",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_26",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_3",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_156",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_157",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_169",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_2",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_62"
+  ],
+  "per_trial": {
+    "max_provider_attempts_per_turn": 1,
+    "max_tool_calls": 32,
+    "max_python_runs_per_turn": 1,
+    "max_input_tokens_per_provider_attempt": 20000,
+    "max_output_tokens_per_provider_attempt": 1024
+  },
+  "global_bounds": {
+    "trial_count": 90,
+    "max_provider_attempts": 207,
+    "max_input_tokens": 4140000,
+    "max_output_tokens": 211968,
+    "max_total_tokens": 4351968,
+    "max_tool_calls": 2880,
+    "max_python_runs": 138
+  },
+  "stopping_rules": {
+    "abort_batch_on": [
+      "usage_missing",
+      "provider_budget_exceeded",
+      "provider_timeout",
+      "provider_or_protocol_failure",
+      "python_engine_failure",
+      "python_trace_mismatch",
+      "direct_host_call_failed",
+      "invalid_tool_observation",
+      "artifact_identity_mismatch"
+    ],
+    "continue_and_score_failure_on": ["model_refusal", "no_tool_calls", "python_guest_error", "task_score_failure"]
+  },
+  "analysis": {
+    "primary_metric": "task_pass_rate",
+    "primary_estimands_percentage_points": ["hybrid_minus_python", "python_minus_direct"],
+    "pairing_unit": "task_and_replicate",
+    "uncertainty": {
+      "method": "paired_cluster_bootstrap_over_tasks",
+      "draws": 10000,
+      "seed": 20260726,
+      "keep_replicates_within_resampled_task": true
+    },
+    "minimum_reporting": [
+      "pass_rate_by_condition",
+      "stateful_trace_pass_rate",
+      "stateful_final_state_pass_rate",
+      "input_output_and_total_tokens",
+      "provider_attempts",
+      "host_tool_calls",
+      "python_runs",
+      "all_failure_codes"
+    ],
+    "prohibited_claims": ["development_results_as_evaluation", "p_value_significance_with_ten_tasks", "dropping_failed_trials", "post_hoc_metric_substitution"]
+  }
+}

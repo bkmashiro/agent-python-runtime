@@ -12,14 +12,16 @@ var ErrPilotActivation = errors.New("invalid agentic pilot activation")
 var spendDecimalPattern = regexp.MustCompile(`^[0-9]{1,6}\.[0-9]{2}$`)
 
 type PilotActivation struct {
-	SchemaVersion         string            `json:"schema_version"`
-	Status                string            `json:"status"`
-	PlanDigest            string            `json:"plan_digest"`
-	RepositoryCommit      string            `json:"repository_commit"`
-	HostArtifactDigest    string            `json:"host_artifact_digest"`
-	DatasetManifestDigest string            `json:"dataset_manifest_digest"`
-	GuestArtifacts        map[string]string `json:"guest_artifacts"`
-	MaximumSpend          struct {
+	SchemaVersion             string            `json:"schema_version"`
+	Status                    string            `json:"status"`
+	PlanDigest                string            `json:"plan_digest"`
+	RepositoryCommit          string            `json:"repository_commit"`
+	HostArtifactDigest        string            `json:"host_artifact_digest"`
+	DatasetManifestDigest     string            `json:"dataset_manifest_digest"`
+	ProviderCatalogDigest     string            `json:"provider_catalog_digest"`
+	ProviderCatalogObservedAt string            `json:"provider_catalog_observed_at"`
+	GuestArtifacts            map[string]string `json:"guest_artifacts"`
+	MaximumSpend              struct {
 		Currency string `json:"currency"`
 		Decimal  string `json:"decimal"`
 	} `json:"maximum_spend"`
@@ -42,9 +44,11 @@ func LoadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDig
 		return PilotActivation{}, ErrPilotActivation
 	}
 	approvedAt, timeErr := time.Parse(time.RFC3339, activation.ApprovedAt)
+	catalogObservedAt, catalogTimeErr := time.Parse(time.RFC3339, activation.ProviderCatalogObservedAt)
 	if activation.SchemaVersion != "agentic-pilot-activation/v1" || activation.Status != "approved" ||
 		activation.PlanDigest != plan.Digest || !validLowerHex(activation.RepositoryCommit, 40) ||
 		activation.HostArtifactDigest != hostArtifactDigest || activation.DatasetManifestDigest != plan.DatasetManifestDigest ||
+		!validDigest(activation.ProviderCatalogDigest) || catalogTimeErr != nil || catalogObservedAt.Location() != time.UTC ||
 		len(activation.GuestArtifacts) != 1 || !validDigest(activation.GuestArtifacts["core"]) ||
 		activation.MaximumSpend.Currency != "USD" || !positiveSpendDecimal(activation.MaximumSpend.Decimal) ||
 		activation.ApprovedBy != "owner" || timeErr != nil || approvedAt.Location() != time.UTC {
@@ -58,6 +62,7 @@ func (activation PilotActivation) Identity(condition Condition) (ExecutionIdenti
 	identity := ExecutionIdentity{
 		RepositoryCommit: activation.RepositoryCommit, HostArtifactDigest: activation.HostArtifactDigest,
 		DatasetManifestDigest: activation.DatasetManifestDigest,
+		ProviderCatalogDigest: activation.ProviderCatalogDigest, ProviderCatalogObservedAt: activation.ProviderCatalogObservedAt,
 	}
 	if condition != ConditionDirect {
 		identity.GuestProfile = "core"

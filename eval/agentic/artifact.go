@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
@@ -18,7 +19,7 @@ func ValidateTrialResult(result TrialResult) error {
 		!validDigest(result.PromptDigest) || !validDigest(result.SurfaceDigest) ||
 		!validDigest(result.CatalogDigest) || result.ProviderCalls != uint32(len(result.Exchanges)) ||
 		result.ProviderCalls > result.ProviderAttempts || result.ProviderAttempts > result.Limits.MaxProviderCalls || result.ToolCalls < 0 || result.ToolCalls > int(result.Limits.MaxToolCalls) ||
-		result.PythonRuns > result.Limits.MaxPythonRuns || len(result.TextDigests) > int(result.ProviderCalls) {
+		result.PythonRuns > result.PythonAttempts || result.PythonAttempts > result.Limits.MaxPythonRuns || len(result.TextDigests) > int(result.ProviderCalls) {
 		return ErrTrialArtifact
 	}
 	for _, value := range result.TextDigests {
@@ -28,8 +29,12 @@ func ValidateTrialResult(result TrialResult) error {
 	}
 	var usage = result.Usage
 	declaredTotal, declaredOK := checkedAdd(usage.InputTokens, usage.OutputTokens)
-	if !declaredOK || usage.TotalTokens != declaredTotal || usage.InputTokens > result.Limits.MaxInputTokens ||
-		usage.OutputTokens > result.Limits.MaxOutputTokens || usage.TotalTokens > result.Limits.MaxTotalTokens {
+	if !declaredOK || usage.TotalTokens != declaredTotal {
+		return ErrTrialArtifact
+	}
+	overBudget := usage.InputTokens > result.Limits.MaxInputTokens || usage.OutputTokens > result.Limits.MaxOutputTokens || usage.TotalTokens > result.Limits.MaxTotalTokens
+	budgetExhausted := overBudget || usage.InputTokens >= result.Limits.MaxInputTokens || usage.OutputTokens >= result.Limits.MaxOutputTokens || usage.TotalTokens >= result.Limits.MaxTotalTokens || result.ProviderAttempts >= result.Limits.MaxProviderCalls
+	if (overBudget && result.ErrorCode != "provider_budget_exceeded") || (result.ErrorCode == "provider_budget_exceeded" && !budgetExhausted) {
 		return ErrTrialArtifact
 	}
 	var summedInput, summedOutput, summedTotal uint64
@@ -54,7 +59,7 @@ func ValidateTrialResult(result TrialResult) error {
 		return ErrTrialArtifact
 	}
 	if result.Condition == ConditionDirect {
-		if result.PythonRuns != 0 || len(result.PythonEvidence) != 0 {
+		if result.PythonAttempts != 0 || result.PythonRuns != 0 || len(result.PythonEvidence) != 0 {
 			return ErrTrialArtifact
 		}
 	} else if result.PythonRuns != uint32(len(result.PythonEvidence)) {
@@ -98,7 +103,9 @@ func ValidateTrialResult(result TrialResult) error {
 }
 
 func validExecutionIdentity(identity ExecutionIdentity, condition Condition) bool {
-	if !validLowerHex(identity.RepositoryCommit, 40) || !validDigest(identity.HostArtifactDigest) || !validDigest(identity.DatasetManifestDigest) {
+	observedAt, observedErr := time.Parse(time.RFC3339, identity.ProviderCatalogObservedAt)
+	if !validLowerHex(identity.RepositoryCommit, 40) || !validDigest(identity.HostArtifactDigest) || !validDigest(identity.DatasetManifestDigest) ||
+		!validDigest(identity.ProviderCatalogDigest) || observedErr != nil || observedAt.Location() != time.UTC {
 		return false
 	}
 	if condition == ConditionDirect {

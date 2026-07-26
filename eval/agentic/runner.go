@@ -20,11 +20,13 @@ type PythonWorkflow interface {
 type PythonWorkflowFactory func(*ToolRuntime) (PythonWorkflow, error)
 
 type ExecutionIdentity struct {
-	RepositoryCommit      string `json:"repository_commit"`
-	HostArtifactDigest    string `json:"host_artifact_digest"`
-	DatasetManifestDigest string `json:"dataset_manifest_digest"`
-	GuestArtifactDigest   string `json:"guest_artifact_digest,omitempty"`
-	GuestProfile          string `json:"guest_profile,omitempty"`
+	RepositoryCommit          string `json:"repository_commit"`
+	HostArtifactDigest        string `json:"host_artifact_digest"`
+	DatasetManifestDigest     string `json:"dataset_manifest_digest"`
+	ProviderCatalogDigest     string `json:"provider_catalog_digest"`
+	ProviderCatalogObservedAt string `json:"provider_catalog_observed_at"`
+	GuestArtifactDigest       string `json:"guest_artifact_digest,omitempty"`
+	GuestProfile              string `json:"guest_profile,omitempty"`
 }
 
 type TrialResult struct {
@@ -46,6 +48,7 @@ type TrialResult struct {
 	ProviderAttempts   uint32             `json:"provider_attempts"`
 	ProviderCalls      uint32             `json:"provider_calls"`
 	ToolCalls          int                `json:"tool_calls"`
+	PythonAttempts     uint32             `json:"python_attempts"`
 	PythonRuns         uint32             `json:"python_runs"`
 	Usage              provider.Usage     `json:"usage"`
 	CatalogDigest      string             `json:"catalog_digest"`
@@ -180,7 +183,7 @@ func RunDevelopmentTrialWithIdentity(
 		for _, call := range parsed.Calls {
 			var observation json.RawMessage
 			if call.CanonicalName == "run_python" {
-				if workflow == nil || result.PythonRuns >= limits.MaxPythonRuns {
+				if workflow == nil || result.PythonAttempts >= limits.MaxPythonRuns {
 					result.ErrorCode = "python_run_budget_exceeded"
 					break
 				}
@@ -196,9 +199,9 @@ func RunDevelopmentTrialWithIdentity(
 					result.ErrorCode = "tool_call_budget_exceeded"
 					break
 				}
-				result.PythonRuns++
+				result.PythonAttempts++
 				pythonResult, runErr := workflow.Execute(
-					ctx, fmt.Sprintf("agentic-python-%d", result.PythonRuns), arguments.Code,
+					ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
 					limits.MaxToolCalls-uint32(usedCalls),
 				)
 				if runErr != nil {
@@ -206,6 +209,7 @@ func RunDevelopmentTrialWithIdentity(
 					break
 				}
 				result.PythonEvidence = append(result.PythonEvidence, pythonResult)
+				result.PythonRuns++
 				afterCalls := countStatefulCalls(tools.Trace())
 				if afterCalls < usedCalls || afterCalls-usedCalls != int(pythonResult.CapabilityCalls) || afterCalls > int(limits.MaxToolCalls) {
 					result.ErrorCode = "python_trace_mismatch"

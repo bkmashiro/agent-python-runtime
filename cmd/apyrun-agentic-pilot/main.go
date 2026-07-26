@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/eval/agentic"
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
@@ -42,6 +43,8 @@ type pilotSummary struct {
 	PassedTrials     uint32          `json:"passed_trials"`
 	ProviderAttempts uint32          `json:"provider_attempts"`
 	ProviderCalls    uint32          `json:"provider_calls"`
+	PythonAttempts   uint32          `json:"python_attempts"`
+	PythonRuns       uint32          `json:"python_runs"`
 	Usage            provider.Usage  `json:"usage"`
 	Artifacts        []artifactEntry `json:"artifacts"`
 }
@@ -82,7 +85,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	if activation.GuestArtifacts["core"] != guestDigest {
 		return agentic.ErrPilotActivation
 	}
-	if _, exists := os.LookupEnv(plan.CredentialEnvName); !exists {
+	credential, exists := os.LookupEnv(plan.CredentialEnvName)
+	if !exists || strings.TrimSpace(credential) == "" {
 		return errors.New("provider credential is unavailable")
 	}
 	if info, statErr := os.Lstat(*outputRoot); statErr == nil || !errors.Is(statErr, os.ErrNotExist) || info != nil {
@@ -147,6 +151,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 				}
 				summary.ProviderAttempts += result.ProviderAttempts
 				summary.ProviderCalls += result.ProviderCalls
+				summary.PythonAttempts += result.PythonAttempts
+				summary.PythonRuns += result.PythonRuns
 				if summary.Usage.InputTokens, err = addBounded(summary.Usage.InputTokens, result.Usage.InputTokens, plan.GlobalBounds.MaxInputTokens); err != nil {
 					return err
 				}
@@ -168,7 +174,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 			}
 		}
 	}
-	if summary.TrialCount != plan.GlobalBounds.TrialCount || summary.ProviderAttempts > plan.GlobalBounds.MaxProviderAttempts {
+	if summary.TrialCount != plan.GlobalBounds.TrialCount || summary.ProviderAttempts > plan.GlobalBounds.MaxProviderAttempts || summary.PythonAttempts > plan.GlobalBounds.MaxPythonRuns {
 		return agentic.ErrPilotPlan
 	}
 	summaryBytes, err := json.MarshalIndent(summary, "", "  ")

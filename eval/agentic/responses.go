@@ -73,9 +73,13 @@ func (session *ResponsesSession) Exchange(
 		return ParsedResponse{}, ErrAgenticRun
 	}
 	remainingOutput := session.limits.MaxOutputTokens - session.usage.OutputTokens
+	remainingTotal := session.limits.MaxTotalTokens - session.usage.TotalTokens
 	perCallOutput := session.limits.MaxOutputTokensPerCall
 	if remainingOutput < perCallOutput {
 		perCallOutput = remainingOutput
+	}
+	if remainingTotal < perCallOutput {
+		perCallOutput = remainingTotal
 	}
 	payloadDocument := map[string]any{
 		"model": session.model, "input": input, "max_output_tokens": perCallOutput,

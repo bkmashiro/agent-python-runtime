@@ -1,6 +1,9 @@
 package runtime
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestDecodeAndValidateRunResponseEnforcesOutputSchema(t *testing.T) {
 	request := RunRequest{RunID: "run", Code: "result = {}", Inputs: []byte(`{}`), OutputSchema: []byte(`{"type":"object","additionalProperties":false,"required":["ok"],"properties":{"ok":{"type":"boolean"}}}`)}
@@ -20,6 +23,14 @@ func TestDecodeAndValidateRunResponseEnforcesOutputSchema(t *testing.T) {
 				t.Fatal("invalid response accepted")
 			}
 		})
+	}
+}
+
+func TestDecodeAndValidateRunResponseReturnsPartialMetricsForSchemaMismatch(t *testing.T) {
+	request := RunRequest{RunID: "run", Code: "print('missing result')", Inputs: []byte(`{}`), OutputSchema: []byte(`{"type":"object"}`)}
+	response, err := DecodeAndValidateRunResponse(request, []byte(`{"status":"ok","result":null,"receipts":[],"metrics":{"capability_calls":4,"result_bytes":4},"error":null}`))
+	if !errors.Is(err, ErrRunResultSchemaMismatch) || response.Metrics == nil || response.Metrics.CapabilityCalls != 4 {
+		t.Fatalf("response=%+v err=%v", response, err)
 	}
 }
 

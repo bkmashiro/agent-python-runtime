@@ -138,6 +138,18 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	payload, runErr := executor.runner.Run(ctx, requestBytes, executor.prepare)
 	result.RawResponse = append(json.RawMessage(nil), payload...)
 	if runErr != nil {
+		if errors.Is(runErr, runtimeconfig.ErrRunResultSchemaMismatch) {
+			response, validationErr := runtimeconfig.DecodeAndValidateRunResponse(request, payload)
+			if !errors.Is(validationErr, runtimeconfig.ErrRunResultSchemaMismatch) || response.Metrics == nil || response.Metrics.CapabilityCalls > maxCalls {
+				return result, ErrAgenticRun
+			}
+			result.ResponseDigest = digest(payload)
+			result.CapabilityCalls = response.Metrics.CapabilityCalls
+			result.ErrorCode = "guest_output_schema_mismatch"
+			result.ResultDigest = digest(response.Result)
+			result.Observation, _ = json.Marshal(map[string]any{"error_code": result.ErrorCode, "status": "error"})
+			return result, nil
+		}
 		return result, runErr
 	}
 	result.ResponseDigest = digest(payload)

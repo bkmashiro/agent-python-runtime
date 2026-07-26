@@ -17,6 +17,8 @@ const (
 	RunResponseError RunResponseStatus = "error"
 )
 
+var ErrRunResultSchemaMismatch = errors.New("run result does not match output_schema")
+
 type RunResponse struct {
 	Status   RunResponseStatus `json:"status"`
 	Result   json.RawMessage   `json:"result"`
@@ -57,7 +59,7 @@ func DecodeAndValidateRunResponse(request RunRequest, data []byte) (RunResponse,
 		}
 		if len(request.OutputSchema) != 0 && string(request.OutputSchema) != "null" {
 			if err := validateRunOutput(request.OutputSchema, response.Result); err != nil {
-				return RunResponse{}, err
+				return response, err
 			}
 		}
 	} else {
@@ -96,7 +98,7 @@ func validateRunOutput(schemaBytes, resultBytes []byte) error {
 		return errors.New("run result is invalid JSON")
 	}
 	if err := compiled.Validate(result); err != nil {
-		return errors.New("run result does not match output_schema")
+		return ErrRunResultSchemaMismatch
 	}
 	return nil
 }

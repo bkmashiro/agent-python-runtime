@@ -146,11 +146,11 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		if !exists {
 			return agentic.ErrPilotPlan
 		}
-		limits, err := plan.LimitsFor(task)
-		if err != nil {
-			return err
-		}
 		for _, condition := range scope.Conditions {
+			limits, err := plan.LimitsFor(task, condition)
+			if err != nil {
+				return err
+			}
 			for _, replicate := range scope.Replicates {
 				if !plan.Authorizes(task.ID, condition, replicate) {
 					return agentic.ErrPilotPlan
@@ -246,17 +246,24 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 		wanted[taskID] = struct{}{}
 	}
 	turns := uint64(0)
+	attempts := uint64(0)
 	found := 0
 	for _, task := range dataset.Tasks {
 		if _, exists := wanted[task.ID]; exists && task.Split == "dev" {
 			turns += uint64(len(task.Interaction.Turns))
+			for _, condition := range plan.Conditions {
+				conditionAttempts, err := plan.ProviderAttemptsFor(task, condition)
+				if err != nil || conditionAttempts > ^uint64(0)-attempts {
+					return executionScope{}, agentic.ErrPilotPlan
+				}
+				attempts += conditionAttempts
+			}
 			found++
 		}
 	}
 	if found != len(representativeCanaryTasks) || turns == 0 || turns > 64 {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
-	attempts := turns * uint64(len(plan.Conditions))
 	trialCount := uint64(len(representativeCanaryTasks) * len(plan.Conditions))
 	return executionScope{
 		Mode: "canary", TaskIDs: append([]string(nil), representativeCanaryTasks...),

@@ -109,7 +109,8 @@ func RunDevelopmentTrialWithIdentity(
 	if err != nil {
 		return TrialResult{}, err
 	}
-	surface, mapping, prompt, err := buildConditionSurface(tools, condition)
+	continueWithinTurn := task.Track == "stateful_local_tools" && condition != ConditionPython
+	surface, mapping, prompt, err := buildConditionSurface(tools, condition, continueWithinTurn)
 	if err != nil {
 		return TrialResult{}, err
 	}
@@ -151,6 +152,17 @@ func RunDevelopmentTrialWithIdentity(
 	}
 	history := []any{map[string]any{"role": "developer", "content": prompt}}
 	directOrdinal := 0
+	providerAttemptsPerTurn := uint32(1)
+	if continueWithinTurn {
+		turns := uint32(len(task.Interaction.Turns))
+		if turns == 0 || limits.MaxProviderCalls%turns != 0 {
+			return TrialResult{}, ErrAgenticRun
+		}
+		providerAttemptsPerTurn = limits.MaxProviderCalls / turns
+		if providerAttemptsPerTurn < 2 {
+			return TrialResult{}, ErrAgenticRun
+		}
+	}
 	for turnIndex, rawTurn := range task.Interaction.Turns {
 		if err := tools.SetTurn(turnIndex); err != nil {
 			return TrialResult{}, err
@@ -162,92 +174,115 @@ func RunDevelopmentTrialWithIdentity(
 		for _, message := range messages {
 			history = append(history, map[string]any{"role": message.Role, "content": message.Content})
 		}
-		parsed, exchangeErr := session.Exchange(ctx, history, surface, "required", mapping)
-		if exchangeErr != nil {
-			result.ErrorCode = classifyTrialError(exchangeErr)
-			break
-		}
-		if parsed.TextDigest != "" {
-			result.TextDigests = append(result.TextDigests, parsed.TextDigest)
-		}
-		if parsed.Refused {
-			result.ErrorCode = "model_refusal"
-			break
-		}
-		if len(parsed.Calls) == 0 {
-			result.ErrorCode = "no_tool_calls"
-			break
-		}
-		history = append(history, parsed.replayItems...)
-		outputs := make([]any, 0, len(parsed.Calls))
-		for _, call := range parsed.Calls {
-			var observation json.RawMessage
-			if call.CanonicalName == "run_python" {
-				if workflow == nil || result.PythonAttempts >= limits.MaxPythonRuns {
-					result.ErrorCode = "python_run_budget_exceeded"
-					break
-				}
-				var arguments struct {
-					Code string `json:"code"`
-				}
-				if decodeStrict(call.Arguments, &arguments) != nil {
-					result.ErrorCode = "invalid_python_arguments"
-					break
-				}
-				usedCalls := countStatefulCalls(tools.Trace())
-				if usedCalls >= int(limits.MaxToolCalls) {
-					result.ErrorCode = "tool_call_budget_exceeded"
-					break
-				}
-				result.PythonAttempts++
-				pythonResult, runErr := workflow.Execute(
-					ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
-					limits.MaxToolCalls-uint32(usedCalls),
-				)
-				if runErr != nil {
-					result.ErrorCode = "python_engine_failure"
-					break
-				}
-				observation = append(json.RawMessage(nil), pythonResult.Observation...)
-				pythonResult.Observation = nil
-				result.PythonEvidence = append(result.PythonEvidence, pythonResult)
-				result.PythonRuns++
-				afterCalls := countStatefulCalls(tools.Trace())
-				if afterCalls < usedCalls || afterCalls-usedCalls != int(pythonResult.CapabilityCalls) || afterCalls > int(limits.MaxToolCalls) {
-					result.ErrorCode = "python_trace_mismatch"
-					break
-				}
-				if !pythonResult.Success {
-					result.ErrorCode = "python_guest_error"
-				}
-			} else {
-				if condition == ConditionPython || countStatefulCalls(tools.Trace()) >= int(limits.MaxToolCalls) {
-					result.ErrorCode = "tool_call_budget_exceeded"
-					break
-				}
-				directOrdinal++
-				observation, err = tools.InvokeDirect(
-					ctx, fmt.Sprintf("agentic-direct-%d", directOrdinal), fmt.Sprintf("host:%d", directOrdinal),
-					call.CanonicalName, call.Arguments,
-				)
-				if err != nil {
-					result.ErrorCode = "direct_host_call_failed"
-					break
-				}
+		turnHadCalls := false
+		turnComplete := false
+		for attempt := uint32(0); attempt < providerAttemptsPerTurn; attempt++ {
+			toolChoice := "auto"
+			if attempt == 0 {
+				toolChoice = "required"
 			}
-			if len(observation) == 0 || !json.Valid(observation) {
-				result.ErrorCode = "invalid_tool_observation"
+			parsed, exchangeErr := session.Exchange(ctx, history, surface, toolChoice, condition != ConditionPython, mapping)
+			if exchangeErr != nil {
+				result.ErrorCode = classifyTrialError(exchangeErr)
 				break
 			}
-			outputs = append(outputs, map[string]any{
-				"type": "function_call_output", "call_id": call.CallID, "output": string(observation),
-			})
+			if parsed.TextDigest != "" {
+				result.TextDigests = append(result.TextDigests, parsed.TextDigest)
+			}
+			if parsed.Refused {
+				result.ErrorCode = "model_refusal"
+				break
+			}
+			history = append(history, parsed.replayItems...)
+			if len(parsed.Calls) == 0 {
+				if !turnHadCalls {
+					result.ErrorCode = "no_tool_calls"
+				}
+				turnComplete = result.ErrorCode == ""
+				break
+			}
+			outputs := make([]any, 0, len(parsed.Calls))
+			for _, call := range parsed.Calls {
+				var observation json.RawMessage
+				if call.CanonicalName == "run_python" {
+					if workflow == nil || result.PythonAttempts >= limits.MaxPythonRuns {
+						result.ErrorCode = "python_run_budget_exceeded"
+						break
+					}
+					var arguments struct {
+						Code string `json:"code"`
+					}
+					if decodeStrict(call.Arguments, &arguments) != nil {
+						result.ErrorCode = "invalid_python_arguments"
+						break
+					}
+					usedCalls := countStatefulCalls(tools.Trace())
+					if usedCalls >= int(limits.MaxToolCalls) {
+						result.ErrorCode = "tool_call_budget_exceeded"
+						break
+					}
+					result.PythonAttempts++
+					pythonResult, runErr := workflow.Execute(
+						ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
+						limits.MaxToolCalls-uint32(usedCalls),
+					)
+					if runErr != nil {
+						result.ErrorCode = "python_engine_failure"
+						break
+					}
+					observation = append(json.RawMessage(nil), pythonResult.Observation...)
+					pythonResult.Observation = nil
+					result.PythonEvidence = append(result.PythonEvidence, pythonResult)
+					result.PythonRuns++
+					afterCalls := countStatefulCalls(tools.Trace())
+					if afterCalls < usedCalls || afterCalls-usedCalls != int(pythonResult.CapabilityCalls) || afterCalls > int(limits.MaxToolCalls) {
+						result.ErrorCode = "python_trace_mismatch"
+						break
+					}
+					if !pythonResult.Success {
+						result.ErrorCode = "python_guest_error"
+					}
+				} else {
+					if condition == ConditionPython || countStatefulCalls(tools.Trace()) >= int(limits.MaxToolCalls) {
+						result.ErrorCode = "tool_call_budget_exceeded"
+						break
+					}
+					directOrdinal++
+					observation, err = tools.InvokeDirect(
+						ctx, fmt.Sprintf("agentic-direct-%d", directOrdinal), fmt.Sprintf("host:%d", directOrdinal),
+						call.CanonicalName, call.Arguments,
+					)
+					if err != nil {
+						result.ErrorCode = "direct_host_call_failed"
+						break
+					}
+				}
+				if len(observation) == 0 || !json.Valid(observation) {
+					result.ErrorCode = "invalid_tool_observation"
+					break
+				}
+				outputs = append(outputs, map[string]any{
+					"type": "function_call_output", "call_id": call.CallID, "output": string(observation),
+				})
+				if result.ErrorCode != "" {
+					break
+				}
+			}
+			history = append(history, outputs...)
 			if result.ErrorCode != "" {
 				break
 			}
+			turnHadCalls = true
+			if !continueWithinTurn {
+				turnComplete = true
+				break
+			}
 		}
-		history = append(history, outputs...)
 		if result.ErrorCode != "" {
+			break
+		}
+		if !turnComplete {
+			result.ErrorCode = "provider_turn_budget_exceeded"
 			break
 		}
 	}
@@ -299,7 +334,7 @@ func decodeBenchmarkTurn(raw json.RawMessage) ([]benchmarkMessage, error) {
 	return messages, nil
 }
 
-func buildConditionSurface(runtime *ToolRuntime, condition Condition) ([]map[string]any, map[string]string, string, error) {
+func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWithinTurn bool) ([]map[string]any, map[string]string, string, error) {
 	if runtime == nil || !condition.valid() {
 		return nil, nil, "", ErrAgenticRun
 	}
@@ -315,15 +350,26 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition) ([]map[str
 			if decodeUseNumber(tool.InputSchema, &parameters) != nil {
 				return nil, nil, "", ErrDataset
 			}
+			description := tool.Description
+			if tool.ToolID == "touch" {
+				description += " Host semantics: returns an error if the file already exists; do not pre-check existence."
+			}
 			mapping[providerName] = tool.ToolID
 			surface = append(surface, map[string]any{
-				"type": "function", "name": providerName, "description": tool.Description,
+				"type": "function", "name": providerName, "description": description,
 				"parameters": parameters, "strict": false,
 			})
 		}
 	}
 	sdk := compactPythonSDK(runtime)
-	prompt := "For each user turn, emit the complete tool plan in this single response. Use only the exposed tools and do not fabricate results."
+	prompt := "Use only the exposed tools and do not fabricate results."
+	if condition == ConditionDirect {
+		if continueWithinTurn {
+			prompt += " Complete each user turn before moving to the next. Continue the same user turn after each tool output until no more tool calls are needed."
+		} else {
+			prompt += " Emit the complete tool plan for each user turn in one response. Return every required direct tool call in dependency order; the Host executes returned calls in output order."
+		}
+	}
 	if condition != ConditionDirect {
 		if mapping["run_python"] != "" {
 			return nil, nil, "", ErrDataset
@@ -339,9 +385,17 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition) ([]map[str
 			"strict": false,
 		})
 		prompt += " Python workflows import from host_tools and must assign a JSON object to result. Available SDK: " + sdk
+		if condition == ConditionPython {
+			prompt += " Emit exactly one run_python call per user turn. Put every required Host-tool operation, including dependencies, in that single Python workflow; never split the work across multiple run_python calls."
+		}
 	}
 	if condition == ConditionHybrid {
-		prompt += " Choose direct calls for simple independent actions and run_python for dependent or programmatic workflows."
+		prompt += " Choose direct calls for simple independent actions and run_python for dependent or programmatic workflows. Use at most one run_python call per user turn and put the complete Python workflow in that call."
+		if continueWithinTurn {
+			prompt += " For direct workflows, complete each user turn before moving to the next and continue after each tool output until no more tool calls are needed."
+		} else {
+			prompt += " If using direct calls, return every required call in dependency order in one response; the Host executes returned calls in output order."
+		}
 	}
 	if len(surface) == 0 || len(surface) > maxFunctionCalls || len(prompt) > 16*1024 {
 		return nil, nil, "", ErrAgenticRun
@@ -360,7 +414,11 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 			}
 			parameters = append(parameters, name)
 		}
-		parts = append(parts, tool.PythonName+"("+strings.Join(parameters, ", ")+")")
+		entry := tool.PythonName + "(" + strings.Join(parameters, ", ") + ")"
+		if tool.ToolID == "touch" {
+			entry += " [returns an error if the file already exists; do not pre-check existence]"
+		}
+		parts = append(parts, entry)
 	}
 	return strings.Join(parts, "; ")
 }

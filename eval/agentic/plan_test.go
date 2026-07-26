@@ -13,16 +13,20 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Digest == "" || plan.GlobalBounds.TrialCount != 30 || plan.GlobalBounds.MaxProviderAttempts != 63 || plan.GlobalBounds.MaxPythonRuns != 42 || len(dataset.Tasks) != 20 {
+	if plan.Digest == "" || plan.GlobalBounds.TrialCount != 30 || plan.GlobalBounds.MaxProviderAttempts != 127 || plan.GlobalBounds.MaxPythonRuns != 42 || len(dataset.Tasks) != 20 {
 		t.Fatalf("plan=%+v tasks=%d", plan, len(dataset.Tasks))
 	}
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
-	limits, err := plan.LimitsFor(task)
+	limits, err := plan.LimitsFor(task, ConditionDirect)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limits.MaxProviderCalls != 3 || limits.MaxPythonRuns != 3 || limits.MaxToolCalls != 32 || limits.MaxInputTokens != 60_000 || limits.MaxOutputTokens != 3_072 || limits.MaxTotalTokens != 63_072 || limits.MaxOutputTokensPerCall != 1_024 {
+	if limits.MaxProviderCalls != 9 || limits.MaxPythonRuns != 3 || limits.MaxToolCalls != 32 || limits.MaxInputTokens != 180_000 || limits.MaxOutputTokens != 9_216 || limits.MaxTotalTokens != 189_216 || limits.MaxOutputTokensPerCall != 1_024 {
 		t.Fatalf("limits=%+v", limits)
+	}
+	pythonLimits, err := plan.LimitsFor(task, ConditionPython)
+	if err != nil || pythonLimits.MaxProviderCalls != 3 || pythonLimits.MaxInputTokens != 60_000 {
+		t.Fatalf("python limits=%+v err=%v", pythonLimits, err)
 	}
 	if !plan.Authorizes(task.ID, ConditionHybrid, 0) || plan.Authorizes(task.ID, ConditionHybrid, 1) {
 		t.Fatal("authorization boundary failed")
@@ -67,14 +71,20 @@ func TestSealedEvaluationPlanRecomputesBoundsAndLatinSquare(t *testing.T) {
 		}
 	}
 	turns := 0
+	attemptsPerReplicate := 0
 	for _, id := range plan.TaskIDs {
 		task, exists := evaluation[id]
 		if !exists {
 			t.Fatalf("unknown evaluation task %s", id)
 		}
 		turns += len(task.Interaction.Turns)
+		if task.Track == "stateful_local_tools" {
+			attemptsPerReplicate += len(task.Interaction.Turns) * 7
+		} else {
+			attemptsPerReplicate += len(task.Interaction.Turns) * 3
+		}
 	}
-	attempts := uint32(turns * 3 * 3)
+	attempts := uint32(attemptsPerReplicate * len(plan.Replicates))
 	if plan.Global.TrialCount != 90 || plan.Global.MaxProviderAttempts != attempts || plan.Global.MaxInputTokens != uint64(attempts)*20_000 || plan.Global.MaxOutputTokens != uint64(attempts)*1_024 || plan.Global.MaxTotalTokens != plan.Global.MaxInputTokens+plan.Global.MaxOutputTokens || plan.Global.MaxToolCalls != 90*32 || plan.Global.MaxPythonRuns != uint32(turns*2*3) {
 		t.Fatalf("turns=%d global=%+v", turns, plan.Global)
 	}

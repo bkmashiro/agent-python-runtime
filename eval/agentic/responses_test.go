@@ -55,7 +55,7 @@ func TestResponsesSessionParsesCallsAndKeepsRawProtocolInMemoryOnly(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := session.Exchange(context.Background(), []any{map[string]any{"role": "user", "content": "where"}}, []map[string]any{{"type": "function", "name": "pwd", "parameters": map[string]any{"type": "object"}}}, "required", map[string]string{"pwd": "pwd"})
+	parsed, err := session.Exchange(context.Background(), []any{map[string]any{"role": "user", "content": "where"}}, []map[string]any{{"type": "function", "name": "pwd", "parameters": map[string]any{"type": "object"}}}, "required", true, map[string]string{"pwd": "pwd"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,10 +82,10 @@ func TestResponsesSessionStopsPermanentlyAfterMissingUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); !errors.Is(err, ErrUsageMissing) {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); !errors.Is(err, ErrUsageMissing) {
 		t.Fatalf("missing usage err=%v", err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); !errors.Is(err, ErrBudgetClosed) {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); !errors.Is(err, ErrBudgetClosed) {
 		t.Fatalf("second exchange err=%v", err)
 	}
 	if len(adapter.requests) != 1 {
@@ -104,10 +104,10 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); err != nil {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); !errors.Is(err, ErrBudgetExceeded) {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); !errors.Is(err, ErrBudgetExceeded) {
 		t.Fatalf("overflow err=%v", err)
 	}
 	var first, second map[string]any
@@ -132,10 +132,10 @@ func TestResponsesSessionCapsOutputByRemainingTotalBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); err != nil {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); err != nil {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -192,7 +192,7 @@ func TestResponsesSessionDoesNotRetryProviderErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", nil); err == nil {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); err == nil {
 		t.Fatal("provider error succeeded")
 	}
 	if len(adapter.requests) != 1 {

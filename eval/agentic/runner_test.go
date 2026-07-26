@@ -17,7 +17,7 @@ func adapterForStatefulOracle(t *testing.T, task Task, providerName func(string)
 	if decodeStrict(task.Oracle, &oracle) != nil {
 		t.Fatal("decode oracle")
 	}
-	responses := make([]provider.Response, len(oracle.Turns))
+	responses := make([]provider.Response, 0, len(oracle.Turns)*2)
 	for turnIndex, turn := range oracle.Turns {
 		items := make([]map[string]any, len(turn))
 		for callIndex, call := range turn {
@@ -27,30 +27,37 @@ func adapterForStatefulOracle(t *testing.T, task Task, providerName func(string)
 			}
 		}
 		body, _ := json.Marshal(map[string]any{"id": "response-private", "status": "completed", "output": items})
-		responses[turnIndex] = responseFixture(string(body), 20, 5)
+		responses = append(responses, responseFixture(string(body), 20, 5))
+		responses = append(responses, responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"turn complete"}]}]}`, 20, 5))
 	}
 	return &scriptedAdapter{responses: responses}
 }
 
 func developmentTrialLimits(turns int) TrialLimits {
 	return TrialLimits{
-		MaxProviderCalls: uint32(turns), MaxToolCalls: 32, MaxPythonRuns: uint32(turns),
+		MaxProviderCalls: uint32(turns * 3), MaxToolCalls: 32, MaxPythonRuns: uint32(turns),
 		MaxInputTokens: 10_000, MaxOutputTokens: 2_000, MaxTotalTokens: 12_000, MaxOutputTokensPerCall: 512,
 	}
 }
 
-func TestRunDevelopmentTrialDirectUsesOneExchangePerTurnAndScores(t *testing.T) {
+func TestRunDevelopmentTrialDirectUsesBoundedResponsesLoopAndScores(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	adapter := adapterForStatefulOracle(t, task, func(name string) string { return name })
 	result, err := RunDevelopmentTrial(context.Background(), adapter, task, ConditionDirect, developmentTrialLimits(len(task.Interaction.Turns)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Passed || result.ErrorCode != "" || result.ProviderCalls != 3 || result.ToolCalls != 4 || result.PythonRuns != 0 || result.StatefulScore == nil || !result.StatefulScore.Passed {
+	if !result.Passed || result.ErrorCode != "" || result.ProviderCalls != 6 || result.ToolCalls != 4 || result.PythonRuns != 0 || result.StatefulScore == nil || !result.StatefulScore.Passed {
 		t.Fatalf("result=%+v", result)
 	}
-	if len(adapter.requests) != len(task.Interaction.Turns) {
+	if len(adapter.requests) != len(task.Interaction.Turns)*2 {
 		t.Fatalf("requests=%d", len(adapter.requests))
+	}
+	if !strings.Contains(string(adapter.requests[0].Payload), "Continue the same user turn after each tool output") {
+		t.Fatalf("direct request does not expose its continuation contract: %s", adapter.requests[0].Payload)
+	}
+	if !strings.Contains(string(adapter.requests[0].Payload), "returns an error if the file already exists; do not pre-check existence") {
+		t.Fatalf("direct request omits the Host touch error contract: %s", adapter.requests[0].Payload)
 	}
 	if !strings.Contains(string(adapter.requests[1].Payload), "function_call_output") {
 		t.Fatal("next turn omitted prior Host tool outputs")
@@ -60,6 +67,39 @@ func TestRunDevelopmentTrialDirectUsesOneExchangePerTurnAndScores(t *testing.T) 
 		if containsBytes(encoded, []byte(forbidden)) {
 			t.Fatalf("serialized result leaked %q: %s", forbidden, encoded)
 		}
+	}
+}
+
+func TestRunDevelopmentTrialStatefulRejectsNoCallsOnInitialExchange(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 20, 5),
+	}}
+	result, err := RunDevelopmentTrial(context.Background(), adapter, task, ConditionDirect, developmentTrialLimits(len(task.Interaction.Turns)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "no_tool_calls" || result.ProviderCalls != 1 || result.ToolCalls != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestRunDevelopmentTrialStatefulFailsClosedAtTurnProviderCap(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	call := func(id, name, arguments string) provider.Response {
+		return responseFixture(fmt.Sprintf(`{"status":"completed","output":[{"type":"function_call","id":%q,"call_id":%q,"name":%q,"arguments":%q,"status":"completed"}]}`, id, id, name, arguments), 20, 5)
+	}
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		call("call-cap-1", "cd", `{"folder":"Documents"}`),
+		call("call-cap-2", "touch", `{"file_name":"summary.txt"}`),
+		call("call-cap-3", "pwd", `{}`),
+	}}
+	result, err := RunDevelopmentTrial(context.Background(), adapter, task, ConditionDirect, developmentTrialLimits(len(task.Interaction.Turns)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "provider_turn_budget_exceeded" || result.ProviderCalls != 3 || result.ToolCalls != 3 {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -133,6 +173,10 @@ func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 	if !result.Passed || result.ProviderCalls != 3 || result.PythonRuns != 3 || result.ToolCalls != 4 || len(result.PythonEvidence) != 3 || workflow == nil || len(workflow.codes) != 3 {
 		t.Fatalf("result=%+v workflow=%+v", result, workflow)
 	}
+	if strings.Contains(string(adapter.requests[0].Payload), `"parallel_tool_calls":true`) ||
+		!strings.Contains(string(adapter.requests[0].Payload), "exactly one run_python call") {
+		t.Fatalf("Python request contradicts its one-run-per-turn budget: %s", adapter.requests[0].Payload)
+	}
 	if err := ValidateTrialResult(result); err != nil {
 		t.Fatalf("successful Python trial is not artifact-safe: %v", err)
 	}
@@ -174,11 +218,13 @@ func TestHybridSurfaceContainsDirectAndPythonWithoutCollision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	surface, mapping, prompt, err := buildConditionSurface(tools, ConditionHybrid)
+	surface, mapping, prompt, err := buildConditionSurface(tools, ConditionHybrid, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(surface) != len(task.Tools)+1 || mapping["run_python"] != "run_python" || mapping["pwd"] != "pwd" || !strings.Contains(prompt, "host_tools") {
+	if len(surface) != len(task.Tools)+1 || mapping["run_python"] != "run_python" || mapping["pwd"] != "pwd" || !strings.Contains(prompt, "host_tools") ||
+		!strings.Contains(prompt, "at most one run_python call") || !strings.Contains(prompt, "continue after each tool output") ||
+		!strings.Contains(prompt, "touch(file_name) [returns an error if the file already exists; do not pre-check existence]") {
 		t.Fatalf("surface=%d mapping=%v prompt=%q", len(surface), mapping, prompt)
 	}
 }

@@ -38,7 +38,7 @@
     "bfcl-v4-stateless-function-calling-parallel_multiple_62"
   ],
   "per_trial": {
-    "max_provider_attempts_per_turn": 1,
+    "max_provider_attempts_per_turn": 3,
     "max_tool_calls": 32,
     "max_python_runs_per_turn": 1,
     "max_input_tokens_per_provider_attempt": 20000,
@@ -46,10 +46,10 @@
   },
   "global_bounds": {
     "trial_count": 90,
-    "max_provider_attempts": 207,
-    "max_input_tokens": 4140000,
-    "max_output_tokens": 211968,
-    "max_total_tokens": 4351968,
+    "max_provider_attempts": 423,
+    "max_input_tokens": 8460000,
+    "max_output_tokens": 433152,
+    "max_total_tokens": 8893152,
     "max_tool_calls": 2880,
     "max_python_runs": 138
   },

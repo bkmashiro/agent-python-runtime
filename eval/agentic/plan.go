@@ -91,7 +91,7 @@ func validateDevelopmentPlan(plan DevelopmentPilotPlan, dataset *Dataset) error 
 		plan.TransportRetryPolicy.Reason != "unverified_provider_idempotency" || plan.CostGate.Status != "awaiting_owner_approval" || !plan.CostGate.ActivationRequired ||
 		len(plan.Conditions) != 3 || plan.Conditions[0] != ConditionDirect || plan.Conditions[1] != ConditionPython || plan.Conditions[2] != ConditionHybrid ||
 		len(plan.Replicates) != 1 || plan.Replicates[0] != 0 || len(plan.GuestProfiles) != 1 || plan.GuestProfiles[0] != "core" ||
-		plan.PerTrial.MaxProviderAttemptsPerTurn != 1 || plan.PerTrial.MaxToolCalls == 0 || plan.PerTrial.MaxToolCalls > maxFunctionCalls ||
+		plan.PerTrial.MaxProviderAttemptsPerTurn != 3 || plan.PerTrial.MaxToolCalls == 0 || plan.PerTrial.MaxToolCalls > maxFunctionCalls ||
 		plan.PerTrial.MaxPythonRunsPerTurn != 1 || plan.PerTrial.MaxInputTokensPerAttempt == 0 ||
 		plan.PerTrial.MaxOutputTokensPerAttempt == 0 || plan.PerTrial.MaxOutputTokensPerAttempt > maxDirectOutputTokens {
 		return ErrPilotPlan
@@ -125,7 +125,23 @@ func validateDevelopmentPlan(plan DevelopmentPilotPlan, dataset *Dataset) error 
 		turnsPerCondition += uint64(len(task.Interaction.Turns))
 	}
 	trialCount := uint64(len(ids) * len(plan.Conditions) * len(plan.Replicates))
-	providerAttempts := turnsPerCondition * uint64(len(plan.Conditions)) * uint64(len(plan.Replicates))
+	providerAttempts := uint64(0)
+	for _, task := range devTasks {
+		for _, condition := range plan.Conditions {
+			attempts, attemptsOK := plan.providerAttemptsForTask(task, condition)
+			if !attemptsOK {
+				return ErrPilotPlan
+			}
+			attempts, attemptsOK = checkedMultiply(attempts, uint64(len(plan.Replicates)))
+			if !attemptsOK {
+				return ErrPilotPlan
+			}
+			providerAttempts, attemptsOK = checkedAdd(providerAttempts, attempts)
+			if !attemptsOK {
+				return ErrPilotPlan
+			}
+		}
+	}
 	maxInput, inputOK := checkedMultiply(providerAttempts, plan.PerTrial.MaxInputTokensPerAttempt)
 	maxOutput, outputOK := checkedMultiply(providerAttempts, plan.PerTrial.MaxOutputTokensPerAttempt)
 	maxTotal, totalOK := checkedAdd(maxInput, maxOutput)
@@ -140,20 +156,20 @@ func validateDevelopmentPlan(plan DevelopmentPilotPlan, dataset *Dataset) error 
 	return nil
 }
 
-func (plan DevelopmentPilotPlan) LimitsFor(task Task) (TrialLimits, error) {
-	if task.Split != "dev" || !containsString(plan.TaskIDs, task.ID) {
+func (plan DevelopmentPilotPlan) LimitsFor(task Task, condition Condition) (TrialLimits, error) {
+	if task.Split != "dev" || !containsString(plan.TaskIDs, task.ID) || !containsCondition(plan.Conditions, condition) {
 		return TrialLimits{}, ErrPilotPlan
 	}
-	attempts := uint64(len(task.Interaction.Turns))
+	attempts, attemptsOK := plan.providerAttemptsForTask(task, condition)
 	input, inputOK := checkedMultiply(attempts, plan.PerTrial.MaxInputTokensPerAttempt)
 	output, outputOK := checkedMultiply(attempts, plan.PerTrial.MaxOutputTokensPerAttempt)
 	total, totalOK := checkedAdd(input, output)
-	if !inputOK || !outputOK || !totalOK || attempts == 0 || attempts > 64 {
+	if !attemptsOK || !inputOK || !outputOK || !totalOK || attempts == 0 || attempts > 64 {
 		return TrialLimits{}, ErrPilotPlan
 	}
 	limits := TrialLimits{
 		MaxProviderCalls: uint32(attempts), MaxToolCalls: plan.PerTrial.MaxToolCalls,
-		MaxPythonRuns:  uint32(attempts) * plan.PerTrial.MaxPythonRunsPerTurn,
+		MaxPythonRuns:  uint32(len(task.Interaction.Turns)) * plan.PerTrial.MaxPythonRunsPerTurn,
 		MaxInputTokens: input, MaxOutputTokens: output, MaxTotalTokens: total,
 		MaxOutputTokensPerCall: plan.PerTrial.MaxOutputTokensPerAttempt,
 	}
@@ -161,6 +177,29 @@ func (plan DevelopmentPilotPlan) LimitsFor(task Task) (TrialLimits, error) {
 		return TrialLimits{}, ErrPilotPlan
 	}
 	return limits, nil
+}
+
+func (plan DevelopmentPilotPlan) ProviderAttemptsFor(task Task, condition Condition) (uint64, error) {
+	if task.Split != "dev" || !containsString(plan.TaskIDs, task.ID) || !containsCondition(plan.Conditions, condition) {
+		return 0, ErrPilotPlan
+	}
+	attempts, ok := plan.providerAttemptsForTask(task, condition)
+	if !ok {
+		return 0, ErrPilotPlan
+	}
+	return attempts, nil
+}
+
+func (plan DevelopmentPilotPlan) providerAttemptsForTask(task Task, condition Condition) (uint64, bool) {
+	turns := uint64(len(task.Interaction.Turns))
+	if turns == 0 {
+		return 0, false
+	}
+	perTurn := uint64(1)
+	if task.Track == "stateful_local_tools" && condition != ConditionPython {
+		perTurn = uint64(plan.PerTrial.MaxProviderAttemptsPerTurn)
+	}
+	return checkedMultiply(turns, perTurn)
 }
 
 func (plan DevelopmentPilotPlan) RuntimeConfig() runtimeconfig.RunConfig {

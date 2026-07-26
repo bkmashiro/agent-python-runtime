@@ -55,6 +55,7 @@ func (session *ResponsesSession) Exchange(
 	input any,
 	tools []map[string]any,
 	toolChoice string,
+	parallelToolCalls bool,
 	providerToCanonical map[string]string,
 ) (ParsedResponse, error) {
 	session.mu.Lock()
@@ -88,7 +89,7 @@ func (session *ResponsesSession) Exchange(
 	if len(tools) > 0 {
 		payloadDocument["tools"] = tools
 		payloadDocument["tool_choice"] = toolChoice
-		payloadDocument["parallel_tool_calls"] = true
+		payloadDocument["parallel_tool_calls"] = parallelToolCalls
 	}
 	payload, err := json.Marshal(payloadDocument)
 	if err != nil || len(payload) == 0 || len(payload) > 1024*1024 {

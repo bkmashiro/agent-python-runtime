@@ -77,6 +77,28 @@ func TestLoadDevelopmentPilotPlanAcceptsExplicitGPT4OModel(t *testing.T) {
 	}
 }
 
+func TestLoadDevelopmentPilotPlanAcceptsExplicitGemini36FlashModel(t *testing.T) {
+	root := datasetRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, "development-pilot-plan.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if json.Unmarshal(content, &document) != nil {
+		t.Fatal("decode plan")
+	}
+	document["model"] = "gemini-3.6-flash"
+	mutated, _ := json.Marshal(document)
+	path := filepath.Join(t.TempDir(), "gemini-3.6-flash-plan.json")
+	if os.WriteFile(path, mutated, 0o600) != nil {
+		t.Fatal("write plan")
+	}
+	plan, _, err := LoadDevelopmentPilotPlan(path, root)
+	if err != nil || plan.Model != "gemini-3.6-flash" {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
 func TestLoadDevelopmentPilotPlanRejectsUnapprovedModel(t *testing.T) {
 	root := datasetRoot(t)
 	content, err := os.ReadFile(filepath.Join(root, "development-pilot-plan.json"))

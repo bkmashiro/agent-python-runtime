@@ -1,0 +1,259 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/bkmashiro/agent-python-runtime/eval/agentic"
+	"github.com/bkmashiro/agent-python-runtime/eval/provider"
+)
+
+type dependencies struct {
+	executablePath func() (string, error)
+	newAdapter     func() (provider.Adapter, error)
+}
+
+type artifactEntry struct {
+	TrialID   string            `json:"trial_id"`
+	TaskID    string            `json:"task_id"`
+	Condition agentic.Condition `json:"condition"`
+	Replicate uint32            `json:"replicate"`
+	Digest    string            `json:"digest"`
+	Path      string            `json:"path"`
+	Passed    bool              `json:"passed"`
+	ErrorCode string            `json:"error_code,omitempty"`
+}
+
+type pilotSummary struct {
+	Version          string          `json:"version"`
+	Status           string          `json:"status"`
+	DecisionEligible bool            `json:"decision_eligible"`
+	PlanDigest       string          `json:"plan_digest"`
+	ActivationDigest string          `json:"activation_digest"`
+	TrialCount       uint32          `json:"trial_count"`
+	PassedTrials     uint32          `json:"passed_trials"`
+	ProviderAttempts uint32          `json:"provider_attempts"`
+	ProviderCalls    uint32          `json:"provider_calls"`
+	Usage            provider.Usage  `json:"usage"`
+	Artifacts        []artifactEntry `json:"artifacts"`
+}
+
+func run(ctx context.Context, args []string, deps dependencies) error {
+	flags := flag.NewFlagSet("apyrun-agentic-pilot", flag.ContinueOnError)
+	datasetRoot := flags.String("dataset", "", "agentic dataset root")
+	planPath := flags.String("plan", "", "frozen development pilot plan")
+	activationPath := flags.String("activation", "", "owner-approved activation")
+	guestPath := flags.String("guest", "", "exact core Guest WASM artifact")
+	outputRoot := flags.String("out", "", "new output directory")
+	repositoryCommit := flags.String("repository-commit", "", "exact 40-hex source commit")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *datasetRoot == "" || *planPath == "" || *activationPath == "" || *guestPath == "" || *outputRoot == "" || len(*repositoryCommit) != 40 {
+		return errors.New("invalid arguments")
+	}
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(*planPath, *datasetRoot)
+	if err != nil {
+		return err
+	}
+	executable, err := deps.executablePath()
+	if err != nil {
+		return err
+	}
+	hostDigest, err := fileDigest(executable, 512*1024*1024)
+	if err != nil {
+		return fmt.Errorf("digest Host artifact: %w", err)
+	}
+	activation, err := agentic.LoadPilotActivation(*activationPath, plan, hostDigest)
+	if err != nil || activation.RepositoryCommit != *repositoryCommit {
+		return agentic.ErrPilotActivation
+	}
+	guestBytes, err := readRegularBounded(*guestPath, 256*1024*1024)
+	if err != nil {
+		return fmt.Errorf("read Guest artifact: %w", err)
+	}
+	guestSum := sha256.Sum256(guestBytes)
+	guestDigest := "sha256:" + hex.EncodeToString(guestSum[:])
+	if activation.GuestArtifacts["core"] != guestDigest {
+		return agentic.ErrPilotActivation
+	}
+	if _, exists := os.LookupEnv(plan.CredentialEnvName); !exists {
+		return errors.New("provider credential is unavailable")
+	}
+	if info, statErr := os.Lstat(*outputRoot); statErr == nil || !errors.Is(statErr, os.ErrNotExist) || info != nil {
+		return errors.New("output directory must not exist")
+	}
+	adapter, err := deps.newAdapter()
+	if err != nil {
+		return err
+	}
+	if err := os.Mkdir(*outputRoot, 0o700); err != nil {
+		return err
+	}
+	trialsRoot := filepath.Join(*outputRoot, "trials")
+	if err := os.Mkdir(trialsRoot, 0o700); err != nil {
+		return err
+	}
+	tasks := make(map[string]agentic.Task)
+	for _, task := range dataset.Tasks {
+		tasks[task.ID] = task
+	}
+	summary := pilotSummary{
+		Version: "agentic-development-pilot-result/v1", Status: "complete", DecisionEligible: false,
+		PlanDigest: plan.Digest, ActivationDigest: activation.Digest,
+		Artifacts: make([]artifactEntry, 0, plan.GlobalBounds.TrialCount),
+	}
+	for _, taskID := range plan.TaskIDs {
+		task, exists := tasks[taskID]
+		if !exists {
+			return agentic.ErrPilotPlan
+		}
+		limits, err := plan.LimitsFor(task)
+		if err != nil {
+			return err
+		}
+		for _, condition := range plan.Conditions {
+			for _, replicate := range plan.Replicates {
+				if !plan.Authorizes(task.ID, condition, replicate) {
+					return agentic.ErrPilotPlan
+				}
+				identity, err := activation.Identity(condition)
+				if err != nil {
+					return err
+				}
+				var factory agentic.PythonWorkflowFactory
+				if condition != agentic.ConditionDirect {
+					factory = func(tools *agentic.ToolRuntime) (agentic.PythonWorkflow, error) {
+						return agentic.NewWASIPythonExecutor(ctx, guestBytes, plan.RuntimeConfig(), tools)
+					}
+				}
+				result, err := agentic.RunDevelopmentTrialWithIdentity(ctx, adapter, task, condition, replicate, limits, identity, factory)
+				if err != nil {
+					return err
+				}
+				path := filepath.Join(trialsRoot, result.TrialID+".json")
+				artifactDigest, err := agentic.WriteTrialArtifact(path, result)
+				if err != nil {
+					return err
+				}
+				summary.TrialCount++
+				if result.Passed {
+					summary.PassedTrials++
+				}
+				summary.ProviderAttempts += result.ProviderAttempts
+				summary.ProviderCalls += result.ProviderCalls
+				if summary.Usage.InputTokens, err = addBounded(summary.Usage.InputTokens, result.Usage.InputTokens, plan.GlobalBounds.MaxInputTokens); err != nil {
+					return err
+				}
+				if summary.Usage.OutputTokens, err = addBounded(summary.Usage.OutputTokens, result.Usage.OutputTokens, plan.GlobalBounds.MaxOutputTokens); err != nil {
+					return err
+				}
+				if summary.Usage.TotalTokens, err = addBounded(summary.Usage.TotalTokens, result.Usage.TotalTokens, plan.GlobalBounds.MaxTotalTokens); err != nil {
+					return err
+				}
+				summary.Artifacts = append(summary.Artifacts, artifactEntry{
+					TrialID: result.TrialID, TaskID: task.ID, Condition: condition, Replicate: replicate,
+					Digest: artifactDigest, Path: filepath.ToSlash(filepath.Join("trials", result.TrialID+".json")),
+					Passed: result.Passed, ErrorCode: result.ErrorCode,
+				})
+				if abortPilot(result.ErrorCode) {
+					summary.Status = "aborted"
+					return fmt.Errorf("pilot aborted after trial %s: %s", result.TrialID, result.ErrorCode)
+				}
+			}
+		}
+	}
+	if summary.TrialCount != plan.GlobalBounds.TrialCount || summary.ProviderAttempts > plan.GlobalBounds.MaxProviderAttempts {
+		return agentic.ErrPilotPlan
+	}
+	summaryBytes, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		return err
+	}
+	summaryBytes = append(summaryBytes, '\n')
+	summaryPath := filepath.Join(*outputRoot, "manifest.json")
+	if err := writeExclusive(summaryPath, summaryBytes); err != nil {
+		return err
+	}
+	manifestSum := sha256.Sum256(summaryBytes)
+	_, err = fmt.Fprintf(os.Stdout, `{"status":"complete","trial_count":%d,"manifest_digest":"sha256:%s"}`+"\n", summary.TrialCount, hex.EncodeToString(manifestSum[:]))
+	return err
+}
+
+func abortPilot(code string) bool {
+	switch code {
+	case "usage_missing", "provider_budget_exceeded", "provider_timeout", "cancelled", "provider_or_protocol_failure", "python_engine_failure", "python_trace_mismatch", "direct_host_call_failed", "invalid_tool_observation":
+		return true
+	default:
+		return false
+	}
+}
+
+func addBounded(left, right, maximum uint64) (uint64, error) {
+	if right > ^uint64(0)-left || left+right > maximum {
+		return 0, errors.New("global token bound exceeded")
+	}
+	return left + right, nil
+}
+
+func fileDigest(path string, maximum int64) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maximum {
+		return "", errors.New("artifact is not a bounded regular file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func readRegularBounded(path string, maximum int64) ([]byte, error) {
+	if _, err := fileDigest(path, maximum); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path)
+}
+
+func writeExclusive(path string, content []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	remove := true
+	defer func() {
+		_ = file.Close()
+		if remove {
+			_ = os.Remove(path)
+		}
+	}()
+	if _, err := file.Write(content); err != nil {
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	remove = false
+	return nil
+}
+
+func main() {
+	deps := dependencies{executablePath: os.Executable, newAdapter: func() (provider.Adapter, error) { return provider.NewLinkAPIResponses() }}
+	if err := run(context.Background(), os.Args[1:], deps); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

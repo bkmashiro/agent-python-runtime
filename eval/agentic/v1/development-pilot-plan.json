@@ -1,0 +1,48 @@
+{
+  "schema_version": "agentic-development-pilot-plan/v1",
+  "status": "frozen",
+  "split": "dev",
+  "model": "gpt-5.4",
+  "decision_eligible": false,
+  "dataset_manifest_digest": "sha256:f84c8ba172c80ce1e64644391faef7d97f4c9581c72c100deb3664fc532c86e6",
+  "credential_env_name": "LINKAPI_API_KEY",
+  "transport_retry_policy": {"automatic_retries": 0, "reason": "unverified_provider_idempotency"},
+  "cost_gate": {"status": "awaiting_owner_approval", "activation_required": true},
+  "conditions": ["direct", "python", "hybrid"],
+  "replicates": [0],
+  "guest_profiles": ["core"],
+  "task_ids": [
+    "bfcl-v4-stateful-local-tools-multi_turn_base_12",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_29",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_37",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_39",
+    "bfcl-v4-stateful-local-tools-multi_turn_base_9",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_112",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_147",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_168",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_177",
+    "bfcl-v4-stateless-function-calling-parallel_multiple_91"
+  ],
+  "per_trial": {
+    "max_provider_attempts_per_turn": 1,
+    "max_tool_calls": 32,
+    "max_python_runs_per_turn": 1,
+    "max_input_tokens_per_provider_attempt": 20000,
+    "max_output_tokens_per_provider_attempt": 1024
+  },
+  "run_config": {
+    "timeout_seconds": 20,
+    "max_request_bytes": 1048576,
+    "max_response_bytes": 1048576,
+    "memory_limit_pages": 8192
+  },
+  "global_bounds": {
+    "trial_count": 30,
+    "max_provider_attempts": 63,
+    "max_input_tokens": 1260000,
+    "max_output_tokens": 64512,
+    "max_total_tokens": 1324512,
+    "max_tool_calls": 960,
+    "max_python_runs": 42
+  }
+}

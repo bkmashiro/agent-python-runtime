@@ -12,12 +12,12 @@ var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
 
 func ValidateTrialResult(result TrialResult) error {
 	if result.Version != "agentic-development-trial/v1" || result.Model != developmentModel ||
-		!result.Condition.valid() || !result.Limits.valid() || result.Replicate > 1000 ||
+		!result.Condition.valid() || !result.Limits.valid() || !validExecutionIdentity(result.Identity, result.Condition) || result.Replicate > 1000 ||
 		!validDigest(result.SpecDigest) || result.TrialID != "dev_"+strings.TrimPrefix(result.SpecDigest, "sha256:")[:32] ||
 		result.TaskID == "" || !validDigest(result.TaskDigest) || !validDigest(result.SourceRecordDigest) ||
 		!validDigest(result.PromptDigest) || !validDigest(result.SurfaceDigest) ||
 		!validDigest(result.CatalogDigest) || result.ProviderCalls != uint32(len(result.Exchanges)) ||
-		result.ProviderCalls > result.Limits.MaxProviderCalls || result.ToolCalls < 0 || result.ToolCalls > int(result.Limits.MaxToolCalls) ||
+		result.ProviderCalls > result.ProviderAttempts || result.ProviderAttempts > result.Limits.MaxProviderCalls || result.ToolCalls < 0 || result.ToolCalls > int(result.Limits.MaxToolCalls) ||
 		result.PythonRuns > result.Limits.MaxPythonRuns || len(result.TextDigests) > int(result.ProviderCalls) {
 		return ErrTrialArtifact
 	}
@@ -95,6 +95,28 @@ func ValidateTrialResult(result TrialResult) error {
 		return ErrTrialArtifact
 	}
 	return nil
+}
+
+func validExecutionIdentity(identity ExecutionIdentity, condition Condition) bool {
+	if !validLowerHex(identity.RepositoryCommit, 40) || !validDigest(identity.HostArtifactDigest) || !validDigest(identity.DatasetManifestDigest) {
+		return false
+	}
+	if condition == ConditionDirect {
+		return identity.GuestArtifactDigest == "" && identity.GuestProfile == ""
+	}
+	return validDigest(identity.GuestArtifactDigest) && (identity.GuestProfile == "core" || identity.GuestProfile == "numpy-core")
+}
+
+func validLowerHex(value string, length int) bool {
+	if len(value) != length {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func WriteTrialArtifact(path string, result TrialResult) (string, error) {

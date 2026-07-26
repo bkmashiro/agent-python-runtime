@@ -19,6 +19,14 @@ type PythonWorkflow interface {
 
 type PythonWorkflowFactory func(*ToolRuntime) (PythonWorkflow, error)
 
+type ExecutionIdentity struct {
+	RepositoryCommit      string `json:"repository_commit"`
+	HostArtifactDigest    string `json:"host_artifact_digest"`
+	DatasetManifestDigest string `json:"dataset_manifest_digest"`
+	GuestArtifactDigest   string `json:"guest_artifact_digest,omitempty"`
+	GuestProfile          string `json:"guest_profile,omitempty"`
+}
+
 type TrialResult struct {
 	Version            string             `json:"version"`
 	TrialID            string             `json:"trial_id"`
@@ -28,12 +36,14 @@ type TrialResult struct {
 	SourceRecordDigest string             `json:"source_record_digest"`
 	Condition          Condition          `json:"condition"`
 	Model              string             `json:"model"`
+	Identity           ExecutionIdentity  `json:"identity"`
 	Replicate          uint32             `json:"replicate"`
 	Limits             TrialLimits        `json:"limits"`
 	PromptDigest       string             `json:"prompt_digest"`
 	SurfaceDigest      string             `json:"surface_digest"`
 	Passed             bool               `json:"passed"`
 	ErrorCode          string             `json:"error_code,omitempty"`
+	ProviderAttempts   uint32             `json:"provider_attempts"`
 	ProviderCalls      uint32             `json:"provider_calls"`
 	ToolCalls          int                `json:"tool_calls"`
 	PythonRuns         uint32             `json:"python_runs"`
@@ -73,6 +83,19 @@ func RunDevelopmentTrialReplicate(
 	limits TrialLimits,
 	pythonFactory PythonWorkflowFactory,
 ) (TrialResult, error) {
+	return RunDevelopmentTrialWithIdentity(ctx, adapter, task, condition, replicate, limits, ExecutionIdentity{}, pythonFactory)
+}
+
+func RunDevelopmentTrialWithIdentity(
+	ctx context.Context,
+	adapter provider.Adapter,
+	task Task,
+	condition Condition,
+	replicate uint32,
+	limits TrialLimits,
+	identity ExecutionIdentity,
+	pythonFactory PythonWorkflowFactory,
+) (TrialResult, error) {
 	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 ||
 		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) ||
 		(condition == ConditionDirect && pythonFactory != nil) ||
@@ -100,7 +123,7 @@ func RunDevelopmentTrialReplicate(
 	promptDigest, surfaceDigest := digest([]byte(prompt)), digest(surfaceBytes)
 	specBytes, specErr := json.Marshal(map[string]any{
 		"version": "agentic-development-trial-spec/v1", "task_digest": taskDigest,
-		"condition": condition, "model": developmentModel, "replicate": replicate, "limits": limits,
+		"condition": condition, "model": developmentModel, "replicate": replicate, "limits": limits, "identity": identity,
 		"catalog_digest": tools.Snapshot().Digest(), "prompt_digest": promptDigest, "surface_digest": surfaceDigest,
 	})
 	if specErr != nil {
@@ -110,7 +133,7 @@ func RunDevelopmentTrialReplicate(
 	result := TrialResult{
 		Version: "agentic-development-trial/v1", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
-		Condition: condition, Model: developmentModel, Replicate: replicate, Limits: limits,
+		Condition: condition, Model: developmentModel, Identity: identity, Replicate: replicate, Limits: limits,
 		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, CatalogDigest: tools.Snapshot().Digest(),
 	}
 	if tools.FileSystem() != nil {
@@ -228,9 +251,10 @@ func RunDevelopmentTrialReplicate(
 			return result, closeErr
 		}
 	}
-	result.ProviderCalls = session.ProviderCalls()
-	result.Usage = session.Usage()
+	result.ProviderAttempts = session.ProviderCalls()
 	result.Exchanges = session.Evidence()
+	result.ProviderCalls = uint32(len(result.Exchanges))
+	result.Usage = session.Usage()
 	trace := tools.Trace()
 	result.ToolCalls = countStatefulCalls(trace)
 	if tools.FileSystem() != nil {

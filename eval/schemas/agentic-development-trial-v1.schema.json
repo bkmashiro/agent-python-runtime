@@ -6,8 +6,8 @@
   "additionalProperties": false,
   "required": [
     "version", "trial_id", "spec_digest", "task_id", "task_digest", "source_record_digest",
-    "condition", "model", "replicate", "limits", "prompt_digest", "surface_digest", "passed",
-    "provider_calls", "tool_calls", "python_runs", "usage", "catalog_digest", "exchanges"
+    "condition", "model", "identity", "replicate", "limits", "prompt_digest", "surface_digest", "passed",
+    "provider_attempts", "provider_calls", "tool_calls", "python_runs", "usage", "catalog_digest", "exchanges"
   ],
   "properties": {
     "version": {"const": "agentic-development-trial/v1"},
@@ -18,12 +18,14 @@
     "source_record_digest": {"$ref": "#/$defs/digest"},
     "condition": {"enum": ["direct", "python", "hybrid"]},
     "model": {"const": "gpt-5.4"},
+    "identity": {"$ref": "#/$defs/identity"},
     "replicate": {"type": "integer", "minimum": 0, "maximum": 1000},
     "limits": {"$ref": "#/$defs/limits"},
     "prompt_digest": {"$ref": "#/$defs/digest"},
     "surface_digest": {"$ref": "#/$defs/digest"},
     "passed": {"type": "boolean"},
     "error_code": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "provider_attempts": {"type": "integer", "minimum": 0, "maximum": 64},
     "provider_calls": {"type": "integer", "minimum": 0, "maximum": 64},
     "tool_calls": {"type": "integer", "minimum": 0, "maximum": 256},
     "python_runs": {"type": "integer", "minimum": 0, "maximum": 256},
@@ -49,6 +51,18 @@
   ],
   "$defs": {
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository_commit", "host_artifact_digest", "dataset_manifest_digest"],
+      "properties": {
+        "repository_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "host_artifact_digest": {"$ref": "#/$defs/digest"},
+        "dataset_manifest_digest": {"$ref": "#/$defs/digest"},
+        "guest_artifact_digest": {"$ref": "#/$defs/digest"},
+        "guest_profile": {"enum": ["core", "numpy-core"]}
+      },
+      "dependentRequired": {"guest_artifact_digest": ["guest_profile"], "guest_profile": ["guest_artifact_digest"]}
+    },
     "usage": {
       "type": "object", "additionalProperties": false,
       "required": ["input_tokens", "output_tokens", "total_tokens"],

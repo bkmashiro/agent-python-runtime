@@ -1,12 +1,10 @@
 package agentic
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 )
@@ -45,6 +43,7 @@ func RunDirectStateless(ctx context.Context, adapter provider.Adapter, task Task
 	}
 	tools := make([]map[string]any, 0, len(task.Tools))
 	seenNames := map[string]struct{}{}
+	providerToCanonical := make(map[string]string, len(task.Tools))
 	for _, tool := range task.Tools {
 		name, err := ProviderToolName(tool.Name)
 		if err != nil {
@@ -54,6 +53,7 @@ func RunDirectStateless(ctx context.Context, adapter provider.Adapter, task Task
 			return DirectResult{}, ErrAgenticRun
 		}
 		seenNames[name] = struct{}{}
+		providerToCanonical[name] = tool.Name
 		var parameters any
 		if decodeUseNumber(tool.Parameters, &parameters) != nil {
 			return DirectResult{}, ErrAgenticRun
@@ -75,9 +75,13 @@ func RunDirectStateless(ctx context.Context, adapter provider.Adapter, task Task
 	if err != nil {
 		return DirectResult{}, fmt.Errorf("%w: provider exchange", ErrAgenticRun)
 	}
-	calls, err := parseResponseFunctionCalls(response.Body)
-	if err != nil {
-		return DirectResult{}, err
+	parsed, err := ParseResponsesOutput(response.Body, providerToCanonical)
+	if err != nil || len(parsed.Calls) == 0 {
+		return DirectResult{}, ErrAgenticRun
+	}
+	calls := make([]FunctionCall, len(parsed.Calls))
+	for index, call := range parsed.Calls {
+		calls[index] = FunctionCall{Name: call.CanonicalName, Arguments: append(json.RawMessage(nil), call.Arguments...)}
 	}
 	score := ScoreStatelessCalls(task, calls)
 	result := DirectResult{
@@ -87,59 +91,6 @@ func RunDirectStateless(ctx context.Context, adapter provider.Adapter, task Task
 		Usage: cloneUsage(response.Usage), UsageUnknown: response.Usage == nil,
 	}
 	return result, nil
-}
-
-func parseResponseFunctionCalls(body json.RawMessage) ([]FunctionCall, error) {
-	var envelope struct {
-		Output []json.RawMessage `json:"output"`
-	}
-	if decodeUseNumber(body, &envelope) != nil || len(envelope.Output) == 0 || len(envelope.Output) > maxFunctionCalls*2 {
-		return nil, ErrAgenticRun
-	}
-	calls := make([]FunctionCall, 0)
-	callIDs := map[string]struct{}{}
-	for _, raw := range envelope.Output {
-		var header struct {
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(raw, &header) != nil {
-			return nil, ErrAgenticRun
-		}
-		if header.Type != "function_call" {
-			continue
-		}
-		var item struct {
-			Type      string `json:"type"`
-			CallID    string `json:"call_id"`
-			Name      string `json:"name"`
-			Arguments string `json:"arguments"`
-		}
-		if json.Unmarshal(raw, &item) != nil || item.CallID == "" || len(item.CallID) > 256 || !providerToolNamePattern.MatchString(item.Name) ||
-			len(item.Arguments) == 0 || len(item.Arguments) > maxArgumentsBytes {
-			return nil, ErrAgenticRun
-		}
-		if _, exists := callIDs[item.CallID]; exists {
-			return nil, ErrAgenticRun
-		}
-		callIDs[item.CallID] = struct{}{}
-		var arguments map[string]any
-		decoder := json.NewDecoder(bytes.NewReader([]byte(item.Arguments)))
-		decoder.UseNumber()
-		if decoder.Decode(&arguments) != nil || arguments == nil {
-			return nil, ErrAgenticRun
-		}
-		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-			return nil, ErrAgenticRun
-		}
-		calls = append(calls, FunctionCall{Name: item.Name, Arguments: json.RawMessage(item.Arguments)})
-		if len(calls) > maxFunctionCalls {
-			return nil, ErrAgenticRun
-		}
-	}
-	if len(calls) == 0 {
-		return nil, ErrAgenticRun
-	}
-	return calls, nil
 }
 
 func cloneUsage(usage *provider.Usage) *provider.Usage {

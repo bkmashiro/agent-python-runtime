@@ -82,6 +82,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	outputRoot := flags.String("out", "", "new output directory")
 	repositoryCommit := flags.String("repository-commit", "", "exact 40-hex source commit")
 	canary := flags.Bool("canary", false, "run the fixed representative three-condition canary")
+	diagnosticTask := flags.String("diagnostic-task", "", "run one authorized development task across all three conditions")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *datasetRoot == "" || *planPath == "" || *activationPath == "" || *guestPath == "" || *outputRoot == "" || len(*repositoryCommit) != 40 {
 		return errors.New("invalid arguments")
 	}
@@ -89,7 +90,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	scope, err := selectExecutionScope(plan, dataset, *canary)
+	scope, err := selectExecutionScope(plan, dataset, *canary, *diagnosticTask)
 	if err != nil {
 		return err
 	}
@@ -220,7 +221,10 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	return err
 }
 
-func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, canary bool) (executionScope, error) {
+func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, canary bool, diagnosticTask string) (executionScope, error) {
+	if canary && diagnosticTask != "" {
+		return executionScope{}, agentic.ErrPilotPlan
+	}
 	full := executionScope{
 		Mode: "pilot", TaskIDs: append([]string(nil), plan.TaskIDs...),
 		Conditions: append([]agentic.Condition(nil), plan.Conditions...), Replicates: append([]uint32(nil), plan.Replicates...),
@@ -231,14 +235,22 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 			MaxPythonRuns: plan.GlobalBounds.MaxPythonRuns,
 		},
 	}
-	if !canary {
+	if !canary && diagnosticTask == "" {
 		return full, nil
 	}
+	taskIDs := representativeCanaryTasks
+	if diagnosticTask != "" {
+		taskIDs = []string{diagnosticTask}
+	}
+	return selectCanaryScope(plan, dataset, taskIDs)
+}
+
+func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, taskIDs []string) (executionScope, error) {
 	if dataset == nil {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
-	wanted := make(map[string]struct{}, len(representativeCanaryTasks))
-	for _, taskID := range representativeCanaryTasks {
+	wanted := make(map[string]struct{}, len(taskIDs))
+	for _, taskID := range taskIDs {
 		if !plan.Authorizes(taskID, agentic.ConditionDirect, 0) ||
 			!plan.Authorizes(taskID, agentic.ConditionPython, 0) || !plan.Authorizes(taskID, agentic.ConditionHybrid, 0) {
 			return executionScope{}, agentic.ErrPilotPlan
@@ -261,12 +273,12 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 			found++
 		}
 	}
-	if found != len(representativeCanaryTasks) || turns == 0 || turns > 64 {
+	if found != len(taskIDs) || turns == 0 || turns > 64 {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
-	trialCount := uint64(len(representativeCanaryTasks) * len(plan.Conditions))
+	trialCount := uint64(len(taskIDs) * len(plan.Conditions))
 	return executionScope{
-		Mode: "canary", TaskIDs: append([]string(nil), representativeCanaryTasks...),
+		Mode: "canary", TaskIDs: append([]string(nil), taskIDs...),
 		Conditions: append([]agentic.Condition(nil), plan.Conditions...), Replicates: []uint32{0},
 		Bounds: executionBounds{
 			TrialCount: uint32(trialCount), MaxProviderAttempts: uint32(attempts),

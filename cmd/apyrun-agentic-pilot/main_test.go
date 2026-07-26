@@ -110,7 +110,7 @@ func TestSelectExecutionScopeUsesFixedRepresentativeCanary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := selectExecutionScope(plan, dataset, true)
+	scope, err := selectExecutionScope(plan, dataset, true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +127,32 @@ func TestSelectExecutionScopeUsesFixedRepresentativeCanary(t *testing.T) {
 	}
 }
 
+func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+	scope, err := selectExecutionScope(plan, dataset, false, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope.Mode != "canary" || len(scope.TaskIDs) != 1 || scope.TaskIDs[0] != taskID ||
+		scope.Bounds.TrialCount != 3 || scope.Bounds.MaxProviderAttempts != 27 || scope.Bounds.MaxInputTokens != 540000 ||
+		scope.Bounds.MaxOutputTokens != 27648 || scope.Bounds.MaxTotalTokens != 567648 ||
+		scope.Bounds.MaxToolCalls != 96 || scope.Bounds.MaxPythonRuns != 6 {
+		t.Fatalf("scope=%+v", scope)
+	}
+	if _, err := selectExecutionScope(plan, dataset, true, taskID); !errors.Is(err, agentic.ErrPilotPlan) {
+		t.Fatalf("combined canary and diagnostic task err=%v", err)
+	}
+	if _, err := selectExecutionScope(plan, dataset, false, "missing-task"); !errors.Is(err, agentic.ErrPilotPlan) {
+		t.Fatalf("unknown diagnostic task err=%v", err)
+	}
+}
+
 func TestSelectExecutionScopePreservesCompletePilot(t *testing.T) {
 	root := repositoryRoot(t)
 	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
@@ -134,7 +160,7 @@ func TestSelectExecutionScopePreservesCompletePilot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := selectExecutionScope(plan, dataset, false)
+	scope, err := selectExecutionScope(plan, dataset, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Digest == "" || plan.GlobalBounds.TrialCount != 30 || plan.GlobalBounds.MaxProviderAttempts != 159 || plan.GlobalBounds.MaxPythonRuns != 42 || len(dataset.Tasks) != 20 {
+	if plan.Digest == "" || plan.Model != "gpt-5.6-luna" || plan.GlobalBounds.TrialCount != 30 || plan.GlobalBounds.MaxProviderAttempts != 159 || plan.GlobalBounds.MaxOutputTokens != 1_302_528 || plan.GlobalBounds.MaxTotalTokens != 4_482_528 || plan.GlobalBounds.MaxPythonRuns != 42 || len(dataset.Tasks) != 20 {
 		t.Fatalf("plan=%+v tasks=%d", plan, len(dataset.Tasks))
 	}
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
@@ -21,7 +21,7 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limits.MaxProviderCalls != 12 || limits.MaxPythonRuns != 3 || limits.MaxToolCalls != 32 || limits.MaxInputTokens != 240_000 || limits.MaxOutputTokens != 12_288 || limits.MaxTotalTokens != 252_288 || limits.MaxOutputTokensPerCall != 1_024 {
+	if limits.MaxProviderCalls != 12 || limits.MaxPythonRuns != 3 || limits.MaxToolCalls != 32 || limits.MaxInputTokens != 240_000 || limits.MaxOutputTokens != 98_304 || limits.MaxTotalTokens != 338_304 || limits.MaxOutputTokensPerCall != 8_192 {
 		t.Fatalf("limits=%+v", limits)
 	}
 	pythonLimits, err := plan.LimitsFor(task, ConditionPython)

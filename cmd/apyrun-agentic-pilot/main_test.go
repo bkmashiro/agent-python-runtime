@@ -193,7 +193,7 @@ func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
 	}
 	if scope.Mode != "canary" || len(scope.TaskIDs) != 1 || scope.TaskIDs[0] != taskID ||
 		scope.Bounds.TrialCount != 3 || scope.Bounds.MaxProviderAttempts != 27 || scope.Bounds.MaxInputTokens != 540000 ||
-		scope.Bounds.MaxOutputTokens != 27648 || scope.Bounds.MaxTotalTokens != 567648 ||
+		scope.Bounds.MaxOutputTokens != 221184 || scope.Bounds.MaxTotalTokens != 761184 ||
 		scope.Bounds.MaxToolCalls != 96 || scope.Bounds.MaxPythonRuns != 6 {
 		t.Fatalf("scope=%+v", scope)
 	}
@@ -323,7 +323,7 @@ func TestSelectExecutionScopeSupportsOneDiagnosticCondition(t *testing.T) {
 	}
 	if scope.Mode != "canary" || len(scope.TaskIDs) != 1 || len(scope.Conditions) != 1 || scope.Conditions[0] != agentic.ConditionPython ||
 		scope.Bounds.TrialCount != 1 || scope.Bounds.MaxProviderAttempts != 3 || scope.Bounds.MaxInputTokens != 60000 ||
-		scope.Bounds.MaxOutputTokens != 3072 || scope.Bounds.MaxTotalTokens != 63072 ||
+		scope.Bounds.MaxOutputTokens != 24576 || scope.Bounds.MaxTotalTokens != 84576 ||
 		scope.Bounds.MaxToolCalls != 32 || scope.Bounds.MaxPythonRuns != 3 {
 		t.Fatalf("scope=%+v", scope)
 	}

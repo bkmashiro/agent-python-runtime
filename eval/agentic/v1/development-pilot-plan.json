@@ -2,7 +2,7 @@
   "schema_version": "agentic-development-pilot-plan/v1",
   "status": "frozen",
   "split": "dev",
-  "model": "gpt-5.4",
+  "model": "gpt-5.6-luna",
   "decision_eligible": false,
   "dataset_manifest_digest": "sha256:f84c8ba172c80ce1e64644391faef7d97f4c9581c72c100deb3664fc532c86e6",
   "credential_env_name": "LINKAPI_API_KEY",
@@ -28,7 +28,7 @@
     "max_tool_calls": 32,
     "max_python_runs_per_turn": 1,
     "max_input_tokens_per_provider_attempt": 20000,
-    "max_output_tokens_per_provider_attempt": 1024
+    "max_output_tokens_per_provider_attempt": 8192
   },
   "run_config": {
     "timeout_seconds": 20,
@@ -40,8 +40,8 @@
     "trial_count": 30,
     "max_provider_attempts": 159,
     "max_input_tokens": 3180000,
-    "max_output_tokens": 162816,
-    "max_total_tokens": 3342816,
+    "max_output_tokens": 1302528,
+    "max_total_tokens": 4482528,
     "max_tool_calls": 960,
     "max_python_runs": 42
   }

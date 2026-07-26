@@ -14,6 +14,26 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 )
 
+func TestPilotSummaryAggregatesOutcomeAndStrictSeparately(t *testing.T) {
+	summary := pilotSummary{}
+	results := []agentic.TrialResult{
+		{Metrics: &agentic.TrialMetrics{OutcomeSuccess: true, StrictPass: false}},
+		{Metrics: &agentic.TrialMetrics{OutcomeSuccess: true, StrictPass: true}},
+		{Metrics: &agentic.TrialMetrics{OutcomeSuccess: false, StrictPass: false}},
+	}
+	for _, result := range results {
+		if err := summary.recordTrialMetrics(result); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if summary.OutcomeSuccessfulTrials != 2 || summary.StrictPassedTrials != 1 {
+		t.Fatalf("summary=%+v", summary)
+	}
+	if err := summary.recordTrialMetrics(agentic.TrialResult{}); err == nil {
+		t.Fatal("missing metrics accepted")
+	}
+}
+
 func repositoryRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)

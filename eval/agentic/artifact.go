@@ -12,7 +12,7 @@ import (
 var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
 
 func ValidateTrialResult(result TrialResult) error {
-	if result.Version != "agentic-development-trial/v1" || !supportedDevelopmentModel(result.Model) ||
+	if (result.Version != "agentic-development-trial/v1" && result.Version != "agentic-development-trial/v2") || !supportedDevelopmentModel(result.Model) ||
 		!result.Condition.valid() || !result.Limits.valid() || !validExecutionIdentity(result.Identity, result.Condition) || result.Replicate > 1000 ||
 		!validDigest(result.SpecDigest) || result.TrialID != "dev_"+strings.TrimPrefix(result.SpecDigest, "sha256:")[:32] ||
 		result.TaskID == "" || !validDigest(result.TaskDigest) || !validDigest(result.SourceRecordDigest) ||
@@ -97,6 +97,11 @@ func ValidateTrialResult(result TrialResult) error {
 		scorePassed = result.StatelessScore.Passed
 	}
 	if result.Passed != (result.ErrorCode == "" && scorePassed) || (result.ErrorCode != "" && !providerToolNamePattern.MatchString(result.ErrorCode)) {
+		return ErrTrialArtifact
+	}
+	derivedMetrics, metricsErr := DeriveTrialMetrics(result)
+	if metricsErr != nil || (result.Version == "agentic-development-trial/v1" && result.Metrics != nil) ||
+		(result.Version == "agentic-development-trial/v2" && (result.Metrics == nil || !trialMetricsEqual(*result.Metrics, derivedMetrics))) {
 		return ErrTrialArtifact
 	}
 	return nil

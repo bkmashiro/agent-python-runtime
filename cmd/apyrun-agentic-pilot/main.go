@@ -23,31 +23,46 @@ type dependencies struct {
 }
 
 type artifactEntry struct {
-	TrialID   string            `json:"trial_id"`
-	TaskID    string            `json:"task_id"`
-	Condition agentic.Condition `json:"condition"`
-	Replicate uint32            `json:"replicate"`
-	Digest    string            `json:"digest"`
-	Path      string            `json:"path"`
-	Passed    bool              `json:"passed"`
-	ErrorCode string            `json:"error_code,omitempty"`
+	TrialID        string            `json:"trial_id"`
+	TaskID         string            `json:"task_id"`
+	Condition      agentic.Condition `json:"condition"`
+	Replicate      uint32            `json:"replicate"`
+	Digest         string            `json:"digest"`
+	Path           string            `json:"path"`
+	OutcomeSuccess bool              `json:"outcome_success"`
+	StrictPass     bool              `json:"strict_pass"`
+	ErrorCode      string            `json:"error_code,omitempty"`
 }
 
 type pilotSummary struct {
-	Version          string          `json:"version"`
-	Mode             string          `json:"mode"`
-	Status           string          `json:"status"`
-	DecisionEligible bool            `json:"decision_eligible"`
-	PlanDigest       string          `json:"plan_digest"`
-	ActivationDigest string          `json:"activation_digest"`
-	TrialCount       uint32          `json:"trial_count"`
-	PassedTrials     uint32          `json:"passed_trials"`
-	ProviderAttempts uint32          `json:"provider_attempts"`
-	ProviderCalls    uint32          `json:"provider_calls"`
-	PythonAttempts   uint32          `json:"python_attempts"`
-	PythonRuns       uint32          `json:"python_runs"`
-	Usage            provider.Usage  `json:"usage"`
-	Artifacts        []artifactEntry `json:"artifacts"`
+	Version                 string          `json:"version"`
+	Mode                    string          `json:"mode"`
+	Status                  string          `json:"status"`
+	DecisionEligible        bool            `json:"decision_eligible"`
+	PlanDigest              string          `json:"plan_digest"`
+	ActivationDigest        string          `json:"activation_digest"`
+	TrialCount              uint32          `json:"trial_count"`
+	OutcomeSuccessfulTrials uint32          `json:"outcome_successful_trials"`
+	StrictPassedTrials      uint32          `json:"strict_passed_trials"`
+	ProviderAttempts        uint32          `json:"provider_attempts"`
+	ProviderCalls           uint32          `json:"provider_calls"`
+	PythonAttempts          uint32          `json:"python_attempts"`
+	PythonRuns              uint32          `json:"python_runs"`
+	Usage                   provider.Usage  `json:"usage"`
+	Artifacts               []artifactEntry `json:"artifacts"`
+}
+
+func (summary *pilotSummary) recordTrialMetrics(result agentic.TrialResult) error {
+	if summary == nil || result.Metrics == nil {
+		return errors.New("trial metrics are unavailable")
+	}
+	if result.Metrics.OutcomeSuccess {
+		summary.OutcomeSuccessfulTrials++
+	}
+	if result.Metrics.StrictPass {
+		summary.StrictPassedTrials++
+	}
+	return nil
 }
 
 var representativeCanaryTasks = []string{
@@ -145,7 +160,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		tasks[task.ID] = task
 	}
 	summary := pilotSummary{
-		Version: "agentic-development-pilot-result/v1", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
+		Version: "agentic-development-pilot-result/v2", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
 		PlanDigest: plan.Digest, ActivationDigest: activation.Digest,
 		Artifacts: make([]artifactEntry, 0, scope.Bounds.TrialCount),
 	}
@@ -193,8 +208,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 					return err
 				}
 				summary.TrialCount++
-				if result.Passed {
-					summary.PassedTrials++
+				if err := summary.recordTrialMetrics(result); err != nil {
+					return err
 				}
 				summary.ProviderAttempts += result.ProviderAttempts
 				summary.ProviderCalls += result.ProviderCalls
@@ -212,7 +227,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 				summary.Artifacts = append(summary.Artifacts, artifactEntry{
 					TrialID: result.TrialID, TaskID: task.ID, Condition: condition, Replicate: replicate,
 					Digest: artifactDigest, Path: filepath.ToSlash(filepath.Join("trials", result.TrialID+".json")),
-					Passed: result.Passed, ErrorCode: result.ErrorCode,
+					OutcomeSuccess: result.Metrics.OutcomeSuccess, StrictPass: result.Metrics.StrictPass,
+					ErrorCode: result.ErrorCode,
 				})
 				if abortPilot(result.ErrorCode) {
 					summary.Status = "aborted"

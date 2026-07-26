@@ -56,6 +56,7 @@ type TrialResult struct {
 	PromptDigest       string             `json:"prompt_digest"`
 	SurfaceDigest      string             `json:"surface_digest"`
 	Passed             bool               `json:"passed"`
+	Metrics            *TrialMetrics      `json:"metrics,omitempty"`
 	ErrorCode          string             `json:"error_code,omitempty"`
 	ProviderAttempts   uint32             `json:"provider_attempts"`
 	ProviderCalls      uint32             `json:"provider_calls"`
@@ -209,7 +210,7 @@ func runDevelopmentTrialForModelWithIdentity(
 	}
 	specDigest := digest(specBytes)
 	result := TrialResult{
-		Version: "agentic-development-trial/v1", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
+		Version: "agentic-development-trial/v2", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
 		Condition: condition, Model: model, Identity: identity, Replicate: replicate, Limits: limits,
 		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, CatalogDigest: tools.Snapshot().Digest(),
@@ -420,6 +421,11 @@ func runDevelopmentTrialForModelWithIdentity(
 		result.StatefulScore = &score
 		result.Passed = result.ErrorCode == "" && score.Passed
 	}
+	metrics, metricsErr := DeriveTrialMetrics(result)
+	if metricsErr != nil {
+		return result, metricsErr
+	}
+	result.Metrics = &metrics
 	return result, nil
 }
 

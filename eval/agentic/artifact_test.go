@@ -28,6 +28,33 @@ func validTrialResult(t *testing.T) TrialResult {
 	return result
 }
 
+func TestValidateTrialResultV2BindsDerivedMetricsAndKeepsV1Readable(t *testing.T) {
+	valid := validTrialResult(t)
+	if valid.Version != "agentic-development-trial/v2" || valid.Metrics == nil {
+		t.Fatalf("runner did not emit v2 metrics: %+v", valid)
+	}
+	if err := ValidateTrialResult(valid); err != nil {
+		t.Fatal(err)
+	}
+	tampered := valid
+	metrics := *valid.Metrics
+	metrics.OutcomeSuccess = !metrics.OutcomeSuccess
+	tampered.Metrics = &metrics
+	if err := ValidateTrialResult(tampered); err == nil {
+		t.Fatal("inconsistent v2 metrics accepted")
+	}
+	legacy := valid
+	legacy.Version = "agentic-development-trial/v1"
+	legacy.Metrics = nil
+	if err := ValidateTrialResult(legacy); err != nil {
+		t.Fatalf("legacy v1 rejected: %v", err)
+	}
+	legacy.Metrics = valid.Metrics
+	if err := ValidateTrialResult(legacy); err == nil {
+		t.Fatal("legacy v1 accepted v2 metrics")
+	}
+}
+
 func TestValidateTrialResultBindsUsageConditionAndScores(t *testing.T) {
 	valid := validTrialResult(t)
 	if err := ValidateTrialResult(valid); err != nil {

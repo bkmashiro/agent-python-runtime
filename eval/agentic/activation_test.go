@@ -16,7 +16,6 @@ func writeActivation(t *testing.T, plan DevelopmentPilotPlan, hostDigest string)
 		"dataset_manifest_digest": plan.DatasetManifestDigest,
 		"provider_catalog_digest": "sha256:" + strings.Repeat("d", 64), "provider_catalog_observed_at": "2026-07-26T11:00:00Z",
 		"guest_artifacts": map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
-		"maximum_spend":   map[string]any{"currency": "USD", "decimal": "5.00"},
 		"approved_by":     "owner", "approved_at": "2026-07-26T12:00:00Z",
 	}
 	content, _ := json.Marshal(document)
@@ -49,5 +48,21 @@ func TestLoadPilotActivationBindsExactArtifacts(t *testing.T) {
 	}
 	if _, err := LoadPilotActivation(path, plan, "sha256:"+strings.Repeat("d", 64)); err == nil {
 		t.Fatal("mismatched Host artifact accepted")
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy map[string]any
+	if json.Unmarshal(content, &legacy) != nil {
+		t.Fatal("decode activation")
+	}
+	legacy["maximum_spend"] = map[string]any{"currency": "USD", "decimal": "0.01"}
+	content, _ = json.Marshal(legacy)
+	if os.WriteFile(path, content, 0o600) != nil {
+		t.Fatal("rewrite activation")
+	}
+	if _, err := LoadPilotActivation(path, plan, host); err == nil {
+		t.Fatal("unenforced monetary cap field accepted")
 	}
 }

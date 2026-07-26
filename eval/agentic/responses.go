@@ -229,8 +229,9 @@ func ParseResponsesOutput(body json.RawMessage, providerToCanonical map[string]s
 }
 
 func parseFunctionCall(header map[string]json.RawMessage, mapping map[string]string) (ResponseCall, map[string]any, error) {
-	var callID, name, arguments string
-	if json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil ||
+	var callID, name, arguments, status string
+	if json.Unmarshal(header["status"], &status) != nil || status != "completed" ||
+		json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil ||
 		!validProtocolID(callID) || !providerToolNamePattern.MatchString(name) || len(arguments) == 0 || len(arguments) > maxArgumentsBytes {
 		return ResponseCall{}, nil, ErrAgenticRun
 	}
@@ -243,7 +244,7 @@ func parseFunctionCall(header map[string]json.RawMessage, mapping map[string]str
 		return ResponseCall{}, nil, ErrAgenticRun
 	}
 	call := ResponseCall{CallID: callID, ProviderName: name, CanonicalName: canonical, Arguments: json.RawMessage(arguments)}
-	replay := map[string]any{"type": "function_call", "call_id": callID, "name": name, "arguments": arguments}
+	replay := map[string]any{"type": "function_call", "status": "completed", "call_id": callID, "name": name, "arguments": arguments}
 	return call, replay, nil
 }
 
@@ -264,7 +265,8 @@ func parseMessage(header map[string]json.RawMessage, text *bytes.Buffer) (bool, 
 		if kind == "refusal" {
 			valueField = "refusal"
 		}
-		if json.Unmarshal(content[valueField], &value) != nil || !utf8.ValidString(value) {
+		rawValue, exists := content[valueField]
+		if !exists || len(rawValue) == 0 || json.Unmarshal(rawValue, &value) != nil || !utf8.ValidString(value) {
 			return false, nil, false, ErrAgenticRun
 		}
 		if text.Len()+len([]byte(value)) > maxResponseTextBytes {

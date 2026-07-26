@@ -21,7 +21,7 @@ func adapterForStatefulOracle(t *testing.T, task Task, providerName func(string)
 		items := make([]map[string]any, len(turn))
 		for callIndex, call := range turn {
 			items[callIndex] = map[string]any{
-				"type": "function_call", "call_id": fmt.Sprintf("provider-private-%d-%d", turnIndex, callIndex),
+				"type": "function_call", "status": "completed", "call_id": fmt.Sprintf("provider-private-%d-%d", turnIndex, callIndex),
 				"name": providerName(call.Name), "arguments": string(call.Arguments),
 			}
 		}
@@ -106,7 +106,7 @@ func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	responses := make([]provider.Response, len(task.Interaction.Turns))
 	for index := range responses {
-		body := fmt.Sprintf(`{"output":[{"type":"function_call","call_id":"python-private-%d","name":"run_python","arguments":"{\"code\":\"private code turn %d\"}"}]}`, index, index)
+		body := fmt.Sprintf(`{"output":[{"type":"function_call","status":"completed","call_id":"python-private-%d","name":"run_python","arguments":"{\"code\":\"private code turn %d\"}"}]}`, index, index)
 		responses[index] = responseFixture(body, 20, 5)
 	}
 	adapter := &scriptedAdapter{responses: responses}

@@ -43,7 +43,6 @@ func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 		"dataset_manifest_digest": plan.DatasetManifestDigest,
 		"provider_catalog_digest": "sha256:" + strings.Repeat("d", 64), "provider_catalog_observed_at": "2026-07-26T11:00:00Z",
 		"guest_artifacts": map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
-		"maximum_spend":   map[string]any{"currency": "USD", "decimal": "5.00"},
 		"approved_by":     "owner", "approved_at": "2026-07-26T12:00:00Z",
 	}
 	activationBytes, _ := json.Marshal(activationDocument)

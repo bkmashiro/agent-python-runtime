@@ -90,7 +90,6 @@ if [[ ! ${SOURCE_DATE_EPOCH} =~ ^[1-9][0-9]*$ ]]; then
   exit 6
 fi
 export SOURCE_DATE_EPOCH
-export PYTHONHASHSEED=0
 
 (
   cd "${CPYTHON_DIR}"

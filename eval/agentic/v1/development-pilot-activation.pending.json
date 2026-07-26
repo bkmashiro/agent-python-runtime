@@ -8,7 +8,6 @@
   "provider_catalog_digest": "REPLACE_WITH_SHA256_DIGEST",
   "provider_catalog_observed_at": "REPLACE_WITH_RFC3339_UTC_TIMESTAMP",
   "guest_artifacts": {"core": "REPLACE_WITH_SHA256_DIGEST"},
-  "maximum_spend": {"currency": "USD", "decimal": "REQUIRES_OWNER_DECISION"},
   "approved_by": "pending",
   "approved_at": "pending"
 }

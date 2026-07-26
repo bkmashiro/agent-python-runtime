@@ -40,10 +40,10 @@ func TestRunDirectStatelessScoresAndRedacts(t *testing.T) {
 	adapter := &stubAdapter{body: json.RawMessage(`{
 		"id":"resp_private",
 		"output":[
-			{"type":"function_call","call_id":"call_private_1","name":"library_search_book","arguments":"{\"title\":\"1984\",\"author\":\"George Orwell\",\"platform\":\"British Library\"}"},
-			{"type":"function_call","call_id":"call_private_2","name":"art_auction_fetch_artwork_price","arguments":"{\"artwork_name\":\"The Scream\",\"artist\":\"Edvard Munch\",\"platform\":\"Christie\"}"},
-			{"type":"function_call","call_id":"call_private_3","name":"library_search_book","arguments":"{\"title\":\"To Kill a Mockingbird\",\"author\":\"Harper Lee\",\"platform\":\"New York Public Library\"}"},
-			{"type":"function_call","call_id":"call_private_4","name":"art_auction_fetch_artwork_price","arguments":"{\"artwork_name\":\"Starry Night\",\"artist\":\"Vincent Van Gogh\",\"platform\":\"Sotheby\"}"}
+			{"type":"function_call","status":"completed","call_id":"call_private_1","name":"library_search_book","arguments":"{\"title\":\"1984\",\"author\":\"George Orwell\",\"platform\":\"British Library\"}"},
+			{"type":"function_call","status":"completed","call_id":"call_private_2","name":"art_auction_fetch_artwork_price","arguments":"{\"artwork_name\":\"The Scream\",\"artist\":\"Edvard Munch\",\"platform\":\"Christie\"}"},
+			{"type":"function_call","status":"completed","call_id":"call_private_3","name":"library_search_book","arguments":"{\"title\":\"To Kill a Mockingbird\",\"author\":\"Harper Lee\",\"platform\":\"New York Public Library\"}"},
+			{"type":"function_call","status":"completed","call_id":"call_private_4","name":"art_auction_fetch_artwork_price","arguments":"{\"artwork_name\":\"Starry Night\",\"artist\":\"Vincent Van Gogh\",\"platform\":\"Sotheby\"}"}
 		],
 		"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}
 	}`)}
@@ -93,7 +93,7 @@ func TestRunDirectStatelessRejectsEvaluationAndMalformedArguments(t *testing.T) 
 			evaluation = task
 		}
 	}
-	adapter := &stubAdapter{body: json.RawMessage(`{"output":[{"type":"function_call","call_id":"c1","name":"bad","arguments":"[]"}]}`)}
+	adapter := &stubAdapter{body: json.RawMessage(`{"output":[{"type":"function_call","status":"completed","call_id":"c1","name":"bad","arguments":"[]"}]}`)}
 	if _, err := RunDirectStateless(context.Background(), adapter, evaluation, "gpt-5.4-mini", 128); err == nil {
 		t.Fatal("expected evaluation split rejection")
 	}

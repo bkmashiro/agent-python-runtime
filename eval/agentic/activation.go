@@ -2,14 +2,11 @@ package agentic
 
 import (
 	"errors"
-	"fmt"
 	"os"
-	"regexp"
 	"time"
 )
 
 var ErrPilotActivation = errors.New("invalid agentic pilot activation")
-var spendDecimalPattern = regexp.MustCompile(`^[0-9]{1,6}\.[0-9]{2}$`)
 
 type PilotActivation struct {
 	SchemaVersion             string            `json:"schema_version"`
@@ -21,13 +18,9 @@ type PilotActivation struct {
 	ProviderCatalogDigest     string            `json:"provider_catalog_digest"`
 	ProviderCatalogObservedAt string            `json:"provider_catalog_observed_at"`
 	GuestArtifacts            map[string]string `json:"guest_artifacts"`
-	MaximumSpend              struct {
-		Currency string `json:"currency"`
-		Decimal  string `json:"decimal"`
-	} `json:"maximum_spend"`
-	ApprovedBy string `json:"approved_by"`
-	ApprovedAt string `json:"approved_at"`
-	Digest     string `json:"-"`
+	ApprovedBy                string            `json:"approved_by"`
+	ApprovedAt                string            `json:"approved_at"`
+	Digest                    string            `json:"-"`
 }
 
 func LoadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDigest string) (PilotActivation, error) {
@@ -50,7 +43,6 @@ func LoadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDig
 		activation.HostArtifactDigest != hostArtifactDigest || activation.DatasetManifestDigest != plan.DatasetManifestDigest ||
 		!validDigest(activation.ProviderCatalogDigest) || catalogTimeErr != nil || catalogObservedAt.Location() != time.UTC ||
 		len(activation.GuestArtifacts) != 1 || !validDigest(activation.GuestArtifacts["core"]) ||
-		activation.MaximumSpend.Currency != "USD" || !positiveSpendDecimal(activation.MaximumSpend.Decimal) ||
 		activation.ApprovedBy != "owner" || timeErr != nil || approvedAt.Location() != time.UTC {
 		return PilotActivation{}, ErrPilotActivation
 	}
@@ -72,16 +64,4 @@ func (activation PilotActivation) Identity(condition Condition) (ExecutionIdenti
 		return ExecutionIdentity{}, ErrPilotActivation
 	}
 	return identity, nil
-}
-
-func positiveSpendDecimal(value string) bool {
-	if !spendDecimalPattern.MatchString(value) {
-		return false
-	}
-	var whole int64
-	var fraction int64
-	if _, err := fmt.Sscanf(value, "%d.%02d", &whole, &fraction); err != nil {
-		return false
-	}
-	return whole > 0 || fraction > 0
 }

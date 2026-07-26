@@ -54,7 +54,7 @@ func (failingPythonWorkflow) Close(context.Context) error { return nil }
 
 func TestProviderUsageOvershootProducesValidAbortArtifact(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
-	response := responseFixture(`{"output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 5, 4_000)
+	response := responseFixture(`{"output":[{"type":"function_call","status":"completed","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 5, 4_000)
 	identity := ExecutionIdentity{
 		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
@@ -71,7 +71,7 @@ func TestProviderUsageOvershootProducesValidAbortArtifact(t *testing.T) {
 
 func TestPythonEngineFailureProducesValidAttemptOnlyArtifact(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
-	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"output":[{"type":"function_call","call_id":"py1","name":"run_python","arguments":"{\"code\":\"result = {}\"}"}]}`, 5, 5)}}
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"output":[{"type":"function_call","status":"completed","call_id":"py1","name":"run_python","arguments":"{\"code\":\"result = {}\"}"}]}`, 5, 5)}}
 	identity := ExecutionIdentity{
 		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
@@ -89,7 +89,7 @@ func TestPythonEngineFailureProducesValidAttemptOnlyArtifact(t *testing.T) {
 
 func TestMissingUsageProducesValidFailureArtifactWithoutInventedUsage(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
-	response := responseFixture(`{"output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 1, 1)
+	response := responseFixture(`{"output":[{"type":"function_call","status":"completed","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 1, 1)
 	response.Usage = nil
 	identity := ExecutionIdentity{
 		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),

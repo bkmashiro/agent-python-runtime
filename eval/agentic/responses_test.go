@@ -62,7 +62,7 @@ func TestResponsesSessionUsesLinkAPIDocumentedWireDialect(t *testing.T) {
 	history := []any{
 		map[string]any{"role": "developer", "content": "use tools"},
 		map[string]any{"role": "user", "content": "inspect"},
-		map[string]any{"type": "function_call", "status": "completed", "call_id": "call-1", "name": "pwd", "arguments": "{}"},
+		map[string]any{"type": "function_call", "status": "completed", "call_id": "call-1", "name": "pwd", "arguments": "null"},
 		map[string]any{"type": "function_call_output", "call_id": "call-1", "output": `{"path":"/"}`},
 	}
 	tools := []map[string]any{{"type": "function", "name": "pwd", "description": "working directory", "parameters": map[string]any{"type": "object"}, "strict": false}}
@@ -90,7 +90,8 @@ func TestResponsesSessionUsesLinkAPIDocumentedWireDialect(t *testing.T) {
 	}
 	assistant := messages[2].(map[string]any)
 	toolMessage := messages[3].(map[string]any)
-	if assistant["role"] != "assistant" || len(assistant["tool_calls"].([]any)) != 1 || toolMessage["role"] != "tool" || toolMessage["tool_call_id"] != "call-1" {
+	toolCall := assistant["tool_calls"].([]any)[0].(map[string]any)
+	if assistant["role"] != "assistant" || len(assistant["tool_calls"].([]any)) != 1 || toolCall["function"].(map[string]any)["arguments"] != "{}" || toolMessage["role"] != "tool" || toolMessage["tool_call_id"] != "call-1" {
 		t.Fatalf("assistant=%#v tool=%#v", assistant, toolMessage)
 	}
 	wireTools, ok := payload["tools"].([]any)
@@ -104,14 +105,21 @@ func TestResponsesSessionUsesLinkAPIDocumentedWireDialect(t *testing.T) {
 }
 
 func TestResponsesSessionRejectsMalformedLinkAPIHistoryBeforeExchange(t *testing.T) {
-	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[]}`, 1, 1)}}
-	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = session.Exchange(context.Background(), []any{map[string]any{"type": "function_call_output", "call_id": "missing-call", "output": "{}"}}, nil, "auto", false, nil)
-	if err == nil || len(adapter.requests) != 0 {
-		t.Fatalf("err=%v requests=%d", err, len(adapter.requests))
+	for name, history := range map[string][]any{
+		"unmatched output": {map[string]any{"type": "function_call_output", "call_id": "missing-call", "output": "{}"}},
+		"non-string type":  {map[string]any{"type": 7, "role": "user", "content": "x"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","output":[]}`, 1, 1)}}
+			session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = session.Exchange(context.Background(), history, nil, "auto", false, nil)
+			if err == nil || len(adapter.requests) != 0 {
+				t.Fatalf("err=%v requests=%d", err, len(adapter.requests))
+			}
+		})
 	}
 }
 

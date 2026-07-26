@@ -198,13 +198,20 @@ func marshalLinkAPIWirePayload(model string, input any, tools []map[string]any, 
 			return nil, ErrAgenticRun
 		}
 		var itemType string
-		_ = json.Unmarshal(header["type"], &itemType)
+		if rawType, exists := header["type"]; exists && (json.Unmarshal(rawType, &itemType) != nil || itemType == "") {
+			return nil, ErrAgenticRun
+		}
 		switch itemType {
 		case "function_call":
 			var callID, name, arguments, status string
 			var argumentObject map[string]any
-			if json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil ||
-				!validProtocolID(callID) || !providerToolNamePattern.MatchString(name) || decodeUseNumber([]byte(arguments), &argumentObject) != nil || argumentObject == nil || knownCalls[callID] ||
+			if json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil {
+				return nil, ErrAgenticRun
+			}
+			if strings.TrimSpace(arguments) == "null" {
+				arguments = "{}"
+			}
+			if !validProtocolID(callID) || !providerToolNamePattern.MatchString(name) || decodeUseNumber([]byte(arguments), &argumentObject) != nil || argumentObject == nil || knownCalls[callID] ||
 				(header["status"] != nil && (json.Unmarshal(header["status"], &status) != nil || status != "completed")) {
 				return nil, ErrAgenticRun
 			}

@@ -176,6 +176,7 @@ func RunDevelopmentTrialWithIdentity(
 		}
 		turnHadCalls := false
 		turnComplete := false
+		pythonAttemptsThisTurn := uint32(0)
 		for attempt := uint32(0); attempt < providerAttemptsPerTurn; attempt++ {
 			toolChoice := "auto"
 			if attempt == 0 {
@@ -205,7 +206,7 @@ func RunDevelopmentTrialWithIdentity(
 			for _, call := range parsed.Calls {
 				var observation json.RawMessage
 				if call.CanonicalName == "run_python" {
-					if workflow == nil || result.PythonAttempts >= limits.MaxPythonRuns {
+					if workflow == nil || pythonAttemptsThisTurn >= 1 || result.PythonAttempts >= limits.MaxPythonRuns {
 						result.ErrorCode = "python_run_budget_exceeded"
 						break
 					}
@@ -221,6 +222,7 @@ func RunDevelopmentTrialWithIdentity(
 						result.ErrorCode = "tool_call_budget_exceeded"
 						break
 					}
+					pythonAttemptsThisTurn++
 					result.PythonAttempts++
 					pythonResult, runErr := workflow.Execute(
 						ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,

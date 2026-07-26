@@ -186,6 +186,31 @@ func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 	}
 }
 
+func TestRunDevelopmentTrialRejectsSecondPythonRunInSameTurn(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	body := `{"status":"completed","output":[` +
+		`{"type":"function_call","status":"completed","call_id":"python-first","name":"run_python","arguments":"{\"code\":\"first\"}"},` +
+		`{"type":"function_call","status":"completed","call_id":"python-second","name":"run_python","arguments":"{\"code\":\"second\"}"}` +
+		`]}`
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(body, 20, 5)}}
+	var workflow *oracleWorkflow
+	factory := func(tools *ToolRuntime) (PythonWorkflow, error) {
+		var oracle StatefulOracle
+		if decodeStrict(task.Oracle, &oracle) != nil {
+			return nil, ErrDataset
+		}
+		workflow = &oracleWorkflow{tools: tools, oracle: oracle}
+		return workflow, nil
+	}
+	result, err := RunDevelopmentTrial(context.Background(), adapter, task, ConditionPython, developmentTrialLimits(len(task.Interaction.Turns)), factory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "python_run_budget_exceeded" || result.ProviderCalls != 1 || result.PythonAttempts != 1 || result.PythonRuns != 1 || workflow == nil || len(workflow.codes) != 1 {
+		t.Fatalf("result=%+v workflow=%+v", result, workflow)
+	}
+}
+
 func TestDevelopmentTrialRejectsEvaluationBeforeProviderOrGuest(t *testing.T) {
 	dataset, err := Load(datasetRoot(t))
 	if err != nil {

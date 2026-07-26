@@ -45,14 +45,37 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "wc(file_name='dev_summary.txt',mode='l')"
+        {
+          "arguments": {
+            "file_name": "dev_summary.txt",
+            "mode": "l"
+          },
+          "name": "wc"
+        }
       ],
       [
-        "grep(file_name='dev_summary.txt',pattern='server error')"
+        {
+          "arguments": {
+            "file_name": "dev_summary.txt",
+            "pattern": "server error"
+          },
+          "name": "grep"
+        }
       ],
       [
-        "touch(file_name='1.txt')",
-        "echo(content='However, a server error was detected in the final testing phase.',file_name='1.txt')"
+        {
+          "arguments": {
+            "file_name": "1.txt"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "However, a server error was detected in the final testing phase.",
+            "file_name": "1.txt"
+          },
+          "name": "echo"
+        }
       ]
     ]
   },

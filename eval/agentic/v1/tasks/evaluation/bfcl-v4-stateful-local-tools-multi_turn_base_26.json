@@ -58,15 +58,41 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "cd(folder='tmp')",
-        "ls(a=True)"
+        {
+          "arguments": {
+            "folder": "tmp"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "a": true
+          },
+          "name": "ls"
+        }
       ],
       [
-        "cat(file_name='file3.txt')"
+        {
+          "arguments": {
+            "file_name": "file3.txt"
+          },
+          "name": "cat"
+        }
       ],
       [
-        "touch(file_name='file3.docx')",
-        "echo(content='Nothing important here. Yet another line.',file_name='file3.docx')"
+        {
+          "arguments": {
+            "file_name": "file3.docx"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "Nothing important here. Yet another line.",
+            "file_name": "file3.docx"
+          },
+          "name": "echo"
+        }
       ]
     ]
   },

@@ -124,6 +124,84 @@ func TestLoadRejectsExternalToolSchemaReference(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsStringStatefulOracle(t *testing.T) {
+	root := copyDataset(t)
+	mutateTask(t, root, "stateful_local_tools", func(task map[string]any) {
+		oracle := task["oracle"].(map[string]any)
+		turns := oracle["turns"].([]any)
+		turns[0] = []any{"pwd()"}
+	})
+	if _, err := Load(root); err == nil {
+		t.Fatal("expected string-form stateful oracle rejection")
+	}
+}
+
+func TestLoadRejectsInvalidStatefulOracleCall(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "unknown tool", mutate: func(call map[string]any) { call["name"] = "unknown" }},
+		{name: "arguments schema", mutate: func(call map[string]any) {
+			call["name"] = "cd"
+			call["arguments"] = map[string]any{"folder": 3}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := copyDataset(t)
+			mutateTask(t, root, "stateful_local_tools", func(task map[string]any) {
+				oracle := task["oracle"].(map[string]any)
+				turns := oracle["turns"].([]any)
+				calls := turns[0].([]any)
+				test.mutate(calls[0].(map[string]any))
+			})
+			if _, err := Load(root); err == nil {
+				t.Fatal("expected invalid stateful oracle rejection")
+			}
+		})
+	}
+}
+
+func mutateTask(t *testing.T, root, track string, mutate func(map[string]any)) {
+	t.Helper()
+	manifest, err := LoadManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entry *ManifestTask
+	for index := range manifest.Tasks {
+		if manifest.Tasks[index].Track == track {
+			entry = &manifest.Tasks[index]
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("track %s not found", track)
+	}
+	path := filepath.Join(root, filepath.FromSlash(entry.Path))
+	var task map[string]any
+	data, err := os.ReadFile(path)
+	if err != nil || json.Unmarshal(data, &task) != nil {
+		t.Fatal("load task")
+	}
+	mutate(task)
+	data, err = json.Marshal(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entry.SHA256 = digest(data)
+	manifestData, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "manifest.json"), manifestData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func copyDataset(t *testing.T) string {
 	t.Helper()
 	src := datasetRoot(t)

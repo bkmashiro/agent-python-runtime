@@ -46,22 +46,73 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "mkdir(dir_name='WebDevProjects')"
+        {
+          "arguments": {
+            "dir_name": "WebDevProjects"
+          },
+          "name": "mkdir"
+        }
       ],
       [
-        "cd(folder='WebDevProjects')",
-        "touch(file_name='styles.css')",
-        "echo(content='Hello World!', file_name='styles.css')",
-        "touch(file_name='index.html')",
-        "echo(content='Hi World!', file_name='index.html')",
-        "touch(file_name='script.js')",
-        "echo(content='Halo World!', file_name='script.js')"
+        {
+          "arguments": {
+            "folder": "WebDevProjects"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "file_name": "styles.css"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "Hello World!",
+            "file_name": "styles.css"
+          },
+          "name": "echo"
+        },
+        {
+          "arguments": {
+            "file_name": "index.html"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "Hi World!",
+            "file_name": "index.html"
+          },
+          "name": "echo"
+        },
+        {
+          "arguments": {
+            "file_name": "script.js"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "Halo World!",
+            "file_name": "script.js"
+          },
+          "name": "echo"
+        }
       ],
       [
-        "ls()"
+        {
+          "arguments": {},
+          "name": "ls"
+        }
       ],
       [
-        "cat(file_name='styles.css')"
+        {
+          "arguments": {
+            "file_name": "styles.css"
+          },
+          "name": "cat"
+        }
       ]
     ]
   },

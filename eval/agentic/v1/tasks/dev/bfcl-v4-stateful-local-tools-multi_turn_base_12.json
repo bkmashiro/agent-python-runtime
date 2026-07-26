@@ -45,14 +45,36 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "cd(folder='Documents')",
-        "touch(file_name='summary.txt')"
+        {
+          "arguments": {
+            "folder": "Documents"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "file_name": "summary.txt"
+          },
+          "name": "touch"
+        }
       ],
       [
-        "echo(content='quantum computing',file_name='summary.txt')"
+        {
+          "arguments": {
+            "content": "quantum computing",
+            "file_name": "summary.txt"
+          },
+          "name": "echo"
+        }
       ],
       [
-        "wc(file_name='summary.txt',mode='w')"
+        {
+          "arguments": {
+            "file_name": "summary.txt",
+            "mode": "w"
+          },
+          "name": "wc"
+        }
       ]
     ]
   },

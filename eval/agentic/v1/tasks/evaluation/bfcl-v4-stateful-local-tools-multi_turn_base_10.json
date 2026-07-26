@@ -66,24 +66,79 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "cd(folder='workspace')",
-        "mkdir(dir_name='Projects')"
+        {
+          "arguments": {
+            "folder": "workspace"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "dir_name": "Projects"
+          },
+          "name": "mkdir"
+        }
       ],
       [
-        "mv(source='proposal.docx',destination='Projects')",
-        "cd(folder='Projects')",
-        "mv(source='proposal.docx',destination='final_proposal_2024')"
+        {
+          "arguments": {
+            "destination": "Projects",
+            "source": "proposal.docx"
+          },
+          "name": "mv"
+        },
+        {
+          "arguments": {
+            "folder": "Projects"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "destination": "final_proposal_2024",
+            "source": "proposal.docx"
+          },
+          "name": "mv"
+        }
       ],
       [
-        "touch(file_name='notes.md')"
+        {
+          "arguments": {
+            "file_name": "notes.md"
+          },
+          "name": "touch"
+        }
       ],
       [
-        "touch(file_name='summary.txt')",
-        "echo(content='Hello',file_name='summary.txt')",
-        "diff(file_name1='notes.md',file_name2='summary.txt')"
+        {
+          "arguments": {
+            "file_name": "summary.txt"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "Hello",
+            "file_name": "summary.txt"
+          },
+          "name": "echo"
+        },
+        {
+          "arguments": {
+            "file_name1": "notes.md",
+            "file_name2": "summary.txt"
+          },
+          "name": "diff"
+        }
       ],
       [
-        "wc(file_name='summary.txt',mode='c')"
+        {
+          "arguments": {
+            "file_name": "summary.txt",
+            "mode": "c"
+          },
+          "name": "wc"
+        }
       ]
     ]
   },

@@ -41,35 +41,35 @@
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_12",
       "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_12.json",
-      "sha256": "sha256:8bd75736bc75344379abaa169534febf2362796f32769f0050971c46f43798b4",
+      "sha256": "sha256:5449e8fc461a6a9e516d895c4351f3dcf12badbb973b61e207c0f5061c0839d0",
       "split": "dev",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_29",
       "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_29.json",
-      "sha256": "sha256:62b13a7e7eb7047fe2cafc59e914fe4a787bc4c5ab465b8e060761637a548a9b",
+      "sha256": "sha256:b28de47a8b58701cfc231c438563ef1ff277fd330cd0c033d05b408237b54119",
       "split": "dev",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_37",
       "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_37.json",
-      "sha256": "sha256:0475617ab498d1d1d1c642da6ec257e4e0d266bbbec0c0c22852f5cb25e1c546",
+      "sha256": "sha256:4e72f9701fb3d51196d5fa911913750b802632a8ca895854230e42817c6ac64f",
       "split": "dev",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_39",
       "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_39.json",
-      "sha256": "sha256:0cbbe7673b078e5c3e08e0291658c5351b741c484f7b6ec4ebf3a8a52afdaca7",
+      "sha256": "sha256:f0df6b72475d868de028743e3beb295060c1d1a80900cf5ab1c62638599077b5",
       "split": "dev",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_9",
       "path": "tasks/dev/bfcl-v4-stateful-local-tools-multi_turn_base_9.json",
-      "sha256": "sha256:06be18350ec209e199dd6f5efcacf43e62600904db20b097b0b21ba2371e9629",
+      "sha256": "sha256:a97f54fd4ef25c0510f32e9c6a5db3b78a3ea0492950b071bfeca046d824a6d6",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -111,35 +111,35 @@
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_1",
       "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_1.json",
-      "sha256": "sha256:1ab3980d54ed8d4ac8b47f60ddb1bdc7f3abf1c8b08c3b1a6f1e7ac37382db09",
+      "sha256": "sha256:c4a4756d7fc7111a3f413c1ac97463d555435989aaebf7173c8fffbb10540d71",
       "split": "evaluation",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_10",
       "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_10.json",
-      "sha256": "sha256:9f8c910daf7f8b6b51bcc52043e265812a5a47ceb8a4107ddd909be0b56d4e91",
+      "sha256": "sha256:f54510070bf919780677fa69471da7dfd555e8ca0c4e81e1e1f911c498bc4fed",
       "split": "evaluation",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_25",
       "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_25.json",
-      "sha256": "sha256:454ca4b2e6d331f06e56d4fc08551021d5e848a1a291cd1d0a2b3d3f9401f5b3",
+      "sha256": "sha256:424005ef035bfdf1e3c7a1db584510239e82cdb261e15bfc84edc732790ef19a",
       "split": "evaluation",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_26",
       "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_26.json",
-      "sha256": "sha256:e883a26cd6a0877af89f618c9e97e64ef345ff83366f3f97e5c92f9aa7d4bc65",
+      "sha256": "sha256:2d89edc5f807b1f273a18cd46f5ec57af2caab109880e71c383e0cf74d6e4be2",
       "split": "evaluation",
       "track": "stateful_local_tools"
     },
     {
       "id": "bfcl-v4-stateful-local-tools-multi_turn_base_3",
       "path": "tasks/evaluation/bfcl-v4-stateful-local-tools-multi_turn_base_3.json",
-      "sha256": "sha256:a28d0a4d682167a47046cdc8a518eb92b22f291ce91e0f3d77a487677e6159af",
+      "sha256": "sha256:4c029cbf5a46e151637c1fcb207605d9070314b0eb42af31ace06db9ae88d391",
       "split": "evaluation",
       "track": "stateful_local_tools"
     },

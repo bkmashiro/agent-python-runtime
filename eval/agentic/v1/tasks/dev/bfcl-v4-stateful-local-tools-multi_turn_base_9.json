@@ -54,15 +54,42 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "cd(folder='Documentation')"
+        {
+          "arguments": {
+            "folder": "Documentation"
+          },
+          "name": "cd"
+        }
       ],
       [
-        "cp(source='FinalReport.txt',destination='Archives')",
-        "cd(folder='Archives')",
-        "mv(source='FinalReport.txt',destination='ArchivedFinalReport2024.txt')"
+        {
+          "arguments": {
+            "destination": "Archives",
+            "source": "FinalReport.txt"
+          },
+          "name": "cp"
+        },
+        {
+          "arguments": {
+            "folder": "Archives"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "destination": "ArchivedFinalReport2024.txt",
+            "source": "FinalReport.txt"
+          },
+          "name": "mv"
+        }
       ],
       [
-        "sort(file_name='ArchivedFinalReport2024.txt')"
+        {
+          "arguments": {
+            "file_name": "ArchivedFinalReport2024.txt"
+          },
+          "name": "sort"
+        }
       ]
     ]
   },

@@ -57,13 +57,41 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "find(path='.',name='test')"
+        {
+          "arguments": {
+            "name": "test",
+            "path": "."
+          },
+          "name": "find"
+        }
       ],
       [
-        "cd(folder='projects')",
-        "cd(folder='photography')",
-        "cp(source='test_image1.jpg',destination='backup_tests')",
-        "cp(source='test_document.txt',destination='backup_tests')"
+        {
+          "arguments": {
+            "folder": "projects"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "folder": "photography"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "destination": "backup_tests",
+            "source": "test_image1.jpg"
+          },
+          "name": "cp"
+        },
+        {
+          "arguments": {
+            "destination": "backup_tests",
+            "source": "test_document.txt"
+          },
+          "name": "cp"
+        }
       ]
     ]
   },

@@ -64,18 +64,51 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "ls(a=True)"
+        {
+          "arguments": {
+            "a": true
+          },
+          "name": "ls"
+        }
       ],
       [
-        "cd(folder='workspace')",
-        "mv(source='log.txt',destination='archive')"
+        {
+          "arguments": {
+            "folder": "workspace"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "destination": "archive",
+            "source": "log.txt"
+          },
+          "name": "mv"
+        }
       ],
       [
-        "cd(folder='archive')",
-        "grep(file_name='log.txt',pattern='Error')"
+        {
+          "arguments": {
+            "folder": "archive"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "file_name": "log.txt",
+            "pattern": "Error"
+          },
+          "name": "grep"
+        }
       ],
       [
-        "tail(file_name='log.txt',lines=20)"
+        {
+          "arguments": {
+            "file_name": "log.txt",
+            "lines": 20
+          },
+          "name": "tail"
+        }
       ]
     ]
   },

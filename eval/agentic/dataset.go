@@ -106,6 +106,16 @@ type Safety struct {
 	Credentials      string `json:"credentials"`
 }
 
+type StatefulCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type StatefulOracle struct {
+	Kind  string           `json:"kind"`
+	Turns [][]StatefulCall `json:"turns"`
+}
+
 func Load(root string) (*Dataset, error) {
 	manifest, err := LoadManifest(root)
 	if err != nil {
@@ -180,41 +190,83 @@ func validateTask(task Task, entry ManifestTask, sources []ManifestSource) error
 		!task.Safety.NetworkDisabled || task.Safety.RealWorldEffects || task.Safety.Credentials != "none" {
 		return ErrDataset
 	}
+	toolSchemas := make(map[string]*jsonschema.Schema, len(task.Tools))
 	for _, tool := range task.Tools {
 		if tool.Name == "" || len(bytes.TrimSpace(tool.Parameters)) == 0 {
 			return ErrDataset
 		}
-		var schema map[string]any
-		if json.Unmarshal(tool.Parameters, &schema) != nil || schema["type"] != "object" || compileToolSchema(tool.Parameters) != nil {
+		if _, duplicate := toolSchemas[tool.Name]; duplicate {
 			return ErrDataset
+		}
+		var schema map[string]any
+		compiled, err := compileSchema(tool.Parameters)
+		if json.Unmarshal(tool.Parameters, &schema) != nil || schema["type"] != "object" || err != nil {
+			return ErrDataset
+		}
+		toolSchemas[tool.Name] = compiled
+		if len(bytes.TrimSpace(tool.Response)) != 0 {
+			if _, err := compileSchema(tool.Response); err != nil {
+				return ErrDataset
+			}
+		}
+	}
+	return validateOracle(task, toolSchemas)
+}
+
+func validateOracle(task Task, toolSchemas map[string]*jsonschema.Schema) error {
+	if task.Track == "stateful_local_tools" {
+		var oracle StatefulOracle
+		if decodeStrict(task.Oracle, &oracle) != nil || oracle.Kind != "expected_call_trace" ||
+			len(oracle.Turns) != len(task.Interaction.Turns) || len(oracle.Turns) == 0 || len(oracle.Turns) > 64 {
+			return ErrDataset
+		}
+		total := 0
+		for _, turn := range oracle.Turns {
+			if len(turn) == 0 || len(turn) > 128 {
+				return ErrDataset
+			}
+			total += len(turn)
+			if total > 128 {
+				return ErrDataset
+			}
+			for _, call := range turn {
+				schema := toolSchemas[call.Name]
+				var arguments map[string]any
+				if schema == nil || len(call.Arguments) == 0 || len(call.Arguments) > maxArgumentsBytes ||
+					decodeUseNumber(call.Arguments, &arguments) != nil || arguments == nil || schema.Validate(arguments) != nil {
+					return ErrDataset
+				}
+			}
+		}
+		return nil
+	}
+	var oracle expectedCallOracle
+	if decodeStrict(task.Oracle, &oracle) != nil || oracle.Kind != "expected_call_trace" || len(oracle.Turns) == 0 || len(oracle.Turns) > 128 {
+		return ErrDataset
+	}
+	for _, expected := range oracle.Turns {
+		if len(expected) != 1 {
+			return ErrDataset
+		}
+		for name, arguments := range expected {
+			if toolSchemas[name] == nil || len(arguments) > 128 {
+				return ErrDataset
+			}
+			for _, options := range arguments {
+				if len(options) == 0 || len(options) > 64 {
+					return ErrDataset
+				}
+			}
 		}
 	}
 	return nil
 }
-
-type denyExternalSchemaLoader struct{}
 
 func (denyExternalSchemaLoader) Load(string) (any, error) {
 	return nil, errors.New("external schema resources are disabled")
 }
 
-func compileToolSchema(raw json.RawMessage) error {
-	var document any
-	if json.Unmarshal(raw, &document) != nil {
-		return ErrDataset
-	}
-	compiler := jsonschema.NewCompiler()
-	compiler.AssertFormat()
-	compiler.UseLoader(denyExternalSchemaLoader{})
-	const resource = "mem:///external-agentic-tool-parameters.json"
-	if compiler.AddResource(resource, document) != nil {
-		return ErrDataset
-	}
-	if _, err := compiler.Compile(resource); err != nil {
-		return ErrDataset
-	}
-	return nil
-}
+type denyExternalSchemaLoader struct{}
 
 func readContainedRegular(root, relative string, limit int64) ([]byte, error) {
 	if !safeRelative(relative) {

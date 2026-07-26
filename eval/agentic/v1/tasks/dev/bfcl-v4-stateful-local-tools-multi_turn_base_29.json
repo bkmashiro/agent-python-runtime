@@ -54,14 +54,35 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "cd(folder='VisionX')",
-        "du(human_readable=True)"
+        {
+          "arguments": {
+            "folder": "VisionX"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "human_readable": true
+          },
+          "name": "du"
+        }
       ],
       [
-        "touch(file_name='79.pdf')"
+        {
+          "arguments": {
+            "file_name": "79.pdf"
+          },
+          "name": "touch"
+        }
       ],
       [
-        "echo(content='Create a file name based on the number of byte used. It should be in \\'number.pdf\\' format.',file_name='79.pdf')"
+        {
+          "arguments": {
+            "content": "Create a file name based on the number of byte used. It should be in 'number.pdf' format.",
+            "file_name": "79.pdf"
+          },
+          "name": "echo"
+        }
       ]
     ]
   },

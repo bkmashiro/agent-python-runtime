@@ -55,17 +55,44 @@
     "kind": "expected_call_trace",
     "turns": [
       [
-        "cat(file_name='summary.txt')"
+        {
+          "arguments": {
+            "file_name": "summary.txt"
+          },
+          "name": "cat"
+        }
       ],
       [
-        "cp(source='summary.txt',destination='Research2023')"
+        {
+          "arguments": {
+            "destination": "Research2023",
+            "source": "summary.txt"
+          },
+          "name": "cp"
+        }
       ],
       [
-        "cd(folder='Research2023')",
-        "sort(file_name='summary.txt')"
+        {
+          "arguments": {
+            "folder": "Research2023"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "file_name": "summary.txt"
+          },
+          "name": "sort"
+        }
       ],
       [
-        "wc(file_name='summary.txt',mode='l')"
+        {
+          "arguments": {
+            "file_name": "summary.txt",
+            "mode": "l"
+          },
+          "name": "wc"
+        }
       ]
     ]
   },

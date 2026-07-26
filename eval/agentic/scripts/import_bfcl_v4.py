@@ -8,8 +8,10 @@ This script never downloads data. Pass a checkout of the pinned Gorilla revision
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -130,6 +132,64 @@ def split_for(index: int) -> str:
     return "dev" if index < 5 else "evaluation"
 
 
+def parse_stateful_call(source: str, allowed_tools: set[str]) -> dict[str, Any]:
+    if (
+        not isinstance(source, str)
+        or not source
+        or len(source.encode("utf-8")) > 4096
+        or source.strip() != source
+    ):
+        raise ValueError("stateful oracle call source is outside bounds")
+    try:
+        expression = ast.parse(source, mode="eval").body
+    except (SyntaxError, ValueError) as error:
+        raise ValueError("stateful oracle call is not a valid expression") from error
+    if (
+        not isinstance(expression, ast.Call)
+        or not isinstance(expression.func, ast.Name)
+        or expression.func.id not in allowed_tools
+        or expression.args
+        or len(expression.keywords) > 64
+    ):
+        raise ValueError("stateful oracle call has an unsupported shape")
+    arguments: dict[str, Any] = {}
+    for keyword in expression.keywords:
+        if (
+            keyword.arg is None
+            or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", keyword.arg)
+            or keyword.arg in arguments
+            or not isinstance(keyword.value, ast.Constant)
+        ):
+            raise ValueError("stateful oracle keyword is unsupported")
+        value = keyword.value.value
+        if not isinstance(value, (str, int, float, bool)) and value is not None:
+            raise ValueError("stateful oracle value is unsupported")
+        if isinstance(value, str) and len(value.encode("utf-8")) > 16_384:
+            raise ValueError("stateful oracle string exceeds bound")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("stateful oracle number is not finite")
+        arguments[keyword.arg] = value
+    return {"name": expression.func.id, "arguments": arguments}
+
+
+def normalize_stateful_trace(trace: Any, allowed_tools: set[str]) -> list[list[dict[str, Any]]]:
+    if not isinstance(trace, list) or not trace or len(trace) > 64:
+        raise ValueError("stateful oracle turns are outside bounds")
+    normalized: list[list[dict[str, Any]]] = []
+    total_calls = 0
+    for turn in trace:
+        if not isinstance(turn, list) or len(turn) > 128:
+            raise ValueError("stateful oracle turn is outside bounds")
+        parsed = [parse_stateful_call(source, allowed_tools) for source in turn]
+        total_calls += len(parsed)
+        if total_calls > 128:
+            raise ValueError("stateful oracle call count exceeds bound")
+        normalized.append(parsed)
+    if total_calls == 0:
+        raise ValueError("stateful oracle contains no calls")
+    return normalized
+
+
 def tool_doc(row: dict[str, Any]) -> dict[str, Any]:
     output = {
         "name": row["name"],
@@ -197,6 +257,7 @@ def main() -> None:
     stateful_answer_by_id = {row["id"]: row for row in stateful_answers}
     filesystem_docs, _ = load_jsonl(data / "multi_turn_func_doc/gorilla_file_system.json")
     filesystem_tools = [tool_doc(row) for row in filesystem_docs if row["name"] not in {"rm", "rmdir"}]
+    filesystem_tool_names = {tool["name"] for tool in filesystem_tools}
 
     def safe_stateful(row: dict[str, Any]) -> bool:
         answer = stateful_answer_by_id.get(row.get("id"))
@@ -205,7 +266,13 @@ def main() -> None:
         if contains_sensitive(row.get("initial_config", {})):
             return False
         trace = json.dumps(answer.get("ground_truth", []), ensure_ascii=False)
-        return "rm(" not in trace and "rmdir(" not in trace
+        if "rm(" in trace or "rmdir(" in trace:
+            return False
+        try:
+            normalize_stateful_trace(answer.get("ground_truth"), filesystem_tool_names)
+        except ValueError:
+            return False
+        return True
 
     selected_stateful = pick(stateful_rows, "stateful_local_tools", safe_stateful)
 
@@ -248,7 +315,11 @@ def main() -> None:
                 },
                 "oracle": {
                     "kind": "expected_call_trace",
-                    "turns": answer["ground_truth"],
+                    "turns": (
+                        answer["ground_truth"]
+                        if track == "stateless_function_calling"
+                        else normalize_stateful_trace(answer["ground_truth"], filesystem_tool_names)
+                    ),
                 },
                 "safety": {
                     "network_disabled": True,

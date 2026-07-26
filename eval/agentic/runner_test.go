@@ -252,8 +252,26 @@ func TestHybridSurfaceContainsDirectAndPythonWithoutCollision(t *testing.T) {
 	}
 	if len(surface) != len(task.Tools)+1 || mapping["run_python"] != "run_python" || mapping["pwd"] != "pwd" || !strings.Contains(prompt, "host_tools") ||
 		!strings.Contains(prompt, "at most one run_python call") || !strings.Contains(prompt, "continue after each tool output") ||
-		!strings.Contains(prompt, "touch(file_name) [returns an error if the file already exists; do not pre-check existence]") ||
-		!strings.Contains(prompt, "echo(content, file_name=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
+		!strings.Contains(prompt, "touch(file_name: str) [returns an error if the file already exists; do not pre-check existence]") ||
+		!strings.Contains(prompt, "echo(content: str, file_name: str=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
 		t.Fatalf("surface=%d mapping=%v prompt=%q", len(surface), mapping, prompt)
+	}
+}
+
+func TestCompactPythonSDKPreservesParameterTypes(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_147")
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdk := compactPythonSDK(runtime)
+	if !strings.Contains(sdk, "find_restaurants(food_type: str, location: str, number: int, dietary_requirements: list[str]=...)") {
+		t.Fatalf("SDK omitted the array parameter type: %s", sdk)
+	}
+}
+
+func TestClassifyTrialErrorPreservesProviderIdentityMismatch(t *testing.T) {
+	if got := classifyTrialError(ErrProviderIdentityMismatch); got != "provider_identity_mismatch" {
+		t.Fatalf("error code=%q", got)
 	}
 }

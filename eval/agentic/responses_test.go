@@ -30,6 +30,14 @@ func (adapter *scriptedAdapter) Exchange(_ context.Context, request provider.Req
 }
 
 func responseFixture(body string, input, output uint64) provider.Response {
+	var document map[string]any
+	if json.Unmarshal([]byte(body), &document) == nil {
+		if _, exists := document["model"]; !exists {
+			document["model"] = developmentModel
+		}
+		encoded, _ := json.Marshal(document)
+		body = string(encoded)
+	}
 	return provider.Response{
 		StatusCode: 200, Body: json.RawMessage(body), RequestID: "provider-private-id",
 		RequestDigest:  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -42,6 +50,51 @@ func testTrialLimits() TrialLimits {
 	return TrialLimits{
 		MaxProviderCalls: 4, MaxToolCalls: 8, MaxPythonRuns: 2,
 		MaxInputTokens: 1000, MaxOutputTokens: 100, MaxTotalTokens: 1100, MaxOutputTokensPerCall: 64,
+	}
+}
+
+func TestResponsesSessionRejectsResponseModelDrift(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"model":"gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "required", false, map[string]string{}); !errors.Is(err, ErrProviderIdentityMismatch) {
+		t.Fatalf("response model drift err=%v", err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "required", false, map[string]string{}); err == nil || len(adapter.requests) != 1 {
+		t.Fatalf("identity failure did not close session: requests=%d", len(adapter.requests))
+	}
+}
+
+func TestResponsesSessionRejectsUnexpectedInstructions(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"instructions":"provider-injected","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "required", false, map[string]string{}); !errors.Is(err, ErrProviderIdentityMismatch) {
+		t.Fatalf("provider-injected instructions err=%v", err)
+	}
+}
+
+func TestResponsesSessionRequiresModelAndAcceptsNullInstructions(t *testing.T) {
+	missing := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"model":null,"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)}}
+	session, err := NewResponsesSession(missing, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "required", false, map[string]string{}); err == nil {
+		t.Fatal("missing response model accepted")
+	}
+
+	valid := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"instructions":null,"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)}}
+	session, err = NewResponsesSession(valid, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "required", false, map[string]string{}); err != nil {
+		t.Fatalf("null instructions rejected: %v", err)
 	}
 }
 

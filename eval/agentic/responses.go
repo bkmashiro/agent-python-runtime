@@ -16,6 +16,8 @@ import (
 
 const maxResponseTextBytes = 64 * 1024
 
+var ErrProviderIdentityMismatch = errors.New("provider response identity mismatch")
+
 type ResponseCall struct {
 	CallID        string          `json:"-"`
 	ProviderName  string          `json:"-"`
@@ -110,6 +112,10 @@ func (session *ResponsesSession) Exchange(
 		session.closed = true
 		return ParsedResponse{}, ErrBudgetExceeded
 	}
+	if identityErr := validateResponseIdentity(response.Body, session.model); identityErr != nil {
+		session.closed = true
+		return ParsedResponse{}, identityErr
+	}
 	parsed, err := ParseResponsesOutput(response.Body, providerToCanonical)
 	if err != nil {
 		session.closed = true
@@ -123,6 +129,23 @@ func (session *ResponsesSession) Exchange(
 		session.seenIDs[call.CallID] = true
 	}
 	return parsed, nil
+}
+
+func validateResponseIdentity(body json.RawMessage, expectedModel string) error {
+	if expectedModel == "" || len(body) == 0 || len(body) > 1024*1024 {
+		return ErrProviderIdentityMismatch
+	}
+	var envelope struct {
+		Model        string          `json:"model"`
+		Instructions json.RawMessage `json:"instructions"`
+	}
+	if json.Unmarshal(body, &envelope) != nil || envelope.Model != expectedModel {
+		return ErrProviderIdentityMismatch
+	}
+	if instructions := bytes.TrimSpace(envelope.Instructions); len(instructions) != 0 && !bytes.Equal(instructions, []byte("null")) {
+		return ErrProviderIdentityMismatch
+	}
+	return nil
 }
 
 func (session *ResponsesSession) admitResponse(response provider.Response) error {

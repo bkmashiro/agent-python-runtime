@@ -412,7 +412,7 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 	for _, tool := range runtime.Snapshot().Tools() {
 		parameters := make([]string, 0, len(tool.Parameters))
 		for _, parameter := range tool.Parameters {
-			name := parameter.PythonName
+			name := parameter.PythonName + ": " + parameter.Annotation
 			if !parameter.Required {
 				name += "=..."
 			}
@@ -431,6 +431,8 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 
 func classifyTrialError(err error) string {
 	switch {
+	case errors.Is(err, ErrProviderIdentityMismatch):
+		return "provider_identity_mismatch"
 	case errors.Is(err, ErrUsageMissing):
 		return "usage_missing"
 	case errors.Is(err, ErrBudgetExceeded), errors.Is(err, ErrBudgetClosed):

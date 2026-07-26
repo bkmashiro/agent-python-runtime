@@ -56,6 +56,7 @@
   "stopping_rules": {
     "abort_batch_on": [
       "usage_missing",
+      "provider_identity_mismatch",
       "provider_budget_exceeded",
       "provider_timeout",
       "provider_or_protocol_failure",

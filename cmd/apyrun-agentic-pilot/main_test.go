@@ -142,3 +142,9 @@ func TestSelectExecutionScopePreservesCompletePilot(t *testing.T) {
 		t.Fatalf("scope=%+v plan=%+v", scope, plan.GlobalBounds)
 	}
 }
+
+func TestAbortPilotRejectsProviderIdentityMismatch(t *testing.T) {
+	if !abortPilot("provider_identity_mismatch") {
+		t.Fatal("provider identity mismatch did not abort pilot")
+	}
+}

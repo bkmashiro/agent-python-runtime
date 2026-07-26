@@ -15,21 +15,22 @@ const (
 )
 
 const (
-	baselineTreatmentJSON              = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"baseline-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0}`
-	structuredHostContextTreatmentJSON = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"structured-host-context-v1","host_context_policy":"prior-successful-effects","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0}`
-	pythonSafeRepairTreatmentJSON      = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"python-safe-repair-v1","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":1}`
-	hybridTwoStageRouterTreatmentJSON  = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-router-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":0}`
+	baselineTreatmentJSON              = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"baseline-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":0}`
+	structuredHostContextTreatmentJSON = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"structured-host-context-v1","host_context_policy":"prior-successful-effects","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":0}`
+	pythonSafeRepairTreatmentJSON      = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"python-safe-repair-v1","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":0}`
+	hybridTwoStageRouterTreatmentJSON  = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-router-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":1}`
 )
 
 type DevelopmentTreatment struct {
-	SchemaVersion            string `json:"schema_version"`
-	Status                   string `json:"status"`
-	ID                       string `json:"id"`
-	HostContextPolicy        string `json:"host_context_policy"`
-	PythonRepairPolicy       string `json:"python_repair_policy"`
-	HybridStrategy           string `json:"hybrid_strategy"`
-	MaxPythonRepairsPerTrial uint32 `json:"max_python_repairs_per_trial"`
-	Digest                   string `json:"-"`
+	SchemaVersion                string `json:"schema_version"`
+	Status                       string `json:"status"`
+	ID                           string `json:"id"`
+	HostContextPolicy            string `json:"host_context_policy"`
+	PythonRepairPolicy           string `json:"python_repair_policy"`
+	HybridStrategy               string `json:"hybrid_strategy"`
+	MaxPythonRepairsPerTrial     uint32 `json:"max_python_repairs_per_trial"`
+	MaxRouterCallsPerHybridTrial uint32 `json:"max_router_calls_per_hybrid_trial"`
+	Digest                       string `json:"-"`
 }
 
 func BaselineTreatment() DevelopmentTreatment {
@@ -66,13 +67,13 @@ func (treatment DevelopmentTreatment) validPolicy() bool {
 	}
 	switch treatment.ID {
 	case TreatmentBaselineV1:
-		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0 && treatment.MaxRouterCallsPerHybridTrial == 0
 	case TreatmentStructuredHostContextV1:
-		return treatment.HostContextPolicy == "prior-successful-effects" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0
+		return treatment.HostContextPolicy == "prior-successful-effects" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0 && treatment.MaxRouterCallsPerHybridTrial == 0
 	case TreatmentPythonSafeRepairV1:
-		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 1
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 0
 	case TreatmentHybridTwoStageRouterV1:
-		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "two-stage-v1" && treatment.MaxPythonRepairsPerTrial == 0
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "two-stage-v1" && treatment.MaxPythonRepairsPerTrial == 0 && treatment.MaxRouterCallsPerHybridTrial == 1
 	default:
 		return false
 	}

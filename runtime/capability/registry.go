@@ -67,6 +67,22 @@ type Handler interface {
 
 type HandlerFunc func(context.Context, HostCall) (json.RawMessage, error)
 
+type HandlerFailure struct {
+	code    string
+	message string
+	cause   error
+}
+
+func NewHandlerFailure(code, message string, cause error) error {
+	if !validIdentifier(code) || message == "" || len(message) > 512 || cause == nil {
+		return errors.New("invalid classified Host handler failure")
+	}
+	return &HandlerFailure{code: code, message: message, cause: cause}
+}
+
+func (failure *HandlerFailure) Error() string { return failure.message }
+func (failure *HandlerFailure) Unwrap() error { return failure.cause }
+
 type ReceiptDraft struct {
 	RequestIdentity string
 	RequestSHA256   string
@@ -318,6 +334,10 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 		status := StatusError
 		code := "handler_failed"
 		message := "Host tool handler failed"
+		var classified *HandlerFailure
+		if errors.As(handlerErr, &classified) {
+			code, message = classified.code, classified.message
+		}
 		if errors.Is(handlerErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status, code, message = StatusTimeout, "handler_timeout", "Host tool handler timed out"
 		}

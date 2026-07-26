@@ -347,7 +347,11 @@ func runDevelopmentTrialForModelWithIdentity(
 						call.CanonicalName, call.Arguments,
 					)
 					if err != nil {
-						result.ErrorCode = "direct_host_call_failed"
+						if errors.Is(err, ErrBenchmarkToolOperation) {
+							result.ErrorCode = "host_application_error"
+						} else {
+							result.ErrorCode = "direct_host_call_failed"
+						}
 						break
 					}
 				}

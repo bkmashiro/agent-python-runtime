@@ -110,7 +110,7 @@ func TestToolRuntimePromotesFilesystemApplicationErrorsToFailedReceipts(t *testi
 		Status capability.Status `json:"status"`
 		Error  *capability.Error `json:"error"`
 	}
-	if err != nil || json.Unmarshal(response, &envelope) != nil || envelope.Status != capability.StatusError || envelope.Error == nil || envelope.Error.Code != "handler_failed" {
+	if err != nil || json.Unmarshal(response, &envelope) != nil || envelope.Status != capability.StatusError || envelope.Error == nil || envelope.Error.Code != "tool_application_error" {
 		t.Fatalf("response=%s envelope=%+v err=%v", response, envelope, err)
 	}
 	receipts := broker.Receipts()

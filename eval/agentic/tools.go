@@ -263,7 +263,7 @@ func (handler *benchmarkHandler) Handle(_ context.Context, call capability.HostC
 	}
 	if operationErr := benchmarkToolOperationError(output); operationErr != nil {
 		handler.runtime.finishRecord(turn, index, output, operationErr)
-		return nil, operationErr
+		return nil, capability.NewHandlerFailure("tool_application_error", "Host tool reported an application error", operationErr)
 	}
 	if string(output) == "null" {
 		output = json.RawMessage(`{}`)
@@ -389,6 +389,9 @@ func (runtime *ToolRuntime) InvokeDirect(ctx context.Context, runID, callID, too
 		code := "malformed_response"
 		if envelope.Error != nil && envelope.Error.Code != "" {
 			code = envelope.Error.Code
+		}
+		if code == "tool_application_error" {
+			return nil, fmt.Errorf("%w: %s", ErrBenchmarkToolOperation, code)
 		}
 		return nil, fmt.Errorf("Host transaction rejected direct tool call: %s", code)
 	}

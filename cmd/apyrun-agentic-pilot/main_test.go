@@ -198,6 +198,15 @@ func TestWriteRawDebugUsesPrivateExclusiveFile(t *testing.T) {
 	}
 }
 
+func TestAbortPilotSeparatesModelApplicationErrorsFromInfrastructureFailures(t *testing.T) {
+	if abortPilot("host_application_error") {
+		t.Fatal("model-caused Host application error aborted pilot")
+	}
+	if !abortPilot("direct_host_call_failed") {
+		t.Fatal("unclassified Host/runtime failure did not abort pilot")
+	}
+}
+
 func TestAbortPilotRejectsProviderIdentityMismatch(t *testing.T) {
 	if !abortPilot("provider_identity_mismatch") {
 		t.Fatal("provider identity mismatch did not abort pilot")

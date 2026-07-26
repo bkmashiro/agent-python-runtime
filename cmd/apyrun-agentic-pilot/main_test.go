@@ -43,6 +43,24 @@ func repositoryRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
+func TestPilotRejectsUnimplementedOrBaselineTreatmentOverrideBeforeExecution(t *testing.T) {
+	root := repositoryRoot(t)
+	dataset := filepath.Join(root, "eval", "agentic", "v1")
+	planPath := filepath.Join(dataset, "development-pilot-plan.json")
+	baseArgs := []string{
+		"--diagnostic-task", "bfcl-v4-stateful-local-tools-multi_turn_base_12",
+		"--diagnostic-condition", "python", "--dataset", dataset, "--plan", planPath,
+		"--activation", "unused", "--guest", "unused", "--out", filepath.Join(t.TempDir(), "out"),
+		"--repository-commit", strings.Repeat("a", 40),
+	}
+	for _, file := range []string{"structured-host-context-v1.json", "baseline-v1.json"} {
+		args := append(append([]string(nil), baseArgs...), "--treatment", filepath.Join(dataset, "treatments", file))
+		if err := run(context.Background(), args, dependencies{}); !errors.Is(err, agentic.ErrDevelopmentTreatment) {
+			t.Fatalf("file=%s err=%v", file, err)
+		}
+	}
+}
+
 func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 	root := repositoryRoot(t)
 	dataset := filepath.Join(root, "eval", "agentic", "v1")
@@ -130,7 +148,7 @@ func TestSelectExecutionScopeUsesFixedRepresentativeCanary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := selectExecutionScope(plan, dataset, true, "")
+	scope, err := selectExecutionScope(plan, dataset, true, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +173,7 @@ func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	taskID := "bfcl-v4-stateful-local-tools-multi_turn_base_12"
-	scope, err := selectExecutionScope(plan, dataset, false, taskID)
+	scope, err := selectExecutionScope(plan, dataset, false, taskID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,11 +183,37 @@ func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
 		scope.Bounds.MaxToolCalls != 96 || scope.Bounds.MaxPythonRuns != 6 {
 		t.Fatalf("scope=%+v", scope)
 	}
-	if _, err := selectExecutionScope(plan, dataset, true, taskID); !errors.Is(err, agentic.ErrPilotPlan) {
+	if _, err := selectExecutionScope(plan, dataset, true, taskID, ""); !errors.Is(err, agentic.ErrPilotPlan) {
 		t.Fatalf("combined canary and diagnostic task err=%v", err)
 	}
-	if _, err := selectExecutionScope(plan, dataset, false, "missing-task"); !errors.Is(err, agentic.ErrPilotPlan) {
+	if _, err := selectExecutionScope(plan, dataset, false, "missing-task", ""); !errors.Is(err, agentic.ErrPilotPlan) {
 		t.Fatalf("unknown diagnostic task err=%v", err)
+	}
+}
+
+func TestSelectExecutionScopeSupportsOneDiagnosticCondition(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+	scope, err := selectExecutionScope(plan, dataset, false, taskID, agentic.ConditionPython)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope.Mode != "canary" || len(scope.TaskIDs) != 1 || len(scope.Conditions) != 1 || scope.Conditions[0] != agentic.ConditionPython ||
+		scope.Bounds.TrialCount != 1 || scope.Bounds.MaxProviderAttempts != 3 || scope.Bounds.MaxInputTokens != 60000 ||
+		scope.Bounds.MaxOutputTokens != 3072 || scope.Bounds.MaxTotalTokens != 63072 ||
+		scope.Bounds.MaxToolCalls != 32 || scope.Bounds.MaxPythonRuns != 3 {
+		t.Fatalf("scope=%+v", scope)
+	}
+	if _, err := selectExecutionScope(plan, dataset, false, "", agentic.ConditionPython); !errors.Is(err, agentic.ErrPilotPlan) {
+		t.Fatalf("condition without task err=%v", err)
+	}
+	if _, err := selectExecutionScope(plan, dataset, true, "", agentic.ConditionPython); !errors.Is(err, agentic.ErrPilotPlan) {
+		t.Fatalf("condition with representative canary err=%v", err)
 	}
 }
 
@@ -180,7 +224,7 @@ func TestSelectExecutionScopePreservesCompletePilot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := selectExecutionScope(plan, dataset, false, "")
+	scope, err := selectExecutionScope(plan, dataset, false, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

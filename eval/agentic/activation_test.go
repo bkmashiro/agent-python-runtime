@@ -26,6 +26,49 @@ func writeActivation(t *testing.T, plan DevelopmentPilotPlan, hostDigest string)
 	return path
 }
 
+func TestLoadPilotActivationBindsDiagnosticTreatmentDigest(t *testing.T) {
+	root := datasetRoot(t)
+	plan, _, err := LoadDevelopmentPilotPlan(filepath.Join(root, "development-pilot-plan.json"), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(root, "treatments", "structured-host-context-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := "sha256:" + strings.Repeat("b", 64)
+	document := map[string]any{
+		"schema_version": "agentic-pilot-activation/v2", "status": "approved", "execution_mode": "canary", "plan_digest": plan.Digest,
+		"treatment_digest": treatment.Digest, "repository_commit": strings.Repeat("a", 40), "host_artifact_digest": host,
+		"dataset_manifest_digest": plan.DatasetManifestDigest,
+		"provider_catalog_digest": "sha256:" + strings.Repeat("d", 64), "provider_catalog_observed_at": "2026-07-26T11:00:00Z",
+		"guest_artifacts": map[string]any{"core": "sha256:" + strings.Repeat("c", 64)},
+		"approved_by":     "owner", "approved_at": "2026-07-26T12:00:00Z",
+	}
+	content, _ := json.Marshal(document)
+	path := filepath.Join(t.TempDir(), "treatment-activation.json")
+	if os.WriteFile(path, content, 0o600) != nil {
+		t.Fatal("write activation")
+	}
+	activation, err := LoadPilotActivationForTreatment(path, plan, host, treatment)
+	if err != nil || activation.TreatmentDigest != treatment.Digest {
+		t.Fatalf("activation=%+v err=%v", activation, err)
+	}
+	other := treatment
+	other.Digest = "sha256:" + strings.Repeat("e", 64)
+	if _, err := LoadPilotActivationForTreatment(path, plan, host, other); err == nil {
+		t.Fatal("mismatched treatment accepted")
+	}
+	document["execution_mode"] = "pilot"
+	content, _ = json.Marshal(document)
+	if os.WriteFile(path, content, 0o600) != nil {
+		t.Fatal("rewrite activation")
+	}
+	if _, err := LoadPilotActivationForTreatment(path, plan, host, treatment); err == nil {
+		t.Fatal("pilot-mode treatment activation accepted")
+	}
+}
+
 func TestLoadPilotActivationBindsExactArtifacts(t *testing.T) {
 	root := datasetRoot(t)
 	plan, _, err := LoadDevelopmentPilotPlan(filepath.Join(root, "development-pilot-plan.json"), root)

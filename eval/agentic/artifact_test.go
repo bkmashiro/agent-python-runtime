@@ -28,30 +28,41 @@ func validTrialResult(t *testing.T) TrialResult {
 	return result
 }
 
-func TestValidateTrialResultV2BindsDerivedMetricsAndKeepsV1Readable(t *testing.T) {
+func TestValidateTrialResultV3BindsTreatmentAndKeepsV1V2Readable(t *testing.T) {
 	valid := validTrialResult(t)
-	if valid.Version != "agentic-development-trial/v2" || valid.Metrics == nil {
-		t.Fatalf("runner did not emit v2 metrics: %+v", valid)
+	if valid.Version != "agentic-development-trial/v3" || valid.Metrics == nil || valid.TreatmentID != TreatmentBaselineV1 || valid.TreatmentDigest != BaselineTreatment().Digest {
+		t.Fatalf("runner did not emit v3 treatment metrics: %+v", valid)
 	}
 	if err := ValidateTrialResult(valid); err != nil {
 		t.Fatal(err)
 	}
 	tampered := valid
+	tampered.TreatmentDigest = "sha256:" + strings.Repeat("e", 64)
+	if err := ValidateTrialResult(tampered); err == nil {
+		t.Fatal("inconsistent treatment digest accepted")
+	}
+	tampered = valid
 	metrics := *valid.Metrics
 	metrics.OutcomeSuccess = !metrics.OutcomeSuccess
 	tampered.Metrics = &metrics
 	if err := ValidateTrialResult(tampered); err == nil {
-		t.Fatal("inconsistent v2 metrics accepted")
+		t.Fatal("inconsistent v3 metrics accepted")
 	}
-	legacy := valid
-	legacy.Version = "agentic-development-trial/v1"
-	legacy.Metrics = nil
-	if err := ValidateTrialResult(legacy); err != nil {
+	legacyV2 := valid
+	legacyV2.Version = "agentic-development-trial/v2"
+	legacyV2.TreatmentID, legacyV2.TreatmentDigest = "", ""
+	if err := ValidateTrialResult(legacyV2); err != nil {
+		t.Fatalf("legacy v2 rejected: %v", err)
+	}
+	legacyV1 := legacyV2
+	legacyV1.Version = "agentic-development-trial/v1"
+	legacyV1.Metrics = nil
+	if err := ValidateTrialResult(legacyV1); err != nil {
 		t.Fatalf("legacy v1 rejected: %v", err)
 	}
-	legacy.Metrics = valid.Metrics
-	if err := ValidateTrialResult(legacy); err == nil {
-		t.Fatal("legacy v1 accepted v2 metrics")
+	legacyV1.Metrics = valid.Metrics
+	if err := ValidateTrialResult(legacyV1); err == nil {
+		t.Fatal("legacy v1 accepted later metrics")
 	}
 }
 

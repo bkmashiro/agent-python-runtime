@@ -69,6 +69,8 @@ type TrialResult struct {
 	Limits             TrialLimits        `json:"limits"`
 	PromptDigest       string             `json:"prompt_digest"`
 	SurfaceDigest      string             `json:"surface_digest"`
+	TreatmentID        string             `json:"treatment_id,omitempty"`
+	TreatmentDigest    string             `json:"treatment_digest,omitempty"`
 	Passed             bool               `json:"passed"`
 	Metrics            *TrialMetrics      `json:"metrics,omitempty"`
 	ErrorCode          string             `json:"error_code,omitempty"`
@@ -159,7 +161,7 @@ func RunDevelopmentTrialForModelWithIdentity(
 	identity ExecutionIdentity,
 	pythonFactory PythonWorkflowFactory,
 ) (TrialResult, error) {
-	return runDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, model, replicate, limits, identity, pythonFactory, false)
+	return runDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, model, replicate, limits, identity, BaselineTreatment(), pythonFactory, false)
 }
 
 func RunDevelopmentDiagnosticTrialForModelWithIdentity(
@@ -173,7 +175,25 @@ func RunDevelopmentDiagnosticTrialForModelWithIdentity(
 	identity ExecutionIdentity,
 	pythonFactory PythonWorkflowFactory,
 ) (TrialResult, error) {
-	return runDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, model, replicate, limits, identity, pythonFactory, true)
+	return RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(ctx, adapter, task, condition, model, replicate, limits, identity, BaselineTreatment(), pythonFactory)
+}
+
+func RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+	ctx context.Context,
+	adapter provider.Adapter,
+	task Task,
+	condition Condition,
+	model string,
+	replicate uint32,
+	limits TrialLimits,
+	identity ExecutionIdentity,
+	treatment DevelopmentTreatment,
+	pythonFactory PythonWorkflowFactory,
+) (TrialResult, error) {
+	if !treatment.Implemented() {
+		return TrialResult{}, ErrDevelopmentTreatment
+	}
+	return runDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, model, replicate, limits, identity, treatment, pythonFactory, true)
 }
 
 func runDevelopmentTrialForModelWithIdentity(
@@ -185,10 +205,11 @@ func runDevelopmentTrialForModelWithIdentity(
 	replicate uint32,
 	limits TrialLimits,
 	identity ExecutionIdentity,
+	treatment DevelopmentTreatment,
 	pythonFactory PythonWorkflowFactory,
 	captureRaw bool,
 ) (TrialResult, error) {
-	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 ||
+	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 || !treatment.Implemented() ||
 		!supportedDevelopmentModel(model) ||
 		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) ||
 		(condition == ConditionDirect && pythonFactory != nil) ||
@@ -216,8 +237,9 @@ func runDevelopmentTrialForModelWithIdentity(
 	taskDigest := digest(taskBytes)
 	promptDigest, surfaceDigest := digest([]byte(prompt)), digest(surfaceBytes)
 	specBytes, specErr := json.Marshal(map[string]any{
-		"version": "agentic-development-trial-spec/v1", "task_digest": taskDigest,
+		"version": "agentic-development-trial-spec/v2", "task_digest": taskDigest,
 		"condition": condition, "model": model, "replicate": replicate, "limits": limits, "identity": identity,
+		"treatment_id": treatment.ID, "treatment_digest": treatment.Digest,
 		"catalog_digest": tools.Snapshot().Digest(), "prompt_digest": promptDigest, "surface_digest": surfaceDigest,
 	})
 	if specErr != nil {
@@ -225,10 +247,11 @@ func runDevelopmentTrialForModelWithIdentity(
 	}
 	specDigest := digest(specBytes)
 	result := TrialResult{
-		Version: "agentic-development-trial/v2", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
+		Version: "agentic-development-trial/v3", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
 		Condition: condition, Model: model, Identity: identity, Replicate: replicate, Limits: limits,
-		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, CatalogDigest: tools.Snapshot().Digest(),
+		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, TreatmentID: treatment.ID, TreatmentDigest: treatment.Digest,
+		CatalogDigest: tools.Snapshot().Digest(),
 	}
 	if captureRaw {
 		result.RawDebug = &TrialRawDebug{DeveloperPrompt: prompt, ToolSurface: append(json.RawMessage(nil), surfaceBytes...)}

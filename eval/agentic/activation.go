@@ -13,6 +13,7 @@ type PilotActivation struct {
 	Status                    string            `json:"status"`
 	ExecutionMode             string            `json:"execution_mode"`
 	PlanDigest                string            `json:"plan_digest"`
+	TreatmentDigest           string            `json:"treatment_digest,omitempty"`
 	RepositoryCommit          string            `json:"repository_commit"`
 	HostArtifactDigest        string            `json:"host_artifact_digest"`
 	DatasetManifestDigest     string            `json:"dataset_manifest_digest"`
@@ -25,6 +26,17 @@ type PilotActivation struct {
 }
 
 func LoadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDigest string) (PilotActivation, error) {
+	return loadPilotActivation(path, plan, hostArtifactDigest, "")
+}
+
+func LoadPilotActivationForTreatment(path string, plan DevelopmentPilotPlan, hostArtifactDigest string, treatment DevelopmentTreatment) (PilotActivation, error) {
+	if !treatment.valid() || !validDigest(treatment.Digest) {
+		return PilotActivation{}, ErrPilotActivation
+	}
+	return loadPilotActivation(path, plan, hostArtifactDigest, treatment.Digest)
+}
+
+func loadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDigest, treatmentDigest string) (PilotActivation, error) {
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > 32*1024 {
 		return PilotActivation{}, ErrPilotActivation
@@ -39,7 +51,10 @@ func LoadPilotActivation(path string, plan DevelopmentPilotPlan, hostArtifactDig
 	}
 	approvedAt, timeErr := time.Parse(time.RFC3339, activation.ApprovedAt)
 	catalogObservedAt, catalogTimeErr := time.Parse(time.RFC3339, activation.ProviderCatalogObservedAt)
-	if activation.SchemaVersion != "agentic-pilot-activation/v1" || activation.Status != "approved" ||
+	legacy := activation.SchemaVersion == "agentic-pilot-activation/v1" && activation.TreatmentDigest == "" && treatmentDigest == ""
+	treatmentBound := activation.SchemaVersion == "agentic-pilot-activation/v2" && activation.ExecutionMode == "canary" &&
+		validDigest(treatmentDigest) && activation.TreatmentDigest == treatmentDigest
+	if (!legacy && !treatmentBound) || activation.Status != "approved" ||
 		(activation.ExecutionMode != "canary" && activation.ExecutionMode != "pilot") ||
 		activation.PlanDigest != plan.Digest || !validLowerHex(activation.RepositoryCommit, 40) ||
 		activation.HostArtifactDigest != hostArtifactDigest || activation.DatasetManifestDigest != plan.DatasetManifestDigest ||

@@ -12,7 +12,7 @@ import (
 var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
 
 func ValidateTrialResult(result TrialResult) error {
-	if (result.Version != "agentic-development-trial/v1" && result.Version != "agentic-development-trial/v2") || !supportedDevelopmentModel(result.Model) ||
+	if (result.Version != "agentic-development-trial/v1" && result.Version != "agentic-development-trial/v2" && result.Version != "agentic-development-trial/v3") || !supportedDevelopmentModel(result.Model) ||
 		!result.Condition.valid() || !result.Limits.valid() || !validExecutionIdentity(result.Identity, result.Condition) || result.Replicate > 1000 ||
 		!validDigest(result.SpecDigest) || result.TrialID != "dev_"+strings.TrimPrefix(result.SpecDigest, "sha256:")[:32] ||
 		result.TaskID == "" || !validDigest(result.TaskDigest) || !validDigest(result.SourceRecordDigest) ||
@@ -20,6 +20,14 @@ func ValidateTrialResult(result TrialResult) error {
 		!validDigest(result.CatalogDigest) || result.ProviderCalls != uint32(len(result.Exchanges)) ||
 		result.ProviderCalls > result.ProviderAttempts || result.ProviderAttempts > result.Limits.MaxProviderCalls || result.ToolCalls < 0 || result.ToolCalls > int(result.Limits.MaxToolCalls) ||
 		result.PythonRuns > result.PythonAttempts || result.PythonAttempts > result.Limits.MaxPythonRuns || len(result.TextDigests) > int(result.ProviderCalls) {
+		return ErrTrialArtifact
+	}
+	if result.Version == "agentic-development-trial/v3" {
+		document := expectedTreatmentDocument(result.TreatmentID)
+		if document == "" || result.TreatmentDigest != digest([]byte(document)) {
+			return ErrTrialArtifact
+		}
+	} else if result.TreatmentID != "" || result.TreatmentDigest != "" {
 		return ErrTrialArtifact
 	}
 	for _, value := range result.TextDigests {
@@ -71,9 +79,10 @@ func ValidateTrialResult(result TrialResult) error {
 			!validDigest(evidence.ResponseDigest) || !validDigest(evidence.ResultDigest) ||
 			evidence.Backend == "" || evidence.ResetMode != "fresh-instance" || len(evidence.Observation) != 0 ||
 			evidence.Success != (evidence.ErrorCode == "") || (evidence.Success && evidence.FailureClass != "") ||
-			(!evidence.Success && result.Version == "agentic-development-trial/v2" && !evidence.FailureClass.valid()) ||
 			(!evidence.Success && result.Version == "agentic-development-trial/v1" && evidence.FailureClass != "") ||
-			(result.Version == "agentic-development-trial/v2" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn <= previousPythonTurn)) {
+			(!evidence.Success && result.Version == "agentic-development-trial/v2" && evidence.FailureClass != "" && !evidence.FailureClass.valid()) ||
+			(!evidence.Success && result.Version == "agentic-development-trial/v3" && !evidence.FailureClass.valid()) ||
+			(result.Version == "agentic-development-trial/v3" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn <= previousPythonTurn)) {
 			return ErrTrialArtifact
 		}
 		previousPythonTurn = evidence.Turn
@@ -82,7 +91,7 @@ func ValidateTrialResult(result TrialResult) error {
 		if result.FailureDetail != nil {
 			return ErrTrialArtifact
 		}
-	} else if result.ErrorCode == "python_guest_error" {
+	} else if result.ErrorCode == "python_guest_error" && (result.Version == "agentic-development-trial/v3" || result.FailureDetail != nil) {
 		if result.FailureDetail == nil || !result.FailureDetail.Class.valid() || result.FailureDetail.Turn < 0 || result.FailureDetail.Turn >= 32 || len(result.PythonEvidence) == 0 {
 			return ErrTrialArtifact
 		}
@@ -123,7 +132,7 @@ func ValidateTrialResult(result TrialResult) error {
 	}
 	derivedMetrics, metricsErr := DeriveTrialMetrics(result)
 	if metricsErr != nil || (result.Version == "agentic-development-trial/v1" && result.Metrics != nil) ||
-		(result.Version == "agentic-development-trial/v2" && (result.Metrics == nil || !trialMetricsEqual(*result.Metrics, derivedMetrics))) {
+		(result.Version != "agentic-development-trial/v1" && (result.Metrics == nil || !trialMetricsEqual(*result.Metrics, derivedMetrics))) {
 		return ErrTrialArtifact
 	}
 	return nil

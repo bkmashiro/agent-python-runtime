@@ -41,6 +41,8 @@ type pilotSummary struct {
 	DecisionEligible        bool            `json:"decision_eligible"`
 	PlanDigest              string          `json:"plan_digest"`
 	ActivationDigest        string          `json:"activation_digest"`
+	TreatmentID             string          `json:"treatment_id"`
+	TreatmentDigest         string          `json:"treatment_digest"`
 	TrialCount              uint32          `json:"trial_count"`
 	OutcomeSuccessfulTrials uint32          `json:"outcome_successful_trials"`
 	StrictPassedTrials      uint32          `json:"strict_passed_trials"`
@@ -98,6 +100,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	repositoryCommit := flags.String("repository-commit", "", "exact 40-hex source commit")
 	canary := flags.Bool("canary", false, "run the fixed representative three-condition canary")
 	diagnosticTask := flags.String("diagnostic-task", "", "run one authorized development task across all three conditions")
+	diagnosticCondition := flags.String("diagnostic-condition", "", "restrict a diagnostic task to direct, python, or hybrid")
+	treatmentPath := flags.String("treatment", "", "frozen development treatment; diagnostic tasks only")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *datasetRoot == "" || *planPath == "" || *activationPath == "" || *guestPath == "" || *outputRoot == "" || len(*repositoryCommit) != 40 {
 		return errors.New("invalid arguments")
 	}
@@ -105,7 +109,17 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	scope, err := selectExecutionScope(plan, dataset, *canary, *diagnosticTask)
+	treatment := agentic.BaselineTreatment()
+	if *treatmentPath != "" {
+		if *diagnosticTask == "" || *canary {
+			return agentic.ErrDevelopmentTreatment
+		}
+		treatment, err = agentic.LoadDevelopmentTreatment(*treatmentPath)
+		if err != nil || treatment.ID == agentic.TreatmentBaselineV1 || !treatment.Implemented() {
+			return agentic.ErrDevelopmentTreatment
+		}
+	}
+	scope, err := selectExecutionScope(plan, dataset, *canary, *diagnosticTask, agentic.Condition(*diagnosticCondition))
 	if err != nil {
 		return err
 	}
@@ -117,7 +131,12 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	if err != nil {
 		return fmt.Errorf("digest Host artifact: %w", err)
 	}
-	activation, err := agentic.LoadPilotActivation(*activationPath, plan, hostDigest)
+	var activation agentic.PilotActivation
+	if treatment.ID == agentic.TreatmentBaselineV1 {
+		activation, err = agentic.LoadPilotActivation(*activationPath, plan, hostDigest)
+	} else {
+		activation, err = agentic.LoadPilotActivationForTreatment(*activationPath, plan, hostDigest, treatment)
+	}
 	if err != nil || activation.RepositoryCommit != *repositoryCommit || activation.ExecutionMode != scope.Mode {
 		return agentic.ErrPilotActivation
 	}
@@ -160,8 +179,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		tasks[task.ID] = task
 	}
 	summary := pilotSummary{
-		Version: "agentic-development-pilot-result/v2", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
-		PlanDigest: plan.Digest, ActivationDigest: activation.Digest,
+		Version: "agentic-development-pilot-result/v3", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
+		PlanDigest: plan.Digest, ActivationDigest: activation.Digest, TreatmentID: treatment.ID, TreatmentDigest: treatment.Digest,
 		Artifacts: make([]artifactEntry, 0, scope.Bounds.TrialCount),
 	}
 	for _, taskID := range scope.TaskIDs {
@@ -190,7 +209,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 				}
 				var result agentic.TrialResult
 				if debugRoot != "" {
-					result, err = agentic.RunDevelopmentDiagnosticTrialForModelWithIdentity(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, factory)
+					result, err = agentic.RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, treatment, factory)
 				} else {
 					result, err = agentic.RunDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, factory)
 				}
@@ -254,8 +273,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	return err
 }
 
-func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, canary bool, diagnosticTask string) (executionScope, error) {
-	if canary && diagnosticTask != "" {
+func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, canary bool, diagnosticTask string, diagnosticCondition agentic.Condition) (executionScope, error) {
+	if (canary && diagnosticTask != "") || (diagnosticCondition != "" && (canary || diagnosticTask == "")) {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
 	full := executionScope{
@@ -272,21 +291,26 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 		return full, nil
 	}
 	taskIDs := representativeCanaryTasks
+	conditions := plan.Conditions
 	if diagnosticTask != "" {
 		taskIDs = []string{diagnosticTask}
+		if diagnosticCondition != "" {
+			conditions = []agentic.Condition{diagnosticCondition}
+		}
 	}
-	return selectCanaryScope(plan, dataset, taskIDs)
+	return selectCanaryScope(plan, dataset, taskIDs, conditions)
 }
 
-func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, taskIDs []string) (executionScope, error) {
-	if dataset == nil {
+func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, taskIDs []string, conditions []agentic.Condition) (executionScope, error) {
+	if dataset == nil || len(conditions) == 0 || len(conditions) > len(plan.Conditions) {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
 	wanted := make(map[string]struct{}, len(taskIDs))
 	for _, taskID := range taskIDs {
-		if !plan.Authorizes(taskID, agentic.ConditionDirect, 0) ||
-			!plan.Authorizes(taskID, agentic.ConditionPython, 0) || !plan.Authorizes(taskID, agentic.ConditionHybrid, 0) {
-			return executionScope{}, agentic.ErrPilotPlan
+		for _, condition := range conditions {
+			if !plan.Authorizes(taskID, condition, 0) {
+				return executionScope{}, agentic.ErrPilotPlan
+			}
 		}
 		wanted[taskID] = struct{}{}
 	}
@@ -296,7 +320,7 @@ func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Datas
 	for _, task := range dataset.Tasks {
 		if _, exists := wanted[task.ID]; exists && task.Split == "dev" {
 			turns += uint64(len(task.Interaction.Turns))
-			for _, condition := range plan.Conditions {
+			for _, condition := range conditions {
 				conditionAttempts, err := plan.ProviderAttemptsFor(task, condition)
 				if err != nil || conditionAttempts > ^uint64(0)-attempts {
 					return executionScope{}, agentic.ErrPilotPlan
@@ -309,17 +333,23 @@ func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Datas
 	if found != len(taskIDs) || turns == 0 || turns > 64 {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
-	trialCount := uint64(len(taskIDs) * len(plan.Conditions))
+	trialCount := uint64(len(taskIDs) * len(conditions))
+	pythonConditionCount := uint64(0)
+	for _, condition := range conditions {
+		if condition != agentic.ConditionDirect {
+			pythonConditionCount++
+		}
+	}
 	return executionScope{
 		Mode: "canary", TaskIDs: append([]string(nil), taskIDs...),
-		Conditions: append([]agentic.Condition(nil), plan.Conditions...), Replicates: []uint32{0},
+		Conditions: append([]agentic.Condition(nil), conditions...), Replicates: []uint32{0},
 		Bounds: executionBounds{
 			TrialCount: uint32(trialCount), MaxProviderAttempts: uint32(attempts),
 			MaxInputTokens:  attempts * plan.PerTrial.MaxInputTokensPerAttempt,
 			MaxOutputTokens: attempts * plan.PerTrial.MaxOutputTokensPerAttempt,
 			MaxTotalTokens:  attempts * (plan.PerTrial.MaxInputTokensPerAttempt + plan.PerTrial.MaxOutputTokensPerAttempt),
 			MaxToolCalls:    uint32(trialCount) * plan.PerTrial.MaxToolCalls,
-			MaxPythonRuns:   uint32(turns * 2),
+			MaxPythonRuns:   uint32(turns * pythonConditionCount),
 		},
 	}, nil
 }

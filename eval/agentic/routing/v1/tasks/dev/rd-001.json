@@ -64,38 +64,13 @@
     "adaptation": "Adapted from the digest-bound local routing source record into external-agentic-task/v1.",
     "benchmark": "RoutingDiagnostic",
     "license": "Apache-2.0",
-    "record_sha256": "sha256:a2fd442d7590a00f28f0dc98100fd69e0d53b6275d750258a252eabe6e5540c2",
+    "record_sha256": "sha256:c02756541c5eb97d9fe8409d6c22a1d674056ae15911f34488a56a2db4cc6eed",
     "revision": "6088885536d117348bb1a9bdb9d013b4f80c77d0",
     "source_id": "rd-001",
     "version": "v1"
   },
   "split": "dev",
   "tools": [
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory.",
-      "name": "cat",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "The name of the file from current directory to display. No path is allowed. ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "file_content": {
-            "description": "The content of the file.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
     {
       "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder.",
       "name": "cd",
@@ -115,36 +90,6 @@
         "properties": {
           "current_working_directory": {
             "description": "The new current working directory path.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Copy a file or directory from one location to another.  If the destination is a directory, the source file or directory will be copied into the destination directory.  Both source and destination must be local to the current directory.",
-      "name": "cp",
-      "parameters": {
-        "properties": {
-          "destination": {
-            "description": "The destination name to copy the file or directory to. If the destination is a directory, the source will be copied into this directory. No file paths allowed. ",
-            "type": "string"
-          },
-          "source": {
-            "description": "The name of the file or directory to copy.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source",
-          "destination"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "result": {
-            "description": "The result of the copy operation or an error message if the operation fails.",
             "type": "string"
           }
         },
@@ -198,40 +143,6 @@
       },
       "response": {
         "properties": {},
-        "type": "object"
-      }
-    },
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Count the number of lines, words, and characters in a file of any extension from current directory.",
-      "name": "wc",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "Name of the file of current directory to perform wc operation on.",
-            "type": "string"
-          },
-          "mode": {
-            "default": "l",
-            "description": "Mode of operation ('l' for lines, 'w' for words, 'c' for characters). ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "count": {
-            "description": "The count of the number of lines, words, or characters in the file.",
-            "type": "integer"
-          },
-          "type": {
-            "description": "The type of unit we are counting. [Enum]: [\"lines\", \"words\", \"characters\"]",
-            "type": "string"
-          }
-        },
         "type": "object"
       }
     }

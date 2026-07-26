@@ -1,7 +1,7 @@
 {
   "dataset_id": "agentic-routing-diagnostic-v1",
   "pack": "pack.json",
-  "pack_digest": "sha256:fcff071a4a4a182959b9cce9f90aefa8e231bbbdc22fcfe48ddffefdbc15e3db",
+  "pack_digest": "sha256:576f90e57294fda98c3b31292aaa6da34c54ddf6b00e321d5f80a64219825699",
   "selection_policy": "balanced",
   "sources": [
     {
@@ -13,27 +13,27 @@
       "source_files": [
         {
           "path": "sources/rd-001.json",
-          "sha256": "sha256:a2fd442d7590a00f28f0dc98100fd69e0d53b6275d750258a252eabe6e5540c2"
+          "sha256": "sha256:c02756541c5eb97d9fe8409d6c22a1d674056ae15911f34488a56a2db4cc6eed"
         },
         {
           "path": "sources/rd-002.json",
-          "sha256": "sha256:923dc81886f2d8e33af4c107ce26568f6d339b7dffe8b400cdf2c904705bac27"
+          "sha256": "sha256:a7e4e4bedcb0f7156cf809f761d65e25b0a21694f4401f657b1846918230202d"
         },
         {
           "path": "sources/rd-003.json",
-          "sha256": "sha256:1d0486bd7f3f99d07b0f1acfda377dc889f32669d0da9801432d096a316addcc"
+          "sha256": "sha256:965cb1cbf27f86c5d7b7f8e97b8ef230f69ec4b536493e6c64f6ba8c7b85cd17"
         },
         {
           "path": "sources/rd-004.json",
-          "sha256": "sha256:9821ec5d5313726803d7e5563e7b08aa9693e7a338dfc6f5a0accbe9b38595af"
+          "sha256": "sha256:f6a414e3037e314e5450077147647391d54f3030cd409ebaa8c15278ec2e7ed1"
         },
         {
           "path": "sources/rd-005.json",
-          "sha256": "sha256:565eb83d79dcf7a06bff92d853081f9f5631f03948e40d7d55e554a01edb2ffd"
+          "sha256": "sha256:df6c7de8932fb22dec8ca99f9c71a5bd8ac643d383fb3ce662031bc0b8f39847"
         },
         {
           "path": "sources/rd-006.json",
-          "sha256": "sha256:3c1da98d4177958e896bec3ad52a94f263208e41bc6eb0cf16f287f503d71eb8"
+          "sha256": "sha256:5892d02eb6073f313dded640981bd777a18bf09f8e01e8d2d8391582c48347b0"
         }
       ],
       "version": "v1"
@@ -44,7 +44,7 @@
       "archetype": "direct_favored",
       "id": "rd-001",
       "path": "tasks/dev/rd-001.json",
-      "sha256": "sha256:8a4f9b217a1b22a633d8f715b72d625fa1fc2c9d849e39b6c9786aa86956082f",
+      "sha256": "sha256:2e9f149d999bc2781986393760425fef042d6cadfeff909f99ea0d3a84f84d85",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -52,7 +52,7 @@
       "archetype": "direct_favored",
       "id": "rd-002",
       "path": "tasks/dev/rd-002.json",
-      "sha256": "sha256:640e1f8fe187533d907c3d5fcec9373df14cd69b3ac5ae71efbee5f2146839cc",
+      "sha256": "sha256:ba2085bdeef1cbb7fda839902d91eac67eb45a54c25d6770981f7e30e4b47049",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -60,7 +60,7 @@
       "archetype": "python_favored",
       "id": "rd-003",
       "path": "tasks/dev/rd-003.json",
-      "sha256": "sha256:45cb8f7fe6f60c697ee62aef20fcade304186b3f2f1a0bd7622416c8b88ed3c6",
+      "sha256": "sha256:efb55266238812e996b6ed42b540fbafc6db0505c535382b2951db4f369b6db4",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -68,7 +68,7 @@
       "archetype": "python_favored",
       "id": "rd-004",
       "path": "tasks/dev/rd-004.json",
-      "sha256": "sha256:78b0dda4289a6f0510380a1ff66890d65655007482a2af828abdaa08976333eb",
+      "sha256": "sha256:4c4250393d22fa3873a2f31fc26d771aa94b05bdc7d47830ca754bc007eccd26",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -76,7 +76,7 @@
       "archetype": "boundary",
       "id": "rd-005",
       "path": "tasks/dev/rd-005.json",
-      "sha256": "sha256:912c21dc25e03d4eeab9d3ea4b5ca5350f91ebe8540cc563159e829e5c51b424",
+      "sha256": "sha256:7b6d15afdba5d72372712753a36626c8cd729980993d541e58d0e86515e7364c",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -84,7 +84,7 @@
       "archetype": "boundary",
       "id": "rd-006",
       "path": "tasks/dev/rd-006.json",
-      "sha256": "sha256:6d5829f0801d357d8d9268587e667c6cebda76ec5f344a3d8a6a3058e3fc81f5",
+      "sha256": "sha256:ca6ff43822fa603e0bb7eb2f14e8a3b14aefc884026ef87ff55f556959c28f2c",
       "split": "dev",
       "track": "stateful_local_tools"
     }

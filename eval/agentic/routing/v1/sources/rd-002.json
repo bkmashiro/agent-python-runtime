@@ -61,31 +61,6 @@
   },
   "tools": [
     {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory.",
-      "name": "cat",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "The name of the file from current directory to display. No path is allowed. ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "file_content": {
-            "description": "The content of the file.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
-    {
       "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder.",
       "name": "cd",
       "parameters": {
@@ -134,90 +109,6 @@
         "properties": {
           "result": {
             "description": "The result of the copy operation or an error message if the operation fails.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal.",
-      "name": "echo",
-      "parameters": {
-        "properties": {
-          "content": {
-            "description": "The content to write or display.",
-            "type": "string"
-          },
-          "file_name": {
-            "default": "None",
-            "description": "The name of the file at current directory to write the content to. Defaults to None. ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "content"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "terminal_output": {
-            "description": "The content if no file name is provided, or None if written to file.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Create a new file of any extension in the current directory.",
-      "name": "touch",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "The name of the new file in the current directory. file_name is local to the current directory and does not allow path.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {},
-        "type": "object"
-      }
-    },
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Count the number of lines, words, and characters in a file of any extension from current directory.",
-      "name": "wc",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "Name of the file of current directory to perform wc operation on.",
-            "type": "string"
-          },
-          "mode": {
-            "default": "l",
-            "description": "Mode of operation ('l' for lines, 'w' for words, 'c' for characters). ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "count": {
-            "description": "The count of the number of lines, words, or characters in the file.",
-            "type": "integer"
-          },
-          "type": {
-            "description": "The type of unit we are counting. [Enum]: [\"lines\", \"words\", \"characters\"]",
             "type": "string"
           }
         },

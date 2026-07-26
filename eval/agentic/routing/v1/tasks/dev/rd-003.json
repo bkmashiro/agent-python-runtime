@@ -75,7 +75,7 @@
     "adaptation": "Adapted from the digest-bound local routing source record into external-agentic-task/v1.",
     "benchmark": "RoutingDiagnostic",
     "license": "Apache-2.0",
-    "record_sha256": "sha256:1d0486bd7f3f99d07b0f1acfda377dc889f32669d0da9801432d096a316addcc",
+    "record_sha256": "sha256:965cb1cbf27f86c5d7b7f8e97b8ef230f69ec4b536493e6c64f6ba8c7b85cd17",
     "revision": "6088885536d117348bb1a9bdb9d013b4f80c77d0",
     "source_id": "rd-003",
     "version": "v1"
@@ -133,36 +133,6 @@
       }
     },
     {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Copy a file or directory from one location to another.  If the destination is a directory, the source file or directory will be copied into the destination directory.  Both source and destination must be local to the current directory.",
-      "name": "cp",
-      "parameters": {
-        "properties": {
-          "destination": {
-            "description": "The destination name to copy the file or directory to. If the destination is a directory, the source will be copied into this directory. No file paths allowed. ",
-            "type": "string"
-          },
-          "source": {
-            "description": "The name of the file or directory to copy.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source",
-          "destination"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "result": {
-            "description": "The result of the copy operation or an error message if the operation fails.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
-    {
       "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal.",
       "name": "echo",
       "parameters": {
@@ -209,40 +179,6 @@
       },
       "response": {
         "properties": {},
-        "type": "object"
-      }
-    },
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Count the number of lines, words, and characters in a file of any extension from current directory.",
-      "name": "wc",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "Name of the file of current directory to perform wc operation on.",
-            "type": "string"
-          },
-          "mode": {
-            "default": "l",
-            "description": "Mode of operation ('l' for lines, 'w' for words, 'c' for characters). ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "count": {
-            "description": "The count of the number of lines, words, or characters in the file.",
-            "type": "integer"
-          },
-          "type": {
-            "description": "The type of unit we are counting. [Enum]: [\"lines\", \"words\", \"characters\"]",
-            "type": "string"
-          }
-        },
         "type": "object"
       }
     }

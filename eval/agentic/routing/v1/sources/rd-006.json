@@ -81,31 +81,6 @@
   },
   "tools": [
     {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory.",
-      "name": "cat",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "The name of the file from current directory to display. No path is allowed. ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "file_content": {
-            "description": "The content of the file.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
-    {
       "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder.",
       "name": "cd",
       "parameters": {

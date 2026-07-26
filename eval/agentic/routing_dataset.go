@@ -390,6 +390,7 @@ func validateRoutingToolOracle(task Task) error {
 	}
 
 	toolSchemas := make(map[string]bool, len(task.Tools))
+	usedTools := make(map[string]bool, len(task.Tools))
 	for _, tool := range task.Tools {
 		if tool.Name == "" || tool.Parameters == nil || len(bytes.TrimSpace(tool.Parameters)) == 0 {
 			return ErrRoutingDataset
@@ -419,7 +420,11 @@ func validateRoutingToolOracle(task Task) error {
 			if !toolSchemas[call.Name] {
 				return ErrRoutingDataset
 			}
+			usedTools[call.Name] = true
 		}
+	}
+	if len(usedTools) != len(toolSchemas) {
+		return ErrRoutingDataset
 	}
 	return nil
 }

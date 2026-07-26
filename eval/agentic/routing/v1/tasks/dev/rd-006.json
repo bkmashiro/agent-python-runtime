@@ -83,38 +83,13 @@
     "adaptation": "Adapted from the digest-bound local routing source record into external-agentic-task/v1.",
     "benchmark": "RoutingDiagnostic",
     "license": "Apache-2.0",
-    "record_sha256": "sha256:3c1da98d4177958e896bec3ad52a94f263208e41bc6eb0cf16f287f503d71eb8",
+    "record_sha256": "sha256:5892d02eb6073f313dded640981bd777a18bf09f8e01e8d2d8391582c48347b0",
     "revision": "6088885536d117348bb1a9bdb9d013b4f80c77d0",
     "source_id": "rd-006",
     "version": "v1"
   },
   "split": "dev",
   "tools": [
-    {
-      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory.",
-      "name": "cat",
-      "parameters": {
-        "properties": {
-          "file_name": {
-            "description": "The name of the file from current directory to display. No path is allowed. ",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_name"
-        ],
-        "type": "object"
-      },
-      "response": {
-        "properties": {
-          "file_content": {
-            "description": "The content of the file.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      }
-    },
     {
       "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder.",
       "name": "cd",

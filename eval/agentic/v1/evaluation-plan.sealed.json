@@ -5,7 +5,7 @@
   "model": "gpt-5.4",
   "current_decision_eligible": false,
   "dataset_manifest_digest": "sha256:f84c8ba172c80ce1e64644391faef7d97f4c9581c72c100deb3664fc532c86e6",
-  "development_plan_digest": "sha256:4af5cf83231fbc9fc3a5e9a09b9a330e0ca49ae21aacbdd24491f6e60140dc3a",
+  "development_plan_digest": "sha256:9da2a5c05029582c167e2b0aaa78c4166db4fc2bc77755eec0df7c6ff096c556",
   "credential_env_name": "LINKAPI_API_KEY",
   "transport_retry_policy": {"automatic_retries": 0, "reason": "unverified_provider_idempotency"},
   "cost_gate": {"status": "awaiting_owner_approval", "separate_activation_required": true},
@@ -38,7 +38,7 @@
     "bfcl-v4-stateless-function-calling-parallel_multiple_62"
   ],
   "per_trial": {
-    "max_provider_attempts_per_turn": 3,
+    "max_provider_attempts_per_turn": 4,
     "max_tool_calls": 32,
     "max_python_runs_per_turn": 1,
     "max_input_tokens_per_provider_attempt": 20000,
@@ -46,10 +46,10 @@
   },
   "global_bounds": {
     "trial_count": 90,
-    "max_provider_attempts": 423,
-    "max_input_tokens": 8460000,
-    "max_output_tokens": 433152,
-    "max_total_tokens": 8893152,
+    "max_provider_attempts": 531,
+    "max_input_tokens": 10620000,
+    "max_output_tokens": 543744,
+    "max_total_tokens": 11163744,
     "max_tool_calls": 2880,
     "max_python_runs": 138
   },

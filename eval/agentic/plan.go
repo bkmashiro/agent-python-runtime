@@ -91,7 +91,7 @@ func validateDevelopmentPlan(plan DevelopmentPilotPlan, dataset *Dataset) error 
 		plan.TransportRetryPolicy.Reason != "unverified_provider_idempotency" || plan.CostGate.Status != "awaiting_owner_approval" || !plan.CostGate.ActivationRequired ||
 		len(plan.Conditions) != 3 || plan.Conditions[0] != ConditionDirect || plan.Conditions[1] != ConditionPython || plan.Conditions[2] != ConditionHybrid ||
 		len(plan.Replicates) != 1 || plan.Replicates[0] != 0 || len(plan.GuestProfiles) != 1 || plan.GuestProfiles[0] != "core" ||
-		plan.PerTrial.MaxProviderAttemptsPerTurn != 3 || plan.PerTrial.MaxToolCalls == 0 || plan.PerTrial.MaxToolCalls > maxFunctionCalls ||
+		plan.PerTrial.MaxProviderAttemptsPerTurn != 4 || plan.PerTrial.MaxToolCalls == 0 || plan.PerTrial.MaxToolCalls > maxFunctionCalls ||
 		plan.PerTrial.MaxPythonRunsPerTurn != 1 || plan.PerTrial.MaxInputTokensPerAttempt == 0 ||
 		plan.PerTrial.MaxOutputTokensPerAttempt == 0 || plan.PerTrial.MaxOutputTokensPerAttempt > maxDirectOutputTokens {
 		return ErrPilotPlan

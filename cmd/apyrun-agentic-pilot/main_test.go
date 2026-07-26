@@ -119,7 +119,7 @@ func TestSelectExecutionScopeUsesFixedRepresentativeCanary(t *testing.T) {
 		scope.TaskIDs[1] != "bfcl-v4-stateless-function-calling-parallel_multiple_112" {
 		t.Fatalf("scope=%+v", scope)
 	}
-	if scope.Bounds.TrialCount != 6 || scope.Bounds.MaxProviderAttempts != 24 || scope.Bounds.MaxPythonRuns != 8 {
+	if scope.Bounds.TrialCount != 6 || scope.Bounds.MaxProviderAttempts != 30 || scope.Bounds.MaxPythonRuns != 8 {
 		t.Fatalf("bounds=%+v", scope.Bounds)
 	}
 	if len(scope.Conditions) != 3 || len(scope.Replicates) != 1 || scope.Replicates[0] != 0 {

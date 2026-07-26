@@ -13,7 +13,7 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Digest == "" || plan.GlobalBounds.TrialCount != 30 || plan.GlobalBounds.MaxProviderAttempts != 127 || plan.GlobalBounds.MaxPythonRuns != 42 || len(dataset.Tasks) != 20 {
+	if plan.Digest == "" || plan.GlobalBounds.TrialCount != 30 || plan.GlobalBounds.MaxProviderAttempts != 159 || plan.GlobalBounds.MaxPythonRuns != 42 || len(dataset.Tasks) != 20 {
 		t.Fatalf("plan=%+v tasks=%d", plan, len(dataset.Tasks))
 	}
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
@@ -21,7 +21,7 @@ func TestLoadDevelopmentPilotPlanRecomputesBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limits.MaxProviderCalls != 9 || limits.MaxPythonRuns != 3 || limits.MaxToolCalls != 32 || limits.MaxInputTokens != 180_000 || limits.MaxOutputTokens != 9_216 || limits.MaxTotalTokens != 189_216 || limits.MaxOutputTokensPerCall != 1_024 {
+	if limits.MaxProviderCalls != 12 || limits.MaxPythonRuns != 3 || limits.MaxToolCalls != 32 || limits.MaxInputTokens != 240_000 || limits.MaxOutputTokens != 12_288 || limits.MaxTotalTokens != 252_288 || limits.MaxOutputTokensPerCall != 1_024 {
 		t.Fatalf("limits=%+v", limits)
 	}
 	pythonLimits, err := plan.LimitsFor(task, ConditionPython)
@@ -79,7 +79,7 @@ func TestSealedEvaluationPlanRecomputesBoundsAndLatinSquare(t *testing.T) {
 		}
 		turns += len(task.Interaction.Turns)
 		if task.Track == "stateful_local_tools" {
-			attemptsPerReplicate += len(task.Interaction.Turns) * 7
+			attemptsPerReplicate += len(task.Interaction.Turns) * 9
 		} else {
 			attemptsPerReplicate += len(task.Interaction.Turns) * 3
 		}

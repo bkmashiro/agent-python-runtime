@@ -101,7 +101,16 @@ func (session *ResponsesSession) Exchange(
 	if remainingTotal < perCallOutput {
 		perCallOutput = remainingTotal
 	}
-	payload, err := marshalLinkAPIWirePayload(session.model, input, tools, toolChoice, parallelToolCalls, perCallOutput)
+	payloadDocument := map[string]any{
+		"model": session.model, "input": input, "max_output_tokens": perCallOutput,
+		"stream": false, "background": false,
+	}
+	if len(tools) > 0 {
+		payloadDocument["tools"] = tools
+		payloadDocument["tool_choice"] = toolChoice
+		payloadDocument["parallel_tool_calls"] = parallelToolCalls
+	}
+	payload, err := json.Marshal(payloadDocument)
 	if err != nil || len(payload) == 0 || len(payload) > 1024*1024 {
 		return ParsedResponse{}, ErrAgenticRun
 	}
@@ -156,151 +165,6 @@ func (session *ResponsesSession) markLatestProtocolInvalid() {
 	if len(session.evidence) > 0 {
 		session.evidence[len(session.evidence)-1].ProtocolInvalid = true
 	}
-}
-
-func marshalLinkAPIWirePayload(model string, input any, tools []map[string]any, toolChoice string, parallelToolCalls bool, maxTokens uint64) ([]byte, error) {
-	if model == "" || maxTokens == 0 || len(tools) > maxFunctionCalls {
-		return nil, ErrAgenticRun
-	}
-	var items []any
-	encodedInput, err := json.Marshal(input)
-	if err != nil || len(encodedInput) == 0 || len(encodedInput) > 1024*1024 || rejectDuplicateJSON(encodedInput) != nil {
-		return nil, ErrAgenticRun
-	}
-	if string(encodedInput) != "null" && json.Unmarshal(encodedInput, &items) != nil {
-		var item map[string]any
-		if json.Unmarshal(encodedInput, &item) != nil || item == nil {
-			return nil, ErrAgenticRun
-		}
-		items = []any{item}
-	}
-	if len(items) > 1024 {
-		return nil, ErrAgenticRun
-	}
-	messages := make([]map[string]any, 0, len(items))
-	pendingCalls := make([]map[string]any, 0)
-	knownCalls := map[string]bool{}
-	consumedCalls := map[string]bool{}
-	flushCalls := func() {
-		if len(pendingCalls) == 0 {
-			return
-		}
-		messages = append(messages, map[string]any{"role": "assistant", "tool_calls": pendingCalls})
-		pendingCalls = nil
-	}
-	for _, item := range items {
-		raw, err := json.Marshal(item)
-		if err != nil || len(raw) == 0 || len(raw) > maxArgumentsBytes || rejectDuplicateJSON(raw) != nil {
-			return nil, ErrAgenticRun
-		}
-		var header map[string]json.RawMessage
-		if json.Unmarshal(raw, &header) != nil || len(header) == 0 || len(header) > 16 {
-			return nil, ErrAgenticRun
-		}
-		var itemType string
-		if rawType, exists := header["type"]; exists && (json.Unmarshal(rawType, &itemType) != nil || itemType == "") {
-			return nil, ErrAgenticRun
-		}
-		switch itemType {
-		case "function_call":
-			var callID, name, arguments, status string
-			var argumentObject map[string]any
-			if json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["name"], &name) != nil || json.Unmarshal(header["arguments"], &arguments) != nil {
-				return nil, ErrAgenticRun
-			}
-			if strings.TrimSpace(arguments) == "null" {
-				arguments = "{}"
-			}
-			if !validProtocolID(callID) || !providerToolNamePattern.MatchString(name) || decodeUseNumber([]byte(arguments), &argumentObject) != nil || argumentObject == nil || knownCalls[callID] ||
-				(header["status"] != nil && (json.Unmarshal(header["status"], &status) != nil || status != "completed")) {
-				return nil, ErrAgenticRun
-			}
-			knownCalls[callID] = true
-			pendingCalls = append(pendingCalls, map[string]any{"id": callID, "type": "function", "function": map[string]any{"name": name, "arguments": arguments}})
-		case "function_call_output":
-			flushCalls()
-			var callID, output string
-			if json.Unmarshal(header["call_id"], &callID) != nil || json.Unmarshal(header["output"], &output) != nil || !knownCalls[callID] || consumedCalls[callID] || len(output) > maxArgumentsBytes || !utf8.ValidString(output) {
-				return nil, ErrAgenticRun
-			}
-			consumedCalls[callID] = true
-			messages = append(messages, map[string]any{"role": "tool", "tool_call_id": callID, "content": output})
-		case "", "message":
-			flushCalls()
-			var role string
-			if json.Unmarshal(header["role"], &role) != nil || (role != "developer" && role != "system" && role != "user" && role != "assistant") {
-				return nil, ErrAgenticRun
-			}
-			content, err := linkAPIMessageContent(role, header["content"])
-			if err != nil {
-				return nil, err
-			}
-			messages = append(messages, map[string]any{"role": role, "content": content})
-		default:
-			return nil, ErrAgenticRun
-		}
-	}
-	flushCalls()
-	for callID := range knownCalls {
-		if !consumedCalls[callID] {
-			return nil, ErrAgenticRun
-		}
-	}
-	wireTools := make([]map[string]any, 0, len(tools))
-	for _, tool := range tools {
-		if tool["type"] != "function" {
-			return nil, ErrAgenticRun
-		}
-		name, nameOK := tool["name"].(string)
-		parameters, parametersOK := tool["parameters"]
-		if !nameOK || !providerToolNamePattern.MatchString(name) || !parametersOK {
-			return nil, ErrAgenticRun
-		}
-		function := map[string]any{"name": name, "parameters": parameters}
-		if description, exists := tool["description"]; exists {
-			function["description"] = description
-		}
-		if strict, exists := tool["strict"]; exists {
-			function["strict"] = strict
-		}
-		wireTools = append(wireTools, map[string]any{"type": "function", "function": function})
-	}
-	document := map[string]any{"model": model, "messages": messages, "max_tokens": maxTokens, "stream": false}
-	if len(wireTools) > 0 {
-		document["tools"] = wireTools
-		document["tool_choice"] = toolChoice
-	}
-	return json.Marshal(document)
-}
-
-func linkAPIMessageContent(role string, raw json.RawMessage) (string, error) {
-	var content string
-	if json.Unmarshal(raw, &content) == nil {
-		if !utf8.ValidString(content) || len(content) > maxResponseTextBytes {
-			return "", ErrAgenticRun
-		}
-		return content, nil
-	}
-	var parts []map[string]json.RawMessage
-	if role != "assistant" || json.Unmarshal(raw, &parts) != nil || len(parts) == 0 || len(parts) > 64 {
-		return "", ErrAgenticRun
-	}
-	var joined strings.Builder
-	for _, part := range parts {
-		var kind, value string
-		if json.Unmarshal(part["type"], &kind) != nil || (kind != "output_text" && kind != "refusal") {
-			return "", ErrAgenticRun
-		}
-		field := "text"
-		if kind == "refusal" {
-			field = "refusal"
-		}
-		if json.Unmarshal(part[field], &value) != nil || !utf8.ValidString(value) || joined.Len()+len(value) > maxResponseTextBytes {
-			return "", ErrAgenticRun
-		}
-		joined.WriteString(value)
-	}
-	return joined.String(), nil
 }
 
 func validateResponseIdentity(body json.RawMessage, expectedModel string) error {

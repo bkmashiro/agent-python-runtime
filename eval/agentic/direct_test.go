@@ -60,11 +60,11 @@ func TestRunDirectStatelessScoresAndRedacts(t *testing.T) {
 		t.Fatal("request payload invalid")
 	}
 	tools := payload["tools"].([]any)
-	if payload["messages"] == nil || payload["max_tokens"] != float64(512) || payload["input"] != nil || payload["max_output_tokens"] != nil {
+	if payload["input"] == nil || payload["max_output_tokens"] != float64(512) || payload["messages"] != nil || payload["max_tokens"] != nil {
 		t.Fatalf("wire payload=%s", adapter.request.Payload)
 	}
 	for _, value := range tools {
-		name := value.(map[string]any)["function"].(map[string]any)["name"].(string)
+		name := value.(map[string]any)["name"].(string)
 		if strings.Contains(name, ".") {
 			t.Fatalf("canonical dotted name leaked to provider: %s", name)
 		}

@@ -277,19 +277,21 @@ func TestRunDevelopmentTrialDirectUsesBoundedResponsesLoopAndScores(t *testing.T
 		t.Fatalf("direct request omits the Host echo error contract: %s", adapter.requests[0].Payload)
 	}
 	var continuation struct {
-		Messages []struct {
-			Role       string `json:"role"`
-			ToolCallID string `json:"tool_call_id"`
-		} `json:"messages"`
+		Input []struct {
+			Type   string `json:"type"`
+			CallID string `json:"call_id"`
+		} `json:"input"`
 	}
 	if json.Unmarshal(adapter.requests[1].Payload, &continuation) != nil {
-		t.Fatal("decode continuation")
+		t.Fatal("decode continuation payload")
 	}
-	hasToolResult := false
-	for _, message := range continuation.Messages {
-		hasToolResult = hasToolResult || message.Role == "tool" && message.ToolCallID != ""
+	foundOutput := false
+	for _, item := range continuation.Input {
+		if item.Type == "function_call_output" && item.CallID != "" {
+			foundOutput = true
+		}
 	}
-	if !hasToolResult {
+	if !foundOutput {
 		t.Fatal("next turn omitted prior Host tool outputs")
 	}
 	encoded, _ := json.Marshal(result)

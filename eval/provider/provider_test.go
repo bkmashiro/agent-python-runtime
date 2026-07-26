@@ -18,7 +18,7 @@ func TestLinkAPIResponsesProducesDigestOnlyEvidence(t *testing.T) {
 			t.Fatalf("request=%+v", request)
 		}
 		var payload map[string]any
-		if json.NewDecoder(request.Body).Decode(&payload) != nil || payload["max_tokens"] != float64(64) || payload["messages"] == nil || payload["input"] != nil || payload["max_output_tokens"] != nil {
+		if json.NewDecoder(request.Body).Decode(&payload) != nil || payload["max_output_tokens"] != float64(64) || payload["input"] == nil || payload["messages"] != nil || payload["max_tokens"] != nil || payload["background"] != false {
 			t.Fatalf("payload=%#v", payload)
 		}
 		writer.Header().Set("Content-Type", "application/json")
@@ -30,7 +30,7 @@ func TestLinkAPIResponsesProducesDigestOnlyEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := json.RawMessage(`{"model":"openai/gpt-test","messages":[{"role":"user","content":"private prompt"}],"max_tokens":64,"stream":false}`)
+	payload := json.RawMessage(`{"model":"openai/gpt-test","input":"private prompt","max_output_tokens":64,"stream":false,"background":false}`)
 	response, err := adapter.Exchange(context.Background(), Request{Model: "openai/gpt-test", Payload: payload})
 	if err != nil || response.StatusCode != 200 || response.RequestID != "req_fixture" || response.Usage == nil || response.Usage.TotalTokens != 10 {
 		t.Fatalf("response=%+v err=%v", response, err)
@@ -54,7 +54,7 @@ func TestLinkAPIResponsesDoesNotImplicitlyRetryPaidRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := adapter.Exchange(context.Background(), Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64}`)})
+	response, err := adapter.Exchange(context.Background(), Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"background":false}`)})
 	if !errors.Is(err, ErrExchange) || response.StatusCode != http.StatusTooManyRequests || response.RequestDigest == "" || response.ResponseDigest == "" || calls.Load() != 1 {
 		t.Fatalf("response=%+v calls=%d err=%v", response, calls.Load(), err)
 	}
@@ -69,7 +69,7 @@ func TestLinkAPIResponsesRejectsNonObjectResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := adapter.Exchange(context.Background(), Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64}`)}); !errors.Is(err, ErrExchange) {
+	if _, err := adapter.Exchange(context.Background(), Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"background":false}`)}); !errors.Is(err, ErrExchange) {
 		t.Fatalf("err=%v", err)
 	}
 }
@@ -82,14 +82,15 @@ func TestLinkAPIResponsesFailsClosedBeforeTransport(t *testing.T) {
 		credential func() (string, bool)
 		request    Request
 	}{
-		"missing credential":        {credential: func() (string, bool) { return "", false }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64}`)}},
-		"invalid credential":        {credential: func() (string, bool) { return " secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64}`)}},
-		"model mismatch":            {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"other","messages":[{"role":"user","content":"x"}],"max_tokens":64}`)}},
-		"streaming not registered":  {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64,"stream":true}`)}},
-		"invalid stream type":       {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64,"stream":"false"}`)}},
-		"background not registered": {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64,"background":false}`)}},
-		"legacy input":              {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","messages":[{"role":"user","content":"x"}],"max_tokens":64}`)}},
-		"legacy output limit":       {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","messages":[{"role":"user","content":"x"}],"max_tokens":64,"max_output_tokens":64}`)}},
+		"missing credential":    {credential: func() (string, bool) { return "", false }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"background":false}`)}},
+		"invalid credential":    {credential: func() (string, bool) { return " secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"background":false}`)}},
+		"model mismatch":        {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"other","input":"x","max_output_tokens":64,"background":false}`)}},
+		"streaming registered":  {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"stream":true,"background":false}`)}},
+		"invalid stream type":   {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"stream":"false","background":false}`)}},
+		"background registered": {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"background":true}`)}},
+		"missing input":         {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","max_output_tokens":64,"background":false}`)}},
+		"chat messages":         {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","messages":[{"role":"user","content":"x"}],"max_output_tokens":64,"background":false}`)}},
+		"chat output limit":     {credential: func() (string, bool) { return "secret", true }, request: Request{Model: "gpt-test", Payload: json.RawMessage(`{"model":"gpt-test","input":"x","max_output_tokens":64,"max_tokens":64,"background":false}`)}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			adapter, err := newLinkAPIResponses(server.Client(), server.URL+"/v1/responses", fixture.credential, true)

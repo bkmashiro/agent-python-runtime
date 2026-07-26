@@ -35,6 +35,7 @@ type artifactEntry struct {
 
 type pilotSummary struct {
 	Version          string          `json:"version"`
+	Mode             string          `json:"mode"`
 	Status           string          `json:"status"`
 	DecisionEligible bool            `json:"decision_eligible"`
 	PlanDigest       string          `json:"plan_digest"`
@@ -49,6 +50,26 @@ type pilotSummary struct {
 	Artifacts        []artifactEntry `json:"artifacts"`
 }
 
+const representativeCanaryTask = "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+
+type executionBounds struct {
+	TrialCount          uint32
+	MaxProviderAttempts uint32
+	MaxInputTokens      uint64
+	MaxOutputTokens     uint64
+	MaxTotalTokens      uint64
+	MaxToolCalls        uint32
+	MaxPythonRuns       uint32
+}
+
+type executionScope struct {
+	Mode       string
+	TaskIDs    []string
+	Conditions []agentic.Condition
+	Replicates []uint32
+	Bounds     executionBounds
+}
+
 func run(ctx context.Context, args []string, deps dependencies) error {
 	flags := flag.NewFlagSet("apyrun-agentic-pilot", flag.ContinueOnError)
 	datasetRoot := flags.String("dataset", "", "agentic dataset root")
@@ -57,10 +78,15 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	guestPath := flags.String("guest", "", "exact core Guest WASM artifact")
 	outputRoot := flags.String("out", "", "new output directory")
 	repositoryCommit := flags.String("repository-commit", "", "exact 40-hex source commit")
+	canary := flags.Bool("canary", false, "run the fixed representative three-condition canary")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *datasetRoot == "" || *planPath == "" || *activationPath == "" || *guestPath == "" || *outputRoot == "" || len(*repositoryCommit) != 40 {
 		return errors.New("invalid arguments")
 	}
 	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(*planPath, *datasetRoot)
+	if err != nil {
+		return err
+	}
+	scope, err := selectExecutionScope(plan, dataset, *canary)
 	if err != nil {
 		return err
 	}
@@ -108,11 +134,11 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		tasks[task.ID] = task
 	}
 	summary := pilotSummary{
-		Version: "agentic-development-pilot-result/v1", Status: "complete", DecisionEligible: false,
+		Version: "agentic-development-pilot-result/v1", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
 		PlanDigest: plan.Digest, ActivationDigest: activation.Digest,
-		Artifacts: make([]artifactEntry, 0, plan.GlobalBounds.TrialCount),
+		Artifacts: make([]artifactEntry, 0, scope.Bounds.TrialCount),
 	}
-	for _, taskID := range plan.TaskIDs {
+	for _, taskID := range scope.TaskIDs {
 		task, exists := tasks[taskID]
 		if !exists {
 			return agentic.ErrPilotPlan
@@ -121,8 +147,8 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		if err != nil {
 			return err
 		}
-		for _, condition := range plan.Conditions {
-			for _, replicate := range plan.Replicates {
+		for _, condition := range scope.Conditions {
+			for _, replicate := range scope.Replicates {
 				if !plan.Authorizes(task.ID, condition, replicate) {
 					return agentic.ErrPilotPlan
 				}
@@ -153,13 +179,13 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 				summary.ProviderCalls += result.ProviderCalls
 				summary.PythonAttempts += result.PythonAttempts
 				summary.PythonRuns += result.PythonRuns
-				if summary.Usage.InputTokens, err = addBounded(summary.Usage.InputTokens, result.Usage.InputTokens, plan.GlobalBounds.MaxInputTokens); err != nil {
+				if summary.Usage.InputTokens, err = addBounded(summary.Usage.InputTokens, result.Usage.InputTokens, scope.Bounds.MaxInputTokens); err != nil {
 					return err
 				}
-				if summary.Usage.OutputTokens, err = addBounded(summary.Usage.OutputTokens, result.Usage.OutputTokens, plan.GlobalBounds.MaxOutputTokens); err != nil {
+				if summary.Usage.OutputTokens, err = addBounded(summary.Usage.OutputTokens, result.Usage.OutputTokens, scope.Bounds.MaxOutputTokens); err != nil {
 					return err
 				}
-				if summary.Usage.TotalTokens, err = addBounded(summary.Usage.TotalTokens, result.Usage.TotalTokens, plan.GlobalBounds.MaxTotalTokens); err != nil {
+				if summary.Usage.TotalTokens, err = addBounded(summary.Usage.TotalTokens, result.Usage.TotalTokens, scope.Bounds.MaxTotalTokens); err != nil {
 					return err
 				}
 				summary.Artifacts = append(summary.Artifacts, artifactEntry{
@@ -174,7 +200,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 			}
 		}
 	}
-	if summary.TrialCount != plan.GlobalBounds.TrialCount || summary.ProviderAttempts > plan.GlobalBounds.MaxProviderAttempts || summary.PythonAttempts > plan.GlobalBounds.MaxPythonRuns {
+	if summary.TrialCount != scope.Bounds.TrialCount || summary.ProviderAttempts > scope.Bounds.MaxProviderAttempts || summary.PythonAttempts > scope.Bounds.MaxPythonRuns {
 		return agentic.ErrPilotPlan
 	}
 	summaryBytes, err := json.MarshalIndent(summary, "", "  ")
@@ -187,8 +213,52 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		return err
 	}
 	manifestSum := sha256.Sum256(summaryBytes)
-	_, err = fmt.Fprintf(os.Stdout, `{"status":"complete","trial_count":%d,"manifest_digest":"sha256:%s"}`+"\n", summary.TrialCount, hex.EncodeToString(manifestSum[:]))
+	_, err = fmt.Fprintf(os.Stdout, `{"status":"complete","mode":%q,"trial_count":%d,"manifest_digest":"sha256:%s"}`+"\n", summary.Mode, summary.TrialCount, hex.EncodeToString(manifestSum[:]))
 	return err
+}
+
+func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, canary bool) (executionScope, error) {
+	full := executionScope{
+		Mode: "pilot", TaskIDs: append([]string(nil), plan.TaskIDs...),
+		Conditions: append([]agentic.Condition(nil), plan.Conditions...), Replicates: append([]uint32(nil), plan.Replicates...),
+		Bounds: executionBounds{
+			TrialCount: plan.GlobalBounds.TrialCount, MaxProviderAttempts: plan.GlobalBounds.MaxProviderAttempts,
+			MaxInputTokens: plan.GlobalBounds.MaxInputTokens, MaxOutputTokens: plan.GlobalBounds.MaxOutputTokens,
+			MaxTotalTokens: plan.GlobalBounds.MaxTotalTokens, MaxToolCalls: plan.GlobalBounds.MaxToolCalls,
+			MaxPythonRuns: plan.GlobalBounds.MaxPythonRuns,
+		},
+	}
+	if !canary {
+		return full, nil
+	}
+	if dataset == nil || !plan.Authorizes(representativeCanaryTask, agentic.ConditionDirect, 0) ||
+		!plan.Authorizes(representativeCanaryTask, agentic.ConditionPython, 0) || !plan.Authorizes(representativeCanaryTask, agentic.ConditionHybrid, 0) {
+		return executionScope{}, agentic.ErrPilotPlan
+	}
+	turns := uint64(0)
+	for _, task := range dataset.Tasks {
+		if task.ID == representativeCanaryTask && task.Split == "dev" {
+			turns = uint64(len(task.Interaction.Turns))
+			break
+		}
+	}
+	if turns == 0 || turns > 64 {
+		return executionScope{}, agentic.ErrPilotPlan
+	}
+	attempts := turns * uint64(len(plan.Conditions))
+	trialCount := uint64(len(plan.Conditions))
+	return executionScope{
+		Mode: "canary", TaskIDs: []string{representativeCanaryTask},
+		Conditions: append([]agentic.Condition(nil), plan.Conditions...), Replicates: []uint32{0},
+		Bounds: executionBounds{
+			TrialCount: uint32(trialCount), MaxProviderAttempts: uint32(attempts),
+			MaxInputTokens:  attempts * plan.PerTrial.MaxInputTokensPerAttempt,
+			MaxOutputTokens: attempts * plan.PerTrial.MaxOutputTokensPerAttempt,
+			MaxTotalTokens:  attempts * (plan.PerTrial.MaxInputTokensPerAttempt + plan.PerTrial.MaxOutputTokensPerAttempt),
+			MaxToolCalls:    uint32(trialCount) * plan.PerTrial.MaxToolCalls,
+			MaxPythonRuns:   uint32(turns * 2),
+		},
+	}, nil
 }
 
 func abortPilot(code string) bool {

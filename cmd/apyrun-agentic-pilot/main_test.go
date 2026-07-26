@@ -88,3 +88,41 @@ func TestRunRejectsGuestDigestBeforeAdapterOrOutput(t *testing.T) {
 		t.Fatalf("output created before credential gate: %v", statErr)
 	}
 }
+
+func TestSelectExecutionScopeUsesFixedRepresentativeCanary(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := selectExecutionScope(plan, dataset, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope.Mode != "canary" || len(scope.TaskIDs) != 1 || scope.TaskIDs[0] != "bfcl-v4-stateful-local-tools-multi_turn_base_12" {
+		t.Fatalf("scope=%+v", scope)
+	}
+	if scope.Bounds.TrialCount != 3 || scope.Bounds.MaxProviderAttempts != 9 || scope.Bounds.MaxPythonRuns != 6 {
+		t.Fatalf("bounds=%+v", scope.Bounds)
+	}
+	if len(scope.Conditions) != 3 || len(scope.Replicates) != 1 || scope.Replicates[0] != 0 {
+		t.Fatalf("scope=%+v", scope)
+	}
+}
+
+func TestSelectExecutionScopePreservesCompletePilot(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := selectExecutionScope(plan, dataset, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope.Mode != "pilot" || len(scope.TaskIDs) != len(plan.TaskIDs) || scope.Bounds.TrialCount != plan.GlobalBounds.TrialCount || scope.Bounds.MaxProviderAttempts != plan.GlobalBounds.MaxProviderAttempts {
+		t.Fatalf("scope=%+v plan=%+v", scope, plan.GlobalBounds)
+	}
+}

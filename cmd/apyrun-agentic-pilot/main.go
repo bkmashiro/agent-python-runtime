@@ -133,6 +133,13 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	if err := os.Mkdir(trialsRoot, 0o700); err != nil {
 		return err
 	}
+	debugRoot := ""
+	if *diagnosticTask != "" {
+		debugRoot = filepath.Join(*outputRoot, "debug")
+		if err := os.Mkdir(debugRoot, 0o700); err != nil {
+			return err
+		}
+	}
 	tasks := make(map[string]agentic.Task)
 	for _, task := range dataset.Tasks {
 		tasks[task.ID] = task
@@ -166,9 +173,19 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 						return agentic.NewWASIPythonExecutor(ctx, guestBytes, plan.RuntimeConfig(), tools)
 					}
 				}
-				result, err := agentic.RunDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, factory)
+				var result agentic.TrialResult
+				if debugRoot != "" {
+					result, err = agentic.RunDevelopmentDiagnosticTrialForModelWithIdentity(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, factory)
+				} else {
+					result, err = agentic.RunDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, plan.Model, replicate, limits, identity, factory)
+				}
 				if err != nil {
 					return err
+				}
+				if debugRoot != "" {
+					if err := writeRawDebug(filepath.Join(debugRoot, result.TrialID+".json"), result); err != nil {
+						return err
+					}
 				}
 				path := filepath.Join(trialsRoot, result.TrialID+".json")
 				artifactDigest, err := agentic.WriteTrialArtifact(path, result)
@@ -354,6 +371,25 @@ func writeExclusive(path string, content []byte) error {
 	}
 	remove = false
 	return nil
+}
+
+func writeRawDebug(path string, result agentic.TrialResult) error {
+	if result.RawDebug == nil || result.TrialID == "" || result.TaskID == "" {
+		return errors.New("raw debug is unavailable")
+	}
+	document := struct {
+		Version   string                 `json:"version"`
+		TrialID   string                 `json:"trial_id"`
+		TaskID    string                 `json:"task_id"`
+		Condition agentic.Condition      `json:"condition"`
+		Replicate uint32                 `json:"replicate"`
+		Debug     *agentic.TrialRawDebug `json:"debug"`
+	}{"agentic-private-raw-debug/v1", result.TrialID, result.TaskID, result.Condition, result.Replicate, result.RawDebug}
+	content, err := json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeExclusive(path, append(content, '\n'))
 }
 
 func main() {

@@ -67,6 +67,24 @@ type TrialResult struct {
 	PythonEvidence     []PythonRunResult  `json:"python_evidence,omitempty"`
 	StatelessScore     *CallScore         `json:"stateless_score,omitempty"`
 	StatefulScore      *StatefulScore     `json:"stateful_score,omitempty"`
+	RawDebug           *TrialRawDebug     `json:"-"`
+}
+
+type TrialRawDebug struct {
+	DeveloperPrompt   string                `json:"developer_prompt"`
+	ToolSurface       json.RawMessage       `json:"tool_surface"`
+	ProviderExchanges []RawProviderExchange `json:"provider_exchanges"`
+	PythonRuns        []RawPythonRun        `json:"python_runs,omitempty"`
+	ToolCalls         [][]RawToolCall       `json:"tool_calls"`
+}
+
+type RawPythonRun struct {
+	Turn          int             `json:"turn"`
+	Code          string          `json:"code"`
+	Observation   json.RawMessage `json:"observation,omitempty"`
+	GuestRequest  json.RawMessage `json:"guest_request,omitempty"`
+	GuestResponse json.RawMessage `json:"guest_response,omitempty"`
+	Error         string          `json:"error,omitempty"`
 }
 
 type benchmarkMessage struct {
@@ -121,6 +139,35 @@ func RunDevelopmentTrialForModelWithIdentity(
 	identity ExecutionIdentity,
 	pythonFactory PythonWorkflowFactory,
 ) (TrialResult, error) {
+	return runDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, model, replicate, limits, identity, pythonFactory, false)
+}
+
+func RunDevelopmentDiagnosticTrialForModelWithIdentity(
+	ctx context.Context,
+	adapter provider.Adapter,
+	task Task,
+	condition Condition,
+	model string,
+	replicate uint32,
+	limits TrialLimits,
+	identity ExecutionIdentity,
+	pythonFactory PythonWorkflowFactory,
+) (TrialResult, error) {
+	return runDevelopmentTrialForModelWithIdentity(ctx, adapter, task, condition, model, replicate, limits, identity, pythonFactory, true)
+}
+
+func runDevelopmentTrialForModelWithIdentity(
+	ctx context.Context,
+	adapter provider.Adapter,
+	task Task,
+	condition Condition,
+	model string,
+	replicate uint32,
+	limits TrialLimits,
+	identity ExecutionIdentity,
+	pythonFactory PythonWorkflowFactory,
+	captureRaw bool,
+) (TrialResult, error) {
 	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 ||
 		!supportedDevelopmentModel(model) ||
 		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) ||
@@ -137,7 +184,7 @@ func RunDevelopmentTrialForModelWithIdentity(
 	if err != nil {
 		return TrialResult{}, err
 	}
-	session, err := NewResponsesSession(adapter, model, limits)
+	session, err := newResponsesSession(adapter, model, limits, captureRaw)
 	if err != nil {
 		return TrialResult{}, err
 	}
@@ -162,6 +209,9 @@ func RunDevelopmentTrialForModelWithIdentity(
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
 		Condition: condition, Model: model, Identity: identity, Replicate: replicate, Limits: limits,
 		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, CatalogDigest: tools.Snapshot().Digest(),
+	}
+	if captureRaw {
+		result.RawDebug = &TrialRawDebug{DeveloperPrompt: prompt, ToolSurface: append(json.RawMessage(nil), surfaceBytes...)}
 	}
 	if tools.FileSystem() != nil {
 		result.InitialStateDigest = tools.FileSystem().Digest()
@@ -247,16 +297,31 @@ func RunDevelopmentTrialForModelWithIdentity(
 					}
 					pythonAttemptsThisTurn++
 					result.PythonAttempts++
+					rawPython := RawPythonRun{Turn: turnIndex, Code: arguments.Code}
 					pythonResult, runErr := workflow.Execute(
 						ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
 						limits.MaxToolCalls-uint32(usedCalls),
 					)
 					if runErr != nil {
+						if result.RawDebug != nil {
+							rawPython.Error = runErr.Error()
+							rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
+							rawPython.GuestResponse = append(json.RawMessage(nil), pythonResult.RawResponse...)
+							result.RawDebug.PythonRuns = append(result.RawDebug.PythonRuns, rawPython)
+						}
 						result.ErrorCode = "python_engine_failure"
 						break
 					}
 					observation = append(json.RawMessage(nil), pythonResult.Observation...)
+					if result.RawDebug != nil {
+						rawPython.Observation = append(json.RawMessage(nil), pythonResult.Observation...)
+						rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
+						rawPython.GuestResponse = append(json.RawMessage(nil), pythonResult.RawResponse...)
+						result.RawDebug.PythonRuns = append(result.RawDebug.PythonRuns, rawPython)
+					}
 					pythonResult.Observation = nil
+					pythonResult.RawRequest = nil
+					pythonResult.RawResponse = nil
 					result.PythonEvidence = append(result.PythonEvidence, pythonResult)
 					result.PythonRuns++
 					afterCalls := countStatefulCalls(tools.Trace())
@@ -322,6 +387,10 @@ func RunDevelopmentTrialForModelWithIdentity(
 	result.Usage = session.Usage()
 	trace := tools.Trace()
 	result.ToolCalls = countStatefulCalls(trace)
+	if result.RawDebug != nil {
+		result.RawDebug.ProviderExchanges = session.RawExchanges()
+		result.RawDebug.ToolCalls = tools.RawTrace()
+	}
 	if tools.FileSystem() != nil {
 		result.FinalStateDigest = tools.FileSystem().Digest()
 	}

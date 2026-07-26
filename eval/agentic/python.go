@@ -29,6 +29,8 @@ type PythonRunResult struct {
 	Backend         string           `json:"backend"`
 	ResetMode       engine.ResetMode `json:"reset_mode"`
 	Observation     json.RawMessage  `json:"-"`
+	RawRequest      json.RawMessage  `json:"-"`
+	RawResponse     json.RawMessage  `json:"-"`
 }
 
 type PythonExecutor struct {
@@ -131,8 +133,10 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	properties := executor.runner.Properties()
 	result := PythonRunResult{
 		RequestDigest: digest(requestBytes), Backend: properties.Backend, ResetMode: properties.ResetMode,
+		RawRequest: append(json.RawMessage(nil), requestBytes...),
 	}
 	payload, runErr := executor.runner.Run(ctx, requestBytes, executor.prepare)
+	result.RawResponse = append(json.RawMessage(nil), payload...)
 	if runErr != nil {
 		return result, runErr
 	}

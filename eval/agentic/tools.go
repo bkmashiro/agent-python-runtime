@@ -32,9 +32,17 @@ type ToolRuntime struct {
 	handlers   map[string]*benchmarkHandler
 	ids        runtimeIDs
 
-	traceMu sync.Mutex
-	turn    int
-	trace   [][]StatefulCall
+	traceMu  sync.Mutex
+	turn     int
+	trace    [][]StatefulCall
+	rawTrace [][]RawToolCall
+}
+
+type RawToolCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+	Output    json.RawMessage `json:"output,omitempty"`
+	Error     string          `json:"error,omitempty"`
 }
 
 type benchmarkHandler struct {
@@ -67,7 +75,7 @@ func NewToolRuntime(task Task) (*ToolRuntime, error) {
 	if task.Split != "dev" || len(task.Tools) == 0 || len(task.Tools) > maxFunctionCalls || len(task.Interaction.Turns) == 0 {
 		return nil, ErrDataset
 	}
-	runtime := &ToolRuntime{task: task, turn: 0, trace: make([][]StatefulCall, len(task.Interaction.Turns))}
+	runtime := &ToolRuntime{task: task, turn: 0, trace: make([][]StatefulCall, len(task.Interaction.Turns)), rawTrace: make([][]RawToolCall, len(task.Interaction.Turns))}
 	if task.Track == "stateful_local_tools" {
 		filesystem, err := NewGorillaFileSystem(task.Environment.InitialState)
 		if err != nil {
@@ -184,27 +192,60 @@ func (runtime *ToolRuntime) Trace() [][]StatefulCall {
 	return trace
 }
 
-func (runtime *ToolRuntime) record(toolID string, arguments json.RawMessage) error {
+func (runtime *ToolRuntime) RawTrace() [][]RawToolCall {
+	if runtime == nil {
+		return nil
+	}
+	runtime.traceMu.Lock()
+	defer runtime.traceMu.Unlock()
+	trace := make([][]RawToolCall, len(runtime.rawTrace))
+	for turn := range runtime.rawTrace {
+		trace[turn] = make([]RawToolCall, len(runtime.rawTrace[turn]))
+		for index, call := range runtime.rawTrace[turn] {
+			trace[turn][index] = RawToolCall{Name: call.Name, Arguments: append(json.RawMessage(nil), call.Arguments...), Output: append(json.RawMessage(nil), call.Output...), Error: call.Error}
+		}
+	}
+	return trace
+}
+
+func (runtime *ToolRuntime) record(toolID string, arguments json.RawMessage) (int, int, error) {
 	runtime.traceMu.Lock()
 	defer runtime.traceMu.Unlock()
 	if runtime.turn < 0 || runtime.turn >= len(runtime.trace) || len(runtime.trace[runtime.turn]) >= maxFunctionCalls {
-		return ErrFileSystem
+		return 0, 0, ErrFileSystem
 	}
+	turn, index := runtime.turn, len(runtime.trace[runtime.turn])
 	runtime.trace[runtime.turn] = append(runtime.trace[runtime.turn], StatefulCall{
 		Name: toolID, Arguments: append(json.RawMessage(nil), arguments...),
 	})
-	return nil
+	runtime.rawTrace[turn] = append(runtime.rawTrace[turn], RawToolCall{Name: toolID, Arguments: append(json.RawMessage(nil), arguments...)})
+	return turn, index, nil
+}
+
+func (runtime *ToolRuntime) finishRecord(turn, index int, output json.RawMessage, err error) {
+	runtime.traceMu.Lock()
+	defer runtime.traceMu.Unlock()
+	if turn < 0 || turn >= len(runtime.rawTrace) || index < 0 || index >= len(runtime.rawTrace[turn]) {
+		return
+	}
+	runtime.rawTrace[turn][index].Output = append(json.RawMessage(nil), output...)
+	if err != nil {
+		runtime.rawTrace[turn][index].Error = err.Error()
+	}
 }
 
 func (handler *benchmarkHandler) Handle(_ context.Context, call capability.HostCall) (json.RawMessage, error) {
 	if call.ToolID != handler.toolID || handler.runtime == nil {
 		return nil, ErrFileSystem
 	}
-	if err := handler.runtime.record(call.ToolID, call.Arguments); err != nil {
+	turn, index, err := handler.runtime.record(call.ToolID, call.Arguments)
+	if err != nil {
 		return nil, err
 	}
 	if handler.runtime.filesystem == nil {
-		return json.RawMessage(`{}`), nil
+		output := json.RawMessage(`{}`)
+		handler.runtime.finishRecord(turn, index, output, nil)
+		return output, nil
 	}
 	var snapshot FileSystemSnapshot
 	var beforeVersion uint64
@@ -214,6 +255,7 @@ func (handler *benchmarkHandler) Handle(_ context.Context, call capability.HostC
 	}
 	output, err := handler.runtime.filesystem.Call(call.ToolID, call.Arguments)
 	if err != nil {
+		handler.runtime.finishRecord(turn, index, nil, err)
 		return nil, err
 	}
 	if string(output) == "null" {
@@ -227,6 +269,7 @@ func (handler *benchmarkHandler) Handle(_ context.Context, call capability.HostC
 		}
 		handler.mu.Unlock()
 	}
+	handler.runtime.finishRecord(turn, index, output, nil)
 	return output, nil
 }
 

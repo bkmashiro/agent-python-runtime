@@ -201,12 +201,26 @@ func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
 		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
 	}
-	result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapter, task, ConditionPython, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, factory)
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentity(context.Background(), adapter, task, ConditionPython, developmentModel, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, factory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !result.Passed || result.ProviderCalls != 3 || result.PythonRuns != 3 || result.ToolCalls != 4 || len(result.PythonEvidence) != 3 || workflow == nil || len(workflow.codes) != 3 {
 		t.Fatalf("result=%+v workflow=%+v", result, workflow)
+	}
+	if result.RawDebug == nil || len(result.RawDebug.ProviderExchanges) != 3 || len(result.RawDebug.PythonRuns) != 3 ||
+		len(result.RawDebug.ToolCalls) != 3 || len(result.RawDebug.ToolCalls[0]) != 2 || result.RawDebug.DeveloperPrompt == "" || len(result.RawDebug.ToolSurface) == 0 {
+		t.Fatalf("raw debug=%+v", result.RawDebug)
+	}
+	if !strings.Contains(string(result.RawDebug.ProviderExchanges[0].Request), "Pop on over") ||
+		!strings.Contains(string(result.RawDebug.ProviderExchanges[0].Response), "private code turn 0") ||
+		result.RawDebug.PythonRuns[0].Code != "private code turn 0" || string(result.RawDebug.PythonRuns[0].Observation) != `{}` ||
+		result.RawDebug.ToolCalls[0][0].Name != "cd" || len(result.RawDebug.ToolCalls[0][0].Arguments) == 0 || len(result.RawDebug.ToolCalls[0][0].Output) == 0 {
+		t.Fatalf("raw debug omitted execution data: %+v", result.RawDebug)
+	}
+	encoded, _ := json.Marshal(result)
+	if strings.Contains(string(encoded), "Pop on over") || strings.Contains(string(encoded), "private code turn") {
+		t.Fatalf("formal artifact serialized raw debug: %s", encoded)
 	}
 	if strings.Contains(string(adapter.requests[0].Payload), `"parallel_tool_calls":true`) ||
 		!strings.Contains(string(adapter.requests[0].Payload), "exactly one run_python call") {
@@ -215,7 +229,7 @@ func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 	if err := ValidateTrialResult(result); err != nil {
 		t.Fatalf("successful Python trial is not artifact-safe: %v", err)
 	}
-	encoded, _ := json.Marshal(result)
+	encoded, _ = json.Marshal(result)
 	if containsBytes(encoded, []byte("private code")) || containsBytes(encoded, []byte("python-private")) {
 		t.Fatalf("serialized Python result leaked: %s", encoded)
 	}

@@ -34,22 +34,37 @@ type ParsedResponse struct {
 }
 
 type ResponsesSession struct {
-	mu       sync.Mutex
-	adapter  provider.Adapter
-	model    string
-	limits   TrialLimits
-	closed   bool
-	calls    uint32
-	usage    provider.Usage
-	evidence []ExchangeEvidence
-	seenIDs  map[string]bool
+	mu           sync.Mutex
+	adapter      provider.Adapter
+	model        string
+	limits       TrialLimits
+	closed       bool
+	calls        uint32
+	usage        provider.Usage
+	evidence     []ExchangeEvidence
+	seenIDs      map[string]bool
+	captureRaw   bool
+	rawExchanges []RawProviderExchange
+}
+
+type RawProviderExchange struct {
+	Request    json.RawMessage `json:"request"`
+	Response   json.RawMessage `json:"response,omitempty"`
+	StatusCode int             `json:"status_code"`
+	RequestID  string          `json:"request_id,omitempty"`
+	Usage      *provider.Usage `json:"usage,omitempty"`
+	Error      string          `json:"error,omitempty"`
 }
 
 func NewResponsesSession(adapter provider.Adapter, model string, limits TrialLimits) (*ResponsesSession, error) {
+	return newResponsesSession(adapter, model, limits, false)
+}
+
+func newResponsesSession(adapter provider.Adapter, model string, limits TrialLimits, captureRaw bool) (*ResponsesSession, error) {
 	if adapter == nil || adapter.Protocol() != provider.LinkAPIResponsesProtocol || model == "" || !limits.valid() {
 		return nil, ErrAgenticRun
 	}
-	return &ResponsesSession{adapter: adapter, model: model, limits: limits, seenIDs: map[string]bool{}}, nil
+	return &ResponsesSession{adapter: adapter, model: model, limits: limits, seenIDs: map[string]bool{}, captureRaw: captureRaw}, nil
 }
 
 func (session *ResponsesSession) Exchange(
@@ -99,6 +114,16 @@ func (session *ResponsesSession) Exchange(
 	}
 	session.calls++
 	response, exchangeErr := session.adapter.Exchange(ctx, provider.Request{Model: session.model, Payload: payload})
+	if session.captureRaw {
+		raw := RawProviderExchange{
+			Request: append(json.RawMessage(nil), payload...), Response: append(json.RawMessage(nil), response.Body...),
+			StatusCode: response.StatusCode, RequestID: response.RequestID, Usage: cloneUsage(response.Usage),
+		}
+		if exchangeErr != nil {
+			raw.Error = exchangeErr.Error()
+		}
+		session.rawExchanges = append(session.rawExchanges, raw)
+	}
 	usageErr := session.admitResponse(response)
 	if usageErr != nil {
 		session.closed = true
@@ -194,6 +219,19 @@ func (session *ResponsesSession) Evidence() []ExchangeEvidence {
 	defer session.mu.Unlock()
 	result := make([]ExchangeEvidence, len(session.evidence))
 	copy(result, session.evidence)
+	return result
+}
+
+func (session *ResponsesSession) RawExchanges() []RawProviderExchange {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	result := make([]RawProviderExchange, len(session.rawExchanges))
+	for index, exchange := range session.rawExchanges {
+		result[index] = RawProviderExchange{
+			Request: append(json.RawMessage(nil), exchange.Request...), Response: append(json.RawMessage(nil), exchange.Response...),
+			StatusCode: exchange.StatusCode, RequestID: exchange.RequestID, Usage: cloneUsage(exchange.Usage), Error: exchange.Error,
+		}
+	}
 	return result
 }
 

@@ -169,6 +169,35 @@ func TestSelectExecutionScopePreservesCompletePilot(t *testing.T) {
 	}
 }
 
+func TestWriteRawDebugUsesPrivateExclusiveFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "trial-debug.json")
+	result := agentic.TrialResult{
+		TrialID: "dev_test", TaskID: "task", Condition: agentic.ConditionPython,
+		RawDebug: &agentic.TrialRawDebug{
+			DeveloperPrompt:   "private prompt",
+			ProviderExchanges: []agentic.RawProviderExchange{{Request: json.RawMessage(`{"private":"request"}`), Response: json.RawMessage(`{"private":"response"}`), StatusCode: 200}},
+		},
+	}
+	if err := writeRawDebug(path, result); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("info=%v err=%v", info, err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(body), "private prompt") || !strings.Contains(string(body), "private\": \"response") {
+		t.Fatalf("body=%s err=%v", body, err)
+	}
+	if err := writeRawDebug(path, result); err == nil {
+		t.Fatal("raw debug overwrite was accepted")
+	}
+	formal, _ := json.Marshal(result)
+	if strings.Contains(string(formal), "private prompt") || strings.Contains(string(formal), "private\":\"request") {
+		t.Fatalf("formal result leaked raw debug: %s", formal)
+	}
+}
+
 func TestAbortPilotRejectsProviderIdentityMismatch(t *testing.T) {
 	if !abortPilot("provider_identity_mismatch") {
 		t.Fatal("provider identity mismatch did not abort pilot")

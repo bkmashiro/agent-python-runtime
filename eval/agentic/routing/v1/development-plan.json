@@ -1,0 +1,16 @@
+{
+  "dataset_id": "agentic-routing-diagnostic-v1",
+  "dataset_manifest_digest": "sha256:5590ed487bedd4ed98196b32d9fabb712b47ab7f5f594500e51af348ef831e30",
+  "schema_version": "routing-diagnostic-development-plan/v1",
+  "selection_policy": "balanced",
+  "status": "frozen_development",
+  "task_ids": [
+    "rd-001",
+    "rd-002",
+    "rd-003",
+    "rd-004",
+    "rd-005",
+    "rd-006"
+  ],
+  "task_pack_digest": "sha256:fcff071a4a4a182959b9cce9f90aefa8e231bbbdc22fcfe48ddffefdbc15e3db"
+}

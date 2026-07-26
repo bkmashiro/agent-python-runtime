@@ -2,6 +2,7 @@ package agentic
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ func TestHybridRouterSelectsOneSurfaceWithoutFutureTurnOrOracleLeakage(t *testin
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	for _, route := range []HybridRoute{HybridRouteDirect, HybridRoutePython} {
 		t.Run(string(route), func(t *testing.T) {
-			body := `{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"` + string(route) + `\"}"}]}`
+			body := `{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"` + string(route) + `\",\"reason_code\":\"known_arguments\"}"}]}`
 			adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(body, 10, 2)}}
 			session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
 			if err != nil {
@@ -22,7 +23,7 @@ func TestHybridRouterSelectsOneSurfaceWithoutFutureTurnOrOracleLeakage(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
-			if decision.Route != route || decision.PromptDigest == "" || decision.SurfaceDigest == "" || session.ProviderCalls() != 1 || len(adapter.requests) != 1 {
+			if decision.Route != route || !decision.ReasonCode.valid() || decision.RouterPromptDigest == "" || decision.RouterSurfaceDigest == "" || session.ProviderCalls() != 1 || len(adapter.requests) != 1 {
 				t.Fatalf("decision=%+v calls=%d", decision, session.ProviderCalls())
 			}
 			payload := string(adapter.requests[0].Payload)
@@ -34,12 +35,25 @@ func TestHybridRouterSelectsOneSurfaceWithoutFutureTurnOrOracleLeakage(t *testin
 	}
 }
 
+func TestHybridRouterPreservesProviderIdentityFailure(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	body := `{"model":"wrong-model","status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"direct\",\"reason_code\":\"known_arguments\"}"}]}`
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(body, 10, 2)}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecideHybridRoute(context.Background(), session, task); !errors.Is(err, ErrProviderIdentityMismatch) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestHybridRouterRejectsAmbiguousOrMalformedDecisions(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	for _, body := range []string{
 		`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"direct"}]}]}`,
-		`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"hybrid\"}"}]}`,
-		`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"direct\"}"},{"type":"function_call","status":"completed","call_id":"route-2","name":"select_execution_surface","arguments":"{\"surface\":\"python\"}"}]}`,
+		`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"hybrid\",\"reason_code\":\"known_arguments\"}"}]}`,
+		`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-1","name":"select_execution_surface","arguments":"{\"surface\":\"direct\",\"reason_code\":\"known_arguments\"}"},{"type":"function_call","status":"completed","call_id":"route-2","name":"select_execution_surface","arguments":"{\"surface\":\"python\",\"reason_code\":\"output_dependency\"}"}]}`,
 	} {
 		adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(body, 10, 2)}}
 		session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())

@@ -42,6 +42,146 @@ func developmentTrialLimits(turns int) TrialLimits {
 	}
 }
 
+func TestHybridTwoStageTreatmentExposesOnlySelectedExecutionSurface(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-router-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	for _, route := range []HybridRoute{HybridRouteDirect, HybridRoutePython} {
+		t.Run(string(route), func(t *testing.T) {
+			routerBody := `{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route","name":"select_execution_surface","arguments":"{\"surface\":\"` + string(route) + `\",\"reason_code\":\"known_arguments\"}"}]}`
+			responses := []provider.Response{responseFixture(routerBody, 5, 2)}
+			if route == HybridRouteDirect {
+				responses = append(responses, adapterForStatefulOracle(t, task, func(name string) string { return name }).responses...)
+			} else {
+				for turn := range task.Interaction.Turns {
+					body := fmt.Sprintf(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"python-%d","name":"run_python","arguments":"{\"code\":\"turn %d\"}"}]}`, turn, turn)
+					responses = append(responses, responseFixture(body, 10, 3))
+				}
+			}
+			adapter := &scriptedAdapter{responses: responses}
+			factory := func(tools *ToolRuntime) (PythonWorkflow, error) {
+				var oracle StatefulOracle
+				if decodeStrict(task.Oracle, &oracle) != nil {
+					return nil, ErrDataset
+				}
+				return &oracleWorkflow{tools: tools, oracle: oracle}, nil
+			}
+			limits := developmentTrialLimits(len(task.Interaction.Turns))
+			limits.MaxProviderCalls++
+			result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(context.Background(), adapter, task, ConditionHybrid, developmentModel, 0, limits, identity, treatment, factory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !result.Passed || result.Route == nil || result.Route.Route != route || result.ProviderCalls != uint32(len(responses)) || ValidateTrialResult(result) != nil {
+				t.Fatalf("result=%+v", result)
+			}
+			if len(adapter.requests) < 2 || !strings.Contains(string(adapter.requests[0].Payload), "select_execution_surface") {
+				t.Fatal("router request missing")
+			}
+			execution := string(adapter.requests[1].Payload)
+			if route == HybridRouteDirect {
+				if strings.Contains(execution, `"name":"run_python"`) || !strings.Contains(execution, `"name":"cd"`) {
+					t.Fatalf("direct route surface=%s", execution)
+				}
+			} else if !strings.Contains(execution, `"name":"run_python"`) || strings.Contains(execution, `"name":"cd"`) {
+				t.Fatalf("python route surface=%s", execution)
+			}
+		})
+	}
+}
+
+func TestHybridTwoStageTreatmentSpecIdentityIsRouteInvariant(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-router-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	factory := func(tools *ToolRuntime) (PythonWorkflow, error) {
+		var oracle StatefulOracle
+		if decodeStrict(task.Oracle, &oracle) != nil {
+			return nil, ErrDataset
+		}
+		return &oracleWorkflow{tools: tools, oracle: oracle}, nil
+	}
+	run := func(route HybridRoute) TrialResult {
+		routerBody := `{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route","name":"select_execution_surface","arguments":"{\"surface\":\"` + string(route) + `\",\"reason_code\":\"known_arguments\"}"}]}`
+		responses := []provider.Response{responseFixture(routerBody, 5, 2)}
+		if route == HybridRouteDirect {
+			responses = append(responses, adapterForStatefulOracle(t, task, func(name string) string { return name }).responses...)
+		} else {
+			for turn := range task.Interaction.Turns {
+				body := fmt.Sprintf(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"python-%d","name":"run_python","arguments":"{\"code\":\"turn %d\"}"}]}`, turn, turn)
+				responses = append(responses, responseFixture(body, 10, 3))
+			}
+		}
+		limits := developmentTrialLimits(len(task.Interaction.Turns))
+		limits.MaxProviderCalls++
+		result, runErr := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+			context.Background(), &scriptedAdapter{responses: responses}, task, ConditionHybrid, developmentModel,
+			0, limits, identity, treatment, factory,
+		)
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		if result.ErrorCode != "" || result.Route == nil || result.Route.Route != route {
+			t.Fatalf("route=%s result=%+v", route, result)
+		}
+		if ValidateTrialResult(result) != nil {
+			t.Fatalf("route=%s invalid artifact: %v", route, result)
+		}
+		return result
+	}
+	direct := run(HybridRouteDirect)
+	python := run(HybridRoutePython)
+	if direct.SpecDigest != python.SpecDigest {
+		t.Fatalf("spec digest differs: direct=%s python=%s", direct.SpecDigest, python.SpecDigest)
+	}
+	if direct.TrialID != python.TrialID {
+		t.Fatalf("trial id differs: direct=%s python=%s", direct.TrialID, python.TrialID)
+	}
+}
+
+func TestHybridTwoStageRouteFailurePreservesTrialResultAndExchange(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-router-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	limits := developmentTrialLimits(len(task.Interaction.Turns))
+	limits.MaxProviderCalls++
+	routerBody := `{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route","name":"select_execution_surface","arguments":"{\"surface\":\"invalid\",\"reason_code\":\"known_arguments\"}"}]}`
+	result, runErr := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+		context.Background(), &scriptedAdapter{responses: []provider.Response{responseFixture(routerBody, 5, 2)}},
+		task, ConditionHybrid, developmentModel, 0, limits, identity, treatment, nil,
+	)
+	if runErr != nil {
+		t.Fatal(runErr)
+	}
+	if result.ErrorCode == "" || result.Route != nil || result.Passed || result.ProviderCalls != 1 || len(result.Exchanges) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if ValidateTrialResult(result) != nil {
+		t.Fatalf("invalid trial result after route failure: %v", result)
+	}
+}
+
 func TestStructuredHostContextTreatmentAppearsBeforeLaterTurns(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	adapter := adapterForStatefulOracle(t, task, func(name string) string { return name })

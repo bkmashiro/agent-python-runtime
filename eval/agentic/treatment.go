@@ -100,7 +100,8 @@ func expectedTreatmentDocument(id string) string {
 }
 
 func (treatment DevelopmentTreatment) Implemented() bool {
-	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1 || treatment.ID == TreatmentPythonSafeRepairV1)
+	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1 ||
+		treatment.ID == TreatmentPythonSafeRepairV1 || treatment.ID == TreatmentHybridTwoStageRouterV1)
 }
 
 func (treatment DevelopmentTreatment) UsesStructuredHostContext() bool {
@@ -109,4 +110,8 @@ func (treatment DevelopmentTreatment) UsesStructuredHostContext() bool {
 
 func (treatment DevelopmentTreatment) AllowsPythonRepair() bool {
 	return treatment.Implemented() && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.MaxPythonRepairsPerTrial == 1
+}
+
+func (treatment DevelopmentTreatment) UsesTwoStageRouter() bool {
+	return treatment.Implemented() && treatment.HybridStrategy == "two-stage-v1" && treatment.MaxRouterCallsPerHybridTrial == 1
 }

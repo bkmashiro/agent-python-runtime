@@ -47,6 +47,20 @@ func ValidateTrialResult(result TrialResult) error {
 	} else if len(result.HostContextDigests) != 0 {
 		return ErrTrialArtifact
 	}
+	routerTrial := result.Condition == ConditionHybrid && result.TreatmentID == TreatmentHybridTwoStageRouterV1
+	if result.Route != nil {
+		if !routerTrial {
+			return ErrTrialArtifact
+		}
+		if !result.Route.ReasonCode.valid() || !validDigest(result.Route.RouterPromptDigest) || !validDigest(result.Route.RouterSurfaceDigest) ||
+			!validDigest(result.Route.ExecutionPromptDigest) || !validDigest(result.Route.ExecutionSurfaceDigest) ||
+			result.Route.RouterPromptDigest != result.PromptDigest || result.Route.RouterSurfaceDigest != result.SurfaceDigest ||
+			(result.Route.Route != HybridRouteDirect && result.Route.Route != HybridRoutePython) {
+			return ErrTrialArtifact
+		}
+	} else if routerTrial && result.ErrorCode == "" {
+		return ErrTrialArtifact
+	}
 	var usage = result.Usage
 	declaredTotal, declaredOK := checkedAdd(usage.InputTokens, usage.OutputTokens)
 	if !declaredOK || usage.TotalTokens != declaredTotal {
@@ -77,6 +91,14 @@ func ValidateTrialResult(result TrialResult) error {
 	}
 	if summedInput != usage.InputTokens || summedOutput != usage.OutputTokens || summedTotal != usage.TotalTokens {
 		return ErrTrialArtifact
+	}
+	if result.Route != nil {
+		if len(result.Exchanges) == 0 || (len(result.Exchanges) == 1 && result.ErrorCode == "") || result.Route.RouterUsage != result.Exchanges[0].Usage ||
+			result.Route.RouterUsage.InputTokens+result.Route.ExecutionUsage.InputTokens != usage.InputTokens ||
+			result.Route.RouterUsage.OutputTokens+result.Route.ExecutionUsage.OutputTokens != usage.OutputTokens ||
+			result.Route.RouterUsage.TotalTokens+result.Route.ExecutionUsage.TotalTokens != usage.TotalTokens {
+			return ErrTrialArtifact
+		}
 	}
 	if result.Condition == ConditionDirect {
 		if result.PythonAttempts != 0 || result.PythonRuns != 0 || len(result.PythonEvidence) != 0 {

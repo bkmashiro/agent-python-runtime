@@ -1,0 +1,252 @@
+{
+  "environment": {
+    "initial_state": {
+      "GorillaFileSystem": {
+        "root": {
+          "alex": {
+            "contents": {
+              "Documents": {
+                "contents": {
+                  "metrics.csv": {
+                    "content": "alpha,5\nbeta,2\ngamma,9\n",
+                    "type": "file"
+                  }
+                },
+                "type": "directory"
+              }
+            },
+            "type": "directory"
+          }
+        }
+      }
+    },
+    "kind": "local_stateful"
+  },
+  "id": "rd-003",
+  "interaction": {
+    "mode": "single_turn",
+    "turns": [
+      [
+        {
+          "content": "Read metrics.csv and write a comma list of rows with values above 4 into high_value_rows.txt.",
+          "role": "user"
+        }
+      ]
+    ]
+  },
+  "oracle": {
+    "kind": "expected_call_trace",
+    "turns": [
+      [
+        {
+          "arguments": {
+            "folder": "Documents"
+          },
+          "name": "cd"
+        },
+        {
+          "arguments": {
+            "file_name": "metrics.csv"
+          },
+          "name": "cat"
+        },
+        {
+          "arguments": {
+            "file_name": "high_value_rows.txt"
+          },
+          "name": "touch"
+        },
+        {
+          "arguments": {
+            "content": "alpha,gamma",
+            "file_name": "high_value_rows.txt"
+          },
+          "name": "echo"
+        }
+      ]
+    ]
+  },
+  "safety": {
+    "credentials": "none",
+    "network_disabled": true,
+    "real_world_effects": false
+  },
+  "source": {
+    "adaptation": "Adapted from the digest-bound local routing source record into external-agentic-task/v1.",
+    "benchmark": "RoutingDiagnostic",
+    "license": "Apache-2.0",
+    "record_sha256": "sha256:1d0486bd7f3f99d07b0f1acfda377dc889f32669d0da9801432d096a316addcc",
+    "revision": "6088885536d117348bb1a9bdb9d013b4f80c77d0",
+    "source_id": "rd-003",
+    "version": "v1"
+  },
+  "split": "dev",
+  "tools": [
+    {
+      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory.",
+      "name": "cat",
+      "parameters": {
+        "properties": {
+          "file_name": {
+            "description": "The name of the file from current directory to display. No path is allowed. ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_name"
+        ],
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "file_content": {
+            "description": "The content of the file.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder.",
+      "name": "cd",
+      "parameters": {
+        "properties": {
+          "folder": {
+            "description": "The folder of the directory to change to. You can only change one folder level at a time. ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder"
+        ],
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "current_working_directory": {
+            "description": "The new current working directory path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Copy a file or directory from one location to another.  If the destination is a directory, the source file or directory will be copied into the destination directory.  Both source and destination must be local to the current directory.",
+      "name": "cp",
+      "parameters": {
+        "properties": {
+          "destination": {
+            "description": "The destination name to copy the file or directory to. If the destination is a directory, the source will be copied into this directory. No file paths allowed. ",
+            "type": "string"
+          },
+          "source": {
+            "description": "The name of the file or directory to copy.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "destination"
+        ],
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "result": {
+            "description": "The result of the copy operation or an error message if the operation fails.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal.",
+      "name": "echo",
+      "parameters": {
+        "properties": {
+          "content": {
+            "description": "The content to write or display.",
+            "type": "string"
+          },
+          "file_name": {
+            "default": "None",
+            "description": "The name of the file at current directory to write the content to. Defaults to None. ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "terminal_output": {
+            "description": "The content if no file name is provided, or None if written to file.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Create a new file of any extension in the current directory.",
+      "name": "touch",
+      "parameters": {
+        "properties": {
+          "file_name": {
+            "description": "The name of the new file in the current directory. file_name is local to the current directory and does not allow path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_name"
+        ],
+        "type": "object"
+      },
+      "response": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Count the number of lines, words, and characters in a file of any extension from current directory.",
+      "name": "wc",
+      "parameters": {
+        "properties": {
+          "file_name": {
+            "description": "Name of the file of current directory to perform wc operation on.",
+            "type": "string"
+          },
+          "mode": {
+            "default": "l",
+            "description": "Mode of operation ('l' for lines, 'w' for words, 'c' for characters). ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_name"
+        ],
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "count": {
+            "description": "The count of the number of lines, words, or characters in the file.",
+            "type": "integer"
+          },
+          "type": {
+            "description": "The type of unit we are counting. [Enum]: [\"lines\", \"words\", \"characters\"]",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ],
+  "track": "stateful_local_tools",
+  "version": "external-agentic-task/v1"
+}

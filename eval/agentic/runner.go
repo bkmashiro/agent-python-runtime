@@ -86,6 +86,7 @@ type TrialResult struct {
 	ErrorCode          string                `json:"error_code,omitempty"`
 	FailureDetail      *FailureDetail        `json:"failure_detail,omitempty"`
 	Repair             *PythonRepairEvidence `json:"python_repair,omitempty"`
+	Route              *HybridRouteDecision  `json:"hybrid_route,omitempty"`
 	ProviderAttempts   uint32                `json:"provider_attempts"`
 	ProviderCalls      uint32                `json:"provider_calls"`
 	ToolCalls          int                   `json:"tool_calls"`
@@ -224,17 +225,90 @@ func runDevelopmentTrialForModelWithIdentity(
 ) (TrialResult, error) {
 	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 || !treatment.Implemented() ||
 		!supportedDevelopmentModel(model) ||
-		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) ||
-		(condition == ConditionDirect && pythonFactory != nil) ||
-		(condition != ConditionDirect && pythonFactory == nil) {
+		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) {
 		return TrialResult{}, ErrAgenticRun
 	}
 	tools, err := NewToolRuntime(task)
 	if err != nil {
 		return TrialResult{}, err
 	}
-	continueWithinTurn := task.Track == "stateful_local_tools" && condition != ConditionPython
-	surface, mapping, prompt, err := buildConditionSurface(tools, condition, continueWithinTurn)
+	routeAware := treatment.UsesTwoStageRouter() && condition == ConditionHybrid
+	if condition == ConditionDirect {
+		if pythonFactory != nil {
+			return TrialResult{}, ErrAgenticRun
+		}
+	} else if !routeAware && pythonFactory == nil {
+		return TrialResult{}, ErrAgenticRun
+	}
+
+	executionCondition := condition
+	continueWithinTurn := task.Track == "stateful_local_tools" && executionCondition != ConditionPython
+	var (
+		surface       []map[string]any
+		mapping       map[string]string
+		prompt        string
+		promptDigest  string
+		surfaceDigest string
+		surfaceBytes  []byte
+		directSurface []map[string]any
+		directMapping map[string]string
+		directPrompt  string
+		pythonSurface []map[string]any
+		pythonMapping map[string]string
+		pythonPrompt  string
+	)
+
+	var directPromptDigest, directSurfaceDigest, pythonPromptDigest, pythonSurfaceDigest string
+	var routerPromptDigest, routerSurfaceDigest string
+	canExecute := true
+	routeErrCode := ""
+	routeChoice := (*HybridRouteDecision)(nil)
+
+	if routeAware {
+		directSurface, directMapping, directPrompt, err = buildConditionSurface(tools, ConditionDirect, task.Track == "stateful_local_tools")
+		if err != nil {
+			return TrialResult{}, err
+		}
+		pythonSurface, pythonMapping, pythonPrompt, err = buildConditionSurface(tools, ConditionPython, false)
+		if err != nil {
+			return TrialResult{}, err
+		}
+		directSurfaceBytes, err := json.Marshal(directSurface)
+		if err != nil {
+			return TrialResult{}, ErrAgenticRun
+		}
+		pythonSurfaceBytes, err := json.Marshal(pythonSurface)
+		if err != nil {
+			return TrialResult{}, ErrAgenticRun
+		}
+		directPromptDigest = digest([]byte(directPrompt))
+		directSurfaceDigest = digest(directSurfaceBytes)
+		pythonPromptDigest = digest([]byte(pythonPrompt))
+		pythonSurfaceDigest = digest(pythonSurfaceBytes)
+
+		_, _, rpPromptDigest, rpSurfaceDigest, err := buildHybridRouterContract(task)
+		if err != nil {
+			return TrialResult{}, err
+		}
+		routerPromptDigest, routerSurfaceDigest = rpPromptDigest, rpSurfaceDigest
+		promptDigest, surfaceDigest = routerPromptDigest, routerSurfaceDigest
+		surface = directSurface
+		mapping = directMapping
+		prompt = directPrompt
+		continueWithinTurn = task.Track == "stateful_local_tools"
+
+	} else {
+		surface, mapping, prompt, err = buildConditionSurface(tools, executionCondition, continueWithinTurn)
+		if err != nil {
+			return TrialResult{}, err
+		}
+		surfaceBytes, err = json.Marshal(surface)
+		if err != nil {
+			return TrialResult{}, ErrAgenticRun
+		}
+		promptDigest = digest([]byte(prompt))
+		surfaceDigest = digest(surfaceBytes)
+	}
 	if err != nil {
 		return TrialResult{}, err
 	}
@@ -242,19 +316,83 @@ func runDevelopmentTrialForModelWithIdentity(
 	if err != nil {
 		return TrialResult{}, err
 	}
+	executionMaxProviderCalls := limits.MaxProviderCalls
+	if routeAware {
+		if executionMaxProviderCalls < uint32(treatment.MaxRouterCallsPerHybridTrial) {
+			return TrialResult{}, ErrAgenticRun
+		}
+		route, err := DecideHybridRoute(ctx, session, task)
+		executionMaxProviderCalls -= uint32(treatment.MaxRouterCallsPerHybridTrial)
+		if err != nil {
+			routeErrCode = classifyTrialError(err)
+			canExecute = false
+		} else {
+			switch route.Route {
+			case HybridRouteDirect:
+				executionCondition = ConditionDirect
+				surface = directSurface
+				mapping = directMapping
+				prompt = directPrompt
+				continueWithinTurn = task.Track == "stateful_local_tools"
+				routeChoice = &HybridRouteDecision{
+					Route: HybridRouteDirect, ReasonCode: route.ReasonCode,
+					RouterPromptDigest: routerPromptDigest, RouterSurfaceDigest: routerSurfaceDigest,
+					ExecutionPromptDigest: directPromptDigest, ExecutionSurfaceDigest: directSurfaceDigest,
+					RouterUsage: route.RouterUsage,
+				}
+			case HybridRoutePython:
+				executionCondition = ConditionPython
+				surface = pythonSurface
+				mapping = pythonMapping
+				prompt = pythonPrompt
+				continueWithinTurn = false
+				routeChoice = &HybridRouteDecision{
+					Route: HybridRoutePython, ReasonCode: route.ReasonCode,
+					RouterPromptDigest: routerPromptDigest, RouterSurfaceDigest: routerSurfaceDigest,
+					ExecutionPromptDigest: pythonPromptDigest, ExecutionSurfaceDigest: pythonSurfaceDigest,
+					RouterUsage: route.RouterUsage,
+				}
+			default:
+				routeErrCode = "provider_or_protocol_failure"
+				canExecute = false
+			}
+		}
+	}
+	if routeAware {
+		surfaceBytes, err = json.Marshal(surface)
+		if err != nil {
+			return TrialResult{}, ErrAgenticRun
+		}
+	}
+	if promptDigest == "" {
+		surfaceBytes, err := json.Marshal(surface)
+		if err != nil {
+			return TrialResult{}, ErrAgenticRun
+		}
+		promptDigest = digest([]byte(prompt))
+		surfaceDigest = digest(surfaceBytes)
+	}
 	taskBytes, taskErr := json.Marshal(task)
-	surfaceBytes, surfaceErr := json.Marshal(surface)
-	if taskErr != nil || surfaceErr != nil {
+	if taskErr != nil {
 		return TrialResult{}, ErrAgenticRun
 	}
 	taskDigest := digest(taskBytes)
-	promptDigest, surfaceDigest := digest([]byte(prompt)), digest(surfaceBytes)
-	specBytes, specErr := json.Marshal(map[string]any{
+
+	baseSpec := map[string]any{
 		"version": "agentic-development-trial-spec/v2", "task_digest": taskDigest,
 		"condition": condition, "model": model, "replicate": replicate, "limits": limits, "identity": identity,
 		"treatment_id": treatment.ID, "treatment_digest": treatment.Digest,
 		"catalog_digest": tools.Snapshot().Digest(), "prompt_digest": promptDigest, "surface_digest": surfaceDigest,
-	})
+	}
+	if routeAware {
+		baseSpec["router_prompt_digest"] = routerPromptDigest
+		baseSpec["router_surface_digest"] = routerSurfaceDigest
+		baseSpec["hybrid_direct_prompt_digest"] = directPromptDigest
+		baseSpec["hybrid_direct_surface_digest"] = directSurfaceDigest
+		baseSpec["hybrid_python_prompt_digest"] = pythonPromptDigest
+		baseSpec["hybrid_python_surface_digest"] = pythonSurfaceDigest
+	}
+	specBytes, specErr := json.Marshal(baseSpec)
 	if specErr != nil {
 		return TrialResult{}, ErrAgenticRun
 	}
@@ -264,7 +402,7 @@ func runDevelopmentTrialForModelWithIdentity(
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
 		Condition: condition, Model: model, Identity: identity, Replicate: replicate, Limits: limits,
 		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, TreatmentID: treatment.ID, TreatmentDigest: treatment.Digest,
-		CatalogDigest: tools.Snapshot().Digest(),
+		CatalogDigest: tools.Snapshot().Digest(), Route: routeChoice, ErrorCode: routeErrCode,
 	}
 	if captureRaw {
 		result.RawDebug = &TrialRawDebug{DeveloperPrompt: prompt, ToolSurface: append(json.RawMessage(nil), surfaceBytes...)}
@@ -272,257 +410,277 @@ func runDevelopmentTrialForModelWithIdentity(
 	if tools.FileSystem() != nil {
 		result.InitialStateDigest = tools.FileSystem().Digest()
 	}
-	var workflow PythonWorkflow
-	if condition != ConditionDirect {
-		workflow, err = pythonFactory(tools)
-		if err != nil || workflow == nil {
-			return TrialResult{}, ErrAgenticRun
-		}
-	}
-	history := []any{map[string]any{"role": "developer", "content": prompt}}
-	directOrdinal := 0
-	repairUsed := false
-	repairEnabled := treatment.AllowsPythonRepair() && condition != ConditionDirect
-	providerAttemptsPerTurn := uint32(1)
-	if continueWithinTurn || repairEnabled {
-		turns := uint32(len(task.Interaction.Turns))
-		baseProviderCalls := limits.MaxProviderCalls
-		if repairEnabled {
-			if baseProviderCalls == 0 {
-				return TrialResult{}, ErrAgenticRun
-			}
-			baseProviderCalls--
-		}
-		if turns == 0 || baseProviderCalls%turns != 0 {
-			return TrialResult{}, ErrAgenticRun
-		}
-		providerAttemptsPerTurn = baseProviderCalls / turns
-		if repairEnabled {
-			providerAttemptsPerTurn++
-		}
-		if providerAttemptsPerTurn < 2 {
-			return TrialResult{}, ErrAgenticRun
-		}
-	}
-	for turnIndex, rawTurn := range task.Interaction.Turns {
-		if err := tools.SetTurn(turnIndex); err != nil {
-			return TrialResult{}, err
-		}
-		if treatment.UsesStructuredHostContext() && turnIndex > 0 {
-			_, contextBytes, contextErr := BuildHostContext(tools, turnIndex)
-			if contextErr != nil {
-				return TrialResult{}, contextErr
-			}
-			contextMessage := "Authoritative Host execution context from successful prior model effects. It contains no read observations, tool outputs, or initial directory contents. Do not repeat completed effects: " + string(contextBytes)
-			history = append(history, map[string]any{"role": "developer", "content": contextMessage})
-			result.HostContextDigests = append(result.HostContextDigests, digest(contextBytes))
-			if result.RawDebug != nil {
-				result.RawDebug.HostContexts = append(result.RawDebug.HostContexts, append(json.RawMessage(nil), contextBytes...))
-			}
-		}
-		messages, err := decodeBenchmarkTurn(rawTurn)
-		if err != nil {
-			return TrialResult{}, err
-		}
-		for _, message := range messages {
-			history = append(history, map[string]any{"role": message.Role, "content": message.Content})
-		}
-		turnHadCalls := false
-		turnComplete := false
-		pythonAttemptsThisTurn := uint32(0)
-		repairPending := false
-		for attempt := uint32(0); attempt < providerAttemptsPerTurn; attempt++ {
-			repairOfferedThisAttempt := false
-			toolChoice := "auto"
-			if attempt == 0 {
-				toolChoice = "required"
-			}
-			parsed, exchangeErr := session.Exchange(ctx, history, surface, toolChoice, condition != ConditionPython, mapping)
-			if exchangeErr != nil {
-				result.ErrorCode = classifyTrialError(exchangeErr)
-				break
-			}
-			if parsed.TextDigest != "" {
-				result.TextDigests = append(result.TextDigests, parsed.TextDigest)
-			}
-			if parsed.Refused {
-				result.ErrorCode = "model_refusal"
-				break
-			}
-			history = append(history, parsed.replayItems...)
-			if len(parsed.Calls) == 0 {
-				if repairPending {
-					result.ErrorCode = "python_repair_not_attempted"
-					break
+	if canExecute {
+		var workflow PythonWorkflow
+		if executionCondition != ConditionDirect {
+			if pythonFactory == nil {
+				result.ErrorCode = "provider_or_protocol_failure"
+				canExecute = false
+			} else {
+				workflow, err = pythonFactory(tools)
+				if err != nil || workflow == nil {
+					return TrialResult{}, ErrAgenticRun
 				}
-				if !turnHadCalls {
-					result.ErrorCode = "no_tool_calls"
+			}
+		}
+		if canExecute {
+			history := []any{map[string]any{"role": "developer", "content": prompt}}
+			directOrdinal := 0
+			repairUsed := false
+			repairEnabled := treatment.AllowsPythonRepair() && executionCondition != ConditionDirect
+			providerAttemptsPerTurn := uint32(1)
+			if continueWithinTurn || repairEnabled {
+				turns := uint32(len(task.Interaction.Turns))
+				baseProviderCalls := executionMaxProviderCalls
+				if repairEnabled {
+					if baseProviderCalls == 0 {
+						return TrialResult{}, ErrAgenticRun
+					}
+					baseProviderCalls--
 				}
-				turnComplete = result.ErrorCode == ""
-				break
+				if turns == 0 || baseProviderCalls%turns != 0 {
+					return TrialResult{}, ErrAgenticRun
+				}
+				providerAttemptsPerTurn = baseProviderCalls / turns
+				if repairEnabled {
+					providerAttemptsPerTurn++
+				}
+				if providerAttemptsPerTurn < 2 {
+					return TrialResult{}, ErrAgenticRun
+				}
 			}
-			if repairPending && (len(parsed.Calls) != 1 || parsed.Calls[0].CanonicalName != "run_python") {
-				result.ErrorCode = "python_repair_protocol_error"
-				break
-			}
-			outputs := make([]any, 0, len(parsed.Calls))
-			for _, call := range parsed.Calls {
-				var observation json.RawMessage
-				pythonRunSucceeded := false
-				if call.CanonicalName == "run_python" {
-					isRepair := repairPending
-					if workflow == nil || (pythonAttemptsThisTurn >= 1 && !isRepair) || result.PythonAttempts >= limits.MaxPythonRuns {
-						result.ErrorCode = "python_run_budget_exceeded"
-						break
+			for turnIndex, rawTurn := range task.Interaction.Turns {
+				if err := tools.SetTurn(turnIndex); err != nil {
+					return TrialResult{}, err
+				}
+				if treatment.UsesStructuredHostContext() && turnIndex > 0 {
+					_, contextBytes, contextErr := BuildHostContext(tools, turnIndex)
+					if contextErr != nil {
+						return TrialResult{}, contextErr
 					}
-					var arguments struct {
-						Code string `json:"code"`
-					}
-					if decodeStrict(call.Arguments, &arguments) != nil {
-						result.ErrorCode = "invalid_python_arguments"
-						break
-					}
-					usedCalls := countStatefulCalls(tools.Trace())
-					if usedCalls >= int(limits.MaxToolCalls) {
-						result.ErrorCode = "tool_call_budget_exceeded"
-						break
-					}
-					pythonAttemptsThisTurn++
-					result.PythonAttempts++
-					if isRepair {
-						if result.Repair == nil {
-							return TrialResult{}, ErrAgenticRun
-						}
-						result.Repair.Attempted = true
-						repairPending = false
-					}
-					rawPython := RawPythonRun{Turn: turnIndex, Code: arguments.Code}
-					pythonResult, runErr := workflow.Execute(
-						ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
-						limits.MaxToolCalls-uint32(usedCalls),
-					)
-					if runErr != nil {
-						if result.RawDebug != nil {
-							rawPython.Error = runErr.Error()
-							rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
-							rawPython.GuestResponse = append(json.RawMessage(nil), pythonResult.RawResponse...)
-							result.RawDebug.PythonRuns = append(result.RawDebug.PythonRuns, rawPython)
-						}
-						result.ErrorCode = "python_engine_failure"
-						break
-					}
-					observation = append(json.RawMessage(nil), pythonResult.Observation...)
-					pythonRunSucceeded = pythonResult.Success
-					pythonResult.Turn = turnIndex
+					contextMessage := "Authoritative Host execution context from successful prior model effects. It contains no read observations, tool outputs, or initial directory contents. Do not repeat completed effects: " + string(contextBytes)
+					history = append(history, map[string]any{"role": "developer", "content": contextMessage})
+					result.HostContextDigests = append(result.HostContextDigests, digest(contextBytes))
 					if result.RawDebug != nil {
-						rawPython.Observation = append(json.RawMessage(nil), pythonResult.Observation...)
-						rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
-						rawPython.GuestResponse = append(json.RawMessage(nil), pythonResult.RawResponse...)
-						result.RawDebug.PythonRuns = append(result.RawDebug.PythonRuns, rawPython)
-					}
-					pythonResult.Observation = nil
-					pythonResult.RawRequest = nil
-					pythonResult.RawResponse = nil
-					result.PythonEvidence = append(result.PythonEvidence, pythonResult)
-					result.PythonRuns++
-					afterCalls := countStatefulCalls(tools.Trace())
-					if afterCalls < usedCalls || afterCalls-usedCalls != int(pythonResult.CapabilityCalls) || afterCalls > int(limits.MaxToolCalls) {
-						result.ErrorCode = "python_trace_mismatch"
-						break
-					}
-					if isRepair {
-						if !pythonResult.Success {
-							result.FailureDetail = failureDetailForPython(pythonResult)
-							result.ErrorCode = "python_guest_error"
-						}
-					} else if !pythonResult.Success {
-						detail := failureDetailForPython(pythonResult)
-						if repairEnabled && !repairUsed && detail.RetryEligible && len(parsed.Calls) == 1 {
-							formalBytes, marshalErr := json.Marshal(pythonResult)
-							if marshalErr != nil {
-								return TrialResult{}, ErrAgenticRun
-							}
-							result.Repair = &PythonRepairEvidence{
-								Offered: true, Turn: turnIndex, OriginalFailureClass: pythonResult.FailureClass,
-								OriginalFailureDigest: digest(formalBytes), CapabilityCallsBefore: pythonResult.CapabilityCalls,
-							}
-							repairUsed, repairPending, repairOfferedThisAttempt = true, true, true
-						} else {
-							result.FailureDetail = detail
-							result.ErrorCode = "python_guest_error"
-						}
-					}
-				} else {
-					if condition == ConditionPython || countStatefulCalls(tools.Trace()) >= int(limits.MaxToolCalls) {
-						result.ErrorCode = "tool_call_budget_exceeded"
-						break
-					}
-					directOrdinal++
-					observation, err = tools.InvokeDirect(
-						ctx, fmt.Sprintf("agentic-direct-%d", directOrdinal), fmt.Sprintf("host:%d", directOrdinal),
-						call.CanonicalName, call.Arguments,
-					)
-					if err != nil {
-						if errors.Is(err, ErrBenchmarkToolOperation) {
-							result.ErrorCode = "host_application_error"
-						} else {
-							result.ErrorCode = "direct_host_call_failed"
-						}
-						break
+						result.RawDebug.HostContexts = append(result.RawDebug.HostContexts, append(json.RawMessage(nil), contextBytes...))
 					}
 				}
-				if len(observation) == 0 || !json.Valid(observation) {
-					result.ErrorCode = "invalid_tool_observation"
-					break
+				messages, err := decodeBenchmarkTurn(rawTurn)
+				if err != nil {
+					return TrialResult{}, err
 				}
-				outputs = append(outputs, map[string]any{
-					"type": "function_call_output", "call_id": call.CallID, "output": string(observation),
-				})
-				if call.CanonicalName == "run_python" && result.Repair != nil && result.Repair.Attempted && !repairPending && pythonRunSucceeded {
-					result.Repair.Succeeded = true
+				for _, message := range messages {
+					history = append(history, map[string]any{"role": message.Role, "content": message.Content})
+				}
+				turnHadCalls := false
+				turnComplete := false
+				pythonAttemptsThisTurn := uint32(0)
+				repairPending := false
+				for attempt := uint32(0); attempt < providerAttemptsPerTurn; attempt++ {
+					repairOfferedThisAttempt := false
+					toolChoice := "auto"
+					if attempt == 0 {
+						toolChoice = "required"
+					}
+					parsed, exchangeErr := session.Exchange(ctx, history, surface, toolChoice, executionCondition != ConditionPython, mapping)
+					if exchangeErr != nil {
+						result.ErrorCode = classifyTrialError(exchangeErr)
+						break
+					}
+					if parsed.TextDigest != "" {
+						result.TextDigests = append(result.TextDigests, parsed.TextDigest)
+					}
+					if parsed.Refused {
+						result.ErrorCode = "model_refusal"
+						break
+					}
+					history = append(history, parsed.replayItems...)
+					if len(parsed.Calls) == 0 {
+						if repairPending {
+							result.ErrorCode = "python_repair_not_attempted"
+							break
+						}
+						if !turnHadCalls {
+							result.ErrorCode = "no_tool_calls"
+						}
+						turnComplete = result.ErrorCode == ""
+						break
+					}
+					if repairPending && (len(parsed.Calls) != 1 || parsed.Calls[0].CanonicalName != "run_python") {
+						result.ErrorCode = "python_repair_protocol_error"
+						break
+					}
+					outputs := make([]any, 0, len(parsed.Calls))
+					for _, call := range parsed.Calls {
+						var observation json.RawMessage
+						pythonRunSucceeded := false
+						if call.CanonicalName == "run_python" {
+							isRepair := repairPending
+							if workflow == nil || (pythonAttemptsThisTurn >= 1 && !isRepair) || result.PythonAttempts >= limits.MaxPythonRuns {
+								result.ErrorCode = "python_run_budget_exceeded"
+								break
+							}
+							var arguments struct {
+								Code string `json:"code"`
+							}
+							if decodeStrict(call.Arguments, &arguments) != nil {
+								result.ErrorCode = "invalid_python_arguments"
+								break
+							}
+							usedCalls := countStatefulCalls(tools.Trace())
+							if usedCalls >= int(limits.MaxToolCalls) {
+								result.ErrorCode = "tool_call_budget_exceeded"
+								break
+							}
+							pythonAttemptsThisTurn++
+							result.PythonAttempts++
+							if isRepair {
+								if result.Repair == nil {
+									return TrialResult{}, ErrAgenticRun
+								}
+								result.Repair.Attempted = true
+								repairPending = false
+							}
+							rawPython := RawPythonRun{Turn: turnIndex, Code: arguments.Code}
+							pythonResult, runErr := workflow.Execute(
+								ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
+								limits.MaxToolCalls-uint32(usedCalls),
+							)
+							if runErr != nil {
+								if result.RawDebug != nil {
+									rawPython.Error = runErr.Error()
+									rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
+									rawPython.GuestResponse = append(json.RawMessage(nil), pythonResult.RawResponse...)
+									result.RawDebug.PythonRuns = append(result.RawDebug.PythonRuns, rawPython)
+								}
+								result.ErrorCode = "python_engine_failure"
+								break
+							}
+							observation = append(json.RawMessage(nil), pythonResult.Observation...)
+							pythonRunSucceeded = pythonResult.Success
+							pythonResult.Turn = turnIndex
+							if result.RawDebug != nil {
+								rawPython.Observation = append(json.RawMessage(nil), pythonResult.Observation...)
+								rawPython.GuestRequest = append(json.RawMessage(nil), pythonResult.RawRequest...)
+								rawPython.GuestResponse = append(json.RawMessage(nil), pythonResult.RawResponse...)
+								result.RawDebug.PythonRuns = append(result.RawDebug.PythonRuns, rawPython)
+							}
+							pythonResult.Observation = nil
+							pythonResult.RawRequest = nil
+							pythonResult.RawResponse = nil
+							result.PythonEvidence = append(result.PythonEvidence, pythonResult)
+							result.PythonRuns++
+							afterCalls := countStatefulCalls(tools.Trace())
+							if afterCalls < usedCalls || afterCalls-usedCalls != int(pythonResult.CapabilityCalls) || afterCalls > int(limits.MaxToolCalls) {
+								result.ErrorCode = "python_trace_mismatch"
+								break
+							}
+							if isRepair {
+								if !pythonResult.Success {
+									result.FailureDetail = failureDetailForPython(pythonResult)
+									result.ErrorCode = "python_guest_error"
+								}
+							} else if !pythonResult.Success {
+								detail := failureDetailForPython(pythonResult)
+								if repairEnabled && !repairUsed && detail.RetryEligible && len(parsed.Calls) == 1 {
+									formalBytes, marshalErr := json.Marshal(pythonResult)
+									if marshalErr != nil {
+										return TrialResult{}, ErrAgenticRun
+									}
+									result.Repair = &PythonRepairEvidence{
+										Offered: true, Turn: turnIndex, OriginalFailureClass: pythonResult.FailureClass,
+										OriginalFailureDigest: digest(formalBytes), CapabilityCallsBefore: pythonResult.CapabilityCalls,
+									}
+									repairUsed, repairPending, repairOfferedThisAttempt = true, true, true
+								} else {
+									result.FailureDetail = detail
+									result.ErrorCode = "python_guest_error"
+								}
+							}
+						} else {
+							if executionCondition == ConditionPython || countStatefulCalls(tools.Trace()) >= int(limits.MaxToolCalls) {
+								result.ErrorCode = "tool_call_budget_exceeded"
+								break
+							}
+							directOrdinal++
+							observation, err = tools.InvokeDirect(
+								ctx, fmt.Sprintf("agentic-direct-%d", directOrdinal), fmt.Sprintf("host:%d", directOrdinal),
+								call.CanonicalName, call.Arguments,
+							)
+							if err != nil {
+								if errors.Is(err, ErrBenchmarkToolOperation) {
+									result.ErrorCode = "host_application_error"
+								} else {
+									result.ErrorCode = "direct_host_call_failed"
+								}
+								break
+							}
+						}
+						if len(observation) == 0 || !json.Valid(observation) {
+							result.ErrorCode = "invalid_tool_observation"
+							break
+						}
+						outputs = append(outputs, map[string]any{
+							"type": "function_call_output", "call_id": call.CallID, "output": string(observation),
+						})
+						if call.CanonicalName == "run_python" && result.Repair != nil && result.Repair.Attempted && !repairPending && pythonRunSucceeded {
+							result.Repair.Succeeded = true
+						}
+						if result.ErrorCode != "" {
+							break
+						}
+						if repairOfferedThisAttempt {
+							break
+						}
+					}
+					history = append(history, outputs...)
+					if repairOfferedThisAttempt {
+						history = append(history, map[string]any{
+							"role":    "developer",
+							"content": "The previous Python run failed before any Host capability call. Issue exactly one corrected run_python call now. This is the only repair attempt; do not call direct Host tools or emit multiple calls.",
+						})
+						turnHadCalls = true
+						continue
+					}
+					if result.ErrorCode != "" {
+						break
+					}
+					turnHadCalls = true
+					if !continueWithinTurn {
+						turnComplete = true
+						break
+					}
 				}
 				if result.ErrorCode != "" {
 					break
 				}
-				if repairOfferedThisAttempt {
+				if !turnComplete {
+					result.ErrorCode = "provider_turn_budget_exceeded"
 					break
 				}
 			}
-			history = append(history, outputs...)
-			if repairOfferedThisAttempt {
-				history = append(history, map[string]any{
-					"role":    "developer",
-					"content": "The previous Python run failed before any Host capability call. Issue exactly one corrected run_python call now. This is the only repair attempt; do not call direct Host tools or emit multiple calls.",
-				})
-				turnHadCalls = true
-				continue
+			if workflow != nil {
+				if closeErr := workflow.Close(context.Background()); closeErr != nil {
+					return result, closeErr
+				}
 			}
-			if result.ErrorCode != "" {
-				break
-			}
-			turnHadCalls = true
-			if !continueWithinTurn {
-				turnComplete = true
-				break
-			}
-		}
-		if result.ErrorCode != "" {
-			break
-		}
-		if !turnComplete {
-			result.ErrorCode = "provider_turn_budget_exceeded"
-			break
-		}
-	}
-	if workflow != nil {
-		if closeErr := workflow.Close(context.Background()); closeErr != nil {
-			return result, closeErr
 		}
 	}
 	result.ProviderAttempts = session.ProviderCalls()
 	result.Exchanges = session.Evidence()
 	result.ProviderCalls = uint32(len(result.Exchanges))
 	result.Usage = session.Usage()
+	if result.Route != nil {
+		routerUsage := result.Route.RouterUsage
+		if routerUsage.InputTokens > result.Usage.InputTokens || routerUsage.OutputTokens > result.Usage.OutputTokens || routerUsage.TotalTokens > result.Usage.TotalTokens {
+			return result, ErrAgenticRun
+		}
+		result.Route.ExecutionUsage = provider.Usage{
+			InputTokens:  result.Usage.InputTokens - routerUsage.InputTokens,
+			OutputTokens: result.Usage.OutputTokens - routerUsage.OutputTokens,
+			TotalTokens:  result.Usage.TotalTokens - routerUsage.TotalTokens,
+		}
+	}
 	trace := tools.Trace()
 	result.ToolCalls = countStatefulCalls(trace)
 	if result.RawDebug != nil {

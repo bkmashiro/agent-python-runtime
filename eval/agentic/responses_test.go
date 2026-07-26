@@ -210,6 +210,55 @@ func TestResponsesSessionCapsOutputByRemainingTotalBudget(t *testing.T) {
 	}
 }
 
+func TestParseResponsesPreservesParallelCallOrder(t *testing.T) {
+	body := json.RawMessage(`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"},{"type":"function_call","call_id":"c2","name":"ls","arguments":"{}"}]}`)
+	parsed, err := ParseResponsesOutput(body, map[string]string{"pwd": "pwd", "ls": "ls"})
+	if err != nil || len(parsed.Calls) != 2 || parsed.Calls[0].CallID != "c1" || parsed.Calls[1].CallID != "c2" || len(parsed.replayItems) != 2 {
+		t.Fatalf("parsed=%+v err=%v", parsed, err)
+	}
+}
+
+func TestResponsesSessionReplaysToolApplicationErrorWithoutRetry(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		responseFixture(`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`, 10, 2),
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 8, 1),
+	}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := []any{map[string]any{"role": "user", "content": "work"}}
+	parsed, err := session.Exchange(context.Background(), history, []map[string]any{{"type": "function", "name": "pwd", "parameters": map[string]any{"type": "object"}}}, "required", false, map[string]string{"pwd": "pwd"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	history = append(history, parsed.replayItems...)
+	history = append(history, map[string]any{"type": "function_call_output", "call_id": "c1", "output": `{"error_code":"tool_application_error","status":"error"}`})
+	if _, err := session.Exchange(context.Background(), history, nil, "auto", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(adapter.requests) != 2 || !containsBytes(adapter.requests[1].Payload, []byte("tool_application_error")) {
+		t.Fatalf("requests=%d second=%s", len(adapter.requests), adapter.requests[1].Payload)
+	}
+}
+
+func TestResponsesSessionAccountsProviderReportedReasoningUsage(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{"status":"completed","usage":{"output_tokens_details":{"reasoning_tokens":90}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"x"}]}]}`, 10, 100)}}
+	limits := testTrialLimits()
+	limits.MaxOutputTokens = 120
+	limits.MaxTotalTokens = 200
+	session, err := NewResponsesSession(adapter, developmentModel, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), nil, nil, "auto", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if session.Usage().OutputTokens != 100 || session.Usage().TotalTokens != 110 {
+		t.Fatalf("usage=%+v", session.Usage())
+	}
+}
+
 func TestParseResponsesAllowsMissingItemStatusOnlyWhenEnvelopeCompleted(t *testing.T) {
 	completed := json.RawMessage(`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"pwd","arguments":"{}"}]}`)
 	parsed, err := ParseResponsesOutput(completed, map[string]string{"pwd": "pwd"})

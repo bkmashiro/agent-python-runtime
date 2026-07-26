@@ -1,0 +1,42 @@
+{
+  "dataset_id": "agentic-routing-diagnostic-v1",
+  "tasks": [
+    {
+      "archetype": "direct_favored",
+      "id": "rd-001",
+      "path": "tasks/dev/rd-001.json",
+      "sha256": "sha256:8a4f9b217a1b22a633d8f715b72d625fa1fc2c9d849e39b6c9786aa86956082f"
+    },
+    {
+      "archetype": "direct_favored",
+      "id": "rd-002",
+      "path": "tasks/dev/rd-002.json",
+      "sha256": "sha256:640e1f8fe187533d907c3d5fcec9373df14cd69b3ac5ae71efbee5f2146839cc"
+    },
+    {
+      "archetype": "python_favored",
+      "id": "rd-003",
+      "path": "tasks/dev/rd-003.json",
+      "sha256": "sha256:45cb8f7fe6f60c697ee62aef20fcade304186b3f2f1a0bd7622416c8b88ed3c6"
+    },
+    {
+      "archetype": "python_favored",
+      "id": "rd-004",
+      "path": "tasks/dev/rd-004.json",
+      "sha256": "sha256:78b0dda4289a6f0510380a1ff66890d65655007482a2af828abdaa08976333eb"
+    },
+    {
+      "archetype": "boundary",
+      "id": "rd-005",
+      "path": "tasks/dev/rd-005.json",
+      "sha256": "sha256:912c21dc25e03d4eeab9d3ea4b5ca5350f91ebe8540cc563159e829e5c51b424"
+    },
+    {
+      "archetype": "boundary",
+      "id": "rd-006",
+      "path": "tasks/dev/rd-006.json",
+      "sha256": "sha256:6d5829f0801d357d8d9268587e667c6cebda76ec5f344a3d8a6a3058e3fc81f5"
+    }
+  ],
+  "version": "routing-diagnostic-pack/v1"
+}

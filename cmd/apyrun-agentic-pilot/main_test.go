@@ -51,7 +51,7 @@ func repositoryRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
-func TestPilotRejectsUnimplementedOrBaselineTreatmentOverrideBeforeExecution(t *testing.T) {
+func TestPilotRejectsBaselineTreatmentOverrideBeforeExecution(t *testing.T) {
 	root := repositoryRoot(t)
 	dataset := filepath.Join(root, "eval", "agentic", "v1")
 	planPath := filepath.Join(dataset, "development-pilot-plan.json")
@@ -61,7 +61,7 @@ func TestPilotRejectsUnimplementedOrBaselineTreatmentOverrideBeforeExecution(t *
 		"--activation", "unused", "--guest", "unused", "--out", filepath.Join(t.TempDir(), "out"),
 		"--repository-commit", strings.Repeat("a", 40),
 	}
-	for _, file := range []string{"hybrid-two-stage-router-v1.json", "baseline-v1.json"} {
+	for _, file := range []string{"baseline-v1.json"} {
 		args := append(append([]string(nil), baseArgs...), "--treatment", filepath.Join(dataset, "treatments", file))
 		if err := run(context.Background(), args, dependencies{}); !errors.Is(err, agentic.ErrDevelopmentTreatment) {
 			t.Fatalf("file=%s err=%v", file, err)
@@ -229,6 +229,40 @@ func TestApplyTreatmentBoundsAddsOneRepairOnlyToPythonCapableTrials(t *testing.T
 			t.Fatal(err)
 		}
 		if scope.Bounds.MaxPythonRuns != test.wantPython || scope.Bounds.MaxProviderAttempts != test.wantProvider {
+			t.Fatalf("condition=%s bounds=%+v", test.condition, scope.Bounds)
+		}
+	}
+}
+
+func TestApplyTreatmentBoundsAddsOneRouterCallOnlyToHybridTrials(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "hybrid-two-stage-router-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+	for _, test := range []struct {
+		condition    agentic.Condition
+		wantProvider uint32
+	}{
+		{agentic.ConditionDirect, 12},
+		{agentic.ConditionPython, 3},
+		{agentic.ConditionHybrid, 13},
+	} {
+		scope, err := selectExecutionScope(plan, dataset, false, taskID, test.condition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scope, err = applyTreatmentBounds(plan, scope, treatment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scope.Bounds.MaxProviderAttempts != test.wantProvider {
 			t.Fatalf("condition=%s bounds=%+v", test.condition, scope.Bounds)
 		}
 	}

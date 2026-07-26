@@ -308,27 +308,33 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 }
 
 func applyTreatmentBounds(plan agentic.DevelopmentPilotPlan, scope executionScope, treatment agentic.DevelopmentTreatment) (executionScope, error) {
-	if !treatment.AllowsPythonRepair() {
-		return scope, nil
-	}
-	eligibleConditions := uint64(0)
+	pythonCapableConditions := uint64(0)
+	hybridConditions := uint64(0)
 	for _, condition := range scope.Conditions {
 		if condition == agentic.ConditionPython || condition == agentic.ConditionHybrid {
-			eligibleConditions++
+			pythonCapableConditions++
+		}
+		if condition == agentic.ConditionHybrid {
+			hybridConditions++
 		}
 	}
-	additional := eligibleConditions * uint64(len(scope.TaskIDs)) * uint64(len(scope.Replicates)) * uint64(treatment.MaxPythonRepairsPerTrial)
-	if additional > uint64(^uint32(0))-uint64(scope.Bounds.MaxPythonRuns) || additional > uint64(^uint32(0))-uint64(scope.Bounds.MaxProviderAttempts) ||
-		additional > (^uint64(0)-scope.Bounds.MaxInputTokens)/plan.PerTrial.MaxInputTokensPerAttempt ||
-		additional > (^uint64(0)-scope.Bounds.MaxOutputTokens)/plan.PerTrial.MaxOutputTokensPerAttempt ||
-		additional > (^uint64(0)-scope.Bounds.MaxTotalTokens)/(plan.PerTrial.MaxInputTokensPerAttempt+plan.PerTrial.MaxOutputTokensPerAttempt) {
+	trialsPerCondition := uint64(len(scope.TaskIDs)) * uint64(len(scope.Replicates))
+	additionalPython := pythonCapableConditions * trialsPerCondition * uint64(treatment.MaxPythonRepairsPerTrial)
+	additionalProvider := additionalPython + hybridConditions*trialsPerCondition*uint64(treatment.MaxRouterCallsPerHybridTrial)
+	if additionalProvider == 0 && additionalPython == 0 {
+		return scope, nil
+	}
+	if additionalPython > uint64(^uint32(0))-uint64(scope.Bounds.MaxPythonRuns) || additionalProvider > uint64(^uint32(0))-uint64(scope.Bounds.MaxProviderAttempts) ||
+		additionalProvider > (^uint64(0)-scope.Bounds.MaxInputTokens)/plan.PerTrial.MaxInputTokensPerAttempt ||
+		additionalProvider > (^uint64(0)-scope.Bounds.MaxOutputTokens)/plan.PerTrial.MaxOutputTokensPerAttempt ||
+		additionalProvider > (^uint64(0)-scope.Bounds.MaxTotalTokens)/(plan.PerTrial.MaxInputTokensPerAttempt+plan.PerTrial.MaxOutputTokensPerAttempt) {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
-	scope.Bounds.MaxPythonRuns += uint32(additional)
-	scope.Bounds.MaxProviderAttempts += uint32(additional)
-	scope.Bounds.MaxInputTokens += additional * plan.PerTrial.MaxInputTokensPerAttempt
-	scope.Bounds.MaxOutputTokens += additional * plan.PerTrial.MaxOutputTokensPerAttempt
-	scope.Bounds.MaxTotalTokens += additional * (plan.PerTrial.MaxInputTokensPerAttempt + plan.PerTrial.MaxOutputTokensPerAttempt)
+	scope.Bounds.MaxPythonRuns += uint32(additionalPython)
+	scope.Bounds.MaxProviderAttempts += uint32(additionalProvider)
+	scope.Bounds.MaxInputTokens += additionalProvider * plan.PerTrial.MaxInputTokensPerAttempt
+	scope.Bounds.MaxOutputTokens += additionalProvider * plan.PerTrial.MaxOutputTokensPerAttempt
+	scope.Bounds.MaxTotalTokens += additionalProvider * (plan.PerTrial.MaxInputTokensPerAttempt + plan.PerTrial.MaxOutputTokensPerAttempt)
 	if scope.Bounds.MaxPythonRuns > plan.GlobalBounds.MaxPythonRuns || scope.Bounds.MaxProviderAttempts > plan.GlobalBounds.MaxProviderAttempts ||
 		scope.Bounds.MaxInputTokens > plan.GlobalBounds.MaxInputTokens || scope.Bounds.MaxOutputTokens > plan.GlobalBounds.MaxOutputTokens || scope.Bounds.MaxTotalTokens > plan.GlobalBounds.MaxTotalTokens {
 		return executionScope{}, agentic.ErrPilotPlan

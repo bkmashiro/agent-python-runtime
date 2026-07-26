@@ -1,0 +1,172 @@
+package agentic
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"regexp"
+	"strings"
+	"sync"
+	"unicode/utf8"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+)
+
+const maxPythonCodeBytes = 64 * 1024
+
+var pythonRunIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+
+type PythonRunResult struct {
+	Success         bool             `json:"success"`
+	ErrorCode       string           `json:"error_code,omitempty"`
+	CapabilityCalls uint32           `json:"capability_calls"`
+	RequestDigest   string           `json:"request_digest"`
+	ResponseDigest  string           `json:"response_digest,omitempty"`
+	ResultDigest    string           `json:"result_digest,omitempty"`
+	Backend         string           `json:"backend"`
+	ResetMode       engine.ResetMode `json:"reset_mode"`
+	Observation     json.RawMessage  `json:"-"`
+}
+
+type PythonExecutor struct {
+	mu         sync.Mutex
+	runner     engine.Runner
+	tools      *ToolRuntime
+	prepare    string
+	controller *workflowBrokerController
+}
+
+type workflowBrokerController struct {
+	mu       sync.Mutex
+	active   bool
+	runID    string
+	maxCalls uint32
+	tools    *ToolRuntime
+}
+
+func NewPythonExecutor(runner engine.Runner, tools *ToolRuntime) (*PythonExecutor, error) {
+	if runner == nil || tools == nil {
+		return nil, ErrAgenticRun
+	}
+	properties := runner.Properties()
+	if properties.Validate() != nil || properties.ResetMode != engine.ResetModeFreshInstance {
+		return nil, ErrAgenticRun
+	}
+	prepare, err := tools.TrustedPrepare()
+	if err != nil || prepare == "" {
+		return nil, ErrAgenticRun
+	}
+	return &PythonExecutor{runner: runner, tools: tools, prepare: prepare}, nil
+}
+
+func NewWASIPythonExecutor(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools *ToolRuntime) (*PythonExecutor, error) {
+	if len(wasm) < 8 || tools == nil {
+		return nil, ErrAgenticRun
+	}
+	controller := &workflowBrokerController{tools: tools}
+	factory := wazeroengine.Factory{BrokerFactory: controller.newBroker}
+	runner, err := factory.New(ctx, wasm, config)
+	if err != nil {
+		return nil, err
+	}
+	executor, err := NewPythonExecutor(runner, tools)
+	if err != nil {
+		_ = runner.Close(context.Background())
+		return nil, err
+	}
+	executor.controller = controller
+	return executor, nil
+}
+
+func (controller *workflowBrokerController) newBroker(context.Context) (*capability.Broker, error) {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if !controller.active || controller.tools == nil {
+		return nil, errors.New("Python workflow broker requested outside an active Run")
+	}
+	return controller.tools.NewWorkflowBroker(controller.runID, controller.maxCalls)
+}
+
+func (controller *workflowBrokerController) begin(runID string, maxCalls uint32) error {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if controller.active {
+		return errors.New("Python workflow controller is already active")
+	}
+	controller.active, controller.runID, controller.maxCalls = true, runID, maxCalls
+	return nil
+}
+
+func (controller *workflowBrokerController) end() {
+	controller.mu.Lock()
+	controller.active, controller.runID, controller.maxCalls = false, "", 0
+	controller.mu.Unlock()
+}
+
+func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string, maxCalls uint32) (PythonRunResult, error) {
+	if executor == nil || executor.runner == nil || !pythonRunIDPattern.MatchString(runID) ||
+		!utf8.ValidString(code) || strings.TrimSpace(code) == "" || strings.ContainsRune(code, 0) || len([]byte(code)) > maxPythonCodeBytes ||
+		maxCalls == 0 || maxCalls > maxFunctionCalls {
+		return PythonRunResult{}, ErrAgenticRun
+	}
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	if executor.controller != nil {
+		if err := executor.controller.begin(runID, maxCalls); err != nil {
+			return PythonRunResult{}, err
+		}
+		defer executor.controller.end()
+	}
+	request := runtimeconfig.RunRequest{
+		RunID: runID, Code: code, Inputs: json.RawMessage(`{}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
+	}
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return PythonRunResult{}, ErrAgenticRun
+	}
+	properties := executor.runner.Properties()
+	result := PythonRunResult{
+		RequestDigest: digest(requestBytes), Backend: properties.Backend, ResetMode: properties.ResetMode,
+	}
+	payload, runErr := executor.runner.Run(ctx, requestBytes, executor.prepare)
+	if runErr != nil {
+		return result, runErr
+	}
+	result.ResponseDigest = digest(payload)
+	response, err := runtimeconfig.DecodeAndValidateRunResponse(request, payload)
+	if err != nil || response.Metrics == nil || response.Metrics.CapabilityCalls > maxCalls {
+		return result, ErrAgenticRun
+	}
+	result.CapabilityCalls = response.Metrics.CapabilityCalls
+	if response.Status == runtimeconfig.RunResponseOK {
+		result.Success = true
+		result.Observation = append(json.RawMessage(nil), response.Result...)
+		result.ResultDigest = digest(response.Result)
+		return result, nil
+	}
+	result.ErrorCode = safeGuestErrorCode(response.Error.Code)
+	result.ResultDigest = digest(response.Result)
+	observation, _ := json.Marshal(map[string]any{"error_code": result.ErrorCode, "status": "error"})
+	result.Observation = observation
+	return result, nil
+}
+
+func safeGuestErrorCode(value string) string {
+	if providerToolNamePattern.MatchString(value) {
+		return value
+	}
+	return "guest_error"
+}
+
+func (executor *PythonExecutor) Close(ctx context.Context) error {
+	if executor == nil || executor.runner == nil {
+		return nil
+	}
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return executor.runner.Close(ctx)
+}

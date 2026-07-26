@@ -355,6 +355,8 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 			description := tool.Description
 			if tool.ToolID == "touch" {
 				description += " Host semantics: returns an error if the file already exists; do not pre-check existence."
+			} else if tool.ToolID == "echo" {
+				description += " Host semantics: when file_name is provided, the target file must already exist; echo does not create missing files."
 			}
 			mapping[providerName] = tool.ToolID
 			surface = append(surface, map[string]any{
@@ -419,6 +421,8 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 		entry := tool.PythonName + "(" + strings.Join(parameters, ", ") + ")"
 		if tool.ToolID == "touch" {
 			entry += " [returns an error if the file already exists; do not pre-check existence]"
+		} else if tool.ToolID == "echo" {
+			entry += " [when file_name is provided, the target file must already exist; echo does not create missing files]"
 		}
 		parts = append(parts, entry)
 	}

@@ -59,6 +59,9 @@ func TestRunDevelopmentTrialDirectUsesBoundedResponsesLoopAndScores(t *testing.T
 	if !strings.Contains(string(adapter.requests[0].Payload), "returns an error if the file already exists; do not pre-check existence") {
 		t.Fatalf("direct request omits the Host touch error contract: %s", adapter.requests[0].Payload)
 	}
+	if !strings.Contains(string(adapter.requests[0].Payload), "the target file must already exist; echo does not create missing files") {
+		t.Fatalf("direct request omits the Host echo error contract: %s", adapter.requests[0].Payload)
+	}
 	if !strings.Contains(string(adapter.requests[1].Payload), "function_call_output") {
 		t.Fatal("next turn omitted prior Host tool outputs")
 	}
@@ -249,7 +252,8 @@ func TestHybridSurfaceContainsDirectAndPythonWithoutCollision(t *testing.T) {
 	}
 	if len(surface) != len(task.Tools)+1 || mapping["run_python"] != "run_python" || mapping["pwd"] != "pwd" || !strings.Contains(prompt, "host_tools") ||
 		!strings.Contains(prompt, "at most one run_python call") || !strings.Contains(prompt, "continue after each tool output") ||
-		!strings.Contains(prompt, "touch(file_name) [returns an error if the file already exists; do not pre-check existence]") {
+		!strings.Contains(prompt, "touch(file_name) [returns an error if the file already exists; do not pre-check existence]") ||
+		!strings.Contains(prompt, "echo(content, file_name=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
 		t.Fatalf("surface=%d mapping=%v prompt=%q", len(surface), mapping, prompt)
 	}
 }

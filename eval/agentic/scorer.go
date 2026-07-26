@@ -22,8 +22,8 @@ type FunctionCall struct {
 }
 
 type CallScore struct {
-	Passed    bool
-	ErrorCode string
+	Passed    bool   `json:"passed"`
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type expectedCallOracle struct {

@@ -13,11 +13,12 @@ import (
 const (
 	developmentModel      = "gpt-5.4"
 	gpt41DevelopmentModel = "gpt-4.1"
+	gpt4oDevelopmentModel = "gpt-4o"
 	maxPythonPromptBytes  = 16 * 1024
 )
 
 func supportedDevelopmentModel(model string) bool {
-	return model == developmentModel || model == gpt41DevelopmentModel
+	return model == developmentModel || model == gpt41DevelopmentModel || model == gpt4oDevelopmentModel
 }
 
 type PythonWorkflow interface {

@@ -96,6 +96,27 @@ func TestRunDevelopmentTrialForModelBindsGPT41RequestAndArtifact(t *testing.T) {
 	}
 }
 
+func TestRunDevelopmentTrialForModelBindsGPT4ORequestAndArtifact(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_112")
+	response := responseFixture(`{"model":"gpt-4o","status":"completed","output":[]}`, 10, 2)
+	adapter := &scriptedAdapter{responses: []provider.Response{response}}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
+	}
+	result, err := RunDevelopmentTrialForModelWithIdentity(context.Background(), adapter, task, ConditionDirect, "gpt-4o", 0, developmentTrialLimits(1), identity, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Model != "gpt-4o" || len(adapter.requests) != 1 || !strings.Contains(string(adapter.requests[0].Payload), `"model":"gpt-4o"`) {
+		t.Fatalf("result=%+v request=%s", result, adapter.requests[0].Payload)
+	}
+	if err := ValidateTrialResult(result); err != nil {
+		t.Fatalf("gpt-4o result is not artifact-safe: %v", err)
+	}
+}
+
 func TestRunDevelopmentTrialForModelRejectsUnapprovedModelBeforeProviderCall(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_112")
 	adapter := &scriptedAdapter{}

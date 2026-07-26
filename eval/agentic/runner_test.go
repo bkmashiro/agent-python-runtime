@@ -334,6 +334,8 @@ func TestPythonSurfaceExplainsMinimalWorkflowWithoutRepeatingSDK(t *testing.T) {
 	description, _ := surface[0]["description"].(string)
 	if strings.Count(description, sdk) != 1 ||
 		!strings.Contains(description, "Use returned JSON values in later calls") ||
+		!strings.Contains(description, "current working directory") ||
+		!strings.Contains(description, "do not repeat setup") ||
 		!strings.Contains(description, "Only call Host tools required by the user") {
 		t.Fatalf("description=%q", description)
 	}

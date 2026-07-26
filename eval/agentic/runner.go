@@ -476,7 +476,7 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 		mapping["run_python"] = "run_python"
 		surface = append(surface, map[string]any{
 			"type": "function", "name": "run_python",
-			"description": "Execute one bounded Python workflow in the CPython/WASI Guest. Import functions from host_tools; calls run in source order. Use returned JSON values in later calls. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Assign a JSON object to result. Available SDK: " + sdk,
+			"description": "Execute one bounded Python workflow in the CPython/WASI Guest. Import functions from host_tools; calls run in source order. A fresh Guest does not reset Host-tool state, including the current working directory; do not repeat setup already completed by earlier turns. Use returned JSON values in later calls. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Assign a JSON object to result. Available SDK: " + sdk,
 			"parameters": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"code"},
 				"properties": map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": maxPythonCodeBytes}},

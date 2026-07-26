@@ -98,6 +98,19 @@ func TestResponsesSessionRequiresModelAndAcceptsNullInstructions(t *testing.T) {
 	}
 }
 
+func TestResponsesSessionRejectsCompletelyMissingModelKey(t *testing.T) {
+	response := responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`, 10, 2)
+	response.Body = json.RawMessage(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`)
+	adapter := &scriptedAdapter{responses: []provider.Response{response}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "required", false, map[string]string{}); !errors.Is(err, ErrProviderIdentityMismatch) {
+		t.Fatalf("missing model key err=%v", err)
+	}
+}
+
 func TestResponsesSessionParsesCallsAndKeepsRawProtocolInMemoryOnly(t *testing.T) {
 	adapter := &scriptedAdapter{responses: []provider.Response{responseFixture(`{
 		"id":"response-private",

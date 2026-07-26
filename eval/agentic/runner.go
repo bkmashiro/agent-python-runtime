@@ -10,7 +10,10 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 )
 
-const developmentModel = "gpt-5.4"
+const (
+	developmentModel     = "gpt-5.4"
+	maxPythonPromptBytes = 16 * 1024
+)
 
 type PythonWorkflow interface {
 	Execute(context.Context, string, string, uint32) (PythonRunResult, error)
@@ -401,7 +404,7 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 			prompt += " If using direct calls, return every required call in dependency order in one response; the Host executes returned calls in output order."
 		}
 	}
-	if len(surface) == 0 || len(surface) > maxFunctionCalls || len(prompt) > 16*1024 {
+	if len(surface) == 0 || len(surface) > maxFunctionCalls || len(prompt) > maxPythonPromptBytes {
 		return nil, nil, "", ErrAgenticRun
 	}
 	return surface, mapping, prompt, nil

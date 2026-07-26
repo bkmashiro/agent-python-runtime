@@ -3,6 +3,7 @@ package agentic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -267,6 +268,55 @@ func TestCompactPythonSDKPreservesParameterTypes(t *testing.T) {
 	sdk := compactPythonSDK(runtime)
 	if !strings.Contains(sdk, "find_restaurants(food_type: str, location: str, number: int, dietary_requirements: list[str]=...)") {
 		t.Fatalf("SDK omitted the array parameter type: %s", sdk)
+	}
+}
+
+func TestFrozenDevelopmentPythonSurfacesStayWithinPromptBound(t *testing.T) {
+	plan, dataset, err := LoadDevelopmentPilotPlan("v1/development-pilot-plan.json", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := make(map[string]Task, len(dataset.Tasks))
+	for _, task := range dataset.Tasks {
+		byID[task.ID] = task
+	}
+	for _, taskID := range plan.TaskIDs {
+		task := byID[taskID]
+		runtime, err := NewToolRuntime(task)
+		if err != nil {
+			t.Fatalf("task=%s runtime: %v", taskID, err)
+		}
+		for _, condition := range []Condition{ConditionPython, ConditionHybrid} {
+			_, _, prompt, err := buildConditionSurface(runtime, condition, task.Track == "stateful_local_tools")
+			if err != nil || len(prompt) > maxPythonPromptBytes {
+				t.Fatalf("task=%s condition=%s bytes=%d err=%v", taskID, condition, len(prompt), err)
+			}
+		}
+	}
+}
+
+func TestPythonSurfaceRejectsOversizedTypedSDKPrompt(t *testing.T) {
+	tools := make([]Tool, maxFunctionCalls)
+	for index := range tools {
+		properties := make(map[string]any, 16)
+		required := make([]string, 16)
+		for parameter := range required {
+			name := fmt.Sprintf("parameter_%02d", parameter)
+			properties[name] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
+			required[parameter] = name
+		}
+		parameters, err := json.Marshal(map[string]any{"type": "object", "additionalProperties": false, "properties": properties, "required": required})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tools[index] = Tool{Name: fmt.Sprintf("oversized_tool_%03d", index), Parameters: parameters}
+	}
+	runtime, err := NewToolRuntime(Task{Split: "dev", Track: "stateless_function_calling", Interaction: Interaction{Mode: "single_turn", Turns: []json.RawMessage{json.RawMessage(`{"role":"user","content":"test"}`)}}, Tools: tools})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := buildConditionSurface(runtime, ConditionPython, false); !errors.Is(err, ErrAgenticRun) {
+		t.Fatalf("oversized typed SDK prompt err=%v", err)
 	}
 }
 

@@ -507,14 +507,21 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 	parts := make([]string, 0, len(runtime.Snapshot().Tools()))
 	for _, tool := range runtime.Snapshot().Tools() {
 		parameters := make([]string, 0, len(tool.Parameters))
+		hints := make([]string, 0, len(tool.Parameters))
 		for _, parameter := range tool.Parameters {
 			name := parameter.PythonName + ": " + parameter.Annotation
 			if !parameter.Required {
 				name += "=..."
 			}
 			parameters = append(parameters, name)
+			if hint := compactParameterValueHint(runtime, tool.ToolID, parameter.Name); hint != "" {
+				hints = append(hints, parameter.PythonName+": "+hint)
+			}
 		}
 		entry := tool.PythonName + "(" + strings.Join(parameters, ", ") + ")"
+		if len(hints) > 0 {
+			entry += " [" + strings.Join(hints, "; ") + "]"
+		}
 		if tool.ToolID == "touch" {
 			entry += " [returns an error if the file already exists; do not pre-check existence]"
 		} else if tool.ToolID == "echo" {
@@ -523,6 +530,37 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 		parts = append(parts, entry)
 	}
 	return strings.Join(parts, "; ")
+}
+
+func compactParameterValueHint(runtime *ToolRuntime, toolID, parameterName string) string {
+	if runtime == nil || toolID == "" || parameterName == "" {
+		return ""
+	}
+	for _, tool := range runtime.task.Tools {
+		if tool.Name != toolID {
+			continue
+		}
+		var schema map[string]any
+		if decodeUseNumber(tool.Parameters, &schema) != nil {
+			return ""
+		}
+		properties, ok := schema["properties"].(map[string]any)
+		if !ok {
+			return ""
+		}
+		property, ok := properties[parameterName].(map[string]any)
+		if !ok {
+			return ""
+		}
+		description, _ := property["description"].(string)
+		description = strings.Join(strings.Fields(description), " ")
+		if description == "" || len([]byte(description)) > 256 ||
+			(strings.Count(description, "'") < 2 && !strings.Contains(description, "[Enum]")) {
+			return ""
+		}
+		return description
+	}
+	return ""
 }
 
 func classifyTrialError(err error) string {

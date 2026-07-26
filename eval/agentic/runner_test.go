@@ -341,6 +341,18 @@ func TestPythonSurfaceExplainsMinimalWorkflowWithoutRepeatingSDK(t *testing.T) {
 	}
 }
 
+func TestCompactPythonSDKPreservesBoundedParameterValueHints(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdk := compactPythonSDK(runtime)
+	if !strings.Contains(sdk, "mode: Mode of operation ('l' for lines, 'w' for words, 'c' for characters).") {
+		t.Fatalf("SDK omitted the bounded mode-value hint: %s", sdk)
+	}
+}
+
 func TestCompactPythonSDKPreservesParameterTypes(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_147")
 	runtime, err := NewToolRuntime(task)

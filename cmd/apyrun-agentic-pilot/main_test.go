@@ -228,6 +228,54 @@ func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
 	}
 }
 
+func TestApplyTreatmentTrialLimitsAddsOnlyAuthorizedExchanges(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, _, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "hybrid-two-stage-safe-repair-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := findTaskForPilotTest(t, datasetRoot, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	cases := []struct {
+		condition            agentic.Condition
+		calls, runs          uint32
+		input, output, total uint64
+	}{
+		{agentic.ConditionDirect, 12, 3, 240_000, 98_304, 338_304},
+		{agentic.ConditionPython, 4, 4, 80_000, 32_768, 112_768},
+		{agentic.ConditionHybrid, 14, 4, 280_000, 114_688, 394_688},
+	}
+	for _, tc := range cases {
+		limits, err := plan.LimitsFor(task, tc.condition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		limits, err = applyTreatmentTrialLimits(plan, limits, tc.condition, treatment)
+		if err != nil || limits.MaxProviderCalls != tc.calls || limits.MaxPythonRuns != tc.runs || limits.MaxInputTokens != tc.input || limits.MaxOutputTokens != tc.output || limits.MaxTotalTokens != tc.total {
+			t.Fatalf("condition=%s limits=%+v err=%v", tc.condition, limits, err)
+		}
+	}
+}
+
+func findTaskForPilotTest(t *testing.T, datasetRoot, id string) agentic.Task {
+	t.Helper()
+	dataset, err := agentic.Load(datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range dataset.Tasks {
+		if task.ID == id {
+			return task
+		}
+	}
+	t.Fatalf("task %s not found", id)
+	return agentic.Task{}
+}
+
 func TestApplyTreatmentBoundsCoversFixedRepresentativeCanary(t *testing.T) {
 	root := repositoryRoot(t)
 	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")

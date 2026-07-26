@@ -199,6 +199,10 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 			if err != nil {
 				return err
 			}
+			limits, err = applyTreatmentTrialLimits(plan, limits, condition, treatment)
+			if err != nil {
+				return err
+			}
 			for _, replicate := range scope.Replicates {
 				if !plan.Authorizes(task.ID, condition, replicate) {
 					return agentic.ErrPilotPlan
@@ -344,6 +348,40 @@ func applyTreatmentBounds(plan agentic.DevelopmentPilotPlan, scope executionScop
 		return executionScope{}, agentic.ErrPilotPlan
 	}
 	return scope, nil
+}
+
+func applyTreatmentTrialLimits(plan agentic.DevelopmentPilotPlan, limits agentic.TrialLimits, condition agentic.Condition, treatment agentic.DevelopmentTreatment) (agentic.TrialLimits, error) {
+	additionalProvider := uint64(0)
+	additionalPython := uint64(0)
+	if condition == agentic.ConditionPython || condition == agentic.ConditionHybrid {
+		additionalProvider += uint64(treatment.MaxPythonRepairsPerTrial)
+		additionalPython += uint64(treatment.MaxPythonRepairsPerTrial)
+	}
+	if condition == agentic.ConditionHybrid {
+		additionalProvider += uint64(treatment.MaxRouterCallsPerHybridTrial)
+	}
+	if additionalProvider == 0 && additionalPython == 0 {
+		return limits, nil
+	}
+	if additionalProvider > uint64(^uint32(0))-uint64(limits.MaxProviderCalls) || additionalPython > uint64(^uint32(0))-uint64(limits.MaxPythonRuns) {
+		return agentic.TrialLimits{}, agentic.ErrPilotPlan
+	}
+	var err error
+	limits.MaxProviderCalls += uint32(additionalProvider)
+	limits.MaxPythonRuns += uint32(additionalPython)
+	limits.MaxInputTokens, err = addBounded(limits.MaxInputTokens, additionalProvider*plan.PerTrial.MaxInputTokensPerAttempt, plan.GlobalBounds.MaxInputTokens)
+	if err != nil {
+		return agentic.TrialLimits{}, agentic.ErrPilotPlan
+	}
+	limits.MaxOutputTokens, err = addBounded(limits.MaxOutputTokens, additionalProvider*plan.PerTrial.MaxOutputTokensPerAttempt, plan.GlobalBounds.MaxOutputTokens)
+	if err != nil {
+		return agentic.TrialLimits{}, agentic.ErrPilotPlan
+	}
+	limits.MaxTotalTokens, err = addBounded(limits.MaxTotalTokens, additionalProvider*(plan.PerTrial.MaxInputTokensPerAttempt+plan.PerTrial.MaxOutputTokensPerAttempt), plan.GlobalBounds.MaxTotalTokens)
+	if err != nil {
+		return agentic.TrialLimits{}, agentic.ErrPilotPlan
+	}
+	return limits, nil
 }
 
 func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Dataset, taskIDs []string, conditions []agentic.Condition) (executionScope, error) {

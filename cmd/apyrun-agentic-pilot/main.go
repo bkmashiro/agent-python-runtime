@@ -50,7 +50,10 @@ type pilotSummary struct {
 	Artifacts        []artifactEntry `json:"artifacts"`
 }
 
-const representativeCanaryTask = "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+var representativeCanaryTasks = []string{
+	"bfcl-v4-stateful-local-tools-multi_turn_base_12",
+	"bfcl-v4-stateless-function-calling-parallel_multiple_112",
+}
 
 type executionBounds struct {
 	TrialCount          uint32
@@ -231,24 +234,32 @@ func selectExecutionScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Da
 	if !canary {
 		return full, nil
 	}
-	if dataset == nil || !plan.Authorizes(representativeCanaryTask, agentic.ConditionDirect, 0) ||
-		!plan.Authorizes(representativeCanaryTask, agentic.ConditionPython, 0) || !plan.Authorizes(representativeCanaryTask, agentic.ConditionHybrid, 0) {
+	if dataset == nil {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
+	wanted := make(map[string]struct{}, len(representativeCanaryTasks))
+	for _, taskID := range representativeCanaryTasks {
+		if !plan.Authorizes(taskID, agentic.ConditionDirect, 0) ||
+			!plan.Authorizes(taskID, agentic.ConditionPython, 0) || !plan.Authorizes(taskID, agentic.ConditionHybrid, 0) {
+			return executionScope{}, agentic.ErrPilotPlan
+		}
+		wanted[taskID] = struct{}{}
+	}
 	turns := uint64(0)
+	found := 0
 	for _, task := range dataset.Tasks {
-		if task.ID == representativeCanaryTask && task.Split == "dev" {
-			turns = uint64(len(task.Interaction.Turns))
-			break
+		if _, exists := wanted[task.ID]; exists && task.Split == "dev" {
+			turns += uint64(len(task.Interaction.Turns))
+			found++
 		}
 	}
-	if turns == 0 || turns > 64 {
+	if found != len(representativeCanaryTasks) || turns == 0 || turns > 64 {
 		return executionScope{}, agentic.ErrPilotPlan
 	}
 	attempts := turns * uint64(len(plan.Conditions))
-	trialCount := uint64(len(plan.Conditions))
+	trialCount := uint64(len(representativeCanaryTasks) * len(plan.Conditions))
 	return executionScope{
-		Mode: "canary", TaskIDs: []string{representativeCanaryTask},
+		Mode: "canary", TaskIDs: append([]string(nil), representativeCanaryTasks...),
 		Conditions: append([]agentic.Condition(nil), plan.Conditions...), Replicates: []uint32{0},
 		Bounds: executionBounds{
 			TrialCount: uint32(trialCount), MaxProviderAttempts: uint32(attempts),

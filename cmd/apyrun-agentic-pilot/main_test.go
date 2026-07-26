@@ -100,10 +100,12 @@ func TestSelectExecutionScopeUsesFixedRepresentativeCanary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scope.Mode != "canary" || len(scope.TaskIDs) != 1 || scope.TaskIDs[0] != "bfcl-v4-stateful-local-tools-multi_turn_base_12" {
+	if scope.Mode != "canary" || len(scope.TaskIDs) != 2 ||
+		scope.TaskIDs[0] != "bfcl-v4-stateful-local-tools-multi_turn_base_12" ||
+		scope.TaskIDs[1] != "bfcl-v4-stateless-function-calling-parallel_multiple_112" {
 		t.Fatalf("scope=%+v", scope)
 	}
-	if scope.Bounds.TrialCount != 3 || scope.Bounds.MaxProviderAttempts != 9 || scope.Bounds.MaxPythonRuns != 6 {
+	if scope.Bounds.TrialCount != 6 || scope.Bounds.MaxProviderAttempts != 12 || scope.Bounds.MaxPythonRuns != 8 {
 		t.Fatalf("bounds=%+v", scope.Bounds)
 	}
 	if len(scope.Conditions) != 3 || len(scope.Replicates) != 1 || scope.Replicates[0] != 0 {

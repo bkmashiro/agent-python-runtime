@@ -49,7 +49,12 @@ def canonical_catalog(raw: bytes) -> tuple[bytes, int]:
         document = json.loads(raw, object_pairs_hook=reject_duplicate_pairs)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise CatalogError("invalid catalog JSON") from exc
-    if not isinstance(document, dict) or set(document) - {"object", "data"} or document.get("object") not in (None, "list"):
+    if (
+        not isinstance(document, dict)
+        or set(document) - {"object", "data", "success"}
+        or document.get("object") not in (None, "list")
+        or ("success" in document and document["success"] is not True)
+    ):
         raise CatalogError("invalid catalog envelope")
     models = document.get("data")
     if not isinstance(models, list) or not (1 <= len(models) <= MAX_MODELS):

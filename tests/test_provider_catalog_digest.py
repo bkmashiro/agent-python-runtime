@@ -30,6 +30,24 @@ class ProviderCatalogDigestTests(unittest.TestCase):
         self.assertEqual(left, right)
         self.assertEqual((left_count, right_count), (2, 2))
 
+    def test_accepts_linkapi_success_envelope_only_when_true(self):
+        accepted = json.dumps({
+            "success": True,
+            "object": "list",
+            "data": [{"id": "gpt-5.4", "ratio": 1.25}],
+        }).encode()
+        _, count = MODULE.canonical_catalog(accepted)
+        self.assertEqual(count, 1)
+        for invalid in (False, "true", 1, None):
+            with self.subTest(success=invalid):
+                raw = json.dumps({
+                    "success": invalid,
+                    "object": "list",
+                    "data": [{"id": "gpt-5.4"}],
+                }).encode()
+                with self.assertRaises(MODULE.CatalogError):
+                    MODULE.canonical_catalog(raw)
+
     def test_rejects_duplicate_sensitive_and_missing_target(self):
         invalid = [
             b'{"data":[{"id":"gpt-5.4","id":"other"}]}',

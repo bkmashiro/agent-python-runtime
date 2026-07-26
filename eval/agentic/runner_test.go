@@ -54,8 +54,9 @@ func TestRunDevelopmentTrialDirectUsesBoundedResponsesLoopAndScores(t *testing.T
 	if len(adapter.requests) != len(task.Interaction.Turns)*2 {
 		t.Fatalf("requests=%d", len(adapter.requests))
 	}
-	if !strings.Contains(string(adapter.requests[0].Payload), "Continue the same user turn after each tool output") {
-		t.Fatalf("direct request does not expose its continuation contract: %s", adapter.requests[0].Payload)
+	if !strings.Contains(string(adapter.requests[0].Payload), "Continue after tool output only when a later call requires returned data") ||
+		!strings.Contains(string(adapter.requests[0].Payload), "Emit all calls whose arguments are already known together") {
+		t.Fatalf("direct request does not expose its bounded continuation contract: %s", adapter.requests[0].Payload)
 	}
 	if !strings.Contains(string(adapter.requests[0].Payload), "returns an error if the file already exists; do not pre-check existence") {
 		t.Fatalf("direct request omits the Host touch error contract: %s", adapter.requests[0].Payload)
@@ -281,11 +282,42 @@ func TestHybridSurfaceContainsDirectAndPythonWithoutCollision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(surface) != len(task.Tools)+1 || mapping["run_python"] != "run_python" || mapping["pwd"] != "pwd" || !strings.Contains(prompt, "host_tools") ||
-		!strings.Contains(prompt, "at most one run_python call") || !strings.Contains(prompt, "continue after each tool output") ||
-		!strings.Contains(prompt, "touch(file_name: str) [returns an error if the file already exists; do not pre-check existence]") ||
-		!strings.Contains(prompt, "echo(content: str, file_name: str=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
-		t.Fatalf("surface=%d mapping=%v prompt=%q", len(surface), mapping, prompt)
+	sdk := compactPythonSDK(tools)
+	description, _ := surface[len(surface)-1]["description"].(string)
+	if len(surface) != len(task.Tools)+1 || mapping["run_python"] != "run_python" || mapping["pwd"] != "pwd" ||
+		strings.Contains(prompt, sdk) || strings.Count(description, sdk) != 1 ||
+		!strings.Contains(prompt, "at most one run_python call") || !strings.Contains(prompt, "Continue after tool output only when a later call requires returned data") ||
+		!strings.Contains(prompt, "every required argument is known before any tool runs") ||
+		!strings.Contains(prompt, "a later argument or control-flow decision depends on a Host-tool result") ||
+		!strings.Contains(prompt, "Do not choose run_python merely because there are multiple calls") ||
+		!strings.Contains(description, "touch(file_name: str) [returns an error if the file already exists; do not pre-check existence]") ||
+		!strings.Contains(description, "echo(content: str, file_name: str=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
+		t.Fatalf("surface=%d mapping=%v prompt=%q description=%q", len(surface), mapping, prompt, description)
+	}
+}
+
+func TestPythonSurfaceExplainsMinimalWorkflowWithoutRepeatingSDK(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface, _, prompt, err := buildConditionSurface(runtime, ConditionPython, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdk := compactPythonSDK(runtime)
+	if strings.Contains(prompt, sdk) || !strings.Contains(prompt, "Do not add exploratory, precondition, or verification calls") {
+		t.Fatalf("prompt=%q", prompt)
+	}
+	if len(surface) != 1 {
+		t.Fatalf("surface=%v", surface)
+	}
+	description, _ := surface[0]["description"].(string)
+	if strings.Count(description, sdk) != 1 ||
+		!strings.Contains(description, "Use returned JSON values in later calls") ||
+		!strings.Contains(description, "Only call Host tools required by the user") {
+		t.Fatalf("description=%q", description)
 	}
 }
 
@@ -347,6 +379,9 @@ func TestPythonSurfaceRejectsOversizedTypedSDKPrompt(t *testing.T) {
 	}
 	if _, _, _, err := buildConditionSurface(runtime, ConditionPython, false); !errors.Is(err, ErrAgenticRun) {
 		t.Fatalf("oversized typed SDK prompt err=%v", err)
+	}
+	if _, _, _, err := buildConditionSurface(runtime, ConditionDirect, false); err != nil {
+		t.Fatalf("direct surface was incorrectly bound by Python SDK size: %v", err)
 	}
 }
 

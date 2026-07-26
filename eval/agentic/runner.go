@@ -389,10 +389,10 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 		}
 	}
 	sdk := compactPythonSDK(runtime)
-	prompt := "Use only the exposed tools and do not fabricate results."
+	prompt := "Use only the exposed tools and do not fabricate results. Do not add exploratory, precondition, or verification calls unless the user requests them or they are required to compute a later argument. Treat successful Host-tool observations as authoritative."
 	if condition == ConditionDirect {
 		if continueWithinTurn {
-			prompt += " Complete each user turn before moving to the next. Continue the same user turn after each tool output until no more tool calls are needed."
+			prompt += " Complete each user turn before moving to the next. Emit all calls whose arguments are already known together in dependency-safe order; the Host executes them in output order. Continue after tool output only when a later call requires returned data."
 		} else {
 			prompt += " Emit the complete tool plan for each user turn in one response. Return every required direct tool call in dependency order; the Host executes returned calls in output order."
 		}
@@ -404,27 +404,28 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 		mapping["run_python"] = "run_python"
 		surface = append(surface, map[string]any{
 			"type": "function", "name": "run_python",
-			"description": "Execute one bounded Python workflow in the CPython/WASI Guest. Import functions from host_tools and assign a JSON object to result. Available SDK: " + sdk,
+			"description": "Execute one bounded Python workflow in the CPython/WASI Guest. Import functions from host_tools; calls run in source order. Use returned JSON values in later calls. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Assign a JSON object to result. Available SDK: " + sdk,
 			"parameters": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"code"},
 				"properties": map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": maxPythonCodeBytes}},
 			},
 			"strict": false,
 		})
-		prompt += " Python workflows import from host_tools and must assign a JSON object to result. Available SDK: " + sdk
+		prompt += " Python workflows import from host_tools and must assign a JSON object to result. Use the Available SDK in the run_python tool description."
 		if condition == ConditionPython {
 			prompt += " Emit exactly one run_python call per user turn. Put every required Host-tool operation, including dependencies, in that single Python workflow; never split the work across multiple run_python calls."
 		}
 	}
 	if condition == ConditionHybrid {
-		prompt += " Choose direct calls for simple independent actions and run_python for dependent or programmatic workflows. Use at most one run_python call per user turn and put the complete Python workflow in that call."
+		prompt += " Choose direct calls when every required argument is known before any tool runs; emit a single call, independent fan-out, or fixed ordered calls directly. Choose run_python when a later argument or control-flow decision depends on a Host-tool result, or the task requires iteration, branching, filtering, aggregation, or transformation inside the workflow. Do not choose run_python merely because there are multiple calls. Use at most one run_python call per user turn and put the complete Python workflow in that call."
 		if continueWithinTurn {
-			prompt += " For direct workflows, complete each user turn before moving to the next and continue after each tool output until no more tool calls are needed."
+			prompt += " For direct workflows, complete each user turn before moving to the next. Emit all calls whose arguments are already known together in dependency-safe order; the Host executes them in output order. Continue after tool output only when a later call requires returned data."
 		} else {
 			prompt += " If using direct calls, return every required call in dependency order in one response; the Host executes returned calls in output order."
 		}
 	}
-	if len(surface) == 0 || len(surface) > maxFunctionCalls || len(prompt) > maxPythonPromptBytes {
+	if len(surface) == 0 || len(surface) > maxFunctionCalls ||
+		(condition != ConditionDirect && len(sdk) > maxPythonPromptBytes) || len(prompt) > maxPythonPromptBytes {
 		return nil, nil, "", ErrAgenticRun
 	}
 	return surface, mapping, prompt, nil

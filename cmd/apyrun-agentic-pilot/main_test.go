@@ -42,6 +42,12 @@ func TestPilotSummaryAggregatesOutcomeAndStrictSeparately(t *testing.T) {
 	}
 }
 
+func TestAbortPilotIncludesProviderOutputLimitViolation(t *testing.T) {
+	if !abortPilot("provider_output_limit_exceeded") {
+		t.Fatal("provider output limit violation did not fail closed")
+	}
+}
+
 func repositoryRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)

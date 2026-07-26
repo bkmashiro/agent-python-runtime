@@ -153,6 +153,35 @@ func TestHybridTwoStageTreatmentSpecIdentityIsRouteInvariant(t *testing.T) {
 	}
 }
 
+func TestHybridTwoStageSafeRepairV2MultiTurnDirectReclaimsRepairBudget(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-safe-repair-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	routerBody := `{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-v2-direct","name":"select_execution_surface","arguments":"{\"surface\":\"direct\",\"reason_code\":\"known_arguments\"}"}]}`
+	responses := []provider.Response{responseFixture(routerBody, 5, 2)}
+	responses = append(responses, adapterForStatefulOracle(t, task, func(name string) string { return name }).responses...)
+	limits := developmentTrialLimits(len(task.Interaction.Turns))
+	limits.MaxProviderCalls += treatment.MaxRouterCallsPerHybridTrial + treatment.MaxPythonRepairsPerTrial
+	limits.MaxPythonRuns += treatment.MaxPythonRepairsPerTrial
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+		context.Background(), &scriptedAdapter{responses: responses}, task, ConditionHybrid, developmentModel, 0, limits, identity, treatment, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Passed || result.Route == nil || result.Route.Route != HybridRouteDirect || result.ProviderCalls != uint32(len(responses)) ||
+		result.Repair != nil || result.PythonAttempts != 0 || result.PythonRuns != 0 || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestHybridTwoStageRouteFailurePreservesTrialResultAndExchange(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-router-v1.json"))

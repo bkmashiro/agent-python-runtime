@@ -329,6 +329,12 @@ func runDevelopmentTrialForModelWithIdentity(
 		} else {
 			switch route.Route {
 			case HybridRouteDirect:
+				if treatment.AllowsPythonRepair() {
+					if executionMaxProviderCalls < treatment.MaxPythonRepairsPerTrial {
+						return TrialResult{}, ErrAgenticRun
+					}
+					executionMaxProviderCalls -= treatment.MaxPythonRepairsPerTrial
+				}
 				executionCondition = ConditionDirect
 				surface = directSurface
 				mapping = directMapping
@@ -784,7 +790,7 @@ func buildConditionSurface(runtime *ToolRuntime, condition Condition, continueWi
 			},
 			"strict": false,
 		})
-		prompt += " Python workflows import from host_tools and must assign a JSON object to result. Use the Available SDK in the run_python tool description."
+		prompt += " Python runs in an isolated WASI Guest: the Host filesystem is not available through open, pathlib, os, subprocess, or shell commands. Import every Host operation from host_tools and use only the Available SDK in the run_python description; use returned JSON values for dependent arguments. Assign a JSON object to result."
 		if condition == ConditionPython {
 			prompt += " Emit exactly one run_python call per user turn. Put every required Host-tool operation, including dependencies, in that single Python workflow; never split the work across multiple run_python calls."
 		}
@@ -870,6 +876,8 @@ func classifyTrialError(err error) string {
 		return "provider_identity_mismatch"
 	case errors.Is(err, ErrUsageMissing):
 		return "usage_missing"
+	case errors.Is(err, ErrProviderOutputLimitExceeded):
+		return "provider_output_limit_exceeded"
 	case errors.Is(err, ErrBudgetExceeded), errors.Is(err, ErrBudgetClosed):
 		return "provider_budget_exceeded"
 	case errors.Is(err, context.DeadlineExceeded):

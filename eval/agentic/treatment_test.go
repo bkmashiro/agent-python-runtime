@@ -17,6 +17,7 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 		{"structured-host-context-v1.json", TreatmentStructuredHostContextV1, true},
 		{"python-safe-repair-v1.json", TreatmentPythonSafeRepairV1, true},
 		{"hybrid-two-stage-router-v1.json", TreatmentHybridTwoStageRouterV1, true},
+		{"hybrid-two-stage-safe-repair-v2.json", TreatmentHybridTwoStageSafeRepairV2, true},
 	} {
 		treatment, err := LoadDevelopmentTreatment(filepath.Join(root, "treatments", test.file))
 		if err != nil || treatment.ID != test.id || treatment.Digest == "" || treatment.Implemented() != test.implemented {

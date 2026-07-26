@@ -18,6 +18,7 @@ import (
 const maxResponseTextBytes = 64 * 1024
 
 var ErrProviderIdentityMismatch = errors.New("provider response identity mismatch")
+var ErrProviderOutputLimitExceeded = errors.New("provider response exceeded requested output token limit")
 
 type ResponseCall struct {
 	CallID        string          `json:"-"`
@@ -125,7 +126,7 @@ func (session *ResponsesSession) Exchange(
 		}
 		session.rawExchanges = append(session.rawExchanges, raw)
 	}
-	usageErr := session.admitResponse(response)
+	usageErr := session.admitResponse(response, perCallOutput)
 	if usageErr != nil {
 		session.closed = true
 		return ParsedResponse{}, usageErr
@@ -174,7 +175,7 @@ func validateResponseIdentity(body json.RawMessage, expectedModel string) error 
 	return nil
 }
 
-func (session *ResponsesSession) admitResponse(response provider.Response) error {
+func (session *ResponsesSession) admitResponse(response provider.Response, requestedMaxOutput uint64) error {
 	if response.Usage == nil {
 		return ErrUsageMissing
 	}
@@ -193,6 +194,9 @@ func (session *ResponsesSession) admitResponse(response provider.Response) error
 		StatusCode: response.StatusCode, RequestDigest: response.RequestDigest,
 		ResponseDigest: response.ResponseDigest, Usage: *cloneUsage(response.Usage),
 	})
+	if requestedMaxOutput == 0 || response.Usage.OutputTokens > requestedMaxOutput {
+		return ErrProviderOutputLimitExceeded
+	}
 	return nil
 }
 

@@ -268,6 +268,41 @@ func TestApplyTreatmentBoundsAddsOneRouterCallOnlyToHybridTrials(t *testing.T) {
 	}
 }
 
+func TestApplyTreatmentBoundsComposesRouterAndOneRepairForV2(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "hybrid-two-stage-safe-repair-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := "bfcl-v4-stateful-local-tools-multi_turn_base_12"
+	for _, test := range []struct {
+		condition    agentic.Condition
+		wantProvider uint32
+		wantPython   uint32
+	}{
+		{agentic.ConditionDirect, 12, 0},
+		{agentic.ConditionPython, 4, 4},
+		{agentic.ConditionHybrid, 14, 4},
+	} {
+		scope, err := selectExecutionScope(plan, dataset, false, taskID, test.condition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scope, err = applyTreatmentBounds(plan, scope, treatment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scope.Bounds.MaxProviderAttempts != test.wantProvider || scope.Bounds.MaxPythonRuns != test.wantPython {
+			t.Fatalf("condition=%s bounds=%+v", test.condition, scope.Bounds)
+		}
+	}
+}
+
 func TestSelectExecutionScopeSupportsOneDiagnosticCondition(t *testing.T) {
 	root := repositoryRoot(t)
 	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")

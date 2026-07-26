@@ -397,7 +397,7 @@ func selectCanaryScope(plan agentic.DevelopmentPilotPlan, dataset *agentic.Datas
 
 func abortPilot(code string) bool {
 	switch code {
-	case "usage_missing", "provider_identity_mismatch", "provider_budget_exceeded", "provider_timeout", "cancelled", "provider_or_protocol_failure", "python_engine_failure", "python_trace_mismatch", "direct_host_call_failed", "invalid_tool_observation":
+	case "usage_missing", "provider_identity_mismatch", "provider_output_limit_exceeded", "provider_budget_exceeded", "provider_timeout", "cancelled", "provider_or_protocol_failure", "python_engine_failure", "python_trace_mismatch", "direct_host_call_failed", "invalid_tool_observation":
 		return true
 	default:
 		return false

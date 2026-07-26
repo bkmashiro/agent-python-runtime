@@ -8,17 +8,19 @@ import (
 var ErrDevelopmentTreatment = errors.New("invalid agentic development treatment")
 
 const (
-	TreatmentBaselineV1              = "baseline-v1"
-	TreatmentStructuredHostContextV1 = "structured-host-context-v1"
-	TreatmentPythonSafeRepairV1      = "python-safe-repair-v1"
-	TreatmentHybridTwoStageRouterV1  = "hybrid-two-stage-router-v1"
+	TreatmentBaselineV1                 = "baseline-v1"
+	TreatmentStructuredHostContextV1    = "structured-host-context-v1"
+	TreatmentPythonSafeRepairV1         = "python-safe-repair-v1"
+	TreatmentHybridTwoStageRouterV1     = "hybrid-two-stage-router-v1"
+	TreatmentHybridTwoStageSafeRepairV2 = "hybrid-two-stage-safe-repair-v2"
 )
 
 const (
-	baselineTreatmentJSON              = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"baseline-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":0}`
-	structuredHostContextTreatmentJSON = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"structured-host-context-v1","host_context_policy":"prior-successful-effects","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":0}`
-	pythonSafeRepairTreatmentJSON      = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"python-safe-repair-v1","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":0}`
-	hybridTwoStageRouterTreatmentJSON  = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-router-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":1}`
+	baselineTreatmentJSON                 = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"baseline-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":0}`
+	structuredHostContextTreatmentJSON    = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"structured-host-context-v1","host_context_policy":"prior-successful-effects","python_repair_policy":"none","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":0}`
+	pythonSafeRepairTreatmentJSON         = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"python-safe-repair-v1","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"combined-surface-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":0}`
+	hybridTwoStageRouterTreatmentJSON     = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-router-v1","host_context_policy":"none","python_repair_policy":"none","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":0,"max_router_calls_per_hybrid_trial":1}`
+	hybridTwoStageSafeRepairTreatmentJSON = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-safe-repair-v2","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":1}`
 )
 
 type DevelopmentTreatment struct {
@@ -74,6 +76,8 @@ func (treatment DevelopmentTreatment) validPolicy() bool {
 		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 0
 	case TreatmentHybridTwoStageRouterV1:
 		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "two-stage-v1" && treatment.MaxPythonRepairsPerTrial == 0 && treatment.MaxRouterCallsPerHybridTrial == 1
+	case TreatmentHybridTwoStageSafeRepairV2:
+		return treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "two-stage-v1" && treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 1
 	default:
 		return false
 	}
@@ -94,6 +98,8 @@ func expectedTreatmentDocument(id string) string {
 		return pythonSafeRepairTreatmentJSON
 	case TreatmentHybridTwoStageRouterV1:
 		return hybridTwoStageRouterTreatmentJSON
+	case TreatmentHybridTwoStageSafeRepairV2:
+		return hybridTwoStageSafeRepairTreatmentJSON
 	default:
 		return ""
 	}
@@ -101,7 +107,7 @@ func expectedTreatmentDocument(id string) string {
 
 func (treatment DevelopmentTreatment) Implemented() bool {
 	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1 ||
-		treatment.ID == TreatmentPythonSafeRepairV1 || treatment.ID == TreatmentHybridTwoStageRouterV1)
+		treatment.ID == TreatmentPythonSafeRepairV1 || treatment.ID == TreatmentHybridTwoStageRouterV1 || treatment.ID == TreatmentHybridTwoStageSafeRepairV2)
 }
 
 func (treatment DevelopmentTreatment) UsesStructuredHostContext() bool {

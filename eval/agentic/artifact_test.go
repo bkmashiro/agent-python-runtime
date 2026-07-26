@@ -102,8 +102,13 @@ func TestProviderUsageOvershootProducesValidAbortArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.ErrorCode != "provider_budget_exceeded" || result.ProviderAttempts != 1 || result.ProviderCalls != 1 || result.Usage.OutputTokens != 4_000 || ValidateTrialResult(result) != nil {
+	if result.ErrorCode != "provider_output_limit_exceeded" || result.ProviderAttempts != 1 || result.ProviderCalls != 1 || result.Usage.OutputTokens != 4_000 || ValidateTrialResult(result) != nil {
 		t.Fatalf("result=%+v", result)
+	}
+	tampered := result
+	tampered.ErrorCode = "provider_budget_exceeded"
+	if ValidateTrialResult(tampered) == nil {
+		t.Fatal("per-exchange output overshoot accepted as aggregate budget exhaustion")
 	}
 }
 

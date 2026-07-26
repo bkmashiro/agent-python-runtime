@@ -173,7 +173,7 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); !errors.Is(err, ErrBudgetExceeded) {
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); !errors.Is(err, ErrProviderOutputLimitExceeded) {
 		t.Fatalf("overflow err=%v", err)
 	}
 	var first, second map[string]any
@@ -185,6 +185,22 @@ func TestResponsesSessionUsesActualUsageAndCheckedRemainingOutput(t *testing.T) 
 	}
 	if session.Usage().OutputTokens != 71 || session.ProviderCalls() != 2 {
 		t.Fatalf("usage=%+v calls=%d", session.Usage(), session.ProviderCalls())
+	}
+}
+
+func TestResponsesSessionClassifiesProviderIgnoringRequestedOutputLimit(t *testing.T) {
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		responseFixture(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"overshoot"}]}]}`, 10, 65),
+	}}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Exchange(context.Background(), []any{}, nil, "auto", false, nil); !errors.Is(err, ErrProviderOutputLimitExceeded) {
+		t.Fatalf("overshoot err=%v", err)
+	}
+	if session.ProviderCalls() != 1 || session.Usage().OutputTokens != 65 || len(session.Evidence()) != 1 || classifyTrialError(ErrProviderOutputLimitExceeded) != "provider_output_limit_exceeded" {
+		t.Fatalf("calls=%d usage=%+v evidence=%+v", session.ProviderCalls(), session.Usage(), session.Evidence())
 	}
 }
 
@@ -247,6 +263,7 @@ func TestResponsesSessionAccountsProviderReportedReasoningUsage(t *testing.T) {
 	limits := testTrialLimits()
 	limits.MaxOutputTokens = 120
 	limits.MaxTotalTokens = 200
+	limits.MaxOutputTokensPerCall = 120
 	session, err := NewResponsesSession(adapter, developmentModel, limits)
 	if err != nil {
 		t.Fatal(err)

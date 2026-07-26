@@ -510,6 +510,64 @@ func TestPythonRepairTreatmentRetriesOneZeroCallFailure(t *testing.T) {
 	}
 }
 
+func TestHybridTwoStageSafeRepairV2RepairsSelectedPythonWithoutHostEffects(t *testing.T) {
+	dataset, err := LoadRoutingDataset(filepath.Join(datasetRoot(t), "..", "routing", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task Task
+	for _, candidate := range dataset.Tasks {
+		if candidate.ID == "rd-003" {
+			task = candidate
+			break
+		}
+	}
+	if task.ID == "" {
+		t.Fatal("missing routing task")
+	}
+	call := func(id, code string) provider.Response {
+		return responseFixture(fmt.Sprintf(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":%q,"name":"run_python","arguments":%q}]}`, id, `{"code":`+fmt.Sprintf("%q", code)+`}`), 10, 3)
+	}
+	adapter := &scriptedAdapter{responses: []provider.Response{
+		responseFixture(`{"status":"completed","output":[{"type":"function_call","status":"completed","call_id":"route-v2","name":"select_execution_surface","arguments":"{\"surface\":\"python\",\"reason_code\":\"transformation\"}"}]}`, 10, 3),
+		call("v2-first", "private broken code"),
+		call("v2-repair", "private repaired code"),
+	}}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-safe-repair-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	var workflow *repairOracleWorkflow
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+		context.Background(), adapter, task, ConditionHybrid, developmentModel, 0,
+		TrialLimits{MaxProviderCalls: 3, MaxToolCalls: 16, MaxPythonRuns: 2, MaxInputTokens: 10_000, MaxOutputTokens: 2_000, MaxTotalTokens: 12_000, MaxOutputTokensPerCall: 512},
+		identity, treatment, func(tools *ToolRuntime) (PythonWorkflow, error) {
+			var oracle StatefulOracle
+			if decodeStrict(task.Oracle, &oracle) != nil {
+				return nil, ErrDataset
+			}
+			workflow = &repairOracleWorkflow{oracle: &oracleWorkflow{tools: tools, oracle: oracle}}
+			return workflow, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Passed || result.Route == nil || result.Route.Route != HybridRoutePython || result.ProviderCalls != 3 || result.PythonRuns != 2 ||
+		result.Repair == nil || !result.Repair.Offered || !result.Repair.Attempted || !result.Repair.Succeeded || workflow.calls != 2 || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v workflow=%+v", result, workflow)
+	}
+	if !strings.Contains(string(adapter.requests[1].Payload), "Host filesystem is not available through open") ||
+		!strings.Contains(string(adapter.requests[2].Payload), "exactly one corrected run_python") {
+		t.Fatalf("execution=%s repair=%s", adapter.requests[1].Payload, adapter.requests[2].Payload)
+	}
+}
+
 type engineFailureWorkflow struct{}
 
 func (*engineFailureWorkflow) Execute(context.Context, string, string, uint32) (PythonRunResult, error) {

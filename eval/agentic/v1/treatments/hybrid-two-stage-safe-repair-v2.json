@@ -1,0 +1,1 @@
+{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-safe-repair-v2","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":1}

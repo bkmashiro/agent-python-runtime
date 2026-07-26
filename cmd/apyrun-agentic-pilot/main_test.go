@@ -57,6 +57,23 @@ func repositoryRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
+func TestPilotAllowsImplementedTreatmentForFixedCanaryScope(t *testing.T) {
+	root := repositoryRoot(t)
+	dataset := filepath.Join(root, "eval", "agentic", "v1")
+	planPath := filepath.Join(dataset, "development-pilot-plan.json")
+	stop := errors.New("reached executable gate")
+	args := []string{
+		"--canary", "--dataset", dataset, "--plan", planPath,
+		"--treatment", filepath.Join(dataset, "treatments", "hybrid-two-stage-safe-repair-v2.json"),
+		"--activation", "unused", "--guest", "unused", "--out", filepath.Join(t.TempDir(), "out"),
+		"--repository-commit", strings.Repeat("a", 40),
+	}
+	err := run(context.Background(), args, dependencies{executablePath: func() (string, error) { return "", stop }})
+	if !errors.Is(err, stop) {
+		t.Fatalf("fixed canary treatment did not reach executable gate: %v", err)
+	}
+}
+
 func TestPilotRejectsBaselineTreatmentOverrideBeforeExecution(t *testing.T) {
 	root := repositoryRoot(t)
 	dataset := filepath.Join(root, "eval", "agentic", "v1")
@@ -202,6 +219,30 @@ func TestSelectExecutionScopeUsesOneAuthorizedDiagnosticTask(t *testing.T) {
 	}
 	if _, err := selectExecutionScope(plan, dataset, false, "missing-task", ""); !errors.Is(err, agentic.ErrPilotPlan) {
 		t.Fatalf("unknown diagnostic task err=%v", err)
+	}
+}
+
+func TestApplyTreatmentBoundsCoversFixedRepresentativeCanary(t *testing.T) {
+	root := repositoryRoot(t)
+	datasetRoot := filepath.Join(root, "eval", "agentic", "v1")
+	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(filepath.Join(datasetRoot, "development-pilot-plan.json"), datasetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "hybrid-two-stage-safe-repair-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := selectExecutionScope(plan, dataset, true, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err = applyTreatmentBounds(plan, scope, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope.Bounds.TrialCount != 6 || scope.Bounds.MaxProviderAttempts != 36 || scope.Bounds.MaxInputTokens != 720_000 || scope.Bounds.MaxOutputTokens != 294_912 || scope.Bounds.MaxTotalTokens != 1_014_912 || scope.Bounds.MaxToolCalls != 192 || scope.Bounds.MaxPythonRuns != 12 {
+		t.Fatalf("bounds=%+v", scope.Bounds)
 	}
 }
 

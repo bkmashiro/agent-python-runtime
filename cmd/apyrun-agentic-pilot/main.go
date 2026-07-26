@@ -112,7 +112,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	}
 	treatment := agentic.BaselineTreatment()
 	if *treatmentPath != "" {
-		if *diagnosticTask == "" || *canary {
+		if *diagnosticTask == "" && !*canary {
 			return agentic.ErrDevelopmentTreatment
 		}
 		treatment, err = agentic.LoadDevelopmentTreatment(*treatmentPath)

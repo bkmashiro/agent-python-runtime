@@ -151,6 +151,7 @@ func TestParseResponsesOutputRejectsUnknownDuplicateAndLeakyMarshal(t *testing.T
 		`{"output":[{"type":"function_call","status":"completed","call_id":"c1","name":"pwd","arguments":"{\"x\":1,\"x\":2}"}]}`,
 		`{"output":[{"type":"function_call","status":"in_progress","call_id":"c1","name":"pwd","arguments":"{}"}]}`,
 		`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text"}]}]}`,
+		`{"output":[{"type":"message","role":"assistant","content":[{"type":"refusal"}]}]}`,
 	}
 	for _, body := range invalid {
 		if _, err := ParseResponsesOutput(json.RawMessage(body), map[string]string{"pwd": "pwd"}); err == nil {

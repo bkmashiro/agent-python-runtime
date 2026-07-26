@@ -222,6 +222,14 @@ func TestParseResponsesAllowsMissingItemStatusOnlyWhenEnvelopeCompleted(t *testi
 	}
 }
 
+func TestParseResponsesNormalizesNullFunctionArgumentsToEmptyObject(t *testing.T) {
+	body := json.RawMessage(`{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"ls","arguments":"null"}]}`)
+	parsed, err := ParseResponsesOutput(body, map[string]string{"ls": "ls"})
+	if err != nil || len(parsed.Calls) != 1 || string(parsed.Calls[0].Arguments) != "{}" {
+		t.Fatalf("parsed=%+v err=%v", parsed, err)
+	}
+}
+
 func TestParseResponsesOutputRejectsUnknownDuplicateAndLeakyMarshal(t *testing.T) {
 	invalid := []string{
 		`{"status":"completed","output":[],"output":[]}`,

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -303,6 +304,9 @@ func parseFunctionCall(header map[string]json.RawMessage, mapping map[string]str
 	canonical, exists := mapping[name]
 	if !exists || canonical == "" || rejectDuplicateJSON([]byte(arguments)) != nil {
 		return ResponseCall{}, nil, ErrAgenticRun
+	}
+	if strings.TrimSpace(arguments) == "null" {
+		arguments = "{}"
 	}
 	var object map[string]any
 	if decodeUseNumber([]byte(arguments), &object) != nil || object == nil {

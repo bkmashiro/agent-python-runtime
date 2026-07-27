@@ -42,3 +42,21 @@ func TestCOWReadySingleUseProductionArtifact(t *testing.T) {
 		}
 	}
 }
+
+func TestCOWReadySingleUseProductionArtifactSupportsWASITimerWait(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 30 * time.Second
+	instance := newEngineWithFactory(t, config, wazeroengine.Factory{
+		PreparedCapacity: 2,
+		Strategy:         enginecontract.StrategyCOWReadySingleUse,
+	})
+	started := time.Now()
+	response := run(t, instance, "cow-ready-timer", "import time\ntime.sleep(inputs['wait_seconds'])\nresult = 'awake'", map[string]any{"wait_seconds": 0.05})
+	elapsed := time.Since(started)
+	if response.Status != "ok" || response.Result != "awake" {
+		t.Fatalf("WASI timer response=%#v", response)
+	}
+	if elapsed+time.Millisecond < 50*time.Millisecond {
+		t.Fatalf("WASI timer returned early: elapsed=%s", elapsed)
+	}
+}

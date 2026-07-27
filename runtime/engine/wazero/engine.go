@@ -307,6 +307,13 @@ func mergeHostEvidence(
 	if envelope == nil {
 		return nil, errors.New("guest response is not an object")
 	}
+	for key := range envelope {
+		switch key {
+		case "status", "result", "receipts", "metrics", "error":
+		default:
+			return nil, fmt.Errorf("guest response contains non-canonical field %q", key)
+		}
+	}
 	if receipts == nil {
 		receipts = []receipt.Receipt{}
 	}
@@ -318,6 +325,13 @@ func mergeHostEvidence(
 	var metrics map[string]json.RawMessage
 	if raw, ok := envelope["metrics"]; !ok || json.Unmarshal(raw, &metrics) != nil || metrics == nil {
 		return nil, errors.New("guest response metrics are invalid")
+	}
+	for key := range metrics {
+		switch key {
+		case "guest_time_ms", "capability_calls", "result_bytes":
+		default:
+			return nil, fmt.Errorf("guest response metrics contain non-canonical field %q", key)
+		}
 	}
 	encodedCalls, err := json.Marshal(capabilityCalls)
 	if err != nil {

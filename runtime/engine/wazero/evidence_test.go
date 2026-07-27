@@ -37,6 +37,28 @@ func TestMergeHostEvidenceOverwritesGuestClaims(t *testing.T) {
 	}
 }
 
+func TestMergeHostEvidenceRejectsNonCanonicalEvidenceAliases(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		payload string
+	}{
+		{
+			name:    "top-level case-fold alias",
+			payload: `{"status":"ok","result":{},"receipts":[],"receiptſ":[{"guest":"forged"}],"metrics":{"capability_calls":0},"error":null}`,
+		},
+		{
+			name:    "nested case-fold alias",
+			payload: `{"status":"ok","result":{},"receipts":[],"metrics":{"capability_calls":0,"capability_callſ":999},"error":null}`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := mergeHostEvidence([]byte(test.payload), nil, 1, 1024*1024); err == nil {
+				t.Fatal("non-canonical Host-evidence alias was accepted")
+			}
+		})
+	}
+}
+
 func TestMergeHostEvidenceFailsClosedOnMalformedOrOversizedResponse(t *testing.T) {
 	if _, err := mergeHostEvidence([]byte(`{"metrics":null}`), nil, 0, 1024); err == nil {
 		t.Fatal("expected malformed metrics rejection")

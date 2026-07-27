@@ -17,6 +17,7 @@ type preparedReadinessEvidence struct {
 	InstantiateGuestNS       int64  `json:"instantiate_guest_ns"`
 	InitializeNS             int64  `json:"_initialize_ns"`
 	RuntimeInitNS            int64  `json:"runtime_init_ns"`
+	AttachHostCallsNS        int64  `json:"attach_host_calls_ns,omitempty"`
 	ReadyInstances           int    `json:"ready_instances"`
 	RetainedGuestMemoryBytes uint64 `json:"retained_guest_memory_bytes"`
 }
@@ -35,6 +36,7 @@ type preparedSampleEvidence struct {
 	RefillInstantiateGuestNS int64  `json:"refill_instantiate_guest_ns"`
 	RefillInitializeNS       int64  `json:"refill__initialize_ns"`
 	RefillRuntimeInitNS      int64  `json:"refill_runtime_init_ns"`
+	RefillAttachHostCallsNS  int64  `json:"refill_attach_host_calls_ns,omitempty"`
 	RefillReadyAfterRunNS    int64  `json:"refill_ready_after_run_ns"`
 	RequestBytes             int    `json:"request_bytes"`
 	ResultBytes              int    `json:"result_bytes"`

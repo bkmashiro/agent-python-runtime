@@ -64,6 +64,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	if runtime == nil || runtime.image == nil {
 		return nil, errors.New("COW prepared runtime is unavailable")
 	}
+	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
 	guestStderr := &bytes.Buffer{}
 	allocator := runtime.image.newAllocator()
 	instantiateStarted := time.Now()
@@ -109,6 +110,12 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 		return nil, err
 	}
 	observe(engine.observer, prefix+"attach_globals", attachStarted, nil)
+	hostAttachStarted := time.Now()
+	if err := verifyNoInitializationHostCalls(hostCallGuard); err != nil {
+		observe(engine.observer, prefix+"attach_host_calls", hostAttachStarted, err)
+		return nil, err
+	}
+	observe(engine.observer, prefix+"attach_host_calls", hostAttachStarted, nil)
 	if runtime.verifyDigest != nil {
 		verifyStarted := time.Now()
 		view, ok := memory.Read(0, memory.Size())

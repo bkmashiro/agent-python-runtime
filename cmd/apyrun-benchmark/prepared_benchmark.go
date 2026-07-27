@@ -153,7 +153,7 @@ result = {"prepared": prepared, "sum": sum(__import__("json").loads(item["body"]
 }
 
 func preparedStartupEvidence(observations []wazeroengine.Observation, total time.Duration, runner preparedBenchmarkRunner) (compileEvidence, preparedReadinessEvidence, error) {
-	want := []string{"instantiate_host", "compile", "pool_prepare_instantiate_guest", "pool_prepare__initialize", "pool_prepare_runtime_init"}
+	want := []string{"instantiate_host", "compile", "pool_prepare_instantiate_guest", "pool_prepare__initialize", "pool_prepare_runtime_init", "pool_prepare_attach_host_calls"}
 	if len(observations) != len(want) {
 		return compileEvidence{}, preparedReadinessEvidence{}, fmt.Errorf("unexpected prepared startup observations: %#v", observations)
 	}
@@ -169,7 +169,7 @@ func preparedStartupEvidence(observations []wazeroengine.Observation, total time
 	}
 	return compileEvidence{InstantiateHostNS: durations["instantiate_host"], CompileNS: durations["compile"]}, preparedReadinessEvidence{
 		FactoryNewTotalNS: total.Nanoseconds(), InstantiateGuestNS: durations["pool_prepare_instantiate_guest"],
-		InitializeNS: durations["pool_prepare__initialize"], RuntimeInitNS: durations["pool_prepare_runtime_init"],
+		InitializeNS: durations["pool_prepare__initialize"], RuntimeInitNS: durations["pool_prepare_runtime_init"], AttachHostCallsNS: durations["pool_prepare_attach_host_calls"],
 		ReadyInstances: runner.PreparedReady(), RetainedGuestMemoryBytes: runner.PreparedRetainedGuestMemoryBytes(),
 	}, nil
 }
@@ -205,6 +205,7 @@ func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleColle
 	want := map[string]bool{
 		"pool_hit": false, "prepare": false, "execute": false,
 		"pool_prepare_instantiate_guest": false, "pool_prepare__initialize": false, "pool_prepare_runtime_init": false,
+		"pool_prepare_attach_host_calls": false,
 	}
 	durations := map[string]int64{}
 	observations := lifecycle.drain()
@@ -235,7 +236,8 @@ func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleColle
 		PoolHitNS: durations["pool_hit"], PrepareNS: durations["prepare"], ExecuteNS: durations["execute"], CapabilityNS: capabilityNS,
 		RunTotalNS: runTotal.Nanoseconds(), RefillInstantiateGuestNS: durations["pool_prepare_instantiate_guest"],
 		RefillInitializeNS: durations["pool_prepare__initialize"], RefillRuntimeInitNS: durations["pool_prepare_runtime_init"],
-		RefillReadyAfterRunNS: refillWait.Nanoseconds(), RequestBytes: len(request), ResultBytes: len(response),
+		RefillAttachHostCallsNS: durations["pool_prepare_attach_host_calls"],
+		RefillReadyAfterRunNS:   refillWait.Nanoseconds(), RequestBytes: len(request), ResultBytes: len(response),
 		RetainedGuestMemoryBytes: runner.PreparedRetainedGuestMemoryBytes(),
 	}, nil
 }

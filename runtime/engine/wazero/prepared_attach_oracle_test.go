@@ -38,6 +38,16 @@ func TestPreparedAttachMutableGlobalOracleDetectsDrift(t *testing.T) {
 	}
 }
 
+func TestPreparedAttachRejectsInitializationHostCalls(t *testing.T) {
+	ctx, guard := guardInitializationHostCalls(context.Background())
+	if result := hostCall(ctx, nil, 1, 1, 1, 1); result != -1 {
+		t.Fatalf("initialization Host call returned %d", result)
+	}
+	if err := verifyNoInitializationHostCalls(guard); err == nil {
+		t.Fatal("initialization Host call was not rejected")
+	}
+}
+
 func TestPreparedAttachMutableGlobalOracleRejectsMissingOrImmutable(t *testing.T) {
 	wasm := wabinbinary.EncodeModule(&wabinwasm.Module{
 		GlobalSection: []*wabinwasm.Global{{

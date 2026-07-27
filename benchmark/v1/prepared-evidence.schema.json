@@ -42,6 +42,7 @@
         "instantiate_guest_ns": {"type": "integer", "minimum": 1},
         "_initialize_ns": {"type": "integer", "minimum": 1},
         "runtime_init_ns": {"type": "integer", "minimum": 1},
+        "attach_host_calls_ns": {"type": "integer", "minimum": 1},
         "ready_instances": {"const": 1},
         "retained_guest_memory_bytes": {"type": "integer", "minimum": 1}
       }
@@ -133,6 +134,7 @@
         "refill_instantiate_guest_ns": {"type": "integer", "minimum": 1},
         "refill__initialize_ns": {"type": "integer", "minimum": 1},
         "refill_runtime_init_ns": {"type": "integer", "minimum": 1},
+        "refill_attach_host_calls_ns": {"type": "integer", "minimum": 1},
         "refill_ready_after_run_ns": {"type": "integer", "minimum": 0},
         "request_bytes": {"type": "integer", "minimum": 1},
         "result_bytes": {"type": "integer", "minimum": 1},

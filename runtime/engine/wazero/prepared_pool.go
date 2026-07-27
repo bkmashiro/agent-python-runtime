@@ -223,6 +223,7 @@ func (engine *Engine) prepareSingleUseInstance(parent context.Context) (*prepare
 }
 
 func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (*preparedInstance, error) {
+	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
 	guestStderr := &bytes.Buffer{}
 	instantiateStarted := time.Now()
 	module, err := engine.runtime.InstantiateModule(
@@ -252,6 +253,12 @@ func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (
 	observe(engine.observer, prefix+"runtime_init", runtimeInitStarted, err)
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
+	}
+	attachStarted := time.Now()
+	err = verifyNoInitializationHostCalls(hostCallGuard)
+	observe(engine.observer, prefix+"attach_host_calls", attachStarted, err)
+	if err != nil {
+		return nil, err
 	}
 	guestStderr.Reset()
 	failed = false

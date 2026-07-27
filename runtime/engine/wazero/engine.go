@@ -365,6 +365,9 @@ func hostCall(
 		responseCapacity == 0 || responseCapacity > hostCallPayloadMax {
 		return -1
 	}
+	if recordInitializationHostCall(ctx) {
+		return -1
+	}
 	broker, ok := ctx.Value(brokerContextKey{}).(*capability.Broker)
 	if !ok || broker == nil {
 		return -1

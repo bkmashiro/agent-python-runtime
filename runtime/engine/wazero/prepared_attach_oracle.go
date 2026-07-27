@@ -1,13 +1,45 @@
 package wazero
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/tetratelabs/wazero/api"
 )
 
 type preparedGlobalSnapshot map[string]uint64
+
+type initializationHostCallGuardKey struct{}
+
+type initializationHostCallGuard struct {
+	count atomic.Uint32
+}
+
+func guardInitializationHostCalls(ctx context.Context) (context.Context, *initializationHostCallGuard) {
+	guard := &initializationHostCallGuard{}
+	return context.WithValue(ctx, initializationHostCallGuardKey{}, guard), guard
+}
+
+func recordInitializationHostCall(ctx context.Context) bool {
+	guard, ok := ctx.Value(initializationHostCallGuardKey{}).(*initializationHostCallGuard)
+	if !ok || guard == nil {
+		return false
+	}
+	guard.count.Add(1)
+	return true
+}
+
+func verifyNoInitializationHostCalls(guard *initializationHostCallGuard) error {
+	if guard == nil {
+		return errors.New("prepared attach Host-call guard is missing")
+	}
+	if count := guard.count.Load(); count != 0 {
+		return fmt.Errorf("prepared initialization attempted %d Host capability calls", count)
+	}
+	return nil
+}
 
 func snapshotPreparedMutableGlobals(module api.Module, names []string) (preparedGlobalSnapshot, error) {
 	if module == nil {

@@ -49,6 +49,18 @@ func TestDensitySweepSpecsAcceptSharedCacheOnlyAsExplicitStrategy(t *testing.T) 
 	}
 }
 
+func TestDensitySweepSpecsAcceptCOWReadySingleUse(t *testing.T) {
+	specs, err := densitySweepSpecs("cow-ready-single-use", 1, 512*1024*1024, 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range specs {
+		if spec.Strategy != "cow-ready-single-use" {
+			t.Fatalf("COW strategy drifted: %#v", spec)
+		}
+	}
+}
+
 func TestDensitySweepSpecsRejectMissingBoundsAndUnknownStrategy(t *testing.T) {
 	for name, invoke := range map[string]func() error{
 		"unknown strategy": func() error {
@@ -84,6 +96,11 @@ func TestValidateLifecycleDensityCLIOptionsSeparatesParentAndChild(t *testing.T)
 	}
 	if err := validateLifecycleDensityOptions(parent, false, "linux"); err != nil {
 		t.Fatal(err)
+	}
+	cow := parent
+	cow.Strategy = "cow-ready-single-use"
+	if err := validateLifecycleDensityOptions(cow, false, "linux"); err != nil {
+		t.Fatalf("production-safe COW density rejected: %v", err)
 	}
 	spike := parent
 	spike.Class = "preinitialization-spike"
@@ -298,6 +315,41 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 	}
 }
 
+func TestAssembleCOWLifecycleDensityRequiresMappingAttribution(t *testing.T) {
+	artifactBytes := []byte("fixture-wasm")
+	digest := sha256.Sum256(artifactBytes)
+	artifact := artifactIdentity{
+		Filename: "guest.wasm", SHA256: hex.EncodeToString(digest[:]), Size: int64(len(artifactBytes)),
+		SourceCommit: strings.Repeat("a", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", Execution: "reactor",
+	}
+	specs, err := densitySweepSpecs("cow-ready-single-use", 1, 4*1024*1024*1024, 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, encoded, err := assembleLifecycleDensityEvidence(
+		context.Background(), artifact, artifactBytes,
+		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "production-safe", specs,
+		[]byte("01234567890123456789012345678901"),
+		func(_ context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
+			return densityChildInvocation{
+				Envelope: validDensityChildEnvelope(spec, artifact),
+				Process:  boundedChildResult{PID: 100 + int(spec.SampleIndex), StartedAtUnixNS: int64(spec.SampleIndex + 1), MaxObservedRSSBytes: 1},
+			}, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimeevidence.ValidateLifecycleDensityJSON(encoded); err != nil {
+		t.Fatal(err)
+	}
+
+	evidence.Samples[0].COWMappings = nil
+	if err := evidence.Validate(); err == nil || !strings.Contains(err.Error(), "mapping") {
+		t.Fatalf("missing COW mapping attribution was accepted: %v", err)
+	}
+}
+
 func TestAssembleLifecycleDensityEvidenceRejectsEnvironmentDrift(t *testing.T) {
 	artifactBytes := []byte("fixture-wasm")
 	digest := sha256.Sum256(artifactBytes)
@@ -352,7 +404,7 @@ func TestPreparedDensityPhasesRequireEveryReadySlot(t *testing.T) {
 			wazeroengine.Observation{Phase: "pool_prepare_runtime_init", Duration: 7 * time.Nanosecond, Success: true},
 		)
 	}
-	phases, err := preparedDensityPhases([]preparedDensityShardResult{{capacity: 2, observations: observations}}, 20*time.Nanosecond)
+	phases, err := preparedDensityPhases([]preparedDensityShardResult{{capacity: 2, observations: observations}}, 20*time.Nanosecond, "single-use-preinitialized")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,8 +413,38 @@ func TestPreparedDensityPhasesRequireEveryReadySlot(t *testing.T) {
 		t.Fatalf("prepared phase aggregation drifted: %#v", phases)
 	}
 	missing := observations[:len(observations)-1]
-	if _, err := preparedDensityPhases([]preparedDensityShardResult{{capacity: 2, observations: missing}}, 20*time.Nanosecond); err == nil {
+	if _, err := preparedDensityPhases([]preparedDensityShardResult{{capacity: 2, observations: missing}}, 20*time.Nanosecond, "single-use-preinitialized"); err == nil {
 		t.Fatal("incomplete prepared observations accepted")
+	}
+}
+
+func TestCOWDensityPhasesBindCanonicalImageAndEveryRestore(t *testing.T) {
+	observations := []wazeroengine.Observation{
+		{Phase: "instantiate_host", Duration: time.Nanosecond, Success: true},
+		{Phase: "compile", Duration: 2 * time.Nanosecond, Success: true},
+		{Phase: "cow_image_instantiate_guest", Duration: 3 * time.Nanosecond, Success: true},
+		{Phase: "cow_image__initialize", Duration: 5 * time.Nanosecond, Success: true},
+		{Phase: "cow_image_runtime_init", Duration: 7 * time.Nanosecond, Success: true},
+	}
+	for range 2 {
+		observations = append(observations,
+			wazeroengine.Observation{Phase: "pool_prepare_instantiate_guest", Duration: 11 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare__initialize", Duration: 13 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_cow_restore", Duration: 17 * time.Nanosecond, Success: true},
+		)
+	}
+	phases, err := preparedDensityPhases(
+		[]preparedDensityShardResult{{capacity: 2, observations: observations}},
+		60*time.Nanosecond,
+		"cow-ready-single-use",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if phases.CompileNS == nil || *phases.CompileNS.Value != 2 || *phases.InstantiateNS.Value != 25 ||
+		*phases.InitializeNS.Value != 31 || *phases.RuntimeInitNS.Value != 7 ||
+		*phases.PrepareNS.Value != 34 || *phases.TotalNS.Value != 60 {
+		t.Fatalf("COW phase aggregation drifted: %#v", phases)
 	}
 }
 
@@ -536,7 +618,7 @@ func validDensityChildEnvelope(spec densitySweepSpec, artifact artifactIdentity)
 		return runtimeevidence.Metric{Status: runtimeevidence.MetricUnsupported, ReasonCode: reason}
 	}
 	cgroupMetric := unsupported(runtimeevidence.ReasonNotApplicable)
-	return densityChildEnvelope{
+	envelope := densityChildEnvelope{
 		ProtocolVersion: 1,
 		ArtifactSHA256:  artifact.SHA256,
 		ArtifactProfile: artifact.ArtifactProfile,
@@ -568,6 +650,17 @@ func validDensityChildEnvelope(spec densitySweepSpec, artifact artifactIdentity)
 			},
 		},
 	}
+	if spec.Strategy == "cow-ready-single-use" {
+		envelope.Sample.Phases.PrepareNS = measured(1)
+		envelope.Sample.COWMappings = &runtimeevidence.MappingMetrics{
+			Name: "memfd:apyrun-cow-image", MappingCount: spec.RequestedSlots,
+			VirtualBytes: measured(1), RSSBytes: measured(1), PSSBytes: measured(1),
+			SharedCleanBytes: measured(1), SharedDirtyBytes: measured(0),
+			PrivateCleanBytes: measured(0), PrivateDirtyBytes: measured(0),
+			ReferencedBytes: measured(1), AnonymousBytes: measured(0),
+		}
+	}
+	return envelope
 }
 
 func ptrForTest[T any](value T) *T { return &value }

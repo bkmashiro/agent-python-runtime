@@ -30,11 +30,12 @@ func validateLifecycleDensityOptions(options benchmarkOptions, child bool, goos 
 	if options.Kind != "lifecycle-density" || options.ArtifactPath == "" || options.ManifestPath == "" {
 		return errors.New("lifecycle-density kind, artifact, and manifest are required")
 	}
-	validProduction := options.Class == "production-safe" && options.Strategy == "single-use-preinitialized"
+	validProduction := options.Class == "production-safe" &&
+		(options.Strategy == "single-use-preinitialized" || options.Strategy == "cow-ready-single-use")
 	validSpike := options.Class == "preinitialization-spike" &&
 		(options.Strategy == "single-use-preinitialized" || options.Strategy == "single-use-preinitialized-shared-cache")
 	if !validProduction && !validSpike {
-		return errors.New("lifecycle-density benchmark requires production-safe single-use-preinitialized or an explicit preinitialization-spike strategy")
+		return errors.New("lifecycle-density benchmark requires production-safe single-use-preinitialized/cow-ready-single-use or an explicit preinitialization-spike strategy")
 	}
 	if options.MaxRSSBytes == 0 || options.MaxRSSBytes > 1<<50 || options.ChildTimeout <= 0 || options.ChildTimeout > 24*time.Hour {
 		return errors.New("lifecycle-density RSS guard or child timeout is missing or outside its hard bound")
@@ -205,6 +206,13 @@ func assembleLifecycleDensityEvidence(
 	if benchmarkClass == "preinitialization-spike" {
 		evidence.Limitations = append(evidence.Limitations,
 			"Preinitialization-spike lifecycle density is exploratory and does not approve the transformed artifact for default, release, deployment, or production-safe status.",
+		)
+	}
+	if specs[0].Strategy == "cow-ready-single-use" {
+		evidence.Limitations = append(evidence.Limitations,
+			"COW mapping metrics aggregate only memfd:apyrun-cow-image VMAs; process metrics include compiled code, Go, WASI, Host state, page tables, and other mappings.",
+			"Prepared retained guest bytes are logical linear-memory bytes and must not be interpreted as physical RSS, PSS, or private dirty bytes.",
+			"Ready slots are never served in this idle-ready sweep; execution-time private dirty growth is outside this evidence.",
 		)
 	}
 	if err := evidence.Validate(); err != nil {

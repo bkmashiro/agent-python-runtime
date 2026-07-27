@@ -8,6 +8,61 @@ import (
 	"testing"
 )
 
+func TestLinuxCollectorAggregatesNamedCOWMappings(t *testing.T) {
+	root := t.TempDir()
+	procRoot := filepath.Join(root, "proc")
+	writeFixture(t, filepath.Join(procRoot, "self/smaps"), `
+1000-3000 rw-p 00000000 00:01 1 /memfd:apyrun-cow-image (deleted)
+Size:                  8 kB
+Rss:                   7 kB
+Pss:                   4 kB
+Shared_Clean:          3 kB
+Shared_Dirty:          1 kB
+Private_Clean:         1 kB
+Private_Dirty:         2 kB
+Referenced:            6 kB
+Anonymous:             2 kB
+4000-5000 rw-p 00000000 00:01 2 /other
+Size:                  4 kB
+Rss:                   4 kB
+Pss:                   4 kB
+Private_Dirty:         4 kB
+6000-9000 rw-p 00000000 00:01 1 /memfd:apyrun-cow-image (deleted)
+Size:                 12 kB
+Rss:                  10 kB
+Pss:                   6 kB
+Shared_Clean:          5 kB
+Shared_Dirty:          1 kB
+Private_Clean:         2 kB
+Private_Dirty:         2 kB
+Referenced:            9 kB
+Anonymous:             2 kB
+`)
+	metrics, err := (LinuxCollector{ProcRoot: procRoot}).CollectNamedMappings("memfd:apyrun-cow-image")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.Name != "memfd:apyrun-cow-image" || metrics.MappingCount != 2 {
+		t.Fatalf("mapping identity drifted: %#v", metrics)
+	}
+	for metric, want := range map[string]struct {
+		got  Metric
+		want uint64
+	}{
+		"virtual":       {metrics.VirtualBytes, 20 * 1024},
+		"rss":           {metrics.RSSBytes, 17 * 1024},
+		"pss":           {metrics.PSSBytes, 10 * 1024},
+		"shared-clean":  {metrics.SharedCleanBytes, 8 * 1024},
+		"shared-dirty":  {metrics.SharedDirtyBytes, 2 * 1024},
+		"private-clean": {metrics.PrivateCleanBytes, 3 * 1024},
+		"private-dirty": {metrics.PrivateDirtyBytes, 4 * 1024},
+		"referenced":    {metrics.ReferencedBytes, 15 * 1024},
+		"anonymous":     {metrics.AnonymousBytes, 4 * 1024},
+	} {
+		t.Run(metric, func(t *testing.T) { assertMeasured(t, want.got, want.want) })
+	}
+}
+
 func TestLinuxCollectorDoesNotInferIsolationFromSingleLeafPID(t *testing.T) {
 	root := t.TempDir()
 	procRoot := filepath.Join(root, "proc")

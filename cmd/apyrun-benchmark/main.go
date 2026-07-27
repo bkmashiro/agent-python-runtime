@@ -93,7 +93,7 @@ func runMain(args []string) error {
 	flags.StringVar(&options.ManifestPath, "manifest", "", "matching artifact manifest")
 	flags.StringVar(&options.OutputPath, "output", "", "JSON evidence output")
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
-	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, or experimental single-use-preinitialized-shared-cache")
+	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
 	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, or reactor-census")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")

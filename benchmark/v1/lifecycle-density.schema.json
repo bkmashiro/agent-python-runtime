@@ -118,6 +118,16 @@
             "active": {"const": "single-use-preinitialized-shared-cache"},
             "fallback": {"const": false}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested", "active", "fallback"],
+          "properties": {
+            "requested": {"const": "cow-ready-single-use"},
+            "active": {"const": "cow-ready-single-use"},
+            "fallback": {"const": false}
+          }
         }
       ]
     },
@@ -328,6 +338,24 @@
         "vma_count": {"$ref": "#/$defs/rawMetric"}
       }
     },
+    "mappingMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "mapping_count", "virtual_bytes", "rss_bytes", "pss_bytes", "shared_clean_bytes", "shared_dirty_bytes", "private_clean_bytes", "private_dirty_bytes", "referenced_bytes", "anonymous_bytes"],
+      "properties": {
+        "name": {"const": "memfd:apyrun-cow-image"},
+        "mapping_count": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "virtual_bytes": {"$ref": "#/$defs/rawMetric"},
+        "rss_bytes": {"$ref": "#/$defs/rawMetric"},
+        "pss_bytes": {"$ref": "#/$defs/rawMetric"},
+        "shared_clean_bytes": {"$ref": "#/$defs/rawMetric"},
+        "shared_dirty_bytes": {"$ref": "#/$defs/rawMetric"},
+        "private_clean_bytes": {"$ref": "#/$defs/rawMetric"},
+        "private_dirty_bytes": {"$ref": "#/$defs/rawMetric"},
+        "referenced_bytes": {"$ref": "#/$defs/rawMetric"},
+        "anonymous_bytes": {"$ref": "#/$defs/rawMetric"}
+      }
+    },
     "cgroup": {
       "type": "object",
       "additionalProperties": false,
@@ -415,6 +443,7 @@
         "phases": {"$ref": "#/$defs/phases"},
         "go_runtime": {"$ref": "#/$defs/goRuntime"},
         "process": {"$ref": "#/$defs/process"},
+        "cow_mappings": {"$ref": "#/$defs/mappingMetrics"},
         "cgroup": {"$ref": "#/$defs/cgroup"}
       },
       "allOf": [

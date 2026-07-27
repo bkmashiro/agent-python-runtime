@@ -16,6 +16,8 @@ import (
 )
 
 const linuxMetricFileMaxBytes = 4 * 1024 * 1024
+const linuxSMAPSFileMaxBytes = 64 * 1024 * 1024
+const linuxSMAPSMaxMappings = 100_000
 
 type LinuxMetricSnapshot struct {
 	Environment EnvironmentIdentity
@@ -150,6 +152,112 @@ func (collector LinuxCollector) collectSMAPSRollup() (Metric, Metric, Metric) {
 		return collectionErrorMetric(), collectionErrorMetric(), collectionErrorMetric()
 	}
 	return measuredMetric(pss), measuredMetric(clean), measuredMetric(dirty)
+}
+
+func (collector LinuxCollector) CollectNamedMappings(name string) (MappingMetrics, error) {
+	if !filepath.IsAbs(collector.ProcRoot) {
+		return MappingMetrics{}, errors.New("Linux proc root must be absolute")
+	}
+	if name == "" || len(name) > 128 || strings.TrimSpace(name) != name || strings.ContainsAny(name, "/\r\n") {
+		return MappingMetrics{}, errors.New("Linux mapping name is invalid")
+	}
+	file, err := os.Open(filepath.Join(collector.ProcRoot, "self/smaps"))
+	if err != nil {
+		return MappingMetrics{}, fmt.Errorf("open proc smaps: %w", err)
+	}
+	defer file.Close()
+
+	totals := map[string]uint64{}
+	metrics := MappingMetrics{Name: name}
+	var current map[string]string
+	currentMatched := false
+	var bytesRead uint64
+	var headers uint64
+	finish := func() error {
+		if !currentMatched {
+			return nil
+		}
+		for _, key := range []string{"Size", "Rss", "Pss", "Shared_Clean", "Shared_Dirty", "Private_Clean", "Private_Dirty", "Referenced", "Anonymous"} {
+			value, err := requiredKBMetric(current, key)
+			if err != nil {
+				return fmt.Errorf("parse named smaps mapping %s: %w", name, err)
+			}
+			if math.MaxUint64-totals[key] < value {
+				return errors.New("named smaps mapping total overflows")
+			}
+			totals[key] += value
+		}
+		if metrics.MappingCount == math.MaxUint32 {
+			return errors.New("named smaps mapping count overflows")
+		}
+		metrics.MappingCount++
+		return nil
+	}
+
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		bytesRead += uint64(len(line) + 1)
+		if bytesRead > linuxSMAPSFileMaxBytes {
+			return MappingMetrics{}, errors.New("proc smaps exceeds hard bound")
+		}
+		if pathname, header := smapsHeaderPath(line); header {
+			if err := finish(); err != nil {
+				return MappingMetrics{}, err
+			}
+			headers++
+			if headers > linuxSMAPSMaxMappings {
+				return MappingMetrics{}, errors.New("proc smaps mapping count exceeds hard bound")
+			}
+			currentMatched = strings.Contains(pathname, name)
+			if currentMatched {
+				current = map[string]string{}
+			} else {
+				current = nil
+			}
+			continue
+		}
+		if !currentMatched {
+			continue
+		}
+		separator := strings.IndexByte(line, ':')
+		if separator <= 0 {
+			continue
+		}
+		key := line[:separator]
+		if _, duplicate := current[key]; duplicate {
+			return MappingMetrics{}, fmt.Errorf("duplicate smaps field %q", key)
+		}
+		current[key] = strings.TrimSpace(line[separator+1:])
+	}
+	if err := scanner.Err(); err != nil {
+		return MappingMetrics{}, fmt.Errorf("scan proc smaps: %w", err)
+	}
+	if err := finish(); err != nil {
+		return MappingMetrics{}, err
+	}
+	metrics.VirtualBytes = measuredMetric(totals["Size"])
+	metrics.RSSBytes = measuredMetric(totals["Rss"])
+	metrics.PSSBytes = measuredMetric(totals["Pss"])
+	metrics.SharedCleanBytes = measuredMetric(totals["Shared_Clean"])
+	metrics.SharedDirtyBytes = measuredMetric(totals["Shared_Dirty"])
+	metrics.PrivateCleanBytes = measuredMetric(totals["Private_Clean"])
+	metrics.PrivateDirtyBytes = measuredMetric(totals["Private_Dirty"])
+	metrics.ReferencedBytes = measuredMetric(totals["Referenced"])
+	metrics.AnonymousBytes = measuredMetric(totals["Anonymous"])
+	return metrics, nil
+}
+
+func smapsHeaderPath(line string) (string, bool) {
+	fields := strings.Fields(line)
+	if len(fields) < 5 || !strings.Contains(fields[0], "-") || len(fields[1]) != 4 {
+		return "", false
+	}
+	if len(fields) == 5 {
+		return "", true
+	}
+	return strings.Join(fields[5:], " "), true
 }
 
 func (collector LinuxCollector) collectCgroup() (CgroupMetrics, error) {

@@ -198,6 +198,20 @@ type ProcessMetrics struct {
 	VMACount          Metric `json:"vma_count"`
 }
 
+type MappingMetrics struct {
+	Name              string `json:"name"`
+	MappingCount      uint32 `json:"mapping_count"`
+	VirtualBytes      Metric `json:"virtual_bytes"`
+	RSSBytes          Metric `json:"rss_bytes"`
+	PSSBytes          Metric `json:"pss_bytes"`
+	SharedCleanBytes  Metric `json:"shared_clean_bytes"`
+	SharedDirtyBytes  Metric `json:"shared_dirty_bytes"`
+	PrivateCleanBytes Metric `json:"private_clean_bytes"`
+	PrivateDirtyBytes Metric `json:"private_dirty_bytes"`
+	ReferencedBytes   Metric `json:"referenced_bytes"`
+	AnonymousBytes    Metric `json:"anonymous_bytes"`
+}
+
 type CgroupMetrics struct {
 	Version                  string `json:"version"`
 	Scope                    string `json:"scope"`
@@ -224,6 +238,7 @@ type LifecycleDensitySample struct {
 	Phases                PhaseTimings     `json:"phases"`
 	GoRuntime             GoRuntimeMetrics `json:"go_runtime"`
 	Process               ProcessMetrics   `json:"process"`
+	COWMappings           *MappingMetrics  `json:"cow_mappings,omitempty"`
 	Cgroup                CgroupMetrics    `json:"cgroup"`
 }
 
@@ -462,6 +477,24 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 			sample.Phases.CompileNS.Value == nil || *sample.Phases.CompileNS.Value == 0) {
 		return errors.New("shared compilation cache strategy requires positive measured compile evidence")
 	}
+	if evidence.Strategy.Active == "cow-ready-single-use" {
+		if sample.COWMappings == nil || sample.COWMappings.Name != "memfd:apyrun-cow-image" ||
+			sample.COWMappings.MappingCount != sample.RequestedSlots {
+			return errors.New("COW strategy requires one attributed mapping per ready slot")
+		}
+		for _, metric := range []Metric{
+			sample.COWMappings.VirtualBytes, sample.COWMappings.RSSBytes, sample.COWMappings.PSSBytes,
+			sample.COWMappings.SharedCleanBytes, sample.COWMappings.SharedDirtyBytes,
+			sample.COWMappings.PrivateCleanBytes, sample.COWMappings.PrivateDirtyBytes,
+			sample.COWMappings.ReferencedBytes, sample.COWMappings.AnonymousBytes,
+		} {
+			if err := validateRawMetric(metric); err != nil || metric.Status != MetricMeasured || metric.Value == nil {
+				return errors.New("COW mapping attribution requires measured raw metrics")
+			}
+		}
+	} else if sample.COWMappings != nil {
+		return errors.New("non-COW strategy carries COW mapping attribution")
+	}
 	if err := sample.GoRuntime.SchedulerLatency.Validate(); err != nil {
 		return fmt.Errorf("scheduler latency: %w", err)
 	}
@@ -582,7 +615,7 @@ func lowerHex(value string, length int) bool {
 
 func validStrategy(strategy string) bool {
 	return strategy == "fresh-instance" || strategy == "single-use-preinitialized" ||
-		strategy == "single-use-preinitialized-shared-cache"
+		strategy == "single-use-preinitialized-shared-cache" || strategy == "cow-ready-single-use"
 }
 
 func invalidDensity(message string) error {

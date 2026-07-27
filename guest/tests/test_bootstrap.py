@@ -50,10 +50,35 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("boom", response["error"]["message"])
         self.assertLessEqual(len(response["error"]["traceback"]), 16384)
 
-    def test_requires_result_to_be_json_serializable(self):
-        response = self.execute(code="result = object()")
-        self.assertEqual("error", response["status"])
-        self.assertEqual("result_not_json", response["error"]["code"])
+    def test_accepts_every_json_value_shape(self):
+        cases = [
+            ("result = 'done'", "done"),
+            ("result = 42", 42),
+            ("result = 3.5", 3.5),
+            ("result = True", True),
+            ("result = None", None),
+            ("result = [1, {'ok': True}, None]", [1, {"ok": True}, None]),
+            ("result = {'items': [1, 2]}", {"items": [1, 2]}),
+        ]
+        for code, expected in cases:
+            with self.subTest(code=code):
+                response = self.execute(code=code)
+                self.assertEqual("ok", response["status"])
+                self.assertEqual(expected, response["result"])
+
+    def test_rejects_results_outside_strict_json(self):
+        for code in [
+            "result = object()",
+            "result = {1, 2}",
+            "result = b'bytes'",
+            "result = float('nan')",
+            "result = float('inf')",
+            "result = float('-inf')",
+        ]:
+            with self.subTest(code=code):
+                response = self.execute(code=code)
+                self.assertEqual("error", response["status"])
+                self.assertEqual("result_not_json", response["error"]["code"])
 
     def test_trusted_prepare_is_available_to_later_execution(self):
         self.runtime._prepare("def transform(value):\n    return value * 4")

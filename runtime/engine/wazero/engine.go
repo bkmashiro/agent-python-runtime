@@ -306,7 +306,11 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	}
 	module := instance.module
 	guestStderr := instance.stderr
-	defer module.Close(context.Background())
+	defer engine.closeServedInstance(instance)
+	if instance.fromPool && engine.pool != nil {
+		engine.pool.executing.Add(1)
+		defer engine.pool.executing.Add(^uint32(0))
+	}
 
 	if trustedPrepare != "" {
 		prepareStarted := time.Now()

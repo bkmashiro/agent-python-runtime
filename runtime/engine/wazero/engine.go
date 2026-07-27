@@ -62,6 +62,7 @@ type Engine struct {
 	brokerFactory BrokerFactory
 	observer      Observer
 	strategy      enginecontract.ExecutionStrategy
+	stateCensus   ReactorStateCensus
 	pool          *preparedPool
 }
 
@@ -147,6 +148,7 @@ func newEngine(
 		brokerFactory: brokerFactory,
 		observer:      observer,
 		strategy:      strategy,
+		stateCensus:   censusCompiledReactor(compiled),
 	}
 	engine.initializePreparedPool(preparedCapacity)
 	return engine, nil
@@ -159,6 +161,18 @@ func (engine *Engine) Properties() enginecontract.Properties {
 		RequestedStrategy: engine.strategy,
 		ActiveStrategy:    engine.strategy,
 	}
+}
+
+// StateCensus returns a defensive copy of the compile-time reactor state
+// census. Unknown state remains fail-closed until a later mechanism proves it.
+func (engine *Engine) StateCensus() ReactorStateCensus {
+	if engine == nil {
+		return ReactorStateCensus{}
+	}
+	census := engine.stateCensus
+	census.UnknownStateClasses = append([]string(nil), census.UnknownStateClasses...)
+	census.Reasons = append([]string(nil), census.Reasons...)
+	return census
 }
 
 func resolveStrategy(requested enginecontract.ExecutionStrategy, preparedCapacity uint32) (enginecontract.ExecutionStrategy, error) {

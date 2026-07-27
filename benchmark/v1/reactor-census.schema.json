@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/reactor-census.schema.json",
+  "title": "Agent Python Reactor State Census Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "backend", "state"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "evidence_kind": {"const": "reactor-state-census"},
+    "evidence_class": {"enum": ["production-safe", "full", "profile-candidate", "preinitialization-spike"]},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "sha256", "size_bytes", "source_commit", "artifact_profile", "target", "execution_model"],
+      "properties": {
+        "filename": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "artifact_profile": {"enum": ["base", "numpy-core"]},
+        "target": {"const": "wasm32-wasip1"},
+        "execution_model": {"const": "reactor"}
+      }
+    },
+    "host_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "modified"],
+      "properties": {
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "modified": {"const": false}
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reset_mode", "requested_strategy", "active_strategy", "fallback"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "reset_mode": {"enum": ["fresh-instance", "prepared-restore"]},
+        "requested_strategy": {"type": "string", "minLength": 1},
+        "active_strategy": {"type": "string", "minLength": 1},
+        "fallback": {"type": "boolean"},
+        "fallback_reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "memory", "unknown_state_classes", "restore_decision", "reasons"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["count", "imported_count", "min_pages", "max_declared", "fixed", "visibility_complete", "cow_eligible"],
+          "properties": {
+            "count": {"type": "integer", "minimum": 0},
+            "imported_count": {"type": "integer", "minimum": 0},
+            "export_name": {"type": "string", "minLength": 1},
+            "min_pages": {"type": "integer", "minimum": 0},
+            "max_pages": {"type": "integer", "minimum": 0},
+            "max_declared": {"type": "boolean"},
+            "fixed": {"type": "boolean"},
+            "visibility_complete": {"type": "boolean"},
+            "cow_eligible": {"type": "boolean"}
+          }
+        },
+        "unknown_state_classes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "restore_decision": {"enum": ["single-use-only", "restore-eligible"]},
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

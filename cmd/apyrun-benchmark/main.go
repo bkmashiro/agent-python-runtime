@@ -95,7 +95,7 @@ func runMain(args []string) error {
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
-	flags.StringVar(&options.Kind, "kind", "runtime", "runtime or lifecycle-density")
+	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, or reactor-census")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
 	flags.UintVar(&options.DensitySlots, "density-slots", 0, "internal lifecycle-density requested slot count")
 	flags.Uint64Var(&options.MaxRSSBytes, "max-rss-bytes", 0, "required lifecycle-density child RSS kill threshold")
@@ -120,6 +120,20 @@ func runMain(args []string) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(envelope)
 	}
+	if options.Kind == "reactor-census" {
+		if options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
+			return errors.New("reactor-census requires -artifact, -manifest, and -output")
+		}
+		if options.Strategy != "fresh" {
+			return errors.New("reactor-census does not activate a non-fresh execution strategy")
+		}
+		sourceCommit, err := writeReactorCensus(options)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(os.Stdout, "{\"output\":%q,\"source_commit\":%q}\n", options.OutputPath, sourceCommit)
+		return nil
+	}
 	if options.Kind == "lifecycle-density" {
 		if err := validateLifecycleDensityOptions(options, false, goruntime.GOOS); err != nil {
 			return err
@@ -127,7 +141,7 @@ func runMain(args []string) error {
 		return runLifecycleDensityMain(options)
 	}
 	if options.Kind != "runtime" {
-		return errors.New("benchmark kind must be runtime or lifecycle-density")
+		return errors.New("benchmark kind must be runtime, lifecycle-density, or reactor-census")
 	}
 	if options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
 		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full|profile-candidate|preinitialization-spike] [-strategy fresh|single-use-preinitialized] [-samples 3]")

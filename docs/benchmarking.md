@@ -103,6 +103,25 @@ python3 tools/compare_prepared_benchmarks.py \
 
 This reports fresh versus prepared first/steady Run ratios, refill `runtime_init`, startup readiness, retained guest memory, and the explicit state-copy N/A record. It also has no threshold or pass/fail field.
 
+## Reactor state census
+
+Before enabling any COW strategy, compile the exact manifest-bound reactor and record which state classes are visible through the current public wazero API:
+
+```bash
+go run ./cmd/apyrun-benchmark \
+  -kind reactor-census \
+  -artifact /path/to/agent-runtime-base.wasm \
+  -manifest /path/to/manifest.json \
+  -output /tmp/reactor-census.json \
+  -class production-safe
+
+go run ./cmd/validate-json-schema \
+  benchmark/v1/reactor-census.schema.json \
+  /tmp/reactor-census.json
+```
+
+The census distinguishes linear-memory COW eligibility from complete restore eligibility. A single owned, exported, fixed-size memory may be COW-memory eligible while the overall reactor remains `single-use-only` because mutable globals and tables are not exhaustively visible through wazero's public compiled-module API. The command requires an exact clean Host revision and never activates a COW strategy.
+
 ## Lifecycle-density evidence contract
 
 [`benchmark/v1/lifecycle-density.schema.json`](../benchmark/v1/lifecycle-density.schema.json) and `runtime/evidence.LifecycleDensityEvidence` define the separate Phase 1 capacity/pressure evidence class. The JSON Schema is the structural gate; every producer and consumer must also call `runtime/evidence.ValidateLifecycleDensityJSON` for cross-sample ordering, histogram shape, derived values, and other semantic relations JSON Schema cannot express. This contract does not replace the fresh or prepared latency schemas above. `apyrun-benchmark -kind lifecycle-density` now orchestrates the initial Linux-only, prepared, idle-ready lane; the fresh-instance active baseline is still a separate unfinished lane.

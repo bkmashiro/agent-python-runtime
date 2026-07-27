@@ -556,6 +556,19 @@ func TestBoundedChildRunnerRejectsOversizedOutput(t *testing.T) {
 	}
 }
 
+func TestBoundedChildRunnerReportsFastExitBeforeInitialRSS(t *testing.T) {
+	runner := boundedChildRunner{
+		executable:   "/bin/sh",
+		readRSSBytes: func(int) (uint64, error) { return 0, errors.New("process disappeared") },
+	}
+	_, err := runner.run(context.Background(), boundedChildSpec{
+		args: []string{"-c", "printf boom >&2; exit 3"}, timeout: 5 * time.Second, maxRSSBytes: 1024,
+	})
+	if err == nil || !strings.Contains(err.Error(), "stderr tail: boom") {
+		t.Fatalf("fast child exit lost its diagnostic: %v", err)
+	}
+}
+
 func TestBoundedChildRunnerTreatsFinalRSSDisappearanceAsProcessExit(t *testing.T) {
 	reads := 0
 	signalPath := filepath.Join(t.TempDir(), "child-exiting")

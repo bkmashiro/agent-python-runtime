@@ -179,26 +179,8 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 		return boundedChildResult{}, fmt.Errorf("start lifecycle-density child: %w", err)
 	}
 	result := boundedChildResult{PID: command.Process.Pid, StartedAtUnixNS: startedAt.UnixNano()}
-	initialRSS, err := readRSSBytes(result.PID)
-	if err != nil {
-		_ = command.Process.Kill()
-		_ = command.Wait()
-		return result, fmt.Errorf("read lifecycle-density child RSS: %w", err)
-	}
-	result.MaxObservedRSSBytes = initialRSS
-	if initialRSS > spec.maxRSSBytes {
-		_ = command.Process.Kill()
-		_ = command.Wait()
-		return result, fmt.Errorf("lifecycle-density safety guard: RSS %d exceeds %d", initialRSS, spec.maxRSSBytes)
-	}
-
 	wait := make(chan error, 1)
 	go func() { wait <- command.Wait() }()
-	timer := time.NewTimer(spec.timeout)
-	defer timer.Stop()
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
 	finish := func(waitErr error) (boundedChildResult, error) {
 		result.Stdout = append([]byte(nil), stdout.Bytes()...)
 		result.StderrTail = stderr.String()
@@ -210,6 +192,38 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 		}
 		return result, nil
 	}
+	initialRSS, err := readRSSBytes(result.PID)
+	if err != nil {
+		exitGrace := time.NewTimer(100 * time.Millisecond)
+		select {
+		case waitErr := <-wait:
+			if !exitGrace.Stop() {
+				<-exitGrace.C
+			}
+			result, finishErr := finish(waitErr)
+			if finishErr != nil {
+				return result, finishErr
+			}
+			return result, fmt.Errorf("lifecycle-density child exited before initial RSS evidence: %w", err)
+		case <-exitGrace.C:
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("read lifecycle-density child RSS: %w; stderr tail: %s", err, strings.TrimSpace(result.StderrTail))
+		}
+	}
+	result.MaxObservedRSSBytes = initialRSS
+	if initialRSS > spec.maxRSSBytes {
+		_ = command.Process.Kill()
+		waitErr := <-wait
+		result, _ = finish(waitErr)
+		return result, fmt.Errorf("lifecycle-density safety guard: RSS %d exceeds %d", initialRSS, spec.maxRSSBytes)
+	}
+
+	timer := time.NewTimer(spec.timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
 
 	for {
 		select {

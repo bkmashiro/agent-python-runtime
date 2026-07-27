@@ -17,11 +17,13 @@ type ReactorImportCensus struct {
 }
 
 type ReactorGlobalCensus struct {
-	Count          int `json:"count"`
-	ImportedCount  int `json:"imported_count"`
-	DefinedCount   int `json:"defined_count"`
-	MutableCount   int `json:"mutable_count"`
-	ImmutableCount int `json:"immutable_count"`
+	Count                  int      `json:"count"`
+	ImportedCount          int      `json:"imported_count"`
+	DefinedCount           int      `json:"defined_count"`
+	MutableCount           int      `json:"mutable_count"`
+	ImmutableCount         int      `json:"immutable_count"`
+	ExportedMutableNames   []string `json:"exported_mutable_names"`
+	UnexportedMutableCount int      `json:"unexported_mutable_count"`
 }
 
 type ReactorTableCensus struct {
@@ -71,6 +73,15 @@ func (census ReactorArtifactCensus) Validate() error {
 		census.Globals.ImportedCount != census.Imports.GlobalCount {
 		return errors.New("reactor artifact global census is inconsistent")
 	}
+	if census.Globals.MutableCount != len(census.Globals.ExportedMutableNames)+census.Globals.UnexportedMutableCount ||
+		!sort.StringsAreSorted(census.Globals.ExportedMutableNames) {
+		return errors.New("reactor artifact mutable-global visibility is inconsistent")
+	}
+	for index, name := range census.Globals.ExportedMutableNames {
+		if name == "" || index > 0 && name == census.Globals.ExportedMutableNames[index-1] {
+			return errors.New("reactor artifact mutable-global exports are incomplete")
+		}
+	}
 	if census.Tables.Count != census.Tables.ImportedCount+census.Tables.DefinedCount || census.Tables.ImportedCount != census.Imports.TableCount {
 		return errors.New("reactor artifact table census is inconsistent")
 	}
@@ -92,12 +103,13 @@ func (census ReactorArtifactCensus) Validate() error {
 }
 
 func censusReactorArtifact(wasm []byte) (ReactorArtifactCensus, error) {
-	census := ReactorArtifactCensus{SchemaVersion: 1, ImportModules: []string{}}
+	census := ReactorArtifactCensus{SchemaVersion: 1, ImportModules: []string{}, Globals: ReactorGlobalCensus{ExportedMutableNames: []string{}}}
 	module, err := wabinbinary.DecodeModule(wasm, wabinwasm.CoreFeaturesV2)
 	if err != nil {
 		return census, fmt.Errorf("decode reactor artifact state: %w", err)
 	}
 	modules := map[string]struct{}{}
+	globalMutable := make([]bool, 0)
 	for _, imported := range module.ImportSection {
 		if imported == nil {
 			return census, errors.New("reactor artifact contains a nil import")
@@ -129,6 +141,7 @@ func censusReactorArtifact(wasm []byte) (ReactorArtifactCensus, error) {
 			} else {
 				census.Globals.ImmutableCount++
 			}
+			globalMutable = append(globalMutable, imported.DescGlobal.Mutable)
 		default:
 			return census, fmt.Errorf("reactor artifact has unsupported import type %#x", imported.Type)
 		}
@@ -148,8 +161,22 @@ func censusReactorArtifact(wasm []byte) (ReactorArtifactCensus, error) {
 		} else {
 			census.Globals.ImmutableCount++
 		}
+		globalMutable = append(globalMutable, global.Type.Mutable)
 	}
 	census.Globals.Count = census.Globals.ImportedCount + census.Globals.DefinedCount
+	for _, exported := range module.ExportSection {
+		if exported == nil || exported.Type != wabinwasm.ExternTypeGlobal {
+			continue
+		}
+		if int(exported.Index) >= len(globalMutable) {
+			return census, errors.New("reactor artifact global export index is invalid")
+		}
+		if globalMutable[exported.Index] {
+			census.Globals.ExportedMutableNames = append(census.Globals.ExportedMutableNames, exported.Name)
+		}
+	}
+	sort.Strings(census.Globals.ExportedMutableNames)
+	census.Globals.UnexportedMutableCount = census.Globals.MutableCount - len(census.Globals.ExportedMutableNames)
 
 	census.Tables.DefinedCount = len(module.TableSection)
 	census.Tables.Count = census.Tables.ImportedCount + census.Tables.DefinedCount

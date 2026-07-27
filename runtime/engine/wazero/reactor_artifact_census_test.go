@@ -21,9 +21,10 @@ func TestCensusReactorArtifactClassifiesNonMemoryState(t *testing.T) {
 			{Type: &wabinwasm.GlobalType{ValType: wabinwasm.ValueTypeI64}, Init: &wabinwasm.ConstantExpression{Opcode: wabinwasm.OpcodeI64Const, Data: []byte{0}}},
 			{Type: &wabinwasm.GlobalType{ValType: wabinwasm.ValueTypeI32, Mutable: true}, Init: &wabinwasm.ConstantExpression{Opcode: wabinwasm.OpcodeI32Const, Data: []byte{0}}},
 		},
-		TableSection: []*wabinwasm.Table{{Min: 1, Max: &max, Type: wabinwasm.RefTypeFuncref}},
-		StartSection: &start,
-		CodeSection:  []*wabinwasm.Code{{Body: []byte{wabinwasm.OpcodeEnd}}},
+		ExportSection: []*wabinwasm.Export{{Name: "state", Type: wabinwasm.ExternTypeGlobal, Index: 2}},
+		TableSection:  []*wabinwasm.Table{{Min: 1, Max: &max, Type: wabinwasm.RefTypeFuncref}},
+		StartSection:  &start,
+		CodeSection:   []*wabinwasm.Code{{Body: []byte{wabinwasm.OpcodeEnd}}},
 	}
 
 	wasm := wabinbinary.EncodeModule(module)
@@ -48,6 +49,9 @@ func TestCensusReactorArtifactClassifiesNonMemoryState(t *testing.T) {
 	}
 	if census.Globals.Count != 3 || census.Globals.ImportedCount != 1 || census.Globals.MutableCount != 2 {
 		t.Fatalf("unexpected global census: %#v", census.Globals)
+	}
+	if len(census.Globals.ExportedMutableNames) != 1 || census.Globals.ExportedMutableNames[0] != "state" || census.Globals.UnexportedMutableCount != 1 {
+		t.Fatalf("unexpected mutable-global visibility: %#v", census.Globals)
 	}
 	if census.Tables.Count != 2 || census.Tables.ImportedCount != 1 || census.Tables.DefinedCount != 1 {
 		t.Fatalf("unexpected table census: %#v", census.Tables)

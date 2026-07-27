@@ -197,6 +197,7 @@ func (engine *Engine) StateCensus() ReactorStateCensus {
 	}
 	census := engine.stateCensus
 	census.Artifact.ImportModules = append([]string{}, census.Artifact.ImportModules...)
+	census.Artifact.Globals.ExportedMutableNames = append([]string{}, census.Artifact.Globals.ExportedMutableNames...)
 	census.UnknownStateClasses = append([]string(nil), census.UnknownStateClasses...)
 	census.Reasons = append([]string(nil), census.Reasons...)
 	return census

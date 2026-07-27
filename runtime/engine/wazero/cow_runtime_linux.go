@@ -14,8 +14,9 @@ import (
 )
 
 type linuxCOWPreparedRuntime struct {
-	image        *cowImage
-	verifyDigest *[sha256.Size]byte
+	image            *cowImage
+	verifyDigest     *[sha256.Size]byte
+	canonicalGlobals preparedGlobalSnapshot
 }
 
 func cowReadyStrategySupported() bool { return true }
@@ -43,11 +44,15 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if !ok {
 		return nil, errors.New("read canonical COW memory")
 	}
+	canonicalGlobals, err := snapshotPreparedMutableGlobals(canonical.module, engine.stateCensus.Artifact.Globals.ExportedMutableNames)
+	if err != nil {
+		return nil, err
+	}
 	image, err := newCOWImage(baseline)
 	if err != nil {
 		return nil, err
 	}
-	runtime := &linuxCOWPreparedRuntime{image: image}
+	runtime := &linuxCOWPreparedRuntime{image: image, canonicalGlobals: canonicalGlobals}
 	if engine.verifyCOWPreparedImage {
 		digest := sha256.Sum256(baseline)
 		runtime.verifyDigest = &digest
@@ -98,6 +103,12 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	if memory == nil || uint64(memory.Size()) != runtime.image.size {
 		return nil, errors.New("COW slot memory shape drifted")
 	}
+	attachStarted := time.Now()
+	if err := verifyPreparedMutableGlobals(module, runtime.canonicalGlobals); err != nil {
+		observe(engine.observer, prefix+"attach_globals", attachStarted, err)
+		return nil, err
+	}
+	observe(engine.observer, prefix+"attach_globals", attachStarted, nil)
 	if runtime.verifyDigest != nil {
 		verifyStarted := time.Now()
 		view, ok := memory.Read(0, memory.Size())

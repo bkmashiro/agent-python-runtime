@@ -94,13 +94,19 @@
             "globals": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["count", "imported_count", "defined_count", "mutable_count", "immutable_count"],
+              "required": ["count", "imported_count", "defined_count", "mutable_count", "immutable_count", "exported_mutable_names", "unexported_mutable_count"],
               "properties": {
                 "count": {"type": "integer", "minimum": 0},
                 "imported_count": {"type": "integer", "minimum": 0},
                 "defined_count": {"type": "integer", "minimum": 0},
                 "mutable_count": {"type": "integer", "minimum": 0},
-                "immutable_count": {"type": "integer", "minimum": 0}
+                "immutable_count": {"type": "integer", "minimum": 0},
+                "exported_mutable_names": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "unexported_mutable_count": {"type": "integer", "minimum": 0}
               }
             },
             "tables": {

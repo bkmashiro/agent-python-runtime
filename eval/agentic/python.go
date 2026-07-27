@@ -65,6 +65,7 @@ type PythonExecutor struct {
 	prepare         string
 	controller      *workflowBrokerController
 	compactPrebound bool
+	anyJSONResult   bool
 	wrapperDigest   string
 }
 
@@ -102,7 +103,10 @@ func newPythonExecutor(runner engine.Runner, tools *ToolRuntime, treatment Devel
 	if err != nil || prepare == "" {
 		return nil, ErrAgenticRun
 	}
-	executor := &PythonExecutor{runner: runner, tools: tools, prepare: prepare, compactPrebound: treatment.UsesPreboundCompactPython()}
+	executor := &PythonExecutor{
+		runner: runner, tools: tools, prepare: prepare,
+		compactPrebound: treatment.UsesPreboundCompactPython(), anyJSONResult: treatment.AllowsAnyJSONPythonResult(),
+	}
 	if executor.compactPrebound {
 		executor.wrapperDigest = compactPythonWrapperDigest()
 	}
@@ -194,9 +198,13 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 			return PythonRunResult{}, err
 		}
 	}
+	outputSchema := json.RawMessage(`{"type":"object"}`)
+	if executor.anyJSONResult {
+		outputSchema = json.RawMessage(`{}`)
+	}
 	request := runtimeconfig.RunRequest{
 		RunID: runID, Code: effectiveCode, Inputs: json.RawMessage(`{}`),
-		OutputSchema: json.RawMessage(`{"type":"object"}`),
+		OutputSchema: outputSchema,
 	}
 	requestBytes, err := json.Marshal(request)
 	if err != nil {

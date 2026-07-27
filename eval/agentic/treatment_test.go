@@ -19,6 +19,7 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 		{"hybrid-two-stage-router-v1.json", TreatmentHybridTwoStageRouterV1, true},
 		{"hybrid-two-stage-safe-repair-v2.json", TreatmentHybridTwoStageSafeRepairV2, true},
 		{"hybrid-two-stage-prebound-compact-v3.json", TreatmentHybridTwoStagePreboundCompactV3, true},
+		{"hybrid-two-stage-prebound-compact-json-v4.json", TreatmentHybridTwoStagePreboundCompactJSONV4, true},
 	} {
 		treatment, err := LoadDevelopmentTreatment(filepath.Join(root, "treatments", test.file))
 		if err != nil || treatment.ID != test.id || treatment.Digest == "" || treatment.Implemented() != test.implemented {
@@ -40,8 +41,12 @@ func TestPreboundCompactTreatmentFreezesPythonExecutionPolicies(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !treatment.UsesPreboundCompactPython() || !treatment.AllowsPythonRepair() || !treatment.UsesTwoStageRouter() ||
-		treatment.PythonBindingPolicy != "prebound-authorized-tools" || treatment.PythonResultPolicy != "default-empty-object" || treatment.PythonSourcePolicy != "compact-no-unused-values" {
+		treatment.AllowsAnyJSONPythonResult() || treatment.PythonBindingPolicy != "prebound-authorized-tools" || treatment.PythonResultPolicy != "default-empty-object" || treatment.PythonSourcePolicy != "compact-no-unused-values" {
 		t.Fatalf("treatment=%+v", treatment)
+	}
+	jsonTreatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-json-v4.json"))
+	if err != nil || !jsonTreatment.UsesPreboundCompactPython() || !jsonTreatment.AllowsAnyJSONPythonResult() || !jsonTreatment.AllowsPythonRepair() || !jsonTreatment.UsesTwoStageRouter() {
+		t.Fatalf("json treatment=%+v err=%v", jsonTreatment, err)
 	}
 }
 
@@ -60,6 +65,9 @@ func TestLoadDevelopmentTreatmentRejectsUnknownKeysAndUnsafeCombinations(t *test
 	mismatch := cloneTreatmentMap(base)
 	mismatch["id"] = TreatmentStructuredHostContextV1
 	cases = append(cases, mismatch)
+	ambientAnyJSON := cloneTreatmentMap(base)
+	ambientAnyJSON["python_output_schema_policy"] = "any-json"
+	cases = append(cases, ambientAnyJSON)
 	for index, document := range cases {
 		content, _ := json.Marshal(document)
 		path := filepath.Join(t.TempDir(), "invalid.json")

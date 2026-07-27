@@ -793,6 +793,9 @@ func buildConditionSurfaceForTreatment(runtime *ToolRuntime, condition Condition
 		pythonDescription := "Execute one bounded Python workflow in the CPython/WASI Guest. Import functions from host_tools; calls run in source order. A fresh Guest does not reset Host-tool state, including the current working directory; do not repeat setup already completed by earlier turns. Use returned JSON values in later calls. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Assign a JSON object to result. Available SDK: " + sdk
 		if treatment.UsesPreboundCompactPython() {
 			pythonDescription = "Execute one bounded Python workflow in the CPython/WASI Guest. Authorized Host functions in Available SDK are prebound; call them directly in source order and do not import host_tools. A fresh Guest does not reset Host-tool state, including the current working directory; do not repeat setup already completed by earlier turns. Use returned JSON values only when later calls depend on them. result defaults to {}; assign it only when workflow output is required. Emit bare calls when return values are unused. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Available SDK: " + sdk
+			if treatment.AllowsAnyJSONPythonResult() {
+				pythonDescription += " An explicit result may be any JSON value."
+			}
 		}
 		surface = append(surface, map[string]any{
 			"type": "function", "name": "run_python",
@@ -805,6 +808,9 @@ func buildConditionSurfaceForTreatment(runtime *ToolRuntime, condition Condition
 		})
 		if treatment.UsesPreboundCompactPython() {
 			prompt += " Python runs in an isolated WASI Guest: the Host filesystem is not available through open, pathlib, os, subprocess, or shell commands. Authorized Available SDK functions are prebound; call them directly and do not import host_tools. result defaults to {}; assign it only when workflow output is required. Emit executable code only: no prose or comments, no unused return bindings, and bare calls when return values are unused. Use loops only when they preserve exact call order and arguments. Use returned JSON values only for dependent arguments."
+			if treatment.AllowsAnyJSONPythonResult() {
+				prompt += " An explicit result may be any JSON value."
+			}
 		} else {
 			prompt += " Python runs in an isolated WASI Guest: the Host filesystem is not available through open, pathlib, os, subprocess, or shell commands. Import every Host operation from host_tools and use only the Available SDK in the run_python description; use returned JSON values for dependent arguments. Assign a JSON object to result."
 		}

@@ -757,14 +757,14 @@ func TestDevelopmentReplicateChangesSpecIdentity(t *testing.T) {
 	}
 }
 
-func TestPreboundCompactTrialBindsSourceEvidenceAndPrompt(t *testing.T) {
+func TestPreboundCompactJSONTrialBindsSourceEvidenceAndPrompt(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	responses := make([]provider.Response, len(task.Interaction.Turns))
 	for index := range responses {
 		body := fmt.Sprintf(`{"status":"completed","model":"gpt-5.6-luna","output":[{"type":"function_call","status":"completed","call_id":"compact-%d","name":"run_python","arguments":"{\"code\":\"pwd()\"}"}]}`, index)
 		responses[index] = responseFixture(body, 20, 5)
 	}
-	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-json-v4.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -143,6 +143,23 @@ result = [pwd()]
 	if err != nil || mismatch.Success || mismatch.ErrorCode != "guest_output_schema_mismatch" || mismatch.CapabilityCalls != 2 || tools.FileSystem().Digest() != beforeMismatch {
 		t.Fatalf("mismatch=%+v err=%v before=%s after=%s", mismatch, err, beforeMismatch, tools.FileSystem().Digest())
 	}
+	jsonTreatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(root, "eval", "agentic", "v1", "treatments", "hybrid-two-stage-prebound-compact-json-v4.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonExecutor, err := agentic.NewWASIPythonExecutorForTreatment(context.Background(), guest, runtimeconfig.DefaultRunConfig(), tools, jsonTreatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := jsonExecutor.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	listResult, err := jsonExecutor.Execute(context.Background(), "agentic-compact-any-json", `result = [pwd()]`, 1)
+	if err != nil || !listResult.Success || listResult.CapabilityCalls != 1 || len(listResult.Observation) == 0 || listResult.Observation[0] != '[' {
+		t.Fatalf("list result=%+v err=%v", listResult, err)
+	}
 	isolated, err := executor.Execute(context.Background(), "agentic-compact-isolated", `result = {"seen": ephemeral_marker}`, 1)
 	if err != nil || isolated.Success || isolated.CapabilityCalls != 0 || isolated.ErrorCode != "python_exception" {
 		t.Fatalf("isolated=%+v err=%v", isolated, err)

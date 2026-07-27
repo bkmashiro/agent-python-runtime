@@ -78,13 +78,13 @@ func TestPythonExecutorBuildsBoundedAuthorityFreeRunRequest(t *testing.T) {
 	}
 }
 
-func TestPreboundCompactExecutorWrapsCodeAndBindsSourceDigests(t *testing.T) {
+func TestPreboundCompactJSONExecutorAcceptsAnyJSONAndPreservesV3ObjectSchema(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	tools, err := NewToolRuntime(task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-json-v4.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,9 +106,25 @@ func TestPreboundCompactExecutorWrapsCodeAndBindsSourceDigests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Code != effectiveCode || !strings.Contains(runner.prepare, `pwd = _host_module.__dict__["pwd"]`) ||
+	if request.Code != effectiveCode || string(request.OutputSchema) != `{}` || !strings.Contains(runner.prepare, `pwd = _host_module.__dict__["pwd"]`) ||
 		result.ModelCodeDigest != digest([]byte(modelCode)) || result.EffectiveCodeDigest != digest([]byte(effectiveCode)) || result.WrapperDigest != compactPythonWrapperDigest() {
 		t.Fatalf("request=%q prepare=%q result=%+v", request.Code, runner.prepare, result)
+	}
+	legacyTreatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRunner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	legacyExecutor, err := NewPythonExecutorForTreatment(legacyRunner, tools, legacyTreatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacyExecutor.Execute(context.Background(), "python-run-compact-v3", modelCode, 4); err != nil {
+		t.Fatal(err)
+	}
+	legacyRequest, err := runtimeconfig.DecodeRunRequest(legacyRunner.request)
+	if err != nil || string(legacyRequest.OutputSchema) != `{"type":"object"}` {
+		t.Fatalf("legacy request=%+v err=%v", legacyRequest, err)
 	}
 }
 

@@ -147,6 +147,35 @@ go run ./cmd/apyrun-benchmark \
 
 `-samples` is repeats per canonical N, not a request to truncate the sweep. The parent launches a distinct bounded child for every row, rejects backend/environment/artifact drift, generates a unique process-instance digest from the observed launch identity, and writes only after object validation, artifact-byte binding, and canonical semantic JSON validation succeed. The RSS threshold is a sampled kill guard rather than a kernel reservation; the evidence records that limitation explicitly.
 
+For `cow-ready-single-use`, lifecycle-density additionally requires mapping-attributed `/proc/self/smaps` evidence for every `memfd:apyrun-cow-image` VMA. The aggregate records virtual bytes, RSS, PSS, shared/private clean/dirty bytes, referenced bytes, and anonymous bytes. A sealed memfd/shmem page can appear as `Private_Dirty` when it has one mapping and as `Shared_Dirty` after another mapping is added; that map-count classification is not proof of a private COW copy. `Anonymous` plus phase-attributed mutation evidence is the safer signal for private MAP_PRIVATE pages. Logical retained guest bytes and mapping RSS are not physical-capacity measurements.
+
+## Bounded COW pressure evidence
+
+[`benchmark/v1/cow-pressure.schema.json`](../benchmark/v1/cow-pressure.schema.json) defines the machine-readable extreme-test envelope. The current harness is deliberately an unoptimized `cow-ready-single-use` test: each four-slot shard owns a separate wazero Runtime, compiled module, and sealed baseline; served slots are destroyed and asynchronously replenished.
+
+A 40 GiB allocation that reserves 8 GiB outside the runtime is expressed as two separate values, not as a claimed capacity result:
+
+```bash
+go run ./cmd/apyrun-benchmark \
+  -kind cow-pressure \
+  -artifact /path/to/fixed-memory-agent-runtime.wasm \
+  -manifest /path/to/manifest.json \
+  -output /private/path/cow-pressure.json \
+  -class production-safe \
+  -strategy cow-ready-single-use \
+  -memory-budget-bytes 34359738368 \
+  -memory-reserve-bytes 8589934592 \
+  -max-pressure-slots 4096 \
+  -consumers 16 \
+  -pressure-duration 30s
+```
+
+Admission uses measured process PSS plus conservative dynamic headroom and stops before the 32 GiB runtime budget. The surrounding scheduler/cgroup must independently enforce the 40 GiB allocation; the PSS policy is not a kernel reservation. The hard slot bound prevents an accounting bug from creating an unbounded loop.
+
+After admission, closed-loop fake consumers continuously submit a small deterministic Python request. Evidence records admitted shards/slots, every spawn PSS snapshot, COW mapping metrics, stop reason, ready counts, started/completed/failed/timed-out requests, throughput, and p50/p95/p99/max service latency. Checkout starts replenishment before the served mapping is closed, so a load sample may transiently contain at most `ready slots + in-flight consumers` matching mappings. This bounded overlap is lifecycle behavior, not an increase in configured ready capacity.
+
+The pressure lane does not claim open-loop sustainable throughput, provider latency, complete served-slot restore, or a general machine-capacity model. Evidence files are written with mode `0600`; private run directories must remain `0700`.
+
 The checked-in three-repeat base-profile artifact is [`docs/benchmarks/lifecycle-density-production-safe-linux-amd64.json`](benchmarks/lifecycle-density-production-safe-linux-amd64.json). It binds Host revision `5921411c3716f6ce37caee26a10cff5b036e99a9` and remains raw prepared idle-ready evidence, not a fresh/prepared comparison or capacity model.
 
 The exact build-time-preinitialization experiment archives its raw baseline and candidate as `docs/benchmarks/preinitialization-spike-lifecycle-density-{baseline,candidate}-linux-amd64.json`. Reproduce its strict same-plan comparison with:

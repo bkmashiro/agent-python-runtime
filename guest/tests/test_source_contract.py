@@ -53,7 +53,10 @@ class GuestSourceContractTests(unittest.TestCase):
         for static_dependency in ["libmpdec.a", "libHacl_", "libexpat.a", "-ldl"]:
             self.assertIn(static_dependency, text)
         self.assertNotIn("--export=wasi_vfs_pack_fs", text)
-        self.assertIn("--max-memory=536870912", text)
+        self.assertIn("MAX_MEMORY_BYTES=536870912", text)
+        self.assertIn("COW_FIXED_MEMORY=${AGENT_RUNTIME_COW_FIXED_MEMORY:-0}", text)
+        self.assertIn("1) MAX_MEMORY_BYTES=${INITIAL_MEMORY_BYTES}", text)
+        self.assertEqual(3, text.count('-Wl,--max-memory="${MAX_MEMORY_BYTES}"'))
         self.assertEqual(2, text.count('--dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14"'))
         self.assertIn("VFS_PYTHON_DIR", text)
         self.assertIn("copy_tree_deterministic.py", text)

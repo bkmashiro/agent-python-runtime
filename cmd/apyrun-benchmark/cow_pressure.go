@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	goruntime "runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -17,7 +18,8 @@ import (
 	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
 )
 
-const pressureShardCapacity uint32 = 4
+const pressureInitialCapacity uint32 = 4
+const pressureMaxGrowthStep uint32 = 64
 const pressureMinimumHeadroom = 512 * 1024 * 1024
 
 type cowPressureLimits struct {
@@ -27,31 +29,50 @@ type cowPressureLimits struct {
 	MaxSlots           uint32 `json:"max_slots"`
 	Consumers          uint32 `json:"consumers"`
 	DurationNS         uint64 `json:"duration_ns"`
-	ShardCapacity      uint32 `json:"shard_capacity"`
+	InitialCapacity    uint32 `json:"initial_capacity"`
+	MaxGrowthStep      uint32 `json:"max_growth_step"`
+	Workload           string `json:"workload"`
+	WaitNS             uint64 `json:"wait_ns"`
+	RefillWorkers      uint32 `json:"refill_workers"`
 }
 
 type cowPressureSnapshot struct {
-	Phase       string                         `json:"phase"`
-	Slots       uint32                         `json:"slots"`
-	Shards      uint32                         `json:"shards"`
-	ObservedNS  uint64                         `json:"observed_unix_ns"`
-	Process     runtimeevidence.ProcessMetrics `json:"process"`
-	COWMappings runtimeevidence.MappingMetrics `json:"cow_mappings"`
+	Phase            string                         `json:"phase"`
+	Slots            uint32                         `json:"slots"`
+	RuntimeInstances uint32                         `json:"runtime_instances"`
+	ObservedNS       uint64                         `json:"observed_unix_ns"`
+	Process          runtimeevidence.ProcessMetrics `json:"process"`
+	COWMappings      runtimeevidence.MappingMetrics `json:"cow_mappings"`
+}
+
+type cowPressurePhase struct {
+	Name      string `json:"name"`
+	Count     uint64 `json:"count"`
+	Succeeded uint64 `json:"succeeded"`
+	Failed    uint64 `json:"failed"`
+	TotalNS   uint64 `json:"total_ns"`
+	MaxNS     uint64 `json:"max_ns"`
 }
 
 type cowPressureLoad struct {
-	StartedRequests   uint64  `json:"started_requests"`
-	CompletedRequests uint64  `json:"completed_requests"`
-	FailedRequests    uint64  `json:"failed_requests"`
-	TimedOutRequests  uint64  `json:"timed_out_requests"`
-	DurationNS        uint64  `json:"duration_ns"`
-	ThroughputPerSec  float64 `json:"throughput_per_second"`
-	LatencyP50NS      uint64  `json:"latency_p50_ns"`
-	LatencyP95NS      uint64  `json:"latency_p95_ns"`
-	LatencyP99NS      uint64  `json:"latency_p99_ns"`
-	LatencyMaxNS      uint64  `json:"latency_max_ns"`
-	ReadyBefore       uint32  `json:"ready_before"`
-	ReadyAfter        uint32  `json:"ready_after"`
+	StartedRequests    uint64             `json:"started_requests"`
+	CompletedRequests  uint64             `json:"completed_requests"`
+	FailedRequests     uint64             `json:"failed_requests"`
+	TimedOutRequests   uint64             `json:"timed_out_requests"`
+	DurationNS         uint64             `json:"duration_ns"`
+	ReplenishDrainNS   uint64             `json:"replenish_drain_ns"`
+	CPUUserNS          uint64             `json:"cpu_user_ns"`
+	CPUSystemNS        uint64             `json:"cpu_system_ns"`
+	CPUCoreUtilization float64            `json:"cpu_core_utilization"`
+	GOMAXPROCS         int                `json:"gomaxprocs"`
+	ThroughputPerSec   float64            `json:"throughput_per_second"`
+	LatencyP50NS       uint64             `json:"latency_p50_ns"`
+	LatencyP95NS       uint64             `json:"latency_p95_ns"`
+	LatencyP99NS       uint64             `json:"latency_p99_ns"`
+	LatencyMaxNS       uint64             `json:"latency_max_ns"`
+	ReadyBefore        uint32             `json:"ready_before"`
+	ReadyAfter         uint32             `json:"ready_after"`
+	Phases             []cowPressurePhase `json:"phases"`
 }
 
 type cowPressureEvidence struct {
@@ -70,41 +91,62 @@ type cowPressureEvidence struct {
 	Limitations   []string                            `json:"limitations"`
 }
 
+type growablePreparedBenchmarkRunner interface {
+	preparedBenchmarkRunner
+	GrowPreparedCapacity(context.Context, uint32) error
+	PreparedCapacity() uint32
+	PreparedRefillWorkers() uint32
+}
+
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 1 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 2 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
 	}
 	if evidence.Limits.RuntimeBudgetBytes+evidence.Limits.ReservedBytes != evidence.Limits.AllocationBytes ||
-		evidence.Limits.ShardCapacity != pressureShardCapacity || len(evidence.Spawn) == 0 || evidence.StopReason == "" {
+		evidence.Limits.InitialCapacity != pressureInitialCapacity || evidence.Limits.MaxGrowthStep != pressureMaxGrowthStep || evidence.Limits.RefillWorkers == 0 || evidence.Limits.RefillWorkers > 4 ||
+		!validPressureWorkload(evidence.Limits.Workload, time.Duration(evidence.Limits.WaitNS)) || len(evidence.Spawn) == 0 || evidence.StopReason == "" {
 		return errors.New("cow-pressure limits or spawn evidence is incomplete")
 	}
+	previousSlots := uint32(0)
 	for index, snapshot := range evidence.Spawn {
-		wantSlots := uint32(index+1) * pressureShardCapacity
-		if snapshot.Phase != "spawn" || snapshot.Slots != wantSlots || snapshot.Shards != uint32(index+1) ||
-			snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || snapshot.COWMappings.MappingCount != wantSlots {
-			return errors.New("cow-pressure spawn sequence or mapping identity drifted")
+		growth := snapshot.Slots - previousSlots
+		if snapshot.Slots <= previousSlots || growth%pressureInitialCapacity != 0 || growth > pressureMaxGrowthStep ||
+			(index == 0 && snapshot.Slots != pressureInitialCapacity) || snapshot.Phase != "spawn" || snapshot.RuntimeInstances != 1 ||
+			snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || snapshot.COWMappings.MappingCount != snapshot.Slots {
+			return errors.New("cow-pressure single-runtime growth sequence or mapping identity drifted")
 		}
 		pss, err := measuredValue(snapshot.Process.PSSBytes, "spawn process PSS")
 		if err != nil || pss > evidence.Limits.RuntimeBudgetBytes {
 			return errors.New("cow-pressure spawn PSS is unavailable or exceeds budget")
 		}
+		previousSlots = snapshot.Slots
 	}
-	if len(evidence.LoadSamples) == 0 || evidence.Load.StartedRequests == 0 || evidence.Load.CompletedRequests == 0 ||
+	if len(evidence.LoadSamples) != 1 || evidence.Load.StartedRequests == 0 || evidence.Load.CompletedRequests == 0 ||
 		evidence.Load.CompletedRequests+evidence.Load.FailedRequests != evidence.Load.StartedRequests ||
-		evidence.Load.DurationNS == 0 || evidence.Load.ThroughputPerSec <= 0 || evidence.Load.LatencyP99NS == 0 {
+		evidence.Load.DurationNS == 0 || evidence.Load.ThroughputPerSec <= 0 || evidence.Load.LatencyP99NS == 0 ||
+		evidence.Load.CPUCoreUtilization <= 0 || evidence.Load.GOMAXPROCS <= 0 || len(evidence.Load.Phases) == 0 {
 		return errors.New("cow-pressure closed-loop load evidence is incomplete")
 	}
 	lastSlots := evidence.Spawn[len(evidence.Spawn)-1].Slots
-	if evidence.Load.ReadyBefore != lastSlots || evidence.Load.ReadyAfter > lastSlots {
-		return errors.New("cow-pressure ready pool accounting drifted")
+	if evidence.Load.ReadyBefore != lastSlots || evidence.Load.ReadyAfter != lastSlots {
+		return errors.New("cow-pressure ready pool did not replenish to its admitted capacity")
 	}
-	for _, snapshot := range evidence.LoadSamples {
-		if snapshot.Slots != lastSlots || snapshot.COWMappings.Name != "memfd:apyrun-cow-image" ||
-			!validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) {
-			return errors.New("cow-pressure load mapping identity drifted")
+	phaseNames := map[string]struct{}{}
+	for _, phase := range evidence.Load.Phases {
+		if phase.Name == "" || phase.Count == 0 || phase.Succeeded+phase.Failed != phase.Count {
+			return errors.New("cow-pressure phase accounting is incomplete")
 		}
+		if _, exists := phaseNames[phase.Name]; exists {
+			return errors.New("cow-pressure phase names are duplicated")
+		}
+		phaseNames[phase.Name] = struct{}{}
+	}
+	snapshot := evidence.LoadSamples[0]
+	if snapshot.Phase != "load-final" || snapshot.Slots != lastSlots || snapshot.RuntimeInstances != 1 ||
+		snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) {
+		return errors.New("cow-pressure final mapping identity drifted")
 	}
 	return nil
 }
@@ -125,13 +167,27 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 		math.MaxUint64-options.MemoryBudgetBytes < options.MemoryReserveBytes {
 		return errors.New("cow-pressure memory budget or reserve is missing or outside bounds")
 	}
-	if options.MaxPressureSlots < uint(pressureShardCapacity) || options.MaxPressureSlots > 4096 || options.MaxPressureSlots%uint(pressureShardCapacity) != 0 {
+	if options.MaxPressureSlots < uint(pressureInitialCapacity) || options.MaxPressureSlots > 4096 || options.MaxPressureSlots%uint(pressureInitialCapacity) != 0 {
 		return errors.New("cow-pressure max slots must be a multiple of four between 4 and 4096")
 	}
 	if options.ConsumerCount == 0 || options.ConsumerCount > 256 || options.PressureDuration < 5*time.Second || options.PressureDuration > 10*time.Minute {
 		return errors.New("cow-pressure consumers or duration is outside bounds")
 	}
+	if !validPressureWorkload(options.PressureWorkload, options.PressureWait) {
+		return errors.New("cow-pressure workload or wait is outside bounds")
+	}
 	return nil
+}
+
+func validPressureWorkload(workload string, wait time.Duration) bool {
+	switch workload {
+	case "cpu":
+		return wait == 0
+	case "wasi-timer-wait":
+		return wait >= time.Millisecond && wait <= 10*time.Second
+	default:
+		return false
+	}
 }
 
 func runCOWPressureMain(options benchmarkOptions, goos string) error {
@@ -154,43 +210,35 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	if err != nil {
 		return err
 	}
-	runners := make([]preparedBenchmarkRunner, 0, options.MaxPressureSlots/uint(pressureShardCapacity))
-	defer func() {
-		for _, runner := range runners {
-			_ = runner.Close(context.Background())
-		}
-	}()
-
-	spawn := make([]cowPressureSnapshot, 0, cap(runners))
 	currentPSS, err := measuredValue(initial.Process.PSSBytes, "initial process PSS")
 	if err != nil {
 		return err
 	}
-	headroom := uint64(pressureMinimumHeadroom)
-	stopReason := "max-slots"
+
+	lifecycle := &lifecycleCollector{}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 2 * time.Minute
-	for uint32(len(runners))*pressureShardCapacity < uint32(options.MaxPressureSlots) {
-		if currentPSS > options.MemoryBudgetBytes || options.MemoryBudgetBytes-currentPSS < headroom {
-			stopReason = "admission-headroom"
-			break
-		}
-		neutral, err := (wazeroengine.Factory{PreparedCapacity: pressureShardCapacity, Strategy: enginecontract.StrategyCOWReadySingleUse}).New(context.Background(), wasm, config)
-		if err != nil {
-			return fmt.Errorf("spawn COW pressure shard %d: %w", len(runners), err)
-		}
-		runner, ok := neutral.(preparedBenchmarkRunner)
-		if !ok {
-			_ = neutral.Close(context.Background())
-			return errors.New("COW pressure diagnostics are unavailable")
-		}
-		if runner.PreparedReady() != int(pressureShardCapacity) {
-			_ = runner.Close(context.Background())
-			return errors.New("COW pressure shard did not become fully ready")
-		}
-		runners = append(runners, runner)
-		slots := uint32(len(runners)) * pressureShardCapacity
-		snapshot, err := collectCOWPressureSnapshot(collector, "spawn", slots, uint32(len(runners)))
+	neutral, err := (wazeroengine.Factory{
+		PreparedCapacity:    pressureInitialCapacity,
+		PreparedMaxCapacity: uint32(options.MaxPressureSlots),
+		Strategy:            enginecontract.StrategyCOWReadySingleUse,
+		Observer:            lifecycle.observe,
+	}).New(context.Background(), wasm, config)
+	if err != nil {
+		return fmt.Errorf("initialize single COW runtime: %w", err)
+	}
+	defer neutral.Close(context.Background())
+	runner, ok := neutral.(growablePreparedBenchmarkRunner)
+	if !ok {
+		return errors.New("growable COW pressure diagnostics are unavailable")
+	}
+
+	spawn := make([]cowPressureSnapshot, 0, options.MaxPressureSlots/uint(pressureMaxGrowthStep)+6)
+	headroom := uint64(pressureMinimumHeadroom)
+	stopReason := "max-slots"
+	slots := pressureInitialCapacity
+	for {
+		snapshot, err := collectCOWPressureSnapshot(collector, "spawn", slots)
 		if err != nil {
 			return err
 		}
@@ -205,19 +253,39 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		if nextPSS > options.MemoryBudgetBytes {
 			return fmt.Errorf("COW pressure admission exceeded runtime budget: PSS=%d budget=%d", nextPSS, options.MemoryBudgetBytes)
 		}
-		delta := nextPSS - currentPSS
-		if delta > headroom/2 && delta <= math.MaxUint64/2 {
-			headroom = delta * 2
+		if nextPSS >= currentPSS {
+			delta := nextPSS - currentPSS
+			if delta > headroom/2 && delta <= math.MaxUint64/2 {
+				headroom = delta * 2
+			}
 		}
 		currentPSS = nextPSS
+		if slots == uint32(options.MaxPressureSlots) {
+			break
+		}
+		if currentPSS > options.MemoryBudgetBytes || options.MemoryBudgetBytes-currentPSS < headroom {
+			stopReason = "admission-headroom"
+			break
+		}
+		growth := slots
+		if growth > pressureMaxGrowthStep {
+			growth = pressureMaxGrowthStep
+		}
+		remaining := uint32(options.MaxPressureSlots) - slots
+		if growth > remaining {
+			growth = remaining
+		}
+		if err := runner.GrowPreparedCapacity(context.Background(), growth); err != nil {
+			return fmt.Errorf("grow single COW runtime to %d slots: %w", slots+growth, err)
+		}
+		slots += growth
 	}
-	if len(runners) == 0 {
-		return errors.New("COW pressure admitted no shards")
+	if runner.PreparedReady() != int(slots) || runner.PreparedCapacity() != slots {
+		return errors.New("single COW runtime did not become fully ready")
 	}
 
-	readyBefore := pressureReadyCount(runners)
-	loadSamples := make([]cowPressureSnapshot, 0, int(options.PressureDuration/time.Second)+1)
-	var sampleMu sync.Mutex
+	lifecycle.drain()
+	readyBefore := uint32(runner.PreparedReady())
 	loadCtx, cancelLoad := context.WithTimeout(context.Background(), options.PressureDuration)
 	defer cancelLoad()
 	var started, completed, failed, timedOut atomic.Uint64
@@ -225,6 +293,10 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	latencies := make([]uint64, 0, 4096)
 	var latencyMu sync.Mutex
 	var workers sync.WaitGroup
+	cpuStarted, err := collectPressureCPU()
+	if err != nil {
+		return err
+	}
 	loadStarted := time.Now()
 	for worker := uint(0); worker < options.ConsumerCount; worker++ {
 		workers.Add(1)
@@ -232,8 +304,13 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			defer workers.Done()
 			for loadCtx.Err() == nil {
 				id := sequence.Add(1)
-				runner := runners[(id-1)%uint64(len(runners))]
-				request, err := makeRequest(fmt.Sprintf("pressure-%d", id), "result = inputs['value'] + 1", map[string]any{"value": id})
+				code := "result = inputs['value'] + 1"
+				inputs := map[string]any{"value": id}
+				if options.PressureWorkload == "wasi-timer-wait" {
+					code = "import time\ntime.sleep(inputs['wait_seconds'])\nresult = inputs['value'] + 1"
+					inputs["wait_seconds"] = options.PressureWait.Seconds()
+				}
+				request, err := makeRequest(fmt.Sprintf("pressure-%d", id), code, inputs)
 				if err != nil {
 					failed.Add(1)
 					continue
@@ -258,38 +335,25 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			}
 		}()
 	}
-	samplerDone := make(chan error, 1)
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-loadCtx.Done():
-				samplerDone <- nil
-				return
-			case <-ticker.C:
-				snapshot, err := collectCOWPressureSnapshot(collector, "load", uint32(len(runners))*pressureShardCapacity, uint32(len(runners)))
-				if err != nil {
-					samplerDone <- err
-					return
-				}
-				sampleMu.Lock()
-				loadSamples = append(loadSamples, snapshot)
-				sampleMu.Unlock()
-			}
-		}
-	}()
 	workers.Wait()
-	if err := <-samplerDone; err != nil {
-		return err
-	}
 	loadElapsed := time.Since(loadStarted)
-	finalSnapshot, err := collectCOWPressureSnapshot(collector, "load-final", uint32(len(runners))*pressureShardCapacity, uint32(len(runners)))
+	cpuFinished, err := collectPressureCPU()
 	if err != nil {
 		return err
 	}
-	loadSamples = append(loadSamples, finalSnapshot)
-	readyAfter := pressureReadyCount(runners)
+
+	replenishStarted := time.Now()
+	replenishContext, cancelReplenish := context.WithTimeout(context.Background(), config.Timeout)
+	defer cancelReplenish()
+	if err := waitForPreparedReady(replenishContext, runner, slots); err != nil {
+		return err
+	}
+	replenishElapsed := time.Since(replenishStarted)
+	finalSnapshot, err := collectCOWPressureSnapshot(collector, "load-final", slots)
+	if err != nil {
+		return err
+	}
+	readyAfter := uint32(runner.PreparedReady())
 
 	latencyMu.Lock()
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
@@ -297,10 +361,14 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	latencyMu.Unlock()
 	load := cowPressureLoad{
 		StartedRequests: started.Load(), CompletedRequests: completed.Load(), FailedRequests: failed.Load(), TimedOutRequests: timedOut.Load(),
-		DurationNS: uint64(loadElapsed.Nanoseconds()), ReadyBefore: readyBefore, ReadyAfter: readyAfter,
+		DurationNS: uint64(loadElapsed.Nanoseconds()), ReplenishDrainNS: uint64(replenishElapsed.Nanoseconds()),
+		CPUUserNS: cpuFinished.userNS - cpuStarted.userNS, CPUSystemNS: cpuFinished.systemNS - cpuStarted.systemNS,
+		GOMAXPROCS:  goruntime.GOMAXPROCS(0),
+		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()),
 	}
 	if loadElapsed > 0 {
 		load.ThroughputPerSec = float64(load.CompletedRequests) / loadElapsed.Seconds()
+		load.CPUCoreUtilization = float64(load.CPUUserNS+load.CPUSystemNS) / float64(load.DurationNS)
 	}
 	if len(latencyCopy) > 0 {
 		load.LatencyP50NS = pressurePercentile(latencyCopy, 50)
@@ -310,17 +378,18 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 1, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 2, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
-		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), ShardCapacity: pressureShardCapacity},
-		StopReason: stopReason, Spawn: spawn, LoadSamples: loadSamples, Load: load,
+		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), RefillWorkers: runner.PreparedRefillWorkers()},
+		StopReason: stopReason, Spawn: spawn, LoadSamples: []cowPressureSnapshot{finalSnapshot}, Load: load,
 		Limitations: []string{
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",
-			"Each four-slot shard owns a distinct wazero runtime, compiled module, and sealed baseline in this unoptimized implementation.",
+			"One bounded wazero runtime, compiled module, and sealed baseline owns every admitted COW slot.",
+			"Full smaps collection is excluded from the timed load and runs only after request and refill drain, so in-load physical peaks are not sampled.",
 			"Closed-loop consumers use a small deterministic Python request and do not model provider latency or open-loop arrivals.",
-			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight drain after issuance stops.",
+			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight request drain but exclude replenish_drain_ns.",
 			"Served slots remain single-use and are replenished; no served-slot restore is claimed.",
 		},
 	}
@@ -335,11 +404,11 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	if err := writeAtomic(options.OutputPath, encoded); err != nil {
 		return err
 	}
-	fmt.Printf("{\"output\":%q,\"slots\":%d,\"completed\":%d}\n", options.OutputPath, len(runners)*int(pressureShardCapacity), load.CompletedRequests)
+	fmt.Printf("{\"output\":%q,\"slots\":%d,\"completed\":%d}\n", options.OutputPath, slots, load.CompletedRequests)
 	return nil
 }
 
-func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, phase string, slots, shards uint32) (cowPressureSnapshot, error) {
+func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, phase string, slots uint32) (cowPressureSnapshot, error) {
 	process, err := collector.Collect()
 	if err != nil {
 		return cowPressureSnapshot{}, err
@@ -348,7 +417,54 @@ func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, phase 
 	if err != nil {
 		return cowPressureSnapshot{}, err
 	}
-	return cowPressureSnapshot{Phase: phase, Slots: slots, Shards: shards, ObservedNS: uint64(time.Now().UnixNano()), Process: process.Process, COWMappings: mappings}, nil
+	return cowPressureSnapshot{Phase: phase, Slots: slots, RuntimeInstances: 1, ObservedNS: uint64(time.Now().UnixNano()), Process: process.Process, COWMappings: mappings}, nil
+}
+
+func waitForPreparedReady(ctx context.Context, runner growablePreparedBenchmarkRunner, slots uint32) error {
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if runner.PreparedReady() == int(slots) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for %d replenished COW slots: %w", slots, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func aggregatePressurePhases(observations []wazeroengine.Observation) []cowPressurePhase {
+	byName := map[string]*cowPressurePhase{}
+	for _, observation := range observations {
+		phase := byName[observation.Phase]
+		if phase == nil {
+			phase = &cowPressurePhase{Name: observation.Phase}
+			byName[observation.Phase] = phase
+		}
+		phase.Count++
+		if observation.Success {
+			phase.Succeeded++
+		} else {
+			phase.Failed++
+		}
+		duration := uint64(observation.Duration.Nanoseconds())
+		phase.TotalNS += duration
+		if duration > phase.MaxNS {
+			phase.MaxNS = duration
+		}
+	}
+	names := make([]string, 0, len(byName))
+	for name := range byName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]cowPressurePhase, 0, len(names))
+	for _, name := range names {
+		result = append(result, *byName[name])
+	}
+	return result
 }
 
 func measuredValue(metric runtimeevidence.Metric, name string) (uint64, error) {
@@ -356,14 +472,6 @@ func measuredValue(metric runtimeevidence.Metric, name string) (uint64, error) {
 		return 0, fmt.Errorf("%s is unavailable", name)
 	}
 	return *metric.Value, nil
-}
-
-func pressureReadyCount(runners []preparedBenchmarkRunner) uint32 {
-	var total uint32
-	for _, runner := range runners {
-		total += uint32(runner.PreparedReady())
-	}
-	return total
 }
 
 func pressurePercentile(sorted []uint64, percentile uint64) uint64 {

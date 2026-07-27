@@ -81,6 +81,8 @@ type benchmarkOptions struct {
 	MaxPressureSlots      uint
 	ConsumerCount         uint
 	PressureDuration      time.Duration
+	PressureWorkload      string
+	PressureWait          time.Duration
 }
 
 func main() {
@@ -110,6 +112,8 @@ func runMain(args []string) error {
 	flags.UintVar(&options.MaxPressureSlots, "max-pressure-slots", 0, "cow-pressure hard slot bound")
 	flags.UintVar(&options.ConsumerCount, "consumers", 0, "cow-pressure closed-loop consumer count")
 	flags.DurationVar(&options.PressureDuration, "pressure-duration", 0, "cow-pressure closed-loop duration")
+	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu or wasi-timer-wait")
+	flags.DurationVar(&options.PressureWait, "pressure-wait", 0, "per-request wait for wasi-timer-wait workload")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

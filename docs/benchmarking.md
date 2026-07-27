@@ -151,7 +151,7 @@ For `cow-ready-single-use`, lifecycle-density additionally requires mapping-attr
 
 ## Bounded COW pressure evidence
 
-[`benchmark/v1/cow-pressure.schema.json`](../benchmark/v1/cow-pressure.schema.json) defines the machine-readable extreme-test envelope. The current harness is deliberately an unoptimized `cow-ready-single-use` test: each four-slot shard owns a separate wazero Runtime, compiled module, and sealed baseline; served slots are destroyed and asynchronously replenished.
+[`benchmark/v1/cow-pressure.schema.json`](../benchmark/v1/cow-pressure.schema.json) defines the machine-readable extreme-test envelope. Schema v2 owns one bounded wazero Runtime, one compiled module, and one sealed baseline for every admitted COW slot. It begins with four slots, doubles bounded growth batches, and caps each later admission step at 64 slots up to the configured hard maximum. These are accounting batches, not runtime shards. Served slots are destroyed and replenished by a fixed worker set.
 
 A 40 GiB allocation that reserves 8 GiB outside the runtime is expressed as two separate values, not as a claimed capacity result:
 
@@ -167,16 +167,23 @@ go run ./cmd/apyrun-benchmark \
   -memory-reserve-bytes 8589934592 \
   -max-pressure-slots 4096 \
   -consumers 16 \
+  -pressure-workload cpu \
   -pressure-duration 30s
 ```
 
 Admission uses measured process PSS plus conservative dynamic headroom and stops before the 32 GiB runtime budget. The surrounding scheduler/cgroup must independently enforce the 40 GiB allocation; the PSS policy is not a kernel reservation. The hard slot bound prevents an accounting bug from creating an unbounded loop.
 
-After admission, closed-loop fake consumers continuously submit a small deterministic Python request. Evidence records admitted shards/slots, every spawn PSS snapshot, COW mapping metrics, stop reason, ready counts, started/completed/failed/timed-out requests, throughput, and p50/p95/p99/max service latency. Checkout starts replenishment before the served mapping is closed, so a load sample may transiently contain at most `ready slots + in-flight consumers` matching mappings. This bounded overlap is lifecycle behavior, not an increase in configured ready capacity.
+After admission, closed-loop fake consumers continuously submit a small deterministic Python request. Evidence records one runtime instance, admitted slots, every growth PSS snapshot, final COW mapping metrics, stop reason, ready counts, started/completed/failed/timed-out requests, throughput, p50/p95/p99/max service latency, process user/system CPU, average utilized cores, `GOMAXPROCS`, phase totals, and separate replenish drain. Checkout requests replenishment through a bounded queue serviced by at most four workers.
 
-`pressure-duration` controls the request-issuance window. Workers finish requests already in flight after that window closes; `load.duration_ns` and `throughput_per_second` cover issuance plus this bounded drain. They must not be interpreted as requests divided by the configured issuance window alone.
+Full `/proc/self/smaps` collection is excluded from the timed load because page-table traversal over large mapping sets can dominate the workload being observed. Schema v2 collects full mapping attribution after request and refill drain and therefore does not claim an in-load physical-memory peak. Lightweight CPU and phase observations remain active during the timed interval.
+
+Production COW slot admission does not fault and SHA-256 all 128 MiB. It relies on the sealed image FD, fixed shape, allocator ownership, and remap result. `wazero.Factory.VerifyCOWPreparedImage` is an explicit bounded diagnostic switch that restores full-image verification and emits `cow_verify`; pressure production evidence leaves it disabled.
+
+`pressure-duration` controls the request-issuance window. Workers finish requests already in flight after that window closes; `load.duration_ns` and `throughput_per_second` cover issuance plus this bounded request drain. `replenish_drain_ns` then measures restoration of the ready pool separately and is excluded from request throughput.
 
 The pressure lane does not claim open-loop sustainable throughput, provider latency, complete served-slot restore, or a general machine-capacity model. Evidence files are written with mode `0600`; private run directories must remain `0700`.
+
+`-pressure-workload cpu` keeps the tiny request compute-only. `-pressure-workload wasi-timer-wait -pressure-wait 100ms` adds a bounded Guest WASI timer wait so a future consumer sweep can distinguish CPU-active work from wait-hiding concurrency. It is not external network, filesystem, database, or provider-I/O evidence.
 
 The checked-in three-repeat base-profile artifact is [`docs/benchmarks/lifecycle-density-production-safe-linux-amd64.json`](benchmarks/lifecycle-density-production-safe-linux-amd64.json). It binds Host revision `5921411c3716f6ce37caee26a10cff5b036e99a9` and remains raw prepared idle-ready evidence, not a fresh/prepared comparison or capacity model.
 

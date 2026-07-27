@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json",
-  "title": "COW pressure evidence v1",
+  "title": "COW pressure evidence v2",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "evidence_kind": {"const": "cow-pressure"},
     "evidence_class": {"const": "production-safe"},
     "artifact": {"$ref": "#/$defs/artifact"},
@@ -20,7 +20,7 @@
     "limits": {"$ref": "#/$defs/limits"},
     "stop_reason": {"enum": ["admission-headroom", "max-slots"]},
     "spawn_snapshots": {"type": "array", "minItems": 1, "maxItems": 1024, "items": {"$ref": "#/$defs/snapshot"}},
-    "load_samples": {"type": "array", "minItems": 1, "maxItems": 601, "items": {"$ref": "#/$defs/snapshot"}},
+    "load_samples": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/snapshot"}},
     "load": {"$ref": "#/$defs/load"},
     "limitations": {"type": "array", "minItems": 4, "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 500}}
   },
@@ -48,12 +48,14 @@
     },
     "limits": {
       "type": "object", "additionalProperties": false,
-      "required": ["runtime_budget_bytes", "reserved_bytes", "allocation_bytes", "max_slots", "consumers", "duration_ns", "shard_capacity"],
+      "required": ["runtime_budget_bytes", "reserved_bytes", "allocation_bytes", "max_slots", "consumers", "duration_ns", "initial_capacity", "max_growth_step", "workload", "wait_ns", "refill_workers"],
       "properties": {
         "runtime_budget_bytes": {"type": "integer", "minimum": 1073741824}, "reserved_bytes": {"type": "integer", "minimum": 1073741824},
         "allocation_bytes": {"type": "integer", "minimum": 2147483648}, "max_slots": {"type": "integer", "minimum": 4, "maximum": 4096, "multipleOf": 4},
         "consumers": {"type": "integer", "minimum": 1, "maximum": 256}, "duration_ns": {"type": "integer", "minimum": 5000000000, "maximum": 600000000000},
-        "shard_capacity": {"const": 4}
+        "initial_capacity": {"const": 4}, "max_growth_step": {"const": 64}, "workload": {"enum": ["cpu", "wasi-timer-wait"]},
+        "wait_ns": {"type": "integer", "minimum": 0, "maximum": 10000000000},
+        "refill_workers": {"type": "integer", "minimum": 1, "maximum": 4}
       }
     },
     "metric": {
@@ -84,23 +86,36 @@
     },
     "snapshot": {
       "type": "object", "additionalProperties": false,
-      "required": ["phase", "slots", "shards", "observed_unix_ns", "process", "cow_mappings"],
+      "required": ["phase", "slots", "runtime_instances", "observed_unix_ns", "process", "cow_mappings"],
       "properties": {
-        "phase": {"enum": ["spawn", "load", "load-final"]}, "slots": {"type": "integer", "minimum": 4, "maximum": 4096, "multipleOf": 4},
-        "shards": {"type": "integer", "minimum": 1, "maximum": 1024}, "observed_unix_ns": {"type": "integer", "minimum": 1},
+        "phase": {"enum": ["spawn", "load-final"]}, "slots": {"type": "integer", "minimum": 4, "maximum": 4096, "multipleOf": 4},
+        "runtime_instances": {"const": 1}, "observed_unix_ns": {"type": "integer", "minimum": 1},
         "process": {"$ref": "#/$defs/process"}, "cow_mappings": {"$ref": "#/$defs/mappings"}
       }
     },
     "load": {
       "type": "object", "additionalProperties": false,
-      "required": ["started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "ready_before", "ready_after"],
+      "required": ["started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "ready_before", "ready_after", "phases"],
       "properties": {
         "started_requests": {"type": "integer", "minimum": 1}, "completed_requests": {"type": "integer", "minimum": 1},
         "failed_requests": {"type": "integer", "minimum": 0}, "timed_out_requests": {"type": "integer", "minimum": 0},
-        "duration_ns": {"type": "integer", "minimum": 1}, "throughput_per_second": {"type": "number", "exclusiveMinimum": 0},
+        "duration_ns": {"type": "integer", "minimum": 1}, "replenish_drain_ns": {"type": "integer", "minimum": 0},
+        "cpu_user_ns": {"type": "integer", "minimum": 0}, "cpu_system_ns": {"type": "integer", "minimum": 0},
+        "cpu_core_utilization": {"type": "number", "exclusiveMinimum": 0}, "gomaxprocs": {"type": "integer", "minimum": 1},
+        "throughput_per_second": {"type": "number", "exclusiveMinimum": 0},
         "latency_p50_ns": {"type": "integer", "minimum": 1}, "latency_p95_ns": {"type": "integer", "minimum": 1},
         "latency_p99_ns": {"type": "integer", "minimum": 1}, "latency_max_ns": {"type": "integer", "minimum": 1},
-        "ready_before": {"type": "integer", "minimum": 1, "maximum": 4096}, "ready_after": {"type": "integer", "minimum": 0, "maximum": 4096}
+        "ready_before": {"type": "integer", "minimum": 1, "maximum": 4096}, "ready_after": {"type": "integer", "minimum": 0, "maximum": 4096},
+        "phases": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/phase"}}
+      }
+    },
+    "phase": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "count", "succeeded", "failed", "total_ns", "max_ns"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 100},
+        "count": {"type": "integer", "minimum": 1}, "succeeded": {"type": "integer", "minimum": 0}, "failed": {"type": "integer", "minimum": 0},
+        "total_ns": {"type": "integer", "minimum": 0}, "max_ns": {"type": "integer", "minimum": 0}
       }
     }
   }

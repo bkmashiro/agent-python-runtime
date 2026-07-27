@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -50,18 +51,18 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 		SharedCleanBytes: metric, SharedDirtyBytes: metric, PrivateCleanBytes: metric, PrivateDirtyBytes: metric,
 		ReferencedBytes: metric, AnonymousBytes: metric,
 	}
-	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, Shards: 1, ObservedNS: 1, Process: process, COWMappings: mappings}
+	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, RuntimeInstances: 1, ObservedNS: 1, Process: process, COWMappings: mappings}
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 1, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 2, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
 		Strategy:    runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"},
-		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), ShardCapacity: 4},
+		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillWorkers: 4},
 		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
-		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4},
+		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}},
 		Limitations: []string{"one", "two", "three", "four"},
 	}
 	if err := evidence.Validate(); err != nil {
@@ -85,7 +86,7 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		Kind: "cow-pressure", Class: "production-safe", Strategy: "cow-ready-single-use",
 		ArtifactPath: "guest.wasm", ManifestPath: "manifest.json", OutputPath: "evidence.json",
 		MemoryBudgetBytes: 32 * 1024 * 1024 * 1024, MemoryReserveBytes: 8 * 1024 * 1024 * 1024,
-		MaxPressureSlots: 4096, ConsumerCount: 16, PressureDuration: 30 * time.Second,
+		MaxPressureSlots: 4096, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu",
 	}
 	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
 		t.Fatal(err)
@@ -96,6 +97,8 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		"missing reserve":    func(value *benchmarkOptions) { value.MemoryReserveBytes = 0 },
 		"nonmultiple slots":  func(value *benchmarkOptions) { value.MaxPressureSlots = 5 },
 		"too many consumers": func(value *benchmarkOptions) { value.ConsumerCount = 257 },
+		"unknown workload":   func(value *benchmarkOptions) { value.PressureWorkload = "io" },
+		"cpu with wait":      func(value *benchmarkOptions) { value.PressureWait = time.Second },
 		"short duration":     func(value *benchmarkOptions) { value.PressureDuration = time.Second },
 		"overflow total": func(value *benchmarkOptions) {
 			value.MemoryBudgetBytes = math.MaxUint64
@@ -113,6 +116,12 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	if err := validateCOWPressureOptions(valid, "darwin"); err == nil {
 		t.Fatal("non-Linux cow-pressure accepted")
 	}
+	waiting := valid
+	waiting.PressureWorkload = "wasi-timer-wait"
+	waiting.PressureWait = 100 * time.Millisecond
+	if err := validateCOWPressureOptions(waiting, "linux"); err != nil {
+		t.Fatalf("bounded wait workload rejected: %v", err)
+	}
 }
 
 func TestPressurePercentileUsesNearestRank(t *testing.T) {
@@ -122,6 +131,20 @@ func TestPressurePercentileUsesNearestRank(t *testing.T) {
 	}
 	if pressurePercentile(nil, 99) != 0 {
 		t.Fatal("empty pressure percentile is not zero")
+	}
+}
+
+func TestAggregatePressurePhasesIsDeterministicAndComplete(t *testing.T) {
+	phases := aggregatePressurePhases([]wazeroengine.Observation{
+		{Phase: "pool_wait", Duration: 2 * time.Millisecond, Success: true},
+		{Phase: "execute", Duration: 3 * time.Millisecond, Success: false},
+		{Phase: "execute", Duration: time.Millisecond, Success: true},
+	})
+	if len(phases) != 2 || phases[0].Name != "execute" || phases[1].Name != "pool_wait" {
+		t.Fatalf("phase ordering drifted: %#v", phases)
+	}
+	if phases[0].Count != 2 || phases[0].Succeeded != 1 || phases[0].Failed != 1 || phases[0].TotalNS != uint64((4*time.Millisecond).Nanoseconds()) || phases[0].MaxNS != uint64((3*time.Millisecond).Nanoseconds()) {
+		t.Fatalf("execute aggregation drifted: %#v", phases[0])
 	}
 }
 

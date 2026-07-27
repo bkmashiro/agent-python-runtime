@@ -320,6 +320,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",
 			"Each four-slot shard owns a distinct wazero runtime, compiled module, and sealed baseline in this unoptimized implementation.",
 			"Closed-loop consumers use a small deterministic Python request and do not model provider latency or open-loop arrivals.",
+			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight drain after issuance stops.",
 			"Served slots remain single-use and are replenished; no served-slot restore is claimed.",
 		},
 	}

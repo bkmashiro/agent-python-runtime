@@ -174,6 +174,8 @@ Admission uses measured process PSS plus conservative dynamic headroom and stops
 
 After admission, closed-loop fake consumers continuously submit a small deterministic Python request. Evidence records admitted shards/slots, every spawn PSS snapshot, COW mapping metrics, stop reason, ready counts, started/completed/failed/timed-out requests, throughput, and p50/p95/p99/max service latency. Checkout starts replenishment before the served mapping is closed, so a load sample may transiently contain at most `ready slots + in-flight consumers` matching mappings. This bounded overlap is lifecycle behavior, not an increase in configured ready capacity.
 
+`pressure-duration` controls the request-issuance window. Workers finish requests already in flight after that window closes; `load.duration_ns` and `throughput_per_second` cover issuance plus this bounded drain. They must not be interpreted as requests divided by the configured issuance window alone.
+
 The pressure lane does not claim open-loop sustainable throughput, provider latency, complete served-slot restore, or a general machine-capacity model. Evidence files are written with mode `0600`; private run directories must remain `0700`.
 
 The checked-in three-repeat base-profile artifact is [`docs/benchmarks/lifecycle-density-production-safe-linux-amd64.json`](benchmarks/lifecycle-density-production-safe-linux-amd64.json). It binds Host revision `5921411c3716f6ce37caee26a10cff5b036e99a9` and remains raw prepared idle-ready evidence, not a fresh/prepared comparison or capacity model.

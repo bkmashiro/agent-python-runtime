@@ -12,7 +12,7 @@ import (
 var ErrTrialArtifact = errors.New("invalid agentic trial artifact")
 
 func ValidateTrialResult(result TrialResult) error {
-	if (result.Version != "agentic-development-trial/v1" && result.Version != "agentic-development-trial/v2" && result.Version != "agentic-development-trial/v3") || !supportedDevelopmentModel(result.Model) ||
+	if (result.Version != "agentic-development-trial/v1" && result.Version != "agentic-development-trial/v2" && result.Version != "agentic-development-trial/v3" && result.Version != "agentic-development-trial/v4") || !supportedDevelopmentModel(result.Model) ||
 		!result.Condition.valid() || !result.Limits.valid() || !validExecutionIdentity(result.Identity, result.Condition) || result.Replicate > 1000 ||
 		!validDigest(result.SpecDigest) || result.TrialID != "dev_"+strings.TrimPrefix(result.SpecDigest, "sha256:")[:32] ||
 		result.TaskID == "" || !validDigest(result.TaskDigest) || !validDigest(result.SourceRecordDigest) ||
@@ -22,7 +22,8 @@ func ValidateTrialResult(result TrialResult) error {
 		result.PythonRuns > result.PythonAttempts || result.PythonAttempts > result.Limits.MaxPythonRuns || len(result.TextDigests) > int(result.ProviderCalls) {
 		return ErrTrialArtifact
 	}
-	if result.Version == "agentic-development-trial/v3" {
+	modernTreatmentArtifact := result.Version == "agentic-development-trial/v3" || result.Version == "agentic-development-trial/v4"
+	if modernTreatmentArtifact {
 		document := expectedTreatmentDocument(result.TreatmentID)
 		if document == "" || result.TreatmentDigest != digest([]byte(document)) {
 			return ErrTrialArtifact
@@ -87,7 +88,9 @@ func ValidateTrialResult(result TrialResult) error {
 	for _, exchange := range result.Exchanges {
 		exchangeTotal, exchangeOK := checkedAdd(exchange.Usage.InputTokens, exchange.Usage.OutputTokens)
 		if !exchangeOK || exchange.StatusCode < 100 || exchange.StatusCode > 599 || !validDigest(exchange.RequestDigest) || !validDigest(exchange.ResponseDigest) ||
-			exchange.Usage.TotalTokens != exchangeTotal {
+			exchange.Usage.TotalTokens != exchangeTotal ||
+			(result.Version == "agentic-development-trial/v4" && (!exchange.InstructionsEcho.valid() || (exchange.InstructionsEcho == InstructionsEchoInvalid && !exchange.ProtocolInvalid))) ||
+			(result.Version != "agentic-development-trial/v4" && exchange.InstructionsEcho != "") {
 			return ErrTrialArtifact
 		}
 		var ok bool
@@ -129,8 +132,8 @@ func ValidateTrialResult(result TrialResult) error {
 			evidence.Success != (evidence.ErrorCode == "") || (evidence.Success && evidence.FailureClass != "") ||
 			(!evidence.Success && result.Version == "agentic-development-trial/v1" && evidence.FailureClass != "") ||
 			(!evidence.Success && result.Version == "agentic-development-trial/v2" && evidence.FailureClass != "" && !evidence.FailureClass.valid()) ||
-			(!evidence.Success && result.Version == "agentic-development-trial/v3" && !evidence.FailureClass.valid()) ||
-			(result.Version == "agentic-development-trial/v3" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn < previousPythonTurn)) {
+			(!evidence.Success && modernTreatmentArtifact && !evidence.FailureClass.valid()) ||
+			(modernTreatmentArtifact && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn < previousPythonTurn)) {
 			return ErrTrialArtifact
 		}
 		if compactPythonTreatment {
@@ -140,7 +143,7 @@ func ValidateTrialResult(result TrialResult) error {
 		} else if evidence.ModelCodeDigest != "" || evidence.EffectiveCodeDigest != "" || evidence.WrapperDigest != "" {
 			return ErrTrialArtifact
 		}
-		if result.Version == "agentic-development-trial/v3" && evidence.Turn == previousPythonTurn {
+		if modernTreatmentArtifact && evidence.Turn == previousPythonTurn {
 			duplicatePythonTurns++
 		}
 		previousPythonTurn = evidence.Turn
@@ -149,7 +152,7 @@ func ValidateTrialResult(result TrialResult) error {
 		if result.FailureDetail != nil {
 			return ErrTrialArtifact
 		}
-	} else if result.ErrorCode == "python_guest_error" && (result.Version == "agentic-development-trial/v3" || result.FailureDetail != nil) {
+	} else if result.ErrorCode == "python_guest_error" && (modernTreatmentArtifact || result.FailureDetail != nil) {
 		if result.FailureDetail == nil || !result.FailureDetail.Class.valid() || result.FailureDetail.Turn < 0 || result.FailureDetail.Turn >= 32 || len(result.PythonEvidence) == 0 {
 			return ErrTrialArtifact
 		}

@@ -42,10 +42,24 @@ func (condition Condition) valid() bool {
 	return condition == ConditionDirect || condition == ConditionPython || condition == ConditionHybrid
 }
 
+type InstructionsEcho string
+
+const (
+	InstructionsEchoExact         InstructionsEcho = "exact"
+	InstructionsEchoUnavailable   InstructionsEcho = "unavailable"
+	InstructionsEchoNotApplicable InstructionsEcho = "not_applicable"
+	InstructionsEchoInvalid       InstructionsEcho = "invalid"
+)
+
+func (echo InstructionsEcho) valid() bool {
+	return echo == InstructionsEchoExact || echo == InstructionsEchoUnavailable || echo == InstructionsEchoNotApplicable || echo == InstructionsEchoInvalid
+}
+
 type ExchangeEvidence struct {
-	StatusCode      int            `json:"status_code"`
-	RequestDigest   string         `json:"request_digest"`
-	ResponseDigest  string         `json:"response_digest"`
-	Usage           provider.Usage `json:"usage"`
-	ProtocolInvalid bool           `json:"protocol_invalid,omitempty"`
+	StatusCode       int              `json:"status_code"`
+	RequestDigest    string           `json:"request_digest"`
+	ResponseDigest   string           `json:"response_digest"`
+	Usage            provider.Usage   `json:"usage"`
+	InstructionsEcho InstructionsEcho `json:"instructions_echo,omitempty"`
+	ProtocolInvalid  bool             `json:"protocol_invalid,omitempty"`
 }

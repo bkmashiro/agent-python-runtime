@@ -28,10 +28,10 @@ func validTrialResult(t *testing.T) TrialResult {
 	return result
 }
 
-func TestValidateTrialResultV3BindsTreatmentAndKeepsV1V2Readable(t *testing.T) {
+func TestValidateTrialResultV4BindsTreatmentEchoAndKeepsV1V2V3Readable(t *testing.T) {
 	valid := validTrialResult(t)
-	if valid.Version != "agentic-development-trial/v3" || valid.Metrics == nil || valid.TreatmentID != TreatmentBaselineV1 || valid.TreatmentDigest != BaselineTreatment().Digest {
-		t.Fatalf("runner did not emit v3 treatment metrics: %+v", valid)
+	if valid.Version != "agentic-development-trial/v4" || valid.Metrics == nil || valid.TreatmentID != TreatmentBaselineV1 || valid.TreatmentDigest != BaselineTreatment().Digest {
+		t.Fatalf("runner did not emit v4 treatment metrics: %+v", valid)
 	}
 	if err := ValidateTrialResult(valid); err != nil {
 		t.Fatal(err)
@@ -42,13 +42,28 @@ func TestValidateTrialResultV3BindsTreatmentAndKeepsV1V2Readable(t *testing.T) {
 		t.Fatal("inconsistent treatment digest accepted")
 	}
 	tampered = valid
+	tampered.Exchanges = append([]ExchangeEvidence(nil), valid.Exchanges...)
+	tampered.Exchanges[0].InstructionsEcho = ""
+	if err := ValidateTrialResult(tampered); err == nil {
+		t.Fatal("v4 exchange without instructions echo state accepted")
+	}
+	tampered = valid
 	metrics := *valid.Metrics
 	metrics.OutcomeSuccess = !metrics.OutcomeSuccess
 	tampered.Metrics = &metrics
 	if err := ValidateTrialResult(tampered); err == nil {
-		t.Fatal("inconsistent v3 metrics accepted")
+		t.Fatal("inconsistent v4 metrics accepted")
 	}
-	legacyV2 := valid
+	legacyV3 := valid
+	legacyV3.Version = "agentic-development-trial/v3"
+	legacyV3.Exchanges = append([]ExchangeEvidence(nil), valid.Exchanges...)
+	for index := range legacyV3.Exchanges {
+		legacyV3.Exchanges[index].InstructionsEcho = ""
+	}
+	if err := ValidateTrialResult(legacyV3); err != nil {
+		t.Fatalf("legacy v3 rejected: %v", err)
+	}
+	legacyV2 := legacyV3
 	legacyV2.Version = "agentic-development-trial/v2"
 	legacyV2.TreatmentID, legacyV2.TreatmentDigest = "", ""
 	if err := ValidateTrialResult(legacyV2); err != nil {

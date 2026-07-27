@@ -139,7 +139,9 @@ func (session *ResponsesSession) Exchange(
 		session.closed = true
 		return ParsedResponse{}, fmt.Errorf("%w: provider exchange", ErrAgenticRun)
 	}
-	if identityErr := validateResponseIdentity(response.Body, session.model, instructions); identityErr != nil {
+	instructionsEcho, identityErr := validateResponseIdentity(response.Body, session.model, instructions)
+	session.setLatestInstructionsEcho(instructionsEcho)
+	if identityErr != nil {
 		session.markLatestProtocolInvalid()
 		session.closed = true
 		return ParsedResponse{}, identityErr
@@ -166,6 +168,12 @@ func (session *ResponsesSession) Exchange(
 		session.seenIDs[call.CallID] = true
 	}
 	return parsed, nil
+}
+
+func (session *ResponsesSession) setLatestInstructionsEcho(echo InstructionsEcho) {
+	if len(session.evidence) > 0 {
+		session.evidence[len(session.evidence)-1].InstructionsEcho = echo
+	}
 }
 
 func (session *ResponsesSession) markLatestProtocolInvalid() {
@@ -206,29 +214,40 @@ func promoteResponseInstructions(input any) (any, string, error) {
 	return wireInput, instructions.String(), nil
 }
 
-func validateResponseIdentity(body json.RawMessage, expectedModel, expectedInstructions string) error {
-	if expectedModel == "" || len(body) == 0 || len(body) > 1024*1024 {
-		return ErrProviderIdentityMismatch
+func validateResponseIdentity(body json.RawMessage, expectedModel, expectedInstructions string) (InstructionsEcho, error) {
+	if expectedModel == "" || len(body) == 0 || len(body) > 1024*1024 || rejectDuplicateJSON(body) != nil {
+		return InstructionsEchoInvalid, ErrProviderIdentityMismatch
 	}
-	var envelope struct {
-		Model        string          `json:"model"`
-		Instructions json.RawMessage `json:"instructions"`
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(body, &envelope) != nil || envelope == nil {
+		return InstructionsEchoInvalid, ErrProviderIdentityMismatch
 	}
-	if json.Unmarshal(body, &envelope) != nil || envelope.Model != expectedModel {
-		return ErrProviderIdentityMismatch
-	}
-	instructions := bytes.TrimSpace(envelope.Instructions)
-	if expectedInstructions == "" {
-		if len(instructions) != 0 && !bytes.Equal(instructions, []byte("null")) {
-			return ErrProviderIdentityMismatch
+	for key := range envelope {
+		if (key != "model" && strings.EqualFold(key, "model")) || (key != "instructions" && strings.EqualFold(key, "instructions")) {
+			return InstructionsEchoInvalid, ErrProviderIdentityMismatch
 		}
-		return nil
+	}
+	var model string
+	modelRaw, modelOK := envelope["model"]
+	if !modelOK || json.Unmarshal(modelRaw, &model) != nil || model != expectedModel {
+		return InstructionsEchoInvalid, ErrProviderIdentityMismatch
+	}
+	instructions := bytes.TrimSpace(envelope["instructions"])
+	unavailable := len(instructions) == 0 || bytes.Equal(instructions, []byte("null"))
+	if expectedInstructions == "" {
+		if !unavailable {
+			return InstructionsEchoInvalid, ErrProviderIdentityMismatch
+		}
+		return InstructionsEchoNotApplicable, nil
+	}
+	if unavailable {
+		return InstructionsEchoUnavailable, nil
 	}
 	var echoed string
-	if len(instructions) == 0 || json.Unmarshal(instructions, &echoed) != nil || echoed != expectedInstructions {
-		return ErrProviderIdentityMismatch
+	if json.Unmarshal(instructions, &echoed) != nil || echoed != expectedInstructions {
+		return InstructionsEchoInvalid, ErrProviderIdentityMismatch
 	}
-	return nil
+	return InstructionsEchoExact, nil
 }
 
 func (session *ResponsesSession) admitResponse(response provider.Response, requestedMaxOutput uint64) error {
@@ -248,7 +267,7 @@ func (session *ResponsesSession) admitResponse(response provider.Response, reque
 	session.usage = provider.Usage{InputTokens: input, OutputTokens: output, TotalTokens: total}
 	session.evidence = append(session.evidence, ExchangeEvidence{
 		StatusCode: response.StatusCode, RequestDigest: response.RequestDigest,
-		ResponseDigest: response.ResponseDigest, Usage: *cloneUsage(response.Usage),
+		ResponseDigest: response.ResponseDigest, Usage: *cloneUsage(response.Usage), InstructionsEcho: InstructionsEchoInvalid,
 	})
 	if requestedMaxOutput == 0 || response.Usage.OutputTokens > requestedMaxOutput {
 		return ErrProviderOutputLimitExceeded

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	LinkAPIResponsesProtocol = "openai-responses-v2"
+	LinkAPIResponsesProtocol = "openai-responses-v3"
 	LinkAPIResponsesEndpoint = "https://api.linkapi.ai/v1/responses"
 	maxExchangeBytes         = 1024 * 1024
 )

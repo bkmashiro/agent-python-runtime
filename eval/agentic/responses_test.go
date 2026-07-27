@@ -10,9 +10,10 @@ import (
 )
 
 type scriptedAdapter struct {
-	responses []provider.Response
-	errors    []error
-	requests  []provider.Request
+	responses                   []provider.Response
+	errors                      []error
+	requests                    []provider.Request
+	preserveMissingInstructions bool
 }
 
 func (*scriptedAdapter) Protocol() string { return provider.LinkAPIResponsesProtocol }
@@ -29,7 +30,7 @@ func (adapter *scriptedAdapter) Exchange(_ context.Context, request provider.Req
 	response := adapter.responses[index]
 	var requestDocument map[string]json.RawMessage
 	var responseDocument map[string]json.RawMessage
-	if json.Unmarshal(request.Payload, &requestDocument) == nil && json.Unmarshal(response.Body, &responseDocument) == nil {
+	if !adapter.preserveMissingInstructions && json.Unmarshal(request.Payload, &requestDocument) == nil && json.Unmarshal(response.Body, &responseDocument) == nil {
 		if instructions, exists := requestDocument["instructions"]; exists {
 			if _, explicit := responseDocument["instructions"]; !explicit {
 				responseDocument["instructions"] = instructions
@@ -80,6 +81,9 @@ func TestResponsesSessionUsesVerifiedResponsesWire(t *testing.T) {
 	if _, err := session.Exchange(context.Background(), history, tools, "required", false, map[string]string{"pwd": "pwd"}); err != nil {
 		t.Fatal(err)
 	}
+	if evidence := session.Evidence(); len(evidence) != 1 || evidence[0].InstructionsEcho != InstructionsEchoExact {
+		t.Fatalf("evidence=%+v", evidence)
+	}
 	var payload map[string]any
 	if len(adapter.requests) != 1 || json.Unmarshal(adapter.requests[0].Payload, &payload) != nil {
 		t.Fatal("decode payload")
@@ -94,6 +98,67 @@ func TestResponsesSessionUsesVerifiedResponsesWire(t *testing.T) {
 	wireTool := payload["tools"].([]any)[0].(map[string]any)
 	if wireTool["type"] != "function" || wireTool["name"] != "pwd" || wireTool["function"] != nil {
 		t.Fatalf("wire tool=%#v", wireTool)
+	}
+}
+
+func TestResponsesSessionAcceptsUnavailableInstructionsEcho(t *testing.T) {
+	for _, body := range []string{
+		`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`,
+		`{"instructions":null,"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`,
+	} {
+		adapter := &scriptedAdapter{
+			responses:                   []provider.Response{responseFixture(body, 10, 2)},
+			preserveMissingInstructions: true,
+		}
+		session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := []any{
+			map[string]any{"role": "developer", "content": "use tools"},
+			map[string]any{"role": "user", "content": "inspect"},
+		}
+		if _, err := session.Exchange(context.Background(), input, nil, "required", false, nil); err != nil {
+			t.Fatalf("missing optional instructions echo rejected: %v", err)
+		}
+		evidence := session.Evidence()
+		if len(evidence) != 1 || evidence[0].InstructionsEcho != InstructionsEchoUnavailable || evidence[0].ProtocolInvalid {
+			t.Fatalf("evidence=%+v", evidence)
+		}
+	}
+}
+
+func TestResponsesSessionRejectsReplacedInstructionsEcho(t *testing.T) {
+	adapter := &scriptedAdapter{
+		responses:                   []provider.Response{responseFixture(`{"instructions":"different","status":"completed","output":[]}`, 10, 2)},
+		preserveMissingInstructions: true,
+	}
+	session, err := NewResponsesSession(adapter, developmentModel, testTrialLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := []any{map[string]any{"role": "developer", "content": "use tools"}}
+	if _, err := session.Exchange(context.Background(), input, nil, "required", false, nil); !errors.Is(err, ErrProviderIdentityMismatch) {
+		t.Fatalf("replaced instructions echo err=%v", err)
+	}
+	evidence := session.Evidence()
+	if len(evidence) != 1 || evidence[0].InstructionsEcho != InstructionsEchoInvalid || !evidence[0].ProtocolInvalid {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
+
+func TestValidateResponseIdentityRejectsNonCanonicalAliases(t *testing.T) {
+	for _, test := range []struct {
+		body         string
+		instructions string
+	}{
+		{body: `{"MODEL":"gpt-5.4","status":"completed","output":[]}`},
+		{body: `{"model":"gpt-5.4","instructionſ":"use tools","status":"completed","output":[]}`, instructions: "use tools"},
+	} {
+		echo, err := validateResponseIdentity(json.RawMessage(test.body), "gpt-5.4", test.instructions)
+		if !errors.Is(err, ErrProviderIdentityMismatch) || echo != InstructionsEchoInvalid {
+			t.Fatalf("body=%s echo=%s err=%v", test.body, echo, err)
+		}
 	}
 }
 

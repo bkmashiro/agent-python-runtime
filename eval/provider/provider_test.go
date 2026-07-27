@@ -42,6 +42,37 @@ func TestLinkAPIResponsesProducesDigestOnlyEvidence(t *testing.T) {
 	}
 }
 
+func TestLinkAPIResponsesRequestDigestBindsInstructions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"model":"gpt-test","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+	adapter, err := newLinkAPIResponses(server.Client(), server.URL+"/v1/responses", func() (string, bool) { return "secret", true }, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(instructions string) Response {
+		payload, err := json.Marshal(map[string]any{
+			"model": "gpt-test", "instructions": instructions, "input": "x", "max_output_tokens": 64,
+			"stream": false, "background": false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := adapter.Exchange(context.Background(), Request{Model: "gpt-test", Payload: payload})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+	first := request("policy-a")
+	second := request("policy-b")
+	if adapter.Protocol() != LinkAPIResponsesProtocol || LinkAPIResponsesProtocol != "openai-responses-v3" || first.RequestDigest == second.RequestDigest {
+		t.Fatalf("protocol=%s first=%s second=%s", adapter.Protocol(), first.RequestDigest, second.RequestDigest)
+	}
+}
+
 func TestLinkAPIResponsesDoesNotImplicitlyRetryPaidRequest(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

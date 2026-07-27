@@ -386,8 +386,9 @@ func runDevelopmentTrialForModelWithIdentity(
 	taskDigest := digest(taskBytes)
 
 	baseSpec := map[string]any{
-		"version": "agentic-development-trial-spec/v2", "task_digest": taskDigest,
-		"condition": condition, "model": model, "replicate": replicate, "limits": limits, "identity": identity,
+		"version": "agentic-development-trial-spec/v3", "task_digest": taskDigest,
+		"provider_protocol": adapter.Protocol(),
+		"condition":         condition, "model": model, "replicate": replicate, "limits": limits, "identity": identity,
 		"treatment_id": treatment.ID, "treatment_digest": treatment.Digest,
 		"catalog_digest": tools.Snapshot().Digest(), "prompt_digest": promptDigest, "surface_digest": surfaceDigest,
 	}
@@ -405,7 +406,7 @@ func runDevelopmentTrialForModelWithIdentity(
 	}
 	specDigest := digest(specBytes)
 	result := TrialResult{
-		Version: "agentic-development-trial/v3", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
+		Version: "agentic-development-trial/v4", TrialID: "dev_" + strings.TrimPrefix(specDigest, "sha256:")[:32],
 		SpecDigest: specDigest, TaskID: task.ID, TaskDigest: taskDigest, SourceRecordDigest: task.Source.RecordSHA256,
 		Condition: condition, Model: model, Identity: identity, Replicate: replicate, Limits: limits,
 		PromptDigest: promptDigest, SurfaceDigest: surfaceDigest, TreatmentID: treatment.ID, TreatmentDigest: treatment.Digest,

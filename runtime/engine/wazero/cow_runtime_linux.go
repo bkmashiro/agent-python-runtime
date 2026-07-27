@@ -21,7 +21,13 @@ type linuxCOWPreparedRuntime struct {
 func cowReadyStrategySupported() bool { return true }
 
 func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRuntime, error) {
-	if engine == nil || !engine.stateCensus.Memory.COWEligible {
+	if engine == nil {
+		return nil, errors.New("COW prepared runtime requires an engine")
+	}
+	if !engine.stateCensus.Artifact.ParseComplete {
+		return nil, errors.New("COW prepared runtime requires a complete static artifact census")
+	}
+	if !engine.stateCensus.Memory.COWEligible {
 		return nil, errors.New("reactor memory is not eligible for COW")
 	}
 	canonical, err := engine.newInitializedModule(ctx, "cow_image_")

@@ -38,6 +38,7 @@ type ReactorMemoryCensus struct {
 type ReactorStateCensus struct {
 	SchemaVersion       int                    `json:"schema_version"`
 	Memory              ReactorMemoryCensus    `json:"memory"`
+	Artifact            ReactorArtifactCensus  `json:"artifact"`
 	UnknownStateClasses []string               `json:"unknown_state_classes"`
 	RestoreDecision     ReactorRestoreDecision `json:"restore_decision"`
 	Reasons             []string               `json:"reasons"`
@@ -46,8 +47,11 @@ type ReactorStateCensus struct {
 // Validate checks internal consistency; it does not widen what the public
 // wazero API can prove.
 func (census ReactorStateCensus) Validate() error {
-	if census.SchemaVersion != 1 || len(census.Reasons) == 0 {
+	if census.SchemaVersion != 2 || len(census.Reasons) == 0 {
 		return fmt.Errorf("reactor state census identity is incomplete")
+	}
+	if err := census.Artifact.Validate(); err != nil {
+		return fmt.Errorf("reactor state census artifact is incomplete: %w", err)
 	}
 	if census.Memory.COWEligible && (!census.Memory.Fixed || !census.Memory.VisibilityComplete ||
 		census.Memory.Count != 1 || census.Memory.ImportedCount != 0 || census.Memory.ExportName != guestMemoryExport) {
@@ -66,11 +70,27 @@ func (census ReactorStateCensus) Validate() error {
 	}
 }
 
-func censusCompiledReactor(compiled wazerort.CompiledModule) ReactorStateCensus {
+func censusCompiledReactor(compiled wazerort.CompiledModule, wasm []byte) ReactorStateCensus {
 	census := ReactorStateCensus{
-		SchemaVersion:       1,
-		UnknownStateClasses: []string{"mutable-globals", "tables"},
+		SchemaVersion:       2,
+		UnknownStateClasses: []string{"module-instance-state", "wasi-host-state"},
 		RestoreDecision:     ReactorRestoreSingleUseOnly,
+	}
+	artifact, artifactErr := censusReactorArtifact(wasm)
+	if artifactErr == nil {
+		census.Artifact = artifact
+		if artifact.Globals.MutableCount > 0 {
+			census.UnknownStateClasses = append(census.UnknownStateClasses, "mutable-globals")
+		}
+		if artifact.Tables.Count > 0 {
+			census.UnknownStateClasses = append(census.UnknownStateClasses, "tables")
+		}
+		if artifact.Elements.PassiveCount > 0 || artifact.Data.PassiveCount > 0 {
+			census.UnknownStateClasses = append(census.UnknownStateClasses, "passive-segments")
+		}
+	} else {
+		census.UnknownStateClasses = append(census.UnknownStateClasses, "artifact-static-state")
+		census.Reasons = append(census.Reasons, artifactErr.Error())
 	}
 	if compiled == nil {
 		census.Reasons = []string{"compiled module is nil"}
@@ -114,6 +134,7 @@ func censusCompiledReactor(compiled wazerort.CompiledModule) ReactorStateCensus 
 	}
 	census.Memory.COWEligible = ok && len(imported) == 0 && census.Memory.VisibilityComplete && census.Memory.Fixed
 
+	sort.Strings(census.UnknownStateClasses)
 	for _, stateClass := range census.UnknownStateClasses {
 		census.Reasons = append(census.Reasons, stateClass+" are not exhaustively observable through wazero public APIs")
 	}

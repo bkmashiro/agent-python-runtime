@@ -171,7 +171,7 @@ func newEngine(
 		observer:               observer,
 		strategy:               strategy,
 		verifyCOWPreparedImage: verifyCOWPreparedImage,
-		stateCensus:            censusCompiledReactor(compiled),
+		stateCensus:            censusCompiledReactor(compiled, wasm),
 	}
 	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity); err != nil {
 		_ = engine.Close(context.Background())
@@ -196,6 +196,7 @@ func (engine *Engine) StateCensus() ReactorStateCensus {
 		return ReactorStateCensus{}
 	}
 	census := engine.stateCensus
+	census.Artifact.ImportModules = append([]string{}, census.Artifact.ImportModules...)
 	census.UnknownStateClasses = append([]string(nil), census.UnknownStateClasses...)
 	census.Reasons = append([]string(nil), census.Reasons...)
 	return census

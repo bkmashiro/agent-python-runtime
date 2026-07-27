@@ -48,9 +48,9 @@
     "state": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "memory", "unknown_state_classes", "restore_decision", "reasons"],
+      "required": ["schema_version", "memory", "artifact", "unknown_state_classes", "restore_decision", "reasons"],
       "properties": {
-        "schema_version": {"const": 1},
+        "schema_version": {"const": 2},
         "memory": {
           "type": "object",
           "additionalProperties": false,
@@ -65,6 +65,76 @@
             "fixed": {"type": "boolean"},
             "visibility_complete": {"type": "boolean"},
             "cow_eligible": {"type": "boolean"}
+          }
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "parse_complete", "import_count", "import_modules", "imports", "globals", "tables", "elements", "data", "has_start_function"],
+          "properties": {
+            "schema_version": {"const": 1},
+            "parse_complete": {"const": true},
+            "import_count": {"type": "integer", "minimum": 0},
+            "import_modules": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "imports": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["function_count", "table_count", "memory_count", "global_count"],
+              "properties": {
+                "function_count": {"type": "integer", "minimum": 0},
+                "table_count": {"type": "integer", "minimum": 0},
+                "memory_count": {"type": "integer", "minimum": 0},
+                "global_count": {"type": "integer", "minimum": 0}
+              }
+            },
+            "globals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["count", "imported_count", "defined_count", "mutable_count", "immutable_count"],
+              "properties": {
+                "count": {"type": "integer", "minimum": 0},
+                "imported_count": {"type": "integer", "minimum": 0},
+                "defined_count": {"type": "integer", "minimum": 0},
+                "mutable_count": {"type": "integer", "minimum": 0},
+                "immutable_count": {"type": "integer", "minimum": 0}
+              }
+            },
+            "tables": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["count", "imported_count", "defined_count"],
+              "properties": {
+                "count": {"type": "integer", "minimum": 0},
+                "imported_count": {"type": "integer", "minimum": 0},
+                "defined_count": {"type": "integer", "minimum": 0}
+              }
+            },
+            "elements": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["count", "active_count", "passive_count", "declarative_count"],
+              "properties": {
+                "count": {"type": "integer", "minimum": 0},
+                "active_count": {"type": "integer", "minimum": 0},
+                "passive_count": {"type": "integer", "minimum": 0},
+                "declarative_count": {"type": "integer", "minimum": 0}
+              }
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["count", "active_count", "passive_count"],
+              "properties": {
+                "count": {"type": "integer", "minimum": 0},
+                "active_count": {"type": "integer", "minimum": 0},
+                "passive_count": {"type": "integer", "minimum": 0}
+              }
+            },
+            "has_start_function": {"type": "boolean"}
           }
         },
         "unknown_state_classes": {

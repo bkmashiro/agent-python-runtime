@@ -21,7 +21,9 @@ func validTrialResult(t *testing.T) TrialResult {
 		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
 		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
 	}
-	result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapterForStatefulOracle(t, task, func(name string) string { return name }), task, ConditionDirect, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, nil)
+	adapter := adapterForStatefulOracle(t, task, func(name string) string { return name })
+	adapter.preserveMissingInstructions = true
+	result, err := RunDevelopmentTrialWithIdentity(context.Background(), adapter, task, ConditionDirect, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +34,11 @@ func TestValidateTrialResultV4BindsTreatmentEchoAndKeepsV1V2V3Readable(t *testin
 	valid := validTrialResult(t)
 	if valid.Version != "agentic-development-trial/v4" || valid.Metrics == nil || valid.TreatmentID != TreatmentBaselineV1 || valid.TreatmentDigest != BaselineTreatment().Digest {
 		t.Fatalf("runner did not emit v4 treatment metrics: %+v", valid)
+	}
+	for _, exchange := range valid.Exchanges {
+		if exchange.InstructionsEcho != InstructionsEchoUnavailable || exchange.ProtocolInvalid {
+			t.Fatalf("unavailable echo evidence=%+v", exchange)
+		}
 	}
 	if err := ValidateTrialResult(valid); err != nil {
 		t.Fatal(err)

@@ -66,6 +66,10 @@ func (collector LinuxCollector) Collect() (LinuxMetricSnapshot, error) {
 	if err != nil {
 		return LinuxMetricSnapshot{}, err
 	}
+	pageTables, err := optionalKBMetric(statusValues, "VmPTE")
+	if err != nil {
+		return LinuxMetricSnapshot{}, err
+	}
 
 	minorFaults, majorFaults, err := collector.collectFaults()
 	if err != nil {
@@ -105,6 +109,7 @@ func (collector LinuxCollector) Collect() (LinuxMetricSnapshot, error) {
 			MajorFaults:       measuredMetric(majorFaults),
 			FDCount:           measuredMetric(fdCount),
 			VMACount:          measuredMetric(vmaCount),
+			PageTableBytes:    &pageTables,
 		},
 		Cgroup: cgroup,
 	}, nil
@@ -291,6 +296,126 @@ func (collector LinuxCollector) collectCgroup() (CgroupMetrics, error) {
 		return unavailableScopedCgroup("v2", scope, membershipSHA256, MetricSkipped, ReasonNonisolatedScope), nil
 	}
 	return unavailableScopedCgroup("v2", "unverified", membershipSHA256, MetricSkipped, ReasonIsolationUnproven), nil
+}
+
+// CollectOperationalCgroup records raw cgroup-v2 boundary counters regardless
+// of whether the scope is shared. Scope remains explicit, so callers cannot
+// treat shared job-level values as process attribution.
+func (collector LinuxCollector) CollectOperationalCgroup() (CgroupMetrics, error) {
+	content, err := readLinuxMetricFile(filepath.Join(collector.ProcRoot, "self/cgroup"))
+	if err != nil {
+		return CgroupMetrics{}, fmt.Errorf("read proc cgroup: %w", err)
+	}
+	cgroupPath := ""
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "0::") {
+			if cgroupPath != "" {
+				return CgroupMetrics{}, errors.New("multiple cgroup v2 memberships")
+			}
+			cgroupPath = strings.TrimPrefix(line, "0::")
+		}
+	}
+	if cgroupPath == "" {
+		return unavailableCgroup("none", ReasonNotApplicable), nil
+	}
+	leaf, err := confinedCgroupPath(collector.CgroupRoot, cgroupPath)
+	if err != nil {
+		return CgroupMetrics{}, err
+	}
+	digest := sha256.Sum256([]byte(path.Clean("/" + strings.TrimPrefix(cgroupPath, "/"))))
+	scope, reason := classifyCgroupScope(filepath.Join(leaf, "cgroup.procs"))
+	if reason != "" {
+		scope = "unverified"
+	}
+	events := readCgroupKeyValues(filepath.Join(leaf, "memory.events"))
+	pressure := readCgroupPressure(filepath.Join(leaf, "memory.pressure"))
+	return CgroupMetrics{
+		Version: "v2", Scope: scope, MembershipSHA256: fmt.Sprintf("%x", digest),
+		MemoryCurrentBytes:       readCgroupUint(filepath.Join(leaf, "memory.current")),
+		MemoryPeakBytes:          readCgroupUint(filepath.Join(leaf, "memory.peak")),
+		MemorySwapCurrentBytes:   readCgroupUint(filepath.Join(leaf, "memory.swap.current")),
+		MemoryEventsHighTotal:    events["high"],
+		MemoryEventsOOMTotal:     events["oom"],
+		MemoryEventsOOMKillTotal: events["oom_kill"],
+		PressureSomeTotalUS:      pressure["some"],
+		PressureFullTotalUS:      pressure["full"],
+	}, nil
+}
+
+func readCgroupUint(filename string) Metric {
+	content, err := readLinuxMetricFile(filename)
+	if err != nil {
+		return unavailableMetricValue(reasonFromSourceError(err))
+	}
+	value, err := strconv.ParseUint(strings.TrimSpace(content), 10, 64)
+	if err != nil {
+		return collectionErrorMetric()
+	}
+	return measuredMetric(value)
+}
+
+func readCgroupKeyValues(filename string) map[string]Metric {
+	result := map[string]Metric{}
+	content, err := readLinuxMetricFile(filename)
+	if err != nil {
+		reason := reasonFromSourceError(err)
+		for _, key := range []string{"high", "oom", "oom_kill"} {
+			result[key] = unavailableMetricValue(reason)
+		}
+		return result
+	}
+	values := map[string]uint64{}
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		value, parseErr := strconv.ParseUint(fields[1], 10, 64)
+		if parseErr == nil {
+			values[fields[0]] = value
+		}
+	}
+	for _, key := range []string{"high", "oom", "oom_kill"} {
+		value, ok := values[key]
+		if !ok {
+			result[key] = collectionErrorMetric()
+		} else {
+			result[key] = measuredMetric(value)
+		}
+	}
+	return result
+}
+
+func readCgroupPressure(filename string) map[string]Metric {
+	result := map[string]Metric{}
+	content, err := readLinuxMetricFile(filename)
+	if err != nil {
+		reason := reasonFromSourceError(err)
+		result["some"] = unavailableMetricValue(reason)
+		result["full"] = unavailableMetricValue(reason)
+		return result
+	}
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || (fields[0] != "some" && fields[0] != "full") {
+			continue
+		}
+		for _, field := range fields[1:] {
+			if !strings.HasPrefix(field, "total=") {
+				continue
+			}
+			value, parseErr := strconv.ParseUint(strings.TrimPrefix(field, "total="), 10, 64)
+			if parseErr == nil {
+				result[fields[0]] = measuredMetric(value)
+			}
+		}
+	}
+	for _, key := range []string{"some", "full"} {
+		if _, ok := result[key]; !ok {
+			result[key] = collectionErrorMetric()
+		}
+	}
+	return result
 }
 
 func classifyCgroupScope(filename string) (string, UnavailableReason) {

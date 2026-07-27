@@ -37,12 +37,15 @@ type cowPressureLimits struct {
 }
 
 type cowPressureSnapshot struct {
-	Phase            string                         `json:"phase"`
-	Slots            uint32                         `json:"slots"`
-	RuntimeInstances uint32                         `json:"runtime_instances"`
-	ObservedNS       uint64                         `json:"observed_unix_ns"`
-	Process          runtimeevidence.ProcessMetrics `json:"process"`
-	COWMappings      runtimeevidence.MappingMetrics `json:"cow_mappings"`
+	Phase            string                           `json:"phase"`
+	Slots            uint32                           `json:"slots"`
+	RuntimeInstances uint32                           `json:"runtime_instances"`
+	ObservedNS       uint64                           `json:"observed_unix_ns"`
+	Process          runtimeevidence.ProcessMetrics   `json:"process"`
+	COWMappings      runtimeevidence.MappingMetrics   `json:"cow_mappings"`
+	Pool             wazeroengine.PreparedPoolState   `json:"pool"`
+	GoRuntime        runtimeevidence.GoRuntimeMetrics `json:"go_runtime"`
+	Cgroup           runtimeevidence.CgroupMetrics    `json:"cgroup"`
 }
 
 type cowPressurePhase struct {
@@ -96,10 +99,11 @@ type growablePreparedBenchmarkRunner interface {
 	GrowPreparedCapacity(context.Context, uint32) error
 	PreparedCapacity() uint32
 	PreparedRefillWorkers() uint32
+	PreparedPoolState() wazeroengine.PreparedPoolState
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 2 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 3 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -114,7 +118,8 @@ func (evidence cowPressureEvidence) Validate() error {
 		growth := snapshot.Slots - previousSlots
 		if snapshot.Slots <= previousSlots || growth%pressureInitialCapacity != 0 || growth > pressureMaxGrowthStep ||
 			(index == 0 && snapshot.Slots != pressureInitialCapacity) || snapshot.Phase != "spawn" || snapshot.RuntimeInstances != 1 ||
-			snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || snapshot.COWMappings.MappingCount != snapshot.Slots {
+			snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || snapshot.COWMappings.MappingCount != snapshot.Slots ||
+			!validPressurePoolState(snapshot.Pool, snapshot.Slots) {
 			return errors.New("cow-pressure single-runtime growth sequence or mapping identity drifted")
 		}
 		pss, err := measuredValue(snapshot.Process.PSSBytes, "spawn process PSS")
@@ -145,10 +150,19 @@ func (evidence cowPressureEvidence) Validate() error {
 	}
 	snapshot := evidence.LoadSamples[0]
 	if snapshot.Phase != "load-final" || snapshot.Slots != lastSlots || snapshot.RuntimeInstances != 1 ||
-		snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) {
+		snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) ||
+		!validPressurePoolState(snapshot.Pool, lastSlots) {
 		return errors.New("cow-pressure final mapping identity drifted")
 	}
 	return nil
+}
+
+func validPressurePoolState(state wazeroengine.PreparedPoolState, slots uint32) bool {
+	return state.TargetCapacity == slots && state.MaximumCapacity >= slots && state.High == slots &&
+		state.Floor <= state.Critical && state.Critical <= state.Low && state.Low <= state.High &&
+		state.Ready == slots && state.SupplyAccounted == slots && state.Queued == 0 && state.Refilling == 0 &&
+		state.Leased == 0 && state.Executing == 0 && state.Waiting == 0 && state.Retiring == 0 &&
+		state.ConsecutiveFailures == 0 && state.TotalFailures == 0 && !state.BreakerOpen
 }
 
 func validPressureLoadMappingCount(mappings, slots, consumers uint32) bool {
@@ -238,7 +252,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	stopReason := "max-slots"
 	slots := pressureInitialCapacity
 	for {
-		snapshot, err := collectCOWPressureSnapshot(collector, "spawn", slots)
+		snapshot, err := collectCOWPressureSnapshot(collector, runner, "spawn", slots)
 		if err != nil {
 			return err
 		}
@@ -349,7 +363,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		return err
 	}
 	replenishElapsed := time.Since(replenishStarted)
-	finalSnapshot, err := collectCOWPressureSnapshot(collector, "load-final", slots)
+	finalSnapshot, err := collectCOWPressureSnapshot(collector, runner, "load-final", slots)
 	if err != nil {
 		return err
 	}
@@ -378,7 +392,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 2, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 3, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
@@ -388,6 +402,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",
 			"One bounded wazero runtime, compiled module, and sealed baseline owns every admitted COW slot.",
 			"Full smaps collection is excluded from the timed load and runs only after request and refill drain, so in-load physical peaks are not sampled.",
+			"Raw cgroup counters retain their observed scope; shared job-level values are not process attribution or per-slot memory.",
 			"Closed-loop consumers use a small deterministic Python request and do not model provider latency or open-loop arrivals.",
 			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight request drain but exclude replenish_drain_ns.",
 			"Served slots remain single-use and are replenished; no served-slot restore is claimed.",
@@ -408,7 +423,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	return nil
 }
 
-func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, phase string, slots uint32) (cowPressureSnapshot, error) {
+func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, runner growablePreparedBenchmarkRunner, phase string, slots uint32) (cowPressureSnapshot, error) {
 	process, err := collector.Collect()
 	if err != nil {
 		return cowPressureSnapshot{}, err
@@ -417,7 +432,18 @@ func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, phase 
 	if err != nil {
 		return cowPressureSnapshot{}, err
 	}
-	return cowPressureSnapshot{Phase: phase, Slots: slots, RuntimeInstances: 1, ObservedNS: uint64(time.Now().UnixNano()), Process: process.Process, COWMappings: mappings}, nil
+	goMetrics, err := runtimeevidence.CollectGoRuntimeMetrics()
+	if err != nil {
+		return cowPressureSnapshot{}, err
+	}
+	cgroup, err := collector.CollectOperationalCgroup()
+	if err != nil {
+		return cowPressureSnapshot{}, err
+	}
+	return cowPressureSnapshot{
+		Phase: phase, Slots: slots, RuntimeInstances: 1, ObservedNS: uint64(time.Now().UnixNano()),
+		Process: process.Process, COWMappings: mappings, Pool: runner.PreparedPoolState(), GoRuntime: goMetrics, Cgroup: cgroup,
+	}, nil
 }
 
 func waitForPreparedReady(ctx context.Context, runner growablePreparedBenchmarkRunner, slots uint32) error {

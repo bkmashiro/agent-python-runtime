@@ -42,20 +42,32 @@ func compileCOWPressureSchema(t *testing.T) *jsonschema.Schema {
 func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	one := uint64(1)
 	metric := runtimeevidence.Metric{Status: runtimeevidence.MetricMeasured, Value: &one}
+	unavailable := runtimeevidence.Metric{Status: runtimeevidence.MetricSkipped, ReasonCode: runtimeevidence.ReasonIsolationUnproven}
 	process := runtimeevidence.ProcessMetrics{
 		RSSBytes: metric, VirtualBytes: metric, PSSBytes: metric, PrivateCleanBytes: metric, PrivateDirtyBytes: metric,
-		SwapBytes: metric, MinorFaults: metric, MajorFaults: metric, FDCount: metric, VMACount: metric,
+		SwapBytes: metric, MinorFaults: metric, MajorFaults: metric, FDCount: metric, VMACount: metric, PageTableBytes: &metric,
 	}
 	mappings := runtimeevidence.MappingMetrics{
 		Name: "memfd:apyrun-cow-image", MappingCount: 4, VirtualBytes: metric, RSSBytes: metric, PSSBytes: metric,
 		SharedCleanBytes: metric, SharedDirtyBytes: metric, PrivateCleanBytes: metric, PrivateDirtyBytes: metric,
 		ReferencedBytes: metric, AnonymousBytes: metric,
 	}
-	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, RuntimeInstances: 1, ObservedNS: 1, Process: process, COWMappings: mappings}
+	pool := wazeroengine.PreparedPoolState{TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4, Ready: 4, SupplyAccounted: 4}
+	goMetrics := runtimeevidence.GoRuntimeMetrics{
+		HeapLiveBytes: metric, HeapGoalBytes: metric, GCCyclesTotal: metric, GCPauseTotalNS: metric, Goroutines: metric,
+		SchedulerLatency: runtimeevidence.Histogram{Status: runtimeevidence.MetricMeasured, UpperBoundsNS: []uint64{1}, Counts: []uint64{1}},
+	}
+	cgroup := runtimeevidence.CgroupMetrics{
+		Version: "v2", Scope: "unverified", MembershipSHA256: strings.Repeat("d", 64),
+		MemoryCurrentBytes: unavailable, MemoryPeakBytes: unavailable, MemorySwapCurrentBytes: unavailable,
+		MemoryEventsHighTotal: unavailable, MemoryEventsOOMTotal: unavailable, MemoryEventsOOMKillTotal: unavailable,
+		PressureSomeTotalUS: unavailable, PressureFullTotalUS: unavailable,
+	}
+	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, RuntimeInstances: 1, ObservedNS: 1, Process: process, COWMappings: mappings, Pool: pool, GoRuntime: goMetrics, Cgroup: cgroup}
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 2, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 3, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},

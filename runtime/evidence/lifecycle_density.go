@@ -186,16 +186,17 @@ type GoRuntimeMetrics struct {
 }
 
 type ProcessMetrics struct {
-	RSSBytes          Metric `json:"rss_bytes"`
-	VirtualBytes      Metric `json:"virtual_bytes"`
-	PSSBytes          Metric `json:"pss_bytes"`
-	PrivateCleanBytes Metric `json:"private_clean_bytes"`
-	PrivateDirtyBytes Metric `json:"private_dirty_bytes"`
-	SwapBytes         Metric `json:"swap_bytes"`
-	MinorFaults       Metric `json:"minor_faults"`
-	MajorFaults       Metric `json:"major_faults"`
-	FDCount           Metric `json:"fd_count"`
-	VMACount          Metric `json:"vma_count"`
+	RSSBytes          Metric  `json:"rss_bytes"`
+	VirtualBytes      Metric  `json:"virtual_bytes"`
+	PSSBytes          Metric  `json:"pss_bytes"`
+	PrivateCleanBytes Metric  `json:"private_clean_bytes"`
+	PrivateDirtyBytes Metric  `json:"private_dirty_bytes"`
+	SwapBytes         Metric  `json:"swap_bytes"`
+	MinorFaults       Metric  `json:"minor_faults"`
+	MajorFaults       Metric  `json:"major_faults"`
+	FDCount           Metric  `json:"fd_count"`
+	VMACount          Metric  `json:"vma_count"`
+	PageTableBytes    *Metric `json:"page_table_bytes,omitempty"`
 }
 
 type MappingMetrics struct {
@@ -465,6 +466,11 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 	} {
 		if err := validateRawMetric(named.metric); err != nil {
 			return fmt.Errorf("%s metric: %w", named.name, err)
+		}
+	}
+	if sample.Process.PageTableBytes != nil {
+		if err := validateRawMetric(*sample.Process.PageTableBytes); err != nil {
+			return fmt.Errorf("process page tables metric: %w", err)
 		}
 	}
 	if sample.Phases.CompileNS != nil {

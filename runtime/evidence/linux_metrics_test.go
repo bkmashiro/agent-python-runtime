@@ -63,6 +63,38 @@ Anonymous:             2 kB
 	}
 }
 
+func TestLinuxCollectorOperationalCgroupRecordsRawScopedCounters(t *testing.T) {
+	root := t.TempDir()
+	procRoot := filepath.Join(root, "proc")
+	cgroupRoot := filepath.Join(root, "cgroup")
+	writeFixture(t, filepath.Join(procRoot, "self/cgroup"), "0::/job.scope\n")
+	leaf := filepath.Join(cgroupRoot, "job.scope")
+	writeFixture(t, filepath.Join(leaf, "cgroup.procs"), strconv.Itoa(os.Getpid())+"\n42\n")
+	writeFixture(t, filepath.Join(leaf, "memory.current"), "1000\n")
+	writeFixture(t, filepath.Join(leaf, "memory.peak"), "2000\n")
+	writeFixture(t, filepath.Join(leaf, "memory.swap.current"), "3\n")
+	writeFixture(t, filepath.Join(leaf, "memory.events"), "low 0\nhigh 4\nmax 0\noom 5\noom_kill 6\n")
+	writeFixture(t, filepath.Join(leaf, "memory.pressure"), "some avg10=0.00 avg60=0.00 avg300=0.00 total=7\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=8\n")
+
+	metrics, err := (LinuxCollector{ProcRoot: procRoot, CgroupRoot: cgroupRoot}).CollectOperationalCgroup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.Scope != "shared" || metrics.MembershipSHA256 == "" {
+		t.Fatalf("scope identity=%+v", metrics)
+	}
+	for name, item := range map[string]struct {
+		metric Metric
+		value  uint64
+	}{
+		"current": {metrics.MemoryCurrentBytes, 1000}, "peak": {metrics.MemoryPeakBytes, 2000}, "swap": {metrics.MemorySwapCurrentBytes, 3},
+		"high": {metrics.MemoryEventsHighTotal, 4}, "oom": {metrics.MemoryEventsOOMTotal, 5}, "oom_kill": {metrics.MemoryEventsOOMKillTotal, 6},
+		"pressure_some": {metrics.PressureSomeTotalUS, 7}, "pressure_full": {metrics.PressureFullTotalUS, 8},
+	} {
+		t.Run(name, func(t *testing.T) { assertMeasured(t, item.metric, item.value) })
+	}
+}
+
 func TestLinuxCollectorDoesNotInferIsolationFromSingleLeafPID(t *testing.T) {
 	root := t.TempDir()
 	procRoot := filepath.Join(root, "proc")

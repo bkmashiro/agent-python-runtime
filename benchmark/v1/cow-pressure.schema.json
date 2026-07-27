@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json",
-  "title": "COW pressure evidence v2",
+  "title": "COW pressure evidence v3",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
   "properties": {
-    "schema_version": {"const": 2},
+    "schema_version": {"const": 3},
     "evidence_kind": {"const": "cow-pressure"},
     "evidence_class": {"const": "production-safe"},
     "artifact": {"$ref": "#/$defs/artifact"},
@@ -70,7 +70,8 @@
       "properties": {
         "rss_bytes": {"$ref": "#/$defs/metric"}, "virtual_bytes": {"$ref": "#/$defs/metric"}, "pss_bytes": {"$ref": "#/$defs/metric"},
         "private_clean_bytes": {"$ref": "#/$defs/metric"}, "private_dirty_bytes": {"$ref": "#/$defs/metric"}, "swap_bytes": {"$ref": "#/$defs/metric"},
-        "minor_faults": {"$ref": "#/$defs/metric"}, "major_faults": {"$ref": "#/$defs/metric"}, "fd_count": {"$ref": "#/$defs/metric"}, "vma_count": {"$ref": "#/$defs/metric"}
+        "minor_faults": {"$ref": "#/$defs/metric"}, "major_faults": {"$ref": "#/$defs/metric"}, "fd_count": {"$ref": "#/$defs/metric"}, "vma_count": {"$ref": "#/$defs/metric"},
+        "page_table_bytes": {"$ref": "#/$defs/metric"}
       }
     },
     "mappings": {
@@ -84,13 +85,49 @@
         "referenced_bytes": {"$ref": "#/$defs/metric"}, "anonymous_bytes": {"$ref": "#/$defs/metric"}
       }
     },
+    "pool": {
+      "type": "object", "additionalProperties": false,
+      "required": ["target_capacity", "maximum_capacity", "floor", "critical", "low", "high", "ready", "leased", "executing", "waiting", "queued", "refilling", "retiring", "supply_accounted", "consecutive_failures", "total_failures", "breaker_open"],
+      "properties": {
+        "target_capacity": {"type": "integer", "minimum": 1, "maximum": 4096}, "maximum_capacity": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "floor": {"type": "integer", "minimum": 1}, "critical": {"type": "integer", "minimum": 1}, "low": {"type": "integer", "minimum": 1}, "high": {"type": "integer", "minimum": 1},
+        "ready": {"type": "integer", "minimum": 0}, "leased": {"type": "integer", "minimum": 0}, "executing": {"type": "integer", "minimum": 0}, "waiting": {"type": "integer", "minimum": 0},
+        "queued": {"type": "integer", "minimum": 0}, "refilling": {"type": "integer", "minimum": 0}, "retiring": {"type": "integer", "minimum": 0}, "supply_accounted": {"type": "integer", "minimum": 0},
+        "consecutive_failures": {"type": "integer", "minimum": 0}, "total_failures": {"type": "integer", "minimum": 0}, "breaker_open": {"type": "boolean"}
+      }
+    },
+    "histogram": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["status", "upper_bounds_ns", "counts"], "properties": {"status": {"const": "measured"}, "upper_bounds_ns": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}}, "counts": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}}}},
+        {"type": "object", "additionalProperties": false, "required": ["status", "reason_code"], "properties": {"status": {"enum": ["unsupported", "skipped"]}, "reason_code": {"type": "string", "minLength": 1}}}
+      ]
+    },
+    "goRuntime": {
+      "type": "object", "additionalProperties": false,
+      "required": ["heap_live_bytes", "heap_goal_bytes", "gc_cycles_total", "gc_pause_total_ns", "goroutines", "scheduler_latency"],
+      "properties": {
+        "heap_live_bytes": {"$ref": "#/$defs/metric"}, "heap_goal_bytes": {"$ref": "#/$defs/metric"}, "gc_cycles_total": {"$ref": "#/$defs/metric"},
+        "gc_pause_total_ns": {"$ref": "#/$defs/metric"}, "goroutines": {"$ref": "#/$defs/metric"}, "scheduler_latency": {"$ref": "#/$defs/histogram"}
+      }
+    },
+    "cgroup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "scope", "memory_current_bytes", "memory_peak_bytes", "memory_swap_current_bytes", "memory_events_high_total", "memory_events_oom_total", "memory_events_oom_kill_total", "pressure_some_total_us", "pressure_full_total_us"],
+      "properties": {
+        "version": {"enum": ["v2", "none"]}, "scope": {"enum": ["shared", "unverified"]}, "membership_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "memory_current_bytes": {"$ref": "#/$defs/metric"}, "memory_peak_bytes": {"$ref": "#/$defs/metric"}, "memory_swap_current_bytes": {"$ref": "#/$defs/metric"},
+        "memory_events_high_total": {"$ref": "#/$defs/metric"}, "memory_events_oom_total": {"$ref": "#/$defs/metric"}, "memory_events_oom_kill_total": {"$ref": "#/$defs/metric"},
+        "pressure_some_total_us": {"$ref": "#/$defs/metric"}, "pressure_full_total_us": {"$ref": "#/$defs/metric"}
+      }
+    },
     "snapshot": {
       "type": "object", "additionalProperties": false,
-      "required": ["phase", "slots", "runtime_instances", "observed_unix_ns", "process", "cow_mappings"],
+      "required": ["phase", "slots", "runtime_instances", "observed_unix_ns", "process", "cow_mappings", "pool", "go_runtime", "cgroup"],
       "properties": {
         "phase": {"enum": ["spawn", "load-final"]}, "slots": {"type": "integer", "minimum": 4, "maximum": 4096, "multipleOf": 4},
         "runtime_instances": {"const": 1}, "observed_unix_ns": {"type": "integer", "minimum": 1},
-        "process": {"$ref": "#/$defs/process"}, "cow_mappings": {"$ref": "#/$defs/mappings"}
+        "process": {"$ref": "#/$defs/process"}, "cow_mappings": {"$ref": "#/$defs/mappings"},
+        "pool": {"$ref": "#/$defs/pool"}, "go_runtime": {"$ref": "#/$defs/goRuntime"}, "cgroup": {"$ref": "#/$defs/cgroup"}
       }
     },
     "load": {

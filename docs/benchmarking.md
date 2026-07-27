@@ -151,7 +151,7 @@ For `cow-ready-single-use`, lifecycle-density additionally requires mapping-attr
 
 ## Bounded COW pressure evidence
 
-[`benchmark/v1/cow-pressure.schema.json`](../benchmark/v1/cow-pressure.schema.json) defines the machine-readable extreme-test envelope. Schema v2 owns one bounded wazero Runtime, one compiled module, and one sealed baseline for every admitted COW slot. It begins with four slots, doubles bounded growth batches, and caps each later admission step at 64 slots up to the configured hard maximum. These are accounting batches, not runtime shards. Served slots are destroyed and replenished by a fixed worker set.
+[`benchmark/v1/cow-pressure.schema.json`](../benchmark/v1/cow-pressure.schema.json) defines the machine-readable extreme-test envelope. Schema v3 owns one bounded wazero Runtime, one compiled module, and one sealed baseline for every admitted COW slot. It begins with four slots, doubles bounded growth batches, and caps each later admission step at 64 slots up to the configured hard maximum. These are accounting batches, not runtime shards. Served slots are destroyed and replenished through a deficit-deduplicated queue with ordered watermarks and a bounded retry/breaker policy. Phase-boundary snapshots include pool lifecycle gauges, Go heap/GC/scheduler metrics, process faults and `VmPTE`, scoped raw cgroup memory/events/PSI counters, and mapping-attributed `smaps`. Shared cgroup values remain job-boundary observations, not process attribution.
 
 A 40 GiB allocation that reserves 8 GiB outside the runtime is expressed as two separate values, not as a claimed capacity result:
 

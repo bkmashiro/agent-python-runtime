@@ -335,7 +335,8 @@
         "minor_faults": {"$ref": "#/$defs/rawMetric"},
         "major_faults": {"$ref": "#/$defs/rawMetric"},
         "fd_count": {"$ref": "#/$defs/rawMetric"},
-        "vma_count": {"$ref": "#/$defs/rawMetric"}
+        "vma_count": {"$ref": "#/$defs/rawMetric"},
+        "page_table_bytes": {"$ref": "#/$defs/rawMetric"}
       }
     },
     "mappingMetrics": {

@@ -28,7 +28,7 @@ func TestWazeroObserverRecordsLifecyclePhases(t *testing.T) {
 	}
 	mutex.Lock()
 	defer mutex.Unlock()
-	want := []string{"instantiate_host", "compile", "instantiate_guest", "_initialize", "runtime_init", "prepare", "execute"}
+	want := []string{"instantiate_host", "compile", "instantiate_guest", "_initialize", "runtime_init", "attach_host_calls", "prepare", "execute"}
 	if len(phases) != len(want) {
 		t.Fatalf("phases=%v, want %v", phases, want)
 	}

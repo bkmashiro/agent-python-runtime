@@ -75,7 +75,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["name", "mapping_count", "virtual_bytes", "rss_bytes", "pss_bytes", "shared_clean_bytes", "shared_dirty_bytes", "private_clean_bytes", "private_dirty_bytes", "referenced_bytes", "anonymous_bytes"],
       "properties": {
-        "name": {"const": "memfd:apyrun-cow-image"}, "mapping_count": {"type": "integer", "minimum": 0, "maximum": 4096},
+        "name": {"const": "memfd:apyrun-cow-image"}, "mapping_count": {"type": "integer", "minimum": 0, "maximum": 4352},
         "virtual_bytes": {"$ref": "#/$defs/metric"}, "rss_bytes": {"$ref": "#/$defs/metric"}, "pss_bytes": {"$ref": "#/$defs/metric"},
         "shared_clean_bytes": {"$ref": "#/$defs/metric"}, "shared_dirty_bytes": {"$ref": "#/$defs/metric"},
         "private_clean_bytes": {"$ref": "#/$defs/metric"}, "private_dirty_bytes": {"$ref": "#/$defs/metric"},

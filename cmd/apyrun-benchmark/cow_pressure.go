@@ -101,11 +101,16 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure ready pool accounting drifted")
 	}
 	for _, snapshot := range evidence.LoadSamples {
-		if snapshot.Slots != lastSlots || snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || snapshot.COWMappings.MappingCount > lastSlots {
+		if snapshot.Slots != lastSlots || snapshot.COWMappings.Name != "memfd:apyrun-cow-image" ||
+			!validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) {
 			return errors.New("cow-pressure load mapping identity drifted")
 		}
 	}
 	return nil
+}
+
+func validPressureLoadMappingCount(mappings, slots, consumers uint32) bool {
+	return uint64(mappings) <= uint64(slots)+uint64(consumers)
 }
 
 func validateCOWPressureOptions(options benchmarkOptions, goos string) error {

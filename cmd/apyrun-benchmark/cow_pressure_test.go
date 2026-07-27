@@ -73,3 +73,12 @@ func TestPressurePercentileUsesNearestRank(t *testing.T) {
 		t.Fatal("empty pressure percentile is not zero")
 	}
 }
+
+func TestPressureLoadMappingCountAllowsOnlyBoundedRefillOverlap(t *testing.T) {
+	if !validPressureLoadMappingCount(116, 100, 16) {
+		t.Fatal("bounded served/refill mapping overlap was rejected")
+	}
+	if validPressureLoadMappingCount(117, 100, 16) {
+		t.Fatal("mapping overlap exceeded consumer bound")
+	}
+}

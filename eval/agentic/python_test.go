@@ -40,7 +40,10 @@ func TestPythonExecutorBuildsBoundedAuthorityFreeRunRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
 	executor, err := NewPythonExecutor(runner, tools)
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +91,10 @@ func TestPreboundCompactJSONExecutorAcceptsAnyJSONAndPreservesV3ObjectSchema(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
 	executor, err := NewPythonExecutorForTreatment(runner, tools, treatment)
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +120,10 @@ func TestPreboundCompactJSONExecutorAcceptsAnyJSONAndPreservesV3ObjectSchema(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacyRunner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	legacyRunner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
 	legacyExecutor, err := NewPythonExecutorForTreatment(legacyRunner, tools, legacyTreatment)
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +151,10 @@ func TestCompactEffectivePythonCodePreservesFutureImportAndSingleEvaluation(t *t
 func TestPythonExecutorProjectsGuestErrorsWithoutTraceback(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	tools, _ := NewToolRuntime(task)
-	runner := &fakeGuestRunner{props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}, payload: []byte(`{
+	runner := &fakeGuestRunner{props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}, payload: []byte(`{
 		"status":"error","result":null,"receipts":[],"metrics":{"capability_calls":1,"result_bytes":4},
 		"error":{"code":"python_exception","message":"private message","error_type":"ValueError","traceback":"private traceback"}
 	}`)}
@@ -165,7 +177,10 @@ func TestPythonExecutorProjectsGuestErrorsWithoutTraceback(t *testing.T) {
 func TestPythonExecutorClassifiesHostToolErrorsWithoutLeakingDetails(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	tools, _ := NewToolRuntime(task)
-	runner := &fakeGuestRunner{props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}, payload: []byte(`{
+	runner := &fakeGuestRunner{props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}, payload: []byte(`{
 		"status":"error","result":null,"receipts":[],"metrics":{"capability_calls":1,"result_bytes":0},
 		"error":{"code":"python_exception","message":"private Host message","error_type":"HostToolError","traceback":"private Host traceback"}
 	}`)}
@@ -189,7 +204,10 @@ func TestPythonExecutorClassifiesOutputSchemaMismatch(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	tools, _ := NewToolRuntime(task)
 	runner := &fakeGuestRunner{
-		props:   engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance},
+		props: engine.Properties{
+			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+			RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+		},
 		payload: []byte(`{"status":"ok","result":null,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":4},"error":null}`),
 		err:     runtimeconfig.ErrRunResultSchemaMismatch,
 	}
@@ -210,7 +228,17 @@ func TestPythonExecutorRejectsInvalidPropertiesAndInputsBeforeRun(t *testing.T) 
 	if _, err := NewPythonExecutor(bad, tools); err == nil {
 		t.Fatal("accepted non-fresh reset mode")
 	}
-	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	cowSingleUse := &fakeGuestRunner{props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyCOWReadySingleUse, ActiveStrategy: engine.StrategyCOWReadySingleUse,
+	}}
+	if _, err := NewPythonExecutor(cowSingleUse, tools); err == nil {
+		t.Fatal("agentic evaluation accepted a non-fresh execution strategy")
+	}
+	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
 	executor, err := NewPythonExecutor(runner, tools)
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +265,10 @@ func TestPythonExecutorRejectsInvalidPropertiesAndInputsBeforeRun(t *testing.T) 
 func TestPythonExecutorPropagatesEngineFailure(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	tools, _ := NewToolRuntime(task)
-	runner := &fakeGuestRunner{err: errors.New("engine failed"), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	runner := &fakeGuestRunner{err: errors.New("engine failed"), props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
 	executor, _ := NewPythonExecutor(runner, tools)
 	result, err := executor.Execute(context.Background(), "python-engine-1", "result = {}", 1)
 	if err == nil || result.RequestDigest == "" || result.ResponseDigest != "" {

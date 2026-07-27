@@ -8,6 +8,7 @@ import (
 	"time"
 
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	engine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
@@ -15,6 +16,42 @@ func TestPreparedCapacityHardBoundFailsBeforeCompile(t *testing.T) {
 	factory := engine.Factory{PreparedCapacity: 5}
 	if _, err := factory.New(context.Background(), []byte("not wasm"), runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "prepared capacity") {
 		t.Fatalf("expected prepared capacity rejection, got %v", err)
+	}
+}
+
+func TestExplicitCOWStrategyFailsBeforeCompileUntilImplemented(t *testing.T) {
+	factory := engine.Factory{Strategy: enginecontract.StrategyCOWReadySingleUse, PreparedCapacity: 1}
+	if _, err := factory.New(context.Background(), []byte("not wasm"), runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "not implemented") {
+		t.Fatalf("expected explicit COW strategy rejection, got %v", err)
+	}
+}
+
+func TestFactoryReportsActiveFreshAndSingleUseStrategies(t *testing.T) {
+	ctx := context.Background()
+	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	for _, test := range []struct {
+		name     string
+		factory  engine.Factory
+		strategy enginecontract.ExecutionStrategy
+	}{
+		{name: "fresh", factory: engine.Factory{}, strategy: enginecontract.StrategyFreshInstance},
+		{name: "derived single use", factory: engine.Factory{PreparedCapacity: 1}, strategy: enginecontract.StrategySingleUsePrepared},
+		{name: "explicit single use", factory: engine.Factory{Strategy: enginecontract.StrategySingleUsePrepared, PreparedCapacity: 1}, strategy: enginecontract.StrategySingleUsePrepared},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner, err := test.factory.New(ctx, wasm, runtime.DefaultRunConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer runner.Close(ctx)
+			properties := runner.Properties()
+			if err := properties.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			if properties.RequestedStrategy != test.strategy || properties.ActiveStrategy != test.strategy || properties.Fallback || properties.ResetMode != enginecontract.ResetModeFreshInstance {
+				t.Fatalf("unexpected properties %#v", properties)
+			}
+		})
 	}
 }
 

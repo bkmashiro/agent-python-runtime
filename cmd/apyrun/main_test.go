@@ -34,7 +34,10 @@ func (runner *fakeRunner) Run(_ context.Context, request []byte, _ string) ([]by
 }
 func (runner *fakeRunner) Close(context.Context) error { runner.closed = true; return nil }
 func (runner *fakeRunner) Properties() engine.Properties {
-	return engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}
+	return engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}
 }
 
 type fakeFactory struct {

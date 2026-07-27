@@ -35,6 +35,7 @@ type Observer func(Observation)
 type Factory struct {
 	BrokerFactory    BrokerFactory
 	Observer         Observer
+	Strategy         enginecontract.ExecutionStrategy
 	PreparedCapacity uint32
 	CompilationCache *CompilationCache
 }
@@ -45,7 +46,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.PreparedCapacity > maxPreparedCapacity {
 		return nil, fmt.Errorf("prepared capacity %d exceeds hard bound %d", factory.PreparedCapacity, maxPreparedCapacity)
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.PreparedCapacity, factory.CompilationCache)
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -60,11 +61,12 @@ type Engine struct {
 	config        runtimeconfig.RunConfig
 	brokerFactory BrokerFactory
 	observer      Observer
+	strategy      enginecontract.ExecutionStrategy
 	pool          *preparedPool
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, 0, nil)
+	return newEngine(ctx, wasm, config, nil, nil, "", 0, nil)
 }
 
 func NewWithBrokerFactory(
@@ -73,7 +75,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, 0, nil)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, nil)
 }
 
 func newEngine(
@@ -82,11 +84,16 @@ func newEngine(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 	observer Observer,
+	requestedStrategy enginecontract.ExecutionStrategy,
 	preparedCapacity uint32,
 	compilationCache *CompilationCache,
 ) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
+	}
+	strategy, err := resolveStrategy(requestedStrategy, preparedCapacity)
+	if err != nil {
+		return nil, err
 	}
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
@@ -139,6 +146,7 @@ func newEngine(
 		config:        config,
 		brokerFactory: brokerFactory,
 		observer:      observer,
+		strategy:      strategy,
 	}
 	engine.initializePreparedPool(preparedCapacity)
 	return engine, nil
@@ -146,8 +154,36 @@ func newEngine(
 
 func (engine *Engine) Properties() enginecontract.Properties {
 	return enginecontract.Properties{
-		Backend:   "wazero",
-		ResetMode: enginecontract.ResetModeFreshInstance,
+		Backend:           "wazero",
+		ResetMode:         enginecontract.ResetModeFreshInstance,
+		RequestedStrategy: engine.strategy,
+		ActiveStrategy:    engine.strategy,
+	}
+}
+
+func resolveStrategy(requested enginecontract.ExecutionStrategy, preparedCapacity uint32) (enginecontract.ExecutionStrategy, error) {
+	if requested == "" {
+		if preparedCapacity > 0 {
+			return enginecontract.StrategySingleUsePrepared, nil
+		}
+		return enginecontract.StrategyFreshInstance, nil
+	}
+	switch requested {
+	case enginecontract.StrategyFreshInstance:
+		if preparedCapacity != 0 {
+			return "", errors.New("fresh-instance strategy requires zero prepared capacity")
+		}
+		return requested, nil
+	case enginecontract.StrategySingleUsePrepared:
+		if preparedCapacity == 0 {
+			return "", errors.New("single-use-preinitialized strategy requires positive prepared capacity")
+		}
+		return requested, nil
+	case enginecontract.StrategyCOWReadySingleUse, enginecontract.StrategyCOWFullRemapRestore,
+		enginecontract.StrategyCOWLocality, enginecontract.StrategyCOWAdaptiveReset:
+		return "", fmt.Errorf("execution strategy %q is not implemented", requested)
+	default:
+		return "", fmt.Errorf("unknown execution strategy %q", requested)
 	}
 }
 

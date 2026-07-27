@@ -93,7 +93,8 @@ func newPythonExecutor(runner engine.Runner, tools *ToolRuntime, treatment Devel
 		return nil, ErrDevelopmentTreatment
 	}
 	properties := runner.Properties()
-	if properties.Validate() != nil || properties.ResetMode != engine.ResetModeFreshInstance {
+	if properties.Validate() != nil || properties.ResetMode != engine.ResetModeFreshInstance ||
+		properties.ActiveStrategy != engine.StrategyFreshInstance || properties.Fallback {
 		return nil, ErrAgenticRun
 	}
 	prepare, err := tools.TrustedPrepare()

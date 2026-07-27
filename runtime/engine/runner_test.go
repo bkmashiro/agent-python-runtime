@@ -16,7 +16,11 @@ func (fakeRunner) Run(context.Context, []byte, string) ([]byte, error) {
 }
 func (fakeRunner) Close(context.Context) error { return nil }
 func (fakeRunner) Properties() engine.Properties {
-	return engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}
+	return engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance,
+		ActiveStrategy:    engine.StrategyFreshInstance,
+	}
 }
 
 type fakeFactory struct{}
@@ -41,6 +45,9 @@ func TestRunnerAndFactoryAreBackendNeutralContracts(t *testing.T) {
 	if runner.Properties().ResetMode != engine.ResetModeFreshInstance {
 		t.Fatalf("unexpected reset mode %q", runner.Properties().ResetMode)
 	}
+	if runner.Properties().RequestedStrategy != engine.StrategyFreshInstance || runner.Properties().ActiveStrategy != engine.StrategyFreshInstance {
+		t.Fatalf("unexpected strategy properties %#v", runner.Properties())
+	}
 }
 
 func TestPropertiesRejectUnknownOrIncompleteClaims(t *testing.T) {
@@ -48,10 +55,50 @@ func TestPropertiesRejectUnknownOrIncompleteClaims(t *testing.T) {
 		{},
 		{Backend: "fake"},
 		{Backend: "fake", ResetMode: engine.ResetMode("memcpy-without-contract")},
+		{Backend: "fake", ResetMode: engine.ResetModeFreshInstance},
+		{Backend: "fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance},
+		{
+			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+			RequestedStrategy: engine.StrategyCOWReadySingleUse,
+			ActiveStrategy:    engine.StrategyFreshInstance,
+		},
+		{
+			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+			RequestedStrategy: engine.StrategyCOWReadySingleUse,
+			ActiveStrategy:    engine.StrategyFreshInstance,
+			Fallback:          true,
+		},
+		{
+			Backend: "fake", ResetMode: engine.ResetModePreparedRestore,
+			RequestedStrategy: engine.StrategyCOWReadySingleUse,
+			ActiveStrategy:    engine.StrategyCOWReadySingleUse,
+		},
 	}
 	for _, properties := range cases {
 		if err := properties.Validate(); !errors.Is(err, engine.ErrInvalidProperties) {
 			t.Fatalf("expected invalid properties for %#v, got %v", properties, err)
+		}
+	}
+}
+
+func TestPropertiesAcceptTruthfulFallbackAndPreparedRestore(t *testing.T) {
+	valid := []engine.Properties{
+		{
+			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+			RequestedStrategy: engine.StrategyCOWReadySingleUse,
+			ActiveStrategy:    engine.StrategyFreshInstance,
+			Fallback:          true,
+			FallbackReason:    "COW is unavailable",
+		},
+		{
+			Backend: "fake", ResetMode: engine.ResetModePreparedRestore,
+			RequestedStrategy: engine.StrategyCOWFullRemapRestore,
+			ActiveStrategy:    engine.StrategyCOWFullRemapRestore,
+		},
+	}
+	for _, properties := range valid {
+		if err := properties.Validate(); err != nil {
+			t.Fatalf("valid properties rejected for %#v: %v", properties, err)
 		}
 	}
 }

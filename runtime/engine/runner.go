@@ -27,6 +27,10 @@ type Factory interface {
 // ResetMode identifies the isolation mechanism a Runner actually applies.
 type ResetMode string
 
+// ExecutionStrategy identifies the Host-requested and actually active
+// lifecycle strategy separately from its reset semantics.
+type ExecutionStrategy string
+
 const (
 	// ResetModeFreshInstance destroys the request instance and instantiates a new
 	// one for the next Run. It is the portable fail-closed baseline.
@@ -34,24 +38,65 @@ const (
 	// ResetModePreparedRestore is reserved for a backend that restores a proven
 	// prepared boundary, including every artifact state class it can mutate.
 	ResetModePreparedRestore ResetMode = "prepared-restore"
+
+	StrategyFreshInstance       ExecutionStrategy = "fresh-instance"
+	StrategySingleUsePrepared   ExecutionStrategy = "single-use-preinitialized"
+	StrategyCOWReadySingleUse   ExecutionStrategy = "cow-ready-single-use"
+	StrategyCOWFullRemapRestore ExecutionStrategy = "cow-full-remap-restore"
+	StrategyCOWLocality         ExecutionStrategy = "cow-locality-optimized"
+	StrategyCOWAdaptiveReset    ExecutionStrategy = "cow-adaptive-reset"
 )
 
 var ErrInvalidProperties = errors.New("invalid engine properties")
 
 // Properties records observable backend behavior, not aspirational support.
 type Properties struct {
-	Backend   string
-	ResetMode ResetMode
+	Backend           string
+	ResetMode         ResetMode
+	RequestedStrategy ExecutionStrategy
+	ActiveStrategy    ExecutionStrategy
+	Fallback          bool
+	FallbackReason    string
 }
 
 func (properties Properties) Validate() error {
 	if properties.Backend == "" {
 		return fmt.Errorf("%w: backend name is empty", ErrInvalidProperties)
 	}
-	switch properties.ResetMode {
-	case ResetModeFreshInstance, ResetModePreparedRestore:
-		return nil
-	default:
+	if !validStrategy(properties.RequestedStrategy) || !validStrategy(properties.ActiveStrategy) {
+		return fmt.Errorf("%w: unknown or incomplete execution strategy", ErrInvalidProperties)
+	}
+	if properties.Fallback {
+		if properties.RequestedStrategy == properties.ActiveStrategy || properties.FallbackReason == "" {
+			return fmt.Errorf("%w: fallback must change strategy and record a reason", ErrInvalidProperties)
+		}
+	} else if properties.RequestedStrategy != properties.ActiveStrategy || properties.FallbackReason != "" {
+		return fmt.Errorf("%w: strategy drift requires an explicit fallback", ErrInvalidProperties)
+	}
+	wantResetMode := resetModeForStrategy(properties.ActiveStrategy)
+	if wantResetMode == "" || properties.ResetMode != wantResetMode {
 		return fmt.Errorf("%w: unknown reset mode %q", ErrInvalidProperties, properties.ResetMode)
+	}
+	return nil
+}
+
+func validStrategy(strategy ExecutionStrategy) bool {
+	switch strategy {
+	case StrategyFreshInstance, StrategySingleUsePrepared, StrategyCOWReadySingleUse,
+		StrategyCOWFullRemapRestore, StrategyCOWLocality, StrategyCOWAdaptiveReset:
+		return true
+	default:
+		return false
+	}
+}
+
+func resetModeForStrategy(strategy ExecutionStrategy) ResetMode {
+	switch strategy {
+	case StrategyFreshInstance, StrategySingleUsePrepared, StrategyCOWReadySingleUse:
+		return ResetModeFreshInstance
+	case StrategyCOWFullRemapRestore, StrategyCOWLocality, StrategyCOWAdaptiveReset:
+		return ResetModePreparedRestore
+	default:
+		return ""
 	}
 }

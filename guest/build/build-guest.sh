@@ -464,12 +464,18 @@ python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --sbom "${DIST_DIR}/sbom.spdx.json" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \
   --verify
-(
-  cd "${ROOT_DIR}"
-  go run ./cmd/validate-json-schema \
+if [[ -n ${AGENT_RUNTIME_JSON_SCHEMA_VALIDATOR:-} ]]; then
+  "${AGENT_RUNTIME_JSON_SCHEMA_VALIDATOR}" \
     "${DOWNLOAD_DIR}/spdx-2.3-schema.json" \
     "${DIST_DIR}/sbom.spdx.json"
-)
+else
+  (
+    cd "${ROOT_DIR}"
+    go run ./cmd/validate-json-schema \
+      "${DOWNLOAD_DIR}/spdx-2.3-schema.json" \
+      "${DIST_DIR}/sbom.spdx.json"
+  )
+fi
 rm "${DIST_DIR}/agent-python-runtime.wat"
 (
   cd "${DIST_DIR}"

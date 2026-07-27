@@ -164,6 +164,242 @@ func (snapshot Snapshot) GenerateTrustedPrepare() (string, error) {
 	return prepare, nil
 }
 
+func (snapshot Snapshot) GenerateTrustedPrepareWithToolBindings() (string, error) {
+	runtimeSource, _, err := snapshot.GeneratePython()
+	if err != nil {
+		return "", err
+	}
+	quoted := strconv.Quote(runtimeSource)
+	var toolBindings strings.Builder
+	for _, tool := range snapshot.tools {
+		if tool.Projection == ProjectionUnsupported {
+			continue
+		}
+		if trustedPrepareGlobalConflict(tool.PythonName) {
+			return "", fmt.Errorf("tool %q cannot be bound into trusted prepare globals", tool.ToolID)
+		}
+		toolBindings.WriteString(tool.PythonName)
+		toolBindings.WriteString(" = _host_module.__dict__[")
+		toolBindings.WriteString(strconv.Quote(tool.PythonName))
+		toolBindings.WriteString("]\n")
+	}
+	prepare := "import sys as _host_sys\n" +
+		"import types as _host_types\n" +
+		"_host_module = _host_types.ModuleType(\"host_tools\")\n" +
+		"_host_module.__package__ = \"\"\n" +
+		"exec(compile(" + quoted + ", \"<host_tools>\", \"exec\"), _host_module.__dict__)\n" +
+		toolBindings.String() +
+		"_host_sys.modules[\"host_tools\"] = _host_module\n" +
+		"del _host_module, _host_types, _host_sys\n"
+	if len(prepare) > maxGeneratedRuntimeBytes+4096 {
+		return "", errors.New("trusted Python preparation exceeds bounded size")
+	}
+	return prepare, nil
+}
+
+var trustedPrepareGlobalConflictNames = map[string]bool{
+	"__name__":            true,
+	"__doc__":             true,
+	"__package__":         true,
+	"__loader__":          true,
+	"__spec__":            true,
+	"__builtins__":        true,
+	"_host_sys":           true,
+	"_host_types":         true,
+	"_host_module":        true,
+	"_json":               true,
+	"_UNSET":              true,
+	"_CALL_COUNTER":       true,
+	"_call":               true,
+	"_TOOL_METADATA":      true,
+	"CATALOG_DIGEST":      true,
+	"CATALOG_REVISION":    true,
+	"Any":                 true,
+	"Literal":             true,
+	"TypedDict":           true,
+	"NotRequired":         true,
+	"HostToolError":       true,
+	"current_transaction": true,
+	"describe_tools":      true,
+	"describe_tool":       true,
+	"inputs":              true,
+	"result":              true,
+	"host_tools":          true,
+	"host_tool":           true,
+	"_agent_runtime_host": true,
+	"sys":                 true,
+	"types":               true,
+}
+
+var pythonBuiltinsForTrustedPrepare = map[string]bool{
+	"__build_class__":           true,
+	"__debug__":                 true,
+	"__doc__":                   true,
+	"__import__":                true,
+	"__loader__":                true,
+	"__name__":                  true,
+	"__package__":               true,
+	"__spec__":                  true,
+	"abs":                       true,
+	"all":                       true,
+	"any":                       true,
+	"ascii":                     true,
+	"bin":                       true,
+	"bool":                      true,
+	"bytearray":                 true,
+	"bytes":                     true,
+	"callable":                  true,
+	"chr":                       true,
+	"classmethod":               true,
+	"compile":                   true,
+	"complex":                   true,
+	"copyright":                 true,
+	"credits":                   true,
+	"delattr":                   true,
+	"dict":                      true,
+	"dir":                       true,
+	"divmod":                    true,
+	"enumerate":                 true,
+	"eval":                      true,
+	"exec":                      true,
+	"filter":                    true,
+	"float":                     true,
+	"format":                    true,
+	"frozenset":                 true,
+	"getattr":                   true,
+	"globals":                   true,
+	"hasattr":                   true,
+	"hash":                      true,
+	"help":                      true,
+	"hex":                       true,
+	"id":                        true,
+	"input":                     true,
+	"int":                       true,
+	"isinstance":                true,
+	"issubclass":                true,
+	"iter":                      true,
+	"len":                       true,
+	"list":                      true,
+	"locals":                    true,
+	"map":                       true,
+	"max":                       true,
+	"memoryview":                true,
+	"min":                       true,
+	"next":                      true,
+	"object":                    true,
+	"oct":                       true,
+	"open":                      true,
+	"ord":                       true,
+	"pow":                       true,
+	"print":                     true,
+	"property":                  true,
+	"range":                     true,
+	"repr":                      true,
+	"reversed":                  true,
+	"round":                     true,
+	"set":                       true,
+	"setattr":                   true,
+	"slice":                     true,
+	"sorted":                    true,
+	"staticmethod":              true,
+	"str":                       true,
+	"sum":                       true,
+	"super":                     true,
+	"tuple":                     true,
+	"type":                      true,
+	"vars":                      true,
+	"zip":                       true,
+	"ArithmeticError":           true,
+	"AssertionError":            true,
+	"AttributeError":            true,
+	"BaseException":             true,
+	"EOFError":                  true,
+	"Exception":                 true,
+	"False":                     true,
+	"FloatingPointError":        true,
+	"GeneratorExit":             true,
+	"ImportError":               true,
+	"IndentationError":          true,
+	"IndexError":                true,
+	"KeyError":                  true,
+	"KeyboardInterrupt":         true,
+	"LookupError":               true,
+	"MemoryError":               true,
+	"NameError":                 true,
+	"None":                      true,
+	"NotImplemented":            true,
+	"NotImplementedError":       true,
+	"OSError":                   true,
+	"OverflowError":             true,
+	"RuntimeError":              true,
+	"StopIteration":             true,
+	"SyntaxError":               true,
+	"SystemError":               true,
+	"SystemExit":                true,
+	"True":                      true,
+	"TypeError":                 true,
+	"ValueError":                true,
+	"ZeroDivisionError":         true,
+	"FileNotFoundError":         true,
+	"PermissionError":           true,
+	"BlockingIOError":           true,
+	"BrokenPipeError":           true,
+	"BufferError":               true,
+	"BytesWarning":              true,
+	"ChildProcessError":         true,
+	"ConnectionAbortedError":    true,
+	"ConnectionError":           true,
+	"ConnectionRefusedError":    true,
+	"ConnectionResetError":      true,
+	"DeprecationWarning":        true,
+	"Ellipsis":                  true,
+	"EnvironmentError":          true,
+	"FileExistsError":           true,
+	"FutureWarning":             true,
+	"IOError":                   true,
+	"ImportWarning":             true,
+	"InterruptedError":          true,
+	"IsADirectoryError":         true,
+	"ModuleNotFoundError":       true,
+	"NotADirectoryError":        true,
+	"PendingDeprecationWarning": true,
+	"ProcessLookupError":        true,
+	"RecursionError":            true,
+	"ReferenceError":            true,
+	"ResourceWarning":           true,
+	"RuntimeWarning":            true,
+	"StopAsyncIteration":        true,
+	"SyntaxWarning":             true,
+	"TabError":                  true,
+	"TimeoutError":              true,
+	"UnboundLocalError":         true,
+	"UnicodeDecodeError":        true,
+	"UnicodeEncodeError":        true,
+	"UnicodeError":              true,
+	"UnicodeTranslateError":     true,
+	"UnicodeWarning":            true,
+	"UserWarning":               true,
+	"Warning":                   true,
+	"breakpoint":                true,
+	"exit":                      true,
+	"license":                   true,
+	"quit":                      true,
+	"aiter":                     true,
+	"anext":                     true,
+	"BaseExceptionGroup":        true,
+	"EncodingWarning":           true,
+	"ExceptionGroup":            true,
+	"PythonFinalizationError":   true,
+	"_IncompleteInputError":     true,
+}
+
+func trustedPrepareGlobalConflict(identifier string) bool {
+	if trustedPrepareGlobalConflictNames[identifier] || pythonBuiltinsForTrustedPrepare[identifier] || pythonKeywords[identifier] {
+		return true
+	}
+	return false
+}
+
 func pythonSignature(tool Tool, optionalDefault string) string {
 	parameters := make([]string, len(tool.Parameters))
 	for index, parameter := range tool.Parameters {

@@ -37,16 +37,34 @@ type Factory struct {
 	Observer         Observer
 	Strategy         enginecontract.ExecutionStrategy
 	PreparedCapacity uint32
-	CompilationCache *CompilationCache
+	// PreparedMaxCapacity reserves a bounded pool envelope that can grow without
+	// creating another Runtime, CompiledModule, or COW baseline. Zero means the
+	// initial PreparedCapacity is also the maximum.
+	PreparedMaxCapacity uint32
+	// VerifyCOWPreparedImage opts into a full linear-memory digest on every
+	// prepared slot. It is intended for bounded diagnostics, not production.
+	VerifyCOWPreparedImage bool
+	CompilationCache       *CompilationCache
 }
 
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
-	if factory.PreparedCapacity > maxPreparedCapacity {
-		return nil, fmt.Errorf("prepared capacity %d exceeds hard bound %d", factory.PreparedCapacity, maxPreparedCapacity)
+	maximum := factory.PreparedMaxCapacity
+	if maximum == 0 {
+		maximum = factory.PreparedCapacity
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, factory.CompilationCache)
+	if maximum < factory.PreparedCapacity {
+		return nil, fmt.Errorf("prepared maximum capacity %d is below initial capacity %d", maximum, factory.PreparedCapacity)
+	}
+	hardBound := maxPreparedCapacity
+	if factory.Strategy == enginecontract.StrategyCOWReadySingleUse {
+		hardBound = maxCOWPreparedCapacity
+	}
+	if factory.PreparedCapacity > hardBound || maximum > hardBound {
+		return nil, fmt.Errorf("prepared capacity %d/%d exceeds hard bound %d", factory.PreparedCapacity, maximum, hardBound)
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -56,19 +74,20 @@ var _ enginecontract.Runner = (*Engine)(nil)
 // Run or checks out a never-served, single-use initialized module; every served
 // module is closed instead of restored or returned to a pool.
 type Engine struct {
-	runtime       wazerort.Runtime
-	compiled      wazerort.CompiledModule
-	config        runtimeconfig.RunConfig
-	brokerFactory BrokerFactory
-	observer      Observer
-	strategy      enginecontract.ExecutionStrategy
-	stateCensus   ReactorStateCensus
-	cowRuntime    cowPreparedRuntime
-	pool          *preparedPool
+	runtime                wazerort.Runtime
+	compiled               wazerort.CompiledModule
+	config                 runtimeconfig.RunConfig
+	brokerFactory          BrokerFactory
+	observer               Observer
+	strategy               enginecontract.ExecutionStrategy
+	verifyCOWPreparedImage bool
+	stateCensus            ReactorStateCensus
+	cowRuntime             cowPreparedRuntime
+	pool                   *preparedPool
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, "", 0, nil)
+	return newEngine(ctx, wasm, config, nil, nil, "", 0, 0, false, nil)
 }
 
 func NewWithBrokerFactory(
@@ -77,7 +96,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, nil)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, 0, false, nil)
 }
 
 func newEngine(
@@ -88,6 +107,8 @@ func newEngine(
 	observer Observer,
 	requestedStrategy enginecontract.ExecutionStrategy,
 	preparedCapacity uint32,
+	preparedMaxCapacity uint32,
+	verifyCOWPreparedImage bool,
 	compilationCache *CompilationCache,
 ) (*Engine, error) {
 	if err := config.Validate(); err != nil {
@@ -143,15 +164,16 @@ func newEngine(
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
 	engine := &Engine{
-		runtime:       wasmRuntime,
-		compiled:      compiled,
-		config:        config,
-		brokerFactory: brokerFactory,
-		observer:      observer,
-		strategy:      strategy,
-		stateCensus:   censusCompiledReactor(compiled),
+		runtime:                wasmRuntime,
+		compiled:               compiled,
+		config:                 config,
+		brokerFactory:          brokerFactory,
+		observer:               observer,
+		strategy:               strategy,
+		verifyCOWPreparedImage: verifyCOWPreparedImage,
+		stateCensus:            censusCompiledReactor(compiled),
 	}
-	if err := engine.initializePreparedPool(preparedCapacity); err != nil {
+	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity); err != nil {
 		_ = engine.Close(context.Background())
 		return nil, err
 	}

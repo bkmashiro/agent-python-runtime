@@ -14,8 +14,8 @@ import (
 )
 
 type linuxCOWPreparedRuntime struct {
-	image  *cowImage
-	digest [sha256.Size]byte
+	image        *cowImage
+	verifyDigest *[sha256.Size]byte
 }
 
 func cowReadyStrategySupported() bool { return true }
@@ -41,7 +41,12 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if err != nil {
 		return nil, err
 	}
-	return &linuxCOWPreparedRuntime{image: image, digest: sha256.Sum256(baseline)}, nil
+	runtime := &linuxCOWPreparedRuntime{image: image}
+	if engine.verifyCOWPreparedImage {
+		digest := sha256.Sum256(baseline)
+		runtime.verifyDigest = &digest
+	}
+	return runtime, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Engine, prefix string) (*preparedInstance, error) {
@@ -87,9 +92,18 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	if memory == nil || uint64(memory.Size()) != runtime.image.size {
 		return nil, errors.New("COW slot memory shape drifted")
 	}
-	view, ok := memory.Read(0, memory.Size())
-	if !ok || sha256.Sum256(view) != runtime.digest {
-		return nil, errors.New("COW slot does not match canonical prepared image")
+	if runtime.verifyDigest != nil {
+		verifyStarted := time.Now()
+		view, ok := memory.Read(0, memory.Size())
+		verified := ok && sha256.Sum256(view) == *runtime.verifyDigest
+		var verifyErr error
+		if !verified {
+			verifyErr = errors.New("COW slot does not match canonical prepared image")
+		}
+		observe(engine.observer, prefix+"cow_verify", verifyStarted, verifyErr)
+		if verifyErr != nil {
+			return nil, verifyErr
+		}
 	}
 	guestStderr.Reset()
 	failed = false

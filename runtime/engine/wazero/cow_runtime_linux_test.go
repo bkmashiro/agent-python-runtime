@@ -64,6 +64,85 @@ func TestEngineBuildsCOWReadySingleUsePool(t *testing.T) {
 	}
 }
 
+func TestEngineGrowsOneCOWPoolWithoutCreatingAnotherBaseline(t *testing.T) {
+	wasm := fixedMemoryReactor(t)
+	runner, err := (Factory{
+		PreparedCapacity:    2,
+		PreparedMaxCapacity: 8,
+		Strategy:            enginecontract.StrategyCOWReadySingleUse,
+	}).New(context.Background(), wasm, runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := runner.(*Engine)
+	defer engine.Close(context.Background())
+	baseline := engine.cowRuntime
+	if err := engine.GrowPreparedCapacity(context.Background(), 6); err != nil {
+		t.Fatal(err)
+	}
+	if engine.cowRuntime != baseline {
+		t.Fatal("growing the pool replaced the canonical COW baseline")
+	}
+	if engine.PreparedReady() != 8 || engine.PreparedCapacity() != 8 {
+		t.Fatalf("grown COW pool is incomplete: ready=%d capacity=%d", engine.PreparedReady(), engine.PreparedCapacity())
+	}
+	if workers := engine.PreparedRefillWorkers(); workers != 4 {
+		t.Fatalf("refill worker bound=%d, want 4", workers)
+	}
+	linuxRuntime := engine.cowRuntime.(*linuxCOWPreparedRuntime)
+	linuxRuntime.image.mu.Lock()
+	mappings := linuxRuntime.image.mappings
+	linuxRuntime.image.mu.Unlock()
+	if mappings != 8 {
+		t.Fatalf("one baseline did not own all mappings: %d", mappings)
+	}
+	if err := engine.GrowPreparedCapacity(context.Background(), 1); err == nil || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("pool grew past its configured maximum: %v", err)
+	}
+}
+
+func TestCOWCapacityHasASeparateLargeHardBound(t *testing.T) {
+	runner, err := (Factory{
+		PreparedCapacity:    8,
+		PreparedMaxCapacity: 8,
+		Strategy:            enginecontract.StrategyCOWReadySingleUse,
+	}).New(context.Background(), fixedMemoryReactor(t), runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	if got := runner.(*Engine).PreparedReady(); got != 8 {
+		t.Fatalf("large COW pool ready=%d, want 8", got)
+	}
+}
+
+func TestCOWFullImageVerificationIsExplicitlyOptIn(t *testing.T) {
+	var phases []string
+	runner, err := (Factory{
+		PreparedCapacity:       1,
+		Strategy:               enginecontract.StrategyCOWReadySingleUse,
+		VerifyCOWPreparedImage: true,
+		Observer: func(observation Observation) {
+			phases = append(phases, observation.Phase)
+		},
+	}).New(context.Background(), fixedMemoryReactor(t), runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	linuxRuntime := runner.(*Engine).cowRuntime.(*linuxCOWPreparedRuntime)
+	if linuxRuntime.verifyDigest == nil {
+		t.Fatal("explicit full-image verification did not retain a canonical digest")
+	}
+	seen := false
+	for _, phase := range phases {
+		seen = seen || phase == "pool_prepare_cow_verify"
+	}
+	if !seen {
+		t.Fatalf("full-image verification phase is missing: %v", phases)
+	}
+}
+
 func TestEngineRejectsCOWWhenMemoryIsNotFixed(t *testing.T) {
 	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
 	if err != nil {

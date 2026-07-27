@@ -20,6 +20,13 @@ func TestPreparedCapacityHardBoundFailsBeforeCompile(t *testing.T) {
 	}
 }
 
+func TestPreparedMaximumCapacityMustCoverInitialCapacity(t *testing.T) {
+	factory := engine.Factory{PreparedCapacity: 2, PreparedMaxCapacity: 1}
+	if _, err := factory.New(context.Background(), []byte("not wasm"), runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("expected prepared maximum rejection, got %v", err)
+	}
+}
+
 func TestExplicitCOWStrategyFailsBeforeCompileWhenPlatformUnsupported(t *testing.T) {
 	if goruntime.GOOS == "linux" {
 		t.Skip("Linux supports the cow-ready-single-use strategy")

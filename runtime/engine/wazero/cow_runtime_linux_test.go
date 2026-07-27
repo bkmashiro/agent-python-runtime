@@ -1,0 +1,93 @@
+//go:build linux
+
+package wazero
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+)
+
+func TestEngineBuildsCOWReadySingleUsePool(t *testing.T) {
+	wasm := fixedMemoryReactor(t)
+	runner, err := (Factory{
+		PreparedCapacity: 2,
+		Strategy:         enginecontract.StrategyCOWReadySingleUse,
+	}).New(context.Background(), wasm, runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := runner.(*Engine)
+	properties := engine.Properties()
+	if err := properties.Validate(); err != nil {
+		t.Fatalf("invalid COW properties: %v", err)
+	}
+	if properties.ActiveStrategy != enginecontract.StrategyCOWReadySingleUse || properties.Fallback {
+		t.Fatalf("unexpected COW properties: %+v", properties)
+	}
+	if engine.PreparedReady() != 2 || engine.cowRuntime == nil {
+		t.Fatalf("COW pool was not filled: ready=%d runtime=%T", engine.PreparedReady(), engine.cowRuntime)
+	}
+	first := <-engine.pool.ready
+	second := <-engine.pool.ready
+	firstView, firstOK := first.module.Memory().Read(0, first.module.Memory().Size())
+	secondView, secondOK := second.module.Memory().Read(0, second.module.Memory().Size())
+	if !firstOK || !secondOK || len(firstView) == 0 || len(firstView) != len(secondView) {
+		t.Fatal("COW slots do not expose equal fixed memories")
+	}
+	offset := len(firstView) - 1
+	baseline := secondView[offset]
+	firstView[offset] = baseline + 1
+	if secondView[offset] != baseline {
+		t.Fatal("COW slot write leaked to sibling")
+	}
+	waitContext, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if _, err := engine.checkoutModule(waitContext); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("empty COW pool silently fell back instead of waiting: %v", err)
+	}
+	if err := first.module.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.module.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEngineRejectsCOWWhenMemoryIsNotFixed(t *testing.T) {
+	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = (Factory{PreparedCapacity: 1, Strategy: enginecontract.StrategyCOWReadySingleUse}).New(
+		context.Background(), wasm, runtimeconfig.DefaultRunConfig(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "not eligible for COW") {
+		t.Fatalf("non-fixed memory entered COW mode: %v", err)
+	}
+}
+
+func fixedMemoryReactor(t *testing.T) []byte {
+	t.Helper()
+	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldMemorySection := []byte{0x05, 0x03, 0x01, 0x00, 0x01}
+	fixedMemorySection := []byte{0x05, 0x04, 0x01, 0x01, 0x01, 0x01}
+	fixed := bytes.Replace(wasm, oldMemorySection, fixedMemorySection, 1)
+	if bytes.Equal(fixed, wasm) {
+		t.Fatal("reactor fixture memory section was not patched")
+	}
+	return fixed
+}

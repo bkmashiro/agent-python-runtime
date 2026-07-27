@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/tetratelabs/wazero/api"
 )
 
@@ -30,9 +31,9 @@ type preparedPool struct {
 	retained atomic.Uint64
 }
 
-func (engine *Engine) initializePreparedPool(capacity uint32) {
+func (engine *Engine) initializePreparedPool(capacity uint32) error {
 	if capacity == 0 {
-		return
+		return nil
 	}
 	poolContext, cancel := context.WithCancel(context.Background())
 	pool := &preparedPool{
@@ -41,19 +42,43 @@ func (engine *Engine) initializePreparedPool(capacity uint32) {
 		cancel:  cancel,
 	}
 	engine.pool = pool
+	if engine.strategy == enginecontract.StrategyCOWReadySingleUse {
+		cowRuntime, err := newCOWPreparedRuntime(poolContext, engine)
+		if err != nil {
+			return fmt.Errorf("initialize COW prepared runtime: %w", err)
+		}
+		engine.cowRuntime = cowRuntime
+	}
 	for index := uint32(0); index < capacity; index++ {
 		instance, err := engine.prepareSingleUseInstance(poolContext)
 		if err != nil {
+			if engine.cowRuntime != nil {
+				return fmt.Errorf("prepare COW slot %d: %w", index, err)
+			}
 			continue
 		}
 		pool.retained.Add(instance.memoryBytes)
 		pool.ready <- instance
 	}
+	return nil
 }
 
 func (engine *Engine) checkoutModule(ctx context.Context) (*preparedInstance, error) {
 	if engine.pool != nil {
 		started := time.Now()
+		if engine.cowRuntime != nil {
+			select {
+			case instance := <-engine.pool.ready:
+				subtractRetained(engine.pool, instance.memoryBytes)
+				observe(engine.observer, "pool_wait", started, nil)
+				engine.schedulePreparedRefill()
+				return instance, nil
+			case <-ctx.Done():
+				err := fmt.Errorf("wait for COW-ready slot: %w", ctx.Err())
+				observe(engine.observer, "pool_wait", started, err)
+				return nil, err
+			}
+		}
 		select {
 		case instance := <-engine.pool.ready:
 			subtractRetained(engine.pool, instance.memoryBytes)
@@ -70,6 +95,9 @@ func (engine *Engine) checkoutModule(ctx context.Context) (*preparedInstance, er
 func (engine *Engine) prepareSingleUseInstance(parent context.Context) (*preparedInstance, error) {
 	prepareContext, cancel := context.WithTimeout(parent, engine.config.Timeout)
 	defer cancel()
+	if engine.cowRuntime != nil {
+		return engine.cowRuntime.prepare(prepareContext, engine, "pool_prepare_")
+	}
 	return engine.newInitializedModule(prepareContext, "pool_prepare_")
 }
 

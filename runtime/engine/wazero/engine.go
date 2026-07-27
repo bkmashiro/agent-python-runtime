@@ -63,6 +63,7 @@ type Engine struct {
 	observer      Observer
 	strategy      enginecontract.ExecutionStrategy
 	stateCensus   ReactorStateCensus
+	cowRuntime    cowPreparedRuntime
 	pool          *preparedPool
 }
 
@@ -150,7 +151,10 @@ func newEngine(
 		strategy:      strategy,
 		stateCensus:   censusCompiledReactor(compiled),
 	}
-	engine.initializePreparedPool(preparedCapacity)
+	if err := engine.initializePreparedPool(preparedCapacity); err != nil {
+		_ = engine.Close(context.Background())
+		return nil, err
+	}
 	return engine, nil
 }
 
@@ -193,8 +197,15 @@ func resolveStrategy(requested enginecontract.ExecutionStrategy, preparedCapacit
 			return "", errors.New("single-use-preinitialized strategy requires positive prepared capacity")
 		}
 		return requested, nil
-	case enginecontract.StrategyCOWReadySingleUse, enginecontract.StrategyCOWFullRemapRestore,
-		enginecontract.StrategyCOWLocality, enginecontract.StrategyCOWAdaptiveReset:
+	case enginecontract.StrategyCOWReadySingleUse:
+		if preparedCapacity == 0 {
+			return "", errors.New("cow-ready-single-use strategy requires positive prepared capacity")
+		}
+		if !cowReadyStrategySupported() {
+			return "", errors.New("cow-ready-single-use strategy is not supported on this platform")
+		}
+		return requested, nil
+	case enginecontract.StrategyCOWFullRemapRestore, enginecontract.StrategyCOWLocality, enginecontract.StrategyCOWAdaptiveReset:
 		return "", fmt.Errorf("execution strategy %q is not implemented", requested)
 	default:
 		return "", fmt.Errorf("unknown execution strategy %q", requested)
@@ -206,7 +217,12 @@ func (engine *Engine) Close(ctx context.Context) error {
 		return nil
 	}
 	engine.closePreparedPool()
-	return engine.runtime.Close(ctx)
+	runtimeErr := engine.runtime.Close(ctx)
+	var cowErr error
+	if engine.cowRuntime != nil {
+		cowErr = engine.cowRuntime.close()
+	}
+	return errors.Join(runtimeErr, cowErr)
 }
 
 func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) (payload []byte, runErr error) {

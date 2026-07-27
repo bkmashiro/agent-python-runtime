@@ -3,6 +3,7 @@ package wazero_test
 import (
 	"context"
 	"encoding/base64"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,10 +20,13 @@ func TestPreparedCapacityHardBoundFailsBeforeCompile(t *testing.T) {
 	}
 }
 
-func TestExplicitCOWStrategyFailsBeforeCompileUntilImplemented(t *testing.T) {
+func TestExplicitCOWStrategyFailsBeforeCompileWhenPlatformUnsupported(t *testing.T) {
+	if goruntime.GOOS == "linux" {
+		t.Skip("Linux supports the cow-ready-single-use strategy")
+	}
 	factory := engine.Factory{Strategy: enginecontract.StrategyCOWReadySingleUse, PreparedCapacity: 1}
-	if _, err := factory.New(context.Background(), []byte("not wasm"), runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "not implemented") {
-		t.Fatalf("expected explicit COW strategy rejection, got %v", err)
+	if _, err := factory.New(context.Background(), []byte("not wasm"), runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("expected explicit COW platform rejection, got %v", err)
 	}
 }
 

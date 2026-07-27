@@ -310,6 +310,16 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	var sequence atomic.Uint64
 	latencies := make([]uint64, 0, 4096)
 	var latencyMu sync.Mutex
+	var failureMu sync.Mutex
+	var firstFailure string
+	recordFailure := func(reason string) {
+		failureMu.Lock()
+		if firstFailure == "" {
+			firstFailure = reason
+			cancelLoad()
+		}
+		failureMu.Unlock()
+	}
 	var workers sync.WaitGroup
 	cpuStarted, err := collectPressureCPU()
 	if err != nil {
@@ -340,11 +350,16 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 				cancel()
 				elapsedDuration := time.Since(began)
 				elapsed := uint64(elapsedDuration.Nanoseconds())
-				if runErr != nil || !successfulPressureResponse(response, options.PressureWorkload, options.PressureWait, elapsedDuration) {
+				failureReason := pressureResponseFailure(response, options.PressureWorkload, options.PressureWait, elapsedDuration)
+				if runErr != nil || failureReason != "" {
 					failed.Add(1)
 					if errors.Is(runErr, context.DeadlineExceeded) {
 						timedOut.Add(1)
 					}
+					if runErr != nil {
+						failureReason = "runner error: " + runErr.Error()
+					}
+					recordFailure(failureReason)
 					continue
 				}
 				completed.Add(1)
@@ -356,7 +371,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 	workers.Wait()
 	if failed.Load() > 0 || timedOut.Load() > 0 {
-		return fmt.Errorf("cow-pressure workload failed closed: failed=%d timed_out=%d", failed.Load(), timedOut.Load())
+		return fmt.Errorf("cow-pressure workload failed closed: failed=%d timed_out=%d first_failure=%s", failed.Load(), timedOut.Load(), firstFailure)
 	}
 	loadElapsed := time.Since(loadStarted)
 	cpuFinished, err := collectPressureCPU()
@@ -508,17 +523,26 @@ func measuredValue(metric runtimeevidence.Metric, name string) (uint64, error) {
 	return *metric.Value, nil
 }
 
-func successfulPressureResponse(raw []byte, workload string, requestedWait, elapsed time.Duration) bool {
+func pressureResponseFailure(raw []byte, workload string, requestedWait, elapsed time.Duration) string {
 	var response struct {
-		Status string `json:"status"`
+		Status string         `json:"status"`
+		Error  map[string]any `json:"error"`
 	}
-	if err := json.Unmarshal(raw, &response); err != nil || response.Status != "ok" {
-		return false
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return "invalid guest response JSON"
+	}
+	if response.Status != "ok" {
+		errorType, _ := response.Error["type"].(string)
+		message, _ := response.Error["message"].(string)
+		if len(message) > 256 {
+			message = message[:256]
+		}
+		return fmt.Sprintf("guest status=%q error_type=%q message=%q", response.Status, errorType, message)
 	}
 	if workload == "wasi-timer-wait" && elapsed+time.Millisecond < requestedWait {
-		return false
+		return fmt.Sprintf("timer returned early: elapsed=%s requested=%s", elapsed, requestedWait)
 	}
-	return true
+	return ""
 }
 
 func pressurePercentile(sorted []uint64, percentile uint64) uint64 {

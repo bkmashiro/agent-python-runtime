@@ -137,26 +137,26 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	}
 }
 
-func TestSuccessfulPressureResponseFailsClosed(t *testing.T) {
-	if !successfulPressureResponse([]byte(`{"status":"ok"}`), "cpu", 0, 10*time.Millisecond) {
-		t.Fatal("valid CPU response was rejected")
+func TestPressureResponseFailureFailsClosed(t *testing.T) {
+	if reason := pressureResponseFailure([]byte(`{"status":"ok"}`), "cpu", 0, 10*time.Millisecond); reason != "" {
+		t.Fatalf("valid CPU response was rejected: %s", reason)
 	}
 	for name, raw := range map[string][]byte{
 		"invalid json": []byte(`{`),
-		"guest error":  []byte(`{"status":"error"}`),
+		"guest error":  []byte(`{"status":"error","error":{"type":"RuntimeError","message":"timer unavailable"}}`),
 		"no status":    []byte(`{"result":1}`),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if successfulPressureResponse(raw, "cpu", 0, 10*time.Millisecond) {
+			if reason := pressureResponseFailure(raw, "cpu", 0, 10*time.Millisecond); reason == "" {
 				t.Fatal("invalid response was accepted")
 			}
 		})
 	}
-	if successfulPressureResponse([]byte(`{"status":"ok"}`), "wasi-timer-wait", 100*time.Millisecond, 40*time.Millisecond) {
+	if reason := pressureResponseFailure([]byte(`{"status":"ok"}`), "wasi-timer-wait", 100*time.Millisecond, 40*time.Millisecond); reason == "" {
 		t.Fatal("timer response that returned before its requested wait was accepted")
 	}
-	if !successfulPressureResponse([]byte(`{"status":"ok"}`), "wasi-timer-wait", 100*time.Millisecond, 100*time.Millisecond) {
-		t.Fatal("completed timer response was rejected")
+	if reason := pressureResponseFailure([]byte(`{"status":"ok"}`), "wasi-timer-wait", 100*time.Millisecond, 100*time.Millisecond); reason != "" {
+		t.Fatalf("completed timer response was rejected: %s", reason)
 	}
 }
 

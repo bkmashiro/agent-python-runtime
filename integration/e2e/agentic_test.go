@@ -132,6 +132,17 @@ result = {"calls": once()}`, 1)
 	if err != nil || !explicit.Success || string(explicit.Observation) != `{"calls":1}` {
 		t.Fatalf("explicit=%+v err=%v", explicit, err)
 	}
+	if err := tools.SetTurn(2); err != nil {
+		t.Fatal(err)
+	}
+	beforeMismatch := tools.FileSystem().Digest()
+	mismatch, err := executor.Execute(context.Background(), "agentic-compact-schema-mismatch", `
+touch(file_name="schema-mismatch-must-rollback.txt")
+result = [pwd()]
+`, 2)
+	if err != nil || mismatch.Success || mismatch.ErrorCode != "guest_output_schema_mismatch" || mismatch.CapabilityCalls != 2 || tools.FileSystem().Digest() != beforeMismatch {
+		t.Fatalf("mismatch=%+v err=%v before=%s after=%s", mismatch, err, beforeMismatch, tools.FileSystem().Digest())
+	}
 	isolated, err := executor.Execute(context.Background(), "agentic-compact-isolated", `result = {"seen": ephemeral_marker}`, 1)
 	if err != nil || isolated.Success || isolated.CapabilityCalls != 0 || isolated.ErrorCode != "python_exception" {
 		t.Fatalf("isolated=%+v err=%v", isolated, err)

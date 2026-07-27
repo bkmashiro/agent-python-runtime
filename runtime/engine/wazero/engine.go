@@ -232,19 +232,19 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
-	decodedResponse, validationErr := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload)
-	if validationErr != nil {
-		finalizeReason = "invalid_output"
-		return nil, validationErr
-	}
-	if decodedResponse.Status == runtimeconfig.RunResponseError {
-		finalizeReason = "guest_error"
-	}
 	if broker != nil {
 		payload, err = mergeHostEvidence(payload, broker.Receipts(), broker.CallCount(), engine.config.MaxResponseBytes)
 		if err != nil {
 			return nil, err
 		}
+	}
+	decodedResponse, validationErr := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload)
+	if validationErr != nil {
+		finalizeReason = "invalid_output"
+		return payload, validationErr
+	}
+	if decodedResponse.Status == runtimeconfig.RunResponseError {
+		finalizeReason = "guest_error"
 	}
 	runSucceeded = decodedResponse.Status == runtimeconfig.RunResponseOK
 	return payload, nil

@@ -1,8 +1,10 @@
 import importlib.util
 import json
 import pathlib
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WRITER_PATH = ROOT / "guest" / "build" / "write-manifest.py"
@@ -100,6 +102,37 @@ class ManifestWriterTests(unittest.TestCase):
                 [{"name": "cpython", "version": "3.14.test", "status": "core"}],
                 manifest["packages"],
             )
+
+    def test_main_uses_bound_environment_commit_without_git(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact = root / "agent-python-runtime.wasm"
+            artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
+            wat = root / "guest.wat"
+            wat.write_text('(module (export "memory" (memory 0)))')
+            lock = root / "sources.lock.json"
+            lock.write_text(json.dumps({
+                "target": "wasm32-wasip1",
+                "sources": [{"id": "cpython-source", "version": "3.14.test"}],
+            }))
+            output = root / "manifest.json"
+            argv = [
+                "write-manifest.py",
+                "--artifact", str(artifact),
+                "--wat", str(wat),
+                "--source-lock", str(lock),
+                "--artifact-profile", "base",
+                "--memory-initial-pages", "2048",
+                "--memory-maximum-pages", "2048",
+                "--output", str(output),
+            ]
+            with (
+                mock.patch.object(self.writer, "git_commit", side_effect=AssertionError("git called")),
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.dict(self.writer.os.environ, {"GITHUB_SHA": "a" * 40}),
+            ):
+                self.assertEqual(0, self.writer.main())
+            self.assertEqual("a" * 40, json.loads(output.read_text())["build"]["repository_commit"])
 
     def test_numpy_core_profile_requires_and_binds_selection(self):
         with tempfile.TemporaryDirectory() as directory:

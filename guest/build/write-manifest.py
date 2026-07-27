@@ -189,7 +189,7 @@ def main() -> int:
         artifact=args.artifact,
         wat=args.wat,
         source_lock=args.source_lock,
-        commit=os.environ.get("GITHUB_SHA", git_commit()),
+        commit=os.environ.get("GITHUB_SHA") or git_commit(),
         source_date_epoch=os.environ.get("SOURCE_DATE_EPOCH", "unknown"),
         artifact_profile=args.artifact_profile,
         extension_selection=args.extension_selection,

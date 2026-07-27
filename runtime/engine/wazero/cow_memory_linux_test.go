@@ -98,6 +98,32 @@ func TestCOWImageIsSealedAndAllocatorRejectsShapeDrift(t *testing.T) {
 	}
 }
 
+func TestCOWImageRejectsReplacedFD(t *testing.T) {
+	image, err := newCOWImage(make([]byte, wasmLinearPageSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := unix.Open("/dev/null", unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Dup3(replacement, image.fd, unix.O_CLOEXEC); err != nil {
+		_ = unix.Close(replacement)
+		t.Fatal(err)
+	}
+	_ = unix.Close(replacement)
+	allocator := image.newAllocator()
+	if got := allocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize); got != nil {
+		t.Fatal("allocator accepted a replaced image FD")
+	}
+	if _, err := allocator.Allocation(); !errors.Is(err, errCOWImageIdentity) {
+		t.Fatalf("missing image identity error: %v", err)
+	}
+	if err := image.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWazeroTinyModuleUsesCOWImageAndExactReset(t *testing.T) {
 	ctx := context.Background()
 	runtime := wazerort.NewRuntime(ctx)

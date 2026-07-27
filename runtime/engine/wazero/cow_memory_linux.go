@@ -14,16 +14,21 @@ import (
 var (
 	errCOWImageClosed       = errors.New("COW image is closed")
 	errCOWImageInUse        = errors.New("COW image still has live mappings")
+	errCOWImageIdentity     = errors.New("COW image identity or seals changed")
 	errCOWAllocationShape   = errors.New("COW allocation shape does not match image")
 	errCOWAllocatorConsumed = errors.New("COW allocator already allocated memory")
 )
 
 const wasmLinearPageSize = 64 * 1024
 
+const requiredCOWSeals = unix.F_SEAL_SEAL | unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE
+
 type cowImage struct {
 	mu       sync.Mutex
 	fd       int
 	size     uint64
+	device   uint64
+	inode    uint64
 	mappings int
 	closed   bool
 }
@@ -55,12 +60,18 @@ func newCOWImage(baseline []byte) (*cowImage, error) {
 		}
 		written += n
 	}
-	seals := unix.F_SEAL_SEAL | unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE
-	if _, err := unix.FcntlInt(uintptr(fd), unix.F_ADD_SEALS, seals); err != nil {
+	if _, err := unix.FcntlInt(uintptr(fd), unix.F_ADD_SEALS, requiredCOWSeals); err != nil {
 		return nil, fmt.Errorf("seal COW memfd: %w", err)
 	}
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil {
+		return nil, fmt.Errorf("stat COW memfd: %w", err)
+	}
+	if stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Size != int64(len(baseline)) {
+		return nil, fmt.Errorf("%w: invalid initial file shape", errCOWImageIdentity)
+	}
 	failed = false
-	return &cowImage{fd: fd, size: uint64(len(baseline))}, nil
+	return &cowImage{fd: fd, size: uint64(len(baseline)), device: uint64(stat.Dev), inode: stat.Ino}, nil
 }
 
 func (image *cowImage) newAllocator() *cowAllocator {
@@ -73,6 +84,9 @@ func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
 	if image.closed {
 		return nil, errCOWImageClosed
 	}
+	if err := image.verifyIdentityLocked(); err != nil {
+		return nil, err
+	}
 	if image.size > uint64(^uint(0)>>1) {
 		return nil, errCOWAllocationShape
 	}
@@ -82,6 +96,21 @@ func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
 	}
 	image.mappings++
 	return &cowLinearMemory{image: image, buffer: buffer, max: image.size}, nil
+}
+
+func (image *cowImage) verifyIdentityLocked() error {
+	var stat unix.Stat_t
+	if err := unix.Fstat(image.fd, &stat); err != nil {
+		return fmt.Errorf("%w: stat: %v", errCOWImageIdentity, err)
+	}
+	if uint64(stat.Dev) != image.device || stat.Ino != image.inode || stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Size != int64(image.size) {
+		return errCOWImageIdentity
+	}
+	seals, err := unix.FcntlInt(uintptr(image.fd), unix.F_GET_SEALS, 0)
+	if err != nil || seals&requiredCOWSeals != requiredCOWSeals {
+		return fmt.Errorf("%w: seals", errCOWImageIdentity)
+	}
+	return nil
 }
 
 func (image *cowImage) releaseMapping() {

@@ -338,8 +338,9 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 				began := time.Now()
 				response, runErr := runner.Run(requestCtx, request, "")
 				cancel()
-				elapsed := uint64(time.Since(began).Nanoseconds())
-				if runErr != nil || !json.Valid(response) {
+				elapsedDuration := time.Since(began)
+				elapsed := uint64(elapsedDuration.Nanoseconds())
+				if runErr != nil || !successfulPressureResponse(response, options.PressureWorkload, options.PressureWait, elapsedDuration) {
 					failed.Add(1)
 					if errors.Is(runErr, context.DeadlineExceeded) {
 						timedOut.Add(1)
@@ -354,6 +355,9 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		}()
 	}
 	workers.Wait()
+	if failed.Load() > 0 || timedOut.Load() > 0 {
+		return fmt.Errorf("cow-pressure workload failed closed: failed=%d timed_out=%d", failed.Load(), timedOut.Load())
+	}
 	loadElapsed := time.Since(loadStarted)
 	cpuFinished, err := collectPressureCPU()
 	if err != nil {
@@ -502,6 +506,19 @@ func measuredValue(metric runtimeevidence.Metric, name string) (uint64, error) {
 		return 0, fmt.Errorf("%s is unavailable", name)
 	}
 	return *metric.Value, nil
+}
+
+func successfulPressureResponse(raw []byte, workload string, requestedWait, elapsed time.Duration) bool {
+	var response struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil || response.Status != "ok" {
+		return false
+	}
+	if workload == "wasi-timer-wait" && elapsed+time.Millisecond < requestedWait {
+		return false
+	}
+	return true
 }
 
 func pressurePercentile(sorted []uint64, percentile uint64) uint64 {

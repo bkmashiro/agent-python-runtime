@@ -137,6 +137,29 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	}
 }
 
+func TestSuccessfulPressureResponseFailsClosed(t *testing.T) {
+	if !successfulPressureResponse([]byte(`{"status":"ok"}`), "cpu", 0, 10*time.Millisecond) {
+		t.Fatal("valid CPU response was rejected")
+	}
+	for name, raw := range map[string][]byte{
+		"invalid json": []byte(`{`),
+		"guest error":  []byte(`{"status":"error"}`),
+		"no status":    []byte(`{"result":1}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if successfulPressureResponse(raw, "cpu", 0, 10*time.Millisecond) {
+				t.Fatal("invalid response was accepted")
+			}
+		})
+	}
+	if successfulPressureResponse([]byte(`{"status":"ok"}`), "wasi-timer-wait", 100*time.Millisecond, 40*time.Millisecond) {
+		t.Fatal("timer response that returned before its requested wait was accepted")
+	}
+	if !successfulPressureResponse([]byte(`{"status":"ok"}`), "wasi-timer-wait", 100*time.Millisecond, 100*time.Millisecond) {
+		t.Fatal("completed timer response was rejected")
+	}
+}
+
 func TestPressurePercentileUsesNearestRank(t *testing.T) {
 	values := []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	if pressurePercentile(values, 50) != 5 || pressurePercentile(values, 95) != 10 || pressurePercentile(values, 99) != 10 {

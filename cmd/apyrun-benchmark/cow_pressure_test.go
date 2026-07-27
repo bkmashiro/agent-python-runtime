@@ -1,10 +1,33 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+func TestCOWPressureSchemaCompiles(t *testing.T) {
+	content, err := os.ReadFile("../../benchmark/v1/cow-pressure.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document any
+	if err := json.Unmarshal(content, &document); err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	const schemaURL = "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json"
+	if err := compiler.AddResource(schemaURL, document); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := compiler.Compile(schemaURL); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	valid := benchmarkOptions{

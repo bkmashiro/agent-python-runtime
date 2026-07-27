@@ -121,6 +121,10 @@ fi
 mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
   "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"
 tar xzf "${DOWNLOAD_DIR}/cpython.tgz" -C "${CPYTHON_DIR}" --strip-components=1
+CPYTHON_WASI_CONFIG_SITE="${CPYTHON_DIR}/Tools/wasm/wasi/config.site-wasm32-wasi"
+python3 "${ROOT_DIR}/tools/patch_cpython_wasi_timer_config.py" \
+  "${CPYTHON_WASI_CONFIG_SITE}" "${CPYTHON_WASI_CONFIG_SITE}.patched"
+mv "${CPYTHON_WASI_CONFIG_SITE}.patched" "${CPYTHON_WASI_CONFIG_SITE}"
 tar xzf "${DOWNLOAD_DIR}/wasi-sdk.tar.gz" -C "${TOOLS_DIR}/wasi-sdk" --strip-components=1
 tar xzf "${DOWNLOAD_DIR}/wasm-tools.tar.gz" -C "${TOOLS_DIR}/wasm-tools" --strip-components=1
 tar xJf "${DOWNLOAD_DIR}/wasmtime.tar.xz" -C "${TOOLS_DIR}/wasmtime" --strip-components=1

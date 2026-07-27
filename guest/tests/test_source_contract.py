@@ -61,6 +61,8 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("VFS_PYTHON_DIR", text)
         self.assertIn("copy_tree_deterministic.py", text)
         self.assertIn("patch_wasi_vfs_storage.py", text)
+        self.assertIn("patch_cpython_wasi_timer_config.py", text)
+        self.assertIn("config.site-wasm32-wasi", text)
         self.assertIn('"${LLVM_AR}" d', text)
         self.assertIn("_sysconfigdata_*.py", text)
         self.assertIn("expected exactly one target sysconfigdata file", text)

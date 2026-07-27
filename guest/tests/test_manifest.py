@@ -58,6 +58,8 @@ class ManifestWriterTests(unittest.TestCase):
                 source_date_epoch="1234567890",
                 artifact_profile="base",
                 extension_selection=None,
+                memory_initial_pages=2048,
+                memory_maximum_pages=2048,
             )
 
             self.assertEqual(2, manifest["schema_version"])
@@ -86,6 +88,10 @@ class ManifestWriterTests(unittest.TestCase):
                 manifest["wasm"]["imports"],
             )
             self.assertEqual(["memory", "runtime_init"], manifest["wasm"]["exports"])
+            self.assertEqual(
+                {"initial_pages": 2048, "maximum_pages": 2048, "fixed": True},
+                manifest["wasm"]["memory"],
+            )
             limitations = "\n".join(manifest["limitations"])
             self.assertNotIn("capabilities are not implemented", limitations)
             self.assertIn("fetch_many", limitations)

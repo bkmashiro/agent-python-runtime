@@ -9,6 +9,9 @@ TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
 PREINITIALIZATION_SPIKE=${AGENT_RUNTIME_PREINITIALIZATION_SPIKE:-0}
+COW_FIXED_MEMORY=${AGENT_RUNTIME_COW_FIXED_MEMORY:-0}
+INITIAL_MEMORY_BYTES=134217728
+MAX_MEMORY_BYTES=536870912
 case "${ARTIFACT_PROFILE}" in
   base)
     SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
@@ -34,6 +37,16 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 && ${ARTIFACT_PROFILE} != base ]]; then
   echo "preinitialization spike is restricted to the base artifact profile" >&2
   exit 13
 fi
+case "${COW_FIXED_MEMORY}" in
+  0) ;;
+  1) MAX_MEMORY_BYTES=${INITIAL_MEMORY_BYTES} ;;
+  *)
+    echo "AGENT_RUNTIME_COW_FIXED_MEMORY must be 0 or 1" >&2
+    exit 14
+    ;;
+esac
+MEMORY_INITIAL_PAGES=$((INITIAL_MEMORY_BYTES / 65536))
+MEMORY_MAXIMUM_PAGES=$((MAX_MEMORY_BYTES / 65536))
 
 case ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} in
   0|1) ;;
@@ -283,8 +296,8 @@ FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
   -Wl,--export=dealloc \
   -Wl,--export=execute \
   -Wl,--export-memory \
-  -Wl,--initial-memory=134217728 \
-  -Wl,--max-memory=536870912 \
+  -Wl,--initial-memory="${INITIAL_MEMORY_BYTES}" \
+  -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
   -Wl,-z,stack-size=16777216 \
   -Wl,--strip-all \
   -o "${RAW_GUEST}"
@@ -354,8 +367,8 @@ if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
     -Wl,--export=dealloc \
     -Wl,--export=execute \
     -Wl,--export-memory \
-    -Wl,--initial-memory=134217728 \
-    -Wl,--max-memory=536870912 \
+    -Wl,--initial-memory="${INITIAL_MEMORY_BYTES}" \
+    -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
     -Wl,-z,stack-size=16777216 \
     -Wl,--strip-all \
     -o "${RAW_GUEST}"
@@ -390,8 +403,8 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
     -Wl,--export=dealloc \
     -Wl,--export=execute \
     -Wl,--export-memory \
-    -Wl,--initial-memory=134217728 \
-    -Wl,--max-memory=536870912 \
+    -Wl,--initial-memory="${INITIAL_MEMORY_BYTES}" \
+    -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
     -Wl,-z,stack-size=16777216 \
     -Wl,--strip-all \
     -o "${PREINITIALIZATION_RAW_GUEST}"
@@ -432,6 +445,8 @@ python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --wat "${DIST_DIR}/agent-python-runtime.wat" \
   --source-lock "${SOURCE_LOCK}" \
   --artifact-profile "${ARTIFACT_PROFILE}" \
+  --memory-initial-pages "${MEMORY_INITIAL_PAGES}" \
+  --memory-maximum-pages "${MEMORY_MAXIMUM_PAGES}" \
   "${MANIFEST_EXTENSION_ARGS[@]}" \
   --output "${DIST_DIR}/manifest.json"
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \

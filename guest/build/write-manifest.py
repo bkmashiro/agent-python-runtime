@@ -58,6 +58,8 @@ def build_manifest(
     source_date_epoch: str,
     artifact_profile: str,
     extension_selection: pathlib.Path | None,
+    memory_initial_pages: int | None = None,
+    memory_maximum_pages: int | None = None,
 ) -> dict[str, Any]:
     if artifact_profile not in ARTIFACT_FILENAMES:
         raise ValueError(f"unsupported artifact profile: {artifact_profile}")
@@ -122,6 +124,23 @@ def build_manifest(
         )
         limitations.insert(0, "NumPy random and FFT are not included")
 
+    if (memory_initial_pages is None) != (memory_maximum_pages is None):
+        raise ValueError("memory initial and maximum pages must be provided together")
+    if memory_initial_pages is not None and memory_maximum_pages is not None and (
+        memory_initial_pages <= 0 or memory_maximum_pages < memory_initial_pages
+    ):
+        raise ValueError("memory page bounds are invalid")
+    wasm = {
+        "imports": imports,
+        "exports": exports,
+    }
+    if memory_initial_pages is not None:
+        wasm["memory"] = {
+            "initial_pages": memory_initial_pages,
+            "maximum_pages": memory_maximum_pages,
+            "fixed": memory_initial_pages == memory_maximum_pages,
+        }
+
     return {
         "schema_version": 2,
         "abi_version": "v1",
@@ -139,10 +158,7 @@ def build_manifest(
             "execution_model": "reactor",
         },
         "sources": lock["sources"],
-        "wasm": {
-            "imports": imports,
-            "exports": exports,
-        },
+        "wasm": wasm,
         "packages": packages,
         "extension_profile": extension_profile,
         "limitations": limitations,
@@ -164,6 +180,8 @@ def main() -> int:
         "--artifact-profile", choices=sorted(ARTIFACT_FILENAMES), default="base"
     )
     parser.add_argument("--extension-selection", type=pathlib.Path)
+    parser.add_argument("--memory-initial-pages", required=True, type=int)
+    parser.add_argument("--memory-maximum-pages", required=True, type=int)
     parser.add_argument("--output", required=True, type=pathlib.Path)
     args = parser.parse_args()
 
@@ -175,6 +193,8 @@ def main() -> int:
         source_date_epoch=os.environ.get("SOURCE_DATE_EPOCH", "unknown"),
         artifact_profile=args.artifact_profile,
         extension_selection=args.extension_selection,
+        memory_initial_pages=args.memory_initial_pages,
+        memory_maximum_pages=args.memory_maximum_pages,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

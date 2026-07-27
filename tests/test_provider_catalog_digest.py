@@ -59,6 +59,16 @@ class ProviderCatalogDigestTests(unittest.TestCase):
                 with self.assertRaises(MODULE.CatalogError):
                     MODULE.canonical_catalog(raw)
 
+    def test_explicit_luna_target_is_required_when_selected(self):
+        luna = json.dumps({"object": "list", "data": [
+            {"id": "gpt-5.6-luna", "ratio": 1},
+            {"id": "other", "ratio": 2},
+        ]}).encode()
+        _, count = MODULE.canonical_catalog(luna, "gpt-5.6-luna")
+        self.assertEqual(count, 2)
+        with self.assertRaises(MODULE.CatalogError):
+            MODULE.canonical_catalog(luna, "gpt-5.4")
+
 
 if __name__ == "__main__":
     unittest.main()

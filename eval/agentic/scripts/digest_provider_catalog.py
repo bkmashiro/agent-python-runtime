@@ -44,7 +44,9 @@ def reject_sensitive_keys(value: Any) -> None:
             reject_sensitive_keys(child)
 
 
-def canonical_catalog(raw: bytes) -> tuple[bytes, int]:
+def canonical_catalog(raw: bytes, target_model: str = "gpt-5.4") -> tuple[bytes, int]:
+    if not isinstance(target_model, str) or not (1 <= len(target_model) <= 128) or any(ord(ch) < 0x20 for ch in target_model):
+        raise CatalogError("invalid target model")
     try:
         document = json.loads(raw, object_pairs_hook=reject_duplicate_pairs)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -70,7 +72,7 @@ def canonical_catalog(raw: bytes) -> tuple[bytes, int]:
             raise CatalogError("invalid or duplicate model id")
         seen.add(model_id)
         normalized.append(model)
-    if "gpt-5.4" not in seen:
+    if target_model not in seen:
         raise CatalogError("target model is absent")
     normalized.sort(key=lambda item: item["id"])
     canonical = json.dumps(
@@ -96,16 +98,17 @@ def read_bounded_regular(path: pathlib.Path) -> bytes:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("catalog")
+    parser.add_argument("--target-model", default="gpt-5.4")
     args = parser.parse_args()
     try:
-        canonical, count = canonical_catalog(read_bounded_regular(pathlib.Path(args.catalog)))
+        canonical, count = canonical_catalog(read_bounded_regular(pathlib.Path(args.catalog)), args.target_model)
     except (CatalogError, OSError, ValueError) as exc:
         raise SystemExit(f"catalog rejected: {exc}")
     print(json.dumps({
         "canonicalization": "linkapi-model-catalog/v1",
         "catalog_digest": "sha256:" + hashlib.sha256(canonical).hexdigest(),
         "models": count,
-        "target_model": "gpt-5.4",
+        "target_model": args.target_model,
     }, sort_keys=True))
     return 0
 

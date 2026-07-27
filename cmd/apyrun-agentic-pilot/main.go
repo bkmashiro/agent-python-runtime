@@ -102,7 +102,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	canary := flags.Bool("canary", false, "run the fixed representative three-condition canary")
 	diagnosticTask := flags.String("diagnostic-task", "", "run one authorized development task across all three conditions")
 	diagnosticCondition := flags.String("diagnostic-condition", "", "restrict a diagnostic task to direct, python, or hybrid")
-	treatmentPath := flags.String("treatment", "", "frozen development treatment; diagnostic tasks only")
+	treatmentPath := flags.String("treatment", "", "frozen non-baseline treatment for a diagnostic or fixed canary")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *datasetRoot == "" || *planPath == "" || *activationPath == "" || *guestPath == "" || *outputRoot == "" || len(*repositoryCommit) != 40 {
 		return errors.New("invalid arguments")
 	}

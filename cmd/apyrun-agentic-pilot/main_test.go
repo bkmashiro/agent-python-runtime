@@ -70,7 +70,7 @@ func TestPilotAllowsImplementedTreatmentForFixedCanaryScope(t *testing.T) {
 	stop := errors.New("reached executable gate")
 	args := []string{
 		"--canary", "--dataset", dataset, "--plan", planPath,
-		"--treatment", filepath.Join(dataset, "treatments", "hybrid-two-stage-safe-repair-v2.json"),
+		"--treatment", filepath.Join(dataset, "treatments", "hybrid-two-stage-prebound-compact-v3.json"),
 		"--activation", "unused", "--guest", "unused", "--out", filepath.Join(t.TempDir(), "out"),
 		"--repository-commit", strings.Repeat("a", 40),
 	}

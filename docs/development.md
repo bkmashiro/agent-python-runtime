@@ -31,6 +31,14 @@ These gates validate contracts and Host code. They are not WASI execution eviden
 
 The guest workflow must build the actual `wasm32-wasip1` artifact from pinned inputs, validate imports/exports and hashes, and pass that exact artifact to Go/wazero E2E tests. A native Python run, source-contract test, cache hit, or uploaded filename does not prove guest behavior.
 
+The first COW strategy requires an explicit fixed-memory artifact:
+
+```bash
+AGENT_RUNTIME_COW_FIXED_MEMORY=1 guest/build/build-guest.sh
+```
+
+This keeps the default artifact's growable `128 MiB → 512 MiB` contract unchanged, while the COW artifact binds `initial_pages == maximum_pages == 2048` in `manifest.json`. Do not request `cow-ready-single-use` with an unbound or growable artifact.
+
 ## TDD and commits
 
 For behavior changes:

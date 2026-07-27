@@ -4,13 +4,20 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestCOWPressureSchemaCompiles(t *testing.T) {
+	_ = compileCOWPressureSchema(t)
+}
+
+func compileCOWPressureSchema(t *testing.T) *jsonschema.Schema {
+	t.Helper()
 	content, err := os.ReadFile("../../benchmark/v1/cow-pressure.schema.json")
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +31,51 @@ func TestCOWPressureSchemaCompiles(t *testing.T) {
 	if err := compiler.AddResource(schemaURL, document); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := compiler.Compile(schemaURL); err != nil {
+	schema, err := compiler.Compile(schemaURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return schema
+}
+
+func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
+	one := uint64(1)
+	metric := runtimeevidence.Metric{Status: runtimeevidence.MetricMeasured, Value: &one}
+	process := runtimeevidence.ProcessMetrics{
+		RSSBytes: metric, VirtualBytes: metric, PSSBytes: metric, PrivateCleanBytes: metric, PrivateDirtyBytes: metric,
+		SwapBytes: metric, MinorFaults: metric, MajorFaults: metric, FDCount: metric, VMACount: metric,
+	}
+	mappings := runtimeevidence.MappingMetrics{
+		Name: "memfd:apyrun-cow-image", MappingCount: 4, VirtualBytes: metric, RSSBytes: metric, PSSBytes: metric,
+		SharedCleanBytes: metric, SharedDirtyBytes: metric, PrivateCleanBytes: metric, PrivateDirtyBytes: metric,
+		ReferencedBytes: metric, AnonymousBytes: metric,
+	}
+	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, Shards: 1, ObservedNS: 1, Process: process, COWMappings: mappings}
+	loadSample := spawn
+	loadSample.Phase = "load-final"
+	evidence := cowPressureEvidence{
+		SchemaVersion: 1, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
+		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
+		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
+		Strategy:    runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"},
+		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), ShardCapacity: 4},
+		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
+		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4},
+		Limitations: []string{"one", "two", "three", "four"},
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document any
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileCOWPressureSchema(t).Validate(document); err != nil {
 		t.Fatal(err)
 	}
 }

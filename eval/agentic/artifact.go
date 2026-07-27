@@ -47,7 +47,7 @@ func ValidateTrialResult(result TrialResult) error {
 	} else if len(result.HostContextDigests) != 0 {
 		return ErrTrialArtifact
 	}
-	routerTrial := result.Condition == ConditionHybrid && (result.TreatmentID == TreatmentHybridTwoStageRouterV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2)
+	routerTrial := result.Condition == ConditionHybrid && (result.TreatmentID == TreatmentHybridTwoStageRouterV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3)
 	if result.Route != nil {
 		if !routerTrial {
 			return ErrTrialArtifact
@@ -121,6 +121,7 @@ func ValidateTrialResult(result TrialResult) error {
 	}
 	previousPythonTurn := -1
 	duplicatePythonTurns := 0
+	compactPythonTreatment := result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3
 	for _, evidence := range result.PythonEvidence {
 		if evidence.CapabilityCalls > result.Limits.MaxToolCalls || !validDigest(evidence.RequestDigest) ||
 			!validDigest(evidence.ResponseDigest) || !validDigest(evidence.ResultDigest) ||
@@ -130,6 +131,13 @@ func ValidateTrialResult(result TrialResult) error {
 			(!evidence.Success && result.Version == "agentic-development-trial/v2" && evidence.FailureClass != "" && !evidence.FailureClass.valid()) ||
 			(!evidence.Success && result.Version == "agentic-development-trial/v3" && !evidence.FailureClass.valid()) ||
 			(result.Version == "agentic-development-trial/v3" && (evidence.Turn < 0 || evidence.Turn >= 32 || evidence.Turn < previousPythonTurn)) {
+			return ErrTrialArtifact
+		}
+		if compactPythonTreatment {
+			if !validDigest(evidence.ModelCodeDigest) || !validDigest(evidence.EffectiveCodeDigest) || evidence.ModelCodeDigest == evidence.EffectiveCodeDigest || evidence.WrapperDigest != compactPythonWrapperDigest() {
+				return ErrTrialArtifact
+			}
+		} else if evidence.ModelCodeDigest != "" || evidence.EffectiveCodeDigest != "" || evidence.WrapperDigest != "" {
 			return ErrTrialArtifact
 		}
 		if result.Version == "agentic-development-trial/v3" && evidence.Turn == previousPythonTurn {
@@ -154,7 +162,7 @@ func ValidateTrialResult(result TrialResult) error {
 	} else if result.FailureDetail != nil {
 		return ErrTrialArtifact
 	}
-	repairTreatment := result.TreatmentID == TreatmentPythonSafeRepairV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2
+	repairTreatment := result.TreatmentID == TreatmentPythonSafeRepairV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3
 	if !repairTreatment {
 		if result.Repair != nil || duplicatePythonTurns != 0 {
 			return ErrTrialArtifact

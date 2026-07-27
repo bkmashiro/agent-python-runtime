@@ -17,6 +17,8 @@ import (
 
 const maxPythonCodeBytes = 64 * 1024
 
+const compactPythonWrapperJSON = `{"version":"agentic-python-wrapper/v2","tool_binding":"prebound-authorized-tools","default_result":"empty-object","execution":"single-nested-compile-exec","filename":"<agent-model>"}`
+
 var pythonRunIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 type FailureClass string
@@ -38,27 +40,32 @@ func (class FailureClass) valid() bool {
 }
 
 type PythonRunResult struct {
-	Turn            int              `json:"turn"`
-	Success         bool             `json:"success"`
-	ErrorCode       string           `json:"error_code,omitempty"`
-	FailureClass    FailureClass     `json:"failure_class,omitempty"`
-	CapabilityCalls uint32           `json:"capability_calls"`
-	RequestDigest   string           `json:"request_digest"`
-	ResponseDigest  string           `json:"response_digest,omitempty"`
-	ResultDigest    string           `json:"result_digest,omitempty"`
-	Backend         string           `json:"backend"`
-	ResetMode       engine.ResetMode `json:"reset_mode"`
-	Observation     json.RawMessage  `json:"-"`
-	RawRequest      json.RawMessage  `json:"-"`
-	RawResponse     json.RawMessage  `json:"-"`
+	Turn                int              `json:"turn"`
+	Success             bool             `json:"success"`
+	ErrorCode           string           `json:"error_code,omitempty"`
+	FailureClass        FailureClass     `json:"failure_class,omitempty"`
+	CapabilityCalls     uint32           `json:"capability_calls"`
+	RequestDigest       string           `json:"request_digest"`
+	ResponseDigest      string           `json:"response_digest,omitempty"`
+	ResultDigest        string           `json:"result_digest,omitempty"`
+	ModelCodeDigest     string           `json:"model_code_digest,omitempty"`
+	EffectiveCodeDigest string           `json:"effective_code_digest,omitempty"`
+	WrapperDigest       string           `json:"wrapper_digest,omitempty"`
+	Backend             string           `json:"backend"`
+	ResetMode           engine.ResetMode `json:"reset_mode"`
+	Observation         json.RawMessage  `json:"-"`
+	RawRequest          json.RawMessage  `json:"-"`
+	RawResponse         json.RawMessage  `json:"-"`
 }
 
 type PythonExecutor struct {
-	mu         sync.Mutex
-	runner     engine.Runner
-	tools      *ToolRuntime
-	prepare    string
-	controller *workflowBrokerController
+	mu              sync.Mutex
+	runner          engine.Runner
+	tools           *ToolRuntime
+	prepare         string
+	controller      *workflowBrokerController
+	compactPrebound bool
+	wrapperDigest   string
 }
 
 type workflowBrokerController struct {
@@ -70,21 +77,43 @@ type workflowBrokerController struct {
 }
 
 func NewPythonExecutor(runner engine.Runner, tools *ToolRuntime) (*PythonExecutor, error) {
+	return newPythonExecutor(runner, tools, BaselineTreatment())
+}
+
+func NewPythonExecutorForTreatment(runner engine.Runner, tools *ToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
+	return newPythonExecutor(runner, tools, treatment)
+}
+
+func newPythonExecutor(runner engine.Runner, tools *ToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
 	if runner == nil || tools == nil {
 		return nil, ErrAgenticRun
+	}
+	if !treatment.Implemented() {
+		return nil, ErrDevelopmentTreatment
 	}
 	properties := runner.Properties()
 	if properties.Validate() != nil || properties.ResetMode != engine.ResetModeFreshInstance {
 		return nil, ErrAgenticRun
 	}
 	prepare, err := tools.TrustedPrepare()
+	if treatment.UsesPreboundCompactPython() {
+		prepare, err = tools.TrustedPrepareWithPreboundTools()
+	}
 	if err != nil || prepare == "" {
 		return nil, ErrAgenticRun
 	}
-	return &PythonExecutor{runner: runner, tools: tools, prepare: prepare}, nil
+	executor := &PythonExecutor{runner: runner, tools: tools, prepare: prepare, compactPrebound: treatment.UsesPreboundCompactPython()}
+	if executor.compactPrebound {
+		executor.wrapperDigest = compactPythonWrapperDigest()
+	}
+	return executor, nil
 }
 
 func NewWASIPythonExecutor(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools *ToolRuntime) (*PythonExecutor, error) {
+	return NewWASIPythonExecutorForTreatment(ctx, wasm, config, tools, BaselineTreatment())
+}
+
+func NewWASIPythonExecutorForTreatment(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools *ToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
 	if len(wasm) < 8 || tools == nil {
 		return nil, ErrAgenticRun
 	}
@@ -94,13 +123,28 @@ func NewWASIPythonExecutor(ctx context.Context, wasm []byte, config runtimeconfi
 	if err != nil {
 		return nil, err
 	}
-	executor, err := NewPythonExecutor(runner, tools)
+	executor, err := NewPythonExecutorForTreatment(runner, tools, treatment)
 	if err != nil {
 		_ = runner.Close(context.Background())
 		return nil, err
 	}
 	executor.controller = controller
 	return executor, nil
+}
+
+func compactPythonWrapperDigest() string {
+	return digest([]byte(compactPythonWrapperJSON))
+}
+
+func compactEffectivePythonCode(modelCode string) (string, error) {
+	if !utf8.ValidString(modelCode) {
+		return "", ErrAgenticRun
+	}
+	quoted, err := json.Marshal(modelCode)
+	if err != nil {
+		return "", ErrAgenticRun
+	}
+	return "result = {}\nexec(compile(" + string(quoted) + `, "<agent-model>", "exec"), globals(), globals())`, nil
 }
 
 func (controller *workflowBrokerController) newBroker(context.Context) (*capability.Broker, error) {
@@ -142,8 +186,16 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 		}
 		defer executor.controller.end()
 	}
+	effectiveCode := code
+	if executor.compactPrebound {
+		var err error
+		effectiveCode, err = compactEffectivePythonCode(code)
+		if err != nil {
+			return PythonRunResult{}, err
+		}
+	}
 	request := runtimeconfig.RunRequest{
-		RunID: runID, Code: code, Inputs: json.RawMessage(`{}`),
+		RunID: runID, Code: effectiveCode, Inputs: json.RawMessage(`{}`),
 		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	requestBytes, err := json.Marshal(request)
@@ -154,6 +206,11 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	result := PythonRunResult{
 		RequestDigest: digest(requestBytes), Backend: properties.Backend, ResetMode: properties.ResetMode,
 		RawRequest: append(json.RawMessage(nil), requestBytes...),
+	}
+	if executor.compactPrebound {
+		result.ModelCodeDigest = digest([]byte(code))
+		result.EffectiveCodeDigest = digest([]byte(effectiveCode))
+		result.WrapperDigest = executor.wrapperDigest
 	}
 	payload, runErr := executor.runner.Run(ctx, requestBytes, executor.prepare)
 	result.RawResponse = append(json.RawMessage(nil), payload...)

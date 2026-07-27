@@ -18,6 +18,7 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 		{"python-safe-repair-v1.json", TreatmentPythonSafeRepairV1, true},
 		{"hybrid-two-stage-router-v1.json", TreatmentHybridTwoStageRouterV1, true},
 		{"hybrid-two-stage-safe-repair-v2.json", TreatmentHybridTwoStageSafeRepairV2, true},
+		{"hybrid-two-stage-prebound-compact-v3.json", TreatmentHybridTwoStagePreboundCompactV3, true},
 	} {
 		treatment, err := LoadDevelopmentTreatment(filepath.Join(root, "treatments", test.file))
 		if err != nil || treatment.ID != test.id || treatment.Digest == "" || treatment.Implemented() != test.implemented {
@@ -30,6 +31,17 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 	}
 	if BaselineTreatment().Digest != digest(baselineBytes) {
 		t.Fatal("built-in baseline does not match frozen document")
+	}
+}
+
+func TestPreboundCompactTreatmentFreezesPythonExecutionPolicies(t *testing.T) {
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !treatment.UsesPreboundCompactPython() || !treatment.AllowsPythonRepair() || !treatment.UsesTwoStageRouter() ||
+		treatment.PythonBindingPolicy != "prebound-authorized-tools" || treatment.PythonResultPolicy != "default-empty-object" || treatment.PythonSourcePolicy != "compact-no-unused-values" {
+		t.Fatalf("treatment=%+v", treatment)
 	}
 }
 

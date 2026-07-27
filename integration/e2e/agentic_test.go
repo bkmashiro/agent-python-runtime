@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,5 +68,76 @@ raise RuntimeError("expected rollback")
 `, 4)
 	if err != nil || failed.Success || failed.CapabilityCalls != 1 || tools.FileSystem().Digest() != committedState {
 		t.Fatalf("failed=%+v err=%v before=%s after=%s", failed, err, committedState, tools.FileSystem().Digest())
+	}
+}
+
+func TestAgenticPreboundCompactExecutorUsesDefaultResultAndFreshGlobals(t *testing.T) {
+	root := repositoryRoot(t)
+	dataset, err := agentic.Load(filepath.Join(root, "eval", "agentic", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task agentic.Task
+	for _, candidate := range dataset.Tasks {
+		if candidate.ID == "bfcl-v4-stateful-local-tools-multi_turn_base_12" {
+			task = candidate
+			break
+		}
+	}
+	if task.ID == "" {
+		t.Fatal("agentic fixture missing")
+	}
+	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(root, "eval", "agentic", "v1", "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools, err := agentic.NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guest, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor, err := agentic.NewWASIPythonExecutorForTreatment(context.Background(), guest, runtimeconfig.DefaultRunConfig(), tools, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := executor.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := tools.SetTurn(0); err != nil {
+		t.Fatal(err)
+	}
+	defaulted, err := executor.Execute(context.Background(), "agentic-compact-default", `
+ephemeral_marker = "must-not-persist"
+cd(folder="Documents")
+touch(file_name="agentic-compact-e2e.txt")
+`, 4)
+	if err != nil || !defaulted.Success || defaulted.CapabilityCalls != 2 || string(defaulted.Observation) != `{}` || defaulted.ModelCodeDigest == "" || defaulted.EffectiveCodeDigest == "" || defaulted.WrapperDigest == "" {
+		t.Fatalf("defaulted=%+v err=%v", defaulted, err)
+	}
+	if err := tools.SetTurn(1); err != nil {
+		t.Fatal(err)
+	}
+	explicit, err := executor.Execute(context.Background(), "agentic-compact-explicit", `from __future__ import annotations
+calls = 0
+def once():
+    global calls
+    calls += 1
+    return calls
+result = {"calls": once()}`, 1)
+	if err != nil || !explicit.Success || string(explicit.Observation) != `{"calls":1}` {
+		t.Fatalf("explicit=%+v err=%v", explicit, err)
+	}
+	isolated, err := executor.Execute(context.Background(), "agentic-compact-isolated", `result = {"seen": ephemeral_marker}`, 1)
+	if err != nil || isolated.Success || isolated.CapabilityCalls != 0 || isolated.ErrorCode != "python_exception" {
+		t.Fatalf("isolated=%+v err=%v", isolated, err)
+	}
+	encoded, err := json.Marshal(defaulted)
+	if err != nil || len(encoded) == 0 {
+		t.Fatalf("formal evidence encoding failed: %v %s", err, encoded)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -56,6 +57,9 @@ func TestPythonExecutorBuildsBoundedAuthorityFreeRunRequest(t *testing.T) {
 	if request.RunID != "python-run-1" || request.Code != code || string(request.Inputs) != "{}" || string(request.OutputSchema) != `{"type":"object"}` {
 		t.Fatalf("request=%+v", request)
 	}
+	if result.ModelCodeDigest != "" || result.EffectiveCodeDigest != "" || result.WrapperDigest != "" {
+		t.Fatalf("baseline source evidence changed: %+v", result)
+	}
 	var envelope map[string]any
 	if json.Unmarshal(runner.request, &envelope) != nil || len(envelope) != 4 {
 		t.Fatalf("request envelope=%s", runner.request)
@@ -71,6 +75,51 @@ func TestPythonExecutorBuildsBoundedAuthorityFreeRunRequest(t *testing.T) {
 	encoded, _ := json.Marshal(result)
 	if containsBytes(encoded, []byte("host_tools")) || containsBytes(encoded, []byte(`"done"`)) {
 		t.Fatalf("serialized result leaked code or observation: %s", encoded)
+	}
+}
+
+func TestPreboundCompactExecutorWrapsCodeAndBindsSourceDigests(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	tools, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance}}
+	executor, err := NewPythonExecutorForTreatment(runner, tools, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelCode := "pwd()"
+	result, err := executor.Execute(context.Background(), "python-run-compact", modelCode, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := runtimeconfig.DecodeRunRequest(runner.request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	effectiveCode, err := compactEffectivePythonCode(modelCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Code != effectiveCode || !strings.Contains(runner.prepare, `pwd = _host_module.__dict__["pwd"]`) ||
+		result.ModelCodeDigest != digest([]byte(modelCode)) || result.EffectiveCodeDigest != digest([]byte(effectiveCode)) || result.WrapperDigest != compactPythonWrapperDigest() {
+		t.Fatalf("request=%q prepare=%q result=%+v", request.Code, runner.prepare, result)
+	}
+}
+
+func TestCompactEffectivePythonCodePreservesFutureImportAndSingleEvaluation(t *testing.T) {
+	modelCode := "from __future__ import annotations\ncalls = 0\ndef once():\n    global calls\n    calls += 1\n    return calls\nresult = {\"calls\": once()}"
+	effective, err := compactEffectivePythonCode(modelCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(effective, "result = {}\nexec(compile(") || strings.Count(effective, "exec(compile(") != 1 || !strings.Contains(effective, `"<agent-model>"`) {
+		t.Fatalf("effective=%q", effective)
 	}
 }
 

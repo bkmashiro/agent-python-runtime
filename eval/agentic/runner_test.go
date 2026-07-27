@@ -448,10 +448,11 @@ func TestRunDevelopmentTrialStatefulFailsClosedAtTurnProviderCap(t *testing.T) {
 }
 
 type oracleWorkflow struct {
-	tools  *ToolRuntime
-	oracle StatefulOracle
-	turn   int
-	codes  []string
+	tools   *ToolRuntime
+	oracle  StatefulOracle
+	turn    int
+	codes   []string
+	compact bool
 }
 
 func (workflow *oracleWorkflow) Execute(ctx context.Context, _ string, code string, _ uint32) (PythonRunResult, error) {
@@ -464,11 +465,21 @@ func (workflow *oracleWorkflow) Execute(ctx context.Context, _ string, code stri
 	}
 	after := countStatefulCalls(workflow.tools.Trace())
 	workflow.turn++
-	return PythonRunResult{
+	result := PythonRunResult{
 		Success: true, CapabilityCalls: uint32(after - before), RequestDigest: digest([]byte(code)),
 		ResponseDigest: digest([]byte("{}")), ResultDigest: digest([]byte("{}")), Backend: "oracle-test",
 		ResetMode: engine.ResetModeFreshInstance, Observation: json.RawMessage(`{}`),
-	}, nil
+	}
+	if workflow.compact {
+		result.ModelCodeDigest = digest([]byte(code))
+		effectiveCode, err := compactEffectivePythonCode(code)
+		if err != nil {
+			return PythonRunResult{}, err
+		}
+		result.EffectiveCodeDigest = digest([]byte(effectiveCode))
+		result.WrapperDigest = compactPythonWrapperDigest()
+	}
+	return result, nil
 }
 func (*oracleWorkflow) Close(context.Context) error { return nil }
 
@@ -746,6 +757,52 @@ func TestDevelopmentReplicateChangesSpecIdentity(t *testing.T) {
 	}
 }
 
+func TestPreboundCompactTrialBindsSourceEvidenceAndPrompt(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	responses := make([]provider.Response, len(task.Interaction.Turns))
+	for index := range responses {
+		body := fmt.Sprintf(`{"status":"completed","model":"gpt-5.6-luna","output":[{"type":"function_call","status":"completed","call_id":"compact-%d","name":"run_python","arguments":"{\"code\":\"pwd()\"}"}]}`, index)
+		responses[index] = responseFixture(body, 20, 5)
+	}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	factory := func(tools *ToolRuntime) (PythonWorkflow, error) {
+		var oracle StatefulOracle
+		if decodeStrict(task.Oracle, &oracle) != nil {
+			return nil, ErrDataset
+		}
+		return &oracleWorkflow{tools: tools, oracle: oracle, compact: true}, nil
+	}
+	limits := developmentTrialLimits(len(task.Interaction.Turns))
+	limits.MaxProviderCalls++
+	limits.MaxPythonRuns++
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(
+		context.Background(), &scriptedAdapter{responses: responses}, task, ConditionPython, luna56DevelopmentModel, 0,
+		limits, identity, treatment, factory,
+	)
+	if err != nil || !result.Passed || ValidateTrialResult(result) != nil || result.RawDebug == nil || !strings.Contains(result.RawDebug.DeveloperPrompt, "prebound") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	for _, evidence := range result.PythonEvidence {
+		if !validDigest(evidence.ModelCodeDigest) || !validDigest(evidence.EffectiveCodeDigest) || evidence.WrapperDigest != compactPythonWrapperDigest() {
+			t.Fatalf("evidence=%+v", evidence)
+		}
+	}
+	tampered := result
+	tampered.PythonEvidence = append([]PythonRunResult(nil), result.PythonEvidence...)
+	tampered.PythonEvidence[0].WrapperDigest = ""
+	if ValidateTrialResult(tampered) == nil {
+		t.Fatal("missing compact wrapper digest accepted")
+	}
+}
+
 func TestRunDevelopmentTrialPythonUsesUnderlyingHostTrace(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	responses := make([]provider.Response, len(task.Interaction.Turns))
@@ -874,6 +931,31 @@ func TestHybridSurfaceContainsDirectAndPythonWithoutCollision(t *testing.T) {
 		!strings.Contains(description, "touch(file_name: str) [returns an error if the file already exists; do not pre-check existence]") ||
 		!strings.Contains(description, "echo(content: str, file_name: str=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
 		t.Fatalf("surface=%d mapping=%v prompt=%q description=%q", len(surface), mapping, prompt, description)
+	}
+}
+
+func TestPreboundCompactPythonSurfaceRequiresDirectMinimalCode(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-compact-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface, _, prompt, err := buildConditionSurfaceForTreatment(runtime, ConditionPython, false, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	description, _ := surface[0]["description"].(string)
+	for _, required := range []string{"prebound", "call them directly", "result defaults to {}", "bare calls", "no unused return bindings"} {
+		if !strings.Contains(prompt+" "+description, required) {
+			t.Fatalf("missing %q prompt=%q description=%q", required, prompt, description)
+		}
+	}
+	if strings.Contains(prompt+" "+description, "Import functions from host_tools") || strings.Contains(prompt+" "+description, "Import every Host operation") || strings.Contains(prompt+" "+description, "Assign a JSON object to result") {
+		t.Fatalf("legacy boilerplate survived prompt=%q description=%q", prompt, description)
 	}
 }
 

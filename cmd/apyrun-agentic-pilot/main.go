@@ -214,7 +214,7 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 				var factory agentic.PythonWorkflowFactory
 				if condition != agentic.ConditionDirect {
 					factory = func(tools *agentic.ToolRuntime) (agentic.PythonWorkflow, error) {
-						return agentic.NewWASIPythonExecutor(ctx, guestBytes, plan.RuntimeConfig(), tools)
+						return agentic.NewWASIPythonExecutorForTreatment(ctx, guestBytes, plan.RuntimeConfig(), tools, treatment)
 					}
 				}
 				var result agentic.TrialResult

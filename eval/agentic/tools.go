@@ -169,6 +169,13 @@ func (runtime *ToolRuntime) TrustedPrepare() (string, error) {
 	return runtime.snapshot.GenerateTrustedPrepare()
 }
 
+func (runtime *ToolRuntime) TrustedPrepareWithPreboundTools() (string, error) {
+	if runtime == nil {
+		return "", ErrDataset
+	}
+	return runtime.snapshot.GenerateTrustedPrepareWithToolBindings()
+}
+
 func (runtime *ToolRuntime) SetTurn(index int) error {
 	if runtime == nil || index < 0 || index >= len(runtime.trace) {
 		return ErrDataset

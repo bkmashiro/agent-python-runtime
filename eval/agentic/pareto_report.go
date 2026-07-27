@@ -192,7 +192,7 @@ func expectedCohortSurfaces(task Task, treatment DevelopmentTreatment) (map[Cond
 	result := make(map[Condition]expectedCohortSurface, 3)
 	for _, condition := range []Condition{ConditionDirect, ConditionPython} {
 		continueWithinTurn := task.Track == "stateful_local_tools" && condition != ConditionPython
-		surface, _, prompt, err := buildConditionSurface(runtime, condition, continueWithinTurn)
+		surface, _, prompt, err := buildConditionSurfaceForTreatment(runtime, condition, continueWithinTurn, treatment)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +209,7 @@ func expectedCohortSurfaces(task Task, treatment DevelopmentTreatment) (map[Cond
 		}
 		result[ConditionHybrid] = expectedCohortSurface{prompt: promptDigest, surface: surfaceDigest}
 	} else {
-		surface, _, prompt, err := buildConditionSurface(runtime, ConditionHybrid, task.Track == "stateful_local_tools")
+		surface, _, prompt, err := buildConditionSurfaceForTreatment(runtime, ConditionHybrid, task.Track == "stateful_local_tools", treatment)
 		if err != nil {
 			return nil, err
 		}

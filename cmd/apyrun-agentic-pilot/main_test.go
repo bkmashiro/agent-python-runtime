@@ -235,10 +235,6 @@ func TestApplyTreatmentTrialLimitsAddsOnlyAuthorizedExchanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "hybrid-two-stage-safe-repair-v2.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	task := findTaskForPilotTest(t, datasetRoot, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	cases := []struct {
 		condition            agentic.Condition
@@ -249,14 +245,20 @@ func TestApplyTreatmentTrialLimitsAddsOnlyAuthorizedExchanges(t *testing.T) {
 		{agentic.ConditionPython, 4, 4, 80_000, 32_768, 112_768},
 		{agentic.ConditionHybrid, 14, 4, 280_000, 114_688, 394_688},
 	}
-	for _, tc := range cases {
-		limits, err := plan.LimitsFor(task, tc.condition)
+	for _, treatmentFile := range []string{"hybrid-two-stage-safe-repair-v2.json", "hybrid-two-stage-prebound-compact-v3.json"} {
+		treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", treatmentFile))
 		if err != nil {
 			t.Fatal(err)
 		}
-		limits, err = applyTreatmentTrialLimits(plan, limits, tc.condition, treatment)
-		if err != nil || limits.MaxProviderCalls != tc.calls || limits.MaxPythonRuns != tc.runs || limits.MaxInputTokens != tc.input || limits.MaxOutputTokens != tc.output || limits.MaxTotalTokens != tc.total {
-			t.Fatalf("condition=%s limits=%+v err=%v", tc.condition, limits, err)
+		for _, tc := range cases {
+			limits, err := plan.LimitsFor(task, tc.condition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			limits, err = applyTreatmentTrialLimits(plan, limits, tc.condition, treatment)
+			if err != nil || limits.MaxProviderCalls != tc.calls || limits.MaxPythonRuns != tc.runs || limits.MaxInputTokens != tc.input || limits.MaxOutputTokens != tc.output || limits.MaxTotalTokens != tc.total {
+				t.Fatalf("treatment=%s condition=%s limits=%+v err=%v", treatment.ID, tc.condition, limits, err)
+			}
 		}
 	}
 }
@@ -283,20 +285,22 @@ func TestApplyTreatmentBoundsCoversFixedRepresentativeCanary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", "hybrid-two-stage-safe-repair-v2.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	scope, err := selectExecutionScope(plan, dataset, true, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err = applyTreatmentBounds(plan, scope, treatment)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if scope.Bounds.TrialCount != 6 || scope.Bounds.MaxProviderAttempts != 36 || scope.Bounds.MaxInputTokens != 720_000 || scope.Bounds.MaxOutputTokens != 294_912 || scope.Bounds.MaxTotalTokens != 1_014_912 || scope.Bounds.MaxToolCalls != 192 || scope.Bounds.MaxPythonRuns != 12 {
-		t.Fatalf("bounds=%+v", scope.Bounds)
+	for _, treatmentFile := range []string{"hybrid-two-stage-safe-repair-v2.json", "hybrid-two-stage-prebound-compact-v3.json"} {
+		treatment, err := agentic.LoadDevelopmentTreatment(filepath.Join(datasetRoot, "treatments", treatmentFile))
+		if err != nil {
+			t.Fatal(err)
+		}
+		bounded, err := applyTreatmentBounds(plan, scope, treatment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bounded.Bounds.TrialCount != 6 || bounded.Bounds.MaxProviderAttempts != 36 || bounded.Bounds.MaxInputTokens != 720_000 || bounded.Bounds.MaxOutputTokens != 294_912 || bounded.Bounds.MaxTotalTokens != 1_014_912 || bounded.Bounds.MaxToolCalls != 192 || bounded.Bounds.MaxPythonRuns != 12 {
+			t.Fatalf("treatment=%s bounds=%+v", treatment.ID, bounded.Bounds)
+		}
 	}
 }
 

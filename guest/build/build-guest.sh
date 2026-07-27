@@ -235,6 +235,15 @@ export SOURCE_DATE_EPOCH
 )
 
 WASI_BUILD_DIR="${CPYTHON_DIR}/cross-build/wasm32-wasip1"
+WASI_PYCONFIG="${WASI_BUILD_DIR}/pyconfig.h"
+if grep -q '^#define HAVE_CLOCK_NANOSLEEP 1$' "${WASI_PYCONFIG}"; then
+  echo "CPython WASI build unexpectedly enabled absolute clock_nanosleep" >&2
+  exit 17
+fi
+if ! grep -q '^#define HAVE_NANOSLEEP 1$' "${WASI_PYCONFIG}"; then
+  echo "CPython WASI build did not enable relative nanosleep" >&2
+  exit 18
+fi
 PYTHON_LIB=$(find "${WASI_BUILD_DIR}" -maxdepth 2 -type f -name 'libpython3.14.a' | head -n 1)
 if [[ -z ${PYTHON_LIB} ]]; then
   echo "CPython WASI static library was not produced" >&2

@@ -16,12 +16,16 @@ class CPythonWASITimerConfigPatchTests(unittest.TestCase):
         source = "# CPython WASI config\nac_cv_func_eventfd=no\n"
         patched = MODULE.patch_config_site(source)
         self.assertIn(MODULE.MARKER, patched)
-        self.assertEqual(patched.count(MODULE.SETTING), 1)
-        self.assertTrue(patched.endswith(f"{MODULE.SETTING}\n"))
+        for setting in MODULE.SETTINGS:
+            self.assertEqual(patched.count(setting), 1)
+        self.assertTrue(patched.endswith(f"{MODULE.SETTINGS[-1]}\n"))
 
     def test_rejects_duplicate_or_upstream_setting(self) -> None:
         with self.assertRaisesRegex(ValueError, "already present"):
-            MODULE.patch_config_site(f"{MODULE.SETTING}\n")
+            MODULE.patch_config_site(f"{MODULE.SETTINGS[0]}\n")
+
+        with self.assertRaisesRegex(ValueError, "already present"):
+            MODULE.patch_config_site(f"{MODULE.SETTINGS[1]}\n")
 
 
 if __name__ == "__main__":

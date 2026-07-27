@@ -6,15 +6,20 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-SETTING = "ac_cv_func_clock_nanosleep=no"
+SETTINGS = (
+    "ac_cv_func_clock_nanosleep=no",
+    "ac_cv_lib_rt_clock_nanosleep=no",
+)
 MARKER = "# agent-python-runtime: wazero poll_oneoff supports relative clock sleeps"
 
 
 def patch_config_site(source: str) -> str:
-    if SETTING in source:
-        raise ValueError(f"clock_nanosleep setting already present: {SETTING}")
+    conflicts = [setting for setting in SETTINGS if setting in source]
+    if conflicts:
+        raise ValueError(f"clock_nanosleep setting already present: {conflicts[0]}")
     suffix = "" if source.endswith("\n") else "\n"
-    return f"{source}{suffix}\n{MARKER}\n{SETTING}\n"
+    settings = "\n".join(SETTINGS)
+    return f"{source}{suffix}\n{MARKER}\n{settings}\n"
 
 
 def main() -> None:

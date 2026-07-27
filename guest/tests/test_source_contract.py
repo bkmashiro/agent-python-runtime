@@ -63,6 +63,8 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("patch_wasi_vfs_storage.py", text)
         self.assertIn("patch_cpython_wasi_timer_config.py", text)
         self.assertIn("config.site-wasm32-wasi", text)
+        self.assertIn("CPython WASI build unexpectedly enabled absolute clock_nanosleep", text)
+        self.assertIn("CPython WASI build did not enable relative nanosleep", text)
         self.assertIn('"${LLVM_AR}" d', text)
         self.assertIn("_sysconfigdata_*.py", text)
         self.assertIn("expected exactly one target sysconfigdata file", text)

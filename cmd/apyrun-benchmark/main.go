@@ -76,6 +76,11 @@ type benchmarkOptions struct {
 	DensitySlots          uint
 	MaxRSSBytes           uint64
 	ChildTimeout          time.Duration
+	MemoryBudgetBytes     uint64
+	MemoryReserveBytes    uint64
+	MaxPressureSlots      uint
+	ConsumerCount         uint
+	PressureDuration      time.Duration
 }
 
 func main() {
@@ -95,11 +100,16 @@ func runMain(args []string) error {
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
-	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, or reactor-census")
+	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, or reactor-census")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
 	flags.UintVar(&options.DensitySlots, "density-slots", 0, "internal lifecycle-density requested slot count")
 	flags.Uint64Var(&options.MaxRSSBytes, "max-rss-bytes", 0, "required lifecycle-density child RSS kill threshold")
 	flags.DurationVar(&options.ChildTimeout, "child-timeout", 2*time.Minute, "lifecycle-density timeout per fresh child")
+	flags.Uint64Var(&options.MemoryBudgetBytes, "memory-budget-bytes", 0, "cow-pressure runtime admission budget")
+	flags.Uint64Var(&options.MemoryReserveBytes, "memory-reserve-bytes", 0, "cow-pressure memory reserved outside runtime budget")
+	flags.UintVar(&options.MaxPressureSlots, "max-pressure-slots", 0, "cow-pressure hard slot bound")
+	flags.UintVar(&options.ConsumerCount, "consumers", 0, "cow-pressure closed-loop consumer count")
+	flags.DurationVar(&options.PressureDuration, "pressure-duration", 0, "cow-pressure closed-loop duration")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -140,8 +150,11 @@ func runMain(args []string) error {
 		}
 		return runLifecycleDensityMain(options)
 	}
+	if options.Kind == "cow-pressure" {
+		return runCOWPressureMain(options, goruntime.GOOS)
+	}
 	if options.Kind != "runtime" {
-		return errors.New("benchmark kind must be runtime, lifecycle-density, or reactor-census")
+		return errors.New("benchmark kind must be runtime, lifecycle-density, cow-pressure, or reactor-census")
 	}
 	if options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
 		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full|profile-candidate|preinitialization-spike] [-strategy fresh|single-use-preinitialized] [-samples 3]")
@@ -432,7 +445,7 @@ func writeAtomic(path string, content []byte) error {
 		return err
 	}
 	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, content, 0o644); err != nil {
+	if err := os.WriteFile(temporary, content, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(temporary, path)

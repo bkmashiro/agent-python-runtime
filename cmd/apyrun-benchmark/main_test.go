@@ -12,6 +12,20 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+func TestWriteAtomicCreatesPrivateEvidence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "evidence.json")
+	if err := writeAtomic(path, []byte("{}\n")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("evidence mode=%#o, want 0600", info.Mode().Perm())
+	}
+}
+
 func TestLoadArtifactIdentityBindsManifestToBytes(t *testing.T) {
 	directory := t.TempDir()
 	wasm := []byte("fixture-wasm")

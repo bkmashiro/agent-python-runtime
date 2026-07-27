@@ -17,9 +17,11 @@ Agent harness
 Go Runtime
   ├─ request/schema validation
   ├─ backend-neutral Runner/Factory contract
-  ├─ wazero V1 adapter and fresh-instance isolation
+  ├─ wazero adapter and fresh-instance isolation baseline
   ├─ lifecycle, cancellation, and limits
-  ├─ fresh instantiate/discard or never-served single-use prepared candidate
+  ├─ current fresh or never-served single-use prepared execution
+  ├─ target dispatcher-owned Runtime/CompiledModule flyweight
+  ├─ target Linux COW prepared image and private slot mappings
   ├─ capability broker
   └─ receipts and metrics
   │ versioned core-WASM ABI
@@ -60,6 +62,8 @@ Authority-bearing fields are not accepted from `RunRequest`.
 
 Created only by trusted bootstrap/preparation code. The implemented optimization admits a never-served initialized instance to a bounded Host pool, checks it out once, and discards it after that Run. No snapshot capture, restore, or served-instance reuse is implemented.
 
+The active target adds an exact sealed prepared-memory image shared by independent Linux `MAP_PRIVATE` slot mappings. The first promotion level still discards every served slot. A later slot may return to the pool only after complete mutable-memory, global, table, WASI, Host-resource, growth, timeout, and failure-path evidence. See [ADR 0008](adr/0008-cow-python-reactor-performance-density.md) and the [active COW performance-density roadmap](plans/2026-07-27-cow-python-reactor-performance-density.md).
+
 ### Run-local
 
 Generated-code globals, imported modules, arrays, temporary buffers, capability results, counters, and outputs. It must not survive the run.
@@ -73,6 +77,8 @@ Deferred. V1 returns bounded JSON/bytes plus a digest. It does not persist an in
 Stateful sessions are a separate future Host-owned lifecycle contract, not an extension of untrusted `RunRequest` and not a relaxation of V1 freshness. A durable session may be represented by an explicitly bound live module, an exact-build memory capsule, or a Guest-defined logical capsule only after the complete mutable state and external-resource boundary is proven. Dirty linear-memory pages alone are partial state.
 
 See [ADR 0006](adr/0006-execution-session-lifecycle.md), the [Host-owned lifecycle contract](session-lifecycle-contract.md), and the [active successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). Activation adds no session manager, capsule, persistence, or restore claim by itself.
+
+Stateless COW execution-slot reuse is not a stateful-session contract. It restores a trusted prepared base and discards all Run-local state; it does not preserve a user Python heap between Runs.
 
 ## Guest lifecycle
 
@@ -89,6 +95,20 @@ compile artifact once
 ```
 
 No dirty instance returns to the pool. A trap, cancellation, failed preparation, unsupported memory shape, or refill failure closes/discards the affected instance; a pool miss uses the synchronous fresh path.
+
+The target COW lifecycle evolves in evidence-gated levels:
+
+```text
+shared Runtime/CompiledModule
+→ independently initialized and verified prepared slots
+→ sealed canonical memory image
+→ one MAP_PRIVATE mapping per slot
+→ first level: serve once and discard
+→ later level: clear Host request state, restore every eligible state class,
+  remap private pages to the canonical image, verify invariants, then reuse
+```
+
+This target is not implemented until the corresponding Linux gates pass. Page-write profiling precedes CPython allocator, subinterpreter, dirty-aware reset, or compression work.
 
 ## Execution slots versus durable sessions
 

@@ -28,7 +28,11 @@ The runtime is not released or deployed. An explicit manual-only `numpy-core` ar
 
 ## Roadmap boundary
 
-The original execution-runtime roadmap has completed the bounded `fetch_many`, single-use prepared-state, supply-chain, explicit `numpy-core`, and truthful-closeout tracks. `base` remains automatic and `numpy-core` remains manual-only; fresh-instance fallback and all non-release boundaries remain intact. The session-lifecycle successor completed its bounded observability and lifecycle-density evidence, then closed as an active queue after the owner's product-value decision. Session managers, capsules, COW, persistence, migration, and UFFD remain explicitly deferred until a concrete stateful use case, target host, workload, and SLO justify them.
+The original execution-runtime roadmap completed the bounded `fetch_many`, single-use prepared-state, supply-chain, explicit `numpy-core`, and truthful-closeout tracks. `base` remains automatic and `numpy-core` remains manual-only; fresh-instance fallback and all non-release boundaries remain intact.
+
+The active runtime-performance direction is now [COW Python reactor performance-density](docs/plans/2026-07-27-cow-python-reactor-performance-density.md): fast Python execution, cheap deterministic reset, and high ready/active density are coupled product goals. This is an accepted target, not a claim that COW or served-slot restore is already implemented. Work begins with exact state census and page-write evidence, then a dispatcher-owned wazero flyweight and Linux COW ready slots; CPython allocator, subinterpreter, dirty-aware reset, and compression changes remain later evidence-gated comparisons. Fresh-instance is the portable fail-closed baseline.
+
+Stateful sessions, capsules, persistence, and migration remain outside this active stateless execution lane.
 
 The project is not a general Linux sandbox, agent framework, MCP marketplace, arbitrary PyPI environment, or write/effect execution system.
 
@@ -36,6 +40,8 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 
 - [Local operator CLI](docs/operator-cli.md)
 - [Runtime benchmark evidence](docs/benchmarking.md)
+- [Active COW Python reactor performance-density roadmap](docs/plans/2026-07-27-cow-python-reactor-performance-density.md)
+- [COW performance-density ADR](docs/adr/0008-cow-python-reactor-performance-density.md)
 - [Prepared-state safety audit](docs/prepared-state-audit.md)
 - [Agent workflow evaluation contract](docs/agent-workflow-evaluation.md)
 - [Active MCP transactional Python workflows roadmap](docs/plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md)
@@ -58,3 +64,4 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 - [`fetch_many` capability ADR](docs/adr/0005-fetch-many-capability.md)
 - [Execution slots and stateful session lifecycle ADR](docs/adr/0006-execution-session-lifecycle.md)
 - [MCP transactional tool workflows ADR](docs/adr/0007-mcp-transactional-tool-workflows.md)
+- [COW Python reactor performance-density ADR](docs/adr/0008-cow-python-reactor-performance-density.md)

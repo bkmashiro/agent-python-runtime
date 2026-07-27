@@ -26,6 +26,8 @@ Do not abstract backend module, memory, function, linker, store, interrupt, or s
 
 `prepared-restore` is a reserved claim, not a current implementation. An adapter may report it only after proving restoration for every mutable artifact state class, including linear memories, mutable globals, tables, Host resources, memory growth, and failure paths. A trap, cancellation, or unsupported state still requires instance discard.
 
+[ADR 0008](0008-cow-python-reactor-performance-density.md) activates Linux COW performance-density as an evidence-gated target behind this neutral boundary. Requested strategy, active strategy, fallback, and fallback reason must remain distinguishable. A COW-ready single-use slot may share a prepared physical image without claiming served-slot restore; a reusable COW claim requires the complete `prepared-restore` proof above. Non-Linux support, strategy fallback, or a backend label is never sufficient evidence that COW was active.
+
 ## Consequences
 
 - The guest ABI and product policy do not name wazero.

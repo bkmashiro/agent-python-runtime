@@ -27,6 +27,22 @@ func TestPreparedMaximumCapacityMustCoverInitialCapacity(t *testing.T) {
 	}
 }
 
+func TestPreparedRefillWorkerCountIsExplicitAndBounded(t *testing.T) {
+	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	if _, err := (engine.Factory{PreparedCapacity: 2, PreparedMaxCapacity: 2, PreparedRefillWorkers: 3}).New(context.Background(), wasm, runtime.DefaultRunConfig()); err == nil {
+		t.Fatal("worker count above capacity was accepted")
+	}
+	runner, err := (engine.Factory{PreparedCapacity: 2, PreparedMaxCapacity: 2, PreparedRefillWorkers: 1}).New(context.Background(), wasm, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	workers := runner.(interface{ PreparedRefillWorkers() uint32 }).PreparedRefillWorkers()
+	if workers != 1 {
+		t.Fatalf("refill workers=%d, want 1", workers)
+	}
+}
+
 func TestExplicitCOWStrategyFailsBeforeCompileWhenPlatformUnsupported(t *testing.T) {
 	if goruntime.GOOS == "linux" {
 		t.Skip("Linux supports the cow-ready-single-use strategy")

@@ -168,6 +168,7 @@ go run ./cmd/apyrun-benchmark \
   -max-pressure-slots 4096 \
   -consumers 16 \
   -pressure-workload cpu \
+  -pressure-refill-workers 4 \
   -pressure-duration 30s
 ```
 

@@ -52,7 +52,7 @@ type preparedPool struct {
 	policy    preparedRefillPolicy
 }
 
-func (engine *Engine) initializePreparedPool(capacity, maximum uint32) error {
+func (engine *Engine) initializePreparedPool(capacity, maximum, configuredWorkers uint32) error {
 	if capacity == 0 {
 		return nil
 	}
@@ -76,7 +76,9 @@ func (engine *Engine) initializePreparedPool(capacity, maximum uint32) error {
 		engine.cowRuntime = cowRuntime
 	}
 	workerCount := maximum
-	if workerCount > maxPreparedRefillWorkers {
+	if configuredWorkers > 0 {
+		workerCount = configuredWorkers
+	} else if workerCount > maxPreparedRefillWorkers {
 		workerCount = maxPreparedRefillWorkers
 	}
 	pool.refillWorkers = workerCount

@@ -187,6 +187,9 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 	if options.ConsumerCount == 0 || options.ConsumerCount > 256 || options.PressureDuration < 5*time.Second || options.PressureDuration > 10*time.Minute {
 		return errors.New("cow-pressure consumers or duration is outside bounds")
 	}
+	if options.PressureRefillWorkers != 1 && options.PressureRefillWorkers != 2 && options.PressureRefillWorkers != 4 {
+		return errors.New("cow-pressure refill workers must be 1, 2, or 4")
+	}
 	if !validPressureWorkload(options.PressureWorkload, options.PressureWait) {
 		return errors.New("cow-pressure workload or wait is outside bounds")
 	}
@@ -233,10 +236,11 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 2 * time.Minute
 	neutral, err := (wazeroengine.Factory{
-		PreparedCapacity:    pressureInitialCapacity,
-		PreparedMaxCapacity: uint32(options.MaxPressureSlots),
-		Strategy:            enginecontract.StrategyCOWReadySingleUse,
-		Observer:            lifecycle.observe,
+		PreparedCapacity:      pressureInitialCapacity,
+		PreparedMaxCapacity:   uint32(options.MaxPressureSlots),
+		PreparedRefillWorkers: uint32(options.PressureRefillWorkers),
+		Strategy:              enginecontract.StrategyCOWReadySingleUse,
+		Observer:              lifecycle.observe,
 	}).New(context.Background(), wasm, config)
 	if err != nil {
 		return fmt.Errorf("initialize single COW runtime: %w", err)

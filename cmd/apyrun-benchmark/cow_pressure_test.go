@@ -98,7 +98,7 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		Kind: "cow-pressure", Class: "production-safe", Strategy: "cow-ready-single-use",
 		ArtifactPath: "guest.wasm", ManifestPath: "manifest.json", OutputPath: "evidence.json",
 		MemoryBudgetBytes: 32 * 1024 * 1024 * 1024, MemoryReserveBytes: 8 * 1024 * 1024 * 1024,
-		MaxPressureSlots: 4096, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu",
+		MaxPressureSlots: 4096, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu", PressureRefillWorkers: 4,
 	}
 	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
 		t.Fatal(err)
@@ -109,6 +109,7 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		"missing reserve":    func(value *benchmarkOptions) { value.MemoryReserveBytes = 0 },
 		"nonmultiple slots":  func(value *benchmarkOptions) { value.MaxPressureSlots = 5 },
 		"too many consumers": func(value *benchmarkOptions) { value.ConsumerCount = 257 },
+		"invalid workers":    func(value *benchmarkOptions) { value.PressureRefillWorkers = 3 },
 		"unknown workload":   func(value *benchmarkOptions) { value.PressureWorkload = "io" },
 		"cpu with wait":      func(value *benchmarkOptions) { value.PressureWait = time.Second },
 		"short duration":     func(value *benchmarkOptions) { value.PressureDuration = time.Second },

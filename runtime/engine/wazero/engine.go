@@ -41,6 +41,9 @@ type Factory struct {
 	// creating another Runtime, CompiledModule, or COW baseline. Zero means the
 	// initial PreparedCapacity is also the maximum.
 	PreparedMaxCapacity uint32
+	// PreparedRefillWorkers selects a fixed worker count. Zero keeps the bounded
+	// automatic default; non-zero values are limited to four and capacity.
+	PreparedRefillWorkers uint32
 	// VerifyCOWPreparedImage opts into a full linear-memory digest on every
 	// prepared slot. It is intended for bounded diagnostics, not production.
 	VerifyCOWPreparedImage bool
@@ -64,7 +67,11 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.PreparedCapacity > hardBound || maximum > hardBound {
 		return nil, fmt.Errorf("prepared capacity %d/%d exceeds hard bound %d", factory.PreparedCapacity, maximum, hardBound)
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	if factory.PreparedRefillWorkers > maxPreparedRefillWorkers || factory.PreparedRefillWorkers > maximum ||
+		(factory.PreparedRefillWorkers > 0 && factory.PreparedCapacity == 0) {
+		return nil, errors.New("prepared refill worker count is outside the configured pool bounds")
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -87,7 +94,7 @@ type Engine struct {
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, "", 0, 0, false, nil)
+	return newEngine(ctx, wasm, config, nil, nil, "", 0, 0, 0, false, nil)
 }
 
 func NewWithBrokerFactory(
@@ -96,7 +103,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, 0, false, nil)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, 0, 0, false, nil)
 }
 
 func newEngine(
@@ -108,6 +115,7 @@ func newEngine(
 	requestedStrategy enginecontract.ExecutionStrategy,
 	preparedCapacity uint32,
 	preparedMaxCapacity uint32,
+	preparedRefillWorkers uint32,
 	verifyCOWPreparedImage bool,
 	compilationCache *CompilationCache,
 ) (*Engine, error) {
@@ -173,7 +181,7 @@ func newEngine(
 		verifyCOWPreparedImage: verifyCOWPreparedImage,
 		stateCensus:            censusCompiledReactor(compiled, wasm),
 	}
-	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity); err != nil {
+	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity, preparedRefillWorkers); err != nil {
 		_ = engine.Close(context.Background())
 		return nil, err
 	}

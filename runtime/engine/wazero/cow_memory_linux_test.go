@@ -25,17 +25,30 @@ func TestCOWImagePrivateMappingsIsolateAndReset(t *testing.T) {
 	secondAllocator := image.newAllocator()
 	first := firstAllocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize)
 	second := secondAllocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize)
-	if first == nil || second == nil || first[0] != 7 || second[0] != 7 {
-		t.Fatalf("baseline mapping failed: first=%v second=%v", first, second)
+	if first == nil || second == nil || first[0] != 0 || second[0] != 0 {
+		t.Fatalf("allocator did not provide fresh memory: first=%v second=%v", first, second)
+	}
+	firstMemory, err := firstAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondMemory, err := secondAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstMemory.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if err := secondMemory.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if first[0] != 7 || second[0] != 7 {
+		t.Fatalf("baseline attach failed: first=%v second=%v", first, second)
 	}
 	first[0], first[4096] = 90, 91
 	address := &first[0]
 	if second[0] != 7 || second[4096] != 8 {
 		t.Fatalf("private write leaked to sibling: %d %d", second[0], second[4096])
-	}
-	firstMemory, err := firstAllocator.Allocation()
-	if err != nil {
-		t.Fatal(err)
 	}
 	if err := firstMemory.Reset(); err != nil {
 		t.Fatal(err)
@@ -53,10 +66,6 @@ func TestCOWImagePrivateMappingsIsolateAndReset(t *testing.T) {
 	firstMemory.Free()
 	if got := firstMemory.Reallocate(1); got != nil {
 		t.Fatal("freed COW memory reallocated")
-	}
-	secondMemory, err := secondAllocator.Allocation()
-	if err != nil {
-		t.Fatal(err)
 	}
 	secondMemory.Free()
 	if err := image.Close(); err != nil {
@@ -154,6 +163,20 @@ func TestWazeroTinyModuleUsesCOWImageAndExactReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	firstMemory, err := firstAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondMemory, err := secondAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstMemory.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if err := secondMemory.Reset(); err != nil {
+		t.Fatal(err)
+	}
 	readFirst := first.ExportedFunction("read0")
 	readSecond := second.ExportedFunction("read0")
 	writeFirst := first.ExportedFunction("write0")
@@ -174,10 +197,6 @@ func TestWazeroTinyModuleUsesCOWImageAndExactReset(t *testing.T) {
 	}
 	assertRead("first private", readFirst, 99)
 	assertRead("second isolated", readSecond, 7)
-	firstMemory, err := firstAllocator.Allocation()
-	if err != nil {
-		t.Fatal(err)
-	}
 	if err := firstMemory.Reset(); err != nil {
 		t.Fatal(err)
 	}

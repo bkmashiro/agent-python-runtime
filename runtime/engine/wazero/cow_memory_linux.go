@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/tetratelabs/wazero/experimental"
 	"golang.org/x/sys/unix"
@@ -90,12 +91,43 @@ func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
 	if image.size > uint64(^uint(0)>>1) {
 		return nil, errCOWAllocationShape
 	}
-	buffer, err := unix.Mmap(image.fd, 0, int(image.size), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE)
+	buffer, err := unix.Mmap(-1, 0, int(image.size), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
 	if err != nil {
-		return nil, fmt.Errorf("map private COW memory: %w", err)
+		return nil, fmt.Errorf("map fresh private linear memory: %w", err)
 	}
 	image.mappings++
 	return &cowLinearMemory{image: image, buffer: buffer, max: image.size}, nil
+}
+
+func (image *cowImage) attachPrivateAt(buffer []byte) error {
+	image.mu.Lock()
+	defer image.mu.Unlock()
+	if image.closed {
+		return errCOWImageClosed
+	}
+	if err := image.verifyIdentityLocked(); err != nil {
+		return err
+	}
+	if len(buffer) == 0 || uint64(len(buffer)) != image.size {
+		return errCOWAllocationShape
+	}
+	address := uintptr(unsafe.Pointer(&buffer[0]))
+	mapped, _, errno := unix.Syscall6(
+		unix.SYS_MMAP,
+		address,
+		uintptr(len(buffer)),
+		uintptr(unix.PROT_READ|unix.PROT_WRITE),
+		uintptr(unix.MAP_PRIVATE|unix.MAP_FIXED),
+		uintptr(image.fd),
+		0,
+	)
+	if errno != 0 {
+		return fmt.Errorf("attach private COW image: %w", errno)
+	}
+	if mapped != address {
+		return errors.New("attach private COW image changed linear-memory address")
+	}
+	return nil
 }
 
 func (image *cowImage) verifyIdentityLocked() error {
@@ -185,11 +217,12 @@ func (*failedLinearMemory) Reallocate(uint64) []byte { return nil }
 func (*failedLinearMemory) Free()                    {}
 
 type cowLinearMemory struct {
-	mu     sync.Mutex
-	image  *cowImage
-	buffer []byte
-	max    uint64
-	freed  bool
+	mu       sync.Mutex
+	image    *cowImage
+	buffer   []byte
+	max      uint64
+	attached bool
+	freed    bool
 }
 
 var _ experimental.LinearMemory = (*cowLinearMemory)(nil)
@@ -208,6 +241,13 @@ func (memory *cowLinearMemory) Reset() error {
 	defer memory.mu.Unlock()
 	if memory.freed {
 		return errors.New("reset freed COW memory")
+	}
+	if !memory.attached {
+		if err := memory.image.attachPrivateAt(memory.buffer); err != nil {
+			return err
+		}
+		memory.attached = true
+		return nil
 	}
 	if err := unix.Madvise(memory.buffer, unix.MADV_DONTNEED); err != nil {
 		return fmt.Errorf("discard private COW pages: %w", err)

@@ -50,6 +50,12 @@ func TestValidateTrialResultV4BindsTreatmentEchoAndKeepsV1V2V3Readable(t *testin
 	}
 	tampered = valid
 	tampered.Exchanges = append([]ExchangeEvidence(nil), valid.Exchanges...)
+	tampered.Exchanges[0].InstructionsEcho = InstructionsEchoNotApplicable
+	if err := ValidateTrialResult(tampered); err == nil {
+		t.Fatal("v4 formal trial accepted not-applicable instructions echo")
+	}
+	tampered = valid
+	tampered.Exchanges = append([]ExchangeEvidence(nil), valid.Exchanges...)
 	tampered.Exchanges[0].InstructionsEcho = ""
 	if err := ValidateTrialResult(tampered); err == nil {
 		t.Fatal("v4 exchange without instructions echo state accepted")
@@ -153,6 +159,29 @@ func TestIncompleteProviderResponseOvershootProducesProtocolArtifact(t *testing.
 	tampered.ErrorCode = "provider_output_limit_exceeded"
 	if ValidateTrialResult(tampered) == nil {
 		t.Fatal("protocol-invalid response accepted as output-limit failure")
+	}
+}
+
+func TestProviderIdentityMismatchBindsInvalidEchoArtifact(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64),
+		ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64), ProviderCatalogObservedAt: "2026-07-26T11:00:00Z",
+	}
+	response := responseFixture(`{"model":"wrong-model","status":"completed","output":[]}`, 5, 1)
+	result, err := RunDevelopmentTrialWithIdentity(context.Background(), &scriptedAdapter{responses: []provider.Response{response}}, task, ConditionDirect, 0, developmentTrialLimits(len(task.Interaction.Turns)), identity, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCode != "provider_identity_mismatch" || len(result.Exchanges) != 1 || result.Exchanges[0].InstructionsEcho != InstructionsEchoInvalid || !result.Exchanges[0].ProtocolInvalid || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v", result)
+	}
+	tampered := result
+	tampered.Exchanges = append([]ExchangeEvidence(nil), result.Exchanges...)
+	tampered.Exchanges[0].InstructionsEcho = InstructionsEchoUnavailable
+	if ValidateTrialResult(tampered) == nil {
+		t.Fatal("provider identity mismatch accepted without invalid echo evidence")
 	}
 }
 

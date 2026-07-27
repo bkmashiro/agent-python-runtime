@@ -71,13 +71,17 @@ func ValidateTrialResult(result TrialResult) error {
 	budgetExhausted := overBudget || usage.InputTokens >= result.Limits.MaxInputTokens || usage.OutputTokens >= result.Limits.MaxOutputTokens || usage.TotalTokens >= result.Limits.MaxTotalTokens || result.ProviderAttempts >= result.Limits.MaxProviderCalls
 	providerOutputOvershoot := false
 	protocolInvalid := false
+	identityEchoInvalid := false
 	for _, exchange := range result.Exchanges {
 		if exchange.Usage.OutputTokens > result.Limits.MaxOutputTokensPerCall {
 			providerOutputOvershoot = true
 		}
 		protocolInvalid = protocolInvalid || exchange.ProtocolInvalid
+		identityEchoInvalid = identityEchoInvalid || exchange.InstructionsEcho == InstructionsEchoInvalid
 	}
 	if (protocolInvalid && result.ErrorCode != "provider_or_protocol_failure" && result.ErrorCode != "provider_identity_mismatch") ||
+		(result.Version == "agentic-development-trial/v4" && result.ErrorCode == "provider_identity_mismatch" && !identityEchoInvalid) ||
+		(result.Version == "agentic-development-trial/v4" && identityEchoInvalid && result.ErrorCode != "provider_identity_mismatch" && result.ErrorCode != "provider_or_protocol_failure") ||
 		(providerOutputOvershoot && !protocolInvalid && result.ErrorCode != "provider_output_limit_exceeded") ||
 		(overBudget && !protocolInvalid && result.ErrorCode != "provider_budget_exceeded" && result.ErrorCode != "provider_output_limit_exceeded") ||
 		(result.ErrorCode == "provider_budget_exceeded" && !budgetExhausted) ||
@@ -89,7 +93,7 @@ func ValidateTrialResult(result TrialResult) error {
 		exchangeTotal, exchangeOK := checkedAdd(exchange.Usage.InputTokens, exchange.Usage.OutputTokens)
 		if !exchangeOK || exchange.StatusCode < 100 || exchange.StatusCode > 599 || !validDigest(exchange.RequestDigest) || !validDigest(exchange.ResponseDigest) ||
 			exchange.Usage.TotalTokens != exchangeTotal ||
-			(result.Version == "agentic-development-trial/v4" && (!exchange.InstructionsEcho.valid() || (exchange.InstructionsEcho == InstructionsEchoInvalid && !exchange.ProtocolInvalid))) ||
+			(result.Version == "agentic-development-trial/v4" && exchange.InstructionsEcho != InstructionsEchoExact && exchange.InstructionsEcho != InstructionsEchoUnavailable && !(exchange.InstructionsEcho == InstructionsEchoInvalid && exchange.ProtocolInvalid)) ||
 			(result.Version != "agentic-development-trial/v4" && exchange.InstructionsEcho != "") {
 			return ErrTrialArtifact
 		}

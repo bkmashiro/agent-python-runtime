@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability/adaptertest"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakecloudflare"
 	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
@@ -229,21 +230,22 @@ func TestFakeCloudflareAmbiguousApplyBlocksReplay(t *testing.T) {
 	plan := planChange(t, &fixture, map[string]any{"action": "update", "record_id": "record:1", "name": "api.example.test", "type": "A", "content": "192.0.2.20", "ttl": 120})
 	fixture.provider.SetAmbiguousNext()
 	callID := "call:ambiguous"
-	firstRaw, first := fixture.callWithID(t, callID, fakecloudflare.DNSApplyToolID, map[string]any{"plan_digest": plan.Digest})
-	if first.Error == nil || first.Error.Code != "reconciliation_required" {
-		t.Fatalf("first=%+v", first)
+	invoke := func(digest string) func() ([]byte, error) {
+		return func() ([]byte, error) {
+			raw, _ := fixture.callWithID(t, callID, fakecloudflare.DNSApplyToolID, map[string]any{"plan_digest": digest})
+			return raw, nil
+		}
 	}
+	adaptertest.AssertReplayConformance(t, adaptertest.ReplayCase{
+		First: invoke(plan.Digest), Same: invoke(plan.Digest),
+		Changed:                invoke("sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+		MutationCount:          func() uint64 { return fixture.provider.Snapshot()[0].Version },
+		ExpectedFirstErrorCode: "reconciliation_required",
+		SecretMarkers:          [][]byte{[]byte("read-token"), []byte("write-token")},
+	})
 	records := fixture.provider.Snapshot()
-	version := records[0].Version
 	if records[0].Content != "192.0.2.20" {
 		t.Fatalf("records=%+v", records)
-	}
-	secondRaw, second := fixture.callWithID(t, callID, fakecloudflare.DNSApplyToolID, map[string]any{"plan_digest": plan.Digest})
-	if second.Error == nil || second.Error.Code != "reconciliation_required" || string(firstRaw) != string(secondRaw) {
-		t.Fatalf("first=%s second=%s", firstRaw, secondRaw)
-	}
-	if after := fixture.provider.Snapshot(); after[0].Version != version {
-		t.Fatalf("replay duplicated mutation: %+v", after)
 	}
 	inspection, err := fixture.broker.InspectTransaction()
 	if err != nil || inspection.Transaction.State != transaction.TransactionReconciliationRequired {

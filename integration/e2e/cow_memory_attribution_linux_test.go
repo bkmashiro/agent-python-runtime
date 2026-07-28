@@ -39,9 +39,9 @@ func TestCOWReadySingleUseProductionArtifactDeterministicDirtyPages(t *testing.T
 		t.Fatal("prepared readiness diagnostics are unavailable")
 	}
 	collector := runtimeevidence.DefaultLinuxCollector()
-	code := "import time\nsize = inputs['size_bytes']\nbuffer = bytearray(size)\nfor offset in range(0, size, 4096):\n    buffer[offset] = 1\ntime.sleep(1.0)\nresult = {'size': len(buffer), 'checksum': buffer[0] + buffer[-1]}"
-	results := make([]cowDirtyProbeResult, 0, 5)
-	for _, sizeMiB := range []uint64{1, 4, 8, 16, 32} {
+	code := "import time\nsize = inputs['size_bytes']\nbuffer = bytearray(size)\nfor offset in range(0, size, 4096):\n    buffer[offset] = 1\ntime.sleep(1.0)\nresult = {'size': len(buffer), 'checksum': (buffer[0] + buffer[-1]) if buffer else 0}"
+	results := make([]cowDirtyProbeResult, 0, 6)
+	for _, sizeMiB := range []uint64{0, 1, 4, 8, 16, 32} {
 		waitPreparedReadyForProbe(t, prepared, 4)
 		ready, err := collector.CollectNamedMappings("memfd:apyrun-cow-image")
 		if err != nil {

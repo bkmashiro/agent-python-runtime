@@ -31,7 +31,7 @@ type fixture struct {
 	next        int
 }
 
-func newFixture(t *testing.T, readToken, controlToken []byte) *fixture {
+func newFixture(t testing.TB, readToken, controlToken []byte) *fixture {
 	t.Helper()
 	now := time.Unix(1000, 0).UTC()
 	resolver, err := capability.NewStaticSecretResolver(map[capability.SecretRef][]byte{"jobs.read": readToken, "jobs.control": controlToken}, func() time.Time { return now }, nil)
@@ -79,7 +79,7 @@ type response struct {
 	} `json:"error"`
 }
 
-func (f *fixture) call(t *testing.T, tool string, arguments any) response {
+func (f *fixture) call(t testing.TB, tool string, arguments any) response {
 	t.Helper()
 	f.next++
 	args, _ := json.Marshal(arguments)
@@ -95,7 +95,7 @@ func (f *fixture) call(t *testing.T, tool string, arguments any) response {
 	return value
 }
 
-func submit(t *testing.T, f *fixture) fakejob.Job {
+func submit(t testing.TB, f *fixture) fakejob.Job {
 	t.Helper()
 	value := f.call(t, fakejob.SubmitToolID, map[string]any{"recipe_alias": "recipe:test"})
 	var job fakejob.Job

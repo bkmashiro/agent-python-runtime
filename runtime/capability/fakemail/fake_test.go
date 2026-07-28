@@ -35,7 +35,7 @@ type mailFixture struct {
 	nextCall    int
 }
 
-func newMailFixture(t *testing.T, sendResolverToken []byte) *mailFixture {
+func newMailFixture(t testing.TB, sendResolverToken []byte) *mailFixture {
 	t.Helper()
 	now := time.Unix(900, 0).UTC()
 	audits := []capability.SecretAudit{}
@@ -65,7 +65,7 @@ func newMailFixture(t *testing.T, sendResolverToken []byte) *mailFixture {
 	return fixture
 }
 
-func (fixture *mailFixture) newTransactionBroker(t *testing.T) {
+func (fixture *mailFixture) newTransactionBroker(t testing.TB) {
 	t.Helper()
 	tx, err := fixture.coordinator.Begin(transaction.BeginRequest{RunID: "run:mail", CatalogDigest: mailCatalog, Mode: transaction.TransactionModeWorkflow})
 	if err != nil {
@@ -102,7 +102,7 @@ type mailResponse struct {
 	} `json:"error"`
 }
 
-func (fixture *mailFixture) call(t *testing.T, toolID string, arguments any) mailResponse {
+func (fixture *mailFixture) call(t testing.TB, toolID string, arguments any) mailResponse {
 	t.Helper()
 	fixture.nextCall++
 	argumentBytes, _ := json.Marshal(arguments)

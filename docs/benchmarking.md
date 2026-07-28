@@ -77,6 +77,24 @@ Background refill can overlap request execution. `refill_ready_after_run_ns` mea
 
 All classes use a local IP-loopback provider with a fixed 2 ms delay per operation. They do not measure production DNS, TCP, TLS, provider rate limits, or provider variance. The class labels separate recurring base measurement, fuller exploratory evidence, and opt-in profile-candidate evidence; none turns synthetic results into a production latency claim. A class/profile mismatch fails before benchmark samples run.
 
+### Local fake-provider durability benchmarks
+
+The fake job and mail packages contain separate Go benchmarks for transaction restart mechanics. They exercise real runtime coordinator, adapter, digest validation, JSON serialization, and plaintext `devsnapshot` SQLite WAL paths while keeping provider behavior deterministic and local:
+
+```bash
+go test ./runtime/capability/fakejob \
+  -run '^$' -bench '^BenchmarkFakeJobDevelopmentCheckpoint$' \
+  -benchmem -count=5
+
+go test ./runtime/capability/fakemail \
+  -run '^$' -bench '^BenchmarkFakeMailDevelopmentCheckpoint$' \
+  -benchmem -count=5
+```
+
+The job lanes separate ambiguous-cancel checkpoint writes from provider/controller reopen. The mail lanes do the same for three-component provider/adapter/send-controller checkpoints at canonical 1 KiB and 64 KiB body sizes. The setup paths prove one accepted irreversible effect before timing; correctness tests separately prove post-restart reconciliation without duplicate dispatch and compensatable draft rollback after restart.
+
+These measurements are suitable for comparing runtime checkpoint overhead, allocation behavior, payload-size scaling, regression, and local concurrency. They are not evidence for real provider network latency, availability, rate limits, delivery semantics, or recall behavior, and must not be pooled with artifact-bound runtime evidence or live-model task benchmarks.
+
 ## Interpretation
 
 Raw samples are canonical. Derived medians, deltas, and thresholds must name the artifact SHA-256, Host revision, OS/architecture, Go version, backend, reset mode, evidence class, and sample count. Cross-platform comparisons must use the same schema and fixture; thresholds are added only after a verified Linux baseline exists.

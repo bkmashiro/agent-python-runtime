@@ -113,6 +113,15 @@ func NewStoreWithClock(fixtures []Fixture, limits Limits, now func() time.Time, 
 	return store, nil
 }
 
+func (store *Store) WorkspaceCount() int {
+	if store == nil {
+		return 0
+	}
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	return len(store.workspaces)
+}
+
 func (store *Store) Close() {
 	if store == nil {
 		return

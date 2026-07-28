@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -23,17 +24,23 @@ const (
 	RepoOpenToolID          = "repo.open"
 	WorkspaceSearchToolID   = "workspace.search"
 	WorkspaceReadManyToolID = "workspace.read_many"
+	RepoManifestToolID      = "repo.manifest"
+	WorkspaceListToolID     = "workspace.list"
+	WorkspaceGlobToolID     = "workspace.glob"
+	WorkspaceStatManyToolID = "workspace.stat_many"
 	HandlerVersion          = "fake-workspace-v1"
 )
 
 var (
-	ErrFixtureDenied   = errors.New("fake repository fixture denied")
-	ErrWorkspaceDenied = errors.New("fake workspace access denied")
-	ErrPathDenied      = errors.New("fake workspace path denied")
-	ErrQuotaExceeded   = errors.New("fake workspace quota exceeded")
+	ErrFixtureDenied    = errors.New("fake repository fixture denied")
+	ErrWorkspaceDenied  = errors.New("fake workspace access denied")
+	ErrPathDenied       = errors.New("fake workspace path denied")
+	ErrQuotaExceeded    = errors.New("fake workspace quota exceeded")
+	ErrWorkspaceExpired = errors.New("fake workspace expired")
 )
 
 type Limits struct {
+	MaxWorkspaces      uint32
 	MaxFixtureFiles    uint32
 	MaxFixtureBytes    uint64
 	MaxFileBytes       uint64
@@ -44,7 +51,7 @@ type Limits struct {
 }
 
 func DefaultLimits() Limits {
-	return Limits{MaxFixtureFiles: 4096, MaxFixtureBytes: 16 << 20, MaxFileBytes: 1 << 20, MaxReadPaths: 32, MaxReadBytes: 1 << 20, MaxSearchResults: 100, MaxSearchLineBytes: 512}
+	return Limits{MaxWorkspaces: 4096, MaxFixtureFiles: 4096, MaxFixtureBytes: 16 << 20, MaxFileBytes: 1 << 20, MaxReadPaths: 32, MaxReadBytes: 1 << 20, MaxSearchResults: 100, MaxSearchLineBytes: 512}
 }
 
 type Fixture struct {
@@ -71,6 +78,7 @@ type workspace struct {
 	runIdentity  string
 	taskIdentity string
 	repository   *repository
+	expiresAt    time.Time
 }
 
 type Store struct {
@@ -78,13 +86,19 @@ type Store struct {
 	limits     Limits
 	fixtures   map[string]*repository
 	workspaces map[string]workspace
+	now        func() time.Time
+	ttl        time.Duration
 }
 
 func NewStore(fixtures []Fixture, limits Limits) (*Store, error) {
-	if !validLimits(limits) || len(fixtures) == 0 || uint32(len(fixtures)) > limits.MaxFixtureFiles {
+	return NewStoreWithClock(fixtures, limits, time.Now, time.Hour)
+}
+
+func NewStoreWithClock(fixtures []Fixture, limits Limits, now func() time.Time, ttl time.Duration) (*Store, error) {
+	if !validLimits(limits) || len(fixtures) == 0 || uint32(len(fixtures)) > limits.MaxFixtureFiles || now == nil || ttl <= 0 || ttl > 24*time.Hour {
 		return nil, ErrFixtureDenied
 	}
-	store := &Store{limits: limits, fixtures: make(map[string]*repository, len(fixtures)), workspaces: map[string]workspace{}}
+	store := &Store{limits: limits, fixtures: make(map[string]*repository, len(fixtures)), workspaces: map[string]workspace{}, now: now, ttl: ttl}
 	for _, fixture := range fixtures {
 		repository, err := buildRepository(fixture, limits)
 		if err != nil {
@@ -130,6 +144,10 @@ func HandlerSpecs(store *Store, binding Binding) ([]capability.HandlerSpec, erro
 		{ToolID: RepoOpenToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(repoOpenInputSchema), OutputSchema: []byte(repoOpenOutputSchema), Handler: &openHandler{store: store, binding: binding}},
 		{ToolID: WorkspaceSearchToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(searchInputSchema), OutputSchema: []byte(searchOutputSchema), Handler: &searchHandler{store: store, binding: binding}},
 		{ToolID: WorkspaceReadManyToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(readInputSchema), OutputSchema: []byte(readOutputSchema), Handler: &readHandler{store: store, binding: binding}},
+		{ToolID: RepoManifestToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(pageInputSchema), OutputSchema: []byte(manifestOutputSchema), Handler: &metadataHandler{store: store, binding: binding, toolID: RepoManifestToolID}},
+		{ToolID: WorkspaceListToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(listInputSchema), OutputSchema: []byte(listOutputSchema), Handler: &metadataHandler{store: store, binding: binding, toolID: WorkspaceListToolID}},
+		{ToolID: WorkspaceGlobToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(globInputSchema), OutputSchema: []byte(globOutputSchema), Handler: &metadataHandler{store: store, binding: binding, toolID: WorkspaceGlobToolID}},
+		{ToolID: WorkspaceStatManyToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(statInputSchema), OutputSchema: []byte(statOutputSchema), Handler: &metadataHandler{store: store, binding: binding, toolID: WorkspaceStatManyToolID}},
 	}, nil
 }
 
@@ -141,6 +159,10 @@ func CatalogTools(maxCalls uint32, grantVersion string) ([]toolcatalog.Discovere
 		{ToolID: RepoOpenToolID, ServerID: "fake-workspace", Name: "repo_open", Description: "Open an approved immutable fake repository fixture as a Host-owned workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(repoOpenInputSchema), OutputSchema: []byte(repoOpenOutputSchema)},
 		{ToolID: WorkspaceSearchToolID, ServerID: "fake-workspace", Name: "workspace_search", Description: "Search bounded UTF-8 content in a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(searchInputSchema), OutputSchema: []byte(searchOutputSchema)},
 		{ToolID: WorkspaceReadManyToolID, ServerID: "fake-workspace", Name: "workspace_read_many", Description: "Read bounded approved paths from a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(readInputSchema), OutputSchema: []byte(readOutputSchema)},
+		{ToolID: RepoManifestToolID, ServerID: "fake-workspace", Name: "repo_manifest", Description: "Page through immutable file metadata in a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(pageInputSchema), OutputSchema: []byte(manifestOutputSchema)},
+		{ToolID: WorkspaceListToolID, ServerID: "fake-workspace", Name: "workspace_list", Description: "List bounded paths under an optional prefix in a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(listInputSchema), OutputSchema: []byte(listOutputSchema)},
+		{ToolID: WorkspaceGlobToolID, ServerID: "fake-workspace", Name: "workspace_glob", Description: "Match a bounded canonical path glob in a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(globInputSchema), OutputSchema: []byte(globOutputSchema)},
+		{ToolID: WorkspaceStatManyToolID, ServerID: "fake-workspace", Name: "workspace_stat_many", Description: "Read size and digest metadata for bounded workspace paths.", HandlerVersion: HandlerVersion, InputSchema: []byte(statInputSchema), OutputSchema: []byte(statOutputSchema)},
 	}
 	grants := make(map[string]toolcatalog.Grant, len(tools))
 	for _, tool := range tools {
@@ -161,6 +183,11 @@ type readHandler struct {
 	store   *Store
 	binding Binding
 }
+type metadataHandler struct {
+	store   *Store
+	binding Binding
+	toolID  string
+}
 
 type openArguments struct {
 	Alias    string `json:"alias"`
@@ -173,6 +200,7 @@ type openResult struct {
 	ManifestDigest   string `json:"manifest_digest"`
 	FileCount        int    `json:"file_count"`
 	TotalBytes       uint64 `json:"total_bytes"`
+	ExpiresAt        string `json:"expires_at"`
 }
 
 func (handler *openHandler) Handle(_ context.Context, call capability.HostCall) (json.RawMessage, error) {
@@ -257,6 +285,108 @@ func (handler *readHandler) Handle(_ context.Context, call capability.HostCall) 
 	return encoded, nil
 }
 
+type pageArguments struct {
+	WorkspaceID string `json:"workspace_id"`
+	Cursor      uint32 `json:"cursor"`
+	Limit       uint32 `json:"limit"`
+}
+
+type manifestFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Bytes  uint64 `json:"bytes"`
+}
+
+type manifestResult struct {
+	Alias          string         `json:"alias"`
+	Revision       string         `json:"revision"`
+	ManifestDigest string         `json:"manifest_digest"`
+	Files          []manifestFile `json:"files"`
+	NextCursor     *uint32        `json:"next_cursor"`
+}
+
+type listArguments struct {
+	WorkspaceID string `json:"workspace_id"`
+	Prefix      string `json:"prefix"`
+	Cursor      uint32 `json:"cursor"`
+	Limit       uint32 `json:"limit"`
+}
+
+type listResult struct {
+	Paths      []string `json:"paths"`
+	NextCursor *uint32  `json:"next_cursor"`
+}
+
+type globArguments struct {
+	WorkspaceID string `json:"workspace_id"`
+	Pattern     string `json:"pattern"`
+	MaxResults  uint32 `json:"max_results"`
+}
+
+type globResult struct {
+	Paths     []string `json:"paths"`
+	Truncated bool     `json:"truncated"`
+}
+
+type statArguments struct {
+	WorkspaceID string   `json:"workspace_id"`
+	Paths       []string `json:"paths"`
+}
+
+type statItem struct {
+	Path   string `json:"path"`
+	Bytes  uint64 `json:"bytes"`
+	SHA256 string `json:"sha256"`
+}
+
+type statResult struct {
+	Items []statItem `json:"items"`
+}
+
+func (handler *metadataHandler) Handle(_ context.Context, call capability.HostCall) (json.RawMessage, error) {
+	if call.RunIdentity != handler.binding.RunIdentity {
+		return nil, classified(ErrWorkspaceDenied)
+	}
+	var result any
+	var err error
+	switch handler.toolID {
+	case RepoManifestToolID:
+		var arguments pageArguments
+		if json.Unmarshal(call.Arguments, &arguments) != nil {
+			err = ErrWorkspaceDenied
+		} else {
+			result, err = handler.store.manifest(handler.binding, arguments)
+		}
+	case WorkspaceListToolID:
+		var arguments listArguments
+		if json.Unmarshal(call.Arguments, &arguments) != nil {
+			err = ErrWorkspaceDenied
+		} else {
+			result, err = handler.store.list(handler.binding, arguments)
+		}
+	case WorkspaceGlobToolID:
+		var arguments globArguments
+		if json.Unmarshal(call.Arguments, &arguments) != nil {
+			err = ErrWorkspaceDenied
+		} else {
+			result, err = handler.store.glob(handler.binding, arguments)
+		}
+	case WorkspaceStatManyToolID:
+		var arguments statArguments
+		if json.Unmarshal(call.Arguments, &arguments) != nil {
+			err = ErrWorkspaceDenied
+		} else {
+			result, err = handler.store.statMany(handler.binding, arguments)
+		}
+	default:
+		err = ErrWorkspaceDenied
+	}
+	if err != nil {
+		return nil, classified(err)
+	}
+	return json.Marshal(result)
+}
+
 func (store *Store) open(binding Binding, alias, revision string) (openResult, error) {
 	if !validAlias(alias) || !validRevision(revision) {
 		return openResult{}, ErrFixtureDenied
@@ -268,18 +398,145 @@ func (store *Store) open(binding Binding, alias, revision string) (openResult, e
 		return openResult{}, ErrFixtureDenied
 	}
 	workspaceID := digest("workspace\x00" + binding.RunIdentity + "\x00" + binding.TaskIdentity + "\x00" + repository.alias + "\x00" + repository.revision + "\x00" + repository.manifestDigest)
-	store.workspaces[workspaceID] = workspace{id: workspaceID, runIdentity: binding.RunIdentity, taskIdentity: binding.TaskIdentity, repository: repository}
-	return openResult{WorkspaceID: workspaceID, Alias: alias, ResolvedRevision: revision, ManifestDigest: repository.manifestDigest, FileCount: len(repository.files), TotalBytes: repository.totalBytes}, nil
+	now := store.now().UTC()
+	if now.IsZero() {
+		return openResult{}, ErrWorkspaceDenied
+	}
+	expiresAt := now.Add(store.ttl)
+	for id, value := range store.workspaces {
+		if !now.Before(value.expiresAt) {
+			delete(store.workspaces, id)
+		}
+	}
+	if _, exists := store.workspaces[workspaceID]; !exists && uint32(len(store.workspaces)) >= store.limits.MaxWorkspaces {
+		return openResult{}, ErrQuotaExceeded
+	}
+	store.workspaces[workspaceID] = workspace{id: workspaceID, runIdentity: binding.RunIdentity, taskIdentity: binding.TaskIdentity, repository: repository, expiresAt: expiresAt}
+	return openResult{WorkspaceID: workspaceID, Alias: alias, ResolvedRevision: revision, ManifestDigest: repository.manifestDigest, FileCount: len(repository.files), TotalBytes: repository.totalBytes, ExpiresAt: expiresAt.Format(time.RFC3339Nano)}, nil
 }
 
 func (store *Store) getWorkspace(binding Binding, id string) (workspace, error) {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	value, exists := store.workspaces[id]
 	if !exists || value.runIdentity != binding.RunIdentity || value.taskIdentity != binding.TaskIdentity {
 		return workspace{}, ErrWorkspaceDenied
 	}
+	if !store.now().UTC().Before(value.expiresAt) {
+		delete(store.workspaces, id)
+		return workspace{}, ErrWorkspaceExpired
+	}
 	return value, nil
+}
+
+func (store *Store) manifest(binding Binding, arguments pageArguments) (manifestResult, error) {
+	value, err := store.getWorkspace(binding, arguments.WorkspaceID)
+	if err != nil {
+		return manifestResult{}, err
+	}
+	paths := sortedPaths(value.repository.files)
+	start, end, next, err := pageBounds(len(paths), arguments.Cursor, arguments.Limit)
+	if err != nil {
+		return manifestResult{}, err
+	}
+	result := manifestResult{Alias: value.repository.alias, Revision: value.repository.revision, ManifestDigest: value.repository.manifestDigest, Files: make([]manifestFile, 0, end-start), NextCursor: next}
+	for _, name := range paths[start:end] {
+		item := value.repository.files[name]
+		result.Files = append(result.Files, manifestFile{Path: name, SHA256: item.digest, Bytes: uint64(len(item.content))})
+	}
+	return result, nil
+}
+
+func (store *Store) list(binding Binding, arguments listArguments) (listResult, error) {
+	if !validPrefix(arguments.Prefix) {
+		return listResult{}, ErrPathDenied
+	}
+	value, err := store.getWorkspace(binding, arguments.WorkspaceID)
+	if err != nil {
+		return listResult{}, err
+	}
+	paths := sortedPaths(value.repository.files)
+	if arguments.Prefix != "" {
+		filtered := paths[:0]
+		for _, name := range paths {
+			if strings.HasPrefix(name, arguments.Prefix) {
+				filtered = append(filtered, name)
+			}
+		}
+		paths = filtered
+	}
+	start, end, next, err := pageBounds(len(paths), arguments.Cursor, arguments.Limit)
+	if err != nil {
+		return listResult{}, err
+	}
+	return listResult{Paths: append([]string(nil), paths[start:end]...), NextCursor: next}, nil
+}
+
+func (store *Store) glob(binding Binding, arguments globArguments) (globResult, error) {
+	if !validGlob(arguments.Pattern) || arguments.MaxResults == 0 || arguments.MaxResults > 100 {
+		return globResult{}, ErrPathDenied
+	}
+	value, err := store.getWorkspace(binding, arguments.WorkspaceID)
+	if err != nil {
+		return globResult{}, err
+	}
+	result := globResult{Paths: []string{}}
+	for _, name := range sortedPaths(value.repository.files) {
+		matched, _ := path.Match(arguments.Pattern, name)
+		if !matched {
+			continue
+		}
+		if uint32(len(result.Paths)) == arguments.MaxResults {
+			result.Truncated = true
+			break
+		}
+		result.Paths = append(result.Paths, name)
+	}
+	return result, nil
+}
+
+func (store *Store) statMany(binding Binding, arguments statArguments) (statResult, error) {
+	if len(arguments.Paths) == 0 || len(arguments.Paths) > 100 || uint32(len(arguments.Paths)) > store.limits.MaxReadPaths {
+		return statResult{}, ErrQuotaExceeded
+	}
+	value, err := store.getWorkspace(binding, arguments.WorkspaceID)
+	if err != nil {
+		return statResult{}, err
+	}
+	result := statResult{Items: make([]statItem, 0, len(arguments.Paths))}
+	seen := map[string]struct{}{}
+	for _, name := range arguments.Paths {
+		if !validPath(name) {
+			return statResult{}, ErrPathDenied
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return statResult{}, ErrPathDenied
+		}
+		seen[name] = struct{}{}
+		item, exists := value.repository.files[name]
+		if !exists {
+			return statResult{}, ErrPathDenied
+		}
+		result.Items = append(result.Items, statItem{Path: name, Bytes: uint64(len(item.content)), SHA256: item.digest})
+	}
+	return result, nil
+}
+
+func pageBounds(length int, cursor, limit uint32) (int, int, *uint32, error) {
+	if limit == 0 || limit > 100 || uint64(cursor) > uint64(length) {
+		return 0, 0, nil, ErrQuotaExceeded
+	}
+	start := int(cursor)
+	end := start + int(limit)
+	if end > length {
+		end = length
+	}
+	var next *uint32
+	if end < length {
+		value := uint32(end)
+		next = &value
+	}
+	return start, end, next, nil
 }
 
 func (store *Store) search(binding Binding, arguments searchArguments) (searchResult, error) {
@@ -392,7 +649,7 @@ func digestBytes(value []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 func validLimits(l Limits) bool {
-	return l.MaxFixtureFiles > 0 && l.MaxFixtureFiles <= 100000 && l.MaxFixtureBytes > 0 && l.MaxFixtureBytes <= 1<<30 && l.MaxFileBytes > 0 && l.MaxFileBytes <= l.MaxFixtureBytes && l.MaxReadPaths > 0 && l.MaxReadPaths <= 4096 && l.MaxReadBytes > 0 && l.MaxReadBytes <= l.MaxFixtureBytes && l.MaxSearchResults > 0 && l.MaxSearchResults <= 10000 && l.MaxSearchLineBytes > 0 && l.MaxSearchLineBytes <= 4096
+	return l.MaxWorkspaces > 0 && l.MaxWorkspaces <= 100000 && l.MaxFixtureFiles > 0 && l.MaxFixtureFiles <= 100000 && l.MaxFixtureBytes > 0 && l.MaxFixtureBytes <= 1<<30 && l.MaxFileBytes > 0 && l.MaxFileBytes <= l.MaxFixtureBytes && l.MaxReadPaths > 0 && l.MaxReadPaths <= 4096 && l.MaxReadBytes > 0 && l.MaxReadBytes <= l.MaxFixtureBytes && l.MaxSearchResults > 0 && l.MaxSearchResults <= 10000 && l.MaxSearchLineBytes > 0 && l.MaxSearchLineBytes <= 4096
 }
 func validAlias(value string) bool {
 	return validIdentity(value) && len(value) <= 128 && !strings.Contains(value, "/")
@@ -418,6 +675,25 @@ func validRevision(value string) bool {
 func validPath(value string) bool {
 	return value != "" && len(value) <= 512 && utf8.ValidString(value) && !strings.Contains(value, "\\") && !strings.ContainsRune(value, 0) && !strings.HasPrefix(value, "/") && path.Clean(value) == value && value != "." && !strings.HasPrefix(value, "../")
 }
+func validPrefix(value string) bool {
+	if value == "" {
+		return true
+	}
+	trimmed := strings.TrimSuffix(value, "/")
+	return trimmed != "" && validPath(trimmed)
+}
+func validGlob(value string) bool {
+	if value == "" || len(value) > 512 || !utf8.ValidString(value) || strings.Contains(value, "\\") || strings.ContainsRune(value, 0) || strings.HasPrefix(value, "/") {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == ".." || segment == "" {
+			return false
+		}
+	}
+	_, err := path.Match(value, "probe")
+	return err == nil
+}
 func truncateUTF8(value string, limit int) string {
 	if len(value) <= limit {
 		return value
@@ -435,18 +711,30 @@ func classified(err error) error {
 		return capability.NewHandlerFailure("quota_exceeded", "workspace quota was exceeded", err)
 	case errors.Is(err, ErrFixtureDenied):
 		return capability.NewHandlerFailure("fixture_denied", "repository fixture was denied", err)
+	case errors.Is(err, ErrWorkspaceExpired):
+		return capability.NewHandlerFailure("workspace_expired", "workspace lease expired", err)
 	default:
 		return capability.NewHandlerFailure("workspace_denied", "workspace access was denied", err)
 	}
 }
 
 const repoOpenInputSchema = `{"type":"object","additionalProperties":false,"required":["alias","revision"],"properties":{"alias":{"type":"string","minLength":1,"maxLength":128},"revision":{"type":"string","pattern":"^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$"}}}`
-const repoOpenOutputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","alias","resolved_revision","manifest_digest","file_count","total_bytes"],"properties":{"workspace_id":{"type":"string"},"alias":{"type":"string"},"resolved_revision":{"type":"string"},"manifest_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"file_count":{"type":"integer","minimum":1},"total_bytes":{"type":"integer","minimum":1}}}`
+const repoOpenOutputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","alias","resolved_revision","manifest_digest","file_count","total_bytes","expires_at"],"properties":{"workspace_id":{"type":"string"},"alias":{"type":"string"},"resolved_revision":{"type":"string"},"manifest_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"file_count":{"type":"integer","minimum":1},"total_bytes":{"type":"integer","minimum":1},"expires_at":{"type":"string"}}}`
 const searchInputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","query","max_results"],"properties":{"workspace_id":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"max_results":{"type":"integer","minimum":1,"maximum":10000}}}`
 const searchOutputSchema = `{"type":"object","additionalProperties":false,"required":["matches","truncated"],"properties":{"matches":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","column","snippet"],"properties":{"path":{"type":"string"},"line":{"type":"integer","minimum":1},"column":{"type":"integer","minimum":1},"snippet":{"type":"string"}}}},"truncated":{"type":"boolean"}}}`
 const readInputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","paths"],"properties":{"workspace_id":{"type":"string"},"paths":{"type":"array","minItems":1,"maxItems":4096,"items":{"type":"string","minLength":1,"maxLength":512}}}}`
 const readOutputSchema = `{"type":"object","additionalProperties":false,"required":["items","total_bytes"],"properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","content","sha256"],"properties":{"path":{"type":"string"},"content":{"type":"string"},"sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"}}}},"total_bytes":{"type":"integer","minimum":0}}}`
+const pageInputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","cursor","limit"],"properties":{"workspace_id":{"type":"string"},"cursor":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}}}`
+const nullableCursorSchema = `{"anyOf":[{"type":"integer","minimum":1},{"type":"null"}]}`
+const manifestOutputSchema = `{"type":"object","additionalProperties":false,"required":["alias","revision","manifest_digest","files","next_cursor"],"properties":{"alias":{"type":"string"},"revision":{"type":"string"},"manifest_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"files":{"type":"array","maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["path","sha256","bytes"],"properties":{"path":{"type":"string"},"sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"bytes":{"type":"integer","minimum":1}}}},"next_cursor":` + nullableCursorSchema + `}}`
+const listInputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","prefix","cursor","limit"],"properties":{"workspace_id":{"type":"string"},"prefix":{"type":"string","maxLength":512},"cursor":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}}}`
+const listOutputSchema = `{"type":"object","additionalProperties":false,"required":["paths","next_cursor"],"properties":{"paths":{"type":"array","maxItems":100,"items":{"type":"string"}},"next_cursor":` + nullableCursorSchema + `}}`
+const globInputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","pattern","max_results"],"properties":{"workspace_id":{"type":"string"},"pattern":{"type":"string","minLength":1,"maxLength":512},"max_results":{"type":"integer","minimum":1,"maximum":100}}}`
+const globOutputSchema = `{"type":"object","additionalProperties":false,"required":["paths","truncated"],"properties":{"paths":{"type":"array","maxItems":100,"items":{"type":"string"}},"truncated":{"type":"boolean"}}}`
+const statInputSchema = `{"type":"object","additionalProperties":false,"required":["workspace_id","paths"],"properties":{"workspace_id":{"type":"string"},"paths":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","minLength":1,"maxLength":512}}}}`
+const statOutputSchema = `{"type":"object","additionalProperties":false,"required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","bytes","sha256"],"properties":{"path":{"type":"string"},"bytes":{"type":"integer","minimum":1},"sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"}}}}}}`
 
 var _ capability.Handler = (*openHandler)(nil)
 var _ capability.Handler = (*searchHandler)(nil)
 var _ capability.Handler = (*readHandler)(nil)
+var _ capability.Handler = (*metadataHandler)(nil)

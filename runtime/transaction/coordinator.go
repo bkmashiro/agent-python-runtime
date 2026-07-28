@@ -557,6 +557,23 @@ func (coordinator *Coordinator) CompleteDispatch(request CompleteDispatchRequest
 }
 
 func (coordinator *Coordinator) completeDispatchLocked(request CompleteDispatchRequest) (DispatchCompletion, error) {
+	return coordinator.completeDispatchWithAuthorityLocked(request, false)
+}
+
+// CompleteAuthorizedDispatch records a successful irreversible provider
+// dispatch only when the exact approval credential was already consumed for
+// the operation and a provider receipt digest is present.
+func (coordinator *Coordinator) CompleteAuthorizedDispatch(credential CommitCredential, request CompleteDispatchRequest) (DispatchCompletion, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if request.Outcome != DispatchSucceeded || !digestPattern.MatchString(request.ProviderReceiptDigest) ||
+		!coordinator.consumedApprovalMatchesLocked(credential, request.OperationID) {
+		return DispatchCompletion{}, ErrAuthorityDenied
+	}
+	return coordinator.completeDispatchWithAuthorityLocked(request, true)
+}
+
+func (coordinator *Coordinator) completeDispatchWithAuthorityLocked(request CompleteDispatchRequest, irreversibleAuthorized bool) (DispatchCompletion, error) {
 	operation, err := coordinator.ledger.GetOperation(request.OperationID)
 	if err != nil {
 		return DispatchCompletion{}, err
@@ -586,7 +603,7 @@ func (coordinator *Coordinator) completeDispatchLocked(request CompleteDispatchR
 	if request.Outcome != DispatchSucceeded && request.ProviderReceiptDigest != "" {
 		return DispatchCompletion{}, ErrInvalidInput
 	}
-	if request.Outcome == DispatchSucceeded && operation.EffectClass == EffectIrreversible {
+	if request.Outcome == DispatchSucceeded && operation.EffectClass == EffectIrreversible && !irreversibleAuthorized {
 		return DispatchCompletion{}, ErrAuthorityDenied
 	}
 	if attempt.State == attemptTarget && attempt.ProviderReceiptDigest != request.ProviderReceiptDigest {
@@ -640,6 +657,21 @@ type ReconcileDispatchRequest struct {
 func (coordinator *Coordinator) ReconcileDispatch(request ReconcileDispatchRequest) (DispatchCompletion, error) {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
+	return coordinator.reconcileDispatchWithAuthorityLocked(request, false)
+}
+
+// ReconcileAuthorizedDispatch permits an irreversible success observation only
+// for the exact consumed approval credential bound to the operation.
+func (coordinator *Coordinator) ReconcileAuthorizedDispatch(credential CommitCredential, request ReconcileDispatchRequest) (DispatchCompletion, error) {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if request.Outcome != DispatchSucceeded || !coordinator.consumedApprovalMatchesLocked(credential, request.OperationID) {
+		return DispatchCompletion{}, ErrAuthorityDenied
+	}
+	return coordinator.reconcileDispatchWithAuthorityLocked(request, true)
+}
+
+func (coordinator *Coordinator) reconcileDispatchWithAuthorityLocked(request ReconcileDispatchRequest, irreversibleAuthorized bool) (DispatchCompletion, error) {
 	if !validIdentifier(request.OperationID) || !validIdentifier(request.AttemptID) || !digestPattern.MatchString(request.ObservationDigest) ||
 		(request.Outcome != DispatchSucceeded && request.Outcome != DispatchFailed) {
 		return DispatchCompletion{}, ErrInvalidInput
@@ -648,7 +680,7 @@ func (coordinator *Coordinator) ReconcileDispatch(request ReconcileDispatchReque
 	if err != nil {
 		return DispatchCompletion{}, err
 	}
-	if operation.EffectClass == EffectIrreversible && request.Outcome == DispatchSucceeded {
+	if operation.EffectClass == EffectIrreversible && request.Outcome == DispatchSucceeded && !irreversibleAuthorized {
 		return DispatchCompletion{}, ErrAuthorityDenied
 	}
 	attempt, err := coordinator.ledger.GetAttempt(request.AttemptID)
@@ -887,6 +919,14 @@ func (coordinator *Coordinator) Authorize(credential CommitCredential) (Operatio
 func approvalTokenDigest(token string) string {
 	sum := sha256.Sum256([]byte("approval-token\x00" + token))
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func (coordinator *Coordinator) consumedApprovalMatchesLocked(credential CommitCredential, operationID string) bool {
+	if len(credential.Token) < 32 || len(credential.Token) > 512 || !validIdentifier(operationID) {
+		return false
+	}
+	record, err := coordinator.ledger.findApproval(approvalTokenDigest(credential.Token))
+	return err == nil && record.OperationID == operationID && !record.ConsumedAt.IsZero()
 }
 
 func approvalExpectedState(source CommitSource) OperationState {

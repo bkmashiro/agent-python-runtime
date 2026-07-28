@@ -69,14 +69,15 @@ type jobState struct {
 }
 
 type Provider struct {
-	mu                sync.Mutex
-	readCredential    []byte
-	controlCredential []byte
-	recipes           map[string]Recipe
-	jobs              map[string]*jobState
-	operationJobs     map[string]string
-	nextJob           uint64
-	nextVersion       uint64
+	mu                  sync.Mutex
+	readCredential      []byte
+	controlCredential   []byte
+	recipes             map[string]Recipe
+	jobs                map[string]*jobState
+	operationJobs       map[string]string
+	nextJob             uint64
+	nextVersion         uint64
+	ambiguousNextCancel bool
 }
 
 func NewProvider(recipes []Recipe, readCredential, controlCredential []byte) (*Provider, error) {

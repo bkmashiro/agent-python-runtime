@@ -13,7 +13,7 @@ func TestCombinedFakeCatalogGeneratesBoundSynchronousPythonSurface(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snapshot.Tools()) != 15 || !strings.HasPrefix(snapshot.Digest(), "sha256:") {
+	if len(snapshot.Tools()) != 19 || !strings.HasPrefix(snapshot.Digest(), "sha256:") {
 		t.Fatalf("tools=%d digest=%q", len(snapshot.Tools()), snapshot.Digest())
 	}
 	runtimeSource, stub, err := snapshot.GeneratePython()
@@ -25,6 +25,7 @@ func TestCombinedFakeCatalogGeneratesBoundSynchronousPythonSurface(t *testing.T)
 		"def workspace_list(", "def workspace_glob(", "def workspace_stat_many(",
 		"def cloudflare_dns_list(", "def cloudflare_dns_plan_change(", "def cloudflare_dns_apply_change(",
 		"def mail_search(", "def mail_read_many(", "def mail_draft_prepare(", "def mail_draft_update(", "def mail_draft_delete(",
+		"def job_submit(", "def job_poll_many(", "def job_logs(", "def job_artifacts(",
 	} {
 		if !strings.Contains(runtimeSource, binding) || !strings.Contains(stub, binding) {
 			names := make([]string, 0, len(snapshot.Tools()))
@@ -36,6 +37,9 @@ func TestCombinedFakeCatalogGeneratesBoundSynchronousPythonSurface(t *testing.T)
 	}
 	if strings.Contains(runtimeSource, "mail_send") || strings.Contains(runtimeSource, "mail.send") {
 		t.Fatal("Host-only irreversible mail send leaked into Guest catalog")
+	}
+	if strings.Contains(runtimeSource, "job_cancel") || strings.Contains(runtimeSource, "job.cancel") {
+		t.Fatal("unqualified irreversible job cancellation leaked into Guest catalog")
 	}
 	if !strings.Contains(runtimeSource, "CATALOG_DIGEST = \""+snapshot.Digest()+"\"") || !strings.Contains(runtimeSource, "fake-mail-v1") || !strings.Contains(runtimeSource, "fake-cloudflare-dns-v1") {
 		t.Fatal("generated surface is not bound to catalog and handler versions")

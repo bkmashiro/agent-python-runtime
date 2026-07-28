@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/toolcatalog"
 )
 
 const (
@@ -173,6 +174,23 @@ func ToolGrants(policyVersion string, maxCalls uint32) (map[string]capability.To
 		DNSPlanToolID:  {ToolID: DNSPlanToolID, HandlerVersion: HandlerVersion, EffectClass: "read_only", Policy: "AUTO_COMMIT", PolicyVersion: policyVersion, MaxCalls: maxCalls},
 		DNSApplyToolID: {ToolID: DNSApplyToolID, HandlerVersion: HandlerVersion, EffectClass: "reversible", Policy: "AUTO_COMMIT", PolicyVersion: policyVersion, MaxCalls: maxCalls},
 	}, nil
+}
+
+func CatalogTools(maxCalls uint32, grantVersion string) ([]toolcatalog.DiscoveredTool, map[string]toolcatalog.Grant, error) {
+	if maxCalls == 0 || maxCalls > 1024 || !validIdentity(grantVersion) {
+		return nil, nil, errors.New("invalid fake Cloudflare catalog grants")
+	}
+	tools := []toolcatalog.DiscoveredTool{
+		{ToolID: DNSListToolID, ServerID: "fake-cloudflare", Name: "cloudflare_dns_list", Description: "List bounded DNS records from the Host-bound fake Cloudflare zone.", HandlerVersion: HandlerVersion, InputSchema: []byte(emptyInputSchema), OutputSchema: []byte(listOutputSchema)},
+		{ToolID: DNSPlanToolID, ServerID: "fake-cloudflare", Name: "cloudflare_dns_plan_change", Description: "Prepare a digest-bound fake DNS create, update, or delete plan without mutation.", HandlerVersion: HandlerVersion, InputSchema: []byte(planInputSchema), OutputSchema: []byte(planOutputSchema)},
+		{ToolID: DNSApplyToolID, ServerID: "fake-cloudflare", Name: "cloudflare_dns_apply_change", Description: "Apply an approved fake DNS plan with conditional Host-only rollback.", HandlerVersion: HandlerVersion, InputSchema: []byte(applyInputSchema), OutputSchema: []byte(applyOutputSchema)},
+	}
+	grants := map[string]toolcatalog.Grant{
+		DNSListToolID:  {ToolID: DNSListToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: grantVersion, MaxCalls: maxCalls},
+		DNSPlanToolID:  {ToolID: DNSPlanToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: grantVersion, MaxCalls: maxCalls},
+		DNSApplyToolID: {ToolID: DNSApplyToolID, EffectClass: "reversible", Policy: "AUTO_COMMIT", GrantVersion: grantVersion, MaxCalls: maxCalls},
+	}
+	return tools, grants, nil
 }
 
 func (adapter *Adapter) handleList(ctx context.Context, call capability.HostCall) (json.RawMessage, error) {
@@ -557,16 +575,16 @@ func classified(err error) error {
 	}
 }
 
-const emptyInputSchema = `{"type":"object","additionalProperties":false}`
-const recordSchema = `{"type":"object","additionalProperties":false,"required":["id","name","type","content","ttl","version"],"properties":{"id":{"type":"string"},"name":{"type":"string"},"type":{"enum":["A","AAAA","CNAME","TXT"]},"content":{"type":"string"},"ttl":{"type":"integer","minimum":0,"maximum":86400},"version":{"type":"integer","minimum":1}}}`
+const emptyInputSchema = `{"type":"object","additionalProperties":false,"properties":{}}`
+const recordSchema = `{"type":"object","additionalProperties":false,"required":["id","name","type","content","ttl","version"],"properties":{"id":{"type":"string"},"name":{"type":"string"},"type":{"type":"string","enum":["A","AAAA","CNAME","TXT"]},"content":{"type":"string"},"ttl":{"type":"integer","minimum":0,"maximum":86400},"version":{"type":"integer","minimum":1}}}`
 const listOutputSchema = `{"type":"object","additionalProperties":false,"required":["zone_alias","records"],"properties":{"zone_alias":{"type":"string"},"records":{"type":"array","items":` + recordSchema + `}}}`
-const planInputSchema = `{"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"enum":["create","update","delete"]},"record_id":{"type":"string"},"name":{"type":"string"},"type":{"enum":["A","AAAA","CNAME","TXT"]},"content":{"type":"string"},"ttl":{"type":"integer","minimum":0,"maximum":86400}}}`
+const planInputSchema = `{"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"type":"string","enum":["create","update","delete"]},"record_id":{"type":"string"},"name":{"type":"string"},"type":{"type":"string","enum":["A","AAAA","CNAME","TXT"]},"content":{"type":"string"},"ttl":{"type":"integer","minimum":0,"maximum":86400}}}`
 const nullableRecordSchema = `{"anyOf":[` + recordSchema + `,{"type":"null"}]}`
-const planRecordSchema = `{"type":"object","additionalProperties":false,"required":["id","name","type","content","ttl","version"],"properties":{"id":{"type":"string"},"name":{"type":"string"},"type":{"enum":["A","AAAA","CNAME","TXT"]},"content":{"type":"string"},"ttl":{"type":"integer","minimum":0,"maximum":86400},"version":{"type":"integer","minimum":0}}}`
+const planRecordSchema = `{"type":"object","additionalProperties":false,"required":["id","name","type","content","ttl","version"],"properties":{"id":{"type":"string"},"name":{"type":"string"},"type":{"type":"string","enum":["A","AAAA","CNAME","TXT"]},"content":{"type":"string"},"ttl":{"type":"integer","minimum":0,"maximum":86400},"version":{"type":"integer","minimum":0}}}`
 const nullablePlanRecordSchema = `{"anyOf":[` + planRecordSchema + `,{"type":"null"}]}`
-const planOutputSchema = `{"type":"object","additionalProperties":false,"required":["digest","action","expected_version","before","after"],"properties":{"digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"action":{"enum":["create","update","delete"]},"record_id":{"type":"string"},"expected_version":{"type":"integer","minimum":0},"before":` + nullablePlanRecordSchema + `,"after":` + nullablePlanRecordSchema + `}}`
+const planOutputSchema = `{"type":"object","additionalProperties":false,"required":["digest","action","expected_version","before","after"],"properties":{"digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"action":{"type":"string","enum":["create","update","delete"]},"record_id":{"type":"string"},"expected_version":{"type":"integer","minimum":0},"before":` + nullablePlanRecordSchema + `,"after":` + nullablePlanRecordSchema + `}}`
 const applyInputSchema = `{"type":"object","additionalProperties":false,"required":["plan_digest"],"properties":{"plan_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"}}}`
-const applyOutputSchema = `{"type":"object","additionalProperties":false,"required":["plan_digest","action","record"],"properties":{"plan_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"action":{"enum":["create","update","delete"]},"record":` + nullableRecordSchema + `}}`
+const applyOutputSchema = `{"type":"object","additionalProperties":false,"required":["plan_digest","action","record"],"properties":{"plan_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"action":{"type":"string","enum":["create","update","delete"]},"record":` + nullableRecordSchema + `}}`
 
 var _ capability.Handler = (*Adapter)(nil)
 var _ capability.AbortHandler = (*Adapter)(nil)

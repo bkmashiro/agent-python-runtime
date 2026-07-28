@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/toolcatalog"
 )
 
 const (
@@ -130,6 +131,22 @@ func HandlerSpecs(store *Store, binding Binding) ([]capability.HandlerSpec, erro
 		{ToolID: WorkspaceSearchToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(searchInputSchema), OutputSchema: []byte(searchOutputSchema), Handler: &searchHandler{store: store, binding: binding}},
 		{ToolID: WorkspaceReadManyToolID, HandlerVersion: HandlerVersion, InputSchema: []byte(readInputSchema), OutputSchema: []byte(readOutputSchema), Handler: &readHandler{store: store, binding: binding}},
 	}, nil
+}
+
+func CatalogTools(maxCalls uint32, grantVersion string) ([]toolcatalog.DiscoveredTool, map[string]toolcatalog.Grant, error) {
+	if maxCalls == 0 || maxCalls > 1024 || !validIdentity(grantVersion) {
+		return nil, nil, ErrWorkspaceDenied
+	}
+	tools := []toolcatalog.DiscoveredTool{
+		{ToolID: RepoOpenToolID, ServerID: "fake-workspace", Name: "repo_open", Description: "Open an approved immutable fake repository fixture as a Host-owned workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(repoOpenInputSchema), OutputSchema: []byte(repoOpenOutputSchema)},
+		{ToolID: WorkspaceSearchToolID, ServerID: "fake-workspace", Name: "workspace_search", Description: "Search bounded UTF-8 content in a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(searchInputSchema), OutputSchema: []byte(searchOutputSchema)},
+		{ToolID: WorkspaceReadManyToolID, ServerID: "fake-workspace", Name: "workspace_read_many", Description: "Read bounded approved paths from a Host-owned fake workspace.", HandlerVersion: HandlerVersion, InputSchema: []byte(readInputSchema), OutputSchema: []byte(readOutputSchema)},
+	}
+	grants := make(map[string]toolcatalog.Grant, len(tools))
+	for _, tool := range tools {
+		grants[tool.ToolID] = toolcatalog.Grant{ToolID: tool.ToolID, EffectClass: "read_only", Policy: "AUTO_COMMIT", GrantVersion: grantVersion, MaxCalls: maxCalls}
+	}
+	return tools, grants, nil
 }
 
 type openHandler struct {

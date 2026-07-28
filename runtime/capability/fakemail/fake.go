@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/toolcatalog"
 	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
@@ -213,6 +214,28 @@ func ToolGrants(policyVersion string, maxCalls uint32) (map[string]capability.To
 		grants[toolID] = capability.ToolGrant{ToolID: toolID, HandlerVersion: HandlerVersion, EffectClass: "reversible", Policy: "AUTO_COMMIT", PolicyVersion: policyVersion, MaxCalls: maxCalls}
 	}
 	return grants, nil
+}
+
+func CatalogTools(maxCalls uint32, grantVersion string) ([]toolcatalog.DiscoveredTool, map[string]toolcatalog.Grant, error) {
+	if maxCalls == 0 || maxCalls > 1024 || !validIdentity(grantVersion) {
+		return nil, nil, ErrMailboxDenied
+	}
+	tools := []toolcatalog.DiscoveredTool{
+		{ToolID: SearchToolID, ServerID: "fake-mail", Name: "mail_search", Description: "Search bounded messages in the Host-bound fake mailbox.", HandlerVersion: HandlerVersion, InputSchema: []byte(searchInputSchema), OutputSchema: []byte(searchOutputSchema)},
+		{ToolID: ReadManyToolID, ServerID: "fake-mail", Name: "mail_read_many", Description: "Read bounded message IDs from the Host-bound fake mailbox.", HandlerVersion: HandlerVersion, InputSchema: []byte(readInputSchema), OutputSchema: []byte(readOutputSchema)},
+		{ToolID: DraftPrepareToolID, ServerID: "fake-mail", Name: "mail_draft_prepare", Description: "Create a reversible draft in the Host-bound fake mailbox.", HandlerVersion: HandlerVersion, InputSchema: []byte(draftPrepareSchema), OutputSchema: []byte(draftOutputSchema)},
+		{ToolID: DraftUpdateToolID, ServerID: "fake-mail", Name: "mail_draft_update", Description: "Conditionally update an exact fake draft version.", HandlerVersion: HandlerVersion, InputSchema: []byte(draftUpdateSchema), OutputSchema: []byte(draftOutputSchema)},
+		{ToolID: DraftDeleteToolID, ServerID: "fake-mail", Name: "mail_draft_delete", Description: "Conditionally delete an exact fake draft version.", HandlerVersion: HandlerVersion, InputSchema: []byte(draftDeleteSchema), OutputSchema: []byte(deleteOutputSchema)},
+	}
+	grants := make(map[string]toolcatalog.Grant, len(tools))
+	for _, tool := range tools {
+		effectClass := "read_only"
+		if tool.ToolID != SearchToolID && tool.ToolID != ReadManyToolID {
+			effectClass = "reversible"
+		}
+		grants[tool.ToolID] = toolcatalog.Grant{ToolID: tool.ToolID, EffectClass: effectClass, Policy: "AUTO_COMMIT", GrantVersion: grantVersion, MaxCalls: maxCalls}
+	}
+	return tools, grants, nil
 }
 
 func (adapter *Adapter) Handle(ctx context.Context, call capability.HostCall) (json.RawMessage, error) {

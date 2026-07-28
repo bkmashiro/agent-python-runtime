@@ -37,6 +37,7 @@ var (
 	ErrPathDenied       = errors.New("fake workspace path denied")
 	ErrQuotaExceeded    = errors.New("fake workspace quota exceeded")
 	ErrWorkspaceExpired = errors.New("fake workspace expired")
+	ErrManifestDrift    = errors.New("fake workspace manifest drift")
 )
 
 type Limits struct {
@@ -85,6 +86,7 @@ type Store struct {
 	mu         sync.RWMutex
 	limits     Limits
 	fixtures   map[string]*repository
+	acquired   map[string]*repository
 	workspaces map[string]workspace
 	now        func() time.Time
 	ttl        time.Duration
@@ -98,7 +100,7 @@ func NewStoreWithClock(fixtures []Fixture, limits Limits, now func() time.Time, 
 	if !validLimits(limits) || len(fixtures) == 0 || uint32(len(fixtures)) > limits.MaxFixtureFiles || now == nil || ttl <= 0 || ttl > 24*time.Hour {
 		return nil, ErrFixtureDenied
 	}
-	store := &Store{limits: limits, fixtures: make(map[string]*repository, len(fixtures)), workspaces: map[string]workspace{}, now: now, ttl: ttl}
+	store := &Store{limits: limits, fixtures: make(map[string]*repository, len(fixtures)), acquired: map[string]*repository{}, workspaces: map[string]workspace{}, now: now, ttl: ttl}
 	for _, fixture := range fixtures {
 		repository, err := buildRepository(fixture, limits)
 		if err != nil {
@@ -129,20 +131,75 @@ func (store *Store) Close() {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	for _, repository := range store.fixtures {
-		for name, item := range repository.files {
-			for index := range item.content {
-				item.content[index] = 0
-			}
-			delete(repository.files, name)
-		}
+		zeroRepository(repository)
+	}
+	for _, repository := range store.acquired {
+		zeroRepository(repository)
 	}
 	store.fixtures = nil
+	store.acquired = nil
 	store.workspaces = nil
 }
 
 type Binding struct {
 	RunIdentity  string
 	TaskIdentity string
+}
+
+type WorkspaceDescriptor struct {
+	WorkspaceID      string `json:"workspace_id"`
+	Alias            string `json:"alias"`
+	ResolvedRevision string `json:"resolved_revision"`
+	ManifestDigest   string `json:"manifest_digest"`
+	FileCount        int    `json:"file_count"`
+	TotalBytes       uint64 `json:"total_bytes"`
+	ExpiresAt        string `json:"expires_at"`
+}
+
+func FixtureManifest(fixture Fixture, limits Limits) (string, error) {
+	repository, err := buildRepository(fixture, limits)
+	if err != nil {
+		return "", err
+	}
+	defer zeroRepository(repository)
+	return repository.manifestDigest, nil
+}
+
+func (store *Store) Acquire(binding Binding, fixture Fixture, expectedManifest string) (WorkspaceDescriptor, error) {
+	if store == nil || !validIdentity(binding.RunIdentity) || !validIdentity(binding.TaskIdentity) || !validDigest(expectedManifest) {
+		return WorkspaceDescriptor{}, ErrWorkspaceDenied
+	}
+	repository, err := buildRepository(fixture, store.limits)
+	if err != nil {
+		return WorkspaceDescriptor{}, err
+	}
+	if repository.manifestDigest != expectedManifest {
+		zeroRepository(repository)
+		return WorkspaceDescriptor{}, ErrManifestDrift
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	now := store.now().UTC()
+	if now.IsZero() {
+		zeroRepository(repository)
+		return WorkspaceDescriptor{}, ErrWorkspaceDenied
+	}
+	store.cleanupExpiredLocked(now)
+	workspaceID := workspaceIdentity(binding, repository)
+	if existing, exists := store.workspaces[workspaceID]; exists {
+		zeroRepository(repository)
+		existing.expiresAt = now.Add(store.ttl)
+		store.workspaces[workspaceID] = existing
+		return descriptor(existing), nil
+	}
+	if uint32(len(store.workspaces)) >= store.limits.MaxWorkspaces {
+		zeroRepository(repository)
+		return WorkspaceDescriptor{}, ErrQuotaExceeded
+	}
+	value := workspace{id: workspaceID, runIdentity: binding.RunIdentity, taskIdentity: binding.TaskIdentity, repository: repository, expiresAt: now.Add(store.ttl)}
+	store.acquired[workspaceID] = repository
+	store.workspaces[workspaceID] = value
+	return descriptor(value), nil
 }
 
 func HandlerSpecs(store *Store, binding Binding) ([]capability.HandlerSpec, error) {
@@ -202,15 +259,7 @@ type openArguments struct {
 	Alias    string `json:"alias"`
 	Revision string `json:"revision"`
 }
-type openResult struct {
-	WorkspaceID      string `json:"workspace_id"`
-	Alias            string `json:"alias"`
-	ResolvedRevision string `json:"resolved_revision"`
-	ManifestDigest   string `json:"manifest_digest"`
-	FileCount        int    `json:"file_count"`
-	TotalBytes       uint64 `json:"total_bytes"`
-	ExpiresAt        string `json:"expires_at"`
-}
+type openResult = WorkspaceDescriptor
 
 func (handler *openHandler) Handle(_ context.Context, call capability.HostCall) (json.RawMessage, error) {
 	if call.RunIdentity != handler.binding.RunIdentity {
@@ -406,17 +455,13 @@ func (store *Store) open(binding Binding, alias, revision string) (openResult, e
 	if !exists {
 		return openResult{}, ErrFixtureDenied
 	}
-	workspaceID := digest("workspace\x00" + binding.RunIdentity + "\x00" + binding.TaskIdentity + "\x00" + repository.alias + "\x00" + repository.revision + "\x00" + repository.manifestDigest)
+	workspaceID := workspaceIdentity(binding, repository)
 	now := store.now().UTC()
 	if now.IsZero() {
 		return openResult{}, ErrWorkspaceDenied
 	}
 	expiresAt := now.Add(store.ttl)
-	for id, value := range store.workspaces {
-		if !now.Before(value.expiresAt) {
-			delete(store.workspaces, id)
-		}
-	}
+	store.cleanupExpiredLocked(now)
 	if _, exists := store.workspaces[workspaceID]; !exists && uint32(len(store.workspaces)) >= store.limits.MaxWorkspaces {
 		return openResult{}, ErrQuotaExceeded
 	}
@@ -432,7 +477,7 @@ func (store *Store) getWorkspace(binding Binding, id string) (workspace, error) 
 		return workspace{}, ErrWorkspaceDenied
 	}
 	if !store.now().UTC().Before(value.expiresAt) {
-		delete(store.workspaces, id)
+		store.removeWorkspaceLocked(id)
 		return workspace{}, ErrWorkspaceExpired
 	}
 	return value, nil
@@ -610,6 +655,50 @@ func (store *Store) readMany(binding Binding, arguments readArguments) (readResu
 	return result, nil
 }
 
+func descriptor(value workspace) WorkspaceDescriptor {
+	return WorkspaceDescriptor{WorkspaceID: value.id, Alias: value.repository.alias, ResolvedRevision: value.repository.revision, ManifestDigest: value.repository.manifestDigest, FileCount: len(value.repository.files), TotalBytes: value.repository.totalBytes, ExpiresAt: value.expiresAt.Format(time.RFC3339Nano)}
+}
+
+func workspaceIdentity(binding Binding, repository *repository) string {
+	return digest("workspace\x00" + binding.RunIdentity + "\x00" + binding.TaskIdentity + "\x00" + repository.alias + "\x00" + repository.revision + "\x00" + repository.manifestDigest)
+}
+
+func (store *Store) cleanupExpiredLocked(now time.Time) {
+	for id, value := range store.workspaces {
+		if !now.Before(value.expiresAt) {
+			store.removeWorkspaceLocked(id)
+		}
+	}
+}
+
+func (store *Store) removeWorkspaceLocked(id string) {
+	delete(store.workspaces, id)
+	if repository, owned := store.acquired[id]; owned {
+		zeroRepository(repository)
+		delete(store.acquired, id)
+	}
+}
+
+func zeroRepository(repository *repository) {
+	if repository == nil {
+		return
+	}
+	for name, item := range repository.files {
+		for index := range item.content {
+			item.content[index] = 0
+		}
+		delete(repository.files, name)
+	}
+}
+
+func validDigest(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != 71 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
+}
+
 func buildRepository(fixture Fixture, limits Limits) (*repository, error) {
 	if !validAlias(fixture.Alias) || !validRevision(fixture.Revision) || len(fixture.Files) == 0 || uint32(len(fixture.Files)) > limits.MaxFixtureFiles {
 		return nil, ErrFixtureDenied
@@ -617,10 +706,12 @@ func buildRepository(fixture Fixture, limits Limits) (*repository, error) {
 	repository := &repository{alias: fixture.Alias, revision: fixture.Revision, files: make(map[string]file, len(fixture.Files))}
 	for name, content := range fixture.Files {
 		if !validPath(name) || len(content) == 0 || uint64(len(content)) > limits.MaxFileBytes || !utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0 {
+			zeroRepository(repository)
 			return nil, ErrFixtureDenied
 		}
 		repository.totalBytes += uint64(len(content))
 		if repository.totalBytes > limits.MaxFixtureBytes {
+			zeroRepository(repository)
 			return nil, ErrQuotaExceeded
 		}
 		repository.files[name] = file{content: append([]byte(nil), content...), digest: digestBytes(content)}

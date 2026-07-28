@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakeacquire"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakecloudflare"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakejob"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakemail"
@@ -33,6 +34,9 @@ func Build(revision uint64, maxCalls uint32, grantVersion string) (toolcatalog.S
 		return nil
 	}
 	if err := appendCatalog(fakeworkspace.CatalogTools(maxCalls, grantVersion)); err != nil {
+		return toolcatalog.Snapshot{}, err
+	}
+	if err := appendCatalog(fakeacquire.CatalogTools(maxCalls, grantVersion)); err != nil {
 		return toolcatalog.Snapshot{}, err
 	}
 	if err := appendCatalog(fakecloudflare.CatalogTools(maxCalls, grantVersion)); err != nil {

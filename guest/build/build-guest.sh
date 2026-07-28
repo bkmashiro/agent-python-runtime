@@ -10,7 +10,6 @@ CPYTHON_DIR="${WORK_DIR}/cpython"
 ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
 PREINITIALIZATION_SPIKE=${AGENT_RUNTIME_PREINITIALIZATION_SPIKE:-0}
 COW_FIXED_MEMORY=${AGENT_RUNTIME_COW_FIXED_MEMORY:-0}
-MERGE_DATA_SEGMENTS=${AGENT_RUNTIME_MERGE_DATA_SEGMENTS:-0}
 INITIAL_MEMORY_BYTES=134217728
 MAX_MEMORY_BYTES=536870912
 case "${ARTIFACT_PROFILE}" in
@@ -44,14 +43,6 @@ case "${COW_FIXED_MEMORY}" in
   *)
     echo "AGENT_RUNTIME_COW_FIXED_MEMORY must be 0 or 1" >&2
     exit 14
-    ;;
-esac
-case "${MERGE_DATA_SEGMENTS}" in
-  0) MERGE_DATA_SEGMENT_FLAGS=() ;;
-  1) MERGE_DATA_SEGMENT_FLAGS=(-Wl,--merge-data-segments) ;;
-  *)
-    echo "AGENT_RUNTIME_MERGE_DATA_SEGMENTS must be 0 or 1" >&2
-    exit 16
     ;;
 esac
 MEMORY_INITIAL_PAGES=$((INITIAL_MEMORY_BYTES / 65536))
@@ -322,7 +313,6 @@ FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
   -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
   -Wl,-z,stack-size=16777216 \
   -Wl,--strip-all \
-  "${MERGE_DATA_SEGMENT_FLAGS[@]}" \
   -o "${RAW_GUEST}"
 
 VFS_PYTHON_DIR=${AGENT_RUNTIME_VFS_ROOT:-"${WORK_DIR}/vfs-python"}
@@ -394,7 +384,6 @@ if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
     -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
     -Wl,-z,stack-size=16777216 \
     -Wl,--strip-all \
-  "${MERGE_DATA_SEGMENT_FLAGS[@]}" \
     -o "${RAW_GUEST}"
 fi
 
@@ -431,7 +420,6 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
     -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
     -Wl,-z,stack-size=16777216 \
     -Wl,--strip-all \
-  "${MERGE_DATA_SEGMENT_FLAGS[@]}" \
     -o "${PREINITIALIZATION_RAW_GUEST}"
 
   "${WASI_VFS}" pack "${PREINITIALIZATION_RAW_GUEST}" \

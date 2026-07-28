@@ -157,6 +157,7 @@ For `cow-ready-single-use`, lifecycle-density additionally requires mapping-attr
 apyrun-memory-probe \
   -artifact /absolute/path/agent-python-runtime.wasm \
   -output /absolute/private/path/cow-memory-attribution.json \
+  -profile-dir /absolute/private/path/heap-profiles \
   -slots 0,1,4,64
 ```
 

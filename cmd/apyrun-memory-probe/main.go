@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,6 +93,8 @@ func main() {
 	slotsText := flag.String("slots", "0,1,4,64", "comma-separated controls")
 	child := flag.Bool("child", false, "internal child mode")
 	childSlots := flag.Uint("child-slots", 0, "internal requested slots")
+	profileDir := flag.String("profile-dir", "", "optional private directory for settled child heap profiles")
+	childProfile := flag.String("child-profile", "", "internal settled heap profile path")
 	flag.Parse()
 	if runtime.GOOS != "linux" {
 		fatal(errors.New("apyrun-memory-probe is Linux-only"))
@@ -100,7 +103,7 @@ func main() {
 		fatal(errors.New("-artifact is required"))
 	}
 	if *child {
-		fatal(runChild(*artifact, uint32(*childSlots)))
+		fatal(runChild(*artifact, uint32(*childSlots), *childProfile))
 		return
 	}
 	if *output == "" {
@@ -110,7 +113,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	fatal(runParent(*artifact, *output, slots))
+	fatal(runParent(*artifact, *output, *profileDir, slots))
 }
 
 func fatal(err error) {
@@ -142,7 +145,7 @@ func parseSlots(value string) ([]uint32, error) {
 	return result, nil
 }
 
-func runChild(artifactPath string, slots uint32) error {
+func runChild(artifactPath string, slots uint32, profilePath string) error {
 	protocol := &checkpointWriter{encoder: json.NewEncoder(os.Stdout), input: bufio.NewScanner(os.Stdin)}
 	protocol.emitPair("process-start")
 	wasm, err := os.ReadFile(artifactPath)
@@ -179,10 +182,15 @@ func runChild(artifactPath string, slots uint32) error {
 		}
 	}
 	protocol.emitPair(fmt.Sprintf("ready-%d", slots))
+	if profilePath != "" {
+		if err := writeHeapProfile(profilePath); err != nil {
+			return err
+		}
+	}
 	return protocol.err
 }
 
-func runParent(artifactPath, outputPath string, slots []uint32) error {
+func runParent(artifactPath, outputPath, profileDir string, slots []uint32) error {
 	wasm, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return err
@@ -193,8 +201,20 @@ func runParent(artifactPath, outputPath string, slots []uint32) error {
 		return err
 	}
 	evidence := probeEvidence{SchemaVersion: 1, ArtifactSHA256: fmt.Sprintf("%x", digest[:])}
+	if profileDir != "" {
+		if !filepath.IsAbs(profileDir) {
+			return errors.New("profile directory must be absolute")
+		}
+		if err := os.MkdirAll(profileDir, 0o700); err != nil {
+			return err
+		}
+	}
 	for _, requested := range slots {
-		sample, err := collectChild(executable, artifactPath, requested)
+		profilePath := ""
+		if profileDir != "" {
+			profilePath = filepath.Join(profileDir, fmt.Sprintf("ready-%d.heap.pprof", requested))
+		}
+		sample, err := collectChild(executable, artifactPath, profilePath, requested)
 		if err != nil {
 			return fmt.Errorf("collect %d slots: %w", requested, err)
 		}
@@ -203,10 +223,14 @@ func runParent(artifactPath, outputPath string, slots []uint32) error {
 	return writeEvidence(outputPath, evidence)
 }
 
-func collectChild(executable, artifactPath string, slots uint32) (processSample, error) {
+func collectChild(executable, artifactPath, profilePath string, slots uint32) (processSample, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, executable, "-child", "-artifact", artifactPath, "-child-slots", strconv.FormatUint(uint64(slots), 10))
+	args := []string{"-child", "-artifact", artifactPath, "-child-slots", strconv.FormatUint(uint64(slots), 10)}
+	if profilePath != "" {
+		args = append(args, "-child-profile", profilePath)
+	}
+	command := exec.CommandContext(ctx, executable, args...)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return processSample{}, err
@@ -263,6 +287,22 @@ func collectChild(executable, artifactPath string, slots uint32) (processSample,
 		return result, errors.New("child checkpoint sequence is incomplete")
 	}
 	return result, nil
+}
+
+func writeHeapProfile(path string) error {
+	if !filepath.IsAbs(path) {
+		return errors.New("heap profile path must be absolute")
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	err = pprof.WriteHeapProfile(file)
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }
 
 func writeEvidence(path string, evidence probeEvidence) error {

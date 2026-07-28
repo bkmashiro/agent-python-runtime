@@ -34,6 +34,10 @@ func (provider *Provider) ExportSnapshot() (ProviderSnapshot, error) {
 	}
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
+	return provider.exportSnapshotLocked()
+}
+
+func (provider *Provider) exportSnapshotLocked() (ProviderSnapshot, error) {
 	result := ProviderSnapshot{SchemaVersion: providerSnapshotVersion, NextJob: provider.nextJob, NextVersion: provider.nextVersion, Recipes: make([]Recipe, 0, len(provider.recipes)), Jobs: make([]ProviderJobSnapshot, 0, len(provider.jobs))}
 	for _, recipe := range provider.recipes {
 		result.Recipes = append(result.Recipes, recipe)

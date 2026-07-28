@@ -3,11 +3,13 @@ package fakejob_test
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakejob"
+	"github.com/bkmashiro/agent-python-runtime/runtime/devsnapshot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
 
@@ -92,5 +94,54 @@ func TestFakeJobProviderSnapshotRejectsTampering(t *testing.T) {
 		if _, err := fakejob.NewProviderFromSnapshot(candidate, []byte("read-token"), []byte("control-token")); err == nil {
 			t.Fatalf("tampered snapshot %d accepted", index)
 		}
+	}
+}
+
+func TestFakeJobCheckpointSurvivesSQLiteReopen(t *testing.T) {
+	f := newFixture(t, []byte("read-token"), []byte("control-token"))
+	job := submit(t, f)
+	controller, _ := fakejob.NewCancelController(f.coordinator, f.tx.ID, f.adapter)
+	staged, _ := controller.Prepare(context.Background(), job.ID, job.Version)
+	credential := transaction.CommitCredential{Token: "7777777777777777777777777777777777777777777777777777777777777777"}
+	if err := controller.RegisterApproval(credential, staged.OperationID, "approval:sqlite-reopen", "owner", time.Unix(1060, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	f.provider.SetAmbiguousNextCancel()
+	_, _ = controller.Commit(context.Background(), credential, staged.OperationID)
+	path := filepath.Join(t.TempDir(), "job-checkpoints.db")
+	store, err := devsnapshot.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fakejob.SaveDevelopmentCheckpoint(context.Background(), store, "checkpoint:job", controller); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopenedStore, err := devsnapshot.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopenedStore.Close()
+	providerSnapshot, controllerSnapshot, err := fakejob.LoadDevelopmentCheckpoint(context.Background(), reopenedStore, "checkpoint:job")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopenedProvider, err := fakejob.NewProviderFromSnapshot(providerSnapshot, []byte("read-token"), []byte("control-token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopenedProvider.Close()
+	reopenedAdapter, err := fakejob.NewAdapter(fakejob.Config{Resolver: f.resolver, ReadSecretRef: "jobs.read", ControlSecretRef: "jobs.control", RunIdentity: "run:jobs", TaskIdentity: "task:jobs", Tenant: "tenant:jobs", QueueAlias: "queue:test", PolicyVersion: "jobs:v1", LeaseDuration: time.Minute, Provider: reopenedProvider})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopenedController, err := fakejob.NewCancelControllerFromSnapshot(f.coordinator, reopenedAdapter, controllerSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopenedController.Reconcile(context.Background(), credential, staged.OperationID); err != nil {
+		t.Fatal(err)
 	}
 }

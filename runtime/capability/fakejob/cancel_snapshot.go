@@ -33,6 +33,10 @@ func (controller *CancelController) Snapshot() (CancelControllerSnapshot, error)
 	}
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
+	return controller.snapshotLocked()
+}
+
+func (controller *CancelController) snapshotLocked() (CancelControllerSnapshot, error) {
 	result := CancelControllerSnapshot{SchemaVersion: cancelControllerSnapshotVersion, TransactionID: controller.transactionID, Ordinal: controller.ordinal, Stages: make([]CancelStageSnapshot, 0, len(controller.staged))}
 	for _, stage := range controller.staged {
 		status := stage.status

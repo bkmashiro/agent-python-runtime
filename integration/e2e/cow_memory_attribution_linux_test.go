@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -25,14 +26,25 @@ type cowDirtyProbeResult struct {
 	FinalPrivateDirty  uint64 `json:"final_private_dirty_bytes"`
 }
 
+type cowDirtyProbeEvidence struct {
+	WarmupProfile string                          `json:"warmup_profile,omitempty"`
+	PreparedImage wazeroengine.PreparedImageState `json:"prepared_image"`
+	Samples       []cowDirtyProbeResult           `json:"samples"`
+}
+
 func TestCOWReadySingleUseProductionArtifactDeterministicDirtyPages(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 15 * time.Second
+	warmupProfile := os.Getenv("AGENT_RUNTIME_COW_WARMUP_PROFILE")
+	if warmupProfile != "" && warmupProfile != wazeroengine.COWWarmupRequestShellV1 {
+		t.Fatalf("unsupported probe warmup profile %q", warmupProfile)
+	}
 	instance := newEngineWithFactory(t, config, wazeroengine.Factory{
 		PreparedCapacity:      4,
 		PreparedMaxCapacity:   4,
 		PreparedRefillWorkers: 1,
 		Strategy:              enginecontract.StrategyCOWReadySingleUse,
+		COWWarmupProfile:      warmupProfile,
 	})
 	prepared, ok := instance.(interface{ PreparedReady() int })
 	if !ok {
@@ -102,7 +114,10 @@ func TestCOWReadySingleUseProductionArtifactDeterministicDirtyPages(t *testing.T
 			ActivePrivateDirty: activeDirty, FinalPrivateDirty: finalDirty,
 		})
 	}
-	encoded, err := json.Marshal(results)
+	imageState := instance.(interface {
+		PreparedImageState() wazeroengine.PreparedImageState
+	}).PreparedImageState()
+	encoded, err := json.Marshal(cowDirtyProbeEvidence{WarmupProfile: warmupProfile, PreparedImage: imageState, Samples: results})
 	if err != nil {
 		t.Fatal(err)
 	}

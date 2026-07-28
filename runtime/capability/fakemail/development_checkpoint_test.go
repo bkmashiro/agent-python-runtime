@@ -58,7 +58,7 @@ func TestFakeMailCheckpointSurvivesSQLiteReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopenedStore.Close()
-	providerSnapshot, controllerSnapshot, err := fakemail.LoadDevelopmentCheckpoint(context.Background(), reopenedStore, "checkpoint:mail")
+	providerSnapshot, controllerSnapshot, adapterSnapshot, err := fakemail.LoadDevelopmentCheckpoint(context.Background(), reopenedStore, "checkpoint:mail")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,8 @@ func TestFakeMailCheckpointSurvivesSQLiteReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopenedProvider.Close()
-	reopenedAdapter, err := fakemail.NewAdapter(fakemail.Config{Resolver: fixture.resolver, ReadSecretRef: "mail.read", DraftSecretRef: "mail.draft", SendSecretRef: "mail.send", RunIdentity: "run:mail", TaskIdentity: "task:mail", Tenant: "tenant:mail", AccountAlias: "mailbox:test", PolicyVersion: "mail:v1", LeaseDuration: time.Minute, Provider: reopenedProvider})
+	config := fakemail.Config{Resolver: fixture.resolver, ReadSecretRef: "mail.read", DraftSecretRef: "mail.draft", SendSecretRef: "mail.send", RunIdentity: "run:mail", TaskIdentity: "task:mail", Tenant: "tenant:mail", AccountAlias: "mailbox:test", PolicyVersion: "mail:v1", LeaseDuration: time.Minute, Provider: reopenedProvider}
+	reopenedAdapter, err := fakemail.NewAdapterFromSnapshot(config, adapterSnapshot)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,6 +43,131 @@ type SendStageSnapshot struct {
 	Receipt        SendReceipt `json:"receipt"`
 }
 
+type AdapterSnapshot struct {
+	SchemaVersion uint32              `json:"schema_version"`
+	Digest        string              `json:"digest"`
+	ConfigDigest  string              `json:"config_digest"`
+	Undo          []DraftUndoSnapshot `json:"undo"`
+	Touched       []string            `json:"touched"`
+}
+
+type DraftUndoSnapshot struct {
+	OperationID string `json:"operation_id"`
+	Action      string `json:"action"`
+	Before      *Draft `json:"before,omitempty"`
+	After       *Draft `json:"after,omitempty"`
+}
+
+func (adapter *Adapter) Snapshot() (AdapterSnapshot, error) {
+	if adapter == nil {
+		return AdapterSnapshot{}, ErrMailboxDenied
+	}
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	return adapter.snapshotLocked()
+}
+func (adapter *Adapter) snapshotLocked() (AdapterSnapshot, error) {
+	result := AdapterSnapshot{SchemaVersion: mailSnapshotVersion, ConfigDigest: adapterConfigDigest(adapter.config), Undo: make([]DraftUndoSnapshot, 0, len(adapter.undo)), Touched: make([]string, 0, len(adapter.touched))}
+	for operationID, undo := range adapter.undo {
+		result.Undo = append(result.Undo, DraftUndoSnapshot{OperationID: operationID, Action: undo.action, Before: cloneOptionalDraft(undo.before), After: cloneOptionalDraft(undo.after)})
+	}
+	for id := range adapter.touched {
+		result.Touched = append(result.Touched, id)
+	}
+	sort.Slice(result.Undo, func(i, j int) bool { return result.Undo[i].OperationID < result.Undo[j].OperationID })
+	sort.Strings(result.Touched)
+	if validateAdapterSnapshot(result, false) != nil {
+		return AdapterSnapshot{}, ErrMailboxDenied
+	}
+	result.Digest = mailDigest(result)
+	return result, nil
+}
+func NewAdapterFromSnapshot(config Config, snapshot AdapterSnapshot) (*Adapter, error) {
+	if validateAdapterSnapshot(snapshot, true) != nil || snapshot.ConfigDigest != adapterConfigDigest(config) {
+		return nil, ErrMailboxDenied
+	}
+	adapter, err := NewAdapter(config)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range snapshot.Undo {
+		adapter.undo[item.OperationID] = draftUndo{action: item.Action, before: cloneOptionalDraft(item.Before), after: cloneOptionalDraft(item.After)}
+	}
+	for _, id := range snapshot.Touched {
+		adapter.touched[id] = struct{}{}
+	}
+	return adapter, nil
+}
+func validateAdapterSnapshot(snapshot AdapterSnapshot, requireDigest bool) error {
+	if snapshot.SchemaVersion != mailSnapshotVersion || !validDigest(snapshot.ConfigDigest) || len(snapshot.Undo) > maxTrackedState || len(snapshot.Touched) > maxTrackedState {
+		return ErrMailboxDenied
+	}
+	if requireDigest && snapshot.Digest != mailDigest(snapshot) {
+		return ErrMailboxDenied
+	}
+	touched := map[string]struct{}{}
+	last := ""
+	for _, key := range snapshot.Touched {
+		parts := strings.Split(key, "\x00")
+		if len(parts) != 2 || !validIdentity(parts[0]) || !validIdentity(parts[1]) || key <= last {
+			return ErrMailboxDenied
+		}
+		touched[parts[1]] = struct{}{}
+		last = key
+	}
+	last = ""
+	seen := map[string]struct{}{}
+	for _, item := range snapshot.Undo {
+		if !validIdentity(item.OperationID) || item.OperationID <= last {
+			return ErrMailboxDenied
+		}
+		last = item.OperationID
+		var id string
+		switch item.Action {
+		case "create":
+			if item.Before != nil || !validDraftSnapshot(item.After) {
+				return ErrMailboxDenied
+			}
+			id = item.After.ID
+		case "update":
+			if !validDraftSnapshot(item.Before) || !validDraftSnapshot(item.After) || item.Before.ID != item.After.ID {
+				return ErrMailboxDenied
+			}
+			id = item.After.ID
+		case "delete":
+			if !validDraftSnapshot(item.Before) || item.After != nil {
+				return ErrMailboxDenied
+			}
+			id = item.Before.ID
+		default:
+			return ErrMailboxDenied
+		}
+		seen[id] = struct{}{}
+	}
+	if len(seen) != len(touched) {
+		return ErrMailboxDenied
+	}
+	for id := range seen {
+		if _, exists := touched[id]; !exists {
+			return ErrMailboxDenied
+		}
+	}
+	return nil
+}
+func validDraftSnapshot(value *Draft) bool {
+	return value != nil && validIdentity(value.ID) && validMailPayload(value.To, value.Subject, value.Body) && value.Version > 0
+}
+func cloneOptionalDraft(value *Draft) *Draft {
+	if value == nil {
+		return nil
+	}
+	cloned := cloneDraft(*value)
+	return &cloned
+}
+func adapterConfigDigest(config Config) string {
+	return digest([]byte(config.RunIdentity + "\x00" + config.TaskIdentity + "\x00" + config.Tenant + "\x00" + config.AccountAlias + "\x00" + config.PolicyVersion + "\x00" + string(config.ReadSecretRef) + "\x00" + string(config.DraftSecretRef) + "\x00" + string(config.SendSecretRef) + "\x00" + config.LeaseDuration.String()))
+}
+
 func (provider *Provider) ExportSnapshot() (ProviderSnapshot, error) {
 	if provider == nil {
 		return ProviderSnapshot{}, ErrMailboxDenied
@@ -203,42 +328,48 @@ func SaveDevelopmentCheckpoint(ctx context.Context, store *devsnapshot.Store, id
 	if store == nil || controller == nil || controller.adapter == nil || controller.adapter.config.Provider == nil {
 		return devsnapshot.Snapshot{}, ErrMailboxDenied
 	}
-	provider := controller.adapter.config.Provider
+	adapter := controller.adapter
+	provider := adapter.config.Provider
 	controller.mu.Lock()
+	adapter.mu.Lock()
 	provider.mu.Lock()
 	providerSnapshot, providerErr := provider.snapshotLocked()
 	controllerSnapshot, controllerErr := controller.snapshotLocked()
+	adapterSnapshot, adapterErr := adapter.snapshotLocked()
 	provider.mu.Unlock()
+	adapter.mu.Unlock()
 	controller.mu.Unlock()
-	if providerErr != nil || controllerErr != nil {
-		return devsnapshot.Snapshot{}, errors.Join(providerErr, controllerErr)
+	if providerErr != nil || controllerErr != nil || adapterErr != nil {
+		return devsnapshot.Snapshot{}, errors.Join(providerErr, controllerErr, adapterErr)
 	}
 	providerJSON, _ := json.Marshal(providerSnapshot)
 	controllerJSON, _ := json.Marshal(controllerSnapshot)
-	return store.Put(ctx, id, map[string]json.RawMessage{"mail_provider": providerJSON, "send_controller": controllerJSON})
+	adapterJSON, _ := json.Marshal(adapterSnapshot)
+	return store.Put(ctx, id, map[string]json.RawMessage{"mail_provider": providerJSON, "send_controller": controllerJSON, "mail_adapter": adapterJSON})
 }
-func LoadDevelopmentCheckpoint(ctx context.Context, store *devsnapshot.Store, id string) (ProviderSnapshot, SendControllerSnapshot, error) {
+func LoadDevelopmentCheckpoint(ctx context.Context, store *devsnapshot.Store, id string) (ProviderSnapshot, SendControllerSnapshot, AdapterSnapshot, error) {
 	if store == nil {
-		return ProviderSnapshot{}, SendControllerSnapshot{}, ErrMailboxDenied
+		return ProviderSnapshot{}, SendControllerSnapshot{}, AdapterSnapshot{}, ErrMailboxDenied
 	}
 	saved, err := store.Get(ctx, id)
 	if err != nil {
-		return ProviderSnapshot{}, SendControllerSnapshot{}, err
+		return ProviderSnapshot{}, SendControllerSnapshot{}, AdapterSnapshot{}, err
 	}
-	if len(saved.Components) != 2 {
-		return ProviderSnapshot{}, SendControllerSnapshot{}, ErrMailboxDenied
+	if len(saved.Components) != 3 {
+		return ProviderSnapshot{}, SendControllerSnapshot{}, AdapterSnapshot{}, ErrMailboxDenied
 	}
 	var provider ProviderSnapshot
 	var controller SendControllerSnapshot
-	if decodeMail(saved.Components["mail_provider"], &provider) != nil || decodeMail(saved.Components["send_controller"], &controller) != nil || validateProviderSnapshot(provider, true) != nil || controller.SchemaVersion != mailSnapshotVersion || controller.Digest != mailDigest(controller) {
-		return ProviderSnapshot{}, SendControllerSnapshot{}, ErrMailboxDenied
+	var adapter AdapterSnapshot
+	if decodeMail(saved.Components["mail_provider"], &provider) != nil || decodeMail(saved.Components["send_controller"], &controller) != nil || decodeMail(saved.Components["mail_adapter"], &adapter) != nil || validateProviderSnapshot(provider, true) != nil || controller.SchemaVersion != mailSnapshotVersion || controller.Digest != mailDigest(controller) || validateAdapterSnapshot(adapter, true) != nil {
+		return ProviderSnapshot{}, SendControllerSnapshot{}, AdapterSnapshot{}, ErrMailboxDenied
 	}
 	for _, stage := range controller.Stages {
 		if validateSendStage(stage) != nil {
-			return ProviderSnapshot{}, SendControllerSnapshot{}, ErrMailboxDenied
+			return ProviderSnapshot{}, SendControllerSnapshot{}, AdapterSnapshot{}, ErrMailboxDenied
 		}
 	}
-	return provider, controller, nil
+	return provider, controller, adapter, nil
 }
 func decodeMail(value []byte, destination any) error {
 	decoder := json.NewDecoder(bytes.NewReader(value))
@@ -257,6 +388,9 @@ func mailDigest(value any) string {
 		typed.Digest = ""
 		value = typed
 	case SendControllerSnapshot:
+		typed.Digest = ""
+		value = typed
+	case AdapterSnapshot:
 		typed.Digest = ""
 		value = typed
 	}

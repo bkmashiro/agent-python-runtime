@@ -34,6 +34,26 @@ type Observer func(Observation)
 
 const COWWarmupRequestShellV1 = "request-shell-v1"
 
+// ValidateCOWWarmupProfile validates an artifact-defined warmup profile ID.
+// The profile implementation remains inside the verified guest artifact.
+func ValidateCOWWarmupProfile(profile string) error {
+	if profile == "" {
+		return nil
+	}
+	if len(profile) > 64 {
+		return errors.New("COW warmup profile exceeds 64 bytes")
+	}
+	for index, character := range profile {
+		alpha := character >= 'a' && character <= 'z'
+		digit := character >= '0' && character <= '9'
+		separator := character == '-' || character == '_' || character == '.'
+		if !alpha && !digit && !separator || index == 0 && !alpha && !digit {
+			return errors.New("COW warmup profile must use lowercase ASCII identifiers")
+		}
+	}
+	return nil
+}
+
 // Factory constructs wazero-backed runners behind the neutral engine contract.
 type Factory struct {
 	BrokerFactory    BrokerFactory
@@ -77,8 +97,11 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 		(factory.PreparedRefillWorkers > 0 && factory.PreparedCapacity == 0) {
 		return nil, errors.New("prepared refill worker count is outside the configured pool bounds")
 	}
-	if factory.COWWarmupProfile != "" && (factory.Strategy != enginecontract.StrategyCOWReadySingleUse || factory.COWWarmupProfile != COWWarmupRequestShellV1) {
-		return nil, errors.New("COW warmup profile is unknown or outside cow-ready-single-use")
+	if err := ValidateCOWWarmupProfile(factory.COWWarmupProfile); err != nil {
+		return nil, err
+	}
+	if factory.COWWarmupProfile != "" && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
+		return nil, errors.New("COW warmup profile is outside cow-ready-single-use")
 	}
 	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
@@ -141,8 +164,11 @@ func newEngine(
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
 	}
-	if cowWarmupProfile != "" && (strategy != enginecontract.StrategyCOWReadySingleUse || cowWarmupProfile != COWWarmupRequestShellV1) {
-		return nil, errors.New("COW warmup profile is unknown or inactive")
+	if err := ValidateCOWWarmupProfile(cowWarmupProfile); err != nil {
+		return nil, err
+	}
+	if cowWarmupProfile != "" && strategy != enginecontract.StrategyCOWReadySingleUse {
+		return nil, errors.New("COW warmup profile is inactive")
 	}
 	warmupGeneration := ""
 	if cowWarmupProfile != "" {

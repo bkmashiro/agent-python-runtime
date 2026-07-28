@@ -88,6 +88,14 @@ class BootstrapTests(unittest.TestCase):
 
     def test_request_shell_warmup_is_allowlisted(self):
         self.runtime._warmup("request-shell-v1")
+        called = []
+        self.runtime.register_warmup_profile("custom.v1", lambda: called.append(True))
+        self.runtime._warmup("custom.v1")
+        self.assertEqual([True], called)
+        with self.assertRaises(ValueError):
+            self.runtime.register_warmup_profile("custom.v1", lambda: None)
+        with self.assertRaises(ValueError):
+            self.runtime.register_warmup_profile("Invalid", lambda: None)
         with self.assertRaises(ValueError):
             self.runtime._warmup("unknown")
 

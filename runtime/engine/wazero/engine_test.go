@@ -43,15 +43,20 @@ func TestPreparedRefillWorkerCountIsExplicitAndBounded(t *testing.T) {
 	}
 }
 
-func TestCOWWarmupProfileIsAllowlistedAndCOWOnly(t *testing.T) {
-	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
-	for _, factory := range []engine.Factory{
-		{COWWarmupProfile: engine.COWWarmupRequestShellV1},
-		{PreparedCapacity: 1, Strategy: enginecontract.StrategyCOWReadySingleUse, COWWarmupProfile: "unknown"},
-	} {
-		if _, err := factory.New(context.Background(), wasm, runtime.DefaultRunConfig()); err == nil {
-			t.Fatalf("accepted invalid warmup factory: %+v", factory)
+func TestCOWWarmupProfileValidationAndCOWBoundary(t *testing.T) {
+	for _, profile := range []string{"", engine.COWWarmupRequestShellV1, "tenant-model.v2", "custom_profile-1"} {
+		if err := engine.ValidateCOWWarmupProfile(profile); err != nil {
+			t.Fatalf("valid profile %q: %v", profile, err)
 		}
+	}
+	for _, profile := range []string{"-leading", "UPPER", "contains space", "é", strings.Repeat("a", 65)} {
+		if err := engine.ValidateCOWWarmupProfile(profile); err == nil {
+			t.Fatalf("accepted invalid profile %q", profile)
+		}
+	}
+	factory := engine.Factory{COWWarmupProfile: "tenant-model.v2"}
+	if _, err := factory.New(context.Background(), []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}, runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "outside cow-ready-single-use") {
+		t.Fatalf("expected strategy boundary rejection, got %v", err)
 	}
 }
 

@@ -12,6 +12,7 @@ _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
 _WARMUP_REQUEST_SHELL_V1 = "request-shell-v1"
+_warmup_profiles: dict[str, Any] = {}
 
 
 def _error(code: str, message: str, *, error_type: str | None = None, trace: str | None = None) -> dict[str, Any]:
@@ -49,9 +50,22 @@ def _prepare(source: str) -> None:
     _prepared_globals = namespace
 
 
-def _warmup(profile: str) -> None:
-    if profile != _WARMUP_REQUEST_SHELL_V1:
-        raise ValueError(f"unsupported warmup profile: {profile}")
+def register_warmup_profile(name: str, handler: Any) -> None:
+    if not isinstance(name, str) or not name or len(name) > 64:
+        raise ValueError("warmup profile name must contain 1-64 characters")
+    if not name[0].isalnum() or not name.isascii() or any(
+        not (character.islower() or character.isdigit() or character in "-_.")
+        for character in name
+    ):
+        raise ValueError("warmup profile name must use lowercase ASCII identifiers")
+    if not callable(handler):
+        raise TypeError("warmup profile handler must be callable")
+    if name in _warmup_profiles:
+        raise ValueError(f"warmup profile already registered: {name}")
+    _warmup_profiles[name] = handler
+
+
+def _warmup_request_shell_v1() -> None:
     # Prime deterministic request-shell paths without retaining request data,
     # wall-clock values, random state, or Host effects in the snapshot.
     request = json.loads('{"run_id":"warmup","code":"result = None","inputs":{}}')
@@ -59,6 +73,17 @@ def _warmup(profile: str) -> None:
     namespace: dict[str, Any] = {"__builtins__": __builtins__, "inputs": request["inputs"]}
     exec(code, namespace, namespace)
     json.dumps({"status": "ok", "result": namespace.get("result")}, separators=(",", ":"), allow_nan=False)
+
+
+register_warmup_profile(_WARMUP_REQUEST_SHELL_V1, _warmup_request_shell_v1)
+
+
+def _warmup(profile: str) -> None:
+    try:
+        handler = _warmup_profiles[profile]
+    except (KeyError, TypeError):
+        raise ValueError(f"unsupported warmup profile: {profile}") from None
+    handler()
 
 
 def _decode_request(request_json: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:

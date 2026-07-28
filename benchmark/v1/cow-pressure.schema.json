@@ -101,7 +101,7 @@
       "required": ["available", "virtual_bytes", "allocated_bytes", "page_size_bytes", "zero_pages", "non_zero_pages", "sparse_potential_bytes"],
       "properties": {
         "available": {"const": true}, "virtual_bytes": {"type": "integer", "minimum": 65536},
-        "allocated_bytes": {"type": "integer", "minimum": 1}, "page_size_bytes": {"type": "integer", "minimum": 1},
+        "allocated_bytes": {"type": "integer", "minimum": 0}, "page_size_bytes": {"type": "integer", "minimum": 1},
         "zero_pages": {"type": "integer", "minimum": 0}, "non_zero_pages": {"type": "integer", "minimum": 0},
         "sparse_potential_bytes": {"type": "integer", "minimum": 0}
       }

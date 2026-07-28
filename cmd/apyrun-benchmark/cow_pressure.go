@@ -164,7 +164,7 @@ func (evidence cowPressureEvidence) Validate() error {
 }
 
 func validPreparedImageState(state wazeroengine.PreparedImageState) bool {
-	return state.Available && state.VirtualBytes > 0 && state.AllocatedBytes > 0 && state.AllocatedBytes <= state.VirtualBytes &&
+	return state.Available && state.VirtualBytes > 0 && state.AllocatedBytes <= state.VirtualBytes &&
 		state.PageSizeBytes > 0 && state.VirtualBytes%state.PageSizeBytes == 0 &&
 		state.ZeroPages+state.NonZeroPages == state.VirtualBytes/state.PageSizeBytes &&
 		state.SparsePotentialBytes == state.ZeroPages*state.PageSizeBytes

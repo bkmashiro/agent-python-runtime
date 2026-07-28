@@ -44,18 +44,6 @@ func newCOWImage(baseline []byte) (*cowImage, error) {
 	}
 	pageSize := unix.Getpagesize()
 	zeroPage := make([]byte, pageSize)
-	var zeroPages, nonZeroPages uint64
-	for offset := 0; offset < len(baseline); offset += pageSize {
-		end := offset + pageSize
-		if end > len(baseline) {
-			end = len(baseline)
-		}
-		if bytes.Equal(baseline[offset:end], zeroPage[:end-offset]) {
-			zeroPages++
-		} else {
-			nonZeroPages++
-		}
-	}
 	fd, err := unix.MemfdCreate("apyrun-cow-image", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
 	if err != nil {
 		return nil, fmt.Errorf("create COW memfd: %w", err)
@@ -69,15 +57,44 @@ func newCOWImage(baseline []byte) (*cowImage, error) {
 	if err := unix.Ftruncate(fd, int64(len(baseline))); err != nil {
 		return nil, fmt.Errorf("size COW memfd: %w", err)
 	}
-	for written := 0; written < len(baseline); {
-		n, err := unix.Pwrite(fd, baseline[written:], int64(written))
-		if err != nil {
-			return nil, fmt.Errorf("write COW baseline: %w", err)
+	var zeroPages, nonZeroPages uint64
+	nonZeroRunStart := -1
+	flushNonZeroRun := func(end int) error {
+		if nonZeroRunStart < 0 {
+			return nil
 		}
-		if n == 0 {
-			return nil, errors.New("write COW baseline made no progress")
+		for written := nonZeroRunStart; written < end; {
+			n, err := unix.Pwrite(fd, baseline[written:end], int64(written))
+			if err != nil {
+				return fmt.Errorf("write COW baseline extent: %w", err)
+			}
+			if n == 0 {
+				return errors.New("write COW baseline extent made no progress")
+			}
+			written += n
 		}
-		written += n
+		nonZeroRunStart = -1
+		return nil
+	}
+	for offset := 0; offset < len(baseline); offset += pageSize {
+		end := offset + pageSize
+		if end > len(baseline) {
+			end = len(baseline)
+		}
+		if bytes.Equal(baseline[offset:end], zeroPage[:end-offset]) {
+			zeroPages++
+			if err := flushNonZeroRun(offset); err != nil {
+				return nil, err
+			}
+		} else {
+			nonZeroPages++
+			if nonZeroRunStart < 0 {
+				nonZeroRunStart = offset
+			}
+		}
+	}
+	if err := flushNonZeroRun(len(baseline)); err != nil {
+		return nil, err
 	}
 	if _, err := unix.FcntlInt(uintptr(fd), unix.F_ADD_SEALS, requiredCOWSeals); err != nil {
 		return nil, fmt.Errorf("seal COW memfd: %w", err)

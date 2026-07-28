@@ -26,7 +26,7 @@ func TestCOWImagePrivateMappingsIsolateAndReset(t *testing.T) {
 	wantPages := uint64(len(baseline)) / pageSize
 	if !state.Available || state.VirtualBytes != uint64(len(baseline)) || state.PageSizeBytes != pageSize ||
 		state.ZeroPages != wantPages-2 || state.NonZeroPages != 2 || state.SparsePotentialBytes != (wantPages-2)*pageSize ||
-		state.AllocatedBytes == 0 || state.AllocatedBytes > state.VirtualBytes {
+		state.AllocatedBytes == 0 || state.AllocatedBytes >= state.VirtualBytes {
 		t.Fatalf("unexpected prepared image state: %+v", state)
 	}
 	firstAllocator := image.newAllocator()
@@ -79,6 +79,41 @@ func TestCOWImagePrivateMappingsIsolateAndReset(t *testing.T) {
 	if err := image.Close(); err != nil {
 		t.Fatal(err)
 	}
+	if err := image.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCOWImageAllZeroBaselineRemainsSparseAndSealed(t *testing.T) {
+	image, err := newCOWImage(make([]byte, wasmLinearPageSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := image.preparedImageState()
+	if !state.Available || state.AllocatedBytes != 0 || state.ZeroPages == 0 || state.NonZeroPages != 0 ||
+		state.SparsePotentialBytes != state.VirtualBytes {
+		t.Fatalf("unexpected all-zero sparse image state: %+v", state)
+	}
+	allocator := image.newAllocator()
+	memory := allocator.Allocate(wasmLinearPageSize, wasmLinearPageSize)
+	if memory == nil {
+		t.Fatal("allocate sparse COW memory")
+	}
+	view := memory.Reallocate(wasmLinearPageSize)
+	if view == nil {
+		t.Fatal("reallocate sparse COW memory")
+	}
+	allocation, err := allocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := allocation.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if view[0] != 0 || view[len(view)-1] != 0 {
+		t.Fatal("sparse holes did not read back as zero")
+	}
+	allocation.Free()
 	if err := image.Close(); err != nil {
 		t.Fatal(err)
 	}

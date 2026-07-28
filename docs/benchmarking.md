@@ -162,7 +162,7 @@ apyrun-memory-probe \
   -slots 0,1,4,64
 ```
 
-The output is written with mode `0600`. `-cache-dir` is optional and user-owned; the probe creates/chmods it to `0700`, while `wazero.NewCompilationCacheWithDir` owns cache-format and artifact/config compatibility checks. Reusing the directory across isolated controls measures warm disk-cache startup without transferring Runtime, CompiledModule, or guest state between children. Full `smaps` parsing occurs only while the child is paused, never in timed execution or refill paths. Slot zero still constructs the Host runtime and compiled module but does not create a canonical COW image; later controls expose canonical-image and marginal ready-slot effects. Differences remain mechanism attribution for that exact binary/artifact/kernel, not a production capacity claim.
+The output is written with mode `0600`. Schema v2 records only `compilation_cache_mode: disabled|disk`, never the cache path. `-cache-dir` is optional and user-owned; the probe creates/chmods it to `0700`, while `wazero.NewCompilationCacheWithDir` owns cache-format and artifact/config compatibility checks. Reusing the directory across isolated controls measures warm disk-cache startup without transferring Runtime, CompiledModule, or guest state between children. Full `smaps` parsing occurs only while the child is paused, never in timed execution or refill paths. Slot zero still constructs the Host runtime and compiled module but does not create a canonical COW image; later controls expose canonical-image and marginal ready-slot effects. Differences remain mechanism attribution for that exact binary/artifact/kernel, not a production capacity claim.
 
 ## Bounded COW pressure evidence
 

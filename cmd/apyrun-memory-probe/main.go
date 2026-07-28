@@ -44,9 +44,10 @@ type processSample struct {
 }
 
 type probeEvidence struct {
-	SchemaVersion  int             `json:"schema_version"`
-	ArtifactSHA256 string          `json:"artifact_sha256"`
-	Samples        []processSample `json:"samples"`
+	SchemaVersion        int             `json:"schema_version"`
+	ArtifactSHA256       string          `json:"artifact_sha256"`
+	CompilationCacheMode string          `json:"compilation_cache_mode"`
+	Samples              []processSample `json:"samples"`
 }
 
 type checkpointWriter struct {
@@ -209,7 +210,11 @@ func runParent(artifactPath, outputPath, profileDir, cacheDir string, slots []ui
 	if err != nil {
 		return err
 	}
-	evidence := probeEvidence{SchemaVersion: 1, ArtifactSHA256: fmt.Sprintf("%x", digest[:])}
+	cacheMode := "disabled"
+	if cacheDir != "" {
+		cacheMode = "disk"
+	}
+	evidence := probeEvidence{SchemaVersion: 2, ArtifactSHA256: fmt.Sprintf("%x", digest[:]), CompilationCacheMode: cacheMode}
 	if profileDir != "" {
 		if !filepath.IsAbs(profileDir) {
 			return errors.New("profile directory must be absolute")

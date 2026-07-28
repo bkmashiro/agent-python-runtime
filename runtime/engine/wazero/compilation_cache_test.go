@@ -2,9 +2,12 @@ package wazero
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	wazerort "github.com/tetratelabs/wazero"
 )
 
 func TestDiskCompilationCacheIsExplicitlyOwned(t *testing.T) {
@@ -22,6 +25,36 @@ func TestDiskCompilationCacheIsExplicitlyOwned(t *testing.T) {
 	}
 	if err := cache.Close(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDiskCompilationCacheReopensCompiledArtifact(t *testing.T) {
+	dir := t.TempDir()
+	wasm := []byte{0, 'a', 's', 'm', 1, 0, 0, 0}
+	for attempt := 0; attempt < 2; attempt++ {
+		cache, err := NewCompilationCacheWithDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inner, release, err := cache.acquire()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := wazerort.NewRuntimeWithConfig(context.Background(), wazerort.NewRuntimeConfigCompiler().WithCompilationCache(inner))
+		compiled, err := r.CompileModule(context.Background(), wasm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = compiled.Close(context.Background())
+		_ = r.Close(context.Background())
+		release()
+		if err := cache.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("disk cache was not populated: entries=%d err=%v", len(entries), err)
 	}
 }
 

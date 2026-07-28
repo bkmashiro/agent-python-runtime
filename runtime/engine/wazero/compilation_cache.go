@@ -23,6 +23,20 @@ func NewCompilationCache() *CompilationCache {
 	return &CompilationCache{inner: wazerort.NewCompilationCache()}
 }
 
+// NewCompilationCacheWithDir creates an explicitly owned disk-backed cache.
+// The caller controls directory privacy, persistence, generation policy, and
+// Close lifecycle; factories only borrow the cache during CompileModule.
+func NewCompilationCacheWithDir(path string) (*CompilationCache, error) {
+	if path == "" {
+		return nil, errors.New("compilation cache directory is empty")
+	}
+	inner, err := wazerort.NewCompilationCacheWithDir(path)
+	if err != nil {
+		return nil, err
+	}
+	return &CompilationCache{inner: inner}, nil
+}
+
 func (cache *CompilationCache) acquire() (wazerort.CompilationCache, func(), error) {
 	if cache == nil {
 		return nil, nil, errors.New("compilation cache is nil")

@@ -94,6 +94,7 @@ func main() {
 	child := flag.Bool("child", false, "internal child mode")
 	childSlots := flag.Uint("child-slots", 0, "internal requested slots")
 	profileDir := flag.String("profile-dir", "", "optional private directory for settled child heap profiles")
+	cacheDir := flag.String("cache-dir", "", "optional user-owned wazero disk compilation cache")
 	childProfile := flag.String("child-profile", "", "internal settled heap profile path")
 	flag.Parse()
 	if runtime.GOOS != "linux" {
@@ -103,7 +104,7 @@ func main() {
 		fatal(errors.New("-artifact is required"))
 	}
 	if *child {
-		fatal(runChild(*artifact, uint32(*childSlots), *childProfile))
+		fatal(runChild(*artifact, uint32(*childSlots), *childProfile, *cacheDir))
 		return
 	}
 	if *output == "" {
@@ -113,7 +114,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	fatal(runParent(*artifact, *output, *profileDir, slots))
+	fatal(runParent(*artifact, *output, *profileDir, *cacheDir, slots))
 }
 
 func fatal(err error) {
@@ -145,7 +146,7 @@ func parseSlots(value string) ([]uint32, error) {
 	return result, nil
 }
 
-func runChild(artifactPath string, slots uint32, profilePath string) error {
+func runChild(artifactPath string, slots uint32, profilePath, cacheDir string) error {
 	protocol := &checkpointWriter{encoder: json.NewEncoder(os.Stdout), input: bufio.NewScanner(os.Stdin)}
 	protocol.emitPair("process-start")
 	wasm, err := os.ReadFile(artifactPath)
@@ -161,6 +162,14 @@ func runChild(artifactPath string, slots uint32, profilePath string) error {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = probeTimeout
 	factory := wazeroengine.Factory{Observer: observer}
+	if cacheDir != "" {
+		cache, err := wazeroengine.NewCompilationCacheWithDir(cacheDir)
+		if err != nil {
+			return err
+		}
+		defer cache.Close(context.Background())
+		factory.CompilationCache = cache
+	}
 	if slots > 0 {
 		factory.Strategy = enginecontract.StrategyCOWReadySingleUse
 		factory.PreparedCapacity = slots
@@ -190,7 +199,7 @@ func runChild(artifactPath string, slots uint32, profilePath string) error {
 	return protocol.err
 }
 
-func runParent(artifactPath, outputPath, profileDir string, slots []uint32) error {
+func runParent(artifactPath, outputPath, profileDir, cacheDir string, slots []uint32) error {
 	wasm, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return err
@@ -209,12 +218,23 @@ func runParent(artifactPath, outputPath, profileDir string, slots []uint32) erro
 			return err
 		}
 	}
+	if cacheDir != "" {
+		if !filepath.IsAbs(cacheDir) {
+			return errors.New("compilation cache directory must be absolute")
+		}
+		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+			return err
+		}
+		if err := os.Chmod(cacheDir, 0o700); err != nil {
+			return err
+		}
+	}
 	for _, requested := range slots {
 		profilePath := ""
 		if profileDir != "" {
 			profilePath = filepath.Join(profileDir, fmt.Sprintf("ready-%d.heap.pprof", requested))
 		}
-		sample, err := collectChild(executable, artifactPath, profilePath, requested)
+		sample, err := collectChild(executable, artifactPath, profilePath, cacheDir, requested)
 		if err != nil {
 			return fmt.Errorf("collect %d slots: %w", requested, err)
 		}
@@ -223,12 +243,15 @@ func runParent(artifactPath, outputPath, profileDir string, slots []uint32) erro
 	return writeEvidence(outputPath, evidence)
 }
 
-func collectChild(executable, artifactPath, profilePath string, slots uint32) (processSample, error) {
+func collectChild(executable, artifactPath, profilePath, cacheDir string, slots uint32) (processSample, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 	args := []string{"-child", "-artifact", artifactPath, "-child-slots", strconv.FormatUint(uint64(slots), 10)}
 	if profilePath != "" {
 		args = append(args, "-child-profile", profilePath)
+	}
+	if cacheDir != "" {
+		args = append(args, "-cache-dir", cacheDir)
 	}
 	command := exec.CommandContext(ctx, executable, args...)
 	stdout, err := command.StdoutPipe()

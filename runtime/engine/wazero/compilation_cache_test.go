@@ -7,6 +7,24 @@ import (
 	"time"
 )
 
+func TestDiskCompilationCacheIsExplicitlyOwned(t *testing.T) {
+	if _, err := NewCompilationCacheWithDir(""); err == nil {
+		t.Fatal("empty cache directory was accepted")
+	}
+	cache, err := NewCompilationCacheWithDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, release, err := cache.acquire(); err != nil {
+		t.Fatal(err)
+	} else {
+		release()
+	}
+	if err := cache.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCompilationCacheCloseWaitsForActiveBorrow(t *testing.T) {
 	cache := NewCompilationCache()
 	_, release, err := cache.acquire()

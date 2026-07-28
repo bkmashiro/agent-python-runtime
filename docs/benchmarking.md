@@ -151,7 +151,7 @@ For `cow-ready-single-use`, lifecycle-density additionally requires mapping-attr
 
 ## Process fixed-cost attribution
 
-`apyrun-memory-probe` isolates each `0,1,4,64` slot control in a fresh child and pauses it at `process-start`, `artifact-loaded`, Host instantiation, compile, canonical guest initialization, sealed-image creation, and final ready capacity. The parent—not the measured child—collects `/proc/<pid>/status`, `smaps_rollup`, `maps`, `fd`, faults, and named COW mappings before releasing each checkpoint:
+`apyrun-memory-probe` isolates each `0,1,4,64` slot control in a fresh child and pauses it at `process-start`, `artifact-loaded`, Host instantiation, compile, canonical guest initialization, sealed-image creation, and final ready capacity. The parent—not the measured child—collects `/proc/<pid>/status`, `smaps_rollup`, `maps`, `fd`, faults, and named COW mappings before releasing each checkpoint. Every raw checkpoint is followed by a `runtime.GC` plus `debug.FreeOSMemory` settled checkpoint, separating transient compiler/initializer heap from retained Runtime, CompiledModule, canonical image, and slot state:
 
 ```bash
 apyrun-memory-probe \

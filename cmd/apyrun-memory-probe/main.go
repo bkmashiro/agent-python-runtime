@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,6 +68,13 @@ func (writer *checkpointWriter) emit(phase string) {
 	if !writer.input.Scan() || writer.input.Text() != "continue" {
 		writer.err = errors.New("checkpoint continuation protocol failed")
 	}
+}
+
+func (writer *checkpointWriter) emitPair(phase string) {
+	writer.emit(phase)
+	runtime.GC()
+	debug.FreeOSMemory()
+	writer.emit(phase + "-settled")
 }
 
 func selectedObserverPhase(phase string) bool {
@@ -136,15 +144,15 @@ func parseSlots(value string) ([]uint32, error) {
 
 func runChild(artifactPath string, slots uint32) error {
 	protocol := &checkpointWriter{encoder: json.NewEncoder(os.Stdout), input: bufio.NewScanner(os.Stdin)}
-	protocol.emit("process-start")
+	protocol.emitPair("process-start")
 	wasm, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return err
 	}
-	protocol.emit("artifact-loaded")
+	protocol.emitPair("artifact-loaded")
 	observer := func(observation wazeroengine.Observation) {
 		if observation.Success && selectedObserverPhase(observation.Phase) {
-			protocol.emit(observation.Phase)
+			protocol.emitPair(observation.Phase)
 		}
 	}
 	config := runtimeconfig.DefaultRunConfig()
@@ -170,7 +178,7 @@ func runChild(artifactPath string, slots uint32) error {
 			return errors.New("prepared pool did not reach requested readiness")
 		}
 	}
-	protocol.emit(fmt.Sprintf("ready-%d", slots))
+	protocol.emitPair(fmt.Sprintf("ready-%d", slots))
 	return protocol.err
 }
 
@@ -251,7 +259,7 @@ func collectChild(executable, artifactPath string, slots uint32) (processSample,
 	if ctx.Err() != nil {
 		return result, ctx.Err()
 	}
-	if len(result.Checkpoints) < 4 || result.Checkpoints[0].Phase != "process-start" || result.Checkpoints[len(result.Checkpoints)-1].Phase != fmt.Sprintf("ready-%d", slots) {
+	if len(result.Checkpoints) < 8 || result.Checkpoints[0].Phase != "process-start" || result.Checkpoints[len(result.Checkpoints)-1].Phase != fmt.Sprintf("ready-%d-settled", slots) {
 		return result, errors.New("child checkpoint sequence is incomplete")
 	}
 	return result, nil

@@ -86,6 +86,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("ok", response["status"])
         self.assertEqual(8, response["result"])
 
+    def test_request_shell_warmup_is_allowlisted(self):
+        self.runtime._warmup("request-shell-v1")
+        with self.assertRaises(ValueError):
+            self.runtime._warmup("unknown")
+
     def test_initialize_and_prepare_require_json_or_source_strings(self):
         with self.assertRaises(TypeError):
             self.runtime._initialize(None)

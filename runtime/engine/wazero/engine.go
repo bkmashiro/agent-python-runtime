@@ -2,6 +2,7 @@ package wazero
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -31,6 +32,8 @@ type Observation struct {
 
 type Observer func(Observation)
 
+const COWWarmupRequestShellV1 = "request-shell-v1"
+
 // Factory constructs wazero-backed runners behind the neutral engine contract.
 type Factory struct {
 	BrokerFactory    BrokerFactory
@@ -47,7 +50,10 @@ type Factory struct {
 	// VerifyCOWPreparedImage opts into a full linear-memory digest on every
 	// prepared slot. It is intended for bounded diagnostics, not production.
 	VerifyCOWPreparedImage bool
-	CompilationCache       *CompilationCache
+	// COWWarmupProfile selects an audited guest-defined canonical warmup. Empty
+	// keeps the current production baseline. Arbitrary source is never accepted.
+	COWWarmupProfile string
+	CompilationCache *CompilationCache
 }
 
 func (Factory) Name() string { return "wazero" }
@@ -71,7 +77,10 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 		(factory.PreparedRefillWorkers > 0 && factory.PreparedCapacity == 0) {
 		return nil, errors.New("prepared refill worker count is outside the configured pool bounds")
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	if factory.COWWarmupProfile != "" && (factory.Strategy != enginecontract.StrategyCOWReadySingleUse || factory.COWWarmupProfile != COWWarmupRequestShellV1) {
+		return nil, errors.New("COW warmup profile is unknown or outside cow-ready-single-use")
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -88,13 +97,15 @@ type Engine struct {
 	observer               Observer
 	strategy               enginecontract.ExecutionStrategy
 	verifyCOWPreparedImage bool
+	cowWarmupProfile       string
+	cowWarmupGeneration    string
 	stateCensus            ReactorStateCensus
 	cowRuntime             cowPreparedRuntime
 	pool                   *preparedPool
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, "", 0, 0, 0, false, nil)
+	return newEngine(ctx, wasm, config, nil, nil, "", 0, 0, 0, "", false, nil)
 }
 
 func NewWithBrokerFactory(
@@ -103,7 +114,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, 0, 0, false, nil)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, 0, 0, "", false, nil)
 }
 
 func newEngine(
@@ -116,6 +127,7 @@ func newEngine(
 	preparedCapacity uint32,
 	preparedMaxCapacity uint32,
 	preparedRefillWorkers uint32,
+	cowWarmupProfile string,
 	verifyCOWPreparedImage bool,
 	compilationCache *CompilationCache,
 ) (*Engine, error) {
@@ -128,6 +140,15 @@ func newEngine(
 	}
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
+	}
+	if cowWarmupProfile != "" && (strategy != enginecontract.StrategyCOWReadySingleUse || cowWarmupProfile != COWWarmupRequestShellV1) {
+		return nil, errors.New("COW warmup profile is unknown or inactive")
+	}
+	warmupGeneration := ""
+	if cowWarmupProfile != "" {
+		artifactDigest := sha256.Sum256(wasm)
+		generationDigest := sha256.Sum256(append(artifactDigest[:], []byte("\x00"+cowWarmupProfile)...))
+		warmupGeneration = fmt.Sprintf("%x", generationDigest[:])
 	}
 
 	runtimeConfig := wazerort.NewRuntimeConfig().
@@ -179,6 +200,8 @@ func newEngine(
 		observer:               observer,
 		strategy:               strategy,
 		verifyCOWPreparedImage: verifyCOWPreparedImage,
+		cowWarmupProfile:       cowWarmupProfile,
+		cowWarmupGeneration:    warmupGeneration,
 		stateCensus:            censusCompiledReactor(compiled, wasm),
 	}
 	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity, preparedRefillWorkers); err != nil {

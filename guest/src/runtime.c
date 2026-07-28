@@ -219,6 +219,20 @@ int32_t runtime_prepare(const char *source, int32_t source_len) {
     return 0;
 }
 
+__attribute__((export_name("runtime_warmup")))
+int32_t runtime_warmup(const char *profile, int32_t profile_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL) {
+        return -1;
+    }
+    PyObject *result = call_with_utf8("_warmup", profile, profile_len);
+    if (result == NULL) {
+        PyErr_Print();
+        return -1;
+    }
+    Py_DECREF(result);
+    return 0;
+}
+
 void *alloc(int32_t size) {
     if (size <= 0 || size > AGENT_RUNTIME_REQUEST_MAX) {
         return NULL;

@@ -43,6 +43,18 @@ func TestPreparedRefillWorkerCountIsExplicitAndBounded(t *testing.T) {
 	}
 }
 
+func TestCOWWarmupProfileIsAllowlistedAndCOWOnly(t *testing.T) {
+	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	for _, factory := range []engine.Factory{
+		{COWWarmupProfile: engine.COWWarmupRequestShellV1},
+		{PreparedCapacity: 1, Strategy: enginecontract.StrategyCOWReadySingleUse, COWWarmupProfile: "unknown"},
+	} {
+		if _, err := factory.New(context.Background(), wasm, runtime.DefaultRunConfig()); err == nil {
+			t.Fatalf("accepted invalid warmup factory: %+v", factory)
+		}
+	}
+}
+
 func TestExplicitCOWStrategyFailsBeforeCompileWhenPlatformUnsupported(t *testing.T) {
 	if goruntime.GOOS == "linux" {
 		t.Skip("Linux supports the cow-ready-single-use strategy")

@@ -17,6 +17,8 @@ type linuxCOWPreparedRuntime struct {
 	image            *cowImage
 	verifyDigest     *[sha256.Size]byte
 	canonicalGlobals preparedGlobalSnapshot
+	warmupProfile    string
+	warmupGeneration string
 }
 
 func cowReadyStrategySupported() bool { return true }
@@ -36,6 +38,18 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 		return nil, fmt.Errorf("prepare canonical COW image: %w", err)
 	}
 	defer canonical.module.Close(context.Background())
+	if engine.cowWarmupProfile != "" {
+		warmupContext, hostCallGuard := guardInitializationHostCalls(ctx)
+		warmupStarted := time.Now()
+		err = callStatusWithBytes(warmupContext, canonical.module, "runtime_warmup", []byte(engine.cowWarmupProfile))
+		observe(engine.observer, "cow_image_warmup", warmupStarted, err)
+		if err != nil {
+			return nil, withGuestDiagnostic(err, canonical.stderr.String())
+		}
+		if err := verifyNoInitializationHostCalls(hostCallGuard); err != nil {
+			return nil, err
+		}
+	}
 	memory := canonical.module.Memory()
 	if memory == nil || memory.Size() == 0 {
 		return nil, errors.New("canonical COW image has no linear memory")
@@ -52,7 +66,10 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if err != nil {
 		return nil, err
 	}
-	runtime := &linuxCOWPreparedRuntime{image: image, canonicalGlobals: canonicalGlobals}
+	runtime := &linuxCOWPreparedRuntime{
+		image: image, canonicalGlobals: canonicalGlobals,
+		warmupProfile: engine.cowWarmupProfile, warmupGeneration: engine.cowWarmupGeneration,
+	}
 	if engine.verifyCOWPreparedImage {
 		digest := sha256.Sum256(baseline)
 		runtime.verifyDigest = &digest
@@ -145,5 +162,8 @@ func (runtime *linuxCOWPreparedRuntime) preparedImageState() PreparedImageState 
 	if runtime == nil || runtime.image == nil {
 		return PreparedImageState{}
 	}
-	return runtime.image.preparedImageState()
+	state := runtime.image.preparedImageState()
+	state.WarmupProfile = runtime.warmupProfile
+	state.WarmupGenerationSHA256 = runtime.warmupGeneration
+	return state
 }

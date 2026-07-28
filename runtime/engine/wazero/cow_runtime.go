@@ -10,13 +10,15 @@ type cowPreparedRuntime interface {
 // PreparedImageState reports immutable baseline allocation facts. ZeroPages is
 // a measurement, not a promise that sparse storage will produce equal savings.
 type PreparedImageState struct {
-	Available            bool   `json:"available"`
-	VirtualBytes         uint64 `json:"virtual_bytes"`
-	AllocatedBytes       uint64 `json:"allocated_bytes"`
-	PageSizeBytes        uint64 `json:"page_size_bytes"`
-	ZeroPages            uint64 `json:"zero_pages"`
-	NonZeroPages         uint64 `json:"non_zero_pages"`
-	SparsePotentialBytes uint64 `json:"sparse_potential_bytes"`
+	Available              bool   `json:"available"`
+	VirtualBytes           uint64 `json:"virtual_bytes"`
+	AllocatedBytes         uint64 `json:"allocated_bytes"`
+	PageSizeBytes          uint64 `json:"page_size_bytes"`
+	ZeroPages              uint64 `json:"zero_pages"`
+	NonZeroPages           uint64 `json:"non_zero_pages"`
+	SparsePotentialBytes   uint64 `json:"sparse_potential_bytes"`
+	WarmupProfile          string `json:"warmup_profile,omitempty"`
+	WarmupGenerationSHA256 string `json:"warmup_generation_sha256,omitempty"`
 }
 
 type cowPreparedImageReporter interface {

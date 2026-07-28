@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -58,5 +59,29 @@ func TestCOWReadySingleUseProductionArtifactSupportsWASITimerWait(t *testing.T) 
 	}
 	if elapsed+time.Millisecond < 50*time.Millisecond {
 		t.Fatalf("WASI timer returned early: elapsed=%s", elapsed)
+	}
+}
+
+func TestCOWReadySingleUseProductionArtifactSupportsRequestShellWarmup(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 30 * time.Second
+	instance := newEngineWithFactory(t, config, wazeroengine.Factory{
+		PreparedCapacity: 2,
+		Strategy:         enginecontract.StrategyCOWReadySingleUse,
+		COWWarmupProfile: wazeroengine.COWWarmupRequestShellV1,
+	})
+	state := instance.(interface {
+		PreparedImageState() wazeroengine.PreparedImageState
+	}).PreparedImageState()
+	if state.WarmupProfile != wazeroengine.COWWarmupRequestShellV1 || len(state.WarmupGenerationSHA256) != 64 || strings.Trim(state.WarmupGenerationSHA256, "0123456789abcdef") != "" {
+		t.Fatalf("warmup generation metadata is invalid: %+v", state)
+	}
+	response := run(t, instance, "cow-warmup", "result = {'value': inputs['value'] + 1}", map[string]any{"value": 41})
+	if response.Status != "ok" {
+		t.Fatalf("warmup request returned guest error: %#v", response.Error)
+	}
+	result, ok := response.Result.(map[string]any)
+	if !ok || result["value"] != float64(42) {
+		t.Fatalf("unexpected warmup result: %#v", response.Result)
 	}
 }

@@ -24,6 +24,9 @@ int32_t runtime_init(const char *config, int32_t config_len);
 AGENT_RUNTIME_EXPORT("runtime_prepare")
 int32_t runtime_prepare(const char *source, int32_t source_len);
 
+AGENT_RUNTIME_EXPORT("runtime_warmup")
+int32_t runtime_warmup(const char *profile, int32_t profile_len);
+
 AGENT_RUNTIME_EXPORT("alloc")
 void *alloc(int32_t size);
 

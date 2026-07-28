@@ -11,6 +11,7 @@ _ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema"}
 _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
+_WARMUP_REQUEST_SHELL_V1 = "request-shell-v1"
 
 
 def _error(code: str, message: str, *, error_type: str | None = None, trace: str | None = None) -> dict[str, Any]:
@@ -46,6 +47,18 @@ def _prepare(source: str) -> None:
     exec(compile(source, "<trusted-prepare>", "exec"), namespace, namespace)
     global _prepared_globals
     _prepared_globals = namespace
+
+
+def _warmup(profile: str) -> None:
+    if profile != _WARMUP_REQUEST_SHELL_V1:
+        raise ValueError(f"unsupported warmup profile: {profile}")
+    # Prime deterministic request-shell paths without retaining request data,
+    # wall-clock values, random state, or Host effects in the snapshot.
+    request = json.loads('{"run_id":"warmup","code":"result = None","inputs":{}}')
+    code = compile(request["code"], "<warmup>", "exec")
+    namespace: dict[str, Any] = {"__builtins__": __builtins__, "inputs": request["inputs"]}
+    exec(code, namespace, namespace)
+    json.dumps({"status": "ok", "result": namespace.get("result")}, separators=(",", ":"), allow_nan=False)
 
 
 def _decode_request(request_json: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:

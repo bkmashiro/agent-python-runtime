@@ -140,3 +140,10 @@ func (runtime *linuxCOWPreparedRuntime) close() error {
 	}
 	return runtime.image.Close()
 }
+
+func (runtime *linuxCOWPreparedRuntime) preparedImageState() PreparedImageState {
+	if runtime == nil || runtime.image == nil {
+		return PreparedImageState{}
+	}
+	return runtime.image.preparedImageState()
+}

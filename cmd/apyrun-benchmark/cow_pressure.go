@@ -44,6 +44,7 @@ type cowPressureSnapshot struct {
 	Process          runtimeevidence.ProcessMetrics   `json:"process"`
 	COWMappings      runtimeevidence.MappingMetrics   `json:"cow_mappings"`
 	Pool             wazeroengine.PreparedPoolState   `json:"pool"`
+	PreparedImage    wazeroengine.PreparedImageState  `json:"prepared_image"`
 	GoRuntime        runtimeevidence.GoRuntimeMetrics `json:"go_runtime"`
 	Cgroup           runtimeevidence.CgroupMetrics    `json:"cgroup"`
 }
@@ -100,10 +101,11 @@ type growablePreparedBenchmarkRunner interface {
 	PreparedCapacity() uint32
 	PreparedRefillWorkers() uint32
 	PreparedPoolState() wazeroengine.PreparedPoolState
+	PreparedImageState() wazeroengine.PreparedImageState
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 3 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 4 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -114,12 +116,16 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure limits or spawn evidence is incomplete")
 	}
 	previousSlots := uint32(0)
+	preparedImage := evidence.Spawn[0].PreparedImage
+	if !validPreparedImageState(preparedImage) {
+		return errors.New("cow-pressure prepared image census is invalid")
+	}
 	for index, snapshot := range evidence.Spawn {
 		growth := snapshot.Slots - previousSlots
 		if snapshot.Slots <= previousSlots || growth%pressureInitialCapacity != 0 || growth > pressureMaxGrowthStep ||
 			(index == 0 && snapshot.Slots != pressureInitialCapacity) || snapshot.Phase != "spawn" || snapshot.RuntimeInstances != 1 ||
 			snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || snapshot.COWMappings.MappingCount != snapshot.Slots ||
-			!validPressurePoolState(snapshot.Pool, snapshot.Slots) {
+			!validPressurePoolState(snapshot.Pool, snapshot.Slots) || snapshot.PreparedImage != preparedImage {
 			return errors.New("cow-pressure single-runtime growth sequence or mapping identity drifted")
 		}
 		pss, err := measuredValue(snapshot.Process.PSSBytes, "spawn process PSS")
@@ -151,10 +157,17 @@ func (evidence cowPressureEvidence) Validate() error {
 	snapshot := evidence.LoadSamples[0]
 	if snapshot.Phase != "load-final" || snapshot.Slots != lastSlots || snapshot.RuntimeInstances != 1 ||
 		snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) ||
-		!validPressurePoolState(snapshot.Pool, lastSlots) {
+		!validPressurePoolState(snapshot.Pool, lastSlots) || snapshot.PreparedImage != preparedImage {
 		return errors.New("cow-pressure final mapping identity drifted")
 	}
 	return nil
+}
+
+func validPreparedImageState(state wazeroengine.PreparedImageState) bool {
+	return state.Available && state.VirtualBytes > 0 && state.AllocatedBytes > 0 && state.AllocatedBytes <= state.VirtualBytes &&
+		state.PageSizeBytes > 0 && state.VirtualBytes%state.PageSizeBytes == 0 &&
+		state.ZeroPages+state.NonZeroPages == state.VirtualBytes/state.PageSizeBytes &&
+		state.SparsePotentialBytes == state.ZeroPages*state.PageSizeBytes
 }
 
 func validPressurePoolState(state wazeroengine.PreparedPoolState, slots uint32) bool {
@@ -415,7 +428,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 3, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 4, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
@@ -465,7 +478,7 @@ func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, runner
 	}
 	return cowPressureSnapshot{
 		Phase: phase, Slots: slots, RuntimeInstances: 1, ObservedNS: uint64(time.Now().UnixNano()),
-		Process: process.Process, COWMappings: mappings, Pool: runner.PreparedPoolState(), GoRuntime: goMetrics, Cgroup: cgroup,
+		Process: process.Process, COWMappings: mappings, Pool: runner.PreparedPoolState(), PreparedImage: runner.PreparedImageState(), GoRuntime: goMetrics, Cgroup: cgroup,
 	}, nil
 }
 

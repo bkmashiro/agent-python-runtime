@@ -6,3 +6,30 @@ type cowPreparedRuntime interface {
 	prepare(context.Context, *Engine, string) (*preparedInstance, error)
 	close() error
 }
+
+// PreparedImageState reports immutable baseline allocation facts. ZeroPages is
+// a measurement, not a promise that sparse storage will produce equal savings.
+type PreparedImageState struct {
+	Available            bool   `json:"available"`
+	VirtualBytes         uint64 `json:"virtual_bytes"`
+	AllocatedBytes       uint64 `json:"allocated_bytes"`
+	PageSizeBytes        uint64 `json:"page_size_bytes"`
+	ZeroPages            uint64 `json:"zero_pages"`
+	NonZeroPages         uint64 `json:"non_zero_pages"`
+	SparsePotentialBytes uint64 `json:"sparse_potential_bytes"`
+}
+
+type cowPreparedImageReporter interface {
+	preparedImageState() PreparedImageState
+}
+
+func (engine *Engine) PreparedImageState() PreparedImageState {
+	if engine == nil || engine.cowRuntime == nil {
+		return PreparedImageState{}
+	}
+	reporter, ok := engine.cowRuntime.(cowPreparedImageReporter)
+	if !ok {
+		return PreparedImageState{}
+	}
+	return reporter.preparedImageState()
+}

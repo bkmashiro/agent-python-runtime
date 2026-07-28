@@ -21,6 +21,14 @@ func TestCOWImagePrivateMappingsIsolateAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	state := image.preparedImageState()
+	pageSize := uint64(unix.Getpagesize())
+	wantPages := uint64(len(baseline)) / pageSize
+	if !state.Available || state.VirtualBytes != uint64(len(baseline)) || state.PageSizeBytes != pageSize ||
+		state.ZeroPages != wantPages-2 || state.NonZeroPages != 2 || state.SparsePotentialBytes != (wantPages-2)*pageSize ||
+		state.AllocatedBytes == 0 || state.AllocatedBytes > state.VirtualBytes {
+		t.Fatalf("unexpected prepared image state: %+v", state)
+	}
 	firstAllocator := image.newAllocator()
 	secondAllocator := image.newAllocator()
 	first := firstAllocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize)

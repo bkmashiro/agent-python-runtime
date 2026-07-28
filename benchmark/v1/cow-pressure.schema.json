@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json",
-  "title": "COW pressure evidence v3",
+  "title": "COW pressure evidence v4",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
   "properties": {
-    "schema_version": {"const": 3},
+    "schema_version": {"const": 4},
     "evidence_kind": {"const": "cow-pressure"},
     "evidence_class": {"const": "production-safe"},
     "artifact": {"$ref": "#/$defs/artifact"},
@@ -96,6 +96,16 @@
         "consecutive_failures": {"type": "integer", "minimum": 0}, "total_failures": {"type": "integer", "minimum": 0}, "breaker_open": {"type": "boolean"}
       }
     },
+    "preparedImage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["available", "virtual_bytes", "allocated_bytes", "page_size_bytes", "zero_pages", "non_zero_pages", "sparse_potential_bytes"],
+      "properties": {
+        "available": {"const": true}, "virtual_bytes": {"type": "integer", "minimum": 65536},
+        "allocated_bytes": {"type": "integer", "minimum": 1}, "page_size_bytes": {"type": "integer", "minimum": 1},
+        "zero_pages": {"type": "integer", "minimum": 0}, "non_zero_pages": {"type": "integer", "minimum": 0},
+        "sparse_potential_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
     "histogram": {
       "oneOf": [
         {"type": "object", "additionalProperties": false, "required": ["status", "upper_bounds_ns", "counts"], "properties": {"status": {"const": "measured"}, "upper_bounds_ns": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}}, "counts": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}}}},
@@ -122,12 +132,13 @@
     },
     "snapshot": {
       "type": "object", "additionalProperties": false,
-      "required": ["phase", "slots", "runtime_instances", "observed_unix_ns", "process", "cow_mappings", "pool", "go_runtime", "cgroup"],
+      "required": ["phase", "slots", "runtime_instances", "observed_unix_ns", "process", "cow_mappings", "pool", "prepared_image", "go_runtime", "cgroup"],
       "properties": {
         "phase": {"enum": ["spawn", "load-final"]}, "slots": {"type": "integer", "minimum": 4, "maximum": 4096, "multipleOf": 4},
         "runtime_instances": {"const": 1}, "observed_unix_ns": {"type": "integer", "minimum": 1},
         "process": {"$ref": "#/$defs/process"}, "cow_mappings": {"$ref": "#/$defs/mappings"},
-        "pool": {"$ref": "#/$defs/pool"}, "go_runtime": {"$ref": "#/$defs/goRuntime"}, "cgroup": {"$ref": "#/$defs/cgroup"}
+        "pool": {"$ref": "#/$defs/pool"}, "prepared_image": {"$ref": "#/$defs/preparedImage"},
+        "go_runtime": {"$ref": "#/$defs/goRuntime"}, "cgroup": {"$ref": "#/$defs/cgroup"}
       }
     },
     "load": {

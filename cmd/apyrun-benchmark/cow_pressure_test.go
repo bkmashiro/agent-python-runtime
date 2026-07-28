@@ -63,11 +63,12 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 		MemoryEventsHighTotal: unavailable, MemoryEventsOOMTotal: unavailable, MemoryEventsOOMKillTotal: unavailable,
 		PressureSomeTotalUS: unavailable, PressureFullTotalUS: unavailable,
 	}
-	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, RuntimeInstances: 1, ObservedNS: 1, Process: process, COWMappings: mappings, Pool: pool, GoRuntime: goMetrics, Cgroup: cgroup}
+	image := wazeroengine.PreparedImageState{Available: true, VirtualBytes: 65536, AllocatedBytes: 65536, PageSizeBytes: 4096, ZeroPages: 8, NonZeroPages: 8, SparsePotentialBytes: 32768}
+	spawn := cowPressureSnapshot{Phase: "spawn", Slots: 4, RuntimeInstances: 1, ObservedNS: 1, Process: process, COWMappings: mappings, Pool: pool, PreparedImage: image, GoRuntime: goMetrics, Cgroup: cgroup}
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 3, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 4, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},

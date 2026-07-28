@@ -3,6 +3,7 @@
 package wazero
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"sync"
@@ -25,18 +26,35 @@ const wasmLinearPageSize = 64 * 1024
 const requiredCOWSeals = unix.F_SEAL_SEAL | unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE
 
 type cowImage struct {
-	mu       sync.Mutex
-	fd       int
-	size     uint64
-	device   uint64
-	inode    uint64
-	mappings int
-	closed   bool
+	mu           sync.Mutex
+	fd           int
+	size         uint64
+	device       uint64
+	inode        uint64
+	mappings     int
+	closed       bool
+	pageSize     uint64
+	zeroPages    uint64
+	nonZeroPages uint64
 }
 
 func newCOWImage(baseline []byte) (*cowImage, error) {
 	if len(baseline) == 0 || len(baseline)%wasmLinearPageSize != 0 {
 		return nil, errors.New("COW image baseline must contain whole Wasm pages")
+	}
+	pageSize := unix.Getpagesize()
+	zeroPage := make([]byte, pageSize)
+	var zeroPages, nonZeroPages uint64
+	for offset := 0; offset < len(baseline); offset += pageSize {
+		end := offset + pageSize
+		if end > len(baseline) {
+			end = len(baseline)
+		}
+		if bytes.Equal(baseline[offset:end], zeroPage[:end-offset]) {
+			zeroPages++
+		} else {
+			nonZeroPages++
+		}
 	}
 	fd, err := unix.MemfdCreate("apyrun-cow-image", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
 	if err != nil {
@@ -72,7 +90,31 @@ func newCOWImage(baseline []byte) (*cowImage, error) {
 		return nil, fmt.Errorf("%w: invalid initial file shape", errCOWImageIdentity)
 	}
 	failed = false
-	return &cowImage{fd: fd, size: uint64(len(baseline)), device: uint64(stat.Dev), inode: stat.Ino}, nil
+	return &cowImage{
+		fd: fd, size: uint64(len(baseline)), device: uint64(stat.Dev), inode: stat.Ino,
+		pageSize: uint64(pageSize), zeroPages: zeroPages, nonZeroPages: nonZeroPages,
+	}, nil
+}
+
+func (image *cowImage) preparedImageState() PreparedImageState {
+	image.mu.Lock()
+	defer image.mu.Unlock()
+	if image.closed {
+		return PreparedImageState{}
+	}
+	var stat unix.Stat_t
+	if err := unix.Fstat(image.fd, &stat); err != nil {
+		return PreparedImageState{}
+	}
+	var allocated uint64
+	if stat.Blocks > 0 {
+		allocated = uint64(stat.Blocks) * 512
+	}
+	return PreparedImageState{
+		Available: true, VirtualBytes: image.size, AllocatedBytes: allocated,
+		PageSizeBytes: image.pageSize, ZeroPages: image.zeroPages, NonZeroPages: image.nonZeroPages,
+		SparsePotentialBytes: image.zeroPages * image.pageSize,
+	}
 }
 
 func (image *cowImage) newAllocator() *cowAllocator {

@@ -96,7 +96,9 @@ func (binder *CoordinatorBinder) Complete(_ context.Context, bound BoundOperatio
 		return errors.New("bound completion identity mismatch")
 	}
 	dispatchOutcome := transaction.DispatchFailed
-	if outcome.Status == StatusOK && outcome.ErrorCode == "" {
+	if outcome.Ambiguous {
+		dispatchOutcome = transaction.DispatchAmbiguous
+	} else if outcome.Status == StatusOK && outcome.ErrorCode == "" {
 		dispatchOutcome = transaction.DispatchSucceeded
 	}
 	_, err := binder.coordinator.CompleteDispatch(transaction.CompleteDispatchRequest{

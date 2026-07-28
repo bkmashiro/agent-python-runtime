@@ -54,6 +54,7 @@ type BoundOutcome struct {
 	Status       Status
 	ResultDigest string
 	ErrorCode    string
+	Ambiguous    bool
 }
 
 type CallBinder interface {
@@ -68,9 +69,10 @@ type Handler interface {
 type HandlerFunc func(context.Context, HostCall) (json.RawMessage, error)
 
 type HandlerFailure struct {
-	code    string
-	message string
-	cause   error
+	code      string
+	message   string
+	cause     error
+	ambiguous bool
 }
 
 func NewHandlerFailure(code, message string, cause error) error {
@@ -78,6 +80,17 @@ func NewHandlerFailure(code, message string, cause error) error {
 		return errors.New("invalid classified Host handler failure")
 	}
 	return &HandlerFailure{code: code, message: message, cause: cause}
+}
+
+// NewAmbiguousHandlerFailure reports that provider dispatch may have committed.
+// The transaction must be reconciled and must not be blindly retried.
+func NewAmbiguousHandlerFailure(code, message string, cause error) error {
+	failure, ok := NewHandlerFailure(code, message, cause).(*HandlerFailure)
+	if !ok {
+		return errors.New("invalid ambiguous Host handler failure")
+	}
+	failure.ambiguous = true
+	return failure
 }
 
 func (failure *HandlerFailure) Error() string { return failure.message }
@@ -334,31 +347,37 @@ func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (
 		status := StatusError
 		code := "handler_failed"
 		message := "Host tool handler failed"
+		ambiguous := false
 		var classified *HandlerFailure
 		if errors.As(handlerErr, &classified) {
-			code, message = classified.code, classified.message
+			code, message, ambiguous = classified.code, classified.message, classified.ambiguous
 		}
-		if errors.Is(handlerErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if ambiguous {
+			code, message = "reconciliation_required", "Host tool outcome requires reconciliation"
+		} else if errors.Is(handlerErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status, code, message = StatusTimeout, "handler_timeout", "Host tool handler timed out"
 		}
-		return broker.finishRegistered(ctx, request, bound, status, nil, nil, code, message)
+		return broker.finishRegistered(ctx, request, bound, status, nil, nil, ambiguous, code, message)
 	}
 	if len(result) == 0 || len(result) > registryMaxPayloadBytes || !json.Valid(result) ||
 		validateHandlerArguments(handler.outputSchema, result) != nil {
-		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, "result_schema_mismatch", "Host tool handler returned a result outside its registered schema")
+		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, false, "result_schema_mismatch", "Host tool handler returned a result outside its registered schema")
 	}
 	if !validReceiptDrafts(drafts) {
-		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, "handler_evidence_invalid", "Host tool handler returned invalid receipt evidence")
+		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, false, "handler_evidence_invalid", "Host tool handler returned invalid receipt evidence")
 	}
-	return broker.finishRegistered(ctx, request, bound, StatusOK, result, drafts, "", "")
+	return broker.finishRegistered(ctx, request, bound, StatusOK, result, drafts, false, "", "")
 }
 
-func (broker *Broker) finishRegistered(ctx context.Context, request toolRequest, bound BoundOperation, status Status, result json.RawMessage, drafts []ReceiptDraft, code, message string) ([]byte, error) {
-	outcome := BoundOutcome{Status: status, ErrorCode: code}
+func (broker *Broker) finishRegistered(ctx context.Context, request toolRequest, bound BoundOperation, status Status, result json.RawMessage, drafts []ReceiptDraft, ambiguous bool, code, message string) ([]byte, error) {
+	outcome := BoundOutcome{Status: status, ErrorCode: code, Ambiguous: ambiguous}
 	if result != nil {
 		outcome.ResultDigest = digestBytes(result)
 	}
 	receiptStatus := status
+	if ambiguous {
+		receiptStatus = Status("reconciliation_required")
+	}
 	if err := broker.config.Binder.Complete(ctx, bound, outcome); err != nil {
 		receiptStatus = Status("reconciliation_required")
 		status, result, code, message = StatusError, nil, "reconciliation_required", "Host transaction completion requires reconciliation"

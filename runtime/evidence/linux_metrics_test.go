@@ -8,6 +8,17 @@ import (
 	"testing"
 )
 
+func TestLinuxCollectorTargetsExplicitProcess(t *testing.T) {
+	collector := LinuxCollector{ProcRoot: "/proc", ProcessID: 1234}
+	if got := collector.processPath("status"); got != "/proc/1234/status" {
+		t.Fatalf("process path=%q", got)
+	}
+	collector.ProcessID = 0
+	if got := collector.processPath("status"); got != "/proc/self/status" {
+		t.Fatalf("self path=%q", got)
+	}
+}
+
 func TestLinuxCollectorAggregatesNamedCOWMappings(t *testing.T) {
 	root := t.TempDir()
 	procRoot := filepath.Join(root, "proc")

@@ -28,6 +28,16 @@ type LinuxMetricSnapshot struct {
 type LinuxCollector struct {
 	ProcRoot   string
 	CgroupRoot string
+	// ProcessID selects a process under ProcRoot. Zero preserves /proc/self.
+	ProcessID int
+}
+
+func (collector LinuxCollector) processPath(name string) string {
+	identity := "self"
+	if collector.ProcessID > 0 {
+		identity = strconv.Itoa(collector.ProcessID)
+	}
+	return filepath.Join(collector.ProcRoot, identity, name)
 }
 
 func DefaultLinuxCollector() LinuxCollector {
@@ -46,7 +56,7 @@ func (collector LinuxCollector) Collect() (LinuxMetricSnapshot, error) {
 	if kernelRelease == "" {
 		return LinuxMetricSnapshot{}, errors.New("kernel release is empty")
 	}
-	status, err := readLinuxMetricFile(filepath.Join(collector.ProcRoot, "self/status"))
+	status, err := readLinuxMetricFile(collector.processPath("status"))
 	if err != nil {
 		return LinuxMetricSnapshot{}, fmt.Errorf("read proc status: %w", err)
 	}
@@ -75,11 +85,11 @@ func (collector LinuxCollector) Collect() (LinuxMetricSnapshot, error) {
 	if err != nil {
 		return LinuxMetricSnapshot{}, err
 	}
-	fdCount, err := countOpenFileDescriptors(filepath.Join(collector.ProcRoot, "self/fd"))
+	fdCount, err := countOpenFileDescriptors(collector.processPath("fd"))
 	if err != nil {
 		return LinuxMetricSnapshot{}, fmt.Errorf("count proc file descriptors: %w", err)
 	}
-	vmaCount, err := countNonemptyLines(filepath.Join(collector.ProcRoot, "self/maps"))
+	vmaCount, err := countNonemptyLines(collector.processPath("maps"))
 	if err != nil {
 		return LinuxMetricSnapshot{}, fmt.Errorf("count proc VMAs: %w", err)
 	}
@@ -116,7 +126,7 @@ func (collector LinuxCollector) Collect() (LinuxMetricSnapshot, error) {
 }
 
 func (collector LinuxCollector) collectFaults() (uint64, uint64, error) {
-	content, err := readLinuxMetricFile(filepath.Join(collector.ProcRoot, "self/stat"))
+	content, err := readLinuxMetricFile(collector.processPath("stat"))
 	if err != nil {
 		return 0, 0, fmt.Errorf("read proc stat: %w", err)
 	}
@@ -141,7 +151,7 @@ func (collector LinuxCollector) collectFaults() (uint64, uint64, error) {
 }
 
 func (collector LinuxCollector) collectSMAPSRollup() (Metric, Metric, Metric) {
-	content, err := readLinuxMetricFile(filepath.Join(collector.ProcRoot, "self/smaps_rollup"))
+	content, err := readLinuxMetricFile(collector.processPath("smaps_rollup"))
 	if err != nil {
 		reason := reasonFromSourceError(err)
 		return unavailableMetricValue(reason), unavailableMetricValue(reason), unavailableMetricValue(reason)
@@ -166,7 +176,7 @@ func (collector LinuxCollector) CollectNamedMappings(name string) (MappingMetric
 	if name == "" || len(name) > 128 || strings.TrimSpace(name) != name || strings.ContainsAny(name, "/\r\n") {
 		return MappingMetrics{}, errors.New("Linux mapping name is invalid")
 	}
-	file, err := os.Open(filepath.Join(collector.ProcRoot, "self/smaps"))
+	file, err := os.Open(collector.processPath("smaps"))
 	if err != nil {
 		return MappingMetrics{}, fmt.Errorf("open proc smaps: %w", err)
 	}
@@ -266,7 +276,7 @@ func smapsHeaderPath(line string) (string, bool) {
 }
 
 func (collector LinuxCollector) collectCgroup() (CgroupMetrics, error) {
-	content, err := readLinuxMetricFile(filepath.Join(collector.ProcRoot, "self/cgroup"))
+	content, err := readLinuxMetricFile(collector.processPath("cgroup"))
 	if err != nil {
 		return CgroupMetrics{}, fmt.Errorf("read proc cgroup: %w", err)
 	}
@@ -302,7 +312,7 @@ func (collector LinuxCollector) collectCgroup() (CgroupMetrics, error) {
 // of whether the scope is shared. Scope remains explicit, so callers cannot
 // treat shared job-level values as process attribution.
 func (collector LinuxCollector) CollectOperationalCgroup() (CgroupMetrics, error) {
-	content, err := readLinuxMetricFile(filepath.Join(collector.ProcRoot, "self/cgroup"))
+	content, err := readLinuxMetricFile(collector.processPath("cgroup"))
 	if err != nil {
 		return CgroupMetrics{}, fmt.Errorf("read proc cgroup: %w", err)
 	}

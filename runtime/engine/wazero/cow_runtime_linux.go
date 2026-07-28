@@ -62,7 +62,9 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if err != nil {
 		return nil, err
 	}
+	imageStarted := time.Now()
 	image, err := newCOWImage(baseline)
+	observe(engine.observer, "cow_image_seal", imageStarted, err)
 	if err != nil {
 		return nil, err
 	}

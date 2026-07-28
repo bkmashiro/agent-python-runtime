@@ -149,6 +149,19 @@ go run ./cmd/apyrun-benchmark \
 
 For `cow-ready-single-use`, lifecycle-density additionally requires mapping-attributed `/proc/self/smaps` evidence for every `memfd:apyrun-cow-image` VMA. The aggregate records virtual bytes, RSS, PSS, shared/private clean/dirty bytes, referenced bytes, and anonymous bytes. A sealed memfd/shmem page can appear as `Private_Dirty` when it has one mapping and as `Shared_Dirty` after another mapping is added; that map-count classification is not proof of a private COW copy. `Anonymous` plus phase-attributed mutation evidence is the safer signal for private MAP_PRIVATE pages. Logical retained guest bytes and mapping RSS are not physical-capacity measurements.
 
+## Process fixed-cost attribution
+
+`apyrun-memory-probe` isolates each `0,1,4,64` slot control in a fresh child and pauses it at `process-start`, `artifact-loaded`, Host instantiation, compile, canonical guest initialization, sealed-image creation, and final ready capacity. The parent—not the measured child—collects `/proc/<pid>/status`, `smaps_rollup`, `maps`, `fd`, faults, and named COW mappings before releasing each checkpoint:
+
+```bash
+apyrun-memory-probe \
+  -artifact /absolute/path/agent-python-runtime.wasm \
+  -output /absolute/private/path/cow-memory-attribution.json \
+  -slots 0,1,4,64
+```
+
+The output is written with mode `0600`. Full `smaps` parsing occurs only while the child is paused, never in timed execution or refill paths. Slot zero still constructs the Host runtime and compiled module but does not create a canonical COW image; later controls expose canonical-image and marginal ready-slot effects. Differences remain mechanism attribution for that exact binary/artifact/kernel, not a production capacity claim.
+
 ## Bounded COW pressure evidence
 
 [`benchmark/v1/cow-pressure.schema.json`](../benchmark/v1/cow-pressure.schema.json) defines the machine-readable extreme-test envelope. Schema v4 owns one bounded wazero Runtime, one compiled module, and one sealed baseline for every admitted COW slot. The Linux baseline writer preserves all-zero native pages as sealed memfd holes and coalesces contiguous non-zero pages into write extents; reads from holes remain canonical zero bytes. Optional warmup profiles are artifact-owned guest handlers selected by `wazero.Factory.COWWarmupProfile`; Host code accepts only a bounded lowercase profile ID, never arbitrary Python source or an external raw-memory image. Artifact builders register a deterministic handler with `agent_runtime.register_warmup_profile("name.v1", handler)` during guest bootstrap, and the guest rejects unknown profiles. The Host executes the selected profile only on the canonical module after `_initialize` and `runtime_init`, blocks capability calls, and binds the verified artifact bytes plus exact profile ID into the prepared-image generation digest. Empty profile remains the production default. Slots still instantiate a fresh module shell before attaching the sealed linear-memory image. Each phase snapshot binds the immutable prepared-image census: virtual and allocated bytes, Linux page size, zero/non-zero page counts, and the theoretical sparse-storage upper bound. It begins with four slots, doubles bounded growth batches, and caps each later admission step at 64 slots up to the configured hard maximum. These are accounting batches, not runtime shards. Served slots are destroyed and replenished through a deficit-deduplicated queue with ordered watermarks and a bounded retry/breaker policy. Phase-boundary snapshots include pool lifecycle gauges, Go heap/GC/scheduler metrics, process faults and `VmPTE`, scoped raw cgroup memory/events/PSI counters, and mapping-attributed `smaps`. Shared cgroup values remain job-boundary observations, not process attribution.

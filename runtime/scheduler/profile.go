@@ -286,6 +286,28 @@ func (store *ProfileStore) ForgetAttempt(attemptID string) {
 	store.mu.Unlock()
 }
 
+func (store *ProfileStore) CurrentReservationQuantileBPS() uint32 {
+	if store == nil {
+		return 0
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.config.ReservationQuantileBPS
+}
+
+func (store *ProfileStore) compareAndSwapReservationQuantile(previous, next uint32) error {
+	if store == nil || next == 0 || next > 10000 {
+		return ErrInvalidConfig
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.config.ReservationQuantileBPS != previous {
+		return ErrConflict
+	}
+	store.config.ReservationQuantileBPS = next
+	return nil
+}
+
 func (store *ProfileStore) Snapshot() ProfileStoreSnapshot {
 	if store == nil {
 		return ProfileStoreSnapshot{}

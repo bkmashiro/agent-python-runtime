@@ -47,6 +47,37 @@ func (immediateRunner) Properties() engine.Properties {
 	return engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance}
 }
 
+type successfulOnCancelRunner struct{ started chan struct{} }
+
+func (runner *successfulOnCancelRunner) Run(ctx context.Context, _ []byte, _ string) ([]byte, error) {
+	close(runner.started)
+	<-ctx.Done()
+	return []byte("finished"), nil
+}
+func (*successfulOnCancelRunner) Close(context.Context) error { return nil }
+func (*successfulOnCancelRunner) Properties() engine.Properties {
+	return engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance}
+}
+
+func TestInProcessWorkerTreatsSuccessfulReturnAfterCancelAsCompletionWon(t *testing.T) {
+	runner := &successfulOnCancelRunner{started: make(chan struct{})}
+	worker, err := NewInProcessWorker(runner, WorkerConfig{MaxActive: 1, MaxRequestBytes: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.Start(context.Background(), ExecutionRequest{AttemptID: "attempt:success-race", Request: []byte("request")}); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	termination, err := worker.Cancel(context.Background(), "attempt:success-race")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !termination.CompletionWon || string(termination.Result.Response) != "finished" || termination.Result.Err != nil {
+		t.Fatalf("termination=%#v", termination)
+	}
+}
+
 func TestInProcessWorkerCancellationReportsCompletedRace(t *testing.T) {
 	runner := immediateRunner{}
 	worker, err := NewInProcessWorker(runner, WorkerConfig{MaxActive: 1, MaxRequestBytes: 64})

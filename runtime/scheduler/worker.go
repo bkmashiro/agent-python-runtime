@@ -197,6 +197,7 @@ func (worker *InProcessWorker) Cancel(ctx context.Context, attemptID string) (Te
 		if !ok {
 			return Termination{}, ErrConflict
 		}
+		completionWon = completionWon || result.Err == nil
 		return Termination{AttemptID: attemptID, ExecutorTerminated: true, CompletionWon: completionWon, Result: result}, nil
 	case <-ctx.Done():
 		return Termination{}, ctx.Err()

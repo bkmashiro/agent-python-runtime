@@ -21,18 +21,53 @@ func (function attemptFootprintSamplerFunc) SampleActiveFootprint(attemptID stri
 }
 
 type orderedReclaimTracker struct {
-	tracked  bool
-	captured bool
+	tracked   bool
+	captured  bool
+	forgotten bool
 }
 
 func (tracker *orderedReclaimTracker) Track(string) error { tracker.tracked = true; return nil }
-func (*orderedReclaimTracker) Forget(string)              {}
+func (tracker *orderedReclaimTracker) Forget(string)      { tracker.forgotten = true }
 func (tracker *orderedReclaimTracker) CaptureFootprint(enginecontract.FootprintObservation) error {
 	if !tracker.tracked {
 		return ErrConflict
 	}
 	tracker.captured = true
 	return nil
+}
+
+func TestCoordinatedVictimDispatcherResolvesMissingActiveSampleAsCompletion(t *testing.T) {
+	scheduler, err := New(testConfig(time.Now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := submitRunning(t, scheduler, TaskSpec{TaskID: "task:finished", ProfileKey: "profile", Lane: LaneSpeculative, ReservationBytes: 40, MaxEvictions: 1})
+	victims, err := scheduler.RequestEvictions(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracker := &orderedReclaimTracker{}
+	dispatcher, err := NewCoordinatedVictimDispatcher(CoordinatedVictimDispatcherConfig{
+		Scheduler: scheduler, Tracker: tracker,
+		Sampler: attemptFootprintSamplerFunc(func(string) (enginecontract.FootprintObservation, error) {
+			return enginecontract.FootprintObservation{}, enginecontract.ErrActiveFootprintNotFound
+		}),
+		Canceler: attemptCancelerFunc(func(context.Context, string) (Termination, error) {
+			return Termination{AttemptID: attempt.AttemptID, ExecutorTerminated: true, CompletionWon: true}, nil
+		}),
+		Observer: reclaimObserverFunc(func(context.Context, Termination) (ReclaimReport, error) {
+			return ReclaimReport{}, ErrConflict
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatcher.Dispatch(context.Background(), victims); err != nil {
+		t.Fatal(err)
+	}
+	if !tracker.forgotten || scheduler.Snapshot().ReservedBytes != 0 {
+		t.Fatalf("tracker=%#v snapshot=%#v", tracker, scheduler.Snapshot())
+	}
 }
 
 func TestCoordinatedVictimDispatcherSamplesBeforeCancellation(t *testing.T) {

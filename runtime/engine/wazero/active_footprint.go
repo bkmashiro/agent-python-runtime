@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	errActiveFootprintNotFound = errors.New("active footprint attempt not found")
+	errActiveFootprintNotFound = enginecontract.ErrActiveFootprintNotFound
 	errActiveFootprintConflict = errors.New("active footprint attempt already registered")
 )
 

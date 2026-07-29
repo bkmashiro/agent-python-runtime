@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
@@ -72,17 +73,23 @@ func (dispatcher *CoordinatedVictimDispatcher) Dispatch(ctx context.Context, vic
 		}
 		if dispatcher.sampler != nil {
 			observation, err := dispatcher.sampler.SampleActiveFootprint(victim.AttemptID)
-			if err != nil {
+			if err != nil && !errors.Is(err, enginecontract.ErrActiveFootprintNotFound) {
 				dispatcher.tracker.Forget(victim.AttemptID)
 				return fmt.Errorf("sample victim %s: %w", victim.AttemptID, err)
 			}
-			if err := dispatcher.tracker.CaptureFootprint(observation); err != nil {
-				dispatcher.tracker.Forget(victim.AttemptID)
-				return fmt.Errorf("capture victim %s: %w", victim.AttemptID, err)
+			if err == nil {
+				if err := dispatcher.tracker.CaptureFootprint(observation); err != nil {
+					dispatcher.tracker.Forget(victim.AttemptID)
+					return fmt.Errorf("capture victim %s: %w", victim.AttemptID, err)
+				}
 			}
 		}
-		if _, err := dispatcher.scheduler.EvictAttempt(ctx, dispatcher.canceler, dispatcher.observer, victim.AttemptID); err != nil {
+		task, err := dispatcher.scheduler.EvictAttempt(ctx, dispatcher.canceler, dispatcher.observer, victim.AttemptID)
+		if err != nil {
 			return fmt.Errorf("dispatch victim %s: %w", victim.AttemptID, err)
+		}
+		if task.State == TaskCompleted && dispatcher.tracker != nil {
+			dispatcher.tracker.Forget(victim.AttemptID)
 		}
 	}
 	return nil

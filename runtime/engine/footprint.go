@@ -10,6 +10,7 @@ var (
 	ErrInvalidAttemptIdentity      = errors.New("invalid Host attempt identity")
 	ErrInvalidFootprintObservation = errors.New("invalid memory footprint observation")
 	ErrInvalidReclaimObservation   = errors.New("invalid memory reclaim observation")
+	ErrActiveFootprintNotFound     = errors.New("active footprint attempt not found")
 )
 
 type attemptIdentityContextKey struct{}

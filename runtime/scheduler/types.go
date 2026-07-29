@@ -38,6 +38,7 @@ type AttemptState string
 
 const (
 	AttemptAdmitted          AttemptState = "admitted"
+	AttemptAdmissionReleased AttemptState = "admission_released"
 	AttemptRunning           AttemptState = "running"
 	AttemptPinned            AttemptState = "pinned"
 	AttemptEvictionRequested AttemptState = "eviction_requested"

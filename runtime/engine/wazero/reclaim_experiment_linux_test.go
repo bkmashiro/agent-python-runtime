@@ -17,12 +17,8 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
-	wabinbinary "github.com/tetratelabs/wabin/binary"
-	wabinwasm "github.com/tetratelabs/wabin/wasm"
 	"golang.org/x/sys/unix"
 )
-
-const e1MemoryPages = uint32(256)
 
 type e1ObservationSink struct {
 	mu         sync.Mutex
@@ -99,7 +95,7 @@ func TestEngineCancellationUnmapsServedCOWSlot(t *testing.T) {
 		PreparedMaxCapacity: 1,
 		Strategy:            enginecontract.StrategyCOWReadySingleUse,
 		ReclaimSink:         sink,
-	}).New(context.Background(), e1DirtyLoopReactor(dirtyPercent), runtimeconfig.DefaultRunConfig())
+	}).New(context.Background(), e1DirtyLoopReactor(dirtyPercent, uint64(unix.Getpagesize())), runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,70 +252,6 @@ func quantilesE1(samples []e1Sample, selectValue func(e1Sample) int64) e1Quantil
 		return values[rank-1]
 	}
 	return e1Quantiles{P50: pick(50), P95: pick(95), P99: pick(99), Max: values[len(values)-1]}
-}
-
-func e1DirtyLoopReactor(dirtyPercent int) []byte {
-	i32 := wabinwasm.ValueTypeI32
-	executeBody := make([]byte, 0, 64*1024)
-	memoryBytes := uint64(e1MemoryPages) * wasmLinearPageSize
-	pageSize := uint64(unix.Getpagesize())
-	dirtyPages := (memoryBytes * uint64(dirtyPercent) / 100) / pageSize
-	for page := uint64(0); page < dirtyPages; page++ {
-		executeBody = append(executeBody, byte(wabinwasm.OpcodeI32Const))
-		executeBody = appendUnsignedLEB128(executeBody, uint32(page*pageSize))
-		executeBody = append(executeBody,
-			byte(wabinwasm.OpcodeI32Const), 1,
-			byte(wabinwasm.OpcodeI32Store8), 0, 0,
-		)
-	}
-	executeBody = append(executeBody,
-		byte(wabinwasm.OpcodeLoop), 0x40,
-		byte(wabinwasm.OpcodeBr), 0,
-		byte(wabinwasm.OpcodeEnd),
-		byte(wabinwasm.OpcodeI32Const), 0,
-		byte(wabinwasm.OpcodeEnd),
-	)
-	return wabinbinary.EncodeModule(&wabinwasm.Module{
-		TypeSection: []*wabinwasm.FunctionType{
-			{},
-			{Params: []wabinwasm.ValueType{i32, i32}, Results: []wabinwasm.ValueType{i32}},
-			{Params: []wabinwasm.ValueType{i32}, Results: []wabinwasm.ValueType{i32}},
-			{Params: []wabinwasm.ValueType{i32}},
-		},
-		FunctionSection: []wabinwasm.Index{0, 1, 1, 2, 3, 1},
-		MemorySection:   &wabinwasm.Memory{Min: e1MemoryPages, Max: e1MemoryPages, IsMaxEncoded: true},
-		ExportSection: []*wabinwasm.Export{
-			{Name: "memory", Type: wabinwasm.ExternTypeMemory, Index: 0},
-			{Name: "_initialize", Type: wabinwasm.ExternTypeFunc, Index: 0},
-			{Name: "runtime_init", Type: wabinwasm.ExternTypeFunc, Index: 1},
-			{Name: "runtime_prepare", Type: wabinwasm.ExternTypeFunc, Index: 2},
-			{Name: "alloc", Type: wabinwasm.ExternTypeFunc, Index: 3},
-			{Name: "dealloc", Type: wabinwasm.ExternTypeFunc, Index: 4},
-			{Name: "execute", Type: wabinwasm.ExternTypeFunc, Index: 5},
-		},
-		CodeSection: []*wabinwasm.Code{
-			{Body: []byte{byte(wabinwasm.OpcodeEnd)}},
-			{Body: []byte{byte(wabinwasm.OpcodeI32Const), 0, byte(wabinwasm.OpcodeEnd)}},
-			{Body: []byte{byte(wabinwasm.OpcodeI32Const), 0, byte(wabinwasm.OpcodeEnd)}},
-			{Body: []byte{byte(wabinwasm.OpcodeI32Const), 8, byte(wabinwasm.OpcodeEnd)}},
-			{Body: []byte{byte(wabinwasm.OpcodeEnd)}},
-			{Body: executeBody},
-		},
-	})
-}
-
-func appendUnsignedLEB128(destination []byte, value uint32) []byte {
-	for {
-		current := byte(value & 0x7f)
-		value >>= 7
-		if value != 0 {
-			current |= 0x80
-		}
-		destination = append(destination, current)
-		if value == 0 {
-			return destination
-		}
-	}
 }
 
 var _ enginecontract.FootprintSink = (*e1ObservationSink)(nil)

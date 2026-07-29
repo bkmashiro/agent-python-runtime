@@ -36,6 +36,7 @@ type cowPressureLimits struct {
 	WaitNS             uint64 `json:"wait_ns"`
 	DirtyBytes         uint64 `json:"dirty_bytes"`
 	RefillWorkers      uint32 `json:"refill_workers"`
+	BurstFactor        uint32 `json:"burst_factor"`
 }
 
 type cowPressureSnapshot struct {
@@ -74,6 +75,26 @@ type cowPressureRequestSpec struct {
 	Wait   time.Duration
 }
 
+type cowPressureBurst struct {
+	Factor                uint32  `json:"factor"`
+	BaselineConsumers     uint32  `json:"baseline_consumers"`
+	PeakConsumers         uint32  `json:"peak_consumers"`
+	StartOffsetNS         uint64  `json:"start_offset_ns"`
+	PreWindowDurationNS   uint64  `json:"pre_window_duration_ns"`
+	BurstWindowDurationNS uint64  `json:"burst_window_duration_ns"`
+	PreCompleted          uint64  `json:"pre_completed"`
+	BurstCompleted        uint64  `json:"burst_completed"`
+	PreThroughputPerSec   float64 `json:"pre_throughput_per_second"`
+	BurstThroughputPerSec float64 `json:"burst_throughput_per_second"`
+}
+
+type cowPressureBurstWindow struct {
+	preCompleted  uint64
+	endCompleted  uint64
+	preDuration   time.Duration
+	burstDuration time.Duration
+}
+
 type cowPressureLoad struct {
 	StartedRequests    uint64                    `json:"started_requests"`
 	CompletedRequests  uint64                    `json:"completed_requests"`
@@ -95,6 +116,7 @@ type cowPressureLoad struct {
 	ReadyAfter         uint32                    `json:"ready_after"`
 	Phases             []cowPressurePhase        `json:"phases"`
 	RequestClasses     []cowPressureRequestClass `json:"request_classes"`
+	Burst              *cowPressureBurst         `json:"burst,omitempty"`
 }
 
 type cowPressureActiveSamples struct {
@@ -128,10 +150,23 @@ type growablePreparedBenchmarkRunner interface {
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 8 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 9 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
+	}
+	if evidence.Limits.BurstFactor != 1 && evidence.Limits.BurstFactor != 2 && evidence.Limits.BurstFactor != 4 && evidence.Limits.BurstFactor != 8 {
+		return errors.New("cow-pressure burst factor is invalid")
+	}
+	if evidence.Limits.BurstFactor == 1 {
+		if evidence.Load.Burst != nil {
+			return errors.New("cow-pressure non-burst load contains burst evidence")
+		}
+	} else if evidence.Load.Burst == nil || evidence.Load.Burst.Factor != evidence.Limits.BurstFactor ||
+		evidence.Load.Burst.BaselineConsumers != evidence.Limits.Consumers || evidence.Load.Burst.PeakConsumers != evidence.Limits.Consumers*evidence.Limits.BurstFactor ||
+		evidence.Load.Burst.StartOffsetNS == 0 || evidence.Load.Burst.PreWindowDurationNS == 0 || evidence.Load.Burst.BurstWindowDurationNS == 0 ||
+		evidence.Load.Burst.PreCompleted == 0 || evidence.Load.Burst.BurstCompleted == 0 || evidence.Load.Burst.PreThroughputPerSec <= 0 || evidence.Load.Burst.BurstThroughputPerSec <= 0 {
+		return errors.New("cow-pressure burst evidence is incomplete")
 	}
 	if evidence.Limits.RuntimeBudgetBytes+evidence.Limits.ReservedBytes != evidence.Limits.AllocationBytes ||
 		evidence.Limits.InitialCapacity != pressureInitialCapacity || evidence.Limits.MaxGrowthStep != pressureMaxGrowthStep || evidence.Limits.RefillWorkers == 0 || evidence.Limits.RefillWorkers > 16 || evidence.Limits.RefillWorkers > evidence.Limits.MaxSlots ||
@@ -284,6 +319,13 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 	if options.PressureRefillWorkers != 1 && options.PressureRefillWorkers != 2 && options.PressureRefillWorkers != 4 &&
 		options.PressureRefillWorkers != 8 && options.PressureRefillWorkers != 12 && options.PressureRefillWorkers != 16 {
 		return errors.New("cow-pressure refill workers must be 1, 2, 4, 8, 12, or 16")
+	}
+	if options.PressureBurstFactor != 1 && options.PressureBurstFactor != 2 && options.PressureBurstFactor != 4 && options.PressureBurstFactor != 8 {
+		return errors.New("cow-pressure burst factor must be 1, 2, 4, or 8")
+	}
+	if options.ConsumerCount > 256/options.PressureBurstFactor ||
+		(options.PressureBurstFactor > 1 && (options.PressureWorkload != "mixed-v1" || options.PressureDuration < 10*time.Second)) {
+		return errors.New("cow-pressure burst requires mixed-v1, at least ten seconds, and at most 256 peak consumers")
 	}
 	if !validPressureWorkload(options.PressureWorkload, options.PressureWait, options.PressureDirtyBytes) {
 		return errors.New("cow-pressure workload or wait is outside bounds")
@@ -463,6 +505,25 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 	loadStarted := time.Now()
 	startLoad := make(chan struct{})
+	burstRelease := make(chan struct{})
+	burstWindowResult := make(chan cowPressureBurstWindow, 1)
+	if options.PressureBurstFactor == 1 {
+		close(burstRelease)
+	} else {
+		go func() {
+			<-startLoad
+			preStarted := time.Now()
+			target := loadStarted.Add(options.PressureDuration / 2)
+			if delay := time.Until(target); delay > 0 {
+				time.Sleep(delay)
+			}
+			preCompleted := completed.Load()
+			burstStarted := time.Now()
+			close(burstRelease)
+			<-loadCtx.Done()
+			burstWindowResult <- cowPressureBurstWindow{preCompleted: preCompleted, endCompleted: completed.Load(), preDuration: burstStarted.Sub(preStarted), burstDuration: time.Since(burstStarted)}
+		}()
+	}
 	var activeSamples <-chan cowPressureActiveSamples
 	if options.PressureWorkload == "dirty-hold" || options.PressureWorkload == "mixed-v1" {
 		result := make(chan cowPressureActiveSamples, 1)
@@ -489,11 +550,15 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			result <- cowPressureActiveSamples{Snapshots: samples}
 		}()
 	}
-	for worker := uint(0); worker < options.ConsumerCount; worker++ {
+	totalConsumers := options.ConsumerCount * options.PressureBurstFactor
+	for worker := uint(0); worker < totalConsumers; worker++ {
 		workers.Add(1)
-		go func() {
+		go func(worker uint) {
 			defer workers.Done()
 			<-startLoad
+			if worker >= options.ConsumerCount {
+				<-burstRelease
+			}
 			for loadCtx.Err() == nil {
 				id := sequence.Add(1)
 				spec := pressureRequestSpecFor(options, id)
@@ -540,10 +605,14 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 				latencies = append(latencies, elapsed)
 				latencyMu.Unlock()
 			}
-		}()
+		}(worker)
 	}
 	close(startLoad)
 	workers.Wait()
+	var burstWindow cowPressureBurstWindow
+	if options.PressureBurstFactor > 1 {
+		burstWindow = <-burstWindowResult
+	}
 	loadSamples := make([]cowPressureSnapshot, 0, pressureActiveSampleCount+1)
 	if activeSamples != nil {
 		result := <-activeSamples
@@ -601,6 +670,15 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		GOMAXPROCS:  goruntime.GOMAXPROCS(0),
 		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()), RequestClasses: requestClassEvidence,
 	}
+	if options.PressureBurstFactor > 1 {
+		burstCompleted := burstWindow.endCompleted - burstWindow.preCompleted
+		load.Burst = &cowPressureBurst{
+			Factor: uint32(options.PressureBurstFactor), BaselineConsumers: uint32(options.ConsumerCount), PeakConsumers: uint32(totalConsumers),
+			StartOffsetNS: uint64(burstWindow.preDuration.Nanoseconds()), PreWindowDurationNS: uint64(burstWindow.preDuration.Nanoseconds()), BurstWindowDurationNS: uint64(burstWindow.burstDuration.Nanoseconds()),
+			PreCompleted: burstWindow.preCompleted, BurstCompleted: burstCompleted,
+			PreThroughputPerSec: float64(burstWindow.preCompleted) / burstWindow.preDuration.Seconds(), BurstThroughputPerSec: float64(burstCompleted) / burstWindow.burstDuration.Seconds(),
+		}
+	}
 	if loadElapsed > 0 {
 		load.ThroughputPerSec = float64(load.CompletedRequests) / loadElapsed.Seconds()
 		load.CPUCoreUtilization = float64(load.CPUUserNS+load.CPUSystemNS) / float64(load.DurationNS)
@@ -613,18 +691,18 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 8, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 9, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
-		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), DirtyBytes: options.PressureDirtyBytes, RefillWorkers: runner.PreparedRefillWorkers()},
+		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), DirtyBytes: options.PressureDirtyBytes, RefillWorkers: runner.PreparedRefillWorkers(), BurstFactor: uint32(options.PressureBurstFactor)},
 		StopReason: stopReason, Spawn: spawn, LoadSamples: loadSamples, Load: load,
 		Limitations: []string{
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",
 			"One bounded wazero runtime, compiled module, and sealed baseline owns every admitted COW slot.",
 			"Full smaps collection is excluded from ordinary timed loads; dirty-hold and mixed-v1 take three fixed-offset in-load samples and include that diagnostic perturbation in their timing.",
 			"Raw cgroup counters retain their observed scope; shared job-level values are not process attribution or per-slot memory.",
-			"Closed-loop consumers use versioned deterministic Python request classes and do not model provider latency or open-loop arrivals.",
+			"Closed-loop consumers use versioned deterministic Python request classes; a burst factor releases additional closed-loop consumers once at mid-load and is not an open-loop arrival process or provider model.",
 			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight request drain but exclude replenish_drain_ns.",
 			"Served slots remain single-use and are replenished; no served-slot restore is claimed.",
 		},

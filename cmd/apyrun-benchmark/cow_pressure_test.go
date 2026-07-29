@@ -69,12 +69,12 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 8, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 9, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
 		Strategy:    runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"},
-		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillWorkers: 4},
+		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillWorkers: 4, BurstFactor: 1},
 		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
 		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}, RequestClasses: []cowPressureRequestClass{{Name: "tiny-cpu", Started: 1, Completed: 1}}},
 		Limitations: []string{"one", "two", "three", "four"},
@@ -145,6 +145,27 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	if err := compileCOWPressureSchema(t).Validate(dirtyDocument); err != nil {
 		t.Fatal(err)
 	}
+	burst := dirty
+	burst.Limits.Workload = "mixed-v1"
+	burst.Limits.WaitNS = 0
+	burst.Limits.DirtyBytes = 0
+	burst.Limits.DurationNS = uint64((10 * time.Second).Nanoseconds())
+	burst.Limits.BurstFactor = 2
+	burst.Load.Burst = &cowPressureBurst{Factor: 2, BaselineConsumers: 1, PeakConsumers: 2, StartOffsetNS: 5, PreWindowDurationNS: 5, BurstWindowDurationNS: 5, PreCompleted: 1, BurstCompleted: 1, PreThroughputPerSec: 1, BurstThroughputPerSec: 1}
+	if err := burst.Validate(); err != nil {
+		t.Fatalf("bounded burst evidence was rejected: %v", err)
+	}
+	encodedBurst, err := json.Marshal(burst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var burstDocument any
+	if err := json.Unmarshal(encodedBurst, &burstDocument); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileCOWPressureSchema(t).Validate(burstDocument); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPressureRequestSpecCanonicalDistributions(t *testing.T) {
@@ -203,7 +224,7 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		Kind: "cow-pressure", Class: "production-safe", Strategy: "cow-ready-single-use",
 		ArtifactPath: "guest.wasm", ManifestPath: "manifest.json", OutputPath: "evidence.json",
 		MemoryBudgetBytes: 32 * 1024 * 1024 * 1024, MemoryReserveBytes: 8 * 1024 * 1024 * 1024,
-		MaxPressureSlots: 65536, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu", PressureRefillWorkers: 4,
+		MaxPressureSlots: 65536, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu", PressureRefillWorkers: 4, PressureBurstFactor: 1,
 	}
 	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
 		t.Fatal(err)
@@ -251,7 +272,13 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	dirty.PressureWait = 2 * time.Second
 	dirty.PressureDirtyBytes = 16 << 20
 	if err := validateCOWPressureOptions(dirty, "linux"); err != nil {
-		t.Fatalf("bounded dirty workload rejected: %v", err)
+		t.Fatalf("bounded dirty workload was rejected: %v", err)
+	}
+	burst := valid
+	burst.PressureWorkload = "mixed-v1"
+	burst.PressureBurstFactor = 8
+	if err := validateCOWPressureOptions(burst, "linux"); err != nil {
+		t.Fatalf("bounded correlated burst was rejected: %v", err)
 	}
 	dirty.PressureDirtyBytes = 0
 	if err := validateCOWPressureOptions(dirty, "linux"); err == nil {

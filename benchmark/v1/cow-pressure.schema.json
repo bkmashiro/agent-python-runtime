@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json",
-  "title": "COW pressure evidence v8",
+  "title": "COW pressure evidence v9",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
   "properties": {
-    "schema_version": {"const": 8},
+    "schema_version": {"const": 9},
     "evidence_kind": {"const": "cow-pressure"},
     "evidence_class": {"const": "production-safe"},
     "artifact": {"$ref": "#/$defs/artifact"},
@@ -48,7 +48,7 @@
     },
     "limits": {
       "type": "object", "additionalProperties": false,
-      "required": ["runtime_budget_bytes", "reserved_bytes", "allocation_bytes", "max_slots", "consumers", "duration_ns", "initial_capacity", "max_growth_step", "workload", "wait_ns", "dirty_bytes", "refill_workers"],
+      "required": ["runtime_budget_bytes", "reserved_bytes", "allocation_bytes", "max_slots", "consumers", "duration_ns", "initial_capacity", "max_growth_step", "workload", "wait_ns", "dirty_bytes", "refill_workers", "burst_factor"],
       "properties": {
         "runtime_budget_bytes": {"type": "integer", "minimum": 1073741824}, "reserved_bytes": {"type": "integer", "minimum": 1073741824},
         "allocation_bytes": {"type": "integer", "minimum": 2147483648}, "max_slots": {"type": "integer", "minimum": 4, "maximum": 65536, "multipleOf": 4},
@@ -56,7 +56,8 @@
         "initial_capacity": {"const": 4}, "max_growth_step": {"const": 64}, "workload": {"enum": ["cpu", "wasi-timer-wait", "dirty-hold", "mixed-v1", "heavy-tail-v1"]},
         "wait_ns": {"type": "integer", "minimum": 0, "maximum": 10000000000},
         "dirty_bytes": {"type": "integer", "minimum": 0, "maximum": 67108864},
-        "refill_workers": {"enum": [1, 2, 4, 8, 12, 16]}
+        "refill_workers": {"enum": [1, 2, 4, 8, 12, 16]},
+        "burst_factor": {"enum": [1, 2, 4, 8]}
       }
     },
     "metric": {
@@ -157,7 +158,18 @@
         "latency_p99_ns": {"type": "integer", "minimum": 1}, "latency_max_ns": {"type": "integer", "minimum": 1},
         "ready_before": {"type": "integer", "minimum": 1, "maximum": 65536}, "ready_after": {"type": "integer", "minimum": 0, "maximum": 65536},
         "phases": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/phase"}},
-        "request_classes": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/requestClass"}}
+        "request_classes": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/requestClass"}},
+        "burst": {"$ref": "#/$defs/burst"}
+      }
+    },
+    "burst": {
+      "type": "object", "additionalProperties": false,
+      "required": ["factor", "baseline_consumers", "peak_consumers", "start_offset_ns", "pre_window_duration_ns", "burst_window_duration_ns", "pre_completed", "burst_completed", "pre_throughput_per_second", "burst_throughput_per_second"],
+      "properties": {
+        "factor": {"enum": [2, 4, 8]}, "baseline_consumers": {"type": "integer", "minimum": 1, "maximum": 128}, "peak_consumers": {"type": "integer", "minimum": 2, "maximum": 256},
+        "start_offset_ns": {"type": "integer", "minimum": 1}, "pre_window_duration_ns": {"type": "integer", "minimum": 1}, "burst_window_duration_ns": {"type": "integer", "minimum": 1},
+        "pre_completed": {"type": "integer", "minimum": 1}, "burst_completed": {"type": "integer", "minimum": 1},
+        "pre_throughput_per_second": {"type": "number", "exclusiveMinimum": 0}, "burst_throughput_per_second": {"type": "number", "exclusiveMinimum": 0}
       }
     },
     "requestClass": {

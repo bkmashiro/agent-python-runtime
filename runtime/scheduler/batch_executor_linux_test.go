@@ -25,37 +25,18 @@ func TestProfiledBatchExecutorRealCOWMixedLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseline, err := reader.Read()
+	limitSnapshot, err := reader.Read()
 	if err != nil {
 		t.Fatal(err)
 	}
 	const mib = uint64(1 << 20)
-	target := baseline.CurrentBytes + 8*mib
-	high := baseline.CurrentBytes + 16*mib
-	critical := baseline.CurrentBytes + 96*mib
-	if critical >= baseline.MaximumBytes {
-		t.Fatalf("cgroup limit is too small for the bounded gate: %#v", baseline)
-	}
-	scheduler, err := New(Config{
-		TargetBytes: target, HighBytes: high, CriticalBytes: critical, HardBytes: baseline.MaximumBytes,
-		MaxTasks: 16, MaxAttempts: 32, RetryMarginBytes: mib, Clock: time.Now,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	profileOptions := profileConfig()
-	profileOptions.HardBytes = baseline.MaximumBytes
+	profileOptions.HardBytes = limitSnapshot.MaximumBytes
 	profileOptions.UnknownReservationBytes = 8 * mib
 	profileOptions.PerAttemptMarginBytes = mib
 	profileOptions.ReservationQuantileBPS = 9500
 	profileOptions.ColdRuns = 16
 	store, err := NewProfileStore(profileOptions)
-	if err != nil {
-		t.Fatal(err)
-	}
-	greedOptions := greedConfig()
-	greedOptions.MinimumAttempts = 1
-	controller, err := NewGreedController(greedOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +54,29 @@ func TestProfiledBatchExecutorRealCOWMixedLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
+	baseline, err := reader.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := baseline.CurrentBytes + 8*mib
+	high := baseline.CurrentBytes + 16*mib
+	critical := baseline.CurrentBytes + 96*mib
+	if critical >= baseline.MaximumBytes || baseline.MaximumBytes != limitSnapshot.MaximumBytes {
+		t.Fatalf("cgroup limit is too small or changed during setup: before=%#v ready=%#v", limitSnapshot, baseline)
+	}
+	scheduler, err := New(Config{
+		TargetBytes: target, HighBytes: high, CriticalBytes: critical, HardBytes: baseline.MaximumBytes,
+		MaxTasks: 16, MaxAttempts: 32, RetryMarginBytes: mib, Clock: time.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	greedOptions := greedConfig()
+	greedOptions.MinimumAttempts = 1
+	controller, err := NewGreedController(greedOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
 	worker, err := NewInProcessWorker(runner, WorkerConfig{MaxActive: 4, MaxRequestBytes: runConfig.MaxRequestBytes})
 	if err != nil {
 		t.Fatal(err)

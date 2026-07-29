@@ -50,6 +50,13 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("boom", response["error"]["message"])
         self.assertLessEqual(len(response["error"]["traceback"]), 16384)
 
+    def test_returns_nonempty_message_for_exception_with_empty_string(self):
+        response = self.execute(code="raise MemoryError()")
+        self.assertEqual("error", response["status"])
+        self.assertEqual("python_exception", response["error"]["code"])
+        self.assertEqual("MemoryError", response["error"]["error_type"])
+        self.assertEqual("MemoryError", response["error"]["message"])
+
     def test_accepts_every_json_value_shape(self):
         cases = [
             ("result = 'done'", "done"),

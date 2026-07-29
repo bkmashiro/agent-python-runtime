@@ -16,7 +16,8 @@ _warmup_profiles: dict[str, Any] = {}
 
 
 def _error(code: str, message: str, *, error_type: str | None = None, trace: str | None = None) -> dict[str, Any]:
-    detail: dict[str, Any] = {"code": code, "message": message[:4096]}
+    bounded_message = message or error_type or code
+    detail: dict[str, Any] = {"code": code, "message": bounded_message[:4096]}
     if error_type is not None:
         detail["error_type"] = error_type[:256]
     if trace is not None:

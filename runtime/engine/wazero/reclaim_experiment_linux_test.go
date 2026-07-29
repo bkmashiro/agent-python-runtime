@@ -126,7 +126,7 @@ func TestEngineCancellationUnmapsServedCOWSlot(t *testing.T) {
 			_, runErr := engine.Run(ctx, []byte(`{"run_id":"e1","code":"loop","inputs":{}}`), "")
 			runDone <- runErr
 		}()
-		waitForE1(t, 2*time.Second, func() bool { return engine.PreparedPoolState().Executing == 1 }, "attempt did not start")
+		waitForE1Attempt(t, engine, runDone)
 		var footprint enginecontract.FootprintObservation
 		waitForE1(t, 2*time.Second, func() bool {
 			observation, sampleErr := engine.SampleActiveFootprint(attemptID)
@@ -208,6 +208,26 @@ func boundedE1Env(t *testing.T, name string, fallback, minimum, maximum int) int
 		t.Fatalf("%s is outside [%d,%d]", name, minimum, maximum)
 	}
 	return parsed
+}
+
+func waitForE1Attempt(t *testing.T, engine *Engine, runDone <-chan error) {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case runErr := <-runDone:
+			t.Fatalf("Run exited before execute: %v", runErr)
+		case <-ticker.C:
+			if engine.PreparedPoolState().Executing == 1 {
+				return
+			}
+		case <-deadline.C:
+			t.Fatal("attempt did not start")
+		}
+	}
 }
 
 func waitForE1(t *testing.T, timeout time.Duration, condition func() bool, message string) {

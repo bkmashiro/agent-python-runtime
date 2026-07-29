@@ -9,19 +9,23 @@ import (
 var ErrInvalidControlWindow = errors.New("invalid greed control window")
 
 type GreedConfig struct {
-	InitialQuantileBPS   uint32
-	MinimumQuantileBPS   uint32
-	MaximumQuantileBPS   uint32
-	QuantileStepBPS      uint32
-	TargetEvictionPPM    uint32
-	TargetUtilizationBPS uint32
-	MinimumAttempts      uint64
+	InitialQuantileBPS     uint32
+	MinimumQuantileBPS     uint32
+	MaximumQuantileBPS     uint32
+	QuantileStepBPS        uint32
+	TargetEvictionPPM      uint32
+	TargetUtilizationBPS   uint32
+	MaximumSomePSIAvg10BPS uint32
+	MaximumFullPSIAvg10BPS uint32
+	MinimumAttempts        uint64
 }
 
 type ControlWindow struct {
 	AttemptsStarted      uint64
 	AttemptsEvicted      uint64
 	MemoryUtilizationBPS uint32
+	MemorySomeAvg10BPS   uint32
+	MemoryFullAvg10BPS   uint32
 	Pressure             PressureLevel
 	OOMEvents            uint64
 }
@@ -53,7 +57,8 @@ func NewGreedController(config GreedConfig) (*GreedController, error) {
 	if config.MinimumQuantileBPS == 0 || config.MinimumQuantileBPS > config.InitialQuantileBPS ||
 		config.InitialQuantileBPS > config.MaximumQuantileBPS || config.MaximumQuantileBPS > 10000 ||
 		config.QuantileStepBPS == 0 || config.TargetEvictionPPM > 1_000_000 ||
-		config.TargetUtilizationBPS == 0 || config.TargetUtilizationBPS > 10000 || config.MinimumAttempts == 0 {
+		config.TargetUtilizationBPS == 0 || config.TargetUtilizationBPS > 10000 ||
+		config.MaximumSomePSIAvg10BPS > 10000 || config.MaximumFullPSIAvg10BPS > 10000 || config.MinimumAttempts == 0 {
 		return nil, ErrInvalidConfig
 	}
 	return &GreedController{config: config, current: config.InitialQuantileBPS}, nil
@@ -86,7 +91,7 @@ func (controller *GreedController) Apply(store *ProfileStore, window ControlWind
 }
 
 func validateControlWindow(window ControlWindow) error {
-	if window.AttemptsEvicted > window.AttemptsStarted || window.MemoryUtilizationBPS > 10000 {
+	if window.AttemptsEvicted > window.AttemptsStarted || window.MemoryUtilizationBPS > 10000 || window.MemorySomeAvg10BPS > 10000 || window.MemoryFullAvg10BPS > 10000 {
 		return ErrInvalidControlWindow
 	}
 	switch window.Pressure {
@@ -112,6 +117,12 @@ func (controller *GreedController) decideLocked(window ControlWindow) GreedDecis
 	case window.Pressure == PressureCritical:
 		next = controller.moreConservative(previous)
 		reason = "critical_pressure"
+	case controller.config.MaximumFullPSIAvg10BPS > 0 && window.MemoryFullAvg10BPS > controller.config.MaximumFullPSIAvg10BPS:
+		next = controller.moreConservative(previous)
+		reason = "memory_full_psi"
+	case controller.config.MaximumSomePSIAvg10BPS > 0 && window.MemorySomeAvg10BPS > controller.config.MaximumSomePSIAvg10BPS:
+		next = controller.moreConservative(previous)
+		reason = "memory_some_psi"
 	case window.Pressure == PressureHigh:
 		next = controller.moreConservative(previous)
 		reason = "high_pressure"

@@ -24,6 +24,33 @@ func reclaimBridgeObservation(attemptID string, status enginecontract.ReclaimSta
 	}
 }
 
+func TestReclaimEvidenceBridgeForwardsProfileSamples(t *testing.T) {
+	profileOptions := profileConfig()
+	store, err := NewProfileStore(profileOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := testProfile("a", "python_eval", RequestSizeSmall)
+	if _, err := store.EnsureProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+	bridge, err := NewReclaimEvidenceBridge(ReclaimEvidenceBridgeConfig{MaxTracked: 1, Profiles: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RegisterAttempt("attempt:profile", profile); err != nil {
+		t.Fatal(err)
+	}
+	sink := bridge.FootprintSink()
+	if !sink.ShouldSample("attempt:profile") {
+		t.Fatal("profile sink sampling decision was lost")
+	}
+	sink.Observe(reclaimBridgeFootprint("attempt:profile", 31))
+	if snapshot := store.Snapshot(); snapshot.ObservedSamples != 1 || snapshot.TrackedAttempts != 0 {
+		t.Fatalf("profile snapshot=%#v", snapshot)
+	}
+}
+
 func TestReclaimEvidenceBridgeCorrelatesReleasedMapping(t *testing.T) {
 	bridge, err := NewReclaimEvidenceBridge(ReclaimEvidenceBridgeConfig{MaxTracked: 2})
 	if err != nil {

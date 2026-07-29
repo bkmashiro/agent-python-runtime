@@ -9,6 +9,7 @@ import (
 
 type ReclaimEvidenceBridgeConfig struct {
 	MaxTracked uint32
+	Profiles   *ProfileStore
 }
 
 type reclaimEvidenceRecord struct {
@@ -21,6 +22,7 @@ type reclaimEvidenceRecord struct {
 type ReclaimEvidenceBridge struct {
 	mu         sync.Mutex
 	maxTracked uint32
+	profiles   *ProfileStore
 	tracked    map[string]*reclaimEvidenceRecord
 }
 
@@ -31,7 +33,7 @@ func NewReclaimEvidenceBridge(config ReclaimEvidenceBridgeConfig) (*ReclaimEvide
 	if config.MaxTracked == 0 || config.MaxTracked > 1<<20 {
 		return nil, ErrInvalidConfig
 	}
-	return &ReclaimEvidenceBridge{maxTracked: config.MaxTracked, tracked: make(map[string]*reclaimEvidenceRecord)}, nil
+	return &ReclaimEvidenceBridge{maxTracked: config.MaxTracked, profiles: config.Profiles, tracked: make(map[string]*reclaimEvidenceRecord)}, nil
 }
 
 func (bridge *ReclaimEvidenceBridge) Track(attemptID string) error {
@@ -77,7 +79,10 @@ func (bridge *ReclaimEvidenceBridge) ReclaimSink() enginecontract.ReclaimSink {
 }
 
 func (sink reclaimFootprintSink) ShouldSample(attemptID string) bool {
-	return sink.bridge.ShouldSample(attemptID)
+	if sink.bridge == nil {
+		return false
+	}
+	return sink.bridge.ShouldSample(attemptID) || sink.bridge.profiles != nil && sink.bridge.profiles.ShouldSample(attemptID)
 }
 
 func (sink reclaimFootprintSink) Observe(observation enginecontract.FootprintObservation) {
@@ -85,9 +90,12 @@ func (sink reclaimFootprintSink) Observe(observation enginecontract.FootprintObs
 		return
 	}
 	sink.bridge.mu.Lock()
-	defer sink.bridge.mu.Unlock()
 	if record := sink.bridge.tracked[observation.AttemptID]; record != nil {
 		record.footprint = observation
+	}
+	sink.bridge.mu.Unlock()
+	if sink.bridge.profiles != nil && sink.bridge.profiles.ShouldSample(observation.AttemptID) {
+		sink.bridge.profiles.Observe(observation)
 	}
 }
 

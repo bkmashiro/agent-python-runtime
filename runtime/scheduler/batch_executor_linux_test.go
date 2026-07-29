@@ -68,7 +68,7 @@ func TestProfiledBatchExecutorRealCOWMixedLoad(t *testing.T) {
 	runner, err := (wazeroengine.Factory{
 		PreparedCapacity: 4, PreparedMaxCapacity: 4, Strategy: enginecontract.StrategyCOWReadySingleUse,
 		FootprintSink: bridge.FootprintSink(), ReclaimSink: bridge.ReclaimSink(),
-	}).New(context.Background(), schedulerFiniteDirtyReactor(25, uint64(os.Getpagesize()), 512, 20_000_000), runConfig)
+	}).New(context.Background(), schedulerFiniteDirtyReactor(25, uint64(os.Getpagesize()), 512, 10_000_000), runConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestProfiledBatchExecutorRealCOWMixedLoad(t *testing.T) {
 	}
 	control, err := NewLiveMemoryControlLoop(LiveMemoryControlLoopConfig{
 		Scheduler: scheduler, Profiles: store, Controller: controller, Reader: reader, Dispatcher: dispatcher,
-		Interval: time.Millisecond, MaxSamples: 10_000,
+		Interval: time.Millisecond, MaxSamples: 20_000,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +111,7 @@ func TestProfiledBatchExecutorRealCOWMixedLoad(t *testing.T) {
 	defer cancel()
 	results, err := executor.Run(ctx, batch)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Run() error=%v scheduler=%#v profiles=%#v", err, scheduler.Snapshot(), store.Snapshot())
 	}
 	if len(results) != len(batch) {
 		t.Fatalf("results=%d want=%d", len(results), len(batch))

@@ -66,19 +66,31 @@ func (snapshot LiveMemorySnapshot) UtilizationBPS() uint32 {
 }
 
 type CgroupV2MemoryReaderConfig struct {
-	Root     string
-	ReadFile func(string) ([]byte, error)
-	Clock    func() time.Time
+	Root         string
+	BoundaryRoot string
+	ReadFile     func(string) ([]byte, error)
+	Clock        func() time.Time
 }
 
 type CgroupV2MemoryReader struct {
-	root     string
-	readFile func(string) ([]byte, error)
-	clock    func() time.Time
+	root         string
+	boundaryRoot string
+	readFile     func(string) ([]byte, error)
+	clock        func() time.Time
 }
 
 func NewCgroupV2MemoryReader(config CgroupV2MemoryReaderConfig) (*CgroupV2MemoryReader, error) {
 	if config.Root == "" || !filepath.IsAbs(config.Root) || filepath.Clean(config.Root) != config.Root {
+		return nil, ErrInvalidLiveMemoryConfig
+	}
+	if config.BoundaryRoot == "" {
+		config.BoundaryRoot = config.Root
+	}
+	if !filepath.IsAbs(config.BoundaryRoot) || filepath.Clean(config.BoundaryRoot) != config.BoundaryRoot {
+		return nil, ErrInvalidLiveMemoryConfig
+	}
+	relative, err := filepath.Rel(config.BoundaryRoot, config.Root)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return nil, ErrInvalidLiveMemoryConfig
 	}
 	if config.ReadFile == nil {
@@ -87,7 +99,7 @@ func NewCgroupV2MemoryReader(config CgroupV2MemoryReaderConfig) (*CgroupV2Memory
 	if config.Clock == nil {
 		config.Clock = time.Now
 	}
-	return &CgroupV2MemoryReader{root: config.Root, readFile: config.ReadFile, clock: config.Clock}, nil
+	return &CgroupV2MemoryReader{root: config.Root, boundaryRoot: config.BoundaryRoot, readFile: config.ReadFile, clock: config.Clock}, nil
 }
 
 func (reader *CgroupV2MemoryReader) Read() (LiveMemorySnapshot, error) {
@@ -105,7 +117,7 @@ func (reader *CgroupV2MemoryReader) Read() (LiveMemorySnapshot, error) {
 	if err != nil {
 		return LiveMemorySnapshot{}, err
 	}
-	maximum, err := read("memory.max")
+	maximum, err := reader.readEffectiveMaximum()
 	if err != nil {
 		return LiveMemorySnapshot{}, err
 	}
@@ -118,6 +130,39 @@ func (reader *CgroupV2MemoryReader) Read() (LiveMemorySnapshot, error) {
 		return LiveMemorySnapshot{}, err
 	}
 	return ParseCgroupV2MemorySnapshot(current, maximum, events, pressure, reader.clock().UTC())
+}
+
+func (reader *CgroupV2MemoryReader) readEffectiveMaximum() ([]byte, error) {
+	var effective uint64
+	var found bool
+	for current := reader.root; ; current = filepath.Dir(current) {
+		payload, err := reader.readFile(filepath.Join(current, "memory.max"))
+		if err != nil {
+			return nil, fmt.Errorf("read memory.max at %s: %w", current, err)
+		}
+		value := strings.TrimSpace(string(payload))
+		if value != "max" {
+			parsed, err := parseUnsignedFile(payload)
+			if err != nil || parsed == 0 {
+				return nil, ErrInvalidLiveMemorySnapshot
+			}
+			if !found || parsed < effective {
+				effective = parsed
+				found = true
+			}
+		}
+		if current == reader.boundaryRoot {
+			break
+		}
+		next := filepath.Dir(current)
+		if next == current {
+			return nil, ErrInvalidLiveMemoryConfig
+		}
+	}
+	if !found {
+		return nil, ErrInvalidLiveMemorySnapshot
+	}
+	return []byte(strconv.FormatUint(effective, 10)), nil
 }
 
 func ParseCgroupV2MemorySnapshot(current, maximum, events, pressure []byte, sampledAt time.Time) (LiveMemorySnapshot, error) {

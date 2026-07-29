@@ -46,6 +46,39 @@ func TestCgroupV2MemoryReaderReadsBoundedSnapshot(t *testing.T) {
 	}
 }
 
+func TestCgroupV2MemoryReaderResolvesInheritedMaximum(t *testing.T) {
+	boundary := t.TempDir()
+	parent := filepath.Join(boundary, "job")
+	leaf := filepath.Join(parent, "task")
+	if err := os.MkdirAll(leaf, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fixtures := map[string]string{
+		filepath.Join(boundary, "memory.max"):  "max\n",
+		filepath.Join(parent, "memory.max"):    "4294967296\n",
+		filepath.Join(leaf, "memory.max"):      "max\n",
+		filepath.Join(leaf, "memory.current"):  "1048576\n",
+		filepath.Join(leaf, "memory.events"):   "high 0\nmax 0\noom 0\noom_kill 0\n",
+		filepath.Join(leaf, "memory.pressure"): "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+	}
+	for path, content := range fixtures {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader, err := NewCgroupV2MemoryReader(CgroupV2MemoryReaderConfig{Root: leaf, BoundaryRoot: boundary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := reader.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.MaximumBytes != 4294967296 {
+		t.Fatalf("inherited maximum = %d", snapshot.MaximumBytes)
+	}
+}
+
 func TestCgroupV2MemoryReaderFailsClosed(t *testing.T) {
 	validEvents := []byte("high 0\nmax 0\noom 0\noom_kill 0\n")
 	validPressure := []byte("some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n")

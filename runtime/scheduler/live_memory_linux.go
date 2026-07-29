@@ -16,5 +16,5 @@ func NewCurrentCgroupV2MemoryReader() (*CgroupV2MemoryReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewCgroupV2MemoryReader(CgroupV2MemoryReaderConfig{Root: root, Clock: time.Now})
+	return NewCgroupV2MemoryReader(CgroupV2MemoryReaderConfig{Root: root, BoundaryRoot: "/sys/fs/cgroup", Clock: time.Now})
 }

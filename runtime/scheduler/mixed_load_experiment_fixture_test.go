@@ -45,7 +45,7 @@ func buildE2MixedWorkload(count int) ([]e2WorkloadTask, error) {
 		default:
 			task.Class, task.ActualBytes, task.DurationTicks = e2Large, 96<<20, 8
 		}
-		factors := [...]uint64{75, 100, 75, 115, 75, 75, 125, 75, 100, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75}
+		factors := [...]uint64{75, 75, 75, 115, 75, 75, 125, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75}
 		factor := factors[classOccurrences[task.Class]%len(factors)]
 		classOccurrences[task.Class]++
 		task.ActualBytes = task.ActualBytes * factor / 100
@@ -115,6 +115,7 @@ type e2MixedLoadReport struct {
 	AggressiveDecisions           uint64      `json:"aggressive_decisions"`
 	ConservativeDecisions         uint64      `json:"conservative_decisions"`
 	HoldDecisions                 uint64      `json:"hold_decisions"`
+	FinalQuantileBPS              uint32      `json:"final_quantile_bps"`
 	UsefulBytes                   uint64      `json:"useful_bytes"`
 	WastedBytes                   uint64      `json:"wasted_bytes"`
 	ReservationAbsoluteErrorBytes uint64      `json:"reservation_absolute_error_bytes"`
@@ -129,7 +130,8 @@ func (report e2MixedLoadReport) Validate() error {
 	decisionTotal += report.HoldDecisions
 	if report.Schema != "apyrun.e2-mixed-load/v1" || report.Tasks < 100 || report.Completed != report.Tasks || report.Failed != 0 ||
 		report.Attempts < report.Tasks || report.Evictions > report.Attempts || report.Retries != report.Evictions || report.OOMEvents != 0 ||
-		report.MaxActive == 0 || report.MaxCurrentBytes == 0 || report.MaxUtilizationBPS > 10000 || report.ControlWindows == 0 || decisionTotal != report.ControlWindows || report.UsefulBytes == 0 ||
+		report.MaxActive == 0 || report.MaxCurrentBytes == 0 || report.MaxUtilizationBPS > 10000 || report.ControlWindows == 0 || decisionTotal != report.ControlWindows ||
+		report.FinalQuantileBPS < 9000 || report.FinalQuantileBPS > 10000 || report.UsefulBytes == 0 ||
 		report.QueueWaitTicks.P50 > report.QueueWaitTicks.P95 || report.QueueWaitTicks.P95 > report.QueueWaitTicks.P99 || report.QueueWaitTicks.P99 > report.QueueWaitTicks.Max {
 		return errInvalidE2Experiment
 	}

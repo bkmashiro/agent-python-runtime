@@ -101,7 +101,7 @@ func TestE2MixedLoadReportValidation(t *testing.T) {
 		Schema: "apyrun.e2-mixed-load/v1", TargetEvictionPPM: 10_000,
 		Tasks: 200, Completed: 200, Attempts: 205, Evictions: 5, Retries: 5,
 		MaxActive: 64, MaxCurrentBytes: 500 << 20, MaxUtilizationBPS: 1300,
-		ControlWindows: 20, AggressiveDecisions: 2, ConservativeDecisions: 3, HoldDecisions: 15,
+		ControlWindows: 20, AggressiveDecisions: 2, ConservativeDecisions: 3, HoldDecisions: 15, FinalQuantileBPS: 9500,
 		UsefulBytes: 2 << 30, WastedBytes: 64 << 20, ReservationAbsoluteErrorBytes: 1 << 30,
 		QueueWaitTicks: e2Quantiles{P50: 2, P95: 10, P99: 20, Max: 25},
 	}
@@ -117,6 +117,7 @@ func TestE2MixedLoadReportValidation(t *testing.T) {
 		"invalid budget":     func(value *e2MixedLoadReport) { value.TargetEvictionPPM = 123 },
 		"unordered quantile": func(value *e2MixedLoadReport) { value.QueueWaitTicks.P99 = 9 },
 		"decision mismatch":  func(value *e2MixedLoadReport) { value.HoldDecisions-- },
+		"missing quantile":   func(value *e2MixedLoadReport) { value.FinalQuantileBPS = 0 },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

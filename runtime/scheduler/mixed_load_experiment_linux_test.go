@@ -280,6 +280,7 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	report.FinalQuantileBPS = controller.CurrentQuantileBPS()
 	if err := report.Validate(); err != nil {
 		t.Fatalf("report validation: %v: %#v", err, report)
 	}

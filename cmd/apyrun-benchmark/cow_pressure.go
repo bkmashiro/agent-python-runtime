@@ -172,7 +172,7 @@ func (evidence cowPressureEvidence) Validate() error {
 		if active.Phase != "load-active" || active.Slots != lastSlots || active.RuntimeInstances != 1 ||
 			active.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(active.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) ||
 			!validPressureActivePoolState(active.Pool, lastSlots) || active.PreparedImage != preparedImage {
-			return errors.New("cow-pressure active-load mapping or pool identity drifted")
+			return fmt.Errorf("cow-pressure active-load identity drifted: mappings=%d slots=%d ready=%d leased=%d executing=%d waiting=%d queued=%d refilling=%d retiring=%d accounted=%d failures=%d breaker=%t", active.COWMappings.MappingCount, lastSlots, active.Pool.Ready, active.Pool.Leased, active.Pool.Executing, active.Pool.Waiting, active.Pool.Queued, active.Pool.Refilling, active.Pool.Retiring, active.Pool.SupplyAccounted, active.Pool.TotalFailures, active.Pool.BreakerOpen)
 		}
 	}
 	snapshot := evidence.LoadSamples[len(evidence.LoadSamples)-1]

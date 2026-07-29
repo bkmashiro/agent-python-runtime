@@ -43,9 +43,9 @@ func buildE2MixedWorkload(count int) ([]e2WorkloadTask, error) {
 		case position < 95:
 			task.Class, task.ActualBytes, task.DurationTicks = e2Medium, 32<<20, 5
 		default:
-			task.Class, task.ActualBytes, task.DurationTicks = e2Large, 96<<20, 8
+			task.Class, task.ActualBytes, task.DurationTicks = e2Large, 64<<20, 8
 		}
-		factors := [...]uint64{75, 75, 75, 115, 75, 75, 125, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75}
+		factors := [...]uint64{50, 50, 50, 150, 50, 50, 200, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50}
 		factor := factors[classOccurrences[task.Class]%len(factors)]
 		classOccurrences[task.Class]++
 		task.ActualBytes = task.ActualBytes * factor / 100

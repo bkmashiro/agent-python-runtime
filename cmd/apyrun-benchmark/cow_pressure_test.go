@@ -122,6 +122,23 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	}
 }
 
+func TestStableCOWPressureFinalSnapshotRequiresSettledCompleteState(t *testing.T) {
+	completePool := wazeroengine.PreparedPoolState{TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4, Ready: 4, SupplyAccounted: 4}
+	snapshot := cowPressureSnapshot{COWMappings: runtimeevidence.MappingMetrics{Name: "memfd:apyrun-cow-image", MappingCount: 4}, Pool: completePool}
+	if !validStableCOWPressureFinalSnapshot(snapshot, 4, "complete", 2) {
+		t.Fatal("settled complete snapshot was rejected")
+	}
+	snapshot.COWMappings.MappingCount = 3
+	if validStableCOWPressureFinalSnapshot(snapshot, 4, "complete", 2) {
+		t.Fatal("complete snapshot with a stale mapping census was accepted")
+	}
+	snapshot.Pool.Ready = 3
+	snapshot.Pool.Queued = 1
+	if !validStableCOWPressureFinalSnapshot(snapshot, 4, "timeout", 2) {
+		t.Fatal("bounded timeout snapshot with in-progress refill was rejected")
+	}
+}
+
 func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	valid := benchmarkOptions{
 		Kind: "cow-pressure", Class: "production-safe", Strategy: "cow-ready-single-use",

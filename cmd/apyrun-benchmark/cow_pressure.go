@@ -419,7 +419,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		replenishStatus = "timeout"
 	}
 	replenishElapsed := time.Since(replenishStarted)
-	finalSnapshot, err := collectCOWPressureSnapshot(collector, runner, "load-final", slots)
+	finalSnapshot, err := collectStableCOWPressureFinalSnapshot(collector, runner, slots, replenishStatus, uint32(options.ConsumerCount))
 	if err != nil {
 		return err
 	}
@@ -477,6 +477,42 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 	fmt.Printf("{\"output\":%q,\"slots\":%d,\"completed\":%d,\"replenish_status\":%q}\n", options.OutputPath, slots, load.CompletedRequests, load.ReplenishStatus)
 	return nil
+}
+
+func collectStableCOWPressureFinalSnapshot(
+	collector runtimeevidence.LinuxCollector,
+	runner growablePreparedBenchmarkRunner,
+	slots uint32,
+	replenishStatus string,
+	consumers uint32,
+) (cowPressureSnapshot, error) {
+	deadline := time.Now().Add(5 * time.Second)
+	var last cowPressureSnapshot
+	for {
+		snapshot, err := collectCOWPressureSnapshot(collector, runner, "load-final", slots)
+		if err != nil {
+			return cowPressureSnapshot{}, err
+		}
+		last = snapshot
+		if validStableCOWPressureFinalSnapshot(snapshot, slots, replenishStatus, consumers) {
+			return snapshot, nil
+		}
+		if !time.Now().Before(deadline) {
+			return cowPressureSnapshot{}, fmt.Errorf(
+				"stable final COW snapshot unavailable: status=%s mappings=%d slots=%d ready=%d queued=%d refilling=%d accounted=%d",
+				replenishStatus, last.COWMappings.MappingCount, slots, last.Pool.Ready, last.Pool.Queued, last.Pool.Refilling, last.Pool.SupplyAccounted,
+			)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func validStableCOWPressureFinalSnapshot(snapshot cowPressureSnapshot, slots uint32, replenishStatus string, consumers uint32) bool {
+	mappingsValid := validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, slots, consumers)
+	if replenishStatus == "complete" {
+		mappingsValid = snapshot.COWMappings.MappingCount == slots
+	}
+	return mappingsValid && validPressureFinalPoolState(snapshot.Pool, slots, replenishStatus)
 }
 
 func collectCOWPressureSnapshot(collector runtimeevidence.LinuxCollector, runner growablePreparedBenchmarkRunner, phase string, slots uint32) (cowPressureSnapshot, error) {

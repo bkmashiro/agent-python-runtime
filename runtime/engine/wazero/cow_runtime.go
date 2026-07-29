@@ -7,8 +7,9 @@ type cowPreparedRuntime interface {
 	close() error
 }
 
-// PreparedImageState reports immutable baseline allocation facts. ZeroPages is
-// a measurement, not a promise that sparse storage will produce equal savings.
+// PreparedImageState reports immutable baseline shape plus a point-in-time
+// allocated-block census. ZeroPages is a measurement, not a promise that sparse
+// storage will produce equal savings. AllocatedBytes is not an identity field.
 type PreparedImageState struct {
 	Available              bool   `json:"available"`
 	VirtualBytes           uint64 `json:"virtual_bytes"`

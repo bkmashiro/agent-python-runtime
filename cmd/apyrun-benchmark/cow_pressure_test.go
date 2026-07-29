@@ -146,6 +146,19 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	}
 }
 
+func TestPressurePreparedImageIdentityExcludesAllocatedBlockCensus(t *testing.T) {
+	baseline := wazeroengine.PreparedImageState{Available: true, VirtualBytes: 128 << 20, AllocatedBytes: 4 << 20, PageSizeBytes: 4096, ZeroPages: 30000, NonZeroPages: 2768, SparsePotentialBytes: 120 << 20}
+	candidate := baseline
+	candidate.AllocatedBytes += 2 << 20
+	if !samePressurePreparedImageIdentity(candidate, baseline) {
+		t.Fatal("allocated-block census drift changed prepared image identity")
+	}
+	candidate.ZeroPages++
+	if samePressurePreparedImageIdentity(candidate, baseline) {
+		t.Fatal("prepared image shape drift retained identity")
+	}
+}
+
 func TestStableCOWPressureFinalSnapshotRequiresSettledCompleteState(t *testing.T) {
 	completePool := wazeroengine.PreparedPoolState{TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4, Ready: 4, SupplyAccounted: 4}
 	snapshot := cowPressureSnapshot{COWMappings: runtimeevidence.MappingMetrics{Name: "memfd:apyrun-cow-image", MappingCount: 4}, Pool: completePool}

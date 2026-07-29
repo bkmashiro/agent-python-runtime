@@ -14,15 +14,15 @@ import (
 )
 
 const (
-	e1MemoryPages        = uint32(256)
-	e1WasmLinearPageSize = uint64(65536)
+	e1DefaultMemoryPages = uint32(256)
+	e1WasmPageBytes      = uint64(65536)
 )
 
 func TestE1DirtyLoopReactorRunsUntilCancellation(t *testing.T) {
 	ctx := context.Background()
 	runtime := wazeroruntime.NewRuntimeWithConfig(ctx, wazeroruntime.NewRuntimeConfig().WithCloseOnContextDone(true))
 	defer runtime.Close(ctx)
-	compiled, err := runtime.CompileModule(ctx, e1DirtyLoopReactor(25, 4096))
+	compiled, err := runtime.CompileModule(ctx, e1DirtyLoopReactor(1, 4096, 2048))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,10 +56,10 @@ func TestE1DirtyLoopReactorRunsUntilCancellation(t *testing.T) {
 	}
 }
 
-func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64) []byte {
+func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64, memoryPages uint32) []byte {
 	i32 := wabinwasm.ValueTypeI32
-	executeBody := make([]byte, 0, 64*1024)
-	memoryBytes := uint64(e1MemoryPages) * e1WasmLinearPageSize
+	executeBody := make([]byte, 0, 512*1024)
+	memoryBytes := uint64(memoryPages) * e1WasmPageBytes
 	dirtyPages := (memoryBytes * uint64(dirtyPercent) / 100) / pageSize
 	for page := uint64(0); page < dirtyPages; page++ {
 		executeBody = append(executeBody, byte(wabinwasm.OpcodeI32Const))
@@ -84,7 +84,7 @@ func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64) []byte {
 			{Params: []wabinwasm.ValueType{i32}},
 		},
 		FunctionSection: []wabinwasm.Index{0, 1, 1, 2, 3, 1},
-		MemorySection:   &wabinwasm.Memory{Min: e1MemoryPages, Max: e1MemoryPages, IsMaxEncoded: true},
+		MemorySection:   &wabinwasm.Memory{Min: memoryPages, Max: memoryPages, IsMaxEncoded: true},
 		ExportSection: []*wabinwasm.Export{
 			{Name: "memory", Type: wabinwasm.ExternTypeMemory, Index: 0},
 			{Name: "_initialize", Type: wabinwasm.ExternTypeFunc, Index: 0},

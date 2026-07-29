@@ -77,6 +77,7 @@ type e1Report struct {
 	Schema                  string      `json:"schema"`
 	DirtyPercent            int         `json:"dirty_percent"`
 	Repetitions             int         `json:"repetitions"`
+	MemoryPages             uint32      `json:"memory_pages"`
 	MemoryBytes             uint64      `json:"memory_bytes"`
 	ExpectedDirtyFloorBytes uint64      `json:"expected_dirty_floor_bytes"`
 	CancelToReturnNS        e1Quantiles `json:"cancel_to_return_ns"`
@@ -89,20 +90,21 @@ type e1Report struct {
 func TestEngineCancellationUnmapsServedCOWSlot(t *testing.T) {
 	dirtyPercent := boundedE1Env(t, "APYRUN_E1_DIRTY_PERCENT", 25, 1, 100)
 	repetitions := boundedE1Env(t, "APYRUN_E1_REPETITIONS", 1, 1, 100)
+	memoryPages := uint32(boundedE1Env(t, "APYRUN_E1_MEMORY_PAGES", int(e1DefaultMemoryPages), 1, 2048))
 	sink := newE1ObservationSink()
 	runner, err := (Factory{
 		PreparedCapacity:    1,
 		PreparedMaxCapacity: 1,
 		Strategy:            enginecontract.StrategyCOWReadySingleUse,
 		ReclaimSink:         sink,
-	}).New(context.Background(), e1DirtyLoopReactor(dirtyPercent, uint64(unix.Getpagesize())), runtimeconfig.DefaultRunConfig())
+	}).New(context.Background(), e1DirtyLoopReactor(dirtyPercent, uint64(unix.Getpagesize()), memoryPages), runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
 	engine := runner.(*Engine)
 	defer engine.Close(context.Background())
 
-	memoryBytes := uint64(e1MemoryPages) * wasmLinearPageSize
+	memoryBytes := uint64(memoryPages) * wasmLinearPageSize
 	requestedDirtyBytes := memoryBytes * uint64(dirtyPercent) / 100
 	pageSize := uint64(unix.Getpagesize())
 	expectedDirtyFloor := requestedDirtyBytes - requestedDirtyBytes%pageSize
@@ -111,7 +113,7 @@ func TestEngineCancellationUnmapsServedCOWSlot(t *testing.T) {
 	}
 	samples := make([]e1Sample, 0, repetitions)
 	for repetition := 0; repetition < repetitions; repetition++ {
-		attemptID := fmt.Sprintf("e1:%d:%d", dirtyPercent, repetition)
+		attemptID := fmt.Sprintf("e1:%d:%d:%d", memoryPages, dirtyPercent, repetition)
 		ctx, cancelParent := context.WithCancel(context.Background())
 		ctx, err = enginecontract.WithAttemptIdentity(ctx, attemptID)
 		if err != nil {
@@ -180,7 +182,7 @@ func TestEngineCancellationUnmapsServedCOWSlot(t *testing.T) {
 	}
 	report := e1Report{
 		Schema: "apyrun.e1-cancel-reclaim/v1", DirtyPercent: dirtyPercent, Repetitions: repetitions,
-		MemoryBytes: memoryBytes, ExpectedDirtyFloorBytes: expectedDirtyFloor, Samples: samples,
+		MemoryPages: memoryPages, MemoryBytes: memoryBytes, ExpectedDirtyFloorBytes: expectedDirtyFloor, Samples: samples,
 		CancelToReturnNS:    quantilesE1(samples, func(sample e1Sample) int64 { return sample.CancelToReturnNS }),
 		CancelToReclaimedNS: quantilesE1(samples, func(sample e1Sample) int64 { return sample.CancelToReclaimedNS }),
 		CloseDurationNS:     quantilesE1(samples, func(sample e1Sample) int64 { return sample.CloseDurationNS }),

@@ -105,7 +105,7 @@ type growablePreparedBenchmarkRunner interface {
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 4 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 5 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -194,8 +194,8 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 		math.MaxUint64-options.MemoryBudgetBytes < options.MemoryReserveBytes {
 		return errors.New("cow-pressure memory budget or reserve is missing or outside bounds")
 	}
-	if options.MaxPressureSlots < uint(pressureInitialCapacity) || options.MaxPressureSlots > 4096 || options.MaxPressureSlots%uint(pressureInitialCapacity) != 0 {
-		return errors.New("cow-pressure max slots must be a multiple of four between 4 and 4096")
+	if options.MaxPressureSlots < uint(pressureInitialCapacity) || options.MaxPressureSlots > 65536 || options.MaxPressureSlots%uint(pressureInitialCapacity) != 0 {
+		return errors.New("cow-pressure max slots must be a multiple of four between 4 and 65536")
 	}
 	if options.ConsumerCount == 0 || options.ConsumerCount > 256 || options.PressureDuration < 5*time.Second || options.PressureDuration > 10*time.Minute {
 		return errors.New("cow-pressure consumers or duration is outside bounds")
@@ -428,7 +428,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 4, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 5, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},

@@ -15,7 +15,7 @@ import (
 
 const (
 	maxPreparedCapacity      uint32 = 4
-	maxCOWPreparedCapacity   uint32 = 4096
+	maxCOWPreparedCapacity   uint32 = 65536
 	maxPreparedRefillWorkers uint32 = 4
 )
 

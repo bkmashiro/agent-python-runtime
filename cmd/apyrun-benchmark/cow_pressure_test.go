@@ -68,7 +68,7 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 4, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 5, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
@@ -99,7 +99,7 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		Kind: "cow-pressure", Class: "production-safe", Strategy: "cow-ready-single-use",
 		ArtifactPath: "guest.wasm", ManifestPath: "manifest.json", OutputPath: "evidence.json",
 		MemoryBudgetBytes: 32 * 1024 * 1024 * 1024, MemoryReserveBytes: 8 * 1024 * 1024 * 1024,
-		MaxPressureSlots: 4096, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu", PressureRefillWorkers: 4,
+		MaxPressureSlots: 65536, ConsumerCount: 16, PressureDuration: 30 * time.Second, PressureWorkload: "cpu", PressureRefillWorkers: 4,
 	}
 	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
 		t.Fatal(err)
@@ -109,6 +109,7 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 		"missing budget":     func(value *benchmarkOptions) { value.MemoryBudgetBytes = 0 },
 		"missing reserve":    func(value *benchmarkOptions) { value.MemoryReserveBytes = 0 },
 		"nonmultiple slots":  func(value *benchmarkOptions) { value.MaxPressureSlots = 5 },
+		"too many slots":     func(value *benchmarkOptions) { value.MaxPressureSlots = 65540 },
 		"too many consumers": func(value *benchmarkOptions) { value.ConsumerCount = 257 },
 		"invalid workers":    func(value *benchmarkOptions) { value.PressureRefillWorkers = 3 },
 		"unknown workload":   func(value *benchmarkOptions) { value.PressureWorkload = "io" },

@@ -177,6 +177,24 @@ func (scheduler *Scheduler) Start(attemptID string) (AttemptSnapshot, error) {
 func (scheduler *Scheduler) Complete(attemptID string) (AttemptSnapshot, error) {
 	scheduler.mu.Lock()
 	defer scheduler.mu.Unlock()
+	return scheduler.completeAttemptLocked(attemptID, false)
+}
+
+func (scheduler *Scheduler) completeEvictionRace(attemptID string) (TaskSnapshot, error) {
+	scheduler.mu.Lock()
+	defer scheduler.mu.Unlock()
+	attempt, err := scheduler.completeAttemptLocked(attemptID, true)
+	if err != nil {
+		return TaskSnapshot{}, err
+	}
+	task := scheduler.tasks[attempt.TaskID]
+	if task == nil {
+		return TaskSnapshot{}, ErrConflict
+	}
+	return task.snapshot, nil
+}
+
+func (scheduler *Scheduler) completeAttemptLocked(attemptID string, allowEvictionRequested bool) (AttemptSnapshot, error) {
 	attempt, ok := scheduler.attempts[attemptID]
 	if !ok {
 		return AttemptSnapshot{}, ErrNotFound
@@ -184,7 +202,7 @@ func (scheduler *Scheduler) Complete(attemptID string) (AttemptSnapshot, error) 
 	if attempt.snapshot.State == AttemptCompleted {
 		return attempt.snapshot, nil
 	}
-	if attempt.snapshot.State != AttemptRunning && attempt.snapshot.State != AttemptPinned {
+	if attempt.snapshot.State != AttemptRunning && attempt.snapshot.State != AttemptPinned && (!allowEvictionRequested || attempt.snapshot.State != AttemptEvictionRequested) {
 		return AttemptSnapshot{}, ErrConflict
 	}
 	if scheduler.reservedBytes < attempt.snapshot.ReservedBytes {
@@ -194,6 +212,9 @@ func (scheduler *Scheduler) Complete(attemptID string) (AttemptSnapshot, error) 
 	attempt.snapshot.CompletedAt = scheduler.config.Clock().UTC()
 	scheduler.reservedBytes -= attempt.snapshot.ReservedBytes
 	task := scheduler.tasks[attempt.snapshot.TaskID]
+	if task == nil {
+		return AttemptSnapshot{}, ErrConflict
+	}
 	task.snapshot.State = TaskCompleted
 	task.snapshot.CurrentAttemptID = attemptID
 	return attempt.snapshot, nil

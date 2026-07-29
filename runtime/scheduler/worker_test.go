@@ -47,6 +47,26 @@ func (immediateRunner) Properties() engine.Properties {
 	return engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance}
 }
 
+func TestInProcessWorkerCancellationReportsCompletedRace(t *testing.T) {
+	runner := immediateRunner{}
+	worker, err := NewInProcessWorker(runner, WorkerConfig{MaxActive: 1, MaxRequestBytes: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, err := worker.Start(context.Background(), ExecutionRequest{AttemptID: "attempt:done", Request: []byte("request")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-handle.Done()
+	termination, err := worker.Cancel(context.Background(), "attempt:done")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !termination.ExecutorTerminated || !termination.CompletionWon || termination.AttemptID != "attempt:done" {
+		t.Fatalf("termination=%#v", termination)
+	}
+}
+
 func TestInProcessWorkerCancelsOneAttemptWithoutConsumingItsResult(t *testing.T) {
 	runner := newBlockingRunner()
 	worker, err := NewInProcessWorker(runner, WorkerConfig{MaxActive: 2, MaxRequestBytes: 64})

@@ -7,6 +7,7 @@ import (
 
 type AttemptReclaimTracker interface {
 	Track(string) error
+	Forget(string)
 }
 
 type CoordinatedVictimDispatcherConfig struct {

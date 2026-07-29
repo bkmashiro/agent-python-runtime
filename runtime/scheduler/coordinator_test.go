@@ -13,6 +13,20 @@ func (function reclaimObserverFunc) Observe(ctx context.Context, termination Ter
 	return function(ctx, termination)
 }
 
+type forgettingReclaimObserver struct {
+	observed  bool
+	forgotten []string
+}
+
+func (observer *forgettingReclaimObserver) Track(string) error { return nil }
+func (observer *forgettingReclaimObserver) Forget(attemptID string) {
+	observer.forgotten = append(observer.forgotten, attemptID)
+}
+func (observer *forgettingReclaimObserver) Observe(context.Context, Termination) (ReclaimReport, error) {
+	observer.observed = true
+	return ReclaimReport{}, errors.New("must not observe after completion won")
+}
+
 func TestEvictAttemptDoesNotReleaseCreditWhenReclaimEvidenceFails(t *testing.T) {
 	now := time.Unix(40, 0).UTC()
 	scheduler, err := New(testConfig(func() time.Time { return now }))
@@ -41,6 +55,28 @@ func TestEvictAttemptDoesNotReleaseCreditWhenReclaimEvidenceFails(t *testing.T) 
 	}
 	if scheduler.Snapshot().ReservedBytes != 40 {
 		t.Fatalf("credit released without evidence: %#v", scheduler.Snapshot())
+	}
+}
+
+func TestEvictAttemptAcceptsNaturalCompletionThatWonCancellationRace(t *testing.T) {
+	now := time.Unix(45, 0).UTC()
+	scheduler, err := New(testConfig(func() time.Time { return now }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := submitRunning(t, scheduler, TaskSpec{TaskID: "task", ProfileKey: "profile", Lane: LaneSpeculative, ReservationBytes: 40, MaxEvictions: 2})
+	if _, err := scheduler.RequestEvictions(100); err != nil {
+		t.Fatal(err)
+	}
+	observer := &forgettingReclaimObserver{}
+	task, err := scheduler.EvictAttempt(context.Background(), attemptCancelerFunc(func(context.Context, string) (Termination, error) {
+		return Termination{AttemptID: attempt.AttemptID, ExecutorTerminated: true, CompletionWon: true}, nil
+	}), observer, attempt.AttemptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observer.observed || len(observer.forgotten) != 1 || observer.forgotten[0] != attempt.AttemptID || task.State != TaskCompleted || scheduler.Snapshot().ReservedBytes != 0 {
+		t.Fatalf("observer=%#v task=%#v snapshot=%#v", observer, task, scheduler.Snapshot())
 	}
 }
 

@@ -70,6 +70,91 @@ func (*retryBatchRunner) Properties() engine.Properties {
 	return engine.Properties{Backend: "retry-fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance}
 }
 
+type completionRaceRunner struct {
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+}
+
+func (runner *completionRaceRunner) Run(context.Context, []byte, string) ([]byte, error) {
+	close(runner.started)
+	<-runner.release
+	close(runner.finished)
+	return []byte("completion-won"), nil
+}
+func (*completionRaceRunner) Close(context.Context) error { return nil }
+func (*completionRaceRunner) Properties() engine.Properties {
+	return engine.Properties{Backend: "fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance}
+}
+
+func TestProfiledBatchExecutorPreservesCompletionThatWinsEvictionRace(t *testing.T) {
+	scheduler, err := New(testConfig(time.Now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profileOptions := profileConfig()
+	profileOptions.HardBytes = 100
+	profileOptions.UnknownReservationBytes = 50
+	profileOptions.PerAttemptMarginBytes = 5
+	profileOptions.ReservationQuantileBPS = 9500
+	store, err := NewProfileStore(profileOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewGreedController(greedConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &completionRaceRunner{started: make(chan struct{}), release: make(chan struct{}), finished: make(chan struct{})}
+	worker, err := NewInProcessWorker(runner, WorkerConfig{MaxActive: 1, MaxRequestBytes: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reads uint32
+	reader := liveMemoryReaderFunc(func() (LiveMemorySnapshot, error) {
+		reads++
+		if reads == 1 {
+			return controlSnapshot(1, 91), nil
+		}
+		return controlSnapshot(int64(reads), 50), nil
+	})
+	dispatcher := victimDispatcherFunc(func(_ context.Context, victims []AttemptSnapshot) error {
+		if len(victims) != 1 {
+			return ErrConflict
+		}
+		close(runner.release)
+		<-runner.finished
+		time.Sleep(5 * time.Millisecond)
+		_, resolveErr := scheduler.completeEvictionRace(victims[0].AttemptID)
+		return resolveErr
+	})
+	control, err := NewLiveMemoryControlLoop(LiveMemoryControlLoopConfig{
+		Scheduler: scheduler, Profiles: store, Controller: controller, Reader: reader, Dispatcher: dispatcher,
+		Interval: time.Millisecond, MaxSamples: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor, err := NewProfiledBatchExecutor(ProfiledBatchExecutorConfig{
+		Scheduler: scheduler, Profiles: store, Worker: worker, ControlLoop: control, PollInterval: time.Millisecond, MaxPayloadBytes: 64,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	results, err := executor.Run(ctx, []ProfiledExecution{{
+		Spec:    ProfiledTaskSpec{TaskID: "task:race", Profile: testProfile("a", "python_eval", RequestSizeSmall), Lane: LaneSpeculative, MaxEvictions: 1},
+		Request: []byte("request"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].AttemptID != "task:race:attempt:1" || string(results[0].Response) != "completion-won" {
+		t.Fatalf("results=%#v", results)
+	}
+}
+
 func TestProfiledBatchExecutorRetriesEvictedAttemptThroughControlLoop(t *testing.T) {
 	scheduler, err := New(Config{
 		TargetBytes: 60, HighBytes: 80, CriticalBytes: 90, HardBytes: 100,

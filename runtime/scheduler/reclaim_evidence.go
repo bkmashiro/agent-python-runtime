@@ -52,6 +52,15 @@ func (bridge *ReclaimEvidenceBridge) Track(attemptID string) error {
 	return nil
 }
 
+func (bridge *ReclaimEvidenceBridge) Forget(attemptID string) {
+	if bridge == nil || !boundedIdentifier(attemptID) {
+		return
+	}
+	bridge.mu.Lock()
+	delete(bridge.tracked, attemptID)
+	bridge.mu.Unlock()
+}
+
 func (bridge *ReclaimEvidenceBridge) ShouldSample(attemptID string) bool {
 	return bridge.isTracked(attemptID)
 }

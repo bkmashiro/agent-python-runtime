@@ -174,7 +174,6 @@ func (executor *ProfiledBatchExecutor) Run(ctx context.Context, batch []Profiled
 			if !ok {
 				return nil, ErrConflict
 			}
-			delete(active, completion.attemptID)
 			executionResult, ok := completion.handle.Result()
 			if !ok {
 				return nil, ErrConflict
@@ -191,9 +190,15 @@ func (executor *ProfiledBatchExecutor) Run(ctx context.Context, batch []Profiled
 					}
 				}
 			}
-			if attempt.State == AttemptEvictionRequested || attempt.State == AttemptReclaimed {
+			if attempt.State == AttemptEvictionRequested {
+				requeueBatchCompletion(runContext, executor.config.PollInterval, completions, completion)
 				continue
 			}
+			if attempt.State == AttemptReclaimed {
+				delete(active, completion.attemptID)
+				continue
+			}
+			delete(active, completion.attemptID)
 			index := order[entry.execution.Spec.TaskID]
 			if completed[index] {
 				return nil, ErrConflict
@@ -215,6 +220,21 @@ func (executor *ProfiledBatchExecutor) Run(ctx context.Context, batch []Profiled
 		}
 	}
 	return results, nil
+}
+
+func requeueBatchCompletion(ctx context.Context, interval time.Duration, completions chan<- batchCompletion, completion batchCompletion) {
+	go func() {
+		timer := time.NewTimer(interval)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+		case <-timer.C:
+			select {
+			case completions <- completion:
+			case <-ctx.Done():
+			}
+		}
+	}()
 }
 
 func stopBatchTimer(timer *time.Timer) {

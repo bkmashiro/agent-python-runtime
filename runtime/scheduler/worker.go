@@ -33,6 +33,7 @@ type ExecutionResult struct {
 type Termination struct {
 	AttemptID          string
 	ExecutorTerminated bool
+	CompletionWon      bool
 	Result             ExecutionResult
 }
 
@@ -81,10 +82,12 @@ func (handle *ExecutionHandle) Result() (ExecutionResult, bool) {
 type InProcessWorker struct {
 	mu sync.Mutex
 
-	runner engine.Runner
-	config WorkerConfig
-	active map[string]*executionRecord
-	closed bool
+	runner        engine.Runner
+	config        WorkerConfig
+	active        map[string]*executionRecord
+	finished      map[string]struct{}
+	finishedOrder []string
+	closed        bool
 }
 
 func NewInProcessWorker(runner engine.Runner, config WorkerConfig) (*InProcessWorker, error) {
@@ -94,7 +97,7 @@ func NewInProcessWorker(runner engine.Runner, config WorkerConfig) (*InProcessWo
 	if err := runner.Properties().Validate(); err != nil {
 		return nil, fmt.Errorf("%w: runner properties: %v", ErrInvalidConfig, err)
 	}
-	return &InProcessWorker{runner: runner, config: config, active: make(map[string]*executionRecord)}, nil
+	return &InProcessWorker{runner: runner, config: config, active: make(map[string]*executionRecord), finished: make(map[string]struct{})}, nil
 }
 
 func (worker *InProcessWorker) Start(ctx context.Context, request ExecutionRequest) (*ExecutionHandle, error) {
@@ -115,6 +118,10 @@ func (worker *InProcessWorker) Start(ctx context.Context, request ExecutionReque
 		handle := prior.handle
 		worker.mu.Unlock()
 		return handle, nil
+	}
+	if _, finished := worker.finished[request.AttemptID]; finished {
+		worker.mu.Unlock()
+		return nil, ErrConflict
 	}
 	if uint32(len(worker.active)) >= worker.config.MaxActive {
 		worker.mu.Unlock()
@@ -153,6 +160,13 @@ func (worker *InProcessWorker) execute(ctx context.Context, attemptID string, re
 	worker.mu.Lock()
 	if worker.active[attemptID] == record {
 		delete(worker.active, attemptID)
+		worker.finished[attemptID] = struct{}{}
+		worker.finishedOrder = append(worker.finishedOrder, attemptID)
+		if uint32(len(worker.finishedOrder)) > worker.config.MaxActive {
+			oldest := worker.finishedOrder[0]
+			worker.finishedOrder = worker.finishedOrder[1:]
+			delete(worker.finished, oldest)
+		}
 	}
 	worker.mu.Unlock()
 }
@@ -162,20 +176,28 @@ func (worker *InProcessWorker) Cancel(ctx context.Context, attemptID string) (Te
 		return Termination{}, ErrInvalidTask
 	}
 	worker.mu.Lock()
-	record, ok := worker.active[attemptID]
-	if !ok {
-		worker.mu.Unlock()
+	record, active := worker.active[attemptID]
+	_, finished := worker.finished[attemptID]
+	worker.mu.Unlock()
+	if !active {
+		if finished {
+			return Termination{AttemptID: attemptID, ExecutorTerminated: true, CompletionWon: true}, nil
+		}
 		return Termination{}, ErrNotFound
 	}
-	record.cancel()
-	worker.mu.Unlock()
+	record.mu.Lock()
+	completionWon := record.complete
+	if !completionWon {
+		record.cancel()
+	}
+	record.mu.Unlock()
 	select {
 	case <-record.done:
 		result, ok := record.handle.Result()
 		if !ok {
 			return Termination{}, ErrConflict
 		}
-		return Termination{AttemptID: attemptID, ExecutorTerminated: true, Result: result}, nil
+		return Termination{AttemptID: attemptID, ExecutorTerminated: true, CompletionWon: completionWon, Result: result}, nil
 	case <-ctx.Done():
 		return Termination{}, ctx.Err()
 	}

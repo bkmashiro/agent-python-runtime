@@ -51,6 +51,28 @@ func TestReclaimEvidenceBridgeForwardsProfileSamples(t *testing.T) {
 	}
 }
 
+func TestReclaimEvidenceBridgePreservesPreCancelSample(t *testing.T) {
+	bridge, err := NewReclaimEvidenceBridge(ReclaimEvidenceBridgeConfig{MaxTracked: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bridge.Track("attempt:1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := bridge.CaptureFootprint(reclaimBridgeFootprint("attempt:1", 37)); err != nil {
+		t.Fatal(err)
+	}
+	bridge.FootprintSink().Observe(enginecontract.FootprintObservation{
+		AttemptID: "attempt:1", Backend: "wazero", Strategy: enginecontract.StrategyCOWReadySingleUse,
+		Status: enginecontract.FootprintFailed, SampledAt: time.Unix(702, 0).UTC(), ErrorCode: "mapping_not_found",
+	})
+	bridge.ReclaimSink().ObserveReclaim(reclaimBridgeObservation("attempt:1", enginecontract.ReclaimReleased, ""))
+	report, err := bridge.Observe(context.Background(), Termination{AttemptID: "attempt:1", ExecutorTerminated: true})
+	if err != nil || report.ObservedFootprintBytes != 37 {
+		t.Fatalf("report=%#v err=%v", report, err)
+	}
+}
+
 func TestReclaimEvidenceBridgeCorrelatesReleasedMapping(t *testing.T) {
 	bridge, err := NewReclaimEvidenceBridge(ReclaimEvidenceBridgeConfig{MaxTracked: 2})
 	if err != nil {

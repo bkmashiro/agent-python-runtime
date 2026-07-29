@@ -36,7 +36,7 @@ func (scheduler *Scheduler) EvictAttempt(ctx context.Context, canceler AttemptCa
 		return TaskSnapshot{}, ErrConflict
 	}
 	if termination.CompletionWon {
-		if tracker, ok := observer.(AttemptReclaimTracker); ok {
+		if tracker, ok := observer.(AttemptReclaimForgetter); ok {
 			tracker.Forget(attemptID)
 		}
 		return scheduler.completeEvictionRace(attemptID)

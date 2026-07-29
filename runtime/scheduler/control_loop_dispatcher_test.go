@@ -14,6 +14,62 @@ func (function attemptCancelerFunc) Cancel(ctx context.Context, attemptID string
 	return function(ctx, attemptID)
 }
 
+type attemptFootprintSamplerFunc func(string) (enginecontract.FootprintObservation, error)
+
+func (function attemptFootprintSamplerFunc) SampleActiveFootprint(attemptID string) (enginecontract.FootprintObservation, error) {
+	return function(attemptID)
+}
+
+type orderedReclaimTracker struct {
+	tracked  bool
+	captured bool
+}
+
+func (tracker *orderedReclaimTracker) Track(string) error { tracker.tracked = true; return nil }
+func (*orderedReclaimTracker) Forget(string)              {}
+func (tracker *orderedReclaimTracker) CaptureFootprint(enginecontract.FootprintObservation) error {
+	if !tracker.tracked {
+		return ErrConflict
+	}
+	tracker.captured = true
+	return nil
+}
+
+func TestCoordinatedVictimDispatcherSamplesBeforeCancellation(t *testing.T) {
+	scheduler, err := New(testConfig(time.Now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := submitRunning(t, scheduler, TaskSpec{TaskID: "task:sample", ProfileKey: "profile", Lane: LaneSpeculative, ReservationBytes: 40, MaxEvictions: 1})
+	victims, err := scheduler.RequestEvictions(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracker := &orderedReclaimTracker{}
+	dispatcher, err := NewCoordinatedVictimDispatcher(CoordinatedVictimDispatcherConfig{
+		Scheduler: scheduler,
+		Tracker:   tracker,
+		Sampler: attemptFootprintSamplerFunc(func(attemptID string) (enginecontract.FootprintObservation, error) {
+			return reclaimBridgeFootprint(attemptID, 40), nil
+		}),
+		Canceler: attemptCancelerFunc(func(context.Context, string) (Termination, error) {
+			if !tracker.captured {
+				return Termination{}, ErrConflict
+			}
+			return Termination{AttemptID: attempt.AttemptID, ExecutorTerminated: true}, nil
+		}),
+		Observer: reclaimObserverFunc(func(context.Context, Termination) (ReclaimReport, error) {
+			return ReclaimReport{ExecutorTerminated: true, ObservedFootprintBytes: 40, ReclaimedBytes: 40}, nil
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatcher.Dispatch(context.Background(), victims); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCoordinatedVictimDispatcherTracksBeforeCancellation(t *testing.T) {
 	scheduler, err := New(testConfig(time.Now))
 	if err != nil {

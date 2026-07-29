@@ -3,11 +3,22 @@ package scheduler
 import (
 	"context"
 	"fmt"
+
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
 type AttemptReclaimTracker interface {
 	Track(string) error
+	CaptureFootprint(enginecontract.FootprintObservation) error
 	Forget(string)
+}
+
+type AttemptReclaimForgetter interface {
+	Forget(string)
+}
+
+type AttemptFootprintSampler interface {
+	SampleActiveFootprint(string) (enginecontract.FootprintObservation, error)
 }
 
 type CoordinatedVictimDispatcherConfig struct {
@@ -15,6 +26,7 @@ type CoordinatedVictimDispatcherConfig struct {
 	Canceler  AttemptCanceler
 	Observer  ReclaimObserver
 	Tracker   AttemptReclaimTracker
+	Sampler   AttemptFootprintSampler
 }
 
 type CoordinatedVictimDispatcher struct {
@@ -22,13 +34,17 @@ type CoordinatedVictimDispatcher struct {
 	canceler  AttemptCanceler
 	observer  ReclaimObserver
 	tracker   AttemptReclaimTracker
+	sampler   AttemptFootprintSampler
 }
 
 func NewCoordinatedVictimDispatcher(config CoordinatedVictimDispatcherConfig) (*CoordinatedVictimDispatcher, error) {
-	if config.Scheduler == nil || config.Canceler == nil || config.Observer == nil {
+	if config.Scheduler == nil || config.Canceler == nil || config.Observer == nil || config.Sampler != nil && config.Tracker == nil {
 		return nil, ErrInvalidConfig
 	}
-	return &CoordinatedVictimDispatcher{scheduler: config.Scheduler, canceler: config.Canceler, observer: config.Observer, tracker: config.Tracker}, nil
+	return &CoordinatedVictimDispatcher{
+		scheduler: config.Scheduler, canceler: config.Canceler, observer: config.Observer,
+		tracker: config.Tracker, sampler: config.Sampler,
+	}, nil
 }
 
 func (dispatcher *CoordinatedVictimDispatcher) Dispatch(ctx context.Context, victims []AttemptSnapshot) error {
@@ -52,6 +68,17 @@ func (dispatcher *CoordinatedVictimDispatcher) Dispatch(ctx context.Context, vic
 		if dispatcher.tracker != nil {
 			if err := dispatcher.tracker.Track(victim.AttemptID); err != nil {
 				return fmt.Errorf("track victim %s: %w", victim.AttemptID, err)
+			}
+		}
+		if dispatcher.sampler != nil {
+			observation, err := dispatcher.sampler.SampleActiveFootprint(victim.AttemptID)
+			if err != nil {
+				dispatcher.tracker.Forget(victim.AttemptID)
+				return fmt.Errorf("sample victim %s: %w", victim.AttemptID, err)
+			}
+			if err := dispatcher.tracker.CaptureFootprint(observation); err != nil {
+				dispatcher.tracker.Forget(victim.AttemptID)
+				return fmt.Errorf("capture victim %s: %w", victim.AttemptID, err)
 			}
 		}
 		if _, err := dispatcher.scheduler.EvictAttempt(ctx, dispatcher.canceler, dispatcher.observer, victim.AttemptID); err != nil {

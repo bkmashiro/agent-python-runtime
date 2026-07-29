@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
@@ -49,6 +50,24 @@ func (bridge *ReclaimEvidenceBridge) Track(attemptID string) error {
 		return ErrCapacity
 	}
 	bridge.tracked[attemptID] = &reclaimEvidenceRecord{ready: make(chan struct{})}
+	return nil
+}
+
+func (bridge *ReclaimEvidenceBridge) CaptureFootprint(observation enginecontract.FootprintObservation) error {
+	if bridge == nil || observation.Status != enginecontract.FootprintObserved || observation.Validate() != nil {
+		return ErrConflict
+	}
+	bridge.mu.Lock()
+	record := bridge.tracked[observation.AttemptID]
+	if record == nil {
+		bridge.mu.Unlock()
+		return ErrNotFound
+	}
+	record.footprint = observation
+	bridge.mu.Unlock()
+	if bridge.profiles != nil && bridge.profiles.ShouldSample(observation.AttemptID) {
+		bridge.profiles.Observe(observation)
+	}
 	return nil
 }
 
@@ -100,7 +119,9 @@ func (sink reclaimFootprintSink) Observe(observation enginecontract.FootprintObs
 	}
 	sink.bridge.mu.Lock()
 	if record := sink.bridge.tracked[observation.AttemptID]; record != nil {
-		record.footprint = observation
+		if record.footprint.Status != enginecontract.FootprintObserved || observation.Status == enginecontract.FootprintObserved {
+			record.footprint = observation
+		}
 	}
 	sink.bridge.mu.Unlock()
 	if sink.bridge.profiles != nil && sink.bridge.profiles.ShouldSample(observation.AttemptID) {
@@ -152,10 +173,20 @@ func (bridge *ReclaimEvidenceBridge) Observe(ctx context.Context, termination Te
 	reclaim := record.reclaim
 	delete(bridge.tracked, termination.AttemptID)
 	bridge.mu.Unlock()
-	if footprint.AttemptID != termination.AttemptID || reclaim.AttemptID != termination.AttemptID ||
-		footprint.Validate() != nil || reclaim.Validate() != nil ||
-		footprint.Status != enginecontract.FootprintObserved || reclaim.Status != enginecontract.ReclaimReleased {
-		return ReclaimReport{}, ErrConflict
+	if footprint.AttemptID != termination.AttemptID || reclaim.AttemptID != termination.AttemptID {
+		return ReclaimReport{}, fmt.Errorf("%w: reclaim evidence attempt identity mismatch", ErrConflict)
+	}
+	if validationErr := footprint.Validate(); validationErr != nil {
+		return ReclaimReport{}, fmt.Errorf("%w: footprint status=%s error_code=%s validation=%v", ErrConflict, footprint.Status, footprint.ErrorCode, validationErr)
+	}
+	if validationErr := reclaim.Validate(); validationErr != nil {
+		return ReclaimReport{}, fmt.Errorf("%w: reclaim status=%s error_code=%s validation=%v", ErrConflict, reclaim.Status, reclaim.ErrorCode, validationErr)
+	}
+	if footprint.Status != enginecontract.FootprintObserved {
+		return ReclaimReport{}, fmt.Errorf("%w: footprint status=%s error_code=%s", ErrConflict, footprint.Status, footprint.ErrorCode)
+	}
+	if reclaim.Status != enginecontract.ReclaimReleased {
+		return ReclaimReport{}, fmt.Errorf("%w: reclaim status=%s error_code=%s", ErrConflict, reclaim.Status, reclaim.ErrorCode)
 	}
 	return ReclaimReport{
 		ExecutorTerminated:     true,

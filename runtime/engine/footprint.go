@@ -58,6 +58,10 @@ type FootprintObservation struct {
 	ErrorCode string
 }
 
+type ActiveFootprintSampler interface {
+	SampleActiveFootprint(attemptID string) (FootprintObservation, error)
+}
+
 // FootprintSink decides whether a served attempt should pay the Linux smaps
 // sampling cost and receives the resulting bounded observation. Implementations
 // must be safe for concurrent Runner.Run calls and must not retain secrets.

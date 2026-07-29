@@ -203,6 +203,17 @@ func (worker *InProcessWorker) Cancel(ctx context.Context, attemptID string) (Te
 	}
 }
 
+func (worker *InProcessWorker) SampleActiveFootprint(attemptID string) (engine.FootprintObservation, error) {
+	if worker == nil || !boundedIdentifier(attemptID) {
+		return engine.FootprintObservation{}, ErrInvalidTask
+	}
+	sampler, ok := worker.runner.(engine.ActiveFootprintSampler)
+	if !ok {
+		return engine.FootprintObservation{}, ErrNotFound
+	}
+	return sampler.SampleActiveFootprint(attemptID)
+}
+
 func (worker *InProcessWorker) Snapshot() WorkerSnapshot {
 	if worker == nil {
 		return WorkerSnapshot{Closed: true}

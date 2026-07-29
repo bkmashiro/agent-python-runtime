@@ -82,7 +82,7 @@ func TestProfiledBatchExecutorRealCOWMixedLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	dispatcher, err := NewCoordinatedVictimDispatcher(CoordinatedVictimDispatcherConfig{
-		Scheduler: scheduler, Canceler: worker, Observer: bridge, Tracker: bridge,
+		Scheduler: scheduler, Canceler: worker, Observer: bridge, Tracker: bridge, Sampler: worker,
 	})
 	if err != nil {
 		t.Fatal(err)

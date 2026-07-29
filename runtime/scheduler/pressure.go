@@ -35,7 +35,7 @@ func (scheduler *Scheduler) observeMemoryLocked(observedBytes uint64) PressureLe
 	case observedBytes >= scheduler.config.CriticalBytes:
 		scheduler.pressured = true
 		return PressureCritical
-	case observedBytes > scheduler.config.HighBytes:
+	case observedBytes >= scheduler.config.HighBytes:
 		scheduler.pressured = true
 		return PressureHigh
 	case observedBytes <= scheduler.config.TargetBytes:

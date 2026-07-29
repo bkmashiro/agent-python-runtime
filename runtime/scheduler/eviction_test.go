@@ -31,7 +31,7 @@ func TestObserveMemoryUsesHysteresisToGateAdmission(t *testing.T) {
 	if _, err := scheduler.Submit(TaskSpec{TaskID: "task", ProfileKey: "profile", Lane: LaneSpeculative, ReservationBytes: 10, MaxEvictions: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if level := scheduler.ObserveMemory(91); level != PressureHigh {
+	if level := scheduler.ObserveMemory(90); level != PressureHigh {
 		t.Fatalf("level = %q", level)
 	}
 	if _, err := scheduler.Admit(); !errors.Is(err, ErrNoAdmissibleTask) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -68,14 +69,14 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 7, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 8, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
 		Strategy:    runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"},
 		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillWorkers: 4},
 		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
-		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}},
+		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}, RequestClasses: []cowPressureRequestClass{{Name: "tiny-cpu", Started: 1, Completed: 1}}},
 		Limitations: []string{"one", "two", "three", "four"},
 	}
 	if err := evidence.Validate(); err != nil {
@@ -143,6 +144,27 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	}
 	if err := compileCOWPressureSchema(t).Validate(dirtyDocument); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPressureRequestSpecCanonicalDistributions(t *testing.T) {
+	mixed := benchmarkOptions{PressureWorkload: "mixed-v1"}
+	mixedCounts := map[string]int{}
+	for id := uint64(1); id <= 20; id++ {
+		mixedCounts[pressureRequestSpecFor(mixed, id).Class]++
+	}
+	wantMixed := map[string]int{"tiny-cpu": 12, "wait-50ms": 5, "dirty-4m-500ms": 2, "dirty-16m-2s": 1}
+	if !reflect.DeepEqual(mixedCounts, wantMixed) {
+		t.Fatalf("mixed counts=%v want=%v", mixedCounts, wantMixed)
+	}
+	heavy := benchmarkOptions{PressureWorkload: "heavy-tail-v1"}
+	heavyCounts := map[string]int{}
+	for id := uint64(1); id <= 20; id++ {
+		heavyCounts[pressureRequestSpecFor(heavy, id).Class]++
+	}
+	wantHeavy := map[string]int{"tiny-cpu": 19, "tail-2s": 1}
+	if !reflect.DeepEqual(heavyCounts, wantHeavy) {
+		t.Fatalf("heavy-tail counts=%v want=%v", heavyCounts, wantHeavy)
 	}
 }
 

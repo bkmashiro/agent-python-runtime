@@ -60,26 +60,41 @@ type cowPressurePhase struct {
 	MaxNS     uint64 `json:"max_ns"`
 }
 
+type cowPressureRequestClass struct {
+	Name      string `json:"name"`
+	Started   uint64 `json:"started"`
+	Completed uint64 `json:"completed"`
+	Failed    uint64 `json:"failed"`
+}
+
+type cowPressureRequestSpec struct {
+	Class  string
+	Code   string
+	Inputs map[string]any
+	Wait   time.Duration
+}
+
 type cowPressureLoad struct {
-	StartedRequests    uint64             `json:"started_requests"`
-	CompletedRequests  uint64             `json:"completed_requests"`
-	FailedRequests     uint64             `json:"failed_requests"`
-	TimedOutRequests   uint64             `json:"timed_out_requests"`
-	DurationNS         uint64             `json:"duration_ns"`
-	ReplenishDrainNS   uint64             `json:"replenish_drain_ns"`
-	ReplenishStatus    string             `json:"replenish_status"`
-	CPUUserNS          uint64             `json:"cpu_user_ns"`
-	CPUSystemNS        uint64             `json:"cpu_system_ns"`
-	CPUCoreUtilization float64            `json:"cpu_core_utilization"`
-	GOMAXPROCS         int                `json:"gomaxprocs"`
-	ThroughputPerSec   float64            `json:"throughput_per_second"`
-	LatencyP50NS       uint64             `json:"latency_p50_ns"`
-	LatencyP95NS       uint64             `json:"latency_p95_ns"`
-	LatencyP99NS       uint64             `json:"latency_p99_ns"`
-	LatencyMaxNS       uint64             `json:"latency_max_ns"`
-	ReadyBefore        uint32             `json:"ready_before"`
-	ReadyAfter         uint32             `json:"ready_after"`
-	Phases             []cowPressurePhase `json:"phases"`
+	StartedRequests    uint64                    `json:"started_requests"`
+	CompletedRequests  uint64                    `json:"completed_requests"`
+	FailedRequests     uint64                    `json:"failed_requests"`
+	TimedOutRequests   uint64                    `json:"timed_out_requests"`
+	DurationNS         uint64                    `json:"duration_ns"`
+	ReplenishDrainNS   uint64                    `json:"replenish_drain_ns"`
+	ReplenishStatus    string                    `json:"replenish_status"`
+	CPUUserNS          uint64                    `json:"cpu_user_ns"`
+	CPUSystemNS        uint64                    `json:"cpu_system_ns"`
+	CPUCoreUtilization float64                   `json:"cpu_core_utilization"`
+	GOMAXPROCS         int                       `json:"gomaxprocs"`
+	ThroughputPerSec   float64                   `json:"throughput_per_second"`
+	LatencyP50NS       uint64                    `json:"latency_p50_ns"`
+	LatencyP95NS       uint64                    `json:"latency_p95_ns"`
+	LatencyP99NS       uint64                    `json:"latency_p99_ns"`
+	LatencyMaxNS       uint64                    `json:"latency_max_ns"`
+	ReadyBefore        uint32                    `json:"ready_before"`
+	ReadyAfter         uint32                    `json:"ready_after"`
+	Phases             []cowPressurePhase        `json:"phases"`
+	RequestClasses     []cowPressureRequestClass `json:"request_classes"`
 }
 
 type cowPressureActiveSamples struct {
@@ -113,7 +128,7 @@ type growablePreparedBenchmarkRunner interface {
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 7 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 8 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -143,7 +158,7 @@ func (evidence cowPressureEvidence) Validate() error {
 		previousSlots = snapshot.Slots
 	}
 	expectedLoadSamples := 1
-	if evidence.Limits.Workload == "dirty-hold" {
+	if evidence.Limits.Workload == "dirty-hold" || evidence.Limits.Workload == "mixed-v1" {
 		expectedLoadSamples += pressureActiveSampleCount
 	}
 	if len(evidence.LoadSamples) != expectedLoadSamples || evidence.Load.StartedRequests == 0 || evidence.Load.CompletedRequests == 0 ||
@@ -151,6 +166,23 @@ func (evidence cowPressureEvidence) Validate() error {
 		evidence.Load.DurationNS == 0 || evidence.Load.ThroughputPerSec <= 0 || evidence.Load.LatencyP99NS == 0 ||
 		evidence.Load.CPUCoreUtilization <= 0 || evidence.Load.GOMAXPROCS <= 0 || len(evidence.Load.Phases) == 0 {
 		return errors.New("cow-pressure closed-loop load evidence is incomplete")
+	}
+	classNames := map[string]struct{}{}
+	var classStarted, classCompleted, classFailed uint64
+	for _, class := range evidence.Load.RequestClasses {
+		if class.Name == "" || class.Started == 0 || class.Completed+class.Failed != class.Started {
+			return errors.New("cow-pressure request-class accounting is incomplete")
+		}
+		if _, exists := classNames[class.Name]; exists {
+			return errors.New("cow-pressure request-class names are duplicated")
+		}
+		classNames[class.Name] = struct{}{}
+		classStarted += class.Started
+		classCompleted += class.Completed
+		classFailed += class.Failed
+	}
+	if classStarted != evidence.Load.StartedRequests || classCompleted != evidence.Load.CompletedRequests || classFailed != evidence.Load.FailedRequests {
+		return errors.New("cow-pressure request-class totals drifted")
 	}
 	lastSlots := evidence.Spawn[len(evidence.Spawn)-1].Slots
 	if evidence.Load.ReadyBefore != lastSlots ||
@@ -259,6 +291,41 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 	return nil
 }
 
+func pressureRequestSpecFor(options benchmarkOptions, id uint64) cowPressureRequestSpec {
+	cpu := func() cowPressureRequestSpec {
+		return cowPressureRequestSpec{Class: "tiny-cpu", Code: "result = inputs['value'] + 1", Inputs: map[string]any{"value": id}}
+	}
+	wait := func(class string, duration time.Duration) cowPressureRequestSpec {
+		return cowPressureRequestSpec{Class: class, Code: "import time\ntime.sleep(inputs['wait_seconds'])\nresult = inputs['value'] + 1", Inputs: map[string]any{"value": id, "wait_seconds": duration.Seconds()}, Wait: duration}
+	}
+	dirty := func(class string, bytes uint64, duration time.Duration) cowPressureRequestSpec {
+		return cowPressureRequestSpec{Class: class, Code: "import time\nbuf = bytearray(inputs['dirty_bytes'])\nfor offset in range(0, len(buf), 4096):\n    buf[offset] = (offset // 4096) & 255\ntime.sleep(inputs['wait_seconds'])\nresult = inputs['value'] + 1", Inputs: map[string]any{"value": id, "dirty_bytes": bytes, "wait_seconds": duration.Seconds()}, Wait: duration}
+	}
+	switch options.PressureWorkload {
+	case "wasi-timer-wait":
+		return wait("timer-wait", options.PressureWait)
+	case "dirty-hold":
+		return dirty("dirty-hold", options.PressureDirtyBytes, options.PressureWait)
+	case "mixed-v1":
+		position := (id - 1) % 20
+		switch {
+		case position < 12:
+			return cpu()
+		case position < 17:
+			return wait("wait-50ms", 50*time.Millisecond)
+		case position < 19:
+			return dirty("dirty-4m-500ms", 4<<20, 500*time.Millisecond)
+		default:
+			return dirty("dirty-16m-2s", 16<<20, 2*time.Second)
+		}
+	case "heavy-tail-v1":
+		if (id-1)%20 == 19 {
+			return wait("tail-2s", 2*time.Second)
+		}
+	}
+	return cpu()
+}
+
 func validPressureWorkload(workload string, wait time.Duration, dirtyBytes uint64) bool {
 	switch workload {
 	case "cpu":
@@ -267,6 +334,8 @@ func validPressureWorkload(workload string, wait time.Duration, dirtyBytes uint6
 		return wait >= time.Millisecond && wait <= 10*time.Second && dirtyBytes == 0
 	case "dirty-hold":
 		return wait >= time.Second && wait <= 10*time.Second && dirtyBytes >= 1<<20 && dirtyBytes <= 64<<20
+	case "mixed-v1", "heavy-tail-v1":
+		return wait == 0 && dirtyBytes == 0
 	default:
 		return false
 	}
@@ -375,6 +444,8 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	var sequence atomic.Uint64
 	latencies := make([]uint64, 0, 4096)
 	var latencyMu sync.Mutex
+	requestClasses := map[string]*cowPressureRequestClass{}
+	var requestClassMu sync.Mutex
 	var failureMu sync.Mutex
 	var firstFailure string
 	recordFailure := func(reason string) {
@@ -393,14 +464,18 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	loadStarted := time.Now()
 	startLoad := make(chan struct{})
 	var activeSamples <-chan cowPressureActiveSamples
-	if options.PressureWorkload == "dirty-hold" {
+	if options.PressureWorkload == "dirty-hold" || options.PressureWorkload == "mixed-v1" {
 		result := make(chan cowPressureActiveSamples, 1)
 		activeSamples = result
 		go func() {
 			<-startLoad
 			samples := make([]cowPressureSnapshot, 0, pressureActiveSampleCount)
+			sampleWindow := options.PressureWait
+			if options.PressureWorkload == "mixed-v1" {
+				sampleWindow = options.PressureDuration
+			}
 			for index := 1; index <= pressureActiveSampleCount; index++ {
-				target := loadStarted.Add(options.PressureWait * time.Duration(index) / time.Duration(pressureActiveSampleCount+1))
+				target := loadStarted.Add(sampleWindow * time.Duration(index) / time.Duration(pressureActiveSampleCount+1))
 				if delay := time.Until(target); delay > 0 {
 					time.Sleep(delay)
 				}
@@ -421,31 +496,33 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			<-startLoad
 			for loadCtx.Err() == nil {
 				id := sequence.Add(1)
-				code := "result = inputs['value'] + 1"
-				inputs := map[string]any{"value": id}
-				if options.PressureWorkload == "wasi-timer-wait" {
-					code = "import time\ntime.sleep(inputs['wait_seconds'])\nresult = inputs['value'] + 1"
-					inputs["wait_seconds"] = options.PressureWait.Seconds()
-				} else if options.PressureWorkload == "dirty-hold" {
-					code = "import time\nbuf = bytearray(inputs['dirty_bytes'])\nfor offset in range(0, len(buf), 4096):\n    buf[offset] = (offset // 4096) & 255\ntime.sleep(inputs['wait_seconds'])\nresult = inputs['value'] + 1"
-					inputs["wait_seconds"] = options.PressureWait.Seconds()
-					inputs["dirty_bytes"] = options.PressureDirtyBytes
-				}
-				request, err := makeRequest(fmt.Sprintf("pressure-%d", id), code, inputs)
+				spec := pressureRequestSpecFor(options, id)
+				request, err := makeRequest(fmt.Sprintf("pressure-%d", id), spec.Code, spec.Inputs)
 				if err != nil {
 					failed.Add(1)
 					continue
 				}
 				started.Add(1)
+				requestClassMu.Lock()
+				class := requestClasses[spec.Class]
+				if class == nil {
+					class = &cowPressureRequestClass{Name: spec.Class}
+					requestClasses[spec.Class] = class
+				}
+				class.Started++
+				requestClassMu.Unlock()
 				requestCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				began := time.Now()
 				response, runErr := runner.Run(requestCtx, request, "")
 				cancel()
 				elapsedDuration := time.Since(began)
 				elapsed := uint64(elapsedDuration.Nanoseconds())
-				failureReason := pressureResponseFailure(response, options.PressureWorkload, options.PressureWait, elapsedDuration)
+				failureReason := pressureResponseFailure(response, options.PressureWorkload, spec.Wait, elapsedDuration)
 				if runErr != nil || failureReason != "" {
 					failed.Add(1)
+					requestClassMu.Lock()
+					class.Failed++
+					requestClassMu.Unlock()
 					if errors.Is(runErr, context.DeadlineExceeded) {
 						timedOut.Add(1)
 					}
@@ -456,6 +533,9 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 					continue
 				}
 				completed.Add(1)
+				requestClassMu.Lock()
+				class.Completed++
+				requestClassMu.Unlock()
 				latencyMu.Lock()
 				latencies = append(latencies, elapsed)
 				latencyMu.Unlock()
@@ -503,12 +583,23 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	latencyCopy := append([]uint64(nil), latencies...)
 	latencyMu.Unlock()
+	requestClassMu.Lock()
+	requestClassNames := make([]string, 0, len(requestClasses))
+	for name := range requestClasses {
+		requestClassNames = append(requestClassNames, name)
+	}
+	sort.Strings(requestClassNames)
+	requestClassEvidence := make([]cowPressureRequestClass, 0, len(requestClassNames))
+	for _, name := range requestClassNames {
+		requestClassEvidence = append(requestClassEvidence, *requestClasses[name])
+	}
+	requestClassMu.Unlock()
 	load := cowPressureLoad{
 		StartedRequests: started.Load(), CompletedRequests: completed.Load(), FailedRequests: failed.Load(), TimedOutRequests: timedOut.Load(),
 		DurationNS: uint64(loadElapsed.Nanoseconds()), ReplenishDrainNS: uint64(replenishElapsed.Nanoseconds()), ReplenishStatus: replenishStatus,
 		CPUUserNS: cpuFinished.userNS - cpuStarted.userNS, CPUSystemNS: cpuFinished.systemNS - cpuStarted.systemNS,
 		GOMAXPROCS:  goruntime.GOMAXPROCS(0),
-		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()),
+		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()), RequestClasses: requestClassEvidence,
 	}
 	if loadElapsed > 0 {
 		load.ThroughputPerSec = float64(load.CompletedRequests) / loadElapsed.Seconds()
@@ -522,7 +613,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 7, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 8, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
@@ -531,9 +622,9 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		Limitations: []string{
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",
 			"One bounded wazero runtime, compiled module, and sealed baseline owns every admitted COW slot.",
-			"Full smaps collection is excluded from ordinary timed loads; dirty-hold takes three fixed-offset in-load samples and includes that diagnostic perturbation in its timing.",
+			"Full smaps collection is excluded from ordinary timed loads; dirty-hold and mixed-v1 take three fixed-offset in-load samples and include that diagnostic perturbation in their timing.",
 			"Raw cgroup counters retain their observed scope; shared job-level values are not process attribution or per-slot memory.",
-			"Closed-loop consumers use a small deterministic Python request and do not model provider latency or open-loop arrivals.",
+			"Closed-loop consumers use versioned deterministic Python request classes and do not model provider latency or open-loop arrivals.",
 			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight request drain but exclude replenish_drain_ns.",
 			"Served slots remain single-use and are replenished; no served-slot restore is claimed.",
 		},
@@ -666,7 +757,7 @@ func measuredValue(metric runtimeevidence.Metric, name string) (uint64, error) {
 	return *metric.Value, nil
 }
 
-func pressureResponseFailure(raw []byte, workload string, requestedWait, elapsed time.Duration) string {
+func pressureResponseFailure(raw []byte, _ string, requestedWait, elapsed time.Duration) string {
 	var response struct {
 		Status string         `json:"status"`
 		Error  map[string]any `json:"error"`
@@ -682,7 +773,7 @@ func pressureResponseFailure(raw []byte, workload string, requestedWait, elapsed
 		}
 		return fmt.Sprintf("guest status=%q error_type=%q message=%q", response.Status, errorType, message)
 	}
-	if (workload == "wasi-timer-wait" || workload == "dirty-hold") && elapsed+time.Millisecond < requestedWait {
+	if requestedWait > 0 && elapsed+time.Millisecond < requestedWait {
 		return fmt.Sprintf("timer returned early: elapsed=%s requested=%s", elapsed, requestedWait)
 	}
 	return ""

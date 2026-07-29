@@ -68,7 +68,7 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 6, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 7, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
@@ -118,6 +118,30 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := compileCOWPressureSchema(t).Validate(timeoutDocument); err != nil {
+		t.Fatal(err)
+	}
+	dirty := evidence
+	dirty.Limits.Workload = "dirty-hold"
+	dirty.Limits.WaitNS = uint64((2 * time.Second).Nanoseconds())
+	dirty.Limits.DirtyBytes = 1 << 20
+	active := loadSample
+	active.Phase = "load-active"
+	active.COWMappings.MappingCount = 5
+	active.Pool.Leased = 1
+	active.Pool.Executing = 1
+	dirty.LoadSamples = []cowPressureSnapshot{active, active, active, loadSample}
+	if err := dirty.Validate(); err != nil {
+		t.Fatalf("dirty active samples were rejected: %v", err)
+	}
+	encodedDirty, err := json.Marshal(dirty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dirtyDocument any
+	if err := json.Unmarshal(encodedDirty, &dirtyDocument); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileCOWPressureSchema(t).Validate(dirtyDocument); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -186,6 +210,17 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	waiting.PressureWait = 100 * time.Millisecond
 	if err := validateCOWPressureOptions(waiting, "linux"); err != nil {
 		t.Fatalf("bounded wait workload rejected: %v", err)
+	}
+	dirty := valid
+	dirty.PressureWorkload = "dirty-hold"
+	dirty.PressureWait = 2 * time.Second
+	dirty.PressureDirtyBytes = 16 << 20
+	if err := validateCOWPressureOptions(dirty, "linux"); err != nil {
+		t.Fatalf("bounded dirty workload rejected: %v", err)
+	}
+	dirty.PressureDirtyBytes = 0
+	if err := validateCOWPressureOptions(dirty, "linux"); err == nil {
+		t.Fatal("dirty workload without a working set was accepted")
 	}
 }
 

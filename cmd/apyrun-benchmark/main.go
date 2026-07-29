@@ -83,6 +83,7 @@ type benchmarkOptions struct {
 	PressureDuration      time.Duration
 	PressureWorkload      string
 	PressureWait          time.Duration
+	PressureDirtyBytes    uint64
 	PressureRefillWorkers uint
 }
 
@@ -113,8 +114,9 @@ func runMain(args []string) error {
 	flags.UintVar(&options.MaxPressureSlots, "max-pressure-slots", 0, "cow-pressure hard slot bound")
 	flags.UintVar(&options.ConsumerCount, "consumers", 0, "cow-pressure closed-loop consumer count")
 	flags.DurationVar(&options.PressureDuration, "pressure-duration", 0, "cow-pressure closed-loop duration")
-	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu or wasi-timer-wait")
-	flags.DurationVar(&options.PressureWait, "pressure-wait", 0, "per-request wait for wasi-timer-wait workload")
+	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu, wasi-timer-wait, or dirty-hold")
+	flags.DurationVar(&options.PressureWait, "pressure-wait", 0, "per-request wait for wasi-timer-wait or dirty-hold workload")
+	flags.Uint64Var(&options.PressureDirtyBytes, "pressure-dirty-bytes", 0, "per-request bytearray bytes touched by dirty-hold")
 	flags.UintVar(&options.PressureRefillWorkers, "pressure-refill-workers", 4, "cow-pressure fixed refill workers: 1, 2, 4, 8, 12, or 16")
 	if err := flags.Parse(args); err != nil {
 		return err

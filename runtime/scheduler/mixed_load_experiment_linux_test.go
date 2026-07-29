@@ -17,6 +17,7 @@ type e2ActiveMapping struct {
 	task        e2WorkloadTask
 	attempt     AttemptSnapshot
 	memory      []byte
+	sampled     bool
 	startedTick uint64
 	dueTick     uint64
 }
@@ -61,10 +62,17 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 		t.Fatal(err)
 	}
 	profileOptions := profileConfig()
+	profileOptions.HardBytes = scheduler.config.HardBytes
+	profileOptions.UnknownReservationBytes = 128 * mib
+	profileOptions.PerAttemptMarginBytes = mib
 	profileOptions.ReservationQuantileBPS = 9500
 	profileOptions.MaxProfiles = 8
 	profileOptions.MaxTrackedAttempts = uint32(taskCount * 3)
-	profileOptions.MaxAggregateSamples = uint32(taskCount * 3)
+	profileOptions.MaxSamplesPerProfile = 64
+	profileOptions.MaxAggregateSamples = 256
+	profileOptions.ColdRuns = 64
+	profileOptions.StableSampleEvery = 1
+	profileOptions.MinimumSamples = 4
 	store, err := NewProfileStore(profileOptions)
 	if err != nil {
 		t.Fatal(err)
@@ -80,11 +88,30 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 	}
 	tracker := NewLiveControlWindowTracker()
 	tasks := make(map[string]e2WorkloadTask, len(workload))
+	profiles := make(map[e2WorkloadClass]WorkloadProfile, 4)
+	seedValues := make(map[e2WorkloadClass][]uint64, 4)
+	for _, class := range []e2WorkloadClass{e2Tiny, e2Small, e2Medium, e2Large} {
+		profile, err := e2WorkloadProfile(class)
+		if err != nil {
+			t.Fatal(err)
+		}
+		profiles[class] = profile
+	}
 	for _, task := range workload {
 		tasks[task.TaskID] = task
-		if _, err := scheduler.Submit(TaskSpec{
-			TaskID: task.TaskID, ProfileKey: "e2_" + string(task.Class), Lane: LaneSpeculative,
-			ReservationBytes: task.ReservationBytes, MaxEvictions: 2,
+		if len(seedValues[task.Class]) < 20 {
+			seedValues[task.Class] = append(seedValues[task.Class], task.ActualBytes)
+		}
+	}
+	for class, values := range seedValues {
+		if len(values) < int(profileOptions.MinimumSamples) {
+			t.Fatalf("insufficient profile seeds for %s", class)
+		}
+		addProfileSamples(t, store, profiles[class], values...)
+	}
+	for _, task := range workload {
+		if _, _, err := scheduler.SubmitProfiled(store, ProfiledTaskSpec{
+			TaskID: task.TaskID, Profile: profiles[task.Class], Lane: LaneSpeculative, MaxEvictions: 2,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -135,6 +162,11 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 			if mapping.dueTick > tick {
 				continue
 			}
+			if mapping.sampled {
+				if err := store.RecordObservation(observedFootprint(attemptID, mapping.task.ActualBytes)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if err := unix.Munmap(mapping.memory); err != nil {
 				t.Fatal(err)
 			}
@@ -167,6 +199,11 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 					elapsed = uint64(mapping.task.DurationTicks)
 				}
 				report.WastedBytes += mapping.task.ActualBytes * elapsed / uint64(mapping.task.DurationTicks)
+				if mapping.sampled {
+					if err := store.RecordObservation(observedFootprint(victim.AttemptID, mapping.task.ActualBytes)); err != nil {
+						t.Fatal(err)
+					}
+				}
 				if err := unix.Munmap(mapping.memory); err != nil {
 					t.Fatal(err)
 				}
@@ -189,13 +226,14 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 			}
 		}
 		for len(active) < 64 {
-			attempt, err := scheduler.Admit()
+			attempt, err := scheduler.AdmitProfiled(store)
 			if errors.Is(err, ErrNoAdmissibleTask) || errors.Is(err, ErrCapacity) {
 				break
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
+			sampled := store.ShouldSample(attempt.AttemptID)
 			attempt, err = scheduler.Start(attempt.AttemptID)
 			if err != nil {
 				t.Fatal(err)
@@ -212,7 +250,7 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 				_ = unix.Munmap(memory)
 				t.Fatal(err)
 			}
-			active[attempt.AttemptID] = &e2ActiveMapping{task: task, attempt: attempt, memory: memory, startedTick: tick, dueTick: tick + uint64(task.DurationTicks)}
+			active[attempt.AttemptID] = &e2ActiveMapping{task: task, attempt: attempt, memory: memory, sampled: sampled, startedTick: tick, dueTick: tick + uint64(task.DurationTicks)}
 			report.Attempts++
 			if uint64(len(active)) > report.MaxActive {
 				report.MaxActive = uint64(len(active))

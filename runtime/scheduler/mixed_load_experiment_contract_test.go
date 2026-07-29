@@ -12,8 +12,13 @@ func TestE2MixedWorkloadCorpusHasExactDistribution(t *testing.T) {
 	}
 	counts := map[e2WorkloadClass]int{}
 	prefixClasses := map[e2WorkloadClass]bool{}
+	footprints := map[e2WorkloadClass]map[uint64]bool{}
 	for index, task := range workload {
 		counts[task.Class]++
+		if footprints[task.Class] == nil {
+			footprints[task.Class] = map[uint64]bool{}
+		}
+		footprints[task.Class][task.ActualBytes] = true
 		if index < 20 {
 			prefixClasses[task.Class] = true
 		}
@@ -23,6 +28,11 @@ func TestE2MixedWorkloadCorpusHasExactDistribution(t *testing.T) {
 	}
 	if len(prefixClasses) < 3 {
 		t.Fatalf("arrival prefix is not mixed: %#v", prefixClasses)
+	}
+	for class, values := range footprints {
+		if len(values) < 3 {
+			t.Fatalf("class %s has no within-class footprint distribution: %#v", class, values)
+		}
 	}
 	if counts[e2Tiny] != 120 || counts[e2Small] != 50 || counts[e2Medium] != 20 || counts[e2Large] != 10 {
 		t.Fatalf("distribution = %#v", counts)
@@ -40,6 +50,32 @@ func TestE2MixedWorkloadCorpusHasExactDistribution(t *testing.T) {
 		if _, err := buildE2MixedWorkload(count); !errors.Is(err, errInvalidE2Experiment) {
 			t.Fatalf("count %d error = %v", count, err)
 		}
+	}
+}
+
+func TestE2WorkloadProfilesAreStablePerClass(t *testing.T) {
+	keys := map[e2WorkloadClass]string{}
+	for _, class := range []e2WorkloadClass{e2Tiny, e2Small, e2Medium, e2Large} {
+		profile, err := e2WorkloadProfile(class)
+		if err != nil {
+			t.Fatalf("profile %s: %v", class, err)
+		}
+		key, err := profile.Key()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if prior := keys[class]; prior != "" && prior != key {
+			t.Fatalf("unstable profile for %s", class)
+		}
+		for other, otherKey := range keys {
+			if other != class && otherKey == key {
+				t.Fatalf("classes %s and %s share profile", class, other)
+			}
+		}
+		keys[class] = key
+	}
+	if _, err := e2WorkloadProfile("unknown"); !errors.Is(err, errInvalidE2Experiment) {
+		t.Fatalf("invalid class error=%v", err)
 	}
 }
 

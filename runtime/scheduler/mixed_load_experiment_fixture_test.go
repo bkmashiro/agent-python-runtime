@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 var errInvalidE2Experiment = errors.New("invalid E2 mixed-load experiment")
@@ -30,22 +31,49 @@ func buildE2MixedWorkload(count int) ([]e2WorkloadTask, error) {
 		return nil, errInvalidE2Experiment
 	}
 	result := make([]e2WorkloadTask, 0, count)
+	classOccurrences := map[e2WorkloadClass]int{}
 	for index := 0; index < count; index++ {
 		position := (index * 37) % 100
 		task := e2WorkloadTask{TaskID: fmt.Sprintf("e2-task-%05d", index)}
 		switch {
 		case position < 60:
-			task.Class, task.ActualBytes, task.ReservationBytes, task.DurationTicks = e2Tiny, 2<<20, 2<<20, 2
+			task.Class, task.ActualBytes, task.DurationTicks = e2Tiny, 2<<20, 2
 		case position < 85:
-			task.Class, task.ActualBytes, task.ReservationBytes, task.DurationTicks = e2Small, 8<<20, 6<<20, 3
+			task.Class, task.ActualBytes, task.DurationTicks = e2Small, 8<<20, 3
 		case position < 95:
-			task.Class, task.ActualBytes, task.ReservationBytes, task.DurationTicks = e2Medium, 32<<20, 16<<20, 5
+			task.Class, task.ActualBytes, task.DurationTicks = e2Medium, 32<<20, 5
 		default:
-			task.Class, task.ActualBytes, task.ReservationBytes, task.DurationTicks = e2Large, 96<<20, 32<<20, 8
+			task.Class, task.ActualBytes, task.DurationTicks = e2Large, 96<<20, 8
 		}
+		factors := [...]uint64{75, 100, 75, 115, 75, 75, 125, 75, 100, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75}
+		factor := factors[classOccurrences[task.Class]%len(factors)]
+		classOccurrences[task.Class]++
+		task.ActualBytes = task.ActualBytes * factor / 100
+		task.ReservationBytes = task.ActualBytes / 2
 		result = append(result, task)
 	}
 	return result, nil
+}
+
+func e2WorkloadProfile(class e2WorkloadClass) (WorkloadProfile, error) {
+	var digestCharacter string
+	var bucket RequestSizeBucket
+	switch class {
+	case e2Tiny:
+		digestCharacter, bucket = "1", RequestSizeTiny
+	case e2Small:
+		digestCharacter, bucket = "2", RequestSizeSmall
+	case e2Medium:
+		digestCharacter, bucket = "3", RequestSizeMedium
+	case e2Large:
+		digestCharacter, bucket = "4", RequestSizeLarge
+	default:
+		return WorkloadProfile{}, errInvalidE2Experiment
+	}
+	return WorkloadProfile{
+		ArtifactDigest: strings.Repeat(digestCharacter, 64), WorkloadClass: "e2_" + string(class),
+		RequestSizeBucket: bucket, CapabilityPattern: "none", PolicyClass: "e2",
+	}, nil
 }
 
 type e2Quantiles struct {

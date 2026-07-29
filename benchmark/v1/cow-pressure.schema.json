@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json",
-  "title": "COW pressure evidence v5",
+  "title": "COW pressure evidence v6",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
   "properties": {
-    "schema_version": {"const": 5},
+    "schema_version": {"const": 6},
     "evidence_kind": {"const": "cow-pressure"},
     "evidence_class": {"const": "production-safe"},
     "artifact": {"$ref": "#/$defs/artifact"},
@@ -143,11 +143,12 @@
     },
     "load": {
       "type": "object", "additionalProperties": false,
-      "required": ["started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "ready_before", "ready_after", "phases"],
+      "required": ["started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "ready_before", "ready_after", "phases"],
       "properties": {
         "started_requests": {"type": "integer", "minimum": 1}, "completed_requests": {"type": "integer", "minimum": 1},
         "failed_requests": {"type": "integer", "minimum": 0}, "timed_out_requests": {"type": "integer", "minimum": 0},
         "duration_ns": {"type": "integer", "minimum": 1}, "replenish_drain_ns": {"type": "integer", "minimum": 0},
+        "replenish_status": {"enum": ["complete", "timeout"]},
         "cpu_user_ns": {"type": "integer", "minimum": 0}, "cpu_system_ns": {"type": "integer", "minimum": 0},
         "cpu_core_utilization": {"type": "number", "exclusiveMinimum": 0}, "gomaxprocs": {"type": "integer", "minimum": 1},
         "throughput_per_second": {"type": "number", "exclusiveMinimum": 0},

@@ -65,6 +65,7 @@ type cowPressureLoad struct {
 	TimedOutRequests   uint64             `json:"timed_out_requests"`
 	DurationNS         uint64             `json:"duration_ns"`
 	ReplenishDrainNS   uint64             `json:"replenish_drain_ns"`
+	ReplenishStatus    string             `json:"replenish_status"`
 	CPUUserNS          uint64             `json:"cpu_user_ns"`
 	CPUSystemNS        uint64             `json:"cpu_system_ns"`
 	CPUCoreUtilization float64            `json:"cpu_core_utilization"`
@@ -105,7 +106,7 @@ type growablePreparedBenchmarkRunner interface {
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 5 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 6 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -141,8 +142,10 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure closed-loop load evidence is incomplete")
 	}
 	lastSlots := evidence.Spawn[len(evidence.Spawn)-1].Slots
-	if evidence.Load.ReadyBefore != lastSlots || evidence.Load.ReadyAfter != lastSlots {
-		return errors.New("cow-pressure ready pool did not replenish to its admitted capacity")
+	if evidence.Load.ReadyBefore != lastSlots ||
+		(evidence.Load.ReplenishStatus == "complete" && evidence.Load.ReadyAfter != lastSlots) ||
+		(evidence.Load.ReplenishStatus != "complete" && evidence.Load.ReplenishStatus != "timeout") {
+		return errors.New("cow-pressure replenish outcome is inconsistent")
 	}
 	phaseNames := map[string]struct{}{}
 	for _, phase := range evidence.Load.Phases {
@@ -157,7 +160,8 @@ func (evidence cowPressureEvidence) Validate() error {
 	snapshot := evidence.LoadSamples[0]
 	if snapshot.Phase != "load-final" || snapshot.Slots != lastSlots || snapshot.RuntimeInstances != 1 ||
 		snapshot.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers) ||
-		!validPressurePoolState(snapshot.Pool, lastSlots) || snapshot.PreparedImage != preparedImage {
+		!validPressureFinalPoolState(snapshot.Pool, lastSlots, evidence.Load.ReplenishStatus) ||
+		snapshot.Pool.Ready != evidence.Load.ReadyAfter || snapshot.PreparedImage != preparedImage {
 		return errors.New("cow-pressure final mapping identity drifted")
 	}
 	return nil
@@ -175,6 +179,17 @@ func validPressurePoolState(state wazeroengine.PreparedPoolState, slots uint32) 
 		state.Floor <= state.Critical && state.Critical <= state.Low && state.Low <= state.High &&
 		state.Ready == slots && state.SupplyAccounted == slots && state.Queued == 0 && state.Refilling == 0 &&
 		state.Leased == 0 && state.Executing == 0 && state.Waiting == 0 && state.Retiring == 0 &&
+		state.ConsecutiveFailures == 0 && state.TotalFailures == 0 && !state.BreakerOpen
+}
+
+func validPressureFinalPoolState(state wazeroengine.PreparedPoolState, slots uint32, replenishStatus string) bool {
+	if replenishStatus == "complete" || replenishStatus == "timeout" && state.Ready == slots {
+		return validPressurePoolState(state, slots)
+	}
+	return replenishStatus == "timeout" && state.TargetCapacity == slots && state.MaximumCapacity >= slots && state.High == slots &&
+		state.Floor <= state.Critical && state.Critical <= state.Low && state.Low <= state.High &&
+		state.Ready < slots && uint64(state.Ready)+uint64(state.Queued)+uint64(state.Refilling) == uint64(state.SupplyAccounted) &&
+		state.SupplyAccounted == slots && state.Leased == 0 && state.Executing == 0 && state.Waiting == 0 && state.Retiring == 0 &&
 		state.ConsecutiveFailures == 0 && state.TotalFailures == 0 && !state.BreakerOpen
 }
 
@@ -395,15 +410,19 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	replenishStarted := time.Now()
 	replenishContext, cancelReplenish := context.WithTimeout(context.Background(), config.Timeout)
 	defer cancelReplenish()
+	replenishStatus := "complete"
 	if err := waitForPreparedReady(replenishContext, runner, slots); err != nil {
-		return err
+		if !errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		replenishStatus = "timeout"
 	}
 	replenishElapsed := time.Since(replenishStarted)
 	finalSnapshot, err := collectCOWPressureSnapshot(collector, runner, "load-final", slots)
 	if err != nil {
 		return err
 	}
-	readyAfter := uint32(runner.PreparedReady())
+	readyAfter := finalSnapshot.Pool.Ready
 
 	latencyMu.Lock()
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
@@ -411,7 +430,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	latencyMu.Unlock()
 	load := cowPressureLoad{
 		StartedRequests: started.Load(), CompletedRequests: completed.Load(), FailedRequests: failed.Load(), TimedOutRequests: timedOut.Load(),
-		DurationNS: uint64(loadElapsed.Nanoseconds()), ReplenishDrainNS: uint64(replenishElapsed.Nanoseconds()),
+		DurationNS: uint64(loadElapsed.Nanoseconds()), ReplenishDrainNS: uint64(replenishElapsed.Nanoseconds()), ReplenishStatus: replenishStatus,
 		CPUUserNS: cpuFinished.userNS - cpuStarted.userNS, CPUSystemNS: cpuFinished.systemNS - cpuStarted.systemNS,
 		GOMAXPROCS:  goruntime.GOMAXPROCS(0),
 		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()),
@@ -428,7 +447,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 5, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 6, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
@@ -455,7 +474,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	if err := writeAtomic(options.OutputPath, encoded); err != nil {
 		return err
 	}
-	fmt.Printf("{\"output\":%q,\"slots\":%d,\"completed\":%d}\n", options.OutputPath, slots, load.CompletedRequests)
+	fmt.Printf("{\"output\":%q,\"slots\":%d,\"completed\":%d,\"replenish_status\":%q}\n", options.OutputPath, slots, load.CompletedRequests, load.ReplenishStatus)
 	return nil
 }
 

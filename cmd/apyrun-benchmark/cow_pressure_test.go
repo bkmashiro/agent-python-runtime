@@ -68,14 +68,14 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 5, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 6, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
 		Strategy:    runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"},
 		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillWorkers: 4},
 		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
-		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}},
+		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}},
 		Limitations: []string{"one", "two", "three", "four"},
 	}
 	if err := evidence.Validate(); err != nil {
@@ -90,6 +90,27 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := compileCOWPressureSchema(t).Validate(document); err != nil {
+		t.Fatal(err)
+	}
+	timeout := evidence
+	timeout.Load.ReplenishStatus = "timeout"
+	timeout.Load.ReadyAfter = 3
+	timeoutSample := loadSample
+	timeoutSample.Pool.Ready = 3
+	timeoutSample.Pool.Queued = 1
+	timeout.LoadSamples = []cowPressureSnapshot{timeoutSample}
+	if err := timeout.Validate(); err != nil {
+		t.Fatalf("bounded replenish timeout was rejected: %v", err)
+	}
+	encodedTimeout, err := json.Marshal(timeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var timeoutDocument any
+	if err := json.Unmarshal(encodedTimeout, &timeoutDocument); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileCOWPressureSchema(t).Validate(timeoutDocument); err != nil {
 		t.Fatal(err)
 	}
 }

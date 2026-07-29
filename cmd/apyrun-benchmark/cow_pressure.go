@@ -112,7 +112,7 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
 	}
 	if evidence.Limits.RuntimeBudgetBytes+evidence.Limits.ReservedBytes != evidence.Limits.AllocationBytes ||
-		evidence.Limits.InitialCapacity != pressureInitialCapacity || evidence.Limits.MaxGrowthStep != pressureMaxGrowthStep || evidence.Limits.RefillWorkers == 0 || evidence.Limits.RefillWorkers > 4 ||
+		evidence.Limits.InitialCapacity != pressureInitialCapacity || evidence.Limits.MaxGrowthStep != pressureMaxGrowthStep || evidence.Limits.RefillWorkers == 0 || evidence.Limits.RefillWorkers > 16 || evidence.Limits.RefillWorkers > evidence.Limits.MaxSlots ||
 		!validPressureWorkload(evidence.Limits.Workload, time.Duration(evidence.Limits.WaitNS)) || len(evidence.Spawn) == 0 || evidence.StopReason == "" {
 		return errors.New("cow-pressure limits or spawn evidence is incomplete")
 	}

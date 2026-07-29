@@ -102,6 +102,13 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	if err := timeout.Validate(); err != nil {
 		t.Fatalf("bounded replenish timeout was rejected: %v", err)
 	}
+	sixteenWorkers := evidence
+	sixteenWorkers.Limits.MaxSlots = 16
+	sixteenWorkers.Limits.RefillWorkers = 16
+	sixteenWorkers.StopReason = "admission-headroom"
+	if err := sixteenWorkers.Validate(); err != nil {
+		t.Fatalf("explicit 16-worker evidence was rejected: %v", err)
+	}
 	encodedTimeout, err := json.Marshal(timeout)
 	if err != nil {
 		t.Fatal(err)

@@ -54,7 +54,6 @@ func TestCgroupV2MemoryReaderResolvesInheritedMaximum(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixtures := map[string]string{
-		filepath.Join(boundary, "memory.max"):  "max\n",
 		filepath.Join(parent, "memory.max"):    "4294967296\n",
 		filepath.Join(leaf, "memory.max"):      "max\n",
 		filepath.Join(leaf, "memory.current"):  "1048576\n",

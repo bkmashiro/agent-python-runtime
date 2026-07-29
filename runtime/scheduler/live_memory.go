@@ -138,6 +138,9 @@ func (reader *CgroupV2MemoryReader) readEffectiveMaximum() ([]byte, error) {
 	for current := reader.root; ; current = filepath.Dir(current) {
 		payload, err := reader.readFile(filepath.Join(current, "memory.max"))
 		if err != nil {
+			if os.IsNotExist(err) && found {
+				break
+			}
 			return nil, fmt.Errorf("read memory.max at %s: %w", current, err)
 		}
 		value := strings.TrimSpace(string(payload))

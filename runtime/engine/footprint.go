@@ -9,6 +9,7 @@ import (
 var (
 	ErrInvalidAttemptIdentity      = errors.New("invalid Host attempt identity")
 	ErrInvalidFootprintObservation = errors.New("invalid memory footprint observation")
+	ErrInvalidReclaimObservation   = errors.New("invalid memory reclaim observation")
 )
 
 type attemptIdentityContextKey struct{}
@@ -63,6 +64,52 @@ type FootprintObservation struct {
 type FootprintSink interface {
 	ShouldSample(attemptID string) bool
 	Observe(FootprintObservation)
+}
+
+type ReclaimStatus string
+
+const (
+	ReclaimReleased    ReclaimStatus = "released"
+	ReclaimStillMapped ReclaimStatus = "still_mapped"
+	ReclaimUnavailable ReclaimStatus = "unavailable"
+	ReclaimFailed      ReclaimStatus = "failed"
+)
+
+type MemoryReclaimObservation struct {
+	AttemptID     string
+	ObservedAt    time.Time
+	Backend       string
+	Strategy      ExecutionStrategy
+	Status        ReclaimStatus
+	CloseDuration time.Duration
+	ErrorCode     string
+}
+
+func (observation MemoryReclaimObservation) Validate() error {
+	if !boundedRuntimeIdentifier(observation.AttemptID, 128) || !boundedRuntimeIdentifier(observation.Backend, 64) ||
+		!validStrategy(observation.Strategy) || observation.ObservedAt.IsZero() || observation.CloseDuration < 0 {
+		return ErrInvalidReclaimObservation
+	}
+	switch observation.Status {
+	case ReclaimReleased:
+		if observation.ErrorCode != "" {
+			return ErrInvalidReclaimObservation
+		}
+	case ReclaimStillMapped, ReclaimUnavailable, ReclaimFailed:
+		if !boundedErrorCode(observation.ErrorCode) {
+			return ErrInvalidReclaimObservation
+		}
+	default:
+		return ErrInvalidReclaimObservation
+	}
+	return nil
+}
+
+// ReclaimSink receives close-complete verification for the same Host attempt.
+// Implementations must be safe for concurrent Runner.Run calls.
+type ReclaimSink interface {
+	ShouldObserve(attemptID string) bool
+	ObserveReclaim(MemoryReclaimObservation)
 }
 
 func (observation FootprintObservation) Validate() error {

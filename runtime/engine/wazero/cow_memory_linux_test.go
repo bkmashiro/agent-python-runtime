@@ -153,9 +153,15 @@ func TestCOWLinearMemorySamplesExactLinuxMapping(t *testing.T) {
 	if footprint.VirtualBytes != wasmLinearPageSize || footprint.MappingCount == 0 || footprint.PrivateDirtyBytes == 0 {
 		t.Fatalf("unexpected mapping footprint: %+v", footprint)
 	}
+	if err := allocation.verifyReclaimed(); !errors.Is(err, errFootprintMappingStillPresent) {
+		t.Fatalf("live mapping reported reclaimed: %v", err)
+	}
 	allocation.Free()
 	if _, err := allocation.sampleFootprint(); !errors.Is(err, errFootprintMappingUnavailable) {
 		t.Fatalf("sampled freed mapping: %v", err)
+	}
+	if err := allocation.verifyReclaimed(); err != nil {
+		t.Fatalf("freed mapping remained present: %v", err)
 	}
 	if err := image.Close(); err != nil {
 		t.Fatal(err)

@@ -165,19 +165,19 @@ func publishPreparedInstance(pool *preparedPool, instance *preparedInstance) err
 	}
 }
 
-func (engine *Engine) closeServedInstance(instance *preparedInstance) {
+func (engine *Engine) closeServedInstance(instance *preparedInstance) error {
 	if instance == nil || instance.module == nil {
-		return
+		return nil
 	}
 	pool := engine.pool
 	if instance.fromPool && pool != nil {
 		pool.retiring.Add(1)
-		_ = instance.module.Close(context.Background())
+		err := instance.module.Close(context.Background())
 		pool.leased.Add(^uint32(0))
 		pool.retiring.Add(^uint32(0))
-		return
+		return err
 	}
-	_ = instance.module.Close(context.Background())
+	return instance.module.Close(context.Background())
 }
 
 // GrowPreparedCapacity admits additional never-served slots into the existing

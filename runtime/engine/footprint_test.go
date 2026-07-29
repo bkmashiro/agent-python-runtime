@@ -25,7 +25,37 @@ func TestAttemptIdentityIsValidatedAndRoundTripsThroughContext(t *testing.T) {
 	}
 }
 
-func TestFootprintObservationValidationFailsClosed(t *testing.T) {
+func TestMemoryReclaimObservationValidation(t *testing.T) {
+	valid := MemoryReclaimObservation{
+		AttemptID: "attempt:1", ObservedAt: time.Unix(12, 0).UTC(), Backend: "linux_proc_smaps",
+		Strategy: StrategyCOWReadySingleUse, Status: ReclaimReleased, CloseDuration: time.Millisecond,
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid reclaim observation: %v", err)
+	}
+	invalid := valid
+	invalid.AttemptID = ""
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("missing attempt identity was accepted")
+	}
+	invalid = valid
+	invalid.Status = ReclaimStillMapped
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("still-mapped observation without an error code was accepted")
+	}
+	invalid.ErrorCode = "mapping_present"
+	if err := invalid.Validate(); err != nil {
+		t.Fatalf("bounded still-mapped observation: %v", err)
+	}
+	invalid = valid
+	invalid.Status = ReclaimReleased
+	invalid.ErrorCode = "close_failed"
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("released observation carried an error code")
+	}
+}
+
+func TestFootprintObservationValidation(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	valid := FootprintObservation{
 		AttemptID: "task:attempt:1",

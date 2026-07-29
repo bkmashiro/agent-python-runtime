@@ -157,7 +157,11 @@ func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
 		return nil, fmt.Errorf("map fresh private linear memory: %w", err)
 	}
 	image.mappings++
-	return &cowLinearMemory{image: image, buffer: buffer, max: image.size}, nil
+	start := uint64(uintptr(unsafe.Pointer(&buffer[0])))
+	return &cowLinearMemory{
+		image: image, buffer: buffer, max: image.size,
+		mappingStart: start, mappingEnd: start + uint64(len(buffer)),
+	}, nil
 }
 
 func (image *cowImage) attachPrivateAt(buffer []byte) error {
@@ -278,12 +282,14 @@ func (*failedLinearMemory) Reallocate(uint64) []byte { return nil }
 func (*failedLinearMemory) Free()                    {}
 
 type cowLinearMemory struct {
-	mu       sync.Mutex
-	image    *cowImage
-	buffer   []byte
-	max      uint64
-	attached bool
-	freed    bool
+	mu           sync.Mutex
+	image        *cowImage
+	buffer       []byte
+	max          uint64
+	mappingStart uint64
+	mappingEnd   uint64
+	attached     bool
+	freed        bool
 }
 
 var _ experimental.LinearMemory = (*cowLinearMemory)(nil)
@@ -320,18 +326,14 @@ func (memory *cowLinearMemory) Reset() error {
 func (memory *cowLinearMemory) sampleFootprint() (enginecontract.MemoryFootprint, error) {
 	memory.mu.Lock()
 	defer memory.mu.Unlock()
-	if memory.freed || len(memory.buffer) == 0 {
+	if memory.freed || len(memory.buffer) == 0 || memory.mappingStart == 0 || memory.mappingEnd <= memory.mappingStart {
 		return enginecontract.MemoryFootprint{}, errFootprintMappingUnavailable
-	}
-	start := uint64(uintptr(unsafe.Pointer(&memory.buffer[0])))
-	if uint64(len(memory.buffer)) > ^uint64(0)-start {
-		return enginecontract.MemoryFootprint{}, errSMAPSMalformed
 	}
 	file, err := os.Open("/proc/self/smaps")
 	if err != nil {
 		return enginecontract.MemoryFootprint{}, fmt.Errorf("%w: open", errFootprintReadFailed)
 	}
-	footprint, parseErr := parseSMAPSMemory(file, start, start+uint64(len(memory.buffer)))
+	footprint, parseErr := parseSMAPSMemory(file, memory.mappingStart, memory.mappingEnd)
 	closeErr := file.Close()
 	if parseErr != nil {
 		return enginecontract.MemoryFootprint{}, parseErr
@@ -340,6 +342,30 @@ func (memory *cowLinearMemory) sampleFootprint() (enginecontract.MemoryFootprint
 		return enginecontract.MemoryFootprint{}, fmt.Errorf("%w: close", errFootprintReadFailed)
 	}
 	return footprint, nil
+}
+
+func (memory *cowLinearMemory) verifyReclaimed() error {
+	memory.mu.Lock()
+	defer memory.mu.Unlock()
+	if memory.mappingStart == 0 || memory.mappingEnd <= memory.mappingStart {
+		return errFootprintMappingUnavailable
+	}
+	file, err := os.Open("/proc/self/smaps")
+	if err != nil {
+		return fmt.Errorf("%w: open", errFootprintReadFailed)
+	}
+	_, parseErr := parseSMAPSMemory(file, memory.mappingStart, memory.mappingEnd)
+	closeErr := file.Close()
+	if parseErr == nil {
+		return errFootprintMappingStillPresent
+	}
+	if !errors.Is(parseErr, errSMAPSMappingNotFound) {
+		return parseErr
+	}
+	if closeErr != nil {
+		return fmt.Errorf("%w: close", errFootprintReadFailed)
+	}
+	return nil
 }
 
 func (memory *cowLinearMemory) Free() {

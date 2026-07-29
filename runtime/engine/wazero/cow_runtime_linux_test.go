@@ -66,10 +66,12 @@ func TestEngineBuildsCOWReadySingleUsePool(t *testing.T) {
 
 func TestEngineObservesServedCOWMappingBeforeClose(t *testing.T) {
 	sink := &recordingFootprintSink{sample: true}
+	reclaimSink := &recordingReclaimSink{observe: true}
 	runner, err := (Factory{
 		PreparedCapacity: 1,
 		Strategy:         enginecontract.StrategyCOWReadySingleUse,
 		FootprintSink:    sink,
+		ReclaimSink:      reclaimSink,
 	}).New(context.Background(), fixedMemoryReactor(t), runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +93,13 @@ func TestEngineObservesServedCOWMappingBeforeClose(t *testing.T) {
 	if observation.Status != enginecontract.FootprintObserved || observation.AttemptID != "linux:attempt:1" ||
 		observation.Memory.VirtualBytes != wasmLinearPageSize || observation.Memory.MappingCount == 0 {
 		t.Fatalf("unexpected footprint observation: %#v", observation)
+	}
+	if len(reclaimSink.observations) != 1 {
+		t.Fatalf("reclaim observations = %#v", reclaimSink.observations)
+	}
+	reclaim := reclaimSink.observations[0]
+	if err := reclaim.Validate(); err != nil || reclaim.Status != enginecontract.ReclaimReleased || reclaim.AttemptID != "linux:attempt:1" {
+		t.Fatalf("unexpected reclaim observation: %#v err=%v", reclaim, err)
 	}
 }
 

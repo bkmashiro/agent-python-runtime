@@ -12,9 +12,14 @@ type preparedFootprintSource interface {
 	sampleFootprint() (enginecontract.MemoryFootprint, error)
 }
 
+type preparedReclaimSource interface {
+	verifyReclaimed() error
+}
+
 var (
-	errFootprintMappingUnavailable = errors.New("footprint mapping unavailable")
-	errFootprintReadFailed         = errors.New("read process footprint failed")
+	errFootprintMappingUnavailable  = errors.New("footprint mapping unavailable")
+	errFootprintMappingStillPresent = errors.New("footprint mapping still present")
+	errFootprintReadFailed          = errors.New("read process footprint failed")
 )
 
 func observePreparedFootprint(ctx context.Context, sink enginecontract.FootprintSink, strategy enginecontract.ExecutionStrategy, instance *preparedInstance) {
@@ -52,6 +57,61 @@ func observePreparedFootprint(ctx context.Context, sink enginecontract.Footprint
 		observation.ErrorCode = "invalid_sample"
 	}
 	sink.Observe(observation)
+}
+
+func observePreparedReclaim(
+	ctx context.Context,
+	sink enginecontract.ReclaimSink,
+	strategy enginecontract.ExecutionStrategy,
+	instance *preparedInstance,
+	closeDuration time.Duration,
+	closeErr error,
+) {
+	if sink == nil || instance == nil {
+		return
+	}
+	attemptID, ok := enginecontract.AttemptIdentityFromContext(ctx)
+	if !ok || !sink.ShouldObserve(attemptID) {
+		return
+	}
+	observation := enginecontract.MemoryReclaimObservation{
+		AttemptID: attemptID, ObservedAt: time.Now().UTC(), Backend: "linux_proc_smaps",
+		Strategy: strategy, CloseDuration: closeDuration,
+	}
+	if closeErr != nil {
+		observation.Status = enginecontract.ReclaimFailed
+		observation.ErrorCode = "close_failed"
+		sink.ObserveReclaim(observation)
+		return
+	}
+	source, ok := instance.footprintSource.(preparedReclaimSource)
+	if !ok {
+		observation.Status = enginecontract.ReclaimUnavailable
+		observation.ErrorCode = "mapping_unavailable"
+		sink.ObserveReclaim(observation)
+		return
+	}
+	if err := source.verifyReclaimed(); err != nil {
+		switch {
+		case errors.Is(err, errFootprintMappingStillPresent):
+			observation.Status = enginecontract.ReclaimStillMapped
+			observation.ErrorCode = "mapping_present"
+		case errors.Is(err, errFootprintMappingUnavailable):
+			observation.Status = enginecontract.ReclaimUnavailable
+			observation.ErrorCode = "mapping_unavailable"
+		default:
+			observation.Status = enginecontract.ReclaimFailed
+			observation.ErrorCode = footprintErrorCode(err)
+		}
+		sink.ObserveReclaim(observation)
+		return
+	}
+	observation.Status = enginecontract.ReclaimReleased
+	if err := observation.Validate(); err != nil {
+		observation.Status = enginecontract.ReclaimFailed
+		observation.ErrorCode = "invalid_reclaim"
+	}
+	sink.ObserveReclaim(observation)
 }
 
 func footprintErrorCode(err error) string {

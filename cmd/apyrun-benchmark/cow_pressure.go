@@ -238,8 +238,8 @@ func (evidence cowPressureEvidence) Validate() error {
 	for _, active := range evidence.LoadSamples[:len(evidence.LoadSamples)-1] {
 		if active.Phase != "load-active" || active.Slots != lastSlots || active.RuntimeInstances != 1 ||
 			active.COWMappings.Name != "memfd:apyrun-cow-image" || !validPressureLoadMappingCount(active.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers*evidence.Limits.BurstFactor) ||
-			!validPressureActivePoolState(active.Pool, lastSlots) || !samePressurePreparedImageIdentity(active.PreparedImage, preparedImage) {
-			return fmt.Errorf("cow-pressure active-load identity drifted: phase=%q runtime_instances=%d mapping_name=%q mappings=%d mappings_valid=%t pool_valid=%t image_identity_equal=%t image_allocated=%d baseline_allocated=%d slots=%d target=%d max=%d floor=%d critical=%d low=%d high=%d ready=%d leased=%d executing=%d waiting=%d queued=%d refilling=%d retiring=%d accounted=%d consecutive_failures=%d failures=%d breaker=%t", active.Phase, active.RuntimeInstances, active.COWMappings.Name, active.COWMappings.MappingCount, validPressureLoadMappingCount(active.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers*evidence.Limits.BurstFactor), validPressureActivePoolState(active.Pool, lastSlots), samePressurePreparedImageIdentity(active.PreparedImage, preparedImage), active.PreparedImage.AllocatedBytes, preparedImage.AllocatedBytes, lastSlots, active.Pool.TargetCapacity, active.Pool.MaximumCapacity, active.Pool.Floor, active.Pool.Critical, active.Pool.Low, active.Pool.High, active.Pool.Ready, active.Pool.Leased, active.Pool.Executing, active.Pool.Waiting, active.Pool.Queued, active.Pool.Refilling, active.Pool.Retiring, active.Pool.SupplyAccounted, active.Pool.ConsecutiveFailures, active.Pool.TotalFailures, active.Pool.BreakerOpen)
+			!validPressureActivePoolState(active.Pool, lastSlots, evidence.Limits.Consumers*evidence.Limits.BurstFactor) || !samePressurePreparedImageIdentity(active.PreparedImage, preparedImage) {
+			return fmt.Errorf("cow-pressure active-load identity drifted: phase=%q runtime_instances=%d mapping_name=%q mappings=%d mappings_valid=%t pool_valid=%t image_identity_equal=%t image_allocated=%d baseline_allocated=%d slots=%d target=%d max=%d floor=%d critical=%d low=%d high=%d ready=%d leased=%d executing=%d waiting=%d queued=%d refilling=%d retiring=%d accounted=%d consecutive_failures=%d failures=%d breaker=%t", active.Phase, active.RuntimeInstances, active.COWMappings.Name, active.COWMappings.MappingCount, validPressureLoadMappingCount(active.COWMappings.MappingCount, lastSlots, evidence.Limits.Consumers*evidence.Limits.BurstFactor), validPressureActivePoolState(active.Pool, lastSlots, evidence.Limits.Consumers*evidence.Limits.BurstFactor), samePressurePreparedImageIdentity(active.PreparedImage, preparedImage), active.PreparedImage.AllocatedBytes, preparedImage.AllocatedBytes, lastSlots, active.Pool.TargetCapacity, active.Pool.MaximumCapacity, active.Pool.Floor, active.Pool.Critical, active.Pool.Low, active.Pool.High, active.Pool.Ready, active.Pool.Leased, active.Pool.Executing, active.Pool.Waiting, active.Pool.Queued, active.Pool.Refilling, active.Pool.Retiring, active.Pool.SupplyAccounted, active.Pool.ConsecutiveFailures, active.Pool.TotalFailures, active.Pool.BreakerOpen)
 		}
 	}
 	snapshot := evidence.LoadSamples[len(evidence.LoadSamples)-1]
@@ -267,12 +267,12 @@ func validPressurePoolState(state wazeroengine.PreparedPoolState, slots uint32) 
 		state.ConsecutiveFailures == 0 && state.TotalFailures == 0 && !state.BreakerOpen
 }
 
-func validPressureActivePoolState(state wazeroengine.PreparedPoolState, slots uint32) bool {
+func validPressureActivePoolState(state wazeroengine.PreparedPoolState, slots, peakConsumers uint32) bool {
 	return state.TargetCapacity == slots && state.MaximumCapacity >= slots && state.High == slots &&
 		state.Floor <= state.Critical && state.Critical <= state.Low && state.Low <= state.High &&
 		state.Ready <= slots && uint64(state.Ready)+uint64(state.Queued)+uint64(state.Refilling) == uint64(state.SupplyAccounted) &&
 		state.SupplyAccounted == slots && state.Leased > 0 && state.Executing > 0 && state.Executing+state.Retiring == state.Leased &&
-		state.Waiting == 0 && state.ConsecutiveFailures == 0 && state.TotalFailures == 0 && !state.BreakerOpen
+		state.Leased+state.Waiting <= peakConsumers && state.ConsecutiveFailures == 0 && state.TotalFailures == 0 && !state.BreakerOpen
 }
 
 func samePressurePreparedImageIdentity(candidate, baseline wazeroengine.PreparedImageState) bool {

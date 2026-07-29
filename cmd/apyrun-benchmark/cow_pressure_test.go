@@ -335,11 +335,16 @@ func TestAggregatePressurePhasesIsDeterministicAndComplete(t *testing.T) {
 
 func TestPressureActivePoolAllowsAccountedRetirementChurn(t *testing.T) {
 	state := wazeroengine.PreparedPoolState{TargetCapacity: 256, MaximumCapacity: 256, Floor: 1, Critical: 64, Low: 128, High: 256, Ready: 217, Queued: 31, Refilling: 8, Leased: 32, Executing: 28, Retiring: 4, SupplyAccounted: 256}
-	if !validPressureActivePoolState(state, 256) {
+	if !validPressureActivePoolState(state, 256, 32) {
 		t.Fatal("accounted single-use retirement churn was rejected")
 	}
+	state.Waiting = 32
+	if !validPressureActivePoolState(state, 256, 64) || validPressureActivePoolState(state, 256, 63) {
+		t.Fatal("bounded saturation wait accounting was not enforced")
+	}
+	state.Waiting = 0
 	state.Retiring = 3
-	if validPressureActivePoolState(state, 256) {
+	if validPressureActivePoolState(state, 256, 32) {
 		t.Fatal("leased/executing/retiring drift was accepted")
 	}
 }

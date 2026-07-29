@@ -2,9 +2,15 @@
 
 package scheduler
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestCurrentCgroupV2MemoryReader(t *testing.T) {
+	if os.Getenv("APYRUN_S7_RUN") != "1" {
+		t.Skip("set APYRUN_S7_RUN=1 for the real Linux cgroup-v2 smoke")
+	}
 	reader, err := NewCurrentCgroupV2MemoryReader()
 	if err != nil {
 		t.Fatal(err)

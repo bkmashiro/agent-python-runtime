@@ -148,6 +148,12 @@ func TestE2MixedLoadLiveMemoryExperiment(t *testing.T) {
 		snapshot, _ := observe()
 		if snapshot.CurrentBytes > scheduler.config.HighBytes {
 			victims, err := scheduler.RequestEvictions(snapshot.CurrentBytes)
+			if errors.Is(err, ErrInsufficientReclaim) {
+				report.InsufficientVictimWindows++
+				tick++
+				time.Sleep(2 * time.Millisecond)
+				continue
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

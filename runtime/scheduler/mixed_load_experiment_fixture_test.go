@@ -78,6 +78,7 @@ type e2MixedLoadReport struct {
 	Evictions                     uint64      `json:"evictions"`
 	Retries                       uint64      `json:"retries"`
 	GuaranteedFallbacks           uint64      `json:"guaranteed_fallbacks"`
+	InsufficientVictimWindows     uint64      `json:"insufficient_victim_windows"`
 	OOMEvents                     uint64      `json:"oom_events"`
 	MaxActive                     uint64      `json:"max_active"`
 	MaxCurrentBytes               uint64      `json:"max_current_bytes"`

@@ -35,29 +35,33 @@ func (store *ProfileStore) Estimate(profile WorkloadProfile) (ReservationEstimat
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	return store.estimateLocked(profile, profileKey), nil
+}
+
+func (store *ProfileStore) estimateLocked(profile WorkloadProfile, profileKey string) ReservationEstimate {
 	if exact := store.profiles[profileKey]; exact != nil && uint32(len(exact.samples)) >= store.config.MinimumSamples {
-		return store.estimateFromSamples(profileKey, EstimateExact, append([]profileSample(nil), exact.samples...)), nil
+		return store.estimateFromSamples(profileKey, EstimateExact, append([]profileSample(nil), exact.samples...))
 	}
 	workload := store.collectRecent(func(candidate WorkloadProfile) bool {
 		return candidate.ArtifactDigest == profile.ArtifactDigest && candidate.WorkloadClass == profile.WorkloadClass && candidate.PolicyClass == profile.PolicyClass
 	})
 	if uint32(len(workload)) >= store.config.MinimumSamples {
-		return store.estimateFromSamples(profileKey, EstimateWorkload, workload), nil
+		return store.estimateFromSamples(profileKey, EstimateWorkload, workload)
 	}
 	artifact := store.collectRecent(func(candidate WorkloadProfile) bool {
 		return candidate.ArtifactDigest == profile.ArtifactDigest && candidate.PolicyClass == profile.PolicyClass
 	})
 	if uint32(len(artifact)) >= store.config.MinimumSamples {
-		return store.estimateFromSamples(profileKey, EstimateArtifact, artifact), nil
+		return store.estimateFromSamples(profileKey, EstimateArtifact, artifact)
 	}
 	global := store.collectRecent(func(WorkloadProfile) bool { return true })
 	if uint32(len(global)) >= store.config.MinimumSamples {
-		return store.estimateFromSamples(profileKey, EstimateGlobal, global), nil
+		return store.estimateFromSamples(profileKey, EstimateGlobal, global)
 	}
 	return ReservationEstimate{
 		ProfileKey: profileKey, Source: EstimateUnknown, QuantileBPS: store.config.ReservationQuantileBPS,
 		MarginBytes: store.config.PerAttemptMarginBytes, ReservationBytes: store.config.UnknownReservationBytes,
-	}, nil
+	}
 }
 
 func (store *ProfileStore) estimateFromSamples(profileKey string, source EstimateSource, samples []profileSample) ReservationEstimate {

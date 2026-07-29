@@ -43,24 +43,42 @@ func (scheduler *Scheduler) AdmitProfiled(store *ProfileStore) (AttemptSnapshot,
 	if scheduler == nil || store == nil {
 		return AttemptSnapshot{}, ErrInvalidProfile
 	}
-	attempt, err := scheduler.Admit()
+	// Lock order is ProfileStore then Scheduler. This keeps the quantile and
+	// samples stable through credit reservation and attempt registration.
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	scheduler.mu.Lock()
+	defer scheduler.mu.Unlock()
+
+	attempt, err := scheduler.admitLocked(func(task TaskSnapshot) (uint64, error) {
+		record := store.profiles[task.ProfileKey]
+		if record == nil {
+			return 0, ErrInvalidProfile
+		}
+		estimate := store.estimateLocked(record.profile, task.ProfileKey)
+		reservation := estimate.ReservationBytes
+		if task.Evictions > 0 || task.Lane == LaneGuaranteed {
+			if task.ReservationFloor > reservation {
+				reservation = task.ReservationFloor
+			}
+		}
+		return reservation, nil
+	})
 	if err != nil {
 		return AttemptSnapshot{}, err
 	}
-	scheduler.mu.Lock()
 	task := scheduler.tasks[attempt.TaskID]
-	profileKey := ""
-	if task != nil {
-		profileKey = task.snapshot.ProfileKey
-	}
-	scheduler.mu.Unlock()
-	profile, ok := store.profileForKey(profileKey)
-	if !ok {
-		releaseErr := scheduler.ReleaseAdmission(attempt.AttemptID)
+	if task == nil {
+		releaseErr := scheduler.releaseAdmissionLocked(attempt.AttemptID)
 		return AttemptSnapshot{}, errors.Join(ErrInvalidProfile, releaseErr)
 	}
-	if err := store.RegisterAttempt(attempt.AttemptID, profile); err != nil {
-		releaseErr := scheduler.ReleaseAdmission(attempt.AttemptID)
+	record := store.profiles[task.snapshot.ProfileKey]
+	if record == nil {
+		releaseErr := scheduler.releaseAdmissionLocked(attempt.AttemptID)
+		return AttemptSnapshot{}, errors.Join(ErrInvalidProfile, releaseErr)
+	}
+	if err := store.registerAttemptLocked(attempt.AttemptID, record.profile, record.key); err != nil {
+		releaseErr := scheduler.releaseAdmissionLocked(attempt.AttemptID)
 		return AttemptSnapshot{}, errors.Join(err, releaseErr)
 	}
 	return attempt, nil
@@ -72,6 +90,10 @@ func (scheduler *Scheduler) ReleaseAdmission(attemptID string) error {
 	}
 	scheduler.mu.Lock()
 	defer scheduler.mu.Unlock()
+	return scheduler.releaseAdmissionLocked(attemptID)
+}
+
+func (scheduler *Scheduler) releaseAdmissionLocked(attemptID string) error {
 	attempt, ok := scheduler.attempts[attemptID]
 	if !ok {
 		return ErrNotFound

@@ -83,6 +83,12 @@ func (scheduler *Scheduler) Admit() (AttemptSnapshot, error) {
 	}
 	scheduler.mu.Lock()
 	defer scheduler.mu.Unlock()
+	return scheduler.admitLocked(nil)
+}
+
+type admissionReservationResolver func(TaskSnapshot) (uint64, error)
+
+func (scheduler *Scheduler) admitLocked(resolve admissionReservationResolver) (AttemptSnapshot, error) {
 	if scheduler.pressured {
 		return AttemptSnapshot{}, ErrNoAdmissibleTask
 	}
@@ -91,17 +97,26 @@ func (scheduler *Scheduler) Admit() (AttemptSnapshot, error) {
 	}
 	now := scheduler.config.Clock().UTC()
 	selected := -1
+	var selectedReservation uint64
 	for index, taskID := range scheduler.queue {
 		task := scheduler.tasks[taskID]
 		if task == nil || !retryReady(task.snapshot.State, task.snapshot.NotBefore, now) {
 			continue
 		}
 		reservation := task.snapshot.ReservationFloor
-		if reservation > scheduler.config.HighBytes || scheduler.reservedBytes > scheduler.config.HighBytes-reservation {
+		if resolve != nil {
+			var err error
+			reservation, err = resolve(task.snapshot)
+			if err != nil {
+				return AttemptSnapshot{}, err
+			}
+		}
+		if reservation == 0 || reservation > scheduler.config.HighBytes || scheduler.reservedBytes > scheduler.config.HighBytes-reservation {
 			continue
 		}
 		if selected < 0 || queueLess(task.snapshot, scheduler.tasks[scheduler.queue[selected]].snapshot) {
 			selected = index
+			selectedReservation = reservation
 		}
 	}
 	if selected < 0 {
@@ -119,7 +134,7 @@ func (scheduler *Scheduler) Admit() (AttemptSnapshot, error) {
 		Ordinal:       ordinal,
 		Lane:          task.snapshot.Lane,
 		Priority:      task.snapshot.Priority,
-		ReservedBytes: task.snapshot.ReservationFloor,
+		ReservedBytes: selectedReservation,
 		State:         AttemptAdmitted,
 		AdmittedAt:    now,
 		Sequence:      scheduler.nextAttemptSequence,

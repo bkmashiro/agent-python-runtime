@@ -188,6 +188,10 @@ func (store *ProfileStore) RegisterAttempt(attemptID string, profile WorkloadPro
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	return store.registerAttemptLocked(attemptID, profile, profileKey)
+}
+
+func (store *ProfileStore) registerAttemptLocked(attemptID string, profile WorkloadProfile, profileKey string) error {
 	if prior, ok := store.attempts[attemptID]; ok {
 		if prior.profileKey != profileKey {
 			return ErrConflict

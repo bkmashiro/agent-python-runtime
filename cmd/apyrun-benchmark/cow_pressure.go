@@ -215,8 +215,9 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 	if options.ConsumerCount == 0 || options.ConsumerCount > 256 || options.PressureDuration < 5*time.Second || options.PressureDuration > 10*time.Minute {
 		return errors.New("cow-pressure consumers or duration is outside bounds")
 	}
-	if options.PressureRefillWorkers != 1 && options.PressureRefillWorkers != 2 && options.PressureRefillWorkers != 4 {
-		return errors.New("cow-pressure refill workers must be 1, 2, or 4")
+	if options.PressureRefillWorkers != 1 && options.PressureRefillWorkers != 2 && options.PressureRefillWorkers != 4 &&
+		options.PressureRefillWorkers != 8 && options.PressureRefillWorkers != 12 && options.PressureRefillWorkers != 16 {
+		return errors.New("cow-pressure refill workers must be 1, 2, 4, 8, 12, or 16")
 	}
 	if !validPressureWorkload(options.PressureWorkload, options.PressureWait) {
 		return errors.New("cow-pressure workload or wait is outside bounds")

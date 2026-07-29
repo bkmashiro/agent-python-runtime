@@ -67,7 +67,8 @@ type Factory struct {
 	// initial PreparedCapacity is also the maximum.
 	PreparedMaxCapacity uint32
 	// PreparedRefillWorkers selects a fixed worker count. Zero keeps the bounded
-	// automatic default; non-zero values are limited to four and capacity.
+	// automatic default of at most four; non-zero values are limited to sixteen
+	// and capacity so bounded COW pressure experiments can sweep replenishment.
 	PreparedRefillWorkers uint32
 	// VerifyCOWPreparedImage opts into a full linear-memory digest on every
 	// prepared slot. It is intended for bounded diagnostics, not production.

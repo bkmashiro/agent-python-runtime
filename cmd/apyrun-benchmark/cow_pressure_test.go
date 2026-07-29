@@ -125,6 +125,11 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
 		t.Fatal(err)
 	}
+	valid.PressureRefillWorkers = 16
+	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
+		t.Fatalf("explicit 16-worker pressure sweep was rejected: %v", err)
+	}
+	valid.PressureRefillWorkers = 4
 	for name, mutate := range map[string]func(*benchmarkOptions){
 		"wrong strategy":     func(value *benchmarkOptions) { value.Strategy = "fresh" },
 		"missing budget":     func(value *benchmarkOptions) { value.MemoryBudgetBytes = 0 },

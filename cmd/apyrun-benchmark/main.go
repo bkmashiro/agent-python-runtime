@@ -115,7 +115,7 @@ func runMain(args []string) error {
 	flags.DurationVar(&options.PressureDuration, "pressure-duration", 0, "cow-pressure closed-loop duration")
 	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu or wasi-timer-wait")
 	flags.DurationVar(&options.PressureWait, "pressure-wait", 0, "per-request wait for wasi-timer-wait workload")
-	flags.UintVar(&options.PressureRefillWorkers, "pressure-refill-workers", 4, "cow-pressure fixed refill workers: 1, 2, or 4")
+	flags.UintVar(&options.PressureRefillWorkers, "pressure-refill-workers", 4, "cow-pressure fixed refill workers: 1, 2, 4, 8, 12, or 16")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

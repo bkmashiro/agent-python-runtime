@@ -55,7 +55,7 @@
         "consumers": {"type": "integer", "minimum": 1, "maximum": 256}, "duration_ns": {"type": "integer", "minimum": 5000000000, "maximum": 600000000000},
         "initial_capacity": {"const": 4}, "max_growth_step": {"const": 64}, "workload": {"enum": ["cpu", "wasi-timer-wait"]},
         "wait_ns": {"type": "integer", "minimum": 0, "maximum": 10000000000},
-        "refill_workers": {"type": "integer", "minimum": 1, "maximum": 4}
+        "refill_workers": {"enum": [1, 2, 4, 8, 12, 16]}
       }
     },
     "metric": {

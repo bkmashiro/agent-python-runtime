@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	maxPreparedCapacity      uint32 = 4
-	maxCOWPreparedCapacity   uint32 = 65536
-	maxPreparedRefillWorkers uint32 = 4
+	maxPreparedCapacity          uint32 = 4
+	maxCOWPreparedCapacity       uint32 = 65536
+	defaultPreparedRefillWorkers uint32 = 4
+	maxPreparedRefillWorkers     uint32 = 16
 )
 
 type preparedInstance struct {
@@ -79,8 +80,8 @@ func (engine *Engine) initializePreparedPool(capacity, maximum, configuredWorker
 	workerCount := maximum
 	if configuredWorkers > 0 {
 		workerCount = configuredWorkers
-	} else if workerCount > maxPreparedRefillWorkers {
-		workerCount = maxPreparedRefillWorkers
+	} else if workerCount > defaultPreparedRefillWorkers {
+		workerCount = defaultPreparedRefillWorkers
 	}
 	pool.refillWorkers = workerCount
 	for worker := uint32(0); worker < workerCount; worker++ {

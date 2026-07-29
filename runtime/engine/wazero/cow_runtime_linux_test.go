@@ -64,6 +64,36 @@ func TestEngineBuildsCOWReadySingleUsePool(t *testing.T) {
 	}
 }
 
+func TestEngineObservesServedCOWMappingBeforeClose(t *testing.T) {
+	sink := &recordingFootprintSink{sample: true}
+	runner, err := (Factory{
+		PreparedCapacity: 1,
+		Strategy:         enginecontract.StrategyCOWReadySingleUse,
+		FootprintSink:    sink,
+	}).New(context.Background(), fixedMemoryReactor(t), runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	ctx, err := enginecontract.WithAttemptIdentity(context.Background(), "linux:attempt:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := []byte(`{"run_id":"run","code":"pass","inputs":{}}`)
+	_, _ = runner.Run(ctx, request, "")
+	if len(sink.observations) != 1 {
+		t.Fatalf("footprint observations = %#v", sink.observations)
+	}
+	observation := sink.observations[0]
+	if err := observation.Validate(); err != nil {
+		t.Fatalf("invalid footprint observation: %#v: %v", observation, err)
+	}
+	if observation.Status != enginecontract.FootprintObserved || observation.AttemptID != "linux:attempt:1" ||
+		observation.Memory.VirtualBytes != wasmLinearPageSize || observation.Memory.MappingCount == 0 {
+		t.Fatalf("unexpected footprint observation: %#v", observation)
+	}
+}
+
 func TestEngineGrowsOneCOWPoolWithoutCreatingAnotherBaseline(t *testing.T) {
 	wasm := fixedMemoryReactor(t)
 	runner, err := (Factory{

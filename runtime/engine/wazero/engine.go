@@ -58,6 +58,7 @@ func ValidateCOWWarmupProfile(profile string) error {
 type Factory struct {
 	BrokerFactory    BrokerFactory
 	Observer         Observer
+	FootprintSink    enginecontract.FootprintSink
 	Strategy         enginecontract.ExecutionStrategy
 	PreparedCapacity uint32
 	// PreparedMaxCapacity reserves a bounded pool envelope that can grow without
@@ -103,7 +104,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.COWWarmupProfile != "" && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
 		return nil, errors.New("COW warmup profile is outside cow-ready-single-use")
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -118,6 +119,7 @@ type Engine struct {
 	config                 runtimeconfig.RunConfig
 	brokerFactory          BrokerFactory
 	observer               Observer
+	footprintSink          enginecontract.FootprintSink
 	strategy               enginecontract.ExecutionStrategy
 	verifyCOWPreparedImage bool
 	cowWarmupProfile       string
@@ -128,7 +130,7 @@ type Engine struct {
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, "", 0, 0, 0, "", false, nil)
+	return newEngine(ctx, wasm, config, nil, nil, nil, "", 0, 0, 0, "", false, nil)
 }
 
 func NewWithBrokerFactory(
@@ -137,7 +139,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, "", 0, 0, 0, "", false, nil)
+	return newEngine(ctx, wasm, config, brokerFactory, nil, nil, "", 0, 0, 0, "", false, nil)
 }
 
 func newEngine(
@@ -146,6 +148,7 @@ func newEngine(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 	observer Observer,
+	footprintSink enginecontract.FootprintSink,
 	requestedStrategy enginecontract.ExecutionStrategy,
 	preparedCapacity uint32,
 	preparedMaxCapacity uint32,
@@ -224,6 +227,7 @@ func newEngine(
 		config:                 config,
 		brokerFactory:          brokerFactory,
 		observer:               observer,
+		footprintSink:          footprintSink,
 		strategy:               strategy,
 		verifyCOWPreparedImage: verifyCOWPreparedImage,
 		cowWarmupProfile:       cowWarmupProfile,
@@ -363,7 +367,10 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	}
 	module := instance.module
 	guestStderr := instance.stderr
-	defer engine.closeServedInstance(instance)
+	defer func() {
+		observePreparedFootprint(runContext, engine.footprintSink, engine.strategy, instance)
+		engine.closeServedInstance(instance)
+	}()
 	if instance.fromPool && engine.pool != nil {
 		engine.pool.executing.Add(1)
 		defer engine.pool.executing.Add(^uint32(0))

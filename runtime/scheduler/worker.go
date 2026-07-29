@@ -120,7 +120,12 @@ func (worker *InProcessWorker) Start(ctx context.Context, request ExecutionReque
 		worker.mu.Unlock()
 		return nil, ErrCapacity
 	}
-	executionContext, cancel := context.WithCancel(ctx)
+	executionContext, err := engine.WithAttemptIdentity(ctx, request.AttemptID)
+	if err != nil {
+		worker.mu.Unlock()
+		return nil, err
+	}
+	executionContext, cancel := context.WithCancel(executionContext)
 	record := &executionRecord{
 		request:        requestBytes,
 		trustedPrepare: request.TrustedPrepare,

@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"unsafe"
 
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/tetratelabs/wazero/experimental"
 	"golang.org/x/sys/unix"
 )
@@ -285,6 +287,7 @@ type cowLinearMemory struct {
 }
 
 var _ experimental.LinearMemory = (*cowLinearMemory)(nil)
+var _ preparedFootprintSource = (*cowLinearMemory)(nil)
 
 func (memory *cowLinearMemory) Reallocate(size uint64) []byte {
 	memory.mu.Lock()
@@ -312,6 +315,31 @@ func (memory *cowLinearMemory) Reset() error {
 		return fmt.Errorf("discard private COW pages: %w", err)
 	}
 	return nil
+}
+
+func (memory *cowLinearMemory) sampleFootprint() (enginecontract.MemoryFootprint, error) {
+	memory.mu.Lock()
+	defer memory.mu.Unlock()
+	if memory.freed || len(memory.buffer) == 0 {
+		return enginecontract.MemoryFootprint{}, errFootprintMappingUnavailable
+	}
+	start := uint64(uintptr(unsafe.Pointer(&memory.buffer[0])))
+	if uint64(len(memory.buffer)) > ^uint64(0)-start {
+		return enginecontract.MemoryFootprint{}, errSMAPSMalformed
+	}
+	file, err := os.Open("/proc/self/smaps")
+	if err != nil {
+		return enginecontract.MemoryFootprint{}, fmt.Errorf("%w: open", errFootprintReadFailed)
+	}
+	footprint, parseErr := parseSMAPSMemory(file, start, start+uint64(len(memory.buffer)))
+	closeErr := file.Close()
+	if parseErr != nil {
+		return enginecontract.MemoryFootprint{}, parseErr
+	}
+	if closeErr != nil {
+		return enginecontract.MemoryFootprint{}, fmt.Errorf("%w: close", errFootprintReadFailed)
+	}
+	return footprint, nil
 }
 
 func (memory *cowLinearMemory) Free() {

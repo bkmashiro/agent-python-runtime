@@ -150,7 +150,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	}
 	guestStderr.Reset()
 	failed = false
-	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size())}, nil
+	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size()), footprintSource: allocation}, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) close() error {

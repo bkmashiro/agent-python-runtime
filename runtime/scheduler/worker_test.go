@@ -11,18 +11,22 @@ import (
 )
 
 type blockingRunner struct {
-	mu       sync.Mutex
-	started  chan string
-	requests map[string][]byte
+	mu         sync.Mutex
+	started    chan string
+	requests   map[string][]byte
+	attemptIDs map[string]string
 }
 
 func newBlockingRunner() *blockingRunner {
-	return &blockingRunner{started: make(chan string, 8), requests: make(map[string][]byte)}
+	return &blockingRunner{started: make(chan string, 8), requests: make(map[string][]byte), attemptIDs: make(map[string]string)}
 }
 
 func (runner *blockingRunner) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
 	runner.mu.Lock()
 	runner.requests[trustedPrepare] = append([]byte(nil), request...)
+	if attemptID, ok := engine.AttemptIdentityFromContext(ctx); ok {
+		runner.attemptIDs[trustedPrepare] = attemptID
+	}
 	runner.mu.Unlock()
 	runner.started <- trustedPrepare
 	<-ctx.Done()
@@ -74,9 +78,10 @@ func TestInProcessWorkerCancelsOneAttemptWithoutConsumingItsResult(t *testing.T)
 	}
 	runner.mu.Lock()
 	got := string(runner.requests["prepare"])
+	gotAttemptID := runner.attemptIDs["prepare"]
 	runner.mu.Unlock()
-	if got != "request" {
-		t.Fatalf("runner request = %q", got)
+	if got != "request" || gotAttemptID != "attempt:1" {
+		t.Fatalf("runner request = %q attempt_id = %q", got, gotAttemptID)
 	}
 	if snapshot := worker.Snapshot(); snapshot.Active != 0 || snapshot.Closed {
 		t.Fatalf("snapshot = %#v", snapshot)

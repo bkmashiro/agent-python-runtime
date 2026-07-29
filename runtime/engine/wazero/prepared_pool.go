@@ -20,10 +20,11 @@ const (
 )
 
 type preparedInstance struct {
-	module      api.Module
-	stderr      *bytes.Buffer
-	memoryBytes uint64
-	fromPool    bool
+	module          api.Module
+	stderr          *bytes.Buffer
+	memoryBytes     uint64
+	fromPool        bool
+	footprintSource preparedFootprintSource
 }
 
 type preparedRefillRequest struct {

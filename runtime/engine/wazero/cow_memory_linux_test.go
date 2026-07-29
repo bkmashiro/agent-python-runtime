@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
@@ -114,6 +116,47 @@ func TestCOWImageAllZeroBaselineRemainsSparseAndSealed(t *testing.T) {
 		t.Fatal("sparse holes did not read back as zero")
 	}
 	allocation.Free()
+	if err := image.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCOWLinearMemorySamplesExactLinuxMapping(t *testing.T) {
+	image, err := newCOWImage(make([]byte, wasmLinearPageSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allocator := image.newAllocator()
+	view := allocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize)
+	if view == nil {
+		t.Fatal("allocate COW memory")
+	}
+	allocation, err := allocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := allocation.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	view[0] = 1
+	footprint, err := allocation.sampleFootprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := enginecontract.FootprintObservation{
+		AttemptID: "linux:attempt:1", Backend: "wazero", Strategy: enginecontract.StrategyCOWReadySingleUse,
+		Status: enginecontract.FootprintObserved, SampledAt: time.Now().UTC(), Memory: footprint,
+	}
+	if err := observation.Validate(); err != nil {
+		t.Fatalf("invalid observed footprint: %+v: %v", footprint, err)
+	}
+	if footprint.VirtualBytes != wasmLinearPageSize || footprint.MappingCount == 0 || footprint.PrivateDirtyBytes == 0 {
+		t.Fatalf("unexpected mapping footprint: %+v", footprint)
+	}
+	allocation.Free()
+	if _, err := allocation.sampleFootprint(); !errors.Is(err, errFootprintMappingUnavailable) {
+		t.Fatalf("sampled freed mapping: %v", err)
+	}
 	if err := image.Close(); err != nil {
 		t.Fatal(err)
 	}

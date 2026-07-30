@@ -122,7 +122,7 @@ func runMain(args []string) error {
 	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu, wasi-timer-wait, dirty-hold, mixed-v1, or heavy-tail-v1")
 	flags.DurationVar(&options.PressureWait, "pressure-wait", 0, "per-request wait for wasi-timer-wait or dirty-hold workload")
 	flags.Uint64Var(&options.PressureDirtyBytes, "pressure-dirty-bytes", 0, "per-request bytearray bytes touched by dirty-hold")
-	flags.UintVar(&options.PressureRefillWorkers, "pressure-refill-workers", 4, "cow-pressure fixed refill workers: 1, 2, 4, 8, 12, or 16")
+	flags.UintVar(&options.PressureRefillWorkers, "pressure-refill-workers", 4, "cow-pressure refill policy: 0=adaptive or fixed 1, 2, 4, 8, 12, 16")
 	flags.UintVar(&options.PressureBurstFactor, "pressure-burst-factor", 1, "mid-load correlated consumer step: 1, 2, 4, or 8")
 	if err := flags.Parse(args); err != nil {
 		return err

@@ -69,12 +69,12 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	loadSample := spawn
 	loadSample.Phase = "load-final"
 	evidence := cowPressureEvidence{
-		SchemaVersion: 9, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 10, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:    runtimeevidence.ArtifactIdentity{Filename: "guest.wasm", SHA256: strings.Repeat("a", 64), SizeBytes: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "base", Target: "wasm32-wasip1", ExecutionModel: "reactor"},
 		HostSource:  runtimeevidence.HostSourceIdentity{Revision: strings.Repeat("c", 40)},
 		Environment: runtimeevidence.EnvironmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.test", KernelRelease: "test", PageSizeBytes: 4096, CgroupVersion: "v2"},
 		Strategy:    runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"},
-		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillWorkers: 4, BurstFactor: 1},
+		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillPolicy: "fixed", RefillWorkers: 4, BurstFactor: 1},
 		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
 		Load:        cowPressureLoad{StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}, RequestClasses: []cowPressureRequestClass{{Name: "tiny-cpu", Started: 1, Completed: 1}}},
 		Limitations: []string{"one", "two", "three", "four"},
@@ -109,6 +109,22 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	sixteenWorkers.StopReason = "admission-headroom"
 	if err := sixteenWorkers.Validate(); err != nil {
 		t.Fatalf("explicit 16-worker evidence was rejected: %v", err)
+	}
+	automaticWorkers := evidence
+	automaticWorkers.Limits.RefillPolicy = "adaptive"
+	if err := automaticWorkers.Validate(); err != nil {
+		t.Fatalf("adaptive refill evidence was rejected: %v", err)
+	}
+	invalidWorkers := evidence
+	invalidWorkers.Limits.RefillWorkers = 3
+	if err := invalidWorkers.Validate(); err == nil {
+		t.Fatal("invalid refill-worker evidence was accepted")
+	}
+	invalidPolicy := evidence
+	invalidPolicy.Limits.RefillPolicy = "adaptive"
+	invalidPolicy.Limits.RefillWorkers = 2
+	if err := invalidPolicy.Validate(); err == nil {
+		t.Fatal("adaptive evidence with the wrong worker bound was accepted")
 	}
 	encodedTimeout, err := json.Marshal(timeout)
 	if err != nil {
@@ -232,6 +248,10 @@ func TestValidateCOWPressureOptionsRequiresBoundedLinuxCOW(t *testing.T) {
 	valid.PressureRefillWorkers = 16
 	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
 		t.Fatalf("explicit 16-worker pressure sweep was rejected: %v", err)
+	}
+	valid.PressureRefillWorkers = 0
+	if err := validateCOWPressureOptions(valid, "linux"); err != nil {
+		t.Fatalf("automatic refill policy was rejected: %v", err)
 	}
 	valid.PressureRefillWorkers = 4
 	for name, mutate := range map[string]func(*benchmarkOptions){

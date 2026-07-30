@@ -32,6 +32,16 @@ func TestPreparedRefillWorkerCountIsExplicitAndBounded(t *testing.T) {
 	if _, err := (engine.Factory{PreparedCapacity: 2, PreparedMaxCapacity: 2, PreparedRefillWorkers: 3}).New(context.Background(), wasm, runtime.DefaultRunConfig()); err == nil {
 		t.Fatal("worker count above capacity was accepted")
 	}
+	for name, factory := range map[string]engine.Factory{
+		"empty pool":     {AdaptivePreparedRefill: true},
+		"fixed conflict": {PreparedCapacity: 1, PreparedRefillWorkers: 1, AdaptivePreparedRefill: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := factory.New(context.Background(), []byte("not wasm"), runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "adaptive prepared refill") {
+				t.Fatalf("invalid adaptive refill configuration was accepted: %v", err)
+			}
+		})
+	}
 	runner, err := (engine.Factory{PreparedCapacity: 2, PreparedMaxCapacity: 2, PreparedRefillWorkers: 1}).New(context.Background(), wasm, runtime.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)

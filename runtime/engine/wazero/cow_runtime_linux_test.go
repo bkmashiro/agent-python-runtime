@@ -128,6 +128,9 @@ func TestEngineGrowsOneCOWPoolWithoutCreatingAnotherBaseline(t *testing.T) {
 	if workers := engine.PreparedRefillWorkers(); workers != 4 {
 		t.Fatalf("refill worker bound=%d, want 4", workers)
 	}
+	if limit := engine.PreparedRefillConcurrencyLimit(); limit != 4 {
+		t.Fatalf("normal refill concurrency limit=%d, want 4", limit)
+	}
 	linuxRuntime := engine.cowRuntime.(*linuxCOWPreparedRuntime)
 	linuxRuntime.image.mu.Lock()
 	mappings := linuxRuntime.image.mappings
@@ -152,6 +155,56 @@ func TestCOWCapacityHasASeparateLargeHardBound(t *testing.T) {
 	defer runner.Close(context.Background())
 	if got := runner.(*Engine).PreparedReady(); got != 8 {
 		t.Fatalf("large COW pool ready=%d, want 8", got)
+	}
+}
+
+func TestCOWMaximumCapacityIsAColdEnvelopeUntilGrowth(t *testing.T) {
+	runner, err := (Factory{
+		PreparedCapacity:    2,
+		PreparedMaxCapacity: maxCOWPreparedCapacity,
+		Strategy:            enginecontract.StrategyCOWReadySingleUse,
+	}).New(context.Background(), fixedMemoryReactor(t), runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := runner.(*Engine)
+	defer engine.Close(context.Background())
+	state := engine.PreparedPoolState()
+	if state.TargetCapacity != 2 || state.MaximumCapacity != maxCOWPreparedCapacity || state.Ready != 2 {
+		t.Fatalf("unexpected hot/cold capacity state: %+v", state)
+	}
+	linuxRuntime := engine.cowRuntime.(*linuxCOWPreparedRuntime)
+	linuxRuntime.image.mu.Lock()
+	mappings := linuxRuntime.image.mappings
+	linuxRuntime.image.mu.Unlock()
+	if mappings != 2 {
+		t.Fatalf("cold envelope instantiated mappings=%d, want 2", mappings)
+	}
+	if workers := engine.PreparedRefillWorkers(); workers != defaultPreparedRefillWorkers {
+		t.Fatalf("default worker bound=%d, want %d", workers, defaultPreparedRefillWorkers)
+	}
+	if limit := engine.PreparedRefillConcurrencyLimit(); limit != defaultPreparedRefillWorkers {
+		t.Fatalf("default refill concurrency limit=%d, want %d", limit, defaultPreparedRefillWorkers)
+	}
+}
+
+func TestCOWAdaptiveRefillIsExplicitlyOptIn(t *testing.T) {
+	runner, err := (Factory{
+		PreparedCapacity:       2,
+		PreparedMaxCapacity:    64,
+		AdaptivePreparedRefill: true,
+		Strategy:               enginecontract.StrategyCOWReadySingleUse,
+	}).New(context.Background(), fixedMemoryReactor(t), runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := runner.(*Engine)
+	defer engine.Close(context.Background())
+	if workers := engine.PreparedRefillWorkers(); workers != criticalPreparedRefillWorkers {
+		t.Fatalf("adaptive worker bound=%d, want %d", workers, criticalPreparedRefillWorkers)
+	}
+	if limit := engine.PreparedRefillConcurrencyLimit(); limit != 2 {
+		t.Fatalf("small-pool adaptive concurrency limit=%d, want 2", limit)
 	}
 }
 

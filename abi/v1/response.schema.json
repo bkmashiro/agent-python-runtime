@@ -8,6 +8,21 @@
   "properties": {
     "status": {"enum": ["ok", "error"]},
     "result": {},
+    "execution_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_run_id", "turn_seq", "output_item_seq", "segment_seq", "invocation_id", "invocation_attempt", "execution_id", "executed_code_sha256"],
+      "properties": {
+        "agent_run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "turn_seq": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "output_item_seq": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "segment_seq": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "invocation_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "invocation_attempt": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "execution_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "executed_code_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
     "receipts": {
       "type": "array",
       "maxItems": 256,

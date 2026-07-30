@@ -13,6 +13,7 @@ import (
 )
 
 type fakeGuestRunner struct {
+	ctx     context.Context
 	request []byte
 	prepare string
 	payload []byte
@@ -21,8 +22,9 @@ type fakeGuestRunner struct {
 	props   engine.Properties
 }
 
-func (runner *fakeGuestRunner) Run(_ context.Context, request []byte, prepare string) ([]byte, error) {
+func (runner *fakeGuestRunner) Run(ctx context.Context, request []byte, prepare string) ([]byte, error) {
 	runner.runs++
+	runner.ctx = ctx
 	runner.request = append([]byte(nil), request...)
 	runner.prepare = prepare
 	return append([]byte(nil), runner.payload...), runner.err
@@ -32,6 +34,49 @@ func (runner *fakeGuestRunner) Properties() engine.Properties { return runner.pr
 
 func successfulGuestPayload() []byte {
 	return []byte(`{"status":"ok","result":{"done":true},"receipts":[],"metrics":{"capability_calls":2,"result_bytes":13},"error":null}`)
+}
+
+func TestPythonExecutorCarriesHostExecutionRefWithoutTrustingGuestRunID(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	tools, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := "result = {'done': True}"
+	invocationRef := runtimeconfig.InvocationRef{
+		AgentRunID: "agent-run-1", TurnSeq: 2, OutputItemSeq: 3, SegmentSeq: 0,
+		InvocationID: "invocation-1", InvocationAttempt: 1, ExecutionID: "execution-1",
+	}
+	executionRef := runtimeconfig.ExecutionRef{InvocationRef: invocationRef, ExecutedCodeSHA256: digest([]byte(code))}
+	payload, _ := json.Marshal(map[string]any{
+		"status": "ok", "result": map[string]any{"done": true}, "receipts": []any{},
+		"metrics": map[string]any{"capability_calls": 0, "result_bytes": 13}, "error": nil,
+		"execution_ref": executionRef,
+	})
+	runner := &fakeGuestRunner{payload: payload, props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
+	executor, err := NewPythonExecutor(runner, tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := engine.WithInvocationRef(context.Background(), invocationRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.Execute(ctx, "guest-run-id", code, 4)
+	if err != nil || result.ExecutionRef == nil || *result.ExecutionRef != executionRef {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	var request runtimeconfig.RunRequest
+	if json.Unmarshal(runner.request, &request) != nil || request.RunID != "guest-run-id" || request.RunID == invocationRef.ExecutionID {
+		t.Fatalf("request=%s", runner.request)
+	}
+	got, ok := engine.InvocationRefFromContext(runner.ctx)
+	if !ok || got != invocationRef {
+		t.Fatalf("got=%+v ok=%v", got, ok)
+	}
 }
 
 func TestPythonExecutorBuildsBoundedAuthorityFreeRunRequest(t *testing.T) {

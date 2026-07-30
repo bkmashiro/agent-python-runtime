@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/agenttrace"
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
@@ -298,6 +299,45 @@ func TestRunDevelopmentTrialDirectUsesBoundedResponsesLoopAndScores(t *testing.T
 	for _, forbidden := range []string{"summary.txt", "quantum computing", "provider-private", "response-private", "Pop on over"} {
 		if containsBytes(encoded, []byte(forbidden)) {
 			t.Fatalf("serialized result leaked %q: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestRunDevelopmentTrialEmitsMetadataOnlyTracePluginEvents(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := adapterForStatefulOracle(t, task, func(name string) string { return name })
+	sink := agenttrace.NewMemorySink()
+	ctx, err := agenttrace.WithPlugin(context.Background(), agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: sink})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunDevelopmentTrial(ctx, adapter, task, ConditionDirect, developmentTrialLimits(len(task.Interaction.Turns)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := sink.Events()
+	if len(events) < 6 || events[0].EventType != agenttrace.EventRunStarted || events[len(events)-1].EventType != agenttrace.EventRunCompleted {
+		t.Fatalf("events=%+v", events)
+	}
+	seen := map[agenttrace.EventType]bool{}
+	for index, event := range events {
+		seen[event.EventType] = true
+		if event.AgentRunID != result.TrialID || event.Sequence != uint64(index+1) || event.Validate() != nil {
+			t.Fatalf("event[%d]=%+v", index, event)
+		}
+		payload := string(event.Payload)
+		for _, forbidden := range []string{"\"developer_prompt\":", "\"tool_surface\":", "\"arguments\":", "\"observation\":", "\"code\":"} {
+			if strings.Contains(payload, forbidden) {
+				t.Fatalf("portable event leaked %q: %s", forbidden, payload)
+			}
+		}
+	}
+	for _, required := range []agenttrace.EventType{
+		agenttrace.EventLLMRequestStarted, agenttrace.EventLLMResponseReceived, agenttrace.EventLLMOutputObserved,
+		agenttrace.EventDirectToolStarted, agenttrace.EventDirectToolCompleted, agenttrace.EventFinalStateObserved,
+	} {
+		if !seen[required] {
+			t.Fatalf("missing event type %q", required)
 		}
 	}
 }

@@ -40,22 +40,23 @@ func (class FailureClass) valid() bool {
 }
 
 type PythonRunResult struct {
-	Turn                int              `json:"turn"`
-	Success             bool             `json:"success"`
-	ErrorCode           string           `json:"error_code,omitempty"`
-	FailureClass        FailureClass     `json:"failure_class,omitempty"`
-	CapabilityCalls     uint32           `json:"capability_calls"`
-	RequestDigest       string           `json:"request_digest"`
-	ResponseDigest      string           `json:"response_digest,omitempty"`
-	ResultDigest        string           `json:"result_digest,omitempty"`
-	ModelCodeDigest     string           `json:"model_code_digest,omitempty"`
-	EffectiveCodeDigest string           `json:"effective_code_digest,omitempty"`
-	WrapperDigest       string           `json:"wrapper_digest,omitempty"`
-	Backend             string           `json:"backend"`
-	ResetMode           engine.ResetMode `json:"reset_mode"`
-	Observation         json.RawMessage  `json:"-"`
-	RawRequest          json.RawMessage  `json:"-"`
-	RawResponse         json.RawMessage  `json:"-"`
+	Turn                int                         `json:"turn"`
+	Success             bool                        `json:"success"`
+	ErrorCode           string                      `json:"error_code,omitempty"`
+	FailureClass        FailureClass                `json:"failure_class,omitempty"`
+	CapabilityCalls     uint32                      `json:"capability_calls"`
+	RequestDigest       string                      `json:"request_digest"`
+	ResponseDigest      string                      `json:"response_digest,omitempty"`
+	ResultDigest        string                      `json:"result_digest,omitempty"`
+	ModelCodeDigest     string                      `json:"model_code_digest,omitempty"`
+	EffectiveCodeDigest string                      `json:"effective_code_digest,omitempty"`
+	WrapperDigest       string                      `json:"wrapper_digest,omitempty"`
+	ExecutionRef        *runtimeconfig.ExecutionRef `json:"execution_ref,omitempty"`
+	Backend             string                      `json:"backend"`
+	ResetMode           engine.ResetMode            `json:"reset_mode"`
+	Observation         json.RawMessage             `json:"-"`
+	RawRequest          json.RawMessage             `json:"-"`
+	RawResponse         json.RawMessage             `json:"-"`
 }
 
 type PythonExecutor struct {
@@ -185,8 +186,13 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	}
 	executor.mu.Lock()
 	defer executor.mu.Unlock()
+	hostRunID := runID
+	invocationRef, hasInvocationRef := engine.InvocationRefFromContext(ctx)
+	if hasInvocationRef {
+		hostRunID = invocationRef.ExecutionID
+	}
 	if executor.controller != nil {
-		if err := executor.controller.begin(runID, maxCalls); err != nil {
+		if err := executor.controller.begin(hostRunID, maxCalls); err != nil {
 			return PythonRunResult{}, err
 		}
 		defer executor.controller.end()
@@ -226,9 +232,11 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	if runErr != nil {
 		if errors.Is(runErr, runtimeconfig.ErrRunResultSchemaMismatch) {
 			response, validationErr := runtimeconfig.DecodeAndValidateRunResponse(request, payload)
-			if !errors.Is(validationErr, runtimeconfig.ErrRunResultSchemaMismatch) || response.Metrics == nil || response.Metrics.CapabilityCalls > maxCalls {
+			if !errors.Is(validationErr, runtimeconfig.ErrRunResultSchemaMismatch) || response.Metrics == nil || response.Metrics.CapabilityCalls > maxCalls ||
+				!executionRefMatches(response.ExecutionRef, invocationRef, hasInvocationRef) {
 				return result, ErrAgenticRun
 			}
+			result.ExecutionRef = response.ExecutionRef
 			result.ResponseDigest = digest(payload)
 			result.CapabilityCalls = response.Metrics.CapabilityCalls
 			result.ErrorCode = "guest_output_schema_mismatch"
@@ -241,9 +249,11 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	}
 	result.ResponseDigest = digest(payload)
 	response, err := runtimeconfig.DecodeAndValidateRunResponse(request, payload)
-	if err != nil || response.Metrics == nil || response.Metrics.CapabilityCalls > maxCalls {
+	if err != nil || response.Metrics == nil || response.Metrics.CapabilityCalls > maxCalls ||
+		!executionRefMatches(response.ExecutionRef, invocationRef, hasInvocationRef) {
 		return result, ErrAgenticRun
 	}
+	result.ExecutionRef = response.ExecutionRef
 	result.CapabilityCalls = response.Metrics.CapabilityCalls
 	if response.Status == runtimeconfig.RunResponseOK {
 		result.Success = true
@@ -257,6 +267,13 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	observation, _ := json.Marshal(map[string]any{"error_code": result.ErrorCode, "status": "error"})
 	result.Observation = observation
 	return result, nil
+}
+
+func executionRefMatches(executionRef *runtimeconfig.ExecutionRef, invocationRef runtimeconfig.InvocationRef, required bool) bool {
+	if !required {
+		return executionRef == nil || executionRef.Validate() == nil
+	}
+	return executionRef != nil && executionRef.InvocationRef == invocationRef && executionRef.Validate() == nil
 }
 
 func safeGuestErrorCode(value string) string {

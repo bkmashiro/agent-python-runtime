@@ -21,6 +21,7 @@ func TestDecodeRunRequestStrict(t *testing.T) {
 	for name, body := range map[string]string{
 		"capability": `{"run_id":"run-1","code":"result=1","inputs":{},"capabilities":["fetch_many"]}`,
 		"budget":     `{"run_id":"run-1","code":"result=1","inputs":{},"timeout_ms":999999}`,
+		"provenance": `{"run_id":"run-1","code":"result=1","inputs":{},"execution_ref":{"execution_id":"guest"}}`,
 		"trailing":   `{"run_id":"run-1","code":"result=1","inputs":{}} {}`,
 	} {
 		t.Run(name, func(t *testing.T) {

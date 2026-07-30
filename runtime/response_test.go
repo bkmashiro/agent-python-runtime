@@ -26,6 +26,22 @@ func TestDecodeAndValidateRunResponseEnforcesOutputSchema(t *testing.T) {
 	}
 }
 
+func TestDecodeAndValidateGuestRunResponseRejectsHostEvidenceAndFoldedAliases(t *testing.T) {
+	request := RunRequest{RunID: "guest", Code: "result = 1", Inputs: []byte(`{}`)}
+	for name, payload := range map[string][]byte{
+		"canonical execution ref": []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"execution_ref":{}}`),
+		"folded execution ref":    []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"Execution_ref":{}}`),
+		"folded status":           []byte(`{"Status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null}`),
+		"folded metric":           []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"Capability_calls":0,"result_bytes":1},"error":null}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := DecodeAndValidateGuestRunResponse(request, payload); err == nil {
+				t.Fatal("Guest response alias/Host evidence accepted")
+			}
+		})
+	}
+}
+
 func TestDecodeAndValidateRunResponseReturnsPartialMetricsForSchemaMismatch(t *testing.T) {
 	request := RunRequest{RunID: "run", Code: "print('missing result')", Inputs: []byte(`{}`), OutputSchema: []byte(`{"type":"object"}`)}
 	response, err := DecodeAndValidateRunResponse(request, []byte(`{"status":"ok","result":null,"receipts":[],"metrics":{"capability_calls":4,"result_bytes":4},"error":null}`))

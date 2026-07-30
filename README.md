@@ -231,12 +231,14 @@ runtime/capability/        host-owned capability registry and adapters
 guest/                     CPython/WASI source, bootstrap, and build pipeline
 integration/e2e/           real guest integration tests
 eval/                      deterministic agent-workflow evaluation fixtures
+agenttrace/                optional metadata-only Harness trace/replay plugin
 docs/                      architecture, threat model, integration, and results
 ```
 
 ## Documentation
 
 - [Framework integration test drive](docs/framework-integration.md)
+- [Harness Agent trace/replay plugin](docs/agent-trace-plugin.md)
 - [Architecture](docs/architecture.md)
 - [Threat model](docs/threat-model.md)
 - [Local CLI](docs/operator-cli.md)

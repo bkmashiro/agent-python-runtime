@@ -25,6 +25,7 @@ type ResponseCall struct {
 	ProviderName  string          `json:"-"`
 	CanonicalName string          `json:"-"`
 	Arguments     json.RawMessage `json:"-"`
+	OutputItemSeq uint32          `json:"-"`
 }
 
 type ParsedResponse struct {
@@ -329,7 +330,7 @@ func ParseResponsesOutput(body json.RawMessage, providerToCanonical map[string]s
 	parsed := ParsedResponse{}
 	seenCalls := map[string]bool{}
 	var text bytes.Buffer
-	for _, raw := range envelope.Output {
+	for outputItemSeq, raw := range envelope.Output {
 		var header map[string]json.RawMessage
 		if json.Unmarshal(raw, &header) != nil || len(header) == 0 || len(header) > 32 {
 			return ParsedResponse{}, ErrAgenticRun
@@ -347,6 +348,7 @@ func ParseResponsesOutput(body json.RawMessage, providerToCanonical map[string]s
 				return ParsedResponse{}, ErrAgenticRun
 			}
 			seenCalls[call.CallID] = true
+			call.OutputItemSeq = uint32(outputItemSeq)
 			parsed.Calls = append(parsed.Calls, call)
 			parsed.replayItems = append(parsed.replayItems, replay)
 		case "message":

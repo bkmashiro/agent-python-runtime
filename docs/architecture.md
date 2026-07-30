@@ -12,8 +12,9 @@ V1 remains read-only. A possible future Host-owned side-effect layer is discusse
 
 ```text
 Agent harness
-  │ RunRequest + Host-owned RunConfig
-  ▼
+  ├─ optional metadata-only trace/replay plugin (Harness-owned)
+  └─ RunRequest + Host-owned RunConfig
+       ▼
 Go Runtime
   ├─ request/schema validation
   ├─ backend-neutral Runner/Factory contract
@@ -34,6 +35,8 @@ CPython WASI guest with optional selected NumPy profile
 ```
 
 The agent harness decides whether Python is useful. The runtime does not force simple actions through code.
+
+Complete Agent-loop observability is an optional Harness concern. The Runtime accepts only a Host context `InvocationRef` and projects a Host-authored `execution_ref`; it does not parse providers or own the trace database. See [Harness Agent trace/replay plugin](agent-trace-plugin.md).
 
 ## Trust boundaries
 

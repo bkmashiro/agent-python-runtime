@@ -51,7 +51,14 @@ The process owns only the supplied socket and trace paths. Shutdown closes the r
 
 Each connection carries one request and one response. Frames are an unsigned 32-bit big-endian length followed by bounded UTF-8 JSON. The maximum frame is 1 MiB. Unknown fields, duplicate keys, trailing JSON, forged `execution_id`, invalid identifiers, invalid JSON inputs/schema, NUL source, and Python source over 64 KiB are rejected.
 
-Request:
+The versioned operations are:
+
+- `execute`: required Runtime invocation trace plus verified `ExecutionRef` evidence;
+- `observe`: a strict metadata-only allowlist for best-effort Hermes lifecycle evidence.
+
+`observe` accepts only agent-run start/completion, LLM response metadata, direct-tool completion metadata, a route in `direct|runtime|hybrid|none`, and final-state fingerprints. Payload fields are limited to digests, byte/character counts, bounded names/status, resource durations, counters, and token usage. There is no accepted field for raw prompt/provider bodies, reasoning, source code, tool arguments/results, attachment bodies, or secrets.
+
+Execute request:
 
 ```json
 {

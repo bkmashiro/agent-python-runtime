@@ -27,6 +27,25 @@ func NewTraceManager(store *agenttrace.SQLiteStore) (*TraceManager, error) {
 	}, nil
 }
 
+func (manager *TraceManager) Observe(ctx context.Context, request ObserveRequest) (agenttrace.Event, error) {
+	if manager == nil || request.Validate() != nil {
+		return agenttrace.Event{}, agenttrace.ErrInvalidEvent
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	recorder, err := manager.recorderLocked(ctx, request.AgentRunID)
+	if err != nil {
+		return agenttrace.Event{}, err
+	}
+	return recorder.Record(
+		ctx,
+		request.EventType,
+		request.ParentEventID,
+		request.Payload,
+		request.StateFingerprint,
+	)
+}
+
 func (manager *TraceManager) RuntimeStarted(ctx context.Context, ref runtimeconfig.InvocationRef, requestDigest string) (string, error) {
 	if manager == nil || ref.Validate() != nil || !validDigest(requestDigest) {
 		return "", agenttrace.ErrInvalidEvent

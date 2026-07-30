@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/agenttrace"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
@@ -55,6 +56,32 @@ func NewService(runner engine.Runner, trace InvocationTrace, ids IDSource, timeo
 		return nil, errors.New("invalid Hermes bridge runner")
 	}
 	return &Service{runner: runner, trace: trace, ids: ids, timeout: timeout}, nil
+}
+
+func (service *Service) Observe(parent context.Context, request ObserveRequest) ObserveResponse {
+	response := ObserveResponse{Version: ProtocolVersion, RequestID: request.RequestID, Status: ResponseStatusError}
+	if service == nil || service.trace == nil || request.Validate() != nil {
+		response.Error = &BridgeError{Code: "invalid_observation", Message: "invalid metadata observation"}
+		return response
+	}
+	observer, ok := service.trace.(interface {
+		Observe(context.Context, ObserveRequest) (agenttrace.Event, error)
+	})
+	if !ok {
+		response.Error = &BridgeError{Code: "trace_unavailable", Message: "metadata observation is unavailable"}
+		return response
+	}
+	traceCtx, cancel := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
+	defer cancel()
+	event, err := observer.Observe(traceCtx, request)
+	if err != nil {
+		response.Error = &BridgeError{Code: "trace_unavailable", Message: "metadata observation was not persisted"}
+		return response
+	}
+	response.Status = ResponseStatusOK
+	response.EventID = event.EventID
+	response.Sequence = event.Sequence
+	return response
 }
 
 func (service *Service) Execute(parent context.Context, request ExecuteRequest) ExecuteResponse {

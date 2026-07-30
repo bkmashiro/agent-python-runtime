@@ -59,9 +59,10 @@ type environmentIdentity struct {
 }
 
 type fixtureIdentity struct {
-	Samples                  int   `json:"samples"`
-	CapabilityOperations     int   `json:"capability_operations"`
-	ProviderDelayNanoseconds int64 `json:"provider_delay_ns_per_operation"`
+	Workload                 string `json:"workload,omitempty"`
+	Samples                  int    `json:"samples"`
+	CapabilityOperations     int    `json:"capability_operations"`
+	ProviderDelayNanoseconds int64  `json:"provider_delay_ns_per_operation"`
 }
 
 type benchmarkEvidence struct {

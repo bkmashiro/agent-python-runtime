@@ -23,6 +23,12 @@ class NativePythonBenchmarkTests(unittest.TestCase):
             MODULE.summarize([1, 2, 3, 4, 5]),
         )
 
+    def test_numpy_fixture_binds_version_and_import(self):
+        fixture = MODULE.FIXTURES["numpy-import"]
+        self.assertIn("import numpy as np", fixture["prepare_source"])
+        self.assertIn("np.arange", fixture["execute_source"])
+        self.assertEqual("2.5.1", fixture["expected_result"]["numpy_version"])
+
     def test_runs_exact_fixture_in_cold_and_warm_native_processes(self):
         with tempfile.TemporaryDirectory() as directory:
             output = pathlib.Path(directory) / "native.json"
@@ -51,7 +57,8 @@ class NativePythonBenchmarkTests(unittest.TestCase):
         self.assertEqual("native-cpython-cold-warm", evidence["evidence_kind"])
         self.assertEqual(3, len(evidence["cold_process"]["samples"]))
         self.assertEqual(3, len(evidence["warm_process"]["samples"]))
-        self.assertEqual(MODULE.EXPECTED_RESULT, evidence["fixture"]["expected_result"])
+        self.assertEqual(MODULE.FIXTURES["basic"]["expected_result"], evidence["fixture"]["expected_result"])
+        self.assertEqual("basic", evidence["fixture"]["name"])
         self.assertEqual("CPython", evidence["python"]["implementation"])
         self.assertGreater(evidence["cold_process"]["total"]["median_ns"], 0)
         self.assertGreater(evidence["warm_process"]["total"]["median_ns"], 0)

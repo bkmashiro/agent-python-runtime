@@ -55,6 +55,7 @@
       "additionalProperties": false,
       "required": ["samples", "capability_operations", "provider_delay_ns_per_operation"],
       "properties": {
+        "workload": {"enum": ["basic", "numpy-import"]},
         "samples": {"type": "integer", "minimum": 3, "maximum": 20},
         "capability_operations": {"type": "integer", "minimum": 1, "maximum": 20},
         "provider_delay_ns_per_operation": {"const": 2000000}

@@ -72,6 +72,7 @@ type benchmarkOptions struct {
 	Strategy              string
 	Samples               int
 	Kind                  string
+	Fixture               string
 	LifecycleDensityChild bool
 	DensitySlots          uint
 	MaxRSSBytes           uint64
@@ -106,6 +107,7 @@ func runMain(args []string) error {
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
 	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, or reactor-census")
+	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic or numpy-import")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
 	flags.UintVar(&options.DensitySlots, "density-slots", 0, "internal lifecycle-density requested slot count")
 	flags.Uint64Var(&options.MaxRSSBytes, "max-rss-bytes", 0, "required lifecycle-density child RSS kill threshold")
@@ -234,6 +236,10 @@ func runBenchmark(options benchmarkOptions) (benchmarkEvidence, error) {
 		operations = 20
 		integerWork = 100_000
 	}
+	executeFixture, err := resolveBenchmarkExecuteFixture(options.Fixture, integerWork, identity.ArtifactProfile)
+	if err != nil {
+		return benchmarkEvidence{}, err
+	}
 
 	var providerCalls atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -296,6 +302,7 @@ func runBenchmark(options benchmarkOptions) (benchmarkEvidence, error) {
 			GoVersion: goruntime.Version(),
 		},
 		Fixture: fixtureIdentity{
+			Workload:                 executeFixture.Name,
 			Samples:                  options.Samples,
 			CapabilityOperations:     operations,
 			ProviderDelayNanoseconds: providerDelay.Nanoseconds(),
@@ -321,13 +328,13 @@ func runBenchmark(options benchmarkOptions) (benchmarkEvidence, error) {
 	for sample := 0; sample < options.Samples; sample++ {
 		executeRequest, err := makeRequest(
 			fmt.Sprintf("execute-%d", sample),
-			`result = {"prepared": prepared, "sum": sum(range(inputs["integer_work"]))}`,
-			map[string]any{"integer_work": integerWork},
+			executeFixture.Code,
+			executeFixture.Inputs,
 		)
 		if err != nil {
 			return benchmarkEvidence{}, err
 		}
-		executeSample, err := runSample(runner, lifecycle, capabilities, executeRequest, "prepared = 41", false)
+		executeSample, err := runSample(runner, lifecycle, capabilities, executeRequest, executeFixture.Prepare, false)
 		if err != nil {
 			return benchmarkEvidence{}, err
 		}
@@ -344,7 +351,7 @@ result = {"prepared": prepared, "sum": sum(__import__("json").loads(item["body"]
 		if err != nil {
 			return benchmarkEvidence{}, err
 		}
-		capabilitySample, err := runSample(runner, lifecycle, capabilities, capabilityRequest, "prepared = 41", true)
+		capabilitySample, err := runSample(runner, lifecycle, capabilities, capabilityRequest, executeFixture.Prepare, true)
 		if err != nil {
 			return benchmarkEvidence{}, err
 		}

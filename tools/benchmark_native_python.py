@@ -21,9 +21,18 @@ import time
 from typing import Any
 
 SCHEMA_VERSION = 1
-PREPARE_SOURCE = "prepared = 41"
-EXECUTE_SOURCE = 'result = {"prepared": prepared, "sum": sum(range(inputs["integer_work"]))}'
-EXPECTED_RESULT = {"prepared": 41, "sum": 499500}
+FIXTURES = {
+    "basic": {
+        "prepare_source": "prepared = 41",
+        "execute_source": 'result = {"prepared": prepared, "sum": sum(range(inputs["integer_work"]))}',
+        "expected_result": {"prepared": 41, "sum": 499500},
+    },
+    "numpy-import": {
+        "prepare_source": "import numpy as np\nprepared = 41",
+        "execute_source": 'result = {"prepared": prepared, "numpy_version": np.__version__, "sum": int(np.arange(inputs["integer_work"]).sum())}',
+        "expected_result": {"prepared": 41, "numpy_version": "2.5.1", "sum": 499500},
+    },
+}
 
 
 def elapsed_ns(start: int) -> int:
@@ -48,11 +57,11 @@ def summarize(values: list[int]) -> dict[str, int]:
     }
 
 
-def request(sample: int) -> str:
+def request(sample: int, fixture: dict[str, Any]) -> str:
     return json.dumps(
         {
             "run_id": f"native-execute-{sample}",
-            "code": EXECUTE_SOURCE,
+            "code": fixture["execute_source"],
             "inputs": {"integer_work": 1000},
         },
         separators=(",", ":"),
@@ -60,7 +69,7 @@ def request(sample: int) -> str:
     )
 
 
-def worker(bootstrap: Path) -> int:
+def worker(bootstrap: Path, fixture: dict[str, Any]) -> int:
     started = time.perf_counter_ns()
     sys.path.insert(0, str(bootstrap))
     import agent_runtime  # pylint: disable=import-outside-toplevel
@@ -70,7 +79,7 @@ def worker(bootstrap: Path) -> int:
     agent_runtime._initialize("{}")
     initialize_ns = elapsed_ns(started)
     started = time.perf_counter_ns()
-    agent_runtime._prepare(PREPARE_SOURCE)
+    agent_runtime._prepare(fixture["prepare_source"])
     prepare_ns = elapsed_ns(started)
     print(
         json.dumps(
@@ -93,30 +102,30 @@ def worker(bootstrap: Path) -> int:
     return 0
 
 
-def parse_worker_output(text: str, expected_results: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def parse_worker_output(text: str, expected_results: int, expected_result: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     records = [json.loads(line) for line in text.splitlines() if line]
     if len(records) != expected_results + 1 or records[0].get("kind") != "ready":
         raise RuntimeError(f"invalid worker protocol: {records!r}")
     results = records[1:]
     for record in results:
         response = record.get("response", {})
-        if record.get("kind") != "result" or response.get("status") != "ok" or response.get("result") != EXPECTED_RESULT:
+        if record.get("kind") != "result" or response.get("status") != "ok" or response.get("result") != expected_result:
             raise RuntimeError(f"native fixture result mismatch: {record!r}")
     return records[0], results
 
 
-def command(python: Path, script: Path, bootstrap: Path) -> list[str]:
-    return [str(python), "-I", "-u", str(script), "--worker", "--bootstrap", str(bootstrap)]
+def command(python: Path, script: Path, bootstrap: Path, fixture_name: str) -> list[str]:
+    return [str(python), "-I", "-u", str(script), "--worker", "--bootstrap", str(bootstrap), "--fixture", fixture_name]
 
 
-def cold_samples(python: Path, script: Path, bootstrap: Path, samples: int, timeout: float) -> tuple[list[dict[str, Any]], list[int]]:
+def cold_samples(python: Path, script: Path, bootstrap: Path, fixture_name: str, fixture: dict[str, Any], samples: int, timeout: float) -> tuple[list[dict[str, Any]], list[int]]:
     records: list[dict[str, Any]] = []
     totals: list[int] = []
     for sample in range(samples):
         started = time.perf_counter_ns()
         process = subprocess.run(
-            command(python, script, bootstrap),
-            input=request(sample) + "\n",
+            command(python, script, bootstrap, fixture_name),
+            input=request(sample, fixture) + "\n",
             text=True,
             capture_output=True,
             timeout=timeout,
@@ -125,16 +134,16 @@ def cold_samples(python: Path, script: Path, bootstrap: Path, samples: int, time
         total_ns = elapsed_ns(started)
         if process.returncode != 0 or process.stderr:
             raise RuntimeError(f"cold worker failed: exit={process.returncode}, stderr={process.stderr!r}")
-        ready, results = parse_worker_output(process.stdout, 1)
+        ready, results = parse_worker_output(process.stdout, 1, fixture["expected_result"])
         records.append({"sample": sample, "total_ns": total_ns, **ready, "execute_ns": results[0]["execute_ns"]})
         totals.append(total_ns)
     return records, totals
 
 
-def warm_samples(python: Path, script: Path, bootstrap: Path, samples: int, timeout: float) -> tuple[dict[str, Any], list[dict[str, Any]], list[int]]:
+def warm_samples(python: Path, script: Path, bootstrap: Path, fixture_name: str, fixture: dict[str, Any], samples: int, timeout: float) -> tuple[dict[str, Any], list[dict[str, Any]], list[int]]:
     started = time.perf_counter_ns()
     process = subprocess.Popen(
-        command(python, script, bootstrap),
+        command(python, script, bootstrap, fixture_name),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -154,13 +163,13 @@ def warm_samples(python: Path, script: Path, bootstrap: Path, samples: int, time
     try:
         for sample in range(samples):
             started = time.perf_counter_ns()
-            process.stdin.write(request(sample) + "\n")
+            process.stdin.write(request(sample, fixture) + "\n")
             process.stdin.flush()
             result_line = process.stdout.readline()
             total_ns = elapsed_ns(started)
             if not result_line:
                 raise RuntimeError(f"warm worker stopped: {process.stderr.read()!r}")
-            _ignored, results = parse_worker_output(json.dumps(ready) + "\n" + result_line, 1)
+            _ignored, results = parse_worker_output(json.dumps(ready) + "\n" + result_line, 1, fixture["expected_result"])
             records.append({"sample": sample, "total_ns": total_ns, "execute_ns": results[0]["execute_ns"]})
             totals.append(total_ns)
     finally:
@@ -202,8 +211,9 @@ def benchmark(args: argparse.Namespace) -> dict[str, Any]:
     script = Path(__file__).resolve(strict=True)
     bootstrap = (root / "guest/bootstrap").resolve(strict=True)
     python = args.python.resolve(strict=True)
-    cold, cold_totals = cold_samples(python, script, bootstrap, args.samples, args.timeout)
-    warm_ready, warm, warm_totals = warm_samples(python, script, bootstrap, args.samples, args.timeout)
+    fixture = FIXTURES[args.fixture]
+    cold, cold_totals = cold_samples(python, script, bootstrap, args.fixture, fixture, args.samples, args.timeout)
+    warm_ready, warm, warm_totals = warm_samples(python, script, bootstrap, args.fixture, fixture, args.samples, args.timeout)
     return {
         "schema_version": SCHEMA_VERSION,
         "evidence_kind": "native-cpython-cold-warm",
@@ -215,11 +225,12 @@ def benchmark(args: argparse.Namespace) -> dict[str, Any]:
         },
         "python": python_identity(python),
         "fixture": {
+            "name": args.fixture,
             "samples": args.samples,
-            "prepare_source": PREPARE_SOURCE,
-            "execute_source": EXECUTE_SOURCE,
+            "prepare_source": fixture["prepare_source"],
+            "execute_source": fixture["execute_source"],
             "inputs": {"integer_work": 1000},
-            "expected_result": EXPECTED_RESULT,
+            "expected_result": fixture["expected_result"],
             "bootstrap_sha256": file_sha256(root / "guest/bootstrap/agent_runtime/__init__.py"),
         },
         "cold_process": {"samples": cold, "total": summarize(cold_totals)},
@@ -236,6 +247,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--bootstrap", type=Path)
+    parser.add_argument("--fixture", choices=sorted(FIXTURES), default="basic")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--repository", type=Path, default=Path.cwd())
     parser.add_argument("--samples", type=int, default=30)
@@ -249,7 +261,7 @@ def main() -> int:
     if args.worker:
         if args.bootstrap is None:
             raise SystemExit("--bootstrap is required in worker mode")
-        return worker(args.bootstrap.resolve(strict=True))
+        return worker(args.bootstrap.resolve(strict=True), FIXTURES[args.fixture])
     if args.samples < 3 or args.samples > 1000 or args.timeout <= 0 or args.timeout > 600:
         raise SystemExit("samples must be 3-1000 and timeout must be in (0,600]")
     evidence = benchmark(args)

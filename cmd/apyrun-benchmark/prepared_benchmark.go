@@ -44,6 +44,10 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 		operations = 20
 		integerWork = 100_000
 	}
+	executeFixture, err := resolveBenchmarkExecuteFixture(options.Fixture, integerWork, identity.ArtifactProfile)
+	if err != nil {
+		return preparedBenchmarkEvidence{}, err
+	}
 
 	var providerCalls atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -97,7 +101,7 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 		Artifact: identity, HostSource: hostSource,
 		Backend:     backendIdentity{Name: runner.Properties().Backend, ResetMode: string(runner.Properties().ResetMode)},
 		Environment: environmentIdentity{GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH, GoVersion: goruntime.Version()},
-		Fixture:     preparedFixtureIdentity{Samples: options.Samples, CapabilityOperations: operations, ProviderDelayNanoseconds: providerDelay.Nanoseconds(), PreparedCapacity: 1},
+		Fixture:     preparedFixtureIdentity{Workload: executeFixture.Name, Samples: options.Samples, CapabilityOperations: operations, ProviderDelayNanoseconds: providerDelay.Nanoseconds(), PreparedCapacity: 1},
 		CompileOnce: compile, Readiness: readiness,
 		StateCopy: stateCopyEvidence{Applicable: false, Reason: "single-use instances are never restored or copied after serving a Run"},
 		Limitations: []string{
@@ -114,20 +118,20 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 		)
 	}
 
-	executeRequest, err := makeRequest("prepared-first-execute", `result = {"prepared": prepared, "sum": sum(range(inputs["integer_work"]))}`, map[string]any{"integer_work": integerWork})
+	executeRequest, err := makeRequest("prepared-first-execute", executeFixture.Code, executeFixture.Inputs)
 	if err != nil {
 		return preparedBenchmarkEvidence{}, err
 	}
-	evidence.Workloads.FirstExecute, err = runPreparedSample(runner, lifecycle, capabilities, executeRequest, "prepared = 41", false)
+	evidence.Workloads.FirstExecute, err = runPreparedSample(runner, lifecycle, capabilities, executeRequest, executeFixture.Prepare, false)
 	if err != nil {
 		return preparedBenchmarkEvidence{}, err
 	}
 	for sample := 0; sample < options.Samples; sample++ {
-		executeRequest, err = makeRequest(fmt.Sprintf("prepared-steady-execute-%d", sample), `result = {"prepared": prepared, "sum": sum(range(inputs["integer_work"]))}`, map[string]any{"integer_work": integerWork})
+		executeRequest, err = makeRequest(fmt.Sprintf("prepared-steady-execute-%d", sample), executeFixture.Code, executeFixture.Inputs)
 		if err != nil {
 			return preparedBenchmarkEvidence{}, err
 		}
-		executeSample, err := runPreparedSample(runner, lifecycle, capabilities, executeRequest, "prepared = 41", false)
+		executeSample, err := runPreparedSample(runner, lifecycle, capabilities, executeRequest, executeFixture.Prepare, false)
 		if err != nil {
 			return preparedBenchmarkEvidence{}, err
 		}
@@ -140,7 +144,7 @@ result = {"prepared": prepared, "sum": sum(__import__("json").loads(item["body"]
 		if err != nil {
 			return preparedBenchmarkEvidence{}, err
 		}
-		capabilitySample, err := runPreparedSample(runner, lifecycle, capabilities, capabilityRequest, "prepared = 41", true)
+		capabilitySample, err := runPreparedSample(runner, lifecycle, capabilities, capabilityRequest, executeFixture.Prepare, true)
 		if err != nil {
 			return preparedBenchmarkEvidence{}, err
 		}

@@ -6,10 +6,11 @@ import (
 )
 
 type preparedFixtureIdentity struct {
-	Samples                  int   `json:"samples"`
-	CapabilityOperations     int   `json:"capability_operations"`
-	ProviderDelayNanoseconds int64 `json:"provider_delay_ns_per_operation"`
-	PreparedCapacity         int   `json:"prepared_capacity"`
+	Workload                 string `json:"workload,omitempty"`
+	Samples                  int    `json:"samples"`
+	CapabilityOperations     int    `json:"capability_operations"`
+	ProviderDelayNanoseconds int64  `json:"provider_delay_ns_per_operation"`
+	PreparedCapacity         int    `json:"prepared_capacity"`
 }
 
 type preparedReadinessEvidence struct {

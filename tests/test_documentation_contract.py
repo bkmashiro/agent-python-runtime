@@ -86,6 +86,28 @@ class PublicDocumentationContractTests(unittest.TestCase):
                 with self.subTest(document=document.relative_to(ROOT), marker=marker):
                     self.assertNotIn(marker, text)
 
+    def test_readme_explains_code_first_tool_bridge_and_reset(self):
+        readme = self.read("README.md")
+        for marker in (
+            "`CODE FIRST`",
+            "`TOOLS AS FUNCTIONS`",
+            "`HOST-OWNED EFFECTS`",
+            "`BOUNDED CONCURRENCY`",
+            "`RESET AFTER RUN`",
+            "from host_tools import notes_search",
+            "from agent_runtime import tools",
+            "2026-07-28/changelog",
+            "read_only",
+            "reversible",
+            "compensatable",
+            "irreversible",
+            '"status": "ok"',
+            '"receipts": []',
+            "Every served slot is discarded",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, readme)
+
     def test_transactional_workflow_docs_share_authority_vocabulary(self):
         effect_plane = self.read("docs/effect-plane.md")
         adr = self.read("docs/adr/0007-mcp-transactional-tool-workflows.md")

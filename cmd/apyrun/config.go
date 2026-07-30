@@ -11,16 +11,19 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
 type operatorConfig struct {
-	TimeoutMS              int64            `json:"timeout_ms,omitempty"`
-	MaxRequestBytes        uint32           `json:"max_request_bytes,omitempty"`
-	MaxResponseBytes       uint32           `json:"max_response_bytes,omitempty"`
-	MemoryLimitPages       uint32           `json:"memory_limit_pages,omitempty"`
-	PreparedCapacity       uint32           `json:"prepared_capacity,omitempty"`
-	TransactionJournalPath string           `json:"transaction_journal_path,omitempty"`
-	FetchMany              *fetchManyConfig `json:"fetch_many,omitempty"`
+	TimeoutMS              int64                            `json:"timeout_ms,omitempty"`
+	MaxRequestBytes        uint32                           `json:"max_request_bytes,omitempty"`
+	MaxResponseBytes       uint32                           `json:"max_response_bytes,omitempty"`
+	MemoryLimitPages       uint32                           `json:"memory_limit_pages,omitempty"`
+	PreparedCapacity       uint32                           `json:"prepared_capacity,omitempty"`
+	ExecutionStrategy      enginecontract.ExecutionStrategy `json:"execution_strategy,omitempty"`
+	COWSnapshotShell       bool                             `json:"cow_snapshot_shell,omitempty"`
+	TransactionJournalPath string                           `json:"transaction_journal_path,omitempty"`
+	FetchMany              *fetchManyConfig                 `json:"fetch_many,omitempty"`
 }
 
 type fetchManyConfig struct {
@@ -71,6 +74,29 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, *capability.Gra
 	}
 	if err := runConfig.Validate(); err != nil {
 		return runtimeconfig.RunConfig{}, nil, fmt.Errorf("invalid operator resource bounds: %w", err)
+	}
+	switch config.ExecutionStrategy {
+	case "":
+		if config.COWSnapshotShell {
+			return runtimeconfig.RunConfig{}, nil, errors.New("cow_snapshot_shell requires execution_strategy cow-ready-single-use")
+		}
+	case enginecontract.StrategyFreshInstance:
+		if config.PreparedCapacity != 0 {
+			return runtimeconfig.RunConfig{}, nil, errors.New("fresh-instance execution_strategy requires zero prepared_capacity")
+		}
+	case enginecontract.StrategySingleUsePrepared:
+		if config.PreparedCapacity == 0 {
+			return runtimeconfig.RunConfig{}, nil, errors.New("single-use-preinitialized execution_strategy requires positive prepared_capacity")
+		}
+		if config.COWSnapshotShell {
+			return runtimeconfig.RunConfig{}, nil, errors.New("cow_snapshot_shell requires execution_strategy cow-ready-single-use")
+		}
+	case enginecontract.StrategyCOWReadySingleUse:
+		if config.PreparedCapacity == 0 {
+			return runtimeconfig.RunConfig{}, nil, errors.New("cow-ready-single-use execution_strategy requires positive prepared_capacity")
+		}
+	default:
+		return runtimeconfig.RunConfig{}, nil, fmt.Errorf("unsupported execution_strategy %q", config.ExecutionStrategy)
 	}
 	if config.TransactionJournalPath != "" && (!filepath.IsAbs(config.TransactionJournalPath) || filepath.Clean(config.TransactionJournalPath) != config.TransactionJournalPath) {
 		return runtimeconfig.RunConfig{}, nil, errors.New("transaction_journal_path must be a clean absolute path")

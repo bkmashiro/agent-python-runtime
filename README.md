@@ -205,6 +205,18 @@ For a first integration, start with a deterministic read-only fake tool and veri
 
 A configured COW warmup profile runs after CPython initialization and before the canonical image is sealed. For example, `numpy-ready-v1` imports NumPy before readiness so a matching request does not repeat the import.
 
+Linux operators can explicitly derive a replacement-only snapshot shell that preserves every non-Data section and seeds active data before canonical initialization. It remains off by default and fails closed for artifacts with growable/imported memory, non-constant active-data offsets, or a WebAssembly start section:
+
+```json
+{
+  "prepared_capacity": 256,
+  "execution_strategy": "cow-ready-single-use",
+  "cow_snapshot_shell": true
+}
+```
+
+The optimization changes instance preparation only; served instances remain single-use and are never returned to the pool.
+
 On the retained Linux benchmark, a fresh native CPython process importing NumPy took a median `324.067 ms`; a request hitting an already prepared NumPy-ready COW slot took `3.863 ms`. This is a lifecycle comparison, not a claim that WebAssembly executes NumPy kernels faster than native code. See the [benchmark report](docs/reports/scheduler-experiment-results.md#8-python-and-numpy-request-lifecycle).
 
 ## Repository map

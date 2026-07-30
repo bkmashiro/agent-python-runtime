@@ -138,6 +138,19 @@ The burst experiment starts with 16 closed-loop consumers. At the five-second mi
 
 The 2× burst remains below saturation. At 4×, ready inventory reaches zero and waiting appears. At 8×, throughput no longer improves, while median p50 and waiting increase sharply. For this controlled mixed profile, 32 active attempts are efficient, 64 is a short-burst upper region, and 128 is over-saturated.
 
+### 6.1 Adaptive refill A/B
+
+A same-node A/B run used 1,024 ready slots, 64 closed-loop consumers, the deterministic CPU workload, and a 30 second load window. Fixed mode retained four refill workers. Adaptive mode bounded outstanding replacement work at four normally, eight below the low watermark, and twelve at critical inventory or while callers waited.
+
+| Refill policy | Worker bound | Throughput, req/s | p50, ms | p99, ms | Observed CPU cores | req/s per observed core | Drain, s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Fixed | 4 | 154.72 | 512.31 | 570.34 | 4.10 | 37.77 | 9.28 |
+| Adaptive | 12 | 235.80 | 303.47 | 362.05 | 8.14 | 28.98 | 7.60 |
+
+Adaptive refill increased throughput by 52.40%, reduced p50 by 40.76%, reduced p99 by 36.52%, and shortened final drain by 18.06%. It also increased observed CPU use by 98.62% and reduced throughput per observed core by 23.27%. Both cases completed without failure or timeout and restored ready inventory from 1,024 to 1,024.
+
+The policy is therefore explicit opt-in rather than the production default. The evidence records `refill_policy` separately from the actual worker bound so fixed twelve-worker and adaptive runs cannot be confused. Accepted source revision: `052ca8856b350e13fbe2862b91e7fb97c3de926f`; Slurm job: `268161`; evidence schema: v10.
+
 ## 7. Platform-normalized interpretation
 
 “Throughput per observed CPU core” divides request throughput by benchmark process CPU time divided by wall time. It is useful within one platform and artifact, but it is not a cross-architecture normalization and does not account for external service work.
@@ -250,7 +263,7 @@ Job `268054` completed with Slurm state `COMPLETED`, Slurm exit `0:0`, wrapper e
 
 The data supports these bounded defaults and compiler choices:
 
-1. Keep automatic refill workers at 4 for conservative production behavior; use 8 as the balanced experimental setting.
+1. Keep the automatic default fixed at 4 refill workers for conservative production behavior; enable adaptive 4/8/12 refill only when latency and burst throughput justify the measured CPU cost.
 2. Treat active concurrency as a profile-dependent bound rather than `active = CPU cores`.
 3. Allow greed to move reservation quantiles only within p90–p100 and to increase maximum active attempts, retry budget, and polling frequency without changing cgroup hard limits.
 4. Tighten immediately on OOM, pressure, PSI, or eviction-budget excess.

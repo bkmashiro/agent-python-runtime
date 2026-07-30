@@ -68,6 +68,8 @@ func TestDecodeOperatorConfigIsStrictAndHostOwned(t *testing.T) {
 		"max_response_bytes": 8192,
 		"memory_limit_pages": 128,
 		"prepared_capacity": 2,
+		"execution_strategy": "cow-ready-single-use",
+		"cow_snapshot_shell": true,
 		"fetch_many": {
 			"max_calls": 2,
 			"max_requests_per_call": 5,
@@ -93,8 +95,8 @@ func TestDecodeOperatorConfigIsStrictAndHostOwned(t *testing.T) {
 	if runConfig.Timeout.Milliseconds() != 1500 || runConfig.MaxRequestBytes != 4096 || runConfig.MaxResponseBytes != 8192 || runConfig.MemoryLimitPages != 128 {
 		t.Fatalf("unexpected run config: %#v", runConfig)
 	}
-	if config.PreparedCapacity != 2 {
-		t.Fatalf("prepared capacity was not decoded: %#v", config)
+	if config.PreparedCapacity != 2 || config.ExecutionStrategy != engine.StrategyCOWReadySingleUse || !config.COWSnapshotShell {
+		t.Fatalf("prepared COW configuration was not decoded: %#v", config)
 	}
 	if grant == nil || grant.MaxConcurrency != 3 || grant.Targets["catalog"].Headers["Authorization"] != "Bearer host-owned" {
 		t.Fatalf("Host grant was not resolved: %#v", grant)
@@ -109,6 +111,37 @@ func TestDecodeOperatorConfigIsStrictAndHostOwned(t *testing.T) {
 				t.Fatal("expected strict config rejection")
 			}
 		})
+	}
+}
+
+func TestOperatorConfigRejectsInvalidExecutionStrategy(t *testing.T) {
+	for name, config := range map[string]operatorConfig{
+		"snapshot without strategy": {PreparedCapacity: 1, COWSnapshotShell: true},
+		"snapshot without COW":      {PreparedCapacity: 1, ExecutionStrategy: engine.StrategySingleUsePrepared, COWSnapshotShell: true},
+		"COW without capacity":      {ExecutionStrategy: engine.StrategyCOWReadySingleUse, COWSnapshotShell: true},
+		"fresh with capacity":       {PreparedCapacity: 1, ExecutionStrategy: engine.StrategyFreshInstance},
+		"unknown":                   {ExecutionStrategy: "unknown"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := config.resolve(); err == nil {
+				t.Fatalf("invalid execution configuration was accepted: %#v", config)
+			}
+		})
+	}
+}
+
+func TestWazeroFactoryWiresCOWSnapshotShell(t *testing.T) {
+	built, err := newWazeroFactory(operatorConfig{
+		PreparedCapacity:  8,
+		ExecutionStrategy: engine.StrategyCOWReadySingleUse,
+		COWSnapshotShell:  true,
+	}, "host-run", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory, ok := built.(wazeroengine.Factory)
+	if !ok || factory.PreparedCapacity != 8 || factory.Strategy != engine.StrategyCOWReadySingleUse || !factory.COWSnapshotShell {
+		t.Fatalf("snapshot-shell factory was not wired: %#v", built)
 	}
 }
 

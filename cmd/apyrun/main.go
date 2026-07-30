@@ -135,7 +135,11 @@ func newWazeroFactory(config operatorConfig, hostIdentity string, client *http.C
 	if err != nil {
 		return nil, err
 	}
-	factory := wazeroengine.Factory{PreparedCapacity: config.PreparedCapacity}
+	factory := wazeroengine.Factory{
+		PreparedCapacity: config.PreparedCapacity,
+		Strategy:         config.ExecutionStrategy,
+		COWSnapshotShell: config.COWSnapshotShell,
+	}
 	if grant == nil {
 		return factory, nil
 	}

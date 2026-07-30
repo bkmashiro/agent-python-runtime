@@ -5,6 +5,7 @@ import "fmt"
 const (
 	benchmarkFixtureBasic       = "basic"
 	benchmarkFixtureNumPyImport = "numpy-import"
+	benchmarkFixtureNumPyReady  = "numpy-ready"
 )
 
 type benchmarkExecuteFixture struct {
@@ -31,7 +32,16 @@ func resolveBenchmarkExecuteFixture(name string, integerWork int, artifactProfil
 			Code:   `result = {"prepared": prepared, "numpy_version": np.__version__, "sum": int(np.arange(inputs["integer_work"]).sum())}`,
 			Inputs: map[string]any{"integer_work": integerWork},
 		}, nil
+	case benchmarkFixtureNumPyReady:
+		if artifactProfile != "numpy-core" {
+			return benchmarkExecuteFixture{}, fmt.Errorf("numpy-ready fixture requires numpy-core artifact, got %q", artifactProfile)
+		}
+		return benchmarkExecuteFixture{
+			Name:   benchmarkFixtureNumPyReady,
+			Code:   `result = {"prepared": prepared, "numpy_version": np.__version__, "sum": int(np.arange(inputs["integer_work"]).sum())}`,
+			Inputs: map[string]any{"integer_work": integerWork},
+		}, nil
 	default:
-		return benchmarkExecuteFixture{}, fmt.Errorf("benchmark fixture must be %q or %q", benchmarkFixtureBasic, benchmarkFixtureNumPyImport)
+		return benchmarkExecuteFixture{}, fmt.Errorf("benchmark fixture must be %q, %q, or %q", benchmarkFixtureBasic, benchmarkFixtureNumPyImport, benchmarkFixtureNumPyReady)
 	}
 }

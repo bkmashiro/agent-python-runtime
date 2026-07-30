@@ -12,6 +12,7 @@ _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
 _WARMUP_REQUEST_SHELL_V1 = "request-shell-v1"
+_WARMUP_NUMPY_READY_V1 = "numpy-ready-v1"
 _warmup_profiles: dict[str, Any] = {}
 
 
@@ -76,7 +77,18 @@ def _warmup_request_shell_v1() -> None:
     json.dumps({"status": "ok", "result": namespace.get("result")}, separators=(",", ":"), allow_nan=False)
 
 
+def _warmup_numpy_ready_v1() -> None:
+    # Import inside the canonical Guest before COW sealing and retain the
+    # audited scientific namespace for request execution. No request data or
+    # Host capabilities are available during this initialization boundary.
+    _prepare("import numpy as np\nprepared = 41")
+    numpy = _prepared_globals["np"]
+    if not isinstance(numpy.__version__, str) or int(numpy.arange(4).sum()) != 6:
+        raise RuntimeError("NumPy warmup self-check failed")
+
+
 register_warmup_profile(_WARMUP_REQUEST_SHELL_V1, _warmup_request_shell_v1)
+register_warmup_profile(_WARMUP_NUMPY_READY_V1, _warmup_numpy_ready_v1)
 
 
 def _warmup(profile: str) -> None:

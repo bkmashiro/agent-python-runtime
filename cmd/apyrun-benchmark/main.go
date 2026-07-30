@@ -73,6 +73,7 @@ type benchmarkOptions struct {
 	Samples               int
 	Kind                  string
 	Fixture               string
+	COWWarmupProfile      string
 	LifecycleDensityChild bool
 	DensitySlots          uint
 	MaxRSSBytes           uint64
@@ -107,7 +108,8 @@ func runMain(args []string) error {
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
 	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, or reactor-census")
-	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic or numpy-import")
+	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic, numpy-import, or numpy-ready")
+	flags.StringVar(&options.COWWarmupProfile, "cow-warmup-profile", "", "audited Guest warmup profile used before COW image sealing")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
 	flags.UintVar(&options.DensitySlots, "density-slots", 0, "internal lifecycle-density requested slot count")
 	flags.Uint64Var(&options.MaxRSSBytes, "max-rss-bytes", 0, "required lifecycle-density child RSS kill threshold")
@@ -174,8 +176,14 @@ func runMain(args []string) error {
 	if options.Class != "production-safe" && options.Class != "full" && options.Class != "profile-candidate" && options.Class != "preinitialization-spike" {
 		return errors.New("benchmark class must be production-safe, full, profile-candidate, or preinitialization-spike")
 	}
-	if options.Strategy != "fresh" && options.Strategy != "single-use-preinitialized" {
-		return errors.New("benchmark strategy must be fresh or single-use-preinitialized")
+	if options.Strategy != "fresh" && options.Strategy != "single-use-preinitialized" && options.Strategy != "cow-ready-single-use" {
+		return errors.New("benchmark strategy must be fresh, single-use-preinitialized, or cow-ready-single-use")
+	}
+	if options.COWWarmupProfile != "" && options.Strategy != "cow-ready-single-use" {
+		return errors.New("COW warmup profile requires cow-ready-single-use")
+	}
+	if options.Fixture == benchmarkFixtureNumPyReady && options.COWWarmupProfile != wazeroengine.COWWarmupNumPyReadyV1 {
+		return errors.New("numpy-ready fixture requires numpy-ready-v1 COW warmup")
 	}
 	if options.Class == "preinitialization-spike" && (options.Kind != "runtime" || options.Strategy != "fresh") {
 		return errors.New("preinitialization-spike evidence requires the fresh runtime benchmark")
@@ -185,7 +193,7 @@ func runMain(args []string) error {
 	}
 	var evidence any
 	var sourceCommit string
-	if options.Strategy == "single-use-preinitialized" {
+	if options.Strategy == "single-use-preinitialized" || options.Strategy == "cow-ready-single-use" {
 		prepared, err := runPreparedBenchmark(options)
 		if err != nil {
 			return err

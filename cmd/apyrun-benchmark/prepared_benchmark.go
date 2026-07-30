@@ -20,6 +20,7 @@ type preparedBenchmarkRunner interface {
 	enginecontract.Runner
 	PreparedReady() int
 	PreparedRetainedGuestMemoryBytes() uint64
+	PreparedImageState() wazeroengine.PreparedImageState
 }
 
 func runPreparedBenchmark(options benchmarkOptions) (preparedBenchmarkEvidence, error) {
@@ -70,6 +71,8 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 	}
 	factory := wazeroengine.Factory{
 		PreparedCapacity: 1,
+		Strategy:         enginecontract.ExecutionStrategy(options.Strategy),
+		COWWarmupProfile: options.COWWarmupProfile,
 		Observer:         lifecycle.observe,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{
@@ -91,17 +94,17 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 	if !ok {
 		return preparedBenchmarkEvidence{}, fmt.Errorf("wazero prepared diagnostics are unavailable")
 	}
-	compile, readiness, err := preparedStartupEvidence(lifecycle.drain(), factoryTotal, runner)
+	compile, readiness, err := preparedStartupEvidence(lifecycle.drain(), factoryTotal, runner, options.Strategy, options.COWWarmupProfile)
 	if err != nil {
 		return preparedBenchmarkEvidence{}, err
 	}
 
 	evidence := preparedBenchmarkEvidence{
-		SchemaVersion: 1, EvidenceKind: "single-use-preinitialized", EvidenceClass: options.Class,
+		SchemaVersion: 1, EvidenceKind: options.Strategy, EvidenceClass: options.Class,
 		Artifact: identity, HostSource: hostSource,
 		Backend:     backendIdentity{Name: runner.Properties().Backend, ResetMode: string(runner.Properties().ResetMode)},
 		Environment: environmentIdentity{GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH, GoVersion: goruntime.Version()},
-		Fixture:     preparedFixtureIdentity{Workload: executeFixture.Name, Samples: options.Samples, CapabilityOperations: operations, ProviderDelayNanoseconds: providerDelay.Nanoseconds(), PreparedCapacity: 1},
+		Fixture:     preparedFixtureIdentity{Workload: executeFixture.Name, Samples: options.Samples, CapabilityOperations: operations, ProviderDelayNanoseconds: providerDelay.Nanoseconds(), PreparedCapacity: 1, COWWarmupProfile: options.COWWarmupProfile},
 		CompileOnce: compile, Readiness: readiness,
 		StateCopy: stateCopyEvidence{Applicable: false, Reason: "single-use instances are never restored or copied after serving a Run"},
 		Limitations: []string{
@@ -111,6 +114,10 @@ func runPreparedBenchmarkWithHostSource(options benchmarkOptions, hostSource hos
 			"No state copy or restore exists, so copy cost is not applicable rather than measured as zero.",
 			"Measurements are evidence for this artifact, backend, host, class, and command only.",
 		},
+	}
+	if options.Strategy == "cow-ready-single-use" {
+		evidence.PreparedImage = runner.PreparedImageState()
+		evidence.StateCopy = stateCopyEvidence{Applicable: true, Reason: "each never-served slot restores the sealed canonical COW image before checkout"}
 	}
 	if options.Class == "profile-candidate" {
 		evidence.Limitations = append(evidence.Limitations,
@@ -156,8 +163,17 @@ result = {"prepared": prepared, "sum": sum(__import__("json").loads(item["body"]
 	return evidence, nil
 }
 
-func preparedStartupEvidence(observations []wazeroengine.Observation, total time.Duration, runner preparedBenchmarkRunner) (compileEvidence, preparedReadinessEvidence, error) {
-	want := []string{"instantiate_host", "compile", "pool_prepare_instantiate_guest", "pool_prepare__initialize", "pool_prepare_runtime_init", "pool_prepare_attach_host_calls"}
+func preparedStartupEvidence(observations []wazeroengine.Observation, total time.Duration, runner preparedBenchmarkRunner, strategy, warmupProfile string) (compileEvidence, preparedReadinessEvidence, error) {
+	want := []string{"instantiate_host", "compile"}
+	if strategy == "cow-ready-single-use" {
+		want = append(want, "cow_image_instantiate_guest", "cow_image__initialize", "cow_image_runtime_init", "cow_image_attach_host_calls")
+		if warmupProfile != "" {
+			want = append(want, "cow_image_warmup")
+		}
+		want = append(want, "cow_image_seal", "pool_prepare_instantiate_guest", "pool_prepare__initialize", "pool_prepare_cow_restore", "pool_prepare_attach_globals", "pool_prepare_attach_host_calls")
+	} else {
+		want = append(want, "pool_prepare_instantiate_guest", "pool_prepare__initialize", "pool_prepare_runtime_init", "pool_prepare_attach_host_calls")
+	}
 	if len(observations) != len(want) {
 		return compileEvidence{}, preparedReadinessEvidence{}, fmt.Errorf("unexpected prepared startup observations: %#v", observations)
 	}
@@ -171,11 +187,28 @@ func preparedStartupEvidence(observations []wazeroengine.Observation, total time
 	if runner.PreparedReady() != 1 || runner.PreparedRetainedGuestMemoryBytes() == 0 {
 		return compileEvidence{}, preparedReadinessEvidence{}, fmt.Errorf("prepared candidate is not ready")
 	}
-	return compileEvidence{InstantiateHostNS: durations["instantiate_host"], CompileNS: durations["compile"]}, preparedReadinessEvidence{
-		FactoryNewTotalNS: total.Nanoseconds(), InstantiateGuestNS: durations["pool_prepare_instantiate_guest"],
-		InitializeNS: durations["pool_prepare__initialize"], RuntimeInitNS: durations["pool_prepare_runtime_init"], AttachHostCallsNS: durations["pool_prepare_attach_host_calls"],
-		ReadyInstances: runner.PreparedReady(), RetainedGuestMemoryBytes: runner.PreparedRetainedGuestMemoryBytes(),
-	}, nil
+	readiness := preparedReadinessEvidence{
+		FactoryNewTotalNS: total.Nanoseconds(), ReadyInstances: runner.PreparedReady(), RetainedGuestMemoryBytes: runner.PreparedRetainedGuestMemoryBytes(),
+	}
+	if strategy == "cow-ready-single-use" {
+		readiness.InstantiateGuestNS = durations["cow_image_instantiate_guest"]
+		readiness.InitializeNS = durations["cow_image__initialize"]
+		readiness.RuntimeInitNS = durations["cow_image_runtime_init"]
+		readiness.AttachHostCallsNS = durations["cow_image_attach_host_calls"]
+		readiness.WarmupNS = durations["cow_image_warmup"]
+		readiness.SealNS = durations["cow_image_seal"]
+		readiness.InitialSlotInstantiateNS = durations["pool_prepare_instantiate_guest"]
+		readiness.InitialSlotInitializeNS = durations["pool_prepare__initialize"]
+		readiness.InitialSlotRestoreNS = durations["pool_prepare_cow_restore"]
+		readiness.InitialSlotAttachNS = durations["pool_prepare_attach_globals"]
+		readiness.InitialSlotHostAttachNS = durations["pool_prepare_attach_host_calls"]
+	} else {
+		readiness.InstantiateGuestNS = durations["pool_prepare_instantiate_guest"]
+		readiness.InitializeNS = durations["pool_prepare__initialize"]
+		readiness.RuntimeInitNS = durations["pool_prepare_runtime_init"]
+		readiness.AttachHostCallsNS = durations["pool_prepare_attach_host_calls"]
+	}
+	return compileEvidence{InstantiateHostNS: durations["instantiate_host"], CompileNS: durations["compile"]}, readiness, nil
 }
 
 func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleCollector, capabilities *capabilityCollector, request []byte, prepare string, requireCapability bool) (preparedSampleEvidence, error) {
@@ -206,10 +239,26 @@ func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleColle
 		return preparedSampleEvidence{}, fmt.Errorf("prepared pool did not refill")
 	}
 
-	want := map[string]bool{
-		"pool_hit": false, "prepare": false, "execute": false,
-		"pool_prepare_instantiate_guest": false, "pool_prepare__initialize": false, "pool_prepare_runtime_init": false,
-		"pool_prepare_attach_host_calls": false,
+	cow := runner.Properties().ActiveStrategy == enginecontract.StrategyCOWReadySingleUse
+	checkoutPhase := "pool_hit"
+	if cow {
+		checkoutPhase = "pool_wait"
+	}
+	want := map[string]bool{checkoutPhase: false, "execute": false}
+	if prepare != "" {
+		want["prepare"] = false
+	}
+	if cow {
+		want["pool_prepare_instantiate_guest"] = false
+		want["pool_prepare__initialize"] = false
+		want["pool_prepare_cow_restore"] = false
+		want["pool_prepare_attach_globals"] = false
+		want["pool_prepare_attach_host_calls"] = false
+	} else {
+		want["pool_prepare_instantiate_guest"] = false
+		want["pool_prepare__initialize"] = false
+		want["pool_prepare_runtime_init"] = false
+		want["pool_prepare_attach_host_calls"] = false
 	}
 	durations := map[string]int64{}
 	observations := lifecycle.drain()
@@ -237,9 +286,10 @@ func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleColle
 		return preparedSampleEvidence{}, fmt.Errorf("execute-only prepared workload used capability: %#v", capabilityObservations)
 	}
 	return preparedSampleEvidence{
-		PoolHitNS: durations["pool_hit"], PrepareNS: durations["prepare"], ExecuteNS: durations["execute"], CapabilityNS: capabilityNS,
+		PoolHitNS: durations["pool_hit"], PoolWaitNS: durations["pool_wait"], PrepareNS: durations["prepare"], ExecuteNS: durations["execute"], CapabilityNS: capabilityNS,
 		RunTotalNS: runTotal.Nanoseconds(), RefillInstantiateGuestNS: durations["pool_prepare_instantiate_guest"],
 		RefillInitializeNS: durations["pool_prepare__initialize"], RefillRuntimeInitNS: durations["pool_prepare_runtime_init"],
+		RefillCOWRestoreNS: durations["pool_prepare_cow_restore"], RefillAttachGlobalsNS: durations["pool_prepare_attach_globals"],
 		RefillAttachHostCallsNS: durations["pool_prepare_attach_host_calls"],
 		RefillReadyAfterRunNS:   refillWait.Nanoseconds(), RequestBytes: len(request), ResultBytes: len(response),
 		RetainedGuestMemoryBytes: runner.PreparedRetainedGuestMemoryBytes(),

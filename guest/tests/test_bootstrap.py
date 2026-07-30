@@ -1,7 +1,10 @@
 import importlib.util
 import json
 import pathlib
+import sys
+import types
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BOOTSTRAP = ROOT / "guest" / "bootstrap" / "agent_runtime" / "__init__.py"
@@ -92,6 +95,21 @@ class BootstrapTests(unittest.TestCase):
         response = self.execute(code="result = transform(inputs['value'])")
         self.assertEqual("ok", response["status"])
         self.assertEqual(8, response["result"])
+
+    def test_numpy_ready_warmup_imports_and_retains_numpy_namespace(self):
+        fake_numpy = types.ModuleType("numpy")
+
+        class FakeArray:
+            def sum(self):
+                return 6
+
+        setattr(fake_numpy, "arange", lambda _stop: FakeArray())
+        setattr(fake_numpy, "__version__", "test")
+        with mock.patch.dict(sys.modules, {"numpy": fake_numpy}):
+            self.runtime._warmup("numpy-ready-v1")
+        response = self.execute(code="result = {'prepared': prepared, 'sum': int(np.arange(4).sum())}")
+        self.assertEqual("ok", response["status"])
+        self.assertEqual({"prepared": 41, "sum": 6}, response["result"])
 
     def test_request_shell_warmup_is_allowlisted(self):
         self.runtime._warmup("request-shell-v1")

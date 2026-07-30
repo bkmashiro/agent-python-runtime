@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -167,6 +168,47 @@ func TestPreparedEvidenceSeparatesReadyFirstSteadyAndNoCopy(t *testing.T) {
 	invalid.StateCopy.Applicable = true
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("prepared evidence claimed an unsupported state copy")
+	}
+}
+
+func TestCOWPreparedEvidenceBindsNumPyWarmupAndOmitsRequestPrepare(t *testing.T) {
+	sample := preparedSampleEvidence{
+		PoolWaitNS: 1, ExecuteNS: 1, RunTotalNS: 1,
+		RefillInstantiateGuestNS: 1, RefillInitializeNS: 1, RefillCOWRestoreNS: 1, RefillAttachGlobalsNS: 1, RefillAttachHostCallsNS: 1,
+		RequestBytes: 1, ResultBytes: 1, RetainedGuestMemoryBytes: 128 * 1024 * 1024,
+	}
+	capabilitySample := sample
+	capabilitySample.CapabilityNS = 1
+	evidence := preparedBenchmarkEvidence{
+		SchemaVersion: 1, EvidenceKind: "cow-ready-single-use", EvidenceClass: "profile-candidate",
+		Artifact:   artifactIdentity{Filename: "numpy.wasm", SHA256: strings.Repeat("a", 64), Size: 1, SourceCommit: strings.Repeat("b", 40), ArtifactProfile: "numpy-core", Target: "wasm32-wasip1", Execution: "reactor"},
+		HostSource: hostSourceIdentity{Revision: strings.Repeat("c", 40)}, Backend: backendIdentity{Name: "wazero", ResetMode: "fresh-instance"},
+		Environment:   environmentIdentity{GOOS: "linux", GOARCH: "amd64", GoVersion: "go1.26"},
+		Fixture:       preparedFixtureIdentity{Workload: benchmarkFixtureNumPyReady, Samples: 3, CapabilityOperations: 1, ProviderDelayNanoseconds: 2_000_000, PreparedCapacity: 1, COWWarmupProfile: wazeroengine.COWWarmupNumPyReadyV1},
+		CompileOnce:   compileEvidence{InstantiateHostNS: 1, CompileNS: 1},
+		Readiness:     preparedReadinessEvidence{FactoryNewTotalNS: 1, InstantiateGuestNS: 1, InitializeNS: 1, RuntimeInitNS: 1, AttachHostCallsNS: 1, WarmupNS: 1, SealNS: 1, InitialSlotInstantiateNS: 1, InitialSlotInitializeNS: 1, InitialSlotRestoreNS: 1, InitialSlotAttachNS: 1, InitialSlotHostAttachNS: 1, ReadyInstances: 1, RetainedGuestMemoryBytes: 128 * 1024 * 1024},
+		PreparedImage: wazeroengine.PreparedImageState{Available: true, VirtualBytes: 128 * 1024 * 1024, PageSizeBytes: 4096, WarmupProfile: wazeroengine.COWWarmupNumPyReadyV1, WarmupGenerationSHA256: strings.Repeat("d", 64)},
+		StateCopy:     stateCopyEvidence{Applicable: true, Reason: "sealed COW image restore"},
+		Workloads:     preparedWorkloadEvidence{FirstExecute: sample, SteadyExecute: []preparedSampleEvidence{sample, sample, sample}, SteadyCapability: []preparedSampleEvidence{capabilitySample, capabilitySample, capabilitySample}}, Limitations: []string{"profile-candidate"},
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(evidence)
+	var instance any
+	_ = json.Unmarshal(encoded, &instance)
+	if err := compilePreparedEvidenceSchema(t).Validate(instance); err != nil {
+		t.Fatal(err)
+	}
+	invalid := evidence
+	invalid.PreparedImage.WarmupGenerationSHA256 = ""
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("COW evidence accepted a missing warmup generation")
+	}
+	invalid = evidence
+	invalid.Workloads.FirstExecute.PrepareNS = 1
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("NumPy-ready COW evidence accepted request-path prepare")
 	}
 }
 

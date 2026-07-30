@@ -32,7 +32,10 @@ type Observation struct {
 
 type Observer func(Observation)
 
-const COWWarmupRequestShellV1 = "request-shell-v1"
+const (
+	COWWarmupRequestShellV1 = "request-shell-v1"
+	COWWarmupNumPyReadyV1   = "numpy-ready-v1"
+)
 
 // ValidateCOWWarmupProfile validates an artifact-defined warmup profile ID.
 // The profile implementation remains inside the verified guest artifact.

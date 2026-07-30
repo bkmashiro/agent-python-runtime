@@ -7,7 +7,7 @@
   "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "backend", "environment", "fixture", "compile_once", "readiness", "state_copy", "workloads", "limitations"],
   "properties": {
     "schema_version": {"const": 1},
-    "evidence_kind": {"const": "single-use-preinitialized"},
+    "evidence_kind": {"enum": ["single-use-preinitialized", "cow-ready-single-use"]},
     "evidence_class": {"enum": ["production-safe", "full", "profile-candidate"]},
     "artifact": {"$ref": "#/$defs/artifact"},
     "host_source": {"$ref": "#/$defs/hostSource"},
@@ -18,7 +18,8 @@
       "additionalProperties": false,
       "required": ["samples", "capability_operations", "provider_delay_ns_per_operation", "prepared_capacity"],
       "properties": {
-        "workload": {"enum": ["basic", "numpy-import"]},
+        "workload": {"enum": ["basic", "numpy-import", "numpy-ready"]},
+        "cow_warmup_profile": {"type": "string", "minLength": 1, "maxLength": 64},
         "samples": {"type": "integer", "minimum": 3, "maximum": 20},
         "capability_operations": {"type": "integer", "minimum": 1, "maximum": 20},
         "provider_delay_ns_per_operation": {"const": 2000000},
@@ -44,16 +45,24 @@
         "_initialize_ns": {"type": "integer", "minimum": 1},
         "runtime_init_ns": {"type": "integer", "minimum": 1},
         "attach_host_calls_ns": {"type": "integer", "minimum": 1},
+        "warmup_ns": {"type": "integer", "minimum": 1},
+        "seal_ns": {"type": "integer", "minimum": 1},
+        "initial_slot_instantiate_ns": {"type": "integer", "minimum": 1},
+        "initial_slot__initialize_ns": {"type": "integer", "minimum": 1},
+        "initial_slot_cow_restore_ns": {"type": "integer", "minimum": 1},
+        "initial_slot_attach_globals_ns": {"type": "integer", "minimum": 1},
+        "initial_slot_attach_host_calls_ns": {"type": "integer", "minimum": 1},
         "ready_instances": {"const": 1},
         "retained_guest_memory_bytes": {"type": "integer", "minimum": 1}
       }
     },
+    "prepared_image": {"$ref": "#/$defs/preparedImage"},
     "state_copy": {
       "type": "object",
       "additionalProperties": false,
       "required": ["applicable", "reason"],
       "properties": {
-        "applicable": {"const": false},
+        "applicable": {"type": "boolean"},
         "reason": {"type": "string", "minLength": 1}
       }
     },
@@ -80,6 +89,22 @@
     }
   ],
   "$defs": {
+    "preparedImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "virtual_bytes", "allocated_bytes", "page_size_bytes", "zero_pages", "non_zero_pages", "sparse_potential_bytes"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "virtual_bytes": {"type": "integer", "minimum": 0},
+        "allocated_bytes": {"type": "integer", "minimum": 0},
+        "page_size_bytes": {"type": "integer", "minimum": 0},
+        "zero_pages": {"type": "integer", "minimum": 0},
+        "non_zero_pages": {"type": "integer", "minimum": 0},
+        "sparse_potential_bytes": {"type": "integer", "minimum": 0},
+        "warmup_profile": {"type": "string", "minLength": 1},
+        "warmup_generation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "artifact": {
       "type": "object",
       "additionalProperties": false,
@@ -125,9 +150,10 @@
     "sampleBase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pool_hit_ns", "prepare_ns", "execute_ns", "capability_ns", "run_total_ns", "refill_instantiate_guest_ns", "refill__initialize_ns", "refill_runtime_init_ns", "refill_ready_after_run_ns", "request_bytes", "result_bytes", "retained_guest_memory_bytes"],
+      "required": ["execute_ns", "capability_ns", "run_total_ns", "refill_instantiate_guest_ns", "refill__initialize_ns", "refill_ready_after_run_ns", "request_bytes", "result_bytes", "retained_guest_memory_bytes"],
       "properties": {
         "pool_hit_ns": {"type": "integer", "minimum": 1},
+        "pool_wait_ns": {"type": "integer", "minimum": 1},
         "prepare_ns": {"type": "integer", "minimum": 1},
         "execute_ns": {"type": "integer", "minimum": 1},
         "capability_ns": {"type": "integer", "minimum": 0},
@@ -135,6 +161,8 @@
         "refill_instantiate_guest_ns": {"type": "integer", "minimum": 1},
         "refill__initialize_ns": {"type": "integer", "minimum": 1},
         "refill_runtime_init_ns": {"type": "integer", "minimum": 1},
+        "refill_cow_restore_ns": {"type": "integer", "minimum": 1},
+        "refill_attach_globals_ns": {"type": "integer", "minimum": 1},
         "refill_attach_host_calls_ns": {"type": "integer", "minimum": 1},
         "refill_ready_after_run_ns": {"type": "integer", "minimum": 0},
         "request_bytes": {"type": "integer", "minimum": 1},

@@ -343,6 +343,16 @@ if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
   NUMPY_WASI_FEATURE_PROFILE=core \
   NUMPY_WASI_SOURCE_LOCK="${SOURCE_LOCK}" \
     bash "${ROOT_DIR}/experiments/numpy-wasi/probe.sh"
+  python3 - "${NUMPY_PROFILE_DIR}/report.json" <<'PY'
+import json
+import pathlib
+import sys
+
+report_path = pathlib.Path(sys.argv[1])
+report = json.loads(report_path.read_text())
+if report.get("outcome") != "pack_succeeded":
+    raise SystemExit(f"numpy-core probe did not produce a packed artifact: {report.get('outcome')}")
+PY
 
   PROFILE_OUTPUT_DIR="${NUMPY_PROFILE_DIR}/extension-profile"
   PROFILE_SELECTION="${PROFILE_OUTPUT_DIR}/selection-report.json"

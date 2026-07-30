@@ -84,6 +84,7 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("--artifact-profile", build)
         self.assertIn("--extension-selection", build)
         self.assertIn('bash "${ROOT_DIR}/experiments/numpy-wasi/probe.sh"', build)
+        self.assertIn('report.get("outcome") != "pack_succeeded"', build)
         self.assertIn("artifact_profile:", workflow)
         self.assertIn("default: base", workflow)
         self.assertIn("- base", workflow)

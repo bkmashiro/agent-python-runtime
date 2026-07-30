@@ -23,6 +23,76 @@ type linuxCOWPreparedRuntime struct {
 
 func cowReadyStrategySupported() bool { return true }
 
+func (engine *Engine) newSeededInitializedModule(ctx context.Context, prefix string) (*preparedInstance, *cowImage, error) {
+	seed, err := engine.cowSnapshotShell.materializeSeed()
+	if err != nil {
+		return nil, nil, err
+	}
+	seedStarted := time.Now()
+	seedImage, err := newCOWImage(seed)
+	seed = nil
+	observe(engine.observer, prefix+"seed_image", seedStarted, err)
+	if err != nil {
+		return nil, nil, err
+	}
+	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
+	guestStderr := &bytes.Buffer{}
+	allocator := seedImage.newAllocator()
+	instantiateStarted := time.Now()
+	module, err := engine.runtime.InstantiateModule(
+		experimental.WithMemoryAllocator(ctx, allocator),
+		engine.compiled,
+		newModuleConfig(guestStderr),
+	)
+	observe(engine.observer, prefix+"instantiate_guest", instantiateStarted, err)
+	if err != nil {
+		_ = seedImage.Close()
+		return nil, nil, fmt.Errorf("instantiate seeded COW guest: %w", err)
+	}
+	failed := true
+	defer func() {
+		if failed {
+			_ = module.Close(context.Background())
+			_ = seedImage.Close()
+		}
+	}()
+	allocation, err := allocator.Allocation()
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve seeded COW allocation: %w", err)
+	}
+	attachSeedStarted := time.Now()
+	err = allocation.Reset()
+	observe(engine.observer, prefix+"seed_attach", attachSeedStarted, err)
+	if err != nil {
+		return nil, nil, fmt.Errorf("attach seeded COW memory: %w", err)
+	}
+	initializeStarted := time.Now()
+	err = callNoArgs(ctx, module, "_initialize")
+	observe(engine.observer, prefix+"_initialize", initializeStarted, err)
+	if err != nil {
+		return nil, nil, withGuestDiagnostic(err, guestStderr.String())
+	}
+	runtimeInitStarted := time.Now()
+	err = callStatusWithBytes(ctx, module, "runtime_init", []byte("{}"))
+	observe(engine.observer, prefix+"runtime_init", runtimeInitStarted, err)
+	if err != nil {
+		return nil, nil, withGuestDiagnostic(err, guestStderr.String())
+	}
+	attachStarted := time.Now()
+	err = verifyNoInitializationHostCalls(hostCallGuard)
+	observe(engine.observer, prefix+"attach_host_calls", attachStarted, err)
+	if err != nil {
+		return nil, nil, err
+	}
+	memory := module.Memory()
+	if memory == nil || uint64(memory.Size()) != engine.cowSnapshotShell.seedSize {
+		return nil, nil, errors.New("seeded COW module memory shape drifted")
+	}
+	guestStderr.Reset()
+	failed = false
+	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size())}, seedImage, nil
+}
+
 func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRuntime, error) {
 	if engine == nil {
 		return nil, errors.New("COW prepared runtime requires an engine")
@@ -33,9 +103,19 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if !engine.stateCensus.Memory.COWEligible {
 		return nil, errors.New("reactor memory is not eligible for COW")
 	}
-	canonical, err := engine.newInitializedModule(ctx, "cow_image_")
+	var canonical *preparedInstance
+	var seedImage *cowImage
+	var err error
+	if engine.cowSnapshotShell != nil {
+		canonical, seedImage, err = engine.newSeededInitializedModule(ctx, "cow_image_")
+	} else {
+		canonical, err = engine.newInitializedModule(ctx, "cow_image_")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("prepare canonical COW image: %w", err)
+	}
+	if seedImage != nil {
+		defer seedImage.Close()
 	}
 	defer canonical.module.Close(context.Background())
 	if engine.cowWarmupProfile != "" {
@@ -72,6 +152,7 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 		image: image, canonicalGlobals: canonicalGlobals,
 		warmupProfile: engine.cowWarmupProfile, warmupGeneration: engine.cowWarmupGeneration,
 	}
+	engine.cowSnapshotShell = nil
 	if engine.verifyCOWPreparedImage {
 		digest := sha256.Sum256(baseline)
 		runtime.verifyDigest = &digest

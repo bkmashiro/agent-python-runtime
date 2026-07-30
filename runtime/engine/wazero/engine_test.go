@@ -68,6 +68,10 @@ func TestCOWWarmupProfileValidationAndCOWBoundary(t *testing.T) {
 	if _, err := factory.New(context.Background(), []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}, runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "outside cow-ready-single-use") {
 		t.Fatalf("expected strategy boundary rejection, got %v", err)
 	}
+	factory = engine.Factory{COWSnapshotShell: true}
+	if _, err := factory.New(context.Background(), []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}, runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "outside cow-ready-single-use") {
+		t.Fatalf("expected snapshot-shell strategy boundary rejection, got %v", err)
+	}
 }
 
 func TestExplicitCOWStrategyFailsBeforeCompileWhenPlatformUnsupported(t *testing.T) {

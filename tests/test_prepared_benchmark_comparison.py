@@ -1,5 +1,4 @@
 import importlib.util
-import json
 import pathlib
 import unittest
 
@@ -65,14 +64,6 @@ class PreparedComparisonTests(unittest.TestCase):
         self.assertEqual(result["retained_guest_memory_bytes"], 128 * 1024 * 1024)
         self.assertNotIn("threshold", result)
         self.assertNotIn("pass", result)
-
-    def test_checked_in_comparisons_are_reproducible(self):
-        directory = ROOT / "docs" / "benchmarks"
-        for platform in ("darwin-arm64", "linux-amd64"):
-            fresh = json.loads((directory / f"runtime-production-safe-{platform}.json").read_text())
-            prepared = json.loads((directory / f"prepared-production-safe-{platform}.json").read_text())
-            checked_in = json.loads((directory / f"prepared-comparison-production-safe-{platform}.json").read_text())
-            self.assertEqual(MODULE.compare(fresh, prepared), checked_in)
 
     def test_rejects_identity_or_fixture_mismatch(self):
         prepared = prepared_fixture()

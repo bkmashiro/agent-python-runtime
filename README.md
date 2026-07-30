@@ -135,8 +135,6 @@ docs/                      architecture, threat model, integration, and results
 - [Supply chain](docs/supply-chain.md)
 - [Research roadmap](docs/research-roadmap.md)
 
-## Project status
+## License
 
-This is a research prototype; it is not released or deployed, and it is not a general Linux sandbox. The base profile is the conservative default. The manual-only `numpy-core` profile remains experimental; served instances are never reused.
-
-The repository does not currently grant a public release license. Select and add a root license before making a public release or inviting unrestricted reuse. Private test drives should be arranged with the repository owner.
+[MIT](LICENSE)

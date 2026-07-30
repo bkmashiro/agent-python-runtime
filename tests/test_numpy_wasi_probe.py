@@ -22,8 +22,12 @@ class NumPyWASIProbeContractTests(unittest.TestCase):
         )
         self.assertEqual(sources["numpy-source"]["artifact_relation"], "build-only")
         self.assertEqual(sources["cython-host-wheel-linux-x86_64-cp313"]["version"], "3.2.8")
+        self.assertEqual(sources["ninja-linux-x86_64"]["version"], "1.13.2")
+        self.assertEqual(sources["ninja-linux-x86_64"]["artifact_relation"], "build-only")
 
         script = PROBE.read_text()
+        self.assertIn("ninja-linux-x86_64", script)
+        self.assertIn('export PATH="${PROBE_DIR}/ninja:${PATH}"', script)
         self.assertIn("--lock \"${LOCK}\"", script)
         self.assertIn("-Dallow-noblas=true", script)
         self.assertIn("-Dblas=none", script)

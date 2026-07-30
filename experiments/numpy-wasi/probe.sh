@@ -29,14 +29,19 @@ now_ns() {
 PROBE_START_NS=$(now_ns)
 
 rm -rf "${PROBE_DIR}"
-mkdir -p "${PROBE_DIR}/downloads" "${PROBE_DIR}/numpy" "${PROBE_DIR}/cython" "${PROBE_DIR}/logs"
+mkdir -p "${PROBE_DIR}/downloads" "${PROBE_DIR}/numpy" "${PROBE_DIR}/cython" "${PROBE_DIR}/ninja" "${PROBE_DIR}/logs"
 python3 "${ROOT_DIR}/tools/verify_sources_lock.py" "${LOCK}"
 python3 "${ROOT_DIR}/tools/fetch_locked_source.py" numpy-source \
   "${PROBE_DIR}/downloads/numpy.tar.gz" --lock "${LOCK}"
 python3 "${ROOT_DIR}/tools/fetch_locked_source.py" cython-host-wheel-linux-x86_64-cp313 \
   "${PROBE_DIR}/downloads/cython.whl" --lock "${LOCK}"
+python3 "${ROOT_DIR}/tools/fetch_locked_source.py" ninja-linux-x86_64 \
+  "${PROBE_DIR}/downloads/ninja.zip" --lock "${LOCK}"
 tar xzf "${PROBE_DIR}/downloads/numpy.tar.gz" -C "${PROBE_DIR}/numpy" --strip-components=1
 python3 -m zipfile -e "${PROBE_DIR}/downloads/cython.whl" "${PROBE_DIR}/cython"
+python3 -m zipfile -e "${PROBE_DIR}/downloads/ninja.zip" "${PROBE_DIR}/ninja"
+chmod 0755 "${PROBE_DIR}/ninja/ninja"
+export PATH="${PROBE_DIR}/ninja:${PATH}"
 
 mapfile -t TARGET_PYTHONS < <(find "${WASI_BUILD_DIR}" -maxdepth 1 -type f -name 'python*.sh' -print)
 if [[ ${#TARGET_PYTHONS[@]} -ne 1 ]]; then

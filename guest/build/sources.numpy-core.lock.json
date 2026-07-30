@@ -21,6 +21,15 @@
       "artifact_relation": "build-only"
     },
     {
+      "id": "ninja-linux-x86_64",
+      "version": "1.13.2",
+      "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip",
+      "sha256": "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6",
+      "license": "Apache-2.0",
+      "role": "build-tool",
+      "artifact_relation": "build-only"
+    },
+    {
       "id": "cpython-source",
       "version": "3.14.0",
       "url": "https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz",

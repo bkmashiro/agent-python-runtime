@@ -62,7 +62,8 @@ class SourcesLockTests(unittest.TestCase):
         for source_id, source in base_sources.items():
             self.assertEqual(source, sources[source_id])
         self.assertEqual(
-            set(base_sources) | {"numpy-source", "cython-host-wheel-linux-x86_64-cp313"},
+            set(base_sources)
+            | {"numpy-source", "cython-host-wheel-linux-x86_64-cp313", "ninja-linux-x86_64"},
             set(sources),
         )
         self.assertEqual("2.5.1", sources["numpy-source"]["version"])

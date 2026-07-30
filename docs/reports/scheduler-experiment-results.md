@@ -4,7 +4,7 @@
 
 The experiments support a bounded Host-governed CPython-WASI COW scheduler, not an unrestricted production-overcommit claim. Under the repeated mixed workload, 32 consumers delivered 146.32 req/s, while the correlated burst experiment showed a clear saturation knee: a 4× step from 16 to 64 consumers reached 220.99 req/s in the burst window but exhausted ready inventory and introduced a median of 30 waiting consumers; an 8× step did not improve throughput and increased median p50 latency to 511 ms. The repeated refill sweep found 8 workers to be the balanced operating point at 91.29% of the 16-worker throughput peak, while 12 workers reached 98.24%.
 
-The production library therefore keeps 4 refill workers as a conservative automatic default, uses 8 for the main controlled experiments, and treats higher values as explicit tuning. `ProductionPolicy` compiles maximum memory, maximum CPU, and greed into bounded watermarks, concurrency, reservation, retry, and control-loop policy; it does not apply cgroup limits or enable a public production-overcommit path.
+The production library therefore keeps 4 refill workers as a conservative automatic default, uses 8 for the main controlled experiments, and treats higher values as explicit tuning. An explicit snapshot-shell strategy removes repeated active-data application from replacement instantiation for compatible artifacts while preserving the single-use COW lifecycle; it remains disabled by default. `ProductionPolicy` compiles maximum memory, maximum CPU, and greed into bounded watermarks, concurrency, reservation, retry, and control-loop policy; it does not apply cgroup limits or enable a public production-overcommit path.
 
 ## Evidence and reproducibility
 
@@ -74,6 +74,23 @@ Fixed conditions: 1024 ready slots, 64 closed-loop consumers, 30 seconds, contro
 | 16 | 231.98 (231.32–234.45) | 371 | 8.11 | 5.29 | 100% |
 
 The 4→8 transition adds 41.39% throughput. The 8→12 transition adds only 7.62% throughput while observed CPU use rises 16.66%; 12→16 adds 1.79%. Eight workers therefore capture most of the attainable throughput without treating the peak setting as the default.
+
+### 2.1 Snapshot-shell instantiation A/B
+
+A final same-node alternating A/B used 256 ready slots, four refill workers, and the same 52,585,175-byte CPython-WASI reactor artifact as the main experiments. The order was full module, snapshot shell, full module, snapshot shell. The table reports the median of the two trials in each mode; it is a bounded lifecycle comparison, not a confidence interval or cross-artifact result.
+
+| Lifecycle stage | Full module | Snapshot shell | Change |
+|---|---:|---:|---:|
+| Factory wall | 11,371.995 ms | 9,382.347 ms | −17.50% |
+| Compile | 3,348.513 ms | 3,346.866 ms | −0.05% |
+| Replacement `InstantiateModule` per slot | 29.062 ms | 0.585 ms | −97.99% |
+| COW restore per slot | 2.773 ms | 0.038 ms | −98.61% |
+
+The opt-in path preserves every non-Data WebAssembly section byte-for-byte, compiles one derived shell, seeds active data before canonical initialization, and then seals the ordinary COW image. It fails closed unless the artifact has one fixed local memory, constant active-data offsets, and no WebAssembly start section. Served instances remain single-use and are discarded after execution.
+
+Every trial returned `{"ok":true,"value":45}`, recovered ready inventory to 256, and recorded zero failures. The reduction applies to replacement preparation for this artifact and host; it is not a claim that every wazero module has a fixed 98% instantiation improvement. The feature is disabled by default and requires `execution_strategy: "cow-ready-single-use"` with `cow_snapshot_shell: true`.
+
+Accepted source revision: `8a07572490ed2146bf7266425a36f7ab98099a18`; Slurm job: `268235`; checksum-verified private evidence: `.artifacts-private/spikes/snapshot-shell/job-268235/`.
 
 ## 3. Profile-specific concurrency
 

@@ -123,6 +123,24 @@ func (plugin Plugin) Begin(agentRunID string, clock func() time.Time) (*Recorder
 	return &Recorder{mode: plugin.Mode, sink: plugin.Sink, agentRunID: agentRunID, clock: clock}, nil
 }
 
+// Resume continues a fully verified playback without rewriting existing events.
+// The caller remains responsible for choosing parent links for new events.
+func (plugin Plugin) Resume(playback Playback, clock func() time.Time) (*Recorder, error) {
+	if plugin.validate() != nil || !boundedIdentifier(playback.AgentRunID, 128) {
+		return nil, ErrInvalidPlugin
+	}
+	if _, err := playback.IntegrityDigest(); err != nil {
+		return nil, err
+	}
+	if clock == nil {
+		clock = time.Now
+	}
+	return &Recorder{
+		mode: plugin.Mode, sink: plugin.Sink, agentRunID: playback.AgentRunID,
+		clock: clock, sequence: uint64(len(playback.Events)),
+	}, nil
+}
+
 func (plugin Plugin) BeginFork(ctx context.Context, plan ForkPlan, clock func() time.Time) (*Recorder, Event, error) {
 	if err := plan.Validate(); err != nil {
 		return nil, Event{}, err

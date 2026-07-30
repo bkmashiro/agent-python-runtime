@@ -35,7 +35,7 @@ The third iteration removes the diagnostic export and sets CPython's hash seed t
 
 Exact Linux run `30005614619` at signed commit `9a571176bb58c2d6a41312d01ad789abdd6b82e6` passed both Wizer transforms, byte determinism, the production artifact ABI verifier, the complete real wazero E2E suite, exact baseline/candidate fresh-runtime benchmarks, structural schemas, and the independent semantic comparison. The candidate SHA-256 is `053934218445c897d2b6323800225625d9b6feabe3f07068774a2adf4ce52cab`; both transforms produced exactly 61,056,572 bytes.
 
-Across six Linux execute/capability samples, median `runtime_init` fell from 4,385,950,839 ns to 120,980 ns (36,253.37x), and median fresh-run total fell from 4,417,702,155 ns to 31,805,114 ns (138.90x). The artifact increased by 8,471,658 bytes (16.11%). The raw transform receipt, baseline, candidate, and verdict are archived under `docs/benchmarks/preinitialization-spike-*-linux-amd64.json`.
+Across six Linux execute/capability samples, median `runtime_init` fell from 4,385,950,839 ns to 120,980 ns (36,253.37x), and median fresh-run total fell from 4,417,702,155 ns to 31,805,114 ns (138.90x). The artifact increased by 8,471,658 bytes (16.11%). Raw transform and runtime evidence is retained locally under `.artifacts-private/benchmarks/`; it is not committed.
 
 This validates build-time Python preinitialization for exact fresh-instance execution. It does not validate session restore, post-request reset, cross-node portability, capacity, or production use of a fixed shared Python hash seed.
 
@@ -53,7 +53,7 @@ Exact Linux run `30012386233` at verified signed commit `7e4084fa0a55624737421a5
 
 At N=16, the transformed candidate's three ready-wall samples were 9.71–9.82 s. Aggregate compile work was 38.58 s while aggregate `runtime_init` work was only 2.55 ms, confirming that four concurrent shard compilations and resource contention had become the dominant bottleneck.
 
-The raw baseline, candidate, and deterministic descriptive comparison are archived under `docs/benchmarks/preinitialization-spike-lifecycle-density-*-linux-amd64.json`. This validates that build-time preinitialization removes Python initialization as the original N=16 startup wall. Production promotion remains blocked by the fixed shared Python hash seed, release/cross-node portability qualification, and the absence of an opt-in artifact contract.
+Raw baseline, candidate, and comparison evidence is retained locally under `.artifacts-private/benchmarks/`. This validates that build-time preinitialization removes Python initialization as the original N=16 startup wall. Production promotion remains blocked by the fixed shared Python hash seed, release/cross-node portability qualification, and the absence of an opt-in artifact contract.
 
 ## Shared compilation-cache verdict: VALIDATED AT MULTI-SHARD DENSITY, EXPERIMENTAL ONLY
 

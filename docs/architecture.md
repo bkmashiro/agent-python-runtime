@@ -178,7 +178,7 @@ runtime/receipt/          bounded operation evidence
 integration/e2e/          real artifact consumer tests
 cmd/apyrun/               implemented local/development CLI
 cmd/apyrun-benchmark/     fresh/prepared evidence command
-benchmark/ and docs/benchmarks/  evidence schemas and checked-in samples
+benchmark/                machine-readable evidence schemas
 ```
 
 ## Completed initial vertical slice

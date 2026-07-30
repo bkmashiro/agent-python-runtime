@@ -1,6 +1,5 @@
 import hashlib
 import importlib.util
-import json
 import pathlib
 import tempfile
 import unittest
@@ -234,40 +233,6 @@ class PreinitializedGuestSpikeTests(unittest.TestCase):
         self.assertIn("lifecycle-density-shared-cache-candidate.json", workflow)
         self.assertIn("--intervention shared-compilation-cache", workflow)
         self.assertNotIn("-max-rss-bytes 4294967296", workflow)
-
-    def test_checked_in_density_comparisons_are_reproducible(self):
-        benchmark_root = ROOT / "docs" / "benchmarks"
-        baseline = json.loads(
-            (benchmark_root / "preinitialization-spike-lifecycle-density-baseline-linux-amd64.json").read_text()
-        )
-        candidate = json.loads(
-            (benchmark_root / "preinitialization-spike-lifecycle-density-candidate-linux-amd64.json").read_text()
-        )
-        preinitialization_report = json.loads(
-            (benchmark_root / "preinitialization-spike-lifecycle-density-comparison-linux-amd64.json").read_text()
-        )
-        self.assertEqual(preinitialization_report, self.density_compare_module.compare(baseline, candidate))
-
-        shared_candidate = json.loads(
-            (
-                benchmark_root
-                / "preinitialization-spike-lifecycle-density-shared-cache-candidate-linux-amd64.json"
-            ).read_text()
-        )
-        shared_report = json.loads(
-            (
-                benchmark_root
-                / "preinitialization-spike-lifecycle-density-shared-cache-comparison-linux-amd64.json"
-            ).read_text()
-        )
-        self.assertEqual(
-            shared_report,
-            self.density_compare_module.compare(
-                candidate,
-                shared_candidate,
-                intervention="shared-compilation-cache",
-            ),
-        )
 
     def test_density_compare_reports_exact_n16_speed_and_rss_tradeoff(self):
         report = self.density_compare_module.compare(

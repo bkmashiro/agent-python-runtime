@@ -43,14 +43,16 @@ class PublicDocumentationContractTests(unittest.TestCase):
             with self.subTest(stale=stale):
                 self.assertNotIn(stale, documents)
 
-    def test_public_docs_preserve_profile_and_release_boundaries(self):
+    def test_public_docs_preserve_profile_and_license_boundaries(self):
         readme = self.read("README.md")
+        license_text = self.read("LICENSE")
         supply_chain = self.read("docs/supply-chain.md")
         threat_model = self.read("docs/threat-model.md")
         provenance = self.read("docs/adr/0003-artifact-provenance.md")
 
-        self.assertIn("manual-only `numpy-core`", readme)
-        self.assertIn("not released or deployed", readme)
+        self.assertIn("[MIT](LICENSE)", readme)
+        self.assertTrue(license_text.startswith("MIT License\n"))
+        self.assertIn("Copyright (c) 2026 Yuzhe Shi", license_text)
         self.assertIn("No served instance is reset, restored, or returned to the pool", threat_model)
         self.assertIn("`numpy-core` deliberately does not write that production-safe index", supply_chain)
         self.assertIn("lock-derived bundled-package versions", provenance)
@@ -58,7 +60,7 @@ class PublicDocumentationContractTests(unittest.TestCase):
     def test_local_markdown_links_resolve(self):
         failures = []
         for document in ROOT.rglob("*.md"):
-            if ".git" in document.parts:
+            if any(part in {".git", ".artifacts-private", ".hermes"} for part in document.parts):
                 continue
             for raw_target in LINK_PATTERN.findall(document.read_text()):
                 target = raw_target.split()[0].strip("<>")
@@ -87,7 +89,6 @@ class PublicDocumentationContractTests(unittest.TestCase):
     def test_transactional_workflow_docs_share_authority_vocabulary(self):
         effect_plane = self.read("docs/effect-plane.md")
         adr = self.read("docs/adr/0007-mcp-transactional-tool-workflows.md")
-        status = self.read("docs/status.md")
 
         for policy in (
             "DENY",
@@ -109,7 +110,6 @@ class PublicDocumentationContractTests(unittest.TestCase):
                 self.assertIn(effect_class, adr)
 
         self.assertIn("same Python run", effect_plane)
-        self.assertIn("Capabilities are claims only when", status)
 
 
 if __name__ == "__main__":

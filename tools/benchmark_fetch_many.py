@@ -220,7 +220,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output",
-        default="docs/benchmarks/fetch-many-sequential-baseline.json",
+        default=".artifacts-private/benchmarks/fetch-many-sequential-baseline.json",
         type=pathlib.Path,
     )
     parser.add_argument(

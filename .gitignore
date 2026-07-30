@@ -1,4 +1,6 @@
 .DS_Store
+/.artifacts-private/
+/.hermes/
 /build/
 /dist/
 __pycache__/

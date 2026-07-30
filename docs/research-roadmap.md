@@ -4,16 +4,6 @@ This page summarizes current research directions. Historical implementation chec
 
 ## Current
 
-### External framework integration
-
-- test-drive the repository from a clean environment;
-- add a minimal adapter for one external agent/tool-use benchmark;
-- verify denial, timeout, cross-run isolation, and receipt behavior;
-- compare native subprocess, fresh WASI, prepared, and COW-ready execution under identical task inputs;
-- separate task success from isolation and lifecycle measurements.
-
-See [Framework integration test drive](framework-integration.md).
-
 ### COW performance and memory density
 
 - measure request latency and memory cost by preparation profile;
@@ -40,9 +30,12 @@ The implemented COW strategy remains single-use: a served slot is discarded.
 - deterministic agent-workflow and BFCL-derived local evaluation fixtures;
 - scheduler experiments for refill, concurrency, memory pressure, and burst load;
 - configurable pre-COW warmup with a NumPy-ready profile.
+- optional metadata-only Agent trace plugin with Host-owned Runtime correlation;
+- private SQLite playback integrity, read-only operator queries/statistics/JSONL export, and checkpoint fork-lineage handoff.
 
 ## Deferred
 
+- external framework integration and comparative test drive;
 - public release and package publication;
 - arbitrary PyPI or SciPy support;
 - served-instance reuse;

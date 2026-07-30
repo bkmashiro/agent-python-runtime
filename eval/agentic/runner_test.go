@@ -342,6 +342,80 @@ func TestRunDevelopmentTrialEmitsMetadataOnlyTracePluginEvents(t *testing.T) {
 	}
 }
 
+func TestRequiredTraceSQLiteDogfoodAndForkLineageContinuation(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	adapter := adapterForStatefulOracle(t, task, func(name string) string { return name })
+	path := filepath.Join(t.TempDir(), "agent-trace.sqlite")
+	store, err := agenttrace.OpenSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := agenttrace.WithPlugin(context.Background(), agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunDevelopmentTrial(ctx, adapter, task, ConditionDirect, developmentTrialLimits(len(task.Interaction.Turns)), nil)
+	if err != nil || !result.Passed {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	readOnly, err := agenttrace.OpenSQLiteStoreReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	playback, err := readOnly.LoadPlayback(context.Background(), result.TrialID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := playback.IntegrityDigest(); err != nil {
+		t.Fatal(err)
+	}
+	checkpointSequence := uint64(0)
+	for _, event := range playback.Events {
+		if event.EventType == agenttrace.EventCheckpointCreated {
+			checkpointSequence = event.Sequence
+			break
+		}
+	}
+	if checkpointSequence == 0 {
+		t.Fatal("source run has no checkpoint")
+	}
+	plan, err := playback.ForkAt(checkpointSequence, result.TrialID+"_fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := readOnly.Close(); err != nil {
+		t.Fatal(err)
+	}
+	writable, err := agenttrace.OpenSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder, forkEvent, err := (agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: writable}).BeginFork(context.Background(), plan, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, err := recorder.Record(context.Background(), agenttrace.EventFinalStateObserved, forkEvent.EventID,
+		json.RawMessage(`{"continued":true,"state_digest":"`+plan.StateFingerprint+`"}`), plan.StateFingerprint)
+	if err != nil || final.Sequence != 2 {
+		t.Fatalf("final=%+v err=%v", final, err)
+	}
+	if err := writable.Close(); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := agenttrace.OpenSQLiteStoreReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer verified.Close()
+	child, err := verified.LoadPlayback(context.Background(), plan.AgentRunID)
+	if err != nil || len(child.Events) != 2 || child.Events[0].EventType != agenttrace.EventForkStarted || child.Events[1].ParentEventID != child.Events[0].EventID {
+		t.Fatalf("child=%+v err=%v", child, err)
+	}
+}
+
 func TestRunDevelopmentTrialForModelBindsLunaRequestAndArtifact(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_112")
 	response := responseFixture(`{"model":"gpt-5.6-luna","status":"completed","output":[]}`, 10, 2)

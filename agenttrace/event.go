@@ -19,6 +19,7 @@ type EventType string
 
 const (
 	EventRunStarted          EventType = "agent.run.started"
+	EventForkStarted         EventType = "agent.fork.started"
 	EventRunCompleted        EventType = "agent.run.completed"
 	EventLLMRequestStarted   EventType = "llm.request.started"
 	EventLLMResponseReceived EventType = "llm.response.received"
@@ -122,6 +123,31 @@ func (plugin Plugin) Begin(agentRunID string, clock func() time.Time) (*Recorder
 	return &Recorder{mode: plugin.Mode, sink: plugin.Sink, agentRunID: agentRunID, clock: clock}, nil
 }
 
+func (plugin Plugin) BeginFork(ctx context.Context, plan ForkPlan, clock func() time.Time) (*Recorder, Event, error) {
+	if err := plan.Validate(); err != nil {
+		return nil, Event{}, err
+	}
+	recorder, err := plugin.Begin(plan.AgentRunID, clock)
+	if err != nil {
+		return nil, Event{}, err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"source_agent_run_id":        plan.SourceAgentRunID,
+		"through_sequence":           plan.ThroughSequence,
+		"source_checkpoint_event_id": plan.ParentEventID,
+		"source_state_fingerprint":   plan.StateFingerprint,
+		"source_prefix_digest":       plan.PrefixDigest,
+	})
+	if err != nil {
+		return nil, Event{}, ErrInvalidEvent
+	}
+	event, err := recorder.Record(ctx, EventForkStarted, "", payload, plan.StateFingerprint)
+	if err != nil {
+		return nil, Event{}, err
+	}
+	return recorder, event, nil
+}
+
 func (recorder *Recorder) Record(ctx context.Context, eventType EventType, parentEventID string, payload json.RawMessage, stateFingerprint string) (Event, error) {
 	if recorder == nil || !validEventType(eventType) || (parentEventID != "" && !boundedIdentifier(parentEventID, 160)) ||
 		(stateFingerprint != "" && !validDigest(stateFingerprint)) {
@@ -180,7 +206,7 @@ func (event Event) Validate() error {
 
 func validEventType(eventType EventType) bool {
 	switch eventType {
-	case EventRunStarted, EventRunCompleted, EventLLMRequestStarted, EventLLMResponseReceived, EventLLMOutputObserved,
+	case EventRunStarted, EventForkStarted, EventRunCompleted, EventLLMRequestStarted, EventLLMResponseReceived, EventLLMOutputObserved,
 		EventRoutingDecided, EventDirectToolStarted, EventDirectToolCompleted, EventRuntimeStarted, EventRuntimeCompleted,
 		EventCheckpointCreated, EventFinalStateObserved:
 		return true

@@ -82,6 +82,10 @@ type Factory struct {
 	// COWWarmupProfile selects an audited guest-defined canonical warmup. Empty
 	// keeps the current production baseline. Arbitrary source is never accepted.
 	COWWarmupProfile string
+	// COWSnapshotShell derives a replacement-only module with empty active data
+	// payloads and reconstructs those payloads in the canonical memory seed. It
+	// is valid only for cow-ready-single-use.
+	COWSnapshotShell bool
 	CompilationCache *CompilationCache
 }
 
@@ -115,11 +119,14 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.COWWarmupProfile != "" && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
 		return nil, errors.New("COW warmup profile is outside cow-ready-single-use")
 	}
+	if factory.COWSnapshotShell && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
+		return nil, errors.New("COW snapshot shell is outside cow-ready-single-use")
+	}
 	refillWorkers := factory.PreparedRefillWorkers
 	if factory.AdaptivePreparedRefill {
 		refillWorkers = adaptivePreparedRefillSentinel
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	return newEngine(ctx, wasm, factory.COWSnapshotShell, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -131,6 +138,7 @@ var _ enginecontract.Runner = (*Engine)(nil)
 type Engine struct {
 	runtime                wazerort.Runtime
 	compiled               wazerort.CompiledModule
+	cowSnapshotShell       *cowSnapshotShellPlan
 	config                 runtimeconfig.RunConfig
 	brokerFactory          BrokerFactory
 	observer               Observer
@@ -147,7 +155,7 @@ type Engine struct {
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, nil, nil, "", 0, 0, 0, "", false, nil)
+	return newEngine(ctx, wasm, false, config, nil, nil, nil, nil, "", 0, 0, 0, "", false, nil)
 }
 
 func NewWithBrokerFactory(
@@ -156,12 +164,13 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, config, brokerFactory, nil, nil, nil, "", 0, 0, 0, "", false, nil)
+	return newEngine(ctx, wasm, false, config, brokerFactory, nil, nil, nil, "", 0, 0, 0, "", false, nil)
 }
 
 func newEngine(
 	ctx context.Context,
 	wasm []byte,
+	cowSnapshotShell bool,
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 	observer Observer,
@@ -197,6 +206,15 @@ func newEngine(
 		generationDigest := sha256.Sum256(append(artifactDigest[:], []byte("\x00"+cowWarmupProfile)...))
 		warmupGeneration = fmt.Sprintf("%x", generationDigest[:])
 	}
+	compiledWasm := wasm
+	var snapshotShell *cowSnapshotShellPlan
+	if cowSnapshotShell {
+		snapshotShell, err = buildCOWSnapshotShell(wasm)
+		if err != nil {
+			return nil, err
+		}
+		compiledWasm = snapshotShell.shell
+	}
 
 	runtimeConfig := wazerort.NewRuntimeConfig().
 		WithCloseOnContextDone(true).
@@ -229,19 +247,27 @@ func newEngine(
 	}
 	observe(observer, "instantiate_host", hostStarted, nil)
 	compileStarted := time.Now()
-	compiled, err := wasmRuntime.CompileModule(ctx, wasm)
+	compiled, err := wasmRuntime.CompileModule(ctx, compiledWasm)
 	observe(observer, "compile", compileStarted, err)
+	if snapshotShell != nil {
+		snapshotShell.shell = nil
+	}
+	if err != nil {
+		if releaseCompilationCache != nil {
+			releaseCompilationCache()
+			releaseCompilationCache = nil
+		}
+		_ = wasmRuntime.Close(ctx)
+		return nil, fmt.Errorf("compile guest: %w", err)
+	}
 	if releaseCompilationCache != nil {
 		releaseCompilationCache()
 		releaseCompilationCache = nil
 	}
-	if err != nil {
-		_ = wasmRuntime.Close(ctx)
-		return nil, fmt.Errorf("compile guest: %w", err)
-	}
 	engine := &Engine{
 		runtime:                wasmRuntime,
 		compiled:               compiled,
+		cowSnapshotShell:       snapshotShell,
 		config:                 config,
 		brokerFactory:          brokerFactory,
 		observer:               observer,

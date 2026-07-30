@@ -62,7 +62,7 @@ Authority-bearing fields are not accepted from `RunRequest`.
 
 Created only by trusted bootstrap/preparation code. The implemented optimization admits a never-served initialized instance to a bounded Host pool, checks it out once, and discards it after that Run. No snapshot capture, restore, or served-instance reuse is implemented.
 
-The active target adds an exact sealed prepared-memory image shared by independent Linux `MAP_PRIVATE` slot mappings. The first promotion level still discards every served slot. A later slot may return to the pool only after complete mutable-memory, global, table, WASI, Host-resource, growth, timeout, and failure-path evidence. See [ADR 0008](adr/0008-cow-python-reactor-performance-density.md) and the [active COW performance-density roadmap](plans/2026-07-27-cow-python-reactor-performance-density.md).
+The active target adds an exact sealed prepared-memory image shared by independent Linux `MAP_PRIVATE` slot mappings. The first promotion level still discards every served slot. A later slot may return to the pool only after complete mutable-memory, global, table, WASI, Host-resource, growth, timeout, and failure-path evidence. See [ADR 0008](adr/0008-cow-python-reactor-performance-density.md) and the [research roadmap](research-roadmap.md).
 
 ### Run-local
 
@@ -76,7 +76,7 @@ Deferred. V1 returns bounded JSON/bytes plus a digest. It does not persist an in
 
 Stateful sessions are a separate future Host-owned lifecycle contract, not an extension of untrusted `RunRequest` and not a relaxation of V1 freshness. A durable session may be represented by an explicitly bound live module, an exact-build memory capsule, or a Guest-defined logical capsule only after the complete mutable state and external-resource boundary is proven. Dirty linear-memory pages alone are partial state.
 
-See [ADR 0006](adr/0006-execution-session-lifecycle.md), the [Host-owned lifecycle contract](session-lifecycle-contract.md), and the [active successor roadmap](plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md). Activation adds no session manager, capsule, persistence, or restore claim by itself.
+See [ADR 0006](adr/0006-execution-session-lifecycle.md), the [Host-owned lifecycle contract](session-lifecycle-contract.md), and the [research roadmap](research-roadmap.md). These documents add no session manager, capsule, persistence, or restore claim by themselves.
 
 Stateless COW execution-slot reuse is not a stateful-session contract. It restores a trusted prepared base and discards all Run-local state; it does not preserve a user Python heap between Runs.
 
@@ -146,7 +146,7 @@ rows = tools.fetch_many(requests)
 
 The SDK serializes a bounded request to a versioned Host import. The Host resolves a pre-granted capability, applies endpoint and call budgets, performs I/O with Host-owned credentials, writes a bounded response into guest memory, and emits one receipt per internal operation.
 
-The active [MCP transactional tool workflows ADR](adr/0007-mcp-transactional-tool-workflows.md) and [roadmap](plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md) preserve this single import while planning dynamic typed tool projection and Host-owned transaction/effect handling. Those capabilities remain unimplemented until their exact contract and Linux/WASI gates pass.
+[ADR 0007](adr/0007-mcp-transactional-tool-workflows.md) and the [research roadmap](research-roadmap.md) preserve this single import while defining dynamic typed tool projection and Host-owned transaction/effect handling. Capabilities outside the tested contracts remain unavailable.
 
 The guest never receives a raw socket or credential.
 

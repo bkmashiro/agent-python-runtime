@@ -70,28 +70,22 @@ class PublicDocumentationContractTests(unittest.TestCase):
                     failures.append(f"{document.relative_to(ROOT)} -> {target}")
         self.assertEqual([], failures)
 
-    def test_closed_execution_roadmaps_have_no_unchecked_items(self):
-        closed_roadmaps = {
-            "docs/plans/2026-07-22-agent-python-runtime-autonomous-megagoal.md": "No unchecked executable item remains",
-            "docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md": "**No active implementation pointer.**",
-        }
-        for path, closeout_marker in closed_roadmaps.items():
-            with self.subTest(path=path):
-                roadmap = self.read(path)
-                self.assertIsNone(re.search(r"^- \[ \]", roadmap, flags=re.MULTILINE))
-                self.assertIn(closeout_marker, roadmap)
-
-        session_roadmap = self.read(
-            "docs/plans/2026-07-23-agent-python-session-lifecycle-autonomous-megagoal.md"
+    def test_internal_agent_plans_are_not_public_docs(self):
+        self.assertFalse((ROOT / "docs/plans").exists())
+        public_documents = [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]
+        forbidden = (
+            "/Users/" + "yuzhe",
+            "For Hermes",
+            "autonomous-megagoal",
+            "Autonomous Mega-Goal",
         )
-        self.assertIn("- [deferred]", session_roadmap)
-        self.assertNotIn("This is the active `/goal`", session_roadmap)
-        self.assertNotIn("session-lifecycle successor is now active", self.read("README.md"))
+        for document in public_documents:
+            text = document.read_text()
+            for marker in forbidden:
+                with self.subTest(document=document.relative_to(ROOT), marker=marker):
+                    self.assertNotIn(marker, text)
 
-    def test_active_transactional_workflow_docs_share_authority_vocabulary(self):
-        roadmap = self.read(
-            "docs/plans/2026-07-23-agent-python-mcp-transactional-workflows-autonomous-megagoal.md"
-        )
+    def test_transactional_workflow_docs_share_authority_vocabulary(self):
         effect_plane = self.read("docs/effect-plane.md")
         adr = self.read("docs/adr/0007-mcp-transactional-tool-workflows.md")
         status = self.read("docs/status.md")
@@ -103,7 +97,6 @@ class PublicDocumentationContractTests(unittest.TestCase):
             "USER_APPROVAL_REQUIRED",
         ):
             with self.subTest(policy=policy):
-                self.assertIn(policy, roadmap)
                 self.assertIn(policy, effect_plane)
                 self.assertIn(policy, adr)
 
@@ -114,15 +107,10 @@ class PublicDocumentationContractTests(unittest.TestCase):
             "irreversible",
         ):
             with self.subTest(effect_class=effect_class):
-                self.assertIn(effect_class, roadmap)
                 self.assertIn(effect_class, adr)
 
-        self.assertIn("same-Run Agent commit is always denied", roadmap)
         self.assertIn("same Python run", effect_plane)
-        self.assertIn("active implementation pointer", status)
-        self.assertIn("None of those write/effect capabilities is an implemented V1 claim", status)
-        self.assertIn("Track I Phase 1 now freezes evaluation and prompt contracts only", status)
-        self.assertIn("no dataset, harness run, live-model comparison", status)
+        self.assertIn("Capabilities are claims only when", status)
 
 
 if __name__ == "__main__":

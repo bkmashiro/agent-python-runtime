@@ -2,12 +2,12 @@
 
 ## Scope
 
-Read the canonical documents before changing runtime behavior:
+Read the public design documents before changing runtime behavior:
 
-1. `docs/plans/2026-07-22-agent-python-runtime-handoff.md`
-2. `docs/plans/2026-07-22-agent-python-runtime-implementation-plan.md`
-3. `docs/architecture.md`
-4. `docs/threat-model.md`
+1. `README.md`
+2. `docs/architecture.md`
+3. `docs/threat-model.md`
+4. `docs/research-roadmap.md`
 5. `docs/adr/`
 
 The project is independent from prior domain-specific runtime experiments. Do not introduce unrelated protocols, compatibility exports, or product-specific request fields.

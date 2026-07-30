@@ -70,9 +70,12 @@ type Factory struct {
 	// initial PreparedCapacity is also the maximum.
 	PreparedMaxCapacity uint32
 	// PreparedRefillWorkers selects a fixed worker count. Zero keeps the bounded
-	// automatic default of at most four; non-zero values are limited to sixteen
-	// and capacity so bounded COW pressure experiments can sweep replenishment.
+	// default of at most four. Explicit values are limited to sixteen.
 	PreparedRefillWorkers uint32
+	// AdaptivePreparedRefill opts into four outstanding refills normally, eight
+	// below the low watermark, and twelve at critical pressure or while callers
+	// wait. It requires PreparedRefillWorkers to remain zero.
+	AdaptivePreparedRefill bool
 	// VerifyCOWPreparedImage opts into a full linear-memory digest on every
 	// prepared slot. It is intended for bounded diagnostics, not production.
 	VerifyCOWPreparedImage bool
@@ -99,6 +102,9 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.PreparedCapacity > hardBound || maximum > hardBound {
 		return nil, fmt.Errorf("prepared capacity %d/%d exceeds hard bound %d", factory.PreparedCapacity, maximum, hardBound)
 	}
+	if factory.AdaptivePreparedRefill && (factory.PreparedRefillWorkers != 0 || factory.PreparedCapacity == 0) {
+		return nil, errors.New("adaptive prepared refill requires a non-empty pool and no fixed worker count")
+	}
 	if factory.PreparedRefillWorkers > maxPreparedRefillWorkers || factory.PreparedRefillWorkers > maximum ||
 		(factory.PreparedRefillWorkers > 0 && factory.PreparedCapacity == 0) {
 		return nil, errors.New("prepared refill worker count is outside the configured pool bounds")
@@ -109,7 +115,11 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.COWWarmupProfile != "" && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
 		return nil, errors.New("COW warmup profile is outside cow-ready-single-use")
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, factory.PreparedRefillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	refillWorkers := factory.PreparedRefillWorkers
+	if factory.AdaptivePreparedRefill {
+		refillWorkers = adaptivePreparedRefillSentinel
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}

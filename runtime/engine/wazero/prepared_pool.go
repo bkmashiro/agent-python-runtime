@@ -14,10 +14,13 @@ import (
 )
 
 const (
-	maxPreparedCapacity          uint32 = 4
-	maxCOWPreparedCapacity       uint32 = 65536
-	defaultPreparedRefillWorkers uint32 = 4
-	maxPreparedRefillWorkers     uint32 = 16
+	maxPreparedCapacity            uint32 = 4
+	maxCOWPreparedCapacity         uint32 = 65536
+	defaultPreparedRefillWorkers   uint32 = 4
+	lowPreparedRefillWorkers       uint32 = 8
+	criticalPreparedRefillWorkers  uint32 = 12
+	maxPreparedRefillWorkers       uint32 = 16
+	adaptivePreparedRefillSentinel uint32 = 17
 )
 
 type preparedInstance struct {
@@ -33,12 +36,13 @@ type preparedRefillRequest struct {
 }
 
 type preparedPool struct {
-	ready         chan *preparedInstance
-	requests      chan preparedRefillRequest
-	context       context.Context
-	cancel        context.CancelFunc
-	maximum       uint32
-	refillWorkers uint32
+	ready           chan *preparedInstance
+	requests        chan preparedRefillRequest
+	context         context.Context
+	cancel          context.CancelFunc
+	maximum         uint32
+	refillWorkers   uint32
+	automaticRefill bool
 
 	mutex     sync.Mutex
 	closed    bool
@@ -78,7 +82,12 @@ func (engine *Engine) initializePreparedPool(capacity, maximum, configuredWorker
 		engine.cowRuntime = cowRuntime
 	}
 	workerCount := maximum
-	if configuredWorkers > 0 {
+	if configuredWorkers == adaptivePreparedRefillSentinel {
+		pool.automaticRefill = true
+		if workerCount > criticalPreparedRefillWorkers {
+			workerCount = criticalPreparedRefillWorkers
+		}
+	} else if configuredWorkers > 0 {
 		workerCount = configuredWorkers
 	} else if workerCount > defaultPreparedRefillWorkers {
 		workerCount = defaultPreparedRefillWorkers
@@ -345,11 +354,42 @@ func (engine *Engine) schedulePreparedDeficitLocked(result chan<- error) uint32 
 	}
 	deficit := target - accounted
 	deficit = pool.policy.schedulingLimit(time.Now(), deficit)
+	if result == nil && pool.refillWorkers > 0 {
+		limit := pool.refillWorkers
+		if pool.automaticRefill {
+			limit = automaticPreparedRefillLimit(target, uint32(len(pool.ready)), pool.waiting.Load(), limit)
+		}
+		outstanding := pool.queued.Load() + pool.refilling.Load()
+		if outstanding >= limit {
+			return 0
+		}
+		if available := limit - outstanding; deficit > available {
+			deficit = available
+		}
+	}
 	for index := uint32(0); index < deficit; index++ {
 		pool.queued.Add(1)
 		pool.requests <- preparedRefillRequest{result: result}
 	}
 	return deficit
+}
+
+func automaticPreparedRefillLimit(target, ready, waiting, workerBound uint32) uint32 {
+	limit := defaultPreparedRefillWorkers
+	_, critical, low, _ := preparedWatermarks(target)
+	switch {
+	case waiting > 0 || ready <= critical:
+		limit = criticalPreparedRefillWorkers
+	case ready <= low:
+		limit = lowPreparedRefillWorkers
+	}
+	if limit > workerBound {
+		limit = workerBound
+	}
+	if limit > target {
+		limit = target
+	}
+	return limit
 }
 
 // PreparedPoolState is a point-in-time lifecycle snapshot. SupplyAccounted is
@@ -414,12 +454,25 @@ func (engine *Engine) PreparedCapacity() uint32 {
 	return engine.pool.capacity.Load()
 }
 
-// PreparedRefillWorkers reports the fixed replenishment worker bound.
+// PreparedRefillWorkers reports the replenishment worker bound. In automatic
+// mode, only a pressure-dependent subset may have outstanding work.
 func (engine *Engine) PreparedRefillWorkers() uint32 {
 	if engine == nil || engine.pool == nil {
 		return 0
 	}
 	return engine.pool.refillWorkers
+}
+
+// PreparedRefillConcurrencyLimit reports the current outstanding-refill bound.
+func (engine *Engine) PreparedRefillConcurrencyLimit() uint32 {
+	if engine == nil || engine.pool == nil {
+		return 0
+	}
+	pool := engine.pool
+	if !pool.automaticRefill {
+		return pool.refillWorkers
+	}
+	return automaticPreparedRefillLimit(pool.capacity.Load(), uint32(len(pool.ready)), pool.waiting.Load(), pool.refillWorkers)
 }
 
 // PreparedRetainedGuestMemoryBytes reports queued candidates' current linear

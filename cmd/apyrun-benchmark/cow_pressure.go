@@ -22,6 +22,7 @@ const pressureInitialCapacity uint32 = 4
 const pressureMaxGrowthStep uint32 = 64
 const pressureMinimumHeadroom = 512 * 1024 * 1024
 const pressureActiveSampleCount = 3
+const pressureAdaptiveRefillWorkers uint32 = 12
 
 type cowPressureLimits struct {
 	RuntimeBudgetBytes uint64 `json:"runtime_budget_bytes"`
@@ -35,6 +36,7 @@ type cowPressureLimits struct {
 	Workload           string `json:"workload"`
 	WaitNS             uint64 `json:"wait_ns"`
 	DirtyBytes         uint64 `json:"dirty_bytes"`
+	RefillPolicy       string `json:"refill_policy"`
 	RefillWorkers      uint32 `json:"refill_workers"`
 	BurstFactor        uint32 `json:"burst_factor"`
 }
@@ -150,7 +152,7 @@ type growablePreparedBenchmarkRunner interface {
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 9 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 10 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -169,7 +171,7 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure burst evidence is incomplete")
 	}
 	if evidence.Limits.RuntimeBudgetBytes+evidence.Limits.ReservedBytes != evidence.Limits.AllocationBytes ||
-		evidence.Limits.InitialCapacity != pressureInitialCapacity || evidence.Limits.MaxGrowthStep != pressureMaxGrowthStep || evidence.Limits.RefillWorkers == 0 || evidence.Limits.RefillWorkers > 16 || evidence.Limits.RefillWorkers > evidence.Limits.MaxSlots ||
+		evidence.Limits.InitialCapacity != pressureInitialCapacity || evidence.Limits.MaxGrowthStep != pressureMaxGrowthStep || !validPressureRefillEvidence(evidence.Limits.RefillPolicy, evidence.Limits.RefillWorkers, evidence.Limits.MaxSlots) ||
 		!validPressureWorkload(evidence.Limits.Workload, time.Duration(evidence.Limits.WaitNS), evidence.Limits.DirtyBytes) || len(evidence.Spawn) == 0 || evidence.StopReason == "" {
 		return errors.New("cow-pressure limits or spawn evidence is incomplete")
 	}
@@ -316,9 +318,8 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 	if options.ConsumerCount == 0 || options.ConsumerCount > 256 || options.PressureDuration < 5*time.Second || options.PressureDuration > 10*time.Minute {
 		return errors.New("cow-pressure consumers or duration is outside bounds")
 	}
-	if options.PressureRefillWorkers != 1 && options.PressureRefillWorkers != 2 && options.PressureRefillWorkers != 4 &&
-		options.PressureRefillWorkers != 8 && options.PressureRefillWorkers != 12 && options.PressureRefillWorkers != 16 {
-		return errors.New("cow-pressure refill workers must be 1, 2, 4, 8, 12, or 16")
+	if !validPressureRefillWorkers(uint32(options.PressureRefillWorkers)) {
+		return errors.New("cow-pressure refill workers must be automatic (0), 1, 2, 4, 8, 12, or 16")
 	}
 	if options.PressureBurstFactor != 1 && options.PressureBurstFactor != 2 && options.PressureBurstFactor != 4 && options.PressureBurstFactor != 8 {
 		return errors.New("cow-pressure burst factor must be 1, 2, 4, or 8")
@@ -368,6 +369,39 @@ func pressureRequestSpecFor(options benchmarkOptions, id uint64) cowPressureRequ
 	return cpu()
 }
 
+func validPressureRefillWorkers(workers uint32) bool {
+	switch workers {
+	case 0, 1, 2, 4, 8, 12, 16:
+		return true
+	default:
+		return false
+	}
+}
+
+func validPressureRefillEvidence(policy string, workers, maxSlots uint32) bool {
+	if workers == 0 || workers > maxSlots {
+		return false
+	}
+	if policy == "fixed" {
+		return validPressureRefillWorkers(workers)
+	}
+	if policy != "adaptive" {
+		return false
+	}
+	want := pressureAdaptiveRefillWorkers
+	if maxSlots < want {
+		want = maxSlots
+	}
+	return workers == want
+}
+
+func pressureRefillPolicy(configuredWorkers uint) string {
+	if configuredWorkers == 0 {
+		return "adaptive"
+	}
+	return "fixed"
+}
+
 func validPressureWorkload(workload string, wait time.Duration, dirtyBytes uint64) bool {
 	switch workload {
 	case "cpu":
@@ -412,11 +446,12 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 2 * time.Minute
 	neutral, err := (wazeroengine.Factory{
-		PreparedCapacity:      pressureInitialCapacity,
-		PreparedMaxCapacity:   uint32(options.MaxPressureSlots),
-		PreparedRefillWorkers: uint32(options.PressureRefillWorkers),
-		Strategy:              enginecontract.StrategyCOWReadySingleUse,
-		Observer:              lifecycle.observe,
+		PreparedCapacity:       pressureInitialCapacity,
+		PreparedMaxCapacity:    uint32(options.MaxPressureSlots),
+		PreparedRefillWorkers:  uint32(options.PressureRefillWorkers),
+		AdaptivePreparedRefill: options.PressureRefillWorkers == 0,
+		Strategy:               enginecontract.StrategyCOWReadySingleUse,
+		Observer:               lifecycle.observe,
 	}).New(context.Background(), wasm, config)
 	if err != nil {
 		return fmt.Errorf("initialize single COW runtime: %w", err)
@@ -691,11 +726,11 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 9, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 10, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
-		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), DirtyBytes: options.PressureDirtyBytes, RefillWorkers: runner.PreparedRefillWorkers(), BurstFactor: uint32(options.PressureBurstFactor)},
+		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), DirtyBytes: options.PressureDirtyBytes, RefillPolicy: pressureRefillPolicy(options.PressureRefillWorkers), RefillWorkers: runner.PreparedRefillWorkers(), BurstFactor: uint32(options.PressureBurstFactor)},
 		StopReason: stopReason, Spawn: spawn, LoadSamples: loadSamples, Load: load,
 		Limitations: []string{
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",

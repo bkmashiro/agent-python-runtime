@@ -156,7 +156,42 @@ Representative repeated values:
 
 The near-flat normalized mixed and burst values show that extra concurrency primarily exposes more CPU capacity until inventory saturation. The heavy-tail profile gains some normalized throughput by hiding deterministic waits. Dirty 32 MiB falls from 15.54 to 11.85 req/s per observed core relative to dirty 16 MiB because page touching adds CPU and memory-system work without reducing the fixed two-second hold.
 
-## 8. Production policy implications
+## 8. Native CPython deployment baseline
+
+A separate direct baseline on `gpuvm36` compares native CPython and CPython-WASI on the same allocated Linux node. It uses Host revision `84d6f3711e4c0e042faea955c4422e0de9ec33f5`. Native CPython 3.14.0 was built from the release source with SHA-256 `88d2da4eed42fa9a5f42ff58a8bc8988881bd6c547e297e46682c2687638a851`; NumPy 2.5.1 came from the CPython 3.14 manylinux x86-64 wheel with SHA-256 `54ad769f17bc2d833b620851989f62054fb9ab93c969d9e1dc3c8e3d56beea21`. The persistent environment is retained under the private Bitbucket experiment root.
+
+The native harness executes the checked-in `guest/bootstrap/agent_runtime` request protocol. “Native cold” includes process spawn, CPython startup, bootstrap import, trusted prepare, execute, JSON framing, and process shutdown. “Native warm” is a persistent interpreter whose bootstrap and trusted prepare have already completed; it measures subsequent request round trips. The WASI totals are Host request totals and use ten samples; native points use 100 samples. All table entries are medians.
+
+![Native CPython deployment baseline](../assets/scheduler-experiments/native-cpython-baseline.png)
+
+The figure uses a logarithmic latency axis because the measured paths span more than four orders of magnitude.
+
+| Fixture / path | Request total, ms | Runtime init, ms | Prepare, ms | Execute, ms |
+|---|---:|---:|---:|---:|
+| Basic, native cold | 171.507 | n/a | 0.031 | included |
+| Basic, native warm | 0.187 | precompleted | precompleted | included |
+| Basic, WASI fresh | 5647.797 | 5618.354 | 0.258 | 1.190 |
+| Basic, WASI prepared | 1.705 | precompleted | 0.315 | 1.278 |
+| NumPy, native cold | 324.132 | n/a | 147.557 | included |
+| NumPy, native warm after import | 0.210 | precompleted | precompleted | included |
+| NumPy, WASI fresh | 11734.886 | 5710.006 | 6004.357 | 1.229 |
+| NumPy, WASI prepared | 6200.491 | precompleted | 6199.138 | 1.229 |
+
+For the basic fixture, prepared CPython-WASI removes 5646.09 ms from the measured request path relative to fresh CPython-WASI, a 99.970% reduction and a 3312.99× fresh/prepared ratio. The fresh WASI path is 32.93× the native cold deployment path; the prepared WASI request is 9.14× the native warm request. These ratios describe this tiny protocol fixture, not arbitrary Python execution speed.
+
+The NumPy result has a different and important boundary. The `numpy-core` artifact contains NumPy 2.5.1, but the prepared pool preinitializes the CPython runtime only; it does **not** import NumPy before the instance becomes ready. Consequently, `import numpy` remains in trusted prepare and costs about 6.20 seconds on every single-use prepared Guest. Preparation reduces NumPy fresh-to-prepared request time by only 47.16% (1.89×), primarily by removing the separate CPython runtime initialization. It does not remove NumPy import. The native warm point has NumPy cached in a persistent interpreter, so comparing its 0.210 ms request directly with the current WASI prepared 6200.491 ms request would mix different prepared-state boundaries and is not reported as a meaningful speedup ratio.
+
+The NumPy artifact remains `profile-candidate`, not `production-safe`. A valid claim that NumPy itself is prewarmed requires a future prepared-image profile that imports NumPy before readiness and then verifies restore isolation and COW behavior.
+
+The checksum-verified private evidence is:
+
+```text
+.artifacts-private/native-numpy/job-268015/
+```
+
+Slurm job `268015` completed with wrapper exit zero and all six benchmark JSON files passed schema/semantic and checksum validation. Slurm accounting (`sacct`) was unavailable because its persistent database connection failed; `scontrol`, wrapper exit, per-command GNU time records, payload/result manifests, and JSON validation form the retained audit chain. Identity job `268018` additionally records the native executable, NumPy path, Linux/glibc platform, bundled OpenBLAS linkage, and extension `ldd` output.
+
+## 9. Production policy implications
 
 The data supports these bounded defaults and compiler choices:
 
@@ -168,7 +203,7 @@ The data supports these bounded defaults and compiler choices:
 
 See [Production policy compiler](../production-policy.md).
 
-## 9. Claim boundaries
+## 10. Claim boundaries
 
 The results do **not** establish:
 

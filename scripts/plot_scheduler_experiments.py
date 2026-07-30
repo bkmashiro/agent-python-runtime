@@ -24,6 +24,7 @@ MIB = 1 << 20
 CURRENT_SOURCE = "d6f6702f9462ec58705f05786a9ea58ba2baba1c"
 CPU_SOURCE = "d6df17be59de626a53c5c374cbb552d0c8d53ca1"
 IO_SOURCE = "23384d236f2e84e5da900d2f50d54a7ba7b96ad5"
+NATIVE_SOURCE = "84d6f3711e4c0e042faea955c4422e0de9ec33f5"
 
 
 def load(path: Path) -> dict:
@@ -190,6 +191,37 @@ def plot_burst(evidence: Path, output: Path) -> None:
     save(fig, output / "correlated-burst.png")
 
 
+def plot_native_baseline(evidence: Path, output: Path) -> None:
+    payload = load(evidence / "native-numpy/job-268015/result/SUMMARY.json")
+    assert payload["host_revision"] == NATIVE_SOURCE
+    rows = []
+    for key, label in [("basic", "Basic"), ("numpy_import", "NumPy import")]:
+        fixture = payload[key]
+        rows.extend(
+            [
+                {"fixture": label, "path": "Native cold", "latency_ms": fixture["native"]["cold_total"] / 1e6},
+                {"fixture": label, "path": "Native warm", "latency_ms": fixture["native"]["warm_total"] / 1e6},
+                {"fixture": label, "path": "WASI fresh", "latency_ms": fixture["wasi_fresh"]["total"] / 1e6},
+                {"fixture": label, "path": "WASI prepared", "latency_ms": fixture["wasi_prepared"]["total"] / 1e6},
+            ]
+        )
+    frame = pd.DataFrame(rows)
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.8), sharey=True)
+    order = ["Native cold", "Native warm", "WASI fresh", "WASI prepared"]
+    for ax, fixture in zip(axes, ["Basic", "NumPy import"]):
+        subset = frame[frame["fixture"] == fixture]
+        sns.barplot(data=subset, x="path", y="latency_ms", order=order, ax=ax)
+        ax.set_yscale("log")
+        ax.set(xlabel="Deployment path", ylabel="Median request total (ms)", title=fixture)
+        ax.tick_params(axis="x", rotation=20)
+        ax.grid(axis="y", alpha=0.25)
+        for container in ax.containers:
+            ax.bar_label(container, fmt="%.3g", padding=3, fontsize=8)
+    axes[1].text(0.02, 0.96, "NumPy is present but not\nimported before WASI readiness", transform=axes[1].transAxes, ha="left", va="top", fontsize=9, bbox={"facecolor": "white", "edgecolor": "0.75", "alpha": 0.9})
+    fig.suptitle("Native CPython and CPython-WASI request boundaries — same Linux node")
+    save(fig, output / "native-cpython-baseline.png")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-root", type=Path, default=Path(".artifacts-private"))
@@ -202,6 +234,7 @@ def main() -> None:
     plot_mixed_heavy(args.evidence_root, args.output_dir)
     plot_dirty(args.evidence_root, args.output_dir)
     plot_burst(args.evidence_root, args.output_dir)
+    plot_native_baseline(args.evidence_root, args.output_dir)
     figures = sorted(args.output_dir.glob("*.png"))
     checksums = []
     for path in figures:

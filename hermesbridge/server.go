@@ -69,12 +69,31 @@ func (server *Server) handle(ctx context.Context, connection net.Conn) {
 		server.writeError(connection, "unknown", "invalid_frame", "invalid bridge frame")
 		return
 	}
-	request, err := DecodeExecuteRequest(payload)
+	operation, err := decodeOperation(payload)
 	if err != nil {
-		server.writeError(connection, "unknown", "invalid_request", "invalid runtime request")
+		server.writeError(connection, "unknown", "invalid_request", "invalid bridge request")
 		return
 	}
-	response := server.service.Execute(ctx, request)
+	var response any
+	switch operation {
+	case OperationExecute:
+		request, decodeErr := DecodeExecuteRequest(payload)
+		if decodeErr != nil {
+			server.writeError(connection, "unknown", "invalid_request", "invalid runtime request")
+			return
+		}
+		response = server.service.Execute(ctx, request)
+	case OperationObserve:
+		request, decodeErr := DecodeObserveRequest(payload)
+		if decodeErr != nil {
+			server.writeError(connection, "unknown", "invalid_request", "invalid observation request")
+			return
+		}
+		response = server.service.Observe(ctx, request)
+	default:
+		server.writeError(connection, "unknown", "invalid_request", "unsupported bridge operation")
+		return
+	}
 	encoded, err := json.Marshal(response)
 	if err != nil || WriteFrame(connection, encoded, MaxFrameBytes) != nil {
 		return

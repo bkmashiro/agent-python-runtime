@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/bkmashiro/agent-python-runtime/agenttrace"
 )
 
 func shortRuntimeDir(t *testing.T) string {
@@ -90,6 +92,67 @@ func TestServerExecutesOneFramedRequestOverUnixSocket(t *testing.T) {
 	}
 	if response.Status != ResponseStatusOK || string(response.Result) != "42" {
 		t.Fatalf("unexpected response: %#v", response)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("server did not stop")
+	}
+}
+
+func TestServerPersistsMetadataObservationOverUnixSocket(t *testing.T) {
+	runtimeDir := shortRuntimeDir(t)
+	store, err := agenttrace.OpenSQLiteStore(filepath.Join(runtimeDir, "trace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	trace, err := NewTraceManager(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService(&fakeRunner{}, trace, func() (string, error) { return "exec-observe", nil }, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServer(service, 1, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := ListenUnix(filepath.Join(runtimeDir, "bridge.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(ctx, listener) }()
+
+	connection, err := net.Dial("unix", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(validObserveRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFrame(connection, payload, MaxFrameBytes); err != nil {
+		t.Fatal(err)
+	}
+	responsePayload, err := ReadFrame(connection, MaxFrameBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = connection.Close()
+	var response ObserveResponse
+	if err := json.Unmarshal(responsePayload, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Status != ResponseStatusOK || response.EventID == "" || response.Sequence != 1 {
+		t.Fatalf("unexpected observation response: %#v", response)
 	}
 	cancel()
 	select {

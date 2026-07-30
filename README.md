@@ -39,6 +39,7 @@ The project is not a general Linux sandbox, agent framework, MCP marketplace, ar
 ## Documentation
 
 - [Local operator CLI](docs/operator-cli.md)
+- [Production policy compiler](docs/production-policy.md)
 - [Runtime benchmark evidence](docs/benchmarking.md)
 - [Active COW Python reactor performance-density roadmap](docs/plans/2026-07-27-cow-python-reactor-performance-density.md)
 - [COW performance-density ADR](docs/adr/0008-cow-python-reactor-performance-density.md)

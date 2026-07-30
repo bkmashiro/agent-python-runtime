@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,8 +20,18 @@ import (
 const sqliteSchemaVersion = 1
 
 type SQLiteStore struct {
-	db   *sql.DB
-	path string
+	db       *sql.DB
+	path     string
+	readOnly bool
+}
+
+type RunSummary struct {
+	AgentRunID             string    `json:"agent_run_id"`
+	FirstObservedAt        time.Time `json:"first_observed_at"`
+	LastObservedAt         time.Time `json:"last_observed_at"`
+	EventCount             uint64    `json:"event_count"`
+	CheckpointCount        uint64    `json:"checkpoint_count"`
+	RuntimeInvocationCount uint64    `json:"runtime_invocation_count"`
 }
 
 type Playback struct {
@@ -106,12 +118,48 @@ func OpenSQLiteStore(path string) (*SQLiteStore, error) {
 	return store, nil
 }
 
+func OpenSQLiteStoreReadOnly(path string) (*SQLiteStore, error) {
+	if path == "" || !filepath.IsAbs(path) {
+		return nil, ErrInvalidPlugin
+	}
+	path = filepath.Clean(path)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, ErrInvalidPlugin
+	}
+	location := url.URL{Scheme: "file", Path: path}
+	query := location.Query()
+	query.Set("mode", "ro")
+	for _, pragma := range []string{"query_only(1)", "busy_timeout(5000)"} {
+		query.Add("_pragma", pragma)
+	}
+	location.RawQuery = query.Encode()
+	db, err := sql.Open("sqlite", location.String())
+	if err != nil {
+		return nil, fmt.Errorf("open trace store read-only: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	store := &SQLiteStore{db: db, path: path, readOnly: true}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping trace store read-only: %w", err)
+	}
+	if err := store.validateSchema(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return store, nil
+}
+
 func (store *SQLiteStore) Close() error {
 	if store == nil || store.db == nil {
 		return nil
 	}
 	err := store.db.Close()
-	store.secureFiles()
+	if !store.readOnly {
+		store.secureFiles()
+	}
 	return err
 }
 
@@ -165,6 +213,24 @@ func (store *SQLiteStore) migrate() error {
 	return nil
 }
 
+func (store *SQLiteStore) validateSchema() error {
+	tx, err := store.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return ErrIntegrity
+	}
+	defer tx.Rollback()
+	var version int
+	var stored string
+	if err := tx.QueryRow(`SELECT version,schema_digest FROM trace_schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version, &stored); err != nil || version != sqliteSchemaVersion {
+		return ErrIntegrity
+	}
+	actual, err := traceSchemaDigest(tx)
+	if err != nil || stored != actual {
+		return ErrIntegrity
+	}
+	return nil
+}
+
 func traceSchemaDigest(tx *sql.Tx) (string, error) {
 	rows, err := tx.Query(`SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name`)
 	if err != nil {
@@ -186,7 +252,7 @@ func traceSchemaDigest(tx *sql.Tx) (string, error) {
 }
 
 func (store *SQLiteStore) Append(ctx context.Context, event Event) error {
-	if store == nil || store.db == nil {
+	if store == nil || store.db == nil || store.readOnly {
 		return ErrAppend
 	}
 	if err := event.Validate(); err != nil {
@@ -219,6 +285,34 @@ func (store *SQLiteStore) Append(ctx context.Context, event Event) error {
 	}
 	store.secureFiles()
 	return nil
+}
+
+func (store *SQLiteStore) Runs(ctx context.Context, limit uint32) ([]RunSummary, error) {
+	if store == nil || store.db == nil || limit == 0 || limit > 1000 {
+		return nil, ErrInvalidEvent
+	}
+	rows, err := store.db.QueryContext(ctx, `SELECT agent_run_id,MIN(observed_at_ns),MAX(observed_at_ns),COUNT(*),
+		SUM(CASE WHEN event_type=? THEN 1 ELSE 0 END),SUM(CASE WHEN event_type=? THEN 1 ELSE 0 END)
+		FROM trace_events GROUP BY agent_run_id ORDER BY MAX(observed_at_ns) DESC,agent_run_id LIMIT ?`, string(EventCheckpointCreated), string(EventRuntimeStarted), limit)
+	if err != nil {
+		return nil, fmt.Errorf("query trace runs: %w", err)
+	}
+	defer rows.Close()
+	summaries := make([]RunSummary, 0)
+	for rows.Next() {
+		var summary RunSummary
+		var first, last int64
+		if err := rows.Scan(&summary.AgentRunID, &first, &last, &summary.EventCount, &summary.CheckpointCount, &summary.RuntimeInvocationCount); err != nil {
+			return nil, fmt.Errorf("scan trace run: %w", err)
+		}
+		summary.FirstObservedAt = time.Unix(0, first).UTC()
+		summary.LastObservedAt = time.Unix(0, last).UTC()
+		summaries = append(summaries, summary)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate trace runs: %w", err)
+	}
+	return summaries, nil
 }
 
 func (store *SQLiteStore) Events(ctx context.Context, agentRunID string, after uint64, limit uint32) ([]Event, error) {
@@ -288,7 +382,62 @@ func (store *SQLiteStore) LoadPlayback(ctx context.Context, agentRunID string) (
 	return Playback{AgentRunID: agentRunID, Events: all}, nil
 }
 
+func (playback Playback) IntegrityDigest() (string, error) {
+	if playback.AgentRunID == "" || len(playback.Events) == 0 {
+		return "", ErrInvalidEvent
+	}
+	hash := sha256.New()
+	seen := make(map[string]struct{}, len(playback.Events))
+	for index, event := range playback.Events {
+		if event.AgentRunID != playback.AgentRunID || event.Sequence != uint64(index+1) || event.Validate() != nil {
+			return "", ErrIntegrity
+		}
+		if _, duplicate := seen[event.EventID]; duplicate {
+			return "", ErrIntegrity
+		}
+		if event.ParentEventID != "" {
+			if _, exists := seen[event.ParentEventID]; !exists {
+				return "", ErrIntegrity
+			}
+		}
+		seen[event.EventID] = struct{}{}
+		if err := writeIntegrityEvent(hash, event); err != nil {
+			return "", ErrIntegrity
+		}
+	}
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), nil
+}
+
+func writeIntegrityEvent(writer io.Writer, event Event) error {
+	encoded, err := json.Marshal(struct {
+		Version          string    `json:"schema_version"`
+		EventID          string    `json:"event_id"`
+		AgentRunID       string    `json:"agent_run_id"`
+		Sequence         uint64    `json:"sequence"`
+		EventType        EventType `json:"event_type"`
+		ObservedAtNS     int64     `json:"observed_at_ns"`
+		ParentEventID    string    `json:"parent_event_id"`
+		PayloadDigest    string    `json:"payload_digest"`
+		StateFingerprint string    `json:"state_fingerprint"`
+	}{
+		Version: event.Version, EventID: event.EventID, AgentRunID: event.AgentRunID, Sequence: event.Sequence,
+		EventType: event.EventType, ObservedAtNS: event.ObservedAt.UnixNano(), ParentEventID: event.ParentEventID,
+		PayloadDigest: event.PayloadDigest, StateFingerprint: event.StateFingerprint,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := writer.Write(encoded); err != nil {
+		return err
+	}
+	_, err = writer.Write([]byte{'\n'})
+	return err
+}
+
 func (playback Playback) ForkAt(sequence uint64, agentRunID string) (ForkPlan, error) {
+	if _, err := playback.IntegrityDigest(); err != nil {
+		return ForkPlan{}, err
+	}
 	if playback.AgentRunID == "" || agentRunID == playback.AgentRunID || !boundedIdentifier(agentRunID, 128) || sequence == 0 || sequence > uint64(len(playback.Events)) {
 		return ForkPlan{}, ErrInvalidEvent
 	}
@@ -298,11 +447,22 @@ func (playback Playback) ForkAt(sequence uint64, agentRunID string) (ForkPlan, e
 	}
 	hash := sha256.New()
 	for _, event := range playback.Events[:sequence] {
-		fmt.Fprintf(hash, "%s\x00%s\n", event.EventID, event.PayloadDigest)
+		if err := writeIntegrityEvent(hash, event); err != nil {
+			return ForkPlan{}, ErrIntegrity
+		}
 	}
 	return ForkPlan{
 		SourceAgentRunID: playback.AgentRunID, AgentRunID: agentRunID, ThroughSequence: sequence,
 		ParentEventID: checkpoint.EventID, StateFingerprint: checkpoint.StateFingerprint,
 		PrefixDigest: fmt.Sprintf("sha256:%x", hash.Sum(nil)),
 	}, nil
+}
+
+func (plan ForkPlan) Validate() error {
+	if !boundedIdentifier(plan.SourceAgentRunID, 128) || !boundedIdentifier(plan.AgentRunID, 128) ||
+		plan.SourceAgentRunID == plan.AgentRunID || plan.ThroughSequence == 0 ||
+		!boundedIdentifier(plan.ParentEventID, 160) || !validDigest(plan.StateFingerprint) || !validDigest(plan.PrefixDigest) {
+		return ErrInvalidEvent
+	}
+	return nil
 }

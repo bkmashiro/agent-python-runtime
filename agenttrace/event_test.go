@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,6 +90,25 @@ func TestBestEffortDropDoesNotCreateSequenceOrParentGap(t *testing.T) {
 	stored, err := recorder.Record(context.Background(), agenttrace.EventRunStarted, "", json.RawMessage(`{}`), "")
 	if err != nil || stored.Sequence != 1 || len(sink.store.Events()) != 1 || recorder.Dropped() != 1 {
 		t.Fatalf("stored=%+v err=%v events=%d dropped=%d", stored, err, len(sink.store.Events()), recorder.Dropped())
+	}
+}
+
+func TestBeginForkRecordsPortableLineageBeforeContinuation(t *testing.T) {
+	sink := agenttrace.NewMemorySink()
+	plan := agenttrace.ForkPlan{
+		SourceAgentRunID: "source-run", AgentRunID: "child-run", ThroughSequence: 3,
+		ParentEventID: "evt-source", StateFingerprint: "sha256:" + strings.Repeat("a", 64), PrefixDigest: "sha256:" + strings.Repeat("b", 64),
+	}
+	recorder, event, err := (agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: sink}).BeginFork(context.Background(), plan, func() time.Time { return time.Unix(2, 0) })
+	if err != nil || recorder == nil || event.EventType != agenttrace.EventForkStarted || event.Sequence != 1 || event.AgentRunID != "child-run" {
+		t.Fatalf("recorder=%v event=%+v err=%v", recorder, event, err)
+	}
+	if !strings.Contains(string(event.Payload), plan.PrefixDigest) {
+		t.Fatalf("payload=%s", event.Payload)
+	}
+	continued, err := recorder.Record(context.Background(), agenttrace.EventCheckpointCreated, event.EventID, json.RawMessage(`{"state_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}`), "sha256:"+strings.Repeat("c", 64))
+	if err != nil || continued.Sequence != 2 || continued.ParentEventID != event.EventID {
+		t.Fatalf("continued=%+v err=%v", continued, err)
 	}
 }
 

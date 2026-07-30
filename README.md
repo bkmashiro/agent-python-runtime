@@ -232,6 +232,7 @@ guest/                     CPython/WASI source, bootstrap, and build pipeline
 integration/e2e/           real guest integration tests
 eval/                      deterministic agent-workflow evaluation fixtures
 agenttrace/                optional metadata-only Harness trace/replay plugin
+cmd/apyrun-agent-trace/    read-only trace query, stats, JSONL export, and fork planning CLI
 docs/                      architecture, threat model, integration, and results
 ```
 

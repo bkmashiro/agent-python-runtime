@@ -72,32 +72,37 @@ Tracing is observer-only: event data never enters capability grants, policy, app
 
 ## SQLite store and playback
 
-`agenttrace.OpenSQLiteStore` creates a private `0600` SQLite database. It enables foreign keys, WAL, bounded busy timeout, and schema-integrity verification. The store enforces:
+`agenttrace.OpenSQLiteStore` creates a private `0600` SQLite database. It enables foreign keys, WAL, bounded busy timeout, and schema-integrity verification. `OpenSQLiteStoreReadOnly` opens an existing store without migrations, permission changes, or append authority. The store enforces:
 
 - unique `(agent_run_id, sequence)` order;
 - unique immutable event IDs;
 - event digest and identifier validation before append;
 - bounded ordered queries;
 - contiguous-sequence validation in `LoadPlayback`;
-- `ForkAt` plans anchored to an exact event and state fingerprint.
+- `ForkAt` plans anchored to an exact event and state fingerprint;
+- integrity digests over ordered event, payload, and state identities.
 
 `LoadPlayback` is a **structural recorded playback**: it validates and returns the immutable normalized event stream without contacting a provider or executing tools. `ForkAt` proves a branch origin and prefix digest. Re-executing a counterfactual branch still requires the Harness to supply a compatible checkpoint state. Exact provider-output replay is intentionally unavailable in metadata-only mode.
 
 Minimal API:
 
 ```go
-store, err := agenttrace.OpenSQLiteStore("agent-trace.sqlite")
+store, err := agenttrace.OpenSQLiteStore("/absolute/agent-trace.sqlite")
 if err != nil { /* handle */ }
 defer store.Close()
 
-ctx, err = agenttrace.WithPlugin(ctx, agenttrace.Plugin{
+plugin := agenttrace.Plugin{
     Mode: agenttrace.ModeRequired,
     Sink: store,
-})
+}
+ctx, err = agenttrace.WithPlugin(ctx, plugin)
 result, err := agentic.RunDevelopmentTrialForModelWithIdentity(/* ctx, ... */)
 
 playback, err := store.LoadPlayback(ctx, result.TrialID)
 fork, err := playback.ForkAt(12, "counterfactual-run-1")
+
+// The Harness owns compatible checkpoint bytes and continuation semantics.
+forkRecorder, forkEvent, err := plugin.BeginFork(ctx, fork, nil)
 ```
 
 The development pilot exposes the same wiring:
@@ -109,6 +114,20 @@ apyrun-agentic-pilot \
 ```
 
 The database is written to `<out>/agent-trace.sqlite`; the manifest records `trace_mode` and the relative `trace_path`. Default mode is `off`.
+
+### Read-only operator CLI
+
+`apyrun-agent-trace` never opens append authority. Its JSON outputs are versioned as `agent-trace-query/v1`:
+
+```bash
+apyrun-agent-trace --db /absolute/agent-trace.sqlite --op runs
+apyrun-agent-trace --db /absolute/agent-trace.sqlite --op events --run RUN_ID --after 0 --limit 100
+apyrun-agent-trace --db /absolute/agent-trace.sqlite --op stats --run RUN_ID
+apyrun-agent-trace --db /absolute/agent-trace.sqlite --op export --run RUN_ID --out /absolute/events.jsonl
+apyrun-agent-trace --db /absolute/agent-trace.sqlite --op fork --run RUN_ID --sequence 12 --new-run CHILD_RUN_ID
+```
+
+Export files are created exclusively with mode `0600`; existing files are never overwritten. `stats` validates the complete playback before reporting duration, payload bytes, event-type counts, and an integrity digest. `fork` emits a metadata-only `ForkPlan`. `Plugin.BeginFork` records `agent.fork.started` as the child run's first event before a Harness-owned continuation callback writes later events. This proves lineage and append integrity; it does not restore checkpoint bytes or execute the branch by itself.
 
 ## Boundary summary
 

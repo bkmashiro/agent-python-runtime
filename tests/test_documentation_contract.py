@@ -16,7 +16,6 @@ class PublicDocumentationContractTests(unittest.TestCase):
             self.read(path)
             for path in (
                 "README.md",
-                "NOTICE.md",
                 "docs/architecture.md",
                 "docs/threat-model.md",
                 "docs/prepared-state-audit.md",

@@ -24,7 +24,7 @@ import (
 
 const providerDelay = 2 * time.Millisecond
 
-var lifecyclePhases = []string{"instantiate_guest", "_initialize", "runtime_init", "prepare", "execute"}
+var lifecyclePhases = []string{"instantiate_guest", "_initialize", "runtime_init", "attach_host_calls", "prepare", "execute"}
 
 type lifecycleCollector struct {
 	mutex        sync.Mutex
@@ -423,6 +423,7 @@ func runSample(
 		InstantiateGuestNS: durations["instantiate_guest"],
 		InitializeNS:       durations["_initialize"],
 		RuntimeInitNS:      durations["runtime_init"],
+		AttachHostCallsNS:  durations["attach_host_calls"],
 		PrepareNS:          durations["prepare"],
 		ExecuteNS:          durations["execute"],
 		CapabilityNS:       capabilityNS,

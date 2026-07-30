@@ -25,6 +25,7 @@ CURRENT_SOURCE = "d6f6702f9462ec58705f05786a9ea58ba2baba1c"
 CPU_SOURCE = "d6df17be59de626a53c5c374cbb552d0c8d53ca1"
 IO_SOURCE = "23384d236f2e84e5da900d2f50d54a7ba7b96ad5"
 NATIVE_SOURCE = "84d6f3711e4c0e042faea955c4422e0de9ec33f5"
+NUMPY_READY_SOURCE = "5acd56ae2eded751933fb3134cf48c740dc5d12f"
 
 
 def load(path: Path) -> dict:
@@ -192,33 +193,36 @@ def plot_burst(evidence: Path, output: Path) -> None:
 
 
 def plot_native_baseline(evidence: Path, output: Path) -> None:
-    payload = load(evidence / "native-numpy/job-268015/result/SUMMARY.json")
-    assert payload["host_revision"] == NATIVE_SOURCE
-    rows = []
-    for key, label in [("basic", "Basic"), ("numpy_import", "NumPy import")]:
-        fixture = payload[key]
-        rows.extend(
-            [
-                {"fixture": label, "path": "Native cold", "latency_ms": fixture["native"]["cold_total"] / 1e6},
-                {"fixture": label, "path": "Native warm", "latency_ms": fixture["native"]["warm_total"] / 1e6},
-                {"fixture": label, "path": "WASI fresh", "latency_ms": fixture["wasi_fresh"]["total"] / 1e6},
-                {"fixture": label, "path": "WASI prepared", "latency_ms": fixture["wasi_prepared"]["total"] / 1e6},
-            ]
-        )
-    frame = pd.DataFrame(rows)
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.8), sharey=True)
-    order = ["Native cold", "Native warm", "WASI fresh", "WASI prepared"]
-    for ax, fixture in zip(axes, ["Basic", "NumPy import"]):
-        subset = frame[frame["fixture"] == fixture]
-        sns.barplot(data=subset, x="path", y="latency_ms", order=order, ax=ax)
+    old = load(evidence / "native-numpy/job-268015/result/SUMMARY.json")
+    ready = load(evidence / "numpy-ready/job-268054/result/SUMMARY.json")
+    assert old["host_revision"] == NATIVE_SOURCE
+    assert ready["source"] == NUMPY_READY_SOURCE
+    basic = old["basic"]
+    basic_rows = [
+        {"path": "Native cold", "latency_ms": basic["native"]["cold_total"] / 1e6},
+        {"path": "Native warm", "latency_ms": basic["native"]["warm_total"] / 1e6},
+        {"path": "WASI fresh", "latency_ms": basic["wasi_fresh"]["total"] / 1e6},
+        {"path": "WASI CPython-ready", "latency_ms": basic["wasi_prepared"]["total"] / 1e6},
+    ]
+    numpy_rows = [
+        {"path": "Native fresh", "latency_ms": ready["native_fresh"]["e2e_ns"] / 1e6},
+        {"path": "WASI fresh", "latency_ms": ready["wasi"]["wasi-fresh-import"]["e2e_ns"] / 1e6},
+        {"path": "WASI single-use\nCPython-ready", "latency_ms": ready["wasi"]["wasi-single-use-import"]["e2e_ns"] / 1e6},
+        {"path": "WASI COW\nCPython-ready", "latency_ms": ready["wasi"]["wasi-cow-import"]["e2e_ns"] / 1e6},
+        {"path": "WASI COW\nNumPy-ready", "latency_ms": ready["wasi"]["wasi-cow-numpy-ready"]["e2e_ns"] / 1e6},
+    ]
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.0), sharey=True, gridspec_kw={"width_ratios": [1, 1.35]})
+    for ax, rows, title in zip(axes, [basic_rows, numpy_rows], ["Basic request", "NumPy request"]):
+        frame = pd.DataFrame(rows)
+        sns.barplot(data=frame, x="path", y="latency_ms", order=frame["path"].tolist(), ax=ax)
         ax.set_yscale("log")
-        ax.set(xlabel="Deployment path", ylabel="Median request total (ms)", title=fixture)
-        ax.tick_params(axis="x", rotation=20)
+        ax.set(xlabel="Deployment path", ylabel="Median request E2E (ms)", title=title)
+        ax.tick_params(axis="x", rotation=18, labelsize=8)
         ax.grid(axis="y", alpha=0.25)
         for container in ax.containers:
             ax.bar_label(container, fmt="%.3g", padding=3, fontsize=8)
-    axes[1].text(0.02, 0.96, "NumPy is present but not\nimported before WASI readiness", transform=axes[1].transAxes, ha="left", va="top", fontsize=9, bbox={"facecolor": "white", "edgecolor": "0.75", "alpha": 0.9})
-    fig.suptitle("Native CPython and CPython-WASI request boundaries — same Linux node")
+    axes[1].text(0.98, 0.70, "NumPy-ready: import completed\nbefore the COW image was sealed", transform=axes[1].transAxes, ha="right", va="top", fontsize=9, bbox={"facecolor": "white", "edgecolor": "0.75", "alpha": 0.9})
+    fig.suptitle("Native CPython and CPython-WASI request boundaries — gpuvm36")
     save(fig, output / "native-cpython-baseline.png")
 
 

@@ -156,40 +156,95 @@ Representative repeated values:
 
 The near-flat normalized mixed and burst values show that extra concurrency primarily exposes more CPU capacity until inventory saturation. The heavy-tail profile gains some normalized throughput by hiding deterministic waits. Dirty 32 MiB falls from 15.54 to 11.85 req/s per observed core relative to dirty 16 MiB because page touching adds CPU and memory-system work without reducing the fixed two-second hold.
 
-## 8. Native CPython deployment baseline
+## 8. Python and NumPy request lifecycle
 
-A separate direct baseline on `gpuvm36` compares native CPython and CPython-WASI on the same allocated Linux node. It uses Host revision `84d6f3711e4c0e042faea955c4422e0de9ec33f5`. Native CPython 3.14.0 was built from the release source with SHA-256 `88d2da4eed42fa9a5f42ff58a8bc8988881bd6c547e297e46682c2687638a851`; NumPy 2.5.1 came from the CPython 3.14 manylinux x86-64 wheel with SHA-256 `54ad769f17bc2d833b620851989f62054fb9ab93c969d9e1dc3c8e3d56beea21`. The persistent environment is retained under the private Bitbucket experiment root.
+The lifecycle is easiest to read as three composable terms:
 
-The native harness executes the checked-in `guest/bootstrap/agent_runtime` request protocol. “Native cold” includes process spawn, CPython startup, bootstrap import, trusted prepare, execute, JSON framing, and process shutdown. “Native warm” is a persistent interpreter whose bootstrap and trusted prepare have already completed; it measures subsequent request round trips. The WASI totals are Host request totals and use ten samples; native points use 100 samples. All table entries are medians.
+```text
+A = create a ready CPython COW shard, excluding its configured warmup hook
+B = configured pre-COW warmup hook; here, import NumPy
+C = one request after a ready COW slot is available: checkout + execute + response
+```
+
+For the `numpy-ready-v1` run on `gpuvm36`, all three terms come from the same checksum-verified evidence:
+
+```text
+A           = 12,234.896 ms
+B           =  6,204.099 ms
+A + B       = 18,438.994 ms  # factory construction; paid before readiness
+C           =      3.863 ms  # steady request E2E after a NumPy-ready COW hit
+A + B + C   = 18,442.857 ms  # composed first lifecycle, not steady request latency
+```
+
+The practical shard behavior is therefore:
+
+```text
+no-hook CPython-ready shard: ready after A; a NumPy request still pays import in its request path
+numpy-ready shard:  ready after A+B; a matching request pays only C
+```
+
+`A+B` is factory work and is amortized outside the request path. It must not be added to every prepared request.
+
+### 8.1 The direct E2E answer
+
+The most direct comparison requested here is a fresh native process against a hit on an already prepared NumPy COW slot. Both run the checked-in agent protocol and produce NumPy version `2.5.1`, `prepared=41`, and the expected `arange(1000)` sum.
+
+```text
+Native fresh:            324.067 ms
+WASI NumPy-ready COW hit:  3.863 ms
+
+saved:                    320.205 ms
+native / COW-hit ratio:    83.90×
+request-latency reduction: 98.808%
+```
+
+This is a deployment-lifecycle result, not a claim that WASM executes arbitrary NumPy kernels 83.90× faster. The native path deliberately creates a new CPython process and imports NumPy for each sample; the COW path deliberately hits a shard that completed CPython and NumPy initialization before readiness.
 
 ![Native CPython deployment baseline](../assets/scheduler-experiments/native-cpython-baseline.png)
 
-The figure uses a logarithmic latency axis because the measured paths span more than four orders of magnitude.
+The logarithmic axis is intentional because the paths span several orders of magnitude.
 
-| Fixture / path | Request total, ms | Runtime init, ms | Prepare, ms | Execute, ms |
-|---|---:|---:|---:|---:|
-| Basic, native cold | 171.507 | n/a | 0.031 | included |
-| Basic, native warm | 0.187 | precompleted | precompleted | included |
-| Basic, WASI fresh | 5647.797 | 5618.354 | 0.258 | 1.190 |
-| Basic, WASI prepared | 1.705 | precompleted | 0.315 | 1.278 |
-| NumPy, native cold | 324.132 | n/a | 147.557 | included |
-| NumPy, native warm after import | 0.210 | precompleted | precompleted | included |
-| NumPy, WASI fresh | 11734.886 | 5710.006 | 6004.357 | 1.229 |
-| NumPy, WASI prepared | 6200.491 | precompleted | 6199.138 | 1.229 |
+### 8.2 Full NumPy boundary matrix
 
-For the basic fixture, prepared CPython-WASI removes 5646.09 ms from the measured request path relative to fresh CPython-WASI, a 99.970% reduction and a 3312.99× fresh/prepared ratio. The fresh WASI path is 32.93× the native cold deployment path; the prepared WASI request is 9.14× the native warm request. These ratios describe this tiny protocol fixture, not arbitrary Python execution speed.
+All entries below are medians from Slurm job `268054` on `gpuvm36`. Native uses 100 samples; every WASI path uses 10 execute samples. Request E2E begins at the harness request call and ends when the result is returned; asynchronous replacement-slot refill is not charged to the completed request.
 
-The NumPy result has a different and important boundary. The `numpy-core` artifact contains NumPy 2.5.1, but the prepared pool preinitializes the CPython runtime only; it does **not** import NumPy before the instance becomes ready. Consequently, `import numpy` remains in trusted prepare and costs about 6.20 seconds on every single-use prepared Guest. Preparation reduces NumPy fresh-to-prepared request time by only 47.16% (1.89×), primarily by removing the separate CPython runtime initialization. It does not remove NumPy import. The native warm point has NumPy cached in a persistent interpreter, so comparing its 0.210 ms request directly with the current WASI prepared 6200.491 ms request would mix different prepared-state boundaries and is not reported as a meaningful speedup ratio.
+| NumPy path | Request E2E, ms | Request-path import, ms | Execute, ms |
+|---|---:|---:|---:|
+| Native fresh process | 324.067 | 146.887 | included in process total |
+| WASI fresh | 11,728.494 | 5,995.095 | 1.222 |
+| WASI single-use CPython-ready | 6,029.889 | 6,028.541 | 1.230 |
+| WASI COW CPython-ready | 6,218.871 | 6,216.111 | 1.273 |
+| **WASI COW NumPy-ready** | **3.863** | **0** | **3.568** |
 
-The NumPy artifact remains `profile-candidate`, not `production-safe`. A valid claim that NumPy itself is prewarmed requires a future prepared-image profile that imports NumPy before readiness and then verifies restore isolation and COW behavior.
+The two CPython-ready controls are retained deliberately. They show that COW alone does not remove NumPy import: if the image is sealed before `import numpy`, the request still pays about 6.2 seconds. The new `numpy-ready-v1` profile executes the allowlisted warmup before canonical memory is sealed, records warmup generation SHA-256 `e2dd3c1e9b5bc8593c7eb878db039b101bcfef27174a2b13a4ea3e934e14a7d6`, and omits the request prepare phase entirely.
 
-The checksum-verified private evidence is:
+The COW evidence records a fixed 128 MiB virtual image, a restore for every replacement slot, and matching `numpy-ready-v1` fixture/image identities. This closes the benchmark lifecycle and repeated reset path, but the NumPy artifact remains `profile-candidate`, not `production-safe`; it does not establish arbitrary package support or mutation safety for every NumPy global.
+
+### 8.3 Basic Python control retained
+
+The earlier basic fixture remains useful for separating CPython initialization from NumPy initialization:
+
+| Basic path | Request E2E, ms |
+|---|---:|
+| Native cold | 171.507 |
+| Native warm persistent interpreter | 0.187 |
+| WASI fresh | 5,647.797 |
+| WASI single-use CPython-ready | 1.705 |
+
+These basic results use the earlier accepted job `268015`; they are not relabeled as COW evidence.
+
+### 8.4 Evidence and environment
+
+The accepted NumPy-ready source revision is `5acd56ae2eded751933fb3134cf48c740dc5d12f`. The Guest artifact SHA-256 is `5480b742d270890cab1e8f01a841994e28655e40b4c93ffd18028d84b55bf04c`; it is a fixed-memory `wasm32-wasip1` reactor containing CPython 3.14.0 and NumPy 2.5.1. The native executable SHA-256 remains `3e73fdd5b39701a7bab84063c0c4c73c857b2a5a002d015a5c4dac5f4e4c9222`.
+
+Private evidence:
 
 ```text
 .artifacts-private/native-numpy/job-268015/
+.artifacts-private/numpy-ready/job-268054/
 ```
 
-Slurm job `268015` completed with wrapper exit zero and all six benchmark JSON files passed schema/semantic and checksum validation. Slurm accounting (`sacct`) was unavailable because its persistent database connection failed; `scontrol`, wrapper exit, per-command GNU time records, payload/result manifests, and JSON validation form the retained audit chain. Identity job `268018` additionally records the native executable, NumPy path, Linux/glibc platform, bundled OpenBLAS linkage, and extension `ldd` output.
+Job `268054` completed with Slurm state `COMPLETED`, Slurm exit `0:0`, wrapper exit zero, and per-command GNU time exit zero. Payload, artifact bundle, supply-chain, SBOM schema, result checksums, benchmark schemas, and independently recomputed medians all passed. No GitHub Actions workflow was triggered.
 
 ## 9. Production policy implications
 

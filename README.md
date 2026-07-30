@@ -4,21 +4,120 @@ A capability-controlled CPython/WASI runtime for executing generated Python with
 
 The agent framework stays outside the sandbox. It supplies code and JSON inputs; the Go host owns runtime limits, tool grants, credentials, instance lifecycle, and receipts.
 
-## Why this project
+## Design
 
-Agent-generated Python is useful for local control flow, filtering, aggregation, and multi-step data processing. Running it in a normal Python process also gives it the process's filesystem, environment, network, and subprocess authority. This runtime places CPython in a WebAssembly guest and exposes only explicitly registered host capabilities.
+### Why Python?
+
+Agents are good at choosing a plan. They are expensive and inconsistent at replaying every mechanical step of that plan. Once the procedure is known, run it as code.
+
+Python is the execution language because models already write it well, it expresses loops and data transforms compactly, and the same snippet can call typed Host tools without giving the Guest their credentials or transports. The model decides *what* to do; Python performs the predictable part once.
+
+| Keyword | Use it for |
+|---|---|
+| `CODE FIRST` | Known, deterministic work: filter, join, validate, aggregate, retry, branch. |
+| `TOOLS AS FUNCTIONS` | Project granted Host tools into Python with typed arguments and ordinary return values. |
+| `HOST-OWNED EFFECTS` | Keep credentials, commit policy, receipts, rollback, and approval outside model code. |
+| `BOUNDED CONCURRENCY` | Let the Host cap active Guests and parallel I/O instead of allowing unbounded fan-out. |
+| `RESET AFTER RUN` | Start the next request from a clean prepared image; never return a served slot to the ready pool. |
+
+The [2026-07-28 MCP specification](https://modelcontextprotocol.io/specification/2026-07-28/changelog) removed protocol-level sessions and made the core request/response protocol stateless. That fits this runtime: an adapter can normalize an MCP `tools/list` result into a Host-owned catalog, then project accepted JSON Schemas as Python functions. If a tool needs cross-call state, it passes an explicit server-minted handle as an ordinary argument. The Guest does not own an MCP transport session.
+
+A projected tool looks like a normal function:
+
+```python
+from host_tools import notes_search
+
+notes = notes_search(query="WASM isolation", limit=5)
+result = {"titles": [note["title"] for note in notes]}
+```
+
+The Host still owns the catalog snapshot, grant, call limit, credential, timeout, effect class, and receipt. Unsupported or ambiguous schemas are not exposed automatically.
+
+### Small examples
+
+**Predictable data work**
+
+```python
+# inputs = {"orders": [{"price": 12}, {"price": 30}, {"price": 7}]}
+paid = [row for row in inputs["orders"] if row["price"] >= 10]
+result = {"count": len(paid), "total": sum(row["price"] for row in paid)}
+```
+
+One model turn becomes one bounded run. There is no model round-trip for each filter, sum, or branch.
+
+**Bounded parallel reads**
+
+```python
+from agent_runtime import tools
+
+items = tools.fetch_many([
+    {"request_id": "item-1", "target": "catalog", "path": "/items/1"},
+    {"request_id": "item-2", "target": "catalog", "path": "/items/2"},
+    {"request_id": "item-3", "target": "catalog", "path": "/items/3"},
+])
+result = {"items": items}
+```
+
+`fetch_many` is one Guest call. The Host executes it in bounded waves, preserves input order, and emits receipts. Guest code never receives a URL, socket, proxy setting, or credential.
+
+**Effects and rollback**
+
+Each granted tool declares one effect level:
+
+```text
+read_only      no state change
+reversible     exact rollback is available
+compensatable  recovery uses a separate forward action
+irreversible   no rollback; Host approval policy applies
+```
+
+The policy is also Host-owned: `DENY`, `AUTO_COMMIT`, `AGENT_COMMIT_REQUIRED`, or `USER_APPROVAL_REQUIRED`. Guest Python can request an operation; it cannot approve itself or relabel an irreversible effect as reversible.
+
+### Output
+
+Every run returns one JSON envelope:
+
+```json
+{
+  "status": "ok",
+  "result": {"count": 2, "total": 42},
+  "receipts": [],
+  "metrics": {
+    "guest_time_ms": 1.25,
+    "capability_calls": 0,
+    "result_bytes": 22
+  },
+  "error": null
+}
+```
+
+Tool calls add Host-authored receipts, for example:
+
+```json
+{
+  "receipt_id": "receipt-01",
+  "run_id": "host-run-01",
+  "capability": "notes.search",
+  "operation_index": 0,
+  "outcome": "ok"
+}
+```
+
+Failures return `status: "error"` with a bounded error object. Model text is never accepted as proof that a tool ran, committed, rolled back, or compensated.
+
+### Concurrency and reset
+
+The Host controls maximum memory, CPU, admission, ready inventory, refill, and tool-call concurrency. Execution can use a fresh Guest, a never-served preinitialized Guest, or a Linux COW-ready slot. Prepared profiles such as `numpy-ready-v1` move deterministic setup before readiness. Every served slot is discarded. A prepared pool creates a clean replacement; the COW path restores that replacement from the sealed image. This keeps request state isolated while preserving fast checkout.
 
 Current properties:
 
 - CPython 3.14 targeting `wasm32-wasip1`;
-- Go host with a backend-neutral `Runner`/`Factory` interface and a wazero backend;
-- fresh guest per request by default;
-- optional single-use prepared and Linux COW-ready execution strategies;
-- strict JSON request and response contracts;
-- host-owned time, memory, output, and capability-call limits;
-- no ambient guest filesystem, environment, socket, process, or credential access;
+- backend-neutral Go `Runner`/`Factory` interface with a wazero backend;
+- strict JSON request, result, tool-catalog, transaction, and evidence contracts;
+- no ambient Guest filesystem, environment, socket, process, or credential access;
+- fresh, single-use prepared, and Linux COW-ready execution strategies;
 - provenance manifests, source locks, checksums, SBOMs, and Linux/WASI integration tests;
-- optional `numpy-core` profile, including a `numpy-ready-v1` pre-COW warmup profile.
+- optional `numpy-core` artifact and `numpy-ready-v1` pre-COW warmup profile.
 
 ## Quick start
 

@@ -25,7 +25,9 @@ V1 must prevent or bound:
 - stale run-local state contaminating a later run;
 - invalid pointer/length reads and writes;
 - unhealthy instances returning to the pool;
-- receipts that claim operations not mediated by the Host.
+- receipts that claim operations not mediated by the Host;
+- Guest-forged Agent invocation or execution provenance;
+- accidental raw prompt/provider/tool content in the portable trace store.
 
 ## Non-goals
 
@@ -46,6 +48,14 @@ Unsupported hard limits are rejected or documented as unsupported; they are not 
 ### RunRequest authority injection
 
 Control: schemas reject unknown and authority-bearing fields. `RunConfig` is constructed by trusted Host code and is not decoded from model JSON.
+
+### Execution provenance forgery
+
+Control: `InvocationRef` is supplied through Host context, never `RunRequest`. A Guest response containing `execution_ref` is rejected before the Host projects its own reference. Capability receipts and transaction evidence bind to the Host `execution_id`, not the Guest `run_id`.
+
+### Portable trace disclosure
+
+Control: the optional Harness trace plugin persists only bounded normalized metadata and SHA-256 digests. Recursive payload validation rejects raw prompt, provider-body, source-code, arguments, observations, and content field names. Raw diagnostics remain separate private artifacts and are not copied into SQLite.
 
 ### WASI ambient authority
 

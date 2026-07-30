@@ -293,6 +293,15 @@ func (broker *Broker) CallCount() uint32 {
 	return total
 }
 
+func (broker *Broker) RunIdentity() string {
+	if broker == nil {
+		return ""
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	return broker.config.RunIdentity
+}
+
 func (broker *Broker) Receipts() []receipt.Receipt {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()

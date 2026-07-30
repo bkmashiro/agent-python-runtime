@@ -364,6 +364,14 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, err
 	}
+	var executionRef *runtimeconfig.ExecutionRef
+	if invocationRef, ok := enginecontract.InvocationRefFromContext(ctx); ok {
+		codeDigest := sha256.Sum256([]byte(runRequest.Code))
+		candidate := runtimeconfig.ExecutionRef{
+			InvocationRef: invocationRef, ExecutedCodeSHA256: fmt.Sprintf("sha256:%x", codeDigest[:]),
+		}
+		executionRef = &candidate
+	}
 
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
@@ -376,6 +384,9 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		}
 		if broker == nil {
 			return nil, errors.New("capability broker factory returned nil")
+		}
+		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
+			return nil, ErrExecutionIdentityMismatch
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
@@ -450,11 +461,19 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
+	var receipts []receipt.Receipt
+	var capabilityCalls uint32
 	if broker != nil {
-		payload, err = mergeHostEvidence(payload, broker.Receipts(), broker.CallCount(), engine.config.MaxResponseBytes)
-		if err != nil {
-			return nil, err
-		}
+		receipts, capabilityCalls = broker.Receipts(), broker.CallCount()
+	}
+	_, guestValidationErr := runtimeconfig.DecodeAndValidateGuestRunResponse(runRequest, payload)
+	if guestValidationErr != nil && !errors.Is(guestValidationErr, runtimeconfig.ErrRunResultSchemaMismatch) {
+		finalizeReason = "invalid_output"
+		return payload, guestValidationErr
+	}
+	payload, err = projectHostEvidence(payload, receipts, capabilityCalls, executionRef, engine.config.MaxResponseBytes)
+	if err != nil {
+		return nil, err
 	}
 	decodedResponse, validationErr := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload)
 	if validationErr != nil {
@@ -515,10 +534,25 @@ func hostCall(
 	return int32(len(response))
 }
 
+var (
+	ErrGuestClaimedExecutionRef  = errors.New("Guest response claimed Host execution reference")
+	ErrExecutionIdentityMismatch = errors.New("Host execution identity mismatch")
+)
+
 func mergeHostEvidence(
 	payload []byte,
 	receipts []receipt.Receipt,
 	capabilityCalls uint32,
+	maxResponse uint32,
+) ([]byte, error) {
+	return projectHostEvidence(payload, receipts, capabilityCalls, nil, maxResponse)
+}
+
+func projectHostEvidence(
+	payload []byte,
+	receipts []receipt.Receipt,
+	capabilityCalls uint32,
+	executionRef *runtimeconfig.ExecutionRef,
 	maxResponse uint32,
 ) ([]byte, error) {
 	var envelope map[string]json.RawMessage
@@ -531,12 +565,29 @@ func mergeHostEvidence(
 	for key := range envelope {
 		switch key {
 		case "status", "result", "receipts", "metrics", "error":
+		case "execution_ref":
+			return nil, ErrGuestClaimedExecutionRef
 		default:
 			return nil, fmt.Errorf("guest response contains non-canonical field %q", key)
 		}
 	}
 	if receipts == nil {
 		receipts = []receipt.Receipt{}
+	}
+	if executionRef != nil {
+		if executionRef.Validate() != nil {
+			return nil, runtimeconfig.ErrInvalidInvocationRef
+		}
+		for _, hostReceipt := range receipts {
+			if hostReceipt.RunID != executionRef.ExecutionID {
+				return nil, ErrExecutionIdentityMismatch
+			}
+		}
+		encodedRef, err := json.Marshal(executionRef)
+		if err != nil {
+			return nil, fmt.Errorf("encode Host execution reference: %w", err)
+		}
+		envelope["execution_ref"] = encodedRef
 	}
 	encodedReceipts, err := json.Marshal(receipts)
 	if err != nil {

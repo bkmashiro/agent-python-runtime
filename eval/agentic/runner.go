@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bkmashiro/agent-python-runtime/agenttrace"
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
 const (
@@ -223,7 +226,7 @@ func runDevelopmentTrialForModelWithIdentity(
 	treatment DevelopmentTreatment,
 	pythonFactory PythonWorkflowFactory,
 	captureRaw bool,
-) (TrialResult, error) {
+) (finalResult TrialResult, returnErr error) {
 	if task.Split != "dev" || !condition.valid() || !limits.valid() || replicate > 1000 || !treatment.Implemented() ||
 		!supportedDevelopmentModel(model) ||
 		limits.MaxProviderCalls < uint32(len(task.Interaction.Turns)) {
@@ -418,6 +421,26 @@ func runDevelopmentTrialForModelWithIdentity(
 	if tools.FileSystem() != nil {
 		result.InitialStateDigest = tools.FileSystem().Digest()
 	}
+	trialTrace, traceErr := beginTrialTrace(ctx, result)
+	if traceErr != nil {
+		return result, traceErr
+	}
+	if trialTrace != nil {
+		defer func() {
+			returnErr = joinTraceError(returnErr, trialTrace.complete(ctx, finalResult, returnErr))
+		}()
+	}
+	routePayload := map[string]any{"requested_condition": condition, "execution_condition": executionCondition, "source": "static"}
+	if result.Route != nil {
+		routePayload["source"] = "model_router"
+		routePayload["route"] = result.Route.Route
+		routePayload["reason_code"] = result.Route.ReasonCode
+		routePayload["router_prompt_digest"] = result.Route.RouterPromptDigest
+		routePayload["router_surface_digest"] = result.Route.RouterSurfaceDigest
+	}
+	if err := trialTrace.record(ctx, agenttrace.EventRoutingDecided, routePayload, ""); err != nil {
+		return result, err
+	}
 	if canExecute {
 		var workflow PythonWorkflow
 		if executionCondition != ConditionDirect {
@@ -490,10 +513,38 @@ func runDevelopmentTrialForModelWithIdentity(
 					if attempt == 0 {
 						toolChoice = "required"
 					}
+					historyDigest, digestErr := traceDigest(history)
+					if digestErr != nil {
+						return result, ErrAgenticRun
+					}
+					if err := trialTrace.record(ctx, agenttrace.EventLLMRequestStarted, map[string]any{
+						"turn_seq": turnIndex, "attempt": attempt + 1, "tool_choice": toolChoice,
+						"history_digest": historyDigest, "surface_digest": surfaceDigest,
+					}, ""); err != nil {
+						return result, err
+					}
+					evidenceBefore := len(session.Evidence())
 					parsed, exchangeErr := session.Exchange(ctx, history, surface, toolChoice, executionCondition != ConditionPython, mapping)
+					exchanges := session.Evidence()
+					if len(exchanges) > evidenceBefore {
+						exchange := exchanges[len(exchanges)-1]
+						if err := trialTrace.record(ctx, agenttrace.EventLLMResponseReceived, map[string]any{
+							"turn_seq": turnIndex, "attempt": attempt + 1, "status_code": exchange.StatusCode,
+							"request_digest": exchange.RequestDigest, "response_digest": exchange.ResponseDigest,
+							"input_tokens": exchange.Usage.InputTokens, "output_tokens": exchange.Usage.OutputTokens,
+						}, ""); err != nil {
+							return result, err
+						}
+					}
 					if exchangeErr != nil {
 						result.ErrorCode = classifyTrialError(exchangeErr)
 						break
+					}
+					if err := trialTrace.record(ctx, agenttrace.EventLLMOutputObserved, map[string]any{
+						"turn_seq": turnIndex, "attempt": attempt + 1, "call_count": len(parsed.Calls),
+						"has_message": parsed.HasMessage, "refused": parsed.Refused, "text_digest": parsed.TextDigest,
+					}, ""); err != nil {
+						return result, err
 					}
 					if parsed.TextDigest != "" {
 						result.TextDigests = append(result.TextDigests, parsed.TextDigest)
@@ -519,7 +570,7 @@ func runDevelopmentTrialForModelWithIdentity(
 						break
 					}
 					outputs := make([]any, 0, len(parsed.Calls))
-					for _, call := range parsed.Calls {
+					for callIndex, call := range parsed.Calls {
 						var observation json.RawMessage
 						pythonRunSucceeded := false
 						if call.CanonicalName == "run_python" {
@@ -550,10 +601,46 @@ func runDevelopmentTrialForModelWithIdentity(
 								repairPending = false
 							}
 							rawPython := RawPythonRun{Turn: turnIndex, Code: arguments.Code}
+							guestRunID := fmt.Sprintf("agentic-python-%d", result.PythonAttempts)
+							trialSuffix := strings.TrimPrefix(result.TrialID, "dev_")
+							invocationID := fmt.Sprintf("inv_%s_%d_%d_%d", trialSuffix, turnIndex, call.OutputItemSeq, callIndex)
+							executionID := fmt.Sprintf("exec_%s_%d", trialSuffix, result.PythonAttempts)
+							invocationRef := runtimeconfig.InvocationRef{
+								AgentRunID: result.TrialID, TurnSeq: uint32(turnIndex), OutputItemSeq: call.OutputItemSeq, SegmentSeq: 0,
+								InvocationID: invocationID, InvocationAttempt: 1, ExecutionID: executionID,
+							}
+							pythonContext, refErr := engine.WithInvocationRef(ctx, invocationRef)
+							if refErr != nil {
+								return result, refErr
+							}
+							if err := trialTrace.record(ctx, agenttrace.EventRuntimeStarted, map[string]any{
+								"turn_seq": turnIndex, "output_item_seq": call.OutputItemSeq, "segment_seq": 0,
+								"invocation_id": invocationID, "invocation_attempt": 1, "execution_id": executionID,
+								"source_segment_sha256": digest([]byte(arguments.Code)),
+							}, ""); err != nil {
+								return result, err
+							}
 							pythonResult, runErr := workflow.Execute(
-								ctx, fmt.Sprintf("agentic-python-%d", result.PythonAttempts), arguments.Code,
+								pythonContext, guestRunID, arguments.Code,
 								limits.MaxToolCalls-uint32(usedCalls),
 							)
+							completionStatus := "ok"
+							if runErr != nil || !pythonResult.Success {
+								completionStatus = "error"
+							}
+							completionPayload := map[string]any{
+								"turn_seq": turnIndex, "output_item_seq": call.OutputItemSeq, "segment_seq": 0,
+								"invocation_id": invocationID, "invocation_attempt": 1, "execution_id": executionID,
+								"status": completionStatus, "run_error": runErr != nil, "error_code": pythonResult.ErrorCode,
+								"request_digest": pythonResult.RequestDigest, "response_digest": pythonResult.ResponseDigest,
+								"result_digest": pythonResult.ResultDigest, "capability_calls": pythonResult.CapabilityCalls,
+							}
+							if pythonResult.ExecutionRef != nil {
+								completionPayload["executed_code_sha256"] = pythonResult.ExecutionRef.ExecutedCodeSHA256
+							}
+							if err := trialTrace.record(ctx, agenttrace.EventRuntimeCompleted, completionPayload, ""); err != nil {
+								return result, err
+							}
 							if runErr != nil {
 								if result.RawDebug != nil {
 									rawPython.Error = runErr.Error()
@@ -611,10 +698,33 @@ func runDevelopmentTrialForModelWithIdentity(
 								break
 							}
 							directOrdinal++
+							callID := fmt.Sprintf("agentic-direct-%d", directOrdinal)
+							argumentsDigest := digest(call.Arguments)
+							if err := trialTrace.record(ctx, agenttrace.EventDirectToolStarted, map[string]any{
+								"turn_seq": turnIndex, "output_item_seq": call.OutputItemSeq, "call_index": callIndex,
+								"call_id_digest": digest([]byte(callID)), "tool": call.CanonicalName, "arguments_digest": argumentsDigest,
+							}, ""); err != nil {
+								return result, err
+							}
 							observation, err = tools.InvokeDirect(
-								ctx, fmt.Sprintf("agentic-direct-%d", directOrdinal), fmt.Sprintf("host:%d", directOrdinal),
+								ctx, callID, fmt.Sprintf("host:%d", directOrdinal),
 								call.CanonicalName, call.Arguments,
 							)
+							toolStatus := "ok"
+							if err != nil {
+								toolStatus = "error"
+							}
+							observationDigest := ""
+							if len(observation) != 0 {
+								observationDigest = digest(observation)
+							}
+							if traceErr := trialTrace.record(ctx, agenttrace.EventDirectToolCompleted, map[string]any{
+								"turn_seq": turnIndex, "output_item_seq": call.OutputItemSeq, "call_index": callIndex,
+								"call_id_digest": digest([]byte(callID)), "tool": call.CanonicalName,
+								"status": toolStatus, "host_error": err != nil, "observation_digest": observationDigest,
+							}, ""); traceErr != nil {
+								return result, traceErr
+							}
 							if err != nil {
 								if errors.Is(err, ErrBenchmarkToolOperation) {
 									result.ErrorCode = "host_application_error"
@@ -665,6 +775,21 @@ func runDevelopmentTrialForModelWithIdentity(
 				if !turnComplete {
 					result.ErrorCode = "provider_turn_budget_exceeded"
 					break
+				}
+				stateFingerprint := ""
+				if tools.FileSystem() != nil {
+					stateFingerprint = tools.FileSystem().Digest()
+				} else {
+					stateFingerprint, err = traceDigest(tools.Trace())
+					if err != nil {
+						return result, ErrAgenticRun
+					}
+				}
+				if err := trialTrace.record(ctx, agenttrace.EventCheckpointCreated, map[string]any{
+					"turn_seq": turnIndex, "state_digest": stateFingerprint,
+					"stateful_tool_calls": countStatefulCalls(tools.Trace()),
+				}, stateFingerprint); err != nil {
+					return result, err
 				}
 			}
 			if workflow != nil {
@@ -721,6 +846,20 @@ func runDevelopmentTrialForModelWithIdentity(
 		return result, metricsErr
 	}
 	result.Metrics = &metrics
+	finalStateFingerprint := result.FinalStateDigest
+	if finalStateFingerprint == "" {
+		finalStateFingerprint, err = traceDigest(trace)
+		if err != nil {
+			return result, ErrAgenticRun
+		}
+	}
+	if err := trialTrace.record(ctx, agenttrace.EventFinalStateObserved, map[string]any{
+		"state_digest": finalStateFingerprint, "passed": result.Passed, "error_code": result.ErrorCode,
+		"provider_calls": result.ProviderCalls, "tool_calls": result.ToolCalls, "python_runs": result.PythonRuns,
+		"input_tokens": result.Usage.InputTokens, "output_tokens": result.Usage.OutputTokens,
+	}, finalStateFingerprint); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 

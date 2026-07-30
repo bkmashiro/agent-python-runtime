@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bkmashiro/agent-python-runtime/agenttrace"
 	"github.com/bkmashiro/agent-python-runtime/eval/agentic"
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 )
@@ -53,6 +54,8 @@ type pilotSummary struct {
 	PythonRuns              uint32          `json:"python_runs"`
 	Usage                   provider.Usage  `json:"usage"`
 	Artifacts               []artifactEntry `json:"artifacts"`
+	TraceMode               agenttrace.Mode `json:"trace_mode"`
+	TracePath               string          `json:"trace_path,omitempty"`
 }
 
 func (summary *pilotSummary) recordTrialMetrics(result agentic.TrialResult) error {
@@ -91,7 +94,7 @@ type executionScope struct {
 	Bounds     executionBounds
 }
 
-func run(ctx context.Context, args []string, deps dependencies) error {
+func run(ctx context.Context, args []string, deps dependencies) (runErr error) {
 	flags := flag.NewFlagSet("apyrun-agentic-pilot", flag.ContinueOnError)
 	datasetRoot := flags.String("dataset", "", "agentic dataset root")
 	planPath := flags.String("plan", "", "frozen development pilot plan")
@@ -103,8 +106,12 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	diagnosticTask := flags.String("diagnostic-task", "", "run one authorized development task across all three conditions")
 	diagnosticCondition := flags.String("diagnostic-condition", "", "restrict a diagnostic task to direct, python, or hybrid")
 	treatmentPath := flags.String("treatment", "", "frozen non-baseline treatment for a diagnostic or fixed canary")
+	traceMode := flags.String("trace-mode", string(agenttrace.ModeOff), "portable Agent trace: off, best-effort, or required")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *datasetRoot == "" || *planPath == "" || *activationPath == "" || *guestPath == "" || *outputRoot == "" || len(*repositoryCommit) != 40 {
 		return errors.New("invalid arguments")
+	}
+	if agenttrace.Mode(*traceMode) != agenttrace.ModeOff && agenttrace.Mode(*traceMode) != agenttrace.ModeBestEffort && agenttrace.Mode(*traceMode) != agenttrace.ModeRequired {
+		return errors.New("invalid trace mode")
 	}
 	plan, dataset, err := agentic.LoadDevelopmentPilotPlan(*planPath, *datasetRoot)
 	if err != nil {
@@ -168,6 +175,22 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 	if err := os.Mkdir(*outputRoot, 0o700); err != nil {
 		return err
 	}
+	tracePath := ""
+	var traceStore *agenttrace.SQLiteStore
+	if agenttrace.Mode(*traceMode) != agenttrace.ModeOff {
+		tracePath = filepath.Join(*outputRoot, "agent-trace.sqlite")
+		traceStore, err = agenttrace.OpenSQLiteStore(tracePath)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			runErr = errors.Join(runErr, traceStore.Close())
+		}()
+		ctx, err = agenttrace.WithPlugin(ctx, agenttrace.Plugin{Mode: agenttrace.Mode(*traceMode), Sink: traceStore})
+		if err != nil {
+			return err
+		}
+	}
 	trialsRoot := filepath.Join(*outputRoot, "trials")
 	if err := os.Mkdir(trialsRoot, 0o700); err != nil {
 		return err
@@ -187,7 +210,10 @@ func run(ctx context.Context, args []string, deps dependencies) error {
 		Version: "agentic-development-pilot-result/v3", Mode: scope.Mode, Status: "complete", DecisionEligible: false,
 		PlanDigest: plan.Digest, ActivationDigest: activation.Digest, TreatmentID: treatment.ID, TreatmentDigest: treatment.Digest,
 		Bounds:    scope.Bounds,
-		Artifacts: make([]artifactEntry, 0, scope.Bounds.TrialCount),
+		Artifacts: make([]artifactEntry, 0, scope.Bounds.TrialCount), TraceMode: agenttrace.Mode(*traceMode),
+	}
+	if tracePath != "" {
+		summary.TracePath = filepath.Base(tracePath)
 	}
 	for _, taskID := range scope.TaskIDs {
 		task, exists := tasks[taskID]

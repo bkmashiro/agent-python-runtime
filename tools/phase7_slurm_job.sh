@@ -101,8 +101,8 @@ test "$actual_file_count" -eq "$((${#expected_payload_files[@]} + 1))"
 cmp -- "$expected_payload_manifest" "$INPUT/payload.SHA256"
 (cd "$INPUT" && sha256sum --check payload.SHA256)
 test "$(tr -d '\r\n' < "$INPUT/SOURCE_COMMIT")" = "$SOURCE_COMMIT"
-grep -Fx "build\tvcs.revision=$SOURCE_COMMIT" "$INPUT/BINARY_METADATA.txt"
-grep -Fx 'build\tvcs.modified=false' "$INPUT/BINARY_METADATA.txt"
+grep -Fx $'\tbuild\tvcs.revision='"$SOURCE_COMMIT" "$INPUT/BINARY_METADATA.txt"
+grep -Fx $'\tbuild\tvcs.modified=false' "$INPUT/BINARY_METADATA.txt"
 
 git clone "$INPUT/source.bundle" "$REPO" >/dev/null 2>&1
 test "$(git -C "$REPO" rev-parse HEAD)" = "$SOURCE_COMMIT"

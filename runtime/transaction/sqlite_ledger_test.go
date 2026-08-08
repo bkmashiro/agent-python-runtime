@@ -146,6 +146,14 @@ func TestSQLiteLedgerPersistsReconciliationObservationAcrossReopen(t *testing.T)
 	}
 	defer reopened.Close()
 	now = time.Unix(41, 0).UTC()
+	currentAttempt, err := reopened.GetAttempt(dispatch.Attempt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameDigest := testDigest("same-evidence")
+	if _, err = reopened.reconcileAttempt(dispatch.Attempt.ID, currentAttempt.Version, AttemptSucceeded, sameDigest, sameDigest, now); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("identical sqlite evidence err=%v", err)
+	}
 	recovered := NewCoordinator(reopened, &sequenceIDs{}, func() time.Time { return now }, nil)
 	completion, err := recovered.ReconcileDispatch(ReconcileDispatchRequest{
 		OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded,

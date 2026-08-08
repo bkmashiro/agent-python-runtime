@@ -753,7 +753,8 @@ func (controller *SendController) Reconcile(ctx context.Context, credential tran
 	}
 	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{
 		OperationID: operationID, AttemptID: attemptID, Outcome: transaction.DispatchSucceeded,
-		ProviderReceiptDigest: receipt.ReceiptDigest, ObservationDigest: receipt.ReceiptDigest,
+		ProviderReceiptDigest: receipt.ReceiptDigest,
+		ObservationDigest:     digest([]byte("fakemail.readback/v1\x00" + receipt.ProviderMessageID + "\x00" + receipt.ManifestDigest + "\x00" + receipt.ReceiptDigest)),
 	})
 	if err != nil {
 		return SendReceipt{}, err

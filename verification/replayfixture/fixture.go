@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	Version         = "replay-fixture/v1"
-	fixtureArtifact = "replayfixture.counter/v1\nstate:int64,applied[]\noperations:add-checked-int64,set\nreceipt:step-id,time,nonce,value\n"
+	Version         = "replay-fixture/v2"
+	fixtureArtifact = "replayfixture.counter/v2\nstate:int64,applied[unique,max=2048],initial-applied-max=1024\ninputs-max=1024\noperations:add-checked-int64,set\nreceipt:step-id,time,nonce,value\n"
 	maxSteps        = 1024
+	maxApplied      = 2 * maxSteps
 )
 
 var (
@@ -144,6 +145,9 @@ func ReplayInputInjection(recording Recording) (Report, State, error) {
 }
 
 func ReplayStateEquivalent(recording Recording, authoritativeFinal State) (Report, State, error) {
+	if err := validateState(authoritativeFinal, maxApplied); err != nil {
+		return Report{}, State{}, err
+	}
 	report, final, err := ReplayInputInjection(recording)
 	if err != nil {
 		return Report{}, State{}, err
@@ -176,6 +180,9 @@ func verifyRecording(recording Recording) error {
 	if err := validateConfig(config); err != nil {
 		return ErrRecordingIntegrity
 	}
+	if err := validateState(recording.FinalState, maxApplied); err != nil || len(recording.Receipts) != len(recording.Inputs) {
+		return ErrRecordingIntegrity
+	}
 	wantTranscript, err := digest(recording.Receipts)
 	if err != nil || wantTranscript != recording.TranscriptDigest {
 		return ErrRecordingIntegrity
@@ -188,13 +195,19 @@ func verifyRecording(recording Recording) error {
 }
 
 func validateConfig(config Config) error {
-	if !identifierPattern.MatchString(config.FixtureID) || len(config.Inputs) == 0 || len(config.Inputs) > 1024 {
+	if !identifierPattern.MatchString(config.FixtureID) || len(config.Inputs) == 0 || len(config.Inputs) > maxSteps {
+		return ErrInvalidFixture
+	}
+	if err := validateState(config.InitialState, maxSteps); err != nil || len(config.InitialState.Applied)+len(config.Inputs) > maxApplied {
 		return ErrInvalidFixture
 	}
 	if len(config.Clock) != len(config.Inputs) || len(config.Random) != len(config.Inputs) {
 		return ErrIncompleteTape
 	}
-	seen := make(map[string]struct{}, len(config.Inputs))
+	seen := make(map[string]struct{}, len(config.InitialState.Applied)+len(config.Inputs))
+	for _, stepID := range config.InitialState.Applied {
+		seen[stepID] = struct{}{}
+	}
 	for index, input := range config.Inputs {
 		if !identifierPattern.MatchString(input.StepID) {
 			return fmt.Errorf("%w: invalid step id", ErrInvalidFixture)
@@ -212,6 +225,23 @@ func validateConfig(config Config) error {
 		if index > 0 && config.Clock[index].Before(config.Clock[index-1]) {
 			return fmt.Errorf("%w: clock must be monotonic", ErrInvalidFixture)
 		}
+	}
+	return nil
+}
+
+func validateState(state State, limit int) error {
+	if len(state.Applied) > limit {
+		return ErrInvalidFixture
+	}
+	seen := make(map[string]struct{}, len(state.Applied))
+	for _, stepID := range state.Applied {
+		if !identifierPattern.MatchString(stepID) {
+			return ErrInvalidFixture
+		}
+		if _, duplicate := seen[stepID]; duplicate {
+			return ErrInvalidFixture
+		}
+		seen[stepID] = struct{}{}
 	}
 	return nil
 }

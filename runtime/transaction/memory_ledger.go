@@ -414,6 +414,7 @@ func (ledger *MemoryLedger) reconcileAttempt(id string, version uint64, target A
 	defer ledger.mu.Unlock()
 	if !digestPattern.MatchString(observationDigest) ||
 		(receiptDigest != "" && !digestPattern.MatchString(receiptDigest)) ||
+		(receiptDigest != "" && receiptDigest == observationDigest) ||
 		(target == AttemptFailed && receiptDigest != "") || observedAt.IsZero() ||
 		(target != AttemptSucceeded && target != AttemptFailed) {
 		return Attempt{}, ErrInvalidInput

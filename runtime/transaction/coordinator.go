@@ -675,6 +675,7 @@ func (coordinator *Coordinator) ReconcileAuthorizedDispatch(credential CommitCre
 func (coordinator *Coordinator) reconcileDispatchWithAuthorityLocked(request ReconcileDispatchRequest, irreversibleAuthorized bool) (DispatchCompletion, error) {
 	if !validIdentifier(request.OperationID) || !validIdentifier(request.AttemptID) || !digestPattern.MatchString(request.ObservationDigest) ||
 		(request.ProviderReceiptDigest != "" && !digestPattern.MatchString(request.ProviderReceiptDigest)) ||
+		(request.ProviderReceiptDigest != "" && request.ProviderReceiptDigest == request.ObservationDigest) ||
 		(request.Outcome != DispatchSucceeded && request.Outcome != DispatchFailed) ||
 		(request.Outcome == DispatchFailed && request.ProviderReceiptDigest != "") {
 		return DispatchCompletion{}, ErrInvalidInput

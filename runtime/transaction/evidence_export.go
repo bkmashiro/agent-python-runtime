@@ -388,7 +388,8 @@ func validEvidenceAttempt(value Attempt, transactionID string) bool {
 		(digestPattern.MatchString(value.ProviderReceiptDigest) && value.State == AttemptSucceeded)
 	reconciliationValid := value.ReconciliationDigest == "" ||
 		(digestPattern.MatchString(value.ReconciliationDigest) && (value.State == AttemptSucceeded || value.State == AttemptFailed))
-	return receiptValid && reconciliationValid && value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
+	distinctEvidence := value.ProviderReceiptDigest == "" || value.ReconciliationDigest == "" || value.ProviderReceiptDigest != value.ReconciliationDigest
+	return receiptValid && reconciliationValid && distinctEvidence && value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
 		value.Ordinal > 0 && value.Ordinal <= maxEvidenceAttemptOrdinal && validAttemptState(value.State) && validOperationState(value.ExpectedOperationState) && validIdentifier(value.LeaseID) &&
 		value.LeaseExpiresAt.After(value.CreatedAt) && digestPattern.MatchString(value.ProviderRequestDigest) && value.Version > 0 && value.Version <= maxEvidenceInteger &&
 		!value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)

@@ -57,12 +57,13 @@ const (
 )
 
 var (
-	ErrInvalidManifest      = errors.New("invalid claim manifest")
-	ErrInsufficientEvidence = errors.New("insufficient evidence for replay level")
-	ErrOverclaimedReplay    = errors.New("claim manifest overstates replay qualification")
-	ErrExecutionNotObserved = errors.New("execution reference not observed in metadata playback")
-	digestPattern           = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	eventIDPattern          = regexp.MustCompile(`^evt_[0-9a-f]{32}$`)
+	ErrInvalidManifest               = errors.New("invalid claim manifest")
+	ErrInsufficientEvidence          = errors.New("insufficient evidence for replay level")
+	ErrOverclaimedReplay             = errors.New("claim manifest overstates replay qualification")
+	ErrExecutionNotObserved          = errors.New("execution reference not observed in metadata playback")
+	ErrAmbiguousExecutionObservation = errors.New("multiple matching execution completions observed in metadata playback")
+	digestPattern                    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	eventIDPattern                   = regexp.MustCompile(`^evt_[0-9a-f]{32}$`)
 )
 
 type Evidence struct {

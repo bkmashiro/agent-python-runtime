@@ -1264,7 +1264,13 @@ func collectStableCOWPressureActiveSnapshot(
 	deadline := time.Now().Add(time.Second)
 	var last cowPressureSnapshot
 	for {
+		if err := ctx.Err(); err != nil {
+			return cowPressureSnapshot{}, err
+		}
 		snapshot, err := collect()
+		if contextErr := ctx.Err(); contextErr != nil {
+			return cowPressureSnapshot{}, contextErr
+		}
 		if err != nil {
 			return cowPressureSnapshot{}, err
 		}

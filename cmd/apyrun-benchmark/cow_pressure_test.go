@@ -511,6 +511,38 @@ func TestStableCOWPressureActiveSnapshotRetriesTransientState(t *testing.T) {
 	}
 }
 
+func TestStableCOWPressureActiveSnapshotRejectsCancellationDuringCollection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	pool := wazeroengine.PreparedPoolState{
+		TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4,
+		Ready: 2, Leased: 1, Executing: 1, Refilling: 2, SupplyAccounted: 4,
+	}
+	valid := cowPressureSnapshot{
+		Phase: "load-active", Slots: 4, RuntimeInstances: 1,
+		COWMappings: runtimeevidence.MappingMetrics{Name: "memfd:apyrun-cow-image", MappingCount: 4}, Pool: pool,
+	}
+	_, err := collectStableCOWPressureActiveSnapshot(ctx, func() (cowPressureSnapshot, error) {
+		cancel()
+		return valid, nil
+	}, 4, 2)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestStableCOWPressureActiveSnapshotRejectsPreCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	calls := 0
+	_, err := collectStableCOWPressureActiveSnapshot(ctx, func() (cowPressureSnapshot, error) {
+		calls++
+		return cowPressureSnapshot{}, nil
+	}, 4, 2)
+	if !errors.Is(err, context.Canceled) || calls != 0 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+}
+
 func TestStableCOWPressureFinalSnapshotRequiresSettledCompleteState(t *testing.T) {
 	completePool := wazeroengine.PreparedPoolState{TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4, Ready: 4, SupplyAccounted: 4}
 	snapshot := cowPressureSnapshot{COWMappings: runtimeevidence.MappingMetrics{Name: "memfd:apyrun-cow-image", MappingCount: 4}, Pool: completePool}

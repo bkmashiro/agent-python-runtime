@@ -71,6 +71,8 @@ The `cow-pressure` schema v11 records:
 - public policy inputs: maximum memory, maximum CPU and greed;
 - JSON-safe effective policy telemetry.
 
+Active diagnostic samples are triggered at fixed offsets. Because the Runtime exposes pool counters through a non-atomic telemetry view, the collector retries a transiently inconsistent view for at most one second and records only a snapshot that passes the unchanged mapping, lifecycle, and supply-conservation predicates; a persistent drift remains a hard failure.
+
 The Host revision and Guest artifact-source revision belong to different repositories and are not required to be equal. Evidence binds each to its own exact source. Hard memory and CPU limits do not move with greed. CPU quota telemetry is not CPU enforcement unless the deployment layer applies and reads back the cgroup value.
 
 ## Execution ladder

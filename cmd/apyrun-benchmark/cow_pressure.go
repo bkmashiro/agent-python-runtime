@@ -963,7 +963,9 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 				sampleWindow = options.PressureDuration
 			}
 			result <- collectPressureActiveSamples(activeSampleCtx, loadStarted, sampleWindow, func() (cowPressureSnapshot, error) {
-				return collectCOWPressureSnapshot(collector, runner, "load-active", slots)
+				return collectStableCOWPressureActiveSnapshot(activeSampleCtx, func() (cowPressureSnapshot, error) {
+					return collectCOWPressureSnapshot(collector, runner, "load-active", slots)
+				}, slots, uint32(options.ConsumerCount*options.PressureBurstFactor))
 			})
 		}()
 	}
@@ -1250,6 +1252,48 @@ func collectStableCOWPressureFinalSnapshot(
 			)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func collectStableCOWPressureActiveSnapshot(
+	ctx context.Context,
+	collect func() (cowPressureSnapshot, error),
+	slots uint32,
+	peakConsumers uint32,
+) (cowPressureSnapshot, error) {
+	deadline := time.Now().Add(time.Second)
+	var last cowPressureSnapshot
+	for {
+		snapshot, err := collect()
+		if err != nil {
+			return cowPressureSnapshot{}, err
+		}
+		last = snapshot
+		if snapshot.Phase == "load-active" && snapshot.Slots == slots && snapshot.RuntimeInstances == 1 &&
+			snapshot.COWMappings.Name == "memfd:apyrun-cow-image" &&
+			validPressureLoadMappingCount(snapshot.COWMappings.MappingCount, slots, peakConsumers) &&
+			validPressureActivePoolState(snapshot.Pool, slots, peakConsumers) {
+			return snapshot, nil
+		}
+		if !time.Now().Before(deadline) {
+			return cowPressureSnapshot{}, fmt.Errorf(
+				"stable active COW snapshot unavailable: mappings=%d slots=%d ready=%d leased=%d executing=%d queued=%d refilling=%d retiring=%d accounted=%d",
+				last.COWMappings.MappingCount, slots, last.Pool.Ready, last.Pool.Leased, last.Pool.Executing,
+				last.Pool.Queued, last.Pool.Refilling, last.Pool.Retiring, last.Pool.SupplyAccounted,
+			)
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return cowPressureSnapshot{}, ctx.Err()
+		case <-timer.C:
+		}
 	}
 }
 

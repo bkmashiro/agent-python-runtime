@@ -483,6 +483,34 @@ func TestPressurePreparedImageIdentityExcludesAllocatedBlockCensus(t *testing.T)
 	}
 }
 
+func TestStableCOWPressureActiveSnapshotRetriesTransientState(t *testing.T) {
+	pool := wazeroengine.PreparedPoolState{
+		TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4,
+		Ready: 2, Leased: 1, Executing: 1, Queued: 0, Refilling: 1, SupplyAccounted: 3,
+	}
+	invalid := cowPressureSnapshot{
+		Phase: "load-active", Slots: 4, RuntimeInstances: 1,
+		COWMappings: runtimeevidence.MappingMetrics{Name: "memfd:apyrun-cow-image", MappingCount: 4}, Pool: pool,
+	}
+	valid := invalid
+	valid.Pool.Refilling = 2
+	valid.Pool.SupplyAccounted = 4
+	calls := 0
+	got, err := collectStableCOWPressureActiveSnapshot(context.Background(), func() (cowPressureSnapshot, error) {
+		calls++
+		if calls == 1 {
+			return invalid, nil
+		}
+		return valid, nil
+	}, 4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || got.Pool.SupplyAccounted != 4 {
+		t.Fatalf("calls=%d snapshot=%+v", calls, got.Pool)
+	}
+}
+
 func TestStableCOWPressureFinalSnapshotRequiresSettledCompleteState(t *testing.T) {
 	completePool := wazeroengine.PreparedPoolState{TargetCapacity: 4, MaximumCapacity: 4, Floor: 1, Critical: 1, Low: 2, High: 4, Ready: 4, SupplyAccounted: 4}
 	snapshot := cowPressureSnapshot{COWMappings: runtimeevidence.MappingMetrics{Name: "memfd:apyrun-cow-image", MappingCount: 4}, Pool: completePool}

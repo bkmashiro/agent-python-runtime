@@ -86,6 +86,13 @@ class Phase6MatrixTest(unittest.TestCase):
                 "arrival": {"mode": "closed-loop", "window_ns": 0, "rate_per_second": 0, "queue_capacity": 0, "offered_requests": 3, "accepted_requests": 3, "rejected_requests": 0},
                 "result_oracle": "numpy-exact-v1",
                 "validated_results": 3,
+                "latency_samples_ns": [1, 2, 3],
+                "latency_total_ns": 6,
+                "latency_mean_ns": 2,
+                "latency_p50_ns": 2,
+                "latency_p95_ns": 3,
+                "latency_p99_ns": 3,
+                "latency_max_ns": 3,
                 "started_requests": 3,
                 "completed_requests": 3,
                 "failed_requests": 0,
@@ -115,6 +122,13 @@ class Phase6MatrixTest(unittest.TestCase):
         wrong_oracle = json.loads(json.dumps(evidence))
         wrong_oracle["load"]["validated_results"] = 2
         mutations.append(wrong_oracle)
+        wrong_latency = json.loads(json.dumps(evidence))
+        wrong_latency["load"]["latency_total_ns"] = 12
+        wrong_latency["load"]["latency_mean_ns"] = 4
+        mutations.append(wrong_latency)
+        wrong_latency_order = json.loads(json.dumps(evidence))
+        wrong_latency_order["load"]["latency_samples_ns"] = [2, 1, 3]
+        mutations.append(wrong_latency_order)
         for mutation in mutations:
             with self.assertRaises(RuntimeError):
                 MODULE.validate_output(mutation, cell=cell, revision=revision, artifact_sha256=artifact_sha, artifact_source_commit=artifact_source)

@@ -86,7 +86,7 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 		Policy:      policy.Telemetry(),
 		Limits:      cowPressureLimits{RuntimeBudgetBytes: 1 << 30, ReservedBytes: 1 << 30, AllocationBytes: 2 << 30, MaxSlots: 4, Consumers: 1, DurationNS: uint64((5 * time.Second).Nanoseconds()), InitialCapacity: 4, MaxGrowthStep: 64, Workload: "cpu", RefillPolicy: "fixed", RefillWorkers: 4, BurstFactor: 1},
 		StopReason:  "max-slots", Spawn: []cowPressureSnapshot{spawn}, LoadSamples: []cowPressureSnapshot{loadSample},
-		Load:        cowPressureLoad{Arrival: cowPressureArrival{Mode: "closed-loop", OfferedRequests: 1, AcceptedRequests: 1}, ResultOracle: "status-ok-v1", ValidatedResults: 1, StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, LatencyTotalNS: 1, LatencyMeanNS: 1, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}, RequestClasses: []cowPressureRequestClass{{Name: "tiny-cpu", Started: 1, Completed: 1}}},
+		Load:        cowPressureLoad{Arrival: cowPressureArrival{Mode: "closed-loop", OfferedRequests: 1, AcceptedRequests: 1}, ResultOracle: "status-ok-v1", ValidatedResults: 1, StartedRequests: 1, CompletedRequests: 1, DurationNS: 1, ReplenishDrainNS: 1, ReplenishStatus: "complete", CPUUserNS: 1, CPUCoreUtilization: 1, GOMAXPROCS: 1, ThroughputPerSec: 1, LatencyP50NS: 1, LatencyP95NS: 1, LatencyP99NS: 1, LatencyMaxNS: 1, LatencyTotalNS: 1, LatencyMeanNS: 1, LatencySamplesNS: []uint64{1}, ReadyBefore: 4, ReadyAfter: 4, Phases: []cowPressurePhase{{Name: "execute", Count: 1, Succeeded: 1, TotalNS: 1, MaxNS: 1}}, RequestClasses: []cowPressureRequestClass{{Name: "tiny-cpu", Started: 1, Completed: 1}}},
 		Limitations: []string{"one", "two", "three", "four"},
 	}
 	if err := evidence.Validate(); err != nil {
@@ -125,6 +125,24 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	}
 	if err := compileCOWPressureSchema(t).Validate(document); err != nil {
 		t.Fatal(err)
+	}
+	latencyDrift := evidence
+	latencyDrift.Load.LatencyTotalNS = 2
+	latencyDrift.Load.LatencyMeanNS = 2
+	if err := latencyDrift.Validate(); err == nil {
+		t.Fatal("joint latency total/mean drift was accepted")
+	}
+	encodedLatencyDrift, err := json.Marshal(latencyDrift)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCOWPressureDocument(encodedLatencyDrift, schemaBytes); err == nil {
+		t.Fatal("standalone validator accepted joint latency total/mean drift")
+	}
+	percentileDrift := evidence
+	percentileDrift.Load.LatencyP99NS++
+	if err := percentileDrift.Validate(); err == nil {
+		t.Fatal("latency percentile drift was accepted")
 	}
 	policyDrift := evidence
 	policyDrift.Policy.MaxActive++
@@ -213,6 +231,10 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	numpyClassDrift.Load.Arrival.OfferedRequests = 20
 	numpyClassDrift.Load.Arrival.AcceptedRequests = 20
 	numpyClassDrift.Load.LatencyTotalNS = 20
+	numpyClassDrift.Load.LatencySamplesNS = make([]uint64, 20)
+	for index := range numpyClassDrift.Load.LatencySamplesNS {
+		numpyClassDrift.Load.LatencySamplesNS[index] = 1
+	}
 	if err := numpyClassDrift.Validate(); err == nil {
 		t.Fatal("NumPy request-class distribution drift was accepted")
 	} else if !strings.Contains(err.Error(), "request-class distribution drifted") {
@@ -380,6 +402,19 @@ func TestAcceptedPressureJobsUseContiguousExecutionIDsDespiteOfferedHoles(t *tes
 	executeAcceptedPressureJobs(cancelledContext, cancelledJobs, &sequence, func(uint64) { executed = true })
 	if executed {
 		t.Fatal("cancelled accepted queue executed a job")
+	}
+	midFlightContext, cancelMidFlight := context.WithCancel(context.Background())
+	midFlightJobs := make(chan struct{}, 2)
+	midFlightJobs <- struct{}{}
+	midFlightJobs <- struct{}{}
+	close(midFlightJobs)
+	executions := 0
+	executeAcceptedPressureJobs(midFlightContext, midFlightJobs, &sequence, func(uint64) {
+		executions++
+		cancelMidFlight()
+	})
+	if executions != 1 {
+		t.Fatalf("post-failure queued executions=%d, want 1", executions)
 	}
 }
 
@@ -625,7 +660,28 @@ func TestCollectPressureActiveSamplesCancelsWithoutWaitingForWindow(t *testing.T
 		t.Fatalf("err=%v want context cancellation", result.Err)
 	}
 	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
-		t.Fatalf("cancelled sampler took %s", elapsed)
+		t.Fatalf("cancelled sampler blocked for %s", elapsed)
+	}
+	loadContext, cancelLoad := context.WithCancel(context.Background())
+	requestContext, cancelRequest := newPressureRequestContext(loadContext)
+	defer cancelRequest()
+	cancelLoad()
+	select {
+	case <-requestContext.Done():
+		if !errors.Is(requestContext.Err(), context.Canceled) {
+			t.Fatalf("request context error=%v", requestContext.Err())
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("in-flight request did not observe load cancellation")
+	}
+	burstContext, cancelBurst := context.WithCancel(context.Background())
+	cancelBurst()
+	burstStarted := time.Now()
+	if waitPressureBurstStart(burstContext, time.Now().Add(10*time.Minute)) {
+		t.Fatal("cancelled burst wait reported a start")
+	}
+	if elapsed := time.Since(burstStarted); elapsed > 100*time.Millisecond {
+		t.Fatalf("cancelled burst wait blocked for %s", elapsed)
 	}
 }
 
@@ -643,6 +699,10 @@ func TestPressureOptionsBindOpenLoopAndClosedLoopSemantics(t *testing.T) {
 	for name, mutate := range map[string]func(*benchmarkOptions){
 		"missing rate":  func(value *benchmarkOptions) { value.PressureArrivalRate = 0 },
 		"missing queue": func(value *benchmarkOptions) { value.PressureQueueCapacity = 0 },
+		"latency sample bound": func(value *benchmarkOptions) {
+			value.PressureDuration = 10 * time.Minute
+			value.PressureArrivalRate = 500
+		},
 		"burst": func(value *benchmarkOptions) {
 			value.PressureBurstFactor = 2
 			value.PressureWorkload = "mixed-v1"

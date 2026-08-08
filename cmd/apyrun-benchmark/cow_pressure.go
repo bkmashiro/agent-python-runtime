@@ -25,6 +25,8 @@ const pressureMinimumHeadroom = 512 * 1024 * 1024
 const pressureActiveSampleCount = 3
 const pressureAdaptiveRefillWorkers uint32 = 12
 const pressureMaximumOfferedRequests uint64 = 1 << 20
+const pressureMaximumLatencySamples = 250_000
+const pressureRequestTimeout = 30 * time.Second
 
 type cowPressureLimits struct {
 	RuntimeBudgetBytes uint64 `json:"runtime_budget_bytes"`
@@ -135,6 +137,7 @@ type cowPressureLoad struct {
 	LatencyMaxNS       uint64                    `json:"latency_max_ns"`
 	LatencyTotalNS     uint64                    `json:"latency_total_ns"`
 	LatencyMeanNS      uint64                    `json:"latency_mean_ns"`
+	LatencySamplesNS   []uint64                  `json:"latency_samples_ns"`
 	ReadyBefore        uint32                    `json:"ready_before"`
 	ReadyAfter         uint32                    `json:"ready_after"`
 	Phases             []cowPressurePhase        `json:"phases"`
@@ -192,8 +195,30 @@ func executeAcceptedPressureJobs(ctx context.Context, jobs <-chan struct{}, sequ
 			if !ok {
 				return
 			}
+			if ctx.Err() != nil {
+				return
+			}
 			execute(sequence.Add(1))
 		}
+	}
+}
+
+func newPressureRequestContext(loadCtx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(loadCtx, pressureRequestTimeout)
+}
+
+func waitPressureBurstStart(ctx context.Context, target time.Time) bool {
+	wait := time.Until(target)
+	if wait <= 0 {
+		return ctx.Err() == nil
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -282,10 +307,12 @@ func (evidence cowPressureEvidence) Validate() error {
 	}
 	if len(evidence.LoadSamples) != expectedLoadSamples || evidence.Load.StartedRequests == 0 || evidence.Load.CompletedRequests == 0 ||
 		evidence.Load.CompletedRequests+evidence.Load.FailedRequests != evidence.Load.StartedRequests ||
-		evidence.Load.DurationNS == 0 || evidence.Load.ThroughputPerSec <= 0 || evidence.Load.LatencyP99NS == 0 ||
-		evidence.Load.LatencyTotalNS < evidence.Load.LatencyMaxNS || evidence.Load.LatencyMeanNS != evidence.Load.LatencyTotalNS/evidence.Load.CompletedRequests ||
+		evidence.Load.DurationNS == 0 || evidence.Load.ThroughputPerSec <= 0 ||
 		evidence.Load.CPUCoreUtilization <= 0 || evidence.Load.GOMAXPROCS <= 0 || len(evidence.Load.Phases) == 0 {
 		return errors.New("cow-pressure load evidence is incomplete")
+	}
+	if err := validatePressureLatencyEvidence(evidence.Load); err != nil {
+		return err
 	}
 	if evidence.Load.ResultOracle != pressureResultOracle(evidence.Limits.Workload) || evidence.Load.ValidatedResults != evidence.Load.CompletedRequests {
 		return errors.New("cow-pressure result oracle evidence drifted")
@@ -384,6 +411,28 @@ func pressureResultOracle(workload string) string {
 		return "numpy-exact-v1"
 	}
 	return "status-ok-v1"
+}
+
+func validatePressureLatencyEvidence(load cowPressureLoad) error {
+	if load.CompletedRequests == 0 || load.CompletedRequests > pressureMaximumLatencySamples || uint64(len(load.LatencySamplesNS)) != load.CompletedRequests {
+		return errors.New("cow-pressure latency sample count drifted")
+	}
+	var total uint64
+	for index, latency := range load.LatencySamplesNS {
+		if latency == 0 || (index > 0 && latency < load.LatencySamplesNS[index-1]) || total > math.MaxUint64-latency {
+			return errors.New("cow-pressure latency samples are invalid")
+		}
+		total += latency
+	}
+	last := load.LatencySamplesNS[len(load.LatencySamplesNS)-1]
+	if load.LatencyTotalNS != total || load.LatencyMeanNS != total/load.CompletedRequests ||
+		load.LatencyP50NS != pressurePercentile(load.LatencySamplesNS, 50) ||
+		load.LatencyP95NS != pressurePercentile(load.LatencySamplesNS, 95) ||
+		load.LatencyP99NS != pressurePercentile(load.LatencySamplesNS, 99) ||
+		load.LatencyMaxNS != last {
+		return errors.New("cow-pressure derived latency evidence drifted")
+	}
+	return nil
 }
 
 func expectedPressureRequestClassCounts(workload string, started uint64) map[string]uint64 {
@@ -546,8 +595,12 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 		if options.PressureQueueCapacity == 0 || options.PressureQueueCapacity > 65536 || options.PressureBurstFactor != 1 {
 			return errors.New("fixed open-loop pressure requires a bounded queue and forbids correlated burst")
 		}
-		if _, err := fixedOpenLoopArrivalOffsets(options.PressureDuration, options.PressureArrivalRate); err != nil {
+		offsets, err := fixedOpenLoopArrivalOffsets(options.PressureDuration, options.PressureArrivalRate)
+		if err != nil {
 			return err
+		}
+		if len(offsets) > pressureMaximumLatencySamples {
+			return errors.New("fixed open-loop pressure exceeds the latency sample bound")
 		}
 	default:
 		return errors.New("cow-pressure arrival mode is unknown")
@@ -828,6 +881,8 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		loadCtx, cancelLoad = context.WithTimeout(context.Background(), options.PressureDuration)
 	}
 	defer cancelLoad()
+	requestParentCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
 	var offered, accepted, rejected, started, completed, failed, timedOut atomic.Uint64
 	var sequence atomic.Uint64
 	latencies := make([]uint64, 0, 4096)
@@ -841,6 +896,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		if firstFailure == "" {
 			firstFailure = reason
 			cancelLoad()
+			cancelRequests()
 		}
 		failureMu.Unlock()
 	}
@@ -865,8 +921,10 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			<-startLoad
 			preStarted := time.Now()
 			target := loadStarted.Add(options.PressureDuration / 2)
-			if delay := time.Until(target); delay > 0 {
-				time.Sleep(delay)
+			if !waitPressureBurstStart(loadCtx, target) {
+				close(burstRelease)
+				burstWindowResult <- cowPressureBurstWindow{}
+				return
 			}
 			preCompleted := completed.Load()
 			burstStarted := time.Now()
@@ -875,7 +933,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			burstWindowResult <- cowPressureBurstWindow{preCompleted: preCompleted, endCompleted: completed.Load(), preDuration: burstStarted.Sub(preStarted), burstDuration: time.Since(burstStarted)}
 		}()
 	}
-	activeSampleCtx, cancelActiveSamples := context.WithCancel(context.Background())
+	activeSampleCtx, cancelActiveSamples := context.WithCancel(loadCtx)
 	defer cancelActiveSamples()
 	var activeSamples <-chan cowPressureActiveSamples
 	if options.PressureWorkload == "dirty-hold" || options.PressureWorkload == "mixed-v1" || options.PressureWorkload == "numpy-mixed-v1" {
@@ -905,7 +963,13 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			recordFailure("make request: " + err.Error())
 			return
 		}
+		failureMu.Lock()
+		if firstFailure != "" {
+			failureMu.Unlock()
+			return
+		}
 		started.Add(1)
+		failureMu.Unlock()
 		requestClassMu.Lock()
 		class := requestClasses[spec.Class]
 		if class == nil {
@@ -914,7 +978,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		}
 		class.Started++
 		requestClassMu.Unlock()
-		requestCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		requestCtx, cancel := newPressureRequestContext(requestParentCtx)
 		began := time.Now()
 		response, runErr := runner.Run(requestCtx, request, "")
 		cancel()
@@ -935,13 +999,22 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			recordFailure(failureReason)
 			return
 		}
+		latencyMu.Lock()
+		if len(latencies) >= pressureMaximumLatencySamples {
+			latencyMu.Unlock()
+			failed.Add(1)
+			requestClassMu.Lock()
+			class.Failed++
+			requestClassMu.Unlock()
+			recordFailure("latency sample bound exceeded")
+			return
+		}
+		latencies = append(latencies, elapsed)
+		latencyMu.Unlock()
 		completed.Add(1)
 		requestClassMu.Lock()
 		class.Completed++
 		requestClassMu.Unlock()
-		latencyMu.Lock()
-		latencies = append(latencies, elapsed)
-		latencyMu.Unlock()
 	}
 
 	totalConsumers := options.ConsumerCount * options.PressureBurstFactor
@@ -1082,6 +1155,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()), RequestClasses: requestClassEvidence,
 	}
 	load.LatencyTotalNS = latencyTotal
+	load.LatencySamplesNS = latencyCopy
 	if load.CompletedRequests > 0 {
 		load.LatencyMeanNS = latencyTotal / load.CompletedRequests
 	}

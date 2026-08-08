@@ -36,7 +36,13 @@ func FromMetadataPlayback(ref runtimeconfig.ExecutionRef, playback agenttrace.Pl
 			continue
 		}
 		observed, ok := decodeCompletedExecution(event.Payload)
-		if !ok || !matches(ref, observed) {
+		if !ok {
+			if referencesExecution(ref, event.Payload) {
+				return Manifest{}, ErrExecutionNotObserved
+			}
+			continue
+		}
+		if !matches(ref, observed) {
 			continue
 		}
 		if completedEventID != "" {
@@ -166,6 +172,11 @@ func validCompletionMetadata(fields map[string]json.RawMessage) bool {
 		}
 	}
 	return true
+}
+
+func referencesExecution(ref runtimeconfig.ExecutionRef, payload []byte) bool {
+	var observed completedExecution
+	return json.Unmarshal(payload, &observed) == nil && matches(ref, observed)
 }
 
 func matches(ref runtimeconfig.ExecutionRef, observed completedExecution) bool {

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import select
 import shlex
 import subprocess
 import tarfile
@@ -20,6 +21,7 @@ MAX_EXTRACTED_BYTES = 256 << 20
 MAX_MEMBER_BYTES = 64 << 20
 MAX_MEMBERS = 256
 MAX_CONTROL_BYTES = 256
+TRANSFER_TIMEOUT_SECONDS = 600
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 JOB = re.compile(r"^[0-9]+$")
@@ -37,7 +39,7 @@ import sys
 
 path = sys.argv[1]
 maximum = int(sys.argv[2])
-flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
 descriptor = os.open(path, flags)
 try:
     identity = os.fstat(descriptor)
@@ -79,6 +81,26 @@ def copy_bounded(source, destination, maximum: int) -> int:
         destination.write(chunk)
 
 
+def copy_bounded_fd(source, destination, maximum: int, timeout: float) -> int:
+    descriptor = source.fileno()
+    deadline = time.monotonic() + timeout
+    total = 0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("bounded download reached its transfer deadline")
+        readable, _, _ = select.select([descriptor], [], [], remaining)
+        if not readable:
+            raise RuntimeError("bounded download reached its transfer deadline")
+        chunk = os.read(descriptor, min(1 << 20, maximum - total + 1))
+        if not chunk:
+            return total
+        total += len(chunk)
+        if total > maximum:
+            raise RuntimeError("download exceeded its local transfer bound")
+        destination.write(chunk)
+
+
 def download_bounded(host: str, remote_path: str, local_path: Path, maximum: int) -> int:
     remote_command = (
         f"/usr/bin/python3 -c {shlex.quote(REMOTE_BOUNDED_READER)} "
@@ -93,7 +115,9 @@ def download_bounded(host: str, remote_path: str, local_path: Path, maximum: int
         if process.stdout is None or process.stderr is None:
             raise RuntimeError("bounded SSH pipes are unavailable")
         with local_path.open("xb") as destination:
-            size = copy_bounded(process.stdout, destination, maximum)
+            size = copy_bounded_fd(
+                process.stdout, destination, maximum, TRANSFER_TIMEOUT_SECONDS
+            )
         return_code = process.wait(timeout=30)
         stderr = process.stderr.read(64 << 10)
         if return_code != 0:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -49,6 +50,7 @@ class Phase6SlurmContractTests(unittest.TestCase):
         self.assertIn("owner_token", source)
         watcher = WATCHER.read_text(encoding="utf-8")
         self.assertIn("os.O_NOFOLLOW", watcher)
+        self.assertIn("os.O_NONBLOCK", watcher)
         self.assertIn("download_bounded", watcher)
         self.assertIn("validate_environment_shape(environment)", watcher)
         self.assertIn("validate_resource_shape(controller_row)", watcher)
@@ -68,6 +70,14 @@ class Phase6SlurmContractTests(unittest.TestCase):
         self.assertEqual(b"four", target.getvalue())
         with self.assertRaises(RuntimeError):
             module.copy_bounded(io.BytesIO(b"five!"), io.BytesIO(), 4)
+
+        read_descriptor, write_descriptor = os.pipe()
+        try:
+            with os.fdopen(read_descriptor, "rb", buffering=0) as source:
+                with self.assertRaises(RuntimeError):
+                    module.copy_bounded_fd(source, io.BytesIO(), 4, 0.05)
+        finally:
+            os.close(write_descriptor)
 
     def test_remote_reader_binds_one_regular_file_descriptor(self) -> None:
         module = load_watcher()
@@ -103,6 +113,18 @@ class Phase6SlurmContractTests(unittest.TestCase):
             )
             self.assertNotEqual(0, linked.returncode)
             self.assertEqual(b"", linked.stdout)
+
+            fifo = root / "fifo"
+            os.mkfifo(fifo)
+            piped = subprocess.run(
+                ["python3", "-c", module.REMOTE_BOUNDED_READER, str(fifo), "4"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=1,
+            )
+            self.assertNotEqual(0, piped.returncode)
+            self.assertEqual(b"", piped.stdout)
 
     def test_watcher_rejects_duplicate_and_traversing_archive_members(self) -> None:
         module = load_watcher()

@@ -319,6 +319,11 @@ def plan_document(tier: str, cells: list[Cell]) -> dict[str, Any]:
 
 
 def run(args: argparse.Namespace, cells: list[Cell]) -> None:
+    input_paths = (args.repo, args.binary, args.artifact, args.artifact_manifest)
+    if any(path.is_symlink() for path in input_paths):
+        raise RuntimeError("symlinked input paths are forbidden")
+    if args.output_dir.is_symlink():
+        raise RuntimeError("symlinked output directory is forbidden")
     repo = args.repo.resolve()
     output_dir = args.output_dir.resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -328,8 +333,10 @@ def run(args: argparse.Namespace, cells: list[Cell]) -> None:
     artifact = args.artifact.resolve()
     artifact_manifest = args.artifact_manifest.resolve()
     schema = repo / "benchmark/v1/cow-pressure.schema.json"
+    if schema.is_symlink():
+        raise RuntimeError("symlinked input paths are forbidden")
     for path in (binary, artifact, artifact_manifest, schema):
-        if not path.is_file() or path.is_symlink():
+        if not path.is_file():
             raise RuntimeError(f"required input is not a file: {path}")
     revision = exact_clean_revision(repo)
     artifact_sha256 = sha256_file(artifact)

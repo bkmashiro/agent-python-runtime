@@ -4,6 +4,7 @@ import importlib.util
 import json
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -180,6 +181,36 @@ class Phase6MatrixTest(unittest.TestCase):
         evidence["load"]["arrival"]["offered_requests"] = True
         with self.assertRaises(RuntimeError):
             MODULE.validate_output(evidence, **validation_inputs)
+
+    def test_run_rejects_symlinked_input_before_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            schema = repo / "benchmark/v1/cow-pressure.schema.json"
+            schema.parent.mkdir(parents=True)
+            schema.write_text("{}", encoding="utf-8")
+            binary = root / "validator"
+            binary.write_bytes(b"binary")
+            artifact = root / "numpy.wasm"
+            artifact.write_bytes(b"wasm")
+            manifest = root / "manifest.json"
+            manifest.write_text("{}", encoding="utf-8")
+            artifact_link = root / "numpy-link.wasm"
+            artifact_link.symlink_to(artifact)
+            args = types.SimpleNamespace(
+                repo=repo,
+                output_dir=root / "output",
+                binary=binary,
+                artifact=artifact_link,
+                artifact_manifest=manifest,
+                memory_budget_bytes=8 << 30,
+                memory_reserve_bytes=2 << 30,
+                max_cpu=16,
+                greed=50,
+                tier="canary",
+            )
+            with self.assertRaisesRegex(RuntimeError, "symlinked input"):
+                MODULE.run(args, [])
 
     def test_artifact_manifest_and_exact_validator_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

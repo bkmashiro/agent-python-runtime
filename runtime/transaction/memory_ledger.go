@@ -409,23 +409,28 @@ func (ledger *MemoryLedger) completeAttempt(id string, version uint64, target At
 	return value, nil
 }
 
-func (ledger *MemoryLedger) reconcileAttempt(id string, version uint64, target AttemptState, observationDigest string, observedAt time.Time) (Attempt, error) {
+func (ledger *MemoryLedger) reconcileAttempt(id string, version uint64, target AttemptState, receiptDigest, observationDigest string, observedAt time.Time) (Attempt, error) {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
-	if !digestPattern.MatchString(observationDigest) || observedAt.IsZero() || (target != AttemptSucceeded && target != AttemptFailed) {
+	if !digestPattern.MatchString(observationDigest) ||
+		(receiptDigest != "" && !digestPattern.MatchString(receiptDigest)) ||
+		(target == AttemptFailed && receiptDigest != "") || observedAt.IsZero() ||
+		(target != AttemptSucceeded && target != AttemptFailed) {
 		return Attempt{}, ErrInvalidInput
 	}
 	value, exists := ledger.attempts[id]
 	if !exists {
 		return Attempt{}, ErrNotFound
 	}
-	if value.State == target && value.ReconciliationDigest == observationDigest {
+	if value.State == target && value.ProviderReceiptDigest == receiptDigest && value.ReconciliationDigest == observationDigest {
 		return value, nil
 	}
-	if value.Version != version || value.State != AttemptAmbiguous || value.ReconciliationDigest != "" {
+	if value.Version != version || value.State != AttemptAmbiguous || value.ReconciliationDigest != "" ||
+		(value.ProviderReceiptDigest != "" && value.ProviderReceiptDigest != receiptDigest) {
 		return Attempt{}, ErrConflict
 	}
 	value.State = target
+	value.ProviderReceiptDigest = receiptDigest
 	value.ReconciliationDigest = observationDigest
 	value.Version++
 	value.UpdatedAt = observedAt.UTC()

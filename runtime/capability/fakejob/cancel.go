@@ -184,7 +184,10 @@ func (controller *CancelController) Reconcile(ctx context.Context, credential tr
 	if err != nil {
 		return CancelReceipt{}, ErrCancelReconciliation
 	}
-	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{OperationID: operationID, AttemptID: attemptID, Outcome: transaction.DispatchSucceeded, ObservationDigest: receipt.ReceiptDigest})
+	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{
+		OperationID: operationID, AttemptID: attemptID, Outcome: transaction.DispatchSucceeded,
+		ProviderReceiptDigest: receipt.ReceiptDigest, ObservationDigest: receipt.ReceiptDigest,
+	})
 	if err != nil {
 		return CancelReceipt{}, err
 	}

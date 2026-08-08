@@ -29,7 +29,7 @@ type coordinatorLedger interface {
 	findAttemptByProviderRequest(string, string) (Attempt, error)
 	transitionAttempt(string, uint64, AttemptState, AttemptState, time.Time) (Attempt, error)
 	completeAttempt(string, uint64, AttemptState, string, time.Time) (Attempt, error)
-	reconcileAttempt(string, uint64, AttemptState, string, time.Time) (Attempt, error)
+	reconcileAttempt(string, uint64, AttemptState, string, string, time.Time) (Attempt, error)
 	transitionTransaction(string, uint64, TransactionState, TransactionState, time.Time) (Transaction, error)
 	transitionOperation(string, uint64, OperationState, OperationState, time.Time) (Operation, error)
 	registerApproval(approvalRecord) error
@@ -648,10 +648,11 @@ func (coordinator *Coordinator) completeDispatchWithAuthorityLocked(request Comp
 }
 
 type ReconcileDispatchRequest struct {
-	OperationID       string
-	AttemptID         string
-	Outcome           DispatchOutcome
-	ObservationDigest string
+	OperationID           string
+	AttemptID             string
+	Outcome               DispatchOutcome
+	ProviderReceiptDigest string
+	ObservationDigest     string
 }
 
 func (coordinator *Coordinator) ReconcileDispatch(request ReconcileDispatchRequest) (DispatchCompletion, error) {
@@ -673,14 +674,17 @@ func (coordinator *Coordinator) ReconcileAuthorizedDispatch(credential CommitCre
 
 func (coordinator *Coordinator) reconcileDispatchWithAuthorityLocked(request ReconcileDispatchRequest, irreversibleAuthorized bool) (DispatchCompletion, error) {
 	if !validIdentifier(request.OperationID) || !validIdentifier(request.AttemptID) || !digestPattern.MatchString(request.ObservationDigest) ||
-		(request.Outcome != DispatchSucceeded && request.Outcome != DispatchFailed) {
+		(request.ProviderReceiptDigest != "" && !digestPattern.MatchString(request.ProviderReceiptDigest)) ||
+		(request.Outcome != DispatchSucceeded && request.Outcome != DispatchFailed) ||
+		(request.Outcome == DispatchFailed && request.ProviderReceiptDigest != "") {
 		return DispatchCompletion{}, ErrInvalidInput
 	}
 	operation, err := coordinator.ledger.GetOperation(request.OperationID)
 	if err != nil {
 		return DispatchCompletion{}, err
 	}
-	if operation.EffectClass == EffectIrreversible && request.Outcome == DispatchSucceeded && !irreversibleAuthorized {
+	if operation.EffectClass == EffectIrreversible && request.Outcome == DispatchSucceeded &&
+		(!irreversibleAuthorized || !digestPattern.MatchString(request.ProviderReceiptDigest)) {
 		return DispatchCompletion{}, ErrAuthorityDenied
 	}
 	attempt, err := coordinator.ledger.GetAttempt(request.AttemptID)
@@ -697,11 +701,15 @@ func (coordinator *Coordinator) reconcileDispatchWithAuthorityLocked(request Rec
 	}
 	now := coordinator.now().UTC()
 	if attempt.State == AttemptAmbiguous {
-		attempt, err = coordinator.ledger.reconcileAttempt(attempt.ID, attempt.Version, attemptTarget, request.ObservationDigest, now)
+		attempt, err = coordinator.ledger.reconcileAttempt(
+			attempt.ID, attempt.Version, attemptTarget,
+			request.ProviderReceiptDigest, request.ObservationDigest, now,
+		)
 		if err != nil {
 			return DispatchCompletion{}, err
 		}
-	} else if attempt.State != attemptTarget || attempt.ReconciliationDigest != request.ObservationDigest {
+	} else if attempt.State != attemptTarget || attempt.ProviderReceiptDigest != request.ProviderReceiptDigest ||
+		attempt.ReconciliationDigest != request.ObservationDigest {
 		return DispatchCompletion{}, ErrConflict
 	}
 	if operation.State == OperationReconciliationRequired {

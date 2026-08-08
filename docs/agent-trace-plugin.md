@@ -93,7 +93,9 @@ Tracing is observer-only: event data never enters capability grants, policy, app
 
 The manifest contains one claim per `artifact`, `base`, `authority`, `execution`, `effect`, and `outcome`, with explicit dependencies and one verifier status: `verified`, `contradicted`, `insufficient`, or `stale`. In the current metadata-only adapter:
 
-- exact executed-code digest and execution-reference observation are `verified` structural claims;
+- only a canonical `runtime.completed` payload with exact `status: "ok"`, matching execution identity, and the versioned Harness completion fields may support the execution claim; failed, unknown-status, duplicate-key, aliased, or unknown-field payloads are rejected;
+- `CompletedEventID`, playback digest, code digest, claim IDs, statuses, dependencies, and evidence references are bound to the exact generated graph rather than accepted as free-form labels;
+- exact executed-code digest and successful execution-reference observation are `verified` structural claims;
 - runtime base, authority binding, effects, and semantic outcome remain `insufficient`;
 - maximum qualification is `structural-only` (R0);
 - `RequireReplay(R1)` and `RequireReplay(R2)` fail with insufficient evidence;

@@ -15,6 +15,7 @@
 | Fault injection | explicit response-loss and accepted-timeout faults |
 | No blind retry | `dispatching` and `ambiguous` controller states return `ErrSendReconciliation` without calling send again |
 | Readback | `lookupSent` reconciles by the original manifest digest |
+| Receipt binding | commit and reconciliation recompute the receipt digest and require the returned provider identity to bind to that exact manifest |
 | Final evidence | reconciliation stores provider receipt and readback observation as distinct digests; `BuildTransactionEvidence` exports both |
 | Persistence gate | SQLite reconciliation persists both digests across ledger reopen |
 

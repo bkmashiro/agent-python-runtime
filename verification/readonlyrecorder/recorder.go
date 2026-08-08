@@ -405,9 +405,7 @@ func locatorContainsSensitiveData(locator string) bool {
 	if urlContainsSensitiveData(locator) {
 		return true
 	}
-	for _, token := range strings.FieldsFunc(locator, func(r rune) bool {
-		return unicode.IsSpace(r) || r == '?' || r == '&'
-	}) {
+	for _, token := range strings.FieldsFunc(locator, unicode.IsSpace) {
 		candidate := strings.Trim(token, `"'(),;`)
 		if urlContainsSensitiveData(candidate) {
 			return true

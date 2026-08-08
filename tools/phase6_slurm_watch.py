@@ -19,9 +19,11 @@ MAX_ARCHIVE_BYTES = 256 << 20
 MAX_EXTRACTED_BYTES = 256 << 20
 MAX_MEMBER_BYTES = 64 << 20
 MAX_MEMBERS = 256
+MAX_CONTROL_BYTES = 256
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
-HOST = re.compile(r"^[A-Za-z0-9.-]+$")
+JOB = re.compile(r"^[0-9]+$")
+HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$")
 STAGE = re.compile(r"^/vol/bitbucket/ys25/[A-Za-z0-9._-]+$")
 TERMINAL_STATES = {
     "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
@@ -111,8 +113,8 @@ def validate_identity_args(
     expected_tier: str, interval: int,
 ) -> None:
     path = PurePosixPath(stage)
-    if not job.isdecimal():
-        raise RuntimeError("job must be numeric")
+    if not JOB.fullmatch(job):
+        raise RuntimeError("invalid Slurm job id")
     if not HOST.fullmatch(host):
         raise RuntimeError("host contains unsafe characters")
     if (not STAGE.fullmatch(stage) or ".." in path.parts or "." in path.parts or
@@ -208,6 +210,48 @@ def parse_scontrol_job(text: str, expected_job: str) -> dict[str, str]:
         raise RuntimeError("scontrol job identity drifted")
     values["JobState"] = values["JobState"].split()[0].rstrip("+")
     return values
+
+
+def parse_remote_size(text: str, maximum: int, label: str) -> int:
+    lines = text.splitlines()
+    if len(lines) != 1 or not re.fullmatch(r"[0-9]+", lines[0]):
+        raise RuntimeError(f"remote {label} size is malformed")
+    size = int(lines[0])
+    if size > maximum:
+        raise RuntimeError(f"remote {label} exceeds its transfer bound")
+    return size
+
+
+def parse_tres(value: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for field in value.split(","):
+        key, separator, item = field.partition("=")
+        if separator != "=" or not key or not item or key in result:
+            raise RuntimeError("Slurm TRES is malformed")
+        result[key] = item
+    return result
+
+
+def validate_resource_shape(values: dict[str, str]) -> None:
+    if (values.get("Partition") != "t4" or values.get("NumNodes") != "1" or
+            values.get("NumCPUs") != "4" or values.get("NumTasks") != "1" or
+            values.get("CPUs/Task") != "4" or
+            values.get("MinMemoryNode") not in {"16G", "16384M"} or
+            values.get("TresPerNode") not in {"gres:gpu:tesla_t4:1", "gres/gpu:tesla_t4:1"}):
+        raise RuntimeError("Slurm requested resource shape drifted")
+    allocated = parse_tres(values.get("AllocTRES", ""))
+    if (allocated.get("cpu") != "4" or allocated.get("mem") not in {"16G", "16384M"} or
+            allocated.get("node") != "1" or allocated.get("gres/gpu") != "1"):
+        raise RuntimeError("Slurm allocated resource shape drifted")
+
+
+def validate_environment_shape(values: dict[str, str]) -> None:
+    cuda = values.get("cuda_visible_devices", "")
+    if (values.get("job_partition") != "t4" or values.get("job_num_nodes") != "1" or
+            values.get("num_tasks") != "1" or values.get("cpus_per_task") != "4" or
+            values.get("memory_per_node") not in {"16G", "16384"} or
+            values.get("gpus_on_node") != "1" or not cuda or "," in cuda):
+        raise RuntimeError("worker resource environment drifted")
 
 
 def validate_acked_text(text: str, expected_hash: str) -> None:
@@ -338,12 +382,31 @@ def main() -> None:
         f"test -f {quoted_ready}; test ! -L {quoted_ready}; "
         f"test ! -e {quoted_ack}; test ! -L {quoted_ack}",
     )
+    archive_remote_size = parse_remote_size(
+        ssh(args.host, f"stat -c %s -- {quoted_archive}").stdout,
+        MAX_ARCHIVE_BYTES,
+        "archive",
+    )
+    checksum_remote_size = parse_remote_size(
+        ssh(args.host, f"stat -c %s -- {quoted_checksum}").stdout,
+        MAX_CONTROL_BYTES,
+        "checksum",
+    )
+    ready_remote_size = parse_remote_size(
+        ssh(args.host, f"stat -c %s -- {quoted_ready}").stdout,
+        MAX_CONTROL_BYTES,
+        "READY",
+    )
     archive = local_root / "archive.tar.gz"
     checksum = local_root / "archive.tar.gz.sha256"
     ready = local_root / "READY"
     run("scp", "-q", f"{args.host}:{archive_remote}", str(archive))
     run("scp", "-q", f"{args.host}:{checksum_remote}", str(checksum))
     run("scp", "-q", f"{args.host}:{ready_remote}", str(ready))
+    if (archive.stat().st_size != archive_remote_size or
+            checksum.stat().st_size != checksum_remote_size or
+            ready.stat().st_size != ready_remote_size):
+        raise RuntimeError("remote result size changed during download")
     archive_hash = sha256(archive)
     checksum_fields = checksum.read_text(encoding="utf-8").strip().split()
     ready_fields = ready.read_text(encoding="utf-8").strip().split()
@@ -359,9 +422,9 @@ def main() -> None:
     if run_complete.is_symlink() or not run_complete.is_file() or run_complete.read_text(encoding="utf-8").strip() != args.expected_revision:
         raise RuntimeError("run completion identity drifted")
     environment = exact_key_values(extracted / "ENVIRONMENT.txt")
+    validate_environment_shape(environment)
     if (environment.get("job_id") != args.job or environment.get("tier") != args.expected_tier or
             environment.get("source_commit") != args.expected_revision or
-            environment.get("job_partition") != "t4" or
             environment.get("formal_selection_sha256") != formal_selection_sha256):
         raise RuntimeError("Slurm environment identity drifted")
     manifests = list(extracted.rglob("manifest.json"))
@@ -427,6 +490,7 @@ def main() -> None:
     controller = ssh(args.host, f"scontrol show job -o {quoted_job}")
     (local_root / "scontrol.txt").write_text(controller.stdout, encoding="utf-8")
     controller_row = parse_scontrol_job(controller.stdout, args.job)
+    validate_resource_shape(controller_row)
     if (state != "COMPLETED" or controller_row["JobState"] != "COMPLETED" or
             controller_row["ExitCode"] != "0:0" or controller_row.get("Partition") != "t4"):
         raise RuntimeError(f"Slurm terminal state is not exact COMPLETED/0:0 on t4: {state}\n{controller.stdout}")
@@ -443,8 +507,15 @@ def main() -> None:
             raise RuntimeError("sacct disagrees with the Slurm controller record")
         sacct_verified = True
     ssh(args.host, f"set -e; test -f {quoted_acked}; test ! -L {quoted_acked}")
+    acked_remote_size = parse_remote_size(
+        ssh(args.host, f"stat -c %s -- {quoted_acked}").stdout,
+        MAX_CONTROL_BYTES,
+        "ACKED",
+    )
     acked = local_root / "ACKED"
     run("scp", "-q", f"{args.host}:{acked_remote}", str(acked))
+    if acked.stat().st_size != acked_remote_size:
+        raise RuntimeError("remote ACKED size changed during download")
     validate_acked_text(acked.read_text(encoding="utf-8"), archive_hash)
 
     ack_text = json.dumps({

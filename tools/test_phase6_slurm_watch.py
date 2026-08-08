@@ -38,6 +38,15 @@ class Phase6SlurmContractTests(unittest.TestCase):
         self.assertIn('test -d "$STAGE"', source)
         self.assertIn('test ! -L "$STAGE"', source)
         self.assertIn('find "$STAGE/input" -type l', source)
+        self.assertIn("expected_payload_files=", source)
+        self.assertIn("payload.expected", source)
+        self.assertIn("SLURM_CPUS_PER_TASK", source)
+        self.assertIn("SLURM_MEM_PER_NODE", source)
+        self.assertIn("SLURM_GPUS_ON_NODE", source)
+        watcher = WATCHER.read_text(encoding="utf-8")
+        self.assertIn("stat -c %s --", watcher)
+        self.assertIn("validate_environment_shape(environment)", watcher)
+        self.assertIn("validate_resource_shape(controller_row)", watcher)
 
     def test_watcher_rejects_duplicate_json_keys(self) -> None:
         module = load_watcher()
@@ -116,6 +125,11 @@ class Phase6SlurmContractTests(unittest.TestCase):
             mutation[field] = bad
             with self.assertRaises(RuntimeError, msg=field):
                 module.validate_identity_args(**mutation)
+        for field, bad in (("job", "١٢٣"), ("host", "-v")):
+            mutation = dict(valid)
+            mutation[field] = bad
+            with self.assertRaises(RuntimeError, msg=field):
+                module.validate_identity_args(**mutation)
 
     def test_record_set_is_complete_unique_and_exact(self) -> None:
         module = load_watcher()
@@ -169,6 +183,38 @@ class Phase6SlurmContractTests(unittest.TestCase):
             module.parse_scontrol_job(
                 "JobId=999 JobName=p6 JobState=COMPLETED ExitCode=0:0 Partition=t4\n", "123"
             )
+
+        good_shape = {
+            "Partition": "t4", "NumNodes": "1", "NumCPUs": "4",
+            "NumTasks": "1", "CPUs/Task": "4", "MinMemoryNode": "16G",
+            "TresPerNode": "gres:gpu:tesla_t4:1",
+            "AllocTRES": "cpu=4,mem=16G,node=1,billing=4,gres/gpu=1",
+        }
+        module.validate_resource_shape(good_shape)
+        for key, value in (("NumCPUs", "8"), ("MinMemoryNode", "32G"),
+                           ("TresPerNode", "gres:gpu:a100:1")):
+            shape = dict(good_shape)
+            shape[key] = value
+            with self.assertRaises(RuntimeError):
+                module.validate_resource_shape(shape)
+
+        good_environment = {
+            "job_partition": "t4", "job_num_nodes": "1", "num_tasks": "1",
+            "cpus_per_task": "4", "memory_per_node": "16384", "gpus_on_node": "1",
+            "cuda_visible_devices": "0",
+        }
+        module.validate_environment_shape(good_environment)
+        for key, value in (("cpus_per_task", "8"), ("gpus_on_node", "2"),
+                           ("cuda_visible_devices", "0,1")):
+            environment = dict(good_environment)
+            environment[key] = value
+            with self.assertRaises(RuntimeError):
+                module.validate_environment_shape(environment)
+
+        self.assertEqual(123, module.parse_remote_size("123\n", 256, "READY"))
+        for text in ("", "-1\n", "257\n", "12\n13\n"):
+            with self.assertRaises(RuntimeError):
+                module.parse_remote_size(text, 256, "READY")
 
         digest = "a" * 64
         module.validate_acked_text(f"{digest}  2026-08-08T18:00:00Z\n", digest)

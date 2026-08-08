@@ -438,8 +438,19 @@ func urlContainsSensitiveData(locator string) bool {
 			return true
 		}
 	}
-	for key := range parsed.Query() {
-		if isSensitiveKey(key) {
+	if rawQueryContainsSensitiveData(parsed.RawQuery) {
+		return true
+	}
+	return false
+}
+
+func rawQueryContainsSensitiveData(rawQuery string) bool {
+	for _, pair := range strings.FieldsFunc(rawQuery, func(r rune) bool {
+		return r == '&' || r == ';'
+	}) {
+		rawKey, _, _ := strings.Cut(pair, "=")
+		key, err := url.QueryUnescape(rawKey)
+		if err != nil || isSensitiveKey(key) {
 			return true
 		}
 	}

@@ -130,6 +130,9 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertIn("ACK-${SLURM_JOB_ID}", source)
         self.assertIn("FAILED-${SLURM_JOB_ID}", source)
         self.assertIn("failure_line=%s", source)
+        self.assertLess(source.index("trap record_failure_and_cleanup EXIT"), source.index('test "${SLURM_JOB_PARTITION:-}" = t4'))
+        self.assertIn('abort_job "$LINENO" 72 "ACK timeout for $archive_sha"', source)
+        self.assertIn('abort_job "$LINENO" 143 "received SIGTERM"', source)
         self.assertNotIn("a100", source.lower())
         self.assertNotIn("sh -c", source)
 

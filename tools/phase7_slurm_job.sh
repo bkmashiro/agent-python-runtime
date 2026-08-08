@@ -26,27 +26,94 @@ case "$TIER" in canary|formal) ;; *) printf 'invalid tier\n' >&2; exit 64 ;; esa
 case "$ORDER" in cow-first|non-cow-first) ;; *) printf 'invalid arm order\n' >&2; exit 64 ;; esac
 [[ "$STAGE" =~ ^/vol/bitbucket/ys25/[A-Za-z0-9._-]+$ ]] || { printf 'unsafe stage path\n' >&2; exit 64; }
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { printf 'invalid source commit\n' >&2; exit 64; }
+test -d "$STAGE" && test ! -L "$STAGE"
+test -d "$STAGE/input" && test ! -L "$STAGE/input"
+
+NODE_ROOT="${SLURM_TMPDIR:-/tmp}/pysolate-p7-${SLURM_JOB_ID}"
+INPUT="$NODE_ROOT/input"
+REPO="$NODE_ROOT/repo"
+RESULT="$NODE_ROOT/result"
+OUTBOX="$STAGE/outbox"
+ACK="$STAGE/ACK-${SLURM_JOB_ID}"
+FAILED="$OUTBOX/FAILED-${SLURM_JOB_ID}"
+FAILED_TMP="$OUTBOX/FAILED-${SLURM_JOB_ID}.partial"
+OWNER_MARKER="$NODE_ROOT/.phase7-owner"
+owner_token="${SLURM_JOB_ID}:${SOURCE_COMMIT}:$$"
+failure_line=0
+node_root_created=false
+
+if [[ -e "$OUTBOX" ]] || [[ -L "$OUTBOX" ]]; then
+  test -d "$OUTBOX" && test ! -L "$OUTBOX"
+else
+  mkdir "$OUTBOX"
+fi
+chmod 700 "$OUTBOX"
+# shellcheck disable=SC2329
+cleanup_node_root() {
+  marker_value=""
+  if [[ "$node_root_created" = true ]] && [[ -d "$NODE_ROOT" ]] && [[ ! -L "$NODE_ROOT" ]]; then
+    if [[ -f "$OWNER_MARKER" ]] && [[ ! -L "$OWNER_MARKER" ]] &&
+       IFS= read -r marker_value < "$OWNER_MARKER" && [[ "$marker_value" == "$owner_token" ]]; then
+      rm -rf -- "$NODE_ROOT"
+    else
+      rmdir -- "$NODE_ROOT" 2>/dev/null || true
+    fi
+  fi
+}
+# shellcheck disable=SC2329
+record_failure_and_cleanup() {
+  status=$?
+  trap - ERR EXIT
+  set +e
+  if [[ "$status" -ne 0 ]] && [[ -d "$OUTBOX" ]] && [[ ! -L "$OUTBOX" ]] &&
+     [[ ! -e "$FAILED" ]] && [[ ! -L "$FAILED" ]] && [[ ! -e "$FAILED_TMP" ]] && [[ ! -L "$FAILED_TMP" ]]; then
+    {
+      printf 'job_id=%s\n' "$SLURM_JOB_ID"
+      printf 'source_commit=%s\n' "$SOURCE_COMMIT"
+      printf 'exit_code=%s\n' "$status"
+      printf 'failure_line=%s\n' "$failure_line"
+    } > "$FAILED_TMP"
+    chmod 400 "$FAILED_TMP"
+    if ln -- "$FAILED_TMP" "$FAILED"; then
+      rm -- "$FAILED_TMP"
+    fi
+  fi
+  cleanup_node_root
+  exit "$status"
+}
+abort_job() {
+  failure_line="$1"
+  code="$2"
+  shift 2
+  printf '%s\n' "$*" >&2
+  exit "$code"
+}
+trap 'failure_line=$LINENO' ERR
+trap record_failure_and_cleanup EXIT
+trap 'abort_job "$LINENO" 129 "received SIGHUP"' HUP
+trap 'abort_job "$LINENO" 130 "received SIGINT"' INT
+trap 'abort_job "$LINENO" 143 "received SIGTERM"' TERM
+
+test ! -e "$ACK" && test ! -L "$ACK"
+test ! -e "$FAILED" && test ! -L "$FAILED"
+test ! -e "$FAILED_TMP" && test ! -L "$FAILED_TMP"
 test "${SLURM_JOB_PARTITION:-}" = t4
 test "${SLURM_CPUS_PER_TASK:-}" = 4
 test "${SLURM_JOB_NUM_NODES:-}" = 1
 test "${SLURM_NTASKS:-}" = 1
-case "${SLURM_MEM_PER_NODE:-}" in 16384|16G) ;; *) printf 'unexpected memory allocation\n' >&2; exit 65 ;; esac
+case "${SLURM_MEM_PER_NODE:-}" in 16384|16G) ;; *) abort_job "$LINENO" 65 'unexpected memory allocation' ;; esac
 test "${SLURM_GPUS_ON_NODE:-}" = 1
 test -n "${CUDA_VISIBLE_DEVICES:-}"
 [[ "${CUDA_VISIBLE_DEVICES}" != *,* ]]
 
-test -d "$STAGE" && test ! -L "$STAGE"
-test -d "$STAGE/input" && test ! -L "$STAGE/input"
 if find "$STAGE/input" -type l -print -quit | grep -q .; then
-  printf 'symlinked staged input is forbidden\n' >&2
-  exit 65
+  abort_job "$LINENO" 65 'symlinked staged input is forbidden'
 fi
 test -d "$STAGE/input/artifacts" && test ! -L "$STAGE/input/artifacts"
 test -d "$STAGE/input/bin" && test ! -L "$STAGE/input/bin"
 test "$(find "$STAGE/input" -type d -print | wc -l | tr -d '[:space:]')" -eq 3
 if find "$STAGE/input" -mindepth 1 ! -type f ! -type d -print -quit | grep -q .; then
-  printf 'special staged input is forbidden\n' >&2
-  exit 65
+  abort_job "$LINENO" 65 'special staged input is forbidden'
 fi
 
 expected_payload_files=(
@@ -61,72 +128,27 @@ expected_payload_max_bytes=(128 268435456 1048576 134217728 131072 67108864)
 test "$(find "$STAGE/input" -type f -print | wc -l | tr -d '[:space:]')" -eq "$((${#expected_payload_files[@]} + 1))"
 for index in "${!expected_payload_files[@]}"; do
   candidate="$STAGE/input/${expected_payload_files[$index]}"
-  test -f "$candidate" && test ! -L "$candidate"
+  test -f "$candidate"
+  test ! -L "$candidate"
   candidate_size="$(stat -c '%s' "$candidate")"
-  test "$candidate_size" -gt 0 && test "$candidate_size" -le "${expected_payload_max_bytes[$index]}"
+  test "$candidate_size" -gt 0
+  test "$candidate_size" -le "${expected_payload_max_bytes[$index]}"
 done
-test -f "$STAGE/input/payload.SHA256" && test ! -L "$STAGE/input/payload.SHA256"
+test -f "$STAGE/input/payload.SHA256"
+test ! -L "$STAGE/input/payload.SHA256"
 payload_manifest_size="$(stat -c '%s' "$STAGE/input/payload.SHA256")"
-test "$payload_manifest_size" -gt 0 && test "$payload_manifest_size" -le 8192
+test "$payload_manifest_size" -gt 0
+test "$payload_manifest_size" -le 8192
 
-NODE_ROOT="${SLURM_TMPDIR:-/tmp}/pysolate-p7-${SLURM_JOB_ID}"
-INPUT="$NODE_ROOT/input"
-REPO="$NODE_ROOT/repo"
-RESULT="$NODE_ROOT/result"
-OUTBOX="$STAGE/outbox"
-ACK="$STAGE/ACK-${SLURM_JOB_ID}"
-FAILED="$OUTBOX/FAILED-${SLURM_JOB_ID}"
-FAILED_TMP="$OUTBOX/FAILED-${SLURM_JOB_ID}.partial"
 if ! mkdir -m 700 "$NODE_ROOT"; then
-  printf 'compute root already exists\n' >&2
-  exit 66
+  abort_job "$LINENO" 66 'compute root already exists'
 fi
-OWNER_MARKER="$NODE_ROOT/.phase7-owner"
-owner_token="${SLURM_JOB_ID}:${SOURCE_COMMIT}:$$"
-failure_line=0
+node_root_created=true
 printf '%s\n' "$owner_token" > "$OWNER_MARKER"
 chmod 400 "$OWNER_MARKER"
-# shellcheck disable=SC2329
-cleanup_node_root() {
-  marker_value=""
-  if [[ -d "$NODE_ROOT" ]] && [[ ! -L "$NODE_ROOT" ]] &&
-     [[ -f "$OWNER_MARKER" ]] && [[ ! -L "$OWNER_MARKER" ]] &&
-     IFS= read -r marker_value < "$OWNER_MARKER" && [[ "$marker_value" == "$owner_token" ]]; then
-    rm -rf -- "$NODE_ROOT"
-  fi
-}
-# shellcheck disable=SC2329
-record_failure_and_cleanup() {
-  status=$?
-  trap - EXIT
-  if [[ "$status" -ne 0 ]] && [[ -d "$OUTBOX" ]] && [[ ! -L "$OUTBOX" ]] &&
-     [[ ! -e "$FAILED" ]] && [[ ! -L "$FAILED" ]] && [[ ! -e "$FAILED_TMP" ]] && [[ ! -L "$FAILED_TMP" ]]; then
-    {
-      printf 'job_id=%s\n' "$SLURM_JOB_ID"
-      printf 'source_commit=%s\n' "$SOURCE_COMMIT"
-      printf 'exit_code=%s\n' "$status"
-      printf 'failure_line=%s\n' "$failure_line"
-    } > "$FAILED_TMP"
-    chmod 400 "$FAILED_TMP"
-    ln -- "$FAILED_TMP" "$FAILED"
-    rm -- "$FAILED_TMP"
-  fi
-  cleanup_node_root
-  exit "$status"
-}
-trap 'failure_line=$LINENO' ERR
-trap record_failure_and_cleanup EXIT
-
 mkdir -m 700 "$INPUT"
 mkdir -m 700 "$INPUT/artifacts" "$INPUT/bin"
-if [[ -e "$OUTBOX" ]] || [[ -L "$OUTBOX" ]]; then
-  test -d "$OUTBOX" && test ! -L "$OUTBOX"
-else
-  mkdir "$OUTBOX"
-fi
-chmod 700 "$NODE_ROOT" "$INPUT" "$OUTBOX"
-test ! -e "$ACK" && test ! -L "$ACK"
-test ! -e "$FAILED" && test ! -L "$FAILED" && test ! -e "$FAILED_TMP" && test ! -L "$FAILED_TMP"
+chmod 700 "$NODE_ROOT" "$INPUT"
 copy_bounded_regular() {
   python3 - "$1" "$2" "$3" <<'PY'
 import hashlib
@@ -222,7 +244,7 @@ for strategy in $arms; do
   case "$strategy" in
     cow-ready-single-use) output="$RESULT/cow.json" ;;
     single-use-preinitialized) output="$RESULT/non-cow.json" ;;
-    *) exit 70 ;;
+    *) abort_job "$LINENO" 70 'unexpected strategy' ;;
   esac
   "$INPUT/bin/apyrun-benchmark-linux-amd64" \
     -kind lifecycle-density \
@@ -321,5 +343,4 @@ for _ in $(seq 1 180); do
   fi
   sleep 10
 done
-printf 'ACK timeout for %s\n' "$archive_sha" >&2
-exit 72
+abort_job "$LINENO" 72 "ACK timeout for $archive_sha"

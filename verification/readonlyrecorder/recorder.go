@@ -11,9 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -44,7 +46,6 @@ var (
 )
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var locatorSecretPattern = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]_])(?:token|password|secret|api[_-]?key|authorization|cookie)(?:\s*(?:=|:)|\s+)`)
 var valueSecretPattern = regexp.MustCompile(`(?i)(?:bearer\s+[A-Za-z0-9._~+/=-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{12,}|AKIA[0-9A-Z]{16})`)
 var sensitiveKeys = map[string]struct{}{
 	"auth": {},
@@ -109,7 +110,7 @@ func Capture(observation Observation) (Recording, error) {
 		strings.ContainsRune(observation.Locator, '\x00') || len(observation.Payload) == 0 || len(observation.Payload) > maxPayloadBytes {
 		return Recording{}, ErrInvalidObservation
 	}
-	if locatorSecretPattern.MatchString(observation.Locator) || valueSecretPattern.MatchString(observation.Locator) {
+	if locatorContainsSensitiveData(observation.Locator) {
 		return Recording{}, ErrSensitiveObservation
 	}
 	value, err := decodeStrict(observation.Payload)
@@ -396,6 +397,31 @@ func validJSONType(kind string) bool {
 }
 
 func validSource(source SourceKind) bool { return source == SourceWeb || source == SourceCLI }
+
+func locatorContainsSensitiveData(locator string) bool {
+	if valueSecretPattern.MatchString(locator) {
+		return true
+	}
+	if parsed, err := url.Parse(locator); err == nil {
+		for key := range parsed.Query() {
+			if isSensitiveKey(key) {
+				return true
+			}
+		}
+	}
+	for _, token := range strings.FieldsFunc(locator, func(r rune) bool {
+		return unicode.IsSpace(r) || r == '?' || r == '&'
+	}) {
+		token = strings.TrimLeft(token, "-/")
+		if index := strings.IndexAny(token, "=:"); index >= 0 {
+			token = token[:index]
+		}
+		if isSensitiveKey(token) {
+			return true
+		}
+	}
+	return false
+}
 
 func isSensitiveKey(key string) bool {
 	normalized := strings.ToLower(key)

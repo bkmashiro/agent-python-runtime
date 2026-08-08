@@ -34,6 +34,11 @@ func TestCaptureRejectsSensitiveFieldsValuesLocatorsAndDuplicateKeys(t *testing.
 		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl", Payload: []byte(`{"message":"Bearer abcdefghijklmnop"}`)},
 		{Source: readonlyrecorder.SourceWeb, Locator: "https://example.invalid?api_key=hidden", Payload: []byte(`{"status":"ok"}`)},
 		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl --password hidden", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl --aws_secret_access_key hidden", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl --client_secret hidden", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl --secret_key hidden", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl --auth hidden", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceWeb, Locator: "https://example.invalid?auth=hidden", Payload: []byte(`{"status":"ok"}`)},
 		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl", Payload: []byte(`{"status":"ok","status":"changed"}`)},
 	}
 	for index, observation := range observations {

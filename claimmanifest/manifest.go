@@ -5,6 +5,7 @@ package claimmanifest
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -61,6 +62,7 @@ var (
 	ErrOverclaimedReplay    = errors.New("claim manifest overstates replay qualification")
 	ErrExecutionNotObserved = errors.New("execution reference not observed in metadata playback")
 	digestPattern           = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	eventIDPattern          = regexp.MustCompile(`^evt_[0-9a-f]{32}$`)
 )
 
 type Evidence struct {
@@ -77,12 +79,13 @@ type Claim struct {
 }
 
 type Manifest struct {
-	Version        string                     `json:"version"`
-	Source         string                     `json:"source"`
-	ExecutionRef   runtimeconfig.ExecutionRef `json:"execution_ref"`
-	PlaybackDigest string                     `json:"playback_digest"`
-	Qualification  Qualification              `json:"qualification"`
-	Claims         []Claim                    `json:"claims"`
+	Version          string                     `json:"version"`
+	Source           string                     `json:"source"`
+	ExecutionRef     runtimeconfig.ExecutionRef `json:"execution_ref"`
+	PlaybackDigest   string                     `json:"playback_digest"`
+	CompletedEventID string                     `json:"completed_event_id"`
+	Qualification    Qualification              `json:"qualification"`
+	Claims           []Claim                    `json:"claims"`
 }
 
 func (manifest Manifest) Claim(kind ClaimKind) (Claim, bool) {
@@ -107,7 +110,7 @@ func (manifest Manifest) RequireReplay(level ReplayLevel) error {
 
 func (manifest Manifest) Validate() error {
 	if manifest.Version != Version || manifest.Source != "metadata-only" || manifest.ExecutionRef.Validate() != nil ||
-		!digestPattern.MatchString(manifest.PlaybackDigest) {
+		!digestPattern.MatchString(manifest.PlaybackDigest) || !eventIDPattern.MatchString(manifest.CompletedEventID) {
 		return ErrInvalidManifest
 	}
 	claims := make(map[ClaimKind]Claim, len(manifest.Claims))
@@ -141,6 +144,9 @@ func (manifest Manifest) Validate() error {
 				return ErrInvalidManifest
 			}
 		}
+	}
+	if !reflect.DeepEqual(manifest.Claims, metadataClaims(manifest.ExecutionRef, manifest.PlaybackDigest, manifest.CompletedEventID)) {
+		return ErrInvalidManifest
 	}
 	maximum := maximumQualification(claims)
 	if qualificationRank(manifest.Qualification) > qualificationRank(maximum) {
@@ -230,6 +236,18 @@ func validEvidenceKind(kind EvidenceKind) bool {
 
 func claimID(kind ClaimKind, executionID string) string {
 	return fmt.Sprintf("%s:%s", kind, executionID)
+}
+
+func metadataClaims(ref runtimeconfig.ExecutionRef, playbackDigest, completedEventID string) []Claim {
+	artifact := statusClaim(ClaimArtifact, ref.ExecutionID, StatusVerified)
+	artifact.Evidence = []Evidence{{Kind: EvidenceExecutedCodeDigest, Ref: ref.ExecutedCodeSHA256}}
+	base := statusClaim(ClaimBase, ref.ExecutionID, StatusInsufficient)
+	authority := statusClaim(ClaimAuthority, ref.ExecutionID, StatusInsufficient)
+	execution := statusClaim(ClaimExecution, ref.ExecutionID, StatusVerified, ClaimArtifact, ClaimBase, ClaimAuthority)
+	execution.Evidence = []Evidence{{Kind: EvidenceTraceIntegrity, Ref: playbackDigest + "#" + completedEventID}}
+	effect := statusClaim(ClaimEffect, ref.ExecutionID, StatusInsufficient, ClaimAuthority, ClaimExecution)
+	outcome := statusClaim(ClaimOutcome, ref.ExecutionID, StatusInsufficient, ClaimExecution, ClaimEffect)
+	return []Claim{artifact, base, authority, execution, effect, outcome}
 }
 
 func statusClaim(kind ClaimKind, executionID string, status Status, dependencies ...ClaimKind) Claim {

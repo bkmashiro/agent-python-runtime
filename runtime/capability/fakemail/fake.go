@@ -688,6 +688,9 @@ func (controller *SendController) Commit(ctx context.Context, credential transac
 		receipt, ambiguous, sendErr = controller.adapter.config.Provider.send(value, staged.public.ManifestDigest, staged.request)
 		return sendErr
 	})
+	if err == nil && (!validSendReceipt(receipt) || receipt.ManifestDigest != staged.public.ManifestDigest) {
+		err = ErrAmbiguousSend
+	}
 	if err != nil {
 		outcome := transaction.DispatchFailed
 		status := "failed"
@@ -745,7 +748,7 @@ func (controller *SendController) Reconcile(ctx context.Context, credential tran
 		receipt, lookupErr = controller.adapter.config.Provider.lookupSent(value, manifest)
 		return lookupErr
 	})
-	if err != nil {
+	if err != nil || !validSendReceipt(receipt) || receipt.ManifestDigest != manifest {
 		return SendReceipt{}, ErrSendReconciliation
 	}
 	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{

@@ -22,8 +22,8 @@ func TestMetadataPlaybackProducesOnlyStructuralQualification(t *testing.T) {
 	if err := manifest.Validate(); err != nil {
 		t.Fatalf("manifest validation failed: %v", err)
 	}
-	if manifest.Qualification != claimmanifest.QualificationStructuralOnly {
-		t.Fatalf("qualification=%q", manifest.Qualification)
+	if manifest.Qualification != claimmanifest.QualificationStructuralOnly || manifest.CompletedEventID == "" {
+		t.Fatalf("manifest=%+v", manifest)
 	}
 	if err := manifest.RequireReplay(claimmanifest.ReplayR0); err != nil {
 		t.Fatalf("R0 rejected: %v", err)
@@ -62,14 +62,42 @@ func TestMetadataPlaybackRejectsForgedR1AndR2Qualifications(t *testing.T) {
 		claimmanifest.QualificationStateEquivalent,
 	} {
 		candidate := manifest
-		candidate.Claims = append([]claimmanifest.Claim(nil), manifest.Claims...)
-		for index := range candidate.Claims {
-			candidate.Claims[index].Status = claimmanifest.StatusVerified
-		}
 		candidate.Qualification = forged
 		if err := candidate.Validate(); !errors.Is(err, claimmanifest.ErrOverclaimedReplay) {
 			t.Fatalf("qualification=%q err=%v", forged, err)
 		}
+	}
+}
+
+func TestMetadataManifestRejectsEvidenceAndTopologyTampering(t *testing.T) {
+	ref, playback := metadataPlayback(t)
+	manifest, err := claimmanifest.FromMetadataPlayback(ref, playback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*claimmanifest.Manifest){
+		"event identity": func(candidate *claimmanifest.Manifest) { candidate.CompletedEventID = "other-event" },
+		"artifact evidence": func(candidate *claimmanifest.Manifest) {
+			claimByKind(candidate, claimmanifest.ClaimArtifact).Evidence[0].Ref = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+		},
+		"execution evidence": func(candidate *claimmanifest.Manifest) {
+			claimByKind(candidate, claimmanifest.ClaimExecution).Evidence[0].Ref = candidate.PlaybackDigest + "#other-event"
+		},
+		"execution status": func(candidate *claimmanifest.Manifest) {
+			claimByKind(candidate, claimmanifest.ClaimExecution).Status = claimmanifest.StatusInsufficient
+		},
+		"dependency graph": func(candidate *claimmanifest.Manifest) {
+			claimByKind(candidate, claimmanifest.ClaimExecution).DependsOn = nil
+		},
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			candidate := cloneManifest(manifest)
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, claimmanifest.ErrInvalidManifest) {
+				t.Fatalf("err=%v candidate=%+v", err, candidate)
+			}
+		})
 	}
 }
 
@@ -79,6 +107,48 @@ func TestMetadataPlaybackRequiresMatchingCompletedExecution(t *testing.T) {
 
 	if _, err := claimmanifest.FromMetadataPlayback(ref, playback); !errors.Is(err, claimmanifest.ErrExecutionNotObserved) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestMetadataPlaybackRejectsNonSuccessOrDuplicateStatus(t *testing.T) {
+	ref := executionRef()
+	for _, status := range []any{"error", "forged", true, float64(1)} {
+		payload, err := json.Marshal(map[string]any{
+			"invocation_id": ref.InvocationID, "invocation_attempt": ref.InvocationAttempt,
+			"execution_id": ref.ExecutionID, "executed_code_sha256": ref.ExecutedCodeSHA256,
+			"status": status, "turn_seq": ref.TurnSeq, "output_item_seq": ref.OutputItemSeq, "segment_seq": ref.SegmentSeq,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := claimmanifest.FromMetadataPlayback(ref, playbackWithPayload(t, ref.AgentRunID, payload)); !errors.Is(err, claimmanifest.ErrExecutionNotObserved) {
+			t.Fatalf("status=%v err=%v", status, err)
+		}
+	}
+	duplicate := []byte(`{"invocation_id":"invocation-1","invocation_attempt":1,"execution_id":"execution-1","executed_code_sha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"ok","status":"error","turn_seq":2,"output_item_seq":3,"segment_seq":4}`)
+	if _, err := claimmanifest.FromMetadataPlayback(ref, playbackWithPayload(t, ref.AgentRunID, duplicate)); !errors.Is(err, claimmanifest.ErrExecutionNotObserved) {
+		t.Fatalf("duplicate status err=%v", err)
+	}
+}
+
+func TestMetadataPlaybackAcceptsVersionedHarnessCompletionShape(t *testing.T) {
+	ref := executionRef()
+	payload, err := json.Marshal(map[string]any{
+		"invocation_id": ref.InvocationID, "invocation_attempt": ref.InvocationAttempt,
+		"execution_id": ref.ExecutionID, "executed_code_sha256": ref.ExecutedCodeSHA256,
+		"status": "ok", "run_error": false, "error_code": "",
+		"request_digest":   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"response_digest":  "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		"result_digest":    "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		"capability_calls": uint32(2), "turn_seq": ref.TurnSeq,
+		"output_item_seq": ref.OutputItemSeq, "segment_seq": ref.SegmentSeq,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := claimmanifest.FromMetadataPlayback(ref, playbackWithPayload(t, ref.AgentRunID, payload))
+	if err != nil || manifest.Qualification != claimmanifest.QualificationStructuralOnly {
+		t.Fatalf("manifest=%+v err=%v", manifest, err)
 	}
 }
 
@@ -96,6 +166,25 @@ func TestMetadataPlaybackRejectsFoldedExecutionIdentityAlias(t *testing.T) {
 	if _, err := claimmanifest.FromMetadataPlayback(ref, playback); !errors.Is(err, claimmanifest.ErrExecutionNotObserved) {
 		t.Fatalf("err=%v", err)
 	}
+}
+
+func cloneManifest(manifest claimmanifest.Manifest) claimmanifest.Manifest {
+	cloned := manifest
+	cloned.Claims = append([]claimmanifest.Claim(nil), manifest.Claims...)
+	for index := range cloned.Claims {
+		cloned.Claims[index].DependsOn = append([]string(nil), manifest.Claims[index].DependsOn...)
+		cloned.Claims[index].Evidence = append([]claimmanifest.Evidence(nil), manifest.Claims[index].Evidence...)
+	}
+	return cloned
+}
+
+func claimByKind(manifest *claimmanifest.Manifest, kind claimmanifest.ClaimKind) *claimmanifest.Claim {
+	for index := range manifest.Claims {
+		if manifest.Claims[index].Kind == kind {
+			return &manifest.Claims[index]
+		}
+	}
+	panic("claim not found")
 }
 
 func metadataPlayback(t *testing.T) (runtimeconfig.ExecutionRef, agenttrace.Playback) {

@@ -71,6 +71,8 @@ Lifecycle-density schema v2 binds:
 
 `tools/phase7_density.py` first invokes the standalone Go validator for each arm and then rejects any cross-arm drift in artifact, warmup, Host source, backend, environment, plan, metric semantics, or observability. Derived ratios use integer parts-per-million to keep rendering deterministic.
 
+The Slurm wrapper accepts only the exact bounded payload file set, copies every source through a one-descriptor size/hash gate, and binds the scheduler's executing script, the checked-out source wrapper, and the running benchmark binary's embedded VCS identity to the requested source commit. Archive, checksum, `READY`, failure, and `ACKED` files use exclusive hard-link publication. ACK input is one bounded regular file read through one `O_NOFOLLOW` descriptor and must equal exactly `<archive-sha256>\n`. Slurm stdout is outside `stage/input`, so scheduler-created log files cannot change the payload inventory. With a four-minute child timeout, 42 formal child cells plus the 30-minute ACK window remain below the four-hour allocation limit.
+
 ## Canary commands
 
 ```bash
@@ -80,7 +82,7 @@ Lifecycle-density schema v2 binds:
   -strategy cow-ready-single-use \
   -prepared-warmup-profile numpy-ready-v1 \
   -artifact "$ARTIFACT" -manifest "$MANIFEST" \
-  -samples 1 -max-rss-bytes 8589934592 -child-timeout 10m \
+  -samples 1 -max-rss-bytes 8589934592 -child-timeout 4m \
   -output cow.json
 
 ./apyrun-benchmark \
@@ -89,7 +91,7 @@ Lifecycle-density schema v2 binds:
   -strategy single-use-preinitialized \
   -prepared-warmup-profile numpy-ready-v1 \
   -artifact "$ARTIFACT" -manifest "$MANIFEST" \
-  -samples 1 -max-rss-bytes 8589934592 -child-timeout 10m \
+  -samples 1 -max-rss-bytes 8589934592 -child-timeout 4m \
   -output non-cow.json
 
 python3 tools/phase7_density.py \

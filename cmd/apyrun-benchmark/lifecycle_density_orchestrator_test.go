@@ -61,6 +61,44 @@ func TestDensitySweepSpecsAcceptCOWReadySingleUse(t *testing.T) {
 	}
 }
 
+func TestNumPyDensitySweepSpecsExtendTo64AndBindWarmup(t *testing.T) {
+	specs, err := numpyDensitySweepSpecs("cow-ready-single-use", 2, 8*1024*1024*1024, 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSlots := []uint32{1, 2, 4, 8, 16, 32, 64}
+	if len(specs) != len(wantSlots)*2 {
+		t.Fatalf("spec count=%d, want %d", len(specs), len(wantSlots)*2)
+	}
+	for index, spec := range specs {
+		if spec.RequestedSlots != wantSlots[index/2] || spec.RepeatIndex != uint32(index%2) || spec.WarmupProfile != wazeroengine.COWWarmupNumPyReadyV1 {
+			t.Fatalf("NumPy density spec %d drifted: %#v", index, spec)
+		}
+	}
+}
+
+func TestPreparedDensityShardsPreserveRealStrategyTopology(t *testing.T) {
+	cow, err := preparedDensityShardCapacitiesForStrategy(64, "cow-ready-single-use", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(cow) != "[64]" {
+		t.Fatalf("COW topology=%v, want one 64-slot canonical image", cow)
+	}
+	nonCOW, err := preparedDensityShardCapacitiesForStrategy(64, "single-use-preinitialized", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nonCOW) != 16 {
+		t.Fatalf("non-COW shards=%d, want 16 hard-bounded runtimes", len(nonCOW))
+	}
+	for _, capacity := range nonCOW {
+		if capacity != 4 {
+			t.Fatalf("non-COW shard capacity=%d, want 4", capacity)
+		}
+	}
+}
+
 func TestDensitySweepSpecsRejectMissingBoundsAndUnknownStrategy(t *testing.T) {
 	for name, invoke := range map[string]func() error{
 		"unknown strategy": func() error {
@@ -116,6 +154,24 @@ func TestValidateLifecycleDensityCLIOptionsSeparatesParentAndChild(t *testing.T)
 	sharedCacheProduction.Strategy = "single-use-preinitialized-shared-cache"
 	if err := validateLifecycleDensityOptions(sharedCacheProduction, false, "linux"); err == nil {
 		t.Fatal("production-safe density accepted experimental shared cache")
+	}
+	numpyExperiment := parent
+	numpyExperiment.Class = "profile-candidate"
+	numpyExperiment.PreparedWarmupProfile = wazeroengine.COWWarmupNumPyReadyV1
+	if err := validateLifecycleDensityOptions(numpyExperiment, false, "linux"); err != nil {
+		t.Fatalf("NumPy density experiment rejected: %v", err)
+	}
+	numpyChild := numpyExperiment
+	numpyChild.OutputPath = ""
+	numpyChild.LifecycleDensityChild = true
+	numpyChild.DensitySlots = 64
+	if err := validateLifecycleDensityOptions(numpyChild, true, "linux"); err != nil {
+		t.Fatalf("NumPy 64-slot child rejected: %v", err)
+	}
+	unknownWarmup := numpyExperiment
+	unknownWarmup.PreparedWarmupProfile = "unknown-v1"
+	if err := validateLifecycleDensityOptions(unknownWarmup, false, "linux"); err == nil {
+		t.Fatal("unknown prepared warmup accepted")
 	}
 	child := parent
 	child.OutputPath = ""
@@ -313,6 +369,103 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 	if evidence.Samples[0].ProcessInstanceSHA256 == evidence.Samples[1].ProcessInstanceSHA256 {
 		t.Fatal("parent reused process-instance identity")
 	}
+	directory := t.TempDir()
+	artifactPath := filepath.Join(directory, "guest.wasm")
+	manifestPath := filepath.Join(directory, "manifest.json")
+	evidencePath := filepath.Join(directory, "evidence.json")
+	manifest := fmt.Sprintf(`{"artifact_profile":"base","artifact":{"filename":"guest.wasm","sha256":"%s","size":%d},"build":{"repository_commit":"%s","compiler_target":"wasm32-wasip1","execution_model":"reactor"},"target":"wasm32-wasip1"}`,
+		artifact.SHA256, len(artifactBytes), artifact.SourceCommit)
+	for path, data := range map[string][]byte{
+		artifactPath: artifactBytes, manifestPath: []byte(manifest), evidencePath: encoded,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	verdict, err := validateLifecycleDensityInput(benchmarkOptions{InputPath: evidencePath, ArtifactPath: artifactPath, ManifestPath: manifestPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verdict.Valid || verdict.ArtifactSHA256 != artifact.SHA256 || verdict.Samples != len(evidence.Samples) {
+		t.Fatalf("standalone validation verdict drifted: %#v", verdict)
+	}
+	duplicate := append([]byte(`{"schema_version":1,`), encoded[1:]...)
+	if err := os.WriteFile(evidencePath, duplicate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateLifecycleDensityInput(benchmarkOptions{InputPath: evidencePath, ArtifactPath: artifactPath, ManifestPath: manifestPath}); err == nil {
+		t.Fatal("standalone validator accepted duplicate JSON key")
+	}
+}
+
+func TestAssembleNumPyLifecycleDensityBindsSameArtifactWarmupAndRealTopology(t *testing.T) {
+	artifactBytes := []byte("fixture-wasm")
+	artifactDigest := sha256.Sum256(artifactBytes)
+	artifact := artifactIdentity{
+		Filename: "numpy.wasm", SHA256: hex.EncodeToString(artifactDigest[:]), Size: int64(len(artifactBytes)),
+		SourceCommit: strings.Repeat("a", 40), ArtifactProfile: "numpy-core", Target: "wasm32-wasip1", Execution: "reactor",
+	}
+	warmupDigest := sha256.New()
+	_, _ = warmupDigest.Write(artifactBytes)
+	_, _ = warmupDigest.Write([]byte{0})
+	_, _ = warmupDigest.Write([]byte(wazeroengine.COWWarmupNumPyReadyV1))
+	expectedGeneration := hex.EncodeToString(warmupDigest.Sum(nil))
+	for _, strategy := range []string{"cow-ready-single-use", "single-use-preinitialized"} {
+		t.Run(strategy, func(t *testing.T) {
+			specs, err := numpyDensitySweepSpecs(strategy, 1, 8*1024*1024*1024, 2*time.Minute)
+			if err != nil {
+				t.Fatal(err)
+			}
+			evidence, encoded, err := assembleLifecycleDensityEvidence(
+				context.Background(), artifact, artifactBytes,
+				hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "profile-candidate", specs,
+				[]byte("01234567890123456789012345678901"),
+				func(_ context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
+					envelope := validDensityChildEnvelope(spec, artifact)
+					envelope.Warmup.GenerationSHA256 = expectedGeneration
+					return densityChildInvocation{
+						Envelope: envelope,
+						Process:  boundedChildResult{PID: 100 + int(spec.SampleIndex), StartedAtUnixNS: int64(spec.SampleIndex + 1), MaxObservedRSSBytes: 1},
+					}, nil
+				},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if evidence.SchemaVersion != 2 || evidence.Warmup == nil || evidence.Warmup.GenerationSHA256 != expectedGeneration ||
+				len(evidence.Samples) != 7 || evidence.Plan.SlotCounts[6] != 64 {
+				t.Fatalf("NumPy lifecycle evidence drifted: %#v", evidence)
+			}
+			if err := runtimeevidence.ValidateLifecycleDensityJSON(encoded); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestAssembleNumPyLifecycleDensityRejectsWarmupGenerationDrift(t *testing.T) {
+	artifactBytes := []byte("fixture-wasm")
+	digest := sha256.Sum256(artifactBytes)
+	artifact := artifactIdentity{
+		Filename: "numpy.wasm", SHA256: hex.EncodeToString(digest[:]), Size: int64(len(artifactBytes)),
+		SourceCommit: strings.Repeat("a", 40), ArtifactProfile: "numpy-core", Target: "wasm32-wasip1", Execution: "reactor",
+	}
+	specs, err := numpyDensitySweepSpecs("single-use-preinitialized", 1, 8*1024*1024*1024, 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = assembleLifecycleDensityEvidence(
+		context.Background(), artifact, artifactBytes,
+		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "profile-candidate", specs,
+		[]byte("01234567890123456789012345678901"),
+		func(_ context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
+			envelope := validDensityChildEnvelope(spec, artifact)
+			return densityChildInvocation{Envelope: envelope, Process: boundedChildResult{PID: 100 + int(spec.SampleIndex), StartedAtUnixNS: int64(spec.SampleIndex + 1), MaxObservedRSSBytes: 1}}, nil
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "artifact-bound") {
+		t.Fatalf("warmup generation drift was accepted: %v", err)
+	}
 }
 
 func TestAssembleCOWLifecycleDensityRequiresMappingAttribution(t *testing.T) {
@@ -415,6 +568,42 @@ func TestPreparedDensityPhasesRequireEveryReadySlot(t *testing.T) {
 	missing := observations[:len(observations)-1]
 	if _, err := preparedDensityPhases([]preparedDensityShardResult{{capacity: 2, observations: missing}}, 20*time.Nanosecond, "single-use-preinitialized"); err == nil {
 		t.Fatal("incomplete prepared observations accepted")
+	}
+}
+
+func TestPreparedDensityPhasesBindEveryNonCOWWarmup(t *testing.T) {
+	observations := []wazeroengine.Observation{
+		{Phase: "instantiate_host", Duration: time.Nanosecond, Success: true},
+		{Phase: "compile", Duration: 2 * time.Nanosecond, Success: true},
+	}
+	for range 2 {
+		observations = append(observations,
+			wazeroengine.Observation{Phase: "pool_prepare_instantiate_guest", Duration: 3 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare__initialize", Duration: 5 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_runtime_init", Duration: 7 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_warmup", Duration: 11 * time.Nanosecond, Success: true},
+		)
+	}
+	phases, err := preparedDensityPhasesWithWarmup(
+		[]preparedDensityShardResult{{capacity: 2, observations: observations}}, 50*time.Nanosecond,
+		"single-use-preinitialized", wazeroengine.COWWarmupNumPyReadyV1,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if phases.WarmupNS == nil || phases.WarmupNS.Value == nil || *phases.WarmupNS.Value != 22 {
+		t.Fatalf("non-COW warmup phase drifted: %#v", phases.WarmupNS)
+	}
+	for _, candidate := range [][]wazeroengine.Observation{
+		observations[:len(observations)-1],
+		append(append([]wazeroengine.Observation(nil), observations...), wazeroengine.Observation{Phase: "pool_prepare_warmup", Duration: time.Nanosecond, Success: true}),
+	} {
+		if _, err := preparedDensityPhasesWithWarmup(
+			[]preparedDensityShardResult{{capacity: 2, observations: candidate}}, 50*time.Nanosecond,
+			"single-use-preinitialized", wazeroengine.COWWarmupNumPyReadyV1,
+		); err == nil {
+			t.Fatal("missing or duplicate non-COW warmup observation was accepted")
+		}
 	}
 }
 
@@ -662,6 +851,16 @@ func validDensityChildEnvelope(spec densitySweepSpec, artifact artifactIdentity)
 				PressureSomeTotalUS: cgroupMetric, PressureFullTotalUS: cgroupMetric,
 			},
 		},
+	}
+	if spec.WarmupProfile != "" {
+		envelope.Warmup = &runtimeevidence.PreparedWarmupIdentity{Profile: spec.WarmupProfile, GenerationSHA256: strings.Repeat("e", 64)}
+		warmup := measured(1)
+		envelope.Sample.Phases.WarmupNS = &warmup
+		if spec.Strategy == "cow-ready-single-use" {
+			envelope.Sample.RuntimeShards = 1
+		} else {
+			envelope.Sample.RuntimeShards = (spec.RequestedSlots + 3) / 4
+		}
 	}
 	if spec.Strategy == "cow-ready-single-use" {
 		envelope.Sample.Phases.PrepareNS = measured(1)

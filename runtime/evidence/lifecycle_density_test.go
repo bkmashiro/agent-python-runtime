@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -135,6 +136,10 @@ func validLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
 	}, artifactBytes
 }
 
+func TestPhase7PairedDensitySchemaCompiles(t *testing.T) {
+	_ = compileLifecycleDensitySchema(t, "../../benchmark/v1/phase7-paired-density.schema.json")
+}
+
 func TestLifecycleDensityEvidenceAcceptsCanonicalSweepAndArtifactBinding(t *testing.T) {
 	evidence, artifactBytes := validLifecycleDensityEvidence()
 	if err := evidence.Validate(); err != nil {
@@ -142,6 +147,120 @@ func TestLifecycleDensityEvidenceAcceptsCanonicalSweepAndArtifactBinding(t *test
 	}
 	if err := evidence.ValidateArtifactBytes(artifactBytes); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func validNumPyLifecycleDensityEvidence() (LifecycleDensityEvidence, []byte) {
+	evidence, artifact := validLifecycleDensityEvidence()
+	evidence.SchemaVersion = 2
+	evidence.Artifact.ArtifactProfile = "numpy-core"
+	evidence.Plan.Workload = "numpy-ready-idle"
+	evidence.Strategy = StrategyIdentity{
+		Requested: "single-use-preinitialized", Active: "single-use-preinitialized",
+	}
+	evidence.Warmup = &PreparedWarmupIdentity{
+		Profile: "numpy-ready-v1", GenerationSHA256: strings.Repeat("e", 64),
+	}
+	for _, count := range []uint32{32, 64} {
+		index := len(evidence.Samples)
+		n := uint64(count)
+		processDigest := sha256.Sum256([]byte(fmt.Sprintf("process-%d", index)))
+		sample := evidence.Samples[0]
+		sample.SampleIndex = uint32(index)
+		sample.RequestedSlots = count
+		sample.RuntimeShards = (count + 3) / 4
+		sample.ProcessInstanceSHA256 = hex.EncodeToString(processDigest[:])
+		sample.ObservedAtUnixNS = metric(MetricTimestampObserved, uint64(index+1))
+		sample.Pool = PoolState{TargetCapacity: count, Ready: count, AccountedSlots: count}
+		sample.Phases.QueueNS = metric(MetricMeasured, n)
+		sample.Phases.InstantiateNS = metric(MetricMeasured, n)
+		sample.Phases.InitializeNS = metric(MetricMeasured, n)
+		sample.Phases.RuntimeInitNS = metric(MetricMeasured, n)
+		sample.Phases.PrepareNS = metric(MetricMeasured, n)
+		sample.Phases.TotalNS = metric(MetricMeasured, n)
+		sample.GoRuntime.HeapLiveBytes = metric(MetricMeasured, 100*n)
+		sample.GoRuntime.HeapGoalBytes = metric(MetricMeasured, 200*n)
+		sample.GoRuntime.GCCyclesTotal = metric(MetricMeasured, n)
+		sample.GoRuntime.GCPauseTotalNS = metric(MetricMeasured, 10*n)
+		sample.GoRuntime.Goroutines = metric(MetricMeasured, n)
+		sample.GoRuntime.SchedulerLatency = Histogram{Status: MetricMeasured, UpperBoundsNS: []uint64{1_000, 10_000}, Counts: []uint64{n, n}}
+		sample.Process = ProcessMetrics{
+			RSSBytes: metric(MetricMeasured, 1_000*n), VirtualBytes: metric(MetricMeasured, 2_000*n),
+			PSSBytes: metric(MetricMeasured, 900*n), PrivateCleanBytes: metric(MetricMeasured, 100*n),
+			PrivateDirtyBytes: metric(MetricMeasured, 800*n), SwapBytes: metric(MetricMeasured, 0),
+			MinorFaults: metric(MetricMeasured, 10*n), MajorFaults: metric(MetricMeasured, 0),
+			FDCount: metric(MetricMeasured, 5+n), VMACount: metric(MetricMeasured, 20+n),
+		}
+		evidence.Samples = append(evidence.Samples, sample)
+		evidence.Plan.SlotCounts = append(evidence.Plan.SlotCounts, count)
+	}
+	for index := range evidence.Samples {
+		warmup := metric(MetricMeasured, uint64(index+1))
+		evidence.Samples[index].Phases.WarmupNS = &warmup
+	}
+	evidence.Summary.SampleCount = len(evidence.Samples)
+	evidence.Summary.PeakProcessRSSBytes = metric(MetricMeasured, 64_000)
+	evidence.Summary.PeakGoHeapLiveBytes = metric(MetricMeasured, 6_400)
+	return evidence, artifact
+}
+
+func TestLifecycleDensityV2AcceptsNumPyReadyWarmupBinding(t *testing.T) {
+	evidence, artifact := validNumPyLifecycleDensityEvidence()
+	if err := evidence.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := evidence.ValidateArtifactBytes(artifact); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var canonical any
+	if err := json.Unmarshal(encoded, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileLifecycleDensitySchema(t).Validate(canonical); err != nil {
+		t.Fatalf("schema v2 NumPy-ready evidence rejected: %v", err)
+	}
+}
+
+func TestLifecycleDensityV2RejectsWarmupIdentityDrift(t *testing.T) {
+	base, _ := validNumPyLifecycleDensityEvidence()
+	for name, mutate := range map[string]func(*LifecycleDensityEvidence){
+		"missing warmup": func(value *LifecycleDensityEvidence) { value.Warmup = nil },
+		"wrong profile":  func(value *LifecycleDensityEvidence) { value.Warmup.Profile = "request-shell-v1" },
+		"bad generation": func(value *LifecycleDensityEvidence) { value.Warmup.GenerationSHA256 = "bad" },
+		"base artifact":  func(value *LifecycleDensityEvidence) { value.Artifact.ArtifactProfile = "base" },
+		"wrong workload": func(value *LifecycleDensityEvidence) { value.Plan.Workload = "idle-ready" },
+		"incomplete canonical sweep": func(value *LifecycleDensityEvidence) {
+			value.Plan.SlotCounts = value.Plan.SlotCounts[:len(value.Plan.SlotCounts)-1]
+		},
+		"fresh strategy": func(value *LifecycleDensityEvidence) {
+			value.Strategy = StrategyIdentity{Requested: "fresh-instance", Active: "fresh-instance"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value := base
+			copyWarmup := *base.Warmup
+			value.Warmup = &copyWarmup
+			mutate(&value)
+			if err := value.Validate(); err == nil {
+				t.Fatal("invalid NumPy-ready lifecycle density evidence was accepted")
+			}
+		})
+	}
+}
+
+func TestValidateLifecycleDensityJSONRejectsDuplicateKeys(t *testing.T) {
+	evidence, _ := validNumPyLifecycleDensityEvidence()
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicated := bytes.Replace(encoded, []byte(`"schema_version":2`), []byte(`"schema_version":2,"schema_version":2`), 1)
+	if err := ValidateLifecycleDensityJSON(duplicated); err == nil || !strings.Contains(err.Error(), "duplicate JSON key") {
+		t.Fatalf("duplicate JSON key was accepted: %v", err)
 	}
 }
 
@@ -411,13 +530,20 @@ func deepCopy(t *testing.T, value LifecycleDensityEvidence) LifecycleDensityEvid
 	return copy
 }
 
-func compileLifecycleDensitySchema(t *testing.T) *jsonschema.Schema {
+func compileLifecycleDensitySchema(t *testing.T, relativePath ...string) *jsonschema.Schema {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("cannot resolve test path")
 	}
-	path := filepath.Clean(filepath.Join(filepath.Dir(filename), "../../benchmark/v1/lifecycle-density.schema.json"))
+	selected := "../../benchmark/v1/lifecycle-density.schema.json"
+	if len(relativePath) > 1 {
+		t.Fatal("at most one schema path may be selected")
+	}
+	if len(relativePath) == 1 {
+		selected = relativePath[0]
+	}
+	path := filepath.Clean(filepath.Join(filepath.Dir(filename), selected))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -427,7 +553,7 @@ func compileLifecycleDensitySchema(t *testing.T) *jsonschema.Schema {
 		t.Fatal(err)
 	}
 	compiler := jsonschema.NewCompiler()
-	const schemaURL = "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/lifecycle-density.schema.json"
+	schemaURL := "file://" + path
 	if err := compiler.AddResource(schemaURL, document); err != nil {
 		t.Fatal(err)
 	}

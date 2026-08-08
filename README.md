@@ -253,6 +253,7 @@ docs/                      architecture, threat model, integration, and results
 - [Benchmark methodology](docs/benchmarking.md)
 - [Scheduler and NumPy-ready results](docs/reports/scheduler-experiment-results.md)
 - [Phase 6 NumPy-ready COW density and load qualification](docs/reports/phase6-numpy-density-results.md)
+- [Phase 7 paired NumPy-ready COW density experiment](docs/phase7-paired-numpy-density.md)
 - [Supply chain](docs/supply-chain.md)
 - [Research roadmap](docs/research-roadmap.md)
 

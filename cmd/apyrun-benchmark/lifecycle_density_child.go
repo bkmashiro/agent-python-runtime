@@ -22,6 +22,17 @@ type preparedDensityShardResult struct {
 	err          error
 }
 
+func densityExecutionStrategy(strategy string) (enginecontract.ExecutionStrategy, error) {
+	switch strategy {
+	case "cow-ready-single-use":
+		return enginecontract.StrategyCOWReadySingleUse, nil
+	case "single-use-preinitialized", "single-use-preinitialized-shared-cache":
+		return enginecontract.StrategySingleUsePrepared, nil
+	default:
+		return "", fmt.Errorf("unsupported prepared density execution strategy %q", strategy)
+	}
+}
+
 type preparedDensityShardFactory func(index int, capacity uint32) preparedDensityShardResult
 
 func createPreparedDensityShards(
@@ -76,10 +87,20 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 	if err != nil {
 		return densityChildEnvelope{}, err
 	}
-	if artifact.ArtifactProfile != "base" {
-		return densityChildEnvelope{}, errors.New("initial lifecycle-density sweep is restricted to the qualified base profile")
+	extended := spec.WarmupProfile != ""
+	switch artifact.ArtifactProfile {
+	case "base":
+		if extended {
+			return densityChildEnvelope{}, errors.New("base lifecycle-density artifact cannot carry a prepared warmup")
+		}
+	case "numpy-core":
+		if spec.WarmupProfile != wazeroengine.COWWarmupNumPyReadyV1 {
+			return densityChildEnvelope{}, errors.New("NumPy lifecycle-density requires numpy-ready-v1 warmup")
+		}
+	default:
+		return densityChildEnvelope{}, errors.New("unsupported lifecycle-density artifact profile")
 	}
-	capacities, err := preparedDensityShardCapacities(spec.RequestedSlots)
+	capacities, err := preparedDensityShardCapacitiesForStrategy(spec.RequestedSlots, spec.Strategy, extended)
 	if err != nil {
 		return densityChildEnvelope{}, err
 	}
@@ -87,9 +108,9 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 	defer cancel()
 
 	started := time.Now()
-	executionStrategy := enginecontract.StrategyFreshInstance
-	if spec.Strategy == "cow-ready-single-use" {
-		executionStrategy = enginecontract.StrategyCOWReadySingleUse
+	executionStrategy, err := densityExecutionStrategy(spec.Strategy)
+	if err != nil {
+		return densityChildEnvelope{}, err
 	}
 	var compilationCache *wazeroengine.CompilationCache
 	if spec.Strategy == "single-use-preinitialized-shared-cache" {
@@ -103,12 +124,18 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 			collector := &lifecycleCollector{}
 			config := runtimeconfig.DefaultRunConfig()
 			config.Timeout = spec.Timeout
-			neutralRunner, err := (wazeroengine.Factory{
+			factory := wazeroengine.Factory{
 				PreparedCapacity: capacity,
 				Strategy:         executionStrategy,
 				Observer:         collector.observe,
 				CompilationCache: compilationCache,
-			}).New(ctx, wasm, config)
+			}
+			if spec.Strategy == "cow-ready-single-use" {
+				factory.COWWarmupProfile = spec.WarmupProfile
+			} else {
+				factory.PreparedWarmupProfile = spec.WarmupProfile
+			}
+			neutralRunner, err := factory.New(ctx, wasm, config)
 			shard := preparedDensityShardResult{capacity: capacity, observations: collector.drain(), err: err}
 			if err == nil {
 				var ok bool
@@ -129,15 +156,38 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 		if shards[index].runner != nil {
 			defer shards[index].runner.Close(context.Background())
 		}
+	}
+	for index := range shards {
 		if shards[index].err != nil {
 			return densityChildEnvelope{}, fmt.Errorf("create prepared density shard %d: %w", index, shards[index].err)
 		}
-		if shards[index].runner.PreparedReady() != int(shards[index].capacity) || shards[index].runner.PreparedRetainedGuestMemoryBytes() == 0 {
+		if shards[index].runner == nil || shards[index].runner.PreparedReady() != int(shards[index].capacity) || shards[index].runner.PreparedRetainedGuestMemoryBytes() == 0 {
 			return densityChildEnvelope{}, fmt.Errorf("prepared density shard %d is not fully ready", index)
 		}
 	}
+	var warmup *runtimeevidence.PreparedWarmupIdentity
+	if extended {
+		for index := range shards {
+			reporter, ok := shards[index].runner.(interface {
+				PreparedWarmupState() wazeroengine.PreparedWarmupState
+			})
+			if !ok {
+				return densityChildEnvelope{}, fmt.Errorf("prepared density shard %d lacks warmup identity", index)
+			}
+			state := reporter.PreparedWarmupState()
+			if state.Profile != spec.WarmupProfile || len(state.GenerationSHA256) != 64 {
+				return densityChildEnvelope{}, fmt.Errorf("prepared density shard %d warmup identity drifted", index)
+			}
+			candidate := &runtimeevidence.PreparedWarmupIdentity{Profile: state.Profile, GenerationSHA256: state.GenerationSHA256}
+			if warmup == nil {
+				warmup = candidate
+			} else if *warmup != *candidate {
+				return densityChildEnvelope{}, errors.New("prepared density warmup generation drifted across runtime shards")
+			}
+		}
+	}
 
-	phases, err := preparedDensityPhases(shards, readyElapsed, spec.Strategy)
+	phases, err := preparedDensityPhasesWithWarmup(shards, readyElapsed, spec.Strategy, spec.WarmupProfile)
 	if err != nil {
 		return densityChildEnvelope{}, err
 	}
@@ -176,6 +226,9 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 			properties.ActiveStrategy != enginecontract.StrategyCOWReadySingleUse || properties.Fallback {
 			return densityChildEnvelope{}, errors.New("COW density child strategy drifted or fell back")
 		}
+	} else if properties.RequestedStrategy != enginecontract.StrategySingleUsePrepared ||
+		properties.ActiveStrategy != enginecontract.StrategySingleUsePrepared || properties.Fallback {
+		return densityChildEnvelope{}, errors.New("non-COW prepared density child strategy drifted or fell back")
 	}
 	observedAt := uint64(time.Now().UnixNano())
 	return densityChildEnvelope{
@@ -189,6 +242,7 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 		Strategy: runtimeevidence.StrategyIdentity{
 			Requested: spec.Strategy, Active: spec.Strategy, Fallback: false,
 		},
+		Warmup: warmup,
 		Sample: runtimeevidence.LifecycleDensitySample{
 			RequestedSlots:    spec.RequestedSlots,
 			RuntimeShards:     uint32(len(shards)),
@@ -209,6 +263,10 @@ func collectPreparedDensityChild(parent context.Context, artifactPath, manifestP
 }
 
 func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed time.Duration, strategy string) (runtimeevidence.PhaseTimings, error) {
+	return preparedDensityPhasesWithWarmup(shards, readyElapsed, strategy, "")
+}
+
+func preparedDensityPhasesWithWarmup(shards []preparedDensityShardResult, readyElapsed time.Duration, strategy, warmupProfile string) (runtimeevidence.PhaseTimings, error) {
 	if len(shards) == 0 || readyElapsed <= 0 {
 		return runtimeevidence.PhaseTimings{}, errors.New("prepared density phases lack shards or ready elapsed time")
 	}
@@ -217,6 +275,7 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 	var runtimeInitNS uint64
 	var compileNS uint64
 	var prepareNS uint64
+	var warmupNS uint64
 	for shardIndex, shard := range shards {
 		wantCounts := map[string]uint32{
 			"instantiate_host": 1,
@@ -229,10 +288,16 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 			wantCounts["pool_prepare_instantiate_guest"] = shard.capacity
 			wantCounts["pool_prepare__initialize"] = shard.capacity
 			wantCounts["pool_prepare_cow_restore"] = shard.capacity
+			if warmupProfile != "" {
+				wantCounts["cow_image_warmup"] = 1
+			}
 		} else if strategy == "single-use-preinitialized" || strategy == "single-use-preinitialized-shared-cache" {
 			wantCounts["pool_prepare_instantiate_guest"] = shard.capacity
 			wantCounts["pool_prepare__initialize"] = shard.capacity
 			wantCounts["pool_prepare_runtime_init"] = shard.capacity
+			if warmupProfile != "" {
+				wantCounts["pool_prepare_warmup"] = shard.capacity
+			}
 		} else {
 			return runtimeevidence.PhaseTimings{}, fmt.Errorf("unsupported prepared density phase strategy %q", strategy)
 		}
@@ -270,6 +335,11 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 					return runtimeevidence.PhaseTimings{}, errors.New("COW restore duration overflow")
 				}
 				prepareNS += value
+			case "pool_prepare_warmup", "cow_image_warmup":
+				if math.MaxUint64-warmupNS < value {
+					return runtimeevidence.PhaseTimings{}, errors.New("prepared warmup duration overflow")
+				}
+				warmupNS += value
 			}
 		}
 		for phase, count := range wantCounts {
@@ -284,7 +354,7 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 	if strategy == "cow-ready-single-use" {
 		prepareMetric = densityMeasured(prepareNS)
 	}
-	return runtimeevidence.PhaseTimings{
+	phases := runtimeevidence.PhaseTimings{
 		QueueNS:       densityUnavailable(runtimeevidence.MetricSkipped, runtimeevidence.ReasonNotApplicable),
 		CompileNS:     &compileMetric,
 		InstantiateNS: densityMeasured(instantiateNS),
@@ -294,7 +364,12 @@ func preparedDensityPhases(shards []preparedDensityShardResult, readyElapsed tim
 		ExecuteNS:     densityUnavailable(runtimeevidence.MetricSkipped, runtimeevidence.ReasonWorkloadNotRun),
 		CapabilityNS:  densityUnavailable(runtimeevidence.MetricSkipped, runtimeevidence.ReasonWorkloadNotRun),
 		TotalNS:       densityMeasured(totalNS),
-	}, nil
+	}
+	if warmupProfile != "" {
+		warmupMetric := densityMeasured(warmupNS)
+		phases.WarmupNS = &warmupMetric
+	}
+	return phases, nil
 }
 
 func densityMeasured(value uint64) runtimeevidence.Metric {

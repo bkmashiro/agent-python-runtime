@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/lifecycle-density.schema.json",
   "$comment": "This schema is the structural gate. Consumers MUST also run runtime/evidence.ValidateLifecycleDensityJSON for cross-sample ordering, histogram-shape, derived-value, and other semantic checks.",
-  "title": "Agent Python Runtime lifecycle density evidence v1",
+  "title": "Agent Python Runtime lifecycle density evidence v1/v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,13 +19,14 @@
     "limitations"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "evidence_class": {"const": "lifecycle-density"},
     "artifact": {"$ref": "#/$defs/artifact"},
     "host_source": {"$ref": "#/$defs/hostSource"},
     "backend": {"$ref": "#/$defs/backend"},
     "environment": {"$ref": "#/$defs/environment"},
     "strategy": {"$ref": "#/$defs/strategy"},
+    "warmup": {"$ref": "#/$defs/preparedWarmup"},
     "plan": {"$ref": "#/$defs/plan"},
     "samples": {
       "type": "array",
@@ -40,6 +41,40 @@
       "items": {"type": "string", "minLength": 1, "pattern": "^\\S(?:.*\\S)?$"}
     }
   },
+  "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": 1}}},
+      "then": {"not": {"required": ["warmup"]}},
+      "else": {
+        "required": ["warmup"],
+        "properties": {
+          "artifact": {"properties": {"artifact_profile": {"const": "numpy-core"}}},
+          "strategy": {"not": {"properties": {"active": {"const": "fresh-instance"}}}},
+          "plan": {
+            "properties": {
+              "workload": {"const": "numpy-ready-idle"},
+              "slot_counts": {
+                "prefixItems": [
+                  {"const": 1}, {"const": 2}, {"const": 4}, {"const": 8}, {"const": 16}, {"const": 32}, {"const": 64}
+                ],
+                "items": false,
+                "minItems": 7,
+                "maxItems": 7
+              }
+            }
+          },
+          "samples": {
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/sample"},
+                {"properties": {"phases": {"required": ["warmup_ns"]}}}
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "artifact": {
       "type": "object",
@@ -131,12 +166,21 @@
         }
       ]
     },
+    "preparedWarmup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "generation_sha256"],
+      "properties": {
+        "profile": {"const": "numpy-ready-v1"},
+        "generation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "plan": {
       "type": "object",
       "additionalProperties": false,
       "required": ["workload", "slot_counts", "repeats_per_slot", "fresh_process_per_sample", "max_process_rss_bytes", "child_timeout_ns"],
       "properties": {
-        "workload": {"enum": ["idle-ready", "execute", "capability"]},
+        "workload": {"enum": ["idle-ready", "execute", "capability", "numpy-ready-idle"]},
         "slot_counts": {
           "oneOf": [
             {
@@ -303,6 +347,7 @@
         "initialize_ns": {"$ref": "#/$defs/rawMetric"},
         "runtime_init_ns": {"$ref": "#/$defs/rawMetric"},
         "prepare_ns": {"$ref": "#/$defs/rawMetric"},
+        "warmup_ns": {"$ref": "#/$defs/rawMetric"},
         "execute_ns": {"$ref": "#/$defs/rawMetric"},
         "capability_ns": {"$ref": "#/$defs/rawMetric"},
         "total_ns": {"$ref": "#/$defs/rawMetric"}

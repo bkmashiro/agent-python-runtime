@@ -118,17 +118,8 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 		defer seedImage.Close()
 	}
 	defer canonical.module.Close(context.Background())
-	if engine.cowWarmupProfile != "" {
-		warmupContext, hostCallGuard := guardInitializationHostCalls(ctx)
-		warmupStarted := time.Now()
-		err = callStatusWithBytes(warmupContext, canonical.module, "runtime_warmup", []byte(engine.cowWarmupProfile))
-		observe(engine.observer, "cow_image_warmup", warmupStarted, err)
-		if err != nil {
-			return nil, withGuestDiagnostic(err, canonical.stderr.String())
-		}
-		if err := verifyNoInitializationHostCalls(hostCallGuard); err != nil {
-			return nil, err
-		}
+	if err := engine.warmPreparedInstance(ctx, canonical, "cow_image_"); err != nil {
+		return nil, err
 	}
 	memory := canonical.module.Memory()
 	if memory == nil || memory.Size() == 0 {
@@ -150,7 +141,7 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	}
 	runtime := &linuxCOWPreparedRuntime{
 		image: image, canonicalGlobals: canonicalGlobals,
-		warmupProfile: engine.cowWarmupProfile, warmupGeneration: engine.cowWarmupGeneration,
+		warmupProfile: engine.preparedWarmupProfile, warmupGeneration: engine.preparedWarmupGeneration,
 	}
 	engine.cowSnapshotShell = nil
 	if engine.verifyCOWPreparedImage {

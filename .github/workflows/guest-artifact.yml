@@ -11,15 +11,25 @@ on:
         options:
           - base
           - numpy-core
+      memory_model:
+        description: Explicit linear-memory model
+        required: true
+        default: growable
+        type: choice
+        options:
+          - growable
+          - cow-fixed
 
 permissions:
   contents: read
 
 env:
   AGENT_RUNTIME_ARTIFACT_PROFILE: ${{ inputs.artifact_profile || 'base' }}
+  AGENT_RUNTIME_MEMORY_MODEL: ${{ inputs.memory_model || 'growable' }}
+  AGENT_RUNTIME_COW_FIXED_MEMORY: ${{ (inputs.memory_model || 'growable') == 'cow-fixed' && '1' || '0' }}
 
 concurrency:
-  group: guest-${{ github.workflow }}-${{ github.ref }}-${{ inputs.artifact_profile || 'base' }}
+  group: guest-${{ github.workflow }}-${{ github.ref }}-${{ inputs.artifact_profile || 'base' }}-${{ inputs.memory_model || 'growable' }}
   cancel-in-progress: true
 
 jobs:
@@ -76,6 +86,25 @@ jobs:
             cd dist
             sha256sum --check SHA256SUMS
           )
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          memory = json.loads(Path("dist/manifest.json").read_text())["wasm"]["memory"]
+          model = os.environ["AGENT_RUNTIME_MEMORY_MODEL"]
+          valid = (
+              model == "growable"
+              and memory["fixed"] is False
+              and memory["initial_pages"] < memory["maximum_pages"]
+          ) or (
+              model == "cow-fixed"
+              and memory["fixed"] is True
+              and memory["initial_pages"] == memory["maximum_pages"]
+          )
+          if not valid:
+              raise SystemExit("artifact memory model drifted")
+          PY
 
       - name: Upload private evidence bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

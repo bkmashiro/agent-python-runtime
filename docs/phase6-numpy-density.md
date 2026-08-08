@@ -83,6 +83,12 @@ The Host revision and Guest artifact-source revision belong to different reposit
 6. Formal matrix: only retained points, three exact-source repetitions each.
 7. After every cell, rerun duplicate-key rejection, JSON Schema v11 and Go semantic validation with the same exact binary, then recheck the clean Host revision. Fetch evidence and verify job/app exits, sentinels, checksums and both source identities before analysis.
 
+### Controlled Slurm transport
+
+- `tools/phase6_slurm_job.sh` is the source-bound worker entrypoint. It runs only on the low-cost `t4` partition, starts from `--export=NIL`, verifies the staged payload, clones the exact clean Host bundle, and compares its Slurm script with the committed copy before invoking the matrix controller.
+- `tools/phase6_slurm_watch.py` is the local controller. Every expected Host, tree, validator and Guest artifact identity is an explicit argument. It rejects unsafe or duplicate archive members and duplicate JSON keys, verifies every evidence checksum with the exact standalone Go validator, and only then publishes the archive-hash ACK.
+- A Slurm job is accepted only when `READY` was validated, the hash-matching `ACKED` sentinel exists, and accounting reports `COMPLETED` with exit `0:0`. Scheduler completion alone is not evidence acceptance.
+
 ## Planned matrix
 
 The canary chooses safe memory limits. The initial candidate matrix is:

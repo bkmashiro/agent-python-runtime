@@ -193,11 +193,19 @@ PY
 
 expected_payload_manifest="$NODE_ROOT/payload.expected"
 : > "$expected_payload_manifest"
+artifact_digest=''
+manifest_digest=''
 for index in "${!expected_payload_files[@]}"; do
   relative_path="${expected_payload_files[$index]}"
   digest="$(copy_bounded_regular "$STAGE/input/$relative_path" "$INPUT/$relative_path" "${expected_payload_max_bytes[$index]}")"
   printf '%s  %s\n' "$digest" "$relative_path" >> "$expected_payload_manifest"
+  case "$relative_path" in
+    artifacts/agent-python-runtime-numpy-core.wasm) artifact_digest="$digest" ;;
+    artifacts/manifest.json) manifest_digest="$digest" ;;
+  esac
 done
+test "$artifact_digest" = f00f22ac94a66f2f2e67573da11ef879f8b5e46622eb9379300cc1e6a5b40a30
+test "$manifest_digest" = 458a4e4bbec1ad225f0f3c38357738f1937b1e16d5388f76cdf4c460ce6839fa
 copy_bounded_regular "$STAGE/input/payload.SHA256" "$INPUT/payload.SHA256" 8192 >/dev/null
 cmp -- "$expected_payload_manifest" "$INPUT/payload.SHA256"
 test "$(find "$INPUT" -type f -print | wc -l | tr -d '[:space:]')" -eq "$((${#expected_payload_files[@]} + 1))"

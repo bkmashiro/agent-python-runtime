@@ -22,11 +22,12 @@ MAX_MEMBERS = 256
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 HOST = re.compile(r"^[A-Za-z0-9.-]+$")
-STAGE = re.compile(r"^/vol/bitbucket/ys25/[A-Za-z0-9._/-]+$")
+STAGE = re.compile(r"^/vol/bitbucket/ys25/[A-Za-z0-9._-]+$")
 TERMINAL_STATES = {
     "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
     "NODE_FAIL", "PREEMPTED", "BOOT_FAIL",
 }
+ACKED_TIME = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -53,6 +54,18 @@ def unique_json(path: Path, maximum_bytes: int = 16 << 20):
         return value
 
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject)
+
+
+def unique_json_text(text: str):
+    def reject(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError(f"duplicate JSON key: {key}")
+            value[key] = item
+        return value
+
+    return json.loads(text, object_pairs_hook=reject)
 
 
 def sha256(path: Path) -> str:
@@ -119,6 +132,105 @@ def validate_identity_args(
         raise RuntimeError("polling interval must be at least 60 seconds")
 
 
+def expected_plan_cells(repo: Path, tier: str, formal_selection: Path | None) -> list[dict]:
+    command = ["python3", str(repo / "tools/phase6_matrix.py"), "plan", "--tier", tier]
+    if tier == "formal":
+        if formal_selection is None or formal_selection.is_symlink() or not formal_selection.is_file():
+            raise RuntimeError("formal tier requires a safe local selection file")
+        command.extend(("--formal-selection", str(formal_selection)))
+    elif formal_selection is not None:
+        raise RuntimeError("formal selection is forbidden outside formal tier")
+    plan = unique_json_text(run(*command).stdout)
+    if (not isinstance(plan, dict) or plan.get("schema_version") != 1 or
+            plan.get("plan_kind") != "phase6-numpy-density-matrix" or plan.get("tier") != tier):
+        raise RuntimeError("canonical matrix plan identity drifted")
+    cells = plan.get("cells")
+    if not isinstance(cells, list) or not cells or not all(isinstance(cell, dict) for cell in cells):
+        raise RuntimeError("canonical matrix plan has no valid cells")
+    return cells
+
+
+def validate_record_set(records, expected_cells: list[dict], tier: str) -> list[str]:
+    if not isinstance(records, list) or len(records) != len(expected_cells):
+        raise RuntimeError("result manifest matrix is incomplete")
+    evidence_names: list[str] = []
+    seen: set[str] = set()
+    for record, expected_cell in zip(records, expected_cells, strict=True):
+        if not isinstance(record, dict) or record.get("cell") != expected_cell:
+            raise RuntimeError("result manifest cell set drifted")
+        suffix = f"-r{expected_cell.get('repetition')}" if tier == "formal" else ""
+        expected_name = f"{expected_cell.get('cell_id')}{suffix}.json"
+        evidence_name = record.get("evidence")
+        if evidence_name != expected_name or evidence_name in seen:
+            raise RuntimeError("result manifest evidence set drifted")
+        seen.add(evidence_name)
+        evidence_names.append(evidence_name)
+    return evidence_names
+
+
+def parse_squeue_state(text: str, expected_job: str) -> str:
+    lines = [line for line in text.splitlines() if line]
+    if not lines:
+        return ""
+    if len(lines) != 1:
+        raise RuntimeError("squeue returned an ambiguous job set")
+    fields = lines[0].split("|")
+    if len(fields) != 2 or fields[0] != expected_job or not fields[1]:
+        raise RuntimeError("squeue job identity drifted")
+    return fields[1].rstrip("+")
+
+
+def parse_sacct_accounting(text: str, expected_job: str) -> dict[str, str]:
+    lines = [line for line in text.splitlines() if line]
+    if len(lines) != 1:
+        raise RuntimeError("sacct returned an ambiguous job set")
+    fields = lines[0].split("|")
+    if len(fields) != 9 or fields[-1] != "" or fields[0] != expected_job:
+        raise RuntimeError("sacct job identity drifted")
+    keys = ("job_id", "state", "exit_code", "elapsed", "max_rss", "requested_memory", "allocated_cpus", "node_list")
+    row = dict(zip(keys, fields[:-1], strict=True))
+    row["state"] = row["state"].split()[0].rstrip("+")
+    return row
+
+
+def parse_scontrol_job(text: str, expected_job: str) -> dict[str, str]:
+    lines = [line for line in text.splitlines() if line]
+    if len(lines) != 1:
+        raise RuntimeError("scontrol returned an ambiguous job set")
+    values: dict[str, str] = {}
+    for token in lines[0].split():
+        key, separator, value = token.partition("=")
+        if separator == "=" and key:
+            if key in values:
+                raise RuntimeError("scontrol returned duplicate fields")
+            values[key] = value
+    if values.get("JobId") != expected_job or not values.get("JobState") or not values.get("ExitCode"):
+        raise RuntimeError("scontrol job identity drifted")
+    values["JobState"] = values["JobState"].split()[0].rstrip("+")
+    return values
+
+
+def validate_acked_text(text: str, expected_hash: str) -> None:
+    lines = text.splitlines()
+    if len(lines) != 1:
+        raise RuntimeError("ACKED sentinel must contain exactly one line")
+    fields = lines[0].split("  ")
+    if len(fields) != 2 or fields[0] != expected_hash or not ACKED_TIME.fullmatch(fields[1]):
+        raise RuntimeError("ACKED sentinel identity drifted")
+
+
+def exact_key_values(path: Path) -> dict[str, str]:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > (64 << 10):
+        raise RuntimeError("unsafe key-value evidence file")
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator != "=" or not re.fullmatch(r"[a-z_]+", key) or key in values:
+            raise RuntimeError("malformed or duplicate key-value evidence")
+        values[key] = value
+    return values
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--job", required=True)
@@ -135,6 +247,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-artifact-manifest-sha256", required=True)
     parser.add_argument("--expected-artifact-source", required=True)
     parser.add_argument("--expected-tier", choices=("canary", "small", "formal"), required=True)
+    parser.add_argument("--formal-selection", type=Path)
     parser.add_argument("--interval", type=int, default=60)
     return parser.parse_args()
 
@@ -162,7 +275,7 @@ def main() -> None:
         raise RuntimeError("local exact review clone revision drifted")
     if run("git", "-C", str(repo), "rev-parse", "HEAD^{tree}").stdout.strip() != args.expected_tree:
         raise RuntimeError("local exact review clone tree drifted")
-    if run("git", "-C", str(repo), "status", "--short").stdout:
+    if run("git", "-C", str(repo), "status", "--short", "--untracked-files=all").stdout:
         raise RuntimeError("local exact review clone is modified")
     run("git", "-C", str(repo), "verify-commit", "HEAD")
 
@@ -173,6 +286,8 @@ def main() -> None:
             schema != expected_schema or schema.is_symlink() or not schema.is_file() or
             sha256(validator) != args.validator_sha256):
         raise RuntimeError("validator or schema identity is unsafe")
+    expected_cells = expected_plan_cells(repo, args.expected_tier, args.formal_selection)
+    formal_selection_sha256 = sha256(args.formal_selection) if args.formal_selection is not None else "none"
 
     archive_name = f"result-{args.job}.tar.gz"
     archive_remote = f"{stage}/outbox/{archive_name}"
@@ -180,10 +295,15 @@ def main() -> None:
     ready_remote = f"{stage}/outbox/READY-{args.job}"
     ack_remote = f"{stage}/ACK-{args.job}"
     acked_remote = f"{stage}/outbox/ACKED-{args.job}"
-    local_root = args.local_root / f"job-{args.job}"
-    if local_root.exists() or local_root.is_symlink():
-        raise RuntimeError(f"local recovery target already exists: {local_root}")
-    local_root.mkdir(parents=True, mode=0o700)
+    base_root = args.local_root
+    if base_root.is_symlink():
+        raise RuntimeError("local recovery root is symlinked")
+    base_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    final_root = base_root / f"job-{args.job}"
+    local_root = base_root / f".job-{args.job}.partial-{os.getpid()}"
+    if final_root.exists() or final_root.is_symlink() or local_root.exists() or local_root.is_symlink():
+        raise RuntimeError(f"local recovery target already exists: {final_root}")
+    local_root.mkdir(mode=0o700)
 
     quoted_job = shlex.quote(args.job)
     quoted_archive = shlex.quote(archive_remote)
@@ -193,12 +313,14 @@ def main() -> None:
     quoted_acked = shlex.quote(acked_remote)
 
     def query_state() -> str:
-        query = ssh(args.host, f"squeue -h -j {quoted_job} -o '%T' || true")
-        value = query.stdout.strip().splitlines()[0] if query.stdout.strip() else ""
-        if not value:
-            accounting = ssh(args.host, f"sacct -n -X -j {quoted_job} --format=State -P | head -n 1 || true")
-            value = accounting.stdout.strip().split("|")[0].split()[0] if accounting.stdout.strip() else ""
-        return value.rstrip("+")
+        query = ssh(args.host, f"squeue -h -j {quoted_job} -o '%A|%T' || true")
+        value = parse_squeue_state(query.stdout, args.job)
+        if value:
+            return value
+        controller = ssh(args.host, f"scontrol show job -o {quoted_job}", check=False)
+        if controller.returncode != 0 or not controller.stdout.strip():
+            return ""
+        return parse_scontrol_job(controller.stdout, args.job)["JobState"]
 
     state = ""
     while True:
@@ -209,7 +331,13 @@ def main() -> None:
             raise RuntimeError(f"job reached {state} before publishing READY")
         time.sleep(args.interval)
 
-    ssh(args.host, f"set -e; test -f {quoted_archive}; test -f {quoted_checksum}; test -f {quoted_ready}; test ! -e {quoted_ack}")
+    ssh(
+        args.host,
+        f"set -e; test -f {quoted_archive}; test ! -L {quoted_archive}; "
+        f"test -f {quoted_checksum}; test ! -L {quoted_checksum}; "
+        f"test -f {quoted_ready}; test ! -L {quoted_ready}; "
+        f"test ! -e {quoted_ack}; test ! -L {quoted_ack}",
+    )
     archive = local_root / "archive.tar.gz"
     checksum = local_root / "archive.tar.gz.sha256"
     ready = local_root / "READY"
@@ -225,9 +353,17 @@ def main() -> None:
 
     extracted = local_root / "extracted"
     safe_extract(archive, extracted)
+    if {path.name for path in extracted.iterdir()} != {"result", "ENVIRONMENT.txt", "RUN_COMPLETE"}:
+        raise RuntimeError("archive top-level members drifted")
     run_complete = extracted / "RUN_COMPLETE"
     if run_complete.is_symlink() or not run_complete.is_file() or run_complete.read_text(encoding="utf-8").strip() != args.expected_revision:
         raise RuntimeError("run completion identity drifted")
+    environment = exact_key_values(extracted / "ENVIRONMENT.txt")
+    if (environment.get("job_id") != args.job or environment.get("tier") != args.expected_tier or
+            environment.get("source_commit") != args.expected_revision or
+            environment.get("job_partition") != "t4" or
+            environment.get("formal_selection_sha256") != formal_selection_sha256):
+        raise RuntimeError("Slurm environment identity drifted")
     manifests = list(extracted.rglob("manifest.json"))
     if len(manifests) != 1:
         raise RuntimeError(f"expected one result manifest, found {len(manifests)}")
@@ -245,17 +381,11 @@ def main() -> None:
     if manifest.get("binary_sha256") != args.validator_sha256:
         raise RuntimeError("result binary and exact validator identity drifted")
     records = manifest.get("records")
-    if not isinstance(records, list) or not records:
-        raise RuntimeError("result manifest has no records")
+    evidence_names = validate_record_set(records, expected_cells, args.expected_tier)
 
     verdict_expected = {"valid": True, "schema_version": 11, "evidence_kind": "cow-pressure"}
     result_root = manifests[0].parent
-    for record in records:
-        if not isinstance(record, dict):
-            raise RuntimeError("result manifest record is invalid")
-        evidence_name = record.get("evidence")
-        if not isinstance(evidence_name, str) or PurePosixPath(evidence_name).name != evidence_name:
-            raise RuntimeError("unsafe evidence path in result manifest")
+    for record, evidence_name in zip(records, evidence_names, strict=True):
         evidence = result_root / evidence_name
         if not evidence.is_file() or evidence.is_symlink() or sha256(evidence) != record.get("evidence_sha256"):
             raise RuntimeError(f"evidence checksum drifted: {evidence_name}")
@@ -270,26 +400,52 @@ def main() -> None:
                 artifact.get("source_commit") != args.expected_artifact_source):
             raise RuntimeError(f"evidence artifact identity drifted: {evidence_name}")
         verdict_run = run(str(validator), "-kind=validate-cow-pressure", f"-input={evidence}", f"-schema={schema}")
-        verdict = json.loads(verdict_run.stdout)
+        verdict = unique_json_text(verdict_run.stdout)
         if verdict != verdict_expected:
             raise RuntimeError(f"non-canonical validator verdict: {evidence_name}: {verdict}")
 
+    local_root.rename(final_root)
+    local_root = final_root
     remote_ack = local_root / "ACK.remote"
     remote_ack.write_text(archive_hash + "\n", encoding="utf-8")
     remote_tmp = f"{ack_remote}.tmp-{os.getpid()}"
-    run("scp", "-q", str(remote_ack), f"{args.host}:{remote_tmp}")
     quoted_tmp = shlex.quote(remote_tmp)
-    ssh(args.host, f"set -e; test ! -e {quoted_ack}; chmod 600 {quoted_tmp}; mv {quoted_tmp} {quoted_ack}")
+    ssh(args.host, f"set -e; test ! -e {quoted_ack}; test ! -L {quoted_ack}; test ! -e {quoted_tmp}; test ! -L {quoted_tmp}")
+    run("scp", "-q", str(remote_ack), f"{args.host}:{remote_tmp}")
+    ssh(
+        args.host,
+        f"set -e; test -f {quoted_tmp}; test ! -L {quoted_tmp}; "
+        f"test \"$(wc -l < {quoted_tmp})\" -eq 1; "
+        f"test \"$(cat {quoted_tmp})\" = '{archive_hash}'; chmod 600 {quoted_tmp}; "
+        f"ln {quoted_tmp} {quoted_ack}; rm {quoted_tmp}",
+    )
 
     while state not in TERMINAL_STATES:
         state = query_state()
         if state not in TERMINAL_STATES:
             time.sleep(args.interval)
-    accounting = ssh(args.host, f"sacct -n -X -j {quoted_job} --format=JobIDRaw,State,ExitCode,Elapsed,MaxRSS,ReqMem,AllocCPUS,NodeList -P")
-    (local_root / "sacct.txt").write_text(accounting.stdout, encoding="utf-8")
-    if state != "COMPLETED" or "|COMPLETED|0:0|" not in accounting.stdout:
-        raise RuntimeError(f"Slurm terminal state is not COMPLETED/0:0: {state}\n{accounting.stdout}")
-    ssh(args.host, f"set -e; test -f {quoted_acked}; test \"$(cut -d' ' -f1 < {quoted_acked})\" = '{archive_hash}'")
+    controller = ssh(args.host, f"scontrol show job -o {quoted_job}")
+    (local_root / "scontrol.txt").write_text(controller.stdout, encoding="utf-8")
+    controller_row = parse_scontrol_job(controller.stdout, args.job)
+    if (state != "COMPLETED" or controller_row["JobState"] != "COMPLETED" or
+            controller_row["ExitCode"] != "0:0" or controller_row.get("Partition") != "t4"):
+        raise RuntimeError(f"Slurm terminal state is not exact COMPLETED/0:0 on t4: {state}\n{controller.stdout}")
+    accounting = ssh(
+        args.host,
+        f"sacct -n -X -j {quoted_job} --format=JobIDRaw,State,ExitCode,Elapsed,MaxRSS,ReqMem,AllocCPUS,NodeList -P",
+        check=False,
+    )
+    (local_root / "sacct.txt").write_text(accounting.stdout + accounting.stderr, encoding="utf-8")
+    sacct_verified = False
+    if accounting.returncode == 0 and accounting.stdout.strip():
+        accounting_row = parse_sacct_accounting(accounting.stdout, args.job)
+        if accounting_row["state"] != "COMPLETED" or accounting_row["exit_code"] != "0:0":
+            raise RuntimeError("sacct disagrees with the Slurm controller record")
+        sacct_verified = True
+    ssh(args.host, f"set -e; test -f {quoted_acked}; test ! -L {quoted_acked}")
+    acked = local_root / "ACKED"
+    run("scp", "-q", f"{args.host}:{acked_remote}", str(acked))
+    validate_acked_text(acked.read_text(encoding="utf-8"), archive_hash)
 
     ack_text = json.dumps({
         "job_id": args.job,
@@ -301,8 +457,11 @@ def main() -> None:
         "artifact_source_revision": args.expected_artifact_source,
         "validator_sha256": args.validator_sha256,
         "tier": args.expected_tier,
+        "formal_selection_sha256": formal_selection_sha256,
         "validated_records": len(records),
         "slurm_state": state,
+        "scontrol_verified": True,
+        "sacct_verified": sacct_verified,
     }, sort_keys=True, separators=(",", ":")) + "\n"
     local_ack = local_root / "CONTROLLER_ACK.json"
     local_ack.write_text(ack_text, encoding="utf-8")

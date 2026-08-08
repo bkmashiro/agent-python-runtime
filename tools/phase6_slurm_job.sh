@@ -22,8 +22,7 @@ case "$TIER" in
   canary|small|formal) ;;
   *) printf 'invalid tier: %s\n' "$TIER" >&2; exit 64 ;;
 esac
-if [[ ! "$STAGE" =~ ^/vol/bitbucket/ys25/[A-Za-z0-9._/-]+$ ]] ||
-   [[ "$STAGE" == *"/../"* ]] || [[ "$STAGE" == *"/./"* ]] || [[ "$STAGE" == */.. ]] || [[ "$STAGE" == */. ]]; then
+if [[ ! "$STAGE" =~ ^/vol/bitbucket/ys25/[A-Za-z0-9._-]+$ ]]; then
   printf 'unsafe stage path\n' >&2
   exit 64
 fi
@@ -32,6 +31,14 @@ if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   exit 64
 fi
 test "${SLURM_JOB_PARTITION:-}" = "t4"
+test -d "$STAGE"
+test ! -L "$STAGE"
+test -d "$STAGE/input"
+test ! -L "$STAGE/input"
+if find "$STAGE/input" -type l -print -quit | grep -q .; then
+  printf 'symlinked staged input is forbidden\n' >&2
+  exit 65
+fi
 
 NODE_ROOT="${SLURM_TMPDIR:-/tmp}/pysolate-p6-${SLURM_JOB_ID}"
 INPUT="$NODE_ROOT/input"
@@ -42,10 +49,20 @@ ACK="$STAGE/ACK-${SLURM_JOB_ID}"
 
 trap 'rm -rf -- "$NODE_ROOT"' EXIT
 
-mkdir -p "$INPUT" "$OUTBOX"
+mkdir -p "$INPUT"
+if [[ -e "$OUTBOX" ]] || [[ -L "$OUTBOX" ]]; then
+  test -d "$OUTBOX"
+  test ! -L "$OUTBOX"
+else
+  mkdir "$OUTBOX"
+fi
 chmod 700 "$NODE_ROOT" "$INPUT" "$OUTBOX"
-test ! -e "$ACK"
+test ! -e "$ACK" && test ! -L "$ACK"
 cp -a "$STAGE/input/." "$INPUT/"
+if find "$INPUT" -type l -print -quit | grep -q .; then
+  printf 'copied input contains a symlink\n' >&2
+  exit 65
+fi
 (
   cd "$INPUT"
   sha256sum --check payload.SHA256
@@ -57,6 +74,15 @@ test "$(git -C "$REPO" rev-parse HEAD)" = "$SOURCE_COMMIT"
 test -z "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)"
 cmp -- "$0" "$REPO/tools/phase6_slurm_job.sh"
 
+extra_args=()
+formal_selection_sha256=none
+if [[ "$TIER" = "formal" ]]; then
+  test -f "$INPUT/formal-selection.json"
+  test ! -L "$INPUT/formal-selection.json"
+  formal_selection_sha256="$(sha256sum "$INPUT/formal-selection.json" | cut -d' ' -f1)"
+  extra_args=(--formal-selection "$INPUT/formal-selection.json")
+fi
+
 {
   printf 'job_id=%s\n' "$SLURM_JOB_ID"
   printf 'tier=%s\n' "$TIER"
@@ -66,15 +92,9 @@ cmp -- "$0" "$REPO/tools/phase6_slurm_job.sh"
   printf 'cpus_per_task=%s\n' "${SLURM_CPUS_PER_TASK:-unknown}"
   printf 'job_partition=%s\n' "${SLURM_JOB_PARTITION:-unknown}"
   printf 'job_gpus=%s\n' "${SLURM_JOB_GPUS:-unknown}"
+  printf 'formal_selection_sha256=%s\n' "$formal_selection_sha256"
   printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$NODE_ROOT/ENVIRONMENT.txt"
-
-extra_args=()
-if [[ "$TIER" = "formal" ]]; then
-  test -f "$INPUT/formal-selection.json"
-  test ! -L "$INPUT/formal-selection.json"
-  extra_args=(--formal-selection "$INPUT/formal-selection.json")
-fi
 
 python3 "$REPO/tools/phase6_matrix.py" run \
   --tier "$TIER" \
@@ -98,8 +118,10 @@ checksum_tmp="$OUTBOX/result-${SLURM_JOB_ID}.tar.gz.sha256.partial"
 checksum="$OUTBOX/result-${SLURM_JOB_ID}.tar.gz.sha256"
 ready_tmp="$OUTBOX/READY-${SLURM_JOB_ID}.partial"
 ready="$OUTBOX/READY-${SLURM_JOB_ID}"
-for path in "$archive_tmp" "$archive" "$checksum_tmp" "$checksum" "$ready_tmp" "$ready" "$OUTBOX/ACKED-${SLURM_JOB_ID}"; do
-  test ! -e "$path"
+acked_tmp="$OUTBOX/ACKED-${SLURM_JOB_ID}.partial"
+acked="$OUTBOX/ACKED-${SLURM_JOB_ID}"
+for path in "$archive_tmp" "$archive" "$checksum_tmp" "$checksum" "$ready_tmp" "$ready" "$acked_tmp" "$acked"; do
+  test ! -e "$path" && test ! -L "$path"
 done
 
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
@@ -112,8 +134,12 @@ printf '%s  %s\n' "$archive_sha" "$(basename "$archive")" > "$ready_tmp"
 mv "$ready_tmp" "$ready"
 
 for _ in $(seq 1 180); do
-  if [[ -f "$ACK" ]] && [[ ! -L "$ACK" ]] && [[ "$(tr -d '\r\n' < "$ACK")" == "$archive_sha" ]]; then
-    printf '%s  %s\n' "$archive_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUTBOX/ACKED-${SLURM_JOB_ID}"
+  ack_value=""
+  if [[ -f "$ACK" ]] && [[ ! -L "$ACK" ]] &&
+     IFS= read -r ack_value < "$ACK" && [[ "$(wc -l < "$ACK")" -eq 1 ]] && [[ "$ack_value" == "$archive_sha" ]]; then
+    printf '%s  %s\n' "$archive_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$acked_tmp"
+    ln "$acked_tmp" "$acked"
+    rm "$acked_tmp"
     exit 0
   fi
   sleep 10

@@ -75,13 +75,24 @@ class Phase6MatrixTest(unittest.TestCase):
         revision = "a" * 40
         artifact_sha = "b" * 64
         artifact_source = "c" * 40
+        memory_budget, memory_reserve, max_cpu, greed = 8 << 30, 2 << 30, 16, 50
+        validation_inputs = {
+            "cell": cell, "revision": revision, "artifact_sha256": artifact_sha,
+            "artifact_source_commit": artifact_source, "memory_budget_bytes": memory_budget,
+            "memory_reserve_bytes": memory_reserve, "max_cpu": max_cpu, "greed": greed,
+        }
         evidence = {
             "schema_version": 11,
             "evidence_kind": "cow-pressure",
             "evidence_class": "profile-candidate",
             "artifact": {"sha256": artifact_sha, "artifact_profile": "numpy-core", "source_commit": artifact_source},
             "host_source": {"revision": revision, "modified": False},
-            "limits": {"workload": cell.workload, "warmup_profile": "numpy-ready-v1", "consumers": cell.consumers, "max_slots": cell.slots},
+            "policy": {"max_memory_bytes": memory_budget, "max_cpu": max_cpu, "greed": greed},
+            "limits": {
+                "workload": cell.workload, "warmup_profile": "numpy-ready-v1", "consumers": cell.consumers,
+                "max_slots": cell.slots, "runtime_budget_bytes": memory_budget,
+                "reserved_bytes": memory_reserve, "allocation_bytes": memory_budget + memory_reserve,
+            },
             "load": {
                 "arrival": {"mode": "closed-loop", "window_ns": 0, "rate_per_second": 0, "queue_capacity": 0, "offered_requests": 3, "accepted_requests": 3, "rejected_requests": 0},
                 "result_oracle": "numpy-exact-v1",
@@ -99,10 +110,27 @@ class Phase6MatrixTest(unittest.TestCase):
                 "replenish_status": "complete",
                 "ready_before": 4,
                 "ready_after": 4,
-                "request_classes": [{"name": "numpy-tiny"}],
+                "request_classes": [{"name": "numpy-tiny", "started": 3, "completed": 3, "failed": 0}],
             },
         }
-        MODULE.validate_output(evidence, cell=cell, revision=revision, artifact_sha256=artifact_sha, artifact_source_commit=artifact_source)
+        MODULE.validate_output(evidence, **validation_inputs)
+        open_cell = MODULE.cells_for_tier("canary")[1]
+        open_evidence = json.loads(json.dumps(evidence))
+        open_evidence["load"]["arrival"] = {
+            "mode": "open-loop-fixed-v1", "window_ns": 5_000_000_000, "rate_per_second": 1,
+            "queue_capacity": 4, "offered_requests": 5, "accepted_requests": 5, "rejected_requests": 0,
+        }
+        open_evidence["load"].update(
+            validated_results=5, started_requests=5, completed_requests=5,
+            latency_samples_ns=[1, 2, 3, 4, 5], latency_total_ns=15, latency_mean_ns=3,
+            latency_p50_ns=3, latency_p95_ns=5, latency_p99_ns=5, latency_max_ns=5,
+            request_classes=[{"name": "numpy-tiny", "started": 5, "completed": 5, "failed": 0}],
+        )
+        open_inputs = dict(validation_inputs, cell=open_cell)
+        MODULE.validate_output(open_evidence, **open_inputs)
+        open_evidence["load"]["arrival"]["offered_requests"] = 4
+        with self.assertRaises(RuntimeError):
+            MODULE.validate_output(open_evidence, **open_inputs)
         mutations = []
         wrong_artifact = json.loads(json.dumps(evidence))
         wrong_artifact["artifact"]["artifact_profile"] = "base"
@@ -110,6 +138,12 @@ class Phase6MatrixTest(unittest.TestCase):
         wrong_source = json.loads(json.dumps(evidence))
         wrong_source["artifact"]["source_commit"] = "d" * 40
         mutations.append(wrong_source)
+        wrong_policy = json.loads(json.dumps(evidence))
+        wrong_policy["policy"]["greed"] = 51
+        mutations.append(wrong_policy)
+        wrong_budget = json.loads(json.dumps(evidence))
+        wrong_budget["limits"]["runtime_budget_bytes"] += 1
+        mutations.append(wrong_budget)
         wrong_arrival = json.loads(json.dumps(evidence))
         wrong_arrival["load"]["arrival"]["offered_requests"] = 4
         mutations.append(wrong_arrival)
@@ -117,8 +151,11 @@ class Phase6MatrixTest(unittest.TestCase):
         incomplete["load"]["ready_after"] = 3
         mutations.append(incomplete)
         wrong_class = json.loads(json.dumps(evidence))
-        wrong_class["load"]["request_classes"] = [{"name": "tiny-cpu"}]
+        wrong_class["load"]["request_classes"] = [{"name": "tiny-cpu", "started": 3, "completed": 3, "failed": 0}]
         mutations.append(wrong_class)
+        wrong_class_count = json.loads(json.dumps(evidence))
+        wrong_class_count["load"]["request_classes"][0].update(started=999, completed=999)
+        mutations.append(wrong_class_count)
         wrong_oracle = json.loads(json.dumps(evidence))
         wrong_oracle["load"]["validated_results"] = 2
         mutations.append(wrong_oracle)
@@ -131,13 +168,13 @@ class Phase6MatrixTest(unittest.TestCase):
         mutations.append(wrong_latency_order)
         for mutation in mutations:
             with self.assertRaises(RuntimeError):
-                MODULE.validate_output(mutation, cell=cell, revision=revision, artifact_sha256=artifact_sha, artifact_source_commit=artifact_source)
+                MODULE.validate_output(mutation, **validation_inputs)
         evidence["load"]["arrival"]["offered_requests"] = 4
         with self.assertRaises(RuntimeError):
-            MODULE.validate_output(evidence, cell=cell, revision=revision, artifact_sha256=artifact_sha, artifact_source_commit=artifact_source)
+            MODULE.validate_output(evidence, **validation_inputs)
         evidence["load"]["arrival"]["offered_requests"] = True
         with self.assertRaises(RuntimeError):
-            MODULE.validate_output(evidence, cell=cell, revision=revision, artifact_sha256=artifact_sha, artifact_source_commit=artifact_source)
+            MODULE.validate_output(evidence, **validation_inputs)
 
     def test_artifact_manifest_and_exact_validator_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -345,6 +345,18 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure request-class totals drifted")
 	}
 	lastSlots := evidence.Spawn[len(evidence.Spawn)-1].Slots
+	switch evidence.StopReason {
+	case "max-slots":
+		if lastSlots != evidence.Limits.MaxSlots {
+			return errors.New("cow-pressure max-slots stop reason does not match final capacity")
+		}
+	case "admission-headroom":
+		if lastSlots >= evidence.Limits.MaxSlots {
+			return errors.New("cow-pressure admission-headroom stop reason does not match final capacity")
+		}
+	default:
+		return errors.New("cow-pressure stop reason is invalid")
+	}
 	if evidence.Load.ReadyBefore != lastSlots ||
 		(evidence.Load.ReplenishStatus == "complete" && evidence.Load.ReadyAfter != lastSlots) ||
 		(evidence.Load.ReplenishStatus != "complete" && evidence.Load.ReplenishStatus != "timeout") {

@@ -144,6 +144,36 @@ func TestCanonicalCOWPressureEvidenceValidatesSchemaAndSemantics(t *testing.T) {
 	if err := percentileDrift.Validate(); err == nil {
 		t.Fatal("latency percentile drift was accepted")
 	}
+	encodedPercentileDrift, err := json.Marshal(percentileDrift)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCOWPressureDocument(encodedPercentileDrift, schemaBytes); err == nil {
+		t.Fatal("standalone validator accepted latency percentile drift")
+	}
+	maxSlotsDrift := evidence
+	maxSlotsDrift.Limits.MaxSlots = 8
+	if err := maxSlotsDrift.Validate(); err == nil {
+		t.Fatal("max-slots stop reason accepted a larger unattained slot limit")
+	}
+	encodedMaxSlotsDrift, err := json.Marshal(maxSlotsDrift)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCOWPressureDocument(encodedMaxSlotsDrift, schemaBytes); err == nil {
+		t.Fatal("standalone validator accepted max-slots limit drift")
+	}
+	headroom := evidence
+	headroom.Limits.MaxSlots = 8
+	headroom.StopReason = "admission-headroom"
+	if err := headroom.Validate(); err != nil {
+		t.Fatalf("bounded admission-headroom evidence rejected: %v", err)
+	}
+	headroomDrift := evidence
+	headroomDrift.StopReason = "admission-headroom"
+	if err := headroomDrift.Validate(); err == nil {
+		t.Fatal("admission-headroom stop reason accepted a fully reached slot limit")
+	}
 	policyDrift := evidence
 	policyDrift.Policy.MaxActive++
 	if err := policyDrift.Validate(); err == nil {

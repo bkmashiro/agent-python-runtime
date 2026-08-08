@@ -167,6 +167,7 @@ def exact_clean_revision(repo: Path) -> str:
 def validate_output(
     evidence: dict[str, Any], *, cell: Cell, revision: str,
     artifact_sha256: str, artifact_source_commit: str,
+    memory_budget_bytes: int, memory_reserve_bytes: int, max_cpu: int, greed: int,
 ) -> None:
     if evidence.get("schema_version") != 11 or evidence.get("evidence_kind") != "cow-pressure":
         raise RuntimeError(f"{cell.cell_id}: wrong evidence schema or kind")
@@ -181,8 +182,15 @@ def validate_output(
         raise RuntimeError(f"{cell.cell_id}: Host source identity drifted")
     limits = evidence.get("limits", {})
     if (limits.get("workload") != cell.workload or limits.get("warmup_profile") != "numpy-ready-v1" or
-            limits.get("consumers") != cell.consumers or limits.get("max_slots") != cell.slots):
+            limits.get("consumers") != cell.consumers or limits.get("max_slots") != cell.slots or
+            limits.get("runtime_budget_bytes") != memory_budget_bytes or
+            limits.get("reserved_bytes") != memory_reserve_bytes or
+            limits.get("allocation_bytes") != memory_budget_bytes + memory_reserve_bytes):
         raise RuntimeError(f"{cell.cell_id}: workload or warmup profile drifted")
+    policy = evidence.get("policy", {})
+    if (policy.get("max_memory_bytes") != memory_budget_bytes or policy.get("max_cpu") != max_cpu or
+            policy.get("greed") != greed):
+        raise RuntimeError(f"{cell.cell_id}: policy inputs drifted")
     load = evidence.get("load", {})
     arrival = load.get("arrival", {})
     fields = {
@@ -199,6 +207,9 @@ def validate_output(
             arrival.get("rate_per_second") != cell.arrival_rate or
             arrival.get("queue_capacity") != cell.queue_capacity or offered != accepted + rejected):
         raise RuntimeError(f"{cell.cell_id}: arrival conservation failed")
+    expected_offered = cell.duration_seconds * cell.arrival_rate if cell.arrival_mode == "open-loop-fixed-v1" else started
+    if offered != expected_offered:
+        raise RuntimeError(f"{cell.cell_id}: offered count drifted from the arrival tape")
     if accepted != started or started != completed + failed or failed != 0 or completed <= 0:
         raise RuntimeError(f"{cell.cell_id}: request accounting failed")
     if load.get("result_oracle") != "numpy-exact-v1" or load.get("validated_results") != completed:
@@ -226,9 +237,34 @@ def validate_output(
         raise RuntimeError(f"{cell.cell_id}: derived latency evidence drifted")
     if load.get("replenish_status") != "complete" or load.get("ready_before") != load.get("ready_after"):
         raise RuntimeError(f"{cell.cell_id}: prepared inventory did not recover")
-    class_names = {entry.get("name") for entry in load.get("request_classes", [])}
-    if not class_names or any(not isinstance(name, str) or not name.startswith("numpy-") for name in class_names):
-        raise RuntimeError(f"{cell.cell_id}: request-class evidence is not NumPy-bound")
+    request_classes = load.get("request_classes")
+    if not isinstance(request_classes, list) or not request_classes:
+        raise RuntimeError(f"{cell.cell_id}: request-class evidence is missing")
+    observed_classes: dict[str, int] = {}
+    for entry in request_classes:
+        if not isinstance(entry, dict):
+            raise RuntimeError(f"{cell.cell_id}: request-class evidence is invalid")
+        name = entry.get("name")
+        class_started, class_completed, class_failed = entry.get("started"), entry.get("completed"), entry.get("failed")
+        if (not isinstance(name, str) or not name.startswith("numpy-") or name in observed_classes or
+                any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+                    for value in (class_started, class_completed, class_failed)) or
+                class_started <= 0 or class_completed + class_failed != class_started):
+            raise RuntimeError(f"{cell.cell_id}: request-class evidence is invalid")
+        observed_classes[name] = class_started
+    if cell.workload == "numpy-v1":
+        expected_classes = {"numpy-tiny": started}
+    else:
+        full_cycles, remainder = divmod(started, 20)
+        expected_classes = {
+            "numpy-tiny": full_cycles * 12 + min(remainder, 12),
+            "numpy-cpu": full_cycles * 5 + min(max(remainder - 12, 0), 5),
+            "numpy-dirty-4m-500ms": full_cycles * 2 + min(max(remainder - 17, 0), 2),
+            "numpy-dirty-16m-2s": full_cycles + min(max(remainder - 19, 0), 1),
+        }
+        expected_classes = {name: count for name, count in expected_classes.items() if count > 0}
+    if observed_classes != expected_classes:
+        raise RuntimeError(f"{cell.cell_id}: request-class distribution drifted")
 
 
 def validate_with_exact_binary(binary: Path, repo: Path, schema: Path, evidence: Path) -> subprocess.CompletedProcess[str]:
@@ -305,6 +341,8 @@ def run(args: argparse.Namespace, cells: list[Cell]) -> None:
         validate_output(
             evidence, cell=cell, revision=revision, artifact_sha256=artifact_sha256,
             artifact_source_commit=artifact_source_commit,
+            memory_budget_bytes=args.memory_budget_bytes, memory_reserve_bytes=args.memory_reserve_bytes,
+            max_cpu=args.max_cpu, greed=args.greed,
         )
         if exact_clean_revision(repo) != revision:
             raise RuntimeError(f"{stem}: Host source revision changed during execution")

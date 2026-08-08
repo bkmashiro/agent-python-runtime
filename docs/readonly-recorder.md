@@ -11,7 +11,7 @@ It deliberately has no browser, shell, credential, tool-registry, or commit API.
 1. Require an explicit source kind (`web` or `cli`), locator, and JSON payload.
 2. Bound payload size, nesting depth, and decoded node count.
 3. Reject duplicate JSON object keys.
-4. Reject sensitive key names, secret-like string values, and secret-bearing locators.
+4. Reject normalized sensitive-key fragments—including prefixed forms such as `X-API-Key` and `aws_secret_access_key`—plus conservative secret-like string values and secret-bearing locator assignments/arguments.
 5. Canonicalize the JSON with numbers preserved as JSON numbers.
 6. Retain the canonical payload only in the local recording and bind it to SHA-256 digests.
 

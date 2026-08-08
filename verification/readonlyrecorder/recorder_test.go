@@ -29,8 +29,11 @@ func TestCaptureCanonicalizesWebAndCLIObservations(t *testing.T) {
 func TestCaptureRejectsSensitiveFieldsValuesLocatorsAndDuplicateKeys(t *testing.T) {
 	observations := []readonlyrecorder.Observation{
 		{Source: readonlyrecorder.SourceWeb, Locator: "https://example.invalid", Payload: []byte(`{"password":"hidden"}`)},
+		{Source: readonlyrecorder.SourceWeb, Locator: "https://example.invalid", Payload: []byte(`{"headers":{"X-API-Key":"ordinary-looking-secret"}}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl", Payload: []byte(`{"aws_secret_access_key":"ordinary-looking-secret"}`)},
 		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl", Payload: []byte(`{"message":"Bearer abcdefghijklmnop"}`)},
 		{Source: readonlyrecorder.SourceWeb, Locator: "https://example.invalid?api_key=hidden", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl --password hidden", Payload: []byte(`{"status":"ok"}`)},
 		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl", Payload: []byte(`{"status":"ok","status":"changed"}`)},
 	}
 	for index, observation := range observations {

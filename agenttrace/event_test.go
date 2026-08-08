@@ -60,6 +60,25 @@ func TestRecorderProducesBoundedMetadataOnlyEvents(t *testing.T) {
 	}
 }
 
+func TestRecorderRejectsDuplicatePayloadKeysBeforeCanonicalization(t *testing.T) {
+	for _, payload := range []json.RawMessage{
+		json.RawMessage(`{"status":"error","status":"ok"}`),
+		json.RawMessage(`{"status":"ok","meta":{"attempt":1,"attempt":2}}`),
+	} {
+		sink := agenttrace.NewMemorySink()
+		recorder, err := (agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: sink}).Begin("agent-run-duplicate", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = recorder.Record(context.Background(), agenttrace.EventRuntimeCompleted, "", payload, ""); !errors.Is(err, agenttrace.ErrInvalidEvent) {
+			t.Fatalf("payload=%s err=%v", payload, err)
+		}
+		if len(sink.Events()) != 0 {
+			t.Fatalf("duplicate payload reached sink: %s", payload)
+		}
+	}
+}
+
 func TestPluginModesBoundTraceFailureWithoutChangingBestEffortExecution(t *testing.T) {
 	bestEffort, err := (agenttrace.Plugin{Mode: agenttrace.ModeBestEffort, Sink: failingSink{}}).Begin("agent-run-1", nil)
 	if err != nil {

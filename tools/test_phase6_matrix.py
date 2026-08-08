@@ -113,6 +113,8 @@ class Phase6MatrixTest(unittest.TestCase):
                 "request_classes": [{"name": "numpy-tiny", "started": 3, "completed": 3, "failed": 0}],
             },
         }
+        # A frozen Guest artifact source and the current Host harness source are separate identities.
+        self.assertNotEqual(revision, artifact_source)
         MODULE.validate_output(evidence, **validation_inputs)
         open_cell = MODULE.cells_for_tier("canary")[1]
         open_evidence = json.loads(json.dumps(evidence))
@@ -156,6 +158,9 @@ class Phase6MatrixTest(unittest.TestCase):
         wrong_class_count = json.loads(json.dumps(evidence))
         wrong_class_count["load"]["request_classes"][0].update(started=999, completed=999)
         mutations.append(wrong_class_count)
+        wrong_class_totals = json.loads(json.dumps(evidence))
+        wrong_class_totals["load"]["request_classes"][0].update(completed=2, failed=1)
+        mutations.append(wrong_class_totals)
         wrong_oracle = json.loads(json.dumps(evidence))
         wrong_oracle["load"]["validated_results"] = 2
         mutations.append(wrong_oracle)

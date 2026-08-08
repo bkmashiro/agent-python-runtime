@@ -177,6 +177,25 @@ func TestReconciledEffectRequiresManifestBoundConsumedApproval(t *testing.T) {
 			t.Fatalf("err=%v", err)
 		}
 	})
+	t.Run("consumption time must match authority transition", func(t *testing.T) {
+		sources := completeSources(t)
+		value := *sources.Transaction
+		value.Approvals = append([]transaction.EvidenceApproval(nil), sources.Transaction.Approvals...)
+		consumedAt := value.Approvals[0].ConsumedAt.Add(500 * time.Millisecond)
+		if !consumedAt.Before(value.Attempts[0].CreatedAt) {
+			t.Fatal("fixture no longer leaves room before dispatch")
+		}
+		value.Approvals[0].ConsumedAt = &consumedAt
+		var err error
+		value.EvidenceDigest, err = transaction.ComputeTransactionEvidenceDigest(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources.Transaction = &value
+		if _, err := evidencebundle.Build(sources); !errors.Is(err, evidencebundle.ErrContradictedSource) {
+			t.Fatalf("err=%v", err)
+		}
+	})
 	t.Run("consumed after dispatch", func(t *testing.T) {
 		sources := completeSources(t)
 		value := *sources.Transaction
@@ -184,6 +203,29 @@ func TestReconciledEffectRequiresManifestBoundConsumedApproval(t *testing.T) {
 		consumedAt := value.Transaction.UpdatedAt.Add(time.Second)
 		value.Approvals[0].ConsumedAt = &consumedAt
 		value.Approvals[0].ExpiresAt = consumedAt.Add(time.Hour)
+		var err error
+		value.EvidenceDigest, err = transaction.ComputeTransactionEvidenceDigest(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources.Transaction = &value
+		if _, err := evidencebundle.Build(sources); !errors.Is(err, evidencebundle.ErrContradictedSource) {
+			t.Fatalf("err=%v", err)
+		}
+	})
+	t.Run("post-terminal consumption with forged attempt timestamps", func(t *testing.T) {
+		sources := completeSources(t)
+		value := *sources.Transaction
+		value.Approvals = append([]transaction.EvidenceApproval(nil), sources.Transaction.Approvals...)
+		value.Attempts = append([]transaction.EvidenceAttempt(nil), sources.Transaction.Attempts...)
+		terminalAt := value.Transaction.UpdatedAt
+		consumedAt := terminalAt.Add(time.Second)
+		value.Approvals[0].ConsumedAt = &consumedAt
+		value.Approvals[0].ExpiresAt = consumedAt.Add(time.Hour)
+		value.Attempts[0].CreatedAt = terminalAt.Add(2 * time.Second)
+		value.Attempts[0].UpdatedAt = terminalAt.Add(3 * time.Second)
+		value.Attempts[0].LeaseExpiresAt = terminalAt.Add(time.Hour)
+		value.GeneratedAt = terminalAt.Add(4 * time.Second)
 		var err error
 		value.EvidenceDigest, err = transaction.ComputeTransactionEvidenceDigest(value)
 		if err != nil {

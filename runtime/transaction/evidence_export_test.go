@@ -102,6 +102,59 @@ func TestBuildTransactionEvidenceIsDeterministicBoundedAndDigestOnly(t *testing.
 	}
 }
 
+func TestVerifyTransactionEvidenceBindsEntityTimestampsAndDirectCardinality(t *testing.T) {
+	t.Run("attempt metadata timestamps match transitions", func(t *testing.T) {
+		ledger := NewMemoryLedger()
+		seedSQLiteLedger(t, ledger)
+		if _, err := ledger.transitionAttempt("att_sql", 1, AttemptLeased, AttemptDispatching, time.Unix(11, 0).UTC()); err != nil {
+			t.Fatal(err)
+		}
+		value, err := BuildTransactionEvidence(ledger, "tx_sql", time.Unix(20, 0).UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		value.Attempts = append([]EvidenceAttempt(nil), value.Attempts...)
+		value.Attempts[0].CreatedAt = value.Attempts[0].UpdatedAt
+		value.EvidenceDigest, err = ComputeTransactionEvidenceDigest(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := VerifyTransactionEvidenceDigest(value); !errors.Is(err, ErrInvalidEvidence) {
+			t.Fatalf("forged attempt timestamp err=%v", err)
+		}
+	})
+
+	t.Run("direct mode requires exactly one operation", func(t *testing.T) {
+		createdAt := time.Unix(10, 0).UTC()
+		updatedAt := time.Unix(11, 0).UTC()
+		value := TransactionEvidence{
+			SchemaVersion: TransactionEvidenceSchemaVersion,
+			GeneratedAt:   time.Unix(20, 0).UTC(),
+			Transaction: EvidenceTransaction{
+				ID: "tx_direct_empty", RunID: "run-direct", CatalogDigest: testDigest("catalog"),
+				Mode: TransactionModeDirect, State: TransactionCommitted, Version: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
+			},
+			Operations: []EvidenceOperation{}, Attempts: []EvidenceAttempt{}, Approvals: []EvidenceApproval{},
+			Transitions: []EvidenceTransition{
+				{Sequence: 1, TransactionID: "tx_direct_empty", EntityType: "transaction", EntityID: "tx_direct_empty", To: string(TransactionOpen), ObservedAt: createdAt},
+				{Sequence: 2, TransactionID: "tx_direct_empty", EntityType: "transaction", EntityID: "tx_direct_empty", From: string(TransactionOpen), To: string(TransactionCommitted), ObservedAt: updatedAt},
+			},
+			Metrics: TransactionEvidenceMetric{TransitionTotal: 2},
+		}
+		value.CorrelationID = evidenceCorrelationID(Transaction{
+			ID: value.Transaction.ID, RunID: value.Transaction.RunID, CatalogDigest: value.Transaction.CatalogDigest,
+		})
+		var err error
+		value.EvidenceDigest, err = ComputeTransactionEvidenceDigest(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := VerifyTransactionEvidenceDigest(value); !errors.Is(err, ErrInvalidEvidence) {
+			t.Fatalf("empty direct transaction err=%v", err)
+		}
+	})
+}
+
 func TestDecodeTransactionEvidenceRejectsDuplicateKeysBeforeTypedDecode(t *testing.T) {
 	ledger := NewMemoryLedger()
 	seedSQLiteLedger(t, ledger)

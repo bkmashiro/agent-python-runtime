@@ -408,8 +408,14 @@ func locatorContainsSensitiveData(locator string) bool {
 	for _, token := range strings.FieldsFunc(locator, func(r rune) bool {
 		return unicode.IsSpace(r) || r == '?' || r == '&'
 	}) {
-		if urlContainsSensitiveData(strings.Trim(token, `"'(),;`)) {
+		candidate := strings.Trim(token, `"'(),;`)
+		if urlContainsSensitiveData(candidate) {
 			return true
+		}
+		if strings.HasPrefix(candidate, "-") {
+			if index := strings.IndexAny(candidate, "=:"); index >= 0 && urlContainsSensitiveData(strings.Trim(candidate[index+1:], `"'(),;`)) {
+				return true
+			}
 		}
 		token = strings.TrimLeft(token, "-/")
 		if index := strings.IndexAny(token, "=:"); index >= 0 {

@@ -41,6 +41,7 @@ func TestCaptureRejectsSensitiveFieldsValuesLocatorsAndDuplicateKeys(t *testing.
 		{Source: readonlyrecorder.SourceWeb, Locator: "https://example.invalid?auth=hidden", Payload: []byte(`{"status":"ok"}`)},
 		{Source: readonlyrecorder.SourceWeb, Locator: "https://user:hidden@example.invalid/status", Payload: []byte(`{"status":"ok"}`)},
 		{Source: readonlyrecorder.SourceCLI, Locator: "curl https://user:hidden@example.invalid/status", Payload: []byte(`{"status":"ok"}`)},
+		{Source: readonlyrecorder.SourceCLI, Locator: "curl --url=https://user:hidden@example.invalid/status", Payload: []byte(`{"status":"ok"}`)},
 		{Source: readonlyrecorder.SourceCLI, Locator: "fixturectl", Payload: []byte(`{"status":"ok","status":"changed"}`)},
 	}
 	for index, observation := range observations {

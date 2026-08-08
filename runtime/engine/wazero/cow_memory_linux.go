@@ -347,6 +347,12 @@ func (memory *cowLinearMemory) sampleFootprint() (enginecontract.MemoryFootprint
 func (memory *cowLinearMemory) verifyReclaimed() error {
 	memory.mu.Lock()
 	defer memory.mu.Unlock()
+	// A successful munmap is authoritative for this allocation. A later
+	// allocation can reuse the same virtual range, so range-only smaps
+	// inspection after Free would misattribute the replacement mapping.
+	if memory.freed {
+		return nil
+	}
 	if memory.mappingStart == 0 || memory.mappingEnd <= memory.mappingStart {
 		return errFootprintMappingUnavailable
 	}

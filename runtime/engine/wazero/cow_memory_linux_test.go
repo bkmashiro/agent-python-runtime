@@ -168,6 +168,38 @@ func TestCOWLinearMemorySamplesExactLinuxMapping(t *testing.T) {
 	}
 }
 
+func TestCOWMemoryReclaimDoesNotMisattributeReusedAddressRange(t *testing.T) {
+	wasmBytes := make([]byte, wasmLinearPageSize)
+	wasmBytes[17] = 9
+	image, err := newCOWImage(wasmBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer image.Close()
+
+	first, err := image.mapPrivate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := image.mapPrivate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Free()
+	first.Free()
+
+	// Simulate the kernel reusing first's historical virtual range for a new
+	// live allocation. Range-only /proc inspection must not attribute that
+	// replacement mapping to the successfully unmapped first allocation.
+	first.mu.Lock()
+	first.mappingStart = second.mappingStart
+	first.mappingEnd = second.mappingEnd
+	first.mu.Unlock()
+	if err := first.verifyReclaimed(); err != nil {
+		t.Fatalf("reused address range was misattributed to freed allocation: %v", err)
+	}
+}
+
 func TestCOWImageIsSealedAndAllocatorRejectsShapeDrift(t *testing.T) {
 	if _, err := newCOWImage(make([]byte, wasmLinearPageSize-1)); err == nil {
 		t.Fatal("accepted a partial Wasm page")

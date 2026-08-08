@@ -193,8 +193,14 @@ class Phase6MatrixTest(unittest.TestCase):
                 "artifact_profile": "numpy-core",
                 "artifact": {"filename": artifact.name, "sha256": digest, "size": 4},
                 "build": {"repository_commit": source},
+                "wasm": {"memory": {"initial_pages": 8192, "maximum_pages": 8192, "fixed": True}},
             }), encoding="utf-8")
             self.assertEqual(source, MODULE.artifact_source_identity(artifact, manifest, digest))
+            growable = json.loads(manifest.read_text(encoding="utf-8"))
+            growable["wasm"]["memory"] = {"initial_pages": 2048, "maximum_pages": 8192, "fixed": False}
+            manifest.write_text(json.dumps(growable), encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                MODULE.artifact_source_identity(artifact, manifest, digest)
             manifest.write_text('{"artifact_profile":"numpy-core","artifact_profile":"base"}', encoding="utf-8")
             with self.assertRaises(RuntimeError):
                 MODULE.artifact_source_identity(artifact, manifest, digest)

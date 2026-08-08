@@ -14,6 +14,7 @@ This phase does not test served-slot reuse, arbitrary packages, stateful session
 
 - Runtime strategy: `cow-ready-single-use`; every served slot retires.
 - Artifact profile: `numpy-core`; evidence class: `profile-candidate`.
+- Artifact memory model: manifest-bound `cow-fixed`, with `initial_pages == maximum_pages` and `fixed: true`; a growable NumPy artifact is ineligible for this COW phase and is rejected before shard initialization.
 - Warmup: exact `numpy-ready-v1` profile and non-empty warmup generation digest.
 - Host source, Guest source/artifact, manifest, workload version, machine, cgroup and effective policy are recorded.
 - Results are compared only within the same workload, artifact/profile, machine class and source revision.

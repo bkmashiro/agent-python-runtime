@@ -137,8 +137,18 @@ def artifact_source_identity(artifact: Path, manifest_path: Path, artifact_sha25
         raise RuntimeError("artifact manifest is not the NumPy-core profile")
     entry = manifest.get("artifact")
     build = manifest.get("build")
-    if not isinstance(entry, dict) or not isinstance(build, dict):
+    wasm = manifest.get("wasm")
+    if not isinstance(entry, dict) or not isinstance(build, dict) or not isinstance(wasm, dict):
         raise RuntimeError("artifact manifest identity is incomplete")
+    memory = wasm.get("memory")
+    if not isinstance(memory, dict):
+        raise RuntimeError("artifact manifest memory identity is incomplete")
+    initial_pages = memory.get("initial_pages")
+    maximum_pages = memory.get("maximum_pages")
+    if (isinstance(initial_pages, bool) or not isinstance(initial_pages, int) or initial_pages <= 0 or
+            isinstance(maximum_pages, bool) or not isinstance(maximum_pages, int) or
+            maximum_pages != initial_pages or memory.get("fixed") is not True):
+        raise RuntimeError("Phase 6 requires a fixed-memory COW artifact")
     if (entry.get("filename") != artifact.name or entry.get("sha256") != artifact_sha256 or
             entry.get("size") != artifact.stat().st_size):
         raise RuntimeError("artifact bytes drifted from the artifact manifest")

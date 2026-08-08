@@ -104,6 +104,16 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn('AGENT_RUNTIME_WASM_EXTENSION_FINDER_SCRIPT', SOURCE.read_text())
         self.assertIn('wasm_extension_finder.h', SOURCE.read_text())
 
+    def test_artifact_memory_model_is_explicit_and_verified(self):
+        workflow = ARTIFACT_WORKFLOW.read_text()
+        self.assertIn("memory_model:", workflow)
+        self.assertIn("default: growable", workflow)
+        self.assertIn("- growable", workflow)
+        self.assertIn("- cow-fixed", workflow)
+        self.assertIn("AGENT_RUNTIME_COW_FIXED_MEMORY:", workflow)
+        self.assertIn("${{ inputs.memory_model || 'growable' }}", workflow)
+        self.assertIn("artifact memory model drifted", workflow)
+
     def test_host_call_import_is_narrow_and_bounded(self):
         header = HEADER.read_text()
         source = SOURCE.read_text()

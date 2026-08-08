@@ -60,7 +60,7 @@ The offered request count is bounded and must equal the exact tape length derive
 
 The `cow-pressure` schema v11 records:
 
-- independent Host revision and Guest artifact-source revision, plus artifact/profile/warmup identities;
+- independent Host revision and Guest artifact-source revision, plus artifact/profile/warmup identities; each revision must match its own exact source or manifest. A frozen Guest artifact may intentionally predate the Host harness revision, so equality between these two revisions is not an acceptance condition and must not replace either binding;
 - arrival mode, window, rate, queue capacity and offered/accepted/rejected totals;
 - started/completed/failed and per-class totals;
 - result-oracle version and validated-result count; NumPy uses `numpy-exact-v1` and requires one validated exact result per completion;

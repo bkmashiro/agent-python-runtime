@@ -241,6 +241,7 @@ def validate_output(
     if not isinstance(request_classes, list) or not request_classes:
         raise RuntimeError(f"{cell.cell_id}: request-class evidence is missing")
     observed_classes: dict[str, int] = {}
+    class_started_total = class_completed_total = class_failed_total = 0
     for entry in request_classes:
         if not isinstance(entry, dict):
             raise RuntimeError(f"{cell.cell_id}: request-class evidence is invalid")
@@ -252,6 +253,9 @@ def validate_output(
                 class_started <= 0 or class_completed + class_failed != class_started):
             raise RuntimeError(f"{cell.cell_id}: request-class evidence is invalid")
         observed_classes[name] = class_started
+        class_started_total += class_started
+        class_completed_total += class_completed
+        class_failed_total += class_failed
     if cell.workload == "numpy-v1":
         expected_classes = {"numpy-tiny": started}
     else:
@@ -265,6 +269,9 @@ def validate_output(
         expected_classes = {name: count for name, count in expected_classes.items() if count > 0}
     if observed_classes != expected_classes:
         raise RuntimeError(f"{cell.cell_id}: request-class distribution drifted")
+    if (class_started_total != started or class_completed_total != completed or
+            class_failed_total != failed):
+        raise RuntimeError(f"{cell.cell_id}: request-class totals drifted")
 
 
 def validate_with_exact_binary(binary: Path, repo: Path, schema: Path, evidence: Path) -> subprocess.CompletedProcess[str]:

@@ -199,10 +199,31 @@ def validate_output(
             arrival.get("rate_per_second") != cell.arrival_rate or
             arrival.get("queue_capacity") != cell.queue_capacity or offered != accepted + rejected):
         raise RuntimeError(f"{cell.cell_id}: arrival conservation failed")
-    if accepted != started or started != completed + failed or failed != 0:
+    if accepted != started or started != completed + failed or failed != 0 or completed <= 0:
         raise RuntimeError(f"{cell.cell_id}: request accounting failed")
     if load.get("result_oracle") != "numpy-exact-v1" or load.get("validated_results") != completed:
         raise RuntimeError(f"{cell.cell_id}: NumPy result oracle evidence drifted")
+    latency_samples = load.get("latency_samples_ns")
+    if (not isinstance(latency_samples, list) or len(latency_samples) != completed or len(latency_samples) > 250_000 or
+            any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in latency_samples) or
+            latency_samples != sorted(latency_samples)):
+        raise RuntimeError(f"{cell.cell_id}: latency samples are invalid")
+
+    def percentile(percent: int) -> int:
+        index = (len(latency_samples) * percent + 99) // 100
+        return latency_samples[max(index, 1) - 1]
+
+    latency_total = sum(latency_samples)
+    derived_latency = {
+        "latency_total_ns": latency_total,
+        "latency_mean_ns": latency_total // completed,
+        "latency_p50_ns": percentile(50),
+        "latency_p95_ns": percentile(95),
+        "latency_p99_ns": percentile(99),
+        "latency_max_ns": latency_samples[-1],
+    }
+    if any(load.get(field) != value for field, value in derived_latency.items()):
+        raise RuntimeError(f"{cell.cell_id}: derived latency evidence drifted")
     if load.get("replenish_status") != "complete" or load.get("ready_before") != load.get("ready_after"):
         raise RuntimeError(f"{cell.cell_id}: prepared inventory did not recover")
     class_names = {entry.get("name") for entry in load.get("request_classes", [])}

@@ -64,7 +64,7 @@ The `cow-pressure` schema v11 records:
 - arrival mode, window, rate, queue capacity and offered/accepted/rejected totals;
 - started/completed/failed and per-class totals;
 - result-oracle version and validated-result count; NumPy uses `numpy-exact-v1` and requires one validated exact result per completion;
-- latency sum, p50 and p99;
+- up to 250,000 sorted raw request-latency samples; count, sum, mean, p50, p95, p99 and max are rederived during semantic validation;
 - ready/leased/queued/refilling/retiring/waiting snapshots;
 - process RSS/PSS, named COW mappings, active anonymous/private-dirty bytes, faults, cgroup memory/PSI and reclaim state;
 - public policy inputs: maximum memory, maximum CPU and greed;
@@ -103,6 +103,7 @@ Unsupported or unsafe rows are recorded as rejected plan points, not fake passes
 - Final target inventory restored after drain.
 - Zero final active anonymous/private-dirty COW bytes.
 - No unexplained OOM, timeout, response mismatch or artifact drift.
+- The first request failure cancels in-flight request contexts, queued admission, burst release waits and active samplers before Runtime cleanup.
 - Paper-facing points have at least three exact-source repetitions and report median plus min-max.
 
 ## Stop conditions

@@ -167,7 +167,7 @@
     },
     "load": {
       "type": "object", "additionalProperties": false,
-      "required": ["arrival", "result_oracle", "validated_results", "started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "latency_total_ns", "latency_mean_ns", "ready_before", "ready_after", "phases", "request_classes"],
+      "required": ["arrival", "result_oracle", "validated_results", "started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "latency_total_ns", "latency_mean_ns", "latency_samples_ns", "ready_before", "ready_after", "phases", "request_classes"],
       "properties": {
         "arrival": {"$ref": "#/$defs/arrival"},
         "result_oracle": {"enum": ["status-ok-v1", "numpy-exact-v1"]},
@@ -182,6 +182,7 @@
         "latency_p50_ns": {"type": "integer", "minimum": 1}, "latency_p95_ns": {"type": "integer", "minimum": 1},
         "latency_p99_ns": {"type": "integer", "minimum": 1}, "latency_max_ns": {"type": "integer", "minimum": 1},
         "latency_total_ns": {"type": "integer", "minimum": 1}, "latency_mean_ns": {"type": "integer", "minimum": 1},
+        "latency_samples_ns": {"type": "array", "minItems": 1, "maxItems": 250000, "items": {"type": "integer", "minimum": 1}},
         "ready_before": {"type": "integer", "minimum": 1, "maximum": 65536}, "ready_after": {"type": "integer", "minimum": 0, "maximum": 65536},
         "phases": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/phase"}},
         "request_classes": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/requestClass"}},

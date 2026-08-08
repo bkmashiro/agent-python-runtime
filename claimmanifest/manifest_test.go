@@ -76,6 +76,7 @@ func TestMetadataManifestRejectsEvidenceAndTopologyTampering(t *testing.T) {
 		t.Fatal(err)
 	}
 	mutations := map[string]func(*claimmanifest.Manifest){
+		"legacy version": func(candidate *claimmanifest.Manifest) { candidate.Version = "claim-manifest/v1" },
 		"event identity": func(candidate *claimmanifest.Manifest) { candidate.CompletedEventID = "other-event" },
 		"artifact evidence": func(candidate *claimmanifest.Manifest) {
 			claimByKind(candidate, claimmanifest.ClaimArtifact).Evidence[0].Ref = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

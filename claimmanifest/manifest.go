@@ -11,7 +11,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
-const Version = "claim-manifest/v1"
+const Version = "claim-manifest/v2"
 
 type ClaimKind string
 

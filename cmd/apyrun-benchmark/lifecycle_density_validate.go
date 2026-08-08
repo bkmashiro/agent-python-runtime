@@ -7,9 +7,13 @@ import (
 	"os"
 
 	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const maximumLifecycleDensityEvidenceBytes = 32 * 1024 * 1024
+const (
+	maximumLifecycleDensityEvidenceBytes = 32 * 1024 * 1024
+	maximumLifecycleDensitySchemaBytes   = 1 * 1024 * 1024
+)
 
 type lifecycleDensityValidationVerdict struct {
 	Valid          bool   `json:"valid"`
@@ -28,12 +32,19 @@ func runLifecycleDensityValidationMain(options benchmarkOptions) error {
 }
 
 func validateLifecycleDensityInput(options benchmarkOptions) (lifecycleDensityValidationVerdict, error) {
-	if options.InputPath == "" || options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath != "" || options.LifecycleDensityChild {
-		return lifecycleDensityValidationVerdict{}, errors.New("validate-lifecycle-density requires -input, -artifact, and -manifest only")
+	if options.InputPath == "" || options.SchemaPath == "" || options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath != "" || options.LifecycleDensityChild {
+		return lifecycleDensityValidationVerdict{}, errors.New("validate-lifecycle-density requires -input, -schema, -artifact, and -manifest only")
 	}
 	evidenceBytes, err := readRegularFileBounded(options.InputPath, maximumLifecycleDensityEvidenceBytes)
 	if err != nil {
 		return lifecycleDensityValidationVerdict{}, fmt.Errorf("read lifecycle-density evidence: %w", err)
+	}
+	schemaBytes, err := readRegularFileBounded(options.SchemaPath, maximumLifecycleDensitySchemaBytes)
+	if err != nil {
+		return lifecycleDensityValidationVerdict{}, fmt.Errorf("read lifecycle-density schema: %w", err)
+	}
+	if err := validateLifecycleDensitySchema(evidenceBytes, schemaBytes); err != nil {
+		return lifecycleDensityValidationVerdict{}, err
 	}
 	if err := runtimeevidence.ValidateLifecycleDensityJSON(evidenceBytes); err != nil {
 		return lifecycleDensityValidationVerdict{}, err
@@ -59,4 +70,34 @@ func validateLifecycleDensityInput(options benchmarkOptions) (lifecycleDensityVa
 		Valid: true, SchemaVersion: evidence.SchemaVersion, ArtifactSHA256: evidence.Artifact.SHA256,
 		Strategy: evidence.Strategy.Active, Samples: len(evidence.Samples),
 	}, nil
+}
+
+func validateLifecycleDensitySchema(evidenceBytes, schemaBytes []byte) error {
+	if err := rejectDuplicateJSONDocument(schemaBytes); err != nil {
+		return fmt.Errorf("lifecycle-density schema JSON is invalid: %w", err)
+	}
+	if err := rejectDuplicateJSONDocument(evidenceBytes); err != nil {
+		return fmt.Errorf("lifecycle-density evidence JSON is invalid: %w", err)
+	}
+	var schemaDocument any
+	if err := json.Unmarshal(schemaBytes, &schemaDocument); err != nil {
+		return fmt.Errorf("decode lifecycle-density schema: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	const schemaURL = "https://agent-python-runtime.invalid/benchmark/v1/lifecycle-density.schema.json"
+	if err := compiler.AddResource(schemaURL, schemaDocument); err != nil {
+		return fmt.Errorf("load lifecycle-density schema: %w", err)
+	}
+	compiled, err := compiler.Compile(schemaURL)
+	if err != nil {
+		return fmt.Errorf("compile lifecycle-density schema: %w", err)
+	}
+	var document any
+	if err := json.Unmarshal(evidenceBytes, &document); err != nil {
+		return fmt.Errorf("decode lifecycle-density evidence: %w", err)
+	}
+	if err := compiled.Validate(document); err != nil {
+		return fmt.Errorf("validate lifecycle-density JSON Schema: %w", err)
+	}
+	return nil
 }

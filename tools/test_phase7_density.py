@@ -110,6 +110,7 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertIn("-prepared-warmup-profile numpy-ready-v1", source)
         self.assertIn("-max-rss-bytes 8589934592", source)
         self.assertIn("validate-lifecycle-density", source)
+        self.assertEqual(2, source.count("-schema \"$REPO/benchmark/v1/lifecycle-density.schema.json\""))
         self.assertIn("phase7_density.py", source)
         self.assertIn("source.bundle", source)
         self.assertIn("payload.SHA256", source)
@@ -118,6 +119,8 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertNotIn('grep -Fx "build\\t', source)
         self.assertIn("READY-${SLURM_JOB_ID}", source)
         self.assertIn("ACK-${SLURM_JOB_ID}", source)
+        self.assertIn("FAILED-${SLURM_JOB_ID}", source)
+        self.assertIn("failure_line=%s", source)
         self.assertNotIn("a100", source.lower())
         self.assertNotIn("sh -c", source)
 

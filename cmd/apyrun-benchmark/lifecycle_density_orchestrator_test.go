@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -382,18 +383,51 @@ func TestAssembleLifecycleDensityEvidenceValidatesCanonicalChildSweep(t *testing
 			t.Fatal(err)
 		}
 	}
-	verdict, err := validateLifecycleDensityInput(benchmarkOptions{InputPath: evidencePath, ArtifactPath: artifactPath, ManifestPath: manifestPath})
+	schemaPath := filepath.Join(directory, "lifecycle-density.schema.json")
+	schemaBytes, err := os.ReadFile(filepath.Join("..", "..", "benchmark", "v1", "lifecycle-density.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(schemaPath, schemaBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	options := benchmarkOptions{InputPath: evidencePath, SchemaPath: schemaPath, ArtifactPath: artifactPath, ManifestPath: manifestPath}
+	verdict, err := validateLifecycleDensityInput(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !verdict.Valid || verdict.ArtifactSHA256 != artifact.SHA256 || verdict.Samples != len(evidence.Samples) {
 		t.Fatalf("standalone validation verdict drifted: %#v", verdict)
 	}
+	var structuralDocument map[string]any
+	if err := json.Unmarshal(encoded, &structuralDocument); err != nil {
+		t.Fatal(err)
+	}
+	structuralSummary, ok := structuralDocument["summary"].(map[string]any)
+	if !ok {
+		t.Fatal("fixture summary is not an object")
+	}
+	delete(structuralSummary, "estimated_fixed_bytes")
+	delete(structuralSummary, "estimated_per_slot_bytes")
+	structuralSummary["estimated_fixed_bytes"] = nil
+	structuralBytes, err := json.Marshal(structuralDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimeevidence.ValidateLifecycleDensityJSON(structuralBytes); err != nil {
+		t.Fatalf("structural-only fixture unexpectedly failed semantic validation: %v", err)
+	}
+	if err := os.WriteFile(evidencePath, structuralBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateLifecycleDensityInput(options); err == nil || !strings.Contains(err.Error(), "JSON Schema") {
+		t.Fatalf("standalone validator did not enforce structural schema: %v", err)
+	}
 	duplicate := append([]byte(`{"schema_version":1,`), encoded[1:]...)
 	if err := os.WriteFile(evidencePath, duplicate, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := validateLifecycleDensityInput(benchmarkOptions{InputPath: evidencePath, ArtifactPath: artifactPath, ManifestPath: manifestPath}); err == nil {
+	if _, err := validateLifecycleDensityInput(options); err == nil {
 		t.Fatal("standalone validator accepted duplicate JSON key")
 	}
 }

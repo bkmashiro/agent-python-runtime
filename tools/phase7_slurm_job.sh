@@ -9,7 +9,7 @@
 #SBATCH --job-name=pysolate-p7
 #SBATCH --export=NIL
 
-set -euo pipefail
+set -Eeuo pipefail
 umask 077
 export PATH=/usr/local/bin:/usr/bin:/bin
 
@@ -47,12 +47,15 @@ REPO="$NODE_ROOT/repo"
 RESULT="$NODE_ROOT/result"
 OUTBOX="$STAGE/outbox"
 ACK="$STAGE/ACK-${SLURM_JOB_ID}"
+FAILED="$OUTBOX/FAILED-${SLURM_JOB_ID}"
+FAILED_TMP="$OUTBOX/FAILED-${SLURM_JOB_ID}.partial"
 if ! mkdir -m 700 "$NODE_ROOT"; then
   printf 'compute root already exists\n' >&2
   exit 66
 fi
 OWNER_MARKER="$NODE_ROOT/.phase7-owner"
 owner_token="${SLURM_JOB_ID}:${SOURCE_COMMIT}:$$"
+failure_line=0
 printf '%s\n' "$owner_token" > "$OWNER_MARKER"
 chmod 400 "$OWNER_MARKER"
 # shellcheck disable=SC2329
@@ -64,7 +67,26 @@ cleanup_node_root() {
     rm -rf -- "$NODE_ROOT"
   fi
 }
-trap cleanup_node_root EXIT
+# shellcheck disable=SC2329
+record_failure_and_cleanup() {
+  status=$?
+  trap - EXIT
+  if [[ "$status" -ne 0 ]] && [[ -d "$OUTBOX" ]] && [[ ! -L "$OUTBOX" ]] &&
+     [[ ! -e "$FAILED" ]] && [[ ! -L "$FAILED" ]] && [[ ! -e "$FAILED_TMP" ]] && [[ ! -L "$FAILED_TMP" ]]; then
+    {
+      printf 'job_id=%s\n' "$SLURM_JOB_ID"
+      printf 'source_commit=%s\n' "$SOURCE_COMMIT"
+      printf 'exit_code=%s\n' "$status"
+      printf 'failure_line=%s\n' "$failure_line"
+    } > "$FAILED_TMP"
+    chmod 400 "$FAILED_TMP"
+    mv -- "$FAILED_TMP" "$FAILED"
+  fi
+  cleanup_node_root
+  exit "$status"
+}
+trap 'failure_line=$LINENO' ERR
+trap record_failure_and_cleanup EXIT
 
 mkdir -m 700 "$INPUT"
 if [[ -e "$OUTBOX" ]] || [[ -L "$OUTBOX" ]]; then
@@ -74,6 +96,7 @@ else
 fi
 chmod 700 "$NODE_ROOT" "$INPUT" "$OUTBOX"
 test ! -e "$ACK" && test ! -L "$ACK"
+test ! -e "$FAILED" && test ! -L "$FAILED" && test ! -e "$FAILED_TMP" && test ! -L "$FAILED_TMP"
 cp -a "$STAGE/input/." "$INPUT/"
 if find "$INPUT" -type l -print -quit | grep -q .; then
   printf 'copied input contains a symlink\n' >&2
@@ -153,6 +176,7 @@ for strategy in $arms; do
   "$INPUT/bin/apyrun-benchmark-linux-amd64" \
     -kind validate-lifecycle-density \
     -input "$output" \
+    -schema "$REPO/benchmark/v1/lifecycle-density.schema.json" \
     -artifact "$INPUT/artifacts/agent-python-runtime-numpy-core.wasm" \
     -manifest "$INPUT/artifacts/manifest.json" \
     > "$output.validation.json"
@@ -160,6 +184,7 @@ done
 
 python3 "$REPO/tools/phase7_density.py" \
   --benchmark "$INPUT/bin/apyrun-benchmark-linux-amd64" \
+  --schema "$REPO/benchmark/v1/lifecycle-density.schema.json" \
   --artifact "$INPUT/artifacts/agent-python-runtime-numpy-core.wasm" \
   --manifest "$INPUT/artifacts/manifest.json" \
   --cow "$RESULT/cow.json" \

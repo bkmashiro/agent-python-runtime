@@ -38,6 +38,7 @@ ACK="$STAGE/ACK-${SLURM_JOB_ID}"
 FAILED="$OUTBOX/FAILED-${SLURM_JOB_ID}"
 FAILED_TMP="$OUTBOX/FAILED-${SLURM_JOB_ID}.partial"
 OWNER_MARKER="$NODE_ROOT/.phase7-owner"
+OWNER_MARKER_TMP="$NODE_ROOT/.phase7-owner.partial"
 owner_token="${SLURM_JOB_ID}:${SOURCE_COMMIT}:$$"
 failure_line=0
 node_root_created=false
@@ -56,7 +57,11 @@ cleanup_node_root() {
        IFS= read -r marker_value < "$OWNER_MARKER" && [[ "$marker_value" == "$owner_token" ]]; then
       rm -rf -- "$NODE_ROOT"
     else
-      rmdir -- "$NODE_ROOT" 2>/dev/null || true
+      if [[ ! -e "$OWNER_MARKER" ]] && [[ ! -L "$OWNER_MARKER" ]] &&
+         { [[ ! -e "$OWNER_MARKER_TMP" ]] || { [[ -f "$OWNER_MARKER_TMP" ]] && [[ ! -L "$OWNER_MARKER_TMP" ]]; }; }; then
+        rm -f -- "$OWNER_MARKER_TMP"
+        rmdir -- "$NODE_ROOT" 2>/dev/null || true
+      fi
     fi
   fi
 }
@@ -144,8 +149,10 @@ if ! mkdir -m 700 "$NODE_ROOT"; then
   abort_job "$LINENO" 66 'compute root already exists'
 fi
 node_root_created=true
-printf '%s\n' "$owner_token" > "$OWNER_MARKER"
-chmod 400 "$OWNER_MARKER"
+printf '%s\n' "$owner_token" > "$OWNER_MARKER_TMP"
+chmod 400 "$OWNER_MARKER_TMP"
+ln -- "$OWNER_MARKER_TMP" "$OWNER_MARKER"
+rm -- "$OWNER_MARKER_TMP"
 mkdir -m 700 "$INPUT"
 mkdir -m 700 "$INPUT/artifacts" "$INPUT/bin"
 chmod 700 "$NODE_ROOT" "$INPUT"
@@ -304,11 +311,11 @@ for path in "$archive_tmp" "$archive" "$checksum_tmp" "$checksum" "$ready_tmp" "
 done
 
 publish_exclusive() {
-  source_path="$1"
-  destination_path="$2"
+  local source_path="$1"
+  local destination_path="$2"
   test -f "$source_path" && test ! -L "$source_path"
   ln -- "$source_path" "$destination_path"
-  rm -- "$source_path"
+  rm -f -- "$source_path" || true
 }
 
 ack_is_exact() {

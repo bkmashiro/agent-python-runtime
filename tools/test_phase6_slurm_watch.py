@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -43,8 +44,12 @@ class Phase6SlurmContractTests(unittest.TestCase):
         self.assertIn("SLURM_CPUS_PER_TASK", source)
         self.assertIn("SLURM_MEM_PER_NODE", source)
         self.assertIn("SLURM_GPUS_ON_NODE", source)
+        self.assertIn('mkdir -m 700 "$NODE_ROOT"', source)
+        self.assertIn("OWNER_MARKER", source)
+        self.assertIn("owner_token", source)
         watcher = WATCHER.read_text(encoding="utf-8")
-        self.assertIn("stat -c %s --", watcher)
+        self.assertIn("os.O_NOFOLLOW", watcher)
+        self.assertIn("download_bounded", watcher)
         self.assertIn("validate_environment_shape(environment)", watcher)
         self.assertIn("validate_resource_shape(controller_row)", watcher)
 
@@ -55,6 +60,49 @@ class Phase6SlurmContractTests(unittest.TestCase):
             path.write_text('{"a":1,"a":2}', encoding="utf-8")
             with self.assertRaises(ValueError):
                 module.unique_json(path)
+
+    def test_local_stream_copy_is_bounded(self) -> None:
+        module = load_watcher()
+        target = io.BytesIO()
+        self.assertEqual(4, module.copy_bounded(io.BytesIO(b"four"), target, 4))
+        self.assertEqual(b"four", target.getvalue())
+        with self.assertRaises(RuntimeError):
+            module.copy_bounded(io.BytesIO(b"five!"), io.BytesIO(), 4)
+
+    def test_remote_reader_binds_one_regular_file_descriptor(self) -> None:
+        module = load_watcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            regular = root / "regular"
+            regular.write_bytes(b"four")
+            accepted = subprocess.run(
+                ["python3", "-c", module.REMOTE_BOUNDED_READER, str(regular), "4"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(0, accepted.returncode)
+            self.assertEqual(b"four", accepted.stdout)
+
+            oversized = subprocess.run(
+                ["python3", "-c", module.REMOTE_BOUNDED_READER, str(regular), "3"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertNotEqual(0, oversized.returncode)
+            self.assertEqual(b"", oversized.stdout)
+
+            link = root / "link"
+            link.symlink_to(regular)
+            linked = subprocess.run(
+                ["python3", "-c", module.REMOTE_BOUNDED_READER, str(link), "4"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertNotEqual(0, linked.returncode)
+            self.assertEqual(b"", linked.stdout)
 
     def test_watcher_rejects_duplicate_and_traversing_archive_members(self) -> None:
         module = load_watcher()
@@ -210,11 +258,6 @@ class Phase6SlurmContractTests(unittest.TestCase):
             environment[key] = value
             with self.assertRaises(RuntimeError):
                 module.validate_environment_shape(environment)
-
-        self.assertEqual(123, module.parse_remote_size("123\n", 256, "READY"))
-        for text in ("", "-1\n", "257\n", "12\n13\n"):
-            with self.assertRaises(RuntimeError):
-                module.parse_remote_size(text, 256, "READY")
 
         digest = "a" * 64
         module.validate_acked_text(f"{digest}  2026-08-08T18:00:00Z\n", digest)

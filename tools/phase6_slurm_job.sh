@@ -59,9 +59,26 @@ RESULT="$NODE_ROOT/result"
 OUTBOX="$STAGE/outbox"
 ACK="$STAGE/ACK-${SLURM_JOB_ID}"
 
-trap 'rm -rf -- "$NODE_ROOT"' EXIT
+if ! mkdir -m 700 "$NODE_ROOT"; then
+  printf 'compute root already exists: %s\n' "$NODE_ROOT" >&2
+  exit 66
+fi
+OWNER_MARKER="$NODE_ROOT/.phase6-owner"
+owner_token="${SLURM_JOB_ID}:${SOURCE_COMMIT}:$$"
+printf '%s\n' "$owner_token" > "$OWNER_MARKER"
+chmod 400 "$OWNER_MARKER"
+# shellcheck disable=SC2329  # invoked by the EXIT trap below
+cleanup_node_root() {
+  marker_value=""
+  if [[ -d "$NODE_ROOT" ]] && [[ ! -L "$NODE_ROOT" ]] &&
+     [[ -f "$OWNER_MARKER" ]] && [[ ! -L "$OWNER_MARKER" ]] &&
+     IFS= read -r marker_value < "$OWNER_MARKER" && [[ "$marker_value" == "$owner_token" ]]; then
+    rm -rf -- "$NODE_ROOT"
+  fi
+}
+trap cleanup_node_root EXIT
 
-mkdir -p "$INPUT"
+mkdir -m 700 "$INPUT"
 if [[ -e "$OUTBOX" ]] || [[ -L "$OUTBOX" ]]; then
   test -d "$OUTBOX"
   test ! -L "$OUTBOX"

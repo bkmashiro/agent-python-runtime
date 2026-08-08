@@ -1,6 +1,8 @@
 #!/bin/bash
 #SBATCH --partition=t4
 #SBATCH --gres=gpu:tesla_t4:1
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=04:00:00
@@ -31,6 +33,16 @@ if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   exit 64
 fi
 test "${SLURM_JOB_PARTITION:-}" = "t4"
+test "${SLURM_CPUS_PER_TASK:-}" = "4"
+test "${SLURM_JOB_NUM_NODES:-}" = "1"
+test "${SLURM_NTASKS:-}" = "1"
+case "${SLURM_MEM_PER_NODE:-}" in
+  16384|16G) ;;
+  *) printf 'unexpected memory allocation: %s\n' "${SLURM_MEM_PER_NODE:-missing}" >&2; exit 65 ;;
+esac
+test "${SLURM_GPUS_ON_NODE:-}" = "1"
+test -n "${CUDA_VISIBLE_DEVICES:-}"
+[[ "${CUDA_VISIBLE_DEVICES}" != *,* ]]
 test -d "$STAGE"
 test ! -L "$STAGE"
 test -d "$STAGE/input"
@@ -63,6 +75,28 @@ if find "$INPUT" -type l -print -quit | grep -q .; then
   printf 'copied input contains a symlink\n' >&2
   exit 65
 fi
+expected_payload_files=(
+  PAYLOAD_IDENTITY.json
+  SOURCE_COMMIT
+  artifacts/agent-python-runtime-numpy-core.wasm
+  artifacts/manifest.json
+  bin/apyrun-benchmark-linux-amd64
+)
+if [[ "$TIER" = "formal" ]]; then
+  expected_payload_files+=(formal-selection.json)
+fi
+expected_payload_files+=(phase6_slurm_job.sh source.bundle)
+expected_payload_manifest="$NODE_ROOT/payload.expected"
+: > "$expected_payload_manifest"
+for relative_path in "${expected_payload_files[@]}"; do
+  candidate="$INPUT/$relative_path"
+  test -f "$candidate"
+  test ! -L "$candidate"
+  printf '%s  %s\n' "$(sha256sum "$candidate" | cut -d' ' -f1)" "$relative_path" >> "$expected_payload_manifest"
+done
+actual_file_count="$(find "$INPUT" -type f -print | wc -l | tr -d '[:space:]')"
+test "$actual_file_count" -eq "$((${#expected_payload_files[@]} + 1))"
+cmp -- "$expected_payload_manifest" "$INPUT/payload.SHA256"
 (
   cd "$INPUT"
   sha256sum --check payload.SHA256
@@ -90,8 +124,13 @@ fi
   printf 'hostname=%s\n' "$(hostname)"
   printf 'kernel=%s\n' "$(uname -srmo)"
   printf 'cpus_per_task=%s\n' "${SLURM_CPUS_PER_TASK:-unknown}"
+  printf 'job_num_nodes=%s\n' "${SLURM_JOB_NUM_NODES:-unknown}"
+  printf 'num_tasks=%s\n' "${SLURM_NTASKS:-unknown}"
+  printf 'memory_per_node=%s\n' "${SLURM_MEM_PER_NODE:-unknown}"
+  printf 'gpus_on_node=%s\n' "${SLURM_GPUS_ON_NODE:-unknown}"
   printf 'job_partition=%s\n' "${SLURM_JOB_PARTITION:-unknown}"
   printf 'job_gpus=%s\n' "${SLURM_JOB_GPUS:-unknown}"
+  printf 'cuda_visible_devices=%s\n' "${CUDA_VISIBLE_DEVICES:-unknown}"
   printf 'formal_selection_sha256=%s\n' "$formal_selection_sha256"
   printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$NODE_ROOT/ENVIRONMENT.txt"

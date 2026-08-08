@@ -7,6 +7,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -115,6 +116,38 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def load_unique_json(path: Path, *, maximum_bytes: int) -> Any:
+    if path.stat().st_size <= 0 or path.stat().st_size > maximum_bytes:
+        raise RuntimeError(f"JSON input is outside the size bound: {path}")
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise RuntimeError(f"duplicate JSON key {key!r}: {path}")
+            result[key] = value
+        return result
+
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
+
+
+def artifact_source_identity(artifact: Path, manifest_path: Path, artifact_sha256: str) -> str:
+    manifest = load_unique_json(manifest_path, maximum_bytes=1 << 20)
+    if not isinstance(manifest, dict) or manifest.get("artifact_profile") != "numpy-core":
+        raise RuntimeError("artifact manifest is not the NumPy-core profile")
+    entry = manifest.get("artifact")
+    build = manifest.get("build")
+    if not isinstance(entry, dict) or not isinstance(build, dict):
+        raise RuntimeError("artifact manifest identity is incomplete")
+    if (entry.get("filename") != artifact.name or entry.get("sha256") != artifact_sha256 or
+            entry.get("size") != artifact.stat().st_size):
+        raise RuntimeError("artifact bytes drifted from the artifact manifest")
+    source_commit = build.get("repository_commit")
+    if not isinstance(source_commit, str) or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise RuntimeError("artifact build source revision is not exact")
+    return source_commit
+
+
 def exact_clean_revision(repo: Path) -> str:
     revision = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=repo, check=True, text=True,
@@ -131,13 +164,17 @@ def exact_clean_revision(repo: Path) -> str:
     return revision
 
 
-def validate_output(evidence: dict[str, Any], *, cell: Cell, revision: str, artifact_sha256: str) -> None:
+def validate_output(
+    evidence: dict[str, Any], *, cell: Cell, revision: str,
+    artifact_sha256: str, artifact_source_commit: str,
+) -> None:
     if evidence.get("schema_version") != 11 or evidence.get("evidence_kind") != "cow-pressure":
         raise RuntimeError(f"{cell.cell_id}: wrong evidence schema or kind")
     if evidence.get("evidence_class") != "profile-candidate":
         raise RuntimeError(f"{cell.cell_id}: wrong evidence class")
     artifact = evidence.get("artifact", {})
-    if artifact.get("sha256") != artifact_sha256 or artifact.get("artifact_profile") != "numpy-core":
+    if (artifact.get("sha256") != artifact_sha256 or artifact.get("artifact_profile") != "numpy-core" or
+            artifact.get("source_commit") != artifact_source_commit):
         raise RuntimeError(f"{cell.cell_id}: artifact identity drifted")
     host = evidence.get("host_source", {})
     if host.get("revision") != revision or host.get("modified") is not False:
@@ -157,11 +194,15 @@ def validate_output(evidence: dict[str, Any], *, cell: Cell, revision: str, arti
         raise RuntimeError(f"{cell.cell_id}: request accounting fields are not non-negative integers")
     offered, accepted, rejected = fields["offered"], fields["accepted"], fields["rejected"]
     started, completed, failed = fields["started"], fields["completed"], fields["failed"]
-    if (arrival.get("mode") != cell.arrival_mode or arrival.get("rate_per_second") != cell.arrival_rate or
+    expected_window_ns = cell.duration_seconds * 1_000_000_000 if cell.arrival_mode == "open-loop-fixed-v1" else 0
+    if (arrival.get("mode") != cell.arrival_mode or arrival.get("window_ns") != expected_window_ns or
+            arrival.get("rate_per_second") != cell.arrival_rate or
             arrival.get("queue_capacity") != cell.queue_capacity or offered != accepted + rejected):
         raise RuntimeError(f"{cell.cell_id}: arrival conservation failed")
     if accepted != started or started != completed + failed or failed != 0:
         raise RuntimeError(f"{cell.cell_id}: request accounting failed")
+    if load.get("result_oracle") != "numpy-exact-v1" or load.get("validated_results") != completed:
+        raise RuntimeError(f"{cell.cell_id}: NumPy result oracle evidence drifted")
     if load.get("replenish_status") != "complete" or load.get("ready_before") != load.get("ready_after"):
         raise RuntimeError(f"{cell.cell_id}: prepared inventory did not recover")
     class_names = {entry.get("name") for entry in load.get("request_classes", [])}
@@ -169,10 +210,26 @@ def validate_output(evidence: dict[str, Any], *, cell: Cell, revision: str, arti
         raise RuntimeError(f"{cell.cell_id}: request-class evidence is not NumPy-bound")
 
 
+def validate_with_exact_binary(binary: Path, repo: Path, schema: Path, evidence: Path) -> subprocess.CompletedProcess[str]:
+    completed = subprocess.run(
+        [str(binary), "-kind=validate-cow-pressure", f"-input={evidence}", f"-schema={schema}"],
+        cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"{evidence.name}: independent schema/semantic validation failed: {completed.stderr.strip()}")
+    try:
+        verdict = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"{evidence.name}: validator returned invalid JSON") from error
+    if verdict != {"valid": True, "schema_version": 11, "evidence_kind": "cow-pressure"}:
+        raise RuntimeError(f"{evidence.name}: validator returned a non-canonical verdict")
+    return completed
+
+
 def load_selection(path: Path | None) -> list[str] | None:
     if path is None:
         return None
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = load_unique_json(path, maximum_bytes=64 << 10)
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError("formal selection must be a JSON array of cell IDs")
     return value
@@ -196,11 +253,13 @@ def run(args: argparse.Namespace, cells: list[Cell]) -> None:
     binary = args.binary.resolve()
     artifact = args.artifact.resolve()
     artifact_manifest = args.artifact_manifest.resolve()
-    for path in (binary, artifact, artifact_manifest):
-        if not path.is_file():
+    schema = repo / "benchmark/v1/cow-pressure.schema.json"
+    for path in (binary, artifact, artifact_manifest, schema):
+        if not path.is_file() or path.is_symlink():
             raise RuntimeError(f"required input is not a file: {path}")
     revision = exact_clean_revision(repo)
     artifact_sha256 = sha256_file(artifact)
+    artifact_source_commit = artifact_source_identity(artifact, artifact_manifest, artifact_sha256)
     records: list[dict[str, Any]] = []
     for cell in cells:
         suffix = f"-r{cell.repetition}" if args.tier == "formal" else ""
@@ -216,18 +275,33 @@ def run(args: argparse.Namespace, cells: list[Cell]) -> None:
         (output_dir / f"{stem}.stderr.log").write_text(completed.stderr, encoding="utf-8")
         if completed.returncode != 0:
             raise RuntimeError(f"{stem}: benchmark exited {completed.returncode}")
-        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-        validate_output(evidence, cell=cell, revision=revision, artifact_sha256=artifact_sha256)
+        validator = validate_with_exact_binary(binary, repo, schema, evidence_path)
+        (output_dir / f"{stem}.validator.stdout.log").write_text(validator.stdout, encoding="utf-8")
+        (output_dir / f"{stem}.validator.stderr.log").write_text(validator.stderr, encoding="utf-8")
+        evidence = load_unique_json(evidence_path, maximum_bytes=8 << 20)
+        if not isinstance(evidence, dict):
+            raise RuntimeError(f"{stem}: evidence root is not an object")
+        validate_output(
+            evidence, cell=cell, revision=revision, artifact_sha256=artifact_sha256,
+            artifact_source_commit=artifact_source_commit,
+        )
+        if exact_clean_revision(repo) != revision:
+            raise RuntimeError(f"{stem}: Host source revision changed during execution")
         records.append({
             "cell": dataclasses.asdict(cell), "command": command,
             "evidence": evidence_path.name, "evidence_sha256": sha256_file(evidence_path),
             "stdout": f"{stem}.stdout.log", "stderr": f"{stem}.stderr.log", "exit_code": 0,
+            "validator_stdout": f"{stem}.validator.stdout.log",
+            "validator_stderr": f"{stem}.validator.stderr.log",
         })
+    if exact_clean_revision(repo) != revision:
+        raise RuntimeError("Host source revision changed after the matrix")
     manifest = {
         "schema_version": 1, "manifest_kind": "phase6-numpy-density-run",
         "tier": args.tier, "host_revision": revision,
         "binary_sha256": sha256_file(binary), "artifact_sha256": artifact_sha256,
         "artifact_manifest_sha256": sha256_file(artifact_manifest),
+        "artifact_source_revision": artifact_source_commit,
         "memory_budget_bytes": args.memory_budget_bytes,
         "memory_reserve_bytes": args.memory_reserve_bytes,
         "max_cpu": args.max_cpu, "greed": args.greed, "records": records,

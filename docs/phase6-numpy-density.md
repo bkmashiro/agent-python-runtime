@@ -54,22 +54,23 @@ accepted = started
 started = completed + failed
 ```
 
-The offered request count is bounded. Open-loop mode cannot also request a correlated consumer burst.
+The offered request count is bounded and must equal the exact tape length derived from the recorded `window_ns` and rate. Accepted jobs receive contiguous execution IDs after admission, so rejected offers cannot create holes in the versioned workload cycle. Open-loop mode cannot also request a correlated consumer burst.
 
 ## Evidence
 
-The next `cow-pressure` schema version records:
+The `cow-pressure` schema v11 records:
 
-- artifact/profile/warmup identities;
-- arrival mode, rate, queue capacity and offered/accepted/rejected totals;
+- independent Host revision and Guest artifact-source revision, plus artifact/profile/warmup identities;
+- arrival mode, window, rate, queue capacity and offered/accepted/rejected totals;
 - started/completed/failed and per-class totals;
+- result-oracle version and validated-result count; NumPy uses `numpy-exact-v1` and requires one validated exact result per completion;
 - latency sum, p50 and p99;
 - ready/leased/queued/refilling/retiring/waiting snapshots;
 - process RSS/PSS, named COW mappings, active anonymous/private-dirty bytes, faults, cgroup memory/PSI and reclaim state;
 - public policy inputs: maximum memory, maximum CPU and greed;
 - JSON-safe effective policy telemetry.
 
-Hard memory and CPU limits do not move with greed. CPU quota telemetry is not CPU enforcement unless the deployment layer applies and reads back the cgroup value.
+The Host revision and Guest artifact-source revision belong to different repositories and are not required to be equal. Evidence binds each to its own exact source. Hard memory and CPU limits do not move with greed. CPU quota telemetry is not CPU enforcement unless the deployment layer applies and reads back the cgroup value.
 
 ## Execution ladder
 
@@ -79,7 +80,7 @@ Hard memory and CPU limits do not move with greed. CPU quota telemetry is not CP
 4. ICL `shell2` staging, then one `gpucluster2` canary with minimal slots/workers and short duration.
 5. Small matrix: one repetition for selected ready-slot, worker/load and dirty-working-set points.
 6. Formal matrix: only retained points, three exact-source repetitions each.
-7. Fetch evidence, verify job/app exits, sentinels, checksums, schemas, source/artifact identity and semantic invariants before analysis.
+7. After every cell, rerun duplicate-key rejection, JSON Schema v11 and Go semantic validation with the same exact binary, then recheck the clean Host revision. Fetch evidence and verify job/app exits, sentinels, checksums and both source identities before analysis.
 
 ## Planned matrix
 

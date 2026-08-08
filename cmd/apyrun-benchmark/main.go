@@ -68,6 +68,8 @@ type benchmarkOptions struct {
 	ArtifactPath          string
 	ManifestPath          string
 	OutputPath            string
+	InputPath             string
+	SchemaPath            string
 	Class                 string
 	Strategy              string
 	Samples               int
@@ -109,10 +111,12 @@ func runMain(args []string) error {
 	flags.StringVar(&options.ArtifactPath, "artifact", "", "verified guest artifact")
 	flags.StringVar(&options.ManifestPath, "manifest", "", "matching artifact manifest")
 	flags.StringVar(&options.OutputPath, "output", "", "JSON evidence output")
+	flags.StringVar(&options.InputPath, "input", "", "existing evidence input for validation mode")
+	flags.StringVar(&options.SchemaPath, "schema", "", "JSON Schema input for validation mode")
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
-	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, or reactor-census")
+	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, validate-cow-pressure, or reactor-census")
 	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic, numpy-import, or numpy-ready")
 	flags.StringVar(&options.COWWarmupProfile, "cow-warmup-profile", "", "audited Guest warmup profile used before COW image sealing")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
@@ -139,6 +143,9 @@ func runMain(args []string) error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional benchmark arguments")
+	}
+	if options.Kind == "validate-cow-pressure" {
+		return runCOWPressureValidationMain(options)
 	}
 	if options.LifecycleDensityChild {
 		if err := validateLifecycleDensityOptions(options, true, goruntime.GOOS); err != nil {
@@ -178,7 +185,7 @@ func runMain(args []string) error {
 		return runCOWPressureMain(options, goruntime.GOOS)
 	}
 	if options.Kind != "runtime" {
-		return errors.New("benchmark kind must be runtime, lifecycle-density, cow-pressure, or reactor-census")
+		return errors.New("benchmark kind must be runtime, lifecycle-density, cow-pressure, validate-cow-pressure, or reactor-census")
 	}
 	if options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
 		return errors.New("usage: apyrun-benchmark -artifact <guest.wasm> -manifest <manifest.json> -output <evidence.json> [-class production-safe|full|profile-candidate|preinitialization-spike] [-strategy fresh|single-use-preinitialized] [-samples 3]")

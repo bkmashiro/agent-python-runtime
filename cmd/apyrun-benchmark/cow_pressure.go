@@ -75,6 +75,7 @@ type cowPressureRequestClass struct {
 
 type cowPressureArrival struct {
 	Mode             string `json:"mode"`
+	WindowNS         uint64 `json:"window_ns"`
 	RatePerSecond    uint32 `json:"rate_per_second"`
 	QueueCapacity    uint32 `json:"queue_capacity"`
 	OfferedRequests  uint64 `json:"offered_requests"`
@@ -114,6 +115,8 @@ type cowPressureBurstWindow struct {
 
 type cowPressureLoad struct {
 	Arrival            cowPressureArrival        `json:"arrival"`
+	ResultOracle       string                    `json:"result_oracle"`
+	ValidatedResults   uint64                    `json:"validated_results"`
 	StartedRequests    uint64                    `json:"started_requests"`
 	CompletedRequests  uint64                    `json:"completed_requests"`
 	FailedRequests     uint64                    `json:"failed_requests"`
@@ -142,6 +145,56 @@ type cowPressureLoad struct {
 type cowPressureActiveSamples struct {
 	Snapshots []cowPressureSnapshot
 	Err       error
+}
+
+func collectPressureActiveSamples(ctx context.Context, started time.Time, window time.Duration, collect func() (cowPressureSnapshot, error)) cowPressureActiveSamples {
+	samples := make([]cowPressureSnapshot, 0, pressureActiveSampleCount)
+	for index := 1; index <= pressureActiveSampleCount; index++ {
+		target := started.Add(window * time.Duration(index) / time.Duration(pressureActiveSampleCount+1))
+		wait := time.Until(target)
+		if wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				return cowPressureActiveSamples{Err: ctx.Err()}
+			case <-timer.C:
+			}
+		} else if err := ctx.Err(); err != nil {
+			return cowPressureActiveSamples{Err: err}
+		}
+		if err := ctx.Err(); err != nil {
+			return cowPressureActiveSamples{Err: err}
+		}
+		snapshot, err := collect()
+		if err != nil {
+			return cowPressureActiveSamples{Err: err}
+		}
+		samples = append(samples, snapshot)
+	}
+	return cowPressureActiveSamples{Snapshots: samples}
+}
+
+func executeAcceptedPressureJobs(ctx context.Context, jobs <-chan struct{}, sequence *atomic.Uint64, execute func(uint64)) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-jobs:
+			if !ok {
+				return
+			}
+			execute(sequence.Add(1))
+		}
+	}
 }
 
 type cowPressureEvidence struct {
@@ -234,6 +287,9 @@ func (evidence cowPressureEvidence) Validate() error {
 		evidence.Load.CPUCoreUtilization <= 0 || evidence.Load.GOMAXPROCS <= 0 || len(evidence.Load.Phases) == 0 {
 		return errors.New("cow-pressure load evidence is incomplete")
 	}
+	if evidence.Load.ResultOracle != pressureResultOracle(evidence.Limits.Workload) || evidence.Load.ValidatedResults != evidence.Load.CompletedRequests {
+		return errors.New("cow-pressure result oracle evidence drifted")
+	}
 	if err := validatePressureArrivalEvidence(evidence.Load.Arrival, evidence.Load.StartedRequests); err != nil {
 		return err
 	}
@@ -321,6 +377,13 @@ func validPressureRequestClassName(workload, name string) bool {
 	}
 	_, ok := allowed[workload][name]
 	return ok
+}
+
+func pressureResultOracle(workload string) string {
+	if workload == "numpy-v1" || workload == "numpy-mixed-v1" {
+		return "numpy-exact-v1"
+	}
+	return "status-ok-v1"
 }
 
 func expectedPressureRequestClassCounts(workload string, started uint64) map[string]uint64 {
@@ -516,16 +579,22 @@ func fixedOpenLoopArrivalOffsets(duration time.Duration, rate uint) ([]time.Dura
 
 func validatePressureArrivalEvidence(arrival cowPressureArrival, started uint64) error {
 	if arrival.Mode == "closed-loop" {
-		if arrival.RatePerSecond != 0 || arrival.QueueCapacity != 0 || arrival.RejectedRequests != 0 ||
+		if arrival.WindowNS != 0 || arrival.RatePerSecond != 0 || arrival.QueueCapacity != 0 || arrival.RejectedRequests != 0 ||
 			arrival.OfferedRequests == 0 || arrival.OfferedRequests != arrival.AcceptedRequests || arrival.AcceptedRequests != started {
 			return errors.New("closed-loop arrival accounting is inconsistent")
 		}
 		return nil
 	}
-	if arrival.Mode != "open-loop-fixed-v1" || arrival.RatePerSecond == 0 || arrival.RatePerSecond > 4096 ||
+	if arrival.Mode != "open-loop-fixed-v1" ||
+		arrival.WindowNS < uint64((5*time.Second).Nanoseconds()) || arrival.WindowNS > uint64((10*time.Minute).Nanoseconds()) ||
+		arrival.RatePerSecond == 0 || arrival.RatePerSecond > 4096 ||
 		arrival.QueueCapacity == 0 || arrival.QueueCapacity > 65536 || arrival.OfferedRequests == 0 ||
 		arrival.OfferedRequests != arrival.AcceptedRequests+arrival.RejectedRequests || arrival.AcceptedRequests != started {
 		return errors.New("fixed open-loop arrival accounting is inconsistent")
+	}
+	offsets, err := fixedOpenLoopArrivalOffsets(time.Duration(arrival.WindowNS), uint(arrival.RatePerSecond))
+	if err != nil || arrival.OfferedRequests != uint64(len(offsets)) {
+		return errors.New("fixed open-loop offered count drifted from the arrival tape")
 	}
 	return nil
 }
@@ -806,30 +875,26 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			burstWindowResult <- cowPressureBurstWindow{preCompleted: preCompleted, endCompleted: completed.Load(), preDuration: burstStarted.Sub(preStarted), burstDuration: time.Since(burstStarted)}
 		}()
 	}
+	activeSampleCtx, cancelActiveSamples := context.WithCancel(context.Background())
+	defer cancelActiveSamples()
 	var activeSamples <-chan cowPressureActiveSamples
 	if options.PressureWorkload == "dirty-hold" || options.PressureWorkload == "mixed-v1" || options.PressureWorkload == "numpy-mixed-v1" {
 		result := make(chan cowPressureActiveSamples, 1)
 		activeSamples = result
 		go func() {
-			<-startLoad
-			samples := make([]cowPressureSnapshot, 0, pressureActiveSampleCount)
+			select {
+			case <-startLoad:
+			case <-activeSampleCtx.Done():
+				result <- cowPressureActiveSamples{Err: activeSampleCtx.Err()}
+				return
+			}
 			sampleWindow := options.PressureWait
 			if options.PressureWorkload == "mixed-v1" || options.PressureWorkload == "numpy-mixed-v1" {
 				sampleWindow = options.PressureDuration
 			}
-			for index := 1; index <= pressureActiveSampleCount; index++ {
-				target := loadStarted.Add(sampleWindow * time.Duration(index) / time.Duration(pressureActiveSampleCount+1))
-				if delay := time.Until(target); delay > 0 {
-					time.Sleep(delay)
-				}
-				snapshot, collectErr := collectCOWPressureSnapshot(collector, runner, "load-active", slots)
-				if collectErr != nil {
-					result <- cowPressureActiveSamples{Err: collectErr}
-					return
-				}
-				samples = append(samples, snapshot)
-			}
-			result <- cowPressureActiveSamples{Snapshots: samples}
+			result <- collectPressureActiveSamples(activeSampleCtx, loadStarted, sampleWindow, func() (cowPressureSnapshot, error) {
+				return collectCOWPressureSnapshot(collector, runner, "load-active", slots)
+			})
 		}()
 	}
 	executeRequest := func(id uint64) {
@@ -904,18 +969,17 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		if err != nil {
 			return err
 		}
-		jobs := make(chan uint64, options.PressureQueueCapacity)
+		jobs := make(chan struct{}, options.PressureQueueCapacity)
 		for worker := uint(0); worker < options.ConsumerCount; worker++ {
 			workers.Add(1)
 			go func() {
 				defer workers.Done()
 				<-startLoad
-				for id := range jobs {
-					executeRequest(id)
-				}
+				executeAcceptedPressureJobs(loadCtx, jobs, &sequence, executeRequest)
 			}()
 		}
 		close(startLoad)
+		cancelled := false
 		for _, offset := range offsets {
 			wait := time.Until(loadStarted.Add(offset))
 			if wait > 0 {
@@ -923,16 +987,19 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 				select {
 				case <-loadCtx.Done():
 					timer.Stop()
-					close(jobs)
-					workers.Wait()
-					return fmt.Errorf("fixed open-loop load cancelled: %s", failureReason())
+					cancelled = true
 				case <-timer.C:
 				}
 			}
-			id := sequence.Add(1)
+			if loadCtx.Err() != nil {
+				cancelled = true
+			}
+			if cancelled {
+				break
+			}
 			offered.Add(1)
 			select {
-			case jobs <- id:
+			case jobs <- struct{}{}:
 				accepted.Add(1)
 			default:
 				rejected.Add(1)
@@ -945,10 +1012,11 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	if options.PressureBurstFactor > 1 {
 		burstWindow = <-burstWindowResult
 	}
+	cancelActiveSamples()
 	loadSamples := make([]cowPressureSnapshot, 0, pressureActiveSampleCount+1)
 	if activeSamples != nil {
 		result := <-activeSamples
-		if result.Err != nil {
+		if result.Err != nil && !(errors.Is(result.Err, context.Canceled) && failureReason() != "") {
 			return result.Err
 		}
 		loadSamples = append(loadSamples, result.Snapshots...)
@@ -999,9 +1067,15 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		requestClassEvidence = append(requestClassEvidence, *requestClasses[name])
 	}
 	requestClassMu.Unlock()
+	arrivalWindowNS := uint64(0)
+	if arrivalMode == "open-loop-fixed-v1" {
+		arrivalWindowNS = uint64(options.PressureDuration.Nanoseconds())
+	}
 	load := cowPressureLoad{
-		Arrival:         cowPressureArrival{Mode: arrivalMode, RatePerSecond: uint32(options.PressureArrivalRate), QueueCapacity: uint32(options.PressureQueueCapacity), OfferedRequests: offered.Load(), AcceptedRequests: accepted.Load(), RejectedRequests: rejected.Load()},
-		StartedRequests: started.Load(), CompletedRequests: completed.Load(), FailedRequests: failed.Load(), TimedOutRequests: timedOut.Load(),
+		Arrival:          cowPressureArrival{Mode: arrivalMode, WindowNS: arrivalWindowNS, RatePerSecond: uint32(options.PressureArrivalRate), QueueCapacity: uint32(options.PressureQueueCapacity), OfferedRequests: offered.Load(), AcceptedRequests: accepted.Load(), RejectedRequests: rejected.Load()},
+		ResultOracle:     pressureResultOracle(options.PressureWorkload),
+		ValidatedResults: completed.Load(),
+		StartedRequests:  started.Load(), CompletedRequests: completed.Load(), FailedRequests: failed.Load(), TimedOutRequests: timedOut.Load(),
 		DurationNS: uint64(loadElapsed.Nanoseconds()), ReplenishDrainNS: uint64(replenishElapsed.Nanoseconds()), ReplenishStatus: replenishStatus,
 		CPUUserNS: cpuFinished.userNS - cpuStarted.userNS, CPUSystemNS: cpuFinished.systemNS - cpuStarted.systemNS,
 		GOMAXPROCS:  goruntime.GOMAXPROCS(0),

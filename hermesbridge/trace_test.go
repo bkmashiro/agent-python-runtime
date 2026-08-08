@@ -2,10 +2,12 @@ package hermesbridge
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/agenttrace"
+	"github.com/bkmashiro/agent-python-runtime/claimmanifest"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
@@ -48,6 +50,38 @@ func TestTraceManagerPersistsMetadataOnlyInvocationEvents(t *testing.T) {
 		if string(event.Payload) == "" || containsRawTraceBody(string(event.Payload)) {
 			t.Fatalf("unsafe payload: %s", event.Payload)
 		}
+	}
+}
+
+func TestTraceManagerBuildsStructuralClaimManifest(t *testing.T) {
+	store, err := agenttrace.OpenSQLiteStore(filepath.Join(t.TempDir(), "trace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	manager, err := NewTraceManager(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocation := traceRef("execution-claim", "invocation-claim")
+	started, err := manager.RuntimeStarted(context.Background(), invocation, digestString("request"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := runtimeconfig.ExecutionRef{InvocationRef: invocation, ExecutedCodeSHA256: digestString("result = 7")}
+	if err := manager.RuntimeCompleted(context.Background(), started, ref, "ok", digestString("7")); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, err := manager.ClaimManifest(context.Background(), ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Qualification != claimmanifest.QualificationStructuralOnly {
+		t.Fatalf("qualification=%q", manifest.Qualification)
+	}
+	if err := manifest.RequireReplay(claimmanifest.ReplayR1); !errors.Is(err, claimmanifest.ErrInsufficientEvidence) {
+		t.Fatalf("R1 err=%v", err)
 	}
 }
 

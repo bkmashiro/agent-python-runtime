@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/bkmashiro/agent-python-runtime/agenttrace"
+	"github.com/bkmashiro/agent-python-runtime/claimmanifest"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
@@ -96,6 +97,19 @@ func (manager *TraceManager) RuntimeCompleted(ctx context.Context, parentEventID
 	}
 	_, err = recorder.Record(ctx, agenttrace.EventRuntimeCompleted, parentEventID, payload, "")
 	return err
+}
+
+// ClaimManifest projects the persisted metadata trace into claim-scoped
+// verification results. It never upgrades metadata-only evidence beyond R0.
+func (manager *TraceManager) ClaimManifest(ctx context.Context, ref runtimeconfig.ExecutionRef) (claimmanifest.Manifest, error) {
+	if manager == nil || manager.store == nil || ref.Validate() != nil {
+		return claimmanifest.Manifest{}, claimmanifest.ErrExecutionNotObserved
+	}
+	playback, err := manager.store.LoadPlayback(ctx, ref.AgentRunID)
+	if err != nil {
+		return claimmanifest.Manifest{}, err
+	}
+	return claimmanifest.FromMetadataPlayback(ref, playback)
 }
 
 func (manager *TraceManager) recorderLocked(ctx context.Context, agentRunID string) (*agenttrace.Recorder, error) {

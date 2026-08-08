@@ -5,12 +5,15 @@ Status: optional development/research infrastructure. The Runtime remains a boun
 ## Dependency direction
 
 ```text
-Harness / eval/agentic
+Harness / Host / Verification
+  ├── claimmanifest
+  │     ├── agenttrace.Playback
+  │     └── runtime.ExecutionRef
   └── agenttrace plugin
         └── Runtime execution_ref + receipts
 ```
 
-`runtime` does not import `agenttrace`. The plugin can therefore be removed without changing Runtime execution semantics.
+`runtime` imports neither `agenttrace` nor `claimmanifest`. Both Host-side layers can therefore be removed without changing Runtime execution semantics. See [ADR 0009](adr/0009-co-designed-monorepo-boundaries.md).
 
 ## Runtime correlation contract
 
@@ -83,6 +86,20 @@ Tracing is observer-only: event data never enters capability grants, policy, app
 - integrity digests over ordered event, payload, and state identities.
 
 `LoadPlayback` is a **structural recorded playback**: it validates and returns the immutable normalized event stream without contacting a provider or executing tools. `ForkAt` proves a branch origin and prefix digest. Re-executing a counterfactual branch still requires the Harness to supply a compatible checkpoint state. Exact provider-output replay is intentionally unavailable in metadata-only mode.
+
+## Claim Manifest projection
+
+`claimmanifest.FromMetadataPlayback` and `hermesbridge.TraceManager.ClaimManifest` project an integrity-checked playback plus the matching Host-authored `ExecutionRef` into `claim-manifest/v1`.
+
+The manifest contains one claim per `artifact`, `base`, `authority`, `execution`, `effect`, and `outcome`, with explicit dependencies and one verifier status: `verified`, `contradicted`, `insufficient`, or `stale`. In the current metadata-only adapter:
+
+- exact executed-code digest and execution-reference observation are `verified` structural claims;
+- runtime base, authority binding, effects, and semantic outcome remain `insufficient`;
+- maximum qualification is `structural-only` (R0);
+- `RequireReplay(R1)` and `RequireReplay(R2)` fail with insufficient evidence;
+- editing the serialized qualification to R1 or R2 fails manifest validation because the required evidence classes are absent.
+
+A digest proves identity or trace integrity only. It does not prove input capture, deterministic dependencies, provider final state, semantic correctness, or outcome equivalence.
 
 Minimal API:
 

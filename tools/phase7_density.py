@@ -53,9 +53,9 @@ def sha256_bytes(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _external_validate(benchmark: Path, artifact: Path, manifest: Path, evidence: Path) -> None:
+def _external_validate(benchmark: Path, schema: Path, artifact: Path, manifest: Path, evidence: Path) -> None:
     completed = subprocess.run(
-        [str(benchmark), "-kind", "validate-lifecycle-density", "-input", str(evidence),
+        [str(benchmark), "-kind", "validate-lifecycle-density", "-input", str(evidence), "-schema", str(schema),
          "-artifact", str(artifact), "-manifest", str(manifest)],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, timeout=120, check=False,
@@ -243,11 +243,11 @@ def atomic_write(path: Path, raw: bytes) -> None:
         raise
 
 
-def run(args: argparse.Namespace, external_validator: Callable[[Path, Path, Path, Path], None] = _external_validate) -> None:
-    benchmark, artifact, manifest = Path(args.benchmark), Path(args.artifact), Path(args.manifest)
+def run(args: argparse.Namespace, external_validator: Callable[[Path, Path, Path, Path, Path], None] = _external_validate) -> None:
+    benchmark, schema, artifact, manifest = Path(args.benchmark), Path(args.schema), Path(args.artifact), Path(args.manifest)
     cow_path, non_cow_path, output = Path(args.cow), Path(args.non_cow), Path(args.output)
-    external_validator(benchmark, artifact, manifest, cow_path)
-    external_validator(benchmark, artifact, manifest, non_cow_path)
+    external_validator(benchmark, schema, artifact, manifest, cow_path)
+    external_validator(benchmark, schema, artifact, manifest, non_cow_path)
     cow, cow_raw = strict_load(cow_path)
     non_cow, non_cow_raw = strict_load(non_cow_path)
     paired = pair_evidence(cow, non_cow, cow_raw, non_cow_raw)
@@ -258,6 +258,7 @@ def run(args: argparse.Namespace, external_validator: Callable[[Path, Path, Path
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser()
     value.add_argument("--benchmark", required=True)
+    value.add_argument("--schema", required=True)
     value.add_argument("--artifact", required=True)
     value.add_argument("--manifest", required=True)
     value.add_argument("--cow", required=True)

@@ -94,6 +94,7 @@ Lifecycle-density schema v2 binds:
 
 python3 tools/phase7_density.py \
   --benchmark ./apyrun-benchmark \
+  --schema benchmark/v1/lifecycle-density.schema.json \
   --artifact "$ARTIFACT" --manifest "$MANIFEST" \
   --cow cow.json --non-cow non-cow.json \
   --output paired.json
@@ -103,8 +104,8 @@ For formal evidence, use `-samples 3`. Run a second independent allocation with 
 
 ## Acceptance gates
 
-- both arm files pass `validate-lifecycle-density` against the staged artifact and manifest;
-- both files are schema v2 and independently pass semantic validation;
+- both arm files pass `validate-lifecycle-density` against the checked-in schema, staged artifact, and manifest;
+- both files are schema v2 and independently pass structural and semantic validation;
 - artifact, warmup generation, Host source, backend, environment, and plan are byte-equivalent across arms;
 - every canonical `(slots, repeat)` cell exists exactly once;
 - COW reports one Runtime shard and exactly `slots` named COW mappings;

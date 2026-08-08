@@ -99,7 +99,7 @@ python3 tools/phase7_density.py \
   --output paired.json
 ```
 
-For formal evidence, use `-samples 3`. Run a second independent allocation with reversed arm order before treating a difference as stable across allocation time.
+For formal evidence, use `-samples 3`. Run a second independent allocation with reversed arm order before treating a difference as stable across allocation time. The versioned `tools/phase7_slurm_job.sh` wrapper runs both arms inside one allocation, records `cow-first|non-cow-first`, validates each arm independently, and only then renders the paired summary.
 
 ## Acceptance gates
 

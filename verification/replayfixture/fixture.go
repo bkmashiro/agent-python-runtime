@@ -17,9 +17,14 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/claimmanifest"
 )
 
-const Version = "replay-fixture/v1"
+const (
+	Version         = "replay-fixture/v1"
+	fixtureArtifact = "replayfixture.counter/v1\nstate:int64,applied[]\noperations:add-checked-int64,set\nreceipt:step-id,time,nonce,value\n"
+	maxSteps        = 1024
+)
 
 var (
+	ErrArtifactMismatch   = errors.New("replay fixture: fixture artifact mismatch")
 	ErrIncompleteTape     = errors.New("replay fixture: incomplete nondeterminism tape")
 	ErrInvalidFixture     = errors.New("replay fixture: invalid fixture")
 	ErrRecordingIntegrity = errors.New("replay fixture: recording integrity failed")
@@ -63,6 +68,7 @@ type Receipt struct {
 
 type Recording struct {
 	Version          string      `json:"version"`
+	ArtifactDigest   string      `json:"artifact_digest"`
 	FixtureID        string      `json:"fixture_id"`
 	InitialState     State       `json:"initial_state"`
 	Inputs           []Input     `json:"inputs"`
@@ -76,6 +82,7 @@ type Recording struct {
 
 type Report struct {
 	Qualification            claimmanifest.Qualification `json:"qualification"`
+	ArtifactDigest           string                      `json:"artifact_digest"`
 	RecordingDigest          string                      `json:"recording_digest"`
 	TranscriptDigest         string                      `json:"transcript_digest"`
 	InitialStateDigest       string                      `json:"initial_state_digest"`
@@ -101,7 +108,7 @@ func Record(config Config) (Recording, error) {
 		return Recording{}, err
 	}
 	recording := Recording{
-		Version: Version, FixtureID: owned.FixtureID, InitialState: owned.InitialState,
+		Version: Version, ArtifactDigest: rawDigest([]byte(fixtureArtifact)), FixtureID: owned.FixtureID, InitialState: owned.InitialState,
 		Inputs: owned.Inputs, Clock: owned.Clock, Random: owned.Random,
 		Receipts: receipts, FinalState: final, TranscriptDigest: transcriptDigest,
 	}
@@ -129,6 +136,7 @@ func ReplayInputInjection(recording Recording) (Report, State, error) {
 	}
 	return Report{
 		Qualification:   claimmanifest.QualificationInputInjection,
+		ArtifactDigest:  recording.ArtifactDigest,
 		RecordingDigest: recording.Digest, TranscriptDigest: recording.TranscriptDigest,
 		InitialStateDigest: initialStateDigest,
 		InputsInjected:     true, ClockFrozen: true, RandomFrozen: true, InitialStateRestored: true,
@@ -154,6 +162,9 @@ func ReplayStateEquivalent(recording Recording, authoritativeFinal State) (Repor
 }
 
 func verifyRecording(recording Recording) error {
+	if recording.ArtifactDigest != rawDigest([]byte(fixtureArtifact)) {
+		return ErrArtifactMismatch
+	}
 	if recording.Version != Version {
 		return ErrRecordingIntegrity
 	}
@@ -233,6 +244,7 @@ func execute(initial State, inputs []Input, clock []time.Time, random []uint64) 
 func (recording Recording) body() any {
 	return struct {
 		Version          string      `json:"version"`
+		ArtifactDigest   string      `json:"artifact_digest"`
 		FixtureID        string      `json:"fixture_id"`
 		InitialState     State       `json:"initial_state"`
 		Inputs           []Input     `json:"inputs"`
@@ -241,7 +253,16 @@ func (recording Recording) body() any {
 		Receipts         []Receipt   `json:"receipts"`
 		FinalState       State       `json:"final_state"`
 		TranscriptDigest string      `json:"transcript_digest"`
-	}{recording.Version, recording.FixtureID, recording.InitialState, recording.Inputs, recording.Clock, recording.Random, recording.Receipts, recording.FinalState, recording.TranscriptDigest}
+	}{
+		Version: recording.Version, ArtifactDigest: recording.ArtifactDigest, FixtureID: recording.FixtureID,
+		InitialState: recording.InitialState, Inputs: recording.Inputs, Clock: recording.Clock, Random: recording.Random,
+		Receipts: recording.Receipts, FinalState: recording.FinalState, TranscriptDigest: recording.TranscriptDigest,
+	}
+}
+
+func rawDigest(value []byte) string {
+	sum := sha256.Sum256(value)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func digest(value any) (string, error) {

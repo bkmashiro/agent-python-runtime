@@ -272,6 +272,39 @@ func TestFakeMailAmbiguousSendReconcilesWithoutDuplicate(t *testing.T) {
 	}
 }
 
+func TestFakeMailAcceptedTimeoutRequiresReadbackAndNeverBlindRetries(t *testing.T) {
+	fixture := newMailFixture(t, []byte("send-token"))
+	controller, _ := fakemail.NewSendController(fixture.coordinator, fixture.transaction.ID, fixture.adapter)
+	staged, _ := controller.Prepare(fakemail.SendRequest{To: []string{"recipient@example.invalid"}, Subject: "Subject", Body: "Body"})
+	credential := transaction.CommitCredential{Token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+	if err := controller.RegisterApproval(credential, staged.OperationID, "approval:timeout", "owner", fixture.now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	fixture.provider.SetAcceptedTimeoutNextSend()
+	if _, err := controller.Commit(context.Background(), credential, staged.OperationID); !errors.Is(err, fakemail.ErrSendReconciliation) {
+		t.Fatalf("timeout commit err=%v", err)
+	}
+	if fixture.provider.SentCount() != 1 {
+		t.Fatalf("sent=%d", fixture.provider.SentCount())
+	}
+	inspection, err := fixture.coordinator.Inspect(fixture.transaction.ID, nil)
+	if err != nil || len(inspection.Attempts) != 1 || inspection.Attempts[0].State != transaction.AttemptAmbiguous {
+		t.Fatalf("inspection=%+v err=%v", inspection, err)
+	}
+	if _, err := controller.Commit(context.Background(), credential, staged.OperationID); !errors.Is(err, fakemail.ErrSendReconciliation) || fixture.provider.SentCount() != 1 {
+		t.Fatalf("blind retry sent=%d err=%v", fixture.provider.SentCount(), err)
+	}
+	receipt, err := controller.Reconcile(context.Background(), credential, staged.OperationID)
+	if err != nil || receipt.ProviderMessageID == "" || fixture.provider.SentCount() != 1 {
+		t.Fatalf("receipt=%+v sent=%d err=%v", receipt, fixture.provider.SentCount(), err)
+	}
+	inspection, err = fixture.coordinator.Inspect(fixture.transaction.ID, nil)
+	if err != nil || len(inspection.Attempts) != 1 || inspection.Attempts[0].State != transaction.AttemptSucceeded ||
+		inspection.Attempts[0].ReconciliationDigest != receipt.ReceiptDigest {
+		t.Fatalf("reconciled inspection=%+v receipt=%+v err=%v", inspection, receipt, err)
+	}
+}
+
 func TestFakeMailRejectsRealRecipientAndWrongSendCredential(t *testing.T) {
 	fixture := newMailFixture(t, []byte("wrong-token"))
 	controller, _ := fakemail.NewSendController(fixture.coordinator, fixture.transaction.ID, fixture.adapter)

@@ -128,6 +128,7 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertGreaterEqual(source.count('ln -- "$'), 2)
         self.assertIn('OWNER_MARKER_TMP="$NODE_ROOT/.phase7-owner.partial"', source)
         self.assertIn('rm -f -- "$source_path" || true', source)
+        self.assertIn('chmod 500 "$INPUT/bin/apyrun-benchmark-linux-amd64"', source)
         self.assertIn('-child-timeout 4m', source)
         self.assertNotIn("-child-timeout 12m", source)
         self.assertIn("#SBATCH --output=/vol/bitbucket/ys25/pysolate-p7-slurm-%j.out", source)

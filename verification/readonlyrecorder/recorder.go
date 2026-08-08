@@ -403,6 +403,11 @@ func locatorContainsSensitiveData(locator string) bool {
 		return true
 	}
 	if parsed, err := url.Parse(locator); err == nil {
+		if parsed.User != nil {
+			if _, hasPassword := parsed.User.Password(); hasPassword {
+				return true
+			}
+		}
 		for key := range parsed.Query() {
 			if isSensitiveKey(key) {
 				return true

@@ -50,6 +50,8 @@ Sample values are not copied into the candidate. Array members are merged under 
 
 The drift report retains the same read-only authority ceiling. It is evidence for human/Host review, not permission to widen a capability surface.
 
+The SHA-256 fields are consistency identities, not signatures or MACs. This package only accepts Host-supplied observations; if a recording crosses an untrusted boundary, the Host must authenticate its envelope before calling `Infer`.
+
 ## Evidence boundary
 
 This fixture demonstrates:

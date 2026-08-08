@@ -119,6 +119,8 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertIn('cmp -- "$0" "$INPUT/phase7_slurm_job.sh"', source)
         self.assertIn("expected_payload_max_bytes=", source)
         self.assertIn("copy_bounded_regular", source)
+        self.assertIn("f00f22ac94a66f2f2e67573da11ef879f8b5e46622eb9379300cc1e6a5b40a30", source)
+        self.assertIn("458a4e4bbec1ad225f0f3c38357738f1937b1e16d5388f76cdf4c460ce6839fa", source)
         self.assertGreaterEqual(source.count("os.O_NOFOLLOW"), 2)
         self.assertIn("os.fstat", source)
         self.assertIn("publish_exclusive", source)

@@ -17,7 +17,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 1
+const (
+	sqliteSchemaVersion = 1
+	maxPlaybackEvents   = 4096
+	maxPlaybackBytes    = 8 * 1024 * 1024
+	playbackPageSize    = 128
+)
 
 type SQLiteStore struct {
 	db       *sql.DB
@@ -353,38 +358,73 @@ func (store *SQLiteStore) Events(ctx context.Context, agentRunID string, after u
 func (store *SQLiteStore) LoadPlayback(ctx context.Context, agentRunID string) (Playback, error) {
 	var all []Event
 	var after uint64
+	totalBytes := len(agentRunID)
 	for {
-		page, err := store.Events(ctx, agentRunID, after, 1000)
+		page, err := store.Events(ctx, agentRunID, after, uint32(playbackPageSize))
 		if err != nil {
 			return Playback{}, err
 		}
+		if len(all)+len(page) > maxPlaybackEvents {
+			return Playback{}, ErrIntegrity
+		}
+		for _, event := range page {
+			var ok bool
+			totalBytes, ok = addPlaybackEventBytes(totalBytes, event)
+			if !ok {
+				return Playback{}, ErrIntegrity
+			}
+		}
 		all = append(all, page...)
-		if len(page) < 1000 {
+		if len(page) < playbackPageSize {
 			break
 		}
 		after = page[len(page)-1].Sequence
 	}
-	if len(all) == 0 {
-		return Playback{}, ErrInvalidEvent
+	playback := Playback{AgentRunID: agentRunID, Events: all}
+	if _, err := playback.IntegrityDigest(); err != nil {
+		return Playback{}, err
 	}
-	seen := make(map[string]struct{}, len(all))
-	for index, event := range all {
-		if event.Sequence != uint64(index+1) {
-			return Playback{}, ErrIntegrity
-		}
-		if event.ParentEventID != "" {
-			if _, exists := seen[event.ParentEventID]; !exists {
-				return Playback{}, ErrIntegrity
-			}
-		}
-		seen[event.EventID] = struct{}{}
+	return playback, nil
+}
+
+func (playback Playback) ValidateBounds() error {
+	if playback.AgentRunID == "" || len(playback.Events) == 0 {
+		return ErrInvalidEvent
 	}
-	return Playback{AgentRunID: agentRunID, Events: all}, nil
+	if len(playback.Events) > maxPlaybackEvents || len(playback.AgentRunID) > maxPlaybackBytes {
+		return ErrIntegrity
+	}
+	totalBytes := len(playback.AgentRunID)
+	for _, event := range playback.Events {
+		var ok bool
+		totalBytes, ok = addPlaybackEventBytes(totalBytes, event)
+		if !ok {
+			return ErrIntegrity
+		}
+	}
+	return nil
+}
+
+func addPlaybackEventBytes(total int, event Event) (int, bool) {
+	fields := []string{
+		event.Version, event.EventID, event.AgentRunID, string(event.EventType), event.ParentEventID,
+		event.PayloadDigest, event.StateFingerprint,
+	}
+	for _, field := range fields {
+		if total > maxPlaybackBytes || len(field) > maxPlaybackBytes-total {
+			return 0, false
+		}
+		total += len(field)
+	}
+	if total > maxPlaybackBytes || len(event.Payload) > maxPlaybackBytes-total {
+		return 0, false
+	}
+	return total + len(event.Payload), true
 }
 
 func (playback Playback) IntegrityDigest() (string, error) {
-	if playback.AgentRunID == "" || len(playback.Events) == 0 {
-		return "", ErrInvalidEvent
+	if err := playback.ValidateBounds(); err != nil {
+		return "", err
 	}
 	hash := sha256.New()
 	seen := make(map[string]struct{}, len(playback.Events))

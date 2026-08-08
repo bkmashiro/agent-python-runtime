@@ -94,6 +94,26 @@ func TestSQLiteStoreAppendsQueriesAndReopensAnOrderedTrace(t *testing.T) {
 	}
 }
 
+func TestPlaybackAggregateBoundsFailClosed(t *testing.T) {
+	sink := agenttrace.NewMemorySink()
+	recorder, err := (agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: sink}).Begin("bounded-run", time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 4097; index++ {
+		if _, err := recorder.Record(context.Background(), agenttrace.EventLLMOutputObserved, "", json.RawMessage(`{"status":"ok"}`), ""); err != nil {
+			t.Fatalf("record %d: %v", index, err)
+		}
+	}
+	playback := agenttrace.Playback{AgentRunID: "bounded-run", Events: sink.Events()}
+	if err := playback.ValidateBounds(); !errors.Is(err, agenttrace.ErrIntegrity) {
+		t.Fatalf("bounds err=%v", err)
+	}
+	if _, err := playback.IntegrityDigest(); !errors.Is(err, agenttrace.ErrIntegrity) {
+		t.Fatalf("integrity err=%v", err)
+	}
+}
+
 func TestSQLiteStoreRejectsSequenceCollisionAndTamperedEvent(t *testing.T) {
 	store, err := agenttrace.OpenSQLiteStore(filepath.Join(t.TempDir(), "trace.db"))
 	if err != nil {

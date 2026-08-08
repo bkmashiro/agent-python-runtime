@@ -32,6 +32,8 @@ The accepted-timeout fault occurs after the provider has stored the send but bef
 
 The adapter regression is `TestFakeMailAcceptedTimeoutRequiresReadbackAndNeverBlindRetries`. Transaction-level coverage is `TestReconciledIrreversibleEvidenceIncludesReceiptAndObservation`; SQLite reopen coverage is `TestSQLiteLedgerPersistsReconciliationObservationAcrossReopen`.
 
+`VerifyTransactionEvidenceDigest` now verifies the exported transaction topology, operation/attempt/transition ordering, kind-specific attempt preconditions, manifest-bound unexpired approvals consumed no later than dispatch creation for successful irreversible attempts, recorded ambiguous → reconciled attempt paths, cross-entity attempt → operation → terminal-transaction causality (an operation can enter its active state only while the latest relevant attempt is still dispatching), direct-mode operation cardinality, committed/all-operations-applied consistency, final states, timestamps, metrics, and receipt/readback constraints as well as the recomputed consistency digest. Recomputing a digest over an invalid mode, metric set, approval binding, causal order, or transition history therefore remains invalid. `DecodeAndVerifyTransactionEvidence` also rejects root, nested, and escaped-equivalent duplicate JSON keys before typed decoding.
+
 ## Evidence boundary
 
 This fixture proves the transaction and adapter protocol against a controlled known-provider model. It does **not** prove interoperability, timeout semantics, idempotency guarantees, or readback behavior for a production mail API. A production adapter must qualify those properties against the selected provider's versioned API contract before inheriting this claim.

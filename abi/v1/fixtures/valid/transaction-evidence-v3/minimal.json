@@ -1,7 +1,7 @@
 {
   "schema_version": "transaction-evidence/v3",
-  "evidence_digest": "sha256:3362a6a261619e105931a3fb10fa1f7d1c55ee4824d4fe9e55e025d33fccd5f1",
-  "correlation_id": "corr_0123456789abcdef0123456789abcdef",
+  "evidence_digest": "sha256:e4cd214f42ce2351abbd6913c90fc2994e7549dc4050af90934b185560e8fcfb",
+  "correlation_id": "corr_2efd8aac37acaf3d701900c3da230d78",
   "generated_at": "2026-07-24T02:00:00Z",
   "transaction": {
     "transaction_id": "tx_fixture",
@@ -15,11 +15,21 @@
   },
   "operations": [],
   "attempts": [],
-  "transitions": [],
+  "transitions": [
+    {
+      "sequence": 1,
+      "transaction_id": "tx_fixture",
+      "entity_type": "transaction",
+      "entity_id": "tx_fixture",
+      "from": "",
+      "to": "open",
+      "observed_at": "2026-07-24T01:59:00Z"
+    }
+  ],
   "metrics": {
     "operation_total": 0,
     "attempt_total": 0,
-    "transition_total": 0,
+    "transition_total": 1,
     "dispatching_attempts": 0,
     "ambiguous_attempts": 0,
     "applied_operations": 0,

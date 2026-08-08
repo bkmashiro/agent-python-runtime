@@ -108,6 +108,12 @@ type EvidenceTransition struct {
 	ObservedAt    time.Time `json:"observed_at"`
 }
 
+type evidenceAttemptIdentity struct {
+	operationID string
+	kind        AttemptKind
+	ordinal     uint32
+}
+
 type TransactionEvidenceMetric struct {
 	OperationTotal         uint32 `json:"operation_total"`
 	AttemptTotal           uint32 `json:"attempt_total"`
@@ -180,6 +186,8 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 	}
 	operationIDs := make(map[string]struct{}, len(operations))
 	operationEffects := make(map[string]EffectClass, len(operations))
+	operationManifests := make(map[string]string, len(operations))
+	operationsByID := make(map[string]Operation, len(operations))
 	var priorIndex uint32
 	for index, operation := range operations {
 		if !validEvidenceOperation(operation, transaction.ID) || operation.Index <= priorIndex {
@@ -191,6 +199,8 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 		priorIndex = operation.Index
 		operationIDs[operation.ID] = struct{}{}
 		operationEffects[operation.ID] = operation.EffectClass
+		operationManifests[operation.ID] = operation.ManifestDigest
+		operationsByID[operation.ID] = operation
 		value.Operations[index] = EvidenceOperation{
 			ID: operation.ID, TransactionID: operation.TransactionID, Index: operation.Index,
 			ToolID: operation.ToolID, HandlerVersion: operation.HandlerVersion, EffectClass: operation.EffectClass,
@@ -209,9 +219,13 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 			value.Metrics.ReconciliationRequired++
 		}
 	}
+	if !validEvidenceTransactionOperations(transaction, operationsByID) {
+		return TransactionEvidence{}, ErrInvalidEvidence
+	}
 	approvalIDs := make(map[string]struct{}, len(approvals))
+	consumedApprovals := make(map[string][]time.Time)
 	for index, approval := range approvals {
-		if !validEvidenceApproval(approval, transaction.ID, operationIDs) {
+		if !validEvidenceApproval(approval, transaction.ID, operationManifests) {
 			return TransactionEvidence{}, ErrInvalidEvidence
 		}
 		if _, duplicate := approvalIDs[approval.AuthorityID]; duplicate {
@@ -230,21 +244,32 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 			RegisteredAt: approval.RegisteredAt.UTC(), ConsumedAt: consumedAt,
 		}
 		if !approval.ConsumedAt.IsZero() {
+			consumedApprovals[approval.OperationID] = append(consumedApprovals[approval.OperationID], approval.ConsumedAt)
 			value.Metrics.ConsumedApprovals++
 		}
 	}
 	attemptIDs := make(map[string]struct{}, len(attempts))
+	attemptIdentities := make(map[evidenceAttemptIdentity]struct{}, len(attempts))
+	attemptsByID := make(map[string]Attempt, len(attempts))
 	reconciledAttemptIDs := make(map[string]struct{})
 	for index, attempt := range attempts {
 		effectClass := operationEffects[attempt.OperationID]
+		hasConsumedApproval := hasConsumedApprovalBefore(consumedApprovals[attempt.OperationID], attempt.CreatedAt)
 		if _, ok := operationIDs[attempt.OperationID]; !ok || !validEvidenceAttempt(attempt, transaction.ID) ||
-			(effectClass == EffectIrreversible && attempt.State == AttemptSucceeded && attempt.ProviderReceiptDigest == "") {
+			(effectClass == EffectIrreversible && attempt.State == AttemptSucceeded &&
+				(attempt.ProviderReceiptDigest == "" || !hasConsumedApproval)) {
 			return TransactionEvidence{}, ErrInvalidEvidence
 		}
 		if _, duplicate := attemptIDs[attempt.ID]; duplicate {
 			return TransactionEvidence{}, ErrInvalidEvidence
 		}
+		identity := evidenceAttemptIdentity{operationID: attempt.OperationID, kind: attempt.Kind, ordinal: attempt.Ordinal}
+		if _, duplicate := attemptIdentities[identity]; duplicate {
+			return TransactionEvidence{}, ErrInvalidEvidence
+		}
+		attemptIdentities[identity] = struct{}{}
 		attemptIDs[attempt.ID] = struct{}{}
+		attemptsByID[attempt.ID] = attempt
 		value.Attempts[index] = EvidenceAttempt{
 			ID: attempt.ID, TransactionID: attempt.TransactionID, OperationID: attempt.OperationID, EffectClass: effectClass,
 			Kind: attempt.Kind, Ordinal: attempt.Ordinal, State: attempt.State,
@@ -266,10 +291,19 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 	}
 	var priorObservedAt time.Time
 	latestStates := make(map[string]string, 1+len(operations)+len(attempts))
+	observedReconciledAttemptIDs := make(map[string]struct{})
 	for index, transition := range transitions {
 		if !validEvidenceTransition(transition, transaction.ID, uint64(index+1), operationIDs, attemptIDs, reconciledAttemptIDs) ||
-			(!priorObservedAt.IsZero() && transition.ObservedAt.Before(priorObservedAt)) {
+			(!priorObservedAt.IsZero() && transition.ObservedAt.Before(priorObservedAt)) ||
+			!validEvidenceTransitionCausality(transition, index, len(transitions), latestStates, operationsByID, attemptsByID) {
 			return TransactionEvidence{}, ErrInvalidEvidence
+		}
+		if transition.EntityType == "attempt" && transition.From == string(AttemptAmbiguous) &&
+			(transition.To == string(AttemptSucceeded) || transition.To == string(AttemptFailed)) {
+			if _, duplicate := observedReconciledAttemptIDs[transition.EntityID]; duplicate {
+				return TransactionEvidence{}, ErrInvalidEvidence
+			}
+			observedReconciledAttemptIDs[transition.EntityID] = struct{}{}
 		}
 		stateKey := transition.EntityType + ":" + transition.EntityID
 		priorState, seen := latestStates[stateKey]
@@ -283,6 +317,9 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 			EntityType: transition.EntityType, EntityID: transition.EntityID,
 			From: transition.From, To: transition.To, ObservedAt: transition.ObservedAt.UTC(),
 		}
+	}
+	if !sameEvidenceIDSet(observedReconciledAttemptIDs, reconciledAttemptIDs) {
+		return TransactionEvidence{}, ErrInvalidEvidence
 	}
 	if generatedAt.Before(transaction.UpdatedAt) || (!priorObservedAt.IsZero() && generatedAt.Before(priorObservedAt)) ||
 		latestStates["transaction:"+transaction.ID] != string(transaction.State) {
@@ -324,7 +361,7 @@ func ComputeTransactionEvidenceDigest(value TransactionEvidence) (string, error)
 }
 
 func VerifyTransactionEvidenceDigest(value TransactionEvidence) error {
-	if value.SchemaVersion != TransactionEvidenceSchemaVersion || !digestPattern.MatchString(value.EvidenceDigest) {
+	if value.SchemaVersion != TransactionEvidenceSchemaVersion || !digestPattern.MatchString(value.EvidenceDigest) || !validExportedTransactionEvidence(value) {
 		return ErrInvalidEvidence
 	}
 	expected, err := ComputeTransactionEvidenceDigest(value)
@@ -334,8 +371,370 @@ func VerifyTransactionEvidenceDigest(value TransactionEvidence) error {
 	return nil
 }
 
+func validExportedTransactionEvidence(value TransactionEvidence) bool {
+	if value.Operations == nil || value.Attempts == nil || value.Approvals == nil || value.Transitions == nil ||
+		len(value.Operations) > maxEvidenceOperations || len(value.Attempts) > maxEvidenceAttempts ||
+		len(value.Approvals) > maxEvidenceApprovals || len(value.Transitions) > maxEvidenceTransitions || value.GeneratedAt.IsZero() {
+		return false
+	}
+	transaction := Transaction{
+		ID: value.Transaction.ID, RunID: value.Transaction.RunID, CatalogDigest: value.Transaction.CatalogDigest,
+		Mode: value.Transaction.Mode, State: value.Transaction.State, Version: value.Transaction.Version,
+		CreatedAt: value.Transaction.CreatedAt, UpdatedAt: value.Transaction.UpdatedAt,
+	}
+	if !validEvidenceTransaction(transaction) || value.CorrelationID != evidenceCorrelationID(transaction) || value.GeneratedAt.Before(transaction.UpdatedAt) {
+		return false
+	}
+
+	metrics := TransactionEvidenceMetric{}
+	operationIDs := make(map[string]struct{}, len(value.Operations))
+	operationEffects := make(map[string]EffectClass, len(value.Operations))
+	operationIndexes := make(map[string]uint32, len(value.Operations))
+	operationManifests := make(map[string]string, len(value.Operations))
+	operationsByID := make(map[string]Operation, len(value.Operations))
+	var priorIndex uint32
+	for _, exported := range value.Operations {
+		operation := Operation{
+			ID: exported.ID, TransactionID: exported.TransactionID, Index: exported.Index, ToolID: exported.ToolID,
+			HandlerVersion: exported.HandlerVersion, EffectClass: exported.EffectClass, Policy: exported.Policy,
+			PolicyVersion: exported.PolicyVersion, State: exported.State, ArgumentDigest: exported.ArgumentDigest,
+			ManifestDigest: exported.ManifestDigest, Version: exported.Version, CreatedAt: exported.CreatedAt, UpdatedAt: exported.UpdatedAt,
+		}
+		if !validEvidenceOperation(operation, transaction.ID) || operation.Index <= priorIndex {
+			return false
+		}
+		if _, duplicate := operationIDs[operation.ID]; duplicate {
+			return false
+		}
+		priorIndex = operation.Index
+		operationIDs[operation.ID] = struct{}{}
+		operationEffects[operation.ID] = operation.EffectClass
+		operationIndexes[operation.ID] = operation.Index
+		operationManifests[operation.ID] = operation.ManifestDigest
+		operationsByID[operation.ID] = operation
+		switch operation.State {
+		case OperationApplied:
+			metrics.AppliedOperations++
+		case OperationRollbackFailed:
+			metrics.RollbackFailed++
+		case OperationCompensationFailed:
+			metrics.CompensationFailed++
+		case OperationReconciliationRequired:
+			metrics.ReconciliationRequired++
+		}
+	}
+	if !validEvidenceTransactionOperations(transaction, operationsByID) {
+		return false
+	}
+
+	approvalIDs := make(map[string]struct{}, len(value.Approvals))
+	consumedApprovals := make(map[string][]time.Time)
+	for _, exported := range value.Approvals {
+		var consumedAt time.Time
+		if exported.ConsumedAt != nil {
+			consumedAt = *exported.ConsumedAt
+		}
+		approval := ApprovalEvidence{
+			AuthorityID: exported.AuthorityID, TransactionID: exported.TransactionID, OperationID: exported.OperationID,
+			ManifestDigest: exported.ManifestDigest, Source: exported.Source, SourceRunID: exported.SourceRunID,
+			ActorID: exported.ActorID, PhaseGrantID: exported.PhaseGrantID, ExpiresAt: exported.ExpiresAt,
+			RegisteredAt: exported.RegisteredAt, ConsumedAt: consumedAt,
+		}
+		if !validEvidenceApproval(approval, transaction.ID, operationManifests) {
+			return false
+		}
+		if _, duplicate := approvalIDs[approval.AuthorityID]; duplicate {
+			return false
+		}
+		approvalIDs[approval.AuthorityID] = struct{}{}
+		if !approval.ConsumedAt.IsZero() {
+			consumedApprovals[approval.OperationID] = append(consumedApprovals[approval.OperationID], approval.ConsumedAt)
+			metrics.ConsumedApprovals++
+		}
+	}
+
+	attemptIDs := make(map[string]struct{}, len(value.Attempts))
+	attemptIdentities := make(map[evidenceAttemptIdentity]struct{}, len(value.Attempts))
+	attemptsByID := make(map[string]Attempt, len(value.Attempts))
+	reconciledAttemptIDs := make(map[string]struct{})
+	var priorAttempt *EvidenceAttempt
+	for index := range value.Attempts {
+		exported := value.Attempts[index]
+		effectClass, operationExists := operationEffects[exported.OperationID]
+		attempt := Attempt{
+			ID: exported.ID, TransactionID: exported.TransactionID, OperationID: exported.OperationID,
+			Kind: exported.Kind, Ordinal: exported.Ordinal, State: exported.State,
+			ExpectedOperationState: exported.ExpectedOperationState, LeaseID: exported.LeaseID,
+			LeaseExpiresAt: exported.LeaseExpiresAt, ProviderRequestDigest: exported.ProviderRequestDigest,
+			ProviderReceiptDigest: exported.ProviderReceiptDigest, ReconciliationDigest: exported.ReconciliationDigest,
+			Version: exported.Version, CreatedAt: exported.CreatedAt, UpdatedAt: exported.UpdatedAt,
+		}
+		hasConsumedApproval := hasConsumedApprovalBefore(consumedApprovals[attempt.OperationID], attempt.CreatedAt)
+		if !operationExists || exported.EffectClass != effectClass || !validEvidenceAttempt(attempt, transaction.ID) ||
+			(effectClass == EffectIrreversible && attempt.State == AttemptSucceeded &&
+				(attempt.ProviderReceiptDigest == "" || !hasConsumedApproval)) {
+			return false
+		}
+		if _, duplicate := attemptIDs[attempt.ID]; duplicate {
+			return false
+		}
+		identity := evidenceAttemptIdentity{operationID: attempt.OperationID, kind: attempt.Kind, ordinal: attempt.Ordinal}
+		if _, duplicate := attemptIdentities[identity]; duplicate {
+			return false
+		}
+		attemptIdentities[identity] = struct{}{}
+		if priorAttempt != nil && !evidenceAttemptBefore(*priorAttempt, exported, operationIndexes) {
+			return false
+		}
+		priorAttempt = &value.Attempts[index]
+		attemptIDs[attempt.ID] = struct{}{}
+		attemptsByID[attempt.ID] = attempt
+		if attempt.ReconciliationDigest != "" {
+			reconciledAttemptIDs[attempt.ID] = struct{}{}
+			metrics.ReconciledAttempts++
+		}
+		switch attempt.State {
+		case AttemptDispatching:
+			metrics.DispatchingAttempts++
+		case AttemptAmbiguous:
+			metrics.AmbiguousAttempts++
+		}
+	}
+
+	latestStates := make(map[string]string, 1+len(value.Operations)+len(value.Attempts))
+	observedReconciledAttemptIDs := make(map[string]struct{})
+	var priorObservedAt time.Time
+	for index, exported := range value.Transitions {
+		transition := Transition{
+			Sequence: exported.Sequence, TransactionID: exported.TransactionID, EntityType: exported.EntityType,
+			EntityID: exported.EntityID, From: exported.From, To: exported.To, ObservedAt: exported.ObservedAt,
+		}
+		if !validEvidenceTransition(transition, transaction.ID, uint64(index+1), operationIDs, attemptIDs, reconciledAttemptIDs) ||
+			(!priorObservedAt.IsZero() && transition.ObservedAt.Before(priorObservedAt)) ||
+			!validEvidenceTransitionCausality(transition, index, len(value.Transitions), latestStates, operationsByID, attemptsByID) {
+			return false
+		}
+		if transition.EntityType == "attempt" && transition.From == string(AttemptAmbiguous) &&
+			(transition.To == string(AttemptSucceeded) || transition.To == string(AttemptFailed)) {
+			if _, duplicate := observedReconciledAttemptIDs[transition.EntityID]; duplicate {
+				return false
+			}
+			observedReconciledAttemptIDs[transition.EntityID] = struct{}{}
+		}
+		stateKey := transition.EntityType + ":" + transition.EntityID
+		priorState, seen := latestStates[stateKey]
+		if (!seen && transition.From != "") || (seen && transition.From != priorState) {
+			return false
+		}
+		latestStates[stateKey] = transition.To
+		priorObservedAt = transition.ObservedAt
+	}
+	if !sameEvidenceIDSet(observedReconciledAttemptIDs, reconciledAttemptIDs) {
+		return false
+	}
+	if value.GeneratedAt.Before(priorObservedAt) || latestStates["transaction:"+transaction.ID] != string(transaction.State) {
+		return false
+	}
+	for _, operation := range value.Operations {
+		if latestStates["operation:"+operation.ID] != string(operation.State) {
+			return false
+		}
+	}
+	for _, attempt := range value.Attempts {
+		if latestStates["attempt:"+attempt.ID] != string(attempt.State) {
+			return false
+		}
+	}
+	metrics.OperationTotal = uint32(len(value.Operations))
+	metrics.AttemptTotal = uint32(len(value.Attempts))
+	metrics.ApprovalTotal = uint32(len(value.Approvals))
+	metrics.TransitionTotal = uint32(len(value.Transitions))
+	if transaction.State == TransactionReconciliationRequired {
+		metrics.ReconciliationRequired++
+	}
+	return metrics == value.Metrics
+}
+
+func validEvidenceTransitionCausality(
+	transition Transition,
+	index, total int,
+	latestStates map[string]string,
+	operations map[string]Operation,
+	attempts map[string]Attempt,
+) bool {
+	switch transition.EntityType {
+	case "transaction":
+		return !terminalEvidenceTransactionState(TransactionState(transition.To)) || index == total-1
+	case "attempt":
+		attempt, ok := attempts[transition.EntityID]
+		if !ok {
+			return false
+		}
+		if transition.From == string(AttemptAmbiguous) &&
+			(transition.To == string(AttemptSucceeded) || transition.To == string(AttemptFailed)) {
+			return latestStates["operation:"+attempt.OperationID] == string(OperationReconciliationRequired)
+		}
+		if transition.From == "" || AttemptState(transition.To) == AttemptDispatching {
+			return latestStates["operation:"+attempt.OperationID] == string(attempt.ExpectedOperationState)
+		}
+		return true
+	case "operation":
+		if _, ok := operations[transition.EntityID]; !ok {
+			return false
+		}
+		return operationTransitionHasAttemptCause(transition, latestStates, attempts)
+	default:
+		return false
+	}
+}
+
+func operationTransitionHasAttemptCause(transition Transition, latestStates map[string]string, attempts map[string]Attempt) bool {
+	from := OperationState(transition.From)
+	to := OperationState(transition.To)
+	requiresAttemptCause := from == OperationApplying || from == OperationRollingBack || from == OperationCompensating ||
+		from == OperationReconciliationRequired || to == OperationApplying || to == OperationRollingBack ||
+		to == OperationCompensating || to == OperationReconciliationRequired
+	if !requiresAttemptCause {
+		return true
+	}
+	type candidate struct {
+		found         bool
+		ordinal       uint32
+		observedState AttemptState
+		requiredState AttemptState
+		reconciled    bool
+	}
+	activeCandidate := candidate{}
+	completionCandidate := candidate{}
+	for _, attempt := range attempts {
+		if attempt.OperationID != transition.EntityID {
+			continue
+		}
+		observed, exists := latestStates["attempt:"+attempt.ID]
+		if !exists {
+			continue
+		}
+		observedState := AttemptState(observed)
+		expected, active, dispatchOK := dispatchStates(attempt.Kind, attempt.ExpectedOperationState)
+		if dispatchOK && from == expected && to == active && (!activeCandidate.found || attempt.Ordinal > activeCandidate.ordinal) {
+			activeCandidate = candidate{found: true, ordinal: attempt.Ordinal, observedState: observedState}
+		}
+		if dispatchOK && (from == active || from == OperationReconciliationRequired) {
+			for _, outcome := range []DispatchOutcome{DispatchSucceeded, DispatchFailed, DispatchAmbiguous} {
+				attemptTarget, operationTarget, ok := completionStates(attempt.Kind, outcome)
+				if !ok || to != operationTarget || (from == OperationReconciliationRequired && outcome == DispatchAmbiguous) {
+					continue
+				}
+				if !completionCandidate.found || attempt.Ordinal > completionCandidate.ordinal {
+					completionCandidate = candidate{
+						found: true, ordinal: attempt.Ordinal, observedState: observedState,
+						requiredState: attemptTarget, reconciled: attempt.ReconciliationDigest != "",
+					}
+				}
+			}
+		}
+	}
+	if activeCandidate.found {
+		return activeCandidate.observedState == AttemptDispatching
+	}
+	if completionCandidate.found {
+		if completionCandidate.reconciled && completionCandidate.requiredState != AttemptAmbiguous && from != OperationReconciliationRequired {
+			return false
+		}
+		return completionCandidate.observedState == completionCandidate.requiredState &&
+			(from != OperationReconciliationRequired || completionCandidate.reconciled)
+	}
+	return false
+}
+
+func terminalEvidenceTransactionState(state TransactionState) bool {
+	switch state {
+	case TransactionAborted, TransactionRolledBack, TransactionPartiallyReverted,
+		TransactionCompensated, TransactionPartiallyCompensated, TransactionCommitted,
+		TransactionRejected, TransactionExpired:
+		return true
+	default:
+		return false
+	}
+}
+
+func evidenceAttemptBefore(left, right EvidenceAttempt, operationIndexes map[string]uint32) bool {
+	if operationIndexes[left.OperationID] != operationIndexes[right.OperationID] {
+		return operationIndexes[left.OperationID] < operationIndexes[right.OperationID]
+	}
+	if left.Kind != right.Kind {
+		return left.Kind < right.Kind
+	}
+	if left.Ordinal != right.Ordinal {
+		return left.Ordinal < right.Ordinal
+	}
+	return left.ID < right.ID
+}
+
+func hasUniqueJSONKeys(encoded []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if consumeUniqueJSONValue(decoder, 0) != nil {
+		return false
+	}
+	_, err := decoder.Token()
+	return err == io.EOF
+}
+
+func consumeUniqueJSONValue(decoder *json.Decoder, depth int) error {
+	if depth > 64 {
+		return ErrInvalidEvidence
+	}
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, composite := token.(json.Delim)
+	if !composite {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return ErrInvalidEvidence
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return ErrInvalidEvidence
+			}
+			seen[key] = struct{}{}
+			if err := consumeUniqueJSONValue(decoder, depth+1); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim('}') {
+			return ErrInvalidEvidence
+		}
+	case '[':
+		for decoder.More() {
+			if err := consumeUniqueJSONValue(decoder, depth+1); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim(']') {
+			return ErrInvalidEvidence
+		}
+	default:
+		return ErrInvalidEvidence
+	}
+	return nil
+}
+
 func DecodeAndVerifyTransactionEvidence(encoded []byte) (TransactionEvidence, error) {
-	if len(encoded) == 0 || len(encoded) > 16*1024*1024 {
+	if len(encoded) == 0 || len(encoded) > 16*1024*1024 || !hasUniqueJSONKeys(encoded) {
 		return TransactionEvidence{}, ErrInvalidEvidence
 	}
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
@@ -360,6 +759,20 @@ func validEvidenceTransaction(value Transaction) bool {
 		value.Version > 0 && value.Version <= maxEvidenceInteger && !value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)
 }
 
+func validEvidenceTransactionOperations(transaction Transaction, operations map[string]Operation) bool {
+	if transaction.Mode == TransactionModeDirect && len(operations) > 1 {
+		return false
+	}
+	if transaction.State == TransactionCommitted {
+		for _, operation := range operations {
+			if operation.State != OperationApplied {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func validEvidenceOperation(value Operation, transactionID string) bool {
 	return value.TransactionID == transactionID && validIdentifier(value.ID) && value.Index > 0 && value.Index <= maxEvidenceOperationIndex && validIdentifier(value.ToolID) &&
 		validIdentifier(value.HandlerVersion) && validIdentifier(value.PolicyVersion) && validEffectClass(value.EffectClass) && validPolicy(value.Policy) &&
@@ -367,14 +780,36 @@ func validEvidenceOperation(value Operation, transactionID string) bool {
 		value.Version > 0 && value.Version <= maxEvidenceInteger && !value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)
 }
 
-func validEvidenceApproval(value ApprovalEvidence, transactionID string, operationIDs map[string]struct{}) bool {
+func sameEvidenceIDSet(left, right map[string]struct{}) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for id := range left {
+		if _, ok := right[id]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func hasConsumedApprovalBefore(consumedAt []time.Time, deadline time.Time) bool {
+	for _, value := range consumedAt {
+		if !value.After(deadline) {
+			return true
+		}
+	}
+	return false
+}
+
+func validEvidenceApproval(value ApprovalEvidence, transactionID string, operationManifests map[string]string) bool {
 	if value.TransactionID != transactionID || !validIdentifier(value.AuthorityID) || !validIdentifier(value.OperationID) ||
 		!validIdentifier(value.ActorID) || !digestPattern.MatchString(value.ManifestDigest) ||
 		value.RegisteredAt.IsZero() || !value.ExpiresAt.After(value.RegisteredAt) ||
-		(!value.ConsumedAt.IsZero() && value.ConsumedAt.Before(value.RegisteredAt)) {
+		(!value.ConsumedAt.IsZero() && (value.ConsumedAt.Before(value.RegisteredAt) || value.ConsumedAt.After(value.ExpiresAt))) {
 		return false
 	}
-	if _, exists := operationIDs[value.OperationID]; !exists {
+	manifestDigest, exists := operationManifests[value.OperationID]
+	if !exists || value.ManifestDigest != manifestDigest {
 		return false
 	}
 	if value.Source == CommitSourceUser {
@@ -390,7 +825,7 @@ func validEvidenceAttempt(value Attempt, transactionID string) bool {
 		(digestPattern.MatchString(value.ReconciliationDigest) && (value.State == AttemptSucceeded || value.State == AttemptFailed))
 	distinctEvidence := value.ProviderReceiptDigest == "" || value.ReconciliationDigest == "" || value.ProviderReceiptDigest != value.ReconciliationDigest
 	return receiptValid && reconciliationValid && distinctEvidence && value.TransactionID == transactionID && validIdentifier(value.ID) && validIdentifier(value.OperationID) && validAttemptKind(value.Kind) &&
-		value.Ordinal > 0 && value.Ordinal <= maxEvidenceAttemptOrdinal && validAttemptState(value.State) && validOperationState(value.ExpectedOperationState) && validIdentifier(value.LeaseID) &&
+		value.Ordinal > 0 && value.Ordinal <= maxEvidenceAttemptOrdinal && validAttemptState(value.State) && validAttemptPriorState(value.Kind, value.ExpectedOperationState) && validIdentifier(value.LeaseID) &&
 		value.LeaseExpiresAt.After(value.CreatedAt) && digestPattern.MatchString(value.ProviderRequestDigest) && value.Version > 0 && value.Version <= maxEvidenceInteger &&
 		!value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)
 }

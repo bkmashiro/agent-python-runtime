@@ -298,6 +298,17 @@ func NewSendControllerFromSnapshot(coordinator *transaction.Coordinator, adapter
 		if err != nil || operation.TransactionID != snapshot.TransactionID || operation.ToolID != SendToolID || operation.HandlerVersion != HandlerVersion || operation.ManifestDigest != item.Public.ManifestDigest || operation.EffectClass != transaction.EffectIrreversible || operation.Policy != transaction.PolicyUserApprovalRequired {
 			return nil, ErrSendReconciliation
 		}
+		if item.Status != "awaiting_approval" {
+			attempt, inspectErr := coordinator.InspectAttempt(item.AttemptID)
+			expectedState := transaction.AttemptAmbiguous
+			if item.Status == "committed" {
+				expectedState = transaction.AttemptSucceeded
+			}
+			if inspectErr != nil || attempt.OperationID != operation.ID || attempt.ProviderRequestDigest != item.Public.ManifestDigest || attempt.State != expectedState ||
+				(item.Status == "committed" && attempt.ProviderReceiptDigest != item.Receipt.ReceiptDigest) {
+				return nil, ErrSendReconciliation
+			}
+		}
 		controller.staged[item.Public.OperationID] = &stagedSend{public: item.Public, request: SendRequest{To: append([]string(nil), item.Request.To...), Subject: item.Request.Subject, Body: item.Request.Body}, approvalDigest: item.ApprovalDigest, attemptID: item.AttemptID, status: item.Status, receipt: item.Receipt}
 	}
 	return controller, nil
@@ -311,7 +322,14 @@ func validateSendStage(item SendStageSnapshot) error {
 		if item.ApprovalDigest != "" || item.AttemptID != "" || item.Receipt != (SendReceipt{}) {
 			return ErrSendReconciliation
 		}
-	case "ambiguous", "committed":
+	case "ambiguous":
+		if !validDigest(item.ApprovalDigest) || !validIdentity(item.AttemptID) {
+			return ErrSendReconciliation
+		}
+		if item.Receipt != (SendReceipt{}) && (!validSendReceipt(item.Receipt) || item.Receipt.ManifestDigest != item.Public.ManifestDigest) {
+			return ErrSendReconciliation
+		}
+	case "committed":
 		if !validDigest(item.ApprovalDigest) || !validIdentity(item.AttemptID) || !validSendReceipt(item.Receipt) || item.Receipt.ManifestDigest != item.Public.ManifestDigest {
 			return ErrSendReconciliation
 		}

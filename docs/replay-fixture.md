@@ -8,7 +8,8 @@ The package `verification/replayfixture` provides a fully local state-machine fi
 
 A recording owns and hashes all values that can influence the fixture:
 
-- authoritative initial state snapshot;
+- exact declarative fixture artifact identity;
+- authoritative initial-state snapshot;
 - ordered typed inputs;
 - ordered UTC clock tape;
 - ordered random-value tape;
@@ -21,7 +22,7 @@ The tape must contain exactly one clock and random value per input. Missing entr
 
 ### R1 — input-injection replay
 
-`ReplayInputInjection` first validates the complete recording digest, then restores the recorded initial state and injects the recorded input, clock, and random tapes. It re-executes the pure in-memory state machine and requires exact receipt and final-state equality with the recording.
+`ReplayInputInjection` first validates the fixture artifact identity and complete recording digest, then restores the recorded initial state and injects the recorded input, clock, and random tapes. It re-executes the pure in-memory state machine and requires exact receipt and final-state equality with the recording.
 
 The report exposes recording, transcript, and initial-state digests plus explicit input/clock/random/restoration checks.
 

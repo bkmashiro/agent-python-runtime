@@ -38,8 +38,20 @@ func TestInputInjectionReplayUsesSealedClockRandomAndInputs(t *testing.T) {
 	if state.Value != 14 || len(state.Applied) != 3 {
 		t.Fatalf("state=%+v", state)
 	}
-	if report.RecordingDigest != recording.Digest || report.TranscriptDigest == "" {
+	if report.RecordingDigest != recording.Digest || report.TranscriptDigest == "" ||
+		report.ArtifactDigest != recording.ArtifactDigest {
 		t.Fatalf("report=%+v", report)
+	}
+}
+
+func TestReplayRejectsFixtureArtifactDriftBeforeExecution(t *testing.T) {
+	recording, err := replayfixture.Record(fixtureConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	recording.ArtifactDigest = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	if _, _, err := replayfixture.ReplayInputInjection(recording); !errors.Is(err, replayfixture.ErrArtifactMismatch) {
+		t.Fatalf("err=%v", err)
 	}
 }
 

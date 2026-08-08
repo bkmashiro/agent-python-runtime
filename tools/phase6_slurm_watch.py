@@ -30,6 +30,30 @@ TERMINAL_STATES = {
     "NODE_FAIL", "PREEMPTED", "BOOT_FAIL",
 }
 ACKED_TIME = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+REMOTE_BOUNDED_READER = r"""
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+maximum = int(sys.argv[2])
+flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+descriptor = os.open(path, flags)
+try:
+    identity = os.fstat(descriptor)
+    if not stat.S_ISREG(identity.st_mode) or identity.st_size > maximum:
+        raise RuntimeError("remote file is not a bounded regular file")
+    remaining = identity.st_size
+    while remaining:
+        chunk = os.read(descriptor, min(1 << 20, remaining))
+        if not chunk:
+            raise RuntimeError("remote file truncated during bounded read")
+        sys.stdout.buffer.write(chunk)
+        remaining -= len(chunk)
+    sys.stdout.buffer.flush()
+finally:
+    os.close(descriptor)
+"""
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -41,6 +65,49 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def ssh(host: str, command: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:
     return run("ssh", "-o", "BatchMode=yes", host, command, check=check)
+
+
+def copy_bounded(source, destination, maximum: int) -> int:
+    total = 0
+    while True:
+        chunk = source.read(min(1 << 20, maximum - total + 1))
+        if not chunk:
+            return total
+        total += len(chunk)
+        if total > maximum:
+            raise RuntimeError("download exceeded its local transfer bound")
+        destination.write(chunk)
+
+
+def download_bounded(host: str, remote_path: str, local_path: Path, maximum: int) -> int:
+    remote_command = (
+        f"/usr/bin/python3 -c {shlex.quote(REMOTE_BOUNDED_READER)} "
+        f"{shlex.quote(remote_path)} {maximum}"
+    )
+    process = subprocess.Popen(
+        ["ssh", "-o", "BatchMode=yes", host, remote_command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        if process.stdout is None or process.stderr is None:
+            raise RuntimeError("bounded SSH pipes are unavailable")
+        with local_path.open("xb") as destination:
+            size = copy_bounded(process.stdout, destination, maximum)
+        return_code = process.wait(timeout=30)
+        stderr = process.stderr.read(64 << 10)
+        if return_code != 0:
+            raise RuntimeError(
+                f"bounded remote read failed ({return_code}): "
+                f"{stderr.decode('utf-8', errors='replace')}"
+            )
+        return size
+    except BaseException:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        local_path.unlink(missing_ok=True)
+        raise
 
 
 def unique_json(path: Path, maximum_bytes: int = 16 << 20):
@@ -212,16 +279,6 @@ def parse_scontrol_job(text: str, expected_job: str) -> dict[str, str]:
     return values
 
 
-def parse_remote_size(text: str, maximum: int, label: str) -> int:
-    lines = text.splitlines()
-    if len(lines) != 1 or not re.fullmatch(r"[0-9]+", lines[0]):
-        raise RuntimeError(f"remote {label} size is malformed")
-    size = int(lines[0])
-    if size > maximum:
-        raise RuntimeError(f"remote {label} exceeds its transfer bound")
-    return size
-
-
 def parse_tres(value: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for field in value.split(","):
@@ -382,31 +439,12 @@ def main() -> None:
         f"test -f {quoted_ready}; test ! -L {quoted_ready}; "
         f"test ! -e {quoted_ack}; test ! -L {quoted_ack}",
     )
-    archive_remote_size = parse_remote_size(
-        ssh(args.host, f"stat -c %s -- {quoted_archive}").stdout,
-        MAX_ARCHIVE_BYTES,
-        "archive",
-    )
-    checksum_remote_size = parse_remote_size(
-        ssh(args.host, f"stat -c %s -- {quoted_checksum}").stdout,
-        MAX_CONTROL_BYTES,
-        "checksum",
-    )
-    ready_remote_size = parse_remote_size(
-        ssh(args.host, f"stat -c %s -- {quoted_ready}").stdout,
-        MAX_CONTROL_BYTES,
-        "READY",
-    )
     archive = local_root / "archive.tar.gz"
     checksum = local_root / "archive.tar.gz.sha256"
     ready = local_root / "READY"
-    run("scp", "-q", f"{args.host}:{archive_remote}", str(archive))
-    run("scp", "-q", f"{args.host}:{checksum_remote}", str(checksum))
-    run("scp", "-q", f"{args.host}:{ready_remote}", str(ready))
-    if (archive.stat().st_size != archive_remote_size or
-            checksum.stat().st_size != checksum_remote_size or
-            ready.stat().st_size != ready_remote_size):
-        raise RuntimeError("remote result size changed during download")
+    download_bounded(args.host, archive_remote, archive, MAX_ARCHIVE_BYTES)
+    download_bounded(args.host, checksum_remote, checksum, MAX_CONTROL_BYTES)
+    download_bounded(args.host, ready_remote, ready, MAX_CONTROL_BYTES)
     archive_hash = sha256(archive)
     checksum_fields = checksum.read_text(encoding="utf-8").strip().split()
     ready_fields = ready.read_text(encoding="utf-8").strip().split()
@@ -507,15 +545,8 @@ def main() -> None:
             raise RuntimeError("sacct disagrees with the Slurm controller record")
         sacct_verified = True
     ssh(args.host, f"set -e; test -f {quoted_acked}; test ! -L {quoted_acked}")
-    acked_remote_size = parse_remote_size(
-        ssh(args.host, f"stat -c %s -- {quoted_acked}").stdout,
-        MAX_CONTROL_BYTES,
-        "ACKED",
-    )
     acked = local_root / "ACKED"
-    run("scp", "-q", f"{args.host}:{acked_remote}", str(acked))
-    if acked.stat().st_size != acked_remote_size:
-        raise RuntimeError("remote ACKED size changed during download")
+    download_bounded(args.host, acked_remote, acked, MAX_CONTROL_BYTES)
     validate_acked_text(acked.read_text(encoding="utf-8"), archive_hash)
 
     ack_text = json.dumps({

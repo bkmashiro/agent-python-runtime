@@ -44,12 +44,13 @@ var (
 )
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var locatorSecretPattern = regexp.MustCompile(`(?i)(?:token|password|secret|api[_-]?key|authorization|cookie)\s*=`)
+var locatorSecretPattern = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]_])(?:token|password|secret|api[_-]?key|authorization|cookie)(?:\s*(?:=|:)|\s+)`)
 var valueSecretPattern = regexp.MustCompile(`(?i)(?:bearer\s+[A-Za-z0-9._~+/=-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{12,}|AKIA[0-9A-Z]{16})`)
 var sensitiveKeys = map[string]struct{}{
-	"accesstoken": {}, "apikey": {}, "auth": {}, "authorization": {}, "clientsecret": {}, "cookie": {},
-	"credential": {}, "credentials": {}, "password": {}, "privatekey": {}, "refreshtoken": {}, "secret": {},
-	"sessioncookie": {}, "sessiontoken": {}, "setcookie": {}, "token": {},
+	"auth": {},
+}
+var sensitiveKeyFragments = []string{
+	"apikey", "authorization", "cookie", "credential", "password", "privatekey", "secret", "token",
 }
 
 type Observation struct {
@@ -399,8 +400,15 @@ func validSource(source SourceKind) bool { return source == SourceWeb || source 
 func isSensitiveKey(key string) bool {
 	normalized := strings.ToLower(key)
 	normalized = strings.NewReplacer("_", "", "-", "", ".", "", " ", "").Replace(normalized)
-	_, sensitive := sensitiveKeys[normalized]
-	return sensitive
+	if _, sensitive := sensitiveKeys[normalized]; sensitive {
+		return true
+	}
+	for _, fragment := range sensitiveKeyFragments {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func validFieldPath(path string) bool {

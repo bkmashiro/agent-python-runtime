@@ -65,17 +65,18 @@ type SendReceipt struct {
 }
 
 type Provider struct {
-	mu              sync.Mutex
-	readCredential  []byte
-	draftCredential []byte
-	sendCredential  []byte
-	messages        map[string]Message
-	drafts          map[string]Draft
-	sent            map[string]SendReceipt
-	nextDraft       uint64
-	nextVersion     uint64
-	nextMessage     uint64
-	ambiguousNext   bool
+	mu                  sync.Mutex
+	readCredential      []byte
+	draftCredential     []byte
+	sendCredential      []byte
+	messages            map[string]Message
+	drafts              map[string]Draft
+	sent                map[string]SendReceipt
+	nextDraft           uint64
+	nextVersion         uint64
+	nextMessage         uint64
+	ambiguousNext       bool
+	acceptedTimeoutNext bool
 }
 
 func NewProvider(messages []Message, readCredential, draftCredential, sendCredential []byte) (*Provider, error) {
@@ -123,6 +124,15 @@ func (provider *Provider) SetAmbiguousNextSend() {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 	provider.ambiguousNext = true
+}
+
+// SetAcceptedTimeoutNextSend injects a response-loss fault after the provider
+// has durably accepted the send. The caller must reconcile by idempotency key;
+// retrying the send is unsafe.
+func (provider *Provider) SetAcceptedTimeoutNextSend() {
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	provider.acceptedTimeoutNext = true
 }
 
 func (provider *Provider) DriftDraft(id, body string) error {
@@ -645,9 +655,13 @@ func (controller *SendController) Commit(ctx context.Context, credential transac
 		controller.mu.Unlock()
 		return receipt, nil
 	}
-	if staged.status == "ambiguous" {
+	if staged.status == "ambiguous" || staged.status == "dispatching" {
 		controller.mu.Unlock()
 		return SendReceipt{}, ErrSendReconciliation
+	}
+	if staged.status == "failed" {
+		controller.mu.Unlock()
+		return SendReceipt{}, ErrSendApprovalRequired
 	}
 	controller.mu.Unlock()
 	operation, err := controller.coordinator.Authorize(credential)
@@ -662,6 +676,11 @@ func (controller *SendController) Commit(ctx context.Context, credential transac
 	if err != nil {
 		return SendReceipt{}, err
 	}
+	controller.mu.Lock()
+	staged.attemptID = dispatch.Attempt.ID
+	staged.approvalDigest = credentialDigest
+	staged.status = "dispatching"
+	controller.mu.Unlock()
 	var receipt SendReceipt
 	var ambiguous bool
 	err = controller.adapter.withSecret(ctx, controller.adapter.config.SendSecretRef, SendToolID, "commit", func(value []byte) error {
@@ -670,13 +689,22 @@ func (controller *SendController) Commit(ctx context.Context, credential transac
 		return sendErr
 	})
 	if err != nil {
-		_, _ = controller.coordinator.CompleteDispatch(transaction.CompleteDispatchRequest{OperationID: operationID, AttemptID: dispatch.Attempt.ID, Outcome: transaction.DispatchFailed})
-		return SendReceipt{}, classified(err)
+		outcome := transaction.DispatchFailed
+		status := "failed"
+		resultErr := classified(err)
+		if errors.Is(err, ErrAmbiguousSend) {
+			outcome = transaction.DispatchAmbiguous
+			status = "ambiguous"
+			resultErr = ErrSendReconciliation
+		}
+		controller.mu.Lock()
+		staged.status = status
+		controller.mu.Unlock()
+		_, completeErr := controller.coordinator.CompleteDispatch(transaction.CompleteDispatchRequest{OperationID: operationID, AttemptID: dispatch.Attempt.ID, Outcome: outcome})
+		return SendReceipt{}, errors.Join(resultErr, completeErr)
 	}
 	controller.mu.Lock()
-	staged.attemptID = dispatch.Attempt.ID
 	staged.receipt = receipt
-	staged.approvalDigest = credentialDigest
 	if ambiguous {
 		staged.status = "ambiguous"
 	} else {
@@ -744,6 +772,10 @@ func (provider *Provider) send(credential []byte, manifest string, request SendR
 	receipt := SendReceipt{ProviderMessageID: fmt.Sprintf("sent:%d", provider.nextMessage), ManifestDigest: manifest}
 	receipt.ReceiptDigest = digest([]byte(receipt.ProviderMessageID + "\x00" + manifest))
 	provider.sent[manifest] = receipt
+	if provider.acceptedTimeoutNext {
+		provider.acceptedTimeoutNext = false
+		return SendReceipt{}, false, ErrAmbiguousSend
+	}
 	ambiguous := provider.ambiguousNext
 	provider.ambiguousNext = false
 	return receipt, ambiguous, nil

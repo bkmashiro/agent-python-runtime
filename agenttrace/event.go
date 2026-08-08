@@ -244,8 +244,8 @@ func canonicalMetadataPayload(payload json.RawMessage) ([]byte, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.UseNumber()
-	var document any
-	if decoder.Decode(&document) != nil {
+	document, err := decodeUniqueJSON(decoder)
+	if err != nil {
 		return nil, ErrInvalidEvent
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
@@ -263,6 +263,60 @@ func canonicalMetadataPayload(payload json.RawMessage) ([]byte, error) {
 		return nil, ErrInvalidEvent
 	}
 	return canonical, nil
+}
+
+func decodeUniqueJSON(decoder *json.Decoder) (any, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	delimiter, compound := token.(json.Delim)
+	if !compound {
+		return token, nil
+	}
+	switch delimiter {
+	case '{':
+		object := make(map[string]any)
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return nil, err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return nil, ErrInvalidEvent
+			}
+			if _, duplicate := object[key]; duplicate {
+				return nil, ErrInvalidEvent
+			}
+			value, err := decodeUniqueJSON(decoder)
+			if err != nil {
+				return nil, err
+			}
+			object[key] = value
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim('}') {
+			return nil, ErrInvalidEvent
+		}
+		return object, nil
+	case '[':
+		array := make([]any, 0)
+		for decoder.More() {
+			value, err := decodeUniqueJSON(decoder)
+			if err != nil {
+				return nil, err
+			}
+			array = append(array, value)
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim(']') {
+			return nil, ErrInvalidEvent
+		}
+		return array, nil
+	default:
+		return nil, ErrInvalidEvent
+	}
 }
 
 func containsSensitiveKey(value any) bool {

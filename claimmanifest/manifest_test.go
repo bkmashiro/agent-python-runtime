@@ -127,8 +127,16 @@ func TestMetadataPlaybackRejectsNonSuccessOrDuplicateStatus(t *testing.T) {
 		}
 	}
 	duplicate := []byte(`{"invocation_id":"invocation-1","invocation_attempt":1,"execution_id":"execution-1","executed_code_sha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"ok","status":"error","turn_seq":2,"output_item_seq":3,"segment_seq":4}`)
-	if _, err := claimmanifest.FromMetadataPlayback(ref, playbackWithPayload(t, ref.AgentRunID, duplicate)); !errors.Is(err, claimmanifest.ErrExecutionNotObserved) {
-		t.Fatalf("duplicate status err=%v", err)
+	sink := agenttrace.NewMemorySink()
+	recorder, err := (agenttrace.Plugin{Mode: agenttrace.ModeRequired, Sink: sink}).Begin(ref.AgentRunID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = recorder.Record(context.Background(), agenttrace.EventRuntimeCompleted, "", duplicate, ""); !errors.Is(err, agenttrace.ErrInvalidEvent) {
+		t.Fatalf("duplicate status ingress err=%v", err)
+	}
+	if len(sink.Events()) != 0 {
+		t.Fatal("duplicate status reached playback sink")
 	}
 }
 

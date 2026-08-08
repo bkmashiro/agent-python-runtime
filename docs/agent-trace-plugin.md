@@ -93,7 +93,7 @@ Tracing is observer-only: event data never enters capability grants, policy, app
 
 `v2` adds the required `completed_event_id` and strict successful-completion/evidence-graph binding. The earlier `v1` wire shape is no longer emitted or accepted by the current validator; callers must rebuild it from the integrity-checked playback rather than relabeling old JSON.
 
-The manifest contains one claim per `artifact`, `base`, `authority`, `execution`, `effect`, and `outcome`, with explicit dependencies and one verifier status: `verified`, `contradicted`, `insufficient`, or `stale`. In the current metadata-only adapter:
+The manifest contains one claim per `artifact`, `base`, `authority`, `execution`, `effect`, and `outcome`, with explicit dependencies and one verifier status: `verified`, `contradicted`, `insufficient`, or `stale`. The trace recorder rejects duplicate JSON object keys recursively before canonicalization, so conflicting completion fields cannot be collapsed before manifest validation. In the current metadata-only adapter:
 
 - only one canonical `runtime.completed` payload with exact non-null typed fields, exact `status: "ok"`, matching execution identity, and the versioned Harness completion fields may support the execution claim; failed, unknown-status, duplicate-key, aliased, unknown-field, null-scalar, duplicate-matching-completion, or contradictory matching-completion payloads are rejected;
 - `CompletedEventID`, playback digest, code digest, claim IDs, statuses, dependencies, and evidence references are bound to the exact generated graph rather than accepted as free-form labels;

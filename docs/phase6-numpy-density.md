@@ -94,7 +94,7 @@ The Host revision and Guest artifact-source revision belong to different reposit
 The canary chooses safe memory limits. The initial candidate matrix is:
 
 - ready slots: 64, 256, and a budget-limited high point;
-- workers: 1, 4, 8, 16 and 32, capped by effective policy;
+- workers: 1, 4, and 8 for the current T4 policy; larger worker points require a separately qualified higher-CPU policy;
 - open-loop offered rates around the measured service knee;
 - NumPy dirty working set: 0, 4 and 16 MiB;
 - greed: 0, 50 and 100 only after one conservative policy row passes.

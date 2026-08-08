@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import re
 import sys
 import tempfile
 import types
@@ -24,6 +25,10 @@ class Phase6MatrixTest(unittest.TestCase):
         self.assertEqual(2, len(canary))
         self.assertEqual(11, len(small))
         self.assertEqual(len(small), len({cell.cell_id for cell in small}))
+        for cell in canary + small:
+            self.assertLessEqual(cell.consumers, 8)
+            marker = "c" if cell.arrival_mode == "closed-loop" else "w"
+            self.assertRegex(cell.cell_id, rf"-{re.escape(marker)}{cell.consumers}(?:-|$)")
         with self.assertRaises(ValueError):
             MODULE.cells_for_tier("formal")
         with self.assertRaises(ValueError):
@@ -45,7 +50,7 @@ class Phase6MatrixTest(unittest.TestCase):
                 output=Path(f"/tmp/{cell.cell_id}.json"),
                 memory_budget_bytes=8 << 30,
                 memory_reserve_bytes=2 << 30,
-                max_cpu=16,
+                max_cpu=4,
                 greed=50,
             )
             joined = "\n".join(command)
@@ -76,7 +81,7 @@ class Phase6MatrixTest(unittest.TestCase):
         revision = "a" * 40
         artifact_sha = "b" * 64
         artifact_source = "c" * 40
-        memory_budget, memory_reserve, max_cpu, greed = 8 << 30, 2 << 30, 16, 50
+        memory_budget, memory_reserve, max_cpu, greed = 8 << 30, 2 << 30, 4, 50
         validation_inputs = {
             "cell": cell, "revision": revision, "artifact_sha256": artifact_sha,
             "artifact_source_commit": artifact_source, "memory_budget_bytes": memory_budget,
@@ -205,7 +210,7 @@ class Phase6MatrixTest(unittest.TestCase):
                 artifact_manifest=manifest,
                 memory_budget_bytes=8 << 30,
                 memory_reserve_bytes=2 << 30,
-                max_cpu=16,
+                max_cpu=4,
                 greed=50,
                 tier="canary",
             )

@@ -118,7 +118,7 @@ python3 tools/phase6_matrix.py plan --tier canary
 python3 tools/phase6_matrix.py plan --tier small
 ```
 
-The canary has two cells and the small matrix has eleven. `formal` has no default matrix: it requires an explicit JSON selection of successful small-matrix cell IDs and expands each selected cell to exactly three repetitions. The runner refuses a modified Host tree or non-empty output directory and validates source/artifact identity, request conservation, inventory recovery, NumPy request classes, and evidence checksums before writing its run manifest.
+The canary has two cells and the small matrix has eleven. `formal` has no default matrix: it requires an explicit JSON selection of successful small-matrix cell IDs and expands each selected cell to exactly three repetitions. The runner rejects duplicate manifest/evidence keys, a modified Host tree, symlinked inputs, manifest/artifact drift, or a non-empty output directory. After each cell it invokes the same exact binary in `validate-cow-pressure` mode for JSON Schema v11 and Go semantic validation, checks independent Host and Guest source identities, reruns the clean-tree gate, and only then records the evidence checksum in its run manifest.
 
 ## Agent-framework comparison
 

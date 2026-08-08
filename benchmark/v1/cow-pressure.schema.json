@@ -167,9 +167,11 @@
     },
     "load": {
       "type": "object", "additionalProperties": false,
-      "required": ["arrival", "started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "latency_total_ns", "latency_mean_ns", "ready_before", "ready_after", "phases", "request_classes"],
+      "required": ["arrival", "result_oracle", "validated_results", "started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "latency_total_ns", "latency_mean_ns", "ready_before", "ready_after", "phases", "request_classes"],
       "properties": {
         "arrival": {"$ref": "#/$defs/arrival"},
+        "result_oracle": {"enum": ["status-ok-v1", "numpy-exact-v1"]},
+        "validated_results": {"type": "integer", "minimum": 1},
         "started_requests": {"type": "integer", "minimum": 1}, "completed_requests": {"type": "integer", "minimum": 1},
         "failed_requests": {"type": "integer", "minimum": 0}, "timed_out_requests": {"type": "integer", "minimum": 0},
         "duration_ns": {"type": "integer", "minimum": 1}, "replenish_drain_ns": {"type": "integer", "minimum": 0},
@@ -188,9 +190,10 @@
     },
     "arrival": {
       "type": "object", "additionalProperties": false,
-      "required": ["mode", "rate_per_second", "queue_capacity", "offered_requests", "accepted_requests", "rejected_requests"],
+      "required": ["mode", "window_ns", "rate_per_second", "queue_capacity", "offered_requests", "accepted_requests", "rejected_requests"],
       "properties": {
         "mode": {"enum": ["closed-loop", "open-loop-fixed-v1"]},
+        "window_ns": {"type": "integer", "minimum": 0, "maximum": 600000000000},
         "rate_per_second": {"type": "integer", "minimum": 0, "maximum": 4096},
         "queue_capacity": {"type": "integer", "minimum": 0, "maximum": 65536},
         "offered_requests": {"type": "integer", "minimum": 1},

@@ -8,6 +8,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --job-name=pysolate-p7
 #SBATCH --export=NIL
+#SBATCH --output=/vol/bitbucket/ys25/pysolate-p7-slurm-%j.out
 
 set -Eeuo pipefail
 umask 077
@@ -40,6 +41,33 @@ if find "$STAGE/input" -type l -print -quit | grep -q .; then
   printf 'symlinked staged input is forbidden\n' >&2
   exit 65
 fi
+test -d "$STAGE/input/artifacts" && test ! -L "$STAGE/input/artifacts"
+test -d "$STAGE/input/bin" && test ! -L "$STAGE/input/bin"
+test "$(find "$STAGE/input" -type d -print | wc -l | tr -d '[:space:]')" -eq 3
+if find "$STAGE/input" -mindepth 1 ! -type f ! -type d -print -quit | grep -q .; then
+  printf 'special staged input is forbidden\n' >&2
+  exit 65
+fi
+
+expected_payload_files=(
+  SOURCE_COMMIT
+  artifacts/agent-python-runtime-numpy-core.wasm
+  artifacts/manifest.json
+  bin/apyrun-benchmark-linux-amd64
+  phase7_slurm_job.sh
+  source.bundle
+)
+expected_payload_max_bytes=(128 268435456 1048576 134217728 131072 67108864)
+test "$(find "$STAGE/input" -type f -print | wc -l | tr -d '[:space:]')" -eq "$((${#expected_payload_files[@]} + 1))"
+for index in "${!expected_payload_files[@]}"; do
+  candidate="$STAGE/input/${expected_payload_files[$index]}"
+  test -f "$candidate" && test ! -L "$candidate"
+  candidate_size="$(stat -c '%s' "$candidate")"
+  test "$candidate_size" -gt 0 && test "$candidate_size" -le "${expected_payload_max_bytes[$index]}"
+done
+test -f "$STAGE/input/payload.SHA256" && test ! -L "$STAGE/input/payload.SHA256"
+payload_manifest_size="$(stat -c '%s' "$STAGE/input/payload.SHA256")"
+test "$payload_manifest_size" -gt 0 && test "$payload_manifest_size" -le 8192
 
 NODE_ROOT="${SLURM_TMPDIR:-/tmp}/pysolate-p7-${SLURM_JOB_ID}"
 INPUT="$NODE_ROOT/input"
@@ -80,7 +108,8 @@ record_failure_and_cleanup() {
       printf 'failure_line=%s\n' "$failure_line"
     } > "$FAILED_TMP"
     chmod 400 "$FAILED_TMP"
-    mv -- "$FAILED_TMP" "$FAILED"
+    ln -- "$FAILED_TMP" "$FAILED"
+    rm -- "$FAILED_TMP"
   fi
   cleanup_node_root
   exit "$status"
@@ -89,6 +118,7 @@ trap 'failure_line=$LINENO' ERR
 trap record_failure_and_cleanup EXIT
 
 mkdir -m 700 "$INPUT"
+mkdir -m 700 "$INPUT/artifacts" "$INPUT/bin"
 if [[ -e "$OUTBOX" ]] || [[ -L "$OUTBOX" ]]; then
   test -d "$OUTBOX" && test ! -L "$OUTBOX"
 else
@@ -97,40 +127,72 @@ fi
 chmod 700 "$NODE_ROOT" "$INPUT" "$OUTBOX"
 test ! -e "$ACK" && test ! -L "$ACK"
 test ! -e "$FAILED" && test ! -L "$FAILED" && test ! -e "$FAILED_TMP" && test ! -L "$FAILED_TMP"
-cp -a "$STAGE/input/." "$INPUT/"
-if find "$INPUT" -type l -print -quit | grep -q .; then
-  printf 'copied input contains a symlink\n' >&2
-  exit 65
-fi
+copy_bounded_regular() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import hashlib
+import os
+import stat
+import sys
 
-expected_payload_files=(
-  SOURCE_COMMIT
-  BINARY_METADATA.txt
-  artifacts/agent-python-runtime-numpy-core.wasm
-  artifacts/manifest.json
-  bin/apyrun-benchmark-linux-amd64
-  phase7_slurm_job.sh
-  source.bundle
-)
+source, destination, maximum_text = sys.argv[1:]
+maximum = int(maximum_text)
+source_fd = os.open(source, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+try:
+    before = os.fstat(source_fd)
+    if not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or before.st_size > maximum:
+        raise SystemExit("staged source is not a bounded regular file")
+    destination_fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    digest = hashlib.sha256()
+    try:
+        remaining = before.st_size
+        while remaining:
+            chunk = os.read(source_fd, min(1024 * 1024, remaining))
+            if not chunk:
+                raise SystemExit("staged source shrank while copying")
+            digest.update(chunk)
+            view = memoryview(chunk)
+            while view:
+                written = os.write(destination_fd, view)
+                view = view[written:]
+            remaining -= len(chunk)
+        if os.read(source_fd, 1):
+            raise SystemExit("staged source grew while copying")
+        after = os.fstat(source_fd)
+        if (before.st_dev, before.st_ino, before.st_size) != (after.st_dev, after.st_ino, after.st_size):
+            raise SystemExit("staged source identity changed while copying")
+        os.fsync(destination_fd)
+    finally:
+        os.close(destination_fd)
+finally:
+    os.close(source_fd)
+print(digest.hexdigest())
+PY
+}
+
 expected_payload_manifest="$NODE_ROOT/payload.expected"
 : > "$expected_payload_manifest"
-for relative_path in "${expected_payload_files[@]}"; do
-  candidate="$INPUT/$relative_path"
-  test -f "$candidate" && test ! -L "$candidate"
-  printf '%s  %s\n' "$(sha256sum "$candidate" | cut -d' ' -f1)" "$relative_path" >> "$expected_payload_manifest"
+for index in "${!expected_payload_files[@]}"; do
+  relative_path="${expected_payload_files[$index]}"
+  digest="$(copy_bounded_regular "$STAGE/input/$relative_path" "$INPUT/$relative_path" "${expected_payload_max_bytes[$index]}")"
+  printf '%s  %s\n' "$digest" "$relative_path" >> "$expected_payload_manifest"
 done
-actual_file_count="$(find "$INPUT" -type f -print | wc -l | tr -d '[:space:]')"
-test "$actual_file_count" -eq "$((${#expected_payload_files[@]} + 1))"
+copy_bounded_regular "$STAGE/input/payload.SHA256" "$INPUT/payload.SHA256" 8192 >/dev/null
 cmp -- "$expected_payload_manifest" "$INPUT/payload.SHA256"
+test "$(find "$INPUT" -type f -print | wc -l | tr -d '[:space:]')" -eq "$((${#expected_payload_files[@]} + 1))"
 (cd "$INPUT" && sha256sum --check payload.SHA256)
 test "$(tr -d '\r\n' < "$INPUT/SOURCE_COMMIT")" = "$SOURCE_COMMIT"
-grep -Fx $'\tbuild\tvcs.revision='"$SOURCE_COMMIT" "$INPUT/BINARY_METADATA.txt"
-grep -Fx $'\tbuild\tvcs.modified=false' "$INPUT/BINARY_METADATA.txt"
 
 git clone "$INPUT/source.bundle" "$REPO" >/dev/null 2>&1
 test "$(git -C "$REPO" rev-parse HEAD)" = "$SOURCE_COMMIT"
 test -z "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)"
+test -f "$0" && test ! -L "$0"
+cmp -- "$0" "$INPUT/phase7_slurm_job.sh"
 cmp -- "$INPUT/phase7_slurm_job.sh" "$REPO/tools/phase7_slurm_job.sh"
+expected_binary_identity="$NODE_ROOT/binary-source.expected.json"
+actual_binary_identity="$NODE_ROOT/binary-source.actual.json"
+printf '{"revision":"%s","modified":false}\n' "$SOURCE_COMMIT" > "$expected_binary_identity"
+"$INPUT/bin/apyrun-benchmark-linux-amd64" -kind binary-source-identity > "$actual_binary_identity"
+cmp -- "$expected_binary_identity" "$actual_binary_identity"
 
 SAMPLES=1
 if [[ "$TIER" = formal ]]; then SAMPLES=3; fi
@@ -171,7 +233,7 @@ for strategy in $arms; do
     -manifest "$INPUT/artifacts/manifest.json" \
     -samples "$SAMPLES" \
     -max-rss-bytes 8589934592 \
-    -child-timeout 12m \
+    -child-timeout 4m \
     -output "$output"
   "$INPUT/bin/apyrun-benchmark-linux-amd64" \
     -kind validate-lifecycle-density \
@@ -211,22 +273,50 @@ for path in "$archive_tmp" "$archive" "$checksum_tmp" "$checksum" "$ready_tmp" "
   test ! -e "$path" && test ! -L "$path"
 done
 
+publish_exclusive() {
+  source_path="$1"
+  destination_path="$2"
+  test -f "$source_path" && test ! -L "$source_path"
+  ln -- "$source_path" "$destination_path"
+  rm -- "$source_path"
+}
+
+ack_is_exact() {
+  python3 - "$ACK" "$archive_sha" <<'PY'
+import os
+import stat
+import sys
+
+path, digest = sys.argv[1:]
+expected = (digest + "\n").encode("ascii")
+try:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+except OSError:
+    raise SystemExit(1)
+try:
+    metadata = os.fstat(descriptor)
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != len(expected):
+        raise SystemExit(1)
+    if os.read(descriptor, len(expected) + 1) != expected:
+        raise SystemExit(1)
+finally:
+    os.close(descriptor)
+PY
+}
+
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
   -C "$NODE_ROOT" -czf "$archive_tmp" result ENVIRONMENT.txt RUN_COMPLETE
 archive_sha="$(sha256sum "$archive_tmp" | cut -d' ' -f1)"
 printf '%s  %s\n' "$archive_sha" "$(basename "$archive")" > "$checksum_tmp"
-mv "$archive_tmp" "$archive"
-mv "$checksum_tmp" "$checksum"
+publish_exclusive "$archive_tmp" "$archive"
+publish_exclusive "$checksum_tmp" "$checksum"
 printf '%s  %s\n' "$archive_sha" "$(basename "$archive")" > "$ready_tmp"
-mv "$ready_tmp" "$ready"
+publish_exclusive "$ready_tmp" "$ready"
 
 for _ in $(seq 1 180); do
-  ack_value=""
-  if [[ -f "$ACK" ]] && [[ ! -L "$ACK" ]] &&
-     IFS= read -r ack_value < "$ACK" && [[ "$(wc -l < "$ACK")" -eq 1 ]] && [[ "$ack_value" == "$archive_sha" ]]; then
+  if ack_is_exact; then
     printf '%s  %s\n' "$archive_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$acked_tmp"
-    ln "$acked_tmp" "$acked"
-    rm "$acked_tmp"
+    publish_exclusive "$acked_tmp" "$acked"
     exit 0
   fi
   sleep 10

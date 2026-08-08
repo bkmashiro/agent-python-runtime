@@ -117,7 +117,7 @@ func runMain(args []string) error {
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
-	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, validate-cow-pressure, validate-lifecycle-density, or reactor-census")
+	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, binary-source-identity, cow-pressure, validate-cow-pressure, validate-lifecycle-density, or reactor-census")
 	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic, numpy-import, or numpy-ready")
 	flags.StringVar(&options.COWWarmupProfile, "cow-warmup-profile", "", "audited Guest warmup profile used before COW image sealing")
 	flags.StringVar(&options.PreparedWarmupProfile, "prepared-warmup-profile", "", "internal artifact-defined warmup profile for lifecycle-density")
@@ -151,6 +151,9 @@ func runMain(args []string) error {
 	}
 	if options.Kind == "validate-lifecycle-density" {
 		return runLifecycleDensityValidationMain(options)
+	}
+	if options.Kind == "binary-source-identity" {
+		return runBinarySourceIdentityMain(options)
 	}
 	if options.LifecycleDensityChild {
 		if err := validateLifecycleDensityOptions(options, true, goruntime.GOOS); err != nil {

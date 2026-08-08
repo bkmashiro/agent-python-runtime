@@ -286,7 +286,36 @@ func (engine *Engine) prepareSingleUseInstance(parent context.Context) (*prepare
 	if engine.cowRuntime != nil {
 		return engine.cowRuntime.prepare(prepareContext, engine, "pool_prepare_")
 	}
-	return engine.newInitializedModule(prepareContext, "pool_prepare_")
+	instance, err := engine.newInitializedModule(prepareContext, "pool_prepare_")
+	if err != nil {
+		return nil, err
+	}
+	if err := engine.warmPreparedInstance(prepareContext, instance, "pool_prepare_"); err != nil {
+		_ = instance.module.Close(context.Background())
+		return nil, err
+	}
+	return instance, nil
+}
+
+func (engine *Engine) warmPreparedInstance(ctx context.Context, instance *preparedInstance, prefix string) error {
+	if engine.preparedWarmupProfile == "" {
+		return nil
+	}
+	if instance == nil || instance.module == nil || instance.stderr == nil {
+		return errors.New("prepared warmup requires an initialized instance")
+	}
+	warmupContext, hostCallGuard := guardInitializationHostCalls(ctx)
+	started := time.Now()
+	err := callStatusWithBytes(warmupContext, instance.module, "runtime_warmup", []byte(engine.preparedWarmupProfile))
+	observe(engine.observer, prefix+"warmup", started, err)
+	if err != nil {
+		return withGuestDiagnostic(err, instance.stderr.String())
+	}
+	if err := verifyNoInitializationHostCalls(hostCallGuard); err != nil {
+		return err
+	}
+	instance.stderr.Reset()
+	return nil
 }
 
 func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (*preparedInstance, error) {

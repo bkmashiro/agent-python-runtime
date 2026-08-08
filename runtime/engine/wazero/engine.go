@@ -82,6 +82,10 @@ type Factory struct {
 	// COWWarmupProfile selects an audited guest-defined canonical warmup. Empty
 	// keeps the current production baseline. Arbitrary source is never accepted.
 	COWWarmupProfile string
+	// PreparedWarmupProfile selects the same artifact-defined warmup for every
+	// independently initialized single-use prepared slot. It is an experimental
+	// measurement seam and is mutually exclusive with COWWarmupProfile.
+	PreparedWarmupProfile string
 	// COWSnapshotShell derives a replacement-only module with empty active data
 	// payloads and reconstructs those payloads in the canonical memory seed. It
 	// is valid only for cow-ready-single-use.
@@ -116,8 +120,17 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if err := ValidateCOWWarmupProfile(factory.COWWarmupProfile); err != nil {
 		return nil, err
 	}
+	if err := ValidateCOWWarmupProfile(factory.PreparedWarmupProfile); err != nil {
+		return nil, err
+	}
+	if factory.COWWarmupProfile != "" && factory.PreparedWarmupProfile != "" {
+		return nil, errors.New("COW and non-COW prepared warmup profiles are mutually exclusive")
+	}
 	if factory.COWWarmupProfile != "" && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
 		return nil, errors.New("COW warmup profile is outside cow-ready-single-use")
+	}
+	if factory.PreparedWarmupProfile != "" && factory.Strategy != enginecontract.StrategySingleUsePrepared {
+		return nil, errors.New("prepared warmup profile is outside single-use-preinitialized")
 	}
 	if factory.COWSnapshotShell && factory.Strategy != enginecontract.StrategyCOWReadySingleUse {
 		return nil, errors.New("COW snapshot shell is outside cow-ready-single-use")
@@ -126,7 +139,11 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.AdaptivePreparedRefill {
 		refillWorkers = adaptivePreparedRefillSentinel
 	}
-	return newEngine(ctx, wasm, factory.COWSnapshotShell, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, factory.COWWarmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	warmupProfile := factory.COWWarmupProfile
+	if factory.PreparedWarmupProfile != "" {
+		warmupProfile = factory.PreparedWarmupProfile
+	}
+	return newEngine(ctx, wasm, factory.COWSnapshotShell, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, warmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -136,22 +153,22 @@ var _ enginecontract.Runner = (*Engine)(nil)
 // Run or checks out a never-served, single-use initialized module; every served
 // module is closed instead of restored or returned to a pool.
 type Engine struct {
-	runtime                wazerort.Runtime
-	compiled               wazerort.CompiledModule
-	cowSnapshotShell       *cowSnapshotShellPlan
-	config                 runtimeconfig.RunConfig
-	brokerFactory          BrokerFactory
-	observer               Observer
-	footprintSink          enginecontract.FootprintSink
-	reclaimSink            enginecontract.ReclaimSink
-	activeFootprints       *activeFootprintRegistry
-	strategy               enginecontract.ExecutionStrategy
-	verifyCOWPreparedImage bool
-	cowWarmupProfile       string
-	cowWarmupGeneration    string
-	stateCensus            ReactorStateCensus
-	cowRuntime             cowPreparedRuntime
-	pool                   *preparedPool
+	runtime                  wazerort.Runtime
+	compiled                 wazerort.CompiledModule
+	cowSnapshotShell         *cowSnapshotShellPlan
+	config                   runtimeconfig.RunConfig
+	brokerFactory            BrokerFactory
+	observer                 Observer
+	footprintSink            enginecontract.FootprintSink
+	reclaimSink              enginecontract.ReclaimSink
+	activeFootprints         *activeFootprintRegistry
+	strategy                 enginecontract.ExecutionStrategy
+	verifyCOWPreparedImage   bool
+	preparedWarmupProfile    string
+	preparedWarmupGeneration string
+	stateCensus              ReactorStateCensus
+	cowRuntime               cowPreparedRuntime
+	pool                     *preparedPool
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -197,8 +214,8 @@ func newEngine(
 	if err := ValidateCOWWarmupProfile(cowWarmupProfile); err != nil {
 		return nil, err
 	}
-	if cowWarmupProfile != "" && strategy != enginecontract.StrategyCOWReadySingleUse {
-		return nil, errors.New("COW warmup profile is inactive")
+	if cowWarmupProfile != "" && strategy != enginecontract.StrategyCOWReadySingleUse && strategy != enginecontract.StrategySingleUsePrepared {
+		return nil, errors.New("prepared warmup profile is inactive")
 	}
 	warmupGeneration := ""
 	if cowWarmupProfile != "" {
@@ -265,20 +282,20 @@ func newEngine(
 		releaseCompilationCache = nil
 	}
 	engine := &Engine{
-		runtime:                wasmRuntime,
-		compiled:               compiled,
-		cowSnapshotShell:       snapshotShell,
-		config:                 config,
-		brokerFactory:          brokerFactory,
-		observer:               observer,
-		footprintSink:          footprintSink,
-		reclaimSink:            reclaimSink,
-		activeFootprints:       newActiveFootprintRegistry(),
-		strategy:               strategy,
-		verifyCOWPreparedImage: verifyCOWPreparedImage,
-		cowWarmupProfile:       cowWarmupProfile,
-		cowWarmupGeneration:    warmupGeneration,
-		stateCensus:            censusCompiledReactor(compiled, wasm),
+		runtime:                  wasmRuntime,
+		compiled:                 compiled,
+		cowSnapshotShell:         snapshotShell,
+		config:                   config,
+		brokerFactory:            brokerFactory,
+		observer:                 observer,
+		footprintSink:            footprintSink,
+		reclaimSink:              reclaimSink,
+		activeFootprints:         newActiveFootprintRegistry(),
+		strategy:                 strategy,
+		verifyCOWPreparedImage:   verifyCOWPreparedImage,
+		preparedWarmupProfile:    cowWarmupProfile,
+		preparedWarmupGeneration: warmupGeneration,
+		stateCensus:              censusCompiledReactor(compiled, wasm),
 	}
 	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity, preparedRefillWorkers); err != nil {
 		_ = engine.Close(context.Background())

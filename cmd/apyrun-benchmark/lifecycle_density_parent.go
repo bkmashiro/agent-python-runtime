@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,8 +36,13 @@ func validateLifecycleDensityOptions(options benchmarkOptions, child bool, goos 
 		(options.Strategy == "single-use-preinitialized" || options.Strategy == "cow-ready-single-use")
 	validSpike := options.Class == "preinitialization-spike" &&
 		(options.Strategy == "single-use-preinitialized" || options.Strategy == "single-use-preinitialized-shared-cache")
-	if !validProduction && !validSpike {
-		return errors.New("lifecycle-density benchmark requires production-safe single-use-preinitialized/cow-ready-single-use or an explicit preinitialization-spike strategy")
+	validNumPyExperiment := options.Class == "profile-candidate" && options.PreparedWarmupProfile == "numpy-ready-v1" &&
+		(options.Strategy == "single-use-preinitialized" || options.Strategy == "single-use-preinitialized-shared-cache" || options.Strategy == "cow-ready-single-use")
+	if !validProduction && !validSpike && !validNumPyExperiment {
+		return errors.New("lifecycle-density class, strategy, and prepared warmup are incompatible")
+	}
+	if !validNumPyExperiment && options.PreparedWarmupProfile != "" {
+		return errors.New("prepared lifecycle-density warmup is restricted to the NumPy experiment")
 	}
 	if options.MaxRSSBytes == 0 || options.MaxRSSBytes > 1<<50 || options.ChildTimeout <= 0 || options.ChildTimeout > 24*time.Hour {
 		return errors.New("lifecycle-density RSS guard or child timeout is missing or outside its hard bound")
@@ -44,7 +51,7 @@ func validateLifecycleDensityOptions(options benchmarkOptions, child bool, goos 
 		if !options.LifecycleDensityChild || options.OutputPath != "" || options.DensitySlots > uint(^uint32(0)) {
 			return errors.New("lifecycle-density child mode or output boundary is invalid")
 		}
-		if _, err := preparedDensityShardCapacities(uint32(options.DensitySlots)); err != nil {
+		if _, err := preparedDensityShardCapacitiesForStrategy(uint32(options.DensitySlots), options.Strategy, validNumPyExperiment); err != nil {
 			return err
 		}
 		return nil
@@ -60,14 +67,22 @@ func runLifecycleDensityMain(options benchmarkOptions) error {
 	if err != nil {
 		return err
 	}
-	if artifact.ArtifactProfile != "base" {
-		return errors.New("initial lifecycle-density sweep requires the qualified base artifact profile")
+	if options.PreparedWarmupProfile == "" && artifact.ArtifactProfile != "base" {
+		return errors.New("lifecycle-density v1 requires the qualified base artifact profile")
+	}
+	if options.PreparedWarmupProfile != "" && artifact.ArtifactProfile != "numpy-core" {
+		return errors.New("NumPy lifecycle-density requires the numpy-core artifact profile")
 	}
 	hostSource, err := currentHostSource()
 	if err != nil {
 		return err
 	}
-	specs, err := densitySweepSpecs(options.Strategy, uint32(options.Samples), options.MaxRSSBytes, options.ChildTimeout)
+	var specs []densitySweepSpec
+	if options.PreparedWarmupProfile != "" {
+		specs, err = numpyDensitySweepSpecs(options.Strategy, uint32(options.Samples), options.MaxRSSBytes, options.ChildTimeout)
+	} else {
+		specs, err = densitySweepSpecs(options.Strategy, uint32(options.Samples), options.MaxRSSBytes, options.ChildTimeout)
+	}
 	if err != nil {
 		return err
 	}
@@ -106,17 +121,46 @@ func assembleLifecycleDensityEvidence(
 	nonce []byte,
 	invoke densityChildInvoker,
 ) (runtimeevidence.LifecycleDensityEvidence, []byte, error) {
-	if len(nonce) != 32 || invoke == nil || len(specs) == 0 || len(specs)%5 != 0 ||
-		(benchmarkClass != "production-safe" && benchmarkClass != "preinitialization-spike") {
+	if len(nonce) != 32 || invoke == nil || len(specs) == 0 {
 		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("lifecycle-density parent configuration is incomplete")
 	}
-	repeats := uint32(len(specs) / 5)
-	expected, err := densitySweepSpecs(specs[0].Strategy, repeats, specs[0].MaxRSSBytes, specs[0].Timeout)
+	numpyReady := specs[0].WarmupProfile != ""
+	slotCount := 5
+	if numpyReady {
+		slotCount = 7
+	}
+	if len(specs)%slotCount != 0 ||
+		(!numpyReady && benchmarkClass != "production-safe" && benchmarkClass != "preinitialization-spike") ||
+		(numpyReady && benchmarkClass != "profile-candidate") {
+		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("lifecycle-density parent class or matrix shape is invalid")
+	}
+	repeats := uint32(len(specs) / slotCount)
+	var expected []densitySweepSpec
+	var err error
+	if numpyReady {
+		expected, err = numpyDensitySweepSpecs(specs[0].Strategy, repeats, specs[0].MaxRSSBytes, specs[0].Timeout)
+	} else {
+		expected, err = densitySweepSpecs(specs[0].Strategy, repeats, specs[0].MaxRSSBytes, specs[0].Timeout)
+	}
 	if err != nil || !reflect.DeepEqual(specs, expected) {
 		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("lifecycle-density child plan is noncanonical")
 	}
 	if artifact.Size <= 0 {
 		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("lifecycle-density artifact size is invalid")
+	}
+	if numpyReady && artifact.ArtifactProfile != "numpy-core" {
+		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("NumPy lifecycle-density artifact profile drifted")
+	}
+	if !numpyReady && artifact.ArtifactProfile != "base" {
+		return runtimeevidence.LifecycleDensityEvidence{}, nil, errors.New("lifecycle-density v1 artifact profile drifted")
+	}
+	expectedWarmupGeneration := ""
+	if numpyReady {
+		digest := sha256.New()
+		_, _ = digest.Write(artifactBytes)
+		_, _ = digest.Write([]byte{0})
+		_, _ = digest.Write([]byte(specs[0].WarmupProfile))
+		expectedWarmupGeneration = hex.EncodeToString(digest.Sum(nil))
 	}
 
 	samples := make([]runtimeevidence.LifecycleDensitySample, 0, len(specs))
@@ -129,6 +173,14 @@ func assembleLifecycleDensityEvidence(
 		}
 		if err := validateDensityChildEnvelope(invocation.Envelope, spec, artifact); err != nil {
 			return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("lifecycle-density child %d: %w", index, err)
+		}
+		if numpyReady {
+			if invocation.Envelope.Warmup == nil || invocation.Envelope.Warmup.Profile != specs[0].WarmupProfile ||
+				invocation.Envelope.Warmup.GenerationSHA256 != expectedWarmupGeneration {
+				return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("lifecycle-density child %d warmup identity is not artifact-bound", index)
+			}
+		} else if invocation.Envelope.Warmup != nil {
+			return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("lifecycle-density child %d carries an unexpected warmup identity", index)
 		}
 		if invocation.Process.PID <= 0 || invocation.Process.StartedAtUnixNS <= 0 || invocation.Process.MaxObservedRSSBytes == 0 ||
 			invocation.Process.MaxObservedRSSBytes > spec.MaxRSSBytes {
@@ -168,8 +220,18 @@ func assembleLifecycleDensityEvidence(
 		return runtimeevidence.LifecycleDensityEvidence{}, nil, err
 	}
 
+	schemaVersion := 1
+	workload := "idle-ready"
+	slotCounts := []uint32{1, 2, 4, 8, 16}
+	var warmup *runtimeevidence.PreparedWarmupIdentity
+	if numpyReady {
+		schemaVersion = 2
+		workload = "numpy-ready-idle"
+		slotCounts = []uint32{1, 2, 4, 8, 16, 32, 64}
+		warmup = &runtimeevidence.PreparedWarmupIdentity{Profile: specs[0].WarmupProfile, GenerationSHA256: expectedWarmupGeneration}
+	}
 	evidence := runtimeevidence.LifecycleDensityEvidence{
-		SchemaVersion: 1,
+		SchemaVersion: schemaVersion,
 		EvidenceClass: "lifecycle-density",
 		Artifact: runtimeevidence.ArtifactIdentity{
 			Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size),
@@ -182,8 +244,9 @@ func assembleLifecycleDensityEvidence(
 		Strategy: runtimeevidence.StrategyIdentity{
 			Requested: specs[0].Strategy, Active: specs[0].Strategy, Fallback: false,
 		},
+		Warmup: warmup,
 		Plan: runtimeevidence.SweepPlan{
-			Workload: "idle-ready", SlotCounts: []uint32{1, 2, 4, 8, 16}, RepeatsPerSlot: repeats,
+			Workload: workload, SlotCounts: slotCounts, RepeatsPerSlot: repeats,
 			FreshProcessPerSample: true, MaxProcessRSSBytes: specs[0].MaxRSSBytes,
 			ChildTimeoutNS: uint64(specs[0].Timeout.Nanoseconds()),
 		},
@@ -193,10 +256,16 @@ func assembleLifecycleDensityEvidence(
 			PeakCgroupMemoryCurrentBytes: peakCgroup, PeakGoHeapLiveBytes: peakHeap,
 		},
 		Limitations: []string{
-			"Idle-ready evidence covers never-served single-use preinitialized slots only; it is not session restore or durable state evidence.",
+			"Idle-ready evidence covers never-served prepared slots only; execution-time dirty growth is outside this density sweep.",
 			"The parent samples child RSS and kills above the configured threshold; this is a bounded safety guard, not a kernel memory reservation.",
-			"V1 cgroup counters remain unavailable unless isolation is independently proven; shared or unverified totals are not attributed to this process.",
+			"Cgroup counters remain unavailable unless isolation is independently proven; shared or unverified totals are not attributed to this process.",
 		},
+	}
+	if numpyReady {
+		evidence.Limitations = append(evidence.Limitations,
+			"Both arms use the exact numpy-core artifact and numpy-ready-v1 warmup generation; COW warms once per canonical image while non-COW warms every independent slot.",
+			"COW uses one runtime shard for each requested capacity; non-COW retains the four-slot hard bound and records all independent runtime shards.",
+		)
 	}
 	if benchmarkClass == "preinitialization-spike" && specs[0].Strategy == "single-use-preinitialized-shared-cache" {
 		evidence.Limitations = append(evidence.Limitations,
@@ -270,18 +339,22 @@ func invokeOSDensityChild(
 	benchmarkClass string,
 	spec densitySweepSpec,
 ) (densityChildInvocation, error) {
+	args := []string{
+		"-lifecycle-density-child",
+		"-kind", "lifecycle-density",
+		"-class", benchmarkClass,
+		"-artifact", artifactPath,
+		"-manifest", manifestPath,
+		"-strategy", spec.Strategy,
+		"-density-slots", strconv.FormatUint(uint64(spec.RequestedSlots), 10),
+		"-max-rss-bytes", strconv.FormatUint(spec.MaxRSSBytes, 10),
+		"-child-timeout", spec.Timeout.String(),
+	}
+	if spec.WarmupProfile != "" {
+		args = append(args, "-prepared-warmup-profile", spec.WarmupProfile)
+	}
 	result, err := runner.run(ctx, boundedChildSpec{
-		args: []string{
-			"-lifecycle-density-child",
-			"-kind", "lifecycle-density",
-			"-class", benchmarkClass,
-			"-artifact", artifactPath,
-			"-manifest", manifestPath,
-			"-strategy", spec.Strategy,
-			"-density-slots", strconv.FormatUint(uint64(spec.RequestedSlots), 10),
-			"-max-rss-bytes", strconv.FormatUint(spec.MaxRSSBytes, 10),
-			"-child-timeout", spec.Timeout.String(),
-		},
+		args:    args,
 		timeout: spec.Timeout, maxRSSBytes: spec.MaxRSSBytes,
 	})
 	if err != nil {

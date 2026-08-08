@@ -145,6 +145,11 @@ type StrategyIdentity struct {
 	Fallback  bool   `json:"fallback"`
 }
 
+type PreparedWarmupIdentity struct {
+	Profile          string `json:"profile"`
+	GenerationSHA256 string `json:"generation_sha256"`
+}
+
 type SweepPlan struct {
 	Workload              string   `json:"workload"`
 	SlotCounts            []uint32 `json:"slot_counts"`
@@ -171,6 +176,7 @@ type PhaseTimings struct {
 	InitializeNS  Metric  `json:"initialize_ns"`
 	RuntimeInitNS Metric  `json:"runtime_init_ns"`
 	PrepareNS     Metric  `json:"prepare_ns"`
+	WarmupNS      *Metric `json:"warmup_ns,omitempty"`
 	ExecuteNS     Metric  `json:"execute_ns"`
 	CapabilityNS  Metric  `json:"capability_ns"`
 	TotalNS       Metric  `json:"total_ns"`
@@ -260,6 +266,7 @@ type LifecycleDensityEvidence struct {
 	Backend       BackendIdentity          `json:"backend"`
 	Environment   EnvironmentIdentity      `json:"environment"`
 	Strategy      StrategyIdentity         `json:"strategy"`
+	Warmup        *PreparedWarmupIdentity  `json:"warmup,omitempty"`
 	Plan          SweepPlan                `json:"plan"`
 	Samples       []LifecycleDensitySample `json:"samples"`
 	Summary       DerivedSummary           `json:"summary"`
@@ -267,6 +274,9 @@ type LifecycleDensityEvidence struct {
 }
 
 func ValidateLifecycleDensityJSON(data []byte) error {
+	if err := rejectDuplicateJSONKeys(data); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidLifecycleDensityEvidence, err)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var evidence LifecycleDensityEvidence
@@ -280,9 +290,79 @@ func ValidateLifecycleDensityJSON(data []byte) error {
 	return evidence.Validate()
 }
 
+func rejectDuplicateJSONKeys(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := consumeUniqueJSONValue(decoder); err != nil {
+		return err
+	}
+	if decoder.More() {
+		return errors.New("multiple JSON values")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple JSON values")
+		}
+		return fmt.Errorf("invalid trailing JSON: %w", err)
+	}
+	return nil
+}
+
+func consumeUniqueJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return fmt.Errorf("invalid JSON object key: %w", err)
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("invalid JSON object key")
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return fmt.Errorf("duplicate JSON key %q", key)
+			}
+			seen[key] = struct{}{}
+			if err := consumeUniqueJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim('}') {
+			return errors.New("invalid JSON object close")
+		}
+	case '[':
+		for decoder.More() {
+			if err := consumeUniqueJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim(']') {
+			return errors.New("invalid JSON array close")
+		}
+	default:
+		return errors.New("invalid JSON delimiter")
+	}
+	return nil
+}
+
 func (evidence LifecycleDensityEvidence) Validate() error {
-	if evidence.SchemaVersion != 1 || evidence.EvidenceClass != "lifecycle-density" {
+	if (evidence.SchemaVersion != 1 && evidence.SchemaVersion != 2) || evidence.EvidenceClass != "lifecycle-density" {
 		return invalidDensity("schema version or evidence class is unsupported")
+	}
+	if err := evidence.validateWarmupContract(); err != nil {
+		return err
 	}
 	if err := evidence.validateIdentity(); err != nil {
 		return err
@@ -296,6 +376,17 @@ func (evidence LifecycleDensityEvidence) Validate() error {
 	for _, limitation := range evidence.Limitations {
 		if strings.TrimSpace(limitation) == "" || limitation != strings.TrimSpace(limitation) {
 			return invalidDensity("limitations must be nonempty and boundary-trimmed")
+		}
+	}
+	if evidence.SchemaVersion == 2 {
+		expectedSlots := [...]uint32{1, 2, 4, 8, 16, 32, 64}
+		if len(evidence.Plan.SlotCounts) != len(expectedSlots) {
+			return invalidDensity("schema v2 requires the exact canonical slot sweep")
+		}
+		for index, expected := range expectedSlots {
+			if evidence.Plan.SlotCounts[index] != expected {
+				return invalidDensity("schema v2 requires the exact canonical slot sweep")
+			}
 		}
 	}
 	expectedSamples := len(evidence.Plan.SlotCounts) * int(evidence.Plan.RepeatsPerSlot)
@@ -348,6 +439,35 @@ func (evidence LifecycleDensityEvidence) Validate() error {
 	return nil
 }
 
+func (evidence LifecycleDensityEvidence) validateWarmupContract() error {
+	if evidence.SchemaVersion == 1 {
+		if evidence.Warmup != nil {
+			return invalidDensity("schema v1 cannot carry prepared warmup identity")
+		}
+		for _, sample := range evidence.Samples {
+			if sample.Phases.WarmupNS != nil {
+				return invalidDensity("schema v1 cannot carry prepared warmup timing")
+			}
+		}
+		return nil
+	}
+	if evidence.Artifact.ArtifactProfile != "numpy-core" || evidence.Plan.Workload != "numpy-ready-idle" {
+		return invalidDensity("schema v2 requires the NumPy-ready artifact and workload")
+	}
+	if evidence.Strategy.Active != "cow-ready-single-use" && evidence.Strategy.Active != "single-use-preinitialized" && evidence.Strategy.Active != "single-use-preinitialized-shared-cache" {
+		return invalidDensity("schema v2 requires a prepared COW or independent-instance strategy")
+	}
+	if evidence.Warmup == nil || evidence.Warmup.Profile != "numpy-ready-v1" || !lowerHex(evidence.Warmup.GenerationSHA256, 64) {
+		return invalidDensity("schema v2 prepared warmup identity is missing or unsupported")
+	}
+	for _, sample := range evidence.Samples {
+		if sample.Phases.WarmupNS == nil || validateRawMetric(*sample.Phases.WarmupNS) != nil || sample.Phases.WarmupNS.Status != MetricMeasured || sample.Phases.WarmupNS.Value == nil || *sample.Phases.WarmupNS.Value == 0 {
+			return invalidDensity("schema v2 requires positive measured warmup timing per sample")
+		}
+	}
+	return nil
+}
+
 func (evidence LifecycleDensityEvidence) ValidateArtifactBytes(artifact []byte) error {
 	digest := sha256.Sum256(artifact)
 	if uint64(len(artifact)) != evidence.Artifact.SizeBytes || hex.EncodeToString(digest[:]) != evidence.Artifact.SHA256 {
@@ -392,7 +512,7 @@ func (evidence LifecycleDensityEvidence) validateIdentity() error {
 }
 
 func (evidence LifecycleDensityEvidence) validatePlan() error {
-	if evidence.Plan.Workload != "idle-ready" && evidence.Plan.Workload != "execute" && evidence.Plan.Workload != "capability" {
+	if evidence.Plan.Workload != "idle-ready" && evidence.Plan.Workload != "execute" && evidence.Plan.Workload != "capability" && evidence.Plan.Workload != "numpy-ready-idle" {
 		return invalidDensity("unsupported workload")
 	}
 	canonical := []uint32{1, 2, 4, 8, 16, 32, 64}

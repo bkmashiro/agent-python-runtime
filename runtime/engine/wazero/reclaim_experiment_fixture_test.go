@@ -90,6 +90,7 @@ func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64, memoryPages uint32) [
 			{Name: "_initialize", Type: wabinwasm.ExternTypeFunc, Index: 0},
 			{Name: "runtime_init", Type: wabinwasm.ExternTypeFunc, Index: 1},
 			{Name: "runtime_prepare", Type: wabinwasm.ExternTypeFunc, Index: 2},
+			{Name: "runtime_warmup", Type: wabinwasm.ExternTypeFunc, Index: 2},
 			{Name: "alloc", Type: wabinwasm.ExternTypeFunc, Index: 3},
 			{Name: "dealloc", Type: wabinwasm.ExternTypeFunc, Index: 4},
 			{Name: "execute", Type: wabinwasm.ExternTypeFunc, Index: 5},

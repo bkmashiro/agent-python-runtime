@@ -76,6 +76,7 @@ type benchmarkOptions struct {
 	Kind                  string
 	Fixture               string
 	COWWarmupProfile      string
+	PreparedWarmupProfile string
 	LifecycleDensityChild bool
 	DensitySlots          uint
 	MaxRSSBytes           uint64
@@ -116,9 +117,10 @@ func runMain(args []string) error {
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
-	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, validate-cow-pressure, or reactor-census")
+	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, cow-pressure, validate-cow-pressure, validate-lifecycle-density, or reactor-census")
 	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic, numpy-import, or numpy-ready")
 	flags.StringVar(&options.COWWarmupProfile, "cow-warmup-profile", "", "audited Guest warmup profile used before COW image sealing")
+	flags.StringVar(&options.PreparedWarmupProfile, "prepared-warmup-profile", "", "internal artifact-defined warmup profile for lifecycle-density")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
 	flags.UintVar(&options.DensitySlots, "density-slots", 0, "internal lifecycle-density requested slot count")
 	flags.Uint64Var(&options.MaxRSSBytes, "max-rss-bytes", 0, "required lifecycle-density child RSS kill threshold")
@@ -147,13 +149,17 @@ func runMain(args []string) error {
 	if options.Kind == "validate-cow-pressure" {
 		return runCOWPressureValidationMain(options)
 	}
+	if options.Kind == "validate-lifecycle-density" {
+		return runLifecycleDensityValidationMain(options)
+	}
 	if options.LifecycleDensityChild {
 		if err := validateLifecycleDensityOptions(options, true, goruntime.GOOS); err != nil {
 			return err
 		}
 		spec := densitySweepSpec{
 			RequestedSlots: uint32(options.DensitySlots), Strategy: options.Strategy,
-			MaxRSSBytes: options.MaxRSSBytes, Timeout: options.ChildTimeout,
+			WarmupProfile: options.PreparedWarmupProfile,
+			MaxRSSBytes:   options.MaxRSSBytes, Timeout: options.ChildTimeout,
 		}
 		envelope, err := collectPreparedDensityChild(context.Background(), options.ArtifactPath, options.ManifestPath, spec)
 		if err != nil {

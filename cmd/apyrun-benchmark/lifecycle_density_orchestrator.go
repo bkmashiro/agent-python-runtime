@@ -25,11 +25,23 @@ type densitySweepSpec struct {
 	RepeatIndex    uint32
 	RequestedSlots uint32
 	Strategy       string
+	WarmupProfile  string
 	MaxRSSBytes    uint64
 	Timeout        time.Duration
 }
 
 func densitySweepSpecs(strategy string, repeats uint32, maxRSSBytes uint64, timeout time.Duration) ([]densitySweepSpec, error) {
+	return densitySweepSpecsWithSlots(strategy, "", []uint32{1, 2, 4, 8, 16}, repeats, maxRSSBytes, timeout)
+}
+
+func numpyDensitySweepSpecs(strategy string, repeats uint32, maxRSSBytes uint64, timeout time.Duration) ([]densitySweepSpec, error) {
+	if strategy != "single-use-preinitialized" && strategy != "single-use-preinitialized-shared-cache" && strategy != "cow-ready-single-use" {
+		return nil, errors.New("NumPy lifecycle-density requires a prepared strategy")
+	}
+	return densitySweepSpecsWithSlots(strategy, "numpy-ready-v1", []uint32{1, 2, 4, 8, 16, 32, 64}, repeats, maxRSSBytes, timeout)
+}
+
+func densitySweepSpecsWithSlots(strategy, warmupProfile string, canonicalSlots []uint32, repeats uint32, maxRSSBytes uint64, timeout time.Duration) ([]densitySweepSpec, error) {
 	activeStrategy := ""
 	switch strategy {
 	case "fresh":
@@ -52,7 +64,6 @@ func densitySweepSpecs(strategy string, repeats uint32, maxRSSBytes uint64, time
 	if timeout <= 0 {
 		return nil, errors.New("lifecycle-density child timeout is required")
 	}
-	canonicalSlots := []uint32{1, 2, 4, 8, 16}
 	specs := make([]densitySweepSpec, 0, len(canonicalSlots)*int(repeats))
 	for _, slots := range canonicalSlots {
 		for repeat := uint32(0); repeat < repeats; repeat++ {
@@ -61,6 +72,7 @@ func densitySweepSpecs(strategy string, repeats uint32, maxRSSBytes uint64, time
 				RepeatIndex:    repeat,
 				RequestedSlots: slots,
 				Strategy:       activeStrategy,
+				WarmupProfile:  warmupProfile,
 				MaxRSSBytes:    maxRSSBytes,
 				Timeout:        timeout,
 			})
@@ -70,10 +82,24 @@ func densitySweepSpecs(strategy string, repeats uint32, maxRSSBytes uint64, time
 }
 
 func preparedDensityShardCapacities(slots uint32) ([]uint32, error) {
+	return preparedDensityShardCapacitiesForStrategy(slots, "single-use-preinitialized", false)
+}
+
+func preparedDensityShardCapacitiesForStrategy(slots uint32, strategy string, extended bool) ([]uint32, error) {
 	switch slots {
 	case 1, 2, 4, 8, 16:
+	case 32, 64:
+		if !extended {
+			return nil, fmt.Errorf("prepared lifecycle-density slots %d require the extended NumPy-ready contract", slots)
+		}
 	default:
 		return nil, fmt.Errorf("prepared lifecycle-density slots %d are noncanonical or unguarded", slots)
+	}
+	if strategy == "cow-ready-single-use" && extended {
+		return []uint32{slots}, nil
+	}
+	if strategy != "single-use-preinitialized" && strategy != "single-use-preinitialized-shared-cache" && strategy != "cow-ready-single-use" {
+		return nil, fmt.Errorf("unsupported prepared lifecycle-density strategy %q", strategy)
 	}
 	capacities := make([]uint32, 0, (slots+3)/4)
 	remaining := slots
@@ -86,13 +112,14 @@ func preparedDensityShardCapacities(slots uint32) ([]uint32, error) {
 }
 
 type densityChildEnvelope struct {
-	ProtocolVersion int                                    `json:"protocol_version"`
-	ArtifactSHA256  string                                 `json:"artifact_sha256"`
-	ArtifactProfile string                                 `json:"artifact_profile"`
-	Backend         runtimeevidence.BackendIdentity        `json:"backend"`
-	Environment     runtimeevidence.EnvironmentIdentity    `json:"environment"`
-	Strategy        runtimeevidence.StrategyIdentity       `json:"strategy"`
-	Sample          runtimeevidence.LifecycleDensitySample `json:"sample"`
+	ProtocolVersion int                                     `json:"protocol_version"`
+	ArtifactSHA256  string                                  `json:"artifact_sha256"`
+	ArtifactProfile string                                  `json:"artifact_profile"`
+	Backend         runtimeevidence.BackendIdentity         `json:"backend"`
+	Environment     runtimeevidence.EnvironmentIdentity     `json:"environment"`
+	Strategy        runtimeevidence.StrategyIdentity        `json:"strategy"`
+	Warmup          *runtimeevidence.PreparedWarmupIdentity `json:"warmup,omitempty"`
+	Sample          runtimeevidence.LifecycleDensitySample  `json:"sample"`
 }
 
 func validateDensityChildEnvelope(envelope densityChildEnvelope, spec densitySweepSpec, artifact artifactIdentity) error {
@@ -104,6 +131,19 @@ func validateDensityChildEnvelope(envelope densityChildEnvelope, spec densitySwe
 	}
 	if envelope.Strategy.Requested != spec.Strategy || envelope.Strategy.Active != spec.Strategy || envelope.Strategy.Fallback {
 		return errors.New("lifecycle-density child strategy drifted or fell back")
+	}
+	if spec.WarmupProfile == "" {
+		if envelope.Warmup != nil {
+			return errors.New("lifecycle-density v1 child carries a warmup identity")
+		}
+	} else {
+		if envelope.Warmup == nil || envelope.Warmup.Profile != spec.WarmupProfile ||
+			len(envelope.Warmup.GenerationSHA256) != 64 || strings.ToLower(envelope.Warmup.GenerationSHA256) != envelope.Warmup.GenerationSHA256 {
+			return errors.New("NumPy lifecycle-density child warmup identity drifted")
+		}
+		if _, err := hex.DecodeString(envelope.Warmup.GenerationSHA256); err != nil {
+			return errors.New("NumPy lifecycle-density child warmup generation is invalid")
+		}
 	}
 	if envelope.Sample.RequestedSlots != spec.RequestedSlots || envelope.Sample.RuntimeShards == 0 || envelope.Sample.RuntimeShards > spec.RequestedSlots {
 		return errors.New("lifecycle-density child slot or runtime-shard identity drifted")

@@ -22,6 +22,20 @@ type PreparedImageState struct {
 	WarmupGenerationSHA256 string `json:"warmup_generation_sha256,omitempty"`
 }
 
+type PreparedWarmupState struct {
+	Profile          string `json:"profile"`
+	GenerationSHA256 string `json:"generation_sha256"`
+}
+
+func (engine *Engine) PreparedWarmupState() PreparedWarmupState {
+	if engine == nil {
+		return PreparedWarmupState{}
+	}
+	return PreparedWarmupState{
+		Profile: engine.preparedWarmupProfile, GenerationSHA256: engine.preparedWarmupGeneration,
+	}
+}
+
 type cowPreparedImageReporter interface {
 	preparedImageState() PreparedImageState
 }

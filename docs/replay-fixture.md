@@ -18,6 +18,8 @@ A recording owns and hashes all values that can influence the fixture:
 
 The tape must contain exactly one clock and random value per input. Missing entries, duplicate step identities, unsupported operations, non-UTC or decreasing clock values, and digest mismatches fail closed.
 
+The artifact digest identifies the versioned declarative fixture contract; it is not a hash of the compiled Go implementation. A semantic implementation change must update that declaration/version before it can claim the same fixture-local qualification.
+
 ## Qualified levels
 
 ### R1 — input-injection replay

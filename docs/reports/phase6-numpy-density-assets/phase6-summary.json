@@ -1,0 +1,2093 @@
+{
+  "artifact_manifest_sha256": "458a4e4bbec1ad225f0f3c38357738f1937b1e16d5388f76cdf4c460ce6839fa",
+  "artifact_sha256": "f00f22ac94a66f2f2e67573da11ef879f8b5e46622eb9379300cc1e6a5b40a30",
+  "artifact_source_revision": "64666a5aaacf8555f65d47f75c77796432e141e8",
+  "benchmark_binary_sha256": "09253ed8b664337863769523707f0a467cd19ec146013ddc435e15fe2749d893",
+  "benchmark_policy": {
+    "derived_max_active": 10,
+    "greed": 50,
+    "max_cpu": 4,
+    "max_memory_gib": 8,
+    "reserve_gib": 2
+  },
+  "dispersion": "median and full min-max across three exact-source repetitions; not a confidence interval",
+  "formal_archive_sha256": "fe3077a0621b83459b3991b28e9506145080331d7f640039d9123d9be5a5b059",
+  "formal_records": 24,
+  "formal_selection_sha256": "2c35b00b352bc3b3dfea7ea10b28d776e18ec847e3283b6c978c92b8745e9b0f",
+  "host_revision": "17872d6a1d52c58cfa4b55826c1a5ef43ed19529",
+  "host_tree": "e8652d8fff31894ca56cbae2a6464992002124fa",
+  "points": [
+    {
+      "accepted_requests": {
+        "max": 842.0,
+        "median": 841.0,
+        "min": 834.0,
+        "raw": [
+          841.0,
+          842.0,
+          834.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "arrival_mode": "closed-loop",
+      "arrival_rate_per_second": 0,
+      "cell_id": "closed-numpy-v1-s64-c1",
+      "cgroup_memory_peak_mib": {
+        "max": 1335.90234375,
+        "median": 1335.90234375,
+        "min": 1335.90234375,
+        "raw": [
+          1335.90234375,
+          1335.90234375,
+          1335.90234375
+        ]
+      },
+      "completed_requests": {
+        "max": 842.0,
+        "median": 841.0,
+        "min": 834.0,
+        "raw": [
+          841.0,
+          842.0,
+          834.0
+        ]
+      },
+      "consumers": 1,
+      "cpu_core_utilization": {
+        "max": 3.766106264770944,
+        "median": 3.750298997589292,
+        "min": 3.7330115737595104,
+        "raw": [
+          3.750298997589292,
+          3.766106264770944,
+          3.7330115737595104
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 263.23828125,
+        "median": 257.546875,
+        "min": 257.453125,
+        "raw": [
+          263.23828125,
+          257.453125,
+          257.546875
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 11.915666,
+        "median": 11.865887,
+        "min": 11.796445,
+        "raw": [
+          11.865887,
+          11.796445,
+          11.915666
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 4.633917,
+        "median": 4.587375,
+        "min": 4.426144,
+        "raw": [
+          4.426144,
+          4.587375,
+          4.633917
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 44.13804,
+        "median": 42.558423,
+        "min": 39.671823,
+        "raw": [
+          42.558423,
+          39.671823,
+          44.13804
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 79.76749,
+        "median": 76.77577,
+        "min": 58.341402,
+        "raw": [
+          79.76749,
+          58.341402,
+          76.77577
+        ]
+      },
+      "max_active_private_dirty_mib": null,
+      "max_active_pss_mib": null,
+      "offered_requests": {
+        "max": 842.0,
+        "median": 841.0,
+        "min": 834.0,
+        "raw": [
+          841.0,
+          842.0,
+          834.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 63.33203125,
+        "median": 63.3203125,
+        "min": 63.30859375,
+        "raw": [
+          63.33203125,
+          63.3203125,
+          63.30859375
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 64.0,
+        "median": 64.0,
+        "min": 64.0,
+        "raw": [
+          64.0,
+          64.0,
+          64.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 8.0,
+        "median": 8.0,
+        "min": 8.0,
+        "raw": [
+          8.0,
+          8.0,
+          8.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 345.822399,
+        "median": 314.913496,
+        "min": 308.93428,
+        "raw": [
+          308.93428,
+          314.913496,
+          345.822399
+        ]
+      },
+      "slots": 64,
+      "throughput_per_second": {
+        "max": 84.01519553825527,
+        "median": 83.93419054139802,
+        "min": 83.03845958156626,
+        "raw": [
+          83.93419054139802,
+          84.01519553825527,
+          83.03845958156626
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 842.0,
+        "median": 841.0,
+        "min": 834.0,
+        "raw": [
+          841.0,
+          842.0,
+          834.0
+        ]
+      },
+      "workload": "numpy-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 1040.0,
+        "median": 1029.0,
+        "min": 1026.0,
+        "raw": [
+          1040.0,
+          1029.0,
+          1026.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "arrival_mode": "closed-loop",
+      "arrival_rate_per_second": 0,
+      "cell_id": "closed-numpy-v1-s256-c4",
+      "cgroup_memory_peak_mib": {
+        "max": 1335.90234375,
+        "median": 1335.90234375,
+        "min": 1335.90234375,
+        "raw": [
+          1335.90234375,
+          1335.90234375,
+          1335.90234375
+        ]
+      },
+      "completed_requests": {
+        "max": 1040.0,
+        "median": 1029.0,
+        "min": 1026.0,
+        "raw": [
+          1040.0,
+          1029.0,
+          1026.0
+        ]
+      },
+      "consumers": 4,
+      "cpu_core_utilization": {
+        "max": 3.7468895043713863,
+        "median": 3.7400713778237353,
+        "min": 3.712508842100477,
+        "raw": [
+          3.7468895043713863,
+          3.7400713778237353,
+          3.712508842100477
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 355.29296875,
+        "median": 350.77734375,
+        "min": 336.78125,
+        "raw": [
+          336.78125,
+          355.29296875,
+          350.77734375
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 38.994164,
+        "median": 38.64312,
+        "min": 38.243589,
+        "raw": [
+          38.243589,
+          38.64312,
+          38.994164
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 14.721265,
+        "median": 12.588128,
+        "min": 12.048072,
+        "raw": [
+          12.048072,
+          12.588128,
+          14.721265
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 137.799344,
+        "median": 136.554774,
+        "min": 134.726612,
+        "raw": [
+          137.799344,
+          136.554774,
+          134.726612
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 190.609643,
+        "median": 184.198115,
+        "min": 177.275603,
+        "raw": [
+          190.609643,
+          177.275603,
+          184.198115
+        ]
+      },
+      "max_active_private_dirty_mib": null,
+      "max_active_pss_mib": null,
+      "offered_requests": {
+        "max": 1040.0,
+        "median": 1029.0,
+        "min": 1026.0,
+        "raw": [
+          1040.0,
+          1029.0,
+          1026.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 63.3203125,
+        "median": 63.31640625,
+        "min": 63.31640625,
+        "raw": [
+          63.3203125,
+          63.31640625,
+          63.31640625
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 2961.442619,
+        "median": 2935.270854,
+        "min": 2920.347382,
+        "raw": [
+          2935.270854,
+          2961.442619,
+          2920.347382
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 103.01594476157301,
+        "median": 102.53735854391937,
+        "min": 101.23748823865833,
+        "raw": [
+          103.01594476157301,
+          102.53735854391937,
+          101.23748823865833
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 1040.0,
+        "median": 1029.0,
+        "min": 1026.0,
+        "raw": [
+          1040.0,
+          1029.0,
+          1026.0
+        ]
+      },
+      "workload": "numpy-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 1042.0,
+        "median": 1037.0,
+        "min": 1032.0,
+        "raw": [
+          1032.0,
+          1042.0,
+          1037.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "arrival_mode": "closed-loop",
+      "arrival_rate_per_second": 0,
+      "cell_id": "closed-numpy-v1-s256-c8",
+      "cgroup_memory_peak_mib": {
+        "max": 1353.65625,
+        "median": 1353.65625,
+        "min": 1353.65625,
+        "raw": [
+          1353.65625,
+          1353.65625,
+          1353.65625
+        ]
+      },
+      "completed_requests": {
+        "max": 1042.0,
+        "median": 1037.0,
+        "min": 1032.0,
+        "raw": [
+          1032.0,
+          1042.0,
+          1037.0
+        ]
+      },
+      "consumers": 8,
+      "cpu_core_utilization": {
+        "max": 3.7464348667936003,
+        "median": 3.724857801407572,
+        "min": 3.7230072295352095,
+        "raw": [
+          3.724857801407572,
+          3.7464348667936003,
+          3.7230072295352095
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 351.39453125,
+        "median": 350.625,
+        "min": 335.14453125,
+        "raw": [
+          351.39453125,
+          350.625,
+          335.14453125
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 77.902315,
+        "median": 77.652918,
+        "min": 77.419764,
+        "raw": [
+          77.902315,
+          77.419764,
+          77.652918
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 67.306693,
+        "median": 62.184712,
+        "min": 61.134728,
+        "raw": [
+          62.184712,
+          67.306693,
+          61.134728
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 207.091316,
+        "median": 200.443736,
+        "min": 199.944702,
+        "raw": [
+          200.443736,
+          199.944702,
+          207.091316
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 274.144246,
+        "median": 261.239187,
+        "min": 242.880955,
+        "raw": [
+          261.239187,
+          242.880955,
+          274.144246
+        ]
+      },
+      "max_active_private_dirty_mib": null,
+      "max_active_pss_mib": null,
+      "offered_requests": {
+        "max": 1042.0,
+        "median": 1037.0,
+        "min": 1032.0,
+        "raw": [
+          1032.0,
+          1042.0,
+          1037.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 63.31640625,
+        "median": 63.30859375,
+        "min": 63.28515625,
+        "raw": [
+          63.30859375,
+          63.31640625,
+          63.28515625
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 3052.612471,
+        "median": 2905.465618,
+        "min": 2890.068545,
+        "raw": [
+          3052.612471,
+          2890.068545,
+          2905.465618
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 102.19346982860817,
+        "median": 101.89813802692561,
+        "min": 101.17092816645408,
+        "raw": [
+          101.89813802692561,
+          102.19346982860817,
+          101.17092816645408
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 1042.0,
+        "median": 1037.0,
+        "min": 1032.0,
+        "raw": [
+          1032.0,
+          1042.0,
+          1037.0
+        ]
+      },
+      "workload": "numpy-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 250.0,
+        "median": 250.0,
+        "min": 250.0,
+        "raw": [
+          250.0,
+          250.0,
+          250.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "arrival_mode": "open-loop-fixed-v1",
+      "arrival_rate_per_second": 25,
+      "cell_id": "open-numpy-v1-s256-w8-r25",
+      "cgroup_memory_peak_mib": {
+        "max": 1353.65625,
+        "median": 1353.65625,
+        "min": 1353.65625,
+        "raw": [
+          1353.65625,
+          1353.65625,
+          1353.65625
+        ]
+      },
+      "completed_requests": {
+        "max": 250.0,
+        "median": 250.0,
+        "min": 250.0,
+        "raw": [
+          250.0,
+          250.0,
+          250.0
+        ]
+      },
+      "consumers": 8,
+      "cpu_core_utilization": {
+        "max": 1.0728551577652259,
+        "median": 1.0650064788309683,
+        "min": 1.0384259268316356,
+        "raw": [
+          1.0728551577652259,
+          1.0384259268316356,
+          1.0650064788309683
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 535.05859375,
+        "median": 531.1796875,
+        "min": 518.109375,
+        "raw": [
+          531.1796875,
+          518.109375,
+          535.05859375
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 6.82707,
+        "median": 6.599492,
+        "min": 6.5854,
+        "raw": [
+          6.5854,
+          6.82707,
+          6.599492
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 7.24925,
+        "median": 7.117582,
+        "min": 7.068781,
+        "raw": [
+          7.068781,
+          7.24925,
+          7.117582
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 10.48863,
+        "median": 10.427484,
+        "min": 10.282641,
+        "raw": [
+          10.48863,
+          10.427484,
+          10.282641
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 10.682454,
+        "median": 10.639287,
+        "min": 10.590847,
+        "raw": [
+          10.682454,
+          10.590847,
+          10.639287
+        ]
+      },
+      "max_active_private_dirty_mib": null,
+      "max_active_pss_mib": null,
+      "offered_requests": {
+        "max": 250.0,
+        "median": 250.0,
+        "min": 250.0,
+        "raw": [
+          250.0,
+          250.0,
+          250.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 63.34375,
+        "median": 63.3203125,
+        "min": 63.31640625,
+        "raw": [
+          63.31640625,
+          63.34375,
+          63.3203125
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 34.123538,
+        "median": 33.56002,
+        "min": 20.355173,
+        "raw": [
+          33.56002,
+          20.355173,
+          34.123538
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 25.076047950070635,
+        "median": 25.07361660472073,
+        "min": 25.072300182200113,
+        "raw": [
+          25.072300182200113,
+          25.076047950070635,
+          25.07361660472073
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 250.0,
+        "median": 250.0,
+        "min": 250.0,
+        "raw": [
+          250.0,
+          250.0,
+          250.0
+        ]
+      },
+      "workload": "numpy-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 1000.0,
+        "median": 1000.0,
+        "min": 1000.0,
+        "raw": [
+          1000.0,
+          1000.0,
+          1000.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "arrival_mode": "open-loop-fixed-v1",
+      "arrival_rate_per_second": 100,
+      "cell_id": "open-numpy-v1-s256-w8-r100",
+      "cgroup_memory_peak_mib": {
+        "max": 1353.65625,
+        "median": 1353.65625,
+        "min": 1353.65625,
+        "raw": [
+          1353.65625,
+          1353.65625,
+          1353.65625
+        ]
+      },
+      "completed_requests": {
+        "max": 1000.0,
+        "median": 1000.0,
+        "min": 1000.0,
+        "raw": [
+          1000.0,
+          1000.0,
+          1000.0
+        ]
+      },
+      "consumers": 8,
+      "cpu_core_utilization": {
+        "max": 3.640647227081599,
+        "median": 3.6304082410978267,
+        "min": 3.6158115726365034,
+        "raw": [
+          3.6304082410978267,
+          3.640647227081599,
+          3.6158115726365034
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 359.97265625,
+        "median": 347.16015625,
+        "min": 343.30859375,
+        "raw": [
+          359.97265625,
+          347.16015625,
+          343.30859375
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 28.316893,
+        "median": 26.85813,
+        "min": 26.519458,
+        "raw": [
+          26.519458,
+          28.316893,
+          26.85813
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 10.588812,
+        "median": 10.046989,
+        "min": 8.593356,
+        "raw": [
+          10.046989,
+          10.588812,
+          8.593356
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 108.065716,
+        "median": 106.169428,
+        "min": 99.906156,
+        "raw": [
+          108.065716,
+          99.906156,
+          106.169428
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 183.285621,
+        "median": 168.762084,
+        "min": 152.418163,
+        "raw": [
+          152.418163,
+          183.285621,
+          168.762084
+        ]
+      },
+      "max_active_private_dirty_mib": null,
+      "max_active_pss_mib": null,
+      "offered_requests": {
+        "max": 1000.0,
+        "median": 1000.0,
+        "min": 1000.0,
+        "raw": [
+          1000.0,
+          1000.0,
+          1000.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 63.3125,
+        "median": 63.30859375,
+        "min": 63.3046875,
+        "raw": [
+          63.30859375,
+          63.3125,
+          63.3046875
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 2964.056204,
+        "median": 2950.147062,
+        "min": 2933.145072,
+        "raw": [
+          2950.147062,
+          2933.145072,
+          2964.056204
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 98.92947296434356,
+        "median": 97.50667861147532,
+        "min": 97.43596068083001,
+        "raw": [
+          98.92947296434356,
+          97.50667861147532,
+          97.43596068083001
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 1000.0,
+        "median": 1000.0,
+        "min": 1000.0,
+        "raw": [
+          1000.0,
+          1000.0,
+          1000.0
+        ]
+      },
+      "workload": "numpy-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 538.0,
+        "median": 538.0,
+        "min": 533.0,
+        "raw": [
+          538.0,
+          538.0,
+          533.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 3.0,
+        "median": 3.0,
+        "min": 3.0,
+        "raw": [
+          3.0,
+          3.0,
+          3.0
+        ]
+      },
+      "arrival_mode": "closed-loop",
+      "arrival_rate_per_second": 0,
+      "cell_id": "closed-numpy-mixed-v1-s256-c8",
+      "cgroup_memory_peak_mib": {
+        "max": 1353.65625,
+        "median": 1353.65625,
+        "min": 1353.65625,
+        "raw": [
+          1353.65625,
+          1353.65625,
+          1353.65625
+        ]
+      },
+      "completed_requests": {
+        "max": 538.0,
+        "median": 538.0,
+        "min": 533.0,
+        "raw": [
+          538.0,
+          538.0,
+          533.0
+        ]
+      },
+      "consumers": 8,
+      "cpu_core_utilization": {
+        "max": 2.356346417392184,
+        "median": 2.3342795845403037,
+        "min": 2.3195425150368423,
+        "raw": [
+          2.356346417392184,
+          2.3342795845403037,
+          2.3195425150368423
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 537.9765625,
+        "median": 537.37890625,
+        "min": 529.0390625,
+        "raw": [
+          537.37890625,
+          537.9765625,
+          529.0390625
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 160.481961,
+        "median": 159.70823,
+        "min": 158.794414,
+        "raw": [
+          159.70823,
+          158.794414,
+          160.481961
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 9.598679,
+        "median": 9.130346,
+        "min": 8.503171,
+        "raw": [
+          8.503171,
+          9.598679,
+          9.130346
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 647.368248,
+        "median": 567.677282,
+        "min": 554.63929,
+        "raw": [
+          567.677282,
+          554.63929,
+          647.368248
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 2047.912877,
+        "median": 2046.337262,
+        "min": 2043.854941,
+        "raw": [
+          2046.337262,
+          2043.854941,
+          2047.912877
+        ]
+      },
+      "max_active_private_dirty_mib": {
+        "max": 779.6953125,
+        "median": 741.31640625,
+        "min": 689.69921875,
+        "raw": [
+          689.69921875,
+          741.31640625,
+          779.6953125
+        ]
+      },
+      "max_active_pss_mib": {
+        "max": 786.18359375,
+        "median": 747.8046875,
+        "min": 696.32421875,
+        "raw": [
+          696.32421875,
+          747.8046875,
+          786.18359375
+        ]
+      },
+      "offered_requests": {
+        "max": 538.0,
+        "median": 538.0,
+        "min": 533.0,
+        "raw": [
+          538.0,
+          538.0,
+          533.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 79.3125,
+        "median": 79.3046875,
+        "min": 79.296875,
+        "raw": [
+          79.3125,
+          79.3046875,
+          79.296875
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 0.007536,
+        "median": 0.007068,
+        "min": 0.006923,
+        "raw": [
+          0.007536,
+          0.006923,
+          0.007068
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 45.53620539009223,
+        "median": 45.366701996860016,
+        "min": 44.87069024485317,
+        "raw": [
+          45.366701996860016,
+          45.53620539009223,
+          44.87069024485317
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 538.0,
+        "median": 538.0,
+        "min": 533.0,
+        "raw": [
+          538.0,
+          538.0,
+          533.0
+        ]
+      },
+      "workload": "numpy-mixed-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 100.0,
+        "median": 100.0,
+        "min": 100.0,
+        "raw": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 3.0,
+        "median": 3.0,
+        "min": 3.0,
+        "raw": [
+          3.0,
+          3.0,
+          3.0
+        ]
+      },
+      "arrival_mode": "open-loop-fixed-v1",
+      "arrival_rate_per_second": 10,
+      "cell_id": "open-numpy-mixed-v1-s256-w8-r10",
+      "cgroup_memory_peak_mib": {
+        "max": 1353.65625,
+        "median": 1353.65625,
+        "min": 1353.65625,
+        "raw": [
+          1353.65625,
+          1353.65625,
+          1353.65625
+        ]
+      },
+      "completed_requests": {
+        "max": 100.0,
+        "median": 100.0,
+        "min": 100.0,
+        "raw": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "consumers": 8,
+      "cpu_core_utilization": {
+        "max": 0.48769314887398313,
+        "median": 0.4809225219899037,
+        "min": 0.4765229261902689,
+        "raw": [
+          0.48769314887398313,
+          0.4765229261902689,
+          0.4809225219899037
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 512.40625,
+        "median": 485.8671875,
+        "min": 475.82421875,
+        "raw": [
+          485.8671875,
+          512.40625,
+          475.82421875
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 163.254559,
+        "median": 163.207568,
+        "min": 162.937153,
+        "raw": [
+          163.254559,
+          162.937153,
+          163.207568
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 10.089202,
+        "median": 10.026088,
+        "min": 7.542627,
+        "raw": [
+          10.089202,
+          10.026088,
+          7.542627
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 526.881372,
+        "median": 526.608233,
+        "min": 526.184904,
+        "raw": [
+          526.881372,
+          526.184904,
+          526.608233
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 2048.606882,
+        "median": 2046.132725,
+        "min": 2046.072296,
+        "raw": [
+          2046.072296,
+          2048.606882,
+          2046.132725
+        ]
+      },
+      "max_active_private_dirty_mib": {
+        "max": 545.8671875,
+        "median": 525.86328125,
+        "min": 502.90625,
+        "raw": [
+          525.86328125,
+          545.8671875,
+          502.90625
+        ]
+      },
+      "max_active_pss_mib": {
+        "max": 551.7265625,
+        "median": 531.2890625,
+        "min": 506.3984375,
+        "raw": [
+          531.2890625,
+          551.7265625,
+          506.3984375
+        ]
+      },
+      "offered_requests": {
+        "max": 100.0,
+        "median": 100.0,
+        "min": 100.0,
+        "raw": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 79.3359375,
+        "median": 79.30859375,
+        "min": 79.30859375,
+        "raw": [
+          79.30859375,
+          79.3359375,
+          79.30859375
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 0.024274,
+        "median": 0.007623,
+        "min": 0.00752,
+        "raw": [
+          0.00752,
+          0.024274,
+          0.007623
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 8.378706815963566,
+        "median": 8.374084539394243,
+        "min": 8.367590818442915,
+        "raw": [
+          8.367590818442915,
+          8.374084539394243,
+          8.378706815963566
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 100.0,
+        "median": 100.0,
+        "min": 100.0,
+        "raw": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "workload": "numpy-mixed-v1"
+    },
+    {
+      "accepted_requests": {
+        "max": 400.0,
+        "median": 400.0,
+        "min": 400.0,
+        "raw": [
+          400.0,
+          400.0,
+          400.0
+        ]
+      },
+      "active_sample_count": {
+        "max": 3.0,
+        "median": 3.0,
+        "min": 3.0,
+        "raw": [
+          3.0,
+          3.0,
+          3.0
+        ]
+      },
+      "arrival_mode": "open-loop-fixed-v1",
+      "arrival_rate_per_second": 40,
+      "cell_id": "open-numpy-mixed-v1-s256-w8-r40",
+      "cgroup_memory_peak_mib": {
+        "max": 1353.65625,
+        "median": 1353.65625,
+        "min": 1353.65625,
+        "raw": [
+          1353.65625,
+          1353.65625,
+          1353.65625
+        ]
+      },
+      "completed_requests": {
+        "max": 400.0,
+        "median": 400.0,
+        "min": 400.0,
+        "raw": [
+          400.0,
+          400.0,
+          400.0
+        ]
+      },
+      "consumers": 8,
+      "cpu_core_utilization": {
+        "max": 1.6121711461928758,
+        "median": 1.6117059058315815,
+        "min": 1.5884159400526463,
+        "raw": [
+          1.6117059058315815,
+          1.6121711461928758,
+          1.5884159400526463
+        ]
+      },
+      "failed_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "final_process_pss_mib": {
+        "max": 537.625,
+        "median": 532.57421875,
+        "min": 529.6953125,
+        "raw": [
+          532.57421875,
+          529.6953125,
+          537.625
+        ]
+      },
+      "latency_mean_ms": {
+        "max": 160.061567,
+        "median": 159.904577,
+        "min": 159.802223,
+        "raw": [
+          160.061567,
+          159.904577,
+          159.802223
+        ]
+      },
+      "latency_p50_ms": {
+        "max": 8.84608,
+        "median": 8.760697,
+        "min": 7.307337,
+        "raw": [
+          8.84608,
+          8.760697,
+          7.307337
+        ]
+      },
+      "latency_p95_ms": {
+        "max": 529.839161,
+        "median": 520.968913,
+        "min": 520.078831,
+        "raw": [
+          520.968913,
+          520.078831,
+          529.839161
+        ]
+      },
+      "latency_p99_ms": {
+        "max": 2037.090001,
+        "median": 2036.9675,
+        "min": 2036.929062,
+        "raw": [
+          2037.090001,
+          2036.9675,
+          2036.929062
+        ]
+      },
+      "max_active_private_dirty_mib": {
+        "max": 678.79296875,
+        "median": 657.55859375,
+        "min": 655.1796875,
+        "raw": [
+          657.55859375,
+          678.79296875,
+          655.1796875
+        ]
+      },
+      "max_active_pss_mib": {
+        "max": 686.2431640625,
+        "median": 663.94140625,
+        "min": 661.845703125,
+        "raw": [
+          663.94140625,
+          686.2431640625,
+          661.845703125
+        ]
+      },
+      "offered_requests": {
+        "max": 400.0,
+        "median": 400.0,
+        "min": 400.0,
+        "raw": [
+          400.0,
+          400.0,
+          400.0
+        ]
+      },
+      "oom_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oom_kill_events": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pool_failures": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "prepared_allocated_mib": {
+        "max": 79.30078125,
+        "median": 79.296875,
+        "min": 79.28515625,
+        "raw": [
+          79.28515625,
+          79.296875,
+          79.30078125
+        ]
+      },
+      "psi_some_total_us": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "ready_after": {
+        "max": 256.0,
+        "median": 256.0,
+        "min": 256.0,
+        "raw": [
+          256.0,
+          256.0,
+          256.0
+        ]
+      },
+      "ready_alias_virtual_gib": {
+        "max": 32.0,
+        "median": 32.0,
+        "min": 32.0,
+        "raw": [
+          32.0,
+          32.0,
+          32.0
+        ]
+      },
+      "rejected_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "repetitions": 3,
+      "replenish_drain_ms": {
+        "max": 0.009159,
+        "median": 0.007229,
+        "min": 0.00692,
+        "raw": [
+          0.007229,
+          0.00692,
+          0.009159
+        ]
+      },
+      "slots": 256,
+      "throughput_per_second": {
+        "max": 33.32320988934646,
+        "median": 33.320210365625414,
+        "min": 33.29055611170555,
+        "raw": [
+          33.320210365625414,
+          33.32320988934646,
+          33.29055611170555
+        ]
+      },
+      "timed_out_requests": {
+        "max": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "raw": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "validated_results": {
+        "max": 400.0,
+        "median": 400.0,
+        "min": 400.0,
+        "raw": [
+          400.0,
+          400.0,
+          400.0
+        ]
+      },
+      "workload": "numpy-mixed-v1"
+    }
+  ],
+  "resource_shape": {
+    "cpus": 4,
+    "gpu": "tesla_t4:1",
+    "memory_gib": 16,
+    "partition": "t4"
+  },
+  "schema_version": 1,
+  "slurm_job_id": "271717",
+  "summary_kind": "phase6-numpy-density-formal-summary",
+  "validator_sha256": "b0ea4daec2bd8ab6d18627f80bca4cbb2aa23641f0662672e2d5c2e07efeb359"
+}

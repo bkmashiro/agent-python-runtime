@@ -318,7 +318,9 @@ func BuildTransactionEvidence(ledger Ledger, transactionID string, generatedAt t
 			From: transition.From, To: transition.To, ObservedAt: transition.ObservedAt.UTC(),
 		}
 	}
-	if !sameEvidenceIDSet(observedReconciledAttemptIDs, reconciledAttemptIDs) {
+	if !sameEvidenceIDSet(observedReconciledAttemptIDs, reconciledAttemptIDs) ||
+		!validEvidenceEntityTransitionTimes(transaction, operationsByID, attemptsByID, transitions) ||
+		!validEvidenceApprovalConsumptions(approvals, transitions) {
 		return TransactionEvidence{}, ErrInvalidEvidence
 	}
 	if generatedAt.Before(transaction.UpdatedAt) || (!priorObservedAt.IsZero() && generatedAt.Before(priorObservedAt)) ||
@@ -429,6 +431,7 @@ func validExportedTransactionEvidence(value TransactionEvidence) bool {
 
 	approvalIDs := make(map[string]struct{}, len(value.Approvals))
 	consumedApprovals := make(map[string][]time.Time)
+	approvals := make([]ApprovalEvidence, 0, len(value.Approvals))
 	for _, exported := range value.Approvals {
 		var consumedAt time.Time
 		if exported.ConsumedAt != nil {
@@ -447,6 +450,7 @@ func validExportedTransactionEvidence(value TransactionEvidence) bool {
 			return false
 		}
 		approvalIDs[approval.AuthorityID] = struct{}{}
+		approvals = append(approvals, approval)
 		if !approval.ConsumedAt.IsZero() {
 			consumedApprovals[approval.OperationID] = append(consumedApprovals[approval.OperationID], approval.ConsumedAt)
 			metrics.ConsumedApprovals++
@@ -503,6 +507,7 @@ func validExportedTransactionEvidence(value TransactionEvidence) bool {
 
 	latestStates := make(map[string]string, 1+len(value.Operations)+len(value.Attempts))
 	observedReconciledAttemptIDs := make(map[string]struct{})
+	verifiedTransitions := make([]Transition, len(value.Transitions))
 	var priorObservedAt time.Time
 	for index, exported := range value.Transitions {
 		transition := Transition{
@@ -528,8 +533,11 @@ func validExportedTransactionEvidence(value TransactionEvidence) bool {
 		}
 		latestStates[stateKey] = transition.To
 		priorObservedAt = transition.ObservedAt
+		verifiedTransitions[index] = transition
 	}
-	if !sameEvidenceIDSet(observedReconciledAttemptIDs, reconciledAttemptIDs) {
+	if !sameEvidenceIDSet(observedReconciledAttemptIDs, reconciledAttemptIDs) ||
+		!validEvidenceEntityTransitionTimes(transaction, operationsByID, attemptsByID, verifiedTransitions) ||
+		!validEvidenceApprovalConsumptions(approvals, verifiedTransitions) {
 		return false
 	}
 	if value.GeneratedAt.Before(priorObservedAt) || latestStates["transaction:"+transaction.ID] != string(transaction.State) {
@@ -760,7 +768,7 @@ func validEvidenceTransaction(value Transaction) bool {
 }
 
 func validEvidenceTransactionOperations(transaction Transaction, operations map[string]Operation) bool {
-	if transaction.Mode == TransactionModeDirect && len(operations) > 1 {
+	if transaction.Mode == TransactionModeDirect && len(operations) != 1 {
 		return false
 	}
 	if transaction.State == TransactionCommitted {
@@ -778,6 +786,69 @@ func validEvidenceOperation(value Operation, transactionID string) bool {
 		validIdentifier(value.HandlerVersion) && validIdentifier(value.PolicyVersion) && validEffectClass(value.EffectClass) && validPolicy(value.Policy) &&
 		validOperationState(value.State) && digestPattern.MatchString(value.ArgumentDigest) && digestPattern.MatchString(value.ManifestDigest) &&
 		value.Version > 0 && value.Version <= maxEvidenceInteger && !value.CreatedAt.IsZero() && !value.UpdatedAt.IsZero() && !value.UpdatedAt.Before(value.CreatedAt)
+}
+
+type evidenceTransitionTimes struct {
+	first time.Time
+	last  time.Time
+}
+
+func validEvidenceEntityTransitionTimes(transaction Transaction, operations map[string]Operation, attempts map[string]Attempt, transitions []Transition) bool {
+	ranges := make(map[string]evidenceTransitionTimes, 1+len(operations)+len(attempts))
+	for _, transition := range transitions {
+		key := transition.EntityType + ":" + transition.EntityID
+		value, seen := ranges[key]
+		if !seen {
+			value.first = transition.ObservedAt
+		}
+		value.last = transition.ObservedAt
+		ranges[key] = value
+	}
+	matches := func(entityType, id string, createdAt, updatedAt time.Time) bool {
+		value, ok := ranges[entityType+":"+id]
+		return ok && createdAt.Equal(value.first) && updatedAt.Equal(value.last)
+	}
+	if !matches("transaction", transaction.ID, transaction.CreatedAt, transaction.UpdatedAt) {
+		return false
+	}
+	for _, operation := range operations {
+		if !matches("operation", operation.ID, operation.CreatedAt, operation.UpdatedAt) {
+			return false
+		}
+	}
+	for _, attempt := range attempts {
+		if !matches("attempt", attempt.ID, attempt.CreatedAt, attempt.UpdatedAt) {
+			return false
+		}
+	}
+	return true
+}
+
+func validEvidenceApprovalConsumptions(approvals []ApprovalEvidence, transitions []Transition) bool {
+	consumedByOperation := make(map[string]struct{})
+	for _, approval := range approvals {
+		if approval.ConsumedAt.IsZero() {
+			continue
+		}
+		if _, duplicate := consumedByOperation[approval.OperationID]; duplicate {
+			return false
+		}
+		consumedByOperation[approval.OperationID] = struct{}{}
+		found := false
+		for _, transition := range transitions {
+			from := OperationState(transition.From)
+			if transition.EntityType == "operation" && transition.EntityID == approval.OperationID &&
+				(from == OperationAwaitingUserApproval || from == OperationAwaitingAgentCommit) &&
+				transition.To == string(OperationReady) && transition.ObservedAt.Equal(approval.ConsumedAt) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func sameEvidenceIDSet(left, right map[string]struct{}) bool {

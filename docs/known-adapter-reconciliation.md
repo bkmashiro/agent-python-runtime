@@ -15,7 +15,8 @@
 | Fault injection | explicit response-loss and accepted-timeout faults |
 | No blind retry | `dispatching` and `ambiguous` controller states return `ErrSendReconciliation` without calling send again |
 | Readback | `lookupSent` reconciles by the original manifest digest |
-| Final evidence | reconciliation writes the provider receipt digest to `Attempt.ReconciliationDigest` |
+| Final evidence | reconciliation stores provider receipt and readback observation as distinct digests; `BuildTransactionEvidence` exports both |
+| Persistence gate | SQLite reconciliation persists both digests across ledger reopen |
 
 ## Accepted-timeout path
 
@@ -26,9 +27,9 @@ The accepted-timeout fault occurs after the provider has stored the send but bef
 3. `ErrAmbiguousSend` transitions the attempt to `ambiguous`, not `failed`;
 4. repeated `Commit` calls return `ErrSendReconciliation` and do not dispatch;
 5. `Reconcile` performs readback using the same key;
-6. the attempt becomes `succeeded` with the receipt digest stored as reconciliation evidence.
+6. the attempt becomes `succeeded` with `ProviderReceiptDigest` bound to the provider result and `ReconciliationDigest` bound to the readback observation.
 
-The regression test is `TestFakeMailAcceptedTimeoutRequiresReadbackAndNeverBlindRetries`.
+The adapter regression is `TestFakeMailAcceptedTimeoutRequiresReadbackAndNeverBlindRetries`. Transaction-level coverage is `TestReconciledIrreversibleEvidenceIncludesReceiptAndObservation`; SQLite reopen coverage is `TestSQLiteLedgerPersistsReconciliationObservationAcrossReopen`.
 
 ## Evidence boundary
 

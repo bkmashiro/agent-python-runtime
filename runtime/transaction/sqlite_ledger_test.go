@@ -147,18 +147,24 @@ func TestSQLiteLedgerPersistsReconciliationObservationAcrossReopen(t *testing.T)
 	defer reopened.Close()
 	now = time.Unix(41, 0).UTC()
 	recovered := NewCoordinator(reopened, &sequenceIDs{}, func() time.Time { return now }, nil)
-	completion, err := recovered.ReconcileDispatch(ReconcileDispatchRequest{OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded, ObservationDigest: testDigest("readback")})
+	completion, err := recovered.ReconcileDispatch(ReconcileDispatchRequest{
+		OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded,
+		ProviderReceiptDigest: testDigest("provider-receipt"), ObservationDigest: testDigest("readback"),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completion.Attempt.ReconciliationDigest != testDigest("readback") || completion.Transaction.State != TransactionCommitted {
+	if completion.Attempt.ProviderReceiptDigest != testDigest("provider-receipt") ||
+		completion.Attempt.ReconciliationDigest != testDigest("readback") || completion.Transaction.State != TransactionCommitted {
 		t.Fatalf("completion=%+v", completion)
 	}
 	evidence, err := BuildTransactionEvidence(reopened, tx.ID, time.Unix(42, 0).UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.Metrics.ReconciledAttempts != 1 || evidence.Attempts[0].ReconciliationDigest != testDigest("readback") {
+	if evidence.Metrics.ReconciledAttempts != 1 ||
+		evidence.Attempts[0].ProviderReceiptDigest != testDigest("provider-receipt") ||
+		evidence.Attempts[0].ReconciliationDigest != testDigest("readback") {
 		t.Fatalf("evidence=%+v", evidence)
 	}
 }

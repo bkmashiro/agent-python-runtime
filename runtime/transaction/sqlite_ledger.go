@@ -807,8 +807,10 @@ func (ledger *SQLiteLedger) completeAttempt(id string, version uint64, target At
 	return value, nil
 }
 
-func (ledger *SQLiteLedger) reconcileAttempt(id string, version uint64, target AttemptState, observationDigest string, observedAt time.Time) (Attempt, error) {
-	if !validIdentifier(id) || !digestPattern.MatchString(observationDigest) || observedAt.IsZero() ||
+func (ledger *SQLiteLedger) reconcileAttempt(id string, version uint64, target AttemptState, receiptDigest, observationDigest string, observedAt time.Time) (Attempt, error) {
+	if !validIdentifier(id) || !digestPattern.MatchString(observationDigest) ||
+		(receiptDigest != "" && !digestPattern.MatchString(receiptDigest)) ||
+		(target == AttemptFailed && receiptDigest != "") || observedAt.IsZero() ||
 		(target != AttemptSucceeded && target != AttemptFailed) {
 		return Attempt{}, ErrInvalidInput
 	}
@@ -821,14 +823,15 @@ func (ledger *SQLiteLedger) reconcileAttempt(id string, version uint64, target A
 	if err != nil {
 		return Attempt{}, err
 	}
-	if current.State == target && current.ReconciliationDigest == observationDigest {
+	if current.State == target && current.ProviderReceiptDigest == receiptDigest && current.ReconciliationDigest == observationDigest {
 		return current, nil
 	}
-	if current.Version != version || current.State != AttemptAmbiguous || current.ReconciliationDigest != "" {
+	if current.Version != version || current.State != AttemptAmbiguous || current.ReconciliationDigest != "" ||
+		(current.ProviderReceiptDigest != "" && current.ProviderReceiptDigest != receiptDigest) {
 		return Attempt{}, ErrConflict
 	}
-	result, err := tx.Exec(`UPDATE attempts SET state=?,reconciliation_digest=?,version=version+1,updated_at_ns=? WHERE id=? AND version=? AND state=? AND reconciliation_digest=''`,
-		target, observationDigest, timeNS(observedAt), id, version, AttemptAmbiguous)
+	result, err := tx.Exec(`UPDATE attempts SET state=?,provider_receipt_digest=?,reconciliation_digest=?,version=version+1,updated_at_ns=? WHERE id=? AND version=? AND state=? AND reconciliation_digest=''`,
+		target, receiptDigest, observationDigest, timeNS(observedAt), id, version, AttemptAmbiguous)
 	if err != nil {
 		return Attempt{}, sqliteFailure("reconcile attempt", err)
 	}

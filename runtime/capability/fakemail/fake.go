@@ -748,7 +748,10 @@ func (controller *SendController) Reconcile(ctx context.Context, credential tran
 	if err != nil {
 		return SendReceipt{}, ErrSendReconciliation
 	}
-	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{OperationID: operationID, AttemptID: attemptID, Outcome: transaction.DispatchSucceeded, ObservationDigest: receipt.ReceiptDigest})
+	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{
+		OperationID: operationID, AttemptID: attemptID, Outcome: transaction.DispatchSucceeded,
+		ProviderReceiptDigest: receipt.ReceiptDigest, ObservationDigest: receipt.ReceiptDigest,
+	})
 	if err != nil {
 		return SendReceipt{}, err
 	}

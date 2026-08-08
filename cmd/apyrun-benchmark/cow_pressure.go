@@ -16,6 +16,7 @@ import (
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
+	runtimescheduler "github.com/bkmashiro/agent-python-runtime/runtime/scheduler"
 )
 
 const pressureInitialCapacity uint32 = 4
@@ -23,6 +24,7 @@ const pressureMaxGrowthStep uint32 = 64
 const pressureMinimumHeadroom = 512 * 1024 * 1024
 const pressureActiveSampleCount = 3
 const pressureAdaptiveRefillWorkers uint32 = 12
+const pressureMaximumOfferedRequests uint64 = 1 << 20
 
 type cowPressureLimits struct {
 	RuntimeBudgetBytes uint64 `json:"runtime_budget_bytes"`
@@ -39,6 +41,7 @@ type cowPressureLimits struct {
 	RefillPolicy       string `json:"refill_policy"`
 	RefillWorkers      uint32 `json:"refill_workers"`
 	BurstFactor        uint32 `json:"burst_factor"`
+	WarmupProfile      string `json:"warmup_profile"`
 }
 
 type cowPressureSnapshot struct {
@@ -70,11 +73,23 @@ type cowPressureRequestClass struct {
 	Failed    uint64 `json:"failed"`
 }
 
+type cowPressureArrival struct {
+	Mode             string `json:"mode"`
+	RatePerSecond    uint32 `json:"rate_per_second"`
+	QueueCapacity    uint32 `json:"queue_capacity"`
+	OfferedRequests  uint64 `json:"offered_requests"`
+	AcceptedRequests uint64 `json:"accepted_requests"`
+	RejectedRequests uint64 `json:"rejected_requests"`
+}
+
 type cowPressureRequestSpec struct {
-	Class  string
-	Code   string
-	Inputs map[string]any
-	Wait   time.Duration
+	Class            string
+	Code             string
+	Inputs           map[string]any
+	Wait             time.Duration
+	RequireNumPy     bool
+	ExpectedPrepared int64
+	ExpectedSum      int64
 }
 
 type cowPressureBurst struct {
@@ -98,6 +113,7 @@ type cowPressureBurstWindow struct {
 }
 
 type cowPressureLoad struct {
+	Arrival            cowPressureArrival        `json:"arrival"`
 	StartedRequests    uint64                    `json:"started_requests"`
 	CompletedRequests  uint64                    `json:"completed_requests"`
 	FailedRequests     uint64                    `json:"failed_requests"`
@@ -114,6 +130,8 @@ type cowPressureLoad struct {
 	LatencyP95NS       uint64                    `json:"latency_p95_ns"`
 	LatencyP99NS       uint64                    `json:"latency_p99_ns"`
 	LatencyMaxNS       uint64                    `json:"latency_max_ns"`
+	LatencyTotalNS     uint64                    `json:"latency_total_ns"`
+	LatencyMeanNS      uint64                    `json:"latency_mean_ns"`
 	ReadyBefore        uint32                    `json:"ready_before"`
 	ReadyAfter         uint32                    `json:"ready_after"`
 	Phases             []cowPressurePhase        `json:"phases"`
@@ -127,19 +145,20 @@ type cowPressureActiveSamples struct {
 }
 
 type cowPressureEvidence struct {
-	SchemaVersion int                                 `json:"schema_version"`
-	EvidenceKind  string                              `json:"evidence_kind"`
-	EvidenceClass string                              `json:"evidence_class"`
-	Artifact      runtimeevidence.ArtifactIdentity    `json:"artifact"`
-	HostSource    runtimeevidence.HostSourceIdentity  `json:"host_source"`
-	Environment   runtimeevidence.EnvironmentIdentity `json:"environment"`
-	Strategy      runtimeevidence.StrategyIdentity    `json:"strategy"`
-	Limits        cowPressureLimits                   `json:"limits"`
-	StopReason    string                              `json:"stop_reason"`
-	Spawn         []cowPressureSnapshot               `json:"spawn_snapshots"`
-	LoadSamples   []cowPressureSnapshot               `json:"load_samples"`
-	Load          cowPressureLoad                     `json:"load"`
-	Limitations   []string                            `json:"limitations"`
+	SchemaVersion int                                       `json:"schema_version"`
+	EvidenceKind  string                                    `json:"evidence_kind"`
+	EvidenceClass string                                    `json:"evidence_class"`
+	Artifact      runtimeevidence.ArtifactIdentity          `json:"artifact"`
+	HostSource    runtimeevidence.HostSourceIdentity        `json:"host_source"`
+	Environment   runtimeevidence.EnvironmentIdentity       `json:"environment"`
+	Strategy      runtimeevidence.StrategyIdentity          `json:"strategy"`
+	Policy        runtimescheduler.EffectivePolicyTelemetry `json:"policy"`
+	Limits        cowPressureLimits                         `json:"limits"`
+	StopReason    string                                    `json:"stop_reason"`
+	Spawn         []cowPressureSnapshot                     `json:"spawn_snapshots"`
+	LoadSamples   []cowPressureSnapshot                     `json:"load_samples"`
+	Load          cowPressureLoad                           `json:"load"`
+	Limitations   []string                                  `json:"limitations"`
 }
 
 type growablePreparedBenchmarkRunner interface {
@@ -152,7 +171,7 @@ type growablePreparedBenchmarkRunner interface {
 }
 
 func (evidence cowPressureEvidence) Validate() error {
-	if evidence.SchemaVersion != 10 || evidence.EvidenceKind != "cow-pressure" || evidence.EvidenceClass != "production-safe" ||
+	if evidence.SchemaVersion != 11 || evidence.EvidenceKind != "cow-pressure" ||
 		evidence.HostSource.Modified || evidence.HostSource.Revision == "" || evidence.Artifact.SHA256 == "" ||
 		evidence.Strategy.Requested != "cow-ready-single-use" || evidence.Strategy.Active != "cow-ready-single-use" || evidence.Strategy.Fallback {
 		return errors.New("cow-pressure identity is incomplete or untruthful")
@@ -175,10 +194,20 @@ func (evidence cowPressureEvidence) Validate() error {
 		!validPressureWorkload(evidence.Limits.Workload, time.Duration(evidence.Limits.WaitNS), evidence.Limits.DirtyBytes) || len(evidence.Spawn) == 0 || evidence.StopReason == "" {
 		return errors.New("cow-pressure limits or spawn evidence is incomplete")
 	}
+	compiledPolicy, err := runtimescheduler.CompileProductionPolicy(runtimescheduler.ProductionPolicy{MaxMemoryBytes: evidence.Limits.RuntimeBudgetBytes, MaxCPU: evidence.Policy.MaxCPU, Greed: evidence.Policy.Greed})
+	if err != nil || compiledPolicy.Telemetry() != evidence.Policy {
+		return errors.New("cow-pressure effective policy telemetry drifted")
+	}
+	if uint64(evidence.Limits.Consumers)*uint64(evidence.Limits.BurstFactor) > uint64(evidence.Policy.MaxActive) {
+		return errors.New("cow-pressure consumers exceed the effective policy")
+	}
 	previousSlots := uint32(0)
 	preparedImage := evidence.Spawn[0].PreparedImage
 	if !validPreparedImageState(preparedImage) {
 		return errors.New("cow-pressure prepared image census is invalid")
+	}
+	if !validPressureProfileBinding(evidence, preparedImage) {
+		return errors.New("cow-pressure evidence class, artifact, workload, or warmup profile drifted")
 	}
 	for index, snapshot := range evidence.Spawn {
 		growth := snapshot.Slots - previousSlots
@@ -195,20 +224,28 @@ func (evidence cowPressureEvidence) Validate() error {
 		previousSlots = snapshot.Slots
 	}
 	expectedLoadSamples := 1
-	if evidence.Limits.Workload == "dirty-hold" || evidence.Limits.Workload == "mixed-v1" {
+	if evidence.Limits.Workload == "dirty-hold" || evidence.Limits.Workload == "mixed-v1" || evidence.Limits.Workload == "numpy-mixed-v1" {
 		expectedLoadSamples += pressureActiveSampleCount
 	}
 	if len(evidence.LoadSamples) != expectedLoadSamples || evidence.Load.StartedRequests == 0 || evidence.Load.CompletedRequests == 0 ||
 		evidence.Load.CompletedRequests+evidence.Load.FailedRequests != evidence.Load.StartedRequests ||
 		evidence.Load.DurationNS == 0 || evidence.Load.ThroughputPerSec <= 0 || evidence.Load.LatencyP99NS == 0 ||
+		evidence.Load.LatencyTotalNS < evidence.Load.LatencyMaxNS || evidence.Load.LatencyMeanNS != evidence.Load.LatencyTotalNS/evidence.Load.CompletedRequests ||
 		evidence.Load.CPUCoreUtilization <= 0 || evidence.Load.GOMAXPROCS <= 0 || len(evidence.Load.Phases) == 0 {
-		return errors.New("cow-pressure closed-loop load evidence is incomplete")
+		return errors.New("cow-pressure load evidence is incomplete")
+	}
+	if err := validatePressureArrivalEvidence(evidence.Load.Arrival, evidence.Load.StartedRequests); err != nil {
+		return err
 	}
 	classNames := map[string]struct{}{}
+	expectedClassCounts := expectedPressureRequestClassCounts(evidence.Limits.Workload, evidence.Load.StartedRequests)
 	var classStarted, classCompleted, classFailed uint64
 	for _, class := range evidence.Load.RequestClasses {
-		if class.Name == "" || class.Started == 0 || class.Completed+class.Failed != class.Started {
+		if !validPressureRequestClassName(evidence.Limits.Workload, class.Name) || class.Started == 0 || class.Completed+class.Failed != class.Started {
 			return errors.New("cow-pressure request-class accounting is incomplete")
+		}
+		if expected, ok := expectedClassCounts[class.Name]; !ok || class.Started != expected {
+			return errors.New("cow-pressure request-class distribution drifted")
 		}
 		if _, exists := classNames[class.Name]; exists {
 			return errors.New("cow-pressure request-class names are duplicated")
@@ -217,6 +254,9 @@ func (evidence cowPressureEvidence) Validate() error {
 		classStarted += class.Started
 		classCompleted += class.Completed
 		classFailed += class.Failed
+	}
+	if len(classNames) != len(expectedClassCounts) {
+		return errors.New("cow-pressure request-class distribution drifted")
 	}
 	if classStarted != evidence.Load.StartedRequests || classCompleted != evidence.Load.CompletedRequests || classFailed != evidence.Load.FailedRequests {
 		return errors.New("cow-pressure request-class totals drifted")
@@ -252,6 +292,93 @@ func (evidence cowPressureEvidence) Validate() error {
 		return errors.New("cow-pressure final mapping identity drifted")
 	}
 	return nil
+}
+
+func validPressureProfileBinding(evidence cowPressureEvidence, prepared wazeroengine.PreparedImageState) bool {
+	switch evidence.Artifact.ArtifactProfile {
+	case "base":
+		return evidence.EvidenceClass == "production-safe" && evidence.Limits.WarmupProfile == "" &&
+			prepared.WarmupProfile == "" && prepared.WarmupGenerationSHA256 == "" &&
+			evidence.Limits.Workload != "numpy-v1" && evidence.Limits.Workload != "numpy-mixed-v1"
+	case "numpy-core":
+		return evidence.EvidenceClass == "profile-candidate" && evidence.Limits.WarmupProfile == wazeroengine.COWWarmupNumPyReadyV1 &&
+			prepared.WarmupProfile == wazeroengine.COWWarmupNumPyReadyV1 && len(prepared.WarmupGenerationSHA256) == 64 &&
+			(evidence.Limits.Workload == "numpy-v1" || evidence.Limits.Workload == "numpy-mixed-v1")
+	default:
+		return false
+	}
+}
+
+func validPressureRequestClassName(workload, name string) bool {
+	allowed := map[string]map[string]struct{}{
+		"cpu":             {"tiny-cpu": {}},
+		"wasi-timer-wait": {"timer-wait": {}},
+		"dirty-hold":      {"dirty-hold": {}},
+		"mixed-v1":        {"tiny-cpu": {}, "wait-50ms": {}, "dirty-4m-500ms": {}, "dirty-16m-2s": {}},
+		"heavy-tail-v1":   {"tiny-cpu": {}, "tail-2s": {}},
+		"numpy-v1":        {"numpy-tiny": {}},
+		"numpy-mixed-v1":  {"numpy-tiny": {}, "numpy-cpu": {}, "numpy-dirty-4m-500ms": {}, "numpy-dirty-16m-2s": {}},
+	}
+	_, ok := allowed[workload][name]
+	return ok
+}
+
+func expectedPressureRequestClassCounts(workload string, started uint64) map[string]uint64 {
+	counts := make(map[string]uint64)
+	add := func(name string, count uint64) {
+		if count > 0 {
+			counts[name] = count
+		}
+	}
+	switch workload {
+	case "cpu":
+		add("tiny-cpu", started)
+	case "wasi-timer-wait":
+		add("timer-wait", started)
+	case "dirty-hold":
+		add("dirty-hold", started)
+	case "mixed-v1":
+		cycles, remainder := started/20, started%20
+		add("tiny-cpu", cycles*12+minUint64(remainder, 12))
+		waitRemainder := uint64(0)
+		if remainder > 12 {
+			waitRemainder = minUint64(remainder-12, 5)
+		}
+		add("wait-50ms", cycles*5+waitRemainder)
+		add("dirty-4m-500ms", cycles*2+boolUint64(remainder > 17)+boolUint64(remainder > 18))
+		add("dirty-16m-2s", cycles+boolUint64(remainder > 19))
+	case "heavy-tail-v1":
+		cycles, remainder := started/20, started%20
+		add("tiny-cpu", cycles*19+minUint64(remainder, 19))
+		add("tail-2s", cycles+boolUint64(remainder > 19))
+	case "numpy-v1":
+		add("numpy-tiny", started)
+	case "numpy-mixed-v1":
+		cycles, remainder := started/20, started%20
+		add("numpy-tiny", cycles*12+minUint64(remainder, 12))
+		cpuRemainder := uint64(0)
+		if remainder > 12 {
+			cpuRemainder = minUint64(remainder-12, 5)
+		}
+		add("numpy-cpu", cycles*5+cpuRemainder)
+		add("numpy-dirty-4m-500ms", cycles*2+boolUint64(remainder > 17)+boolUint64(remainder > 18))
+		add("numpy-dirty-16m-2s", cycles+boolUint64(remainder > 19))
+	}
+	return counts
+}
+
+func minUint64(left, right uint64) uint64 {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func boolUint64(value bool) uint64 {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func validPreparedImageState(state wazeroengine.PreparedImageState) bool {
@@ -301,8 +428,16 @@ func validPressureLoadMappingCount(mappings, slots, consumers uint32) bool {
 }
 
 func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
-	if goos != "linux" || options.Kind != "cow-pressure" || options.Class != "production-safe" || options.Strategy != "cow-ready-single-use" {
-		return errors.New("cow-pressure requires Linux production-safe cow-ready-single-use")
+	if goos != "linux" || options.Kind != "cow-pressure" || options.Strategy != "cow-ready-single-use" {
+		return errors.New("cow-pressure requires Linux cow-ready-single-use")
+	}
+	numpyWorkload := options.PressureWorkload == "numpy-v1" || options.PressureWorkload == "numpy-mixed-v1"
+	if numpyWorkload {
+		if options.Class != "profile-candidate" || options.COWWarmupProfile != wazeroengine.COWWarmupNumPyReadyV1 {
+			return errors.New("NumPy pressure requires profile-candidate and numpy-ready-v1")
+		}
+	} else if options.Class != "production-safe" || options.COWWarmupProfile != "" {
+		return errors.New("base pressure requires production-safe without a warmup profile")
 	}
 	if options.ArtifactPath == "" || options.ManifestPath == "" || options.OutputPath == "" {
 		return errors.New("cow-pressure requires artifact, manifest, and output")
@@ -331,6 +466,67 @@ func validateCOWPressureOptions(options benchmarkOptions, goos string) error {
 	if !validPressureWorkload(options.PressureWorkload, options.PressureWait, options.PressureDirtyBytes) {
 		return errors.New("cow-pressure workload or wait is outside bounds")
 	}
+	if uint64(options.PressureMaxCPU) > math.MaxUint32 || options.PressureMaxCPU == 0 || options.PressureGreed > 100 {
+		return errors.New("cow-pressure maximum CPU or greed is outside bounds")
+	}
+	compiledPolicy, err := runtimescheduler.CompileProductionPolicy(runtimescheduler.ProductionPolicy{MaxMemoryBytes: options.MemoryBudgetBytes, MaxCPU: uint32(options.PressureMaxCPU), Greed: uint8(options.PressureGreed)})
+	if err != nil || uint64(options.ConsumerCount)*uint64(options.PressureBurstFactor) > uint64(compiledPolicy.MaxActive) {
+		return errors.New("cow-pressure consumers exceed the compiled production policy")
+	}
+	mode := canonicalPressureArrivalMode(options.PressureArrivalMode)
+	switch mode {
+	case "closed-loop":
+		if options.PressureArrivalRate != 0 || options.PressureQueueCapacity != 0 {
+			return errors.New("closed-loop pressure cannot define an arrival rate or queue")
+		}
+	case "open-loop-fixed-v1":
+		if options.PressureQueueCapacity == 0 || options.PressureQueueCapacity > 65536 || options.PressureBurstFactor != 1 {
+			return errors.New("fixed open-loop pressure requires a bounded queue and forbids correlated burst")
+		}
+		if _, err := fixedOpenLoopArrivalOffsets(options.PressureDuration, options.PressureArrivalRate); err != nil {
+			return err
+		}
+	default:
+		return errors.New("cow-pressure arrival mode is unknown")
+	}
+	return nil
+}
+
+func canonicalPressureArrivalMode(mode string) string {
+	if mode == "" {
+		return "closed-loop"
+	}
+	return mode
+}
+
+func fixedOpenLoopArrivalOffsets(duration time.Duration, rate uint) ([]time.Duration, error) {
+	if duration <= 0 || rate == 0 || rate > 4096 || uint64(duration) > math.MaxUint64/uint64(rate) {
+		return nil, errors.New("fixed open-loop duration or rate is outside bounds")
+	}
+	count := uint64(duration) * uint64(rate) / uint64(time.Second)
+	if count == 0 || count > pressureMaximumOfferedRequests {
+		return nil, errors.New("fixed open-loop offered request count is outside bounds")
+	}
+	offsets := make([]time.Duration, count)
+	for index := uint64(0); index < count; index++ {
+		offsets[index] = time.Duration(index * uint64(time.Second) / uint64(rate))
+	}
+	return offsets, nil
+}
+
+func validatePressureArrivalEvidence(arrival cowPressureArrival, started uint64) error {
+	if arrival.Mode == "closed-loop" {
+		if arrival.RatePerSecond != 0 || arrival.QueueCapacity != 0 || arrival.RejectedRequests != 0 ||
+			arrival.OfferedRequests == 0 || arrival.OfferedRequests != arrival.AcceptedRequests || arrival.AcceptedRequests != started {
+			return errors.New("closed-loop arrival accounting is inconsistent")
+		}
+		return nil
+	}
+	if arrival.Mode != "open-loop-fixed-v1" || arrival.RatePerSecond == 0 || arrival.RatePerSecond > 4096 ||
+		arrival.QueueCapacity == 0 || arrival.QueueCapacity > 65536 || arrival.OfferedRequests == 0 ||
+		arrival.OfferedRequests != arrival.AcceptedRequests+arrival.RejectedRequests || arrival.AcceptedRequests != started {
+		return errors.New("fixed open-loop arrival accounting is inconsistent")
+	}
 	return nil
 }
 
@@ -343,6 +539,25 @@ func pressureRequestSpecFor(options benchmarkOptions, id uint64) cowPressureRequ
 	}
 	dirty := func(class string, bytes uint64, duration time.Duration) cowPressureRequestSpec {
 		return cowPressureRequestSpec{Class: class, Code: "import time\nbuf = bytearray(inputs['dirty_bytes'])\nfor offset in range(0, len(buf), 4096):\n    buf[offset] = (offset // 4096) & 255\ntime.sleep(inputs['wait_seconds'])\nresult = inputs['value'] + 1", Inputs: map[string]any{"value": id, "dirty_bytes": bytes, "wait_seconds": duration.Seconds()}, Wait: duration}
+	}
+	numpy := func(class string, elements uint64) cowPressureRequestSpec {
+		return cowPressureRequestSpec{
+			Class:  class,
+			Code:   `result = {"prepared": prepared, "numpy_version": np.__version__, "sum": int(np.arange(inputs["elements"], dtype=np.int64).sum())}`,
+			Inputs: map[string]any{"elements": elements}, RequireNumPy: true, ExpectedPrepared: 41,
+			ExpectedSum: int64(elements * (elements - 1) / 2),
+		}
+	}
+	numpyDirty := func(class string, bytes uint64, duration time.Duration) cowPressureRequestSpec {
+		pages := (bytes + 4095) / 4096
+		cycles, remainder := pages/256, pages%256
+		expected := cycles*32640 + remainder*(remainder-1)/2
+		return cowPressureRequestSpec{
+			Class:  class,
+			Code:   "import time\narr = np.zeros(inputs['dirty_bytes'], dtype=np.uint8)\nfor offset in range(0, len(arr), 4096):\n    arr[offset] = (offset // 4096) & 255\ntime.sleep(inputs['wait_seconds'])\nresult = {\"prepared\": prepared, \"numpy_version\": np.__version__, \"sum\": int(arr[::4096].sum())}",
+			Inputs: map[string]any{"dirty_bytes": bytes, "wait_seconds": duration.Seconds()}, Wait: duration,
+			RequireNumPy: true, ExpectedPrepared: 41, ExpectedSum: int64(expected),
+		}
 	}
 	switch options.PressureWorkload {
 	case "wasi-timer-wait":
@@ -364,6 +579,20 @@ func pressureRequestSpecFor(options benchmarkOptions, id uint64) cowPressureRequ
 	case "heavy-tail-v1":
 		if (id-1)%20 == 19 {
 			return wait("tail-2s", 2*time.Second)
+		}
+	case "numpy-v1":
+		return numpy("numpy-tiny", 1000)
+	case "numpy-mixed-v1":
+		position := (id - 1) % 20
+		switch {
+		case position < 12:
+			return numpy("numpy-tiny", 1000)
+		case position < 17:
+			return numpy("numpy-cpu", 250000)
+		case position < 19:
+			return numpyDirty("numpy-dirty-4m-500ms", 4<<20, 500*time.Millisecond)
+		default:
+			return numpyDirty("numpy-dirty-16m-2s", 16<<20, 2*time.Second)
 		}
 	}
 	return cpu()
@@ -410,7 +639,7 @@ func validPressureWorkload(workload string, wait time.Duration, dirtyBytes uint6
 		return wait >= time.Millisecond && wait <= 10*time.Second && dirtyBytes == 0
 	case "dirty-hold":
 		return wait >= time.Second && wait <= 10*time.Second && dirtyBytes >= 1<<20 && dirtyBytes <= 64<<20
-	case "mixed-v1", "heavy-tail-v1":
+	case "mixed-v1", "heavy-tail-v1", "numpy-v1", "numpy-mixed-v1":
 		return wait == 0 && dirtyBytes == 0
 	default:
 		return false
@@ -421,12 +650,20 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	if err := validateCOWPressureOptions(options, goos); err != nil {
 		return err
 	}
+	effectivePolicy, err := runtimescheduler.CompileProductionPolicy(runtimescheduler.ProductionPolicy{MaxMemoryBytes: options.MemoryBudgetBytes, MaxCPU: uint32(options.PressureMaxCPU), Greed: uint8(options.PressureGreed)})
+	if err != nil {
+		return err
+	}
 	artifact, wasm, err := loadArtifactIdentity(options.ArtifactPath, options.ManifestPath)
 	if err != nil {
 		return err
 	}
-	if artifact.ArtifactProfile != "base" {
-		return errors.New("cow-pressure is restricted to the qualified base artifact")
+	if err := validateEvidenceClassProfile(options.Class, artifact.ArtifactProfile); err != nil {
+		return err
+	}
+	numpyWorkload := options.PressureWorkload == "numpy-v1" || options.PressureWorkload == "numpy-mixed-v1"
+	if (numpyWorkload && artifact.ArtifactProfile != "numpy-core") || (!numpyWorkload && artifact.ArtifactProfile != "base") {
+		return errors.New("cow-pressure artifact profile does not match its workload")
 	}
 	host, err := currentHostSource()
 	if err != nil {
@@ -451,6 +688,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		PreparedRefillWorkers:  uint32(options.PressureRefillWorkers),
 		AdaptivePreparedRefill: options.PressureRefillWorkers == 0,
 		Strategy:               enginecontract.StrategyCOWReadySingleUse,
+		COWWarmupProfile:       options.COWWarmupProfile,
 		Observer:               lifecycle.observe,
 	}).New(context.Background(), wasm, config)
 	if err != nil {
@@ -515,9 +753,13 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 
 	lifecycle.drain()
 	readyBefore := uint32(runner.PreparedReady())
-	loadCtx, cancelLoad := context.WithTimeout(context.Background(), options.PressureDuration)
+	arrivalMode := canonicalPressureArrivalMode(options.PressureArrivalMode)
+	loadCtx, cancelLoad := context.WithCancel(context.Background())
+	if arrivalMode == "closed-loop" {
+		loadCtx, cancelLoad = context.WithTimeout(context.Background(), options.PressureDuration)
+	}
 	defer cancelLoad()
-	var started, completed, failed, timedOut atomic.Uint64
+	var offered, accepted, rejected, started, completed, failed, timedOut atomic.Uint64
 	var sequence atomic.Uint64
 	latencies := make([]uint64, 0, 4096)
 	var latencyMu sync.Mutex
@@ -532,6 +774,11 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			cancelLoad()
 		}
 		failureMu.Unlock()
+	}
+	failureReason := func() string {
+		failureMu.Lock()
+		defer failureMu.Unlock()
+		return firstFailure
 	}
 	var workers sync.WaitGroup
 	cpuStarted, err := collectPressureCPU()
@@ -560,14 +807,14 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		}()
 	}
 	var activeSamples <-chan cowPressureActiveSamples
-	if options.PressureWorkload == "dirty-hold" || options.PressureWorkload == "mixed-v1" {
+	if options.PressureWorkload == "dirty-hold" || options.PressureWorkload == "mixed-v1" || options.PressureWorkload == "numpy-mixed-v1" {
 		result := make(chan cowPressureActiveSamples, 1)
 		activeSamples = result
 		go func() {
 			<-startLoad
 			samples := make([]cowPressureSnapshot, 0, pressureActiveSampleCount)
 			sampleWindow := options.PressureWait
-			if options.PressureWorkload == "mixed-v1" {
+			if options.PressureWorkload == "mixed-v1" || options.PressureWorkload == "numpy-mixed-v1" {
 				sampleWindow = options.PressureDuration
 			}
 			for index := 1; index <= pressureActiveSampleCount; index++ {
@@ -585,65 +832,115 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 			result <- cowPressureActiveSamples{Snapshots: samples}
 		}()
 	}
-	totalConsumers := options.ConsumerCount * options.PressureBurstFactor
-	for worker := uint(0); worker < totalConsumers; worker++ {
-		workers.Add(1)
-		go func(worker uint) {
-			defer workers.Done()
-			<-startLoad
-			if worker >= options.ConsumerCount {
-				<-burstRelease
+	executeRequest := func(id uint64) {
+		spec := pressureRequestSpecFor(options, id)
+		request, err := makeRequest(fmt.Sprintf("pressure-%d", id), spec.Code, spec.Inputs)
+		if err != nil {
+			failed.Add(1)
+			recordFailure("make request: " + err.Error())
+			return
+		}
+		started.Add(1)
+		requestClassMu.Lock()
+		class := requestClasses[spec.Class]
+		if class == nil {
+			class = &cowPressureRequestClass{Name: spec.Class}
+			requestClasses[spec.Class] = class
+		}
+		class.Started++
+		requestClassMu.Unlock()
+		requestCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		began := time.Now()
+		response, runErr := runner.Run(requestCtx, request, "")
+		cancel()
+		elapsedDuration := time.Since(began)
+		elapsed := uint64(elapsedDuration.Nanoseconds())
+		failureReason := pressureResponseFailureForSpec(response, spec, elapsedDuration)
+		if runErr != nil || failureReason != "" {
+			failed.Add(1)
+			requestClassMu.Lock()
+			class.Failed++
+			requestClassMu.Unlock()
+			if errors.Is(runErr, context.DeadlineExceeded) {
+				timedOut.Add(1)
 			}
-			for loadCtx.Err() == nil {
-				id := sequence.Add(1)
-				spec := pressureRequestSpecFor(options, id)
-				request, err := makeRequest(fmt.Sprintf("pressure-%d", id), spec.Code, spec.Inputs)
-				if err != nil {
-					failed.Add(1)
-					continue
-				}
-				started.Add(1)
-				requestClassMu.Lock()
-				class := requestClasses[spec.Class]
-				if class == nil {
-					class = &cowPressureRequestClass{Name: spec.Class}
-					requestClasses[spec.Class] = class
-				}
-				class.Started++
-				requestClassMu.Unlock()
-				requestCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				began := time.Now()
-				response, runErr := runner.Run(requestCtx, request, "")
-				cancel()
-				elapsedDuration := time.Since(began)
-				elapsed := uint64(elapsedDuration.Nanoseconds())
-				failureReason := pressureResponseFailure(response, options.PressureWorkload, spec.Wait, elapsedDuration)
-				if runErr != nil || failureReason != "" {
-					failed.Add(1)
-					requestClassMu.Lock()
-					class.Failed++
-					requestClassMu.Unlock()
-					if errors.Is(runErr, context.DeadlineExceeded) {
-						timedOut.Add(1)
-					}
-					if runErr != nil {
-						failureReason = "runner error: " + runErr.Error()
-					}
-					recordFailure(failureReason)
-					continue
-				}
-				completed.Add(1)
-				requestClassMu.Lock()
-				class.Completed++
-				requestClassMu.Unlock()
-				latencyMu.Lock()
-				latencies = append(latencies, elapsed)
-				latencyMu.Unlock()
+			if runErr != nil {
+				failureReason = "runner error: " + runErr.Error()
 			}
-		}(worker)
+			recordFailure(failureReason)
+			return
+		}
+		completed.Add(1)
+		requestClassMu.Lock()
+		class.Completed++
+		requestClassMu.Unlock()
+		latencyMu.Lock()
+		latencies = append(latencies, elapsed)
+		latencyMu.Unlock()
 	}
-	close(startLoad)
-	workers.Wait()
+
+	totalConsumers := options.ConsumerCount * options.PressureBurstFactor
+	if arrivalMode == "closed-loop" {
+		for worker := uint(0); worker < totalConsumers; worker++ {
+			workers.Add(1)
+			go func(worker uint) {
+				defer workers.Done()
+				<-startLoad
+				if worker >= options.ConsumerCount {
+					<-burstRelease
+				}
+				for loadCtx.Err() == nil {
+					id := sequence.Add(1)
+					offered.Add(1)
+					accepted.Add(1)
+					executeRequest(id)
+				}
+			}(worker)
+		}
+		close(startLoad)
+		workers.Wait()
+	} else {
+		offsets, err := fixedOpenLoopArrivalOffsets(options.PressureDuration, options.PressureArrivalRate)
+		if err != nil {
+			return err
+		}
+		jobs := make(chan uint64, options.PressureQueueCapacity)
+		for worker := uint(0); worker < options.ConsumerCount; worker++ {
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				<-startLoad
+				for id := range jobs {
+					executeRequest(id)
+				}
+			}()
+		}
+		close(startLoad)
+		for _, offset := range offsets {
+			wait := time.Until(loadStarted.Add(offset))
+			if wait > 0 {
+				timer := time.NewTimer(wait)
+				select {
+				case <-loadCtx.Done():
+					timer.Stop()
+					close(jobs)
+					workers.Wait()
+					return fmt.Errorf("fixed open-loop load cancelled: %s", failureReason())
+				case <-timer.C:
+				}
+			}
+			id := sequence.Add(1)
+			offered.Add(1)
+			select {
+			case jobs <- id:
+				accepted.Add(1)
+			default:
+				rejected.Add(1)
+			}
+		}
+		close(jobs)
+		workers.Wait()
+	}
 	var burstWindow cowPressureBurstWindow
 	if options.PressureBurstFactor > 1 {
 		burstWindow = <-burstWindowResult
@@ -657,7 +954,7 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 		loadSamples = append(loadSamples, result.Snapshots...)
 	}
 	if failed.Load() > 0 || timedOut.Load() > 0 {
-		return fmt.Errorf("cow-pressure workload failed closed: failed=%d timed_out=%d first_failure=%s", failed.Load(), timedOut.Load(), firstFailure)
+		return fmt.Errorf("cow-pressure workload failed closed: failed=%d timed_out=%d first_failure=%s", failed.Load(), timedOut.Load(), failureReason())
 	}
 	loadElapsed := time.Since(loadStarted)
 	cpuFinished, err := collectPressureCPU()
@@ -687,6 +984,10 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	latencyCopy := append([]uint64(nil), latencies...)
 	latencyMu.Unlock()
+	var latencyTotal uint64
+	for _, latency := range latencyCopy {
+		latencyTotal += latency
+	}
 	requestClassMu.Lock()
 	requestClassNames := make([]string, 0, len(requestClasses))
 	for name := range requestClasses {
@@ -699,11 +1000,16 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 	requestClassMu.Unlock()
 	load := cowPressureLoad{
+		Arrival:         cowPressureArrival{Mode: arrivalMode, RatePerSecond: uint32(options.PressureArrivalRate), QueueCapacity: uint32(options.PressureQueueCapacity), OfferedRequests: offered.Load(), AcceptedRequests: accepted.Load(), RejectedRequests: rejected.Load()},
 		StartedRequests: started.Load(), CompletedRequests: completed.Load(), FailedRequests: failed.Load(), TimedOutRequests: timedOut.Load(),
 		DurationNS: uint64(loadElapsed.Nanoseconds()), ReplenishDrainNS: uint64(replenishElapsed.Nanoseconds()), ReplenishStatus: replenishStatus,
 		CPUUserNS: cpuFinished.userNS - cpuStarted.userNS, CPUSystemNS: cpuFinished.systemNS - cpuStarted.systemNS,
 		GOMAXPROCS:  goruntime.GOMAXPROCS(0),
 		ReadyBefore: readyBefore, ReadyAfter: readyAfter, Phases: aggregatePressurePhases(lifecycle.drain()), RequestClasses: requestClassEvidence,
+	}
+	load.LatencyTotalNS = latencyTotal
+	if load.CompletedRequests > 0 {
+		load.LatencyMeanNS = latencyTotal / load.CompletedRequests
 	}
 	if options.PressureBurstFactor > 1 {
 		burstCompleted := burstWindow.endCompleted - burstWindow.preCompleted
@@ -726,18 +1032,20 @@ func runCOWPressureMain(options benchmarkOptions, goos string) error {
 	}
 
 	evidence := cowPressureEvidence{
-		SchemaVersion: 10, EvidenceKind: "cow-pressure", EvidenceClass: "production-safe",
+		SchemaVersion: 11, EvidenceKind: "cow-pressure", EvidenceClass: options.Class,
 		Artifact:   runtimeevidence.ArtifactIdentity{Filename: artifact.Filename, SHA256: artifact.SHA256, SizeBytes: uint64(artifact.Size), SourceCommit: artifact.SourceCommit, ArtifactProfile: artifact.ArtifactProfile, Target: artifact.Target, ExecutionModel: artifact.Execution},
 		HostSource: runtimeevidence.HostSourceIdentity{Revision: host.Revision, Modified: host.Modified}, Environment: initial.Environment,
 		Strategy:   runtimeevidence.StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use", Fallback: false},
-		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), DirtyBytes: options.PressureDirtyBytes, RefillPolicy: pressureRefillPolicy(options.PressureRefillWorkers), RefillWorkers: runner.PreparedRefillWorkers(), BurstFactor: uint32(options.PressureBurstFactor)},
+		Policy:     effectivePolicy.Telemetry(),
+		Limits:     cowPressureLimits{RuntimeBudgetBytes: options.MemoryBudgetBytes, ReservedBytes: options.MemoryReserveBytes, AllocationBytes: options.MemoryBudgetBytes + options.MemoryReserveBytes, MaxSlots: uint32(options.MaxPressureSlots), Consumers: uint32(options.ConsumerCount), DurationNS: uint64(options.PressureDuration.Nanoseconds()), InitialCapacity: pressureInitialCapacity, MaxGrowthStep: pressureMaxGrowthStep, Workload: options.PressureWorkload, WaitNS: uint64(options.PressureWait.Nanoseconds()), DirtyBytes: options.PressureDirtyBytes, RefillPolicy: pressureRefillPolicy(options.PressureRefillWorkers), RefillWorkers: runner.PreparedRefillWorkers(), BurstFactor: uint32(options.PressureBurstFactor), WarmupProfile: options.COWWarmupProfile},
 		StopReason: stopReason, Spawn: spawn, LoadSamples: loadSamples, Load: load,
 		Limitations: []string{
 			"Admission uses process PSS with a conservative dynamic headroom; it is not a kernel memory reservation.",
 			"One bounded wazero runtime, compiled module, and sealed baseline owns every admitted COW slot.",
-			"Full smaps collection is excluded from ordinary timed loads; dirty-hold and mixed-v1 take three fixed-offset in-load samples and include that diagnostic perturbation in their timing.",
+			"Full smaps collection is excluded from ordinary timed loads; dirty-hold and versioned mixed workloads take three fixed-offset in-load samples and include that diagnostic perturbation in their timing.",
 			"Raw cgroup counters retain their observed scope; shared job-level values are not process attribution or per-slot memory.",
-			"Closed-loop consumers use versioned deterministic Python request classes; a burst factor releases additional closed-loop consumers once at mid-load and is not an open-loop arrival process or provider model.",
+			"Closed-loop consumers and fixed open-loop arrivals are distinct modes; correlated burst is permitted only for closed-loop and is not an arrival process or provider model.",
+			"Fixed open-loop uses a deterministic interval tape and bounded in-process queue; it is not a production arrival distribution.",
 			"The configured pressure duration is the request-issuance window; load.duration_ns and throughput include bounded in-flight request drain but exclude replenish_drain_ns.",
 			"Served slots remain single-use and are replenished; no served-slot restore is claimed.",
 		},
@@ -871,9 +1179,14 @@ func measuredValue(metric runtimeevidence.Metric, name string) (uint64, error) {
 }
 
 func pressureResponseFailure(raw []byte, _ string, requestedWait, elapsed time.Duration) string {
+	return pressureResponseFailureForSpec(raw, cowPressureRequestSpec{Wait: requestedWait}, elapsed)
+}
+
+func pressureResponseFailureForSpec(raw []byte, spec cowPressureRequestSpec, elapsed time.Duration) string {
 	var response struct {
-		Status string         `json:"status"`
-		Error  map[string]any `json:"error"`
+		Status string                     `json:"status"`
+		Result map[string]json.RawMessage `json:"result"`
+		Error  map[string]any             `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return "invalid guest response JSON"
@@ -886,8 +1199,24 @@ func pressureResponseFailure(raw []byte, _ string, requestedWait, elapsed time.D
 		}
 		return fmt.Sprintf("guest status=%q error_type=%q message=%q", response.Status, errorType, message)
 	}
-	if requestedWait > 0 && elapsed+time.Millisecond < requestedWait {
-		return fmt.Sprintf("timer returned early: elapsed=%s requested=%s", elapsed, requestedWait)
+	if spec.Wait > 0 && elapsed+time.Millisecond < spec.Wait {
+		return fmt.Sprintf("timer returned early: elapsed=%s requested=%s", elapsed, spec.Wait)
+	}
+	if spec.RequireNumPy {
+		if len(response.Result) != 3 {
+			return "NumPy result does not have the exact expected shape"
+		}
+		var prepared, sum int64
+		var version string
+		if err := json.Unmarshal(response.Result["prepared"], &prepared); err != nil || prepared != spec.ExpectedPrepared {
+			return "NumPy result prepared value mismatched"
+		}
+		if err := json.Unmarshal(response.Result["numpy_version"], &version); err != nil || version == "" || len(version) > 64 {
+			return "NumPy result version is missing or invalid"
+		}
+		if err := json.Unmarshal(response.Result["sum"], &sum); err != nil || sum != spec.ExpectedSum {
+			return "NumPy result sum mismatched"
+		}
 	}
 	return ""
 }

@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bkmashiro/agent-python-runtime/benchmark/v1/cow-pressure.schema.json",
-  "title": "COW pressure evidence v9",
+  "title": "COW pressure evidence v11",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
+  "required": ["schema_version", "evidence_kind", "evidence_class", "artifact", "host_source", "environment", "strategy", "policy", "limits", "stop_reason", "spawn_snapshots", "load_samples", "load", "limitations"],
   "properties": {
-    "schema_version": {"const": 10},
+    "schema_version": {"const": 11},
     "evidence_kind": {"const": "cow-pressure"},
-    "evidence_class": {"const": "production-safe"},
+    "evidence_class": {"enum": ["production-safe", "profile-candidate"]},
     "artifact": {"$ref": "#/$defs/artifact"},
     "host_source": {"$ref": "#/$defs/hostSource"},
     "environment": {"$ref": "#/$defs/environment"},
@@ -17,6 +17,7 @@
       "required": ["requested", "active", "fallback"],
       "properties": {"requested": {"const": "cow-ready-single-use"}, "active": {"const": "cow-ready-single-use"}, "fallback": {"const": false}}
     },
+    "policy": {"$ref": "#/$defs/policy"},
     "limits": {"$ref": "#/$defs/limits"},
     "stop_reason": {"enum": ["admission-headroom", "max-slots"]},
     "spawn_snapshots": {"type": "array", "minItems": 1, "maxItems": 2048, "items": {"$ref": "#/$defs/snapshot"}},
@@ -25,13 +26,30 @@
     "limitations": {"type": "array", "minItems": 4, "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 500}}
   },
   "$defs": {
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "max_memory_bytes", "max_cpu", "greed", "cpu_period_micros", "cpu_quota_micros", "max_active", "target_memory_bps", "target_memory_bytes", "high_memory_bps", "high_memory_bytes", "critical_memory_bps", "critical_memory_bytes", "hard_memory_bytes", "unknown_reservation_bytes", "per_attempt_margin_bytes", "reservation_quantile_bps", "target_eviction_ppm", "speculative_max_evictions", "default_retry_delay_ns", "control_interval_ns", "stable_sample_every", "maximum_some_psi_avg10_bps", "maximum_full_psi_avg10_bps", "max_tasks", "max_attempts"],
+      "properties": {
+        "version": {"const": "production-policy-v1"},
+        "max_memory_bytes": {"type": "integer", "minimum": 67108864}, "max_cpu": {"type": "integer", "minimum": 1, "maximum": 1024}, "greed": {"type": "integer", "minimum": 0, "maximum": 100},
+        "cpu_period_micros": {"type": "integer", "minimum": 1}, "cpu_quota_micros": {"type": "integer", "minimum": 1}, "max_active": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "target_memory_bps": {"type": "integer", "minimum": 1, "maximum": 10000}, "target_memory_bytes": {"type": "integer", "minimum": 1},
+        "high_memory_bps": {"type": "integer", "minimum": 1, "maximum": 10000}, "high_memory_bytes": {"type": "integer", "minimum": 1},
+        "critical_memory_bps": {"type": "integer", "minimum": 1, "maximum": 10000}, "critical_memory_bytes": {"type": "integer", "minimum": 1}, "hard_memory_bytes": {"type": "integer", "minimum": 1},
+        "unknown_reservation_bytes": {"type": "integer", "minimum": 1}, "per_attempt_margin_bytes": {"type": "integer", "minimum": 1},
+        "reservation_quantile_bps": {"type": "integer", "minimum": 1, "maximum": 10000}, "target_eviction_ppm": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "speculative_max_evictions": {"type": "integer", "minimum": 0}, "default_retry_delay_ns": {"type": "integer", "minimum": 1}, "control_interval_ns": {"type": "integer", "minimum": 1},
+        "stable_sample_every": {"type": "integer", "minimum": 1}, "maximum_some_psi_avg10_bps": {"type": "integer", "minimum": 0}, "maximum_full_psi_avg10_bps": {"type": "integer", "minimum": 0},
+        "max_tasks": {"type": "integer", "minimum": 1}, "max_attempts": {"type": "integer", "minimum": 1}
+      }
+    },
     "artifact": {
       "type": "object", "additionalProperties": false,
       "required": ["filename", "sha256", "size_bytes", "source_commit", "artifact_profile", "target", "execution_model"],
       "properties": {
         "filename": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "size_bytes": {"type": "integer", "minimum": 1}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-        "artifact_profile": {"const": "base"}, "target": {"const": "wasm32-wasip1"}, "execution_model": {"const": "reactor"}
+        "artifact_profile": {"enum": ["base", "numpy-core"]}, "target": {"const": "wasm32-wasip1"}, "execution_model": {"const": "reactor"}
       }
     },
     "hostSource": {
@@ -48,17 +66,18 @@
     },
     "limits": {
       "type": "object", "additionalProperties": false,
-      "required": ["runtime_budget_bytes", "reserved_bytes", "allocation_bytes", "max_slots", "consumers", "duration_ns", "initial_capacity", "max_growth_step", "workload", "wait_ns", "dirty_bytes", "refill_policy", "refill_workers", "burst_factor"],
+      "required": ["runtime_budget_bytes", "reserved_bytes", "allocation_bytes", "max_slots", "consumers", "duration_ns", "initial_capacity", "max_growth_step", "workload", "wait_ns", "dirty_bytes", "refill_policy", "refill_workers", "burst_factor", "warmup_profile"],
       "properties": {
         "runtime_budget_bytes": {"type": "integer", "minimum": 1073741824}, "reserved_bytes": {"type": "integer", "minimum": 1073741824},
         "allocation_bytes": {"type": "integer", "minimum": 2147483648}, "max_slots": {"type": "integer", "minimum": 4, "maximum": 65536, "multipleOf": 4},
         "consumers": {"type": "integer", "minimum": 1, "maximum": 256}, "duration_ns": {"type": "integer", "minimum": 5000000000, "maximum": 600000000000},
-        "initial_capacity": {"const": 4}, "max_growth_step": {"const": 64}, "workload": {"enum": ["cpu", "wasi-timer-wait", "dirty-hold", "mixed-v1", "heavy-tail-v1"]},
+        "initial_capacity": {"const": 4}, "max_growth_step": {"const": 64}, "workload": {"enum": ["cpu", "wasi-timer-wait", "dirty-hold", "mixed-v1", "heavy-tail-v1", "numpy-v1", "numpy-mixed-v1"]},
         "wait_ns": {"type": "integer", "minimum": 0, "maximum": 10000000000},
         "dirty_bytes": {"type": "integer", "minimum": 0, "maximum": 67108864},
         "refill_policy": {"enum": ["fixed", "adaptive"]},
         "refill_workers": {"enum": [1, 2, 4, 8, 12, 16]},
-        "burst_factor": {"enum": [1, 2, 4, 8]}
+        "burst_factor": {"enum": [1, 2, 4, 8]},
+        "warmup_profile": {"enum": ["", "numpy-ready-v1"]}
       }
     },
     "metric": {
@@ -106,7 +125,9 @@
         "available": {"const": true}, "virtual_bytes": {"type": "integer", "minimum": 65536},
         "allocated_bytes": {"type": "integer", "minimum": 0}, "page_size_bytes": {"type": "integer", "minimum": 1},
         "zero_pages": {"type": "integer", "minimum": 0}, "non_zero_pages": {"type": "integer", "minimum": 0},
-        "sparse_potential_bytes": {"type": "integer", "minimum": 0}
+        "sparse_potential_bytes": {"type": "integer", "minimum": 0},
+        "warmup_profile": {"const": "numpy-ready-v1"},
+        "warmup_generation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },
     "histogram": {
@@ -146,8 +167,9 @@
     },
     "load": {
       "type": "object", "additionalProperties": false,
-      "required": ["started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "ready_before", "ready_after", "phases", "request_classes"],
+      "required": ["arrival", "started_requests", "completed_requests", "failed_requests", "timed_out_requests", "duration_ns", "replenish_drain_ns", "replenish_status", "cpu_user_ns", "cpu_system_ns", "cpu_core_utilization", "gomaxprocs", "throughput_per_second", "latency_p50_ns", "latency_p95_ns", "latency_p99_ns", "latency_max_ns", "latency_total_ns", "latency_mean_ns", "ready_before", "ready_after", "phases", "request_classes"],
       "properties": {
+        "arrival": {"$ref": "#/$defs/arrival"},
         "started_requests": {"type": "integer", "minimum": 1}, "completed_requests": {"type": "integer", "minimum": 1},
         "failed_requests": {"type": "integer", "minimum": 0}, "timed_out_requests": {"type": "integer", "minimum": 0},
         "duration_ns": {"type": "integer", "minimum": 1}, "replenish_drain_ns": {"type": "integer", "minimum": 0},
@@ -157,10 +179,23 @@
         "throughput_per_second": {"type": "number", "exclusiveMinimum": 0},
         "latency_p50_ns": {"type": "integer", "minimum": 1}, "latency_p95_ns": {"type": "integer", "minimum": 1},
         "latency_p99_ns": {"type": "integer", "minimum": 1}, "latency_max_ns": {"type": "integer", "minimum": 1},
+        "latency_total_ns": {"type": "integer", "minimum": 1}, "latency_mean_ns": {"type": "integer", "minimum": 1},
         "ready_before": {"type": "integer", "minimum": 1, "maximum": 65536}, "ready_after": {"type": "integer", "minimum": 0, "maximum": 65536},
         "phases": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/phase"}},
         "request_classes": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/requestClass"}},
         "burst": {"$ref": "#/$defs/burst"}
+      }
+    },
+    "arrival": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mode", "rate_per_second", "queue_capacity", "offered_requests", "accepted_requests", "rejected_requests"],
+      "properties": {
+        "mode": {"enum": ["closed-loop", "open-loop-fixed-v1"]},
+        "rate_per_second": {"type": "integer", "minimum": 0, "maximum": 4096},
+        "queue_capacity": {"type": "integer", "minimum": 0, "maximum": 65536},
+        "offered_requests": {"type": "integer", "minimum": 1},
+        "accepted_requests": {"type": "integer", "minimum": 1},
+        "rejected_requests": {"type": "integer", "minimum": 0}
       }
     },
     "burst": {
@@ -177,7 +212,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["name", "started", "completed", "failed"],
       "properties": {
-        "name": {"type": "string", "minLength": 1, "maxLength": 100},
+        "name": {"enum": ["tiny-cpu", "timer-wait", "dirty-hold", "wait-50ms", "dirty-4m-500ms", "dirty-16m-2s", "tail-2s", "numpy-tiny", "numpy-cpu", "numpy-dirty-4m-500ms", "numpy-dirty-16m-2s"]},
         "started": {"type": "integer", "minimum": 1}, "completed": {"type": "integer", "minimum": 0}, "failed": {"type": "integer", "minimum": 0}
       }
     },

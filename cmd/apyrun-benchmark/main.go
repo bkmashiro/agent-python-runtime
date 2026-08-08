@@ -88,6 +88,11 @@ type benchmarkOptions struct {
 	PressureDirtyBytes    uint64
 	PressureRefillWorkers uint
 	PressureBurstFactor   uint
+	PressureArrivalMode   string
+	PressureArrivalRate   uint
+	PressureQueueCapacity uint
+	PressureMaxCPU        uint
+	PressureGreed         uint
 }
 
 func main() {
@@ -117,13 +122,18 @@ func runMain(args []string) error {
 	flags.Uint64Var(&options.MemoryBudgetBytes, "memory-budget-bytes", 0, "cow-pressure runtime admission budget")
 	flags.Uint64Var(&options.MemoryReserveBytes, "memory-reserve-bytes", 0, "cow-pressure memory reserved outside runtime budget")
 	flags.UintVar(&options.MaxPressureSlots, "max-pressure-slots", 0, "cow-pressure hard slot bound")
-	flags.UintVar(&options.ConsumerCount, "consumers", 0, "cow-pressure closed-loop consumer count")
-	flags.DurationVar(&options.PressureDuration, "pressure-duration", 0, "cow-pressure closed-loop duration")
-	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu, wasi-timer-wait, dirty-hold, mixed-v1, or heavy-tail-v1")
+	flags.UintVar(&options.ConsumerCount, "consumers", 0, "cow-pressure closed-loop consumers or fixed open-loop workers")
+	flags.DurationVar(&options.PressureDuration, "pressure-duration", 0, "cow-pressure request-issuance window")
+	flags.StringVar(&options.PressureWorkload, "pressure-workload", "cpu", "cow-pressure workload: cpu, wasi-timer-wait, dirty-hold, mixed-v1, heavy-tail-v1, numpy-v1, or numpy-mixed-v1")
 	flags.DurationVar(&options.PressureWait, "pressure-wait", 0, "per-request wait for wasi-timer-wait or dirty-hold workload")
 	flags.Uint64Var(&options.PressureDirtyBytes, "pressure-dirty-bytes", 0, "per-request bytearray bytes touched by dirty-hold")
 	flags.UintVar(&options.PressureRefillWorkers, "pressure-refill-workers", 4, "cow-pressure refill policy: 0=adaptive or fixed 1, 2, 4, 8, 12, 16")
-	flags.UintVar(&options.PressureBurstFactor, "pressure-burst-factor", 1, "mid-load correlated consumer step: 1, 2, 4, or 8")
+	flags.UintVar(&options.PressureBurstFactor, "pressure-burst-factor", 1, "correlated closed-loop consumer step: 1, 2, 4, or 8")
+	flags.StringVar(&options.PressureArrivalMode, "pressure-arrival-mode", "closed-loop", "pressure arrival mode: closed-loop or open-loop-fixed-v1")
+	flags.UintVar(&options.PressureArrivalRate, "pressure-arrival-rate", 0, "fixed open-loop offered arrivals per second")
+	flags.UintVar(&options.PressureQueueCapacity, "pressure-queue-capacity", 0, "bounded fixed open-loop queue capacity")
+	flags.UintVar(&options.PressureMaxCPU, "pressure-max-cpu", 1, "maximum CPU units used by the production policy compiler")
+	flags.UintVar(&options.PressureGreed, "pressure-greed", 50, "bounded performance-density preference from 0 to 100")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

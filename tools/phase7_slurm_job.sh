@@ -218,6 +218,7 @@ cmp -- "$expected_payload_manifest" "$INPUT/payload.SHA256"
 test "$(find "$INPUT" -type f -print | wc -l | tr -d '[:space:]')" -eq "$((${#expected_payload_files[@]} + 1))"
 (cd "$INPUT" && sha256sum --check payload.SHA256)
 test "$(tr -d '\r\n' < "$INPUT/SOURCE_COMMIT")" = "$SOURCE_COMMIT"
+chmod 500 "$INPUT/bin/apyrun-benchmark-linux-amd64"
 
 git clone "$INPUT/source.bundle" "$REPO" >/dev/null 2>&1
 test "$(git -C "$REPO" rev-parse HEAD)" = "$SOURCE_COMMIT"

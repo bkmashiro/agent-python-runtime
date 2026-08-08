@@ -34,16 +34,16 @@ _CANARY = (
 
 _SMALL = (
     Cell("closed-numpy-v1-s64-c1", "numpy-v1", "closed-loop", 64, 1, 10),
+    Cell("closed-numpy-v1-s64-c4", "numpy-v1", "closed-loop", 64, 4, 10),
     Cell("closed-numpy-v1-s64-c8", "numpy-v1", "closed-loop", 64, 8, 10),
-    Cell("closed-numpy-v1-s64-c16", "numpy-v1", "closed-loop", 64, 16, 10),
+    Cell("closed-numpy-v1-s256-c4", "numpy-v1", "closed-loop", 256, 4, 10),
     Cell("closed-numpy-v1-s256-c8", "numpy-v1", "closed-loop", 256, 8, 10),
-    Cell("closed-numpy-v1-s256-c16", "numpy-v1", "closed-loop", 256, 16, 10),
+    Cell("closed-numpy-mixed-v1-s256-c4", "numpy-mixed-v1", "closed-loop", 256, 4, 10),
     Cell("closed-numpy-mixed-v1-s256-c8", "numpy-mixed-v1", "closed-loop", 256, 8, 10),
-    Cell("closed-numpy-mixed-v1-s256-c16", "numpy-mixed-v1", "closed-loop", 256, 16, 10),
     Cell("open-numpy-v1-s256-w8-r25", "numpy-v1", "open-loop-fixed-v1", 256, 8, 10, 25, 64),
     Cell("open-numpy-v1-s256-w8-r100", "numpy-v1", "open-loop-fixed-v1", 256, 8, 10, 100, 64),
-    Cell("open-numpy-mixed-v1-s256-w16-r10", "numpy-mixed-v1", "open-loop-fixed-v1", 256, 16, 10, 10, 64),
-    Cell("open-numpy-mixed-v1-s256-w16-r40", "numpy-mixed-v1", "open-loop-fixed-v1", 256, 16, 10, 40, 64),
+    Cell("open-numpy-mixed-v1-s256-w8-r10", "numpy-mixed-v1", "open-loop-fixed-v1", 256, 8, 10, 10, 64),
+    Cell("open-numpy-mixed-v1-s256-w8-r40", "numpy-mixed-v1", "open-loop-fixed-v1", 256, 8, 10, 40, 64),
 )
 
 

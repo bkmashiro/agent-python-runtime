@@ -3,6 +3,7 @@ package fakemail_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,15 @@ import (
 )
 
 func TestFakeMailCheckpointSurvivesSQLiteReopen(t *testing.T) {
+	testFakeMailCheckpointSurvivesSQLiteReopen(t, false)
+}
+
+func TestFakeMailAcceptedTimeoutCheckpointSurvivesSQLiteReopen(t *testing.T) {
+	testFakeMailCheckpointSurvivesSQLiteReopen(t, true)
+}
+
+func testFakeMailCheckpointSurvivesSQLiteReopen(t *testing.T, acceptedTimeout bool) {
+	t.Helper()
 	fixture := newMailFixture(t, []byte("send-token"))
 	controller, err := fakemail.NewSendController(fixture.coordinator, fixture.transaction.ID, fixture.adapter)
 	if err != nil {
@@ -27,8 +37,14 @@ func TestFakeMailCheckpointSurvivesSQLiteReopen(t *testing.T) {
 	if err := controller.RegisterApproval(credential, staged.OperationID, "approval:mail-sqlite", "owner", fixture.now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	fixture.provider.SetAmbiguousNextSend()
-	_, _ = controller.Commit(context.Background(), credential, staged.OperationID)
+	if acceptedTimeout {
+		fixture.provider.SetAcceptedTimeoutNextSend()
+	} else {
+		fixture.provider.SetAmbiguousNextSend()
+	}
+	if _, err := controller.Commit(context.Background(), credential, staged.OperationID); !errors.Is(err, fakemail.ErrSendReconciliation) {
+		t.Fatalf("commit err=%v", err)
+	}
 	if fixture.provider.SentCount() != 1 {
 		t.Fatalf("sent=%d", fixture.provider.SentCount())
 	}

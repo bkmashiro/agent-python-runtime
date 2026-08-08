@@ -63,6 +63,27 @@ class Phase6SlurmContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.unique_json(path)
 
+    def test_key_value_evidence_allows_ascii_digits_after_first_character(self) -> None:
+        module = load_watcher()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "environment.txt"
+            path.write_text(
+                "formal_selection_sha256=none\njob_id=271691\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                {"formal_selection_sha256": "none", "job_id": "271691"},
+                module.exact_key_values(path),
+            )
+            for malformed in (
+                "1job=value\n",
+                "job-id=value\n",
+                "job_id=one\njob_id=two\n",
+            ):
+                path.write_text(malformed, encoding="utf-8")
+                with self.assertRaises(RuntimeError):
+                    module.exact_key_values(path)
+
     def test_local_stream_copy_is_bounded(self) -> None:
         module = load_watcher()
         target = io.BytesIO()
@@ -173,6 +194,7 @@ class Phase6SlurmContractTests(unittest.TestCase):
             "expected_artifact_sha256": "a" * 64,
             "expected_artifact_manifest_sha256": "c" * 64,
             "expected_artifact_source": "7" * 40,
+            "expected_benchmark_binary_sha256": "e" * 64,
             "validator_sha256": "b" * 64,
             "expected_tier": "canary",
             "interval": 60,
@@ -187,6 +209,7 @@ class Phase6SlurmContractTests(unittest.TestCase):
             ("expected_artifact_sha256", "true"),
             ("expected_artifact_manifest_sha256", "c" * 63),
             ("expected_artifact_source", "7" * 41),
+            ("expected_benchmark_binary_sha256", "e" * 63),
             ("validator_sha256", "b" * 63),
             ("expected_tier", "unknown"),
             ("interval", 59),

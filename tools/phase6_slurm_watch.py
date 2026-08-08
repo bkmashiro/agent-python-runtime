@@ -200,7 +200,7 @@ def validate_identity_args(
     *, job: str, host: str, stage: str, expected_revision: str,
     expected_tree: str, expected_artifact_sha256: str,
     expected_artifact_manifest_sha256: str, expected_artifact_source: str,
-    validator_sha256: str,
+    expected_benchmark_binary_sha256: str, validator_sha256: str,
     expected_tier: str, interval: int,
 ) -> None:
     path = PurePosixPath(stage)
@@ -217,8 +217,9 @@ def validate_identity_args(
             not HEX64.fullmatch(expected_artifact_manifest_sha256) or
             not HEX40.fullmatch(expected_artifact_source)):
         raise RuntimeError("artifact identity is invalid")
-    if not HEX64.fullmatch(validator_sha256):
-        raise RuntimeError("validator identity is invalid")
+    if (not HEX64.fullmatch(expected_benchmark_binary_sha256) or
+            not HEX64.fullmatch(validator_sha256)):
+        raise RuntimeError("benchmark or validator identity is invalid")
     if expected_tier not in {"canary", "small", "formal"}:
         raise RuntimeError("expected tier is invalid")
     if interval < 60:
@@ -350,7 +351,7 @@ def exact_key_values(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         key, separator, value = line.partition("=")
-        if separator != "=" or not re.fullmatch(r"[a-z_]+", key) or key in values:
+        if separator != "=" or not re.fullmatch(r"[a-z][a-z0-9_]*", key) or key in values:
             raise RuntimeError("malformed or duplicate key-value evidence")
         values[key] = value
     return values
@@ -371,6 +372,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-artifact-sha256", required=True)
     parser.add_argument("--expected-artifact-manifest-sha256", required=True)
     parser.add_argument("--expected-artifact-source", required=True)
+    parser.add_argument("--expected-benchmark-binary-sha256", required=True)
     parser.add_argument("--expected-tier", choices=("canary", "small", "formal"), required=True)
     parser.add_argument("--formal-selection", type=Path)
     parser.add_argument("--interval", type=int, default=60)
@@ -388,6 +390,7 @@ def main() -> None:
         expected_artifact_sha256=args.expected_artifact_sha256,
         expected_artifact_manifest_sha256=args.expected_artifact_manifest_sha256,
         expected_artifact_source=args.expected_artifact_source,
+        expected_benchmark_binary_sha256=args.expected_benchmark_binary_sha256,
         validator_sha256=args.validator_sha256,
         expected_tier=args.expected_tier,
         interval=args.interval,
@@ -503,8 +506,8 @@ def main() -> None:
             manifest.get("artifact_manifest_sha256") != args.expected_artifact_manifest_sha256 or
             manifest.get("artifact_source_revision") != args.expected_artifact_source):
         raise RuntimeError("result manifest artifact identity drifted")
-    if manifest.get("binary_sha256") != args.validator_sha256:
-        raise RuntimeError("result binary and exact validator identity drifted")
+    if manifest.get("binary_sha256") != args.expected_benchmark_binary_sha256:
+        raise RuntimeError("result benchmark binary identity drifted")
     records = manifest.get("records")
     evidence_names = validate_record_set(records, expected_cells, args.expected_tier)
 
@@ -581,6 +584,7 @@ def main() -> None:
         "artifact_sha256": args.expected_artifact_sha256,
         "artifact_manifest_sha256": args.expected_artifact_manifest_sha256,
         "artifact_source_revision": args.expected_artifact_source,
+        "benchmark_binary_sha256": args.expected_benchmark_binary_sha256,
         "validator_sha256": args.validator_sha256,
         "tier": args.expected_tier,
         "formal_selection_sha256": formal_selection_sha256,

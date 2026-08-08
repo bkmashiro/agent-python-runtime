@@ -101,6 +101,25 @@ Logical Guest memory, mapping RSS, process RSS, and cgroup usage are different q
 
 Use a private output path and an explicit external memory guard. A Slurm `COMPLETED` state or process exit code alone is not acceptance evidence; also verify wrapper exit, checksums, schemas, semantic invariants, source/artifact identity, and full stdout/stderr.
 
+## Phase 6 NumPy-ready pressure
+
+The versioned Phase 6 contract is [NumPy-ready COW density and admission qualification](phase6-numpy-density.md). `cow-pressure` schema v11 adds:
+
+- exact `profile-candidate` + `numpy-core` + `numpy-ready-v1` binding;
+- `numpy-v1` and `numpy-mixed-v1` request classes with Host-validated numerical results;
+- distinct `closed-loop` and deterministic `open-loop-fixed-v1` modes;
+- `offered = accepted + rejected`, `accepted = started`, and `started = completed + failed` accounting;
+- latency total/mean and effective `production-policy-v1` telemetry derived from maximum memory, maximum CPU, and greed.
+
+Generate bounded plans without executing them:
+
+```bash
+python3 tools/phase6_matrix.py plan --tier canary
+python3 tools/phase6_matrix.py plan --tier small
+```
+
+The canary has two cells and the small matrix has eleven. `formal` has no default matrix: it requires an explicit JSON selection of successful small-matrix cell IDs and expands each selected cell to exactly three repetitions. The runner refuses a modified Host tree or non-empty output directory and validates source/artifact identity, request conservation, inventory recovery, NumPy request classes, and evidence checksums before writing its run manifest.
+
 ## Agent-framework comparison
 
 For an external agentic benchmark, keep task inputs, tool schemas, scoring, and Host capability policy fixed across:

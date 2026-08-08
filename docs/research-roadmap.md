@@ -13,6 +13,8 @@ This page summarizes current research directions. Historical implementation chec
 
 The implemented COW strategy remains single-use: a served slot is discarded.
 
+The active bounded tranche is [Phase 6: NumPy-ready COW density and admission qualification](phase6-numpy-density.md). It extends the reviewed single-lifecycle NumPy result into profile-bound density, deterministic open-loop admission, and effective-policy evidence without changing the single-use boundary.
+
 ### Host-owned capabilities
 
 - keep capability grants and credentials outside guest requests;

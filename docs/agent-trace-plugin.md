@@ -81,6 +81,7 @@ Tracing is observer-only: event data never enters capability grants, policy, app
 - unique immutable event IDs;
 - event digest and identifier validation before append;
 - bounded ordered queries;
+- `LoadPlayback` paged at 128 events and globally capped at 4,096 events / 8 MiB aggregate event bytes before accumulation;
 - contiguous-sequence validation in `LoadPlayback`;
 - `ForkAt` plans anchored to an exact event and state fingerprint;
 - integrity digests over ordered event, payload, and state identities.
@@ -104,6 +105,8 @@ The manifest contains one claim per `artifact`, `base`, `authority`, `execution`
 - editing the serialized qualification to R1 or R2 fails manifest validation because the required evidence classes are absent.
 
 A digest proves identity or trace integrity only. It does not prove input capture, deterministic dependencies, provider final state, semantic correctness, or outcome equivalence.
+
+The read-only projection in [`evidence-bundle.md`](evidence-bundle.md) can connect this exact manifest to its Agent run, an exact-execution-bound reconciled transaction, and recorded checkpoint ancestry without changing that structural-only ceiling.
 
 Minimal API:
 

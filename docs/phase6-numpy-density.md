@@ -1,5 +1,7 @@
 # Phase 6: NumPy-ready COW density and admission qualification
 
+The accepted exact-source T4 results, figures, policy conclusion, and evidence boundaries are published in [Phase 6 NumPy-ready COW density and load qualification](reports/phase6-numpy-density-results.md).
+
 ## Status
 
 Accepted implementation and experiment plan. Results remain `profile-candidate` until every gate below passes on one exact Host revision and one checksum-verified Guest artifact.

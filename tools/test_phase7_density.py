@@ -98,7 +98,27 @@ class Phase7DensityTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ValidationError, "mapping"):
             MODULE.pair_evidence(cow, non_cow, b"cow", b"non-cow")
 
-    def test_strict_load_rejects_duplicate_keys_and_symlinks(self) -> None:
+    def test_slurm_wrapper_is_t4_source_bound_and_runs_exact_pair(self):
+        source = Path(__file__).with_name("phase7_slurm_job.sh").read_text(encoding="utf-8")
+        self.assertIn("#SBATCH --partition=t4", source)
+        self.assertIn("#SBATCH --gres=gpu:tesla_t4:1", source)
+        self.assertIn("#SBATCH --cpus-per-task=4", source)
+        self.assertIn("#SBATCH --mem=16G", source)
+        self.assertIn("#SBATCH --export=NIL", source)
+        self.assertIn("single-use-preinitialized", source)
+        self.assertIn("cow-ready-single-use", source)
+        self.assertIn("-prepared-warmup-profile numpy-ready-v1", source)
+        self.assertIn("-max-rss-bytes 8589934592", source)
+        self.assertIn("validate-lifecycle-density", source)
+        self.assertIn("phase7_density.py", source)
+        self.assertIn("source.bundle", source)
+        self.assertIn("payload.SHA256", source)
+        self.assertIn("READY-${SLURM_JOB_ID}", source)
+        self.assertIn("ACK-${SLURM_JOB_ID}", source)
+        self.assertNotIn("a100", source.lower())
+        self.assertNotIn("sh -c", source)
+
+    def test_strict_load_rejects_duplicate_keys_and_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             duplicate = root / "duplicate.json"

@@ -56,6 +56,12 @@ func TestReconciledIrreversibleEvidenceIncludesReceiptAndObservation(t *testing.
 	}); err != ErrAuthorityDenied {
 		t.Fatalf("missing receipt err=%v", err)
 	}
+	if _, err := coordinator.ReconcileAuthorizedDispatch(credential, ReconcileDispatchRequest{
+		OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded,
+		ProviderReceiptDigest: observationDigest, ObservationDigest: observationDigest,
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("identical evidence err=%v", err)
+	}
 	completion, err := coordinator.ReconcileAuthorizedDispatch(credential, ReconcileDispatchRequest{
 		OperationID: op.ID, AttemptID: dispatch.Attempt.ID, Outcome: DispatchSucceeded,
 		ProviderReceiptDigest: receiptDigest, ObservationDigest: observationDigest,

@@ -186,7 +186,8 @@ func (controller *CancelController) Reconcile(ctx context.Context, credential tr
 	}
 	_, err = controller.coordinator.ReconcileAuthorizedDispatch(credential, transaction.ReconcileDispatchRequest{
 		OperationID: operationID, AttemptID: attemptID, Outcome: transaction.DispatchSucceeded,
-		ProviderReceiptDigest: receipt.ReceiptDigest, ObservationDigest: receipt.ReceiptDigest,
+		ProviderReceiptDigest: receipt.ReceiptDigest,
+		ObservationDigest:     cancelDigest(fmt.Sprintf("fakejob.readback/v1\x00%s\x00%d\x00%s\x00%s", receipt.JobID, receipt.JobVersion, stage.public.ManifestDigest, receipt.ReceiptDigest)),
 	})
 	if err != nil {
 		return CancelReceipt{}, err

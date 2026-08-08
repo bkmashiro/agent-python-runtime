@@ -39,8 +39,10 @@ func FromMetadataPlayback(ref runtimeconfig.ExecutionRef, playback agenttrace.Pl
 		if !ok || !matches(ref, observed) {
 			continue
 		}
+		if completedEventID != "" {
+			return Manifest{}, ErrAmbiguousExecutionObservation
+		}
 		completedEventID = event.EventID
-		break
 	}
 	if completedEventID == "" {
 		return Manifest{}, ErrExecutionNotObserved
@@ -132,7 +134,7 @@ func decodeStrictObject(payload []byte) (map[string]json.RawMessage, bool) {
 
 func decodeField(fields map[string]json.RawMessage, key string, target any) bool {
 	raw, ok := fields[key]
-	return ok && json.Unmarshal(raw, target) == nil
+	return ok && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) && json.Unmarshal(raw, target) == nil
 }
 
 func validCompletionMetadata(fields map[string]json.RawMessage) bool {

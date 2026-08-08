@@ -95,7 +95,7 @@ Tracing is observer-only: event data never enters capability grants, policy, app
 
 The manifest contains one claim per `artifact`, `base`, `authority`, `execution`, `effect`, and `outcome`, with explicit dependencies and one verifier status: `verified`, `contradicted`, `insufficient`, or `stale`. In the current metadata-only adapter:
 
-- only a canonical `runtime.completed` payload with exact `status: "ok"`, matching execution identity, and the versioned Harness completion fields may support the execution claim; failed, unknown-status, duplicate-key, aliased, or unknown-field payloads are rejected;
+- only one canonical `runtime.completed` payload with exact non-null typed fields, exact `status: "ok"`, matching execution identity, and the versioned Harness completion fields may support the execution claim; failed, unknown-status, duplicate-key, aliased, unknown-field, null-scalar, or duplicate-matching-completion payloads are rejected;
 - `CompletedEventID`, playback digest, code digest, claim IDs, statuses, dependencies, and evidence references are bound to the exact generated graph rather than accepted as free-form labels;
 - exact executed-code digest and successful execution-reference observation are `verified` structural claims;
 - runtime base, authority binding, effects, and semantic outcome remain `insufficient`;

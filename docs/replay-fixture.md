@@ -2,7 +2,7 @@
 
 **Status:** Current, bounded verification fixture.
 
-The package `verification/replayfixture` provides a fully local state-machine fixture for qualifying replay evidence without contacting a provider, filesystem, network service, or Runtime engine. It belongs to the Host-side Verification plane and does not expand Pysolate Runtime authority.
+The package `verification/replayfixture` provides a fully local state-machine fixture for qualifying replay evidence without contacting a provider, filesystem, network service, or Runtime engine. Its bounded state-history contract is versioned as `replay-fixture/v2`; v1 recordings are not accepted as v2. It belongs to the Host-side Verification plane and does not expand Pysolate Runtime authority.
 
 ## Frozen inputs
 
@@ -16,7 +16,7 @@ A recording owns and hashes all values that can influence the fixture:
 - resulting receipts and final state;
 - transcript and recording digests.
 
-The tape must contain exactly one clock and random value per input. Missing entries, duplicate step identities, unsupported operations, non-UTC or decreasing clock values, and digest mismatches fail closed.
+The tape must contain exactly one clock and random value per input. Inputs, initial `State.Applied`, generated final state, and the authoritative R2 final-state oracle are bounded; applied step identities must be valid and unique. Missing entries, duplicate step identities, unsupported operations, non-UTC or decreasing clock values, and digest mismatches fail closed.
 
 The artifact digest identifies the versioned declarative fixture contract; it is not a hash of the compiled Go implementation. A semantic implementation change must update that declaration/version before it can claim the same fixture-local qualification.
 

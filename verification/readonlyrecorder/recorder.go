@@ -402,26 +402,38 @@ func locatorContainsSensitiveData(locator string) bool {
 	if valueSecretPattern.MatchString(locator) {
 		return true
 	}
-	if parsed, err := url.Parse(locator); err == nil {
-		if parsed.User != nil {
-			if _, hasPassword := parsed.User.Password(); hasPassword {
-				return true
-			}
-		}
-		for key := range parsed.Query() {
-			if isSensitiveKey(key) {
-				return true
-			}
-		}
+	if urlContainsSensitiveData(locator) {
+		return true
 	}
 	for _, token := range strings.FieldsFunc(locator, func(r rune) bool {
 		return unicode.IsSpace(r) || r == '?' || r == '&'
 	}) {
+		if urlContainsSensitiveData(strings.Trim(token, `"'(),;`)) {
+			return true
+		}
 		token = strings.TrimLeft(token, "-/")
 		if index := strings.IndexAny(token, "=:"); index >= 0 {
 			token = token[:index]
 		}
 		if isSensitiveKey(token) {
+			return true
+		}
+	}
+	return false
+}
+
+func urlContainsSensitiveData(locator string) bool {
+	parsed, err := url.Parse(locator)
+	if err != nil {
+		return false
+	}
+	if parsed.User != nil {
+		if _, hasPassword := parsed.User.Password(); hasPassword {
+			return true
+		}
+	}
+	for key := range parsed.Query() {
+		if isSensitiveKey(key) {
 			return true
 		}
 	}

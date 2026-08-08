@@ -300,7 +300,8 @@ func TestFakeMailAcceptedTimeoutRequiresReadbackAndNeverBlindRetries(t *testing.
 	}
 	inspection, err = fixture.coordinator.Inspect(fixture.transaction.ID, nil)
 	if err != nil || len(inspection.Attempts) != 1 || inspection.Attempts[0].State != transaction.AttemptSucceeded ||
-		inspection.Attempts[0].ReconciliationDigest != receipt.ReceiptDigest {
+		inspection.Attempts[0].ProviderReceiptDigest != receipt.ReceiptDigest ||
+		inspection.Attempts[0].ReconciliationDigest == "" || inspection.Attempts[0].ReconciliationDigest == receipt.ReceiptDigest {
 		t.Fatalf("reconciled inspection=%+v receipt=%+v err=%v", inspection, receipt, err)
 	}
 }

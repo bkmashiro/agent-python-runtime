@@ -810,6 +810,7 @@ func (ledger *SQLiteLedger) completeAttempt(id string, version uint64, target At
 func (ledger *SQLiteLedger) reconcileAttempt(id string, version uint64, target AttemptState, receiptDigest, observationDigest string, observedAt time.Time) (Attempt, error) {
 	if !validIdentifier(id) || !digestPattern.MatchString(observationDigest) ||
 		(receiptDigest != "" && !digestPattern.MatchString(receiptDigest)) ||
+		(receiptDigest != "" && receiptDigest == observationDigest) ||
 		(target == AttemptFailed && receiptDigest != "") || observedAt.IsZero() ||
 		(target != AttemptSucceeded && target != AttemptFailed) {
 		return Attempt{}, ErrInvalidInput

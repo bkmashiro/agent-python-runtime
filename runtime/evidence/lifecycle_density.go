@@ -637,6 +637,24 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 	if uint64(sample.Pool.AccountedSlots) != accounted || accounted > uint64(sample.Pool.TargetCapacity) {
 		return errors.New("pool state accounting is inconsistent")
 	}
+	if evidence.SchemaVersion == 3 {
+		if sample.ActiveConcurrency != 0 || sample.Pool.TargetCapacity != sample.RequestedSlots || sample.Pool.Ready != sample.RequestedSlots ||
+			sample.Pool.AccountedSlots != sample.RequestedSlots || sample.Pool.Initializing != 0 || sample.Pool.Leased != 0 ||
+			sample.Pool.Unhealthy != 0 || sample.Pool.Retiring != 0 {
+			return errors.New("schema v3 requires the exact quiescent ready inventory")
+		}
+		expectedShards := uint32(1)
+		if evidence.Strategy.Active == "single-use-preinitialized" {
+			expectedShards = (sample.RequestedSlots + 3) / 4
+		}
+		if sample.RuntimeShards != expectedShards {
+			return errors.New("schema v3 runtime shard topology drifted")
+		}
+		if sample.Phases.WarmupNS == nil || sample.Phases.WarmupNS.Status != MetricMeasured ||
+			sample.Phases.WarmupNS.Value == nil || *sample.Phases.WarmupNS.Value == 0 {
+			return errors.New("schema v3 requires positive measured warmup timing")
+		}
+	}
 	for _, named := range []struct {
 		name   string
 		metric Metric
@@ -733,6 +751,30 @@ func (evidence LifecycleDensityEvidence) validateSample(sample LifecycleDensityS
 		if metric.Status != MetricSkipped || metric.ReasonCode != expectedReason {
 			return errors.New("cgroup v2 metrics lack the required fail-closed scope reason")
 		}
+	}
+	return nil
+}
+
+// ValidateLifecycleDensitySampleFragment applies the same sample semantics used by
+// LifecycleDensityEvidence.Validate before a controller has assembled the full matrix.
+func ValidateLifecycleDensitySampleFragment(sample LifecycleDensitySample, strategy StrategyIdentity, environment EnvironmentIdentity) error {
+	if !lowerHex(sample.ProcessInstanceSHA256, 64) {
+		return invalidDensity("sample process instance identity is missing")
+	}
+	evidence := LifecycleDensityEvidence{SchemaVersion: 3, Strategy: strategy, Environment: environment}
+	if err := evidence.validateSample(sample); err != nil {
+		return fmt.Errorf("%w: sample %d: %v", ErrInvalidLifecycleDensityEvidence, sample.SampleIndex, err)
+	}
+	return nil
+}
+
+// ValidateLifecycleDensityBoundaryFragment applies schema-v3 boundary semantics
+// before a controller has assembled the full matrix.
+func ValidateLifecycleDensityBoundaryFragment(boundary LifecycleDensityBoundary, strategy StrategyIdentity, plan SweepPlan) error {
+	if strategy.Active != "single-use-preinitialized" || boundary.RequestedSlots != 64 || boundary.Status != "rss_guard" ||
+		boundary.GuardRSSBytes != plan.MaxProcessRSSBytes || boundary.MaxObservedRSSBytes <= boundary.GuardRSSBytes ||
+		!lowerHex(boundary.ProcessInstanceSHA256, 64) {
+		return invalidDensity("boundary outcome is unsupported or incomplete")
 	}
 	return nil
 }

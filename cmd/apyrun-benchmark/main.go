@@ -69,6 +69,7 @@ type benchmarkOptions struct {
 	ManifestPath          string
 	OutputPath            string
 	InputPath             string
+	OtherInputPath        string
 	SchemaPath            string
 	Class                 string
 	Strategy              string
@@ -79,6 +80,8 @@ type benchmarkOptions struct {
 	PreparedWarmupProfile string
 	LifecycleDensityChild bool
 	DensitySlots          uint
+	DensityRepeat         uint
+	ArmOrder              string
 	MaxRSSBytes           uint64
 	ChildTimeout          time.Duration
 	MemoryBudgetBytes     uint64
@@ -113,16 +116,19 @@ func runMain(args []string) error {
 	flags.StringVar(&options.ManifestPath, "manifest", "", "matching artifact manifest")
 	flags.StringVar(&options.OutputPath, "output", "", "JSON evidence output")
 	flags.StringVar(&options.InputPath, "input", "", "existing evidence input for validation mode")
+	flags.StringVar(&options.OtherInputPath, "other-input", "", "second evidence input for cross-campaign validation")
 	flags.StringVar(&options.SchemaPath, "schema", "", "JSON Schema input for validation mode")
 	flags.StringVar(&options.Class, "class", "production-safe", "production-safe, full, profile-candidate, or preinitialization-spike")
 	flags.StringVar(&options.Strategy, "strategy", "fresh", "fresh, single-use-preinitialized, cow-ready-single-use, or experimental single-use-preinitialized-shared-cache")
 	flags.IntVar(&options.Samples, "samples", 3, "runtime samples (3-20) or lifecycle-density repeats (1-20)")
-	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, binary-source-identity, cow-pressure, validate-cow-pressure, validate-lifecycle-density, validate-phase7-paired-density, or reactor-census")
+	flags.StringVar(&options.Kind, "kind", "runtime", "runtime, lifecycle-density, phase7-paired-density-cell, aggregate-phase7-density-cells, validate-phase7-formal-disjointness, binary-source-identity, cow-pressure, validate-cow-pressure, validate-lifecycle-density, validate-phase7-density-cell, validate-phase7-paired-density, or reactor-census")
 	flags.StringVar(&options.Fixture, "fixture", benchmarkFixtureBasic, "runtime execute fixture: basic, numpy-import, or numpy-ready")
 	flags.StringVar(&options.COWWarmupProfile, "cow-warmup-profile", "", "audited Guest warmup profile used before COW image sealing")
 	flags.StringVar(&options.PreparedWarmupProfile, "prepared-warmup-profile", "", "internal artifact-defined warmup profile for lifecycle-density")
 	flags.BoolVar(&options.LifecycleDensityChild, "lifecycle-density-child", false, "internal lifecycle-density child mode")
 	flags.UintVar(&options.DensitySlots, "density-slots", 0, "internal lifecycle-density requested slot count")
+	flags.UintVar(&options.DensityRepeat, "density-repeat", 0, "Phase 7 paired-cell zero-based repeat index")
+	flags.StringVar(&options.ArmOrder, "arm-order", "", "Phase 7 paired-cell arm order: cow-first or non-cow-first")
 	flags.Uint64Var(&options.MaxRSSBytes, "max-rss-bytes", 0, "required lifecycle-density child RSS kill threshold")
 	flags.DurationVar(&options.ChildTimeout, "child-timeout", 2*time.Minute, "lifecycle-density timeout per fresh child")
 	flags.Uint64Var(&options.MemoryBudgetBytes, "memory-budget-bytes", 0, "cow-pressure runtime admission budget")
@@ -146,6 +152,9 @@ func runMain(args []string) error {
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional benchmark arguments")
 	}
+	if options.OtherInputPath != "" && options.Kind != "validate-phase7-formal-disjointness" {
+		return errors.New("-other-input is reserved for Phase 7 formal disjointness validation")
+	}
 	if options.Kind == "validate-cow-pressure" {
 		return runCOWPressureValidationMain(options)
 	}
@@ -155,8 +164,20 @@ func runMain(args []string) error {
 	if options.Kind == "validate-phase7-paired-density" {
 		return runPhase7PairedValidationMain(options)
 	}
+	if options.Kind == "validate-phase7-density-cell" {
+		return runPhase7CellValidationMain(options)
+	}
+	if options.Kind == "aggregate-phase7-density-cells" {
+		return runPhase7CellAggregationMain(options)
+	}
+	if options.Kind == "validate-phase7-formal-disjointness" {
+		return runPhase7FormalDisjointnessMain(options)
+	}
 	if options.Kind == "binary-source-identity" {
 		return runBinarySourceIdentityMain(options)
+	}
+	if options.Kind == "phase7-paired-density-cell" {
+		return runPhase7PairedCellMain(options, goruntime.GOOS)
 	}
 	if options.LifecycleDensityChild {
 		if err := validateLifecycleDensityOptions(options, true, goruntime.GOOS); err != nil {

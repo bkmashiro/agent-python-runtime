@@ -291,10 +291,15 @@ python3 "$REPO/tools/phase7_density.py" \
   --cow "$RESULT/cow.json" \
   --non-cow "$RESULT/non-cow.json" \
   --output "$RESULT/paired-summary.json"
+"$INPUT/bin/apyrun-benchmark-linux-amd64" \
+  -kind validate-phase7-paired-density \
+  -input "$RESULT/paired-summary.json" \
+  -schema "$REPO/benchmark/v1/phase7-paired-density.schema.json" \
+  > "$RESULT/paired-summary.json.validation.json"
 
 (
   cd "$RESULT"
-  sha256sum cow.json cow.json.validation.json non-cow.json non-cow.json.validation.json paired-summary.json > SHA256SUMS
+  sha256sum cow.json cow.json.validation.json non-cow.json non-cow.json.validation.json paired-summary.json paired-summary.json.validation.json > SHA256SUMS
   sha256sum --check SHA256SUMS
 )
 printf 'completed_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$NODE_ROOT/ENVIRONMENT.txt"

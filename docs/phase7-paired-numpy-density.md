@@ -29,7 +29,7 @@ The topology difference is recorded in every sample. It is part of the supported
 - 2 GiB policy reserve
 - greed 50
 
-A sample is accepted only when the pool reaches its exact ready target and all inventory counters conserve supply. The parent kills a child that exceeds its RSS guard or timeout; a killed child is not converted into a successful measurement.
+A successful sample is accepted only when the pool reaches its exact ready target and all inventory counters conserve supply. The parent kills a child that exceeds its RSS guard or timeout. For schema v3, only a manifest-bound `single-use-preinitialized` 64-slot child may retain a typed `rss_guard` outcome: it records the observed peak, fixed guard, process identity, slot, and repeat, but it is never converted into a successful ready measurement. A timeout, OOM, malformed child output, COW guard hit, or guard hit below 64 still fails the arm.
 
 ## Lifecycle separation
 
@@ -60,16 +60,17 @@ The COW arm also records named COW mapping attribution. Shared Slurm cgroup coun
 
 ## Evidence contract
 
-Lifecycle-density schema v2 binds:
+Lifecycle-density schema v3 binds:
 
 - exact artifact SHA-256, size, source commit, target, execution model, and profile;
-- `numpy-ready-v1` plus `SHA256(artifact_bytes || 0x00 || profile)` generation;
+- `numpy-ready-v1` plus `SHA256(SHA256(artifact_bytes) || 0x00 || profile)` generation;
 - requested and active strategy with no fallback;
 - exact canonical matrix and runtime-shard topology;
 - process, backend, environment, phase, pool, and COW mapping identities;
-- duplicate-key rejection and unknown-field rejection.
+- duplicate-key rejection and unknown-field rejection;
+- exactly one outcome per canonical `(slots, repeat)` cell: a complete ready sample, or the narrowly allowed non-COW 64-slot RSS boundary.
 
-`tools/phase7_density.py` first invokes the standalone Go validator for each arm and then rejects any cross-arm drift in artifact, warmup, Host source, backend, environment, plan, metric semantics, or observability. Derived ratios use integer parts-per-million to keep rendering deterministic.
+`tools/phase7_density.py` first invokes the standalone Go validator for each arm and then rejects any cross-arm drift in artifact, warmup, Host source, backend, environment, plan, metric semantics, or observability. Derived ratios use integer parts-per-million to keep rendering deterministic. Slots 1–32 must have successful pairs for every repeat. Slot 64 is paired only when both arms complete; otherwise paired schema v2 reports explicit coverage and the non-COW RSS boundary without inventing PSS or ready-time ratios.
 
 The Slurm wrapper accepts only the exact bounded payload file set, copies every source through a one-descriptor size/hash gate, and binds the scheduler's executing script, the checked-out source wrapper, and the running benchmark binary's embedded VCS identity to the requested source commit. Archive, checksum, `READY`, failure, and `ACKED` files use exclusive hard-link publication. ACK input is one bounded regular file read through one `O_NOFOLLOW` descriptor and must equal exactly `<archive-sha256>\n`. Slurm stdout is outside `stage/input`, so scheduler-created log files cannot change the payload inventory. With a four-minute child timeout, 42 formal child cells plus the 30-minute ACK window remain below the four-hour allocation limit.
 
@@ -107,11 +108,12 @@ For formal evidence, use `-samples 3`. Run a second independent allocation with 
 ## Acceptance gates
 
 - both arm files pass `validate-lifecycle-density` against the checked-in schema, staged artifact, and manifest;
-- both files are schema v2 and independently pass structural and semantic validation;
+- both arm files are schema v3 and independently pass structural and semantic validation;
+- paired summary is schema v2 and passes `validate-phase7-paired-density` before archive publication;
 - artifact, warmup generation, Host source, backend, environment, and plan are byte-equivalent across arms;
-- every canonical `(slots, repeat)` cell exists exactly once;
+- every canonical `(slots, repeat)` cell has exactly one complete-sample or typed-boundary outcome;
 - COW reports one Runtime shard and exactly `slots` named COW mappings;
 - non-COW reports `ceil(slots / 4)` Runtime shards and no COW mapping attribution;
 - pool ready/accounted values equal requested slots;
-- no timeout, RSS guard kill, OOM, OOM-kill, or fallback;
+- no timeout, OOM, OOM-kill, fallback, COW RSS guard, or RSS guard below 64; non-COW 64 may be a typed `rss_guard` boundary;
 - raw evidence hashes are embedded in the paired summary.

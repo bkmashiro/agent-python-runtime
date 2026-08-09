@@ -13,13 +13,15 @@ import subprocess
 import tempfile
 from typing import Any, Callable
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 EVIDENCE_CLASS = "phase7-paired-density"
 COW_STRATEGY = "cow-ready-single-use"
 NON_COW_STRATEGY = "single-use-preinitialized"
 WARMUP_PROFILE = "numpy-ready-v1"
 CANONICAL_SLOTS = [1, 2, 4, 8, 16, 32, 64]
 MAX_INPUT_BYTES = 32 * 1024 * 1024
+MAX_RSS_BYTES = 8 << 30
+CHILD_TIMEOUT_NS = 4 * 60 * 1_000_000_000
 
 
 class ValidationError(ValueError):
@@ -66,8 +68,10 @@ def _external_validate(benchmark: Path, schema: Path, artifact: Path, manifest: 
         verdict = json.loads(completed.stdout, object_pairs_hook=_unique_object)
     except json.JSONDecodeError as exc:
         raise ValidationError(f"standalone validator returned invalid JSON for {evidence}") from exc
-    if verdict.get("valid") is not True or verdict.get("schema_version") != 2:
+    if verdict.get("valid") is not True or verdict.get("schema_version") != 3:
         raise ValidationError(f"standalone validator returned an invalid verdict for {evidence}")
+    if not isinstance(verdict.get("samples"), int) or not isinstance(verdict.get("boundaries"), int):
+        raise ValidationError(f"standalone validator omitted outcome counts for {evidence}")
 
 
 def _required_object(value: dict[str, Any], key: str) -> dict[str, Any]:
@@ -86,9 +90,19 @@ def _metric_value(metric: Any, path: str) -> int:
     return value
 
 
-def _validate_arm(evidence: dict[str, Any], strategy: str) -> None:
-    if evidence.get("schema_version") != 2 or evidence.get("evidence_class") != "lifecycle-density":
-        raise ValidationError("arm is not lifecycle-density schema v2")
+def _lower_hex(value: Any, length: int) -> bool:
+    if not isinstance(value, str) or len(value) != length or value.lower() != value:
+        return False
+    try:
+        bytes.fromhex(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _validate_arm(evidence: dict[str, Any], strategy: str) -> int:
+    if evidence.get("schema_version") != 3 or evidence.get("evidence_class") != "lifecycle-density":
+        raise ValidationError("arm is not lifecycle-density schema v3")
     identity = _required_object(evidence, "strategy")
     if identity != {"active": strategy, "fallback": False, "requested": strategy}:
         raise ValidationError(f"arm strategy identity drifted for {strategy}")
@@ -101,37 +115,47 @@ def _validate_arm(evidence: dict[str, Any], strategy: str) -> None:
     plan = _required_object(evidence, "plan")
     if plan.get("workload") != "numpy-ready-idle" or plan.get("slot_counts") != CANONICAL_SLOTS:
         raise ValidationError("arm plan is not the canonical NumPy density sweep")
-    repeats = plan.get("repeats")
+    repeats = plan.get("repeats_per_slot")
     if not isinstance(repeats, int) or isinstance(repeats, bool) or not 1 <= repeats <= 20:
         raise ValidationError("arm repeat count is invalid")
+    if (plan.get("fresh_process_per_sample") is not True or plan.get("max_process_rss_bytes") != MAX_RSS_BYTES or
+            plan.get("child_timeout_ns") != CHILD_TIMEOUT_NS):
+        raise ValidationError("arm process isolation or fixed guard plan drifted")
     samples = evidence.get("samples")
-    if not isinstance(samples, list) or len(samples) != repeats * len(CANONICAL_SLOTS):
-        raise ValidationError("arm sample matrix is incomplete")
+    boundaries = evidence.get("boundaries", [])
+    if not isinstance(samples, list) or not isinstance(boundaries, list) or len(samples) + len(boundaries) != repeats * len(CANONICAL_SLOTS):
+        raise ValidationError("arm outcome matrix is incomplete")
+    summary = _required_object(evidence, "summary")
+    if summary.get("sample_count") != len(samples) or summary.get("boundary_count", 0) != len(boundaries):
+        raise ValidationError("arm summary outcome counts drifted")
+    return repeats
 
 
-def _lower_hex(value: Any, length: int) -> bool:
-    if not isinstance(value, str) or len(value) != length or value.lower() != value:
-        return False
-    try:
-        bytes.fromhex(value)
-    except ValueError:
-        return False
-    return True
+def _cell_identity(outcome: dict[str, Any], repeats: int, kind: str) -> tuple[int, int]:
+    slots = outcome.get("requested_slots")
+    repeat_index = outcome.get("repeat_index")
+    sample_index = outcome.get("sample_index")
+    if (not isinstance(slots, int) or isinstance(slots, bool) or slots not in CANONICAL_SLOTS or
+            not isinstance(repeat_index, int) or isinstance(repeat_index, bool) or not 0 <= repeat_index < repeats or
+            not isinstance(sample_index, int) or isinstance(sample_index, bool) or sample_index < 0):
+        raise ValidationError(f"{kind} cell identity is invalid")
+    expected_index = CANONICAL_SLOTS.index(slots) * repeats + repeat_index
+    if sample_index != expected_index:
+        raise ValidationError(f"{kind} sample index drifted")
+    return slots, repeat_index + 1
 
 
-def _sample_map(evidence: dict[str, Any], strategy: str) -> dict[tuple[int, int], dict[str, Any]]:
-    result: dict[tuple[int, int], dict[str, Any]] = {}
+def _outcome_maps(evidence: dict[str, Any], strategy: str) -> tuple[dict[tuple[int, int], dict[str, Any]], dict[tuple[int, int], dict[str, Any]]]:
+    repeats = evidence["plan"]["repeats_per_slot"]
+    samples: dict[tuple[int, int], dict[str, Any]] = {}
+    boundaries: dict[tuple[int, int], dict[str, Any]] = {}
     for sample in evidence["samples"]:
         if not isinstance(sample, dict):
             raise ValidationError("sample must be an object")
-        slots, repeat = sample.get("requested_slots"), sample.get("repeat")
-        if not isinstance(slots, int) or isinstance(slots, bool) or slots not in CANONICAL_SLOTS:
-            raise ValidationError("sample slot count is invalid")
-        if not isinstance(repeat, int) or isinstance(repeat, bool) or repeat < 1:
-            raise ValidationError("sample repeat is invalid")
-        key = (slots, repeat)
-        if key in result:
-            raise ValidationError(f"duplicate sample cell: {key}")
+        key = _cell_identity(sample, repeats, "sample")
+        if key in samples or key in boundaries:
+            raise ValidationError(f"duplicate outcome cell: {key}")
+        slots = key[0]
         pool = _required_object(sample, "pool")
         if pool.get("target_capacity") != slots or pool.get("ready") != slots or pool.get("accounted_slots") != slots:
             raise ValidationError(f"sample pool is not fully ready: {key}")
@@ -145,12 +169,29 @@ def _sample_map(evidence: dict[str, Any], strategy: str) -> dict[tuple[int, int]
                 raise ValidationError(f"COW mapping count drifted: {key}")
         elif sample.get("cow_mappings") is not None:
             raise ValidationError(f"non-COW sample carries COW mapping attribution: {key}")
-        result[key] = sample
-    repeats = evidence["plan"]["repeats"]
+        samples[key] = sample
+    for boundary in evidence.get("boundaries", []):
+        if not isinstance(boundary, dict):
+            raise ValidationError("boundary must be an object")
+        key = _cell_identity(boundary, repeats, "boundary")
+        if key in samples or key in boundaries:
+            raise ValidationError(f"duplicate outcome cell: {key}")
+        if (strategy != NON_COW_STRATEGY or key[0] != 64 or boundary.get("status") != "rss_guard" or
+                boundary.get("guard_rss_bytes") != MAX_RSS_BYTES or
+                not isinstance(boundary.get("max_observed_rss_bytes"), int) or isinstance(boundary.get("max_observed_rss_bytes"), bool) or
+                boundary["max_observed_rss_bytes"] <= MAX_RSS_BYTES or
+                not _lower_hex(boundary.get("process_instance_sha256"), 64)):
+            raise ValidationError(f"unsupported boundary outcome: {key}")
+        boundaries[key] = boundary
     expected = {(slots, repeat) for slots in CANONICAL_SLOTS for repeat in range(1, repeats + 1)}
-    if set(result) != expected:
-        raise ValidationError("sample keys do not cover the canonical matrix")
-    return result
+    if set(samples) | set(boundaries) != expected or set(samples) & set(boundaries):
+        raise ValidationError("outcome keys do not cover the canonical matrix exactly once")
+    if strategy == COW_STRATEGY and boundaries:
+        raise ValidationError("COW arm cannot carry a boundary outcome")
+    for slots in CANONICAL_SLOTS[:-1]:
+        if any((slots, repeat) not in samples for repeat in range(1, repeats + 1)):
+            raise ValidationError("slots 1-32 must be complete successful samples")
+    return samples, boundaries
 
 
 def _arm_metrics(sample: dict[str, Any], cow: bool) -> dict[str, int]:
@@ -173,15 +214,19 @@ def _arm_metrics(sample: dict[str, Any], cow: bool) -> dict[str, int]:
 
 
 def pair_evidence(cow: dict[str, Any], non_cow: dict[str, Any], cow_raw: bytes, non_cow_raw: bytes) -> dict[str, Any]:
-    _validate_arm(cow, COW_STRATEGY)
-    _validate_arm(non_cow, NON_COW_STRATEGY)
+    cow_repeats = _validate_arm(cow, COW_STRATEGY)
+    non_cow_repeats = _validate_arm(non_cow, NON_COW_STRATEGY)
+    if cow_repeats != non_cow_repeats:
+        raise ValidationError("cross-arm repeat count drifted")
     for field in ("artifact", "host_source", "backend", "environment", "warmup", "plan", "metric_semantics", "observability"):
         if cow.get(field) != non_cow.get(field):
             raise ValidationError(f"cross-arm {field} drifted")
-    cow_samples = _sample_map(cow, COW_STRATEGY)
-    non_cow_samples = _sample_map(non_cow, NON_COW_STRATEGY)
+    cow_samples, cow_boundaries = _outcome_maps(cow, COW_STRATEGY)
+    non_cow_samples, non_cow_boundaries = _outcome_maps(non_cow, NON_COW_STRATEGY)
+    if cow_boundaries:
+        raise ValidationError("COW boundary outcomes are forbidden")
     pairs: list[dict[str, Any]] = []
-    for key in sorted(cow_samples):
+    for key in sorted(set(cow_samples) & set(non_cow_samples)):
         slots, repeat = key
         cow_metrics = _arm_metrics(cow_samples[key], True)
         non_cow_metrics = _arm_metrics(non_cow_samples[key], False)
@@ -197,9 +242,14 @@ def pair_evidence(cow: dict[str, Any], non_cow: dict[str, Any], cow_raw: bytes, 
                 "non_cow_to_cow_ready_time_ppm": non_cow_metrics["ready_total_ns"] * 1_000_000 // cow_metrics["ready_total_ns"],
             },
         })
+    expected_success_pairs = {(slots, repeat) for slots in CANONICAL_SLOTS[:-1] for repeat in range(1, cow_repeats + 1)}
+    if not expected_success_pairs.issubset({(pair["slots"], pair["repeat"]) for pair in pairs}):
+        raise ValidationError("paired successful curve is incomplete below the boundary")
     by_slots: list[dict[str, Any]] = []
     for slots in CANONICAL_SLOTS:
         slot_pairs = [pair for pair in pairs if pair["slots"] == slots]
+        if not slot_pairs:
+            continue
         by_slots.append({
             "slots": slots,
             "median_cow_pss_bytes": int(statistics.median(pair["cow"]["pss_bytes"] for pair in slot_pairs)),
@@ -208,6 +258,24 @@ def pair_evidence(cow: dict[str, Any], non_cow: dict[str, Any], cow_raw: bytes, 
             "median_pss_reduction_ppm": int(statistics.median(pair["derived"]["pss_reduction_ppm"] for pair in slot_pairs)),
             "median_non_cow_to_cow_ready_time_ppm": int(statistics.median(pair["derived"]["non_cow_to_cow_ready_time_ppm"] for pair in slot_pairs)),
         })
+    coverage = []
+    for slots in CANONICAL_SLOTS:
+        coverage.append({
+            "slots": slots,
+            "cow_measured": sum((slots, repeat) in cow_samples for repeat in range(1, cow_repeats + 1)),
+            "cow_rss_guard": 0,
+            "non_cow_measured": sum((slots, repeat) in non_cow_samples for repeat in range(1, cow_repeats + 1)),
+            "non_cow_rss_guard": sum((slots, repeat) in non_cow_boundaries for repeat in range(1, cow_repeats + 1)),
+        })
+    boundary_outcomes = [{
+        "slots": slots,
+        "repeat": repeat,
+        "arm": "non_cow",
+        "status": boundary["status"],
+        "max_observed_rss_bytes": boundary["max_observed_rss_bytes"],
+        "guard_rss_bytes": boundary["guard_rss_bytes"],
+        "process_instance_sha256": boundary["process_instance_sha256"],
+    } for (slots, repeat), boundary in sorted(non_cow_boundaries.items())]
     return {
         "schema_version": SCHEMA_VERSION,
         "evidence_class": EVIDENCE_CLASS,
@@ -223,6 +291,8 @@ def pair_evidence(cow: dict[str, Any], non_cow: dict[str, Any], cow_raw: bytes, 
         },
         "pairs": pairs,
         "summary_by_slots": by_slots,
+        "coverage_by_slots": coverage,
+        "boundary_outcomes": boundary_outcomes,
     }
 
 

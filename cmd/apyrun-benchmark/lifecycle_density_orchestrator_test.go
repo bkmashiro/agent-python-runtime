@@ -466,12 +466,74 @@ func TestAssembleNumPyLifecycleDensityBindsSameArtifactWarmupAndRealTopology(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			if evidence.SchemaVersion != 2 || evidence.Warmup == nil || evidence.Warmup.GenerationSHA256 != expectedGeneration ||
-				len(evidence.Samples) != 7 || evidence.Plan.SlotCounts[6] != 64 {
+			if evidence.SchemaVersion != 3 || evidence.Warmup == nil || evidence.Warmup.GenerationSHA256 != expectedGeneration ||
+				len(evidence.Samples) != 7 || len(evidence.Boundaries) != 0 || evidence.Plan.SlotCounts[6] != 64 {
 				t.Fatalf("NumPy lifecycle evidence drifted: %#v", evidence)
 			}
 			if err := runtimeevidence.ValidateLifecycleDensityJSON(encoded); err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestAssembleNumPyLifecycleDensityRecordsOnlyNonCOW64RSSGuardBoundary(t *testing.T) {
+	artifactBytes := []byte("fixture-wasm")
+	digest := sha256.Sum256(artifactBytes)
+	artifact := artifactIdentity{
+		Filename: "numpy.wasm", SHA256: hex.EncodeToString(digest[:]), Size: int64(len(artifactBytes)),
+		SourceCommit: strings.Repeat("a", 40), ArtifactProfile: "numpy-core", Target: "wasm32-wasip1", Execution: "reactor",
+	}
+	guard := uint64(8 * 1024 * 1024 * 1024)
+	specs, err := numpyDensitySweepSpecs("single-use-preinitialized", 1, guard, 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invoke := func(_ context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
+		process := boundedChildResult{PID: 100 + int(spec.SampleIndex), StartedAtUnixNS: int64(spec.SampleIndex + 1), MaxObservedRSSBytes: 1}
+		if spec.RequestedSlots == 64 {
+			process.MaxObservedRSSBytes = guard + 4096
+			return densityChildInvocation{Process: process}, &processRSSGuardError{Observed: guard + 4096, Limit: guard}
+		}
+		envelope := validDensityChildEnvelope(spec, artifact)
+		artifactDigest := sha256.Sum256(artifactBytes)
+		warmupDigest := sha256.New()
+		_, _ = warmupDigest.Write(artifactDigest[:])
+		_, _ = warmupDigest.Write([]byte{0})
+		_, _ = warmupDigest.Write([]byte(wazeroengine.COWWarmupNumPyReadyV1))
+		envelope.Warmup.GenerationSHA256 = hex.EncodeToString(warmupDigest.Sum(nil))
+		return densityChildInvocation{Envelope: envelope, Process: process}, nil
+	}
+	evidence, encoded, err := assembleLifecycleDensityEvidence(
+		context.Background(), artifact, artifactBytes,
+		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "profile-candidate", specs,
+		[]byte("01234567890123456789012345678901"), invoke,
+	)
+	if err != nil {
+		t.Fatalf("valid non-COW boundary rejected: %v", err)
+	}
+	if evidence.SchemaVersion != 3 || len(evidence.Samples) != 6 || len(evidence.Boundaries) != 1 ||
+		evidence.Boundaries[0].SampleIndex != 6 || evidence.Boundaries[0].Status != "rss_guard" ||
+		evidence.Summary.SampleCount != 6 || evidence.Summary.BoundaryCount != 1 {
+		t.Fatalf("boundary evidence drifted: %#v", evidence)
+	}
+	if err := runtimeevidence.ValidateLifecycleDensityJSON(encoded); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func([]densitySweepSpec){
+		"slot32": func(value []densitySweepSpec) { value[6].RequestedSlots = 32 },
+		"COW":    func(value []densitySweepSpec) { value[6].Strategy = "cow-ready-single-use" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := append([]densitySweepSpec(nil), specs...)
+			mutate(candidate)
+			if _, _, err := assembleLifecycleDensityEvidence(
+				context.Background(), artifact, artifactBytes,
+				hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "profile-candidate", candidate,
+				[]byte("01234567890123456789012345678901"), invoke,
+			); err == nil {
+				t.Fatal("RSS guard outside non-COW slot64 was accepted")
 			}
 		})
 	}
@@ -763,6 +825,10 @@ func TestBoundedChildRunnerKillsTimeoutAndRSSOverflow(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), testCase.want) {
 				t.Fatalf("got %v, want %q failure", err, testCase.want)
 			}
+			var guard *processRSSGuardError
+			if name == "rss guard" && (!errors.As(err, &guard) || guard.Observed != 2048 || guard.Limit != 1024) {
+				t.Fatalf("RSS guard failure was not typed and bound: %#v, %v", guard, err)
+			}
 		})
 	}
 }
@@ -830,7 +896,9 @@ func TestBoundedChildRunnerWaitsForReapAfterRSSExit(t *testing.T) {
 		executable: "/bin/sh", pollInterval: time.Millisecond,
 		readRSSBytes: func(int) (uint64, error) {
 			reads++
-			if reads == 1 { return 7, nil }
+			if reads == 1 {
+				return 7, nil
+			}
 			return 0, errProcessRSSExited
 		},
 	}

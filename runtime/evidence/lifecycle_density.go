@@ -249,8 +249,19 @@ type LifecycleDensitySample struct {
 	Cgroup                CgroupMetrics    `json:"cgroup"`
 }
 
+type LifecycleDensityBoundary struct {
+	SampleIndex           uint32 `json:"sample_index"`
+	RepeatIndex           uint32 `json:"repeat_index"`
+	RequestedSlots        uint32 `json:"requested_slots"`
+	ProcessInstanceSHA256 string `json:"process_instance_sha256"`
+	Status                string `json:"status"`
+	MaxObservedRSSBytes   uint64 `json:"max_observed_rss_bytes"`
+	GuardRSSBytes         uint64 `json:"guard_rss_bytes"`
+}
+
 type DerivedSummary struct {
 	SampleCount                  int     `json:"sample_count"`
+	BoundaryCount                int     `json:"boundary_count,omitempty"`
 	PeakProcessRSSBytes          Metric  `json:"peak_process_rss_bytes"`
 	PeakCgroupMemoryCurrentBytes Metric  `json:"peak_cgroup_memory_current_bytes"`
 	PeakGoHeapLiveBytes          Metric  `json:"peak_go_heap_live_bytes"`
@@ -259,18 +270,19 @@ type DerivedSummary struct {
 }
 
 type LifecycleDensityEvidence struct {
-	SchemaVersion int                      `json:"schema_version"`
-	EvidenceClass string                   `json:"evidence_class"`
-	Artifact      ArtifactIdentity         `json:"artifact"`
-	HostSource    HostSourceIdentity       `json:"host_source"`
-	Backend       BackendIdentity          `json:"backend"`
-	Environment   EnvironmentIdentity      `json:"environment"`
-	Strategy      StrategyIdentity         `json:"strategy"`
-	Warmup        *PreparedWarmupIdentity  `json:"warmup,omitempty"`
-	Plan          SweepPlan                `json:"plan"`
-	Samples       []LifecycleDensitySample `json:"samples"`
-	Summary       DerivedSummary           `json:"summary"`
-	Limitations   []string                 `json:"limitations"`
+	SchemaVersion int                        `json:"schema_version"`
+	EvidenceClass string                     `json:"evidence_class"`
+	Artifact      ArtifactIdentity           `json:"artifact"`
+	HostSource    HostSourceIdentity         `json:"host_source"`
+	Backend       BackendIdentity            `json:"backend"`
+	Environment   EnvironmentIdentity        `json:"environment"`
+	Strategy      StrategyIdentity           `json:"strategy"`
+	Warmup        *PreparedWarmupIdentity    `json:"warmup,omitempty"`
+	Plan          SweepPlan                  `json:"plan"`
+	Samples       []LifecycleDensitySample   `json:"samples"`
+	Boundaries    []LifecycleDensityBoundary `json:"boundaries,omitempty"`
+	Summary       DerivedSummary             `json:"summary"`
+	Limitations   []string                   `json:"limitations"`
 }
 
 func ValidateLifecycleDensityJSON(data []byte) error {
@@ -358,7 +370,7 @@ func consumeUniqueJSONValue(decoder *json.Decoder) error {
 }
 
 func (evidence LifecycleDensityEvidence) Validate() error {
-	if (evidence.SchemaVersion != 1 && evidence.SchemaVersion != 2) || evidence.EvidenceClass != "lifecycle-density" {
+	if (evidence.SchemaVersion != 1 && evidence.SchemaVersion != 2 && evidence.SchemaVersion != 3) || evidence.EvidenceClass != "lifecycle-density" {
 		return invalidDensity("schema version or evidence class is unsupported")
 	}
 	if err := evidence.validateWarmupContract(); err != nil {
@@ -378,30 +390,47 @@ func (evidence LifecycleDensityEvidence) Validate() error {
 			return invalidDensity("limitations must be nonempty and boundary-trimmed")
 		}
 	}
-	if evidence.SchemaVersion == 2 {
+	if evidence.SchemaVersion >= 2 {
 		expectedSlots := [...]uint32{1, 2, 4, 8, 16, 32, 64}
 		if len(evidence.Plan.SlotCounts) != len(expectedSlots) {
-			return invalidDensity("schema v2 requires the exact canonical slot sweep")
+			return invalidDensity("schema v2/v3 requires the exact canonical slot sweep")
 		}
 		for index, expected := range expectedSlots {
 			if evidence.Plan.SlotCounts[index] != expected {
-				return invalidDensity("schema v2 requires the exact canonical slot sweep")
+				return invalidDensity("schema v2/v3 requires the exact canonical slot sweep")
 			}
 		}
 	}
-	expectedSamples := len(evidence.Plan.SlotCounts) * int(evidence.Plan.RepeatsPerSlot)
-	if len(evidence.Samples) != expectedSamples || evidence.Summary.SampleCount != expectedSamples {
-		return invalidDensity("sample count does not match the sweep plan")
+	expectedOutcomes := len(evidence.Plan.SlotCounts) * int(evidence.Plan.RepeatsPerSlot)
+	if evidence.Summary.SampleCount != len(evidence.Samples) || evidence.Summary.BoundaryCount != len(evidence.Boundaries) {
+		return invalidDensity("sample or boundary count does not match its summary")
 	}
-	processInstances := make(map[string]struct{}, len(evidence.Samples))
-	for index := range evidence.Samples {
-		expectedSlotIndex := index / int(evidence.Plan.RepeatsPerSlot)
-		expectedRepeat := index % int(evidence.Plan.RepeatsPerSlot)
-		sample := evidence.Samples[index]
-		if sample.SampleIndex != uint32(index) || sample.RepeatIndex != uint32(expectedRepeat) ||
-			sample.RequestedSlots != evidence.Plan.SlotCounts[expectedSlotIndex] {
-			return invalidDensity("sample order or slot/repeat identity drifted")
+	if evidence.SchemaVersion < 3 {
+		if len(evidence.Boundaries) != 0 || evidence.Summary.BoundaryCount != 0 || len(evidence.Samples) != expectedOutcomes {
+			return invalidDensity("schema v1/v2 requires a complete successful sample matrix without boundaries")
 		}
+	} else if len(evidence.Samples)+len(evidence.Boundaries) != expectedOutcomes {
+		return invalidDensity("schema v3 outcomes do not cover the sweep plan")
+	}
+	processInstances := make(map[string]struct{}, expectedOutcomes)
+	outcomeIndexes := make(map[uint32]struct{}, expectedOutcomes)
+	var previousSampleIndex uint32
+	for position := range evidence.Samples {
+		sample := evidence.Samples[position]
+		if position > 0 && sample.SampleIndex <= previousSampleIndex {
+			return invalidDensity("samples are not in increasing canonical cell order")
+		}
+		previousSampleIndex = sample.SampleIndex
+		if err := evidence.validateOutcomeIdentity(sample.SampleIndex, sample.RepeatIndex, sample.RequestedSlots, expectedOutcomes); err != nil {
+			return err
+		}
+		if evidence.SchemaVersion < 3 && sample.SampleIndex != uint32(position) {
+			return invalidDensity("schema v1/v2 sample order drifted")
+		}
+		if _, duplicate := outcomeIndexes[sample.SampleIndex]; duplicate {
+			return invalidDensity("sample or boundary cell was duplicated")
+		}
+		outcomeIndexes[sample.SampleIndex] = struct{}{}
 		if !lowerHex(sample.ProcessInstanceSHA256, 64) {
 			return invalidDensity("sample process instance identity is missing")
 		}
@@ -410,7 +439,38 @@ func (evidence LifecycleDensityEvidence) Validate() error {
 		}
 		processInstances[sample.ProcessInstanceSHA256] = struct{}{}
 		if err := evidence.validateSample(sample); err != nil {
-			return fmt.Errorf("%w: sample %d: %v", ErrInvalidLifecycleDensityEvidence, index, err)
+			return fmt.Errorf("%w: sample %d: %v", ErrInvalidLifecycleDensityEvidence, sample.SampleIndex, err)
+		}
+	}
+	var previousBoundaryIndex uint32
+	for position, boundary := range evidence.Boundaries {
+		if position > 0 && boundary.SampleIndex <= previousBoundaryIndex {
+			return invalidDensity("boundaries are not in increasing canonical cell order")
+		}
+		previousBoundaryIndex = boundary.SampleIndex
+		if err := evidence.validateOutcomeIdentity(boundary.SampleIndex, boundary.RepeatIndex, boundary.RequestedSlots, expectedOutcomes); err != nil {
+			return err
+		}
+		if _, duplicate := outcomeIndexes[boundary.SampleIndex]; duplicate {
+			return invalidDensity("sample or boundary cell was duplicated")
+		}
+		outcomeIndexes[boundary.SampleIndex] = struct{}{}
+		if evidence.SchemaVersion != 3 || evidence.Strategy.Active != "single-use-preinitialized" || boundary.RequestedSlots != 64 ||
+			boundary.Status != "rss_guard" || boundary.GuardRSSBytes != evidence.Plan.MaxProcessRSSBytes ||
+			boundary.MaxObservedRSSBytes <= boundary.GuardRSSBytes || !lowerHex(boundary.ProcessInstanceSHA256, 64) {
+			return invalidDensity("boundary outcome is unsupported or incomplete")
+		}
+		if _, duplicate := processInstances[boundary.ProcessInstanceSHA256]; duplicate {
+			return invalidDensity("boundary process instance identity was reused")
+		}
+		processInstances[boundary.ProcessInstanceSHA256] = struct{}{}
+	}
+	if len(outcomeIndexes) != expectedOutcomes {
+		return invalidDensity("sample and boundary outcomes do not cover every canonical cell")
+	}
+	for index := 0; index < expectedOutcomes; index++ {
+		if _, ok := outcomeIndexes[uint32(index)]; !ok {
+			return invalidDensity("sample and boundary outcomes contain a canonical cell gap")
 		}
 	}
 	if err := validateDerivedPeak("process RSS", evidence.Summary.PeakProcessRSSBytes, evidence.Samples, func(sample LifecycleDensitySample) Metric { return sample.Process.RSSBytes }); err != nil {
@@ -452,17 +512,17 @@ func (evidence LifecycleDensityEvidence) validateWarmupContract() error {
 		return nil
 	}
 	if evidence.Artifact.ArtifactProfile != "numpy-core" || evidence.Plan.Workload != "numpy-ready-idle" {
-		return invalidDensity("schema v2 requires the NumPy-ready artifact and workload")
+		return invalidDensity("schema v2/v3 requires the NumPy-ready artifact and workload")
 	}
 	if evidence.Strategy.Active != "cow-ready-single-use" && evidence.Strategy.Active != "single-use-preinitialized" && evidence.Strategy.Active != "single-use-preinitialized-shared-cache" {
-		return invalidDensity("schema v2 requires a prepared COW or independent-instance strategy")
+		return invalidDensity("schema v2/v3 requires a prepared COW or independent-instance strategy")
 	}
 	if evidence.Warmup == nil || evidence.Warmup.Profile != "numpy-ready-v1" || !lowerHex(evidence.Warmup.GenerationSHA256, 64) {
-		return invalidDensity("schema v2 prepared warmup identity is missing or unsupported")
+		return invalidDensity("schema v2/v3 prepared warmup identity is missing or unsupported")
 	}
 	for _, sample := range evidence.Samples {
 		if sample.Phases.WarmupNS == nil || validateRawMetric(*sample.Phases.WarmupNS) != nil || sample.Phases.WarmupNS.Status != MetricMeasured || sample.Phases.WarmupNS.Value == nil || *sample.Phases.WarmupNS.Value == 0 {
-			return invalidDensity("schema v2 requires positive measured warmup timing per sample")
+			return invalidDensity("schema v2/v3 requires positive measured warmup timing per sample")
 		}
 	}
 	return nil
@@ -530,6 +590,19 @@ func (evidence LifecycleDensityEvidence) validatePlan() error {
 	if evidence.Plan.MaxProcessRSSBytes == 0 || evidence.Plan.MaxProcessRSSBytes > 1<<50 ||
 		evidence.Plan.ChildTimeoutNS == 0 || evidence.Plan.ChildTimeoutNS > 86_400_000_000_000 {
 		return invalidDensity("child RSS or timeout guard is missing or outside its hard bound")
+	}
+	return nil
+}
+
+func (evidence LifecycleDensityEvidence) validateOutcomeIdentity(sampleIndex, repeatIndex, requestedSlots uint32, expectedOutcomes int) error {
+	if int(sampleIndex) >= expectedOutcomes {
+		return invalidDensity("sample or boundary index is outside the sweep plan")
+	}
+	repeats := int(evidence.Plan.RepeatsPerSlot)
+	expectedSlotIndex := int(sampleIndex) / repeats
+	expectedRepeat := uint32(int(sampleIndex) % repeats)
+	if requestedSlots != evidence.Plan.SlotCounts[expectedSlotIndex] || repeatIndex != expectedRepeat {
+		return invalidDensity("sample or boundary slot/repeat identity drifted")
 	}
 	return nil
 }

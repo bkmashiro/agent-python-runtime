@@ -58,6 +58,8 @@ The child records process-level `/proc` measurements after all requested slots a
 
 The COW arm also records named COW mapping attribution. Shared Slurm cgroup counters remain unavailable unless isolation is independently established; cumulative job cgroup peaks are not assigned to a cell.
 
+The parent samples `/proc/<pid>/status` throughout the child lifecycle. Linux `proc_pid_status()` emits `VmRSS` only while `get_task_mm()` returns a userspace `mm`; `do_exit()` clears that `mm` before the task reaches zombie state and before multi-GiB page-table teardown finishes. Therefore, a complete status record with no `VmRSS` is treated as released-mm terminal evidence only after the same child has produced a positive RSS sample. The parent still waits for the real process result and preserves timeout, cancellation, nonzero exit, stderr, and output-limit failures. Missing RSS before any positive sample remains fail-closed.
+
 ## Evidence contract
 
 Lifecycle-density schema v3 binds:

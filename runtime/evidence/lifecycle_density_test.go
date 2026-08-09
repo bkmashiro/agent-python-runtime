@@ -225,6 +225,81 @@ func TestLifecycleDensityV2AcceptsNumPyReadyWarmupBinding(t *testing.T) {
 	}
 }
 
+func validNumPyLifecycleDensityV3BoundaryEvidence() (LifecycleDensityEvidence, []byte) {
+	evidence, artifact := validNumPyLifecycleDensityEvidence()
+	evidence.SchemaVersion = 3
+	last := evidence.Samples[len(evidence.Samples)-1]
+	evidence.Samples = evidence.Samples[:len(evidence.Samples)-1]
+	evidence.Boundaries = []LifecycleDensityBoundary{{
+		SampleIndex: last.SampleIndex, RepeatIndex: last.RepeatIndex, RequestedSlots: last.RequestedSlots,
+		ProcessInstanceSHA256: last.ProcessInstanceSHA256, Status: "rss_guard",
+		MaxObservedRSSBytes: evidence.Plan.MaxProcessRSSBytes + 1, GuardRSSBytes: evidence.Plan.MaxProcessRSSBytes,
+	}}
+	evidence.Summary.SampleCount = len(evidence.Samples)
+	evidence.Summary.BoundaryCount = len(evidence.Boundaries)
+	evidence.Summary.PeakProcessRSSBytes = metric(MetricMeasured, 32_000)
+	evidence.Summary.PeakGoHeapLiveBytes = metric(MetricMeasured, 3_200)
+	return evidence, artifact
+}
+
+func TestLifecycleDensityV3AcceptsNonCOWRSSGuardBoundaryAt64(t *testing.T) {
+	evidence, artifact := validNumPyLifecycleDensityV3BoundaryEvidence()
+	if err := evidence.Validate(); err != nil {
+		t.Fatalf("valid v3 boundary evidence rejected: %v", err)
+	}
+	if err := evidence.ValidateArtifactBytes(artifact); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var canonical any
+	if err := json.Unmarshal(encoded, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileLifecycleDensitySchema(t).Validate(canonical); err != nil {
+		t.Fatalf("schema v3 boundary evidence rejected: %v", err)
+	}
+}
+
+func TestLifecycleDensityV3RejectsInvalidBoundaryOutcomes(t *testing.T) {
+	base, _ := validNumPyLifecycleDensityV3BoundaryEvidence()
+	for name, mutate := range map[string]func(*LifecycleDensityEvidence){
+		"boundary below 64": func(value *LifecycleDensityEvidence) {
+			value.Boundaries[0].SampleIndex = 5
+			value.Boundaries[0].RequestedSlots = 32
+		},
+		"COW boundary": func(value *LifecycleDensityEvidence) {
+			value.Strategy = StrategyIdentity{Requested: "cow-ready-single-use", Active: "cow-ready-single-use"}
+		},
+		"peak at guard": func(value *LifecycleDensityEvidence) {
+			value.Boundaries[0].MaxObservedRSSBytes = value.Plan.MaxProcessRSSBytes
+		},
+		"wrong guard":  func(value *LifecycleDensityEvidence) { value.Boundaries[0].GuardRSSBytes++ },
+		"wrong status": func(value *LifecycleDensityEvidence) { value.Boundaries[0].Status = "oom" },
+		"duplicate outcome": func(value *LifecycleDensityEvidence) {
+			value.Samples = append(value.Samples, value.Samples[len(value.Samples)-1])
+			value.Samples[len(value.Samples)-1].SampleIndex = value.Boundaries[0].SampleIndex
+			value.Samples[len(value.Samples)-1].RequestedSlots = 64
+			value.Summary.SampleCount++
+		},
+		"missing outcome": func(value *LifecycleDensityEvidence) {
+			value.Boundaries = nil
+			value.Summary.BoundaryCount = 0
+		},
+		"v2 boundary": func(value *LifecycleDensityEvidence) { value.SchemaVersion = 2 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := deepCopy(t, base)
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrInvalidLifecycleDensityEvidence) {
+				t.Fatalf("invalid boundary evidence accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestLifecycleDensityV2RejectsWarmupIdentityDrift(t *testing.T) {
 	base, _ := validNumPyLifecycleDensityEvidence()
 	for name, mutate := range map[string]func(*LifecycleDensityEvidence){

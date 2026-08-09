@@ -161,6 +161,15 @@ func validateDensityChildEnvelope(envelope densityChildEnvelope, spec densitySwe
 
 var errProcessRSSExited = errors.New("process exited before RSS sample")
 
+type processRSSGuardError struct {
+	Observed uint64
+	Limit    uint64
+}
+
+func (err *processRSSGuardError) Error() string {
+	return fmt.Sprintf("lifecycle-density safety guard: RSS %d exceeds %d", err.Observed, err.Limit)
+}
+
 func processInstanceSHA256(nonce []byte, result boundedChildResult) string {
 	digest := sha256.Sum256([]byte(fmt.Sprintf("%x\x00%d\x00%d", nonce, result.PID, result.StartedAtUnixNS)))
 	return hex.EncodeToString(digest[:])
@@ -262,7 +271,7 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 			result.MaxObservedRSSBytes = rss
 		}
 		if rss > spec.maxRSSBytes {
-			return fmt.Errorf("lifecycle-density safety guard: RSS %d exceeds %d", rss, spec.maxRSSBytes)
+			return &processRSSGuardError{Observed: rss, Limit: spec.maxRSSBytes}
 		}
 		return nil
 	}

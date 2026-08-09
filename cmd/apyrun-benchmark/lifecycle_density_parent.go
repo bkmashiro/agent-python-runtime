@@ -13,6 +13,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
@@ -165,11 +166,27 @@ func assembleLifecycleDensityEvidence(
 	}
 
 	samples := make([]runtimeevidence.LifecycleDensitySample, 0, len(specs))
+	boundaries := make([]runtimeevidence.LifecycleDensityBoundary, 0, repeats)
 	var backend runtimeevidence.BackendIdentity
 	var environment runtimeevidence.EnvironmentIdentity
 	for index, spec := range specs {
 		invocation, err := invoke(ctx, spec)
 		if err != nil {
+			var guard *processRSSGuardError
+			if numpyReady && spec.Strategy == "single-use-preinitialized" && spec.RequestedSlots == 64 && errors.As(err, &guard) {
+				if invocation.Process.PID <= 0 || invocation.Process.StartedAtUnixNS <= 0 ||
+					guard.Limit != spec.MaxRSSBytes || guard.Observed <= guard.Limit ||
+					invocation.Process.MaxObservedRSSBytes != guard.Observed || len(invocation.Process.Stdout) != 0 ||
+					strings.TrimSpace(invocation.Process.StderrTail) != "" {
+					return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("lifecycle-density child %d RSS boundary evidence drifted", index)
+				}
+				boundaries = append(boundaries, runtimeevidence.LifecycleDensityBoundary{
+					SampleIndex: spec.SampleIndex, RepeatIndex: spec.RepeatIndex, RequestedSlots: spec.RequestedSlots,
+					ProcessInstanceSHA256: processInstanceSHA256(nonce, invocation.Process), Status: "rss_guard",
+					MaxObservedRSSBytes: guard.Observed, GuardRSSBytes: guard.Limit,
+				})
+				continue
+			}
 			return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("lifecycle-density child %d: %w", index, err)
 		}
 		if err := validateDensityChildEnvelope(invocation.Envelope, spec, artifact); err != nil {
@@ -226,7 +243,7 @@ func assembleLifecycleDensityEvidence(
 	slotCounts := []uint32{1, 2, 4, 8, 16}
 	var warmup *runtimeevidence.PreparedWarmupIdentity
 	if numpyReady {
-		schemaVersion = 2
+		schemaVersion = 3
 		workload = "numpy-ready-idle"
 		slotCounts = []uint32{1, 2, 4, 8, 16, 32, 64}
 		warmup = &runtimeevidence.PreparedWarmupIdentity{Profile: specs[0].WarmupProfile, GenerationSHA256: expectedWarmupGeneration}
@@ -251,9 +268,10 @@ func assembleLifecycleDensityEvidence(
 			FreshProcessPerSample: true, MaxProcessRSSBytes: specs[0].MaxRSSBytes,
 			ChildTimeoutNS: uint64(specs[0].Timeout.Nanoseconds()),
 		},
-		Samples: samples,
+		Samples:    samples,
+		Boundaries: boundaries,
 		Summary: runtimeevidence.DerivedSummary{
-			SampleCount: len(samples), PeakProcessRSSBytes: peakRSS,
+			SampleCount: len(samples), BoundaryCount: len(boundaries), PeakProcessRSSBytes: peakRSS,
 			PeakCgroupMemoryCurrentBytes: peakCgroup, PeakGoHeapLiveBytes: peakHeap,
 		},
 		Limitations: []string{
@@ -266,6 +284,7 @@ func assembleLifecycleDensityEvidence(
 		evidence.Limitations = append(evidence.Limitations,
 			"Both arms use the exact numpy-core artifact and numpy-ready-v1 warmup generation; COW warms once per canonical image while non-COW warms every independent slot.",
 			"COW uses one runtime shard for each requested capacity; non-COW retains the four-slot hard bound and records all independent runtime shards.",
+			"A non-COW 64-slot child that crosses the fixed RSS guard is retained only as an explicit rss_guard capacity boundary; it is never converted into a successful ready sample.",
 		)
 	}
 	if benchmarkClass == "preinitialization-spike" && specs[0].Strategy == "single-use-preinitialized-shared-cache" {
@@ -359,7 +378,7 @@ func invokeOSDensityChild(
 		timeout: spec.Timeout, maxRSSBytes: spec.MaxRSSBytes,
 	})
 	if err != nil {
-		return densityChildInvocation{}, err
+		return densityChildInvocation{Process: result}, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(result.Stdout))
 	decoder.DisallowUnknownFields()

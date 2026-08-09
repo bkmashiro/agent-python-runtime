@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bkmashiro.github.io/agent-python-runtime/benchmark/v1/phase7-paired-density.schema.json",
-  "title": "Phase 7 paired NumPy density summary v1",
+  "title": "Phase 7 paired NumPy density summary v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "evidence_class", "artifact", "warmup", "host_source", "backend", "environment", "plan", "source_evidence", "pairs", "summary_by_slots"],
+  "required": ["schema_version", "evidence_class", "artifact", "warmup", "host_source", "backend", "environment", "plan", "source_evidence", "pairs", "summary_by_slots", "coverage_by_slots", "boundary_outcomes"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "evidence_class": {"const": "phase7-paired-density"},
     "artifact": {"type": "object"},
     "warmup": {
@@ -33,15 +33,26 @@
     },
     "pairs": {
       "type": "array",
-      "minItems": 7,
+      "minItems": 6,
       "maxItems": 140,
       "items": {"$ref": "#/$defs/pair"}
     },
     "summary_by_slots": {
       "type": "array",
-      "minItems": 7,
+      "minItems": 6,
       "maxItems": 7,
       "items": {"$ref": "#/$defs/slotSummary"}
+    },
+    "coverage_by_slots": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/coverage"}
+    },
+    "boundary_outcomes": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/boundaryOutcome"}
     }
   },
   "$defs": {
@@ -68,12 +79,7 @@
       "properties": {
         "slots": {"enum": [1, 2, 4, 8, 16, 32, 64]},
         "repeat": {"type": "integer", "minimum": 1, "maximum": 20},
-        "cow": {
-          "allOf": [
-            {"$ref": "#/$defs/arm"},
-            {"required": ["cow_mapping_pss_bytes"]}
-          ]
-        },
+        "cow": {"allOf": [{"$ref": "#/$defs/arm"}, {"required": ["cow_mapping_pss_bytes"]}]},
         "non_cow": {"$ref": "#/$defs/arm"},
         "derived": {
           "type": "object",
@@ -98,6 +104,32 @@
         "median_pss_saved_bytes": {"type": "integer"},
         "median_pss_reduction_ppm": {"type": "integer"},
         "median_non_cow_to_cow_ready_time_ppm": {"$ref": "#/$defs/uint"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slots", "cow_measured", "cow_rss_guard", "non_cow_measured", "non_cow_rss_guard"],
+      "properties": {
+        "slots": {"enum": [1, 2, 4, 8, 16, 32, 64]},
+        "cow_measured": {"$ref": "#/$defs/uint"},
+        "cow_rss_guard": {"const": 0},
+        "non_cow_measured": {"$ref": "#/$defs/uint"},
+        "non_cow_rss_guard": {"$ref": "#/$defs/uint"}
+      }
+    },
+    "boundaryOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slots", "repeat", "arm", "status", "max_observed_rss_bytes", "guard_rss_bytes", "process_instance_sha256"],
+      "properties": {
+        "slots": {"const": 64},
+        "repeat": {"type": "integer", "minimum": 1, "maximum": 20},
+        "arm": {"const": "non_cow"},
+        "status": {"const": "rss_guard"},
+        "max_observed_rss_bytes": {"$ref": "#/$defs/positive"},
+        "guard_rss_bytes": {"const": 8589934592},
+        "process_instance_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     }
   }

@@ -18,14 +18,16 @@ def metric(value: int) -> dict:
     return {"status": "measured", "value": value}
 
 
-def sample(strategy: str, slots: int, repeat: int) -> dict:
+def sample(strategy: str, slots: int, repeat_index: int, repeats: int) -> dict:
     cow = strategy == MODULE.COW_STRATEGY
+    sample_index = MODULE.CANONICAL_SLOTS.index(slots) * repeats + repeat_index
     result = {
+        "sample_index": sample_index,
+        "repeat_index": repeat_index,
         "requested_slots": slots,
-        "repeat": repeat,
         "runtime_shards": 1 if cow else (slots + 3) // 4,
-        "process_instance_sha256": hashlib.sha256(f"{strategy}-{slots}-{repeat}".encode()).hexdigest(),
-        "observed_at_unix_ns": {"status": "timestamp-observed", "value": repeat},
+        "process_instance_sha256": hashlib.sha256(f"{strategy}-{slots}-{repeat_index}".encode()).hexdigest(),
+        "observed_at_unix_ns": {"status": "timestamp-observed", "value": repeat_index + 1},
         "pool": {"target_capacity": slots, "ready": slots, "leased": 0, "executing": 0, "refilling": 0, "retiring": 0, "accounted_slots": slots},
         "phases": {"total_ns": metric(slots * (10 if cow else 20)), "warmup_ns": metric(slots if not cow else 1)},
         "process": {
@@ -39,28 +41,47 @@ def sample(strategy: str, slots: int, repeat: int) -> dict:
     return result
 
 
-def arm(strategy: str, repeats: int = 1) -> dict:
-    return {
-        "schema_version": 2,
+def arm(strategy: str, repeats: int = 1, boundary64: bool = False) -> dict:
+    samples = [sample(strategy, slots, repeat_index, repeats)
+               for slots in MODULE.CANONICAL_SLOTS for repeat_index in range(repeats)
+               if not (boundary64 and strategy == MODULE.NON_COW_STRATEGY and slots == 64)]
+    boundaries = []
+    if boundary64 and strategy == MODULE.NON_COW_STRATEGY:
+        boundaries = [{
+            "sample_index": 6 * repeats + repeat_index,
+            "repeat_index": repeat_index,
+            "requested_slots": 64,
+            "process_instance_sha256": hashlib.sha256(f"boundary-{repeat_index}".encode()).hexdigest(),
+            "status": "rss_guard",
+            "max_observed_rss_bytes": MODULE.MAX_RSS_BYTES + 4096,
+            "guard_rss_bytes": MODULE.MAX_RSS_BYTES,
+        } for repeat_index in range(repeats)]
+    result = {
+        "schema_version": 3,
         "evidence_class": "lifecycle-density",
         "artifact": {
             "filename": "numpy.wasm", "sha256": "a" * 64, "size_bytes": 10,
             "source_commit": "b" * 40, "artifact_profile": "numpy-core",
             "target": "wasm32-wasip1", "execution_model": "reactor",
         },
-        "host_source": {"revision": "c" * 40, "dirty": False},
+        "host_source": {"revision": "c" * 40, "modified": False},
         "backend": {"name": "wazero", "version": "v1", "reset_mode": "fresh-instance"},
         "environment": {"goos": "linux", "goarch": "amd64", "go_version": "go1", "kernel_release": "k", "page_size_bytes": 4096, "cgroup_version": "v2"},
         "strategy": {"requested": strategy, "active": strategy, "fallback": False},
         "warmup": {"profile": "numpy-ready-v1", "generation_sha256": "d" * 64},
         "plan": {
             "workload": "numpy-ready-idle", "slot_counts": MODULE.CANONICAL_SLOTS,
-            "repeats": repeats, "child_timeout_ms": 120000, "memory_guard_bytes": 8 << 30,
+            "repeats_per_slot": repeats, "fresh_process_per_sample": True,
+            "child_timeout_ns": MODULE.CHILD_TIMEOUT_NS, "max_process_rss_bytes": MODULE.MAX_RSS_BYTES,
         },
         "metric_semantics": {"status_values": ["measured"]},
         "observability": {"process_source": "/proc"},
-        "samples": [sample(strategy, slots, repeat) for slots in MODULE.CANONICAL_SLOTS for repeat in range(1, repeats + 1)],
+        "samples": samples,
+        "summary": {"sample_count": len(samples), "boundary_count": len(boundaries)},
     }
+    if boundaries:
+        result["boundaries"] = boundaries
+    return result
 
 
 class Phase7DensityTests(unittest.TestCase):
@@ -75,12 +96,28 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertEqual(666666, first["pairs"][0]["derived"]["pss_reduction_ppm"])
         self.assertEqual(2000000, first["pairs"][0]["derived"]["non_cow_to_cow_ready_time_ppm"])
 
+    def test_pair_evidence_records_non_cow_64_rss_boundary(self) -> None:
+        cow = arm(MODULE.COW_STRATEGY, repeats=3)
+        non_cow = arm(MODULE.NON_COW_STRATEGY, repeats=3, boundary64=True)
+        paired = MODULE.pair_evidence(cow, non_cow, b"cow", b"non-cow")
+        self.assertEqual(18, len(paired["pairs"]))
+        self.assertEqual(6, len(paired["summary_by_slots"]))
+        self.assertEqual(3, len(paired["boundary_outcomes"]))
+        self.assertEqual(3, paired["coverage_by_slots"][-1]["cow_measured"])
+        self.assertEqual(0, paired["coverage_by_slots"][-1]["non_cow_measured"])
+        self.assertEqual(3, paired["coverage_by_slots"][-1]["non_cow_rss_guard"])
+
+        invalid = arm(MODULE.NON_COW_STRATEGY, boundary64=True)
+        invalid["boundaries"][0]["max_observed_rss_bytes"] = MODULE.MAX_RSS_BYTES
+        with self.assertRaisesRegex(MODULE.ValidationError, "boundary"):
+            MODULE.pair_evidence(arm(MODULE.COW_STRATEGY), invalid, b"cow", b"non-cow")
+
     def test_pair_evidence_rejects_cross_arm_identity_drift(self) -> None:
         for field, mutate in {
             "artifact": lambda value: value["artifact"].update({"sha256": "f" * 64}),
             "warmup": lambda value: value["warmup"].update({"generation_sha256": "e" * 64}),
             "environment": lambda value: value["environment"].update({"kernel_release": "other"}),
-            "plan": lambda value: value["plan"].update({"child_timeout_ms": 1}),
+            "plan": lambda value: value["plan"].update({"child_timeout_ns": 1}),
         }.items():
             with self.subTest(field=field):
                 cow, non_cow = arm(MODULE.COW_STRATEGY), arm(MODULE.NON_COW_STRATEGY)
@@ -111,6 +148,10 @@ class Phase7DensityTests(unittest.TestCase):
         self.assertIn("-max-rss-bytes 8589934592", source)
         self.assertIn("validate-lifecycle-density", source)
         self.assertEqual(2, source.count("-schema \"$REPO/benchmark/v1/lifecycle-density.schema.json\""))
+        self.assertIn("validate-phase7-paired-density", source)
+        self.assertIn("-schema \"$REPO/benchmark/v1/phase7-paired-density.schema.json\"", source)
+        self.assertIn("paired-summary.json.validation.json", source)
+        self.assertLess(source.index("validate-phase7-paired-density"), source.index("sha256sum cow.json"))
         self.assertIn("phase7_density.py", source)
         self.assertIn("source.bundle", source)
         self.assertIn("payload.SHA256", source)

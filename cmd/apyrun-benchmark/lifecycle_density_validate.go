@@ -21,6 +21,7 @@ type lifecycleDensityValidationVerdict struct {
 	ArtifactSHA256 string `json:"artifact_sha256"`
 	Strategy       string `json:"strategy"`
 	Samples        int    `json:"samples"`
+	Boundaries     int    `json:"boundaries"`
 }
 
 func runLifecycleDensityValidationMain(options benchmarkOptions) error {
@@ -68,36 +69,40 @@ func validateLifecycleDensityInput(options benchmarkOptions) (lifecycleDensityVa
 	}
 	return lifecycleDensityValidationVerdict{
 		Valid: true, SchemaVersion: evidence.SchemaVersion, ArtifactSHA256: evidence.Artifact.SHA256,
-		Strategy: evidence.Strategy.Active, Samples: len(evidence.Samples),
+		Strategy: evidence.Strategy.Active, Samples: len(evidence.Samples), Boundaries: len(evidence.Boundaries),
 	}, nil
 }
 
 func validateLifecycleDensitySchema(evidenceBytes, schemaBytes []byte) error {
+	return validateJSONSchemaDocument(evidenceBytes, schemaBytes, "lifecycle-density")
+}
+
+func validateJSONSchemaDocument(documentBytes, schemaBytes []byte, label string) error {
 	if err := rejectDuplicateJSONDocument(schemaBytes); err != nil {
-		return fmt.Errorf("lifecycle-density schema JSON is invalid: %w", err)
+		return fmt.Errorf("%s schema JSON is invalid: %w", label, err)
 	}
-	if err := rejectDuplicateJSONDocument(evidenceBytes); err != nil {
-		return fmt.Errorf("lifecycle-density evidence JSON is invalid: %w", err)
+	if err := rejectDuplicateJSONDocument(documentBytes); err != nil {
+		return fmt.Errorf("%s evidence JSON is invalid: %w", label, err)
 	}
 	var schemaDocument any
 	if err := json.Unmarshal(schemaBytes, &schemaDocument); err != nil {
-		return fmt.Errorf("decode lifecycle-density schema: %w", err)
+		return fmt.Errorf("decode %s schema: %w", label, err)
 	}
 	compiler := jsonschema.NewCompiler()
-	const schemaURL = "https://agent-python-runtime.invalid/benchmark/v1/lifecycle-density.schema.json"
+	schemaURL := "https://agent-python-runtime.invalid/benchmark/v1/" + label + ".schema.json"
 	if err := compiler.AddResource(schemaURL, schemaDocument); err != nil {
-		return fmt.Errorf("load lifecycle-density schema: %w", err)
+		return fmt.Errorf("load %s schema: %w", label, err)
 	}
 	compiled, err := compiler.Compile(schemaURL)
 	if err != nil {
-		return fmt.Errorf("compile lifecycle-density schema: %w", err)
+		return fmt.Errorf("compile %s schema: %w", label, err)
 	}
 	var document any
-	if err := json.Unmarshal(evidenceBytes, &document); err != nil {
-		return fmt.Errorf("decode lifecycle-density evidence: %w", err)
+	if err := json.Unmarshal(documentBytes, &document); err != nil {
+		return fmt.Errorf("decode %s evidence: %w", label, err)
 	}
 	if err := compiled.Validate(document); err != nil {
-		return fmt.Errorf("validate lifecycle-density JSON Schema: %w", err)
+		return fmt.Errorf("validate %s JSON Schema: %w", label, err)
 	}
 	return nil
 }

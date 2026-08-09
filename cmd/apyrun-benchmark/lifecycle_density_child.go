@@ -285,9 +285,13 @@ func preparedDensityPhasesWithWarmup(shards []preparedDensityShardResult, readyE
 			wantCounts["cow_image_instantiate_guest"] = 1
 			wantCounts["cow_image__initialize"] = 1
 			wantCounts["cow_image_runtime_init"] = 1
+			wantCounts["cow_image_attach_host_calls"] = 1
+			wantCounts["cow_image_seal"] = 1
 			wantCounts["pool_prepare_instantiate_guest"] = shard.capacity
 			wantCounts["pool_prepare__initialize"] = shard.capacity
 			wantCounts["pool_prepare_cow_restore"] = shard.capacity
+			wantCounts["pool_prepare_attach_globals"] = shard.capacity
+			wantCounts["pool_prepare_attach_host_calls"] = shard.capacity
 			if warmupProfile != "" {
 				wantCounts["cow_image_warmup"] = 1
 			}
@@ -295,6 +299,7 @@ func preparedDensityPhasesWithWarmup(shards []preparedDensityShardResult, readyE
 			wantCounts["pool_prepare_instantiate_guest"] = shard.capacity
 			wantCounts["pool_prepare__initialize"] = shard.capacity
 			wantCounts["pool_prepare_runtime_init"] = shard.capacity
+			wantCounts["pool_prepare_attach_host_calls"] = shard.capacity
 			if warmupProfile != "" {
 				wantCounts["pool_prepare_warmup"] = shard.capacity
 			}

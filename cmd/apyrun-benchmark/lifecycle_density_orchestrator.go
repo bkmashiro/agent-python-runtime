@@ -159,6 +159,8 @@ func validateDensityChildEnvelope(envelope densityChildEnvelope, spec densitySwe
 	return nil
 }
 
+var errProcessRSSExited = errors.New("process exited before RSS sample")
+
 func processInstanceSHA256(nonce []byte, result boundedChildResult) string {
 	digest := sha256.Sum256([]byte(fmt.Sprintf("%x\x00%d\x00%d", nonce, result.PID, result.StartedAtUnixNS)))
 	return hex.EncodeToString(digest[:])
@@ -238,10 +240,16 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 	defer ticker.Stop()
 	var rssErr error
 	var rssErrorSince time.Time
+	var rssProcessExited bool
 	sampleRSS := func() error {
 		rss, err := readRSSBytes(result.PID)
 		if err != nil {
 			rssErr = err
+			rssProcessExited = errors.Is(err, errProcessRSSExited)
+			if rssProcessExited {
+				rssErrorSince = time.Time{}
+				return nil
+			}
 			if rssErrorSince.IsZero() {
 				rssErrorSince = time.Now()
 			}
@@ -249,6 +257,7 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 		}
 		rssErr = nil
 		rssErrorSince = time.Time{}
+		rssProcessExited = false
 		if rss > result.MaxObservedRSSBytes {
 			result.MaxObservedRSSBytes = rss
 		}
@@ -295,7 +304,7 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 				result, _ = finish(waitErr)
 				return result, err
 			}
-			if rssErr != nil && time.Since(rssErrorSince) >= 100*time.Millisecond {
+			if !rssProcessExited && rssErr != nil && time.Since(rssErrorSince) >= 100*time.Millisecond {
 				_ = command.Process.Kill()
 				waitErr := <-wait
 				result, _ = finish(waitErr)

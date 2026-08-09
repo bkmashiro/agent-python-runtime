@@ -785,6 +785,40 @@ func TestBoundedChildRunnerRejectsOversizedOutput(t *testing.T) {
 	}
 }
 
+func TestBoundedChildRunnerRetriesTransientRSSErrors(t *testing.T) {
+	reads := 0
+	runner := boundedChildRunner{
+		executable: "/bin/sh", pollInterval: time.Millisecond,
+		readRSSBytes: func(int) (uint64, error) {
+			reads++
+			if reads == 1 || reads == 3 {
+				return 0, errors.New("transient RSS")
+			}
+			return 7, nil
+		},
+	}
+	result, err := runner.run(context.Background(), boundedChildSpec{
+		args: []string{"-c", "sleep 0.05"}, timeout: time.Second, maxRSSBytes: 1024,
+	})
+	if err != nil || result.MaxObservedRSSBytes != 7 || reads < 4 {
+		t.Fatalf("transient RSS error was not recovered: result=%#v reads=%d err=%v", result, reads, err)
+	}
+}
+
+func TestBoundedChildRunnerRejectsPersistentRSSError(t *testing.T) {
+	runner := boundedChildRunner{
+		executable: "/bin/sh", pollInterval: time.Millisecond,
+		readRSSBytes: func(int) (uint64, error) { return 0, errors.New("persistent RSS") },
+	}
+	started := time.Now()
+	_, err := runner.run(context.Background(), boundedChildSpec{
+		args: []string{"-c", "sleep 30"}, timeout: time.Second, maxRSSBytes: 1024,
+	})
+	if err == nil || !strings.Contains(err.Error(), "read lifecycle-density child RSS: persistent RSS") || time.Since(started) < 100*time.Millisecond {
+		t.Fatalf("persistent RSS failure was not fail-closed after grace: %v", err)
+	}
+}
+
 func TestBoundedChildRunnerReportsFastExitBeforeInitialRSS(t *testing.T) {
 	runner := boundedChildRunner{
 		executable:   "/bin/sh",

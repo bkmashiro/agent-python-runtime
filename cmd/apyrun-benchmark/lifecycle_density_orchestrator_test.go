@@ -589,6 +589,7 @@ func TestPreparedDensityPhasesRequireEveryReadySlot(t *testing.T) {
 			wazeroengine.Observation{Phase: "pool_prepare_instantiate_guest", Duration: 3 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare__initialize", Duration: 5 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare_runtime_init", Duration: 7 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_attach_host_calls", Duration: 2 * time.Nanosecond, Success: true},
 		)
 	}
 	phases, err := preparedDensityPhases([]preparedDensityShardResult{{capacity: 2, observations: observations}}, 20*time.Nanosecond, "single-use-preinitialized")
@@ -615,6 +616,7 @@ func TestPreparedDensityPhasesBindEveryNonCOWWarmup(t *testing.T) {
 			wazeroengine.Observation{Phase: "pool_prepare_instantiate_guest", Duration: 3 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare__initialize", Duration: 5 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare_runtime_init", Duration: 7 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_attach_host_calls", Duration: 2 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare_warmup", Duration: 11 * time.Nanosecond, Success: true},
 		)
 	}
@@ -648,12 +650,16 @@ func TestCOWDensityPhasesBindCanonicalImageAndEveryRestore(t *testing.T) {
 		{Phase: "cow_image_instantiate_guest", Duration: 3 * time.Nanosecond, Success: true},
 		{Phase: "cow_image__initialize", Duration: 5 * time.Nanosecond, Success: true},
 		{Phase: "cow_image_runtime_init", Duration: 7 * time.Nanosecond, Success: true},
+		{Phase: "cow_image_attach_host_calls", Duration: 2 * time.Nanosecond, Success: true},
+		{Phase: "cow_image_seal", Duration: 3 * time.Nanosecond, Success: true},
 	}
 	for range 2 {
 		observations = append(observations,
 			wazeroengine.Observation{Phase: "pool_prepare_instantiate_guest", Duration: 11 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare__initialize", Duration: 13 * time.Nanosecond, Success: true},
 			wazeroengine.Observation{Phase: "pool_prepare_cow_restore", Duration: 17 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_attach_globals", Duration: 2 * time.Nanosecond, Success: true},
+			wazeroengine.Observation{Phase: "pool_prepare_attach_host_calls", Duration: 3 * time.Nanosecond, Success: true},
 		)
 	}
 	phases, err := preparedDensityPhases(

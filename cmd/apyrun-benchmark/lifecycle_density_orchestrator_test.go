@@ -928,20 +928,44 @@ func TestBoundedChildRunnerRetriesTransientRSSErrors(t *testing.T) {
 }
 
 func TestParseLinuxProcessRSSStatusDistinguishesExit(t *testing.T) {
-	rss, err := parseLinuxProcessRSSStatus([]byte("State:\tR (running)\nVmRSS:\t123 kB\n"))
+	rss, err := parseLinuxProcessRSSStatus([]byte("State:	R (running)\nVmRSS:	123 kB\n"))
 	if err != nil || rss != 123*1024 {
 		t.Fatalf("active RSS parse: rss=%d err=%v", rss, err)
 	}
-	_, err = parseLinuxProcessRSSStatus([]byte("State:\tZ (zombie)\n"))
-	if !errors.Is(err, errProcessRSSExited) {
-		t.Fatalf("zombie was not classified as exited: %v", err)
+
+	for _, terminal := range []struct {
+		state string
+		label string
+	}{{"Z", "zombie"}, {"X", "dead"}, {"x", "dead"}} {
+		_, err = parseLinuxProcessRSSStatus([]byte("State:	" + terminal.state + " (" + terminal.label + ")\nKthread:	0\n"))
+		if !errors.Is(err, errProcessRSSExited) {
+			t.Fatalf("terminal state %s was not classified as exited: %v", terminal.state, err)
+		}
 	}
-	_, err = parseLinuxProcessRSSStatus([]byte("State:	R (running)\n"))
-	if err == nil || errors.Is(err, errProcessRSSExited) {
-		t.Fatalf("running process without RSS was not a regular read error: %v", err)
+
+	_, err = parseLinuxProcessRSSStatus([]byte("State:	R (running)\nKthread:	0\n"))
+	if !errors.Is(err, errProcessRSSMMReleased) || errors.Is(err, errProcessRSSExited) {
+		t.Fatalf("nonterminal state without VmRSS was not classified as released mm: %v", err)
 	}
-	_, err = parseLinuxProcessRSSStatus([]byte("State:	Z (zombie)\nVmRSS:	123 bananas\n"))
-	if err == nil || errors.Is(err, errProcessRSSExited) {
+
+	malformed := []string{
+		"Kthread:	0\n",
+		"State:	Q (unknown)\nKthread:	0\n",
+		"State:	R (running)\nState:	S (sleeping)\nKthread:	0\n",
+		"State:	R (running)\nKthread:	1\nKthread:	0\n",
+		"State:	R (running)\nKthread:	0\nKthread:	0\n",
+		"State:	R (running)\nKthread:	2\n",
+		"State:	R (running)\n",
+	}
+	for _, status := range malformed {
+		_, err = parseLinuxProcessRSSStatus([]byte(status))
+		if err == nil || errors.Is(err, errProcessRSSMMReleased) || errors.Is(err, errProcessRSSExited) {
+			t.Fatalf("malformed missing-RSS status was accepted: %q err=%v", status, err)
+		}
+	}
+
+	_, err = parseLinuxProcessRSSStatus([]byte("State:	Z (zombie)\nKthread:	0\nVmRSS:	123 bananas\n"))
+	if err == nil || errors.Is(err, errProcessRSSMMReleased) || errors.Is(err, errProcessRSSExited) {
 		t.Fatalf("malformed zombie RSS was not a regular read error: %v", err)
 	}
 }
@@ -963,6 +987,67 @@ func TestBoundedChildRunnerWaitsForReapAfterRSSExit(t *testing.T) {
 	})
 	if err != nil || result.MaxObservedRSSBytes != 7 {
 		t.Fatalf("kernel-confirmed exit was not allowed to reap: result=%#v err=%v", result, err)
+	}
+}
+
+func TestBoundedChildRunnerWaitsForReapAfterMMReleased(t *testing.T) {
+	tests := []struct {
+		name        string
+		command     string
+		timeout     time.Duration
+		cancelAfter time.Duration
+		wantErr     string
+	}{
+		{name: "clean", command: "sleep 0.2", timeout: time.Second},
+		{name: "nonzero", command: "sleep 0.05; exit 7", timeout: time.Second, wantErr: "child failed"},
+		{name: "timeout", command: "sleep 30", timeout: 25 * time.Millisecond, wantErr: "child timeout"},
+		{name: "canceled", command: "sleep 30", timeout: time.Second, cancelAfter: 25 * time.Millisecond, wantErr: "child cancelled"},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			reads := 0
+			runner := boundedChildRunner{
+				executable: "/bin/sh", pollInterval: time.Millisecond,
+				readRSSBytes: func(int) (uint64, error) {
+					reads++
+					if reads == 1 {
+						return 7, nil
+					}
+					return 0, errProcessRSSMMReleased
+				},
+			}
+			ctx := context.Background()
+			if testCase.cancelAfter > 0 {
+				cancelCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				time.AfterFunc(testCase.cancelAfter, cancel)
+				ctx = cancelCtx
+			}
+			result, err := runner.run(ctx, boundedChildSpec{
+				args: []string{"-c", testCase.command}, timeout: testCase.timeout, maxRSSBytes: 1024,
+			})
+			if testCase.wantErr == "" {
+				if err != nil || result.MaxObservedRSSBytes != 7 {
+					t.Fatalf("released mm did not wait for clean reap: result=%#v err=%v", result, err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("released mm masked %s: %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestBoundedChildRunnerRejectsMMReleasedBeforePositiveRSS(t *testing.T) {
+	runner := boundedChildRunner{
+		executable: "/bin/sh", pollInterval: time.Millisecond,
+		readRSSBytes: func(int) (uint64, error) { return 0, errProcessRSSMMReleased },
+	}
+	started := time.Now()
+	_, err := runner.run(context.Background(), boundedChildSpec{
+		args: []string{"-c", "sleep 30"}, timeout: time.Second, maxRSSBytes: 1024,
+	})
+	if err == nil || !errors.Is(err, errProcessRSSMMReleased) || time.Since(started) < 100*time.Millisecond {
+		t.Fatalf("released mm before positive RSS was not rejected after grace: %v", err)
 	}
 }
 

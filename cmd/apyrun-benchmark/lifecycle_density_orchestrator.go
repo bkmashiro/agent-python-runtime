@@ -160,6 +160,7 @@ func validateDensityChildEnvelope(envelope densityChildEnvelope, spec densitySwe
 }
 
 var errProcessRSSExited = errors.New("process exited before RSS sample")
+var errProcessRSSMMReleased = errors.New("process released its userspace mm before RSS sample")
 
 type processRSSGuardError struct {
 	Observed uint64
@@ -259,7 +260,11 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 		rss, err := readRSSBytes(result.PID)
 		if err != nil {
 			rssErr = err
-			rssProcessExited = errors.Is(err, errProcessRSSExited)
+			// Linux proc_pid_status omits VmRSS when get_task_mm() returns nil.
+			// A child that already produced positive RSS cannot regain task->mm
+			// after exit_mm(), but its multi-GiB mmput teardown can precede Z state.
+			rssProcessExited = errors.Is(err, errProcessRSSExited) ||
+				(errors.Is(err, errProcessRSSMMReleased) && result.MaxObservedRSSBytes > 0)
 			if rssProcessExited {
 				rssErrorSince = time.Time{}
 				return nil

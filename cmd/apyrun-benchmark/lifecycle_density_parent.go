@@ -10,10 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
 	runtimeevidence "github.com/bkmashiro/agent-python-runtime/runtime/evidence"
@@ -175,9 +175,9 @@ func assembleLifecycleDensityEvidence(
 			var guard *processRSSGuardError
 			if numpyReady && spec.Strategy == "single-use-preinitialized" && spec.RequestedSlots == 64 && errors.As(err, &guard) {
 				if invocation.Process.PID <= 0 || invocation.Process.StartedAtUnixNS <= 0 ||
+					guard.Observed != invocation.Process.MaxObservedRSSBytes || guard.Observed > math.MaxInt64 ||
 					guard.Limit != spec.MaxRSSBytes || guard.Observed <= guard.Limit ||
-					invocation.Process.MaxObservedRSSBytes != guard.Observed || len(invocation.Process.Stdout) != 0 ||
-					strings.TrimSpace(invocation.Process.StderrTail) != "" {
+					len(invocation.Process.Stdout) != 0 || invocation.Process.StderrBytes != 0 {
 					return runtimeevidence.LifecycleDensityEvidence{}, nil, fmt.Errorf("lifecycle-density child %d RSS boundary evidence drifted", index)
 				}
 				boundaries = append(boundaries, runtimeevidence.LifecycleDensityBoundary{

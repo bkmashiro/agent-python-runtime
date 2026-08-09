@@ -19,8 +19,11 @@ func parseLinuxProcessRSSStatus(content []byte) (uint64, error) {
 			state = fields[1]
 			continue
 		}
-		if len(fields) != 3 || fields[0] != "VmRSS:" || fields[2] != "kB" {
+		if len(fields) == 0 || fields[0] != "VmRSS:" {
 			continue
+		}
+		if len(fields) != 3 || fields[2] != "kB" {
+			return 0, errorsForProcessRSS("invalid VmRSS")
 		}
 		kilobytes, err := strconv.ParseUint(fields[1], 10, 64)
 		if err != nil || kilobytes > math.MaxUint64/1024 {

@@ -805,6 +805,39 @@ func TestBoundedChildRunnerRetriesTransientRSSErrors(t *testing.T) {
 	}
 }
 
+func TestParseLinuxProcessRSSStatusDistinguishesExit(t *testing.T) {
+	rss, err := parseLinuxProcessRSSStatus([]byte("State:\tR (running)\nVmRSS:\t123 kB\n"))
+	if err != nil || rss != 123*1024 {
+		t.Fatalf("active RSS parse: rss=%d err=%v", rss, err)
+	}
+	_, err = parseLinuxProcessRSSStatus([]byte("State:\tZ (zombie)\n"))
+	if !errors.Is(err, errProcessRSSExited) {
+		t.Fatalf("zombie was not classified as exited: %v", err)
+	}
+	_, err = parseLinuxProcessRSSStatus([]byte("State:\tR (running)\n"))
+	if err == nil || errors.Is(err, errProcessRSSExited) {
+		t.Fatalf("running process without RSS was not a regular read error: %v", err)
+	}
+}
+
+func TestBoundedChildRunnerWaitsForReapAfterRSSExit(t *testing.T) {
+	reads := 0
+	runner := boundedChildRunner{
+		executable: "/bin/sh", pollInterval: time.Millisecond,
+		readRSSBytes: func(int) (uint64, error) {
+			reads++
+			if reads == 1 { return 7, nil }
+			return 0, errProcessRSSExited
+		},
+	}
+	result, err := runner.run(context.Background(), boundedChildSpec{
+		args: []string{"-c", "sleep 0.2"}, timeout: time.Second, maxRSSBytes: 1024,
+	})
+	if err != nil || result.MaxObservedRSSBytes != 7 {
+		t.Fatalf("kernel-confirmed exit was not allowed to reap: result=%#v err=%v", result, err)
+	}
+}
+
 func TestBoundedChildRunnerRejectsPersistentRSSError(t *testing.T) {
 	runner := boundedChildRunner{
 		executable: "/bin/sh", pollInterval: time.Millisecond,

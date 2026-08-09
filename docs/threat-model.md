@@ -59,7 +59,7 @@ Control: the optional Harness trace plugin persists only bounded normalized meta
 
 ### WASI ambient authority
 
-Control: instantiate without inherited arguments, environment, stdio, preopened directories, network sockets, or Host process APIs. Packed read-only runtime files are artifact content, not ambient Host paths.
+Control: instantiate without inherited arguments, environment, stdio, network sockets, arbitrary preopened directories, or Host process APIs. Packed read-only runtime files are artifact content, not ambient Host paths. An optional workspace binding adds exactly one Host-selected `/workspace` preopen backed by the rooted ordinary-file adapter: the untrusted request cannot select it; path escape, links, special files, mount crossings, Host identity metadata, and out-of-budget mutations fail closed. A per-module virtual gate prevents workspace access during initialization, warmup, and COW image capture.
 
 ### Pointer and length corruption
 

@@ -15,6 +15,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -91,11 +92,32 @@ type Factory struct {
 	// is valid only for cow-ready-single-use.
 	COWSnapshotShell bool
 	CompilationCache *CompilationCache
+
+	// WorkspaceManager/Ref/Owner form one Host-owned binding. The untrusted
+	// RunRequest cannot select a Host path or change this binding. A Factory
+	// holds one exclusive writer lease for the lifetime of the Runner so that
+	// sequential disposable instances see the same ordinary-file tree.
+	WorkspaceManager *workspace.Manager
+	WorkspaceRef     workspace.Ref
+	WorkspaceOwner   string
 }
 
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
+	workspaceFields := 0
+	if factory.WorkspaceManager != nil {
+		workspaceFields++
+	}
+	if factory.WorkspaceRef != "" {
+		workspaceFields++
+	}
+	if factory.WorkspaceOwner != "" {
+		workspaceFields++
+	}
+	if workspaceFields != 0 && workspaceFields != 3 {
+		return nil, errors.New("workspace binding requires manager, reference, and owner")
+	}
 	maximum := factory.PreparedMaxCapacity
 	if maximum == 0 {
 		maximum = factory.PreparedCapacity
@@ -143,7 +165,25 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.PreparedWarmupProfile != "" {
 		warmupProfile = factory.PreparedWarmupProfile
 	}
-	return newEngine(ctx, wasm, factory.COWSnapshotShell, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, warmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache)
+	var workspaceLease *workspace.Lease
+	if factory.WorkspaceManager != nil {
+		var err error
+		workspaceLease, err = factory.WorkspaceManager.Acquire(factory.WorkspaceRef, factory.WorkspaceOwner)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if workspaceLease != nil {
+				_ = workspaceLease.Release()
+			}
+		}()
+	}
+	result, err := newEngine(ctx, wasm, factory.COWSnapshotShell, config, factory.BrokerFactory, factory.Observer, factory.FootprintSink, factory.ReclaimSink, factory.Strategy, factory.PreparedCapacity, maximum, refillWorkers, warmupProfile, factory.VerifyCOWPreparedImage, factory.CompilationCache, workspaceLease)
+	if err != nil {
+		return nil, err
+	}
+	workspaceLease = nil
+	return result, nil
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -169,10 +209,12 @@ type Engine struct {
 	stateCensus              ReactorStateCensus
 	cowRuntime               cowPreparedRuntime
 	pool                     *preparedPool
+	workspaceLease           *workspace.Lease
+	workspaceRun             chan struct{}
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, false, config, nil, nil, nil, nil, "", 0, 0, 0, "", false, nil)
+	return newEngine(ctx, wasm, false, config, nil, nil, nil, nil, "", 0, 0, 0, "", false, nil, nil)
 }
 
 func NewWithBrokerFactory(
@@ -181,7 +223,7 @@ func NewWithBrokerFactory(
 	config runtimeconfig.RunConfig,
 	brokerFactory BrokerFactory,
 ) (*Engine, error) {
-	return newEngine(ctx, wasm, false, config, brokerFactory, nil, nil, nil, "", 0, 0, 0, "", false, nil)
+	return newEngine(ctx, wasm, false, config, brokerFactory, nil, nil, nil, "", 0, 0, 0, "", false, nil, nil)
 }
 
 func newEngine(
@@ -200,6 +242,7 @@ func newEngine(
 	cowWarmupProfile string,
 	verifyCOWPreparedImage bool,
 	compilationCache *CompilationCache,
+	workspaceLease *workspace.Lease,
 ) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
@@ -296,6 +339,10 @@ func newEngine(
 		preparedWarmupProfile:    cowWarmupProfile,
 		preparedWarmupGeneration: warmupGeneration,
 		stateCensus:              censusCompiledReactor(compiled, wasm),
+		workspaceLease:           workspaceLease,
+	}
+	if workspaceLease != nil {
+		engine.workspaceRun = make(chan struct{}, 1)
 	}
 	if err := engine.initializePreparedPool(preparedCapacity, preparedMaxCapacity, preparedRefillWorkers); err != nil {
 		_ = engine.Close(context.Background())
@@ -370,7 +417,11 @@ func (engine *Engine) Close(ctx context.Context) error {
 	if engine.cowRuntime != nil {
 		cowErr = engine.cowRuntime.close()
 	}
-	return errors.Join(runtimeErr, cowErr)
+	var workspaceErr error
+	if engine.workspaceLease != nil {
+		workspaceErr = engine.workspaceLease.Release()
+	}
+	return errors.Join(runtimeErr, cowErr, workspaceErr)
 }
 
 func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) (payload []byte, runErr error) {
@@ -392,6 +443,14 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
+	if engine.workspaceRun != nil {
+		select {
+		case engine.workspaceRun <- struct{}{}:
+			defer func() { <-engine.workspaceRun }()
+		case <-runContext.Done():
+			return nil, runContext.Err()
+		}
+	}
 	var broker *capability.Broker
 	if engine.brokerFactory != nil {
 		var err error
@@ -452,6 +511,11 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 			engine.unregisterActiveFootprint(activeAttemptID)
 		}
 	}()
+	if instance.workspaceGate != nil {
+		if err := instance.workspaceGate.activate(); err != nil {
+			return nil, fmt.Errorf("activate workspace: %w", err)
+		}
+	}
 	if attemptID, ok := enginecontract.AttemptIdentityFromContext(runContext); ok && instance.footprintSource != nil {
 		if err := engine.registerActiveFootprint(attemptID, instance.footprintSource); err != nil {
 			return nil, fmt.Errorf("register active footprint: %w", err)

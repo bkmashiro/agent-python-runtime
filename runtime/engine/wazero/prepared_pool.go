@@ -29,6 +29,7 @@ type preparedInstance struct {
 	memoryBytes     uint64
 	fromPool        bool
 	footprintSource preparedFootprintSource
+	workspaceGate   *workspaceGate
 }
 
 type preparedRefillRequest struct {
@@ -321,11 +322,15 @@ func (engine *Engine) warmPreparedInstance(ctx context.Context, instance *prepar
 func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (*preparedInstance, error) {
 	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
 	guestStderr := &bytes.Buffer{}
+	moduleConfig, workspaceGate, err := engine.moduleConfig(guestStderr)
+	if err != nil {
+		return nil, err
+	}
 	instantiateStarted := time.Now()
 	module, err := engine.runtime.InstantiateModule(
 		ctx,
 		engine.compiled,
-		newModuleConfig(guestStderr),
+		moduleConfig,
 	)
 	observe(engine.observer, prefix+"instantiate_guest", instantiateStarted, err)
 	if err != nil {
@@ -358,7 +363,7 @@ func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (
 	}
 	guestStderr.Reset()
 	failed = false
-	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(module.Memory().Size())}, nil
+	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(module.Memory().Size()), workspaceGate: workspaceGate}, nil
 }
 
 func (engine *Engine) schedulePreparedDeficit(result chan<- error) uint32 {

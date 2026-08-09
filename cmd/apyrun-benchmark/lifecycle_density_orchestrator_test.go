@@ -440,7 +440,7 @@ func TestAssembleNumPyLifecycleDensityBindsSameArtifactWarmupAndRealTopology(t *
 		SourceCommit: strings.Repeat("a", 40), ArtifactProfile: "numpy-core", Target: "wasm32-wasip1", Execution: "reactor",
 	}
 	warmupDigest := sha256.New()
-	_, _ = warmupDigest.Write(artifactBytes)
+	_, _ = warmupDigest.Write(artifactDigest[:])
 	_, _ = warmupDigest.Write([]byte{0})
 	_, _ = warmupDigest.Write([]byte(wazeroengine.COWWarmupNumPyReadyV1))
 	expectedGeneration := hex.EncodeToString(warmupDigest.Sum(nil))

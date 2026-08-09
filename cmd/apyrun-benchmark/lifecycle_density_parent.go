@@ -156,8 +156,9 @@ func assembleLifecycleDensityEvidence(
 	}
 	expectedWarmupGeneration := ""
 	if numpyReady {
+		artifactDigest := sha256.Sum256(artifactBytes)
 		digest := sha256.New()
-		_, _ = digest.Write(artifactBytes)
+		_, _ = digest.Write(artifactDigest[:])
 		_, _ = digest.Write([]byte{0})
 		_, _ = digest.Write([]byte(specs[0].WarmupProfile))
 		expectedWarmupGeneration = hex.EncodeToString(digest.Sum(nil))

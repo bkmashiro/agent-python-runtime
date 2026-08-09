@@ -814,9 +814,13 @@ func TestParseLinuxProcessRSSStatusDistinguishesExit(t *testing.T) {
 	if !errors.Is(err, errProcessRSSExited) {
 		t.Fatalf("zombie was not classified as exited: %v", err)
 	}
-	_, err = parseLinuxProcessRSSStatus([]byte("State:\tR (running)\n"))
+	_, err = parseLinuxProcessRSSStatus([]byte("State:	R (running)\n"))
 	if err == nil || errors.Is(err, errProcessRSSExited) {
 		t.Fatalf("running process without RSS was not a regular read error: %v", err)
+	}
+	_, err = parseLinuxProcessRSSStatus([]byte("State:	Z (zombie)\nVmRSS:	123 bananas\n"))
+	if err == nil || errors.Is(err, errProcessRSSExited) {
+		t.Fatalf("malformed zombie RSS was not a regular read error: %v", err)
 	}
 }
 

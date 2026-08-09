@@ -114,7 +114,7 @@ Current properties:
 - CPython 3.14 targeting `wasm32-wasip1`;
 - backend-neutral Go `Runner`/`Factory` interface with a wazero backend;
 - strict JSON request, result, tool-catalog, transaction, and evidence contracts;
-- no ambient Guest filesystem, environment, socket, process, or credential access;
+- no ambient Guest filesystem, environment, socket, process, or credential access; an optional Host-bound `/workspace` exposes only the ordinary-file capsule described below;
 - fresh, single-use prepared, and Linux COW-ready execution strategies;
 - provenance manifests, source locks, checksums, SBOMs, and Linux/WASI integration tests;
 - optional `numpy-core` artifact and `numpy-ready-v1` pre-COW warmup profile.
@@ -217,6 +217,12 @@ Linux operators can explicitly derive a replacement-only snapshot shell that pre
 
 The optimization changes instance preparation only; served instances remain single-use and are never returned to the pool.
 
+## Optional workspace capsule
+
+A Host may bind a wazero `Factory` to an opaque workspace reference. The guest then sees `/workspace` as a bounded ordinary-file tree. Sequential Runs use fresh or never-served single-use instances while reopening the same Host-owned tree, so file changes continue without preserving or copying interpreter state. The workspace is unavailable during prepared initialization and COW image creation, and a workspace-bound Runner serializes active Runs.
+
+This surface does not add Git, shell, subprocess, package-manager, native executable, arbitrary mount, socket, credential, or Host-path access. The first version is mutable and non-transactional: completed writes survive a failed Run, while rollback, snapshots, patch export, `/tmp`, and restart persistence are deferred. See [Workspace Capsule v1](docs/workspace-capsule.md).
+
 On the retained Linux benchmark, a fresh native CPython process importing NumPy took a median `324.067 ms`; a request hitting an already prepared NumPy-ready COW slot took `3.863 ms`. This is a lifecycle comparison, not a claim that WebAssembly executes NumPy kernels faster than native code. See the [benchmark report](docs/reports/scheduler-experiment-results.md#8-python-and-numpy-request-lifecycle).
 
 ## Repository map
@@ -226,7 +232,8 @@ abi/v1/                    request, response, tool, and evidence schemas
 cmd/apyrun/                local CLI
 cmd/apyrun-benchmark/      artifact-bound benchmark harness
 runtime/engine/            backend-neutral runtime interface
-runtime/engine/wazero/     wazero fresh, prepared, and COW implementations
+runtime/engine/wazero/     wazero fresh, prepared, COW, and gated workspace mounting
+runtime/workspace/         Host-owned ordinary-file workspace manager and rooted FS
 runtime/capability/        host-owned capability registry and adapters
 guest/                     CPython/WASI source, bootstrap, and build pipeline
 integration/e2e/           real guest integration tests

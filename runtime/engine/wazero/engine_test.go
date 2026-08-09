@@ -3,6 +3,8 @@ package wazero_test
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"os"
 	goruntime "runtime"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	engine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 func TestPreparedCapacityHardBoundFailsBeforeCompile(t *testing.T) {
@@ -207,5 +210,54 @@ func TestNewRejectsMalformedModule(t *testing.T) {
 		runtime.DefaultRunConfig(),
 	); err == nil {
 		t.Fatal("expected malformed module rejection")
+	}
+}
+
+func TestFactoryWorkspaceLeaseIsExclusiveUntilRunnerClose(t *testing.T) {
+	base := t.TempDir()
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	ref, err := manager.Create(nil, workspace.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	factory := engine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "runner-a"}
+	first, err := factory.New(context.Background(), wasm, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (engine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "runner-b"}).New(context.Background(), wasm, runtime.DefaultRunConfig()); !errors.Is(err, workspace.ErrWorkspaceBusy) {
+		t.Fatalf("second runner acquired active workspace: %v", err)
+	}
+	if err := first.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	second, err := (engine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "runner-b"}).New(context.Background(), wasm, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatalf("runner close did not release workspace: %v", err)
+	}
+	if err := second.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFactoryRejectsPartialWorkspaceBinding(t *testing.T) {
+	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	for name, factory := range map[string]engine.Factory{
+		"ref only":     {WorkspaceRef: workspace.Ref("ws-00000000000000000000000000000000"), WorkspaceOwner: "owner"},
+		"manager only": {WorkspaceManager: &workspace.Manager{}, WorkspaceOwner: "owner"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := factory.New(context.Background(), wasm, runtime.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "workspace binding") {
+				t.Fatalf("partial workspace binding error=%v", err)
+			}
+		})
 	}
 }

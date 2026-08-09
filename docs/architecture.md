@@ -8,7 +8,7 @@ This document defines the target architecture. A component is not implemented un
 
 Agent Python Runtime executes one bounded generated-Python run. It is not an agent planner, tool selector, MCP marketplace, package installer, general Linux sandbox, or external-effect transaction system.
 
-V1 remains read-only. A possible future Host-owned side-effect layer is discussed separately in [Effect Plane: playback, COMMIT, and APPROVE](effect-plane.md); it does not expand the current implementation scope.
+V1 external effects remain read-only. The optional workspace capsule is mutable Host-owned file state inside the sandbox boundary, not a permission to modify an external repository or service. A possible future Host-owned side-effect layer is discussed separately in [Effect Plane: playback, COMMIT, and APPROVE](effect-plane.md); workspace semantics do not expand that authority.
 
 ```text
 Agent harness
@@ -54,6 +54,7 @@ Complete Agent-loop observability is an optional Harness concern. The Runtime ac
 - credentials and endpoint allowlists;
 - memory, wall-time, output, and tool-call budgets;
 - instance lifecycle and pool admission;
+- optional workspace manager, opaque reference, limits, and exclusive Runner lease;
 - receipt identity;
 - artifact selection and accepted ABI version.
 
@@ -71,9 +72,9 @@ The active target adds an exact sealed prepared-memory image shared by independe
 
 Generated-code globals, imported modules, arrays, temporary buffers, capability results, counters, and outputs. It must not survive the run.
 
-### Cross-run artifacts
+### Cross-run file state
 
-Deferred. V1 returns bounded JSON/bytes plus a digest. It does not persist an interpreter heap or arbitrary Pickle.
+The optional implemented workspace capsule preserves only a Host-owned bounded tree of ordinary files and directories. Sequential disposable instances reopen the same root; no per-Run tree copy, Python heap, WebAssembly memory, Broker, descriptor, or native resource continues. The v1 tree is mutable and non-transactional: completed writes survive Run failure, while snapshots, rollback, fork, patch export, `/tmp`, and restart persistence are deferred. See [Workspace Capsule v1](workspace-capsule.md).
 
 ### Future stateful sessions
 
@@ -90,6 +91,7 @@ compile artifact once
 → either instantiate synchronously for this Run
   or checkout one never-served instance that already completed _initialize/runtime_init
 → attach a fresh Host-owned per-Run broker
+→ for a bound workspace, activate its per-module gate only after checkout
 → runtime_prepare(request-specific trusted code/data)
 → execute(untrusted request)
 → validate bounded response

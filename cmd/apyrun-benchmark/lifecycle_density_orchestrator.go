@@ -188,6 +188,7 @@ type boundedChildResult struct {
 	MaxObservedRSSBytes uint64
 	Stdout              []byte
 	StderrTail          string
+	StderrBytes         uint64
 }
 
 type boundedChildRunner struct {
@@ -235,11 +236,15 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 	finish := func(waitErr error) (boundedChildResult, error) {
 		result.Stdout = append([]byte(nil), stdout.Bytes()...)
 		result.StderrTail = stderr.String()
+		result.StderrBytes = stderr.written
 		if stdout.overflow {
 			return result, fmt.Errorf("lifecycle-density child stdout limit %d exceeded", stdoutLimit)
 		}
 		if waitErr != nil {
 			return result, fmt.Errorf("lifecycle-density child failed: %w; stderr tail: %s", waitErr, strings.TrimSpace(result.StderrTail))
+		}
+		if result.StderrBytes != 0 {
+			return result, fmt.Errorf("lifecycle-density child emitted %d unexpected stderr bytes; stderr tail: %s", result.StderrBytes, strings.TrimSpace(result.StderrTail))
 		}
 		return result, nil
 	}
@@ -275,14 +280,87 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 		}
 		return nil
 	}
-	if err := sampleRSS(); err != nil {
-		_ = command.Process.Kill()
+	resolveRSSGuard := func(guardErr error) (boundedChildResult, error) {
+		select {
+		case waitErr := <-wait:
+			return finish(waitErr)
+		default:
+		}
+		if parent.Err() != nil {
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("lifecycle-density child cancelled: %w", parent.Err())
+		}
+		select {
+		case <-timer.C:
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("lifecycle-density child timeout after %s", spec.timeout)
+		default:
+		}
+
+		killErr := command.Process.Kill()
 		waitErr := <-wait
-		result, _ = finish(waitErr)
-		return result, err
+		result, finishErr := finish(waitErr)
+		if parent.Err() != nil {
+			return result, fmt.Errorf("lifecycle-density child cancelled: %w", parent.Err())
+		}
+		select {
+		case <-timer.C:
+			return result, fmt.Errorf("lifecycle-density child timeout after %s", spec.timeout)
+		default:
+		}
+		if killErr != nil {
+			if finishErr != nil {
+				return result, finishErr
+			}
+			return result, fmt.Errorf("kill lifecycle-density child at RSS guard: %w", killErr)
+		}
+		var exitErr *exec.ExitError
+		if finishErr == nil || !errors.As(finishErr, &exitErr) || exitErr.ExitCode() != -1 {
+			if finishErr == nil {
+				finishErr = errors.New("child exited without the expected guard signal")
+			}
+			return result, fmt.Errorf("lifecycle-density RSS guard termination was not confirmed: %w", finishErr)
+		}
+		return result, guardErr
+	}
+	if err := sampleRSS(); err != nil {
+		return resolveRSSGuard(err)
 	}
 
 	for {
+		if parent.Err() != nil {
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("lifecycle-density child cancelled: %w", parent.Err())
+		}
+		select {
+		case waitErr := <-wait:
+			result, finishErr := finish(waitErr)
+			if finishErr != nil {
+				return result, finishErr
+			}
+			if result.MaxObservedRSSBytes == 0 {
+				if rssErr == nil {
+					rssErr = errors.New("process RSS was never observed")
+				}
+				return result, fmt.Errorf("lifecycle-density child exited before initial RSS evidence: %w", rssErr)
+			}
+			return result, nil
+		default:
+		}
+		select {
+		case <-timer.C:
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("lifecycle-density child timeout after %s", spec.timeout)
+		default:
+		}
 		select {
 		case waitErr := <-wait:
 			result, finishErr := finish(waitErr)
@@ -308,10 +386,7 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 			return result, fmt.Errorf("lifecycle-density child timeout after %s", spec.timeout)
 		case <-ticker.C:
 			if err := sampleRSS(); err != nil {
-				_ = command.Process.Kill()
-				waitErr := <-wait
-				result, _ = finish(waitErr)
-				return result, err
+				return resolveRSSGuard(err)
 			}
 			if !rssProcessExited && rssErr != nil && time.Since(rssErrorSince) >= 100*time.Millisecond {
 				_ = command.Process.Kill()
@@ -349,10 +424,12 @@ func (buffer *cappedBuffer) Bytes() []byte { return buffer.buffer.Bytes() }
 type tailBuffer struct {
 	content []byte
 	limit   int
+	written uint64
 }
 
 func (buffer *tailBuffer) Write(content []byte) (int, error) {
 	originalLength := len(content)
+	buffer.written += uint64(originalLength)
 	if buffer.limit <= 0 {
 		return originalLength, nil
 	}

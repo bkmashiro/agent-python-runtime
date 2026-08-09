@@ -595,12 +595,13 @@ func (evidence LifecycleDensityEvidence) validatePlan() error {
 }
 
 func (evidence LifecycleDensityEvidence) validateOutcomeIdentity(sampleIndex, repeatIndex, requestedSlots uint32, expectedOutcomes int) error {
-	if int(sampleIndex) >= expectedOutcomes {
+	if sampleIndex >= uint32(expectedOutcomes) {
 		return invalidDensity("sample or boundary index is outside the sweep plan")
 	}
+	index := int(sampleIndex)
 	repeats := int(evidence.Plan.RepeatsPerSlot)
-	expectedSlotIndex := int(sampleIndex) / repeats
-	expectedRepeat := uint32(int(sampleIndex) % repeats)
+	expectedSlotIndex := index / repeats
+	expectedRepeat := uint32(index % repeats)
 	if requestedSlots != evidence.Plan.SlotCounts[expectedSlotIndex] || repeatIndex != expectedRepeat {
 		return invalidDensity("sample or boundary slot/repeat identity drifted")
 	}

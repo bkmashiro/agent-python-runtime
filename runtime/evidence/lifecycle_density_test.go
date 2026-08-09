@@ -140,6 +140,32 @@ func TestPhase7PairedDensitySchemaCompiles(t *testing.T) {
 	_ = compileLifecycleDensitySchema(t, "../../benchmark/v1/phase7-paired-density.schema.json")
 }
 
+func TestPhase7PairedDensitySchemaClosesIdentityObjects(t *testing.T) {
+	content, err := os.ReadFile("../../benchmark/v1/phase7-paired-density.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(content, &document); err != nil {
+		t.Fatal(err)
+	}
+	properties := document["properties"].(map[string]any)
+	definitions := document["$defs"].(map[string]any)
+	for _, field := range []string{"artifact", "host_source", "backend", "environment", "plan"} {
+		property := properties[field].(map[string]any)
+		reference, ok := property["$ref"].(string)
+		if !ok || !strings.HasPrefix(reference, "#/$defs/") {
+			t.Fatalf("%s is not schema-bound: %#v", field, property)
+		}
+		definition := definitions[strings.TrimPrefix(reference, "#/$defs/")].(map[string]any)
+		allowsAdditional, closed := definition["additionalProperties"].(bool)
+		required, _ := definition["required"].([]any)
+		if !closed || allowsAdditional || len(required) == 0 {
+			t.Fatalf("%s identity schema is not closed and required: %#v", field, definition)
+		}
+	}
+}
+
 func TestLifecycleDensityEvidenceAcceptsCanonicalSweepAndArtifactBinding(t *testing.T) {
 	evidence, artifactBytes := validLifecycleDensityEvidence()
 	if err := evidence.Validate(); err != nil {
@@ -260,6 +286,14 @@ func TestLifecycleDensityV3AcceptsNonCOWRSSGuardBoundaryAt64(t *testing.T) {
 	}
 	if err := compileLifecycleDensitySchema(t).Validate(canonical); err != nil {
 		t.Fatalf("schema v3 boundary evidence rejected: %v", err)
+	}
+}
+
+func TestLifecycleDensityV3RejectsOversizedSampleIndexWithoutPanic(t *testing.T) {
+	evidence, _ := validNumPyLifecycleDensityV3BoundaryEvidence()
+	evidence.Samples[0].SampleIndex = ^uint32(0)
+	if err := evidence.Validate(); err == nil {
+		t.Fatal("oversized sample index was accepted")
 	}
 }
 

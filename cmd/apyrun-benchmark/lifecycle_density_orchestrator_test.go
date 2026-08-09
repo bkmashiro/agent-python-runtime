@@ -537,6 +537,23 @@ func TestAssembleNumPyLifecycleDensityRecordsOnlyNonCOW64RSSGuardBoundary(t *tes
 			}
 		})
 	}
+
+	_, _, err = assembleLifecycleDensityEvidence(
+		context.Background(), artifact, artifactBytes,
+		hostSourceIdentity{Revision: strings.Repeat("b", 40)}, "profile-candidate", specs,
+		[]byte("01234567890123456789012345678901"),
+		func(ctx context.Context, spec densitySweepSpec) (densityChildInvocation, error) {
+			invocation, invokeErr := invoke(ctx, spec)
+			if spec.RequestedSlots == 64 {
+				invocation.Process.StderrBytes = defaultDensityChildStderrLimit + 1
+				invocation.Process.StderrTail = strings.Repeat(" ", defaultDensityChildStderrLimit)
+			}
+			return invocation, invokeErr
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "RSS boundary evidence drifted") {
+		t.Fatalf("non-empty stderr hidden by a whitespace tail was accepted: %v", err)
+	}
 }
 
 func TestAssembleNumPyLifecycleDensityRejectsWarmupGenerationDrift(t *testing.T) {
@@ -848,6 +865,45 @@ func TestBoundedChildRunnerRejectsOversizedOutput(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "stdout limit") {
 		t.Fatalf("oversized child output was not rejected: %v", err)
+	}
+}
+
+func TestBoundedChildRunnerDoesNotLetBlockedRSSProbeMaskExitOrTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		timeout time.Duration
+		want    string
+	}{
+		{name: "exit", command: "sleep 0.01; exit 137", timeout: time.Second, want: "child failed"},
+		{name: "timeout", command: "sleep 1", timeout: 25 * time.Millisecond, want: "child timeout"},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			calls := 0
+			runner := boundedChildRunner{
+				executable: "/bin/sh", pollInterval: time.Millisecond,
+				readRSSBytes: func(int) (uint64, error) {
+					calls++
+					if calls == 1 {
+						return 1, nil
+					}
+					time.Sleep(75 * time.Millisecond)
+					return 2, nil
+				},
+			}
+			result, err := runner.run(context.Background(), boundedChildSpec{
+				args:    []string{"-c", testCase.command},
+				timeout: testCase.timeout, maxRSSBytes: 1,
+			})
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("got %v, want %q; result=%+v", err, testCase.want, result)
+			}
+			var guard *processRSSGuardError
+			if errors.As(err, &guard) {
+				t.Fatalf("exit/timeout was masked as RSS boundary: %v", err)
+			}
+		})
 	}
 }
 

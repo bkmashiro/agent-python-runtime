@@ -8,7 +8,7 @@
   "properties": {
     "schema_version": {"const": 2},
     "evidence_class": {"const": "phase7-paired-density"},
-    "artifact": {"type": "object"},
+    "artifact": {"$ref": "#/$defs/artifact"},
     "warmup": {
       "type": "object",
       "additionalProperties": false,
@@ -18,10 +18,10 @@
         "generation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },
-    "host_source": {"type": "object"},
-    "backend": {"type": "object"},
-    "environment": {"type": "object"},
-    "plan": {"type": "object"},
+    "host_source": {"$ref": "#/$defs/hostSource"},
+    "backend": {"$ref": "#/$defs/backend"},
+    "environment": {"$ref": "#/$defs/environment"},
+    "plan": {"$ref": "#/$defs/plan"},
     "source_evidence": {
       "type": "object",
       "additionalProperties": false,
@@ -56,6 +56,71 @@
     }
   },
   "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "sha256", "size_bytes", "source_commit", "artifact_profile", "target", "execution_model"],
+      "properties": {
+        "filename": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "artifact_profile": {"const": "numpy-core"},
+        "target": {"const": "wasm32-wasip1"},
+        "execution_model": {"const": "reactor"}
+      }
+    },
+    "hostSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "modified"],
+      "properties": {
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "modified": {"const": false}
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "reset_mode"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "reset_mode": {"const": "fresh-instance"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goos", "goarch", "go_version", "kernel_release", "page_size_bytes", "cgroup_version"],
+      "properties": {
+        "goos": {"const": "linux"},
+        "goarch": {"const": "amd64"},
+        "go_version": {"type": "string", "minLength": 1},
+        "kernel_release": {"type": "string", "minLength": 1},
+        "page_size_bytes": {"type": "integer", "minimum": 1},
+        "cgroup_version": {"enum": ["v2", "none"]}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workload", "slot_counts", "repeats_per_slot", "fresh_process_per_sample", "max_process_rss_bytes", "child_timeout_ns"],
+      "properties": {
+        "workload": {"const": "numpy-ready-idle"},
+        "slot_counts": {
+          "type": "array",
+          "prefixItems": [{"const": 1}, {"const": 2}, {"const": 4}, {"const": 8}, {"const": 16}, {"const": 32}, {"const": 64}],
+          "items": false,
+          "minItems": 7,
+          "maxItems": 7
+        },
+        "repeats_per_slot": {"enum": [1, 3]},
+        "fresh_process_per_sample": {"const": true},
+        "max_process_rss_bytes": {"const": 8589934592},
+        "child_timeout_ns": {"const": 240000000000}
+      }
+    },
     "uint": {"type": "integer", "minimum": 0},
     "positive": {"type": "integer", "minimum": 1},
     "arm": {

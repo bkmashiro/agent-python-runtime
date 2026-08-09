@@ -56,7 +56,7 @@ The child records process-level `/proc` measurements after all requested slots a
 - page faults;
 - VMA and FD counts.
 
-The COW arm also records named COW mapping attribution. Shared Slurm cgroup counters remain unavailable unless isolation is independently established; cumulative job cgroup peaks are not assigned to a cell.
+The COW arm also records named COW mapping attribution. Each strict campaign cell has its own Slurm allocation and job cgroup, while the two ordered arms intentionally share that cell's time/node stratum. Cgroup counters remain unavailable for arm attribution because they are cumulative across the paired arms; cumulative cell-cgroup peaks are not assigned to either arm. Process PSS/RSS and allocation identity remain independently bound.
 
 The parent samples `/proc/<pid>/status` throughout the child lifecycle. Linux `proc_pid_status()` emits `VmRSS` only while `get_task_mm()` returns a userspace `mm`; `do_exit()` clears that `mm` before the task reaches zombie state and before multi-GiB page-table teardown finishes. Therefore, a complete status record with no `VmRSS` is treated as released-mm terminal evidence only after the same child has produced a positive RSS sample. The parent still waits for the real process result and preserves timeout, cancellation, nonzero exit, stderr, and output-limit failures. Missing RSS before any positive sample remains fail-closed.
 
@@ -105,7 +105,9 @@ python3 tools/phase7_density.py \
   --output paired.json
 ```
 
-For formal evidence, use `-samples 3`. Run a second independent allocation with reversed arm order before treating a difference as stable across allocation time. The versioned `tools/phase7_slurm_job.sh` wrapper runs both arms inside one allocation, records `cow-first|non-cow-first`, validates each arm independently, and only then renders the paired summary.
+For strict formal evidence, use `-samples 3` and one `tools/phase7_cell_slurm_job.sh` array task per canonical `(slots, repeat)` cell. Each task runs the two arms in the declared `cow-first|non-cow-first` order and emits one schema-validated paired-cell fragment. Canary therefore uses seven independent allocations; each formal arm-order campaign uses 21. A second disjoint 21-allocation campaign reverses the arm order. If scheduler QOS limits reject 21 simultaneously submitted tasks, submit disjoint absolute task ranges in bounded waves and pass a bounded regular `--array-job-map` to the controller. The map may initially cover only submitted tasks; each READY archive is validated and ACKed against the alias captured by that polling snapshot, and that task-to-array binding is frozen immediately. Later map updates may only add previously unmapped tasks; changing or deleting an accepted mapping fails closed. This lets completed waves leave the QOS count. Before aggregation, the controller requires exact accepted task coverage `0..20` and freezes the complete mapping. Array grouping and submission timing are scheduler metadata, not campaign identity: absolute task/sample coverage, allocation Job IDs, and cgroup identities remain globally unique across all 21 cells. `tools/phase7_cell_campaign.py` is the committed acceptance controller and trust boundary: it preserves the wrapper's exact `READY/ACKED-<array>_<task>` names, validates each immutable archive before ACK, queries and strictly binds live Slurm allocation resources and terminal state, persists the exact per-cell `scontrol -o` line with its SHA-256, and writes the local receipt bundle whose raw snapshots are independently replayed by the Go aggregator. Hand-authored campaign manifests or scheduler receipts are not eligible evidence.
+
+`tools/phase7_slurm_job.sh` runs a whole matrix in one allocation. Its results are process-isolated diagnostic evidence only and are not eligible for the strict allocation-isolated formal class.
 
 ## Acceptance gates
 
@@ -114,6 +116,10 @@ For formal evidence, use `-samples 3`. Run a second independent allocation with 
 - paired summary is schema v2 and passes `validate-phase7-paired-density` before archive publication;
 - artifact, warmup generation, Host source, backend, environment, and plan are byte-equivalent across arms;
 - every canonical `(slots, repeat)` cell has exactly one complete-sample or typed-boundary outcome;
+- every paired-cell fragment passes `phase7-paired-density-cell.schema.json` and semantic validation before publication;
+- accepted fragment receipts provide exact one-to-one canonical cell coverage, unique Slurm job and cgroup identities, immutable archive digests, ACK/ACKED, and scheduler `COMPLETED/0:0`;
+- canary has exactly seven independent allocations; each formal order has exactly 21;
+- `validate-phase7-formal-disjointness -input <cow-first campaign> -other-input <non-cow-first campaign> -output <verdict>` passes and proves 42 globally unique Slurm Job IDs and cgroup identities across the opposite-order formal sets;
 - COW reports one Runtime shard and exactly `slots` named COW mappings;
 - non-COW reports `ceil(slots / 4)` Runtime shards and no COW mapping attribution;
 - pool ready/accounted values equal requested slots;

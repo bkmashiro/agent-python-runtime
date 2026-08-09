@@ -254,6 +254,9 @@ func TestLifecycleDensityV2AcceptsNumPyReadyWarmupBinding(t *testing.T) {
 func validNumPyLifecycleDensityV3BoundaryEvidence() (LifecycleDensityEvidence, []byte) {
 	evidence, artifact := validNumPyLifecycleDensityEvidence()
 	evidence.SchemaVersion = 3
+	for index := range evidence.Samples {
+		evidence.Samples[index].RuntimeShards = (evidence.Samples[index].RequestedSlots + 3) / 4
+	}
 	last := evidence.Samples[len(evidence.Samples)-1]
 	evidence.Samples = evidence.Samples[:len(evidence.Samples)-1]
 	evidence.Boundaries = []LifecycleDensityBoundary{{

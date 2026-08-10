@@ -218,8 +218,22 @@ The repository currently provides:
 - optional bounded stress loops and Darwin/Linux FD oracle;
 - deterministic local transaction/reconciliation fixtures;
 - trace/evidence bundle semantic validation.
+- a six-task, balanced routing diagnostic with two `direct_favored`, two `python_favored`, and two `boundary` tasks;
+- `apyrun-eval-mechanism`, which executes each routing task through both direct Host calls and one real CPython/WASI Guest Run and checks exact call trace plus final state.
 
-These establish bounded runtime and local protocol foundations, including H5's explicit preflight mechanism and negative classification tests. They do not yet establish H4 against a real provider or H5's route share on a representative workload corpus.
+The mechanism report is deliberately labeled `mechanism_only_not_model_evaluation` and `internal_legacy_no_manifest`. It demonstrates that one Guest Run can carry the same Host-mediated tool sequence as multiple direct calls while preserving the task oracle. It prohibits claims about model quality, token or latency reduction, Computer replacement rate, profile-qualified placement, or decision eligibility. It uses deterministic oracle-authored Python—not model output—and records no timing.
+
+Run it against an exact verified artifact:
+
+```bash
+go run ./cmd/apyrun-eval-mechanism \
+  -guest /path/to/agent-python-runtime.wasm \
+  -dataset eval/agentic/routing/v1 \
+  -repository-commit <40-hex-commit> \
+  -output /new/path/agentic-mechanism-baseline.json
+```
+
+These establish bounded runtime and local protocol foundations, including H5's explicit preflight mechanism and negative classification tests. They do not establish H4 against a real provider, model-generated workflow quality, or H5's route share on a representative external workload corpus. Those are the next decision-bearing experiments; the scripted mechanism report is only their prerequisite smoke test.
 
 ## 12. Phase exit rule
 

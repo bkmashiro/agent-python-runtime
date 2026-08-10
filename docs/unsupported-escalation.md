@@ -10,7 +10,7 @@
 
 Accepted values are:
 
-- `browser`;
+- `browser_runtime` (page rendering, DOM/JavaScript, browser session state, and UI automation);
 - `daemon`;
 - `dynamic_package_install`;
 - `native_extension`;
@@ -41,7 +41,7 @@ A rejected request produces `execution-outcome.schema.json`:
   "kind": "runtime_unsupported",
   "escalation_required": true,
   "escalation_reason": "required_features_unsupported",
-  "required_features": ["browser", "posix"],
+  "required_features": ["browser_runtime", "posix"],
   "workspace_disposition": "not_started",
   "effect_disposition": "not_started",
   "evidence": {
@@ -51,6 +51,8 @@ A rejected request produces `execution-outcome.schema.json`:
 ```
 
 Required features are sorted before emission. The SHA-256 digest binds the exact internal `RunRequest` bytes admitted by that Host interface. The outcome contains no VM target, route directive, credential, Host path, retry command, or claim about an external backend.
+
+`web_search` and bounded `web_fetch` are Host semantic capabilities, not runtime requirements. If the Host grants one through the per-Run Broker, the request remains an L1 Pysolate workload. They do not provide rendering, DOM/JavaScript, browser session state, or ambient network. See [Semantic web capabilities](semantic-web-capabilities.md).
 
 The local CLI writes this JSON to stdout and exits with status `3`. The Hermes bridge returns an error response with `error.code = "runtime_unsupported"` and the same typed object in `outcome`. Neither path starts Guest execution.
 

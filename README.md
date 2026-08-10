@@ -282,6 +282,7 @@ docs/                      architecture, threat model, integration, and results
 - [Threat model](docs/threat-model.md)
 - [Local CLI](docs/operator-cli.md)
 - [Structured unsupported and escalation outcome](docs/unsupported-escalation.md)
+- [Semantic web capabilities](docs/semantic-web-capabilities.md)
 - [Development and test gates](docs/development.md)
 - [Benchmark methodology](docs/benchmarking.md)
 - [North-star evaluation contract](docs/north-star-evaluation-contract.md)

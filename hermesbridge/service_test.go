@@ -104,11 +104,11 @@ func TestServiceReportsUnsupportedWithoutStartingTraceOrRunner(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := validExecuteRequest()
-	request.Requirements = []runtimeconfig.RequiredFeature{runtimeconfig.RequiredFeaturePOSIX, runtimeconfig.RequiredFeatureBrowser}
+	request.Requirements = []runtimeconfig.RequiredFeature{runtimeconfig.RequiredFeaturePOSIX, runtimeconfig.RequiredFeatureBrowserRuntime}
 	response := service.Execute(context.Background(), request)
 	if response.Status != ResponseStatusError || response.Error == nil || response.Error.Code != "runtime_unsupported" || response.Outcome == nil ||
 		!response.Outcome.EscalationRequired || response.Outcome.WorkspaceDisposition != runtimeconfig.WorkspaceNotStarted || response.Outcome.EffectDisposition != runtimeconfig.EffectsNotStarted ||
-		len(response.Outcome.RequiredFeatures) != 2 || response.Outcome.RequiredFeatures[0] != runtimeconfig.RequiredFeatureBrowser || response.Outcome.RequiredFeatures[1] != runtimeconfig.RequiredFeaturePOSIX {
+		len(response.Outcome.RequiredFeatures) != 2 || response.Outcome.RequiredFeatures[0] != runtimeconfig.RequiredFeatureBrowserRuntime || response.Outcome.RequiredFeatures[1] != runtimeconfig.RequiredFeaturePOSIX {
 		t.Fatalf("response=%+v", response)
 	}
 	if atomic.LoadInt32(&runner.runs) != 0 || trace.started != 0 || trace.completed != 0 || response.ExecutionRef != nil {

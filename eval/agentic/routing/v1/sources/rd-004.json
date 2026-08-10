@@ -60,7 +60,7 @@
     "turns": [
       [
         {
-          "content": "Read the four numbers in nums.txt and write their sum into sum.txt.",
+          "content": "In Documents, read the four numbers in nums.txt and write their sum into sum.txt.",
           "role": "user"
         }
       ]

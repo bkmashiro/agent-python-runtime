@@ -60,7 +60,7 @@
     "turns": [
       [
         {
-          "content": "Create a concise report.txt from prefix.txt and the literal suffix `-delta`.",
+          "content": "In Documents, create a concise report.txt from prefix.txt and the literal suffix `-delta`.",
           "role": "user"
         }
       ]

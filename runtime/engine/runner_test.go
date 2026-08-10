@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -78,6 +79,27 @@ func TestPropertiesRejectUnknownOrIncompleteClaims(t *testing.T) {
 		if err := properties.Validate(); !errors.Is(err, engine.ErrInvalidProperties) {
 			t.Fatalf("expected invalid properties for %#v, got %v", properties, err)
 		}
+	}
+}
+
+func TestPropertiesRoundTripArtifactBoundProfile(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	properties := engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+		ExecutionProfileID: "base", AllowedImports: []string{"json"},
+		ArtifactSHA256: digest, ManifestSHA256: digest,
+	}
+	if err := properties.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	profile := properties.ExecutionProfile()
+	if profile == nil || profile.ArtifactSHA256() != digest || profile.ManifestSHA256() != digest {
+		t.Fatalf("profile=%+v", profile)
+	}
+	properties.ManifestSHA256 = ""
+	if !errors.Is(properties.Validate(), engine.ErrInvalidProperties) {
+		t.Fatal("unpaired artifact identity was accepted")
 	}
 }
 

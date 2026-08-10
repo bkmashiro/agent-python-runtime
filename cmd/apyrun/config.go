@@ -25,6 +25,7 @@ type operatorConfig struct {
 	TransactionJournalPath string                           `json:"transaction_journal_path,omitempty"`
 	FetchMany              *fetchManyConfig                 `json:"fetch_many,omitempty"`
 	ExecutionProfile       *executionProfileConfig          `json:"execution_profile,omitempty"`
+	boundExecutionProfile  *runtimeconfig.ExecutionProfile
 }
 
 type executionProfileConfig struct {
@@ -84,6 +85,12 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, *capability.Gra
 			return runtimeconfig.RunConfig{}, nil, errors.New("invalid execution_profile")
 		}
 		runConfig.ExecutionProfile = &profile
+	}
+	if config.boundExecutionProfile != nil {
+		if runConfig.ExecutionProfile == nil || runConfig.ExecutionProfile.ID() != config.boundExecutionProfile.ID() || config.boundExecutionProfile.Validate() != nil {
+			return runtimeconfig.RunConfig{}, nil, errors.New("bound execution profile does not match operator policy")
+		}
+		runConfig.ExecutionProfile = config.boundExecutionProfile
 	}
 	if err := runConfig.Validate(); err != nil {
 		return runtimeconfig.RunConfig{}, nil, fmt.Errorf("invalid operator resource bounds: %w", err)

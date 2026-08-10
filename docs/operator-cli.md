@@ -8,17 +8,18 @@
 go build -o /tmp/apyrun ./cmd/apyrun
 /tmp/apyrun \
   -artifact /path/to/verified/agent-python-runtime.wasm \
+  -manifest /path/to/verified/manifest.json \
   -config ./operator.json \
   < run-request.json
 ```
 
-`-artifact` is required. `-config` is optional; omitting it uses bounded defaults and grants no capability.
+`-artifact` is required. `-config` is optional; omitting it uses bounded defaults and grants no capability. When `execution_profile` is configured, `-manifest` is required and must identify the exact artifact bytes; a manifest without profile policy is also rejected.
 
 A successful invocation writes exactly one JSON response and a newline to stdout. Diagnostics go to stderr. Exit status `2` means invocation, config, artifact, or RunRequest input was rejected; exit status `1` means initialization, execution, bounds enforcement, identity generation, or output failed. Exit status `3` writes a schema-validated Host outcome to stdout and means a valid explicit `requirements` declaration cannot enter this Pysolate profile; the caller must make a different execution-placement decision before starting work.
 
 ## Authority boundary
 
-`run-request.json` is untrusted guest/model data and follows `abi/v1/request.schema.json`. It may contain only `run_id`, generated `code`, `inputs`, an optional output schema, and optional bounded typed `requirements`. Requirements only narrow admission; they are not grants. The request cannot carry targets, URLs, headers, credentials, grants, timeout, memory limits, request/response budgets, or receipt identity.
+`run-request.json` is untrusted guest/model data and follows `abi/v1/request.schema.json`. It may contain only `run_id`, generated `code`, `inputs`, an optional output schema, optional bounded typed `requirements`, and an optional compatibility declaration. Requirements and compatibility metadata only narrow admission; they are not grants. The request cannot carry targets, URLs, headers, credentials, grants, timeout, memory limits, request/response budgets, or receipt identity.
 
 `operator.json` is separate Host-owned policy. The CLI generates a cryptographically random Host run identity for receipts; the request's `run_id` is only an untrusted label and cannot become receipt identity.
 
@@ -61,7 +62,7 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
 
 `prepared_capacity` is an optional wazero-adapter optimization. `0` preserves synchronous fresh initialization. Values `1`–`4` preinitialize that many never-served instances; each checkout serves exactly one Run and is then closed, while a miss falls back to the synchronous fresh path. The exact current artifact starts at 128 MiB of guest memory per candidate, so capacity remains Host-owned and hard-capped. This is not snapshot/restore and does not change the reported `fresh-instance` safety mode.
 
-`execution_profile` is optional Host-owned compatibility policy. When a Run contains a `compatibility` manifest, the CLI requires an exact `base` or `numpy-core` profile match and every declared import must appear in `allowed_imports`. A mismatch exits `2` before artifact read or Factory construction and writes no stdout payload. Legacy requests without a compatibility manifest remain accepted. This is declaration admission, not source inference or artifact-manifest verification; see [Execution profile admission](profile-admission.md).
+`execution_profile` is optional Host-owned compatibility policy. When a Run contains a `compatibility` manifest, the CLI requires an exact `base` or `numpy-core` profile match and every declared import must appear in `allowed_imports`. Request mismatch exits `2` before artifact read. For an admitted request, the CLI then verifies the distribution manifest against the exact bytes, profile, package set, filename, size, artifact SHA-256, build identity and manifest SHA-256, freezes those digests into the profile, and only then constructs the Factory. Identity mismatch exits `2` before Guest work. Legacy requests without a compatibility declaration remain accepted, but configured Host profile policy still requires and verifies its manifest. This is artifact-bound declaration admission, not source inference or a complete per-import inventory; see [Execution profile admission](profile-admission.md).
 
 `transaction_journal_path` is an optional clean absolute path to the Host-owned SQLite/WAL transaction journal. With it, the production CLI creates a workflow transaction before Guest execution, journals every admitted `fetch_many` call as an operation+attempt, finalizes successful Runs, and supports reopen inspection with `apyrun-ledger`. Without it, the same Registry/Coordinator path uses `MemoryLedger` for backward compatibility and must not be presented as durable evidence. The journal rejects symlinks and uses private file permissions.
 

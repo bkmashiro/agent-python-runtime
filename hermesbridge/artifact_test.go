@@ -19,9 +19,15 @@ func writePinnedFixture(t *testing.T) (string, string, []byte) {
 	}
 	sum := sha256.Sum256(wasm)
 	manifestDocument := map[string]any{
-		"schema_version": 2, "abi_version": "v1", "target": "wasm32-wasip1",
+		"schema_version": 2, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
 		"artifact": map[string]any{"filename": filepath.Base(artifact), "sha256": hex.EncodeToString(sum[:]), "size": len(wasm)},
-		"build":    map[string]any{"repository_commit": "7f3070cc155373791010f4de53e9e2b9f7ae3060"},
+		"build": map[string]any{
+			"repository_commit": "7f3070cc155373791010f4de53e9e2b9f7ae3060", "source_date_epoch": "1",
+			"compiler_target": "wasm32-wasip1", "execution_model": "reactor",
+		},
+		"sources": []any{}, "wasm": map[string]any{"imports": []any{}, "exports": []any{"_start"}},
+		"packages":          []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}},
+		"extension_profile": nil, "limitations": []any{"bounded"},
 	}
 	manifestBytes, err := json.Marshal(manifestDocument)
 	if err != nil {
@@ -41,7 +47,8 @@ func TestLoadPinnedArtifactVerifiesManifestIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) != string(want) || provenance.ArtifactSHA256 != digestBytes(want) ||
-		provenance.ManifestSHA256 == "" || provenance.RepositoryCommit != "7f3070cc155373791010f4de53e9e2b9f7ae3060" {
+		provenance.ManifestSHA256 == "" || provenance.RepositoryCommit != "7f3070cc155373791010f4de53e9e2b9f7ae3060" ||
+		provenance.ArtifactProfile != "base" || len(provenance.Packages) != 1 || provenance.Packages[0].Name != "cpython" {
 		t.Fatalf("unexpected artifact/provenance: %q %#v", got, provenance)
 	}
 }

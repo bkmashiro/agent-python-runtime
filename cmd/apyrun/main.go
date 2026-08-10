@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -45,9 +46,10 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	flags := flag.NewFlagSet("apyrun", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	artifactPath := flags.String("artifact", "", "path to the verified WASI guest artifact")
+	manifestPath := flags.String("manifest", "", "path to the artifact distribution manifest")
 	configPath := flags.String("config", "", "path to Host-owned operator config")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *artifactPath == "" {
-		writeDiagnostic(stderr, "usage: apyrun -artifact <guest.wasm> [-config <host.json>]")
+		writeDiagnostic(stderr, "usage: apyrun -artifact <guest.wasm> [-manifest <manifest.json> -config <host.json>]")
 		return 2
 	}
 	if deps.readFile == nil {
@@ -95,11 +97,33 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, "execution profile unsupported")
 		return 2
 	}
+	if (runConfig.ExecutionProfile != nil) != (*manifestPath != "") {
+		writeDiagnostic(stderr, "execution profile and artifact manifest must be configured together")
+		return 2
+	}
 
 	wasm, err := deps.readFile(*artifactPath)
 	if err != nil {
 		writeDiagnostic(stderr, "read guest artifact")
 		return 2
+	}
+	if runConfig.ExecutionProfile != nil {
+		manifest, manifestErr := deps.readFile(*manifestPath)
+		if manifestErr != nil {
+			writeDiagnostic(stderr, "read artifact manifest")
+			return 2
+		}
+		identity, verifyErr := runtimeconfig.VerifyDistributionArtifact(filepath.Base(*artifactPath), wasm, manifest)
+		if verifyErr != nil {
+			writeDiagnostic(stderr, "verify execution profile artifact")
+			return 2
+		}
+		bound, bindErr := runConfig.ExecutionProfile.BindVerifiedArtifact(identity)
+		if bindErr != nil {
+			writeDiagnostic(stderr, "execution profile artifact mismatch")
+			return 2
+		}
+		operator.boundExecutionProfile = &bound
 	}
 	if deps.newIdentity == nil {
 		deps.newIdentity = randomRunIdentity

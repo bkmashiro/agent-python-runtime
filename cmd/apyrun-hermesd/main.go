@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,12 +24,13 @@ import (
 )
 
 type options struct {
-	artifactPath string
-	manifestPath string
-	socketPath   string
-	tracePath    string
-	maxMemoryMiB uint
-	maxCPUMS     uint
+	artifactPath   string
+	manifestPath   string
+	socketPath     string
+	tracePath      string
+	maxMemoryMiB   uint
+	maxCPUMS       uint
+	profileImports []string
 }
 
 func main() {
@@ -50,6 +52,8 @@ func parseOptions(args []string) (options, error) {
 	flags.StringVar(&value.tracePath, "trace-db", "", "absolute path to private trace SQLite database")
 	flags.UintVar(&value.maxMemoryMiB, "max-memory-mib", 512, "maximum WebAssembly memory in MiB")
 	flags.UintVar(&value.maxCPUMS, "max-cpu-ms", 20000, "per-invocation wall/CPU budget in milliseconds")
+	var profileImports string
+	flags.StringVar(&profileImports, "profile-imports", "", "comma-separated Host-admitted import roots")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		return options{}, errors.New("invalid apyrun-hermesd arguments")
 	}
@@ -60,6 +64,19 @@ func parseOptions(args []string) (options, error) {
 	}
 	if value.maxMemoryMiB < 128 || value.maxMemoryMiB > 1024 || value.maxCPUMS == 0 || value.maxCPUMS > 300000 {
 		return options{}, errors.New("apyrun-hermesd resource bounds are invalid")
+	}
+	if profileImports != "" {
+		value.profileImports = strings.Split(profileImports, ",")
+		seen := make(map[string]struct{}, len(value.profileImports))
+		for _, module := range value.profileImports {
+			if module == "" || strings.TrimSpace(module) != module {
+				return options{}, errors.New("profile imports must be canonical comma-separated roots")
+			}
+			if _, duplicate := seen[module]; duplicate {
+				return options{}, errors.New("profile imports must be unique")
+			}
+			seen[module] = struct{}{}
+		}
 	}
 	return value, nil
 }
@@ -99,6 +116,21 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if len(value.profileImports) != 0 {
+		profile, profileErr := runtimeconfig.NewExecutionProfile(provenance.ArtifactProfile, value.profileImports)
+		if profileErr != nil {
+			return profileErr
+		}
+		bound, bindErr := profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+			ProfileID: provenance.ArtifactProfile, ArtifactSHA256: provenance.ArtifactSHA256,
+			ManifestSHA256: provenance.ManifestSHA256, RepositoryCommit: provenance.RepositoryCommit,
+			ABIVersion: provenance.ABIVersion, Target: provenance.Target, Packages: provenance.Packages,
+		})
+		if bindErr != nil {
+			return bindErr
+		}
+		config.ExecutionProfile = &bound
+	}
 	store, err := agenttrace.OpenSQLiteStore(value.tracePath)
 	if err != nil {
 		return err
@@ -134,6 +166,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	readiness := map[string]any{
 		"status": "ready", "protocol": hermesbridge.ProtocolVersion, "socket": value.socketPath,
 		"artifact_sha256": provenance.ArtifactSHA256, "manifest_sha256": provenance.ManifestSHA256,
+		"artifact_profile": provenance.ArtifactProfile, "profile_admission": config.ExecutionProfile != nil,
 		"guest_repository_commit": provenance.RepositoryCommit, "strategy": engine.StrategySingleUsePrepared,
 		"prepared_capacity": 1, "max_concurrency": 1, "max_memory_mib": value.maxMemoryMiB,
 		"max_cpu_ms": value.maxCPUMS, "network_capability": false, "provider_mode": "none",

@@ -10,9 +10,10 @@ import (
 const maxDeclaredImports = 64
 
 var (
-	ErrInvalidCompatibilityDeclaration = errors.New("invalid compatibility declaration")
-	ErrInvalidExecutionProfile         = errors.New("invalid execution profile")
-	ErrExecutionProfileUnsupported     = errors.New("execution profile unsupported")
+	ErrInvalidCompatibilityDeclaration  = errors.New("invalid compatibility declaration")
+	ErrInvalidExecutionProfile          = errors.New("invalid execution profile")
+	ErrExecutionProfileUnsupported      = errors.New("execution profile unsupported")
+	ErrExecutionProfileArtifactMismatch = errors.New("execution profile artifact mismatch")
 )
 
 // CompatibilityDeclaration is untrusted compatibility metadata. It can only
@@ -24,11 +25,14 @@ type CompatibilityDeclaration struct {
 }
 
 // ExecutionProfile is Host-owned admission policy for one named artifact
-// profile. Construction freezes the declared import roots. The runtime does
-// not yet prove that this policy was derived from the artifact manifest.
+// profile. Construction freezes declared import roots; BindVerifiedArtifact can
+// additionally freeze verified profile/artifact/manifest identity. The runtime
+// still does not prove that every import root was enumerated by the artifact.
 type ExecutionProfile struct {
 	id             string
 	allowedImports map[string]struct{}
+	artifactSHA256 string
+	manifestSHA256 string
 }
 
 // ExecutionProfileUnsupportedError contains bounded Host-authored rejection
@@ -75,10 +79,18 @@ func (profile ExecutionProfile) Validate() error {
 			return ErrInvalidExecutionProfile
 		}
 	}
+	if (profile.artifactSHA256 == "") != (profile.manifestSHA256 == "") ||
+		(profile.artifactSHA256 != "" && (!validProfileDigest(profile.artifactSHA256) || !validProfileDigest(profile.manifestSHA256))) {
+		return ErrInvalidExecutionProfile
+	}
 	return nil
 }
 
 func (profile ExecutionProfile) ID() string { return profile.id }
+
+func (profile ExecutionProfile) ArtifactSHA256() string { return profile.artifactSHA256 }
+
+func (profile ExecutionProfile) ManifestSHA256() string { return profile.manifestSHA256 }
 
 func (profile ExecutionProfile) AllowedImports() []string {
 	imports := make([]string, 0, len(profile.allowedImports))
@@ -87,6 +99,35 @@ func (profile ExecutionProfile) AllowedImports() []string {
 	}
 	sort.Strings(imports)
 	return imports
+}
+
+func (profile ExecutionProfile) BindVerifiedArtifact(identity VerifiedArtifactIdentity) (ExecutionProfile, error) {
+	if profile.Validate() != nil || identity.ProfileID != profile.id || !validProfileDigest(identity.ArtifactSHA256) || !validProfileDigest(identity.ManifestSHA256) {
+		return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
+	}
+	if profile.artifactSHA256 != "" && (profile.artifactSHA256 != identity.ArtifactSHA256 || profile.manifestSHA256 != identity.ManifestSHA256) {
+		return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
+	}
+	bound := profile
+	bound.allowedImports = make(map[string]struct{}, len(profile.allowedImports))
+	for module := range profile.allowedImports {
+		bound.allowedImports[module] = struct{}{}
+	}
+	bound.artifactSHA256 = identity.ArtifactSHA256
+	bound.manifestSHA256 = identity.ManifestSHA256
+	return bound, nil
+}
+
+func validProfileDigest(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, character := range value[len("sha256:"):] {
+		if !((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func ValidateCompatibilityDeclaration(declaration *CompatibilityDeclaration) error {

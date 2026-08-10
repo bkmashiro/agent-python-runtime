@@ -40,10 +40,11 @@ go run ./cmd/apyrun-hermesd \
   -socket /absolute/private/runtime-dir/runtime.sock \
   -trace-db /absolute/private/runtime-dir/agent-trace.sqlite \
   -max-memory-mib 512 \
-  -max-cpu-ms 20000
+  -max-cpu-ms 20000 \
+  -profile-imports json,math,statistics
 ```
 
-The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations.
+The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, verified `artifact_profile`, `profile_admission`, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations. `-profile-imports` is optional Host policy; when present, the bridge binds those roots to the verified manifest profile and digests before Runner construction. Roots are canonical, unique and comma-separated. Without it, `profile_admission:false` is reported and compatibility manifests fail closed because no Host profile is bound.
 
 The process owns only the supplied socket and trace paths. Shutdown closes the runtime/store and removes its own socket. It does not remove or replace stale paths from an earlier process.
 
@@ -111,7 +112,7 @@ Guest exceptions, schema mismatch, timeout, invalid Guest envelopes, execution-r
 
 An optional non-empty `requirements` list uses the bounded feature vocabulary in [Structured unsupported and escalation outcome](unsupported-escalation.md). The bridge performs admission before trace start or Runner invocation. Unsupported requests return `status: "error"`, `error.code: "runtime_unsupported"`, and a Host-authored `outcome` containing `escalation_required`, sorted required features, `not_started` workspace/effect dispositions, and a request digest. No `execution_ref` is emitted because no execution exists.
 
-An optional `compatibility` manifest names `base` or `numpy-core` and declared import roots. The bridge reconstructs the Host-frozen profile from validated Runner properties and rejects a mismatch with `error.code: "profile_unsupported"` before trace start or Runner invocation. It emits no escalation outcome or `execution_ref`: profile rejection is pre-execution placement information, not Hard escalation. See [Execution profile admission](profile-admission.md).
+An optional `compatibility` manifest names `base` or `numpy-core` and declared import roots. The pinned loader first validates the exact artifact profile, package set, artifact/manifest digests and build identity; when `-profile-imports` is configured, the Runner properties carry that artifact-bound Host profile. The bridge reconstructs it defensively and rejects a mismatch with `error.code: "profile_unsupported"` before trace start or Runner invocation. It emits no escalation outcome or `execution_ref`: profile rejection is pre-execution placement information, not Hard escalation. See [Execution profile admission](profile-admission.md).
 
 ## Verification
 

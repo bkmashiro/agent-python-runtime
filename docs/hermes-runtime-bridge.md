@@ -44,6 +44,8 @@ go run ./cmd/apyrun-hermesd \
   -profile-imports json,math,statistics
 ```
 
+Profile mismatch, unqualified Host policy, obvious undeclared static imports, and indeterminate source forms are rejected as `profile_unsupported` before trace start or runner checkout. The service uses `conservative-python-imports-v1` over the exact request source and defensively repeats the same admission from the Runner's bound properties. Dynamic import/execution, relative imports, lexical ambiguity, and comparison bounds overflow are not converted into Guest failures or backend fallback. The compatibility result records `syntax_checked=false`; no source result grants authority.
+
 The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, verified `artifact_profile`, `profile_admission`, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations. `-profile-imports` is optional Host policy; when present, every root must be present in the schema-v4 target-Guest qualified catalog, and every qualified root must remain present in the discoverable inventory, before the bridge binds policy and constructs the Runner. Roots are canonical, unique and comma-separated. Without it, `profile_admission:false` is reported and compatibility manifests fail closed because no Host profile is bound. Schema-v2/v3 bundles cannot enable profile admission.
 
 The process owns only the supplied socket and trace paths. Shutdown closes the runtime/store and removes its own socket. It does not remove or replace stale paths from an earlier process.

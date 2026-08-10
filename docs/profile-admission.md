@@ -2,7 +2,7 @@
 
 ## Status
 
-**Current for explicit compatibility manifests, Host-configured import policy, artifact-bound profile identity, target-Guest-generated discoverability, and curated import/operation qualification.** This is a conservative declaration and versioned probe set—not a complete Python source analyzer, transitive closure proof, or arbitrary module support claim.
+**Current for explicit compatibility manifests, Host-configured import policy, artifact-bound profile identity, target-Guest-generated discoverability, curated import/operation qualification, and bounded conservative source comparison.** This is a conservative declaration and versioned evidence set—not an exact Python parser, complete transitive closure proof, or arbitrary module support claim.
 
 ## Contract
 
@@ -139,19 +139,21 @@ It does **not** prove:
 - that transitive package/native-extension requirements were inferred;
 - that a representative workload corpus has high Pysolate admission or completion share.
 
-A request can lie by omitting an import. Runtime availability and Guest restrictions remain fail-closed, but any resulting `ImportError` is an ordinary Guest failure, not backend escalation.
+A request can still lie by omitting an import that the bounded scanner cannot observe. Obvious static omissions are rejected before Guest work; unobserved dynamic or data-dependent omissions remain possible. Runtime availability and Guest restrictions stay fail-closed, and any later `ImportError` is an ordinary Guest failure, not backend escalation.
 
-## Next profile-depth step
+## Current source-comparison layer
 
-The next profile-depth step is conservative source/import declaration comparison against the artifact-generated qualification catalog:
+The profile path now adds conservative source/import declaration comparison to the artifact-generated qualification catalog:
 
 ```text
-verified artifact profile/digests/packages          [Current]
-+ target-Guest find-spec discoverable-root inventory [Current]
-+ curated fresh-Guest import/operation qualification   [Current]
-+ conservative source/import declaration comparison  [Proposed]
-+ selected native/transitive closure evidence          [Partial/Proposed]
+verified artifact profile/digests/packages            [Current]
++ target-Guest find-spec discoverable-root inventory  [Current]
++ curated fresh-Guest import/operation qualification  [Current]
++ conservative-python-imports-v1 source comparison    [Current]
++ selected native/transitive closure evidence         [Partial/Proposed]
 -> fuller Host-authored compatibility evidence
 ```
 
-The Current binding proves which profile/package distribution was loaded and that every Host-allowlisted root passed its exact named import/operation probe in a fresh instance of that target Guest. It does not prove arbitrary operations, transitive closure, or that source declared every reachable import. Deeper checks must remain conservative and versioned; lack of a detected problem is not proof that dynamic Python cannot access an undeclared path.
+The scanner records obvious static roots, compares them with caller declarations and the current Host/profile set, and emits immutable exact-source-digest-bound `compatible | unsupported | indeterminate` evidence. After artifact binding, the same result also binds artifact and manifest digests. Dynamic import/execution, relative imports, lexical ambiguity, and boundedness overflow are indeterminate and fail closed. `syntax_checked=false` is explicit: this layer does not invoke or emulate the exact Guest parser. See [Conservative source import comparison](source-compatibility.md).
+
+The combined Current binding proves which profile/package distribution was loaded, that every Host-allowlisted root passed its exact named import/operation probe in a fresh instance of that target Guest, and that every static root observed by the bounded scanner is declared and admitted. It still does not prove arbitrary operations, exact syntax, complete source reachability, dynamic-import absence, or transitive closure.

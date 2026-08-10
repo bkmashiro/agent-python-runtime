@@ -283,6 +283,37 @@ func TestExecuteRejectsProfileBeforeArtifactOrFactory(t *testing.T) {
 	}
 }
 
+func TestExecuteRejectsSourceComparisonBeforeArtifactOrFactory(t *testing.T) {
+	for name, raw := range map[string]string{
+		"undeclared static import": `{"run_id":"guest","code":"import json, math","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`,
+		"dynamic import":           `{"run_id":"guest","code":"result=__import__(inputs['module'])","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`,
+		"relative import":          `{"run_id":"guest","code":"from .helpers import run","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			artifactReads, factoryCalls := 0, 0
+			deps := dependencies{
+				readFile: func(path string) ([]byte, error) {
+					if path == "host.json" {
+						return []byte(`{"execution_profile":{"id":"base","allowed_imports":["json","math"]}}`), nil
+					}
+					artifactReads++
+					return nil, errors.New("artifact must not be read")
+				},
+				newIdentity: func() (string, error) { return "host-run", nil },
+				newFactory: func(operatorConfig, string, *http.Client) (engine.Factory, error) {
+					factoryCalls++
+					return nil, errors.New("factory must not be created")
+				},
+			}
+			var stdout, stderr strings.Builder
+			exit := execute([]string{"-artifact", "guest.wasm", "-config", "host.json"}, strings.NewReader(raw), &stdout, &stderr, deps)
+			if exit != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "execution profile unsupported") || artifactReads != 0 || factoryCalls != 0 {
+				t.Fatalf("exit=%d stdout=%q stderr=%q artifact_reads=%d factory_calls=%d", exit, stdout.String(), stderr.String(), artifactReads, factoryCalls)
+			}
+		})
+	}
+}
+
 func TestOperatorConfigBindsExecutionProfile(t *testing.T) {
 	config, err := decodeOperatorConfig([]byte(`{"execution_profile":{"id":"numpy-core","allowed_imports":["json","numpy"]}}`))
 	if err != nil {
@@ -339,8 +370,9 @@ func TestExecuteBindsProfileToVerifiedArtifactBeforeFactory(t *testing.T) {
 	request := `{"run_id":"guest","code":"import json\nresult=1","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`
 	var stdout, stderr strings.Builder
 	exit := execute([]string{"-artifact", "agent-python-runtime.wasm", "-manifest", "manifest.json", "-config", "host.json"}, strings.NewReader(request), &stdout, &stderr, deps)
-	if exit != 0 || !bound || stderr.Len() != 0 {
-		t.Fatalf("exit=%d bound=%v stdout=%q stderr=%q", exit, bound, stdout.String(), stderr.String())
+	passedBound := factory.config.ExecutionProfile != nil && factory.config.ExecutionProfile.ArtifactSHA256() != "" && factory.config.ExecutionProfile.ManifestSHA256() != ""
+	if exit != 0 || !bound || !passedBound || stderr.Len() != 0 {
+		t.Fatalf("exit=%d operator_bound=%v runner_bound=%v stdout=%q stderr=%q", exit, bound, passedBound, stdout.String(), stderr.String())
 	}
 }
 

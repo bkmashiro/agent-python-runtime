@@ -1064,8 +1064,10 @@ func TestHybridSurfaceContainsDirectAndPythonWithoutCollision(t *testing.T) {
 		!strings.Contains(prompt, "every required argument is known before any tool runs") ||
 		!strings.Contains(prompt, "a later argument or control-flow decision depends on a Host-tool result") ||
 		!strings.Contains(prompt, "Do not choose run_python merely because there are multiple calls") ||
-		!strings.Contains(description, "touch(file_name: str) [returns an error if the file already exists; do not pre-check existence]") ||
-		!strings.Contains(description, "echo(content: str, file_name: str=...) [when file_name is provided, the target file must already exist; echo does not create missing files]") {
+		!strings.Contains(description, "touch(file_name: str) -> {}") ||
+		!strings.Contains(description, "[returns an error if the file already exists; do not pre-check existence]") ||
+		!strings.Contains(description, "echo(content: str, file_name: str=...) -> {terminal_output: str}") ||
+		!strings.Contains(description, "[when file_name is provided, the target file must already exist; echo does not create missing files]") {
 		t.Fatalf("surface=%d mapping=%v prompt=%q description=%q", len(surface), mapping, prompt, description)
 	}
 }
@@ -1135,6 +1137,30 @@ func TestCompactPythonSDKPreservesBoundedParameterValueHints(t *testing.T) {
 	sdk := compactPythonSDK(runtime)
 	if !strings.Contains(sdk, "mode: Mode of operation ('l' for lines, 'w' for words, 'c' for characters).") {
 		t.Fatalf("SDK omitted the bounded mode-value hint: %s", sdk)
+	}
+}
+
+func TestCompactPythonSDKIncludesBoundedResponseShapes(t *testing.T) {
+	dataset, err := LoadRoutingDataset(filepath.Join(datasetRoot(t), "..", "routing", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task Task
+	for _, candidate := range dataset.Tasks {
+		if candidate.ID == "rd-003" {
+			task = candidate
+			break
+		}
+	}
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdk := compactPythonSDK(runtime)
+	for _, expected := range []string{"cat(file_name: str) -\u003e {file_content: str}", "touch(file_name: str) -\u003e {}"} {
+		if !strings.Contains(sdk, expected) {
+			t.Fatalf("SDK omitted response shape %q: %s", expected, sdk)
+		}
 	}
 }
 

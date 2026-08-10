@@ -13,7 +13,7 @@ BOUNDED CONTINUATION   only a Host-owned ordinary-file workspace may cross Runs
 
 The latency claim is lifecycle-specific: preparation cost is paid before a profile hit. It is not a claim that WASM executes Python or NumPy kernels faster than native Python.
 
-Pysolate deliberately exposes programmable Python plus typed Host capabilities rather than ambient operating-system authority. It is not a general Linux sandbox, package manager, shell, VM fallback manager, persistent interpreter, or coding-agent computer. Backend routing and compatibility escalation belong to an external Harness and must not silently widen authority.
+Pysolate deliberately exposes programmable Python plus typed Host capabilities rather than ambient operating-system authority. It is not a general Linux sandbox, package manager, shell, VM fallback manager, persistent interpreter, or coding-agent computer. For unsupported runtime/profile/features, Pysolate should return a structured escalation outcome; target selection and VM execution belong to an upper layer.
 
 The programming model and snapshot mechanism are not unique. Cloudflare Code Mode executes generated code with projected tools; Python Workers prepares Pyodide/imports and snapshots WebAssembly linear memory to bootstrap new V8 isolates. Workers isolates may then serve multiple requests. Pysolate instead gives each served instance exactly one untrusted Run, binds fresh Host authority, closes that instance, and verifies that non-workspace state does not continue. It does not yet restore and reuse a served instance. See the [Vinculum related-work audit](https://github.com/bkmashiro/vinculum/blob/main/docs/related-work.md) and the [north-star evaluation contract](docs/north-star-evaluation-contract.md).
 

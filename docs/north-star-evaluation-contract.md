@@ -4,7 +4,7 @@
 
 **Proposed evaluation contract, frozen before result generation.**
 
-This document defines the workload, comparison validity rules, lifecycle units, metrics, and oracles required to evaluate the post-Code-Mode product thesis. It does not claim that Native Python routing, workspace overlays, real-provider reconciliation, or Cloudflare baselines are implemented in this repository.
+This document defines the workload, comparison validity rules, lifecycle units, metrics, and oracles required to evaluate the post-Code-Mode product thesis. It does not claim that structured escalation outcomes, workspace overlays, real-provider reconciliation, or Cloudflare baselines are implemented in this repository. VM selection and execution are outside this repository's scope.
 
 The Current implementation boundary remains [Architecture](architecture.md), [Workspace Capsule v1](workspace-capsule.md), and the artifact-bound test/evidence suites. The broader system roadmap is maintained in [Vinculum](https://github.com/bkmashiro/vinculum/blob/main/docs/roadmap.md).
 
@@ -36,9 +36,9 @@ Across sequential Runs, only the explicitly bound ordinary-file workspace may co
 
 For a qualified provider, provider acceptance followed by response loss enters a durable ambiguous state, blocks blind retry, and requires authoritative reconciliation. This hypothesis is **Proposed** until a real provider adapter and fault-injection verifier exist.
 
-### H5 — Authority-equivalent routing
+### H5 — Honest unsupported/escalation reporting
 
-A compatibility backend can execute the same generated program and `host_tools` contract without receiving broader network, credential, filesystem, or commit authority. This hypothesis is **Deferred** until a Native Python sandbox, attempt overlay, and Host-authored route contract exist.
+For requests that require unsupported runtime, profile, POSIX, native-extension, browser, daemon, or subprocess features, Pysolate can return a typed `runtime_unsupported` outcome with required features and `escalation_required=true`. It must not launch a fallback, select a VM, or classify ordinary Python errors, denial, timeout, resource exhaustion, or ambiguous effects as compatibility escalation. This hypothesis is **Proposed** until the outcome contract and acceptance corpus exist.
 
 ## 3. North-star workload
 
@@ -74,8 +74,7 @@ Add only when the exact version, artifact, environment, and authority surface ca
 - native warm process pool;
 - native warm NumPy pool;
 - Node-side just-bash CPython/Emscripten;
-- Cloudflare Python Workers snapshot construction, cold-isolate bootstrap, and warm request on a reused isolate;
-- future Native Python compatibility backend.
+- Cloudflare Python Workers snapshot construction, cold-isolate bootstrap, and warm request on a reused isolate.
 
 Code Mode is principally a programming-model/effect-workflow comparator. Computer is principally a durable-workspace/backend-facade comparator. Neither should be forced into an unlike per-Run runtime benchmark.
 
@@ -120,7 +119,7 @@ A backend may offer more compatibility, but a comparison is invalid if it silent
 - task completion rate;
 - model turns;
 - input/output/cached tokens;
-- repair attempts and route decisions.
+- repair attempts and escalation classifications.
 
 ### Runtime lifecycle
 
@@ -132,7 +131,7 @@ A backend may offer more compatibility, but a comparison is invalid if it silent
 - result validation;
 - close/retire;
 - replacement refill;
-- profile hit/miss and fallback frequency.
+- profile hit/miss and unsupported/escalation frequency.
 
 ### Resources
 
@@ -220,7 +219,7 @@ The repository currently provides:
 - deterministic local transaction/reconciliation fixtures;
 - trace/evidence bundle semantic validation.
 
-These establish bounded runtime and local protocol foundations. They do not yet establish H4 against a real provider or H5 against a Native Python backend.
+These establish bounded runtime and local protocol foundations. They do not yet establish H4 against a real provider or H5 against an unsupported/escalation acceptance corpus.
 
 ## 12. Phase exit rule
 

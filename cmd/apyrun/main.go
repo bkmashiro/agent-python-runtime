@@ -110,10 +110,23 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	if runConfig.ExecutionProfile != nil {
 		manifest, manifestErr := deps.readFile(*manifestPath)
 		if manifestErr != nil {
-			writeDiagnostic(stderr, "read artifact manifest")
+			writeDiagnostic(stderr, "read execution profile manifest")
 			return 2
 		}
-		identity, verifyErr := runtimeconfig.VerifyDistributionArtifact(filepath.Base(*artifactPath), wasm, manifest)
+		inventoryFilename, required, inventoryEnvelopeErr := runtimeconfig.DistributionImportInventoryFilename(manifest)
+		if inventoryEnvelopeErr != nil {
+			writeDiagnostic(stderr, "inspect execution profile manifest")
+			return 2
+		}
+		var inventory []byte
+		if required {
+			inventory, manifestErr = deps.readFile(filepath.Join(filepath.Dir(*manifestPath), inventoryFilename))
+			if manifestErr != nil {
+				writeDiagnostic(stderr, "read execution profile import inventory")
+				return 2
+			}
+		}
+		identity, verifyErr := runtimeconfig.VerifyDistributionArtifact(filepath.Base(*artifactPath), wasm, manifest, inventory)
 		if verifyErr != nil {
 			writeDiagnostic(stderr, "verify execution profile artifact")
 			return 2

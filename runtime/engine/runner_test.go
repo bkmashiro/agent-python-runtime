@@ -87,7 +87,7 @@ func TestPropertiesRoundTripArtifactBoundProfile(t *testing.T) {
 	properties := engine.Properties{
 		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
 		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
-		ExecutionProfileID: "base", AllowedImports: []string{"json"},
+		ExecutionProfileID: "base", AllowedImports: []string{"json"}, AvailableImports: []string{"agent_runtime", "json", "sys"},
 		ArtifactSHA256: digest, ManifestSHA256: digest,
 	}
 	if err := properties.Validate(); err != nil {

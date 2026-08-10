@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 REQUIRED_FILES = {
     "agent-python-runtime.wasm",
     "manifest.json",
+    "import-inventory.json",
     "SHA256SUMS",
     "sbom.spdx.json",
     "THIRD_PARTY_NOTICES.md",

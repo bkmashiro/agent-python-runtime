@@ -19,6 +19,23 @@ def load_writer():
     return module
 
 
+def write_inventory(root: pathlib.Path, profile: str) -> pathlib.Path:
+    roots = ["agent_runtime", "json", "sys"]
+    if profile == "numpy-core":
+        roots.insert(2, "numpy")
+    path = root / "import-inventory.json"
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "artifact_profile": profile,
+        "probe": "guest-importlib-find-spec-v1",
+        "implementation": "cpython",
+        "python_version": "3.14.test",
+        "discoverable_roots": roots,
+        "failures": [],
+    }))
+    return path
+
+
 class ManifestWriterTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -52,6 +69,7 @@ class ManifestWriterTests(unittest.TestCase):
                 )
             )
 
+            inventory = write_inventory(root, "base")
             manifest = self.writer.build_manifest(
                 artifact=artifact,
                 wat=wat,
@@ -60,12 +78,14 @@ class ManifestWriterTests(unittest.TestCase):
                 source_date_epoch="1234567890",
                 artifact_profile="base",
                 extension_selection=None,
+                import_inventory=inventory,
                 memory_initial_pages=2048,
                 memory_maximum_pages=2048,
             )
 
-            self.assertEqual(2, manifest["schema_version"])
+            self.assertEqual(3, manifest["schema_version"])
             self.assertEqual("base", manifest["artifact_profile"])
+            self.assertEqual(["agent_runtime", "json", "sys"], manifest["python_import_inventory"]["discoverable_roots"])
             self.assertEqual("v1", manifest["abi_version"])
             self.assertEqual(8, manifest["artifact"]["size"])
             self.assertEqual(
@@ -116,6 +136,7 @@ class ManifestWriterTests(unittest.TestCase):
                 "target": "wasm32-wasip1",
                 "sources": [{"id": "cpython-source", "version": "3.14.test"}],
             }))
+            inventory = write_inventory(root, "base")
             output = root / "manifest.json"
             argv = [
                 "write-manifest.py",
@@ -123,6 +144,7 @@ class ManifestWriterTests(unittest.TestCase):
                 "--wat", str(wat),
                 "--source-lock", str(lock),
                 "--artifact-profile", "base",
+                "--import-inventory", str(inventory),
                 "--memory-initial-pages", "2048",
                 "--memory-maximum-pages", "2048",
                 "--output", str(output),
@@ -162,6 +184,7 @@ class ManifestWriterTests(unittest.TestCase):
                 "link_inputs": [],
             }))
 
+            inventory = write_inventory(root, "numpy-core")
             manifest = self.writer.build_manifest(
                 artifact=artifact,
                 wat=wat,
@@ -170,6 +193,7 @@ class ManifestWriterTests(unittest.TestCase):
                 source_date_epoch="1234567890",
                 artifact_profile="numpy-core",
                 extension_selection=selection,
+                import_inventory=inventory,
             )
             self.assertEqual("numpy-core", manifest["artifact_profile"])
             self.assertEqual("core", manifest["extension_profile"]["profile"])
@@ -196,6 +220,7 @@ class ManifestWriterTests(unittest.TestCase):
                     source_date_epoch="1234567890",
                     artifact_profile="numpy-core",
                     extension_selection=selection,
+                    import_inventory=inventory,
                 )
 
             with self.assertRaisesRegex(ValueError, "artifact profile"):
@@ -207,7 +232,9 @@ class ManifestWriterTests(unittest.TestCase):
                     source_date_epoch="1234567890",
                     artifact_profile="unknown",
                     extension_selection=None,
+                    import_inventory=inventory,
                 )
+
     def test_locked_source_version_requires_one_versioned_source(self):
         cases = {
             "missing": {"sources": []},

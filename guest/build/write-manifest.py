@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -22,6 +23,19 @@ NUMPY_CORE_MODULES = (
     "numpy._core._multiarray_umath",
     "numpy.linalg._umath_linalg",
 )
+
+
+def load_import_inventory_module():
+    path = pathlib.Path(__file__).with_name("import_inventory.py")
+    spec = importlib.util.spec_from_file_location("artifact_import_inventory", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load import inventory validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+IMPORT_INVENTORY = load_import_inventory_module()
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -58,6 +72,7 @@ def build_manifest(
     source_date_epoch: str,
     artifact_profile: str,
     extension_selection: pathlib.Path | None,
+    import_inventory: pathlib.Path,
     memory_initial_pages: int | None = None,
     memory_maximum_pages: int | None = None,
 ) -> dict[str, Any]:
@@ -69,6 +84,15 @@ def build_manifest(
             f"artifact filename {artifact.name!r} does not match profile "
             f"{artifact_profile!r}: expected {expected_filename!r}"
         )
+
+    if import_inventory.name != "import-inventory.json":
+        raise ValueError("import inventory must use canonical filename")
+    inventory = IMPORT_INVENTORY.load_inventory(import_inventory, artifact_profile)
+    inventory_record = {
+        key: value for key, value in inventory.items() if key != "artifact_profile"
+    }
+    inventory_record["filename"] = import_inventory.name
+    inventory_record["sha256"] = sha256(import_inventory)
 
     extension_profile = None
     if artifact_profile == "base":
@@ -142,7 +166,7 @@ def build_manifest(
         }
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "abi_version": "v1",
         "artifact_profile": artifact_profile,
         "target": lock["target"],
@@ -161,6 +185,7 @@ def build_manifest(
         "wasm": wasm,
         "packages": packages,
         "extension_profile": extension_profile,
+        "python_import_inventory": inventory_record,
         "limitations": limitations,
     }
 
@@ -180,6 +205,7 @@ def main() -> int:
         "--artifact-profile", choices=sorted(ARTIFACT_FILENAMES), default="base"
     )
     parser.add_argument("--extension-selection", type=pathlib.Path)
+    parser.add_argument("--import-inventory", required=True, type=pathlib.Path)
     parser.add_argument("--memory-initial-pages", required=True, type=int)
     parser.add_argument("--memory-maximum-pages", required=True, type=int)
     parser.add_argument("--output", required=True, type=pathlib.Path)
@@ -193,6 +219,7 @@ def main() -> int:
         source_date_epoch=os.environ.get("SOURCE_DATE_EPOCH", "unknown"),
         artifact_profile=args.artifact_profile,
         extension_selection=args.extension_selection,
+        import_inventory=args.import_inventory,
         memory_initial_pages=args.memory_initial_pages,
         memory_maximum_pages=args.memory_maximum_pages,
     )

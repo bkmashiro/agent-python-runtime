@@ -19,7 +19,7 @@ func writePinnedFixture(t *testing.T) (string, string, []byte) {
 	}
 	sum := sha256.Sum256(wasm)
 	manifestDocument := map[string]any{
-		"schema_version": 2, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
+		"schema_version": 3, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
 		"artifact": map[string]any{"filename": filepath.Base(artifact), "sha256": hex.EncodeToString(sum[:]), "size": len(wasm)},
 		"build": map[string]any{
 			"repository_commit": "7f3070cc155373791010f4de53e9e2b9f7ae3060", "source_date_epoch": "1",
@@ -28,6 +28,17 @@ func writePinnedFixture(t *testing.T) (string, string, []byte) {
 		"sources": []any{}, "wasm": map[string]any{"imports": []any{}, "exports": []any{"_start"}},
 		"packages":          []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}},
 		"extension_profile": nil, "limitations": []any{"bounded"},
+	}
+	inventory := []byte(`{"schema_version":1,"artifact_profile":"base","probe":"guest-importlib-find-spec-v1","implementation":"cpython","python_version":"3.14.0","discoverable_roots":["agent_runtime","json","sys"],"failures":[]}`)
+	inventoryPath := filepath.Join(root, "import-inventory.json")
+	if err := os.WriteFile(inventoryPath, inventory, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inventorySum := sha256.Sum256(inventory)
+	manifestDocument["python_import_inventory"] = map[string]any{
+		"schema_version": 1, "filename": "import-inventory.json", "sha256": hex.EncodeToString(inventorySum[:]),
+		"probe": "guest-importlib-find-spec-v1", "implementation": "cpython", "python_version": "3.14.0",
+		"discoverable_roots": []any{"agent_runtime", "json", "sys"}, "failures": []any{},
 	}
 	manifestBytes, err := json.Marshal(manifestDocument)
 	if err != nil {
@@ -48,7 +59,8 @@ func TestLoadPinnedArtifactVerifiesManifestIdentity(t *testing.T) {
 	}
 	if string(got) != string(want) || provenance.ArtifactSHA256 != digestBytes(want) ||
 		provenance.ManifestSHA256 == "" || provenance.RepositoryCommit != "7f3070cc155373791010f4de53e9e2b9f7ae3060" ||
-		provenance.ArtifactProfile != "base" || len(provenance.Packages) != 1 || provenance.Packages[0].Name != "cpython" {
+		provenance.ArtifactProfile != "base" || len(provenance.Packages) != 1 || provenance.Packages[0].Name != "cpython" ||
+		len(provenance.ImportRoots) != 3 || provenance.ImportRoots[1] != "json" {
 		t.Fatalf("unexpected artifact/provenance: %q %#v", got, provenance)
 	}
 }

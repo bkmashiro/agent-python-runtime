@@ -369,8 +369,14 @@ func (engine *Engine) Properties() enginecontract.Properties {
 		ActiveStrategy:     engine.strategy,
 		ExecutionProfileID: profileID,
 		AllowedImports:     allowedImports,
-		ArtifactSHA256:     artifactSHA256,
-		ManifestSHA256:     manifestSHA256,
+		AvailableImports: func() []string {
+			if engine.config.ExecutionProfile == nil {
+				return nil
+			}
+			return engine.config.ExecutionProfile.AvailableImports()
+		}(),
+		ArtifactSHA256: artifactSHA256,
+		ManifestSHA256: manifestSHA256,
 	}
 }
 

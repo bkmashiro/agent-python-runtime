@@ -59,6 +59,7 @@ type Properties struct {
 	FallbackReason     string
 	ExecutionProfileID string
 	AllowedImports     []string
+	AvailableImports   []string
 	ArtifactSHA256     string
 	ManifestSHA256     string
 }
@@ -85,15 +86,16 @@ func (properties Properties) Validate() error {
 		if err != nil {
 			return fmt.Errorf("%w: execution profile is invalid", ErrInvalidProperties)
 		}
-		if (properties.ArtifactSHA256 == "") != (properties.ManifestSHA256 == "") {
-			return fmt.Errorf("%w: artifact and manifest digests must be present together", ErrInvalidProperties)
+		if (properties.ArtifactSHA256 == "") != (properties.ManifestSHA256 == "") ||
+			(properties.ArtifactSHA256 == "") != (len(properties.AvailableImports) == 0) {
+			return fmt.Errorf("%w: artifact, manifest, and import inventory must be present together", ErrInvalidProperties)
 		}
 		if properties.ArtifactSHA256 != "" {
-			if _, err := profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256}); err != nil {
+			if _, err := profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256, ImportRoots: properties.AvailableImports}); err != nil {
 				return fmt.Errorf("%w: artifact-bound execution profile is invalid", ErrInvalidProperties)
 			}
 		}
-	} else if properties.ArtifactSHA256 != "" || properties.ManifestSHA256 != "" {
+	} else if properties.ArtifactSHA256 != "" || properties.ManifestSHA256 != "" || len(properties.AvailableImports) != 0 {
 		return fmt.Errorf("%w: artifact identity requires an execution profile", ErrInvalidProperties)
 	}
 	wantResetMode := resetModeForStrategy(properties.ActiveStrategy)
@@ -114,7 +116,10 @@ func (properties Properties) ExecutionProfile() *runtime.ExecutionProfile {
 		return nil
 	}
 	if properties.ArtifactSHA256 != "" {
-		profile, err = profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256})
+		profile, err = profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{
+			ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256,
+			ManifestSHA256: properties.ManifestSHA256, ImportRoots: append([]string(nil), properties.AvailableImports...),
+		})
 		if err != nil {
 			return nil
 		}

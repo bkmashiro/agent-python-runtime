@@ -16,8 +16,8 @@ The initial bridge is intentionally local and narrow:
 - Unix-domain socket only; no TCP listener;
 - socket parent must already exist, be owned by the current user, and have mode `0700`;
 - socket mode is `0600`, and an existing path is never replaced automatically;
-- artifact and distribution manifest are clean absolute regular-file paths;
-- manifest ABI, target, filename, size, source revision, and artifact SHA-256 are verified before the socket becomes ready;
+- artifact and distribution manifest are clean absolute regular-file paths; schema v3 resolves only the canonical sibling `import-inventory.json` through the same pinned regular-file gate;
+- manifest ABI, target, filename, size, source revision, artifact/manifest/inventory SHA-256, profile/package identity, and embedded-vs-sidecar inventory equality are verified before the socket becomes ready;
 - no Host capability broker is configured, so Guest network/tool calls fail closed;
 - one compiled runtime, one single-use prepared slot, and one concurrent invocation;
 - per-invocation memory and execution-time bounds are Host flags;
@@ -44,7 +44,7 @@ go run ./cmd/apyrun-hermesd \
   -profile-imports json,math,statistics
 ```
 
-The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, verified `artifact_profile`, `profile_admission`, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations. `-profile-imports` is optional Host policy; when present, the bridge binds those roots to the verified manifest profile and digests before Runner construction. Roots are canonical, unique and comma-separated. Without it, `profile_admission:false` is reported and compatibility manifests fail closed because no Host profile is bound.
+The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, verified `artifact_profile`, `profile_admission`, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations. `-profile-imports` is optional Host policy; when present, every root must be present in the schema-v3 target-Guest discoverable inventory before the bridge binds policy to the verified artifact identity and constructs the Runner. Roots are canonical, unique and comma-separated. Without it, `profile_admission:false` is reported and compatibility manifests fail closed because no Host profile is bound. Schema-v2 bundles cannot enable profile admission.
 
 The process owns only the supplied socket and trace paths. Shutdown closes the runtime/store and removes its own socket. It does not remove or replace stale paths from an earlier process.
 
@@ -112,7 +112,7 @@ Guest exceptions, schema mismatch, timeout, invalid Guest envelopes, execution-r
 
 An optional non-empty `requirements` list uses the bounded feature vocabulary in [Structured unsupported and escalation outcome](unsupported-escalation.md). The bridge performs admission before trace start or Runner invocation. Unsupported requests return `status: "error"`, `error.code: "runtime_unsupported"`, and a Host-authored `outcome` containing `escalation_required`, sorted required features, `not_started` workspace/effect dispositions, and a request digest. No `execution_ref` is emitted because no execution exists.
 
-An optional `compatibility` manifest names `base` or `numpy-core` and declared import roots. The pinned loader first validates the exact artifact profile, package set, artifact/manifest digests and build identity; when `-profile-imports` is configured, the Runner properties carry that artifact-bound Host profile. The bridge reconstructs it defensively and rejects a mismatch with `error.code: "profile_unsupported"` before trace start or Runner invocation. It emits no escalation outcome or `execution_ref`: profile rejection is pre-execution placement information, not Hard escalation. See [Execution profile admission](profile-admission.md).
+An optional `compatibility` manifest names `base` or `numpy-core` and declared import roots. The pinned loader first validates the exact artifact profile, package set, artifact/manifest/inventory digests, sidecar contents, and build identity; when `-profile-imports` is configured, the Runner properties carry that artifact-bound Host profile and a defensive inventory copy. The bridge reconstructs it and rejects a mismatch with `error.code: "profile_unsupported"` before trace start or Runner invocation. It emits no escalation outcome or `execution_ref`: profile rejection is pre-execution placement information, not Hard escalation. This is explicit manifest plus Guest-discoverability admission, not source analysis or import-execution proof. See [Execution profile admission](profile-admission.md).
 
 ## Verification
 

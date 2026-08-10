@@ -102,6 +102,31 @@ class ArtifactVerifierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "filename"):
             self.verifier.verify(self.artifact, manifest)
 
+    def test_schema_v3_binds_guest_import_inventory(self):
+        inventory = pathlib.Path(self.directory.name) / "import-inventory.json"
+        payload = {
+            "schema_version": 1,
+            "artifact_profile": "base",
+            "probe": "guest-importlib-find-spec-v1",
+            "implementation": "cpython",
+            "python_version": "3.14.test",
+            "discoverable_roots": ["agent_runtime", "json", "sys"],
+            "failures": [],
+        }
+        inventory.write_text(json.dumps(payload, sort_keys=True))
+        manifest = copy.deepcopy(self.manifest)
+        manifest["schema_version"] = 3
+        manifest["python_import_inventory"] = {
+            **{key: value for key, value in payload.items() if key != "artifact_profile"},
+            "filename": inventory.name,
+            "sha256": self.verifier.sha256(inventory),
+        }
+        self.verifier.verify(self.artifact, manifest, None, inventory)
+
+        manifest["python_import_inventory"]["discoverable_roots"] = ["agent_runtime", "sys"]
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.verifier.verify(self.artifact, manifest, None, inventory)
+
     def test_numpy_core_requires_bound_core_extension_selection(self):
         numpy_artifact = pathlib.Path(self.directory.name) / "agent-python-runtime-numpy-core.wasm"
         numpy_artifact.write_bytes(self.artifact.read_bytes())

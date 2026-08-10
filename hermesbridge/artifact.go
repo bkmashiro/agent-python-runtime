@@ -22,6 +22,7 @@ type ArtifactProvenance struct {
 	Target           string                          `json:"target"`
 	ArtifactProfile  string                          `json:"artifact_profile"`
 	Packages         []runtimeconfig.ArtifactPackage `json:"packages"`
+	ImportRoots      []string                        `json:"import_roots,omitempty"`
 }
 
 func LoadPinnedArtifact(artifactPath, manifestPath string) ([]byte, ArtifactProvenance, error) {
@@ -33,7 +34,18 @@ func LoadPinnedArtifact(artifactPath, manifestPath string) ([]byte, ArtifactProv
 	if err != nil {
 		return nil, ArtifactProvenance{}, err
 	}
-	identity, err := runtimeconfig.VerifyDistributionArtifact(filepath.Base(artifactPath), artifact, manifestBytes)
+	var inventoryBytes []byte
+	inventoryFilename, required, err := runtimeconfig.DistributionImportInventoryFilename(manifestBytes)
+	if err != nil {
+		return nil, ArtifactProvenance{}, errors.New("inspect distribution artifact manifest")
+	}
+	if required {
+		inventoryBytes, err = readPinnedRegularFile(filepath.Join(filepath.Dir(manifestPath), inventoryFilename), maxManifestBytes)
+		if err != nil {
+			return nil, ArtifactProvenance{}, err
+		}
+	}
+	identity, err := runtimeconfig.VerifyDistributionArtifact(filepath.Base(artifactPath), artifact, manifestBytes, inventoryBytes)
 	if err != nil {
 		return nil, ArtifactProvenance{}, errors.New("verify distribution artifact identity")
 	}
@@ -45,6 +57,7 @@ func LoadPinnedArtifact(artifactPath, manifestPath string) ([]byte, ArtifactProv
 		Target:           identity.Target,
 		ArtifactProfile:  identity.ProfileID,
 		Packages:         append([]runtimeconfig.ArtifactPackage(nil), identity.Packages...),
+		ImportRoots:      append([]string(nil), identity.ImportRoots...),
 	}, nil
 }
 

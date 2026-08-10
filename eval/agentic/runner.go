@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/agenttrace"
@@ -990,6 +991,9 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 			}
 		}
 		entry := tool.PythonName + "(" + strings.Join(parameters, ", ") + ")"
+		if response := compactResponseShape(runtime, tool.ToolID); response != "" {
+			entry += " -> " + response
+		}
 		if len(hints) > 0 {
 			entry += " [" + strings.Join(hints, "; ") + "]"
 		}
@@ -1001,6 +1005,75 @@ func compactPythonSDK(runtime *ToolRuntime) string {
 		parts = append(parts, entry)
 	}
 	return strings.Join(parts, "; ")
+}
+
+func compactResponseShape(runtime *ToolRuntime, toolID string) string {
+	if runtime == nil || toolID == "" {
+		return ""
+	}
+	for _, source := range runtime.task.Tools {
+		if source.Name != toolID || len(source.Response) == 0 {
+			continue
+		}
+		var schema map[string]any
+		if decodeUseNumber(source.Response, &schema) != nil || schema["type"] != "object" {
+			return ""
+		}
+		properties, ok := schema["properties"].(map[string]any)
+		if !ok || len(properties) > 8 {
+			return ""
+		}
+		keys := make([]string, 0, len(properties))
+		for key := range properties {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			property, ok := properties[key].(map[string]any)
+			if !ok {
+				return ""
+			}
+			annotation := compactJSONType(property)
+			if annotation == "" {
+				return ""
+			}
+			parts = append(parts, key+": "+annotation)
+		}
+		shape := "{" + strings.Join(parts, ", ") + "}"
+		if len([]byte(shape)) > 512 {
+			return ""
+		}
+		return shape
+	}
+	return ""
+}
+
+func compactJSONType(schema map[string]any) string {
+	switch schema["type"] {
+	case "string":
+		return "str"
+	case "integer":
+		return "int"
+	case "number":
+		return "float"
+	case "boolean":
+		return "bool"
+	case "object":
+		return "dict"
+	case "array":
+		items, ok := schema["items"].(map[string]any)
+		if !ok {
+			return "list"
+		}
+		itemType := compactJSONType(items)
+		if itemType == "" {
+			return "list"
+		}
+		return "list[" + itemType + "]"
+	default:
+		return ""
+	}
 }
 
 func compactParameterValueHint(runtime *ToolRuntime, toolID, parameterName string) string {

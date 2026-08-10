@@ -19,7 +19,7 @@ func TestProjectHostEvidenceAddsExecutionRefWithoutBrokerEvidence(t *testing.T) 
 		},
 		ExecutedCodeSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
-	merged, err := projectHostEvidence(payload, nil, 0, &ref, 1024*1024)
+	merged, err := projectHostEvidence(payload, nil, 0, &ref, nil, nil, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestProjectHostEvidenceAddsExecutionRefWithoutBrokerEvidence(t *testing.T) 
 
 func TestProjectHostEvidenceRejectsGuestExecutionRefAndBrokerIdentityMismatch(t *testing.T) {
 	forged := []byte(`{"status":"ok","result":{},"execution_ref":{"execution_id":"guest"},"receipts":[],"metrics":{"capability_calls":0},"error":null}`)
-	if _, err := projectHostEvidence(forged, nil, 0, nil, 1024); !errors.Is(err, ErrGuestClaimedExecutionRef) {
+	if _, err := projectHostEvidence(forged, nil, 0, nil, nil, nil, 1024); !errors.Is(err, ErrGuestClaimedExecutionRef) {
 		t.Fatalf("err=%v", err)
 	}
 	payload := []byte(`{"status":"ok","result":{},"receipts":[],"metrics":{"capability_calls":0},"error":null}`)
@@ -47,7 +47,7 @@ func TestProjectHostEvidenceRejectsGuestExecutionRefAndBrokerIdentityMismatch(t 
 		AgentRunID: "agent", InvocationID: "invocation", InvocationAttempt: 1, ExecutionID: "exec-1",
 	}, ExecutedCodeSHA256: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
 	receiptFromOtherExecution := receipt.New("exec-2", "call-1", "pwd", 0, "", "ok", []byte(`{}`))
-	if _, err := projectHostEvidence(payload, []receipt.Receipt{receiptFromOtherExecution}, 1, &ref, 1024*1024); !errors.Is(err, ErrExecutionIdentityMismatch) {
+	if _, err := projectHostEvidence(payload, []receipt.Receipt{receiptFromOtherExecution}, 1, &ref, nil, nil, 1024*1024); !errors.Is(err, ErrExecutionIdentityMismatch) {
 		t.Fatalf("err=%v", err)
 	}
 }

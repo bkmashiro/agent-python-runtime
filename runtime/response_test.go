@@ -65,3 +65,14 @@ func TestDecodeAndValidateRunResponseAcceptsBoundedGuestError(t *testing.T) {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
 }
+
+func TestGuestResponseValidationPrecedesHostPlanProjection(t *testing.T) {
+	request := sourceCompatibilityRequest(t, "import json\nresult = 1", []string{"json"})
+	payload := []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null}`)
+	if _, err := DecodeAndValidateGuestRunResponse(request, payload); err != nil {
+		t.Fatalf("canonical Guest response rejected before Host projection: %v", err)
+	}
+	if _, err := DecodeAndValidateRunResponse(request, payload); err == nil {
+		t.Fatal("final profile response accepted without Host RunPlan/import receipts")
+	}
+}

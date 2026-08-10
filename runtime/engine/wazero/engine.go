@@ -461,7 +461,8 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err := runtimeconfig.AdmitRunRequirements(runRequest); err != nil {
 		return nil, err
 	}
-	if err := runtimeconfig.AdmitRunCompatibility(runRequest, engine.config.ExecutionProfile); err != nil {
+	compatibilityResult, err := runtimeconfig.EvaluateRunCompatibility(runRequest, engine.config.ExecutionProfile)
+	if err != nil {
 		return nil, err
 	}
 	var executionRef *runtimeconfig.ExecutionRef
@@ -544,6 +545,25 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
+	var runPlan *runtimeconfig.FrozenRunPlan
+	if runRequest.Compatibility != nil {
+		if err := validatePlanEvidenceExports(module); err != nil {
+			return nil, err
+		}
+		validationPayload, validationErr := callGuestPayload(runContext, module, "runtime_source_validation_result", planEvidenceMaxBytes)
+		if validationErr != nil {
+			return nil, withGuestDiagnostic(validationErr, guestStderr.String())
+		}
+		validation, validationErr := runtimeconfig.DecodeSourceValidationEvidence(validationPayload)
+		if validationErr != nil {
+			return nil, validationErr
+		}
+		frozen, planErr := runtimeconfig.NewFrozenRunPlan(request, runRequest, compatibilityResult, validation)
+		if planErr != nil {
+			return nil, planErr
+		}
+		runPlan = &frozen
+	}
 	if engine.workspaceRun != nil {
 		select {
 		case engine.workspaceRun <- struct{}{}:
@@ -588,6 +608,22 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, withGuestDiagnostic(err, guestStderr.String())
 	}
+	var importReceipts *runtimeconfig.ImportReceiptEvidence
+	if runPlan != nil {
+		receiptPayload, receiptErr := callGuestPayload(runContext, module, "runtime_import_receipts", planEvidenceMaxBytes)
+		if receiptErr != nil {
+			return nil, withGuestDiagnostic(receiptErr, guestStderr.String())
+		}
+		guestReceipts, receiptErr := runtimeconfig.DecodeGuestImportReceiptEvidence(receiptPayload)
+		if receiptErr != nil {
+			return nil, receiptErr
+		}
+		boundReceipts, receiptErr := runtimeconfig.BindImportReceiptEvidence(*runPlan, guestReceipts)
+		if receiptErr != nil {
+			return nil, receiptErr
+		}
+		importReceipts = &boundReceipts
+	}
 	var receipts []receipt.Receipt
 	var capabilityCalls uint32
 	if broker != nil {
@@ -598,7 +634,7 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		finalizeReason = "invalid_output"
 		return payload, guestValidationErr
 	}
-	payload, err = projectHostEvidence(payload, receipts, capabilityCalls, executionRef, engine.config.MaxResponseBytes)
+	payload, err = projectHostEvidence(payload, receipts, capabilityCalls, executionRef, runPlan, importReceipts, engine.config.MaxResponseBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -617,6 +653,7 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 type brokerContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
+const planEvidenceMaxBytes = 1024 * 1024
 
 func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) error {
 	_, err := runtime.NewHostModuleBuilder("agent_runtime_v1").
@@ -672,7 +709,7 @@ func mergeHostEvidence(
 	capabilityCalls uint32,
 	maxResponse uint32,
 ) ([]byte, error) {
-	return projectHostEvidence(payload, receipts, capabilityCalls, nil, maxResponse)
+	return projectHostEvidence(payload, receipts, capabilityCalls, nil, nil, nil, maxResponse)
 }
 
 func projectHostEvidence(
@@ -680,6 +717,8 @@ func projectHostEvidence(
 	receipts []receipt.Receipt,
 	capabilityCalls uint32,
 	executionRef *runtimeconfig.ExecutionRef,
+	runPlan *runtimeconfig.FrozenRunPlan,
+	importReceipts *runtimeconfig.ImportReceiptEvidence,
 	maxResponse uint32,
 ) ([]byte, error) {
 	var envelope map[string]json.RawMessage
@@ -692,7 +731,7 @@ func projectHostEvidence(
 	for key := range envelope {
 		switch key {
 		case "status", "result", "receipts", "metrics", "error":
-		case "execution_ref":
+		case "execution_ref", "run_plan", "import_receipts":
 			return nil, ErrGuestClaimedExecutionRef
 		default:
 			return nil, fmt.Errorf("guest response contains non-canonical field %q", key)
@@ -715,6 +754,26 @@ func projectHostEvidence(
 			return nil, fmt.Errorf("encode Host execution reference: %w", err)
 		}
 		envelope["execution_ref"] = encodedRef
+	}
+	if runPlan != nil {
+		if runPlan.Validate() != nil {
+			return nil, runtimeconfig.ErrInvalidFrozenRunPlan
+		}
+		encodedPlan, err := json.Marshal(runPlan)
+		if err != nil {
+			return nil, fmt.Errorf("encode Host RunPlan: %w", err)
+		}
+		envelope["run_plan"] = encodedPlan
+	}
+	if importReceipts != nil {
+		if importReceipts.Validate() != nil || runPlan == nil || importReceipts.PlanSHA256() != runPlan.PlanSHA256() {
+			return nil, runtimeconfig.ErrInvalidImportReceiptEvidence
+		}
+		encodedImportReceipts, err := json.Marshal(importReceipts)
+		if err != nil {
+			return nil, fmt.Errorf("encode Host import receipts: %w", err)
+		}
+		envelope["import_receipts"] = encodedImportReceipts
 	}
 	encodedReceipts, err := json.Marshal(receipts)
 	if err != nil {
@@ -761,6 +820,35 @@ func callNoArgs(ctx context.Context, module api.Module, name string) error {
 		return fmt.Errorf("call %s: %w", name, err)
 	}
 	return nil
+}
+
+func validatePlanEvidenceExports(module api.Module) error {
+	for _, name := range []string{"runtime_source_validation_result", "runtime_import_receipts"} {
+		function := module.ExportedFunction(name)
+		if function == nil {
+			return fmt.Errorf("required Guest export %s is missing", name)
+		}
+		definition := function.Definition()
+		if len(definition.ParamTypes()) != 0 || len(definition.ResultTypes()) != 1 || definition.ResultTypes()[0] != api.ValueTypeI32 {
+			return fmt.Errorf("required Guest export %s has invalid ABI shape", name)
+		}
+	}
+	return nil
+}
+
+func callGuestPayload(ctx context.Context, module api.Module, name string, maxResponse uint32) ([]byte, error) {
+	function := module.ExportedFunction(name)
+	if function == nil {
+		return nil, fmt.Errorf("required export %q is missing", name)
+	}
+	results, err := function.Call(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("call %s: %w", name, err)
+	}
+	if len(results) != 1 {
+		return nil, fmt.Errorf("%s returned an unexpected result count", name)
+	}
+	return readGuestResponse(module.Memory(), uint32(results[0]), maxResponse)
 }
 
 func callSourceValidation(ctx context.Context, module api.Module, request []byte) error {

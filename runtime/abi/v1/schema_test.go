@@ -14,7 +14,7 @@ import (
 )
 
 var schemaNames = []string{
-	"request", "response", "compatibility-result", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
+	"request", "response", "compatibility-result", "source-validation-evidence", "run-plan", "import-receipts", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
 	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "effect-attempt-v2", "effect-attempt-v3", "commit-command", "audit-evidence", "transaction-evidence", "transaction-evidence-v2", "transaction-evidence-v3",
 }
 
@@ -40,6 +40,21 @@ func compileSchema(t *testing.T, name string) *jsonschema.Schema {
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.AssertFormat()
+	if name == "response" {
+		for _, dependency := range []string{"run-plan", "import-receipts"} {
+			dependencyData, err := os.ReadFile(filepath.Join(abiRoot(t), dependency+".schema.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var dependencyDocument any
+			if err := json.Unmarshal(dependencyData, &dependencyDocument); err != nil {
+				t.Fatal(err)
+			}
+			if err := compiler.AddResource("https://agent-runtime.dev/abi/v1/"+dependency+".schema.json", dependencyDocument); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	url := "https://agent-runtime.dev/abi/v1/" + name + ".schema.json"
 	if err := compiler.AddResource(url, document); err != nil {
 		t.Fatalf("add %s: %v", name, err)

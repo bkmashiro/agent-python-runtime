@@ -307,6 +307,8 @@ FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
   -lpthread -lm \
   -Wl,--export=runtime_init \
   -Wl,--export=runtime_validate_source \
+  -Wl,--export=runtime_source_validation_result \
+  -Wl,--export=runtime_import_receipts \
   -Wl,--export=runtime_prepare \
   -Wl,--export=alloc \
   -Wl,--export=dealloc \
@@ -389,6 +391,8 @@ PY
     -lpthread -lm -lc-printscan-long-double \
     -Wl,--export=runtime_init \
     -Wl,--export=runtime_validate_source \
+    -Wl,--export=runtime_source_validation_result \
+    -Wl,--export=runtime_import_receipts \
     -Wl,--export=runtime_prepare \
     -Wl,--export=alloc \
     -Wl,--export=dealloc \
@@ -424,6 +428,8 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
     -lpthread -lm \
     -Wl,--export=runtime_init \
     -Wl,--export=runtime_validate_source \
+    -Wl,--export=runtime_source_validation_result \
+    -Wl,--export=runtime_import_receipts \
     -Wl,--export=runtime_prepare \
     -Wl,--export=runtime_preinitialize \
     -Wl,--export=runtime_preinitialized_initialize \

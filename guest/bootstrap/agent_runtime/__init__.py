@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import dis
+import hashlib
 import json
 import sys
 import time
@@ -21,6 +22,8 @@ _warmup_profiles: dict[str, Any] = {}
 _validated_request_json: str | None = None
 _validated_code: types.CodeType | None = None
 _validated_import_globals: dict[str, Any] = {}
+_source_validation_evidence: str | None = None
+_native_import_receipts: Any = None
 _SOURCE_CONTRACT_OK = 0
 _SOURCE_CONTRACT_UNSUPPORTED = 1
 _SOURCE_CONTRACT_INVALID = 2
@@ -50,12 +53,14 @@ def _initialize(config_json: str) -> None:
     value = json.loads(config_json)
     if not isinstance(value, dict):
         raise ValueError("runtime config must be an object")
-    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals
+    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals, _source_validation_evidence, _native_import_receipts
     _runtime_config = dict(value)
     _prepared_globals = {}
     _validated_request_json = None
     _validated_code = None
     _validated_import_globals = {}
+    _source_validation_evidence = None
+    _native_import_receipts = None
 
 
 def _prepare(source: str) -> None:
@@ -218,23 +223,33 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
     return _SOURCE_CONTRACT_OK, code, import_nodes
 
 
-def _preload_and_seal_imports(import_nodes: list[ast.stmt]) -> dict[str, Any] | None:
+def _preload_and_seal_imports(
+    import_nodes: list[ast.stmt],
+) -> tuple[dict[str, Any], list[str], list[str], list[str]] | None:
     try:
+        import _agent_runtime_host  # type: ignore[import-not-found]
+        seal = getattr(_agent_runtime_host, "seal_imports")
+        receipt_reader = getattr(_agent_runtime_host, "import_receipts")
+        baseline_modules = sorted(sys.modules)
         namespace: dict[str, Any] = {"__builtins__": __builtins__}
         if import_nodes:
             preamble = ast.fix_missing_locations(ast.Module(body=import_nodes, type_ignores=[]))
             exec(compile(preamble, "<agent-import-preamble>", "exec"), namespace, namespace)
-        import _agent_runtime_host  # type: ignore[import-not-found]
-        seal = getattr(_agent_runtime_host, "seal_imports")
-        seal(tuple(sorted(sys.modules)))
+        sealed_modules = sorted(sys.modules)
+        seal(tuple(sealed_modules))
+        global _native_import_receipts
+        _native_import_receipts = receipt_reader
+        baseline_set = set(baseline_modules)
+        entry_closure_modules = [name for name in sealed_modules if name not in baseline_set]
         namespace.pop("__builtins__", None)
-        return namespace
+        return namespace, baseline_modules, entry_closure_modules, sealed_modules
     except BaseException:
         return None
 
 
 def _validate_request_source(request_json: str) -> int:
-    global _validated_request_json, _validated_code, _validated_import_globals
+    global _validated_request_json, _validated_code, _validated_import_globals, _source_validation_evidence
+    _source_validation_evidence = None
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
     request, error = _decode_request(request_json)
@@ -252,13 +267,48 @@ def _validate_request_source(request_json: str) -> int:
     status, code, import_nodes = _validate_agent_source(request["code"], request.get("compatibility"))
     if status != _SOURCE_CONTRACT_OK or code is None:
         return status
-    import_globals = _preload_and_seal_imports(import_nodes)
-    if import_globals is None:
+    preload = _preload_and_seal_imports(import_nodes)
+    if preload is None:
         return _SOURCE_CONTRACT_UNSUPPORTED
+    import_globals, baseline_modules, entry_closure_modules, sealed_modules = preload
+    ast_import_roots = sorted(request["compatibility"]["imports"])
+    evidence = {
+        "schema_version": 1,
+        "validator": "exact-guest-static-imports-v1",
+        "status": "ready",
+        "source_sha256": "sha256:" + hashlib.sha256(request["code"].encode("utf-8")).hexdigest(),
+        "profile": request["compatibility"]["profile"],
+        "declared_import_roots": ast_import_roots,
+        "ast_import_roots": ast_import_roots,
+        "bytecode_checked": True,
+        "baseline_modules": baseline_modules,
+        "entry_closure_modules": entry_closure_modules,
+        "sealed_modules": sealed_modules,
+    }
+    _source_validation_evidence = json.dumps(evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     _validated_request_json = request_json
     _validated_code = code
     _validated_import_globals = import_globals
     return _SOURCE_CONTRACT_OK
+
+
+def _source_validation_result() -> str | None:
+    return _source_validation_evidence
+
+
+def _import_receipts_result() -> str:
+    if _native_import_receipts is None:
+        raise RuntimeError("native import receipt collector is unavailable")
+    events = [
+        {"sequence": index, "module_name": name, "decision": "admitted" if admitted else "denied"}
+        for index, (name, admitted) in enumerate(_native_import_receipts())
+    ]
+    return json.dumps(
+        {"schema_version": 1, "collector": "cpython-pre-cache-import-gate-v1", "events": events},
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def _encode(response: dict[str, Any]) -> str:

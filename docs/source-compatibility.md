@@ -122,7 +122,9 @@ The exact target CPython then:
 7. seals the modules loaded by bootstrap, trusted preparation, and the import preamble;
 8. stores the compiled body bound to the exact request bytes.
 
-Only after status `0` does the Host activate workspace mounts, construct the capability Broker, and execute the business body.
+Status `0` is necessary but no longer sufficient to enter Running. The Host next reads `runtime_source_validation_result()`, strictly validates its exact-Guest sidecar, and freezes a Host-authored `RunPlan` before workspace activation or Broker construction. The plan binds exact request/source bytes, the Host compatibility evidence digest, artifact/manifest/profile identity, exact AST roots, baseline modules, entry-import delta, the sealed module set, and the import-policy digest. Its canonical `plan_sha256` covers every field except itself.
+
+Only after that immutable plan validates does the Host activate workspace mounts, construct the capability Broker, and execute the business body.
 
 Status `1` maps to `agent source contract unsupported`; status `2` maps to `agent source invalid`. Neither creates a Broker or causes VM selection.
 
@@ -144,6 +146,14 @@ Imported libraries retain their normal builtins. If Agent code obtains another i
 
 A denied late import is an ordinary failed Pysolate Run. It never triggers automatic retry, VM upgrade, backend migration, or WASM-to-native continuation.
 
+## Host-authored RunPlan and import receipts
+
+Profile-qualified Host responses contain a `run_plan` conforming to `abi/v1/run-plan.schema.json`. The Guest cannot add or replace this field: the Host accepts only the canonical Guest envelope, then projects the plan after execution.
+
+The native pre-cache gate also records every resolved import attempt after sealing, in order, as `admitted` or `denied`. `runtime_import_receipts()` exposes at most 1024 events; overflow fails closed. The Host validates that sidecar, binds it to `plan_sha256`, computes its canonical evidence digest, and projects `import_receipts` conforming to `abi/v1/import-receipts.schema.json`. A cached module therefore still crosses both the enforcement gate and receipt point. Missing or malformed evidence exports are rejected before workspace/Broker authority; Guest-claimed plan or receipt fields are rejected.
+
+These receipts are observations of imports that actually crossed the native gate during Running. They are not a claim that every theoretically reachable branch or transitive module was exercised.
+
 ## Admission order
 
 ```text
@@ -158,8 +168,11 @@ request/config decode
   -> Host trusted preparation (no Broker)
   -> exact Guest AST/bytecode validation
   -> static preamble import + module-set seal
+  -> exact Guest validation sidecar
+  -> Host-authored immutable RunPlan freeze
   -> workspace activation / Broker construction
   -> business-body execution
+  -> native import receipts bound to RunPlan digest
 ```
 
 ## Claim boundary
@@ -173,6 +186,8 @@ exact request bytes
 + exact caller root declaration
 + successful preloading
 + sealed runtime module set
++ Host-frozen artifact/profile/policy identity
++ actual admitted/denied import receipts bound to the plan
 ```
 
 It does not prove:

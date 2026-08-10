@@ -20,6 +20,7 @@
 static uint8_t response_buffer[AGENT_RUNTIME_RESPONSE_MAX + 4];
 static PyObject *runtime_module = NULL;
 static PyObject *allowed_import_names = NULL;
+static PyObject *import_receipts = NULL;
 static int import_policy_sealed = 0;
 static int audit_hook_registered = 0;
 
@@ -42,6 +43,17 @@ static int agent_runtime_audit_hook(const char *event, PyObject *args,
     if (admitted < 0) {
         return -1;
     }
+    if (import_receipts == NULL || PyList_GET_SIZE(import_receipts) >= 1024) {
+        PyErr_SetString(PyExc_RuntimeError, "Pysolate import receipt bound exceeded");
+        return -1;
+    }
+    PyObject *receipt = Py_BuildValue("(OO)", name,
+                                      admitted ? Py_True : Py_False);
+    if (receipt == NULL || PyList_Append(import_receipts, receipt) < 0) {
+        Py_XDECREF(receipt);
+        return -1;
+    }
+    Py_DECREF(receipt);
     if (!admitted) {
         PyErr_Format(PyExc_ImportError,
                      "module is outside the sealed Pysolate import set: %U",
@@ -67,6 +79,24 @@ static uint32_t write_internal_error(void) {
     const uint32_t length = (uint32_t)(sizeof(payload) - 1);
     write_u32_le(response_buffer, length);
     memcpy(response_buffer + 4, payload, length);
+    return (uint32_t)(uintptr_t)response_buffer;
+}
+
+static uint32_t write_python_unicode(PyObject *result) {
+    if (result == NULL) {
+        PyErr_Clear();
+        return write_internal_error();
+    }
+    Py_ssize_t length = 0;
+    const char *payload = PyUnicode_AsUTF8AndSize(result, &length);
+    if (payload == NULL || length < 0 || length > AGENT_RUNTIME_RESPONSE_MAX) {
+        Py_DECREF(result);
+        PyErr_Clear();
+        return write_internal_error();
+    }
+    write_u32_le(response_buffer, (uint32_t)length);
+    memcpy(response_buffer + 4, payload, (size_t)length);
+    Py_DECREF(result);
     return (uint32_t)(uintptr_t)response_buffer;
 }
 
@@ -134,14 +164,33 @@ static PyObject *python_seal_imports(PyObject *self, PyObject *names) {
         }
     }
     Py_DECREF(sequence);
+    PyObject *receipts = PyList_New(0);
+    if (receipts == NULL) {
+        Py_DECREF(allowed);
+        return NULL;
+    }
     allowed_import_names = allowed;
+    import_receipts = receipts;
     import_policy_sealed = 1;
     Py_RETURN_NONE;
+}
+
+static PyObject *python_import_receipts(PyObject *self, PyObject *unused) {
+    (void)self;
+    (void)unused;
+    if (!import_policy_sealed || import_receipts == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "Pysolate import policy is not sealed");
+        return NULL;
+    }
+    return PyList_GetSlice(import_receipts, 0,
+                           PyList_GET_SIZE(import_receipts));
 }
 
 static PyMethodDef agent_runtime_host_methods[] = {
     {"call", python_host_call, METH_VARARGS, "Perform a bounded Host capability call."},
     {"seal_imports", python_seal_imports, METH_O, "Seal the exact per-Run import set."},
+    {"import_receipts", python_import_receipts, METH_NOARGS, "Read bounded native import receipts."},
     {NULL, NULL, 0, NULL},
 };
 
@@ -272,6 +321,34 @@ int32_t runtime_validate_source(const char *request, int32_t request_len) {
     return (int32_t)status;
 }
 
+uint32_t runtime_source_validation_result(void) {
+    if (!Py_IsInitialized() || runtime_module == NULL) {
+        return write_internal_error();
+    }
+    PyObject *function = PyObject_GetAttrString(runtime_module,
+                                                "_source_validation_result");
+    if (function == NULL) {
+        return write_internal_error();
+    }
+    PyObject *result = PyObject_CallNoArgs(function);
+    Py_DECREF(function);
+    return write_python_unicode(result);
+}
+
+uint32_t runtime_import_receipts(void) {
+    if (!Py_IsInitialized() || runtime_module == NULL) {
+        return write_internal_error();
+    }
+    PyObject *function = PyObject_GetAttrString(runtime_module,
+                                                "_import_receipts_result");
+    if (function == NULL) {
+        return write_internal_error();
+    }
+    PyObject *result = PyObject_CallNoArgs(function);
+    Py_DECREF(function);
+    return write_python_unicode(result);
+}
+
 #ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
 static void preinitialize_python_or_trap(void) {
     static const char config[] = "{}";
@@ -340,23 +417,6 @@ uint32_t execute(const char *request, int32_t request_len) {
         request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
         return write_internal_error();
     }
-
-    PyObject *result = call_with_utf8("_execute", request, request_len);
-    if (result == NULL) {
-        PyErr_Clear();
-        return write_internal_error();
-    }
-
-    Py_ssize_t length = 0;
-    const char *payload = PyUnicode_AsUTF8AndSize(result, &length);
-    if (payload == NULL || length < 0 || length > AGENT_RUNTIME_RESPONSE_MAX) {
-        Py_DECREF(result);
-        PyErr_Clear();
-        return write_internal_error();
-    }
-
-    write_u32_le(response_buffer, (uint32_t)length);
-    memcpy(response_buffer + 4, payload, (size_t)length);
-    Py_DECREF(result);
-    return (uint32_t)(uintptr_t)response_buffer;
+    return write_python_unicode(call_with_utf8("_execute", request,
+                                               request_len));
 }

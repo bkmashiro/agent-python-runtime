@@ -3,6 +3,7 @@ package runtime
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -108,6 +109,7 @@ func TestExecutionProfileRejectsInvalidHostPolicy(t *testing.T) {
 		{"duplicate imports", "base", []string{"json", "json"}},
 		{"bad import", "base", []string{"json.*"}},
 		{"qualified root", "base", []string{"json.decoder"}},
+		{"oversized root", "base", []string{strings.Repeat("a", maxImportRootLength+1)}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := NewExecutionProfile(test.id, test.imports); err == nil {

@@ -116,6 +116,15 @@ class BootstrapTests(unittest.TestCase):
                 response = json.loads(runtime._execute(raw))
                 self.assertEqual("source_contract_unsupported", response["error"]["code"])
 
+    def test_static_import_aliases_preserve_original_preamble_order(self):
+        response = self.execute(
+            code="import json as inputs\nresult = inputs.dumps({'ok': True})",
+            inputs={"would": "otherwise overwrite alias"},
+            compatibility={"profile": "base", "imports": ["json"]},
+        )
+        self.assertEqual("ok", response["status"])
+        self.assertEqual('{"ok": true}', response["result"])
+
     def test_profile_contract_fails_closed_without_native_seal(self):
         with mock.patch.dict(sys.modules, {"_agent_runtime_host": None}):
             response = self.execute(

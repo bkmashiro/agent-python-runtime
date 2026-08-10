@@ -83,7 +83,7 @@ func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64, memoryPages uint32) [
 			{Params: []wabinwasm.ValueType{i32}, Results: []wabinwasm.ValueType{i32}},
 			{Params: []wabinwasm.ValueType{i32}},
 		},
-		FunctionSection: []wabinwasm.Index{0, 1, 1, 2, 3, 1},
+		FunctionSection: []wabinwasm.Index{0, 1, 1, 2, 3, 1, 1},
 		MemorySection:   &wabinwasm.Memory{Min: memoryPages, Max: memoryPages, IsMaxEncoded: true},
 		ExportSection: []*wabinwasm.Export{
 			{Name: "memory", Type: wabinwasm.ExternTypeMemory, Index: 0},
@@ -93,7 +93,8 @@ func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64, memoryPages uint32) [
 			{Name: "runtime_warmup", Type: wabinwasm.ExternTypeFunc, Index: 2},
 			{Name: "alloc", Type: wabinwasm.ExternTypeFunc, Index: 3},
 			{Name: "dealloc", Type: wabinwasm.ExternTypeFunc, Index: 4},
-			{Name: "execute", Type: wabinwasm.ExternTypeFunc, Index: 5},
+			{Name: "runtime_validate_source", Type: wabinwasm.ExternTypeFunc, Index: 5},
+			{Name: "execute", Type: wabinwasm.ExternTypeFunc, Index: 6},
 		},
 		CodeSection: []*wabinwasm.Code{
 			{Body: []byte{byte(wabinwasm.OpcodeEnd)}},
@@ -101,6 +102,7 @@ func e1DirtyLoopReactor(dirtyPercent int, pageSize uint64, memoryPages uint32) [
 			{Body: []byte{byte(wabinwasm.OpcodeI32Const), 0, byte(wabinwasm.OpcodeEnd)}},
 			{Body: []byte{byte(wabinwasm.OpcodeI32Const), 8, byte(wabinwasm.OpcodeEnd)}},
 			{Body: []byte{byte(wabinwasm.OpcodeEnd)}},
+			{Body: []byte{byte(wabinwasm.OpcodeI32Const), 0, byte(wabinwasm.OpcodeEnd)}},
 			{Body: executeBody},
 		},
 	})

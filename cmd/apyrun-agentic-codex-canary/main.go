@@ -36,7 +36,7 @@ var canaryLimits = agentic.TrialLimits{
 type dependencies struct {
 	readFile       func(string) ([]byte, error)
 	newAdapter     func(string, string, string, time.Duration) (provider.Adapter, error)
-	newPythonWasi  func(context.Context, []byte, runtimeconfig.RunConfig, *agentic.ToolRuntime) (agentic.PythonWorkflow, error)
+	newPythonWasi  func(context.Context, []byte, runtimeconfig.RunConfig, *agentic.ToolRuntime, agentic.DevelopmentTreatment) (agentic.PythonWorkflow, error)
 	runTrial       func(context.Context, provider.Adapter, agentic.Task, agentic.Condition, string, uint32, agentic.TrialLimits, agentic.ExecutionIdentity, agentic.DevelopmentTreatment, agentic.PythonWorkflowFactory) (agentic.TrialResult, error)
 	codexVersion   func(context.Context, string, time.Duration) (string, error)
 	now            func() time.Time
@@ -50,8 +50,8 @@ func productionDependencies() dependencies {
 		newAdapter: func(executablePath, model, workdir string, timeout time.Duration) (provider.Adapter, error) {
 			return provider.NewCodexCLIAdapter(executablePath, model, workdir, timeout)
 		},
-		newPythonWasi: func(ctx context.Context, guest []byte, config runtimeconfig.RunConfig, tools *agentic.ToolRuntime) (agentic.PythonWorkflow, error) {
-			return agentic.NewWASIPythonExecutor(ctx, guest, config, tools)
+		newPythonWasi: func(ctx context.Context, guest []byte, config runtimeconfig.RunConfig, tools *agentic.ToolRuntime, treatment agentic.DevelopmentTreatment) (agentic.PythonWorkflow, error) {
+			return agentic.NewWASIPythonExecutorForTreatment(ctx, guest, config, tools, treatment)
 		},
 		runTrial:     agentic.RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment,
 		codexVersion: probeCodexVersion,
@@ -92,8 +92,8 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 		}
 	}
 	if deps.newPythonWasi == nil {
-		deps.newPythonWasi = func(ctx context.Context, guest []byte, config runtimeconfig.RunConfig, tools *agentic.ToolRuntime) (agentic.PythonWorkflow, error) {
-			return agentic.NewWASIPythonExecutor(ctx, guest, config, tools)
+		deps.newPythonWasi = func(ctx context.Context, guest []byte, config runtimeconfig.RunConfig, tools *agentic.ToolRuntime, treatment agentic.DevelopmentTreatment) (agentic.PythonWorkflow, error) {
+			return agentic.NewWASIPythonExecutorForTreatment(ctx, guest, config, tools, treatment)
 		}
 	}
 	if deps.runTrial == nil {
@@ -247,7 +247,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	var factory agentic.PythonWorkflowFactory
 	if condition != agentic.ConditionDirect {
 		factory = func(tools *agentic.ToolRuntime) (agentic.PythonWorkflow, error) {
-			return deps.newPythonWasi(ctx, guest, runtimeconfig.DefaultRunConfig(), tools)
+			return deps.newPythonWasi(ctx, guest, runtimeconfig.DefaultRunConfig(), tools, treatment)
 		}
 	}
 

@@ -155,6 +155,7 @@
         "pool_hit_ns": {"type": "integer", "minimum": 1},
         "pool_wait_ns": {"type": "integer", "minimum": 1},
         "prepare_ns": {"type": "integer", "minimum": 1},
+        "source_validate_ns": {"type": "integer", "minimum": 1},
         "execute_ns": {"type": "integer", "minimum": 1},
         "capability_ns": {"type": "integer", "minimum": 0},
         "run_total_ns": {"type": "integer", "minimum": 1},

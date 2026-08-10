@@ -42,6 +42,7 @@ type preparedSampleEvidence struct {
 	PoolHitNS                int64  `json:"pool_hit_ns,omitempty"`
 	PoolWaitNS               int64  `json:"pool_wait_ns,omitempty"`
 	PrepareNS                int64  `json:"prepare_ns,omitempty"`
+	SourceValidateNS         int64  `json:"source_validate_ns,omitempty"`
 	ExecuteNS                int64  `json:"execute_ns"`
 	CapabilityNS             int64  `json:"capability_ns"`
 	RunTotalNS               int64  `json:"run_total_ns"`

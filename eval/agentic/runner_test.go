@@ -922,7 +922,8 @@ func TestPreboundCompactJSONTrialBindsSourceEvidenceAndPrompt(t *testing.T) {
 		context.Background(), &scriptedAdapter{responses: responses}, task, ConditionPython, luna56DevelopmentModel, 0,
 		limits, identity, treatment, factory,
 	)
-	if err != nil || !result.Passed || ValidateTrialResult(result) != nil || result.RawDebug == nil || !strings.Contains(result.RawDebug.DeveloperPrompt, "prebound") {
+	if err != nil || !result.Passed || ValidateTrialResult(result) != nil || result.RawDebug == nil ||
+		!strings.Contains(result.RawDebug.DeveloperPrompt, "prebound") || !strings.Contains(result.RawDebug.DeveloperPrompt, "Every Available SDK function is keyword-only") {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	for _, evidence := range result.PythonEvidence {

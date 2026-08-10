@@ -21,8 +21,18 @@ def load_bootstrap():
 
 class BootstrapTests(unittest.TestCase):
     def setUp(self):
+        self._native_module = sys.modules.get("_agent_runtime_host")
+        native_stub = types.ModuleType("_agent_runtime_host")
+        native_stub.seal_imports = lambda names: None  # type: ignore[attr-defined]
+        sys.modules["_agent_runtime_host"] = native_stub
         self.runtime = load_bootstrap()
         self.runtime._initialize("{}")
+
+    def tearDown(self):
+        if self._native_module is None:
+            sys.modules.pop("_agent_runtime_host", None)
+        else:
+            sys.modules["_agent_runtime_host"] = self._native_module
 
     def execute(self, **overrides):
         request = {
@@ -53,12 +63,106 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("invalid_request", response["error"]["code"])
 
     def test_accepts_host_admitted_compatibility_manifest(self):
-        response = self.execute(compatibility={"profile": "base", "imports": ["json"]})
+        response = self.execute(code="import json\nresult = {'value': inputs['value'] + 1}", compatibility={"profile": "base", "imports": ["json"]})
         self.assertEqual("ok", response["status"])
 
         response = self.execute(compatibility={"profile": "base"})
         self.assertEqual("error", response["status"])
         self.assertEqual("invalid_request", response["error"]["code"])
+
+    def test_validates_static_absolute_import_preamble_with_exact_declared_roots(self):
+        request = {
+            "run_id": "static-imports",
+            "code": (
+                '\"\"\"agent program\"\"\"\n'
+                "import json.decoder as decoder\n"
+                "from pathlib import PurePosixPath\n"
+                "result = decoder.JSONDecoder().decode('1')\n"
+            ),
+            "inputs": {},
+            "compatibility": {"profile": "base", "imports": ["json", "pathlib"]},
+        }
+        raw = json.dumps(request)
+        self.assertEqual(0, self.runtime._validate_request_source(raw))
+        response = json.loads(self.runtime._execute(raw))
+        self.assertEqual("ok", response["status"])
+        self.assertEqual(1, response["result"])
+
+    def test_rejects_non_static_agent_import_forms_before_execution(self):
+        cases = {
+            "dunder": "result = __import__(inputs['module'])",
+            "dunder alias": "loader = __import__\nresult = loader(inputs['module'])",
+            "importlib": "import importlib\nresult = importlib.import_module('json')",
+            "nested": "def load():\n    import json\n    return json\nresult = load()",
+            "conditional": "if inputs['enabled']:\n    import json\nresult = 1",
+            "relative": "from .helpers import run\nresult = run()",
+            "star": "from json import *\nresult = 1",
+            "late": "result = 1\nimport json",
+            "eval": "result = eval(inputs['expression'])",
+            "exec": "exec(inputs['source'])\nresult = 1",
+        }
+        for name, code in cases.items():
+            with self.subTest(name=name):
+                runtime = load_bootstrap()
+                runtime._initialize("{}")
+                request = {
+                    "run_id": name,
+                    "code": code,
+                    "inputs": {"module": "json", "enabled": True, "expression": "1", "source": "result=1"},
+                    "compatibility": {"profile": "base", "imports": ["json"]},
+                }
+                raw = json.dumps(request)
+                self.assertEqual(1, runtime._validate_request_source(raw))
+                response = json.loads(runtime._execute(raw))
+                self.assertEqual("source_contract_unsupported", response["error"]["code"])
+
+    def test_profile_contract_fails_closed_without_native_seal(self):
+        with mock.patch.dict(sys.modules, {"_agent_runtime_host": None}):
+            response = self.execute(
+                code="import json\nresult = 1",
+                compatibility={"profile": "base", "imports": ["json"]},
+            )
+        self.assertEqual("error", response["status"])
+        self.assertEqual("source_contract_unsupported", response["error"]["code"])
+
+    def test_restricted_execution_builtins_remove_dynamic_compilation_entrypoints(self):
+        request = {
+            "run_id": "restricted-builtins",
+            "code": "result = [name in __builtins__ for name in inputs['names']]",
+            "inputs": {"names": ["__import__", "eval", "exec"]},
+            "compatibility": {"profile": "base", "imports": []},
+        }
+        response = json.loads(self.runtime._execute(json.dumps(request)))
+        self.assertEqual("ok", response["status"])
+        self.assertEqual([False, False, False], response["result"])
+
+        request["code"] = "result = __builtins__['__' + 'import__']('json')"
+        response = json.loads(self.runtime._execute(json.dumps(request)))
+        self.assertEqual("python_exception", response["error"]["code"])
+        self.assertEqual("KeyError", response["error"]["error_type"])
+
+    def test_rejects_import_declaration_drift_and_invalid_syntax(self):
+        for imports in ([], ["json", "math"]):
+            runtime = load_bootstrap()
+            runtime._initialize("{}")
+            request = {
+                "run_id": "declaration-drift",
+                "code": "import json\nresult = 1",
+                "inputs": {},
+                "compatibility": {"profile": "base", "imports": imports},
+            }
+            self.assertEqual(1, runtime._validate_request_source(json.dumps(request)))
+        request["code"] = "result ="
+        request["compatibility"]["imports"] = []
+        self.assertEqual(2, runtime._validate_request_source(json.dumps(request)))
+
+    def test_legacy_internal_request_without_profile_manifest_remains_available_for_build_probes(self):
+        response = self.execute(
+            code="import importlib\nresult = importlib.import_module(inputs['module']).__name__",
+            inputs={"module": "json"},
+        )
+        self.assertEqual("ok", response["status"])
+        self.assertEqual("json", response["result"])
 
     def test_returns_bounded_structured_exception(self):
         response = self.execute(code="raise ValueError('boom')")

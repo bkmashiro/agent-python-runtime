@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	sourceCompatibilitySchemaVersion = 1
-	sourceCompatibilityAnalyzer      = "conservative-python-imports-v1"
+	sourceCompatibilitySchemaVersion = 2
+	sourceCompatibilityAnalyzer      = "static-agent-imports-v2"
 	maxSourceCompatibilityBytes      = 1 << 20
 	maxObservedSourceImports         = 1024
 )
@@ -20,6 +20,8 @@ const (
 var (
 	ErrSourceCompatibilityUnsupported   = errors.New("source compatibility unsupported")
 	ErrSourceCompatibilityIndeterminate = errors.New("source compatibility indeterminate")
+	ErrAgentSourceContractUnsupported   = errors.New("agent source contract unsupported")
+	ErrAgentSourceInvalid               = errors.New("agent source invalid")
 )
 
 type SourceCompatibilityStatus string
@@ -31,17 +33,18 @@ const (
 )
 
 type CompatibilityResult struct {
-	status               SourceCompatibilityStatus
-	sourceSHA256         string
-	evidenceSHA256       string
-	profileID            string
-	artifactSHA256       string
-	manifestSHA256       string
-	declaredImports      []string
-	observedImports      []string
-	undeclaredImports    []string
-	unqualifiedImports   []string
-	indeterminateReasons []string
+	status                SourceCompatibilityStatus
+	sourceSHA256          string
+	evidenceSHA256        string
+	profileID             string
+	artifactSHA256        string
+	manifestSHA256        string
+	declaredImports       []string
+	observedImports       []string
+	undeclaredImports     []string
+	unusedDeclaredImports []string
+	unqualifiedImports    []string
+	indeterminateReasons  []string
 }
 
 type SourceCompatibilityError struct {
@@ -71,20 +74,21 @@ func (failure *SourceCompatibilityError) Is(target error) bool {
 }
 
 type compatibilityResultDocument struct {
-	SchemaVersion        int                       `json:"schema_version"`
-	Analyzer             string                    `json:"analyzer"`
-	Status               SourceCompatibilityStatus `json:"status"`
-	SyntaxChecked        bool                      `json:"syntax_checked"`
-	SourceSHA256         string                    `json:"source_sha256"`
-	Profile              string                    `json:"profile"`
-	ArtifactSHA256       string                    `json:"artifact_sha256,omitempty"`
-	ManifestSHA256       string                    `json:"manifest_sha256,omitempty"`
-	DeclaredImports      []string                  `json:"declared_imports"`
-	ObservedImports      []string                  `json:"observed_imports"`
-	UndeclaredImports    []string                  `json:"undeclared_imports"`
-	UnqualifiedImports   []string                  `json:"unqualified_imports"`
-	IndeterminateReasons []string                  `json:"indeterminate_reasons"`
-	EvidenceSHA256       string                    `json:"evidence_sha256,omitempty"`
+	SchemaVersion         int                       `json:"schema_version"`
+	Analyzer              string                    `json:"analyzer"`
+	Status                SourceCompatibilityStatus `json:"status"`
+	SyntaxChecked         bool                      `json:"syntax_checked"`
+	SourceSHA256          string                    `json:"source_sha256"`
+	Profile               string                    `json:"profile"`
+	ArtifactSHA256        string                    `json:"artifact_sha256,omitempty"`
+	ManifestSHA256        string                    `json:"manifest_sha256,omitempty"`
+	DeclaredImports       []string                  `json:"declared_imports"`
+	ObservedImports       []string                  `json:"observed_imports"`
+	UndeclaredImports     []string                  `json:"undeclared_imports"`
+	UnusedDeclaredImports []string                  `json:"unused_declared_imports"`
+	UnqualifiedImports    []string                  `json:"unqualified_imports"`
+	IndeterminateReasons  []string                  `json:"indeterminate_reasons"`
+	EvidenceSHA256        string                    `json:"evidence_sha256,omitempty"`
 }
 
 func (result CompatibilityResult) Status() SourceCompatibilityStatus { return result.status }
@@ -103,6 +107,9 @@ func (result CompatibilityResult) ObservedImports() []string {
 func (result CompatibilityResult) UndeclaredImports() []string {
 	return cloneStrings(result.undeclaredImports)
 }
+func (result CompatibilityResult) UnusedDeclaredImports() []string {
+	return cloneStrings(result.unusedDeclaredImports)
+}
 func (result CompatibilityResult) UnqualifiedImports() []string {
 	return cloneStrings(result.unqualifiedImports)
 }
@@ -115,17 +122,18 @@ func (result CompatibilityResult) Validate() error {
 		(result.artifactSHA256 == "") != (result.manifestSHA256 == "") ||
 		(result.artifactSHA256 != "" && (!validProfileDigest(result.artifactSHA256) || !validProfileDigest(result.manifestSHA256))) ||
 		len(result.declaredImports) > maxDeclaredImports || len(result.observedImports) > maxObservedSourceImports ||
-		len(result.undeclaredImports) > maxObservedSourceImports || len(result.unqualifiedImports) > maxObservedSourceImports {
+		len(result.undeclaredImports) > maxObservedSourceImports || len(result.unusedDeclaredImports) > maxDeclaredImports ||
+		len(result.unqualifiedImports) > maxObservedSourceImports {
 		return errors.New("invalid compatibility result")
 	}
-	for _, values := range [][]string{result.declaredImports, result.observedImports, result.undeclaredImports, result.unqualifiedImports} {
+	for _, values := range [][]string{result.declaredImports, result.observedImports, result.undeclaredImports, result.unusedDeclaredImports, result.unqualifiedImports} {
 		if !sortedUniqueImportRoots(values) {
 			return errors.New("invalid compatibility result")
 		}
 	}
 	for _, reason := range result.indeterminateReasons {
 		switch reason {
-		case "dynamic_execution", "dynamic_import", "import_set_too_large", "lexically_ambiguous", "noncanonical_import", "relative_import", "source_too_large":
+		case "dynamic_execution", "dynamic_import", "import_set_too_large", "lexically_ambiguous", "non_preamble_import", "noncanonical_import", "relative_import", "source_too_large":
 		default:
 			return errors.New("invalid compatibility result")
 		}
@@ -134,7 +142,7 @@ func (result CompatibilityResult) Validate() error {
 		return errors.New("invalid compatibility result")
 	}
 	wantStatus := SourceCompatible
-	if len(result.undeclaredImports) != 0 || len(result.unqualifiedImports) != 0 {
+	if len(result.undeclaredImports) != 0 || len(result.unusedDeclaredImports) != 0 || len(result.unqualifiedImports) != 0 || hasUnsupportedSourceReason(result.indeterminateReasons) {
 		wantStatus = SourceUnsupported
 	} else if len(result.indeterminateReasons) != 0 {
 		wantStatus = SourceIndeterminate
@@ -160,19 +168,20 @@ func (result CompatibilityResult) MarshalJSON() ([]byte, error) {
 
 func (result CompatibilityResult) document(includeEvidence bool) compatibilityResultDocument {
 	document := compatibilityResultDocument{
-		SchemaVersion:        sourceCompatibilitySchemaVersion,
-		Analyzer:             sourceCompatibilityAnalyzer,
-		Status:               result.status,
-		SyntaxChecked:        false,
-		SourceSHA256:         result.sourceSHA256,
-		Profile:              result.profileID,
-		ArtifactSHA256:       result.artifactSHA256,
-		ManifestSHA256:       result.manifestSHA256,
-		DeclaredImports:      cloneStrings(result.declaredImports),
-		ObservedImports:      cloneStrings(result.observedImports),
-		UndeclaredImports:    cloneStrings(result.undeclaredImports),
-		UnqualifiedImports:   cloneStrings(result.unqualifiedImports),
-		IndeterminateReasons: cloneStrings(result.indeterminateReasons),
+		SchemaVersion:         sourceCompatibilitySchemaVersion,
+		Analyzer:              sourceCompatibilityAnalyzer,
+		Status:                result.status,
+		SyntaxChecked:         false,
+		SourceSHA256:          result.sourceSHA256,
+		Profile:               result.profileID,
+		ArtifactSHA256:        result.artifactSHA256,
+		ManifestSHA256:        result.manifestSHA256,
+		DeclaredImports:       cloneStrings(result.declaredImports),
+		ObservedImports:       cloneStrings(result.observedImports),
+		UndeclaredImports:     cloneStrings(result.undeclaredImports),
+		UnusedDeclaredImports: cloneStrings(result.unusedDeclaredImports),
+		UnqualifiedImports:    cloneStrings(result.unqualifiedImports),
+		IndeterminateReasons:  cloneStrings(result.indeterminateReasons),
 	}
 	if includeEvidence {
 		document.EvidenceSHA256 = result.evidenceSHA256
@@ -180,11 +189,11 @@ func (result CompatibilityResult) document(includeEvidence bool) compatibilityRe
 	return document
 }
 
-// CompareSourceCompatibility conservatively compares obvious static import
-// roots with caller declarations and Host policy. It does not parse or validate
-// Python syntax and cannot grant authority. Unknown dynamic or relative import
-// forms make the result indeterminate unless a known mismatch already proves
-// the source unsupported for this profile.
+// CompareSourceCompatibility compares bounded obvious import roots with caller
+// declarations and Host policy. It does not parse or validate Python syntax and
+// cannot grant authority. Obvious dynamic, relative, non-preamble, or declaration
+// drift is unsupported; only genuine lexical or evidence-bound uncertainty is
+// indeterminate. Exact enforcement belongs to the target Guest validator.
 func CompareSourceCompatibility(request RunRequest, profile ExecutionProfile) CompatibilityResult {
 	sourceDigest := sha256.Sum256([]byte(request.Code))
 	result := CompatibilityResult{
@@ -219,7 +228,12 @@ func CompareSourceCompatibility(request RunRequest, profile ExecutionProfile) Co
 			result.unqualifiedImports = append(result.unqualifiedImports, root)
 		}
 	}
-	if len(result.undeclaredImports) != 0 || len(result.unqualifiedImports) != 0 {
+	for _, declared := range result.declaredImports {
+		if !stringSliceContains(observed, declared) {
+			result.unusedDeclaredImports = append(result.unusedDeclaredImports, declared)
+		}
+	}
+	if len(result.undeclaredImports) != 0 || len(result.unusedDeclaredImports) != 0 || len(result.unqualifiedImports) != 0 || hasUnsupportedSourceReason(result.indeterminateReasons) {
 		result.status = SourceUnsupported
 	} else if len(result.indeterminateReasons) != 0 {
 		result.status = SourceIndeterminate
@@ -245,6 +259,21 @@ func sortedSet(values map[string]struct{}) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func stringSliceContains(values []string, target string) bool {
+	index := sort.SearchStrings(values, target)
+	return index < len(values) && values[index] == target
+}
+
+func hasUnsupportedSourceReason(reasons []string) bool {
+	for _, reason := range reasons {
+		switch reason {
+		case "dynamic_execution", "dynamic_import", "non_preamble_import", "noncanonical_import", "relative_import":
+			return true
+		}
+	}
+	return false
 }
 
 func sortedUniqueImportRoots(values []string) bool {
@@ -283,8 +312,26 @@ func scanConservativePythonImports(source string) ([]string, []string) {
 	if ambiguous || bracketAmbiguous {
 		reasons["lexically_ambiguous"] = struct{}{}
 	}
+	preambleOpen := true
 	for _, statement := range statements {
 		tokens := tokenizeSourceStatement(statement)
+		if len(tokens) == 0 {
+			continue
+		}
+		topLevelImport := tokens[0].value == "import" || tokens[0].value == "from"
+		indented := len(statement) != len(strings.TrimLeft(statement, " 	"))
+		if topLevelImport {
+			if !preambleOpen || indented {
+				reasons["non_preamble_import"] = struct{}{}
+			}
+		} else {
+			preambleOpen = false
+			for _, token := range tokens {
+				if token.value == "import" {
+					reasons["non_preamble_import"] = struct{}{}
+				}
+			}
+		}
 		consumedImport := make(map[int]struct{})
 		for index := 0; index < len(tokens); index++ {
 			if tokens[index].value == "__import__" || tokens[index].value == "import_module" {
@@ -304,6 +351,12 @@ func scanConservativePythonImports(source string) ([]string, []string) {
 				continue
 			}
 			consumedImport[importIndex] = struct{}{}
+			if importIndex+1 < len(tokens) && tokens[importIndex+1].value == "*" {
+				reasons["noncanonical_import"] = struct{}{}
+			}
+			if root == "builtins" || root == "importlib" {
+				reasons["dynamic_import"] = struct{}{}
+			}
 			observed[root] = struct{}{}
 		}
 		for index := 0; index < len(tokens); index++ {
@@ -319,6 +372,9 @@ func scanConservativePythonImports(source string) ([]string, []string) {
 				continue
 			}
 			for _, root := range roots {
+				if root == "builtins" || root == "importlib" {
+					reasons["dynamic_import"] = struct{}{}
+				}
 				observed[root] = struct{}{}
 			}
 		}

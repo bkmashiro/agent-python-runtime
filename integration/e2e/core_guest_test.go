@@ -95,6 +95,28 @@ func runWithPrepare(t *testing.T, instance engine.Runner, runID, code string, in
 	return response
 }
 
+func runWithCompatibility(t *testing.T, instance engine.Runner, runID, code string, inputs any, profile string, imports []string) guestResponse {
+	t.Helper()
+	request, err := json.Marshal(map[string]any{
+		"run_id":        runID,
+		"code":          code,
+		"inputs":        inputs,
+		"compatibility": map[string]any{"profile": profile, "imports": imports},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := instance.Run(context.Background(), request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response guestResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		t.Fatalf("decode guest response: %v: %s", err, payload)
+	}
+	return response
+}
+
 func TestCoreGuestExecutesNeutralRequest(t *testing.T) {
 	response := run(
 		t,
@@ -109,6 +131,27 @@ func TestCoreGuestExecutesNeutralRequest(t *testing.T) {
 	result := response.Result.(map[string]any)
 	if result["value"] != float64(42) {
 		t.Fatalf("unexpected result: %#v", response.Result)
+	}
+}
+
+func TestStaticAgentCodeCLevelGateRejectsObfuscatedLateImport(t *testing.T) {
+	profile, err := runtime.NewExecutionProfile("base", []string{"sys"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtime.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	response := runWithCompatibility(
+		t,
+		newEngineWithConfig(t, config),
+		"sealed-import-gate",
+		"import sys\nloader = sys.modules['builtins'].__dict__['__' + 'import__']\nresult = loader('fractions')",
+		map[string]any{},
+		"base",
+		[]string{"sys"},
+	)
+	if response.Status != "error" || response.Error["code"] != "python_exception" || response.Error["error_type"] != "ImportError" {
+		t.Fatalf("sealed import gate did not reject late module: %#v", response)
 	}
 }
 

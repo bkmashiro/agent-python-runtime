@@ -24,7 +24,7 @@ import (
 
 const providerDelay = 2 * time.Millisecond
 
-var lifecyclePhases = []string{"instantiate_guest", "_initialize", "runtime_init", "attach_host_calls", "prepare", "execute"}
+var lifecyclePhases = []string{"instantiate_guest", "_initialize", "runtime_init", "attach_host_calls", "prepare", "source_validate", "execute"}
 
 type lifecycleCollector struct {
 	mutex        sync.Mutex

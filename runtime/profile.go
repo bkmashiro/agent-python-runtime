@@ -236,7 +236,7 @@ func ValidateCompatibilityDeclaration(declaration *CompatibilityDeclaration) err
 	}
 	seen := make(map[string]struct{}, len(declaration.Imports))
 	for _, module := range declaration.Imports {
-		if !validImportName(module) {
+		if !validImportName(module) || strings.Contains(module, ".") {
 			return ErrInvalidCompatibilityDeclaration
 		}
 		if _, duplicate := seen[module]; duplicate {

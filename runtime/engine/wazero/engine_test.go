@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
+	"reflect"
 	goruntime "runtime"
 	"strings"
 	"testing"
@@ -15,7 +16,30 @@ import (
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	engine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
+	wabinbinary "github.com/tetratelabs/wabin/binary"
+	wabinwasm "github.com/tetratelabs/wabin/wasm"
 )
+
+func withSourceValidationExport(t *testing.T, encoded string) []byte {
+	return withSourceValidationStatus(t, encoded, 0)
+}
+
+func withSourceValidationStatus(t *testing.T, encoded string, status byte) []byte {
+	t.Helper()
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	module, err := wabinbinary.DecodeModule(raw, wabinwasm.CoreFeaturesV2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	functionIndex := uint32(len(module.FunctionSection))
+	module.FunctionSection = append(module.FunctionSection, 1)
+	module.CodeSection = append(module.CodeSection, &wabinwasm.Code{Body: []byte{byte(wabinwasm.OpcodeI32Const), status, byte(wabinwasm.OpcodeEnd)}})
+	module.ExportSection = append(module.ExportSection, &wabinwasm.Export{Name: "runtime_validate_source", Type: wabinwasm.ExternTypeFunc, Index: functionIndex})
+	return wabinbinary.EncodeModule(module)
+}
 
 func TestPreparedCapacityHardBoundFailsBeforeCompile(t *testing.T) {
 	factory := engine.Factory{PreparedCapacity: 5}
@@ -195,11 +219,39 @@ func TestFactoryBorrowsCompilationCacheUntilOwnerCloses(t *testing.T) {
 	}
 }
 
-func TestPreparedPoolDiscardsTrappedModule(t *testing.T) {
-	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
+func TestSourceContractValidationRejectsBeforeBrokerCreation(t *testing.T) {
+	wasm := withSourceValidationStatus(t, "AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=", 1)
+	brokerCalls := 0
+	phases := make([]string, 0, 2)
+	runner, err := (engine.Factory{
+		Observer: func(observation engine.Observation) {
+			if observation.Phase == "prepare" || observation.Phase == "source_validate" {
+				phases = append(phases, observation.Phase)
+			}
+		},
+		BrokerFactory: func(context.Context) (*capability.Broker, error) {
+			brokerCalls++
+			return nil, errors.New("broker must not be created")
+		},
+	}).New(context.Background(), wasm, runtime.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer runner.Close(context.Background())
+	request := []byte(`{"run_id":"source-contract","code":"result = 1","inputs":{}}`)
+	if _, err := runner.Run(context.Background(), request, "trusted = 1"); !errors.Is(err, runtime.ErrAgentSourceContractUnsupported) {
+		t.Fatalf("error=%v", err)
+	}
+	if !reflect.DeepEqual(phases, []string{"prepare", "source_validate"}) {
+		t.Fatalf("phases=%v", phases)
+	}
+	if brokerCalls != 0 {
+		t.Fatalf("broker calls=%d", brokerCalls)
+	}
+}
+
+func TestPreparedPoolDiscardsTrappedModule(t *testing.T) {
+	wasm := withSourceValidationExport(t, "AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
 	factory := engine.Factory{PreparedCapacity: 1}
 	runner, err := factory.New(context.Background(), wasm, runtime.DefaultRunConfig())
 	if err != nil {
@@ -223,10 +275,7 @@ func TestPreparedPoolDiscardsTrappedModule(t *testing.T) {
 }
 
 func TestPreparedPoolInitializationUsesHostTimeout(t *testing.T) {
-	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQogBgIACwkAA0AMAAtBAAsEAEEACwQAQQgLAgALBABBCAsAEwRuYW1lAwwBAQEAB2ZvcmV2ZXI=")
-	if err != nil {
-		t.Fatal(err)
-	}
+	wasm := withSourceValidationExport(t, "AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQogBgIACwkAA0AMAAtBAAsEAEEACwQAQQgLAgALBABBCAsAEwRuYW1lAwwBAQEAB2ZvcmV2ZXI=")
 	config := runtime.DefaultRunConfig()
 	config.Timeout = 50 * time.Millisecond
 	started := time.Now()

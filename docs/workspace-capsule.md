@@ -107,16 +107,17 @@ This does not authorize general execution. Workspace v1 provides no shell, `exec
 
 ## Instance verification
 
-`verification/workspacecapsule.Verify` runs the actual artifact through five disposable instances and emits a deterministic `workspace-capsule-verification/v1` report. The CLI entry point is:
+`verification/workspacecapsule.Verify` runs the actual artifact through at least eleven disposable instances and emits a deterministic `workspace-capsule-verification/v2` report. The CLI entry point is:
 
 ```bash
 go run ./cmd/apyrun-verify-workspace \
   -artifact /absolute/path/to/reactor.wasm \
   -strategy single-use-preinitialized \
+  -stress-iterations 100 \
   -output workspace-verification.json
 ```
 
-The verifier creates and removes its own source, Manager, workspace, and scratch roots. It binds the report to the artifact SHA-256 and checks:
+The verifier creates and removes its own source, Manager, workspace, scratch roots, and local-only barrier capability. It binds the report to the artifact SHA-256 and checks:
 
 1. opaque workspace identity;
 2. an actual fresh-instance engine strategy;
@@ -137,9 +138,21 @@ The verifier creates and removes its own source, Manager, workspace, and scratch
 17. workspace quota enforcement without committed over-limit bytes;
 18. `.git` metadata rejection;
 19. denial of ambient Host filesystem paths;
-20. absence of verifier Host paths in Guest responses;
-21. Runner/module/filesystem/lease cleanup;
-22. Manager root cleanup.
+20. reset of a one-call Broker budget across two disposable instances;
+21. configured timeout interruption of a non-terminating instance;
+22. persistence of workspace writes completed before timeout;
+23. fresh `/tmp` after timeout;
+24. Host context cancellation after a deterministic Guest-to-Host barrier;
+25. persistence of workspace writes completed before cancellation;
+26. fresh `/tmp` after cancellation;
+27. construction of one independent Broker per Run;
+28. absence of verifier Host paths in Guest responses;
+29. Runner/module/filesystem/lease cleanup;
+30. Manager root cleanup.
+
+The timeout and cancellation probes use separate workspace-bound Runners over the same opaque Ref, so each probe starts from a clean engine/pool while retaining only the ordinary workspace tree. The timeout Runner uses at least a five-second budget; the cancellation Runner uses at least ten seconds so fresh CPython initialization is outside the barrier race. Cancellation is not sleep-timed: after writing `/workspace` and `/tmp`, the Guest invokes a one-call, local-only `fetch_many` barrier through the normal typed Broker ABI; the Host cancels only after receiving that signal. No network request or external side effect occurs.
+
+`-stress-iterations N` accepts `0..1000`. A nonzero value appends four checks and a `stress` summary: all requested Runs completed, the workspace counter advanced exactly once per instance, Python globals stayed fresh, and `/tmp` stayed fresh. Stress still uses the same exclusive workspace and the final cleanup/lease oracle.
 
 WASI snapshot-preview1 exposes object type but not POSIX permission bits in filestat. Therefore the live verifier checks regular-file/directory type, while Host-side `0644`/`0755` canonicalization remains covered by `runtime/workspace` tests; the report does not invent a Guest-visible permission claim.
 

@@ -32,7 +32,7 @@ func TestWorkspaceCapsuleVerifierAgainstRealArtifact(t *testing.T) {
 	if report.Status != workspacecapsule.StatusVerified {
 		t.Fatalf("workspace verification failed: %+v", report)
 	}
-	if report.Engine.ResetMode != enginecontract.ResetModeFreshInstance || len(report.Checks) != 22 {
+	if report.SchemaVersion != workspacecapsule.SchemaVersion || report.Engine.ResetMode != enginecontract.ResetModeFreshInstance || len(report.Checks) != 30 || report.Stress != nil {
 		t.Fatalf("unexpected workspace verification report: %+v", report)
 	}
 	seen := make(map[string]bool, len(report.Checks))

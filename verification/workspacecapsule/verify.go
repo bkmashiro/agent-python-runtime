@@ -13,14 +13,39 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
-const SchemaVersion = "workspace-capsule-verification/v1"
+const (
+	SchemaVersion       = "workspace-capsule-verification/v2"
+	MaxStressIterations = 1000
+)
+
+type Options struct {
+	StressIterations           int
+	CancellationBarrierTimeout time.Duration
+}
+
+func DefaultOptions() Options {
+	return Options{CancellationBarrierTimeout: 9 * time.Second}
+}
+
+func (options Options) validate() error {
+	if options.StressIterations < 0 || options.StressIterations > MaxStressIterations {
+		return fmt.Errorf("stress iterations must be between 0 and %d", MaxStressIterations)
+	}
+	if options.CancellationBarrierTimeout <= 0 || options.CancellationBarrierTimeout > 15*time.Second {
+		return errors.New("cancellation barrier timeout must be greater than zero and at most 15s")
+	}
+	return nil
+}
 
 type Status string
 type CheckStatus string
@@ -47,24 +72,43 @@ type Check struct {
 	Detail string      `json:"detail"`
 }
 
+type StressSummary struct {
+	RequestedIterations int `json:"requested_iterations"`
+	CompletedIterations int `json:"completed_iterations"`
+}
+
 type Report struct {
 	SchemaVersion  string           `json:"schema_version"`
 	Status         Status           `json:"status"`
 	ArtifactSHA256 string           `json:"artifact_sha256"`
 	Engine         EngineProperties `json:"engine"`
 	Checks         []Check          `json:"checks"`
+	Stress         *StressSummary   `json:"stress,omitempty"`
 }
 
-// Verify provisions a private source tree and workspace, executes four Runs,
-// and checks the observable single-use instance contract. Factory workspace
-// fields must be empty; Verify owns and removes all Host paths it creates.
-func Verify(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory wazeroengine.Factory) (report Report, returnErr error) {
+// Verify uses the default bounded interruption profile and no stress loop.
+func Verify(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory wazeroengine.Factory) (Report, error) {
+	return VerifyWithOptions(ctx, wasm, config, factory, DefaultOptions())
+}
+
+// VerifyWithOptions provisions a private source tree and workspace, executes
+// real disposable instances, and checks the observable lifecycle contract.
+// Factory workspace fields must be empty; verification owns and removes all
+// Host paths it creates.
+func VerifyWithOptions(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory wazeroengine.Factory, options Options) (report Report, returnErr error) {
 	digest := sha256.Sum256(wasm)
+	checkCapacity := 30
+	if options.StressIterations > 0 {
+		checkCapacity += 4
+	}
 	report = Report{
 		SchemaVersion:  SchemaVersion,
 		Status:         StatusFailed,
 		ArtifactSHA256: hex.EncodeToString(digest[:]),
-		Checks:         make([]Check, 0, 22),
+		Checks:         make([]Check, 0, checkCapacity),
+	}
+	if err := options.validate(); err != nil {
+		return report, fmt.Errorf("workspace verification options: %w", err)
 	}
 	if len(wasm) == 0 {
 		return report, errors.New("workspace verification artifact is empty")
@@ -72,8 +116,8 @@ func Verify(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, fa
 	if err := config.Validate(); err != nil {
 		return report, fmt.Errorf("workspace verification config: %w", err)
 	}
-	if factory.WorkspaceManager != nil || factory.WorkspaceRef != "" || factory.WorkspaceOwner != "" {
-		return report, errors.New("workspace verification factory is already bound")
+	if factory.WorkspaceManager != nil || factory.WorkspaceRef != "" || factory.WorkspaceOwner != "" || factory.BrokerFactory != nil {
+		return report, errors.New("workspace verification factory already has Host capability bindings")
 	}
 	if factory.Strategy == "" {
 		factory.Strategy = enginecontract.StrategySingleUsePrepared
@@ -129,6 +173,32 @@ func Verify(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, fa
 	factory.WorkspaceManager = manager
 	factory.WorkspaceRef = ref
 	factory.WorkspaceOwner = "workspace-capsule-verifier"
+	cancelBarrier := make(chan struct{}, 1)
+	var brokerCount atomic.Uint64
+	barrierGrant := capability.Grant{
+		Name: capability.FetchManyCapability,
+		Targets: map[string]capability.TargetGrant{
+			"barrier": {BaseURL: "https://workspace-verifier.invalid"},
+		},
+		MaxCalls: 1, MaxRequestsPerCall: 1, MaxTotalRequests: 1,
+		MaxConcurrency: 1, MaxResponseBytes: 64, PerRequestTimeout: time.Second,
+	}
+	barrierFetcher := capability.FetcherFunc(func(_ context.Context, request capability.ResolvedRequest, _ uint32) (capability.FetchOutput, error) {
+		if strings.HasSuffix(request.URL, "/ready") {
+			select {
+			case cancelBarrier <- struct{}{}:
+			default:
+			}
+		}
+		return capability.FetchOutput{StatusCode: 200, Body: []byte(`{"ready":true}`), ContentType: "application/json"}, nil
+	})
+	factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
+		identity := brokerCount.Add(1)
+		return capability.NewBroker(capability.Config{
+			RunIdentity: fmt.Sprintf("workspace-verifier-%d", identity),
+			Grants:      map[string]capability.Grant{barrierGrant.Name: barrierGrant},
+		}, barrierFetcher)
+	}
 	runner, err := factory.New(ctx, wasm, config)
 	if err != nil {
 		return report, sanitizeError("construct workspace verification runner", err, base, source)
@@ -331,6 +401,161 @@ result = {
 	addCheck(&report, "git_metadata_rejected", fifthOK && fifthResult.GitRejected, "Guest cannot create a .git metadata directory")
 	addCheck(&report, "ambient_host_filesystem_denied", fifthOK && fifthResult.AmbientDenied, "Guest cannot read ambient Host filesystem paths")
 
+	brokerBudgetFresh := true
+	for probe := 0; probe < 2; probe++ {
+		response, raw, probeErr := run(ctx, runner, fmt.Sprintf("workspace-verify-broker-%d", probe+1), `
+from agent_runtime.tools import fetch_many
+items = fetch_many([{"request_id": "fresh", "target": "barrier", "path": "/fresh"}])
+result = len(items) == 1 and items[0]["status"] == "ok"
+`)
+		if probeErr != nil {
+			return report, sanitizeError("execute Broker freshness probe", probeErr, base, source)
+		}
+		payloads = append(payloads, raw)
+		var accepted bool
+		valid := response.Status == runtimeconfig.RunResponseOK && json.Unmarshal(response.Result, &accepted) == nil && accepted && response.Metrics != nil && response.Metrics.CapabilityCalls == 1
+		brokerBudgetFresh = brokerBudgetFresh && valid
+	}
+	addCheck(&report, "broker_budget_fresh_across_runs", brokerBudgetFresh, "two disposable instances each receive a fresh one-call Broker budget")
+
+	interruptConfig := config
+	if interruptConfig.Timeout < 5*time.Second {
+		interruptConfig.Timeout = 5 * time.Second
+	}
+	if err := runner.Close(ctx); err != nil {
+		return report, sanitizeError("close contract verification runner", err, base, source)
+	}
+	runnerClosed = true
+	runner, err = factory.New(ctx, wasm, interruptConfig)
+	if err != nil {
+		return report, sanitizeError("construct timeout verification runner", err, base, source)
+	}
+	runnerClosed = false
+
+	timeoutPayload, timeoutErr := runRaw(ctx, runner, "workspace-verify-timeout", `
+from pathlib import Path
+Path("/workspace/state/timeout.txt").write_text("committed")
+Path("/tmp/timeout-only.txt").write_text("ephemeral")
+while True:
+    pass
+`)
+	if len(timeoutPayload) > 0 {
+		payloads = append(payloads, timeoutPayload)
+	}
+	timedOut := interruptObserved(timeoutPayload, timeoutErr, context.DeadlineExceeded)
+	addCheck(&report, "configured_timeout_interrupts_instance", timedOut, "configured Run timeout interrupts a non-terminating Guest")
+	timeoutRecovery, raw, recoveryErr := run(ctx, runner, "workspace-verify-timeout-recovery", `
+from pathlib import Path
+result = {
+    "workspace_committed": Path("/workspace/state/timeout.txt").read_text() == "committed",
+    "tmp_continued": Path("/tmp/timeout-only.txt").exists(),
+}
+`)
+	if recoveryErr != nil {
+		return report, sanitizeError("execute timeout recovery probe", recoveryErr, base, source)
+	}
+	payloads = append(payloads, raw)
+	var timeoutRecoveryResult struct {
+		WorkspaceCommitted bool `json:"workspace_committed"`
+		TmpContinued       bool `json:"tmp_continued"`
+	}
+	timeoutRecoveryOK := timeoutRecovery.Status == runtimeconfig.RunResponseOK && json.Unmarshal(timeoutRecovery.Result, &timeoutRecoveryResult) == nil
+	addCheck(&report, "timeout_workspace_write_persists", timeoutRecoveryOK && timeoutRecoveryResult.WorkspaceCommitted, "workspace writes completed before timeout remain visible")
+	addCheck(&report, "tmp_fresh_after_timeout", timeoutRecoveryOK && !timeoutRecoveryResult.TmpContinued, "timed-out Run scratch state does not continue")
+
+	if err := runner.Close(ctx); err != nil {
+		return report, sanitizeError("close timeout verification runner", err, base, source)
+	}
+	runnerClosed = true
+	cancellationConfig := config
+	if cancellationConfig.Timeout < 10*time.Second {
+		cancellationConfig.Timeout = 10 * time.Second
+	}
+	runner, err = factory.New(ctx, wasm, cancellationConfig)
+	if err != nil {
+		return report, sanitizeError("construct cancellation verification runner", err, base, source)
+	}
+	runnerClosed = false
+
+	cancelContext, cancel := context.WithCancel(ctx)
+	type cancelOutcome struct {
+		payload []byte
+		err     error
+	}
+	cancelDone := make(chan cancelOutcome, 1)
+	go func() {
+		payload, runErr := runRaw(cancelContext, runner, "workspace-verify-cancel", `
+from pathlib import Path
+from agent_runtime.tools import fetch_many
+Path("/workspace/state/cancel.txt").write_text("committed")
+Path("/tmp/cancel-only.txt").write_text("ephemeral")
+fetch_many([{"request_id": "ready", "target": "barrier", "path": "/ready"}])
+while True:
+    pass
+`)
+		cancelDone <- cancelOutcome{payload: payload, err: runErr}
+	}()
+	barrierReached := false
+	var cancelResult cancelOutcome
+	barrierTimer := time.NewTimer(options.CancellationBarrierTimeout)
+	select {
+	case <-cancelBarrier:
+		barrierReached = true
+		cancel()
+		cancelResult = <-cancelDone
+	case cancelResult = <-cancelDone:
+		cancel()
+	case <-barrierTimer.C:
+		cancel()
+		cancelResult = <-cancelDone
+	}
+	if !barrierTimer.Stop() {
+		select {
+		case <-barrierTimer.C:
+		default:
+		}
+	}
+	if len(cancelResult.payload) > 0 {
+		payloads = append(payloads, cancelResult.payload)
+	}
+	if !barrierReached {
+		evidence := cancelResult.err
+		if evidence == nil {
+			bounded := cancelResult.payload
+			if len(bounded) > 4096 {
+				bounded = bounded[:4096]
+			}
+			evidence = errors.New(string(bounded))
+		}
+		return report, sanitizeError("cancellation barrier was not reached", evidence, base, source)
+	}
+	cancelled := interruptObserved(cancelResult.payload, cancelResult.err, context.Canceled)
+	addCheck(&report, "context_cancellation_interrupts_instance", cancelled, "Host context cancellation interrupts a non-terminating Guest")
+	cancelRecovery, raw, recoveryErr := run(ctx, runner, "workspace-verify-cancel-recovery", `
+from pathlib import Path
+result = {
+    "workspace_committed": Path("/workspace/state/cancel.txt").read_text() == "committed",
+    "tmp_continued": Path("/tmp/cancel-only.txt").exists(),
+}
+`)
+	if recoveryErr != nil {
+		return report, sanitizeError("execute cancellation recovery probe", recoveryErr, base, source)
+	}
+	payloads = append(payloads, raw)
+	var cancelRecoveryResult struct {
+		WorkspaceCommitted bool `json:"workspace_committed"`
+		TmpContinued       bool `json:"tmp_continued"`
+	}
+	cancelRecoveryOK := cancelRecovery.Status == runtimeconfig.RunResponseOK && json.Unmarshal(cancelRecovery.Result, &cancelRecoveryResult) == nil
+	addCheck(&report, "cancelled_workspace_write_persists", cancelRecoveryOK && cancelRecoveryResult.WorkspaceCommitted, "workspace writes completed before cancellation remain visible")
+	addCheck(&report, "tmp_fresh_after_cancellation", cancelRecoveryOK && !cancelRecoveryResult.TmpContinued, "cancelled Run scratch state does not continue")
+
+	if options.StressIterations > 0 {
+		runStress(ctx, runner, options.StressIterations, &report, &payloads)
+	}
+	expectedBrokers := uint64(11 + options.StressIterations)
+	addCheck(&report, "broker_fresh_per_run", brokerCount.Load() == expectedBrokers, fmt.Sprintf("Host constructed %d independent per-Run Brokers", expectedBrokers))
+
 	pathsHidden := true
 	for _, payload := range payloads {
 		text := string(payload)
@@ -367,6 +592,87 @@ result = {
 		}
 	}
 	return report, nil
+}
+
+func runStress(ctx context.Context, runner enginecontract.Runner, iterations int, report *Report, payloads *[][]byte) {
+	summary := &StressSummary{RequestedIterations: iterations}
+	report.Stress = summary
+	allRunsSucceeded := true
+	sequenceExact := true
+	heapFresh := true
+	tmpFresh := true
+	for iteration := 0; iteration < iterations; iteration++ {
+		response, raw, err := run(ctx, runner, fmt.Sprintf("workspace-stress-%04d", iteration), `
+from pathlib import Path
+path = Path("/workspace/state/stress-count.txt")
+before = int(path.read_text()) if path.exists() else 0
+tmp_path = Path("/tmp/stress-only.txt")
+result = {
+    "before": before,
+    "heap_continued": "stress_heap_marker" in globals(),
+    "tmp_continued": tmp_path.exists(),
+}
+path.write_text(str(before + 1))
+tmp_path.write_text("ephemeral")
+stress_heap_marker = before
+`)
+		if err != nil {
+			allRunsSucceeded = false
+			sequenceExact = false
+			heapFresh = false
+			tmpFresh = false
+			break
+		}
+		*payloads = append(*payloads, raw)
+		var result struct {
+			Before        int  `json:"before"`
+			HeapContinued bool `json:"heap_continued"`
+			TmpContinued  bool `json:"tmp_continued"`
+		}
+		valid := response.Status == runtimeconfig.RunResponseOK && json.Unmarshal(response.Result, &result) == nil
+		if !valid {
+			allRunsSucceeded = false
+			sequenceExact = false
+			heapFresh = false
+			tmpFresh = false
+			break
+		}
+		summary.CompletedIterations++
+		sequenceExact = sequenceExact && result.Before == iteration
+		heapFresh = heapFresh && !result.HeapContinued
+		tmpFresh = tmpFresh && !result.TmpContinued
+	}
+	completedAll := summary.CompletedIterations == iterations
+	addCheck(report, "stress_runs_complete", allRunsSucceeded && completedAll, fmt.Sprintf("all %d requested stress Runs return valid responses", iterations))
+	addCheck(report, "stress_workspace_sequence", completedAll && sequenceExact, "workspace counter advances exactly once per disposable instance")
+	addCheck(report, "stress_heap_fresh", completedAll && heapFresh, "Python globals remain fresh across every stress instance")
+	addCheck(report, "stress_tmp_fresh", completedAll && tmpFresh, "scratch state remains fresh across every stress instance")
+}
+
+func runRaw(ctx context.Context, runner enginecontract.Runner, runID, code string) ([]byte, error) {
+	request, err := json.Marshal(runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		return nil, err
+	}
+	return runner.Run(ctx, request, "")
+}
+
+func interruptObserved(payload []byte, runErr error, target error) bool {
+	if errors.Is(runErr, target) {
+		return true
+	}
+	text := ""
+	if runErr != nil {
+		text = runErr.Error()
+	}
+	if len(payload) > 0 {
+		text += " " + string(payload)
+	}
+	text = strings.ToLower(text)
+	if target == context.DeadlineExceeded {
+		return strings.Contains(text, "deadline exceeded") || strings.Contains(text, "timed out") || strings.Contains(text, "timeout")
+	}
+	return strings.Contains(text, "context canceled") || strings.Contains(text, "context cancelled")
 }
 
 func run(ctx context.Context, runner enginecontract.Runner, runID, code string) (runtimeconfig.RunResponse, []byte, error) {

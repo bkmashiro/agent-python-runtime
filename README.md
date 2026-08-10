@@ -223,15 +223,16 @@ A Host may bind a wazero `Factory` to an opaque workspace reference. The Host ca
 
 This surface does not add Git, shell, subprocess, package-manager, native executable, arbitrary mount, socket, credential, or Host-path access. The workspace is mutable and non-transactional: completed writes survive a failed Run. A workspace-bound Runner also receives a fresh bounded `/tmp` for each single-use instance; it is destroyed after that Run and never continues. Rollback, snapshots, patch export, and restart persistence remain deferred. See [Workspace Capsule v1](docs/workspace-capsule.md).
 
-Verify a concrete artifact against the live 22-check instance contract before deployment:
+Verify a concrete artifact against the live 30-check instance contract before deployment; add a bounded disposable-instance stress loop when needed:
 
 ```bash
 go run ./cmd/apyrun-verify-workspace \
   -artifact /absolute/path/to/agent-python-runtime.wasm \
+  -stress-iterations 100 \
   -output workspace-verification.json
 ```
 
-The report is bound to the artifact SHA-256 and records actual engine properties plus workspace continuation, fresh heap, per-Run `/tmp`, failure semantics, exclusive lease, hidden Host paths, and cleanup checks.
+The v2 report is bound to the artifact SHA-256 and records actual engine properties plus workspace continuation, fresh heap, per-Run `/tmp`, failure/timeout/cancellation semantics, per-Run Broker freshness, exclusive leases, hidden Host paths, cleanup, and optional stress completion.
 
 On the retained Linux benchmark, a fresh native CPython process importing NumPy took a median `324.067 ms`; a request hitting an already prepared NumPy-ready COW slot took `3.863 ms`. This is a lifecycle comparison, not a claim that WebAssembly executes NumPy kernels faster than native code. See the [benchmark report](docs/reports/scheduler-experiment-results.md#8-python-and-numpy-request-lifecycle).
 

@@ -73,7 +73,7 @@ func TestWorkspaceContinuesOrdinaryFilesAcrossExclusiveLeasesWithoutCopy(t *test
 	if got := readAll(t, first.FS(), "input/data.txt"); !bytes.Equal(got, []byte("seed")) {
 		t.Fatalf("initial file=%q", got)
 	}
-	if errno := first.FS().Mkdir("state", 0o777); errno != 0 {
+	if errno := first.FS().Mkdir("state/", 0o777); errno != 0 {
 		t.Fatalf("mkdir: %v", errno)
 	}
 	output, errno := first.FS().OpenFile("state/result.json", experimentalsys.O_WRONLY|experimentalsys.O_CREAT|experimentalsys.O_EXCL, 0o777)
@@ -86,6 +86,19 @@ func TestWorkspaceContinuesOrdinaryFilesAcrossExclusiveLeasesWithoutCopy(t *test
 	if errno := output.Close(); errno != 0 {
 		t.Fatalf("close output: %v", errno)
 	}
+	directory, errno := first.FS().OpenFile("state", experimentalsys.O_RDONLY|experimentalsys.O_DIRECTORY, 0)
+	if errno != 0 {
+		t.Fatalf("open directory: %v", errno)
+	}
+	inode, errno := directory.Ino()
+	if errno != 0 || inode == 0 {
+		t.Fatalf("synthetic directory inode=%d errno=%v", inode, errno)
+	}
+	entries, errno := directory.Readdir(-1)
+	if errno != 0 || len(entries) != 1 || entries[0].Name != "result.json" || entries[0].Ino == 0 {
+		t.Fatalf("readdir entries=%+v errno=%v", entries, errno)
+	}
+	_ = directory.Close()
 	if err := first.Release(); err != nil {
 		t.Fatal(err)
 	}

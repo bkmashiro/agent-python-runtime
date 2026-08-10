@@ -193,6 +193,9 @@ func (file *workspacePreopenFile) Close() experimentalsys.Errno {
 	}
 	return 0
 }
+func (file *workspacePreopenFile) Ino() (wazerosys.Inode, experimentalsys.Errno) {
+	return wazerosys.Inode(1), 0
+}
 func (file *workspacePreopenFile) IsDir() (bool, experimentalsys.Errno) {
 	if file.gate != nil && !file.gate.allowed() {
 		return true, 0
@@ -213,8 +216,7 @@ func (file *workspacePreopenFile) Stat() (wazerosys.Stat_t, experimentalsys.Errn
 	}
 	return delegate.Stat()
 }
-func (*workspacePreopenFile) Dev() (uint64, experimentalsys.Errno)          { return 0, 0 }
-func (*workspacePreopenFile) Ino() (wazerosys.Inode, experimentalsys.Errno) { return 0, 0 }
+func (*workspacePreopenFile) Dev() (uint64, experimentalsys.Errno) { return 0, 0 }
 func (file *workspacePreopenFile) Readdir(count int) ([]experimentalsys.Dirent, experimentalsys.Errno) {
 	delegate, errno := file.delegate()
 	if errno != 0 {

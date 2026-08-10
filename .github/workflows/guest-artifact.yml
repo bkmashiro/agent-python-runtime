@@ -462,6 +462,8 @@ jobs:
               --profile base \
               --output-dir "${ROOT}/candidate-qualification-requests"
             mkdir -p "${ROOT}/candidate-qualification-responses"
+            # Input and output are in distinct fixed directories; basename cannot alias the source path.
+            # shellcheck disable=SC2094
             for request in "${ROOT}/candidate-qualification-requests"/*.json; do
               "${ROOT}/apyrun-probe" \
                 -artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \

@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -24,8 +25,18 @@ func TestWorkspaceContinuesFilesAcrossDisposablePreparedInstances(t *testing.T) 
 			t.Errorf("close workspace manager: %v", err)
 		}
 	})
-	ref, err := manager.Create([]workspace.InitialFile{{Path: "state/count.txt", Data: []byte("0")}}, workspace.DefaultLimits())
+	source := t.TempDir()
+	if err := os.Mkdir(filepath.Join(source, "state"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "state", "count.txt"), []byte("0"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ref, err := manager.CreateFromDirectory(source, workspace.DefaultLimits())
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "state", "count.txt"), []byte("999"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	instance := newEngineWithFactory(t, runtime.DefaultRunConfig(), wazeroengine.Factory{

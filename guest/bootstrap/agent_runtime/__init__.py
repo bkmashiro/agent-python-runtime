@@ -325,11 +325,15 @@ def _execute(request_json: str) -> str:
             encoded = _encode(response)
         return encoded
     except BaseException as exc:
+        try:
+            trace = traceback.format_exc()
+        except BaseException:
+            trace = f"{type(exc).__name__}: {exc}"
         return _encode(
             _error(
                 "python_exception",
                 str(exc),
                 error_type=type(exc).__name__,
-                trace=traceback.format_exc(),
+                trace=trace,
             )
         )

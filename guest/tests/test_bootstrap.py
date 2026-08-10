@@ -173,6 +173,16 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("ok", response["status"])
         self.assertEqual("json", response["result"])
 
+    def test_exception_reporting_preserves_primary_error_when_traceback_formatting_fails(self):
+        with mock.patch.object(self.runtime.traceback, "format_exc", side_effect=ImportError("sealed lazy import")):
+            response = self.execute(
+                code="raise ValueError('primary')",
+                compatibility={"profile": "base", "imports": []},
+            )
+        self.assertEqual("python_exception", response["error"]["code"])
+        self.assertEqual("ValueError", response["error"]["error_type"])
+        self.assertEqual("ValueError: primary", response["error"]["traceback"])
+
     def test_returns_bounded_structured_exception(self):
         response = self.execute(code="raise ValueError('boom')")
         self.assertEqual("error", response["status"])

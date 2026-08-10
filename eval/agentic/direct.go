@@ -31,7 +31,7 @@ type DirectResult struct {
 }
 
 func RunDirectStateless(ctx context.Context, adapter provider.Adapter, task Task, model string, maxOutputTokens uint64) (DirectResult, error) {
-	if adapter == nil || adapter.Protocol() != provider.LinkAPIResponsesProtocol || task.Split != "dev" ||
+	if adapter == nil || !supportedResponsesProtocol(adapter.Protocol()) || task.Split != "dev" ||
 		task.Track != "stateless_function_calling" || task.Interaction.Mode != "single_turn" || len(task.Interaction.Turns) != 1 ||
 		len(task.Tools) == 0 || len(task.Tools) > maxFunctionCalls ||
 		model == "" || maxOutputTokens == 0 || maxOutputTokens > maxDirectOutputTokens {

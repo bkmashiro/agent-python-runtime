@@ -64,10 +64,14 @@ func NewResponsesSession(adapter provider.Adapter, model string, limits TrialLim
 }
 
 func newResponsesSession(adapter provider.Adapter, model string, limits TrialLimits, captureRaw bool) (*ResponsesSession, error) {
-	if adapter == nil || adapter.Protocol() != provider.LinkAPIResponsesProtocol || model == "" || !limits.valid() {
+	if adapter == nil || !supportedResponsesProtocol(adapter.Protocol()) || model == "" || !limits.valid() {
 		return nil, ErrAgenticRun
 	}
 	return &ResponsesSession{adapter: adapter, model: model, limits: limits, seenIDs: map[string]bool{}, captureRaw: captureRaw}, nil
+}
+
+func supportedResponsesProtocol(protocol string) bool {
+	return protocol == provider.LinkAPIResponsesProtocol || protocol == provider.CodexCLIProtocol
 }
 
 func (session *ResponsesSession) Exchange(

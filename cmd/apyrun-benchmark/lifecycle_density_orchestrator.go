@@ -305,6 +305,33 @@ func (runner boundedChildRunner) run(parent context.Context, spec boundedChildSp
 			return result, fmt.Errorf("lifecycle-density child timeout after %s", spec.timeout)
 		default:
 		}
+		// A slow RSS probe can return after the child has already exited while the
+		// Wait goroutine is still waiting to publish that terminal state. Give
+		// exit/cancel/timeout one bounded scheduler window before enforcing the
+		// guard so a stale sample cannot mask the real disposition.
+		terminalGrace := pollInterval
+		if terminalGrace > 10*time.Millisecond {
+			terminalGrace = 10 * time.Millisecond
+		}
+		graceTimer := time.NewTimer(terminalGrace)
+		select {
+		case waitErr := <-wait:
+			graceTimer.Stop()
+			return finish(waitErr)
+		case <-parent.Done():
+			graceTimer.Stop()
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("lifecycle-density child cancelled: %w", parent.Err())
+		case <-timer.C:
+			graceTimer.Stop()
+			_ = command.Process.Kill()
+			waitErr := <-wait
+			result, _ = finish(waitErr)
+			return result, fmt.Errorf("lifecycle-density child timeout after %s", spec.timeout)
+		case <-graceTimer.C:
+		}
 
 		killErr := command.Process.Kill()
 		waitErr := <-wait

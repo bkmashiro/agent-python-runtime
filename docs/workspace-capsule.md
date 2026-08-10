@@ -105,6 +105,46 @@ Git is only one possible Host-side provisioner. A trusted Host may materialize a
 
 This does not authorize general execution. Workspace v1 provides no shell, `exec`, arbitrary argv, Git, package manager, compiler, subprocess, socket, or Host executable. A fixed native helper may be an implementation detail of a separately reviewed Host provisioner or typed Broker operation; it is never exposed as guest-controlled command execution.
 
+## Instance verification
+
+`verification/workspacecapsule.Verify` runs the actual artifact through five disposable instances and emits a deterministic `workspace-capsule-verification/v1` report. The CLI entry point is:
+
+```bash
+go run ./cmd/apyrun-verify-workspace \
+  -artifact /absolute/path/to/reactor.wasm \
+  -strategy single-use-preinitialized \
+  -output workspace-verification.json
+```
+
+The verifier creates and removes its own source, Manager, workspace, and scratch roots. It binds the report to the artifact SHA-256 and checks:
+
+1. opaque workspace identity;
+2. an actual fresh-instance engine strategy;
+3. exclusive Runner lease;
+4. detached one-time source copy;
+5. ordinary-file continuation;
+6. fresh Python globals;
+7. fresh `/tmp` after success;
+8. canonical reporting of an intentional Guest failure;
+9. persistence of completed workspace writes from that failed Run;
+10. fresh `/tmp` after failure;
+11. fresh Python globals after failure;
+12. Guest create/list behavior for ordinary files and directories;
+13. Guest `stat` distinction between regular files and directories;
+14. ordinary-file rename and truncate behavior;
+15. ordinary-file and directory deletion;
+16. symbolic-link and hard-link rejection;
+17. workspace quota enforcement without committed over-limit bytes;
+18. `.git` metadata rejection;
+19. denial of ambient Host filesystem paths;
+20. absence of verifier Host paths in Guest responses;
+21. Runner/module/filesystem/lease cleanup;
+22. Manager root cleanup.
+
+WASI snapshot-preview1 exposes object type but not POSIX permission bits in filestat. Therefore the live verifier checks regular-file/directory type, while Host-side `0644`/`0755` canonicalization remains covered by `runtime/workspace` tests; the report does not invent a Guest-visible permission claim.
+
+A `verified` report means all checks passed on that artifact and requested strategy. It is evidence for this bounded lifecycle contract, not a claim about untested artifacts, Host restart persistence, rollback, arbitrary native execution, or external side effects. The command exits `0` for `verified`, `1` for a completed report containing failed checks, and `2` for verifier/setup/protocol failure.
+
 ## Deliberately deferred
 
 - persistent Manager catalog across Host restart;

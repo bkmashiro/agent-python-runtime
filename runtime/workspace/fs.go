@@ -53,6 +53,12 @@ func (filesystem *rootedFS) close() error {
 }
 
 func (filesystem *rootedFS) clean(name string, allowRoot bool) (string, experimentalsys.Errno) {
+	// WASI libc may preserve one or more trailing separators for directory
+	// operations. They do not change path resolution and are normalized only at
+	// this Guest syscall boundary; stored and ingress paths remain strict.
+	if name != "." {
+		name = strings.TrimRight(name, "/")
+	}
 	cleaned, err := cleanGuestPath(name, filesystem.limits.MaxDepth, allowRoot)
 	if err != nil {
 		return "", experimentalsys.EPERM
@@ -530,12 +536,31 @@ func (file *quotaFile) Readdir(count int) ([]experimentalsys.Dirent, experimenta
 			child = path.Join(file.name, entry.Name)
 		}
 		tracked, exists := filesystem.usage.entries[child]
-		if !exists || (tracked.IsDir() != entry.Type.IsDir()) || (entry.Type != 0 && !entry.Type.IsDir()) {
+		entryType := entry.Type.Type()
+		if !exists || (tracked.IsDir() != entryType.IsDir()) || (entryType != 0 && !entryType.IsDir()) {
 			return nil, experimentalsys.EPERM
 		}
-		entry.Ino = 0
+		entry.Ino = syntheticInode(child)
 	}
 	return entries, 0
+}
+
+func (file *quotaFile) Ino() (wazerosys.Inode, experimentalsys.Errno) {
+	return syntheticInode(file.name), 0
+}
+
+func syntheticInode(name string) wazerosys.Inode {
+	// FNV-1a gives a stable Guest-only identity without exposing Host device or
+	// inode values. Zero is avoided because libc treats it as an absent entry.
+	value := uint64(14695981039346656037)
+	for index := 0; index < len(name); index++ {
+		value ^= uint64(name[index])
+		value *= 1099511628211
+	}
+	if value == 0 {
+		value = 1
+	}
+	return wazerosys.Inode(value)
 }
 
 func (file *quotaFile) Sync() experimentalsys.Errno     { return file.delegate.Sync() }
@@ -544,7 +569,6 @@ func (file *quotaFile) SetAppend(enabled bool) experimentalsys.Errno {
 	file.appendMode = enabled
 	return file.delegate.SetAppend(enabled)
 }
-func (file *quotaFile) IsAppend() bool                                { return file.appendMode }
-func (file *quotaFile) Dev() (uint64, experimentalsys.Errno)          { return 0, 0 }
-func (file *quotaFile) Ino() (wazerosys.Inode, experimentalsys.Errno) { return 0, 0 }
-func (file *quotaFile) Utimens(int64, int64) experimentalsys.Errno    { return experimentalsys.ENOSYS }
+func (file *quotaFile) IsAppend() bool                             { return file.appendMode }
+func (file *quotaFile) Dev() (uint64, experimentalsys.Errno)       { return 0, 0 }
+func (file *quotaFile) Utimens(int64, int64) experimentalsys.Errno { return experimentalsys.ENOSYS }

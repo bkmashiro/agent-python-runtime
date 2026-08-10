@@ -219,7 +219,7 @@ The optimization changes instance preparation only; served instances remain sing
 
 ## Optional workspace capsule
 
-A Host may bind a wazero `Factory` to an opaque workspace reference. The guest then sees `/workspace` as a bounded ordinary-file tree. Sequential Runs use fresh or never-served single-use instances while reopening the same Host-owned tree, so file changes continue without preserving or copying interpreter state. The workspace is unavailable during prepared initialization and COW image creation, and a workspace-bound Runner serializes active Runs.
+A Host may bind a wazero `Factory` to an opaque workspace reference. The Host can provision that reference from copied `InitialFile` values or copy a previously materialized trusted directory once with `CreateFromDirectory`; source paths are never exposed to the guest. The guest then sees `/workspace` as a bounded ordinary-file tree. Sequential Runs use fresh or never-served single-use instances while reopening the same Host-owned tree, so file changes continue without preserving or copying interpreter state. The workspace is unavailable during prepared initialization and COW image creation, and a workspace-bound Runner serializes active Runs.
 
 This surface does not add Git, shell, subprocess, package-manager, native executable, arbitrary mount, socket, credential, or Host-path access. The workspace is mutable and non-transactional: completed writes survive a failed Run. A workspace-bound Runner also receives a fresh bounded `/tmp` for each single-use instance; it is destroyed after that Run and never continues. Rollback, snapshots, patch export, and restart persistence remain deferred. See [Workspace Capsule v1](docs/workspace-capsule.md).
 

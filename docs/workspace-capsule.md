@@ -36,10 +36,16 @@ base := "/private/host-owned/workspaces" // existing clean 0700 directory
 manager, err := workspace.NewManager(base)
 if err != nil { /* fail closed */ }
 
-ref, err := manager.Create([]workspace.InitialFile{
-    {Path: "input/config.json", Data: configBytes},
-}, workspace.DefaultLimits())
+ref, err := manager.CreateFromDirectory(
+    "/private/host-owned/materialized-source",
+    workspace.DefaultLimits(),
+)
 if err != nil { /* fail closed */ }
+
+// Small generated inputs can instead be supplied directly as copied values:
+// ref, err := manager.Create([]workspace.InitialFile{
+//     {Path: "input/config.json", Data: configBytes},
+// }, workspace.DefaultLimits())
 
 factory := wazero.Factory{
     Strategy:         engine.StrategySingleUsePrepared,
@@ -53,7 +59,7 @@ runner, err := factory.New(ctx, wasm, runtime.DefaultRunConfig())
 
 `WorkspaceRef` is random opaque identity, not a path. The Manager alone resolves it. All three Factory fields are required together. A second Runner cannot acquire the same workspace until the first Runner closes.
 
-Initial files are copied once when the Host provisions the workspace. Sequential Runs do not copy the tree or compute/apply a patch. They reopen the same root and observe prior ordinary-file mutations directly.
+Initial files or a trusted source directory are copied once when the Host provisions the workspace. `CreateFromDirectory` accepts only a clean absolute Host path, opens it through `os.Root`, validates every entry as an ordinary same-filesystem object, streams it under the configured limits, preserves empty directories, canonicalizes modes, and rejects the whole import atomically on any invalid entry or detected mutation. The source path is neither retained nor returned. Sequential Runs do not copy the tree or compute/apply a patch; they reopen the resulting managed root and observe prior ordinary-file mutations directly.
 
 ## Filesystem model
 
@@ -95,7 +101,7 @@ Applications that need state transfer must write explicit files. Pickle or anoth
 
 ## Source provisioning and executables
 
-Git is only one possible Host-side provisioner. A trusted Host may materialize a repository working tree, dataset, object-store blob, generated template, document conversion, or API snapshot into `InitialFile` values before Runner creation. The reactor receives files, not the source resolver, credentials, transport, or command.
+Git is only one possible Host-side provisioner. A trusted Host may materialize a repository working tree, dataset, object-store blob, generated template, document conversion, or API snapshot as a directory and copy it once with `CreateFromDirectory`; small generated values can use `InitialFile`. The reactor receives the managed files, not the source path, resolver, credentials, transport, or command.
 
 This does not authorize general execution. Workspace v1 provides no shell, `exec`, arbitrary argv, Git, package manager, compiler, subprocess, socket, or Host executable. A fixed native helper may be an implementation detail of a separately reviewed Host provisioner or typed Broker operation; it is never exposed as guest-controlled command execution.
 

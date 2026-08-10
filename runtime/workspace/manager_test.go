@@ -291,6 +291,127 @@ func TestWorkspaceTemporaryFilesystemIsLeaseBoundAndDestroyed(t *testing.T) {
 	}
 }
 
+func TestWorkspaceCreateFromDirectoryCopiesOrdinaryTreeOnce(t *testing.T) {
+	source := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(source, "nested", "empty"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "nested", "data.txt"), []byte("source-v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "tool.py"), []byte("print('ok')\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager := newTestManager(t)
+	ref, err := manager.CreateFromDirectory(source, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "nested", "data.txt"), []byte("source-v2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "source-copy-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	filesystem := lease.FS()
+	opened, errno := filesystem.OpenFile("nested/data.txt", experimentalsys.O_RDONLY, 0)
+	if errno != 0 {
+		t.Fatal(errno)
+	}
+	buffer := make([]byte, 64)
+	read, errno := opened.Read(buffer)
+	if errno != 0 {
+		t.Fatal(errno)
+	}
+	data := buffer[:read]
+	_ = opened.Close()
+	if string(data) != "source-v1" {
+		t.Fatalf("workspace adopted mutable source: %q", data)
+	}
+	for path, want := range map[string]fs.FileMode{
+		"nested":          fs.ModeDir | 0o755,
+		"nested/empty":    fs.ModeDir | 0o755,
+		"nested/data.txt": 0o644,
+		"tool.py":         0o755,
+	} {
+		stat, errno := filesystem.Stat(path)
+		if errno != 0 || stat.Mode != want {
+			t.Fatalf("stat %s: mode=%v want=%v errno=%v", path, stat.Mode, want, errno)
+		}
+	}
+}
+
+func TestWorkspaceCreateFromDirectoryRejectsUnsafeTreesAtomically(t *testing.T) {
+	manager := newTestManager(t)
+	cases := map[string]func(string) error{
+		"symlink": func(root string) error {
+			return os.Symlink("target", filepath.Join(root, "link"))
+		},
+		"hardlink": func(root string) error {
+			path := filepath.Join(root, "first")
+			if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+				return err
+			}
+			return os.Link(path, filepath.Join(root, "second"))
+		},
+		"git-metadata": func(root string) error {
+			return os.Mkdir(filepath.Join(root, ".git"), 0o700)
+		},
+	}
+	for name, populate := range cases {
+		t.Run(name, func(t *testing.T) {
+			source := t.TempDir()
+			if err := populate(source); err != nil {
+				t.Fatal(err)
+			}
+			before := len(manager.entries)
+			if _, err := manager.CreateFromDirectory(source, DefaultLimits()); err == nil {
+				t.Fatal("unsafe source tree was accepted")
+			} else if strings.Contains(err.Error(), source) {
+				t.Fatalf("source Host path leaked in error: %v", err)
+			}
+			if len(manager.entries) != before {
+				t.Fatal("failed ingress left a managed workspace")
+			}
+			children, err := os.ReadDir(manager.base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(children) != 0 {
+				t.Fatalf("failed ingress left %d physical roots", len(children))
+			}
+		})
+	}
+}
+
+func TestWorkspaceCreateFromDirectoryEnforcesLimits(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "too-large"), []byte("12345"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager := newTestManager(t)
+	limits := Limits{MaxFiles: 4, MaxBytes: 4, MaxFileBytes: 4, MaxDepth: 2}
+	if _, err := manager.CreateFromDirectory(source, limits); !errors.Is(err, ErrInvalidWorkspace) {
+		t.Fatalf("oversize ingress err=%v", err)
+	}
+}
+
+func TestWorkspaceCreateFromDirectoryRejectsSymlinkRoot(t *testing.T) {
+	source := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "source-alias")
+	if err := os.Symlink(source, alias); err != nil {
+		t.Fatal(err)
+	}
+	manager := newTestManager(t)
+	if _, err := manager.CreateFromDirectory(alias, DefaultLimits()); !errors.Is(err, ErrInvalidWorkspace) {
+		t.Fatalf("symlink source root err=%v", err)
+	} else if strings.Contains(err.Error(), alias) || strings.Contains(err.Error(), source) {
+		t.Fatalf("source Host path leaked in error: %v", err)
+	}
+}
+
 func TestWorkspaceCreateRejectsNonCanonicalAndDuplicateInitialFiles(t *testing.T) {
 	manager := newTestManager(t)
 	for name, files := range map[string][]InitialFile{

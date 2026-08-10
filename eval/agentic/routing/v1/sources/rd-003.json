@@ -60,7 +60,7 @@
     "turns": [
       [
         {
-          "content": "In Documents, read metrics.csv and write a comma list of rows with values above 4 into high_value_rows.txt.",
+          "content": "In Documents, read metrics.csv and write the first-column labels of rows whose numeric value is above 4 as a comma-separated list into high_value_rows.txt.",
           "role": "user"
         }
       ]

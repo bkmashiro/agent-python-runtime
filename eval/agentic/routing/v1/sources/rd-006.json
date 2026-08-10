@@ -68,7 +68,7 @@
     "turns": [
       [
         {
-          "content": "In Documents, count the lines in list.txt, write the total to count.txt, then duplicate it.",
+          "content": "In Documents, count the lines in list.txt, write the total to count.txt, then copy count.txt to count_copy.txt.",
           "role": "user"
         }
       ]

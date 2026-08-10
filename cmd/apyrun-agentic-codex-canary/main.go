@@ -28,9 +28,9 @@ var canaryLimits = agentic.TrialLimits{
 	MaxToolCalls:           32,
 	MaxPythonRuns:          4,
 	MaxInputTokens:         500_000,
-	MaxOutputTokens:        20_000,
-	MaxTotalTokens:         520_000,
-	MaxOutputTokensPerCall: 4_096,
+	MaxOutputTokens:        65_536,
+	MaxTotalTokens:         565_536,
+	MaxOutputTokensPerCall: 8_192,
 }
 
 type dependencies struct {
@@ -411,8 +411,8 @@ func isSupportedCondition(condition agentic.Condition) bool {
 
 func validateCanaryLimits(limits agentic.TrialLimits) error {
 	if limits.MaxProviderCalls != 8 || limits.MaxToolCalls != 32 || limits.MaxPythonRuns != 4 ||
-		limits.MaxInputTokens != 500_000 || limits.MaxOutputTokens != 20_000 || limits.MaxTotalTokens != 520_000 ||
-		limits.MaxOutputTokensPerCall != 4_096 {
+		limits.MaxInputTokens != 500_000 || limits.MaxOutputTokens != 65_536 || limits.MaxTotalTokens != 565_536 ||
+		limits.MaxOutputTokensPerCall != 8_192 {
 		return errors.New("invalid canary limits")
 	}
 	if limits.MaxPythonRuns > limits.MaxToolCalls || limits.MaxProviderCalls == 0 || limits.MaxToolCalls == 0 || limits.MaxInputTokens == 0 ||

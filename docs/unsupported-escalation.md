@@ -77,7 +77,9 @@ The outcome means only:
 
 > Pysolate did not start this request because its declared requirements are outside the bounded runtime contract.
 
-An upper layer may decide whether to use an external Computer/VM. Pysolate and Vinculum do not select, start, configure, test, or audit that VM. In current experiments the external VM may be assumed to cover the unsupported remainder, but that assumption is outside Pysolate implementation and evidence claims.
+The legacy ABI field `escalation_required` means that the caller must select another execution profile before starting work. It does not mean Hard escalation, whole-program VM replay, workspace transfer, cross-runtime continuation, or automatic retry. Once a Run starts, Pysolate does not emit a backend-escalation outcome.
+
+An upper layer may independently choose a compatibility backend. Pysolate and Vinculum do not select, start, configure, test, migrate to, or audit that backend. Its availability and authority contract are outside Pysolate implementation and evidence claims.
 
 ## Verification
 

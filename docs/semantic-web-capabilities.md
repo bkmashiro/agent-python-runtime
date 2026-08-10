@@ -15,7 +15,7 @@ Guest Python
   -> bounded result plus Host evidence
 ```
 
-These tool names do not belong in `RunRequest.requirements`. A task that can be completed with a granted semantic web tool remains an L1 Pysolate workload. A task that requires rendering, DOM/JavaScript, login/session UI, or interactive browser automation declares `browser_runtime` and is reported for upper-layer escalation.
+These tool names do not belong in `RunRequest.requirements`. A task that can be completed with a granted semantic web tool remains a Pysolate workload. A task that requires rendering, DOM/JavaScript, login/session UI, or interactive browser automation declares `browser_runtime` and is rejected before execution so the upper layer can choose a compatibility backend.
 
 ## Current fetch foundation and Guest entry
 

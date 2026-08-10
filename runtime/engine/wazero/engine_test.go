@@ -128,9 +128,9 @@ func TestRunRejectsUnsupportedRequirementsBeforeGuestExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(ctx)
-	_, err = runner.Run(ctx, []byte(`{"run_id":"run","code":"result=1","inputs":{},"requirements":["browser"]}`), "")
+	_, err = runner.Run(ctx, []byte(`{"run_id":"run","code":"result=1","inputs":{},"requirements":["browser_runtime"]}`), "")
 	var unsupported *runtime.UnsupportedRunError
-	if !errors.As(err, &unsupported) || len(unsupported.RequiredFeatures) != 1 || unsupported.RequiredFeatures[0] != runtime.RequiredFeatureBrowser {
+	if !errors.As(err, &unsupported) || len(unsupported.RequiredFeatures) != 1 || unsupported.RequiredFeatures[0] != runtime.RequiredFeatureBrowserRuntime {
 		t.Fatalf("error=%v unsupported=%+v", err, unsupported)
 	}
 	if brokerCalls != 0 {

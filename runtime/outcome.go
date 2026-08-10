@@ -15,7 +15,10 @@ const maxRequiredFeatures = 8
 type RequiredFeature string
 
 const (
-	RequiredFeatureBrowser               RequiredFeature = "browser"
+	// BrowserRuntime means page rendering, DOM/JavaScript execution, browser
+	// session state, and UI automation. Semantic Host tools such as web_search
+	// and bounded web_fetch are capabilities, not runtime requirements.
+	RequiredFeatureBrowserRuntime        RequiredFeature = "browser_runtime"
 	RequiredFeatureDaemon                RequiredFeature = "daemon"
 	RequiredFeatureDynamicPackageInstall RequiredFeature = "dynamic_package_install"
 	RequiredFeatureNativeExtension       RequiredFeature = "native_extension"
@@ -184,7 +187,7 @@ func validateRequiredFeatures(features []RequiredFeature, requireSorted bool) er
 
 func validRequiredFeature(feature RequiredFeature) bool {
 	switch feature {
-	case RequiredFeatureBrowser, RequiredFeatureDaemon, RequiredFeatureDynamicPackageInstall,
+	case RequiredFeatureBrowserRuntime, RequiredFeatureDaemon, RequiredFeatureDynamicPackageInstall,
 		RequiredFeatureNativeExtension, RequiredFeatureNativeThreads, RequiredFeaturePOSIX,
 		RequiredFeatureShell, RequiredFeatureSubprocess:
 		return true

@@ -30,7 +30,7 @@
       "uniqueItems": true,
       "items": {
         "enum": [
-          "browser",
+          "browser_runtime",
           "daemon",
           "dynamic_package_install",
           "native_extension",

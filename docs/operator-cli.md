@@ -76,14 +76,14 @@ The Host maps the opaque guest target `catalog` to the configured origin. A targ
 }
 ```
 
-For a request that explicitly requires POSIX and a browser:
+For a request that explicitly requires POSIX and a full browser runtime:
 
 ```json
 {
   "run_id": "untrusted-label",
   "code": "result = None",
   "inputs": {},
-  "requirements": ["posix", "browser"]
+  "requirements": ["posix", "browser_runtime"]
 }
 ```
 

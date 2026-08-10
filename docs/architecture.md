@@ -62,6 +62,8 @@ Authority-bearing fields are not accepted from `RunRequest`.
 
 Before workspace Run admission, Broker creation, or Guest checkout, the Host rejects any valid non-empty ambient/native requirements declaration with a typed `runtime_unsupported` outcome. The declaration can only narrow execution and cannot select a backend or widen authority. Ordinary Guest exceptions and runtime failures never become escalation by string matching. See [Structured unsupported and escalation outcome](unsupported-escalation.md).
 
+`browser_runtime` specifically means rendering, DOM/JavaScript, browser session state, and UI automation. Host-mediated `web_search` and bounded `web_fetch` remain ordinary typed capabilities and do not imply ambient Guest networking. See [Semantic web capabilities](semantic-web-capabilities.md).
+
 ## State classes
 
 ### Prepared base

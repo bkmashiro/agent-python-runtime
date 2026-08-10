@@ -12,19 +12,20 @@ This version provides a Host-owned mutable ordinary-file tree at guest path `/wo
 Host creates Workspace Manager under a private 0700 base
 → Host creates ws-<random 128-bit id> and optionally copies trusted initial files once
 → wazero Factory acquires one exclusive Runner lease
-→ prepared module initializes with a virtual, closed workspace gate
+→ prepared module initializes with virtual, closed `/workspace` and `/tmp` gates
 → Runner checks out a never-served module
-→ gate activates and lazily opens the rooted filesystem
-→ guest reads/writes /workspace
+→ `/workspace` gate activates and the Host creates a fresh private `/tmp`
+→ guest reads/writes the continuing `/workspace` and run-local `/tmp`
 → module and all WASI descriptors are closed and discarded
-→ the same Host directory is opened by the next never-served module
+→ `/tmp` is removed before the workspace lease can be released
+→ the same workspace directory is opened by the next never-served module with a new empty `/tmp`
 → Runner.Close releases the lease
 → Host destroys the workspace, or Manager.Close destroys all inactive workspaces
 ```
 
 A workspace-bound Runner serializes Runs. Prepared capacity may still hide initialization latency, but two active instances never write the same workspace concurrently.
 
-The gate is part of the security contract. During `_initialize`, `runtime_init`, trusted prepared warmup, and COW image creation, the guest can observe the virtual preopen name but cannot list or open workspace contents. The real root descriptor is opened lazily only after checkout for a Run. Workspace-derived values therefore cannot enter a prepared heap or sealed COW baseline.
+The gates are part of the security contract. During `_initialize`, `runtime_init`, trusted prepared warmup, and COW image creation, the guest can observe both virtual preopen names but cannot list or open either filesystem. The real workspace root is opened lazily only after checkout. `/tmp` does not even have a backing directory until checkout; activation creates a fresh Manager-owned rooted filesystem and module close destroys it. Filesystem-derived values and live descriptors therefore cannot enter a prepared heap or sealed COW baseline.
 
 ## Host API
 
@@ -76,7 +77,7 @@ Rejected or unavailable:
 - `/proc`, `/sys`, `/dev`, cgroupfs, debugfs, Host home directories, or arbitrary Host mounts;
 - file-descriptor passing and native handles.
 
-Guest-visible `stat` projects device and inode to zero and normalizes link count. Workspace limits bound entry count, total bytes, per-file bytes, and depth. Unsupported stored objects fail acquisition; unsupported objects encountered while serving fail the operation.
+Guest-visible `stat` projects device and inode to zero and normalizes link count. `/workspace` limits bound entry count, total bytes, per-file bytes, and depth. `/tmp` uses the same ordinary-file model with stricter defaults: 1,024 entries, 64 MiB total, 16 MiB per file, and depth 16. Unsupported stored objects fail acquisition; unsupported objects encountered while serving fail the operation.
 
 The Manager base and generated workspace roots are private Host directories. The Host is trusted and must not mutate a leased root through an out-of-band path. Guest code never receives that path.
 
@@ -88,7 +89,7 @@ Persistence is file-only and non-transactional:
 - no automatic rollback, overlay commit, result snapshot, or patch is produced;
 - `/workspace` lifetime is independent of each disposable reactor, but not independent of the Manager process in v1;
 - `Manager.Close` removes all inactive managed roots;
-- `/tmp` is not mounted by this version.
+- `/tmp` is per-instance scratch state: it is created only on checkout, removed after module close on success/error/timeout/cancellation, and never becomes part of workspace continuation.
 
 Applications that need state transfer must write explicit files. Pickle or another opaque format is stored only as bytes; the Host does not deserialize it. Python globals, imported modules, monkey patches, random state, threads, atexit handlers, open files, Broker references, and WebAssembly memory never continue to the next Run.
 
@@ -102,7 +103,6 @@ This does not authorize general execution. Workspace v1 provides no shell, `exec
 
 - persistent Manager catalog across Host restart;
 - TTL, garbage-collection policy, and crash recovery;
-- `/tmp` per-instance ephemeral mount;
 - immutable snapshots, lineage, diff/patch export, rollback, fork, overlayfs, and reflink optimization;
 - safe relative symlink support;
 - source resolver registry;

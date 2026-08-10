@@ -30,7 +30,7 @@ func TestHostEntropyDiffersAcrossFreshInstances(t *testing.T) {
 	defer compiled.Close(ctx)
 
 	read := func() []byte {
-		moduleConfig, _, err := newModuleConfig(nil, nil)
+		moduleConfig, _, err := newModuleConfig(nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

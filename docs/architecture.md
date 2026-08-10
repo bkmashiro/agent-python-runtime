@@ -74,7 +74,7 @@ Generated-code globals, imported modules, arrays, temporary buffers, capability 
 
 ### Cross-run file state
 
-The optional implemented workspace capsule preserves only a Host-owned bounded tree of ordinary files and directories. Sequential disposable instances reopen the same root; no per-Run tree copy, Python heap, WebAssembly memory, Broker, descriptor, or native resource continues. The v1 tree is mutable and non-transactional: completed writes survive Run failure, while snapshots, rollback, fork, patch export, `/tmp`, and restart persistence are deferred. See [Workspace Capsule v1](workspace-capsule.md).
+The optional implemented workspace capsule preserves only a Host-owned bounded tree of ordinary files and directories. Sequential disposable instances reopen the same root; no per-Run tree copy, Python heap, WebAssembly memory, Broker, descriptor, or native resource continues. Each workspace-bound instance also receives a separate bounded `/tmp`, created only after checkout and destroyed when that instance closes. The v1 workspace tree is mutable and non-transactional: completed writes survive Run failure, while snapshots, rollback, fork, patch export, and restart persistence are deferred. See [Workspace Capsule v1](workspace-capsule.md).
 
 ### Future stateful sessions
 

@@ -507,13 +507,19 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		closeStarted := time.Now()
 		closeErr := engine.closeServedInstance(instance)
 		observePreparedReclaim(runContext, engine.reclaimSink, engine.strategy, instance, time.Since(closeStarted), closeErr)
+		if closeErr != nil {
+			runSucceeded = false
+			finalizeReason = "cleanup_failed"
+			runErr = errors.Join(runErr, fmt.Errorf("close served instance: %w", closeErr))
+			payload = nil
+		}
 		if activeRegistered {
 			engine.unregisterActiveFootprint(activeAttemptID)
 		}
 	}()
-	if instance.workspaceGate != nil {
-		if err := instance.workspaceGate.activate(); err != nil {
-			return nil, fmt.Errorf("activate workspace: %w", err)
+	if instance.mounts != nil {
+		if err := instance.mounts.activate(); err != nil {
+			return nil, fmt.Errorf("activate module filesystems: %w", err)
 		}
 	}
 	if attemptID, ok := enginecontract.AttemptIdentityFromContext(runContext); ok && instance.footprintSource != nil {

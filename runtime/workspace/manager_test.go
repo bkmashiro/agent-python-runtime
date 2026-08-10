@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,6 +239,55 @@ func TestWorkspaceFilesystemEnforcesQuotasAndMasksHostStatIdentity(t *testing.T)
 	third, errno := filesystem.OpenFile("c", experimentalsys.O_WRONLY|experimentalsys.O_CREAT|experimentalsys.O_EXCL, 0o600)
 	if errno != experimentalsys.EACCES || third != nil {
 		t.Fatalf("workspace byte/file quota errno=%v file=%v", errno, third)
+	}
+}
+
+func TestWorkspaceTemporaryFilesystemIsLeaseBoundAndDestroyed(t *testing.T) {
+	manager := newTestManager(t)
+	ref, err := manager.Create(nil, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "run-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	temporary, err := lease.NewTemporary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := temporary.root
+	file, errno := temporary.FS().OpenFile("sentinel", experimentalsys.O_WRONLY|experimentalsys.O_CREAT|experimentalsys.O_EXCL, 0o600)
+	if errno != 0 {
+		t.Fatal(errno)
+	}
+	if _, errno := file.Write([]byte("run-local")); errno != 0 {
+		t.Fatal(errno)
+	}
+	if errno := file.Close(); errno != 0 {
+		t.Fatal(errno)
+	}
+	if err := lease.Release(); !errors.Is(err, ErrWorkspaceBusy) {
+		t.Fatalf("released lease with live temporary: %v", err)
+	}
+	if err := temporary.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("temporary root survived close: %v", err)
+	}
+	second, err := lease.NewTemporary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, errno := second.FS().OpenFile("sentinel", experimentalsys.O_RDONLY, 0); errno != experimentalsys.ENOENT {
+		t.Fatalf("temporary state crossed instances: errno=%v", errno)
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
 	}
 }
 

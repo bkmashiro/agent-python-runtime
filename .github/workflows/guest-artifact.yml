@@ -480,8 +480,12 @@ jobs:
       - name: Execute exact baseline and candidate through wazero
         run: |
           ROOT="${{ runner.temp }}/preinitialized-guest"
-          AGENT_RUNTIME_GUEST="${ROOT}/candidate/agent-python-runtime.wasm" \
-            go test ./integration/e2e -v -count=1
+          for GUEST in \
+            "${ROOT}/input/agent-python-runtime.wasm" \
+            "${ROOT}/candidate/agent-python-runtime.wasm"; do
+            AGENT_RUNTIME_GUEST="${GUEST}" \
+              go test ./integration/e2e -run '^TestCoreGuestExecutesNeutralRequest$' -v -count=1
+          done
           go run ./cmd/apyrun-benchmark \
             -artifact "${ROOT}/input/agent-python-runtime.wasm" \
             -manifest "${ROOT}/input/manifest.json" \

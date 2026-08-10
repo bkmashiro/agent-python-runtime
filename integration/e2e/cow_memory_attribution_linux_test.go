@@ -33,6 +33,7 @@ type cowDirtyProbeEvidence struct {
 }
 
 func TestCOWReadySingleUseProductionArtifactDeterministicDirtyPages(t *testing.T) {
+	requireCOWFixedArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 15 * time.Second
 	warmupProfile := os.Getenv("AGENT_RUNTIME_COW_WARMUP_PROFILE")

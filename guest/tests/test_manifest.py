@@ -97,6 +97,7 @@ class ManifestWriterTests(unittest.TestCase):
             limitations = "\n".join(manifest["limitations"])
             self.assertNotIn("capabilities are not implemented", limitations)
             self.assertIn("fetch_many", limitations)
+            self.assertIn("built-in capability", limitations)
             self.assertIn("NumPy is not included", limitations)
             self.assertEqual(
                 [{"name": "cpython", "version": "3.14.test", "status": "core"}],

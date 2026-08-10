@@ -109,7 +109,7 @@ def build_manifest(
         },
     ]
     limitations = [
-        "fetch_many is the only supported capability and requires explicit Host grants",
+        "fetch_many is the only built-in capability and requires explicit Host grants; frozen catalogs may project additional typed Host tools",
         "WASI execution evidence is recorded separately",
     ]
     if artifact_profile == "base":

@@ -98,3 +98,15 @@ def fetch_many(requests: list[dict[str, str]]) -> list[dict[str, Any]]:
 
     response = host_call(json.dumps(envelope, ensure_ascii=False, separators=(",", ":"), allow_nan=False))
     return _decode_host_response(response, call_id)
+
+
+def web_fetch(target: str, path: str) -> dict[str, Any]:
+    """Fetch one relative path from a Host-granted target alias.
+
+    This is a semantic convenience wrapper over ``fetch_many``. ``target`` is
+    not a URL and cannot select an ungranted destination.
+    """
+    items = fetch_many([{"request_id": "web_fetch", "target": target, "path": path}])
+    if len(items) != 1 or not isinstance(items[0], dict) or items[0].get("request_id") != "web_fetch":
+        raise CapabilityProtocolError("Host web_fetch result is invalid")
+    return items[0]

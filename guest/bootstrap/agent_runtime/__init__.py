@@ -294,6 +294,8 @@ def _execute(request_json: str) -> str:
 
     started = time.monotonic()
     namespace = dict(_prepared_globals)
+    namespace["inputs"] = request["inputs"]
+    namespace.pop("result", None)
     namespace.update(_validated_import_globals)
     if request.get("compatibility") is not None:
         builtins_source = vars(__builtins__) if isinstance(__builtins__, types.ModuleType) else __builtins__
@@ -301,8 +303,6 @@ def _execute(request_json: str) -> str:
         for forbidden in ("__import__", "eval", "exec"):
             restricted_builtins.pop(forbidden, None)
         namespace["__builtins__"] = restricted_builtins
-    namespace["inputs"] = request["inputs"]
-    namespace.pop("result", None)
     try:
         exec(code, namespace, namespace)
         result = namespace.get("result")

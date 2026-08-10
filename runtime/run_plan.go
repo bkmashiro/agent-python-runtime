@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -136,9 +137,20 @@ type frozenRunPlanDocument struct {
 type FrozenRunPlan struct{ document frozenRunPlanDocument }
 
 func NewFrozenRunPlan(rawRequest []byte, request RunRequest, compatibility CompatibilityResult, validation SourceValidationEvidence) (FrozenRunPlan, error) {
-	if len(rawRequest) == 0 || compatibility.Validate() != nil || compatibility.Status() != SourceCompatible ||
-		compatibility.ArtifactSHA256() == "" || validation.Validate() != nil {
-		return FrozenRunPlan{}, ErrInvalidFrozenRunPlan
+	if len(rawRequest) == 0 {
+		return FrozenRunPlan{}, fmt.Errorf("%w: empty request", ErrInvalidFrozenRunPlan)
+	}
+	if err := compatibility.Validate(); err != nil {
+		return FrozenRunPlan{}, fmt.Errorf("%w: compatibility evidence: %v", ErrInvalidFrozenRunPlan, err)
+	}
+	if compatibility.Status() != SourceCompatible {
+		return FrozenRunPlan{}, fmt.Errorf("%w: source is not compatible", ErrInvalidFrozenRunPlan)
+	}
+	if compatibility.ArtifactSHA256() == "" {
+		return FrozenRunPlan{}, fmt.Errorf("%w: artifact is not bound", ErrInvalidFrozenRunPlan)
+	}
+	if err := validation.Validate(); err != nil {
+		return FrozenRunPlan{}, fmt.Errorf("%w: exact Guest evidence: %v", ErrInvalidFrozenRunPlan, err)
 	}
 	requestDigest := sha256.Sum256(rawRequest)
 	sourceDigest := sha256.Sum256([]byte(request.Code))
@@ -161,8 +173,8 @@ func NewFrozenRunPlan(rawRequest []byte, request RunRequest, compatibility Compa
 	}
 	plan := FrozenRunPlan{document: document}
 	plan.document.PlanSHA256 = plan.digest()
-	if plan.Validate() != nil {
-		return FrozenRunPlan{}, ErrInvalidFrozenRunPlan
+	if err := plan.Validate(); err != nil {
+		return FrozenRunPlan{}, err
 	}
 	return plan, nil
 }

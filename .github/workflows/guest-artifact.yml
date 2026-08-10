@@ -551,6 +551,7 @@ jobs:
           path: |
             ${{ runner.temp }}/preinitialized-guest/candidate/*.wasm
             ${{ runner.temp }}/preinitialized-guest/candidate/manifest.json
+            ${{ runner.temp }}/preinitialized-guest/candidate/import-inventory.json
             ${{ runner.temp }}/preinitialized-guest/evidence/
           if-no-files-found: warn
           retention-days: 7

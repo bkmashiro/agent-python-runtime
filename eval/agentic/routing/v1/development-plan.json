@@ -1,6 +1,6 @@
 {
   "dataset_id": "agentic-routing-diagnostic-v1",
-  "dataset_manifest_digest": "sha256:e290a7349fae7490c9b23d8fc192aa95111a345e3bf93b4807cb99a7c3703b1b",
+  "dataset_manifest_digest": "sha256:b63a8ac851c78d00e0485f4f49ab7037fef0eb4248604b77cbe6e7bb70ff5bb0",
   "schema_version": "routing-diagnostic-development-plan/v1",
   "selection_policy": "balanced",
   "status": "frozen_development",
@@ -12,5 +12,5 @@
     "rd-005",
     "rd-006"
   ],
-  "task_pack_digest": "sha256:576f90e57294fda98c3b31292aaa6da34c54ddf6b00e321d5f80a64219825699"
+  "task_pack_digest": "sha256:81f0504083e1b8974c89f043522648de46177e4121f3d1a0422e716ba5a50de5"
 }

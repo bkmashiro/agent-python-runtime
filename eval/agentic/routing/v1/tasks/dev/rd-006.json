@@ -28,7 +28,7 @@
     "turns": [
       [
         {
-          "content": "Count the lines in list.txt, write the total to count.txt, then duplicate it.",
+          "content": "In Documents, count the lines in list.txt, write the total to count.txt, then duplicate it.",
           "role": "user"
         }
       ]
@@ -83,8 +83,8 @@
     "adaptation": "Adapted from the digest-bound local routing source record into external-agentic-task/v1.",
     "benchmark": "RoutingDiagnostic",
     "license": "Apache-2.0",
-    "record_sha256": "sha256:5892d02eb6073f313dded640981bd777a18bf09f8e01e8d2d8391582c48347b0",
-    "revision": "6088885536d117348bb1a9bdb9d013b4f80c77d0",
+    "record_sha256": "sha256:cb36abc5a578cda3c573e0985eba2d96a036151226f273cbe3811778df29b286",
+    "revision": "c8e11b6ed8b9d007f47b2f278e5c18658708d6ae",
     "source_id": "rd-006",
     "version": "v1"
   },

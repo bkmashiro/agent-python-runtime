@@ -5,37 +5,37 @@
       "archetype": "direct_favored",
       "id": "rd-001",
       "path": "tasks/dev/rd-001.json",
-      "sha256": "sha256:2e9f149d999bc2781986393760425fef042d6cadfeff909f99ea0d3a84f84d85"
+      "sha256": "sha256:510fb03685a805019ea31848f1941070ceab2af85f051c0525c0edb4571b4aad"
     },
     {
       "archetype": "direct_favored",
       "id": "rd-002",
       "path": "tasks/dev/rd-002.json",
-      "sha256": "sha256:ba2085bdeef1cbb7fda839902d91eac67eb45a54c25d6770981f7e30e4b47049"
+      "sha256": "sha256:c80f2bf8f4679a32c0433b0f6fb427926b58e0ce9d6aa598abd151b8b37e27a0"
     },
     {
       "archetype": "python_favored",
       "id": "rd-003",
       "path": "tasks/dev/rd-003.json",
-      "sha256": "sha256:efb55266238812e996b6ed42b540fbafc6db0505c535382b2951db4f369b6db4"
+      "sha256": "sha256:a7182ef12802b98f0b145ffafe08b2a880d14aef488f2fec040e8271b8d82996"
     },
     {
       "archetype": "python_favored",
       "id": "rd-004",
       "path": "tasks/dev/rd-004.json",
-      "sha256": "sha256:4c4250393d22fa3873a2f31fc26d771aa94b05bdc7d47830ca754bc007eccd26"
+      "sha256": "sha256:e110f5a68f1926a0a17b8422f03491eeb9f134218fbe1e1d5d9acb6b950649d7"
     },
     {
       "archetype": "boundary",
       "id": "rd-005",
       "path": "tasks/dev/rd-005.json",
-      "sha256": "sha256:7b6d15afdba5d72372712753a36626c8cd729980993d541e58d0e86515e7364c"
+      "sha256": "sha256:5be60bde84945a6c5e47c76fb608eb9c3cfce79c9266983829e177d0aca7ddef"
     },
     {
       "archetype": "boundary",
       "id": "rd-006",
       "path": "tasks/dev/rd-006.json",
-      "sha256": "sha256:ca6ff43822fa603e0bb7eb2f14e8a3b14aefc884026ef87ff55f556959c28f2c"
+      "sha256": "sha256:d97665ef1ce14a68357dd79f928ec549337d5ac2e5ea8f6c3c3c71144b56b9d9"
     }
   ],
   "version": "routing-diagnostic-pack/v1"

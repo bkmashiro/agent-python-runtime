@@ -1,7 +1,7 @@
 {
   "dataset_id": "agentic-routing-diagnostic-v1",
   "pack": "pack.json",
-  "pack_digest": "sha256:81f0504083e1b8974c89f043522648de46177e4121f3d1a0422e716ba5a50de5",
+  "pack_digest": "sha256:6126f4a107cccb976ceb5a36506d14e2ccab2461d0fafe0a81dd8da6193677ba",
   "selection_policy": "balanced",
   "sources": [
     {
@@ -9,7 +9,7 @@
       "license": "Apache-2.0",
       "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
       "repository": "https://github.com/bkmashiro/agent-python-runtime",
-      "revision": "c8e11b6ed8b9d007f47b2f278e5c18658708d6ae",
+      "revision": "c3d1d8e4c37bb710bac66d9e66e1f0d10369a71e",
       "source_files": [
         {
           "path": "sources/rd-001.json",
@@ -21,7 +21,7 @@
         },
         {
           "path": "sources/rd-003.json",
-          "sha256": "sha256:56693c22b26cac389af20d04df3101f81c03e7cf73904fb4a0345bfc4a647d9d"
+          "sha256": "sha256:e2e4ec0f2af9725c3c0bbd981f95914142e8cde7ce7504fd603870fb9fc204ed"
         },
         {
           "path": "sources/rd-004.json",
@@ -33,7 +33,7 @@
         },
         {
           "path": "sources/rd-006.json",
-          "sha256": "sha256:cb36abc5a578cda3c573e0985eba2d96a036151226f273cbe3811778df29b286"
+          "sha256": "sha256:1276fdeaccb94e706072d9bb9be36e196e20027e05c39d84c240a4d54c5307af"
         }
       ],
       "version": "v1"
@@ -44,7 +44,7 @@
       "archetype": "direct_favored",
       "id": "rd-001",
       "path": "tasks/dev/rd-001.json",
-      "sha256": "sha256:510fb03685a805019ea31848f1941070ceab2af85f051c0525c0edb4571b4aad",
+      "sha256": "sha256:91253bd89e2449312a513b96c1cb3a39b154ce0debea9a4c38f4c622d204908f",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -52,7 +52,7 @@
       "archetype": "direct_favored",
       "id": "rd-002",
       "path": "tasks/dev/rd-002.json",
-      "sha256": "sha256:c80f2bf8f4679a32c0433b0f6fb427926b58e0ce9d6aa598abd151b8b37e27a0",
+      "sha256": "sha256:4c292328a55687de5c09383390e7bbf2df08a2de1c507989d41fe72e12e9d086",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -60,7 +60,7 @@
       "archetype": "python_favored",
       "id": "rd-003",
       "path": "tasks/dev/rd-003.json",
-      "sha256": "sha256:a7182ef12802b98f0b145ffafe08b2a880d14aef488f2fec040e8271b8d82996",
+      "sha256": "sha256:fde9c62355fbf1a1583565fc4ae460258ad7c17efb24a59145f02cde8c50c79e",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -68,7 +68,7 @@
       "archetype": "python_favored",
       "id": "rd-004",
       "path": "tasks/dev/rd-004.json",
-      "sha256": "sha256:e110f5a68f1926a0a17b8422f03491eeb9f134218fbe1e1d5d9acb6b950649d7",
+      "sha256": "sha256:4c4efbb73336327445a125a2dc67607923c34fc8c6cd22df2c0bd48c3e18b5ec",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -76,7 +76,7 @@
       "archetype": "boundary",
       "id": "rd-005",
       "path": "tasks/dev/rd-005.json",
-      "sha256": "sha256:5be60bde84945a6c5e47c76fb608eb9c3cfce79c9266983829e177d0aca7ddef",
+      "sha256": "sha256:1facffa1eacd02040a5dc00af6c0b4997378ff8e71282a6cac438c64ee308900",
       "split": "dev",
       "track": "stateful_local_tools"
     },
@@ -84,7 +84,7 @@
       "archetype": "boundary",
       "id": "rd-006",
       "path": "tasks/dev/rd-006.json",
-      "sha256": "sha256:d97665ef1ce14a68357dd79f928ec549337d5ac2e5ea8f6c3c3c71144b56b9d9",
+      "sha256": "sha256:74155beacb268885b9a71bf684cc1b96a2b0791084415d7f873b106144198615",
       "split": "dev",
       "track": "stateful_local_tools"
     }

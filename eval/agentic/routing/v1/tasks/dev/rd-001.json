@@ -65,7 +65,7 @@
     "benchmark": "RoutingDiagnostic",
     "license": "Apache-2.0",
     "record_sha256": "sha256:c02756541c5eb97d9fe8409d6c22a1d674056ae15911f34488a56a2db4cc6eed",
-    "revision": "c8e11b6ed8b9d007f47b2f278e5c18658708d6ae",
+    "revision": "c3d1d8e4c37bb710bac66d9e66e1f0d10369a71e",
     "source_id": "rd-001",
     "version": "v1"
   },

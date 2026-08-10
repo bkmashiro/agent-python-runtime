@@ -219,6 +219,29 @@ func TestFactoryBorrowsCompilationCacheUntilOwnerCloses(t *testing.T) {
 	}
 }
 
+func TestLegacyModuleWithoutSourceValidationFailsClosedBeforeBroker(t *testing.T) {
+	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokerCalls := 0
+	runner, err := (engine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		brokerCalls++
+		return nil, errors.New("broker must not be created")
+	}}).New(context.Background(), wasm, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request := []byte(`{"run_id":"legacy","code":"result = 1","inputs":{}}`)
+	if _, err := runner.Run(context.Background(), request, ""); err == nil || !strings.Contains(err.Error(), "runtime_validate_source") {
+		t.Fatalf("error=%v", err)
+	}
+	if brokerCalls != 0 {
+		t.Fatalf("broker calls=%d", brokerCalls)
+	}
+}
+
 func TestSourceContractValidationRejectsBeforeBrokerCreation(t *testing.T) {
 	wasm := withSourceValidationStatus(t, "AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=", 1)
 	brokerCalls := 0

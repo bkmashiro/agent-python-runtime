@@ -166,14 +166,40 @@ func TestCodexCLIAdapterParsesParallelFunctionCalls(t *testing.T) {
 		}
 		switch index {
 		case 0:
-			if string(item["call_id"]) != `"call_1"` {
+			if string(item["call_id"]) != `"call_thread123_1"` {
 				t.Fatalf("first call id=%s", string(item["call_id"]))
 			}
 		case 1:
-			if string(item["call_id"]) != `"call_2"` {
+			if string(item["call_id"]) != `"call_thread123_2"` {
 				t.Fatalf("second call id=%s", string(item["call_id"]))
 			}
 		}
+	}
+}
+
+func TestCodexCLIAdapterCallIDsAreUniqueAcrossThreads(t *testing.T) {
+	var ids []string
+	for _, threadID := range []string{"thread-a", "thread-b"} {
+		output := []byte(strings.Join([]string{
+			mustEvent(t, map[string]any{"type": "thread.started", "thread_id": threadID}),
+			mustEvent(t, map[string]any{"type": "turn.started"}),
+			mustAgentOutputEvent(t, map[string]any{"type": "function_call", "name": "echo", "arguments": map[string]any{"content": "x"}}),
+			mustUsage(t, map[string]any{"input_tokens": 1, "output_tokens": 1}),
+		}, "\n"))
+		_, items, _, err := parseCodexCLIResponse(output)
+		if err != nil || len(items) != 1 {
+			t.Fatalf("thread=%s items=%s err=%v", threadID, items, err)
+		}
+		var item struct {
+			CallID string `json:"call_id"`
+		}
+		if json.Unmarshal(items[0], &item) != nil || item.CallID == "" {
+			t.Fatalf("thread=%s item=%s", threadID, items[0])
+		}
+		ids = append(ids, item.CallID)
+	}
+	if ids[0] == ids[1] {
+		t.Fatalf("cross-thread call IDs collided: %v", ids)
 	}
 }
 

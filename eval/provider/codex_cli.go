@@ -299,7 +299,7 @@ func parseCodexCLIResponse(raw []byte) (string, []json.RawMessage, Usage, error)
 			if !hasItem || len(event) != 2 {
 				return "", nil, Usage{}, fmt.Errorf("%w: malformed cli output", ErrExchange)
 			}
-			parsed, err := parseCodexCLIItemCompleted(rawItem)
+			parsed, err := parseCodexCLIItemCompleted(rawItem, threadID)
 			if err != nil {
 				return "", nil, Usage{}, err
 			}
@@ -332,7 +332,7 @@ func parseCodexCLIResponse(raw []byte) (string, []json.RawMessage, Usage, error)
 	return threadID, output, usage, nil
 }
 
-func parseCodexCLIItemCompleted(raw json.RawMessage) ([]json.RawMessage, error) {
+func parseCodexCLIItemCompleted(raw json.RawMessage, threadID string) ([]json.RawMessage, error) {
 	if len(raw) == 0 || rejectDuplicateJSON(raw) != nil {
 		return nil, fmt.Errorf("%w: malformed cli output", ErrExchange)
 	}
@@ -359,10 +359,10 @@ func parseCodexCLIItemCompleted(raw json.RawMessage) ([]json.RawMessage, error) 
 	if err := json.Unmarshal(rawText, &text); err != nil || text == "" {
 		return nil, fmt.Errorf("%w: malformed cli output", ErrExchange)
 	}
-	return parseCodexCLIResponseText(text)
+	return parseCodexCLIResponseText(text, threadID)
 }
 
-func parseCodexCLIResponseText(raw string) ([]json.RawMessage, error) {
+func parseCodexCLIResponseText(raw, threadID string) ([]json.RawMessage, error) {
 	rawEnvelope := []byte(raw)
 	if len(rawEnvelope) == 0 || len(rawEnvelope) > maxExchangeBytes || rejectDuplicateJSON(rawEnvelope) != nil {
 		return nil, fmt.Errorf("%w: malformed cli output", ErrExchange)
@@ -382,7 +382,7 @@ func parseCodexCLIResponseText(raw string) ([]json.RawMessage, error) {
 	callIndex := 1
 	parsed := make([]json.RawMessage, 0, len(output))
 	for _, rawItem := range output {
-		item, kind, err := parseCodexCLIOutputItem(rawItem, callIndex)
+		item, kind, err := parseCodexCLIOutputItem(rawItem, threadID, callIndex)
 		if err != nil {
 			return nil, err
 		}
@@ -394,7 +394,7 @@ func parseCodexCLIResponseText(raw string) ([]json.RawMessage, error) {
 	return parsed, nil
 }
 
-func parseCodexCLIOutputItem(raw json.RawMessage, callIndex int) (json.RawMessage, string, error) {
+func parseCodexCLIOutputItem(raw json.RawMessage, threadID string, callIndex int) (json.RawMessage, string, error) {
 	if len(raw) == 0 || len(raw) > maxExchangeBytes || rejectDuplicateJSON(raw) != nil {
 		return nil, "", fmt.Errorf("%w: malformed cli output", ErrExchange)
 	}
@@ -454,10 +454,13 @@ func parseCodexCLIOutputItem(raw json.RawMessage, callIndex int) (json.RawMessag
 		if err != nil {
 			return nil, "", err
 		}
+		if !boundedIdentity.MatchString(threadID) {
+			return nil, "", fmt.Errorf("%w: malformed cli output", ErrExchange)
+		}
 		message := map[string]any{
 			"type":      "function_call",
 			"status":    "completed",
-			"call_id":   fmt.Sprintf("call_%d", callIndex),
+			"call_id":   fmt.Sprintf("call_%s_%d", strings.ReplaceAll(threadID, "-", ""), callIndex),
 			"name":      name,
 			"arguments": string(arguments),
 		}

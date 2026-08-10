@@ -23,6 +23,23 @@
         {"type": "boolean"},
         {"type": "null"}
       ]
+    },
+    "requirements": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "browser",
+          "daemon",
+          "dynamic_package_install",
+          "native_extension",
+          "native_threads",
+          "posix",
+          "shell",
+          "subprocess"
+        ]
+      }
     }
   }
 }

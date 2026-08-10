@@ -432,6 +432,9 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, err
 	}
+	if err := runtimeconfig.AdmitRunRequirements(runRequest); err != nil {
+		return nil, err
+	}
 	var executionRef *runtimeconfig.ExecutionRef
 	if invocationRef, ok := enginecontract.InvocationRefFromContext(ctx); ok {
 		codeDigest := sha256.Sum256([]byte(runRequest.Code))

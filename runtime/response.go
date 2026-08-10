@@ -42,7 +42,7 @@ type RunResponse struct {
 }
 
 func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResponse, error) {
-	if err := rejectDuplicateRunResponseJSON(data); err != nil {
+	if err := rejectDuplicateBoundedJSON(data); err != nil {
 		return RunResponse{}, errors.New("Guest run response contains duplicate JSON keys")
 	}
 	var envelope map[string]json.RawMessage
@@ -64,11 +64,11 @@ func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResp
 	return DecodeAndValidateRunResponse(request, data)
 }
 
-func rejectDuplicateRunResponseJSON(raw []byte) error {
+func rejectDuplicateBoundedJSON(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	nodes := 0
-	if err := consumeUniqueRunResponseJSON(decoder, 0, &nodes); err != nil {
+	if err := consumeUniqueBoundedJSON(decoder, 0, &nodes); err != nil {
 		return err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
@@ -77,7 +77,7 @@ func rejectDuplicateRunResponseJSON(raw []byte) error {
 	return nil
 }
 
-func consumeUniqueRunResponseJSON(decoder *json.Decoder, depth int, nodes *int) error {
+func consumeUniqueBoundedJSON(decoder *json.Decoder, depth int, nodes *int) error {
 	if depth > 64 || *nodes >= 4096 {
 		return errors.New("run response JSON is too complex")
 	}
@@ -100,7 +100,7 @@ func consumeUniqueRunResponseJSON(decoder *json.Decoder, depth int, nodes *int) 
 				return errors.New("run response contains duplicate JSON keys")
 			}
 			seen[key] = true
-			if err := consumeUniqueRunResponseJSON(decoder, depth+1, nodes); err != nil {
+			if err := consumeUniqueBoundedJSON(decoder, depth+1, nodes); err != nil {
 				return err
 			}
 		}
@@ -110,7 +110,7 @@ func consumeUniqueRunResponseJSON(decoder *json.Decoder, depth int, nodes *int) 
 		}
 	case '[':
 		for decoder.More() {
-			if err := consumeUniqueRunResponseJSON(decoder, depth+1, nodes); err != nil {
+			if err := consumeUniqueBoundedJSON(decoder, depth+1, nodes); err != nil {
 				return err
 			}
 		}

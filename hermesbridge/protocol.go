@@ -35,13 +35,14 @@ type InvocationCoordinates struct {
 }
 
 type ExecuteRequest struct {
-	Version      string                `json:"version"`
-	Operation    string                `json:"operation"`
-	RequestID    string                `json:"request_id"`
-	Invocation   InvocationCoordinates `json:"invocation"`
-	Code         string                `json:"code"`
-	Inputs       json.RawMessage       `json:"inputs"`
-	OutputSchema json.RawMessage       `json:"output_schema,omitempty"`
+	Version      string                          `json:"version"`
+	Operation    string                          `json:"operation"`
+	RequestID    string                          `json:"request_id"`
+	Invocation   InvocationCoordinates           `json:"invocation"`
+	Code         string                          `json:"code"`
+	Inputs       json.RawMessage                 `json:"inputs"`
+	OutputSchema json.RawMessage                 `json:"output_schema,omitempty"`
+	Requirements []runtimeconfig.RequiredFeature `json:"requirements,omitempty"`
 }
 
 func DecodeExecuteRequest(payload []byte) (ExecuteRequest, error) {
@@ -81,6 +82,9 @@ func (request ExecuteRequest) Validate() error {
 		if _, ok := schema.(map[string]any); !ok {
 			return ErrInvalidRequest
 		}
+	}
+	if runtimeconfig.ValidateRunRequirements(request.Requirements) != nil {
+		return ErrInvalidRequest
 	}
 	ref := runtimeconfig.InvocationRef{
 		AgentRunID: request.Invocation.AgentRunID, TurnSeq: request.Invocation.TurnSeq,

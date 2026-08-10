@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "runtime_unsupported",
+  "escalation_required": true,
+  "escalation_reason": "required_features_unsupported",
+  "required_features": ["browser", "posix"],
+  "workspace_disposition": "not_started",
+  "effect_disposition": "not_started",
+  "evidence": {
+    "request_sha256": "sha256:584a3cbcde841a08da15ad156496dd01a0d7ca1180ebac0cd01d6c76d586bb8c"
+  }
+}

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
 func validExecuteRequest() ExecuteRequest {
@@ -35,6 +37,23 @@ func TestDecodeExecuteRequestAcceptsCanonicalEnvelope(t *testing.T) {
 	}
 	if request.RequestID != "request-1" || request.Invocation.InvocationID != "tool-call-1" {
 		t.Fatalf("unexpected request: %#v", request)
+	}
+}
+
+func TestExecuteRequestAcceptsTypedRequirementsAndRejectsUnknownFeature(t *testing.T) {
+	request := validExecuteRequest()
+	request.Requirements = []runtimeconfig.RequiredFeature{runtimeconfig.RequiredFeaturePOSIX}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeExecuteRequest(payload)
+	if err != nil || len(decoded.Requirements) != 1 || decoded.Requirements[0] != runtimeconfig.RequiredFeaturePOSIX {
+		t.Fatalf("decoded=%+v err=%v", decoded, err)
+	}
+	request.Requirements = []runtimeconfig.RequiredFeature{"gpu"}
+	if request.Validate() == nil {
+		t.Fatal("unknown compatibility requirement accepted")
 	}
 }
 

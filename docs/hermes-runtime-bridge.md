@@ -75,6 +75,7 @@ Execute request:
   },
   "code": "result = inputs['left'] + inputs['right']",
   "inputs": {"left": 19, "right": 23},
+  "requirements": [],
   "output_schema": {"type": "integer"}
 }
 ```
@@ -107,6 +108,8 @@ Successful response:
 ```
 
 Guest exceptions, schema mismatch, timeout, invalid Guest envelopes, execution-reference mismatch, and required-trace failure return bounded typed errors. A trace completion uses a short cancellation-independent context so timeout/cancel outcomes can still be durably recorded.
+
+An optional non-empty `requirements` list uses the bounded feature vocabulary in [Structured unsupported and escalation outcome](unsupported-escalation.md). The bridge performs admission before trace start or Runner invocation. Unsupported requests return `status: "error"`, `error.code: "runtime_unsupported"`, and a Host-authored `outcome` containing `escalation_required`, sorted required features, `not_started` workspace/effect dispositions, and a request digest. No `execution_ref` is emitted because no execution started. VM selection and execution remain upstream-owned.
 
 ## Verification
 

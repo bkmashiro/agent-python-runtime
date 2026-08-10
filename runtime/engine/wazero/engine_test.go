@@ -11,6 +11,7 @@ import (
 	"time"
 
 	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	engine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -113,6 +114,27 @@ func TestFactoryReportsActiveFreshAndSingleUseStrategies(t *testing.T) {
 				t.Fatalf("unexpected properties %#v", properties)
 			}
 		})
+	}
+}
+
+func TestRunRejectsUnsupportedRequirementsBeforeGuestExecution(t *testing.T) {
+	ctx := context.Background()
+	brokerCalls := 0
+	runner, err := (engine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		brokerCalls++
+		return nil, errors.New("broker must not be created")
+	}}).New(ctx, []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}, runtime.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(ctx)
+	_, err = runner.Run(ctx, []byte(`{"run_id":"run","code":"result=1","inputs":{},"requirements":["browser"]}`), "")
+	var unsupported *runtime.UnsupportedRunError
+	if !errors.As(err, &unsupported) || len(unsupported.RequiredFeatures) != 1 || unsupported.RequiredFeatures[0] != runtime.RequiredFeatureBrowser {
+		t.Fatalf("error=%v unsupported=%+v", err, unsupported)
+	}
+	if brokerCalls != 0 {
+		t.Fatalf("broker calls=%d, want zero before admission", brokerCalls)
 	}
 }
 

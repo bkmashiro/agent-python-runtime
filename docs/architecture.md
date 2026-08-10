@@ -43,7 +43,7 @@ Complete Agent-loop observability is an optional Harness concern. The Runtime ac
 ### Untrusted
 
 - generated Python;
-- `RunRequest.code` and `RunRequest.inputs`;
+- `RunRequest.code`, `RunRequest.inputs`, and compatibility-only `RunRequest.requirements`;
 - requested tool names and arguments;
 - output values, exceptions, and guest pointers;
 - guest stdout/stderr if enabled in a future version.
@@ -59,6 +59,8 @@ Complete Agent-loop observability is an optional Harness concern. The Runtime ac
 - artifact selection and accepted ABI version.
 
 Authority-bearing fields are not accepted from `RunRequest`.
+
+Before workspace Run admission, Broker creation, or Guest checkout, the Host rejects any valid non-empty ambient/native requirements declaration with a typed `runtime_unsupported` outcome. The declaration can only narrow execution and cannot select a backend or widen authority. Ordinary Guest exceptions and runtime failures never become escalation by string matching. See [Structured unsupported and escalation outcome](unsupported-escalation.md).
 
 ## State classes
 

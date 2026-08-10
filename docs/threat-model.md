@@ -49,6 +49,8 @@ Unsupported hard limits are rejected or documented as unsupported; they are not 
 
 Control: schemas reject unknown and authority-bearing fields. `RunConfig` is constructed by trusted Host code and is not decoded from model JSON.
 
+`RunRequest.requirements` is a bounded compatibility declaration only. It can cause fail-closed preflight rejection but cannot grant a capability, select a backend, or trigger a VM. The Host never derives escalation from Guest/provider error text; only the typed preflight sentinel can produce `runtime_unsupported`.
+
 ### Execution provenance forgery
 
 Control: `InvocationRef` is supplied through Host context, never `RunRequest`. A Guest response containing `execution_ref` is rejected before the Host projects its own reference. Capability receipts and transaction evidence bind to the Host `execution_id`, not the Guest `run_id`.

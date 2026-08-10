@@ -26,7 +26,7 @@ permissions:
 env:
   AGENT_RUNTIME_ARTIFACT_PROFILE: ${{ inputs.artifact_profile || 'base' }}
   AGENT_RUNTIME_MEMORY_MODEL: ${{ inputs.memory_model || 'growable' }}
-  AGENT_RUNTIME_COW_FIXED_MEMORY: ${{ (inputs.memory_model || 'growable') == 'cow-fixed' && '1' || '0' }}
+  AGENT_RUNTIME_COW_FIXED_MEMORY: ${{ (inputs.memory_model || 'growable') == 'cow-fixed' && '1' || '' }}
 
 concurrency:
   group: guest-${{ github.workflow }}-${{ github.ref }}-${{ inputs.artifact_profile || 'base' }}-${{ inputs.memory_model || 'growable' }}

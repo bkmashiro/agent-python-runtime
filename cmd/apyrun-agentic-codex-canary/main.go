@@ -39,7 +39,6 @@ type dependencies struct {
 	newPythonWasi  func(context.Context, []byte, runtimeconfig.RunConfig, *agentic.ToolRuntime, agentic.DevelopmentTreatment) (agentic.PythonWorkflow, error)
 	runTrial       func(context.Context, provider.Adapter, agentic.Task, agentic.Condition, string, uint32, agentic.TrialLimits, agentic.ExecutionIdentity, agentic.DevelopmentTreatment, agentic.PythonWorkflowFactory) (agentic.TrialResult, error)
 	codexVersion   func(context.Context, string, time.Duration) (string, error)
-	now            func() time.Time
 	repositoryRoot func() (string, error)
 	workdir        func() (string, error)
 }
@@ -55,7 +54,6 @@ func productionDependencies() dependencies {
 		},
 		runTrial:     agentic.RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment,
 		codexVersion: probeCodexVersion,
-		now:          time.Now,
 		repositoryRoot: func() (string, error) {
 			return os.Executable()
 		},
@@ -102,9 +100,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	if deps.codexVersion == nil {
 		deps.codexVersion = probeCodexVersion
 	}
-	if deps.now == nil {
-		deps.now = time.Now
-	}
+
 	if deps.repositoryRoot == nil {
 		deps.repositoryRoot = os.Executable
 	}
@@ -119,6 +115,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	datasetRoot := flags.String("dataset", "", "routing diagnostic dataset root")
 	guestPath := flags.String("guest", "", "exact core Guest WASM artifact")
 	repoCommit := flags.String("repository-commit", "", "exact source commit")
+	providerObservedAtText := flags.String("provider-observed-at", "", "frozen UTC RFC3339 provider observation time")
 	taskID := flags.String("task", "rd-001", "routing task ID")
 	conditionValue := flags.String("condition", string(agentic.ConditionDirect), "direct|python|hybrid")
 	treatmentPath := flags.String("treatment", "", "optional frozen development treatment; defaults to baseline-v1")
@@ -134,8 +131,12 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	if err != nil || timeout <= 0 {
 		return "", errors.New("invalid timeout")
 	}
-	if *codexPath == "" || *datasetRoot == "" || *guestPath == "" || *repoCommit == "" || *out == "" {
+	if *codexPath == "" || *datasetRoot == "" || *guestPath == "" || *repoCommit == "" || *providerObservedAtText == "" || *out == "" {
 		return "", errors.New("missing required argument")
+	}
+	providerObservedAt, err := time.Parse(time.RFC3339, *providerObservedAtText)
+	if err != nil || providerObservedAt.Location() != time.UTC {
+		return "", errors.New("invalid provider-observed-at")
 	}
 	if *replicate > 1000 {
 		return "", errors.New("replicate exceeds limit")
@@ -234,7 +235,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	if condition != agentic.ConditionDirect {
 		identityGuestDigest = guestDigest
 	}
-	identity, err := buildExecutionIdentity(*repoCommit, hostDigest, dataset.Plan.DatasetManifestDigest, catalogDigest, identityGuestDigest, deps.now(), condition)
+	identity, err := buildExecutionIdentity(*repoCommit, hostDigest, dataset.Plan.DatasetManifestDigest, catalogDigest, identityGuestDigest, providerObservedAt, condition)
 	if err != nil {
 		return "", err
 	}

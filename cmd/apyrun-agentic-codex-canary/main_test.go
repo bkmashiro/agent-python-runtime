@@ -35,7 +35,7 @@ func TestRunRejectsUnknownTask(t *testing.T) {
 	err := runError(context.Background(), []string{
 		"-codex", codexPath, "-model", "gpt-5.3-codex-spark", "-dataset", datasetRoot,
 		"-guest", guestPath, "-repository-commit", strings.Repeat("a", 40),
-		"-task", "rd-999", "-condition", "direct", "-out", outPath,
+		"-task", "rd-999", "-condition", "direct", "-provider-observed-at", "2026-08-11T00:30:00Z", "-out", outPath,
 	}, deps)
 	if err == nil || !strings.Contains(canaryCommandErrOutput(err), "task absent") {
 		t.Fatalf("expected missing task error, got %v", err)
@@ -55,7 +55,7 @@ func TestRunRejectsInvalidCondition(t *testing.T) {
 	err := runError(context.Background(), []string{
 		"-codex", codexPath, "-model", "gpt-5.3-codex-spark", "-dataset", datasetRoot,
 		"-guest", guestPath, "-repository-commit", strings.Repeat("b", 40),
-		"-task", "rd-001", "-condition", "invalid", "-out", outPath,
+		"-task", "rd-001", "-condition", "invalid", "-provider-observed-at", "2026-08-11T00:30:00Z", "-out", outPath,
 	}, deps)
 	if err == nil || !strings.Contains(canaryCommandErrOutput(err), "invalid condition") {
 		t.Fatalf("expected invalid condition error, got %v", err)
@@ -97,7 +97,7 @@ func TestRunRejectsExistingOutputBeforeAdapter(t *testing.T) {
 	err := runError(context.Background(), []string{
 		"-codex", codexPath, "-model", codexSparkModel, "-dataset", datasetRoot,
 		"-guest", guestPath, "-repository-commit", strings.Repeat("d", 40),
-		"-task", "rd-001", "-condition", "direct", "-out", outPath,
+		"-task", "rd-001", "-condition", "direct", "-provider-observed-at", "2026-08-11T00:30:00Z", "-out", outPath,
 	}, deps)
 	if err == nil || !strings.Contains(err.Error(), "output path already exists") || adapterCalled {
 		t.Fatalf("err=%v adapter_called=%v", err, adapterCalled)
@@ -113,7 +113,7 @@ func TestExecuteFlagsUsesDefaultsAndRejectsMissingArguments(t *testing.T) {
 	deps.runTrial = func(_ context.Context, _ provider.Adapter, _ agentic.Task, _ agentic.Condition, _ string, _ uint32, _ agentic.TrialLimits, _ agentic.ExecutionIdentity, _ agentic.DevelopmentTreatment, _ agentic.PythonWorkflowFactory) (agentic.TrialResult, error) {
 		return agentic.TrialResult{}, errors.New("trial should not execute in missing args")
 	}
-	if _, err := run(context.Background(), []string{"-codex", codexPath, "-guest", guestPath, "-repository-commit", strings.Repeat("e", 40), "-out", outPath}, deps); err == nil {
+	if _, err := run(context.Background(), []string{"-codex", codexPath, "-guest", guestPath, "-repository-commit", strings.Repeat("e", 40), "-provider-observed-at", "2026-08-11T00:30:00Z", "-out", outPath}, deps); err == nil {
 		t.Fatalf("expected dataset argument requirement error")
 	}
 }

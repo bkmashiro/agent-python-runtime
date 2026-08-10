@@ -8,6 +8,8 @@
 
 `RunRequest.requirements` is an optional, untrusted compatibility declaration. It is not a capability grant and cannot authorize network, credentials, filesystems, processes, or any Host resource.
 
+The separate optional `RunRequest.compatibility` object declares a named artifact profile and import roots. A profile mismatch returns `profile_unsupported`, not this escalation outcome. See [Execution profile admission](profile-admission.md).
+
 Accepted values are:
 
 - `browser_runtime` (page rendering, DOM/JavaScript, browser session state, and UI automation);

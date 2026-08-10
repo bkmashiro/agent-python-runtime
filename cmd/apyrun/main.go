@@ -91,6 +91,10 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	if admissionErr := runtimeconfig.AdmitRunRequirements(decodedRequest); admissionErr != nil {
 		return emitUnsupportedOutcome(request, admissionErr, runConfig.MaxResponseBytes, stdout, stderr)
 	}
+	if admissionErr := runtimeconfig.AdmitRunCompatibility(decodedRequest, runConfig.ExecutionProfile); admissionErr != nil {
+		writeDiagnostic(stderr, "execution profile unsupported")
+		return 2
+	}
 
 	wasm, err := deps.readFile(*artifactPath)
 	if err != nil {

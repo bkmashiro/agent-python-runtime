@@ -4,7 +4,7 @@
 
 **Proposed evaluation contract, frozen before result generation.**
 
-This document defines the workload, comparison validity rules, lifecycle units, metrics, and oracles required to evaluate the post-Code-Mode product thesis. Explicit typed preflight rejection is Current; workspace overlays, real-provider reconciliation, and Cloudflare baselines are not implemented in this repository. Compatibility-backend selection and execution are outside this repository's scope.
+This document defines the workload, comparison validity rules, lifecycle units, metrics, and oracles required to evaluate the post-Code-Mode product thesis. Explicit typed requirements rejection and Host-configured profile/import manifest admission are Current foundations; artifact-bound profile proof, workspace overlays, real-provider reconciliation, and Cloudflare baselines are not implemented in this repository. Compatibility-backend selection and execution are outside this repository's scope.
 
 The Current implementation boundary remains [Architecture](architecture.md), [Workspace Capsule v1](workspace-capsule.md), and the artifact-bound test/evidence suites. The broader system roadmap is maintained in [Vinculum](https://github.com/bkmashiro/vinculum/blob/main/docs/roadmap.md).
 

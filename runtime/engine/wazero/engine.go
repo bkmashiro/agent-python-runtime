@@ -352,11 +352,19 @@ func newEngine(
 }
 
 func (engine *Engine) Properties() enginecontract.Properties {
+	var profileID string
+	var allowedImports []string
+	if engine.config.ExecutionProfile != nil {
+		profileID = engine.config.ExecutionProfile.ID()
+		allowedImports = engine.config.ExecutionProfile.AllowedImports()
+	}
 	return enginecontract.Properties{
-		Backend:           "wazero",
-		ResetMode:         enginecontract.ResetModeFreshInstance,
-		RequestedStrategy: engine.strategy,
-		ActiveStrategy:    engine.strategy,
+		Backend:            "wazero",
+		ResetMode:          enginecontract.ResetModeFreshInstance,
+		RequestedStrategy:  engine.strategy,
+		ActiveStrategy:     engine.strategy,
+		ExecutionProfileID: profileID,
+		AllowedImports:     allowedImports,
 	}
 }
 
@@ -433,6 +441,9 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		return nil, err
 	}
 	if err := runtimeconfig.AdmitRunRequirements(runRequest); err != nil {
+		return nil, err
+	}
+	if err := runtimeconfig.AdmitRunCompatibility(runRequest, engine.config.ExecutionProfile); err != nil {
 		return nil, err
 	}
 	var executionRef *runtimeconfig.ExecutionRef

@@ -24,6 +24,27 @@
         {"type": "null"}
       ]
     },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "imports"],
+      "properties": {
+        "profile": {
+          "enum": ["base", "numpy-core"]
+        },
+        "imports": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+          }
+        }
+      }
+    },
     "requirements": {
       "type": "array",
       "maxItems": 8,

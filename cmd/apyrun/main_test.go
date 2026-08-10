@@ -256,6 +256,48 @@ func TestExecuteEmitsMachineReadableUnsupportedOutcome(t *testing.T) {
 	}
 }
 
+func TestExecuteRejectsProfileBeforeArtifactOrFactory(t *testing.T) {
+	artifactReads, factoryCalls := 0, 0
+	deps := dependencies{
+		readFile: func(path string) ([]byte, error) {
+			if path == "host.json" {
+				return []byte(`{"execution_profile":{"id":"base","allowed_imports":["json"]}}`), nil
+			}
+			artifactReads++
+			return nil, errors.New("artifact must not be read")
+		},
+		newIdentity: func() (string, error) { return "host-run", nil },
+		newFactory: func(operatorConfig, string, *http.Client) (engine.Factory, error) {
+			factoryCalls++
+			return nil, errors.New("factory must not be created")
+		},
+	}
+	raw := `{"run_id":"guest","code":"import subprocess","inputs":{},"compatibility":{"profile":"base","imports":["subprocess"]}}`
+	var stdout, stderr strings.Builder
+	exit := execute([]string{"-artifact", "guest.wasm", "-config", "host.json"}, strings.NewReader(raw), &stdout, &stderr, deps)
+	if exit != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "execution profile unsupported") || artifactReads != 0 || factoryCalls != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q artifact_reads=%d factory_calls=%d", exit, stdout.String(), stderr.String(), artifactReads, factoryCalls)
+	}
+}
+
+func TestOperatorConfigBindsExecutionProfile(t *testing.T) {
+	config, err := decodeOperatorConfig([]byte(`{"execution_profile":{"id":"numpy-core","allowed_imports":["json","numpy"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runConfig, _, err := config.resolve()
+	if err != nil || runConfig.ExecutionProfile == nil || runConfig.ExecutionProfile.ID() != "numpy-core" {
+		t.Fatalf("config=%+v err=%v", runConfig, err)
+	}
+	if err := admitProfileForTest(runConfig, "numpy-core", []string{"numpy"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func admitProfileForTest(config runtimeconfig.RunConfig, profile string, imports []string) error {
+	return runtimeconfig.AdmitRunCompatibility(runtimeconfig.RunRequest{Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: profile, Imports: imports}}, config.ExecutionProfile)
+}
+
 func TestExecuteDoesNotUpgradeOrdinaryRuntimeError(t *testing.T) {
 	runner := &fakeRunner{err: errors.New("python exception says posix required")}
 	factory := &fakeFactory{runner: runner}

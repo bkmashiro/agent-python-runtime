@@ -24,6 +24,12 @@ type operatorConfig struct {
 	COWSnapshotShell       bool                             `json:"cow_snapshot_shell,omitempty"`
 	TransactionJournalPath string                           `json:"transaction_journal_path,omitempty"`
 	FetchMany              *fetchManyConfig                 `json:"fetch_many,omitempty"`
+	ExecutionProfile       *executionProfileConfig          `json:"execution_profile,omitempty"`
+}
+
+type executionProfileConfig struct {
+	ID             string   `json:"id"`
+	AllowedImports []string `json:"allowed_imports"`
 }
 
 type fetchManyConfig struct {
@@ -71,6 +77,13 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, *capability.Gra
 	}
 	if config.MemoryLimitPages != 0 {
 		runConfig.MemoryLimitPages = config.MemoryLimitPages
+	}
+	if config.ExecutionProfile != nil {
+		profile, profileErr := runtimeconfig.NewExecutionProfile(config.ExecutionProfile.ID, config.ExecutionProfile.AllowedImports)
+		if profileErr != nil {
+			return runtimeconfig.RunConfig{}, nil, errors.New("invalid execution_profile")
+		}
+		runConfig.ExecutionProfile = &profile
 	}
 	if err := runConfig.Validate(); err != nil {
 		return runtimeconfig.RunConfig{}, nil, fmt.Errorf("invalid operator resource bounds: %w", err)

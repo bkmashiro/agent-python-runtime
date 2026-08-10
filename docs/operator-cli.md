@@ -35,6 +35,10 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
   "max_response_bytes": 1048576,
   "memory_limit_pages": 8192,
   "prepared_capacity": 1,
+  "execution_profile": {
+    "id": "base",
+    "allowed_imports": ["collections", "json", "math", "statistics"]
+  },
   "transaction_journal_path": "/absolute/private/path/transactions.db",
   "fetch_many": {
     "max_calls": 2,
@@ -56,6 +60,8 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
 ```
 
 `prepared_capacity` is an optional wazero-adapter optimization. `0` preserves synchronous fresh initialization. Values `1`–`4` preinitialize that many never-served instances; each checkout serves exactly one Run and is then closed, while a miss falls back to the synchronous fresh path. The exact current artifact starts at 128 MiB of guest memory per candidate, so capacity remains Host-owned and hard-capped. This is not snapshot/restore and does not change the reported `fresh-instance` safety mode.
+
+`execution_profile` is optional Host-owned compatibility policy. When a Run contains a `compatibility` manifest, the CLI requires an exact `base` or `numpy-core` profile match and every declared import must appear in `allowed_imports`. A mismatch exits `2` before artifact read or Factory construction and writes no stdout payload. Legacy requests without a compatibility manifest remain accepted. This is declaration admission, not source inference or artifact-manifest verification; see [Execution profile admission](profile-admission.md).
 
 `transaction_journal_path` is an optional clean absolute path to the Host-owned SQLite/WAL transaction journal. With it, the production CLI creates a workflow transaction before Guest execution, journals every admitted `fetch_many` call as an operation+attempt, finalizes successful Runs, and supports reopen inspection with `apyrun-ledger`. Without it, the same Registry/Coordinator path uses `MemoryLedger` for backward compatibility and must not be presented as durable evidence. The journal rejects symlinks and uses private file permissions.
 
@@ -93,4 +99,4 @@ The normal success/error response retains the strict Guest execution envelope. B
 
 ## Verification boundary
 
-`go test ./cmd/apyrun` covers strict config decoding, authority separation, response bounds, stream behavior, lifecycle, SQLite reopen, and credential-safe diagnostics. `TestOperatorCLIWithRealGuestArtifact` builds the actual binary and exercises no-grant execution, Host-granted localhost fetch with a Host-owned credential, transaction-bound receipts, committed-journal reopen, and timeout against the exact artifact selected by `AGENT_RUNTIME_GUEST`.
+`go test ./cmd/apyrun` covers strict config decoding, authority separation, response bounds, stream behavior, lifecycle, SQLite reopen, profile admission before artifact access, and credential-safe diagnostics. `TestOperatorCLIWithRealGuestArtifact` builds the actual binary and exercises no-grant execution, Host-granted localhost fetch with a Host-owned credential, transaction-bound receipts, committed-journal reopen, and timeout against the exact artifact selected by `AGENT_RUNTIME_GUEST`.

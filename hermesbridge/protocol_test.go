@@ -57,6 +57,23 @@ func TestExecuteRequestAcceptsTypedRequirementsAndRejectsUnknownFeature(t *testi
 	}
 }
 
+func TestExecuteRequestAcceptsCompatibilityManifest(t *testing.T) {
+	request := validExecuteRequest()
+	request.Compatibility = &runtimeconfig.CompatibilityDeclaration{Profile: "base", Imports: []string{"json"}}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeExecuteRequest(payload)
+	if err != nil || decoded.Compatibility == nil || decoded.Compatibility.Profile != "base" {
+		t.Fatalf("decoded=%+v err=%v", decoded, err)
+	}
+	request.Compatibility = &runtimeconfig.CompatibilityDeclaration{Profile: "base", Imports: []string{"json", "json"}}
+	if request.Validate() == nil {
+		t.Fatal("duplicate declared import accepted")
+	}
+}
+
 func TestDecodeExecuteRequestRejectsUnknownAndTrailingFields(t *testing.T) {
 	for name, payload := range map[string]string{
 		"unknown top-level":  `{"version":"hermes-python-runtime-bridge/v1","operation":"execute","request_id":"r","invocation":{"agent_run_id":"a","turn_seq":1,"output_item_seq":1,"segment_seq":1,"invocation_id":"i","invocation_attempt":1},"code":"result=1","inputs":{},"extra":true}`,

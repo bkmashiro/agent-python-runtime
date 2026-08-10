@@ -35,14 +35,15 @@ type InvocationCoordinates struct {
 }
 
 type ExecuteRequest struct {
-	Version      string                          `json:"version"`
-	Operation    string                          `json:"operation"`
-	RequestID    string                          `json:"request_id"`
-	Invocation   InvocationCoordinates           `json:"invocation"`
-	Code         string                          `json:"code"`
-	Inputs       json.RawMessage                 `json:"inputs"`
-	OutputSchema json.RawMessage                 `json:"output_schema,omitempty"`
-	Requirements []runtimeconfig.RequiredFeature `json:"requirements,omitempty"`
+	Version       string                                  `json:"version"`
+	Operation     string                                  `json:"operation"`
+	RequestID     string                                  `json:"request_id"`
+	Invocation    InvocationCoordinates                   `json:"invocation"`
+	Code          string                                  `json:"code"`
+	Inputs        json.RawMessage                         `json:"inputs"`
+	OutputSchema  json.RawMessage                         `json:"output_schema,omitempty"`
+	Compatibility *runtimeconfig.CompatibilityDeclaration `json:"compatibility,omitempty"`
+	Requirements  []runtimeconfig.RequiredFeature         `json:"requirements,omitempty"`
 }
 
 func DecodeExecuteRequest(payload []byte) (ExecuteRequest, error) {
@@ -84,6 +85,9 @@ func (request ExecuteRequest) Validate() error {
 		}
 	}
 	if runtimeconfig.ValidateRunRequirements(request.Requirements) != nil {
+		return ErrInvalidRequest
+	}
+	if runtimeconfig.ValidateCompatibilityDeclaration(request.Compatibility) != nil {
 		return ErrInvalidRequest
 	}
 	ref := runtimeconfig.InvocationRef{

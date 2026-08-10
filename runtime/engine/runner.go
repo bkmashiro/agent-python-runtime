@@ -60,6 +60,7 @@ type Properties struct {
 	ExecutionProfileID string
 	AllowedImports     []string
 	AvailableImports   []string
+	QualifiedImports   []string
 	ArtifactSHA256     string
 	ManifestSHA256     string
 }
@@ -87,15 +88,16 @@ func (properties Properties) Validate() error {
 			return fmt.Errorf("%w: execution profile is invalid", ErrInvalidProperties)
 		}
 		if (properties.ArtifactSHA256 == "") != (properties.ManifestSHA256 == "") ||
-			(properties.ArtifactSHA256 == "") != (len(properties.AvailableImports) == 0) {
-			return fmt.Errorf("%w: artifact, manifest, and import inventory must be present together", ErrInvalidProperties)
+			(properties.ArtifactSHA256 == "") != (len(properties.AvailableImports) == 0) ||
+			(properties.ArtifactSHA256 == "") != (len(properties.QualifiedImports) == 0) {
+			return fmt.Errorf("%w: artifact, manifest, inventory, and qualification must be present together", ErrInvalidProperties)
 		}
 		if properties.ArtifactSHA256 != "" {
-			if _, err := profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256, ImportRoots: properties.AvailableImports}); err != nil {
+			if _, err := profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256, ImportRoots: properties.AvailableImports, QualifiedImportRoots: properties.QualifiedImports}); err != nil {
 				return fmt.Errorf("%w: artifact-bound execution profile is invalid", ErrInvalidProperties)
 			}
 		}
-	} else if properties.ArtifactSHA256 != "" || properties.ManifestSHA256 != "" || len(properties.AvailableImports) != 0 {
+	} else if properties.ArtifactSHA256 != "" || properties.ManifestSHA256 != "" || len(properties.AvailableImports) != 0 || len(properties.QualifiedImports) != 0 {
 		return fmt.Errorf("%w: artifact identity requires an execution profile", ErrInvalidProperties)
 	}
 	wantResetMode := resetModeForStrategy(properties.ActiveStrategy)
@@ -119,6 +121,7 @@ func (properties Properties) ExecutionProfile() *runtime.ExecutionProfile {
 		profile, err = profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{
 			ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256,
 			ManifestSHA256: properties.ManifestSHA256, ImportRoots: append([]string(nil), properties.AvailableImports...),
+			QualifiedImportRoots: append([]string(nil), properties.QualifiedImports...),
 		})
 		if err != nil {
 			return nil

@@ -12,6 +12,7 @@ REQUIRED_FILES = {
     "agent-python-runtime.wasm",
     "manifest.json",
     "import-inventory.json",
+    "import-qualification.json",
     "SHA256SUMS",
     "sbom.spdx.json",
     "THIRD_PARTY_NOTICES.md",

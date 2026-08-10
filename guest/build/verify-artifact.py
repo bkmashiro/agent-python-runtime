@@ -48,7 +48,18 @@ def load_import_inventory_module():
     return module
 
 
+def load_import_qualification_module():
+    path = pathlib.Path(__file__).with_name("import_qualification.py")
+    spec = importlib.util.spec_from_file_location("artifact_import_qualification", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load import qualification validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
+IMPORT_QUALIFICATION = load_import_qualification_module()
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -64,11 +75,12 @@ def verify(
     manifest: dict[str, Any],
     extension_selection: pathlib.Path | None = None,
     import_inventory: pathlib.Path | None = None,
+    import_qualification: pathlib.Path | None = None,
 ) -> None:
     if artifact.read_bytes()[:4] != b"\x00asm":
         raise ValueError("artifact does not have the WASM magic")
     schema_version = manifest.get("schema_version")
-    if schema_version not in {2, 3} or manifest.get("abi_version") != "v1":
+    if schema_version not in {2, 3, 4} or manifest.get("abi_version") != "v1":
         raise ValueError("unsupported manifest or ABI version")
     profile = manifest.get("artifact_profile")
     if profile not in ARTIFACT_FILENAMES:
@@ -89,9 +101,10 @@ def verify(
         raise ValueError("artifact sha256 does not match manifest")
 
     inventory_record = manifest.get("python_import_inventory")
+    qualification_record = manifest.get("python_import_qualification")
     if schema_version == 2:
-        if inventory_record is not None or import_inventory is not None:
-            raise ValueError("legacy manifest must not contain import inventory")
+        if inventory_record is not None or import_inventory is not None or qualification_record is not None or import_qualification is not None:
+            raise ValueError("legacy manifest must not contain Python import evidence")
     else:
         if not isinstance(inventory_record, dict) or import_inventory is None or not import_inventory.is_file():
             raise ValueError("schema-v3 manifest requires import inventory")
@@ -103,6 +116,26 @@ def verify(
         embedded["sha256"] = sha256(import_inventory)
         if inventory_record != embedded:
             raise ValueError("manifest import inventory does not match sidecar")
+        if schema_version == 3:
+            if qualification_record is not None or import_qualification is not None:
+                raise ValueError("schema-v3 manifest must not contain import qualification")
+        else:
+            if not isinstance(qualification_record, dict) or import_qualification is None or not import_qualification.is_file():
+                raise ValueError("schema-v4 manifest requires import qualification")
+            if qualification_record.get("filename") != import_qualification.name or qualification_record.get("sha256") != sha256(import_qualification):
+                raise ValueError("import qualification sidecar identity mismatch")
+            qualification = IMPORT_QUALIFICATION.load_qualification(import_qualification, profile)
+            if (
+                qualification["implementation"] != inventory["implementation"]
+                or qualification["python_version"] != inventory["python_version"]
+                or not set(qualification["qualified_roots"]).issubset(inventory["discoverable_roots"])
+            ):
+                raise ValueError("import qualification does not match inventory")
+            embedded_qualification = {key: value for key, value in qualification.items() if key != "artifact_profile"}
+            embedded_qualification["filename"] = import_qualification.name
+            embedded_qualification["sha256"] = sha256(import_qualification)
+            if qualification_record != embedded_qualification:
+                raise ValueError("manifest import qualification does not match sidecar")
 
     extension_profile = manifest.get("extension_profile")
     if profile == "base":
@@ -180,7 +213,14 @@ def main() -> int:
         if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
             raise ValueError("invalid import inventory filename")
         inventory = args.manifest.parent / filename
-    verify(args.artifact, manifest, selection, inventory)
+    qualification_record = manifest.get("python_import_qualification")
+    qualification = None
+    if isinstance(qualification_record, dict):
+        filename = qualification_record.get("filename")
+        if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
+            raise ValueError("invalid import qualification filename")
+        qualification = args.manifest.parent / filename
+    verify(args.artifact, manifest, selection, inventory, qualification)
     print(json.dumps({"artifact": str(args.artifact), "sha256": sha256(args.artifact)}))
     return 0
 

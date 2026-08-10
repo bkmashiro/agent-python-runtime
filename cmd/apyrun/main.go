@@ -126,7 +126,20 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 				return 2
 			}
 		}
-		identity, verifyErr := runtimeconfig.VerifyDistributionArtifact(filepath.Base(*artifactPath), wasm, manifest, inventory)
+		var qualification []byte
+		qualificationFilename, qualificationRequired, qualificationEnvelopeErr := runtimeconfig.DistributionImportQualificationFilename(manifest)
+		if qualificationEnvelopeErr != nil {
+			writeDiagnostic(stderr, "inspect execution profile manifest")
+			return 2
+		}
+		if qualificationRequired {
+			qualification, manifestErr = deps.readFile(filepath.Join(filepath.Dir(*manifestPath), qualificationFilename))
+			if manifestErr != nil {
+				writeDiagnostic(stderr, "read execution profile import qualification")
+				return 2
+			}
+		}
+		identity, verifyErr := runtimeconfig.VerifyDistributionArtifact(filepath.Base(*artifactPath), wasm, manifest, inventory, qualification)
 		if verifyErr != nil {
 			writeDiagnostic(stderr, "verify execution profile artifact")
 			return 2

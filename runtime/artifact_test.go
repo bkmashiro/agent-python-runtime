@@ -13,11 +13,12 @@ func TestVerifyDistributionArtifactBindsProfilePackagesAndDigests(t *testing.T) 
 	artifact := []byte("verified-wasm")
 	manifest := distributionManifestFixture(t, artifact, "base")
 	inventory := distributionImportInventoryFixture(t, "base")
+	qualification := distributionImportQualificationFixture(t, "base")
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, inventory)
+	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, inventory, qualification)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,12 +33,16 @@ func TestVerifyDistributionArtifactBindsProfilePackagesAndDigests(t *testing.T) 
 	if strings.Join(identity.ImportRoots, ",") != "agent_runtime,json,math,sys" {
 		t.Fatalf("imports=%v", identity.ImportRoots)
 	}
+	if strings.Join(identity.QualifiedImportRoots, ",") != "agent_runtime,json,sys" {
+		t.Fatalf("qualified imports=%v", identity.QualifiedImportRoots)
+	}
 }
 
 func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 	artifact := []byte("verified-wasm")
 	valid := distributionManifestFixture(t, artifact, "numpy-core")
 	inventory := distributionImportInventoryFixture(t, "numpy-core")
+	qualification := distributionImportQualificationFixture(t, "numpy-core")
 	cases := map[string]func(map[string]any){
 		"unknown profile":        func(value map[string]any) { value["artifact_profile"] = "everything" },
 		"profile filename drift": func(value map[string]any) { value["artifact_profile"] = "base" },
@@ -49,6 +54,9 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 		"import inventory drift": func(value map[string]any) {
 			value["python_import_inventory"].(map[string]any)["discoverable_roots"] = []any{"numpy", "json"}
 		},
+		"qualification drift": func(value map[string]any) {
+			value["python_import_qualification"].(map[string]any)["qualified_roots"] = []any{"agent_runtime", "numpy", "sys"}
+		},
 		"unknown top-level field": func(value map[string]any) { value["authority"] = "guest" },
 	}
 	for name, mutate := range cases {
@@ -59,7 +67,7 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encoded, inventory); !errors.Is(err, ErrInvalidArtifactManifest) {
+			if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encoded, inventory, qualification); !errors.Is(err, ErrInvalidArtifactManifest) {
 				t.Fatalf("err=%v", err)
 			}
 		})
@@ -70,11 +78,34 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 	}
 	mutatedInventory := append([]byte(nil), inventory...)
 	mutatedInventory[len(mutatedInventory)-1] = ' '
-	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encodedValid, mutatedInventory); !errors.Is(err, ErrInvalidArtifactManifest) {
-		t.Fatalf("sidecar drift err=%v", err)
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encodedValid, mutatedInventory, qualification); !errors.Is(err, ErrInvalidArtifactManifest) {
+		t.Fatalf("inventory sidecar drift err=%v", err)
 	}
-	duplicate := []byte(`{"schema_version":3,"schema_version":3}`)
-	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, duplicate, nil); !errors.Is(err, ErrInvalidArtifactManifest) {
+	mutatedQualification := append([]byte(nil), qualification...)
+	mutatedQualification[len(mutatedQualification)-1] = ' '
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encodedValid, inventory, mutatedQualification); !errors.Is(err, ErrInvalidArtifactManifest) {
+		t.Fatalf("qualification sidecar drift err=%v", err)
+	}
+	var invalidQualification artifactImportQualificationSidecar
+	if err := json.Unmarshal(qualification, &invalidQualification); err != nil {
+		t.Fatal(err)
+	}
+	invalidQualification.Results[1].Operation = "arbitrary_operation"
+	invalidQualificationBytes, err := json.Marshal(invalidQualification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidManifest := distributionManifestFixture(t, artifact, "numpy-core")
+	invalidManifest["python_import_qualification"] = distributionImportQualificationRecordFixture(t, invalidQualificationBytes)
+	invalidManifestBytes, err := json.Marshal(invalidManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, invalidManifestBytes, inventory, invalidQualificationBytes); !errors.Is(err, ErrInvalidArtifactManifest) {
+		t.Fatalf("unrecognized qualification operation err=%v", err)
+	}
+	duplicate := []byte(`{"schema_version":4,"schema_version":4}`)
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, duplicate, nil, nil); !errors.Is(err, ErrInvalidArtifactManifest) {
 		t.Fatalf("duplicate err=%v", err)
 	}
 }
@@ -82,22 +113,37 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 func TestVerifyLegacyArtifactIdentityCannotBindProfile(t *testing.T) {
 	artifact := []byte("verified-wasm")
 	manifest := distributionManifestFixture(t, artifact, "base")
-	manifest["schema_version"] = 2
-	delete(manifest, "python_import_inventory")
+	manifest["schema_version"] = 3
+	delete(manifest, "python_import_qualification")
+	inventory := distributionImportInventoryFixture(t, "base")
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, nil)
-	if err != nil || len(identity.ImportRoots) != 0 {
-		t.Fatalf("identity=%+v err=%v", identity, err)
+	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, inventory, nil)
+	if err != nil || len(identity.ImportRoots) == 0 || len(identity.QualifiedImportRoots) != 0 {
+		t.Fatalf("schema-v3 identity=%+v err=%v", identity, err)
 	}
 	profile, err := NewExecutionProfile("base", []string{"json"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := profile.BindVerifiedArtifact(identity); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
-		t.Fatalf("bind err=%v", err)
+		t.Fatalf("schema-v3 bind err=%v", err)
+	}
+
+	manifest["schema_version"] = 2
+	delete(manifest, "python_import_inventory")
+	encoded, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err = VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, nil, nil)
+	if err != nil || len(identity.ImportRoots) != 0 || len(identity.QualifiedImportRoots) != 0 {
+		t.Fatalf("schema-v2 identity=%+v err=%v", identity, err)
+	}
+	if _, err := profile.BindVerifiedArtifact(identity); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
+		t.Fatalf("schema-v2 bind err=%v", err)
 	}
 }
 
@@ -107,11 +153,12 @@ func TestBindExecutionProfileToVerifiedArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	identity := VerifiedArtifactIdentity{
-		ProfileID:      "numpy-core",
-		ArtifactSHA256: "sha256:" + strings.Repeat("1", 64),
-		ManifestSHA256: "sha256:" + strings.Repeat("2", 64),
-		Packages:       []ArtifactPackage{{Name: "cpython", Version: "3.14.0", Status: "core"}, {Name: "numpy", Version: "2.3.0", Status: "selected-core"}},
-		ImportRoots:    []string{"agent_runtime", "json", "numpy", "sys"},
+		ProfileID:            "numpy-core",
+		ArtifactSHA256:       "sha256:" + strings.Repeat("1", 64),
+		ManifestSHA256:       "sha256:" + strings.Repeat("2", 64),
+		Packages:             []ArtifactPackage{{Name: "cpython", Version: "3.14.0", Status: "core"}, {Name: "numpy", Version: "2.3.0", Status: "selected-core"}},
+		ImportRoots:          []string{"agent_runtime", "json", "numpy", "sys"},
+		QualifiedImportRoots: []string{"agent_runtime", "json", "numpy", "sys"},
 	}
 	bound, err := profile.BindVerifiedArtifact(identity)
 	if err != nil {
@@ -120,27 +167,49 @@ func TestBindExecutionProfileToVerifiedArtifact(t *testing.T) {
 	if profile.ArtifactSHA256() != "" || bound.ArtifactSHA256() != identity.ArtifactSHA256 || bound.ManifestSHA256() != identity.ManifestSHA256 {
 		t.Fatalf("original=%q bound=%q/%q", profile.ArtifactSHA256(), bound.ArtifactSHA256(), bound.ManifestSHA256())
 	}
+	if strings.Join(bound.QualifiedImports(), ",") != "agent_runtime,json,numpy,sys" {
+		t.Fatalf("qualified=%v", bound.QualifiedImports())
+	}
 	wrong := identity
 	wrong.ProfileID = "base"
 	if _, err := profile.BindVerifiedArtifact(wrong); !errors.Is(err, ErrExecutionProfileArtifactMismatch) {
 		t.Fatalf("err=%v", err)
 	}
 	missingImport := identity
-	missingImport.ImportRoots = []string{"agent_runtime", "json", "sys"}
+	missingImport.QualifiedImportRoots = []string{"agent_runtime", "json", "sys"}
 	if _, err := profile.BindVerifiedArtifact(missingImport); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
-		t.Fatalf("missing import err=%v", err)
+		t.Fatalf("missing qualified import err=%v", err)
+	}
+	undiscoverable := identity
+	undiscoverable.QualifiedImportRoots = append(undiscoverable.QualifiedImportRoots, "statistics")
+	if _, err := profile.BindVerifiedArtifact(undiscoverable); !errors.Is(err, ErrExecutionProfileArtifactMismatch) {
+		t.Fatalf("undiscoverable qualification err=%v", err)
 	}
 	legacy := identity
-	legacy.ImportRoots = nil
+	legacy.QualifiedImportRoots = nil
 	if _, err := profile.BindVerifiedArtifact(legacy); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
 		t.Fatalf("legacy err=%v", err)
 	}
+}
+
+func distributionImportQualificationRecordFixture(t *testing.T, encoded []byte) map[string]any {
+	t.Helper()
+	var record map[string]any
+	if err := json.Unmarshal(encoded, &record); err != nil {
+		t.Fatal(err)
+	}
+	delete(record, "artifact_profile")
+	digest := sha256.Sum256(encoded)
+	record["filename"] = "import-qualification.json"
+	record["sha256"] = hex.EncodeToString(digest[:])
+	return record
 }
 
 func distributionManifestFixture(t *testing.T, artifact []byte, profile string) map[string]any {
 	t.Helper()
 	artifactSum := sha256.Sum256(artifact)
 	inventorySum := sha256.Sum256(distributionImportInventoryFixture(t, profile))
+	qualificationSum := sha256.Sum256(distributionImportQualificationFixture(t, profile))
 	filename := "agent-python-runtime.wasm"
 	packages := []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}}
 	var extension any
@@ -154,7 +223,7 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 		imports = []any{"agent_runtime", "json", "math", "numpy", "sys"}
 	}
 	return map[string]any{
-		"schema_version":    3,
+		"schema_version":    4,
 		"abi_version":       "v1",
 		"artifact_profile":  profile,
 		"target":            "wasm32-wasip1",
@@ -169,8 +238,30 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 			"probe": "guest-importlib-find-spec-v1", "implementation": "cpython", "python_version": "3.14.0",
 			"discoverable_roots": imports, "failures": []any{},
 		},
+		"python_import_qualification": map[string]any{
+			"schema_version": 1, "filename": "import-qualification.json", "sha256": hex.EncodeToString(qualificationSum[:]),
+			"probe": "guest-import-exec-v1", "implementation": "cpython", "python_version": "3.14.0",
+			"qualified_roots": qualificationRoots(profile), "results": qualificationResults(profile),
+		},
 		"limitations": []any{"bounded"},
 	}
+}
+
+func qualificationRoots(profile string) []string {
+	roots := []string{"agent_runtime", "json", "sys"}
+	if profile == "numpy-core" {
+		roots = []string{"agent_runtime", "json", "numpy", "sys"}
+	}
+	return roots
+}
+
+func qualificationResults(profile string) []any {
+	operations := map[string]string{"agent_runtime": "import", "json": "roundtrip", "numpy": "array_sum", "sys": "version_info"}
+	results := make([]any, 0, len(qualificationRoots(profile)))
+	for _, root := range qualificationRoots(profile) {
+		results = append(results, map[string]any{"name": root, "operation": operations[root], "status": "qualified", "error": ""})
+	}
+	return results
 }
 
 func distributionImportInventoryFixture(t *testing.T, profile string) []byte {
@@ -182,6 +273,19 @@ func distributionImportInventoryFixture(t *testing.T, profile string) []byte {
 	encoded, err := json.Marshal(map[string]any{
 		"schema_version": 1, "artifact_profile": profile, "probe": "guest-importlib-find-spec-v1",
 		"implementation": "cpython", "python_version": "3.14.0", "discoverable_roots": roots, "failures": []any{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
+func distributionImportQualificationFixture(t *testing.T, profile string) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(map[string]any{
+		"schema_version": 1, "artifact_profile": profile, "probe": "guest-import-exec-v1",
+		"implementation": "cpython", "python_version": "3.14.0", "qualified_roots": qualificationRoots(profile),
+		"results": qualificationResults(profile),
 	})
 	if err != nil {
 		t.Fatal(err)

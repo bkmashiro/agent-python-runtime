@@ -19,7 +19,7 @@ func writePinnedFixture(t *testing.T) (string, string, []byte) {
 	}
 	sum := sha256.Sum256(wasm)
 	manifestDocument := map[string]any{
-		"schema_version": 3, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
+		"schema_version": 4, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
 		"artifact": map[string]any{"filename": filepath.Base(artifact), "sha256": hex.EncodeToString(sum[:]), "size": len(wasm)},
 		"build": map[string]any{
 			"repository_commit": "7f3070cc155373791010f4de53e9e2b9f7ae3060", "source_date_epoch": "1",
@@ -39,6 +39,22 @@ func writePinnedFixture(t *testing.T) (string, string, []byte) {
 		"schema_version": 1, "filename": "import-inventory.json", "sha256": hex.EncodeToString(inventorySum[:]),
 		"probe": "guest-importlib-find-spec-v1", "implementation": "cpython", "python_version": "3.14.0",
 		"discoverable_roots": []any{"agent_runtime", "json", "sys"}, "failures": []any{},
+	}
+	qualification := []byte(`{"schema_version":1,"artifact_profile":"base","probe":"guest-import-exec-v1","implementation":"cpython","python_version":"3.14.0","qualified_roots":["agent_runtime","json","sys"],"results":[{"name":"agent_runtime","operation":"import","status":"qualified","error":""},{"name":"json","operation":"roundtrip","status":"qualified","error":""},{"name":"sys","operation":"version_info","status":"qualified","error":""}]}`)
+	qualificationPath := filepath.Join(root, "import-qualification.json")
+	if err := os.WriteFile(qualificationPath, qualification, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	qualificationSum := sha256.Sum256(qualification)
+	manifestDocument["python_import_qualification"] = map[string]any{
+		"schema_version": 1, "filename": "import-qualification.json", "sha256": hex.EncodeToString(qualificationSum[:]),
+		"probe": "guest-import-exec-v1", "implementation": "cpython", "python_version": "3.14.0",
+		"qualified_roots": []any{"agent_runtime", "json", "sys"},
+		"results": []any{
+			map[string]any{"name": "agent_runtime", "operation": "import", "status": "qualified", "error": ""},
+			map[string]any{"name": "json", "operation": "roundtrip", "status": "qualified", "error": ""},
+			map[string]any{"name": "sys", "operation": "version_info", "status": "qualified", "error": ""},
+		},
 	}
 	manifestBytes, err := json.Marshal(manifestDocument)
 	if err != nil {
@@ -60,7 +76,8 @@ func TestLoadPinnedArtifactVerifiesManifestIdentity(t *testing.T) {
 	if string(got) != string(want) || provenance.ArtifactSHA256 != digestBytes(want) ||
 		provenance.ManifestSHA256 == "" || provenance.RepositoryCommit != "7f3070cc155373791010f4de53e9e2b9f7ae3060" ||
 		provenance.ArtifactProfile != "base" || len(provenance.Packages) != 1 || provenance.Packages[0].Name != "cpython" ||
-		len(provenance.ImportRoots) != 3 || provenance.ImportRoots[1] != "json" {
+		len(provenance.ImportRoots) != 3 || provenance.ImportRoots[1] != "json" ||
+		len(provenance.QualifiedImportRoots) != 3 || provenance.QualifiedImportRoots[1] != "json" {
 		t.Fatalf("unexpected artifact/provenance: %q %#v", got, provenance)
 	}
 }
@@ -69,6 +86,13 @@ func TestLoadPinnedArtifactRejectsDriftAndUnsafePaths(t *testing.T) {
 	for name, mutate := range map[string]func(*testing.T, string, string) (string, string){
 		"artifact drift": func(t *testing.T, artifact, manifest string) (string, string) {
 			if err := os.WriteFile(artifact, []byte("\x00asm\x01\x00\x00\x00changed"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return artifact, manifest
+		},
+		"qualification drift": func(t *testing.T, artifact, manifest string) (string, string) {
+			qualification := filepath.Join(filepath.Dir(manifest), "import-qualification.json")
+			if err := os.WriteFile(qualification, []byte("{}"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			return artifact, manifest

@@ -127,6 +127,53 @@ class ArtifactVerifierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.verifier.verify(self.artifact, manifest, None, inventory)
 
+    def test_schema_v4_binds_guest_import_qualification(self):
+        tool = self.verifier.IMPORT_QUALIFICATION
+        probes = tool.probe_specs("base")
+        roots = [probe["name"] for probe in probes]
+        inventory_payload = {
+            "schema_version": 1,
+            "artifact_profile": "base",
+            "probe": "guest-importlib-find-spec-v1",
+            "implementation": "cpython",
+            "python_version": "3.14.test",
+            "discoverable_roots": roots,
+            "failures": [],
+        }
+        inventory = pathlib.Path(self.directory.name) / "import-inventory.json"
+        inventory.write_text(json.dumps(inventory_payload, sort_keys=True))
+        qualification_payload = {
+            "schema_version": 1,
+            "artifact_profile": "base",
+            "probe": "guest-import-exec-v1",
+            "implementation": "cpython",
+            "python_version": "3.14.test",
+            "qualified_roots": roots,
+            "results": [
+                {"name": probe["name"], "operation": probe["operation"], "status": "qualified", "error": ""}
+                for probe in probes
+            ],
+        }
+        qualification = pathlib.Path(self.directory.name) / "import-qualification.json"
+        qualification.write_text(json.dumps(qualification_payload, sort_keys=True))
+        manifest = copy.deepcopy(self.manifest)
+        manifest["schema_version"] = 4
+        manifest["python_import_inventory"] = {
+            **{key: value for key, value in inventory_payload.items() if key != "artifact_profile"},
+            "filename": inventory.name,
+            "sha256": self.verifier.sha256(inventory),
+        }
+        manifest["python_import_qualification"] = {
+            **{key: value for key, value in qualification_payload.items() if key != "artifact_profile"},
+            "filename": qualification.name,
+            "sha256": self.verifier.sha256(qualification),
+        }
+        self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
+
+        manifest["python_import_qualification"]["qualified_roots"] = ["agent_runtime", "json", "sys"]
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
+
     def test_numpy_core_requires_bound_core_extension_selection(self):
         numpy_artifact = pathlib.Path(self.directory.name) / "agent-python-runtime-numpy-core.wasm"
         numpy_artifact.write_bytes(self.artifact.read_bytes())

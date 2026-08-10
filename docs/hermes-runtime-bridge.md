@@ -16,8 +16,8 @@ The initial bridge is intentionally local and narrow:
 - Unix-domain socket only; no TCP listener;
 - socket parent must already exist, be owned by the current user, and have mode `0700`;
 - socket mode is `0600`, and an existing path is never replaced automatically;
-- artifact and distribution manifest are clean absolute regular-file paths; schema v3 resolves only the canonical sibling `import-inventory.json` through the same pinned regular-file gate;
-- manifest ABI, target, filename, size, source revision, artifact/manifest/inventory SHA-256, profile/package identity, and embedded-vs-sidecar inventory equality are verified before the socket becomes ready;
+- artifact and distribution manifest are clean absolute regular-file paths; schema v4 resolves only canonical sibling `import-inventory.json` and `import-qualification.json` files through the same pinned regular-file gate;
+- manifest ABI, target, filename, size, source revision, artifact/manifest/sidecar SHA-256, profile/package identity, embedded-vs-sidecar equality, and qualified-subset-of-discoverable relation are verified before the socket becomes ready;
 - no Host capability broker is configured, so Guest network/tool calls fail closed;
 - one compiled runtime, one single-use prepared slot, and one concurrent invocation;
 - per-invocation memory and execution-time bounds are Host flags;
@@ -44,7 +44,7 @@ go run ./cmd/apyrun-hermesd \
   -profile-imports json,math,statistics
 ```
 
-The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, verified `artifact_profile`, `profile_admission`, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations. `-profile-imports` is optional Host policy; when present, every root must be present in the schema-v3 target-Guest discoverable inventory before the bridge binds policy to the verified artifact identity and constructs the Runner. Roots are canonical, unique and comma-separated. Without it, `profile_admission:false` is reported and compatibility manifests fail closed because no Host profile is bound. Schema-v2 bundles cannot enable profile admission.
+The bridge writes one readiness JSON object after artifact verification, trace-store opening, compilation, preparation, and private socket creation. Important fields include exact artifact/manifest digests, verified `artifact_profile`, `profile_admission`, Guest repository revision, active strategy, capacity, resource bounds, and explicit `network_capability:false` / `provider_mode:"none"` declarations. `-profile-imports` is optional Host policy; when present, every root must be present in the schema-v4 target-Guest qualified catalog, and every qualified root must remain present in the discoverable inventory, before the bridge binds policy and constructs the Runner. Roots are canonical, unique and comma-separated. Without it, `profile_admission:false` is reported and compatibility manifests fail closed because no Host profile is bound. Schema-v2/v3 bundles cannot enable profile admission.
 
 The process owns only the supplied socket and trace paths. Shutdown closes the runtime/store and removes its own socket. It does not remove or replace stale paths from an earlier process.
 

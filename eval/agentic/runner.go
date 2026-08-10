@@ -934,7 +934,7 @@ func buildConditionSurfaceForTreatment(runtime *ToolRuntime, condition Condition
 		mapping["run_python"] = "run_python"
 		pythonDescription := "Execute one bounded Python workflow in the CPython/WASI Guest. Import functions from host_tools; calls run in source order. A fresh Guest does not reset Host-tool state, including the current working directory; do not repeat setup already completed by earlier turns. Use returned JSON values in later calls. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Assign a JSON object to result. Available SDK: " + sdk
 		if treatment.UsesPreboundCompactPython() {
-			pythonDescription = "Execute one bounded Python workflow in the CPython/WASI Guest. Authorized Host functions in Available SDK are prebound; call them directly in source order and do not import host_tools. Every Available SDK function is keyword-only: pass every argument by its exact parameter name and never use positional arguments. A fresh Guest does not reset Host-tool state, including the current working directory; do not repeat setup already completed by earlier turns. Use returned JSON values only when later calls depend on them. result defaults to {}; assign it only when workflow output is required. Emit bare calls when return values are unused. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Available SDK: " + sdk
+			pythonDescription = "Execute one bounded Python workflow in the CPython/WASI Guest. Authorized Host functions in Available SDK are prebound; call them directly in source order and do not import host_tools. Every Available SDK function is keyword-only: pass every argument by its exact parameter name and never use positional arguments. Respect every parameter constraint in Available SDK; file names are local to the current directory, so use cd rather than embedding a path. To create a missing output file, call touch before echo; echo does not create files. A fresh Guest does not reset Host-tool state, including the current working directory; do not repeat setup already completed by earlier turns. Use returned JSON values only when later calls depend on them. result defaults to {}; assign it only when workflow output is required. Emit bare calls when return values are unused. Only call Host tools required by the user; do not add discovery or verification calls unless required to compute a later argument. Available SDK: " + sdk
 			if treatment.AllowsAnyJSONPythonResult() {
 				pythonDescription += " An explicit result may be any JSON value."
 			}
@@ -949,7 +949,7 @@ func buildConditionSurfaceForTreatment(runtime *ToolRuntime, condition Condition
 			"strict": false,
 		})
 		if treatment.UsesPreboundCompactPython() {
-			prompt += " Python runs in an isolated WASI Guest: the Host filesystem is not available through open, pathlib, os, subprocess, or shell commands. Authorized Available SDK functions are prebound; call them directly and do not import host_tools. Every Available SDK function is keyword-only: pass every argument by its exact parameter name and never use positional arguments. result defaults to {}; assign it only when workflow output is required. Emit executable code only: no prose or comments, no unused return bindings, and bare calls when return values are unused. Use loops only when they preserve exact call order and arguments. Use returned JSON values only for dependent arguments."
+			prompt += " Python runs in an isolated WASI Guest: the Host filesystem is not available through open, pathlib, os, subprocess, or shell commands. Authorized Available SDK functions are prebound; call them directly and do not import host_tools. Every Available SDK function is keyword-only: pass every argument by its exact parameter name and never use positional arguments. Respect every parameter constraint in Available SDK; file names are local to the current directory, so use cd rather than embedding a path. To create a missing output file, call touch before echo; echo does not create files. result defaults to {}; assign it only when workflow output is required. Emit executable code only: no prose or comments, no unused return bindings, and bare calls when return values are unused. Use loops only when they preserve exact call order and arguments. Use returned JSON values only for dependent arguments."
 			if treatment.AllowsAnyJSONPythonResult() {
 				prompt += " An explicit result may be any JSON value."
 			}
@@ -1098,8 +1098,7 @@ func compactParameterValueHint(runtime *ToolRuntime, toolID, parameterName strin
 		}
 		description, _ := property["description"].(string)
 		description = strings.Join(strings.Fields(description), " ")
-		if description == "" || len([]byte(description)) > 256 ||
-			(strings.Count(description, "'") < 2 && !strings.Contains(description, "[Enum]")) {
+		if description == "" || len([]byte(description)) > 192 {
 			return ""
 		}
 		return description

@@ -5,37 +5,37 @@
       "archetype": "direct_favored",
       "id": "rd-001",
       "path": "tasks/dev/rd-001.json",
-      "sha256": "sha256:510fb03685a805019ea31848f1941070ceab2af85f051c0525c0edb4571b4aad"
+      "sha256": "sha256:91253bd89e2449312a513b96c1cb3a39b154ce0debea9a4c38f4c622d204908f"
     },
     {
       "archetype": "direct_favored",
       "id": "rd-002",
       "path": "tasks/dev/rd-002.json",
-      "sha256": "sha256:c80f2bf8f4679a32c0433b0f6fb427926b58e0ce9d6aa598abd151b8b37e27a0"
+      "sha256": "sha256:4c292328a55687de5c09383390e7bbf2df08a2de1c507989d41fe72e12e9d086"
     },
     {
       "archetype": "python_favored",
       "id": "rd-003",
       "path": "tasks/dev/rd-003.json",
-      "sha256": "sha256:a7182ef12802b98f0b145ffafe08b2a880d14aef488f2fec040e8271b8d82996"
+      "sha256": "sha256:fde9c62355fbf1a1583565fc4ae460258ad7c17efb24a59145f02cde8c50c79e"
     },
     {
       "archetype": "python_favored",
       "id": "rd-004",
       "path": "tasks/dev/rd-004.json",
-      "sha256": "sha256:e110f5a68f1926a0a17b8422f03491eeb9f134218fbe1e1d5d9acb6b950649d7"
+      "sha256": "sha256:4c4efbb73336327445a125a2dc67607923c34fc8c6cd22df2c0bd48c3e18b5ec"
     },
     {
       "archetype": "boundary",
       "id": "rd-005",
       "path": "tasks/dev/rd-005.json",
-      "sha256": "sha256:5be60bde84945a6c5e47c76fb608eb9c3cfce79c9266983829e177d0aca7ddef"
+      "sha256": "sha256:1facffa1eacd02040a5dc00af6c0b4997378ff8e71282a6cac438c64ee308900"
     },
     {
       "archetype": "boundary",
       "id": "rd-006",
       "path": "tasks/dev/rd-006.json",
-      "sha256": "sha256:d97665ef1ce14a68357dd79f928ec549337d5ac2e5ea8f6c3c3c71144b56b9d9"
+      "sha256": "sha256:74155beacb268885b9a71bf684cc1b96a2b0791084415d7f873b106144198615"
     }
   ],
   "version": "routing-diagnostic-pack/v1"

@@ -14,7 +14,7 @@ go build -o /tmp/apyrun ./cmd/apyrun
 
 `-artifact` is required. `-config` is optional; omitting it uses bounded defaults and grants no capability.
 
-A successful invocation writes exactly one JSON response and a newline to stdout. Diagnostics go to stderr. Exit status `2` means invocation, config, artifact, or RunRequest input was rejected; exit status `1` means initialization, execution, bounds enforcement, identity generation, or output failed. Exit status `3` writes a schema-validated Host outcome to stdout and means a valid explicit `requirements` declaration cannot run in Pysolate and should be considered for upper-layer escalation.
+A successful invocation writes exactly one JSON response and a newline to stdout. Diagnostics go to stderr. Exit status `2` means invocation, config, artifact, or RunRequest input was rejected; exit status `1` means initialization, execution, bounds enforcement, identity generation, or output failed. Exit status `3` writes a schema-validated Host outcome to stdout and means a valid explicit `requirements` declaration cannot enter this Pysolate profile; the caller must make a different execution-placement decision before starting work.
 
 ## Authority boundary
 

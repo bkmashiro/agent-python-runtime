@@ -490,9 +490,9 @@ python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   "${MANIFEST_EXTENSION_ARGS[@]}" \
   --output "${DIST_DIR}/manifest.json"
 
-if [[ -n "${PREINITIALIZE_SPIKE_INPUT_DIR}" ]]; then
-  cp "${DIST_DIR}/manifest.json" "${PREINITIALIZE_SPIKE_INPUT_DIR}/manifest.json"
-  cp "${DIST_DIR}/import-inventory.json" "${PREINITIALIZE_SPIKE_INPUT_DIR}/import-inventory.json"
+if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
+  cp "${DIST_DIR}/manifest.json" "${PREINITIALIZATION_INPUT_DIR}/manifest.json"
+  cp "${DIST_DIR}/import-inventory.json" "${PREINITIALIZATION_INPUT_DIR}/import-inventory.json"
 fi
 
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \

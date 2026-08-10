@@ -459,7 +459,7 @@ func parseCodexCLIOutputItem(raw json.RawMessage, callIndex int) (json.RawMessag
 			"status":    "completed",
 			"call_id":   fmt.Sprintf("call_%d", callIndex),
 			"name":      name,
-			"arguments": arguments,
+			"arguments": string(arguments),
 		}
 		encoded, err := json.Marshal(message)
 		if err != nil {

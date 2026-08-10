@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-python-runtime.invalid/verification/workspace-capsule-report-v2.schema.json",
+  "title": "Workspace Capsule Verification Report v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "artifact_sha256", "engine", "checks"],
+  "properties": {
+    "schema_version": {
+      "const": "workspace-capsule-verification/v2"
+    },
+    "status": {
+      "enum": ["verified", "failed"]
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "reset_mode", "requested_strategy", "active_strategy", "fallback"],
+      "properties": {
+        "backend": {"type": "string"},
+        "reset_mode": {"type": "string"},
+        "requested_strategy": {"type": "string"},
+        "active_strategy": {"type": "string"},
+        "fallback": {"type": "boolean"},
+        "fallback_reason": {"type": "string", "minLength": 1, "maxLength": 1024}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "detail"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,127}$"
+          },
+          "status": {
+            "enum": ["pass", "fail"]
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      }
+    },
+    "stress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested_iterations", "completed_iterations"],
+      "properties": {
+        "requested_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "completed_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "open_fds_before": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open_fds_after": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open_fd_delta": {
+          "type": "integer"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["open_fds_before", "open_fds_after", "open_fd_delta"]
+        },
+        {
+          "not": {
+            "anyOf": [
+              {"required": ["open_fds_before"]},
+              {"required": ["open_fds_after"]},
+              {"required": ["open_fd_delta"]}
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

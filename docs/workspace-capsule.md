@@ -154,6 +154,8 @@ The timeout and cancellation probes use separate workspace-bound Runners over th
 
 `-stress-iterations N` accepts `0..1000`. A nonzero value appends four portable checks and a `stress` summary: all requested Runs completed, the workspace counter advanced exactly once per instance, Python globals stayed fresh, and `/tmp` stayed fresh. On Darwin and Linux it also records open-FD before/after/delta and adds a fifth check requiring growth of at most two descriptors; unsupported platforms omit those fields and the check instead of reporting an untested PASS. Stress still uses the same exclusive workspace and the final cleanup/lease oracle.
 
+The strict report schema lives at `verification/workspacecapsule/report-v2.schema.json` and is embedded into the package. The CLI validates every encoded report against that schema before writing it; unknown fields, malformed stress/FD groups, and schema-version drift fail closed.
+
 WASI snapshot-preview1 exposes object type but not POSIX permission bits in filestat. Therefore the live verifier checks regular-file/directory type, while Host-side `0644`/`0755` canonicalization remains covered by `runtime/workspace` tests; the report does not invent a Guest-visible permission claim.
 
 A `verified` report means all checks passed on that artifact and requested strategy. It is evidence for this bounded lifecycle contract, not a claim about untested artifacts, Host restart persistence, rollback, arbitrary native execution, or external side effects. The command exits `0` for `verified`, `1` for a completed report containing failed checks, and `2` for verifier/setup/protocol failure.

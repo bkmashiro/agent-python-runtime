@@ -64,6 +64,9 @@ func run(arguments []string) int {
 	)
 	encoded, encodeErr := json.MarshalIndent(report, "", "  ")
 	if encodeErr == nil {
+		encodeErr = workspacecapsule.ValidateReportJSON(encoded)
+	}
+	if encodeErr == nil {
 		encoded = append(encoded, '\n')
 		encodeErr = writeReport(*outputPath, encoded)
 	}

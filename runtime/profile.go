@@ -10,6 +10,7 @@ import (
 const (
 	maxDeclaredImports  = 64
 	maxAvailableImports = 1024
+	maxImportRootLength = 64
 )
 
 var (
@@ -291,7 +292,7 @@ func validProfileID(id string) bool {
 }
 
 func validImportName(module string) bool {
-	if module == "" || len(module) > 128 || strings.HasPrefix(module, ".") || strings.HasSuffix(module, ".") {
+	if module == "" || len(module) > maxImportRootLength || strings.HasPrefix(module, ".") || strings.HasSuffix(module, ".") {
 		return false
 	}
 	for _, segment := range strings.Split(module, ".") {

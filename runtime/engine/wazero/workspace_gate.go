@@ -16,16 +16,24 @@ import (
 // immediately after exclusive checkout for a Run.
 type workspaceGate struct {
 	experimentalsys.UnimplementedFS
-	target experimentalsys.FS
+	target atomic.Pointer[workspaceTarget]
 	active atomic.Bool
 }
 
+type workspaceTarget struct {
+	filesystem experimentalsys.FS
+}
+
 func newWorkspaceGate(target experimentalsys.FS) *workspaceGate {
-	return &workspaceGate{target: target}
+	gate := &workspaceGate{}
+	if target != nil {
+		gate.target.Store(&workspaceTarget{filesystem: target})
+	}
+	return gate
 }
 
 func (gate *workspaceGate) activate() error {
-	if gate == nil || gate.target == nil {
+	if gate == nil || gate.filesystem() == nil {
 		return errors.New("workspace gate is unavailable")
 	}
 	if !gate.active.CompareAndSwap(false, true) {
@@ -34,8 +42,29 @@ func (gate *workspaceGate) activate() error {
 	return nil
 }
 
+func (gate *workspaceGate) attachAndActivate(filesystem experimentalsys.FS) error {
+	if gate == nil || filesystem == nil {
+		return errors.New("workspace gate target is unavailable")
+	}
+	if !gate.target.CompareAndSwap(nil, &workspaceTarget{filesystem: filesystem}) {
+		return errors.New("workspace gate target was already attached")
+	}
+	return gate.activate()
+}
+
+func (gate *workspaceGate) filesystem() experimentalsys.FS {
+	if gate == nil {
+		return nil
+	}
+	target := gate.target.Load()
+	if target == nil {
+		return nil
+	}
+	return target.filesystem
+}
+
 func (gate *workspaceGate) allowed() bool {
-	return gate != nil && gate.target != nil && gate.active.Load()
+	return gate != nil && gate.filesystem() != nil && gate.active.Load()
 }
 
 func (gate *workspaceGate) OpenFile(path string, flag experimentalsys.Oflag, perm fs.FileMode) (experimentalsys.File, experimentalsys.Errno) {
@@ -45,7 +74,7 @@ func (gate *workspaceGate) OpenFile(path string, flag experimentalsys.Oflag, per
 		}
 		return nil, experimentalsys.EACCES
 	}
-	return gate.target.OpenFile(path, flag, perm)
+	return gate.filesystem().OpenFile(path, flag, perm)
 }
 
 func workspaceRootReadOnly(flag experimentalsys.Oflag) bool {
@@ -56,67 +85,67 @@ func (gate *workspaceGate) Lstat(path string) (wazerosys.Stat_t, experimentalsys
 	if !gate.allowed() {
 		return wazerosys.Stat_t{}, experimentalsys.EACCES
 	}
-	return gate.target.Lstat(path)
+	return gate.filesystem().Lstat(path)
 }
 func (gate *workspaceGate) Stat(path string) (wazerosys.Stat_t, experimentalsys.Errno) {
 	if !gate.allowed() {
 		return wazerosys.Stat_t{}, experimentalsys.EACCES
 	}
-	return gate.target.Stat(path)
+	return gate.filesystem().Stat(path)
 }
 func (gate *workspaceGate) Mkdir(path string, perm fs.FileMode) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Mkdir(path, perm)
+	return gate.filesystem().Mkdir(path, perm)
 }
 func (gate *workspaceGate) Chmod(path string, perm fs.FileMode) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Chmod(path, perm)
+	return gate.filesystem().Chmod(path, perm)
 }
 func (gate *workspaceGate) Rename(from, to string) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Rename(from, to)
+	return gate.filesystem().Rename(from, to)
 }
 func (gate *workspaceGate) Rmdir(path string) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Rmdir(path)
+	return gate.filesystem().Rmdir(path)
 }
 func (gate *workspaceGate) Unlink(path string) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Unlink(path)
+	return gate.filesystem().Unlink(path)
 }
 func (gate *workspaceGate) Link(oldName, newName string) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Link(oldName, newName)
+	return gate.filesystem().Link(oldName, newName)
 }
 func (gate *workspaceGate) Symlink(oldName, link string) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Symlink(oldName, link)
+	return gate.filesystem().Symlink(oldName, link)
 }
 func (gate *workspaceGate) Readlink(path string) (string, experimentalsys.Errno) {
 	if !gate.allowed() {
 		return "", experimentalsys.EACCES
 	}
-	return gate.target.Readlink(path)
+	return gate.filesystem().Readlink(path)
 }
 func (gate *workspaceGate) Utimens(path string, atim, mtim int64) experimentalsys.Errno {
 	if !gate.allowed() {
 		return experimentalsys.EACCES
 	}
-	return gate.target.Utimens(path, atim, mtim)
+	return gate.filesystem().Utimens(path, atim, mtim)
 }
 
 // workspacePreopenFile is a virtual directory before activation. It opens the
@@ -143,7 +172,7 @@ func (file *workspacePreopenFile) delegate() (experimentalsys.File, experimental
 		return nil, experimentalsys.EBADF
 	}
 	if file.file == nil {
-		opened, errno := file.gate.target.OpenFile(".", file.flag, file.perm)
+		opened, errno := file.gate.filesystem().OpenFile(".", file.flag, file.perm)
 		if errno != 0 {
 			return nil, errno
 		}

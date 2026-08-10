@@ -41,6 +41,7 @@ from pathlib import Path
 path = Path("/workspace/state/count.txt")
 count = int(path.read_text()) + 1
 path.write_text(str(count))
+Path("/tmp/run-only.txt").write_text("first")
 heap_only = 99
 result = {"count": count}
 `, map[string]any{})
@@ -51,16 +52,17 @@ result = {"count": count}
 	second := run(t, instance, "workspace-2", `
 from pathlib import Path
 count = int(Path("/workspace/state/count.txt").read_text())
-result = {"count": count, "heap_continued": "heap_only" in globals()}
+result = {"count": count, "heap_continued": "heap_only" in globals(), "tmp_continued": Path("/tmp/run-only.txt").exists()}
 `, map[string]any{})
 	secondResult := second.Result.(map[string]any)
-	if second.Status != "ok" || secondResult["count"] != float64(1) || secondResult["heap_continued"] != false {
+	if second.Status != "ok" || secondResult["count"] != float64(1) || secondResult["heap_continued"] != false || secondResult["tmp_continued"] != false {
 		t.Fatalf("second workspace Run: %#v", second)
 	}
 
 	failed := run(t, instance, "workspace-failed", `
 from pathlib import Path
 Path("/workspace/state/count.txt").write_text("2")
+Path("/tmp/failed-only.txt").write_text("failed")
 raise RuntimeError("intentional")
 `, map[string]any{})
 	if failed.Status != "error" {
@@ -68,9 +70,10 @@ raise RuntimeError("intentional")
 	}
 	last := run(t, instance, "workspace-after-failure", `
 from pathlib import Path
-result = int(Path("/workspace/state/count.txt").read_text())
+result = {"count": int(Path("/workspace/state/count.txt").read_text()), "tmp_continued": Path("/tmp/failed-only.txt").exists()}
 `, map[string]any{})
-	if last.Status != "ok" || last.Result != float64(2) {
+	lastResult := last.Result.(map[string]any)
+	if last.Status != "ok" || lastResult["count"] != float64(2) || lastResult["tmp_continued"] != false {
 		t.Fatalf("completed pre-failure write did not persist: %#v", last)
 	}
 }

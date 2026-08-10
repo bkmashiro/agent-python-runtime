@@ -29,7 +29,18 @@ type preparedInstance struct {
 	memoryBytes     uint64
 	fromPool        bool
 	footprintSource preparedFootprintSource
-	workspaceGate   *workspaceGate
+	mounts          *moduleMounts
+}
+
+func (instance *preparedInstance) close() error {
+	if instance == nil {
+		return nil
+	}
+	var moduleErr error
+	if instance.module != nil {
+		moduleErr = instance.module.Close(context.Background())
+	}
+	return errors.Join(moduleErr, instance.mounts.close())
 }
 
 type preparedRefillRequest struct {
@@ -161,7 +172,7 @@ func publishPreparedInstance(pool *preparedPool, instance *preparedInstance) err
 	closed := pool.closed
 	pool.mutex.Unlock()
 	if closed {
-		_ = instance.module.Close(context.Background())
+		_ = instance.close()
 		return errors.New("prepared pool is closed")
 	}
 	instance.fromPool = true
@@ -171,24 +182,24 @@ func publishPreparedInstance(pool *preparedPool, instance *preparedInstance) err
 		return nil
 	case <-pool.context.Done():
 		subtractRetained(pool, instance.memoryBytes)
-		_ = instance.module.Close(context.Background())
+		_ = instance.close()
 		return pool.context.Err()
 	}
 }
 
 func (engine *Engine) closeServedInstance(instance *preparedInstance) error {
-	if instance == nil || instance.module == nil {
+	if instance == nil {
 		return nil
 	}
 	pool := engine.pool
 	if instance.fromPool && pool != nil {
 		pool.retiring.Add(1)
-		err := instance.module.Close(context.Background())
+		err := instance.close()
 		pool.leased.Add(^uint32(0))
 		pool.retiring.Add(^uint32(0))
 		return err
 	}
-	return instance.module.Close(context.Background())
+	return instance.close()
 }
 
 // GrowPreparedCapacity admits additional never-served slots into the existing
@@ -292,7 +303,7 @@ func (engine *Engine) prepareSingleUseInstance(parent context.Context) (*prepare
 		return nil, err
 	}
 	if err := engine.warmPreparedInstance(prepareContext, instance, "pool_prepare_"); err != nil {
-		_ = instance.module.Close(context.Background())
+		_ = instance.close()
 		return nil, err
 	}
 	return instance, nil
@@ -322,7 +333,7 @@ func (engine *Engine) warmPreparedInstance(ctx context.Context, instance *prepar
 func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (*preparedInstance, error) {
 	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
 	guestStderr := &bytes.Buffer{}
-	moduleConfig, workspaceGate, err := engine.moduleConfig(guestStderr)
+	moduleConfig, mounts, err := engine.moduleConfig(guestStderr)
 	if err != nil {
 		return nil, err
 	}
@@ -334,12 +345,14 @@ func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (
 	)
 	observe(engine.observer, prefix+"instantiate_guest", instantiateStarted, err)
 	if err != nil {
+		_ = mounts.close()
 		return nil, fmt.Errorf("instantiate guest: %w", err)
 	}
+	instance := &preparedInstance{module: module, stderr: guestStderr, mounts: mounts}
 	failed := true
 	defer func() {
 		if failed {
-			_ = module.Close(context.Background())
+			_ = instance.close()
 		}
 	}()
 
@@ -362,8 +375,9 @@ func (engine *Engine) newInitializedModule(ctx context.Context, prefix string) (
 		return nil, err
 	}
 	guestStderr.Reset()
+	instance.memoryBytes = uint64(module.Memory().Size())
 	failed = false
-	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(module.Memory().Size()), workspaceGate: workspaceGate}, nil
+	return instance, nil
 }
 
 func (engine *Engine) schedulePreparedDeficit(result chan<- error) uint32 {
@@ -542,7 +556,7 @@ func (engine *Engine) closePreparedPool() {
 		select {
 		case instance := <-pool.ready:
 			subtractRetained(pool, instance.memoryBytes)
-			_ = instance.module.Close(context.Background())
+			_ = instance.close()
 		default:
 			pool.capacity.Store(0)
 			return

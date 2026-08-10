@@ -47,6 +47,11 @@ func DefaultLimits() Limits {
 	return Limits{MaxFiles: 4096, MaxBytes: 256 << 20, MaxFileBytes: 64 << 20, MaxDepth: 32}
 }
 
+// DefaultTemporaryLimits returns stricter bounds for per-instance scratch data.
+func DefaultTemporaryLimits() Limits {
+	return Limits{MaxFiles: 1024, MaxBytes: 64 << 20, MaxFileBytes: 16 << 20, MaxDepth: 16}
+}
+
 func (limits Limits) validate() error {
 	if limits.MaxFiles == 0 || limits.MaxBytes == 0 || limits.MaxFileBytes == 0 || limits.MaxDepth == 0 || limits.MaxFileBytes > limits.MaxBytes {
 		return fmt.Errorf("%w: invalid limits", ErrInvalidWorkspace)
@@ -210,7 +215,7 @@ func (manager *Manager) Acquire(ref Ref, owner string) (*Lease, error) {
 		return nil, err
 	}
 	item.owner = owner
-	return &Lease{manager: manager, ref: ref, owner: owner, filesystem: filesystem}, nil
+	return &Lease{manager: manager, ref: ref, owner: owner, filesystem: filesystem, temporaries: make(map[*Temporary]struct{})}, nil
 }
 
 func validRef(ref Ref) bool {
@@ -290,12 +295,13 @@ func (manager *Manager) Close() error {
 
 // Lease is an exclusive, revocable attachment to one workspace root.
 type Lease struct {
-	mu         sync.Mutex
-	manager    *Manager
-	ref        Ref
-	owner      string
-	filesystem *rootedFS
-	released   bool
+	mu          sync.Mutex
+	manager     *Manager
+	ref         Ref
+	owner       string
+	filesystem  *rootedFS
+	temporaries map[*Temporary]struct{}
+	released    bool
 }
 
 // Ref returns the opaque workspace identity.
@@ -314,6 +320,84 @@ func (lease *Lease) FS() experimentalsys.FS {
 	return lease.filesystem
 }
 
+// NewTemporary creates a private scratch filesystem tied to this lease. It has
+// no Ref and must be closed before the lease can be released.
+func (lease *Lease) NewTemporary() (*Temporary, error) {
+	if lease == nil {
+		return nil, ErrWorkspaceClosed
+	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	if lease.released {
+		return nil, ErrWorkspaceClosed
+	}
+	manager := lease.manager
+	manager.mu.Lock()
+	if manager.closed {
+		manager.mu.Unlock()
+		return nil, ErrWorkspaceClosed
+	}
+	item, exists := manager.entries[lease.ref]
+	if !exists || item.owner != lease.owner {
+		manager.mu.Unlock()
+		return nil, errors.New("workspace lease identity changed")
+	}
+	root, err := os.MkdirTemp(manager.base, "run-tmp-")
+	manager.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("create temporary workspace: %w", err)
+	}
+	limits := DefaultTemporaryLimits()
+	usage := treeUsage{entries: make(map[string]fs.FileMode), sizes: make(map[string]uint64)}
+	filesystem, err := newRootedFS(root, limits, usage)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return nil, fmt.Errorf("open temporary workspace: %w", err)
+	}
+	temporary := &Temporary{lease: lease, root: root, filesystem: filesystem}
+	lease.temporaries[temporary] = struct{}{}
+	return temporary, nil
+}
+
+// Temporary is a per-instance scratch filesystem with no continuation identity.
+type Temporary struct {
+	mu         sync.Mutex
+	lease      *Lease
+	root       string
+	filesystem *rootedFS
+	closed     bool
+}
+
+// FS returns the rooted scratch filesystem without exposing its Host path.
+func (temporary *Temporary) FS() experimentalsys.FS {
+	if temporary == nil {
+		return nil
+	}
+	return temporary.filesystem
+}
+
+// Close closes all rooted access and removes the scratch tree.
+func (temporary *Temporary) Close() error {
+	if temporary == nil {
+		return nil
+	}
+	temporary.mu.Lock()
+	defer temporary.mu.Unlock()
+	if temporary.closed {
+		return nil
+	}
+	closeErr := temporary.filesystem.close()
+	removeErr := os.RemoveAll(temporary.root)
+	if err := errors.Join(closeErr, removeErr); err != nil {
+		return fmt.Errorf("destroy temporary workspace: %w", err)
+	}
+	temporary.lease.mu.Lock()
+	delete(temporary.lease.temporaries, temporary)
+	temporary.lease.mu.Unlock()
+	temporary.closed = true
+	return nil
+}
+
 // Release closes the rooted adapter and makes the workspace acquirable again.
 func (lease *Lease) Release() error {
 	if lease == nil {
@@ -323,6 +407,9 @@ func (lease *Lease) Release() error {
 	defer lease.mu.Unlock()
 	if lease.released {
 		return nil
+	}
+	if len(lease.temporaries) != 0 {
+		return ErrWorkspaceBusy
 	}
 	if err := lease.filesystem.close(); err != nil {
 		return fmt.Errorf("close workspace filesystem: %w", err)

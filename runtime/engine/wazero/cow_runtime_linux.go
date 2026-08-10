@@ -38,7 +38,7 @@ func (engine *Engine) newSeededInitializedModule(ctx context.Context, prefix str
 	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
 	guestStderr := &bytes.Buffer{}
 	allocator := seedImage.newAllocator()
-	moduleConfig, workspaceGate, err := engine.moduleConfig(guestStderr)
+	moduleConfig, mounts, err := engine.moduleConfig(guestStderr)
 	if err != nil {
 		_ = seedImage.Close()
 		return nil, nil, err
@@ -51,6 +51,7 @@ func (engine *Engine) newSeededInitializedModule(ctx context.Context, prefix str
 	)
 	observe(engine.observer, prefix+"instantiate_guest", instantiateStarted, err)
 	if err != nil {
+		_ = mounts.close()
 		_ = seedImage.Close()
 		return nil, nil, fmt.Errorf("instantiate seeded COW guest: %w", err)
 	}
@@ -58,6 +59,7 @@ func (engine *Engine) newSeededInitializedModule(ctx context.Context, prefix str
 	defer func() {
 		if failed {
 			_ = module.Close(context.Background())
+			_ = mounts.close()
 			_ = seedImage.Close()
 		}
 	}()
@@ -95,7 +97,7 @@ func (engine *Engine) newSeededInitializedModule(ctx context.Context, prefix str
 	}
 	guestStderr.Reset()
 	failed = false
-	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size()), workspaceGate: workspaceGate}, seedImage, nil
+	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size()), mounts: mounts}, seedImage, nil
 }
 
 func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRuntime, error) {
@@ -122,7 +124,7 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if seedImage != nil {
 		defer seedImage.Close()
 	}
-	defer canonical.module.Close(context.Background())
+	defer canonical.close()
 	if err := engine.warmPreparedInstance(ctx, canonical, "cow_image_"); err != nil {
 		return nil, err
 	}
@@ -163,7 +165,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	ctx, hostCallGuard := guardInitializationHostCalls(ctx)
 	guestStderr := &bytes.Buffer{}
 	allocator := runtime.image.newAllocator()
-	moduleConfig, workspaceGate, err := engine.moduleConfig(guestStderr)
+	moduleConfig, mounts, err := engine.moduleConfig(guestStderr)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +177,14 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	)
 	observe(engine.observer, prefix+"instantiate_guest", instantiateStarted, err)
 	if err != nil {
+		_ = mounts.close()
 		return nil, fmt.Errorf("instantiate COW guest: %w", err)
 	}
 	failed := true
 	defer func() {
 		if failed {
 			_ = module.Close(context.Background())
+			_ = mounts.close()
 		}
 	}()
 
@@ -231,7 +235,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	}
 	guestStderr.Reset()
 	failed = false
-	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size()), footprintSource: allocation, workspaceGate: workspaceGate}, nil
+	return &preparedInstance{module: module, stderr: guestStderr, memoryBytes: uint64(memory.Size()), footprintSource: allocation, mounts: mounts}, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) close() error {

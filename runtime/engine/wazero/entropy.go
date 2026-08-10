@@ -10,7 +10,7 @@ import (
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
 )
 
-func newModuleConfig(stderr io.Writer, workspaceFS experimentalsys.FS) (wazerort.ModuleConfig, *workspaceGate, error) {
+func newModuleConfig(stderr io.Writer, workspaceFS experimentalsys.FS, temporaryFactory temporaryMountFactory) (wazerort.ModuleConfig, *moduleMounts, error) {
 	config := wazerort.NewModuleConfig().
 		WithName("").
 		WithRandSource(cryptorand.Reader).
@@ -20,23 +20,35 @@ func newModuleConfig(stderr io.Writer, workspaceFS experimentalsys.FS) (wazerort
 	if stderr != nil {
 		config = config.WithStderr(stderr)
 	}
-	var gate *workspaceGate
-	if workspaceFS != nil {
-		base := wazerort.NewFSConfig()
-		extended, ok := base.(experimentalsysfs.FSConfig)
-		if !ok {
-			return nil, nil, errors.New("wazero does not support rooted workspace mounts")
-		}
-		gate = newWorkspaceGate(workspaceFS)
-		config = config.WithFSConfig(extended.WithSysFSMount(gate, "workspace"))
+	if (workspaceFS == nil) != (temporaryFactory == nil) {
+		return nil, nil, errors.New("workspace and temporary mounts must be configured together")
 	}
-	return config, gate, nil
+	if workspaceFS == nil {
+		return config, nil, nil
+	}
+	mounts, err := newModuleMounts(workspaceFS, temporaryFactory)
+	if err != nil {
+		return nil, nil, err
+	}
+	base := wazerort.NewFSConfig()
+	extended, ok := base.(experimentalsysfs.FSConfig)
+	if !ok {
+		return nil, nil, errors.New("wazero does not support rooted workspace mounts")
+	}
+	withWorkspace := extended.WithSysFSMount(mounts.workspace, "workspace")
+	extended, ok = withWorkspace.(experimentalsysfs.FSConfig)
+	if !ok {
+		return nil, nil, errors.New("wazero does not support multiple rooted mounts")
+	}
+	config = config.WithFSConfig(extended.WithSysFSMount(mounts.temporary, "tmp"))
+	return config, mounts, nil
 }
 
-func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspaceGate, error) {
-	var filesystem experimentalsys.FS
-	if engine.workspaceLease != nil {
-		filesystem = engine.workspaceLease.FS()
+func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *moduleMounts, error) {
+	if engine.workspaceLease == nil {
+		return newModuleConfig(stderr, nil, nil)
 	}
-	return newModuleConfig(stderr, filesystem)
+	return newModuleConfig(stderr, engine.workspaceLease.FS(), func() (temporaryMount, error) {
+		return engine.workspaceLease.NewTemporary()
+	})
 }

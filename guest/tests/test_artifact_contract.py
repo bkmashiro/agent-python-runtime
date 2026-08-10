@@ -47,6 +47,7 @@ class ArtifactVerifierTests(unittest.TestCase):
                     "_initialize",
                     "memory",
                     "runtime_init",
+                    "runtime_validate_source",
                     "runtime_prepare",
                     "runtime_warmup",
                     "alloc",

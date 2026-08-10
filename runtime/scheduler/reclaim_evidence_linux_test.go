@@ -11,6 +11,8 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	wabinbinary "github.com/tetratelabs/wabin/binary"
+	wabinwasm "github.com/tetratelabs/wabin/wasm"
 )
 
 func TestReclaimEvidenceBridgeConsumesRealCOWEvidence(t *testing.T) {
@@ -59,5 +61,13 @@ func schedulerFixedMemoryReactor(t *testing.T) []byte {
 	if bytes.Equal(fixed, wasm) {
 		t.Fatal("reactor fixture memory section was not patched")
 	}
-	return fixed
+	module, err := wabinbinary.DecodeModule(fixed, wabinwasm.CoreFeaturesV2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	functionIndex := uint32(len(module.FunctionSection))
+	module.FunctionSection = append(module.FunctionSection, 1)
+	module.CodeSection = append(module.CodeSection, &wabinwasm.Code{Body: []byte{byte(wabinwasm.OpcodeI32Const), 0, byte(wabinwasm.OpcodeEnd)}})
+	module.ExportSection = append(module.ExportSection, &wabinwasm.Export{Name: "runtime_validate_source", Type: wabinwasm.ExternTypeFunc, Index: functionIndex})
+	return wabinbinary.EncodeModule(module)
 }

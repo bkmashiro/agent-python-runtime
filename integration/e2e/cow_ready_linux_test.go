@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,15 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
+func requireCOWFixedArtifact(t *testing.T) {
+	t.Helper()
+	if os.Getenv("AGENT_RUNTIME_COW_FIXED_MEMORY") != "1" {
+		t.Skip("COW acceptance requires an explicitly selected cow-fixed artifact")
+	}
+}
+
 func TestCOWReadySingleUseProductionArtifact(t *testing.T) {
+	requireCOWFixedArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 30 * time.Second
 	instance := newEngineWithFactory(t, config, wazeroengine.Factory{
@@ -45,6 +54,7 @@ func TestCOWReadySingleUseProductionArtifact(t *testing.T) {
 }
 
 func TestCOWReadySingleUseProductionArtifactSupportsWASITimerWait(t *testing.T) {
+	requireCOWFixedArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 30 * time.Second
 	instance := newEngineWithFactory(t, config, wazeroengine.Factory{
@@ -63,6 +73,7 @@ func TestCOWReadySingleUseProductionArtifactSupportsWASITimerWait(t *testing.T) 
 }
 
 func TestCOWReadySingleUseProductionArtifactSupportsRequestShellWarmup(t *testing.T) {
+	requireCOWFixedArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 30 * time.Second
 	instance := newEngineWithFactory(t, config, wazeroengine.Factory{

@@ -24,6 +24,38 @@ func TestParseStrategyAcceptsFreshInstanceStrategies(t *testing.T) {
 	}
 }
 
+func TestReadArtifactRejectsSymlinkAndDirectory(t *testing.T) {
+	root := t.TempDir()
+	artifact := filepath.Join(root, "guest.wasm")
+	if err := os.WriteFile(artifact, []byte("wasm"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := readArtifact(artifact)
+	if err != nil || string(payload) != "wasm" {
+		t.Fatalf("payload=%q err=%v", payload, err)
+	}
+	alias := filepath.Join(root, "alias.wasm")
+	if err := os.Symlink(artifact, alias); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readArtifact(alias); err == nil {
+		t.Fatal("symlink artifact was accepted")
+	}
+	if _, err := readArtifact(root); err == nil {
+		t.Fatal("directory artifact was accepted")
+	}
+}
+
+func TestRunRejectsOutOfRangeStressBeforeArtifactExecution(t *testing.T) {
+	artifact := filepath.Join(t.TempDir(), "guest.wasm")
+	if err := os.WriteFile(artifact, []byte("not wasm"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"-artifact", artifact, "-stress-iterations", "-1"}); code != 2 {
+		t.Fatalf("exit code=%d", code)
+	}
+}
+
 func TestWriteReportUsesPrivateMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "report.json")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {

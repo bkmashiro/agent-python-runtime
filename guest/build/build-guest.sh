@@ -489,6 +489,12 @@ python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --memory-maximum-pages "${MEMORY_MAXIMUM_PAGES}" \
   "${MANIFEST_EXTENSION_ARGS[@]}" \
   --output "${DIST_DIR}/manifest.json"
+
+if [[ -n "${PREINITIALIZE_SPIKE_INPUT_DIR}" ]]; then
+  cp "${DIST_DIR}/manifest.json" "${PREINITIALIZE_SPIKE_INPUT_DIR}/manifest.json"
+  cp "${DIST_DIR}/import-inventory.json" "${PREINITIALIZE_SPIKE_INPUT_DIR}/import-inventory.json"
+fi
+
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --artifact "${FINAL_GUEST}" \
   --manifest "${DIST_DIR}/manifest.json" \

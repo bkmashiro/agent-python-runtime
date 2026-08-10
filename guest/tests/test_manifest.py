@@ -124,6 +124,34 @@ class ManifestWriterTests(unittest.TestCase):
                 manifest["packages"],
             )
 
+    def test_infers_memory_bounds_from_canonical_wat(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact = root / "agent-python-runtime.wasm"
+            artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
+            wat = root / "guest.wat"
+            wat.write_text('(module\n  (memory (;0;) 3072 32768)\n  (export "memory" (memory 0))\n)\n')
+            lock = root / "sources.lock.json"
+            lock.write_text(json.dumps({
+                "target": "wasm32-wasip1",
+                "sources": [{"id": "cpython-source", "version": "3.14.test"}],
+                "host_tools": [{"name": "wasi-sdk", "version": "25.0"}],
+            }))
+            manifest = self.writer.build_manifest(
+                artifact=artifact,
+                wat=wat,
+                source_lock=lock,
+                commit="1" * 40,
+                source_date_epoch="1",
+                artifact_profile="base",
+                extension_selection=None,
+                import_inventory=write_inventory(root, "base"),
+            )
+            self.assertEqual(
+                {"initial_pages": 3072, "maximum_pages": 32768, "fixed": False},
+                manifest["wasm"]["memory"],
+            )
+
     def test_main_uses_bound_environment_commit_without_git(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -194,6 +222,8 @@ class ManifestWriterTests(unittest.TestCase):
                 artifact_profile="numpy-core",
                 extension_selection=selection,
                 import_inventory=inventory,
+                memory_initial_pages=2048,
+                memory_maximum_pages=32768,
             )
             self.assertEqual("numpy-core", manifest["artifact_profile"])
             self.assertEqual("core", manifest["extension_profile"]["profile"])
@@ -221,6 +251,8 @@ class ManifestWriterTests(unittest.TestCase):
                     artifact_profile="numpy-core",
                     extension_selection=selection,
                     import_inventory=inventory,
+                    memory_initial_pages=2048,
+                    memory_maximum_pages=32768,
                 )
 
             with self.assertRaisesRegex(ValueError, "artifact profile"):

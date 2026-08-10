@@ -15,6 +15,7 @@ from typing import Any
 
 IMPORT_RE = re.compile(r'\(import\s+"([^"]+)"\s+"([^"]+)"')
 EXPORT_RE = re.compile(r'\(export\s+"([^"]+)"')
+MEMORY_RE = re.compile(r'^\s*\(memory(?:\s+\(;\d+;\))?\s+(\d+)\s+(\d+)\s*\)', re.MULTILINE)
 ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
     "numpy-core": "agent-python-runtime-numpy-core.wasm",
@@ -44,6 +45,18 @@ def sha256(path: pathlib.Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def parse_memory_bounds(wat_text: str) -> tuple[int, int] | None:
+    matches = MEMORY_RE.findall(wat_text)
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise ValueError("artifact WAT must contain exactly one bounded memory declaration")
+    initial, maximum = (int(value) for value in matches[0])
+    if initial <= 0 or maximum < initial:
+        raise ValueError("artifact WAT memory bounds are invalid")
+    return initial, maximum
 
 
 def locked_source_version(lock: dict[str, Any], source_id: str) -> str:
@@ -148,11 +161,17 @@ def build_manifest(
         )
         limitations.insert(0, "NumPy random and FFT are not included")
 
+    detected_memory = parse_memory_bounds(wat_text)
     if (memory_initial_pages is None) != (memory_maximum_pages is None):
         raise ValueError("memory initial and maximum pages must be provided together")
-    if memory_initial_pages is not None and memory_maximum_pages is not None and (
-        memory_initial_pages <= 0 or memory_maximum_pages < memory_initial_pages
-    ):
+    if memory_initial_pages is None:
+        if detected_memory is None:
+            raise ValueError("memory page bounds are required when WAT has no bounded memory declaration")
+        memory_initial_pages, memory_maximum_pages = detected_memory
+    elif detected_memory is not None and detected_memory != (memory_initial_pages, memory_maximum_pages):
+        raise ValueError("declared memory page bounds do not match artifact WAT")
+    assert memory_initial_pages is not None and memory_maximum_pages is not None
+    if memory_initial_pages <= 0 or memory_maximum_pages < memory_initial_pages:
         raise ValueError("memory page bounds are invalid")
     wasm = {
         "imports": imports,
@@ -206,8 +225,8 @@ def main() -> int:
     )
     parser.add_argument("--extension-selection", type=pathlib.Path)
     parser.add_argument("--import-inventory", required=True, type=pathlib.Path)
-    parser.add_argument("--memory-initial-pages", required=True, type=int)
-    parser.add_argument("--memory-maximum-pages", required=True, type=int)
+    parser.add_argument("--memory-initial-pages", type=int)
+    parser.add_argument("--memory-maximum-pages", type=int)
     parser.add_argument("--output", required=True, type=pathlib.Path)
     args = parser.parse_args()
 

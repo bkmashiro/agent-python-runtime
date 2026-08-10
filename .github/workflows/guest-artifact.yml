@@ -445,19 +445,24 @@ jobs:
 
             export SOURCE_DATE_EPOCH
             SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
-            "${SPIKE_WASM_TOOLS}" print "${INPUT}" > "${ROOT}/input.wat"
-            python3 guest/build/write-manifest.py \
-              --artifact "${INPUT}" \
-              --wat "${ROOT}/input.wat" \
-              --source-lock guest/build/sources.lock.json \
-              --artifact-profile base \
-              --output "${ROOT}/input/manifest.json"
             "${SPIKE_WASM_TOOLS}" print "${CANDIDATE_DIR}/agent-python-runtime.wasm" > "${ROOT}/candidate.wat"
+            python3 guest/build/import_inventory.py request \
+              --profile base \
+              --output "${ROOT}/candidate-inventory-request.json"
+            go run ./cmd/apyrun \
+              -artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
+              < "${ROOT}/candidate-inventory-request.json" \
+              > "${ROOT}/candidate-inventory-response.json"
+            python3 guest/build/import_inventory.py extract \
+              --profile base \
+              --response "${ROOT}/candidate-inventory-response.json" \
+              --output "${CANDIDATE_DIR}/import-inventory.json"
             python3 guest/build/write-manifest.py \
               --artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
               --wat "${ROOT}/candidate.wat" \
               --source-lock guest/build/sources.lock.json \
               --artifact-profile base \
+              --import-inventory "${CANDIDATE_DIR}/import-inventory.json" \
               --output "${CANDIDATE_DIR}/manifest.json"
             python3 guest/build/verify-artifact.py \
               "${CANDIDATE_DIR}/agent-python-runtime.wasm" \

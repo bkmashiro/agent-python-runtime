@@ -80,8 +80,9 @@ func TestRunStressReportsExactCompletion(t *testing.T) {
 	runner := &stressRunner{failAt: -1}
 	report := Report{}
 	payloads := [][]byte{}
-	runStress(context.Background(), runner, 3, &report, &payloads)
-	if report.Stress == nil || report.Stress.CompletedIterations != 3 || len(report.Checks) != 4 || len(payloads) != 3 {
+	sampler := &scriptedDescriptorSampler{values: []int{20, 20}}
+	runStress(context.Background(), runner, 3, &report, &payloads, sampler.sample)
+	if report.Stress == nil || report.Stress.CompletedIterations != 3 || len(report.Checks) != 5 || len(payloads) != 3 || report.Stress.OpenFDDelta == nil || *report.Stress.OpenFDDelta != 0 {
 		t.Fatalf("report=%+v payloads=%d", report, len(payloads))
 	}
 	for _, check := range report.Checks {
@@ -91,11 +92,22 @@ func TestRunStressReportsExactCompletion(t *testing.T) {
 	}
 }
 
+func TestRunStressOmitsUnavailableDescriptorOracle(t *testing.T) {
+	runner := &stressRunner{failAt: -1}
+	report := Report{}
+	payloads := [][]byte{}
+	runStress(context.Background(), runner, 1, &report, &payloads, func() (int, bool) { return 0, false })
+	if len(report.Checks) != 4 || report.Stress == nil || report.Stress.OpenFDsBefore != nil || report.Stress.OpenFDsAfter != nil || report.Stress.OpenFDDelta != nil {
+		t.Fatalf("report=%+v", report)
+	}
+}
+
 func TestRunStressFailsClosedAfterRunnerError(t *testing.T) {
 	runner := &stressRunner{failAt: 2}
 	report := Report{}
 	payloads := [][]byte{}
-	runStress(context.Background(), runner, 5, &report, &payloads)
+	sampler := &scriptedDescriptorSampler{values: []int{20, 20}}
+	runStress(context.Background(), runner, 5, &report, &payloads, sampler.sample)
 	if report.Stress == nil || report.Stress.CompletedIterations != 2 || len(payloads) != 2 {
 		t.Fatalf("report=%+v payloads=%d", report, len(payloads))
 	}
@@ -104,6 +116,20 @@ func TestRunStressFailsClosedAfterRunnerError(t *testing.T) {
 			t.Fatalf("check silently passed after runner error: %+v", check)
 		}
 	}
+}
+
+type scriptedDescriptorSampler struct {
+	values []int
+	index  int
+}
+
+func (sampler *scriptedDescriptorSampler) sample() (int, bool) {
+	if sampler.index >= len(sampler.values) {
+		return 0, false
+	}
+	value := sampler.values[sampler.index]
+	sampler.index++
+	return value, true
 }
 
 type stressRunner struct {

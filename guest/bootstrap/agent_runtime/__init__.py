@@ -7,7 +7,7 @@ import time
 import traceback
 from typing import Any
 
-_ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema"}
+_ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "requirements"}
 _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
@@ -116,6 +116,9 @@ def _decode_request(request_json: str) -> tuple[dict[str, Any] | None, dict[str,
         return None, _error("invalid_request", "run_id must be a non-empty string")
     if not isinstance(request["code"], str):
         return None, _error("invalid_request", "code must be a string")
+    requirements = request.get("requirements", [])
+    if not isinstance(requirements, list) or requirements:
+        return None, _error("invalid_request", "non-empty requirements must be rejected by Host admission")
     return request, None
 
 

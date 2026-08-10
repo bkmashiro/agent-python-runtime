@@ -24,13 +24,14 @@ type BridgeError struct {
 }
 
 type ExecuteResponse struct {
-	Version      string                      `json:"version"`
-	RequestID    string                      `json:"request_id"`
-	Status       string                      `json:"status"`
-	Result       json.RawMessage             `json:"result,omitempty"`
-	Error        *BridgeError                `json:"error,omitempty"`
-	Metrics      *runtimeconfig.RunMetrics   `json:"metrics,omitempty"`
-	ExecutionRef *runtimeconfig.ExecutionRef `json:"execution_ref,omitempty"`
+	Version      string                          `json:"version"`
+	RequestID    string                          `json:"request_id"`
+	Status       string                          `json:"status"`
+	Result       json.RawMessage                 `json:"result,omitempty"`
+	Error        *BridgeError                    `json:"error,omitempty"`
+	Metrics      *runtimeconfig.RunMetrics       `json:"metrics,omitempty"`
+	ExecutionRef *runtimeconfig.ExecutionRef     `json:"execution_ref,omitempty"`
+	Outcome      *runtimeconfig.ExecutionOutcome `json:"outcome,omitempty"`
 }
 
 type IDSource func() (string, error)
@@ -112,10 +113,19 @@ func (service *Service) Execute(parent context.Context, request ExecuteRequest) 
 		RunID: "hermes-" + executionID, Code: request.Code,
 		Inputs:       append(json.RawMessage(nil), request.Inputs...),
 		OutputSchema: append(json.RawMessage(nil), request.OutputSchema...),
+		Requirements: append([]runtimeconfig.RequiredFeature(nil), request.Requirements...),
 	}
 	runPayload, err := json.Marshal(runRequest)
 	if err != nil {
 		return bridgeFailure(response, "invalid_request", "encode runtime request")
+	}
+	if admissionErr := runtimeconfig.AdmitRunRequirements(runRequest); admissionErr != nil {
+		outcome, outcomeErr := runtimeconfig.NewUnsupportedOutcome(runPayload, admissionErr)
+		if outcomeErr != nil {
+			return bridgeFailure(response, "runtime_error", "runtime admission failed")
+		}
+		response.Outcome = &outcome
+		return bridgeFailure(response, "runtime_unsupported", "runtime requirements unsupported; escalation required")
 	}
 	startedEventID, err := service.trace.RuntimeStarted(traceCtx, invocationRef, digestBytes(runPayload))
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -17,6 +18,8 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 )
+
+const exitEscalationRequired = 3
 
 type dependencies struct {
 	readFile    func(string) ([]byte, error)
@@ -80,9 +83,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, "RunRequest exceeds configured bounds")
 		return 2
 	}
-	if _, err := runtimeconfig.DecodeRunRequest(request); err != nil {
+	decodedRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
 		writeDiagnostic(stderr, "invalid RunRequest")
 		return 2
+	}
+	if admissionErr := runtimeconfig.AdmitRunRequirements(decodedRequest); admissionErr != nil {
+		return emitUnsupportedOutcome(request, admissionErr, runConfig.MaxResponseBytes, stdout, stderr)
 	}
 
 	wasm, err := deps.readFile(*artifactPath)
@@ -116,6 +123,9 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	defer runner.Close(context.Background())
 	response, err := runner.Run(ctx, request, "")
 	if err != nil {
+		if _, outcomeErr := runtimeconfig.NewUnsupportedOutcome(request, err); outcomeErr == nil {
+			return emitUnsupportedOutcome(request, err, runConfig.MaxResponseBytes, stdout, stderr)
+		}
 		writeDiagnostic(stderr, "execute guest")
 		return 1
 	}
@@ -128,6 +138,24 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		return 1
 	}
 	return 0
+}
+
+func emitUnsupportedOutcome(request []byte, runErr error, maximum uint32, stdout, stderr io.Writer) int {
+	outcome, err := runtimeconfig.NewUnsupportedOutcome(request, runErr)
+	if err != nil {
+		writeDiagnostic(stderr, "classify unsupported outcome")
+		return 1
+	}
+	encoded, err := json.Marshal(outcome)
+	if err != nil || uint64(len(encoded)) > uint64(maximum) {
+		writeDiagnostic(stderr, "encode unsupported outcome")
+		return 1
+	}
+	if _, err := stdout.Write(append(encoded, '\n')); err != nil {
+		writeDiagnostic(stderr, "write unsupported outcome")
+		return 1
+	}
+	return exitEscalationRequired
 }
 
 func newWazeroFactory(config operatorConfig, hostIdentity string, client *http.Client) (engine.Factory, error) {

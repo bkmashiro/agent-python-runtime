@@ -14,11 +14,11 @@ go build -o /tmp/apyrun ./cmd/apyrun
 
 `-artifact` is required. `-config` is optional; omitting it uses bounded defaults and grants no capability.
 
-A successful invocation writes exactly one JSON response and a newline to stdout. Diagnostics go to stderr. Exit status `2` means invocation, config, artifact, or RunRequest input was rejected; exit status `1` means initialization, execution, bounds enforcement, identity generation, or output failed.
+A successful invocation writes exactly one JSON response and a newline to stdout. Diagnostics go to stderr. Exit status `2` means invocation, config, artifact, or RunRequest input was rejected; exit status `1` means initialization, execution, bounds enforcement, identity generation, or output failed. Exit status `3` writes a schema-validated Host outcome to stdout and means a valid explicit `requirements` declaration cannot run in Pysolate and should be considered for upper-layer escalation.
 
 ## Authority boundary
 
-`run-request.json` is untrusted guest/model data and follows `abi/v1/run-request.schema.json`. It may contain only `run_id`, generated `code`, `inputs`, and an optional output schema. It cannot carry targets, URLs, headers, credentials, grants, timeout, memory limits, request/response budgets, or receipt identity.
+`run-request.json` is untrusted guest/model data and follows `abi/v1/request.schema.json`. It may contain only `run_id`, generated `code`, `inputs`, an optional output schema, and optional bounded typed `requirements`. Requirements only narrow admission; they are not grants. The request cannot carry targets, URLs, headers, credentials, grants, timeout, memory limits, request/response budgets, or receipt identity.
 
 `operator.json` is separate Host-owned policy. The CLI generates a cryptographically random Host run identity for receipts; the request's `run_id` is only an untrusted label and cannot become receipt identity.
 
@@ -76,7 +76,20 @@ The Host maps the opaque guest target `catalog` to the configured origin. A targ
 }
 ```
 
-The response retains the normal strict execution envelope. Before committing the workflow, the Host strictly validates the envelope and the requested `output_schema`. Guest error, timeout/cancellation, invalid output, or failed transaction finalization triggers bounded Host abort; compensation is never automatic unless the Host configured the relevant adapter policy. If Host capabilities were used, Host-authored receipts and capability-call metrics overwrite any guest claims before stdout is written.
+For a request that explicitly requires POSIX and a browser:
+
+```json
+{
+  "run_id": "untrusted-label",
+  "code": "result = None",
+  "inputs": {},
+  "requirements": ["posix", "browser"]
+}
+```
+
+the CLI does not read the artifact or construct the execution Factory. It emits `abi/v1/execution-outcome.schema.json` with sorted required features, `workspace_disposition` and `effect_disposition` both `not_started`, and a SHA-256 binding to the exact request. It exits `3`. See [Structured unsupported and escalation outcome](unsupported-escalation.md).
+
+The normal success/error response retains the strict Guest execution envelope. Before committing the workflow, the Host strictly validates the envelope and the requested `output_schema`. Guest error, timeout/cancellation, invalid output, or failed transaction finalization triggers bounded Host abort; compensation is never automatic unless the Host configured the relevant adapter policy. If Host capabilities were used, Host-authored receipts and capability-call metrics overwrite any guest claims before stdout is written.
 
 ## Verification boundary
 

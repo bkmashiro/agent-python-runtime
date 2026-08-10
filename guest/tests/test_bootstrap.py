@@ -45,6 +45,13 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("error", response["status"])
         self.assertEqual("invalid_request", response["error"]["code"])
 
+    def test_accepts_empty_preflight_requirements_and_rejects_unhandled_nonempty_requirements(self):
+        response = self.execute(requirements=[])
+        self.assertEqual("ok", response["status"])
+        response = self.execute(requirements=["posix"])
+        self.assertEqual("error", response["status"])
+        self.assertEqual("invalid_request", response["error"]["code"])
+
     def test_returns_bounded_structured_exception(self):
         response = self.execute(code="raise ValueError('boom')")
         self.assertEqual("error", response["status"])

@@ -231,6 +231,51 @@ func TestExecuteEnforcesResponseBoundOutsideBackend(t *testing.T) {
 	}
 }
 
+func TestExecuteEmitsMachineReadableUnsupportedOutcome(t *testing.T) {
+	artifactReads, factoryCalls := 0, 0
+	deps := dependencies{
+		readFile: func(path string) ([]byte, error) {
+			artifactReads++
+			return nil, errors.New("artifact must not be read")
+		},
+		newIdentity: func() (string, error) { return "host-run", nil },
+		newFactory: func(operatorConfig, string, *http.Client) (engine.Factory, error) {
+			factoryCalls++
+			return nil, errors.New("factory must not be created")
+		},
+	}
+	raw := `{"run_id":"guest","code":"result=1","inputs":{},"requirements":["posix"]}`
+	var stdout, stderr strings.Builder
+	exit := execute([]string{"-artifact", "guest.wasm"}, strings.NewReader(raw), &stdout, &stderr, deps)
+	if exit != exitEscalationRequired || stderr.Len() != 0 || artifactReads != 0 || factoryCalls != 0 {
+		t.Fatalf("exit=%d stderr=%q artifact_reads=%d factory_calls=%d", exit, stderr.String(), artifactReads, factoryCalls)
+	}
+	outcome, err := runtimeconfig.DecodeExecutionOutcome([]byte(strings.TrimSpace(stdout.String())))
+	if err != nil || outcome.Kind != runtimeconfig.OutcomeRuntimeUnsupported || !outcome.EscalationRequired || outcome.RequiredFeatures[0] != runtimeconfig.RequiredFeaturePOSIX {
+		t.Fatalf("stdout=%q outcome=%+v err=%v", stdout.String(), outcome, err)
+	}
+}
+
+func TestExecuteDoesNotUpgradeOrdinaryRuntimeError(t *testing.T) {
+	runner := &fakeRunner{err: errors.New("python exception says posix required")}
+	factory := &fakeFactory{runner: runner}
+	deps := dependencies{
+		readFile: func(path string) ([]byte, error) {
+			if path == "guest.wasm" {
+				return []byte("wasm"), nil
+			}
+			return nil, errors.New("not found")
+		},
+		newIdentity: func() (string, error) { return "host-run", nil },
+		newFactory:  func(operatorConfig, string, *http.Client) (engine.Factory, error) { return factory, nil },
+	}
+	var stdout, stderr strings.Builder
+	exit := execute([]string{"-artifact", "guest.wasm"}, strings.NewReader(`{"run_id":"guest","code":"result=1","inputs":{}}`), &stdout, &stderr, deps)
+	if exit != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "execute guest") {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", exit, stdout.String(), stderr.String())
+	}
+}
+
 func TestWazeroFactoryPersistsBuiltinFetchTransactionJournal(t *testing.T) {
 	journalPath := filepath.Join(t.TempDir(), "transactions.db")
 	config := operatorConfig{TransactionJournalPath: journalPath, FetchMany: &fetchManyConfig{

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-runtime.dev/abi/v1/execution-outcome.schema.json",
+  "title": "Agent Python Runtime Host execution outcome v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "escalation_required",
+    "escalation_reason",
+    "required_features",
+    "workspace_disposition",
+    "effect_disposition",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "runtime_unsupported"},
+    "escalation_required": {"const": true},
+    "escalation_reason": {"const": "required_features_unsupported"},
+    "required_features": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "browser",
+          "daemon",
+          "dynamic_package_install",
+          "native_extension",
+          "native_threads",
+          "posix",
+          "shell",
+          "subprocess"
+        ]
+      }
+    },
+    "workspace_disposition": {"const": "not_started"},
+    "effect_disposition": {"const": "not_started"},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_sha256"],
+      "properties": {
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -303,6 +303,7 @@ func admitProfileForTest(config runtimeconfig.RunConfig, profile string, imports
 
 func TestExecuteBindsProfileToVerifiedArtifactBeforeFactory(t *testing.T) {
 	artifact := []byte("verified-wasm")
+	inventory := baseImportInventory(t)
 	manifest := baseDistributionManifest(t, artifact)
 	runner := &fakeRunner{response: []byte(`{"run_id":"host-run","status":"ok","result":1}`)}
 	factory := &fakeFactory{runner: runner}
@@ -316,6 +317,8 @@ func TestExecuteBindsProfileToVerifiedArtifactBeforeFactory(t *testing.T) {
 				return artifact, nil
 			case "manifest.json":
 				return manifest, nil
+			case "import-inventory.json":
+				return inventory, nil
 			default:
 				return nil, errors.New("not found")
 			}
@@ -341,15 +344,35 @@ func TestExecuteBindsProfileToVerifiedArtifactBeforeFactory(t *testing.T) {
 func baseDistributionManifest(t *testing.T, artifact []byte) []byte {
 	t.Helper()
 	digest := sha256.Sum256(artifact)
+	inventoryDigest := sha256.Sum256(baseImportInventory(t))
 	value := map[string]any{
-		"schema_version": 2, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
+		"schema_version": 3, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
 		"artifact": map[string]any{"filename": "agent-python-runtime.wasm", "size": len(artifact), "sha256": hex.EncodeToString(digest[:])},
 		"build":    map[string]any{"repository_commit": strings.Repeat("a", 40), "source_date_epoch": "1", "compiler_target": "wasm32-wasip1", "execution_model": "reactor"},
 		"sources":  []any{}, "wasm": map[string]any{"imports": []any{}, "exports": []any{"_start"}},
 		"packages":          []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}},
-		"extension_profile": nil, "limitations": []any{"bounded"},
+		"extension_profile": nil,
+		"python_import_inventory": map[string]any{
+			"schema_version": 1, "filename": "import-inventory.json", "sha256": hex.EncodeToString(inventoryDigest[:]),
+			"probe": "guest-importlib-find-spec-v1", "implementation": "cpython", "python_version": "3.14.0",
+			"discoverable_roots": []any{"agent_runtime", "json", "sys"}, "failures": []any{},
+		},
+		"limitations": []any{"bounded"},
 	}
 	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
+func baseImportInventory(t *testing.T) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(map[string]any{
+		"schema_version": 1, "artifact_profile": "base", "probe": "guest-importlib-find-spec-v1",
+		"implementation": "cpython", "python_version": "3.14.0",
+		"discoverable_roots": []any{"agent_runtime", "json", "sys"}, "failures": []any{},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

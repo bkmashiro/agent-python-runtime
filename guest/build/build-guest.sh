@@ -463,11 +463,28 @@ fi
 
 "${WASM_TOOLS}" validate "${FINAL_GUEST}"
 "${WASM_TOOLS}" print "${FINAL_GUEST}" > "${DIST_DIR}/agent-python-runtime.wat"
+IMPORT_INVENTORY_REQUEST="${WORK_DIR}/import-inventory-request.json"
+IMPORT_INVENTORY_RESPONSE="${WORK_DIR}/import-inventory-response.json"
+IMPORT_INVENTORY="${DIST_DIR}/import-inventory.json"
+python3 "${ROOT_DIR}/guest/build/import_inventory.py" request \
+  --profile "${ARTIFACT_PROFILE}" \
+  --output "${IMPORT_INVENTORY_REQUEST}"
+(
+  cd "${ROOT_DIR}"
+  go run ./cmd/apyrun -artifact "${FINAL_GUEST}" \
+    < "${IMPORT_INVENTORY_REQUEST}" \
+    > "${IMPORT_INVENTORY_RESPONSE}"
+)
+python3 "${ROOT_DIR}/guest/build/import_inventory.py" extract \
+  --profile "${ARTIFACT_PROFILE}" \
+  --response "${IMPORT_INVENTORY_RESPONSE}" \
+  --output "${IMPORT_INVENTORY}"
 python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --artifact "${FINAL_GUEST}" \
   --wat "${DIST_DIR}/agent-python-runtime.wat" \
   --source-lock "${SOURCE_LOCK}" \
   --artifact-profile "${ARTIFACT_PROFILE}" \
+  --import-inventory "${IMPORT_INVENTORY}" \
   --memory-initial-pages "${MEMORY_INITIAL_PAGES}" \
   --memory-maximum-pages "${MEMORY_MAXIMUM_PAGES}" \
   "${MANIFEST_EXTENSION_ARGS[@]}" \
@@ -505,6 +522,7 @@ rm "${DIST_DIR}/agent-python-runtime.wat"
   SUM_FILES=(
     "${ARTIFACT_FILENAME}"
     manifest.json
+    import-inventory.json
     sbom.spdx.json
     THIRD_PARTY_NOTICES.md
   )

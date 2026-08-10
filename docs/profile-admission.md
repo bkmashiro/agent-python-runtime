@@ -2,7 +2,7 @@
 
 ## Status
 
-**Current for explicit compatibility manifests, Host-configured import policy, and artifact-bound profile identity.** This is a conservative declaration and distribution-identity check, not a complete Python source analyzer or per-import artifact inventory.
+**Current for explicit compatibility manifests, Host-configured import policy, artifact-bound profile identity, and target-Guest-generated discoverable-root inventory.** This is a conservative declaration, `find_spec` discovery, and distribution-identity check—not a complete Python source analyzer or import-execution proof.
 
 ## Contract
 
@@ -49,7 +49,7 @@ apyrun \
   -config host.json
 ```
 
-If `execution_profile` is configured, `-manifest` is mandatory; `-manifest` without Host profile policy is rejected. The canonical verifier binds the selected bytes to `artifact_profile`, exact package set, artifact SHA-256, manifest SHA-256, repository commit, ABI, target, compiler target, and reactor execution model. `base` must carry only the CPython core package and no extension profile; `numpy-core` must carry CPython plus the selected-core NumPy package and its bounded extension-profile identity.
+If `execution_profile` is configured, `-manifest` is mandatory; `-manifest` without Host profile policy is rejected. A schema-v3 manifest names the canonical sibling `import-inventory.json`. The canonical verifier binds the selected bytes to `artifact_profile`, exact package set, artifact SHA-256, manifest SHA-256, inventory-sidecar SHA-256 and contents, repository commit, ABI, target, compiler target, and reactor execution model. `base` must carry only the CPython core package and no extension profile; `numpy-core` must carry CPython plus the selected-core NumPy package and its bounded extension-profile identity. Schema-v2 manifests remain readable as legacy artifact identity but cannot bind an `ExecutionProfile` because they have no target-Guest inventory.
 
 ## Validation
 
@@ -58,9 +58,10 @@ Profile IDs use the fixed current vocabulary. Import names must be bounded Pytho
 - no Host profile is bound;
 - the requested profile differs from the Host profile;
 - any declared import is absent from the Host allowlist;
+- any Host-allowlisted root is absent from the artifact's schema-v3 discoverable-root inventory;
 - the declaration is `null`, incomplete, duplicated, malformed, or over the bound.
 
-Artifact binding additionally rejects duplicate/unknown identity fields, invalid or trailing JSON, profile/package mismatch, wrong canonical filename, size/SHA drift, incomplete build identity, or invalid NumPy extension identity. Artifact and manifest digests are retained in the immutable `ExecutionProfile` and exposed through Runner properties.
+Artifact binding additionally rejects duplicate/unknown identity fields, invalid or trailing JSON, profile/package mismatch, wrong canonical filename, size/SHA drift, incomplete build identity, missing/drifted inventory sidecar, unsorted or duplicate inventory roots, or invalid NumPy extension identity. Artifact and manifest digests plus the defensive inventory copy are retained in the immutable `ExecutionProfile` and exposed through Runner properties.
 
 Admission is enforced at three boundaries:
 
@@ -69,13 +70,13 @@ CLI
   decode request + Host config
   -> requirements admission
   -> profile admission
-  -> read artifact + manifest
-  -> verify distribution identity and bind profile digests
+  -> read artifact + manifest + canonical inventory sidecar
+  -> verify distribution identity and bind profile/digests/inventory
   -> only then construct Factory
 
 Hermes daemon / bridge
-  read pinned regular artifact + manifest
-  -> verify distribution identity
+  read pinned regular artifact + manifest + canonical inventory sidecar
+  -> verify distribution and inventory identity
   -> optionally bind Host -profile-imports policy
   -> construct Runner and expose profile/digests in properties
   -> validate protocol
@@ -116,7 +117,8 @@ This Current slice proves:
 
 - a bounded manifest can name one current artifact profile and declared imports;
 - Host policy, not Guest input, fixes the admitted import set;
-- Host policy can be bound to the exact artifact/profile/package/digest identity before Factory construction;
+- the exact target Guest runs a versioned `importlib.find_spec` probe over builtin, stdlib, and packaged roots during the Linux build;
+- Host policy can be restricted to the checksummed Guest-discoverable inventory and bound to exact artifact/profile/package/digest identity before Factory construction;
 - the local CLI and pinned Hermes loader share one canonical distribution verifier;
 - CLI, Hermes bridge, and Wazero enforce the same admission rule before Guest work;
 - legacy requests without a compatibility declaration continue to use the existing path;
@@ -129,8 +131,9 @@ It does **not** prove:
 - that declared imports equal imports reachable from arbitrary Python source;
 - that dynamic `__import__`, `eval`, `exec`, plugin loading, or data-dependent imports were discovered;
 - that syntax-valid source will complete successfully;
-- that the v2 distribution manifest enumerates every stdlib/builtin/import root present in the selected artifact;
-- that each Host-allowlisted import was individually proven present and behaviorally qualified;
+- that `find_spec` success means module initialization or representative operations succeed;
+- that every transitive, data-dependent, dynamically synthesized, or plugin-provided import was enumerated;
+- that every discoverable root is behaviorally qualified for Pysolate;
 - that transitive package/native-extension requirements were inferred;
 - that a representative workload corpus has high Pysolate admission or completion share.
 
@@ -138,14 +141,15 @@ A request can lie by omitting an import. Runtime availability and Guest restrict
 
 ## Next qualification step
 
-The remaining profile-depth step is an artifact-generated import/catalog inventory:
+The next profile-depth step is execution qualification and conservative source checking over the artifact-generated inventory:
 
 ```text
-verified artifact profile/digests/packages       [Current]
-+ artifact-generated stdlib/builtin/import roots [Proposed]
-+ selected native-module closure                 [Proposed]
-+ frozen tool catalog identity                   [Proposed]
--> fuller Host-frozen profile evidence
+verified artifact profile/digests/packages          [Current]
++ target-Guest find-spec discoverable-root inventory [Current]
++ curated module import/operation smoke qualification [Proposed]
++ conservative source/import declaration comparison  [Proposed]
++ selected native/transitive closure evidence          [Partial/Proposed]
+-> fuller Host-authored compatibility evidence
 ```
 
-The Current binding proves which profile/package distribution was loaded, but not that an arbitrary Host import allowlist exactly describes its import surface. Deeper source compatibility checks should remain conservative and versioned; lack of a detected problem is not proof that dynamic Python cannot access an undeclared path.
+The Current binding proves which profile/package distribution was loaded and that every Host-allowlisted root was discoverable in that exact target Guest during the build. It does not prove that importing or using every root succeeds, nor that arbitrary source declared every reachable import. Deeper checks must remain conservative and versioned; lack of a detected problem is not proof that dynamic Python cannot access an undeclared path.

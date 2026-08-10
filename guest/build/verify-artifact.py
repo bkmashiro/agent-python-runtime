@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import pathlib
 from typing import Any
@@ -37,6 +38,19 @@ NUMPY_CORE_MODULES = (
 )
 
 
+def load_import_inventory_module():
+    path = pathlib.Path(__file__).with_name("import_inventory.py")
+    spec = importlib.util.spec_from_file_location("artifact_import_inventory", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load import inventory validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+IMPORT_INVENTORY = load_import_inventory_module()
+
+
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -49,10 +63,12 @@ def verify(
     artifact: pathlib.Path,
     manifest: dict[str, Any],
     extension_selection: pathlib.Path | None = None,
+    import_inventory: pathlib.Path | None = None,
 ) -> None:
     if artifact.read_bytes()[:4] != b"\x00asm":
         raise ValueError("artifact does not have the WASM magic")
-    if manifest.get("schema_version") != 2 or manifest.get("abi_version") != "v1":
+    schema_version = manifest.get("schema_version")
+    if schema_version not in {2, 3} or manifest.get("abi_version") != "v1":
         raise ValueError("unsupported manifest or ABI version")
     profile = manifest.get("artifact_profile")
     if profile not in ARTIFACT_FILENAMES:
@@ -71,6 +87,22 @@ def verify(
     actual_sha256 = sha256(artifact)
     if artifact_record.get("sha256") != actual_sha256:
         raise ValueError("artifact sha256 does not match manifest")
+
+    inventory_record = manifest.get("python_import_inventory")
+    if schema_version == 2:
+        if inventory_record is not None or import_inventory is not None:
+            raise ValueError("legacy manifest must not contain import inventory")
+    else:
+        if not isinstance(inventory_record, dict) or import_inventory is None or not import_inventory.is_file():
+            raise ValueError("schema-v3 manifest requires import inventory")
+        if inventory_record.get("filename") != import_inventory.name or inventory_record.get("sha256") != sha256(import_inventory):
+            raise ValueError("import inventory sidecar identity mismatch")
+        inventory = IMPORT_INVENTORY.load_inventory(import_inventory, profile)
+        embedded = {key: value for key, value in inventory.items() if key != "artifact_profile"}
+        embedded["filename"] = import_inventory.name
+        embedded["sha256"] = sha256(import_inventory)
+        if inventory_record != embedded:
+            raise ValueError("manifest import inventory does not match sidecar")
 
     extension_profile = manifest.get("extension_profile")
     if profile == "base":
@@ -141,7 +173,14 @@ def main() -> int:
         if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
             raise ValueError("invalid extension profile filename")
         selection = args.manifest.parent / filename
-    verify(args.artifact, manifest, selection)
+    inventory_record = manifest.get("python_import_inventory")
+    inventory = None
+    if isinstance(inventory_record, dict):
+        filename = inventory_record.get("filename")
+        if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
+            raise ValueError("invalid import inventory filename")
+        inventory = args.manifest.parent / filename
+    verify(args.artifact, manifest, selection, inventory)
     print(json.dumps({"artifact": str(args.artifact), "sha256": sha256(args.artifact)}))
     return 0
 

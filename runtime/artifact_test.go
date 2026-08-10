@@ -12,11 +12,12 @@ import (
 func TestVerifyDistributionArtifactBindsProfilePackagesAndDigests(t *testing.T) {
 	artifact := []byte("verified-wasm")
 	manifest := distributionManifestFixture(t, artifact, "base")
+	inventory := distributionImportInventoryFixture(t, "base")
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded)
+	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, inventory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,11 +29,15 @@ func TestVerifyDistributionArtifactBindsProfilePackagesAndDigests(t *testing.T) 
 	if len(identity.Packages) != 1 || identity.Packages[0].Name != "cpython" || identity.Packages[0].Status != "core" {
 		t.Fatalf("packages=%+v", identity.Packages)
 	}
+	if strings.Join(identity.ImportRoots, ",") != "agent_runtime,json,math,sys" {
+		t.Fatalf("imports=%v", identity.ImportRoots)
+	}
 }
 
 func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 	artifact := []byte("verified-wasm")
 	valid := distributionManifestFixture(t, artifact, "numpy-core")
+	inventory := distributionImportInventoryFixture(t, "numpy-core")
 	cases := map[string]func(map[string]any){
 		"unknown profile":        func(value map[string]any) { value["artifact_profile"] = "everything" },
 		"profile filename drift": func(value map[string]any) { value["artifact_profile"] = "base" },
@@ -41,7 +46,10 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 			value["packages"] = []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}}
 		},
 		"extension profile missing": func(value map[string]any) { value["extension_profile"] = nil },
-		"unknown top-level field":   func(value map[string]any) { value["authority"] = "guest" },
+		"import inventory drift": func(value map[string]any) {
+			value["python_import_inventory"].(map[string]any)["discoverable_roots"] = []any{"numpy", "json"}
+		},
+		"unknown top-level field": func(value map[string]any) { value["authority"] = "guest" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -51,14 +59,45 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encoded); !errors.Is(err, ErrInvalidArtifactManifest) {
+			if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encoded, inventory); !errors.Is(err, ErrInvalidArtifactManifest) {
 				t.Fatalf("err=%v", err)
 			}
 		})
 	}
-	duplicate := []byte(`{"schema_version":2,"schema_version":2}`)
-	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, duplicate); !errors.Is(err, ErrInvalidArtifactManifest) {
+	encodedValid, err := json.Marshal(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutatedInventory := append([]byte(nil), inventory...)
+	mutatedInventory[len(mutatedInventory)-1] = ' '
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, encodedValid, mutatedInventory); !errors.Is(err, ErrInvalidArtifactManifest) {
+		t.Fatalf("sidecar drift err=%v", err)
+	}
+	duplicate := []byte(`{"schema_version":3,"schema_version":3}`)
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-numpy-core.wasm", artifact, duplicate, nil); !errors.Is(err, ErrInvalidArtifactManifest) {
 		t.Fatalf("duplicate err=%v", err)
+	}
+}
+
+func TestVerifyLegacyArtifactIdentityCannotBindProfile(t *testing.T) {
+	artifact := []byte("verified-wasm")
+	manifest := distributionManifestFixture(t, artifact, "base")
+	manifest["schema_version"] = 2
+	delete(manifest, "python_import_inventory")
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := VerifyDistributionArtifact("agent-python-runtime.wasm", artifact, encoded, nil)
+	if err != nil || len(identity.ImportRoots) != 0 {
+		t.Fatalf("identity=%+v err=%v", identity, err)
+	}
+	profile, err := NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := profile.BindVerifiedArtifact(identity); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
+		t.Fatalf("bind err=%v", err)
 	}
 }
 
@@ -72,6 +111,7 @@ func TestBindExecutionProfileToVerifiedArtifact(t *testing.T) {
 		ArtifactSHA256: "sha256:" + strings.Repeat("1", 64),
 		ManifestSHA256: "sha256:" + strings.Repeat("2", 64),
 		Packages:       []ArtifactPackage{{Name: "cpython", Version: "3.14.0", Status: "core"}, {Name: "numpy", Version: "2.3.0", Status: "selected-core"}},
+		ImportRoots:    []string{"agent_runtime", "json", "numpy", "sys"},
 	}
 	bound, err := profile.BindVerifiedArtifact(identity)
 	if err != nil {
@@ -85,21 +125,36 @@ func TestBindExecutionProfileToVerifiedArtifact(t *testing.T) {
 	if _, err := profile.BindVerifiedArtifact(wrong); !errors.Is(err, ErrExecutionProfileArtifactMismatch) {
 		t.Fatalf("err=%v", err)
 	}
+	missingImport := identity
+	missingImport.ImportRoots = []string{"agent_runtime", "json", "sys"}
+	if _, err := profile.BindVerifiedArtifact(missingImport); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
+		t.Fatalf("missing import err=%v", err)
+	}
+	legacy := identity
+	legacy.ImportRoots = nil
+	if _, err := profile.BindVerifiedArtifact(legacy); !errors.Is(err, ErrExecutionProfileImportUnavailable) {
+		t.Fatalf("legacy err=%v", err)
+	}
 }
 
 func distributionManifestFixture(t *testing.T, artifact []byte, profile string) map[string]any {
 	t.Helper()
 	artifactSum := sha256.Sum256(artifact)
+	inventorySum := sha256.Sum256(distributionImportInventoryFixture(t, profile))
 	filename := "agent-python-runtime.wasm"
 	packages := []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}}
 	var extension any
 	if profile == "numpy-core" {
 		filename = "agent-python-runtime-numpy-core.wasm"
 		packages = append(packages, map[string]any{"name": "numpy", "version": "2.3.0", "status": "selected-core"})
-		extension = map[string]any{"filename": "numpy-core-selection.json", "manifest_sha256": strings.Repeat("3", 64), "profile": "core", "modules": []any{"numpy._core._multiarray_umath", "numpy.linalg._umath_linalg"}, "link_input_count": 2}
+		extension = map[string]any{"filename": "extension-selection.json", "manifest_sha256": strings.Repeat("3", 64), "profile": "core", "modules": []any{"numpy._core._multiarray_umath", "numpy.linalg._umath_linalg"}, "link_input_count": 2}
+	}
+	imports := []any{"agent_runtime", "json", "math", "sys"}
+	if profile == "numpy-core" {
+		imports = []any{"agent_runtime", "json", "math", "numpy", "sys"}
 	}
 	return map[string]any{
-		"schema_version":    2,
+		"schema_version":    3,
 		"abi_version":       "v1",
 		"artifact_profile":  profile,
 		"target":            "wasm32-wasip1",
@@ -109,8 +164,29 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 		"wasm":              map[string]any{"imports": []any{}, "exports": []any{"_start"}},
 		"packages":          packages,
 		"extension_profile": extension,
-		"limitations":       []any{"bounded"},
+		"python_import_inventory": map[string]any{
+			"schema_version": 1, "filename": "import-inventory.json", "sha256": hex.EncodeToString(inventorySum[:]),
+			"probe": "guest-importlib-find-spec-v1", "implementation": "cpython", "python_version": "3.14.0",
+			"discoverable_roots": imports, "failures": []any{},
+		},
+		"limitations": []any{"bounded"},
 	}
+}
+
+func distributionImportInventoryFixture(t *testing.T, profile string) []byte {
+	t.Helper()
+	roots := []string{"agent_runtime", "json", "math", "sys"}
+	if profile == "numpy-core" {
+		roots = []string{"agent_runtime", "json", "math", "numpy", "sys"}
+	}
+	encoded, err := json.Marshal(map[string]any{
+		"schema_version": 1, "artifact_profile": profile, "probe": "guest-importlib-find-spec-v1",
+		"implementation": "cpython", "python_version": "3.14.0", "discoverable_roots": roots, "failures": []any{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
 }
 
 func cloneManifestFixture(t *testing.T, value map[string]any) map[string]any {

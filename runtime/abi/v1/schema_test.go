@@ -14,7 +14,7 @@ import (
 )
 
 var schemaNames = []string{
-	"request", "response", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
+	"request", "response", "compatibility-result", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
 	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "effect-attempt-v2", "effect-attempt-v3", "commit-command", "audit-evidence", "transaction-evidence", "transaction-evidence-v2", "transaction-evidence-v3",
 }
 

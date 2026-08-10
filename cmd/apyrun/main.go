@@ -150,6 +150,12 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			return 2
 		}
 		operator.boundExecutionProfile = &bound
+		runConfig.ExecutionProfile = &bound
+		compatibilityResult, compatibilityErr := runtimeconfig.EvaluateRunCompatibility(decodedRequest, runConfig.ExecutionProfile)
+		if compatibilityErr != nil || compatibilityResult.Validate() != nil {
+			writeDiagnostic(stderr, "execution profile source comparison failed")
+			return 2
+		}
 	}
 	if deps.newIdentity == nil {
 		deps.newIdentity = randomRunIdentity

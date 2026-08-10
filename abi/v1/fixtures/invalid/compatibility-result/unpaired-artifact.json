@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "analyzer": "conservative-python-imports-v1",
+  "status": "compatible",
+  "syntax_checked": false,
+  "source_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "profile": "base",
+  "artifact_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "declared_imports": ["json"],
+  "observed_imports": ["json"],
+  "undeclared_imports": [],
+  "unqualified_imports": [],
+  "indeterminate_reasons": [],
+  "evidence_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+}

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -27,6 +28,41 @@ func TestCompatibilityDeclarationIsBoundedAndStrict(t *testing.T) {
 				t.Fatal("invalid compatibility declaration accepted")
 			}
 		})
+	}
+}
+
+func TestAdmitRunCompatibilityRejectsUndeclaredStaticImport(t *testing.T) {
+	profile, err := NewExecutionProfile("base", []string{"json", "math"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := DecodeRunRequest([]byte(`{"run_id":"run","code":"import json, math\nresult=1","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := EvaluateRunCompatibility(request, &profile)
+	var sourceErr *SourceCompatibilityError
+	if !errors.As(err, &sourceErr) || !errors.Is(err, ErrExecutionProfileUnsupported) || !errors.Is(err, ErrSourceCompatibilityUnsupported) || result.Status() != SourceUnsupported {
+		t.Fatalf("result=%v err=%v", result.Status(), err)
+	}
+	if got := result.UndeclaredImports(); !reflect.DeepEqual(got, []string{"math"}) {
+		t.Fatalf("undeclared=%v", got)
+	}
+}
+
+func TestAdmitRunCompatibilityRejectsIndeterminateDynamicImport(t *testing.T) {
+	profile, err := NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := DecodeRunRequest([]byte(`{"run_id":"run","code":"result=__import__(inputs['module'])","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := EvaluateRunCompatibility(request, &profile)
+	var sourceErr *SourceCompatibilityError
+	if !errors.As(err, &sourceErr) || !errors.Is(err, ErrSourceCompatibilityIndeterminate) || result.Status() != SourceIndeterminate {
+		t.Fatalf("result=%v err=%v", result.Status(), err)
 	}
 }
 

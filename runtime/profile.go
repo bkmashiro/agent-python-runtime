@@ -247,18 +247,18 @@ func ValidateCompatibilityDeclaration(declaration *CompatibilityDeclaration) err
 	return nil
 }
 
-// AdmitRunCompatibility compares an untrusted declaration with one Host-bound
-// artifact profile. A missing declaration preserves the v1 request path; when a
-// declaration is present, absence of Host profile policy fails closed.
-func AdmitRunCompatibility(request RunRequest, profile *ExecutionProfile) error {
+// EvaluateRunCompatibility compares the caller declaration and obvious static
+// source imports with one Host profile. The returned immutable result is suitable
+// as later RunPlan evidence; it never grants imports or claims syntax validity.
+func EvaluateRunCompatibility(request RunRequest, profile *ExecutionProfile) (CompatibilityResult, error) {
 	if request.Compatibility == nil {
-		return nil
+		return CompatibilityResult{}, nil
 	}
 	if err := ValidateCompatibilityDeclaration(request.Compatibility); err != nil {
-		return err
+		return CompatibilityResult{}, err
 	}
 	if profile == nil || profile.Validate() != nil || profile.id != request.Compatibility.Profile {
-		return &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile}
+		return CompatibilityResult{}, &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile}
 	}
 	unsupported := make([]string, 0)
 	for _, module := range request.Compatibility.Imports {
@@ -269,9 +269,21 @@ func AdmitRunCompatibility(request RunRequest, profile *ExecutionProfile) error 
 	}
 	if len(unsupported) != 0 {
 		sort.Strings(unsupported)
-		return &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile, UnsupportedImports: unsupported}
+		return CompatibilityResult{}, &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile, UnsupportedImports: unsupported}
 	}
-	return nil
+	result := CompareSourceCompatibility(request, *profile)
+	if result.Status() != SourceCompatible {
+		return result, &SourceCompatibilityError{Result: result}
+	}
+	return result, nil
+}
+
+// AdmitRunCompatibility compares an untrusted declaration with one Host-bound
+// artifact profile. A missing declaration preserves the v1 request path; when a
+// declaration is present, absence of Host profile policy fails closed.
+func AdmitRunCompatibility(request RunRequest, profile *ExecutionProfile) error {
+	_, err := EvaluateRunCompatibility(request, profile)
+	return err
 }
 
 func validProfileID(id string) bool {

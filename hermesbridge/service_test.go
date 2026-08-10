@@ -169,6 +169,31 @@ func TestServiceRejectsProfileBeforeStartingTraceOrRunner(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsIndeterminateSourceBeforeStartingTraceOrRunner(t *testing.T) {
+	trace := &fakeTrace{}
+	runner := &fakeRunner{properties: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+		ExecutionProfileID: "base", AllowedImports: []string{"json"},
+	}, run: func(context.Context, []byte) ([]byte, error) {
+		return nil, errors.New("runner must not be called")
+	}}
+	service, err := NewService(runner, trace, func() (string, error) { return "execution-profile", nil }, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validExecuteRequest()
+	request.Code = `result = __import__(inputs["module"])`
+	request.Compatibility = &runtimeconfig.CompatibilityDeclaration{Profile: "base", Imports: []string{"json"}}
+	response := service.Execute(context.Background(), request)
+	if response.Status != ResponseStatusError || response.Error == nil || response.Error.Code != "profile_unsupported" || response.Outcome != nil {
+		t.Fatalf("response=%+v", response)
+	}
+	if atomic.LoadInt32(&runner.runs) != 0 || trace.started != 0 || trace.completed != 0 || response.ExecutionRef != nil {
+		t.Fatalf("runner=%d trace=%+v execution_ref=%+v", runner.runs, trace, response.ExecutionRef)
+	}
+}
+
 func TestServiceRejectsForgedExecutionReference(t *testing.T) {
 	runner := &fakeRunner{run: func(ctx context.Context, payload []byte) ([]byte, error) {
 		response := guestResponse(t, ctx, `42`)

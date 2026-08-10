@@ -4,7 +4,7 @@
 
 **Proposed evaluation contract, frozen before result generation.**
 
-This document defines the workload, comparison validity rules, lifecycle units, metrics, and oracles required to evaluate the post-Code-Mode product thesis. Explicit typed requirements rejection, artifact-bound profile/import manifest admission, target-Guest-generated discoverable-root inventory, and curated fresh-Guest import/operation qualification are Current foundations; conservative source comparison, workspace overlays, real-provider reconciliation, and Cloudflare baselines are not implemented in this repository. Compatibility-backend selection and execution are outside this repository.
+This document defines the workload, comparison validity rules, lifecycle units, metrics, and oracles required to evaluate the post-Code-Mode product thesis. Explicit typed requirements rejection, artifact-bound profile/import manifest admission, target-Guest-generated discoverable-root inventory, curated fresh-Guest import/operation qualification, and bounded conservative source comparison are Current foundations; workspace overlays, real-provider reconciliation, and Cloudflare baselines are not implemented here.
 
 The Current implementation boundary remains [Architecture](architecture.md), [Workspace Capsule v1](workspace-capsule.md), and the artifact-bound test/evidence suites. The broader system roadmap is maintained in [Vinculum](https://github.com/bkmashiro/vinculum/blob/main/docs/roadmap.md).
 
@@ -38,7 +38,7 @@ For a qualified provider, provider acceptance followed by response loss enters a
 
 ### H5 — Honest preflight profile rejection
 
-For requests with an explicit bounded `requirements` declaration, Pysolate returns a typed `runtime_unsupported` outcome with required features and the legacy ABI field `escalation_required=true` before execution. That field means only that backend selection must change. An explicit `compatibility` manifest is separately matched against Host import policy bound to verified artifact profile/package/digests; mismatch returns `profile_unsupported` without an escalation outcome. Pysolate does not launch a fallback, select a VM, or classify ordinary Python errors, denial, timeout, resource exhaustion, or ambiguous effects as a backend-selection signal. This mechanism is **Current**; its supported/profile-rejection share on a representative workload corpus remains **Proposed**.
+For requests with an explicit bounded `requirements` declaration, Pysolate returns a typed `runtime_unsupported` outcome with required features and the legacy ABI field `escalation_required=true` before execution. That field means only that backend selection must change. An explicit `compatibility` manifest is separately matched against Host import policy bound to verified artifact profile/package/digests. `conservative-python-imports-v1` rejects obvious undeclared/unqualified static imports and marks dynamic/relative/ambiguous/bounds-exceeded source `indeterminate`; both paths return `profile_unsupported` without an escalation outcome before Guest work. The immutable result binds exact source and, after artifact admission, artifact/manifest identity while explicitly recording `syntax_checked=false`. Pysolate does not launch a fallback, select a VM, or classify ordinary Python errors, denial, timeout, resource exhaustion, or ambiguous effects as a backend-selection signal. This mechanism is **Current**; its supported/profile-rejection share on a representative workload corpus remains **Proposed**.
 
 ## 3. North-star workload
 

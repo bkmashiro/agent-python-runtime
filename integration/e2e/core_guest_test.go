@@ -55,9 +55,34 @@ func newEngineWithConfig(t *testing.T, config runtime.RunConfig) engine.Runner {
 
 func newEngineWithFactory(t *testing.T, config runtime.RunConfig, factory engine.Factory) engine.Runner {
 	t.Helper()
-	wasm, err := os.ReadFile(guestArtifact(t))
+	artifactPath := guestArtifact(t)
+	wasm, err := os.ReadFile(artifactPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if config.ExecutionProfile != nil && config.ExecutionProfile.ArtifactSHA256() == "" {
+		bundleRoot := filepath.Dir(artifactPath)
+		manifest, readErr := os.ReadFile(filepath.Join(bundleRoot, "manifest.json"))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		inventory, readErr := os.ReadFile(filepath.Join(bundleRoot, "import-inventory.json"))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		qualification, readErr := os.ReadFile(filepath.Join(bundleRoot, "import-qualification.json"))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		identity, verifyErr := runtime.VerifyDistributionArtifact(filepath.Base(artifactPath), wasm, manifest, inventory, qualification)
+		if verifyErr != nil {
+			t.Fatal(verifyErr)
+		}
+		bound, bindErr := config.ExecutionProfile.BindVerifiedArtifact(identity)
+		if bindErr != nil {
+			t.Fatal(bindErr)
+		}
+		config.ExecutionProfile = &bound
 	}
 	instance, err := factory.New(context.Background(), wasm, config)
 	if err != nil {

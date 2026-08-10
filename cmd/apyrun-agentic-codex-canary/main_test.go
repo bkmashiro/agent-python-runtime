@@ -110,7 +110,7 @@ func TestExecuteFlagsUsesDefaultsAndRejectsMissingArguments(t *testing.T) {
 	deps.newAdapter = func(string, string, string, time.Duration) (provider.Adapter, error) { return fakeAdapter{}, nil }
 	deps.repositoryRoot = func() (string, error) { return codexPath, nil }
 	deps.codexVersion = func(_ context.Context, _ string, _ time.Duration) (string, error) { return "v1", nil }
-	deps.runTrial = func(_ context.Context, _ provider.Adapter, _ agentic.Task, _ agentic.Condition, _ string, _ uint32, _ agentic.TrialLimits, _ agentic.ExecutionIdentity, _ agentic.PythonWorkflowFactory) (agentic.TrialResult, error) {
+	deps.runTrial = func(_ context.Context, _ provider.Adapter, _ agentic.Task, _ agentic.Condition, _ string, _ uint32, _ agentic.TrialLimits, _ agentic.ExecutionIdentity, _ agentic.DevelopmentTreatment, _ agentic.PythonWorkflowFactory) (agentic.TrialResult, error) {
 		return agentic.TrialResult{}, errors.New("trial should not execute in missing args")
 	}
 	if _, err := run(context.Background(), []string{"-codex", codexPath, "-guest", guestPath, "-repository-commit", strings.Repeat("e", 40), "-out", outPath}, deps); err == nil {

@@ -37,7 +37,7 @@ type dependencies struct {
 	readFile       func(string) ([]byte, error)
 	newAdapter     func(string, string, string, time.Duration) (provider.Adapter, error)
 	newPythonWasi  func(context.Context, []byte, runtimeconfig.RunConfig, *agentic.ToolRuntime) (agentic.PythonWorkflow, error)
-	runTrial       func(context.Context, provider.Adapter, agentic.Task, agentic.Condition, string, uint32, agentic.TrialLimits, agentic.ExecutionIdentity, agentic.PythonWorkflowFactory) (agentic.TrialResult, error)
+	runTrial       func(context.Context, provider.Adapter, agentic.Task, agentic.Condition, string, uint32, agentic.TrialLimits, agentic.ExecutionIdentity, agentic.DevelopmentTreatment, agentic.PythonWorkflowFactory) (agentic.TrialResult, error)
 	codexVersion   func(context.Context, string, time.Duration) (string, error)
 	now            func() time.Time
 	repositoryRoot func() (string, error)
@@ -53,7 +53,7 @@ func productionDependencies() dependencies {
 		newPythonWasi: func(ctx context.Context, guest []byte, config runtimeconfig.RunConfig, tools *agentic.ToolRuntime) (agentic.PythonWorkflow, error) {
 			return agentic.NewWASIPythonExecutor(ctx, guest, config, tools)
 		},
-		runTrial:     agentic.RunDevelopmentDiagnosticTrialForModelWithIdentity,
+		runTrial:     agentic.RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment,
 		codexVersion: probeCodexVersion,
 		now:          time.Now,
 		repositoryRoot: func() (string, error) {
@@ -97,7 +97,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 		}
 	}
 	if deps.runTrial == nil {
-		deps.runTrial = agentic.RunDevelopmentDiagnosticTrialForModelWithIdentity
+		deps.runTrial = agentic.RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment
 	}
 	if deps.codexVersion == nil {
 		deps.codexVersion = probeCodexVersion
@@ -119,8 +119,9 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	datasetRoot := flags.String("dataset", "", "routing diagnostic dataset root")
 	guestPath := flags.String("guest", "", "exact core Guest WASM artifact")
 	repoCommit := flags.String("repository-commit", "", "exact source commit")
-	taskID := flags.String("task", "rd-001", "routing task identifier")
+	taskID := flags.String("task", "rd-001", "routing task ID")
 	conditionValue := flags.String("condition", string(agentic.ConditionDirect), "direct|python|hybrid")
+	treatmentPath := flags.String("treatment", "", "optional frozen development treatment; defaults to baseline-v1")
 	replicate := flags.Uint("replicate", 0, "trial replicate")
 	out := flags.String("out", "", "new artifact path")
 	timeoutText := flags.String("timeout", "180s", "Codex timeout")
@@ -145,6 +146,13 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	condition := agentic.Condition(*conditionValue)
 	if !isSupportedCondition(condition) {
 		return "", errors.New("invalid condition")
+	}
+	treatment := agentic.BaselineTreatment()
+	if *treatmentPath != "" {
+		treatment, err = agentic.LoadDevelopmentTreatment(*treatmentPath)
+		if err != nil {
+			return "", err
+		}
 	}
 	if err := validateCanaryLimits(canaryLimits); err != nil {
 		return "", err
@@ -243,7 +251,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 		}
 	}
 
-	result, err := deps.runTrial(ctx, adapter, *task, condition, canonicalModel, uint32(*replicate), canaryLimits, identity, factory)
+	result, err := deps.runTrial(ctx, adapter, *task, condition, canonicalModel, uint32(*replicate), canaryLimits, identity, treatment, factory)
 	if err != nil {
 		return "", err
 	}

@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "analyzer": "conservative-python-imports-v1",
+  "schema_version": 2,
+  "analyzer": "static-agent-imports-v2",
   "status": "compatible",
   "syntax_checked": false,
   "source_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -9,6 +9,7 @@
   "declared_imports": ["json"],
   "observed_imports": ["json"],
   "undeclared_imports": [],
+  "unused_declared_imports": [],
   "unqualified_imports": [],
   "indeterminate_reasons": [],
   "evidence_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"

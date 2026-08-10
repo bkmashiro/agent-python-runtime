@@ -2,7 +2,7 @@
 
 ## Status
 
-**Current for explicit compatibility manifests, Host-configured import policy, artifact-bound profile identity, target-Guest-generated discoverability, curated import/operation qualification, and bounded conservative source comparison.** This is a conservative declaration and versioned evidence set—not an exact Python parser, complete transitive closure proof, or arbitrary module support claim.
+**Current for explicit compatibility manifests, Host-configured import policy, artifact-bound profile identity, target-Guest-generated discoverability, curated import/operation qualification, conservative Host comparison, exact Guest static-preamble validation, and a pre-cache CPython import seal.** This is a restricted Agent Code contract—not arbitrary Python compatibility, a complete theoretical transitive closure proof, or arbitrary module support.
 
 ## Contract
 
@@ -139,21 +139,25 @@ It does **not** prove:
 - that transitive package/native-extension requirements were inferred;
 - that a representative workload corpus has high Pysolate admission or completion share.
 
-A request can still lie by omitting an import that the bounded scanner cannot observe. Obvious static omissions are rejected before Guest work; unobserved dynamic or data-dependent omissions remain possible. Runtime availability and Guest restrictions stay fail-closed, and any later `ImportError` is an ordinary Guest failure, not backend escalation.
+A profile-qualified request cannot omit or add an Agent-authored import root: the exact Guest AST root set must equal the root-only caller declaration. Data-dependent library behavior can still reach a module path not loaded during preparation; the native CPython gate rejects that path, and the current Run fails without backend escalation.
 
-## Current source-comparison layer
+## Current Static Import Agent Code layer
 
-The profile path now adds conservative source/import declaration comparison to the artifact-generated qualification catalog:
+The profile path combines artifact qualification with both early Host evidence and exact Guest preparation:
 
 ```text
-verified artifact profile/digests/packages            [Current]
-+ target-Guest find-spec discoverable-root inventory  [Current]
-+ curated fresh-Guest import/operation qualification  [Current]
-+ conservative-python-imports-v1 source comparison    [Current]
-+ selected native/transitive closure evidence         [Partial/Proposed]
+verified artifact profile/digests/packages             [Current]
++ target-Guest find-spec discoverable-root inventory   [Current]
++ curated fresh-Guest import/operation qualification   [Current]
++ static-agent-imports-v2 early comparison               [Current]
++ exact Guest AST/bytecode static-preamble validation  [Current]
++ pre-Broker import preparation and CPython module seal [Current]
++ selected operation/transitive closure evidence       [Partial/Proposed]
 -> fuller Host-authored compatibility evidence
 ```
 
-The scanner records obvious static roots, compares them with caller declarations and the current Host/profile set, and emits immutable exact-source-digest-bound `compatible | unsupported | indeterminate` evidence. After artifact binding, the same result also binds artifact and manifest digests. Dynamic import/execution, relative imports, lexical ambiguity, and boundedness overflow are indeterminate and fail closed. `syntax_checked=false` is explicit: this layer does not invoke or emulate the exact Guest parser. See [Conservative source import comparison](source-compatibility.md).
+The Host scanner emits immutable exact-source-digest-bound `compatible | unsupported | indeterminate` evidence and explicitly records `syntax_checked=false`. Dynamic import/execution, relative/star import, non-preamble imports, undeclared roots, and unused declarations are unsupported. Genuine lexical or evidence-bound uncertainty remains indeterminate.
 
-The combined Current binding proves which profile/package distribution was loaded, that every Host-allowlisted root passed its exact named import/operation probe in a fresh instance of that target Guest, and that every static root observed by the bounded scanner is declared and admitted. It still does not prove arbitrary operations, exact syntax, complete source reachability, dynamic-import absence, or transitive closure.
+After fresh or never-served Guest checkout—but before workspace activation or Broker construction—the exact target CPython parses the source, checks the static absolute preamble, checks exact root equality, preloads that preamble, retains aliases, compiles a body with import nodes removed, and seals the loaded module set. The business body receives no `__import__`, `eval`, or `exec` builtins. A native hook enforces the sealed set before CPython module-cache lookup.
+
+The combined Current binding proves which profile/package distribution was loaded, that every Host-allowlisted root passed its exact named import/operation probe in a fresh instance, and that the exact Guest accepted the Agent Code source contract. It still does not prove arbitrary operations, all data-dependent library paths, theoretical transitive closure, program termination, or business success. See [Static Import Agent Code contract](source-compatibility.md).

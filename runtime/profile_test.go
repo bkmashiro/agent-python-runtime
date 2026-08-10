@@ -21,6 +21,7 @@ func TestCompatibilityDeclarationIsBoundedAndStrict(t *testing.T) {
 		"null imports":      `{"run_id":"r","code":"result=1","inputs":{},"compatibility":{"profile":"base","imports":null}}`,
 		"duplicate imports": `{"run_id":"r","code":"result=1","inputs":{},"compatibility":{"profile":"base","imports":["json","json"]}}`,
 		"bad import":        `{"run_id":"r","code":"result=1","inputs":{},"compatibility":{"profile":"base","imports":["../json"]}}`,
+		"dotted import":     `{"run_id":"r","code":"result=1","inputs":{},"compatibility":{"profile":"base","imports":["json.decoder"]}}`,
 		"unknown field":     `{"run_id":"r","code":"result=1","inputs":{},"compatibility":{"profile":"base","imports":[],"install":true}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -50,7 +51,7 @@ func TestAdmitRunCompatibilityRejectsUndeclaredStaticImport(t *testing.T) {
 	}
 }
 
-func TestAdmitRunCompatibilityRejectsIndeterminateDynamicImport(t *testing.T) {
+func TestAdmitRunCompatibilityRejectsDynamicImportAsUnsupported(t *testing.T) {
 	profile, err := NewExecutionProfile("base", []string{"json"})
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +62,7 @@ func TestAdmitRunCompatibilityRejectsIndeterminateDynamicImport(t *testing.T) {
 	}
 	result, err := EvaluateRunCompatibility(request, &profile)
 	var sourceErr *SourceCompatibilityError
-	if !errors.As(err, &sourceErr) || !errors.Is(err, ErrSourceCompatibilityIndeterminate) || result.Status() != SourceIndeterminate {
+	if !errors.As(err, &sourceErr) || !errors.Is(err, ErrSourceCompatibilityUnsupported) || result.Status() != SourceUnsupported {
 		t.Fatalf("result=%v err=%v", result.Status(), err)
 	}
 }
@@ -71,7 +72,7 @@ func TestExecutionProfileAdmissionIsHostBoundAndFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := RunRequest{Compatibility: &CompatibilityDeclaration{Profile: "base", Imports: []string{"json", "json.decoder", "math"}}}
+	request := RunRequest{Code: "import json, math\nresult = 1", Compatibility: &CompatibilityDeclaration{Profile: "base", Imports: []string{"json", "math"}}}
 	if err := AdmitRunCompatibility(request, &profile); err != nil {
 		t.Fatalf("declared imports rejected: %v", err)
 	}

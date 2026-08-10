@@ -11,22 +11,20 @@ import (
 func TestCompareSourceCompatibilityObservesOnlyStaticImportRoots(t *testing.T) {
 	request := sourceCompatibilityRequest(t, `
 # import subprocess
-message = "import socket"
 import json.decoder as decoder
 import base64, \
     hashlib
 from statistics import (
     mean,
 )
-if inputs.get("csv"):
-    import csv
+message = "import socket"
 result = decoder.JSONDecoder().decode("1")
-`, []string{"statistics", "json.decoder", "csv", "base64", "hashlib"})
-	result := CompareSourceCompatibility(request, sourceCompatibilityProfile(t, "agent_runtime", "base64", "csv", "hashlib", "json", "statistics", "sys"))
+`, []string{"statistics", "json", "base64", "hashlib"})
+	result := CompareSourceCompatibility(request, sourceCompatibilityProfile(t, "agent_runtime", "base64", "hashlib", "json", "statistics", "sys"))
 	if result.Status() != SourceCompatible || result.SyntaxChecked() {
-		t.Fatalf("status=%q syntax_checked=%v", result.Status(), result.SyntaxChecked())
+		t.Fatalf("result=%s", mustCompatibilityJSON(t, result))
 	}
-	want := []string{"base64", "csv", "hashlib", "json", "statistics"}
+	want := []string{"base64", "hashlib", "json", "statistics"}
 	if got := result.ObservedImports(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("observed=%v want=%v", got, want)
 	}
@@ -35,7 +33,7 @@ result = decoder.JSONDecoder().decode("1")
 	}
 }
 
-func TestCompareSourceCompatibilityMarksDynamicAndRelativeImportsIndeterminate(t *testing.T) {
+func TestCompareSourceCompatibilityRejectsDynamicAndRelativeImports(t *testing.T) {
 	for name, code := range map[string]string{
 		"dunder import": `result = __import__(inputs["module"])`,
 		"dunder alias":  `loader = __import__; result = loader(inputs["module"])`,
@@ -47,10 +45,23 @@ func TestCompareSourceCompatibilityMarksDynamicAndRelativeImportsIndeterminate(t
 		t.Run(name, func(t *testing.T) {
 			request := sourceCompatibilityRequest(t, code, []string{"json"})
 			result := CompareSourceCompatibility(request, sourceCompatibilityProfile(t, "agent_runtime", "json", "sys"))
-			if result.Status() != SourceIndeterminate || len(result.IndeterminateReasons()) == 0 {
+			if result.Status() != SourceUnsupported || len(result.IndeterminateReasons()) == 0 {
 				t.Fatalf("result=%s", mustCompatibilityJSON(t, result))
 			}
 		})
+	}
+}
+
+func TestCompareSourceCompatibilityRejectsDeclarationExpansionAndNonPreambleImport(t *testing.T) {
+	request := sourceCompatibilityRequest(t, "import json\nresult = 1", []string{"json", "math"})
+	result := CompareSourceCompatibility(request, sourceCompatibilityProfile(t, "json", "math"))
+	if result.Status() != SourceUnsupported || !reflect.DeepEqual(result.UnusedDeclaredImports(), []string{"math"}) {
+		t.Fatalf("result=%s", mustCompatibilityJSON(t, result))
+	}
+	request = sourceCompatibilityRequest(t, "result = 1\nimport json", []string{"json"})
+	result = CompareSourceCompatibility(request, sourceCompatibilityProfile(t, "json"))
+	if result.Status() != SourceUnsupported || !reflect.DeepEqual(result.IndeterminateReasons(), []string{"non_preamble_import"}) {
+		t.Fatalf("result=%s", mustCompatibilityJSON(t, result))
 	}
 }
 
@@ -101,10 +112,10 @@ func TestCompatibilityResultIsCanonicalAndReturnsDefensiveCopies(t *testing.T) {
 	if err := json.Unmarshal([]byte(mustCompatibilityJSON(t, first)), &document); err != nil {
 		t.Fatal(err)
 	}
-	if document["schema_version"] != float64(1) || document["analyzer"] != "conservative-python-imports-v1" || document["syntax_checked"] != false {
+	if document["schema_version"] != float64(2) || document["analyzer"] != "static-agent-imports-v2" || document["syntax_checked"] != false {
 		t.Fatalf("document=%v", document)
 	}
-	for _, field := range []string{"declared_imports", "observed_imports", "undeclared_imports", "unqualified_imports", "indeterminate_reasons"} {
+	for _, field := range []string{"declared_imports", "observed_imports", "undeclared_imports", "unused_declared_imports", "unqualified_imports", "indeterminate_reasons"} {
 		if document[field] == nil {
 			t.Fatalf("%s serialized as null: %v", field, document)
 		}
@@ -115,7 +126,7 @@ func TestCompareSourceCompatibilityRetainsKnownImportsAfterLexicalAmbiguity(t *t
 	request := sourceCompatibilityRequest(t, "message = 'unterminated\nimport math\n", []string{"json"})
 	result := CompareSourceCompatibility(request, sourceCompatibilityProfile(t, "json"))
 	if result.Status() != SourceUnsupported || !reflect.DeepEqual(result.ObservedImports(), []string{"math"}) ||
-		!reflect.DeepEqual(result.IndeterminateReasons(), []string{"lexically_ambiguous"}) {
+		!reflect.DeepEqual(result.IndeterminateReasons(), []string{"lexically_ambiguous", "non_preamble_import"}) {
 		t.Fatalf("result=%s", mustCompatibilityJSON(t, result))
 	}
 }

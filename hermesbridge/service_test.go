@@ -53,12 +53,16 @@ func (trace *fakeTrace) RuntimeCompleted(ctx context.Context, _ string, _ runtim
 }
 
 func guestResponse(t *testing.T, ctx context.Context, result string) []byte {
+	return guestResponseForCode(t, ctx, result, "result = inputs['left'] + inputs['right']")
+}
+
+func guestResponseForCode(t *testing.T, ctx context.Context, result, code string) []byte {
 	t.Helper()
 	ref, ok := engine.InvocationRefFromContext(ctx)
 	if !ok {
 		t.Fatal("runner did not receive Host invocation ref")
 	}
-	executionRef := runtimeconfig.ExecutionRef{InvocationRef: ref, ExecutedCodeSHA256: digestString("result = inputs['left'] + inputs['right']")}
+	executionRef := runtimeconfig.ExecutionRef{InvocationRef: ref, ExecutedCodeSHA256: digestString(code)}
 	payload, err := json.Marshal(runtimeconfig.RunResponse{
 		Status: runtimeconfig.RunResponseOK, Result: json.RawMessage(result), Receipts: json.RawMessage(`[]`),
 		Metrics: &runtimeconfig.RunMetrics{CapabilityCalls: 0, ResultBytes: uint32(len(result))}, ExecutionRef: &executionRef,
@@ -109,17 +113,18 @@ func TestServiceExecutesMatchingProfileManifest(t *testing.T) {
 		if err != nil || request.Compatibility == nil || request.Compatibility.Profile != "base" {
 			t.Fatalf("request=%+v err=%v", request, err)
 		}
-		return guestResponse(t, ctx, `42`), nil
+		return guestResponseForCode(t, ctx, `42`, request.Code), nil
 	}}
 	service, err := NewService(runner, trace, func() (string, error) { return "execution-profile-ok", nil }, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := validExecuteRequest()
-	request.Compatibility = &runtimeconfig.CompatibilityDeclaration{Profile: "base", Imports: []string{"json.decoder"}}
+	request.Code = "import json\nresult = 42"
+	request.Compatibility = &runtimeconfig.CompatibilityDeclaration{Profile: "base", Imports: []string{"json"}}
 	response := service.Execute(context.Background(), request)
 	if response.Status != ResponseStatusOK || atomic.LoadInt32(&runner.runs) != 1 || trace.started != 1 || trace.completed != 1 {
-		t.Fatalf("response=%+v runner=%d trace=%+v", response, runner.runs, trace)
+		t.Fatalf("response=%+v error=%+v runner=%d trace=%+v", response, response.Error, runner.runs, trace)
 	}
 }
 

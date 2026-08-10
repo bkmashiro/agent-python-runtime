@@ -125,6 +125,8 @@ CPYTHON_WASI_CONFIG_SITE="${CPYTHON_DIR}/Tools/wasm/wasi/config.site-wasm32-wasi
 python3 "${ROOT_DIR}/tools/patch_cpython_wasi_timer_config.py" \
   "${CPYTHON_WASI_CONFIG_SITE}" "${CPYTHON_WASI_CONFIG_SITE}.patched"
 mv "${CPYTHON_WASI_CONFIG_SITE}.patched" "${CPYTHON_WASI_CONFIG_SITE}"
+python3 "${ROOT_DIR}/tools/patch_cpython_import_gate.py" \
+  "${CPYTHON_DIR}/Python/import.c"
 tar xzf "${DOWNLOAD_DIR}/wasi-sdk.tar.gz" -C "${TOOLS_DIR}/wasi-sdk" --strip-components=1
 tar xzf "${DOWNLOAD_DIR}/wasm-tools.tar.gz" -C "${TOOLS_DIR}/wasm-tools" --strip-components=1
 tar xJf "${DOWNLOAD_DIR}/wasmtime.tar.xz" -C "${TOOLS_DIR}/wasmtime" --strip-components=1
@@ -304,6 +306,7 @@ FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
   -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
   -lpthread -lm \
   -Wl,--export=runtime_init \
+  -Wl,--export=runtime_validate_source \
   -Wl,--export=runtime_prepare \
   -Wl,--export=alloc \
   -Wl,--export=dealloc \
@@ -385,6 +388,7 @@ PY
     -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
     -lpthread -lm -lc-printscan-long-double \
     -Wl,--export=runtime_init \
+    -Wl,--export=runtime_validate_source \
     -Wl,--export=runtime_prepare \
     -Wl,--export=alloc \
     -Wl,--export=dealloc \
@@ -419,6 +423,7 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
     -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
     -lpthread -lm \
     -Wl,--export=runtime_init \
+    -Wl,--export=runtime_validate_source \
     -Wl,--export=runtime_prepare \
     -Wl,--export=runtime_preinitialize \
     -Wl,--export=runtime_preinitialized_initialize \

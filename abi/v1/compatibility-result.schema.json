@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-runtime.dev/abi/v1/compatibility-result.schema.json",
-  "title": "Agent Python Runtime Host compatibility result v1",
+  "title": "Agent Python Runtime Host compatibility result v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,13 +14,14 @@
     "declared_imports",
     "observed_imports",
     "undeclared_imports",
+    "unused_declared_imports",
     "unqualified_imports",
     "indeterminate_reasons",
     "evidence_sha256"
   ],
   "properties": {
-    "schema_version": {"const": 1},
-    "analyzer": {"const": "conservative-python-imports-v1"},
+    "schema_version": {"const": 2},
+    "analyzer": {"const": "static-agent-imports-v2"},
     "status": {"enum": ["compatible", "unsupported", "indeterminate"]},
     "syntax_checked": {"const": false},
     "source_sha256": {"$ref": "#/$defs/digest"},
@@ -30,10 +31,11 @@
     "declared_imports": {"$ref": "#/$defs/declaredRoots"},
     "observed_imports": {"$ref": "#/$defs/observedRoots"},
     "undeclared_imports": {"$ref": "#/$defs/observedRoots"},
+    "unused_declared_imports": {"$ref": "#/$defs/declaredRoots"},
     "unqualified_imports": {"$ref": "#/$defs/observedRoots"},
     "indeterminate_reasons": {
       "type": "array",
-      "maxItems": 7,
+      "maxItems": 8,
       "uniqueItems": true,
       "items": {
         "enum": [
@@ -41,6 +43,7 @@
           "dynamic_import",
           "import_set_too_large",
           "lexically_ambiguous",
+          "non_preamble_import",
           "noncanonical_import",
           "relative_import",
           "source_too_large"

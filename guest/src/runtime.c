@@ -19,6 +19,37 @@
 
 static uint8_t response_buffer[AGENT_RUNTIME_RESPONSE_MAX + 4];
 static PyObject *runtime_module = NULL;
+static PyObject *allowed_import_names = NULL;
+static int import_policy_sealed = 0;
+static int audit_hook_registered = 0;
+
+static int agent_runtime_audit_hook(const char *event, PyObject *args,
+                                    void *user_data) {
+    (void)user_data;
+    if (!import_policy_sealed || strcmp(event, "agent_runtime.import") != 0) {
+        return 0;
+    }
+    if (!PyTuple_Check(args) || PyTuple_GET_SIZE(args) != 1) {
+        PyErr_SetString(PyExc_RuntimeError, "invalid Pysolate import audit event");
+        return -1;
+    }
+    PyObject *name = PyTuple_GET_ITEM(args, 0);
+    if (!PyUnicode_Check(name) || allowed_import_names == NULL) {
+        PyErr_SetString(PyExc_ImportError, "Pysolate import policy is unavailable");
+        return -1;
+    }
+    int admitted = PySet_Contains(allowed_import_names, name);
+    if (admitted < 0) {
+        return -1;
+    }
+    if (!admitted) {
+        PyErr_Format(PyExc_ImportError,
+                     "module is outside the sealed Pysolate import set: %U",
+                     name);
+        return -1;
+    }
+    return 0;
+}
 
 static void write_u32_le(uint8_t *dst, uint32_t value) {
     dst[0] = (uint8_t)(value & 0xffu);
@@ -74,8 +105,43 @@ static PyObject *python_host_call(PyObject *self, PyObject *args) {
     return result;
 }
 
+static PyObject *python_seal_imports(PyObject *self, PyObject *names) {
+    (void)self;
+    if (import_policy_sealed) {
+        PyErr_SetString(PyExc_RuntimeError, "Pysolate import policy is already sealed");
+        return NULL;
+    }
+    PyObject *sequence = PySequence_Fast(names, "import names must be a sequence");
+    if (sequence == NULL) {
+        return NULL;
+    }
+    PyObject *allowed = PySet_New(NULL);
+    if (allowed == NULL) {
+        Py_DECREF(sequence);
+        return NULL;
+    }
+    Py_ssize_t count = PySequence_Fast_GET_SIZE(sequence);
+    for (Py_ssize_t index = 0; index < count; index++) {
+        PyObject *name = PySequence_Fast_GET_ITEM(sequence, index);
+        if (!PyUnicode_Check(name) || PyUnicode_GET_LENGTH(name) == 0 ||
+            PyUnicode_GET_LENGTH(name) > 256 || PySet_Add(allowed, name) < 0) {
+            Py_DECREF(allowed);
+            Py_DECREF(sequence);
+            if (!PyErr_Occurred()) {
+                PyErr_SetString(PyExc_ValueError, "invalid sealed import name");
+            }
+            return NULL;
+        }
+    }
+    Py_DECREF(sequence);
+    allowed_import_names = allowed;
+    import_policy_sealed = 1;
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef agent_runtime_host_methods[] = {
     {"call", python_host_call, METH_VARARGS, "Perform a bounded Host capability call."},
+    {"seal_imports", python_seal_imports, METH_O, "Seal the exact per-Run import set."},
     {NULL, NULL, 0, NULL},
 };
 
@@ -98,6 +164,12 @@ static int32_t ensure_interpreter(void) {
 
     if (PyImport_AppendInittab("_agent_runtime_host", PyInit__agent_runtime_host) != 0) {
         return -1;
+    }
+    if (!audit_hook_registered) {
+        if (PySys_AddAuditHook(agent_runtime_audit_hook, NULL) != 0) {
+            return -1;
+        }
+        audit_hook_registered = 1;
     }
 #ifdef AGENT_RUNTIME_EXTENSION_PROFILE
     if (register_selected_builtins() != 0) {
@@ -179,6 +251,25 @@ int32_t runtime_init(const char *config, int32_t config_len) {
     }
     Py_DECREF(result);
     return 0;
+}
+
+int32_t runtime_validate_source(const char *request, int32_t request_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL) {
+        return -1;
+    }
+    PyObject *result = call_with_utf8("_validate_request_source", request,
+                                     request_len);
+    if (result == NULL) {
+        PyErr_Print();
+        return -1;
+    }
+    long status = PyLong_AsLong(result);
+    Py_DECREF(result);
+    if (status < 0 || status > 2 || PyErr_Occurred()) {
+        PyErr_Clear();
+        return -1;
+    }
+    return (int32_t)status;
 }
 
 #ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE

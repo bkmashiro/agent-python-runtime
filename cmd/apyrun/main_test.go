@@ -329,7 +329,11 @@ func TestOperatorConfigBindsExecutionProfile(t *testing.T) {
 }
 
 func admitProfileForTest(config runtimeconfig.RunConfig, profile string, imports []string) error {
-	return runtimeconfig.AdmitRunCompatibility(runtimeconfig.RunRequest{Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: profile, Imports: imports}}, config.ExecutionProfile)
+	code := "result = 1"
+	if len(imports) != 0 {
+		code = "import " + strings.Join(imports, ", ") + "\nresult = 1"
+	}
+	return runtimeconfig.AdmitRunCompatibility(runtimeconfig.RunRequest{Code: code, Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: profile, Imports: imports}}, config.ExecutionProfile)
 }
 
 func TestExecuteBindsProfileToVerifiedArtifactBeforeFactory(t *testing.T) {

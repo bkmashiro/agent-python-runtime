@@ -475,33 +475,33 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
-	if engine.workspaceRun != nil {
-		select {
-		case engine.workspaceRun <- struct{}{}:
-			defer func() { <-engine.workspaceRun }()
-		case <-runContext.Done():
-			return nil, runContext.Err()
-		}
-	}
 	var broker *capability.Broker
-	if engine.brokerFactory != nil {
-		var err error
-		broker, err = engine.brokerFactory(runContext)
-		if err != nil {
-			return nil, fmt.Errorf("create capability broker: %w", err)
-		}
-		if broker == nil {
-			return nil, errors.New("capability broker factory returned nil")
-		}
-		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
-			return nil, ErrExecutionIdentityMismatch
-		}
-		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
-	}
 	runSucceeded := false
 	finalizeReason := "execution_failed"
-	if broker != nil {
-		defer func() {
+	instance, err := engine.checkoutModule(runContext)
+	if err != nil {
+		return nil, err
+	}
+	module := instance.module
+	guestStderr := instance.stderr
+	activeAttemptID := ""
+	activeRegistered := false
+	workspaceAcquired := false
+	defer func() {
+		observePreparedFootprint(runContext, engine.footprintSink, engine.strategy, instance)
+		closeStarted := time.Now()
+		closeErr := engine.closeServedInstance(instance)
+		observePreparedReclaim(runContext, engine.reclaimSink, engine.strategy, instance, time.Since(closeStarted), closeErr)
+		if closeErr != nil {
+			runSucceeded = false
+			finalizeReason = "cleanup_failed"
+			runErr = errors.Join(runErr, fmt.Errorf("close served instance: %w", closeErr))
+			payload = nil
+		}
+		if activeRegistered {
+			engine.unregisterActiveFootprint(activeAttemptID)
+		}
+		if broker != nil {
 			if errors.Is(runContext.Err(), context.DeadlineExceeded) {
 				finalizeReason = "timeout"
 			} else if errors.Is(runContext.Err(), context.Canceled) {
@@ -520,35 +520,51 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 				runErr = errors.Join(runErr, fmt.Errorf("finalize Host transaction: %w", finalizeErr))
 				payload = nil
 			}
-			if closeErr := broker.CloseJournal(); closeErr != nil {
-				runErr = errors.Join(runErr, fmt.Errorf("close Host transaction journal: %w", closeErr))
+			if journalErr := broker.CloseJournal(); journalErr != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("close Host transaction journal: %w", journalErr))
 				payload = nil
 			}
-		}()
-	}
-	instance, err := engine.checkoutModule(runContext)
-	if err != nil {
-		return nil, err
-	}
-	module := instance.module
-	guestStderr := instance.stderr
-	activeAttemptID := ""
-	activeRegistered := false
-	defer func() {
-		observePreparedFootprint(runContext, engine.footprintSink, engine.strategy, instance)
-		closeStarted := time.Now()
-		closeErr := engine.closeServedInstance(instance)
-		observePreparedReclaim(runContext, engine.reclaimSink, engine.strategy, instance, time.Since(closeStarted), closeErr)
-		if closeErr != nil {
-			runSucceeded = false
-			finalizeReason = "cleanup_failed"
-			runErr = errors.Join(runErr, fmt.Errorf("close served instance: %w", closeErr))
-			payload = nil
 		}
-		if activeRegistered {
-			engine.unregisterActiveFootprint(activeAttemptID)
+		if workspaceAcquired {
+			<-engine.workspaceRun
 		}
 	}()
+
+	if trustedPrepare != "" {
+		prepareStarted := time.Now()
+		err = callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare))
+		observe(engine.observer, "prepare", prepareStarted, err)
+		if err != nil {
+			return nil, withGuestDiagnostic(err, guestStderr.String())
+		}
+	}
+	validationStarted := time.Now()
+	err = callSourceValidation(runContext, module, request)
+	observe(engine.observer, "source_validate", validationStarted, err)
+	if err != nil {
+		return nil, withGuestDiagnostic(err, guestStderr.String())
+	}
+	if engine.workspaceRun != nil {
+		select {
+		case engine.workspaceRun <- struct{}{}:
+			workspaceAcquired = true
+		case <-runContext.Done():
+			return nil, runContext.Err()
+		}
+	}
+	if engine.brokerFactory != nil {
+		broker, err = engine.brokerFactory(runContext)
+		if err != nil {
+			return nil, fmt.Errorf("create capability broker: %w", err)
+		}
+		if broker == nil {
+			return nil, errors.New("capability broker factory returned nil")
+		}
+		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
+			return nil, ErrExecutionIdentityMismatch
+		}
+		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
+	}
 	if instance.mounts != nil {
 		if err := instance.mounts.activate(); err != nil {
 			return nil, fmt.Errorf("activate module filesystems: %w", err)
@@ -566,14 +582,6 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		defer engine.pool.executing.Add(^uint32(0))
 	}
 
-	if trustedPrepare != "" {
-		prepareStarted := time.Now()
-		err = callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare))
-		observe(engine.observer, "prepare", prepareStarted, err)
-		if err != nil {
-			return nil, withGuestDiagnostic(err, guestStderr.String())
-		}
-	}
 	executeStarted := time.Now()
 	payload, err = callExecute(runContext, module, request, engine.config.MaxResponseBytes)
 	observe(engine.observer, "execute", executeStarted, err)
@@ -753,6 +761,29 @@ func callNoArgs(ctx context.Context, module api.Module, name string) error {
 		return fmt.Errorf("call %s: %w", name, err)
 	}
 	return nil
+}
+
+func callSourceValidation(ctx context.Context, module api.Module, request []byte) error {
+	results, release, err := callWithBytes(ctx, module, "runtime_validate_source", request)
+	if release != nil {
+		defer release()
+	}
+	if err != nil {
+		return err
+	}
+	if len(results) != 1 {
+		return errors.New("runtime_validate_source returned an unexpected result count")
+	}
+	switch uint32(results[0]) {
+	case 0:
+		return nil
+	case 1:
+		return runtimeconfig.ErrAgentSourceContractUnsupported
+	case 2:
+		return runtimeconfig.ErrAgentSourceInvalid
+	default:
+		return errors.New("runtime_validate_source returned an invalid status")
+	}
 }
 
 func callStatusWithBytes(ctx context.Context, module api.Module, name string, data []byte) error {

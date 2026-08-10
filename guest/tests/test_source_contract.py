@@ -16,9 +16,16 @@ class GuestSourceContractTests(unittest.TestCase):
         text = HEADER.read_text()
         exports = set(re.findall(r"AGENT_RUNTIME_EXPORT\(\"([^\"]+)\"\)", text))
         self.assertEqual(
-            {"runtime_init", "runtime_prepare", "runtime_warmup", "alloc", "dealloc", "execute"},
+            {"runtime_init", "runtime_validate_source", "runtime_prepare", "runtime_warmup", "alloc", "dealloc", "execute"},
             exports,
         )
+
+    def test_guest_patches_cpython_import_path_before_module_cache_lookup(self):
+        build = BUILD_SCRIPT.read_text()
+        source = SOURCE.read_text()
+        self.assertIn("patch_cpython_import_gate.py", build)
+        self.assertIn("PySys_AddAuditHook(agent_runtime_audit_hook", source)
+        self.assertIn("seal_imports", source)
 
     def test_source_and_bootstrap_exclude_product_specific_protocol(self):
         text = SOURCE.read_text() + "\n" + BOOTSTRAP.read_text()

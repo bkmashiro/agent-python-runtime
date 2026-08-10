@@ -1,8 +1,21 @@
 # Agent Python Runtime
 
-A capability-controlled CPython/WASI runtime for executing generated Python without giving guest code ambient access to the host.
+A low-latency, single-use CPython/WASI execution substrate for short-lived agent programs, with fresh per-Run authority.
 
-The agent framework stays outside the sandbox. It supplies code and JSON inputs; the Go host owns runtime limits, tool grants, credentials, instance lifecycle, and receipts.
+Pysolate moves trusted CPython/package initialization off the request path, then executes each generated program with a fresh Host-owned authority boundary. The agent framework supplies code and JSON inputs; the Go Host owns artifact selection, limits, tool grants, credentials, workspace binding, instance lifecycle, effects, and receipts.
+
+```text
+PREPARED COMPUTATION   deterministic initialization happens before checkout
+COLD AUTHORITY         every Run receives fresh grants, budgets, Broker and scratch
+DISPOSABLE EXECUTION   a served CPython/WASI instance never returns to the ready pool
+BOUNDED CONTINUATION   only a Host-owned ordinary-file workspace may cross Runs
+```
+
+The latency claim is lifecycle-specific: preparation cost is paid before a profile hit. It is not a claim that WASM executes Python or NumPy kernels faster than native Python.
+
+Pysolate deliberately exposes programmable Python plus typed Host capabilities rather than ambient operating-system authority. It is not a general Linux sandbox, package manager, shell, VM fallback manager, persistent interpreter, or coding-agent computer. Backend routing and compatibility escalation belong to an external Harness and must not silently widen authority.
+
+The programming model and snapshot mechanism are not unique. Cloudflare Code Mode executes generated code with projected tools; Python Workers prepares Pyodide/imports and snapshots WebAssembly linear memory to bootstrap new V8 isolates. Workers isolates may then serve multiple requests. Pysolate instead gives each served instance exactly one untrusted Run, binds fresh Host authority, closes that instance, and verifies that non-workspace state does not continue. It does not yet restore and reuse a served instance. See the [Vinculum related-work audit](https://github.com/bkmashiro/vinculum/blob/main/docs/related-work.md) and the [north-star evaluation contract](docs/north-star-evaluation-contract.md).
 
 ## Design
 
@@ -270,6 +283,7 @@ docs/                      architecture, threat model, integration, and results
 - [Local CLI](docs/operator-cli.md)
 - [Development and test gates](docs/development.md)
 - [Benchmark methodology](docs/benchmarking.md)
+- [North-star evaluation contract](docs/north-star-evaluation-contract.md)
 - [Scheduler and NumPy-ready results](docs/reports/scheduler-experiment-results.md)
 - [Phase 6 NumPy-ready COW density and load qualification](docs/reports/phase6-numpy-density-results.md)
 - [Phase 7 paired NumPy-ready COW density experiment](docs/phase7-paired-numpy-density.md)

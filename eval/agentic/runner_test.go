@@ -1157,7 +1157,12 @@ func TestCompactPythonSDKIncludesBoundedResponseShapes(t *testing.T) {
 		t.Fatal(err)
 	}
 	sdk := compactPythonSDK(runtime)
-	for _, expected := range []string{"cat(file_name: str) -\u003e {file_content: str}", "touch(file_name: str) -\u003e {}"} {
+	for _, expected := range []string{
+		"cat(file_name: str) -> {file_content: str}",
+		"touch(file_name: str) -> {}",
+		"file_name: The name of the file from current directory to display. No path is allowed.",
+		"folder: The folder of the directory to change to. You can only change one folder level at a time.",
+	} {
 		if !strings.Contains(sdk, expected) {
 			t.Fatalf("SDK omitted response shape %q: %s", expected, sdk)
 		}

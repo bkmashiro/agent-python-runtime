@@ -17,9 +17,9 @@ Guest Python
 
 These tool names do not belong in `RunRequest.requirements`. A task that can be completed with a granted semantic web tool remains an L1 Pysolate workload. A task that requires rendering, DOM/JavaScript, login/session UI, or interactive browser automation declares `browser_runtime` and is reported for upper-layer escalation.
 
-## Current fetch foundation
+## Current fetch foundation and Guest entry
 
-The existing `fetch_many` capability is a bounded Host-mediated fetch primitive for Host-configured opaque targets. Guest code supplies a target name and relative path, not a credential or unrestricted network endpoint. The production CLI:
+The existing `fetch_many` capability is a bounded Host-mediated fetch primitive for Host-configured opaque targets. The Guest SDK also exposes `web_fetch(target, path)` as a one-request convenience wrapper over the same grant and Broker path. Guest code supplies a target name and relative path, not a credential or unrestricted network endpoint. The production CLI:
 
 - maps the opaque target to a Host-configured HTTPS origin;
 - does not follow redirects;
@@ -30,9 +30,24 @@ The existing `fetch_many` capability is a bounded Host-mediated fetch primitive 
 - keeps Host headers and credentials outside Guest memory;
 - emits Host receipts.
 
-This is evidence for the mediation pattern, not a claim that arbitrary public-web fetch or a search provider is already available.
+Neither entry accepts a URL. `web_fetch` therefore means "fetch one relative path from one Host-granted target", not arbitrary public-web fetch.
 
-## `web_search` qualification contract
+## Current provider-neutral `web_search` contract
+
+`runtime/capability/websearch` now provides:
+
+- frozen input/output schemas and a generated `web_search(query, max_results)` Python projection;
+- Host-frozen provider identity, allowed source aliases, query bytes, result count, call count, and transaction budget;
+- provider-neutral request/page types;
+- Host validation of HTTPS result URLs, absence of URL userinfo, allowed-source provenance, result count, title/snippet bounds, and observation time;
+- bounded provider failures and Broker receipts;
+- exact call replay without provider redispatch.
+
+`runtime/capability/fakeweb` is a deterministic network-free Provider fixture. It accepts only `.invalid` result hosts and supports bounded failure injection. This proves the adapter, catalog, Broker, receipt, replay, and provenance contracts; it does **not** establish real-provider compatibility or search quality.
+
+No real search provider is wired in Current production configuration. A live adapter must be qualified separately and may not change the Guest schema.
+
+## Live `web_search` qualification contract
 
 A production `web_search` adapter must freeze at least:
 

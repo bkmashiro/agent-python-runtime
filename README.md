@@ -73,6 +73,14 @@ result = {"items": items}
 
 `fetch_many` is one Guest call. The Host executes it in bounded waves, preserves input order, and emits receipts. Guest code never receives a URL, socket, proxy setting, or credential.
 
+For one Host-granted target/path, the Guest SDK also provides:
+
+```python
+item = tools.web_fetch("catalog", "/items/1")
+```
+
+`web_fetch` is a convenience wrapper over `fetch_many`; its target is still an opaque Host alias, not a URL. The provider-neutral `web.search` typed adapter and generated `web_search(query, max_results)` catalog projection are Current with a deterministic network-free Provider fixture. No live search provider is wired or qualified yet. See [Semantic web capabilities](docs/semantic-web-capabilities.md).
+
 **Effects and rollback**
 
 Each granted tool declares one effect level:

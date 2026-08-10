@@ -11,6 +11,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakejob"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakemail"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability/fakeworkspace"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability/websearch"
 	"github.com/bkmashiro/agent-python-runtime/runtime/toolcatalog"
 )
 
@@ -46,6 +47,9 @@ func Build(revision uint64, maxCalls uint32, grantVersion string) (toolcatalog.S
 		return toolcatalog.Snapshot{}, err
 	}
 	if err := appendCatalog(fakejob.CatalogTools(maxCalls, grantVersion)); err != nil {
+		return toolcatalog.Snapshot{}, err
+	}
+	if err := appendCatalog(websearch.CatalogTools(maxCalls, grantVersion)); err != nil {
 		return toolcatalog.Snapshot{}, err
 	}
 	return toolcatalog.BuildSnapshot(discovered, grants, toolcatalog.BuildOptions{Revision: revision, DiscoveredAt: time.Unix(0, 0).UTC()})

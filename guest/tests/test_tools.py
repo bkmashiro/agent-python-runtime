@@ -62,6 +62,33 @@ class ToolsTests(unittest.TestCase):
             observed[0],
         )
 
+    def test_web_fetch_is_a_single_bounded_target_alias_fetch(self):
+        observed = []
+
+        def host_call(payload):
+            envelope = json.loads(payload)
+            observed.append(envelope)
+            return json.dumps(
+                {
+                    "call_id": envelope["call_id"],
+                    "status": "ok",
+                    "result": {"items": [{"request_id": "web_fetch", "status": "ok", "http_status": 200, "body": "text", "content_type": "text/plain", "error": None}]},
+                    "error": None,
+                }
+            )
+
+        tools = load_tools(host_call)
+        item = tools.web_fetch("docs", "/guide")
+        self.assertEqual("text", item["body"])
+        self.assertEqual("fetch_many", observed[0]["capability"])
+        self.assertEqual(
+            [{"request_id": "web_fetch", "target": "docs", "path": "/guide"}],
+            observed[0]["arguments"]["requests"],
+        )
+        with self.assertRaises((TypeError, ValueError)):
+            tools.web_fetch("https://evil.invalid", "/")
+        self.assertEqual(1, len(observed))
+
     def test_rejects_guest_url_headers_and_unknown_fields_before_host_call(self):
         calls = []
         tools = load_tools(lambda payload: calls.append(payload))

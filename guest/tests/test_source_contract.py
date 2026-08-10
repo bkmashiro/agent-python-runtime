@@ -123,6 +123,7 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn('PyImport_AppendInittab("_agent_runtime_host"', source)
         self.assertIn("AGENT_RUNTIME_TOOL_RESPONSE_MAX", source)
         self.assertIn('"capability": "fetch_many"', tools)
+        self.assertIn("def web_fetch(", tools)
         self.assertNotIn('"url"', tools)
         self.assertNotIn('"headers"', tools)
 

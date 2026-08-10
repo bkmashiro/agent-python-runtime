@@ -138,6 +138,32 @@ func TestRunRejectsUnsupportedRequirementsBeforeGuestExecution(t *testing.T) {
 	}
 }
 
+func TestRunRejectsIncompatibleProfileBeforeGuestExecution(t *testing.T) {
+	ctx := context.Background()
+	brokerCalls := 0
+	profile, err := runtime.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtime.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	runner, err := (engine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		brokerCalls++
+		return nil, errors.New("broker must not be created")
+	}}).New(ctx, []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(ctx)
+	_, err = runner.Run(ctx, []byte(`{"run_id":"run","code":"import subprocess","inputs":{},"compatibility":{"profile":"base","imports":["subprocess"]}}`), "")
+	if !errors.Is(err, runtime.ErrExecutionProfileUnsupported) {
+		t.Fatalf("error=%v", err)
+	}
+	if brokerCalls != 0 {
+		t.Fatalf("broker calls=%d, want zero before profile admission", brokerCalls)
+	}
+}
+
 func TestFactoryBorrowsCompilationCacheUntilOwnerCloses(t *testing.T) {
 	ctx := context.Background()
 	cache := engine.NewCompilationCache()

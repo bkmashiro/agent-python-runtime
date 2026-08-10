@@ -51,12 +51,14 @@ var ErrInvalidProperties = errors.New("invalid engine properties")
 
 // Properties records observable backend behavior, not aspirational support.
 type Properties struct {
-	Backend           string
-	ResetMode         ResetMode
-	RequestedStrategy ExecutionStrategy
-	ActiveStrategy    ExecutionStrategy
-	Fallback          bool
-	FallbackReason    string
+	Backend            string
+	ResetMode          ResetMode
+	RequestedStrategy  ExecutionStrategy
+	ActiveStrategy     ExecutionStrategy
+	Fallback           bool
+	FallbackReason     string
+	ExecutionProfileID string
+	AllowedImports     []string
 }
 
 func (properties Properties) Validate() error {
@@ -73,11 +75,32 @@ func (properties Properties) Validate() error {
 	} else if properties.RequestedStrategy != properties.ActiveStrategy || properties.FallbackReason != "" {
 		return fmt.Errorf("%w: strategy drift requires an explicit fallback", ErrInvalidProperties)
 	}
+	if (properties.ExecutionProfileID == "") != (len(properties.AllowedImports) == 0) {
+		return fmt.Errorf("%w: execution profile identity and imports must be present together", ErrInvalidProperties)
+	}
+	if properties.ExecutionProfileID != "" {
+		if _, err := runtime.NewExecutionProfile(properties.ExecutionProfileID, properties.AllowedImports); err != nil {
+			return fmt.Errorf("%w: execution profile is invalid", ErrInvalidProperties)
+		}
+	}
 	wantResetMode := resetModeForStrategy(properties.ActiveStrategy)
 	if wantResetMode == "" || properties.ResetMode != wantResetMode {
 		return fmt.Errorf("%w: unknown reset mode %q", ErrInvalidProperties, properties.ResetMode)
 	}
 	return nil
+}
+
+// ExecutionProfile reconstructs a defensive Host profile from observable
+// runner properties. A nil result means this runner has no profile binding.
+func (properties Properties) ExecutionProfile() *runtime.ExecutionProfile {
+	if properties.ExecutionProfileID == "" || len(properties.AllowedImports) == 0 {
+		return nil
+	}
+	profile, err := runtime.NewExecutionProfile(properties.ExecutionProfileID, append([]string(nil), properties.AllowedImports...))
+	if err != nil {
+		return nil
+	}
+	return &profile
 }
 
 func validStrategy(strategy ExecutionStrategy) bool {

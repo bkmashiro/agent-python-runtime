@@ -7,7 +7,7 @@ import time
 import traceback
 from typing import Any
 
-_ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "requirements"}
+_ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "compatibility", "requirements"}
 _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
@@ -119,6 +119,16 @@ def _decode_request(request_json: str) -> tuple[dict[str, Any] | None, dict[str,
     requirements = request.get("requirements", [])
     if not isinstance(requirements, list) or requirements:
         return None, _error("invalid_request", "non-empty requirements must be rejected by Host admission")
+    compatibility = request.get("compatibility")
+    if compatibility is not None:
+        if (
+            not isinstance(compatibility, dict)
+            or set(compatibility) != {"profile", "imports"}
+            or not isinstance(compatibility.get("profile"), str)
+            or not isinstance(compatibility.get("imports"), list)
+            or any(not isinstance(name, str) for name in compatibility.get("imports", []))
+        ):
+            return None, _error("invalid_request", "compatibility declaration must be admitted by Host")
     return request, None
 
 

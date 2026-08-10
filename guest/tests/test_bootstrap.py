@@ -52,6 +52,14 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("error", response["status"])
         self.assertEqual("invalid_request", response["error"]["code"])
 
+    def test_accepts_host_admitted_compatibility_manifest(self):
+        response = self.execute(compatibility={"profile": "base", "imports": ["json"]})
+        self.assertEqual("ok", response["status"])
+
+        response = self.execute(compatibility={"profile": "base"})
+        self.assertEqual("error", response["status"])
+        self.assertEqual("invalid_request", response["error"]["code"])
+
     def test_returns_bounded_structured_exception(self):
         response = self.execute(code="raise ValueError('boom')")
         self.assertEqual("error", response["status"])

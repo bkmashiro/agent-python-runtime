@@ -15,6 +15,9 @@ type RunRequest struct {
 	Code         string          `json:"code"`
 	Inputs       json.RawMessage `json:"inputs"`
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
+	// Compatibility is an untrusted profile/import declaration. The Host
+	// independently binds the artifact profile and allowed import set.
+	Compatibility *CompatibilityDeclaration `json:"compatibility,omitempty"`
 	// Requirements are compatibility declarations, not grants. They can only
 	// narrow admission and never authorize Host resources or ambient access.
 	Requirements []RequiredFeature `json:"requirements,omitempty"`
@@ -30,6 +33,9 @@ func DecodeRunRequest(data []byte) (RunRequest, error) {
 	}
 	if rawRequirements, present := envelope["requirements"]; present && bytes.Equal(bytes.TrimSpace(rawRequirements), []byte("null")) {
 		return RunRequest{}, errors.New("requirements must be an array")
+	}
+	if rawCompatibility, present := envelope["compatibility"]; present && bytes.Equal(bytes.TrimSpace(rawCompatibility), []byte("null")) {
+		return RunRequest{}, errors.New("compatibility must be an object")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -50,6 +56,9 @@ func DecodeRunRequest(data []byte) (RunRequest, error) {
 		return RunRequest{}, errors.New("inputs is required")
 	}
 	if err := ValidateRunRequirements(request.Requirements); err != nil {
+		return RunRequest{}, err
+	}
+	if err := ValidateCompatibilityDeclaration(request.Compatibility); err != nil {
 		return RunRequest{}, err
 	}
 	var input any

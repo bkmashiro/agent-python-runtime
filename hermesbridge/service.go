@@ -46,6 +46,7 @@ type Service struct {
 	trace   InvocationTrace
 	ids     IDSource
 	timeout time.Duration
+	profile *runtimeconfig.ExecutionProfile
 }
 
 func NewService(runner engine.Runner, trace InvocationTrace, ids IDSource, timeout time.Duration) (*Service, error) {
@@ -56,7 +57,7 @@ func NewService(runner engine.Runner, trace InvocationTrace, ids IDSource, timeo
 	if properties.Validate() != nil {
 		return nil, errors.New("invalid Hermes bridge runner")
 	}
-	return &Service{runner: runner, trace: trace, ids: ids, timeout: timeout}, nil
+	return &Service{runner: runner, trace: trace, ids: ids, timeout: timeout, profile: properties.ExecutionProfile()}, nil
 }
 
 func (service *Service) Observe(parent context.Context, request ObserveRequest) ObserveResponse {
@@ -111,9 +112,10 @@ func (service *Service) Execute(parent context.Context, request ExecuteRequest) 
 
 	runRequest := runtimeconfig.RunRequest{
 		RunID: "hermes-" + executionID, Code: request.Code,
-		Inputs:       append(json.RawMessage(nil), request.Inputs...),
-		OutputSchema: append(json.RawMessage(nil), request.OutputSchema...),
-		Requirements: append([]runtimeconfig.RequiredFeature(nil), request.Requirements...),
+		Inputs:        append(json.RawMessage(nil), request.Inputs...),
+		OutputSchema:  append(json.RawMessage(nil), request.OutputSchema...),
+		Compatibility: cloneCompatibility(request.Compatibility),
+		Requirements:  append([]runtimeconfig.RequiredFeature(nil), request.Requirements...),
 	}
 	runPayload, err := json.Marshal(runRequest)
 	if err != nil {
@@ -126,6 +128,9 @@ func (service *Service) Execute(parent context.Context, request ExecuteRequest) 
 		}
 		response.Outcome = &outcome
 		return bridgeFailure(response, "runtime_unsupported", "runtime requirements unsupported; escalation required")
+	}
+	if admissionErr := runtimeconfig.AdmitRunCompatibility(runRequest, service.profile); admissionErr != nil {
+		return bridgeFailure(response, "profile_unsupported", "execution profile unsupported")
 	}
 	startedEventID, err := service.trace.RuntimeStarted(traceCtx, invocationRef, digestBytes(runPayload))
 	if err != nil {
@@ -193,6 +198,16 @@ func (service *Service) Execute(parent context.Context, request ExecuteRequest) 
 
 func executionRefMatches(actual *runtimeconfig.ExecutionRef, expected runtimeconfig.InvocationRef, code string) bool {
 	return actual != nil && actual.Validate() == nil && actual.InvocationRef == expected && actual.ExecutedCodeSHA256 == digestString(code)
+}
+
+func cloneCompatibility(value *runtimeconfig.CompatibilityDeclaration) *runtimeconfig.CompatibilityDeclaration {
+	if value == nil {
+		return nil
+	}
+	return &runtimeconfig.CompatibilityDeclaration{
+		Profile: value.Profile,
+		Imports: append([]string(nil), value.Imports...),
+	}
 }
 
 func bridgeFailure(response ExecuteResponse, code, message string) ExecuteResponse {

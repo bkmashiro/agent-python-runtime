@@ -19,6 +19,10 @@ type RunConfig struct {
 	MaxRequestBytes  uint32
 	MaxResponseBytes uint32
 	MemoryLimitPages uint32
+	// ExecutionProfile is Host-owned artifact/import admission policy. A nil
+	// profile preserves legacy requests but rejects any explicit compatibility
+	// declaration.
+	ExecutionProfile *ExecutionProfile
 	CapabilityGrants map[string]CapabilityGrant
 }
 
@@ -50,6 +54,9 @@ func (config RunConfig) Validate() error {
 	}
 	if config.MemoryLimitPages == 0 || config.MemoryLimitPages > hardMaxMemoryPages {
 		return errors.New("memory page limit is outside the hard bound")
+	}
+	if config.ExecutionProfile != nil && config.ExecutionProfile.Validate() != nil {
+		return errors.New("execution profile is invalid")
 	}
 	return nil
 }

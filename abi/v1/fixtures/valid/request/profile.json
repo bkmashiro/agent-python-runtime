@@ -1,0 +1,9 @@
+{
+  "run_id": "profile-run",
+  "code": "import json\nresult = json.dumps(inputs)",
+  "inputs": {},
+  "compatibility": {
+    "profile": "base",
+    "imports": ["json"]
+  }
+}

@@ -17,6 +17,8 @@ Pysolate deliberately exposes programmable Python plus typed Host capabilities r
 
 **Product direction (Framing, not a Current coverage claim):** Pysolate aims to replace Computer-first execution as the default for bounded agent programs. Python carries local control flow while Host-owned semantic capabilities, workspace, effects, and evidence retain real authority; ambient, native, and interactive long-tail workloads remain an upstream placement concern selected before execution. See the Vinculum design note [Pysolate-first agentic execution](https://github.com/bkmashiro/vinculum/blob/main/docs/pysolate-first-agentic-execution.md).
 
+**Current profile-admission foundation:** an optional untrusted `compatibility` manifest names `base` or `numpy-core` and declares import roots. A Host-configured frozen profile independently fixes the allowed imports; CLI, Hermes bridge, and Wazero reject mismatches before Guest work. This is explicit manifest admission, not arbitrary-Python source proof, and the Host policy is not yet automatically bound to the artifact manifest/digest. See [Execution profile admission](docs/profile-admission.md).
+
 The programming model and snapshot mechanism are not unique. Cloudflare Code Mode executes generated code with projected tools; Python Workers prepares Pyodide/imports and snapshots WebAssembly linear memory to bootstrap new V8 isolates. Workers isolates may then serve multiple requests. Pysolate instead gives each served instance exactly one untrusted Run, binds fresh Host authority, closes that instance, and verifies that non-workspace state does not continue. It does not yet restore and reuse a served instance. See the [Vinculum related-work audit](https://github.com/bkmashiro/vinculum/blob/main/docs/related-work.md) and the [north-star evaluation contract](docs/north-star-evaluation-contract.md).
 
 ## Design
@@ -292,6 +294,7 @@ docs/                      architecture, threat model, integration, and results
 - [Threat model](docs/threat-model.md)
 - [Local CLI](docs/operator-cli.md)
 - [Structured unsupported and escalation outcome](docs/unsupported-escalation.md)
+- [Execution profile admission](docs/profile-admission.md)
 - [Semantic web capabilities](docs/semantic-web-capabilities.md)
 - [Development and test gates](docs/development.md)
 - [Benchmark methodology](docs/benchmarking.md)

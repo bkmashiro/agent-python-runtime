@@ -183,6 +183,18 @@ jobs:
       - name: Run real Host/guest E2E
         run: go test ./integration/e2e -v -count=1
 
+      - name: Record scripted agentic mechanism baseline
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
+        run: |
+          go run ./cmd/apyrun-eval-mechanism \
+            -guest "${AGENT_RUNTIME_GUEST}" \
+            -dataset eval/agentic/routing/v1 \
+            -repository-commit "${GITHUB_SHA}" \
+            -output "${{ runner.temp }}/agentic-mechanism-baseline.json"
+          python3 -m json.tool \
+            "${{ runner.temp }}/agentic-mechanism-baseline.json" \
+            >/dev/null
+
       - name: Record reactor state census
         run: |
           case "${AGENT_RUNTIME_ARTIFACT_PROFILE}" in
@@ -301,6 +313,15 @@ jobs:
         with:
           name: runtime-evidence-index-${{ github.sha }}
           path: ${{ runner.temp }}/evidence-index.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scripted agentic mechanism baseline
+        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic-mechanism-baseline-${{ github.sha }}
+          path: ${{ runner.temp }}/agentic-mechanism-baseline.json
           if-no-files-found: error
           retention-days: 7
 

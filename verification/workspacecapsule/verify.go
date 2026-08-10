@@ -73,8 +73,11 @@ type Check struct {
 }
 
 type StressSummary struct {
-	RequestedIterations int `json:"requested_iterations"`
-	CompletedIterations int `json:"completed_iterations"`
+	RequestedIterations int  `json:"requested_iterations"`
+	CompletedIterations int  `json:"completed_iterations"`
+	OpenFDsBefore       *int `json:"open_fds_before,omitempty"`
+	OpenFDsAfter        *int `json:"open_fds_after,omitempty"`
+	OpenFDDelta         *int `json:"open_fd_delta,omitempty"`
 }
 
 type Report struct {
@@ -99,7 +102,7 @@ func VerifyWithOptions(ctx context.Context, wasm []byte, config runtimeconfig.Ru
 	digest := sha256.Sum256(wasm)
 	checkCapacity := 30
 	if options.StressIterations > 0 {
-		checkCapacity += 4
+		checkCapacity += 5
 	}
 	report = Report{
 		SchemaVersion:  SchemaVersion,
@@ -551,7 +554,7 @@ result = {
 	addCheck(&report, "tmp_fresh_after_cancellation", cancelRecoveryOK && !cancelRecoveryResult.TmpContinued, "cancelled Run scratch state does not continue")
 
 	if options.StressIterations > 0 {
-		runStress(ctx, runner, options.StressIterations, &report, &payloads)
+		runStress(ctx, runner, options.StressIterations, &report, &payloads, openDescriptorCount)
 	}
 	expectedBrokers := uint64(11 + options.StressIterations)
 	addCheck(&report, "broker_fresh_per_run", brokerCount.Load() == expectedBrokers, fmt.Sprintf("Host constructed %d independent per-Run Brokers", expectedBrokers))
@@ -594,9 +597,12 @@ result = {
 	return report, nil
 }
 
-func runStress(ctx context.Context, runner enginecontract.Runner, iterations int, report *Report, payloads *[][]byte) {
+type descriptorSampler func() (int, bool)
+
+func runStress(ctx context.Context, runner enginecontract.Runner, iterations int, report *Report, payloads *[][]byte, sampleDescriptors descriptorSampler) {
 	summary := &StressSummary{RequestedIterations: iterations}
 	report.Stress = summary
+	openFDsBefore, descriptorOracleAvailable := sampleDescriptors()
 	allRunsSucceeded := true
 	sequenceExact := true
 	heapFresh := true
@@ -647,7 +653,16 @@ stress_heap_marker = before
 	addCheck(report, "stress_workspace_sequence", completedAll && sequenceExact, "workspace counter advances exactly once per disposable instance")
 	addCheck(report, "stress_heap_fresh", completedAll && heapFresh, "Python globals remain fresh across every stress instance")
 	addCheck(report, "stress_tmp_fresh", completedAll && tmpFresh, "scratch state remains fresh across every stress instance")
+	if openFDsAfter, afterAvailable := sampleDescriptors(); descriptorOracleAvailable && afterAvailable {
+		delta := openFDsAfter - openFDsBefore
+		summary.OpenFDsBefore = intPointer(openFDsBefore)
+		summary.OpenFDsAfter = intPointer(openFDsAfter)
+		summary.OpenFDDelta = intPointer(delta)
+		addCheck(report, "stress_open_fds_bounded", completedAll && delta <= 2, fmt.Sprintf("Host open descriptors changed by %d across stress Runs", delta))
+	}
 }
+
+func intPointer(value int) *int { return &value }
 
 func runRaw(ctx context.Context, runner enginecontract.Runner, runID, code string) ([]byte, error) {
 	request, err := json.Marshal(runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`)})

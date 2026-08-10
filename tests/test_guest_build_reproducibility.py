@@ -31,12 +31,15 @@ def write_bundle(directory, wasm, epoch="1784729528", limitation="same"):
     (directory / "manifest.json").write_bytes(manifest_bytes)
     inventory_bytes = b'{"schema_version":1}\n'
     (directory / "import-inventory.json").write_bytes(inventory_bytes)
+    qualification_bytes = b'{"schema_version":1}\n'
+    (directory / "import-qualification.json").write_bytes(qualification_bytes)
     sbom_bytes = b"{}\n"
     (directory / "sbom.spdx.json").write_bytes(sbom_bytes)
     sums = (
         f"{sha256(wasm)}  agent-python-runtime.wasm\n"
         f"{sha256(manifest_bytes)}  manifest.json\n"
         f"{sha256(inventory_bytes)}  import-inventory.json\n"
+        f"{sha256(qualification_bytes)}  import-qualification.json\n"
         f"{sha256(sbom_bytes)}  sbom.spdx.json\n"
     )
     (directory / "SHA256SUMS").write_text(sums)

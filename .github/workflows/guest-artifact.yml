@@ -457,12 +457,28 @@ jobs:
               --profile base \
               --response "${ROOT}/candidate-inventory-response.json" \
               --output "${CANDIDATE_DIR}/import-inventory.json"
+            go build -o "${ROOT}/apyrun-probe" ./cmd/apyrun
+            python3 guest/build/import_qualification.py requests \
+              --profile base \
+              --output-dir "${ROOT}/candidate-qualification-requests"
+            mkdir -p "${ROOT}/candidate-qualification-responses"
+            for request in "${ROOT}/candidate-qualification-requests"/*.json; do
+              "${ROOT}/apyrun-probe" \
+                -artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
+                < "${request}" \
+                > "${ROOT}/candidate-qualification-responses/$(basename "${request}")"
+            done
+            python3 guest/build/import_qualification.py extract \
+              --profile base \
+              --responses-dir "${ROOT}/candidate-qualification-responses" \
+              --output "${CANDIDATE_DIR}/import-qualification.json"
             python3 guest/build/write-manifest.py \
               --artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
               --wat "${ROOT}/candidate.wat" \
               --source-lock guest/build/sources.lock.json \
               --artifact-profile base \
               --import-inventory "${CANDIDATE_DIR}/import-inventory.json" \
+              --import-qualification "${CANDIDATE_DIR}/import-qualification.json" \
               --output "${CANDIDATE_DIR}/manifest.json"
             python3 guest/build/verify-artifact.py \
               "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
@@ -552,6 +568,7 @@ jobs:
             ${{ runner.temp }}/preinitialized-guest/candidate/*.wasm
             ${{ runner.temp }}/preinitialized-guest/candidate/manifest.json
             ${{ runner.temp }}/preinitialized-guest/candidate/import-inventory.json
+            ${{ runner.temp }}/preinitialized-guest/candidate/import-qualification.json
             ${{ runner.temp }}/preinitialized-guest/evidence/
           if-no-files-found: warn
           retention-days: 7

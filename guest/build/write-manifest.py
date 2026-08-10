@@ -36,7 +36,18 @@ def load_import_inventory_module():
     return module
 
 
+def load_import_qualification_module():
+    path = pathlib.Path(__file__).with_name("import_qualification.py")
+    spec = importlib.util.spec_from_file_location("artifact_import_qualification", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load import qualification validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
+IMPORT_QUALIFICATION = load_import_qualification_module()
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -86,6 +97,7 @@ def build_manifest(
     artifact_profile: str,
     extension_selection: pathlib.Path | None,
     import_inventory: pathlib.Path,
+    import_qualification: pathlib.Path,
     memory_initial_pages: int | None = None,
     memory_maximum_pages: int | None = None,
 ) -> dict[str, Any]:
@@ -106,6 +118,24 @@ def build_manifest(
     }
     inventory_record["filename"] = import_inventory.name
     inventory_record["sha256"] = sha256(import_inventory)
+
+    if import_qualification.name != "import-qualification.json":
+        raise ValueError("import qualification must use canonical filename")
+    qualification = IMPORT_QUALIFICATION.validate_qualification(
+        IMPORT_QUALIFICATION.strict_json_loads(import_qualification.read_text()),
+        artifact_profile,
+    )
+    if (
+        qualification["implementation"] != inventory["implementation"]
+        or qualification["python_version"] != inventory["python_version"]
+        or not set(qualification["qualified_roots"]).issubset(inventory["discoverable_roots"])
+    ):
+        raise ValueError("import qualification does not match import inventory")
+    qualification_record = {
+        key: value for key, value in qualification.items() if key != "artifact_profile"
+    }
+    qualification_record["filename"] = import_qualification.name
+    qualification_record["sha256"] = sha256(import_qualification)
 
     extension_profile = None
     if artifact_profile == "base":
@@ -146,6 +176,7 @@ def build_manifest(
         },
     ]
     limitations = [
+        "import qualification covers only the named guest-import-exec-v1 operations and is not transitive closure or arbitrary behavior proof",
         "fetch_many is the only built-in capability and requires explicit Host grants; frozen catalogs may project additional typed Host tools",
         "WASI execution evidence is recorded separately",
     ]
@@ -185,7 +216,7 @@ def build_manifest(
         }
 
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "abi_version": "v1",
         "artifact_profile": artifact_profile,
         "target": lock["target"],
@@ -205,6 +236,7 @@ def build_manifest(
         "packages": packages,
         "extension_profile": extension_profile,
         "python_import_inventory": inventory_record,
+        "python_import_qualification": qualification_record,
         "limitations": limitations,
     }
 
@@ -225,6 +257,7 @@ def main() -> int:
     )
     parser.add_argument("--extension-selection", type=pathlib.Path)
     parser.add_argument("--import-inventory", required=True, type=pathlib.Path)
+    parser.add_argument("--import-qualification", required=True, type=pathlib.Path)
     parser.add_argument("--memory-initial-pages", type=int)
     parser.add_argument("--memory-maximum-pages", type=int)
     parser.add_argument("--output", required=True, type=pathlib.Path)
@@ -239,6 +272,7 @@ def main() -> int:
         artifact_profile=args.artifact_profile,
         extension_selection=args.extension_selection,
         import_inventory=args.import_inventory,
+        import_qualification=args.import_qualification,
         memory_initial_pages=args.memory_initial_pages,
         memory_maximum_pages=args.memory_maximum_pages,
     )

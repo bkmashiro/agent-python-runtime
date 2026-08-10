@@ -19,10 +19,18 @@ def load_writer():
     return module
 
 
+def load_qualification_tool():
+    tool_path = ROOT / "guest" / "build" / "import_qualification.py"
+    spec = importlib.util.spec_from_file_location("manifest_import_qualification", tool_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load import qualification tool")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def write_inventory(root: pathlib.Path, profile: str) -> pathlib.Path:
-    roots = ["agent_runtime", "json", "sys"]
-    if profile == "numpy-core":
-        roots.insert(2, "numpy")
+    roots = [probe["name"] for probe in load_qualification_tool().probe_specs(profile)]
     path = root / "import-inventory.json"
     path.write_text(json.dumps({
         "schema_version": 1,
@@ -32,6 +40,26 @@ def write_inventory(root: pathlib.Path, profile: str) -> pathlib.Path:
         "python_version": "3.14.test",
         "discoverable_roots": roots,
         "failures": [],
+    }))
+    return path
+
+
+def write_qualification(root: pathlib.Path, profile: str) -> pathlib.Path:
+    tool = load_qualification_tool()
+    probes = tool.probe_specs(profile)
+    roots = [probe["name"] for probe in probes]
+    path = root / "import-qualification.json"
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "artifact_profile": profile,
+        "probe": "guest-import-exec-v1",
+        "implementation": "cpython",
+        "python_version": "3.14.test",
+        "qualified_roots": roots,
+        "results": [
+            {"name": probe["name"], "operation": probe["operation"], "status": "qualified", "error": ""}
+            for probe in probes
+        ],
     }))
     return path
 
@@ -79,13 +107,18 @@ class ManifestWriterTests(unittest.TestCase):
                 artifact_profile="base",
                 extension_selection=None,
                 import_inventory=inventory,
+                import_qualification=write_qualification(root, "base"),
                 memory_initial_pages=2048,
                 memory_maximum_pages=2048,
             )
 
-            self.assertEqual(3, manifest["schema_version"])
+            self.assertEqual(4, manifest["schema_version"])
             self.assertEqual("base", manifest["artifact_profile"])
-            self.assertEqual(["agent_runtime", "json", "sys"], manifest["python_import_inventory"]["discoverable_roots"])
+            discoverable = json.loads(inventory.read_text())["discoverable_roots"]
+            self.assertEqual(discoverable, manifest["python_import_inventory"]["discoverable_roots"])
+            qualified = json.loads((root / "import-qualification.json").read_text())["qualified_roots"]
+            self.assertEqual(qualified, manifest["python_import_qualification"]["qualified_roots"])
+            self.assertEqual("import-qualification.json", manifest["python_import_qualification"]["filename"])
             self.assertEqual("v1", manifest["abi_version"])
             self.assertEqual(8, manifest["artifact"]["size"])
             self.assertEqual(
@@ -146,6 +179,7 @@ class ManifestWriterTests(unittest.TestCase):
                 artifact_profile="base",
                 extension_selection=None,
                 import_inventory=write_inventory(root, "base"),
+                import_qualification=write_qualification(root, "base"),
             )
             self.assertEqual(
                 {"initial_pages": 3072, "maximum_pages": 32768, "fixed": False},
@@ -173,6 +207,7 @@ class ManifestWriterTests(unittest.TestCase):
                 "--source-lock", str(lock),
                 "--artifact-profile", "base",
                 "--import-inventory", str(inventory),
+                "--import-qualification", str(write_qualification(root, "base")),
                 "--memory-initial-pages", "2048",
                 "--memory-maximum-pages", "2048",
                 "--output", str(output),
@@ -222,6 +257,7 @@ class ManifestWriterTests(unittest.TestCase):
                 artifact_profile="numpy-core",
                 extension_selection=selection,
                 import_inventory=inventory,
+                import_qualification=write_qualification(root, "numpy-core"),
                 memory_initial_pages=2048,
                 memory_maximum_pages=32768,
             )
@@ -251,6 +287,7 @@ class ManifestWriterTests(unittest.TestCase):
                     artifact_profile="numpy-core",
                     extension_selection=selection,
                     import_inventory=inventory,
+                    import_qualification=write_qualification(root, "numpy-core"),
                     memory_initial_pages=2048,
                     memory_maximum_pages=32768,
                 )
@@ -265,6 +302,7 @@ class ManifestWriterTests(unittest.TestCase):
                     artifact_profile="unknown",
                     extension_selection=None,
                     import_inventory=inventory,
+                    import_qualification=write_qualification(root, "base"),
                 )
 
     def test_locked_source_version_requires_one_versioned_source(self):

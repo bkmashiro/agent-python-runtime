@@ -30,15 +30,16 @@ type CompatibilityDeclaration struct {
 
 // ExecutionProfile is Host-owned admission policy for one named artifact
 // profile. Construction freezes declared import roots; BindVerifiedArtifact can
-// additionally freeze verified profile/artifact/manifest identity. A schema-v3
-// artifact binding also freezes the target-Guest discoverable-root inventory;
-// this remains a find-spec result, not import execution proof.
+// additionally freeze verified profile/artifact/manifest identity. A schema-v4
+// artifact binding freezes both target-Guest discoverability and separately
+// executed import qualification evidence.
 type ExecutionProfile struct {
 	id               string
 	allowedImports   map[string]struct{}
 	artifactSHA256   string
 	manifestSHA256   string
 	availableImports map[string]struct{}
+	qualifiedImports map[string]struct{}
 }
 
 // ExecutionProfileUnsupportedError contains bounded Host-authored rejection
@@ -88,7 +89,8 @@ func (profile ExecutionProfile) Validate() error {
 	bound := profile.artifactSHA256 != ""
 	if (profile.artifactSHA256 == "") != (profile.manifestSHA256 == "") ||
 		(bound && (!validProfileDigest(profile.artifactSHA256) || !validProfileDigest(profile.manifestSHA256))) ||
-		bound != (len(profile.availableImports) > 0) || len(profile.availableImports) > maxAvailableImports {
+		bound != (len(profile.availableImports) > 0) || bound != (len(profile.qualifiedImports) > 0) ||
+		len(profile.availableImports) > maxAvailableImports || len(profile.qualifiedImports) > maxDeclaredImports {
 		return ErrInvalidExecutionProfile
 	}
 	for module := range profile.availableImports {
@@ -96,9 +98,17 @@ func (profile ExecutionProfile) Validate() error {
 			return ErrInvalidExecutionProfile
 		}
 	}
+	for module := range profile.qualifiedImports {
+		if !validImportName(module) || strings.Contains(module, ".") {
+			return ErrInvalidExecutionProfile
+		}
+		if _, ok := profile.availableImports[module]; !ok {
+			return ErrInvalidExecutionProfile
+		}
+	}
 	if bound {
 		for module := range profile.allowedImports {
-			if _, ok := profile.availableImports[module]; !ok {
+			if _, ok := profile.qualifiedImports[module]; !ok {
 				return ErrInvalidExecutionProfile
 			}
 		}
@@ -130,6 +140,15 @@ func (profile ExecutionProfile) AvailableImports() []string {
 	return imports
 }
 
+func (profile ExecutionProfile) QualifiedImports() []string {
+	imports := make([]string, 0, len(profile.qualifiedImports))
+	for module := range profile.qualifiedImports {
+		imports = append(imports, module)
+	}
+	sort.Strings(imports)
+	return imports
+}
+
 func (profile ExecutionProfile) BindVerifiedArtifact(identity VerifiedArtifactIdentity) (ExecutionProfile, error) {
 	if profile.Validate() != nil || identity.ProfileID != profile.id || !validProfileDigest(identity.ArtifactSHA256) || !validProfileDigest(identity.ManifestSHA256) {
 		return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
@@ -137,7 +156,8 @@ func (profile ExecutionProfile) BindVerifiedArtifact(identity VerifiedArtifactId
 	if profile.artifactSHA256 != "" && (profile.artifactSHA256 != identity.ArtifactSHA256 || profile.manifestSHA256 != identity.ManifestSHA256) {
 		return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
 	}
-	if len(identity.ImportRoots) == 0 || len(identity.ImportRoots) > maxAvailableImports {
+	if len(identity.ImportRoots) == 0 || len(identity.ImportRoots) > maxAvailableImports ||
+		len(identity.QualifiedImportRoots) == 0 || len(identity.QualifiedImportRoots) > maxDeclaredImports {
 		return ExecutionProfile{}, ErrExecutionProfileImportUnavailable
 	}
 	available := make(map[string]struct{}, len(identity.ImportRoots))
@@ -150,12 +170,25 @@ func (profile ExecutionProfile) BindVerifiedArtifact(identity VerifiedArtifactId
 		}
 		available[module] = struct{}{}
 	}
-	for module := range profile.allowedImports {
+	qualified := make(map[string]struct{}, len(identity.QualifiedImportRoots))
+	for _, module := range identity.QualifiedImportRoots {
+		if !validImportName(module) || strings.Contains(module, ".") {
+			return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
+		}
+		if _, duplicate := qualified[module]; duplicate {
+			return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
+		}
 		if _, ok := available[module]; !ok {
+			return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
+		}
+		qualified[module] = struct{}{}
+	}
+	for module := range profile.allowedImports {
+		if _, ok := qualified[module]; !ok {
 			return ExecutionProfile{}, ErrExecutionProfileImportUnavailable
 		}
 	}
-	if profile.artifactSHA256 != "" && !sameImportSet(profile.availableImports, available) {
+	if profile.artifactSHA256 != "" && (!sameImportSet(profile.availableImports, available) || !sameImportSet(profile.qualifiedImports, qualified)) {
 		return ExecutionProfile{}, ErrExecutionProfileArtifactMismatch
 	}
 	bound := profile
@@ -164,6 +197,7 @@ func (profile ExecutionProfile) BindVerifiedArtifact(identity VerifiedArtifactId
 		bound.allowedImports[module] = struct{}{}
 	}
 	bound.availableImports = available
+	bound.qualifiedImports = qualified
 	bound.artifactSHA256 = identity.ArtifactSHA256
 	bound.manifestSHA256 = identity.ManifestSHA256
 	return bound, nil

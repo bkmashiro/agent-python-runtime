@@ -33,14 +33,15 @@ type ArtifactPackage struct {
 }
 
 type VerifiedArtifactIdentity struct {
-	ProfileID        string
-	ArtifactSHA256   string
-	ManifestSHA256   string
-	RepositoryCommit string
-	ABIVersion       string
-	Target           string
-	Packages         []ArtifactPackage
-	ImportRoots      []string
+	ProfileID            string
+	ArtifactSHA256       string
+	ManifestSHA256       string
+	RepositoryCommit     string
+	ABIVersion           string
+	Target               string
+	Packages             []ArtifactPackage
+	ImportRoots          []string
+	QualifiedImportRoots []string
 }
 
 type pythonImportInventory struct {
@@ -69,6 +70,34 @@ type artifactImportInventorySidecar struct {
 	Failures          []importProbeFailure `json:"failures"`
 }
 
+type importQualificationResult struct {
+	Name      string `json:"name"`
+	Operation string `json:"operation"`
+	Status    string `json:"status"`
+	Error     string `json:"error"`
+}
+
+type pythonImportQualification struct {
+	SchemaVersion  int                         `json:"schema_version"`
+	Filename       string                      `json:"filename"`
+	SHA256         string                      `json:"sha256"`
+	Probe          string                      `json:"probe"`
+	Implementation string                      `json:"implementation"`
+	PythonVersion  string                      `json:"python_version"`
+	QualifiedRoots []string                    `json:"qualified_roots"`
+	Results        []importQualificationResult `json:"results"`
+}
+
+type artifactImportQualificationSidecar struct {
+	SchemaVersion   int                         `json:"schema_version"`
+	ArtifactProfile string                      `json:"artifact_profile"`
+	Probe           string                      `json:"probe"`
+	Implementation  string                      `json:"implementation"`
+	PythonVersion   string                      `json:"python_version"`
+	QualifiedRoots  []string                    `json:"qualified_roots"`
+	Results         []importQualificationResult `json:"results"`
+}
+
 type distributionArtifactManifest struct {
 	SchemaVersion   int    `json:"schema_version"`
 	ABIVersion      string `json:"abi_version"`
@@ -85,12 +114,13 @@ type distributionArtifactManifest struct {
 		CompilerTarget   string `json:"compiler_target"`
 		ExecutionModel   string `json:"execution_model"`
 	} `json:"build"`
-	Sources               json.RawMessage        `json:"sources"`
-	Wasm                  json.RawMessage        `json:"wasm"`
-	Packages              []ArtifactPackage      `json:"packages"`
-	ExtensionProfile      json.RawMessage        `json:"extension_profile"`
-	PythonImportInventory *pythonImportInventory `json:"python_import_inventory,omitempty"`
-	Limitations           []string               `json:"limitations"`
+	Sources                   json.RawMessage            `json:"sources"`
+	Wasm                      json.RawMessage            `json:"wasm"`
+	Packages                  []ArtifactPackage          `json:"packages"`
+	ExtensionProfile          json.RawMessage            `json:"extension_profile"`
+	PythonImportInventory     *pythonImportInventory     `json:"python_import_inventory,omitempty"`
+	PythonImportQualification *pythonImportQualification `json:"python_import_qualification,omitempty"`
+	Limitations               []string                   `json:"limitations"`
 }
 
 type numpyExtensionProfile struct {
@@ -101,7 +131,7 @@ type numpyExtensionProfile struct {
 	LinkInputCount int      `json:"link_input_count"`
 }
 
-func VerifyDistributionArtifact(artifactFilename string, artifact, manifestBytes, importInventoryBytes []byte) (VerifiedArtifactIdentity, error) {
+func VerifyDistributionArtifact(artifactFilename string, artifact, manifestBytes, importInventoryBytes, importQualificationBytes []byte) (VerifiedArtifactIdentity, error) {
 	if len(artifact) == 0 || len(artifact) > maxVerifiedArtifactBytes || len(manifestBytes) == 0 || len(manifestBytes) > maxArtifactManifestBytes ||
 		filepath.Base(artifactFilename) != artifactFilename || rejectDuplicateBoundedJSON(manifestBytes) != nil {
 		return VerifiedArtifactIdentity{}, ErrInvalidArtifactManifest
@@ -115,25 +145,30 @@ func VerifyDistributionArtifact(artifactFilename string, artifact, manifestBytes
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return VerifiedArtifactIdentity{}, ErrInvalidArtifactManifest
 	}
-	if err := validateDistributionManifest(manifest, artifactFilename, artifact, importInventoryBytes); err != nil {
+	if err := validateDistributionManifest(manifest, artifactFilename, artifact, importInventoryBytes, importQualificationBytes); err != nil {
 		return VerifiedArtifactIdentity{}, fmt.Errorf("%w: %v", ErrInvalidArtifactManifest, err)
 	}
 	artifactSum := sha256.Sum256(artifact)
 	manifestSum := sha256.Sum256(manifestBytes)
 	packages := append([]ArtifactPackage(nil), manifest.Packages...)
 	var importRoots []string
+	var qualifiedImportRoots []string
 	if manifest.PythonImportInventory != nil {
 		importRoots = append([]string(nil), manifest.PythonImportInventory.DiscoverableRoots...)
 	}
+	if manifest.PythonImportQualification != nil {
+		qualifiedImportRoots = append([]string(nil), manifest.PythonImportQualification.QualifiedRoots...)
+	}
 	return VerifiedArtifactIdentity{
-		ProfileID:        manifest.ArtifactProfile,
-		ArtifactSHA256:   "sha256:" + hex.EncodeToString(artifactSum[:]),
-		ManifestSHA256:   "sha256:" + hex.EncodeToString(manifestSum[:]),
-		RepositoryCommit: manifest.Build.RepositoryCommit,
-		ABIVersion:       manifest.ABIVersion,
-		Target:           manifest.Target,
-		Packages:         packages,
-		ImportRoots:      importRoots,
+		ProfileID:            manifest.ArtifactProfile,
+		ArtifactSHA256:       "sha256:" + hex.EncodeToString(artifactSum[:]),
+		ManifestSHA256:       "sha256:" + hex.EncodeToString(manifestSum[:]),
+		RepositoryCommit:     manifest.Build.RepositoryCommit,
+		ABIVersion:           manifest.ABIVersion,
+		Target:               manifest.Target,
+		Packages:             packages,
+		ImportRoots:          importRoots,
+		QualifiedImportRoots: qualifiedImportRoots,
 	}, nil
 }
 
@@ -154,18 +189,41 @@ func DistributionImportInventoryFilename(manifestBytes []byte) (string, bool, er
 	if envelope.SchemaVersion == 2 && envelope.Inventory == nil {
 		return "", false, nil
 	}
-	if envelope.SchemaVersion != 3 || envelope.Inventory == nil || envelope.Inventory.Filename != "import-inventory.json" {
+	if (envelope.SchemaVersion != 3 && envelope.SchemaVersion != 4) || envelope.Inventory == nil || envelope.Inventory.Filename != "import-inventory.json" {
 		return "", false, ErrInvalidArtifactManifest
 	}
 	return envelope.Inventory.Filename, true, nil
 }
 
-func validateDistributionManifest(manifest distributionArtifactManifest, artifactFilename string, artifact, importInventoryBytes []byte) error {
+func DistributionImportQualificationFilename(manifestBytes []byte) (string, bool, error) {
+	if len(manifestBytes) == 0 || len(manifestBytes) > maxArtifactManifestBytes || rejectDuplicateBoundedJSON(manifestBytes) != nil {
+		return "", false, ErrInvalidArtifactManifest
+	}
+	var envelope struct {
+		SchemaVersion int `json:"schema_version"`
+		Qualification *struct {
+			Filename string `json:"filename"`
+		} `json:"python_import_qualification"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
+	if err := decoder.Decode(&envelope); err != nil || !errors.Is(decoder.Decode(&struct{}{}), io.EOF) {
+		return "", false, ErrInvalidArtifactManifest
+	}
+	if (envelope.SchemaVersion == 2 || envelope.SchemaVersion == 3) && envelope.Qualification == nil {
+		return "", false, nil
+	}
+	if envelope.SchemaVersion != 4 || envelope.Qualification == nil || envelope.Qualification.Filename != "import-qualification.json" {
+		return "", false, ErrInvalidArtifactManifest
+	}
+	return envelope.Qualification.Filename, true, nil
+}
+
+func validateDistributionManifest(manifest distributionArtifactManifest, artifactFilename string, artifact, importInventoryBytes, importQualificationBytes []byte) error {
 	expectedFilename := map[string]string{
 		"base":       "agent-python-runtime.wasm",
 		"numpy-core": "agent-python-runtime-numpy-core.wasm",
 	}[manifest.ArtifactProfile]
-	if expectedFilename == "" || (manifest.SchemaVersion != 2 && manifest.SchemaVersion != 3) || manifest.ABIVersion != "v1" || manifest.Target != "wasm32-wasip1" ||
+	if expectedFilename == "" || (manifest.SchemaVersion != 2 && manifest.SchemaVersion != 3 && manifest.SchemaVersion != 4) || manifest.ABIVersion != "v1" || manifest.Target != "wasm32-wasip1" ||
 		manifest.Artifact.Filename != expectedFilename || artifactFilename != expectedFilename || manifest.Artifact.Size != int64(len(artifact)) ||
 		!artifactHexDigestPattern.MatchString(manifest.Artifact.SHA256) || !artifactCommitPattern.MatchString(manifest.Build.RepositoryCommit) ||
 		manifest.Build.SourceDateEpoch == "" || manifest.Build.CompilerTarget != "wasm32-wasip1" || manifest.Build.ExecutionModel != "reactor" ||
@@ -180,8 +238,8 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 		return err
 	}
 	if manifest.SchemaVersion == 2 {
-		if manifest.PythonImportInventory != nil || len(importInventoryBytes) != 0 {
-			return errors.New("legacy manifest contains import inventory")
+		if manifest.PythonImportInventory != nil || manifest.PythonImportQualification != nil || len(importInventoryBytes) != 0 || len(importQualificationBytes) != 0 {
+			return errors.New("legacy manifest contains Python import evidence")
 		}
 	} else {
 		if err := validatePythonImportInventory(manifest.ArtifactProfile, manifest.PythonImportInventory); err != nil {
@@ -189,6 +247,18 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 		}
 		if err := validatePythonImportInventorySidecar(manifest.ArtifactProfile, manifest.PythonImportInventory, importInventoryBytes); err != nil {
 			return err
+		}
+		if manifest.SchemaVersion == 3 {
+			if manifest.PythonImportQualification != nil || len(importQualificationBytes) != 0 {
+				return errors.New("schema-v3 manifest contains import qualification")
+			}
+		} else {
+			if err := validatePythonImportQualification(manifest.ArtifactProfile, manifest.PythonImportInventory, manifest.PythonImportQualification); err != nil {
+				return err
+			}
+			if err := validatePythonImportQualificationSidecar(manifest.ArtifactProfile, manifest.PythonImportQualification, importQualificationBytes); err != nil {
+				return err
+			}
 		}
 	}
 	if manifest.ArtifactProfile == "base" {
@@ -272,6 +342,105 @@ func validatePythonImportInventorySidecar(profile string, inventory *pythonImpor
 	}
 	if !reflect.DeepEqual(sidecar, expected) {
 		return errors.New("Python import inventory sidecar does not match manifest")
+	}
+	return nil
+}
+
+func validatePythonImportQualification(profile string, inventory *pythonImportInventory, qualification *pythonImportQualification) error {
+	if inventory == nil || qualification == nil || qualification.SchemaVersion != 1 || qualification.Filename != "import-qualification.json" ||
+		!artifactHexDigestPattern.MatchString(qualification.SHA256) || qualification.Probe != "guest-import-exec-v1" ||
+		qualification.Implementation != inventory.Implementation || qualification.PythonVersion != inventory.PythonVersion ||
+		len(qualification.QualifiedRoots) == 0 || len(qualification.QualifiedRoots) > 64 ||
+		len(qualification.Results) == 0 || len(qualification.Results) > 64 {
+		return errors.New("Python import qualification identity is invalid")
+	}
+	discoverable := make(map[string]struct{}, len(inventory.DiscoverableRoots))
+	for _, root := range inventory.DiscoverableRoots {
+		discoverable[root] = struct{}{}
+	}
+	qualified := make(map[string]struct{}, len(qualification.QualifiedRoots))
+	previous := ""
+	for _, root := range qualification.QualifiedRoots {
+		if !validImportName(root) || strings.Contains(root, ".") || root <= previous {
+			return errors.New("Python import qualification roots are invalid")
+		}
+		if _, ok := discoverable[root]; !ok {
+			return errors.New("Python import qualification root is not discoverable")
+		}
+		qualified[root] = struct{}{}
+		previous = root
+	}
+	required := []string{"agent_runtime", "json", "sys"}
+	if profile == "numpy-core" {
+		required = append(required, "numpy")
+	}
+	for _, root := range required {
+		if _, ok := qualified[root]; !ok {
+			return errors.New("Python import qualification omits a required profile root")
+		}
+	}
+	derived := make([]string, 0, len(qualification.Results))
+	expectedOperations := map[string]string{
+		"agent_runtime": "import", "base64": "roundtrip", "collections": "counter", "csv": "roundtrip",
+		"datetime": "date_isoformat", "decimal": "add", "fractions": "add", "functools": "reduce",
+		"hashlib": "sha256", "itertools": "islice", "json": "roundtrip", "math": "sqrt",
+		"pathlib": "pure_path", "re": "fullmatch", "statistics": "mean", "sys": "version_info",
+		"urllib": "parse", "xml": "etree_roundtrip",
+	}
+	if profile == "numpy-core" {
+		expectedOperations["numpy"] = "array_sum"
+	}
+	previous = ""
+	for _, result := range qualification.Results {
+		if !validImportName(result.Name) || strings.Contains(result.Name, ".") || result.Name <= previous ||
+			expectedOperations[result.Name] != result.Operation {
+			return errors.New("Python import qualification result is invalid")
+		}
+		if _, ok := discoverable[result.Name]; !ok {
+			return errors.New("Python import qualification result is not discoverable")
+		}
+		switch result.Status {
+		case "qualified":
+			if result.Error != "" {
+				return errors.New("qualified Python import contains an error")
+			}
+			derived = append(derived, result.Name)
+		case "import_failed", "operation_failed":
+			if len(result.Error) == 0 || len(result.Error) > 128 {
+				return errors.New("failed Python import qualification omits its error class")
+			}
+		default:
+			return errors.New("Python import qualification status is invalid")
+		}
+		previous = result.Name
+	}
+	if !reflect.DeepEqual(derived, qualification.QualifiedRoots) {
+		return errors.New("Python import qualification roots do not match results")
+	}
+	return nil
+}
+
+func validatePythonImportQualificationSidecar(profile string, qualification *pythonImportQualification, encoded []byte) error {
+	if qualification == nil || len(encoded) == 0 || len(encoded) > maxArtifactManifestBytes || rejectDuplicateBoundedJSON(encoded) != nil {
+		return errors.New("Python import qualification sidecar is invalid")
+	}
+	digest := sha256.Sum256(encoded)
+	if qualification.SHA256 != hex.EncodeToString(digest[:]) {
+		return errors.New("Python import qualification sidecar digest mismatch")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	var sidecar artifactImportQualificationSidecar
+	if err := decoder.Decode(&sidecar); err != nil || !errors.Is(decoder.Decode(&struct{}{}), io.EOF) {
+		return errors.New("Python import qualification sidecar is invalid")
+	}
+	expected := artifactImportQualificationSidecar{
+		SchemaVersion: qualification.SchemaVersion, ArtifactProfile: profile, Probe: qualification.Probe,
+		Implementation: qualification.Implementation, PythonVersion: qualification.PythonVersion,
+		QualifiedRoots: qualification.QualifiedRoots, Results: qualification.Results,
+	}
+	if !reflect.DeepEqual(sidecar, expected) {
+		return errors.New("Python import qualification sidecar does not match manifest")
 	}
 	return nil
 }

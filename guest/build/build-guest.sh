@@ -463,6 +463,11 @@ fi
 
 "${WASM_TOOLS}" validate "${FINAL_GUEST}"
 "${WASM_TOOLS}" print "${FINAL_GUEST}" > "${DIST_DIR}/agent-python-runtime.wat"
+PROBE_RUNNER="${WORK_DIR}/apyrun-probe"
+(
+  cd "${ROOT_DIR}"
+  go build -o "${PROBE_RUNNER}" ./cmd/apyrun
+)
 IMPORT_INVENTORY_REQUEST="${WORK_DIR}/import-inventory-request.json"
 IMPORT_INVENTORY_RESPONSE="${WORK_DIR}/import-inventory-response.json"
 IMPORT_INVENTORY="${DIST_DIR}/import-inventory.json"
@@ -471,7 +476,7 @@ python3 "${ROOT_DIR}/guest/build/import_inventory.py" request \
   --output "${IMPORT_INVENTORY_REQUEST}"
 (
   cd "${ROOT_DIR}"
-  go run ./cmd/apyrun -artifact "${FINAL_GUEST}" \
+  "${PROBE_RUNNER}" -artifact "${FINAL_GUEST}" \
     < "${IMPORT_INVENTORY_REQUEST}" \
     > "${IMPORT_INVENTORY_RESPONSE}"
 )
@@ -479,12 +484,46 @@ python3 "${ROOT_DIR}/guest/build/import_inventory.py" extract \
   --profile "${ARTIFACT_PROFILE}" \
   --response "${IMPORT_INVENTORY_RESPONSE}" \
   --output "${IMPORT_INVENTORY}"
+
+run_import_qualification() {
+  local artifact=$1
+  local profile=$2
+  local work_prefix=$3
+  local output=$4
+  local requests="${work_prefix}/requests"
+  local responses="${work_prefix}/responses"
+  rm -rf "${work_prefix}"
+  mkdir -p "${requests}" "${responses}"
+  python3 "${ROOT_DIR}/guest/build/import_qualification.py" requests \
+    --profile "${profile}" \
+    --output-dir "${requests}"
+  local request
+  local response
+  for request in "${requests}"/*.json; do
+    response="${responses}/$(basename "${request}")"
+    "${PROBE_RUNNER}" -artifact "${artifact}" \
+      < "${request}" \
+      > "${response}"
+  done
+  python3 "${ROOT_DIR}/guest/build/import_qualification.py" extract \
+    --profile "${profile}" \
+    --responses-dir "${responses}" \
+    --output "${output}"
+}
+
+IMPORT_QUALIFICATION="${DIST_DIR}/import-qualification.json"
+run_import_qualification \
+  "${FINAL_GUEST}" \
+  "${ARTIFACT_PROFILE}" \
+  "${WORK_DIR}/import-qualification" \
+  "${IMPORT_QUALIFICATION}"
 python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --artifact "${FINAL_GUEST}" \
   --wat "${DIST_DIR}/agent-python-runtime.wat" \
   --source-lock "${SOURCE_LOCK}" \
   --artifact-profile "${ARTIFACT_PROFILE}" \
   --import-inventory "${IMPORT_INVENTORY}" \
+  --import-qualification "${IMPORT_QUALIFICATION}" \
   --memory-initial-pages "${MEMORY_INITIAL_PAGES}" \
   --memory-maximum-pages "${MEMORY_MAXIMUM_PAGES}" \
   "${MANIFEST_EXTENSION_ARGS[@]}" \
@@ -494,10 +533,11 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
   PREINITIALIZATION_WAT="${PREINITIALIZATION_SPIKE_DIR}/input.wat"
   PREINITIALIZATION_INVENTORY_RESPONSE="${PREINITIALIZATION_SPIKE_DIR}/import-inventory-response.json"
   PREINITIALIZATION_INVENTORY="${PREINITIALIZATION_INPUT_DIR}/import-inventory.json"
+  PREINITIALIZATION_QUALIFICATION="${PREINITIALIZATION_INPUT_DIR}/import-qualification.json"
   "${WASM_TOOLS}" print "${PREINITIALIZATION_INPUT_GUEST}" > "${PREINITIALIZATION_WAT}"
   (
     cd "${ROOT_DIR}"
-    go run ./cmd/apyrun -artifact "${PREINITIALIZATION_INPUT_GUEST}" \
+    "${PROBE_RUNNER}" -artifact "${PREINITIALIZATION_INPUT_GUEST}" \
       < "${IMPORT_INVENTORY_REQUEST}" \
       > "${PREINITIALIZATION_INVENTORY_RESPONSE}"
   )
@@ -505,12 +545,18 @@ if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
     --profile base \
     --response "${PREINITIALIZATION_INVENTORY_RESPONSE}" \
     --output "${PREINITIALIZATION_INVENTORY}"
+  run_import_qualification \
+    "${PREINITIALIZATION_INPUT_GUEST}" \
+    base \
+    "${PREINITIALIZATION_SPIKE_DIR}/import-qualification" \
+    "${PREINITIALIZATION_QUALIFICATION}"
   python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
     --artifact "${PREINITIALIZATION_INPUT_GUEST}" \
     --wat "${PREINITIALIZATION_WAT}" \
     --source-lock "${SOURCE_LOCK}" \
     --artifact-profile base \
     --import-inventory "${PREINITIALIZATION_INVENTORY}" \
+    --import-qualification "${PREINITIALIZATION_QUALIFICATION}" \
     --output "${PREINITIALIZATION_INPUT_DIR}/manifest.json"
 fi
 
@@ -548,6 +594,7 @@ rm "${DIST_DIR}/agent-python-runtime.wat"
     "${ARTIFACT_FILENAME}"
     manifest.json
     import-inventory.json
+    import-qualification.json
     sbom.spdx.json
     THIRD_PARTY_NOTICES.md
   )

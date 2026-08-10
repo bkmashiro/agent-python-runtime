@@ -15,14 +15,15 @@ const (
 )
 
 type ArtifactProvenance struct {
-	ArtifactSHA256   string                          `json:"artifact_sha256"`
-	ManifestSHA256   string                          `json:"manifest_sha256"`
-	RepositoryCommit string                          `json:"repository_commit"`
-	ABIVersion       string                          `json:"abi_version"`
-	Target           string                          `json:"target"`
-	ArtifactProfile  string                          `json:"artifact_profile"`
-	Packages         []runtimeconfig.ArtifactPackage `json:"packages"`
-	ImportRoots      []string                        `json:"import_roots,omitempty"`
+	ArtifactSHA256       string                          `json:"artifact_sha256"`
+	ManifestSHA256       string                          `json:"manifest_sha256"`
+	RepositoryCommit     string                          `json:"repository_commit"`
+	ABIVersion           string                          `json:"abi_version"`
+	Target               string                          `json:"target"`
+	ArtifactProfile      string                          `json:"artifact_profile"`
+	Packages             []runtimeconfig.ArtifactPackage `json:"packages"`
+	ImportRoots          []string                        `json:"import_roots,omitempty"`
+	QualifiedImportRoots []string                        `json:"qualified_import_roots,omitempty"`
 }
 
 func LoadPinnedArtifact(artifactPath, manifestPath string) ([]byte, ArtifactProvenance, error) {
@@ -45,19 +46,31 @@ func LoadPinnedArtifact(artifactPath, manifestPath string) ([]byte, ArtifactProv
 			return nil, ArtifactProvenance{}, err
 		}
 	}
-	identity, err := runtimeconfig.VerifyDistributionArtifact(filepath.Base(artifactPath), artifact, manifestBytes, inventoryBytes)
+	var qualificationBytes []byte
+	qualificationFilename, required, err := runtimeconfig.DistributionImportQualificationFilename(manifestBytes)
+	if err != nil {
+		return nil, ArtifactProvenance{}, errors.New("inspect distribution artifact manifest")
+	}
+	if required {
+		qualificationBytes, err = readPinnedRegularFile(filepath.Join(filepath.Dir(manifestPath), qualificationFilename), maxManifestBytes)
+		if err != nil {
+			return nil, ArtifactProvenance{}, err
+		}
+	}
+	identity, err := runtimeconfig.VerifyDistributionArtifact(filepath.Base(artifactPath), artifact, manifestBytes, inventoryBytes, qualificationBytes)
 	if err != nil {
 		return nil, ArtifactProvenance{}, errors.New("verify distribution artifact identity")
 	}
 	return artifact, ArtifactProvenance{
-		ArtifactSHA256:   identity.ArtifactSHA256,
-		ManifestSHA256:   identity.ManifestSHA256,
-		RepositoryCommit: identity.RepositoryCommit,
-		ABIVersion:       identity.ABIVersion,
-		Target:           identity.Target,
-		ArtifactProfile:  identity.ProfileID,
-		Packages:         append([]runtimeconfig.ArtifactPackage(nil), identity.Packages...),
-		ImportRoots:      append([]string(nil), identity.ImportRoots...),
+		ArtifactSHA256:       identity.ArtifactSHA256,
+		ManifestSHA256:       identity.ManifestSHA256,
+		RepositoryCommit:     identity.RepositoryCommit,
+		ABIVersion:           identity.ABIVersion,
+		Target:               identity.Target,
+		ArtifactProfile:      identity.ProfileID,
+		Packages:             append([]runtimeconfig.ArtifactPackage(nil), identity.Packages...),
+		ImportRoots:          append([]string(nil), identity.ImportRoots...),
+		QualifiedImportRoots: append([]string(nil), identity.QualifiedImportRoots...),
 	}, nil
 }
 

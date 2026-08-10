@@ -125,7 +125,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 			ProfileID: provenance.ArtifactProfile, ArtifactSHA256: provenance.ArtifactSHA256,
 			ManifestSHA256: provenance.ManifestSHA256, RepositoryCommit: provenance.RepositoryCommit,
 			ABIVersion: provenance.ABIVersion, Target: provenance.Target, Packages: provenance.Packages,
-			ImportRoots: provenance.ImportRoots,
+			ImportRoots: provenance.ImportRoots, QualifiedImportRoots: provenance.QualifiedImportRoots,
 		})
 		if bindErr != nil {
 			return bindErr

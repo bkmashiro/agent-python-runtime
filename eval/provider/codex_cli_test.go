@@ -160,6 +160,10 @@ func TestCodexCLIAdapterParsesParallelFunctionCalls(t *testing.T) {
 		if err := json.Unmarshal(raw, &item); err != nil {
 			t.Fatalf("item=%s err=%v", string(raw), err)
 		}
+		var arguments string
+		if err := json.Unmarshal(item["arguments"], &arguments); err != nil || !json.Valid([]byte(arguments)) {
+			t.Fatalf("arguments must be a JSON string: %s err=%v", item["arguments"], err)
+		}
 		switch index {
 		case 0:
 			if string(item["call_id"]) != `"call_1"` {

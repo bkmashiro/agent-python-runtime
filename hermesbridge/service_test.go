@@ -57,15 +57,31 @@ func guestResponse(t *testing.T, ctx context.Context, result string) []byte {
 }
 
 func guestResponseForCode(t *testing.T, ctx context.Context, result, code string) []byte {
+	return guestResponseForCodeAndPlan(t, ctx, result, code, nil)
+}
+
+func guestResponseForCodeAndPlan(t *testing.T, ctx context.Context, result, code string, plan *runtimeconfig.FrozenRunPlan) []byte {
 	t.Helper()
 	ref, ok := engine.InvocationRefFromContext(ctx)
 	if !ok {
 		t.Fatal("runner did not receive Host invocation ref")
 	}
 	executionRef := runtimeconfig.ExecutionRef{InvocationRef: ref, ExecutedCodeSHA256: digestString(code)}
+	var importReceipts *runtimeconfig.ImportReceiptEvidence
+	if plan != nil {
+		guestEvidence, err := runtimeconfig.DecodeGuestImportReceiptEvidence([]byte(`{"schema_version":1,"collector":"cpython-pre-cache-import-gate-v1","events":[]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		bound, err := runtimeconfig.BindImportReceiptEvidence(*plan, guestEvidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		importReceipts = &bound
+	}
 	payload, err := json.Marshal(runtimeconfig.RunResponse{
 		Status: runtimeconfig.RunResponseOK, Result: json.RawMessage(result), Receipts: json.RawMessage(`[]`),
-		Metrics: &runtimeconfig.RunMetrics{CapabilityCalls: 0, ResultBytes: uint32(len(result))}, ExecutionRef: &executionRef,
+		Metrics: &runtimeconfig.RunMetrics{CapabilityCalls: 0, ResultBytes: uint32(len(result))}, ExecutionRef: &executionRef, RunPlan: plan, ImportReceipts: importReceipts,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -104,16 +120,35 @@ func TestServiceExecutesWithHostOwnedExecutionIdentity(t *testing.T) {
 
 func TestServiceExecutesMatchingProfileManifest(t *testing.T) {
 	trace := &fakeTrace{}
-	runner := &fakeRunner{properties: engine.Properties{
+	properties := engine.Properties{
 		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
 		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
-		ExecutionProfileID: "base", AllowedImports: []string{"json"},
-	}, run: func(ctx context.Context, payload []byte) ([]byte, error) {
+		ExecutionProfileID: "base", AllowedImports: []string{"json"}, AvailableImports: []string{"json"}, QualifiedImports: []string{"json"},
+		ArtifactSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestSHA256: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	}
+	runner := &fakeRunner{properties: properties, run: func(ctx context.Context, payload []byte) ([]byte, error) {
 		request, err := runtimeconfig.DecodeRunRequest(payload)
 		if err != nil || request.Compatibility == nil || request.Compatibility.Profile != "base" {
 			t.Fatalf("request=%+v err=%v", request, err)
 		}
-		return guestResponseForCode(t, ctx, `42`, request.Code), nil
+		profile := properties.ExecutionProfile()
+		compatibility, err := runtimeconfig.EvaluateRunCompatibility(request, profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		validation, err := runtimeconfig.DecodeSourceValidationEvidence([]byte(`{"schema_version":1,"validator":"exact-guest-static-imports-v1","status":"ready","source_sha256":"` + compatibility.SourceSHA256() + `","profile":"base","declared_import_roots":["json"],"ast_import_roots":["json"],"bytecode_checked":true,"baseline_modules":["sys"],"entry_closure_modules":["json"],"sealed_modules":["json","sys"]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := runtimeconfig.NewFrozenRunPlan(payload, request, compatibility, validation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		responsePayload := guestResponseForCodeAndPlan(t, ctx, `42`, request.Code, &plan)
+		if decoded, decodeErr := runtimeconfig.DecodeAndValidateRunResponse(request, responsePayload); decodeErr != nil {
+			t.Fatalf("mock response invalid: %v payload=%s decoded=%+v", decodeErr, responsePayload, decoded)
+		}
+		return responsePayload, nil
 	}}
 	service, err := NewService(runner, trace, func() (string, error) { return "execution-profile-ok", nil }, time.Second)
 	if err != nil {

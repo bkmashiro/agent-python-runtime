@@ -273,6 +273,32 @@ func TestSourceContractValidationRejectsBeforeBrokerCreation(t *testing.T) {
 	}
 }
 
+func TestMissingPlanEvidenceExportsRejectBeforeBrokerCreation(t *testing.T) {
+	wasm := withSourceValidationStatus(t, "AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=", 0)
+	profile, err := runtime.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtime.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	brokerCalls := 0
+	runner, err := (engine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		brokerCalls++
+		return nil, errors.New("broker must not be created")
+	}}).New(context.Background(), wasm, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request := []byte(`{"run_id":"missing-plan-evidence","code":"import json\nresult = 1","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`)
+	if _, err := runner.Run(context.Background(), request, ""); err == nil || !strings.Contains(err.Error(), "runtime_source_validation_result") {
+		t.Fatalf("error=%v", err)
+	}
+	if brokerCalls != 0 {
+		t.Fatalf("broker calls=%d", brokerCalls)
+	}
+}
+
 func TestPreparedPoolDiscardsTrappedModule(t *testing.T) {
 	wasm := withSourceValidationExport(t, "AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
 	factory := engine.Factory{PreparedCapacity: 1}

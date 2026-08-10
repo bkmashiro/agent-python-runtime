@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-runtime.dev/abi/v1/run-plan.schema.json",
+  "title": "Host-authored frozen RunPlan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "state", "request_sha256", "source_sha256", "profile", "artifact_sha256", "manifest_sha256", "compatibility_evidence_sha256", "source_validation_evidence_sha256", "declared_import_roots", "ast_import_roots", "baseline_modules", "entry_closure_modules", "sealed_modules", "import_policy_sha256", "bytecode_checked", "plan_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "state": {"const": "frozen"},
+    "request_sha256": {"$ref": "#/$defs/digest"},
+    "source_sha256": {"$ref": "#/$defs/digest"},
+    "profile": {"enum": ["base", "numpy-core"]},
+    "artifact_sha256": {"$ref": "#/$defs/digest"},
+    "manifest_sha256": {"$ref": "#/$defs/digest"},
+    "compatibility_evidence_sha256": {"$ref": "#/$defs/digest"},
+    "source_validation_evidence_sha256": {"$ref": "#/$defs/digest"},
+    "declared_import_roots": {"$ref": "#/$defs/importRoots"},
+    "ast_import_roots": {"$ref": "#/$defs/importRoots"},
+    "baseline_modules": {"$ref": "#/$defs/modules"},
+    "entry_closure_modules": {"$ref": "#/$defs/modules"},
+    "sealed_modules": {"$ref": "#/$defs/modules"},
+    "import_policy_sha256": {"$ref": "#/$defs/digest"},
+    "bytecode_checked": {"const": true},
+    "plan_sha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "importRoots": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
+    "modules": {"type": "array", "maxItems": 1024, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"}}
+  }
+}

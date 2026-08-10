@@ -33,12 +33,14 @@ type RunError struct {
 }
 
 type RunResponse struct {
-	Status       RunResponseStatus `json:"status"`
-	Result       json.RawMessage   `json:"result"`
-	Receipts     json.RawMessage   `json:"receipts"`
-	Metrics      *RunMetrics       `json:"metrics"`
-	Error        *RunError         `json:"error"`
-	ExecutionRef *ExecutionRef     `json:"execution_ref,omitempty"`
+	Status         RunResponseStatus      `json:"status"`
+	Result         json.RawMessage        `json:"result"`
+	Receipts       json.RawMessage        `json:"receipts"`
+	Metrics        *RunMetrics            `json:"metrics"`
+	Error          *RunError              `json:"error"`
+	ExecutionRef   *ExecutionRef          `json:"execution_ref,omitempty"`
+	RunPlan        *FrozenRunPlan         `json:"run_plan,omitempty"`
+	ImportReceipts *ImportReceiptEvidence `json:"import_receipts,omitempty"`
 }
 
 func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResponse, error) {
@@ -61,7 +63,7 @@ func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResp
 			return RunResponse{}, errors.New("Guest run response has non-canonical envelope keys")
 		}
 	}
-	return DecodeAndValidateRunResponse(request, data)
+	return decodeAndValidateRunResponse(request, data, false)
 }
 
 func rejectDuplicateBoundedJSON(raw []byte) error {
@@ -77,8 +79,10 @@ func rejectDuplicateBoundedJSON(raw []byte) error {
 	return nil
 }
 
+const maxCanonicalJSONNodes = 16384
+
 func consumeUniqueBoundedJSON(decoder *json.Decoder, depth int, nodes *int) error {
-	if depth > 64 || *nodes >= 4096 {
+	if depth > 64 || *nodes >= maxCanonicalJSONNodes {
 		return errors.New("run response JSON is too complex")
 	}
 	*nodes++
@@ -156,6 +160,10 @@ func hasRequiredAndOnlyExactKeys(values map[string]json.RawMessage, required []s
 }
 
 func DecodeAndValidateRunResponse(request RunRequest, data []byte) (RunResponse, error) {
+	return decodeAndValidateRunResponse(request, data, true)
+}
+
+func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEvidence bool) (RunResponse, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var response RunResponse
@@ -165,8 +173,18 @@ func DecodeAndValidateRunResponse(request RunRequest, data []byte) (RunResponse,
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return RunResponse{}, errors.New("run response contains trailing JSON")
 	}
+	hostEvidenceInvalid := false
+	if requireHostEvidence {
+		hostEvidenceInvalid = (request.Compatibility == nil) != (response.RunPlan == nil) ||
+			(response.RunPlan == nil) != (response.ImportReceipts == nil) ||
+			(response.RunPlan != nil && response.ImportReceipts.PlanSHA256() != response.RunPlan.PlanSHA256())
+	} else {
+		hostEvidenceInvalid = response.RunPlan != nil || response.ImportReceipts != nil || response.ExecutionRef != nil
+	}
 	if (response.Status != RunResponseOK && response.Status != RunResponseError) || len(response.Result) == 0 || len(response.Receipts) == 0 || response.Metrics == nil ||
-		(response.Metrics.GuestTimeMS != nil && *response.Metrics.GuestTimeMS < 0) || (response.ExecutionRef != nil && response.ExecutionRef.Validate() != nil) {
+		(response.Metrics.GuestTimeMS != nil && *response.Metrics.GuestTimeMS < 0) || (response.ExecutionRef != nil && response.ExecutionRef.Validate() != nil) ||
+		(response.RunPlan != nil && response.RunPlan.Validate() != nil) || (response.ImportReceipts != nil && response.ImportReceipts.Validate() != nil) ||
+		hostEvidenceInvalid {
 		return RunResponse{}, errors.New("run response has invalid required fields")
 	}
 	var receipts []any

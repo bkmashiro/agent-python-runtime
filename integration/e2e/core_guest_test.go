@@ -21,11 +21,13 @@ import (
 )
 
 type guestResponse struct {
-	Status   string            `json:"status"`
-	Result   any               `json:"result"`
-	Receipts []receipt.Receipt `json:"receipts"`
-	Metrics  map[string]any    `json:"metrics"`
-	Error    map[string]any    `json:"error"`
+	Status         string                         `json:"status"`
+	Result         any                            `json:"result"`
+	Receipts       []receipt.Receipt              `json:"receipts"`
+	Metrics        map[string]any                 `json:"metrics"`
+	Error          map[string]any                 `json:"error"`
+	RunPlan        *runtime.FrozenRunPlan         `json:"run_plan,omitempty"`
+	ImportReceipts *runtime.ImportReceiptEvidence `json:"import_receipts,omitempty"`
 }
 
 func guestArtifact(t *testing.T) string {
@@ -152,6 +154,20 @@ func TestStaticAgentCodeCLevelGateRejectsObfuscatedLateImport(t *testing.T) {
 	)
 	if response.Status != "error" || response.Error["code"] != "python_exception" || response.Error["error_type"] != "ImportError" {
 		t.Fatalf("sealed import gate did not reject late module: %#v", response)
+	}
+	if response.RunPlan == nil || response.RunPlan.Validate() != nil || response.ImportReceipts == nil || response.ImportReceipts.Validate() != nil ||
+		response.ImportReceipts.PlanSHA256() != response.RunPlan.PlanSHA256() {
+		t.Fatalf("Host RunPlan/import receipt binding invalid: %#v", response)
+	}
+	events := response.ImportReceipts.Events()
+	foundDeniedFractions := false
+	for _, event := range events {
+		if event.ModuleName == "fractions" && event.Decision == runtime.ImportDenied {
+			foundDeniedFractions = true
+		}
+	}
+	if !foundDeniedFractions {
+		t.Fatalf("late denial receipt missing: %#v", events)
 	}
 }
 

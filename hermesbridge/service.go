@@ -24,14 +24,16 @@ type BridgeError struct {
 }
 
 type ExecuteResponse struct {
-	Version      string                          `json:"version"`
-	RequestID    string                          `json:"request_id"`
-	Status       string                          `json:"status"`
-	Result       json.RawMessage                 `json:"result,omitempty"`
-	Error        *BridgeError                    `json:"error,omitempty"`
-	Metrics      *runtimeconfig.RunMetrics       `json:"metrics,omitempty"`
-	ExecutionRef *runtimeconfig.ExecutionRef     `json:"execution_ref,omitempty"`
-	Outcome      *runtimeconfig.ExecutionOutcome `json:"outcome,omitempty"`
+	Version        string                               `json:"version"`
+	RequestID      string                               `json:"request_id"`
+	Status         string                               `json:"status"`
+	Result         json.RawMessage                      `json:"result,omitempty"`
+	Error          *BridgeError                         `json:"error,omitempty"`
+	Metrics        *runtimeconfig.RunMetrics            `json:"metrics,omitempty"`
+	ExecutionRef   *runtimeconfig.ExecutionRef          `json:"execution_ref,omitempty"`
+	RunPlan        *runtimeconfig.FrozenRunPlan         `json:"run_plan,omitempty"`
+	ImportReceipts *runtimeconfig.ImportReceiptEvidence `json:"import_receipts,omitempty"`
+	Outcome        *runtimeconfig.ExecutionOutcome      `json:"outcome,omitempty"`
 }
 
 type IDSource func() (string, error)
@@ -166,6 +168,8 @@ func (service *Service) Execute(parent context.Context, request ExecuteRequest) 
 		return bridgeFailure(response, "execution_ref_mismatch", "runtime execution reference mismatch")
 	}
 	executionRef = *guestResponse.ExecutionRef
+	response.RunPlan = guestResponse.RunPlan
+	response.ImportReceipts = guestResponse.ImportReceipts
 
 	if errors.Is(validationErr, runtimeconfig.ErrRunResultSchemaMismatch) || errors.Is(runErr, runtimeconfig.ErrRunResultSchemaMismatch) {
 		if traceErr := service.trace.RuntimeCompleted(traceCtx, startedEventID, executionRef, "schema_mismatch", digestBytes(guestResponse.Result)); traceErr != nil {

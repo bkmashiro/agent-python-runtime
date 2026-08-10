@@ -31,6 +31,8 @@ The producer performs three checks before writing `SHA256SUMS`:
 
 The artifact consumer repeats bundle identity/source-lock/notice validation without trusting producer staging, refetches the hash-locked official schema, and repeats schema validation. `SHA256SUMS` covers the Wasm, manifest, SPDX document, and generated notices; `numpy-core` additionally covers the exact extension-selection sidecar.
 
+Runtime admission uses one canonical `runtime.VerifyDistributionArtifact` verifier shared by the local CLI and the pinned Hermes loader. It rejects duplicate/unknown identity fields and trailing manifest JSON, validates the exact profile/package-set contract (`base` versus `numpy-core`), canonical filename, size and artifact SHA-256, build/target identity, NumPy extension-profile identity, and computes the manifest SHA-256. An enabled `ExecutionProfile` retains both digests and exposes them through validated Runner properties before Guest work. This is runtime identity binding, not a replacement for downloaded-bundle SBOM/source-lock verification and not yet a per-import inventory.
+
 The generated notice separates packaged/linked components from build-only tools. It records immutable source URLs, versions, archive digests, and license identifiers. License identifiers are provenance metadata, not legal advice or a substitute for upstream license texts.
 
 ## Consumer evidence index

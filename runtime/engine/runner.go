@@ -59,6 +59,8 @@ type Properties struct {
 	FallbackReason     string
 	ExecutionProfileID string
 	AllowedImports     []string
+	ArtifactSHA256     string
+	ManifestSHA256     string
 }
 
 func (properties Properties) Validate() error {
@@ -79,9 +81,20 @@ func (properties Properties) Validate() error {
 		return fmt.Errorf("%w: execution profile identity and imports must be present together", ErrInvalidProperties)
 	}
 	if properties.ExecutionProfileID != "" {
-		if _, err := runtime.NewExecutionProfile(properties.ExecutionProfileID, properties.AllowedImports); err != nil {
+		profile, err := runtime.NewExecutionProfile(properties.ExecutionProfileID, properties.AllowedImports)
+		if err != nil {
 			return fmt.Errorf("%w: execution profile is invalid", ErrInvalidProperties)
 		}
+		if (properties.ArtifactSHA256 == "") != (properties.ManifestSHA256 == "") {
+			return fmt.Errorf("%w: artifact and manifest digests must be present together", ErrInvalidProperties)
+		}
+		if properties.ArtifactSHA256 != "" {
+			if _, err := profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256}); err != nil {
+				return fmt.Errorf("%w: artifact-bound execution profile is invalid", ErrInvalidProperties)
+			}
+		}
+	} else if properties.ArtifactSHA256 != "" || properties.ManifestSHA256 != "" {
+		return fmt.Errorf("%w: artifact identity requires an execution profile", ErrInvalidProperties)
 	}
 	wantResetMode := resetModeForStrategy(properties.ActiveStrategy)
 	if wantResetMode == "" || properties.ResetMode != wantResetMode {
@@ -99,6 +112,12 @@ func (properties Properties) ExecutionProfile() *runtime.ExecutionProfile {
 	profile, err := runtime.NewExecutionProfile(properties.ExecutionProfileID, append([]string(nil), properties.AllowedImports...))
 	if err != nil {
 		return nil
+	}
+	if properties.ArtifactSHA256 != "" {
+		profile, err = profile.BindVerifiedArtifact(runtime.VerifiedArtifactIdentity{ProfileID: properties.ExecutionProfileID, ArtifactSHA256: properties.ArtifactSHA256, ManifestSHA256: properties.ManifestSHA256})
+		if err != nil {
+			return nil
+		}
 	}
 	return &profile
 }

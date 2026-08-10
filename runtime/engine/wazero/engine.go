@@ -354,9 +354,13 @@ func newEngine(
 func (engine *Engine) Properties() enginecontract.Properties {
 	var profileID string
 	var allowedImports []string
+	var artifactSHA256 string
+	var manifestSHA256 string
 	if engine.config.ExecutionProfile != nil {
 		profileID = engine.config.ExecutionProfile.ID()
 		allowedImports = engine.config.ExecutionProfile.AllowedImports()
+		artifactSHA256 = engine.config.ExecutionProfile.ArtifactSHA256()
+		manifestSHA256 = engine.config.ExecutionProfile.ManifestSHA256()
 	}
 	return enginecontract.Properties{
 		Backend:            "wazero",
@@ -365,6 +369,8 @@ func (engine *Engine) Properties() enginecontract.Properties {
 		ActiveStrategy:     engine.strategy,
 		ExecutionProfileID: profileID,
 		AllowedImports:     allowedImports,
+		ArtifactSHA256:     artifactSHA256,
+		ManifestSHA256:     manifestSHA256,
 	}
 }
 

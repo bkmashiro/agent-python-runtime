@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -296,6 +299,61 @@ func TestOperatorConfigBindsExecutionProfile(t *testing.T) {
 
 func admitProfileForTest(config runtimeconfig.RunConfig, profile string, imports []string) error {
 	return runtimeconfig.AdmitRunCompatibility(runtimeconfig.RunRequest{Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: profile, Imports: imports}}, config.ExecutionProfile)
+}
+
+func TestExecuteBindsProfileToVerifiedArtifactBeforeFactory(t *testing.T) {
+	artifact := []byte("verified-wasm")
+	manifest := baseDistributionManifest(t, artifact)
+	runner := &fakeRunner{response: []byte(`{"run_id":"host-run","status":"ok","result":1}`)}
+	factory := &fakeFactory{runner: runner}
+	bound := false
+	deps := dependencies{
+		readFile: func(path string) ([]byte, error) {
+			switch path {
+			case "host.json":
+				return []byte(`{"execution_profile":{"id":"base","allowed_imports":["json"]}}`), nil
+			case "agent-python-runtime.wasm":
+				return artifact, nil
+			case "manifest.json":
+				return manifest, nil
+			default:
+				return nil, errors.New("not found")
+			}
+		},
+		newIdentity: func() (string, error) { return "host-run", nil },
+		newFactory: func(config operatorConfig, _ string, _ *http.Client) (engine.Factory, error) {
+			runConfig, _, err := config.resolve()
+			if err != nil {
+				return nil, err
+			}
+			bound = runConfig.ExecutionProfile != nil && runConfig.ExecutionProfile.ArtifactSHA256() != "" && runConfig.ExecutionProfile.ManifestSHA256() != ""
+			return factory, nil
+		},
+	}
+	request := `{"run_id":"guest","code":"import json\nresult=1","inputs":{},"compatibility":{"profile":"base","imports":["json"]}}`
+	var stdout, stderr strings.Builder
+	exit := execute([]string{"-artifact", "agent-python-runtime.wasm", "-manifest", "manifest.json", "-config", "host.json"}, strings.NewReader(request), &stdout, &stderr, deps)
+	if exit != 0 || !bound || stderr.Len() != 0 {
+		t.Fatalf("exit=%d bound=%v stdout=%q stderr=%q", exit, bound, stdout.String(), stderr.String())
+	}
+}
+
+func baseDistributionManifest(t *testing.T, artifact []byte) []byte {
+	t.Helper()
+	digest := sha256.Sum256(artifact)
+	value := map[string]any{
+		"schema_version": 2, "abi_version": "v1", "artifact_profile": "base", "target": "wasm32-wasip1",
+		"artifact": map[string]any{"filename": "agent-python-runtime.wasm", "size": len(artifact), "sha256": hex.EncodeToString(digest[:])},
+		"build":    map[string]any{"repository_commit": strings.Repeat("a", 40), "source_date_epoch": "1", "compiler_target": "wasm32-wasip1", "execution_model": "reactor"},
+		"sources":  []any{}, "wasm": map[string]any{"imports": []any{}, "exports": []any{"_start"}},
+		"packages":          []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}},
+		"extension_profile": nil, "limitations": []any{"bounded"},
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
 }
 
 func TestExecuteDoesNotUpgradeOrdinaryRuntimeError(t *testing.T) {

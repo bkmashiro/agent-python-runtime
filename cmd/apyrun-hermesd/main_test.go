@@ -15,6 +15,7 @@ func TestParseOptionsDerivesBoundedCanaryPolicy(t *testing.T) {
 		"-trace-db", filepath.Join(root, "trace.sqlite"),
 		"-max-memory-mib", "512",
 		"-max-cpu-ms", "15000",
+		"-profile-imports", "json,math",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +24,7 @@ func TestParseOptionsDerivesBoundedCanaryPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.MemoryLimitPages != 8192 || config.Timeout != 15*time.Second {
+	if config.MemoryLimitPages != 8192 || config.Timeout != 15*time.Second || len(options.profileImports) != 2 {
 		t.Fatalf("unexpected config: %#v", config)
 	}
 	if factory.PreparedCapacity != 1 || factory.PreparedMaxCapacity != 1 || !factory.AdaptivePreparedRefill {
@@ -40,10 +41,12 @@ func TestParseOptionsRejectsUnsafeOrUnboundedConfiguration(t *testing.T) {
 		"-trace-db", filepath.Join(root, "trace.sqlite"),
 	}
 	cases := map[string][]string{
-		"relative artifact": append(append([]string{}, base...), "-artifact", "guest.wasm"),
-		"excess memory":     append(append([]string{}, base...), "-max-memory-mib", "1025"),
-		"excess cpu":        append(append([]string{}, base...), "-max-cpu-ms", "300001"),
-		"unexpected arg":    append(append([]string{}, base...), "extra"),
+		"relative artifact":    append(append([]string{}, base...), "-artifact", "guest.wasm"),
+		"excess memory":        append(append([]string{}, base...), "-max-memory-mib", "1025"),
+		"excess cpu":           append(append([]string{}, base...), "-max-cpu-ms", "300001"),
+		"unexpected arg":       append(append([]string{}, base...), "extra"),
+		"noncanonical imports": append(append([]string{}, base...), "-profile-imports", "json, math"),
+		"duplicate imports":    append(append([]string{}, base...), "-profile-imports", "json,json"),
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {

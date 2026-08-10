@@ -491,8 +491,27 @@ python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --output "${DIST_DIR}/manifest.json"
 
 if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
-  cp "${DIST_DIR}/manifest.json" "${PREINITIALIZATION_INPUT_DIR}/manifest.json"
-  cp "${DIST_DIR}/import-inventory.json" "${PREINITIALIZATION_INPUT_DIR}/import-inventory.json"
+  PREINITIALIZATION_WAT="${PREINITIALIZATION_SPIKE_DIR}/input.wat"
+  PREINITIALIZATION_INVENTORY_RESPONSE="${PREINITIALIZATION_SPIKE_DIR}/import-inventory-response.json"
+  PREINITIALIZATION_INVENTORY="${PREINITIALIZATION_INPUT_DIR}/import-inventory.json"
+  "${WASM_TOOLS}" print "${PREINITIALIZATION_INPUT_GUEST}" > "${PREINITIALIZATION_WAT}"
+  (
+    cd "${ROOT_DIR}"
+    go run ./cmd/apyrun -artifact "${PREINITIALIZATION_INPUT_GUEST}" \
+      < "${IMPORT_INVENTORY_REQUEST}" \
+      > "${PREINITIALIZATION_INVENTORY_RESPONSE}"
+  )
+  python3 "${ROOT_DIR}/guest/build/import_inventory.py" extract \
+    --profile base \
+    --response "${PREINITIALIZATION_INVENTORY_RESPONSE}" \
+    --output "${PREINITIALIZATION_INVENTORY}"
+  python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
+    --artifact "${PREINITIALIZATION_INPUT_GUEST}" \
+    --wat "${PREINITIALIZATION_WAT}" \
+    --source-lock "${SOURCE_LOCK}" \
+    --artifact-profile base \
+    --import-inventory "${PREINITIALIZATION_INVENTORY}" \
+    --output "${PREINITIALIZATION_INPUT_DIR}/manifest.json"
 fi
 
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \

@@ -244,7 +244,7 @@ func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleColle
 	if cow {
 		checkoutPhase = "pool_wait"
 	}
-	want := map[string]bool{checkoutPhase: false, "execute": false}
+	want := map[string]bool{checkoutPhase: false, "source_validate": false, "execute": false}
 	if prepare != "" {
 		want["prepare"] = false
 	}
@@ -286,7 +286,7 @@ func runPreparedSample(runner preparedBenchmarkRunner, lifecycle *lifecycleColle
 		return preparedSampleEvidence{}, fmt.Errorf("execute-only prepared workload used capability: %#v", capabilityObservations)
 	}
 	return preparedSampleEvidence{
-		PoolHitNS: durations["pool_hit"], PoolWaitNS: durations["pool_wait"], PrepareNS: durations["prepare"], ExecuteNS: durations["execute"], CapabilityNS: capabilityNS,
+		PoolHitNS: durations["pool_hit"], PoolWaitNS: durations["pool_wait"], PrepareNS: durations["prepare"], SourceValidateNS: durations["source_validate"], ExecuteNS: durations["execute"], CapabilityNS: capabilityNS,
 		RunTotalNS: runTotal.Nanoseconds(), RefillInstantiateGuestNS: durations["pool_prepare_instantiate_guest"],
 		RefillInitializeNS: durations["pool_prepare__initialize"], RefillRuntimeInitNS: durations["pool_prepare_runtime_init"],
 		RefillCOWRestoreNS: durations["pool_prepare_cow_restore"], RefillAttachGlobalsNS: durations["pool_prepare_attach_globals"],

@@ -483,6 +483,7 @@ func runSample(
 		RuntimeInitNS:      durations["runtime_init"],
 		AttachHostCallsNS:  durations["attach_host_calls"],
 		PrepareNS:          durations["prepare"],
+		SourceValidateNS:   durations["source_validate"],
 		ExecuteNS:          durations["execute"],
 		CapabilityNS:       capabilityNS,
 		RunTotalNS:         runTotal.Nanoseconds(),

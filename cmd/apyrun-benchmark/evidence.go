@@ -41,6 +41,7 @@ type sampleEvidence struct {
 	RuntimeInitNS      int64 `json:"runtime_init_ns"`
 	AttachHostCallsNS  int64 `json:"attach_host_calls_ns,omitempty"`
 	PrepareNS          int64 `json:"prepare_ns"`
+	SourceValidateNS   int64 `json:"source_validate_ns,omitempty"`
 	ExecuteNS          int64 `json:"execute_ns"`
 	CapabilityNS       int64 `json:"capability_ns"`
 	RunTotalNS         int64 `json:"run_total_ns"`

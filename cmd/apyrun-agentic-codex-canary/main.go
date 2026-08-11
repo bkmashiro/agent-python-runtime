@@ -121,6 +121,7 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	treatmentPath := flags.String("treatment", "", "optional frozen development treatment; defaults to baseline-v1")
 	replicate := flags.Uint("replicate", 0, "trial replicate")
 	out := flags.String("out", "", "new artifact path")
+	debugOut := flags.String("debug-out", "", "optional new private raw-debug path under a mode-0700 directory")
 	timeoutText := flags.String("timeout", "180s", "Codex timeout")
 
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
@@ -160,6 +161,11 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	}
 	if err := requireNewArtifactPath(*out); err != nil {
 		return "", err
+	}
+	if *debugOut != "" {
+		if err := validatePrivateDebugPath(*debugOut); err != nil {
+			return "", err
+		}
 	}
 
 	dataset, err := agentic.LoadRoutingDataset(*datasetRoot)
@@ -256,11 +262,74 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 	if err != nil {
 		return "", err
 	}
+	if *debugOut != "" {
+		if err := writePrivateRawDebug(*debugOut, result); err != nil {
+			return "", err
+		}
+	}
 	artifactDigest, err := agentic.WriteTrialArtifact(*out, result)
 	if err != nil {
 		return "", err
 	}
 	return artifactDigest, nil
+}
+
+func validatePrivateDebugPath(path string) error {
+	if path == "" {
+		return errors.New("missing private debug path")
+	}
+	info, err := os.Lstat(filepath.Dir(path))
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o700 {
+		return errors.New("private debug parent must be a mode-0700 directory")
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		return errors.New("private debug path already exists")
+	}
+	return nil
+}
+
+func writePrivateRawDebug(path string, result agentic.TrialResult) error {
+	if result.RawDebug == nil || result.TrialID == "" || result.TaskID == "" {
+		return errors.New("raw debug is unavailable")
+	}
+	if err := validatePrivateDebugPath(path); err != nil {
+		return err
+	}
+	document := struct {
+		Version   string                 `json:"version"`
+		TrialID   string                 `json:"trial_id"`
+		TaskID    string                 `json:"task_id"`
+		Condition agentic.Condition      `json:"condition"`
+		Replicate uint32                 `json:"replicate"`
+		Debug     *agentic.TrialRawDebug `json:"debug"`
+	}{"agentic-private-raw-debug/v1", result.TrialID, result.TaskID, result.Condition, result.Replicate, result.RawDebug}
+	content, err := json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	remove := true
+	defer func() {
+		_ = file.Close()
+		if remove {
+			_ = os.Remove(path)
+		}
+	}()
+	if _, err := file.Write(content); err != nil {
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	remove = false
+	return nil
 }
 
 func findTask(tasks []agentic.Task, taskID string) *agentic.Task {

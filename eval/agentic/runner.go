@@ -917,6 +917,9 @@ func buildConditionSurfaceForTreatment(runtime *ToolRuntime, condition Condition
 	}
 	sdk := compactPythonSDK(runtime)
 	prompt := "Use only the exposed tools and do not fabricate results. Do not add exploratory, precondition, or verification calls unless the user requests them or they are required to compute a later argument. Treat successful Host-tool observations as authoritative."
+	if treatment.UsesExactRequiredHostPlan() {
+		prompt += " Before emitting direct calls or Python code, internally form the exact required Host-call sequence. Include every directory change required by the user request and execute each required call exactly once in dependency-safe order. When a Host response feeds a later argument, extract the named field shown in the SDK response shape instead of converting the whole response object. Do not catch or suppress Host-tool exceptions."
+	}
 	if condition != ConditionDirect {
 		prompt += " Each Python Guest run starts fresh, but Host-tool state persists across user turns. Do not replay state-changing setup already completed in earlier turns; use prior successful Host observations as current state unless the user asks to change it."
 	}

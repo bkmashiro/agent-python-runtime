@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"os"
@@ -14,6 +15,32 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/eval/agentic"
 	"github.com/bkmashiro/agent-python-runtime/eval/provider"
 )
+
+func TestWritePrivateRawDebugIsExclusiveAndDoesNotLeakIntoFormalResult(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "debug")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "trial.json")
+	result := agentic.TrialResult{
+		TrialID: "dev_test", TaskID: "rd-006", Condition: agentic.ConditionPython,
+		RawDebug: &agentic.TrialRawDebug{DeveloperPrompt: "private prompt", ProviderExchanges: []agentic.RawProviderExchange{{Request: json.RawMessage(`{"secret":"request"}`), Response: json.RawMessage(`{"secret":"response"}`), StatusCode: 200}}},
+	}
+	if err := writePrivateRawDebug(path, result); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode=%v err=%v", info.Mode(), err)
+	}
+	if err := writePrivateRawDebug(path, result); err == nil {
+		t.Fatal("debug overwrite accepted")
+	}
+	formal, _ := json.Marshal(result)
+	if strings.Contains(string(formal), "private prompt") || strings.Contains(string(formal), "secret") {
+		t.Fatalf("formal result leaked raw debug: %s", formal)
+	}
+}
 
 var canaryCommandErrOutput = func(err error) string {
 	if err != nil {

@@ -15,6 +15,7 @@ const (
 	TreatmentHybridTwoStageSafeRepairV2          = "hybrid-two-stage-safe-repair-v2"
 	TreatmentHybridTwoStagePreboundCompactV3     = "hybrid-two-stage-prebound-compact-v3"
 	TreatmentHybridTwoStagePreboundCompactJSONV4 = "hybrid-two-stage-prebound-compact-json-v4"
+	TreatmentHybridTwoStagePreboundExactPlanV5   = "hybrid-two-stage-prebound-exact-plan-v5"
 )
 
 const (
@@ -25,6 +26,7 @@ const (
 	hybridTwoStageSafeRepairTreatmentJSON          = `{"schema_version":"agentic-development-treatment/v1","status":"frozen","id":"hybrid-two-stage-safe-repair-v2","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"two-stage-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":1}`
 	hybridTwoStagePreboundCompactTreatmentJSON     = `{"schema_version":"agentic-development-treatment/v2","status":"frozen","id":"hybrid-two-stage-prebound-compact-v3","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"two-stage-v1","python_binding_policy":"prebound-authorized-tools","python_result_policy":"default-empty-object","python_source_policy":"compact-no-unused-values","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":1}`
 	hybridTwoStagePreboundCompactJSONTreatmentJSON = `{"schema_version":"agentic-development-treatment/v3","status":"frozen","id":"hybrid-two-stage-prebound-compact-json-v4","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"two-stage-v1","python_binding_policy":"prebound-authorized-tools","python_result_policy":"default-empty-object-explicit-any-json","python_source_policy":"compact-no-unused-values","python_output_schema_policy":"any-json","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":1}`
+	hybridTwoStagePreboundExactPlanTreatmentJSON   = `{"schema_version":"agentic-development-treatment/v4","status":"frozen","id":"hybrid-two-stage-prebound-exact-plan-v5","host_context_policy":"none","python_repair_policy":"one-zero-host-call","hybrid_strategy":"two-stage-v1","python_binding_policy":"prebound-authorized-tools","python_result_policy":"default-empty-object-explicit-any-json","python_source_policy":"compact-no-unused-values","python_output_schema_policy":"any-json","execution_prompt_policy":"exact-required-host-plan-v1","max_python_repairs_per_trial":1,"max_router_calls_per_hybrid_trial":1}`
 )
 
 type DevelopmentTreatment struct {
@@ -38,6 +40,7 @@ type DevelopmentTreatment struct {
 	PythonResultPolicy           string `json:"python_result_policy,omitempty"`
 	PythonSourcePolicy           string `json:"python_source_policy,omitempty"`
 	PythonOutputSchemaPolicy     string `json:"python_output_schema_policy,omitempty"`
+	ExecutionPromptPolicy        string `json:"execution_prompt_policy,omitempty"`
 	MaxPythonRepairsPerTrial     uint32 `json:"max_python_repairs_per_trial"`
 	MaxRouterCallsPerHybridTrial uint32 `json:"max_router_calls_per_hybrid_trial"`
 	Digest                       string `json:"-"`
@@ -75,7 +78,7 @@ func (treatment DevelopmentTreatment) validPolicy() bool {
 	if treatment.Status != "frozen" {
 		return false
 	}
-	legacy := treatment.SchemaVersion == "agentic-development-treatment/v1" && treatment.PythonBindingPolicy == "" && treatment.PythonResultPolicy == "" && treatment.PythonSourcePolicy == "" && treatment.PythonOutputSchemaPolicy == ""
+	legacy := treatment.SchemaVersion == "agentic-development-treatment/v1" && treatment.PythonBindingPolicy == "" && treatment.PythonResultPolicy == "" && treatment.PythonSourcePolicy == "" && treatment.PythonOutputSchemaPolicy == "" && treatment.ExecutionPromptPolicy == ""
 	switch treatment.ID {
 	case TreatmentBaselineV1:
 		return legacy && treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "none" && treatment.HybridStrategy == "combined-surface-v1" && treatment.MaxPythonRepairsPerTrial == 0 && treatment.MaxRouterCallsPerHybridTrial == 0
@@ -90,11 +93,15 @@ func (treatment DevelopmentTreatment) validPolicy() bool {
 	case TreatmentHybridTwoStagePreboundCompactV3:
 		return treatment.SchemaVersion == "agentic-development-treatment/v2" && treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "two-stage-v1" &&
 			treatment.PythonBindingPolicy == "prebound-authorized-tools" && treatment.PythonResultPolicy == "default-empty-object" && treatment.PythonSourcePolicy == "compact-no-unused-values" && treatment.PythonOutputSchemaPolicy == "" &&
-			treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 1
+			treatment.ExecutionPromptPolicy == "" && treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 1
 	case TreatmentHybridTwoStagePreboundCompactJSONV4:
 		return treatment.SchemaVersion == "agentic-development-treatment/v3" && treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "two-stage-v1" &&
 			treatment.PythonBindingPolicy == "prebound-authorized-tools" && treatment.PythonResultPolicy == "default-empty-object-explicit-any-json" && treatment.PythonSourcePolicy == "compact-no-unused-values" && treatment.PythonOutputSchemaPolicy == "any-json" &&
-			treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 1
+			treatment.ExecutionPromptPolicy == "" && treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 1
+	case TreatmentHybridTwoStagePreboundExactPlanV5:
+		return treatment.SchemaVersion == "agentic-development-treatment/v4" && treatment.HostContextPolicy == "none" && treatment.PythonRepairPolicy == "one-zero-host-call" && treatment.HybridStrategy == "two-stage-v1" &&
+			treatment.PythonBindingPolicy == "prebound-authorized-tools" && treatment.PythonResultPolicy == "default-empty-object-explicit-any-json" && treatment.PythonSourcePolicy == "compact-no-unused-values" && treatment.PythonOutputSchemaPolicy == "any-json" &&
+			treatment.ExecutionPromptPolicy == "exact-required-host-plan-v1" && treatment.MaxPythonRepairsPerTrial == 1 && treatment.MaxRouterCallsPerHybridTrial == 1
 	default:
 		return false
 	}
@@ -121,6 +128,8 @@ func expectedTreatmentDocument(id string) string {
 		return hybridTwoStagePreboundCompactTreatmentJSON
 	case TreatmentHybridTwoStagePreboundCompactJSONV4:
 		return hybridTwoStagePreboundCompactJSONTreatmentJSON
+	case TreatmentHybridTwoStagePreboundExactPlanV5:
+		return hybridTwoStagePreboundExactPlanTreatmentJSON
 	default:
 		return ""
 	}
@@ -129,7 +138,7 @@ func expectedTreatmentDocument(id string) string {
 func (treatment DevelopmentTreatment) Implemented() bool {
 	return treatment.valid() && (treatment.ID == TreatmentBaselineV1 || treatment.ID == TreatmentStructuredHostContextV1 ||
 		treatment.ID == TreatmentPythonSafeRepairV1 || treatment.ID == TreatmentHybridTwoStageRouterV1 || treatment.ID == TreatmentHybridTwoStageSafeRepairV2 ||
-		treatment.ID == TreatmentHybridTwoStagePreboundCompactV3 || treatment.ID == TreatmentHybridTwoStagePreboundCompactJSONV4)
+		treatment.ID == TreatmentHybridTwoStagePreboundCompactV3 || treatment.ID == TreatmentHybridTwoStagePreboundCompactJSONV4 || treatment.ID == TreatmentHybridTwoStagePreboundExactPlanV5)
 }
 
 func (treatment DevelopmentTreatment) UsesStructuredHostContext() bool {
@@ -151,4 +160,8 @@ func (treatment DevelopmentTreatment) UsesPreboundCompactPython() bool {
 
 func (treatment DevelopmentTreatment) AllowsAnyJSONPythonResult() bool {
 	return treatment.Implemented() && treatment.PythonResultPolicy == "default-empty-object-explicit-any-json" && treatment.PythonOutputSchemaPolicy == "any-json"
+}
+
+func (treatment DevelopmentTreatment) UsesExactRequiredHostPlan() bool {
+	return treatment.Implemented() && treatment.ExecutionPromptPolicy == "exact-required-host-plan-v1"
 }

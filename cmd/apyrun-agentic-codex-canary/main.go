@@ -275,10 +275,15 @@ func run(ctx context.Context, args []string, deps dependencies) (string, error) 
 }
 
 func validatePrivateDebugPath(path string) error {
-	if path == "" {
+	if path == "" || !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return errors.New("missing private debug path")
 	}
-	info, err := os.Lstat(filepath.Dir(path))
+	parent := filepath.Dir(path)
+	resolvedParent, err := filepath.EvalSymlinks(parent)
+	if err != nil || resolvedParent != parent {
+		return errors.New("private debug parent must not traverse symlinks")
+	}
+	info, err := os.Lstat(parent)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o700 {
 		return errors.New("private debug parent must be a mode-0700 directory")
 	}

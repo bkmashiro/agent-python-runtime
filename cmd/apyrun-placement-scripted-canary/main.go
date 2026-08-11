@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -97,6 +98,14 @@ func run() error {
 	sourceCommit := flag.String("source-commit", "", "40-character runner source commit")
 	flag.Parse()
 	if *guestDir == "" || *computerCheckout == "" || *outputDir == "" || len(*sourceCommit) != 40 {
+		return errScriptedCanary
+	}
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return errScriptedCanary
+	}
+	builtCommit, err := sourceRevision(buildInfo)
+	if err != nil || builtCommit != *sourceCommit {
 		return errScriptedCanary
 	}
 	plan, err := placement.LoadDevelopmentCanaryPlan(*corpusRoot, *planPath)
@@ -341,6 +350,25 @@ func trialFilename(taskID, arm string) string {
 		return ""
 	}
 	return taskID + "--" + arm + "--scripted--r1.json"
+}
+
+func sourceRevision(info *debug.BuildInfo) (string, error) {
+	if info == nil {
+		return "", errScriptedCanary
+	}
+	var revision, modified string
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value
+		}
+	}
+	if len(revision) != 40 || !regexp.MustCompile(`^[0-9a-f]+$`).MatchString(revision) || modified != "false" {
+		return "", errScriptedCanary
+	}
+	return revision, nil
 }
 
 func workspaceID(taskID string) string {

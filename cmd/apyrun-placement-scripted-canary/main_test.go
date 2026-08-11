@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -37,6 +38,21 @@ func TestScriptedCellFilenameIsContained(t *testing.T) {
 	for _, id := range []string{"../escape", "/absolute", "bad space"} {
 		if trialFilename(id, "direct") != "" {
 			t.Fatalf("unsafe id %q admitted", id)
+		}
+	}
+}
+
+func TestBuildSourceRevisionRejectsDirtyOrMissingIdentity(t *testing.T) {
+	clean := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: strings.Repeat("a", 40)}, {Key: "vcs.modified", Value: "false"}}}
+	if got, err := sourceRevision(clean); err != nil || got != strings.Repeat("a", 40) {
+		t.Fatalf("revision=%q err=%v", got, err)
+	}
+	for _, info := range []*debug.BuildInfo{
+		{Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: strings.Repeat("a", 40)}, {Key: "vcs.modified", Value: "true"}}},
+		{Settings: []debug.BuildSetting{{Key: "vcs.modified", Value: "false"}}},
+	} {
+		if _, err := sourceRevision(info); err == nil {
+			t.Fatal("invalid build identity admitted")
 		}
 	}
 }

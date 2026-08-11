@@ -1,0 +1,66 @@
+{
+  "schema_version": "placement-scripted-canary-stop/v1",
+  "status": "stopped_after_infrastructure_repair_limit",
+  "plan_sha256": "sha256:ea3faf8b2930734b38e757d7727581141c69d84c42f85f701133d6b5dd84c1ce",
+  "initial_source_commit": "e7efe3f849687a23d8d70e91e7582bcb24ef6c76",
+  "initial_binary_sha256": "sha256:6ce678fd6ece167b0c82aa3b49b763133473a9b61aa122c6dc27cde7920c29e7",
+  "repair_source_commit": "389ffeaf2684d8c31256aa15009319a6756af361",
+  "repair_binary_sha256": "sha256:8b57e6dc899734647079ab605dda0919cd1de3ac2c42cec84224e166a62e100b",
+  "formal_cells": {
+    "planned": 18,
+    "accepted": 2,
+    "passed": 2,
+    "artifacts": [
+      {
+        "task_id": "pl-dev_simple_read_001",
+        "arm": "direct",
+        "sha256": "sha256:fe3a5e11886cc46cbb90fe8167148897dd990ade7ec64bf46e4a9f7cba0e40d8"
+      },
+      {
+        "task_id": "pl-dev_simple_read_001",
+        "arm": "pysolate",
+        "sha256": "sha256:feeb540757de8134aec88442ef51227be8a566993a2986b9af43e419c208ab84"
+      }
+    ]
+  },
+  "initial_failure": {
+    "task_id": "pl-dev_simple_read_001",
+    "arm": "computer",
+    "failure_layer": "adapter_request_validation",
+    "sanitized_cause": "empty output_files encoded as null rather than a JSON array",
+    "adapter_output_sha256": "sha256:361875f57468beca1cb8325f2437af084abbb95b7396681a1d05aadffb6529fc"
+  },
+  "class_wide_repair": {
+    "count": 1,
+    "limit": 1,
+    "result": "closed_initial_null_collection_defect"
+  },
+  "repair_rerun": {
+    "identity_valid": false,
+    "cells_accepted": 0,
+    "failure": "worker_javascript_node_path_not_configured",
+    "failure_layer": "scripted_javascript_compiler",
+    "adapter_output_sha256": "sha256:41b143975be0ffb2e42561a32df24355ae955cf580eaa28ab690218043f91929"
+  },
+  "diagnostic": {
+    "backend": "worker-javascript",
+    "transport": "wrangler-local",
+    "http_status": 500,
+    "sanitized_error": "node:path is not configured for the worker-javascript backend",
+    "upstream_modified": false
+  },
+  "not_run": [
+    "remaining scripted parity cells",
+    "six-task model canary",
+    "40-task development screen",
+    "sealed decision cohort",
+    "ICL qualification",
+    "Cloudflare deployment"
+  ],
+  "usage": {
+    "provider_calls": 0,
+    "cli_tokens": 0
+  },
+  "sealed_decision_tasks_exposed": false,
+  "next_step_requires_new_preregistration": true
+}

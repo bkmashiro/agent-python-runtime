@@ -15,11 +15,12 @@ import (
 )
 
 type guestResponse struct {
-	Status   string           `json:"status"`
-	Result   any              `json:"result"`
-	Receipts []map[string]any `json:"receipts"`
-	Metrics  map[string]any   `json:"metrics"`
-	Error    map[string]any   `json:"error"`
+	Status           string           `json:"status"`
+	Result           any              `json:"result"`
+	Receipts         []map[string]any `json:"receipts"`
+	Metrics          map[string]any   `json:"metrics"`
+	Error            map[string]any   `json:"error"`
+	WorkspaceReceipt map[string]any   `json:"workspace_receipt"`
 }
 
 func guestArtifact(t *testing.T) string {

@@ -51,14 +51,15 @@ As an alternative to `workspace_files`, the Host config may provision a rooted `
 {
   "workspace": {
     "input_capsule": "/absolute/host/state.pwc",
-    "output_capsule": "/absolute/host/next-state.pwc"
+    "output_capsule": "/absolute/host/next-state.pwc",
+    "disposition": "export_on_success"
   }
 }
 ```
 
-`source_directory` may replace `input_capsule`; omitting both creates an empty workspace. All configured paths must be clean and absolute. `workspace` and `workspace_files` are rejected together rather than creating two inconsistent state planes. The Agent request cannot select either input/output path or change workspace limits.
+`source_directory` may replace `input_capsule`; omitting both creates an empty workspace. `disposition` is mandatory: `export_on_success` and `export_on_response` require `output_capsule`, while `discard` forbids it. All configured paths must be clean and absolute. `workspace` and `workspace_files` are rejected together rather than creating two inconsistent state planes. The Agent request cannot select input/output paths, disposition policy, or workspace limits.
 
-The Guest accesses this state with ordinary Python file APIs under `/workspace`. `/tmp` remains per-Run scratch. Output capsules are complete, deterministic storage artifacts and are atomically published with mode `0600`; they are not mounted in place or backed by SQLite. See [workspace-capsules.md](workspace-capsules.md).
+The Guest accesses this state with ordinary Python file APIs under `/workspace`. `/tmp` remains per-Run scratch. Every bounded response includes a Host-authored disposition receipt with request, initial state, final state and optional exact capsule identities. Output capsules are complete, deterministic storage artifacts and are atomically published with mode `0600`; they are not mounted in place or backed by SQLite. See [workspace-capsules.md](workspace-capsules.md).
 
 ## Request
 

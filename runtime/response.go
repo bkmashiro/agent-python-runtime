@@ -12,9 +12,18 @@ import (
 
 type RunResponseStatus string
 
+type WorkspaceDispositionPolicy string
+
 const (
 	RunResponseOK    RunResponseStatus = "ok"
 	RunResponseError RunResponseStatus = "error"
+
+	WorkspaceExportOnSuccess  WorkspaceDispositionPolicy = "export_on_success"
+	WorkspaceExportOnResponse WorkspaceDispositionPolicy = "export_on_response"
+	WorkspaceDiscardPolicy    WorkspaceDispositionPolicy = "discard"
+
+	WorkspaceExported  WorkspaceDisposition = "exported"
+	WorkspaceDiscarded WorkspaceDisposition = "discarded"
 )
 
 var ErrRunResultSchemaMismatch = errors.New("run result does not match output_schema")
@@ -32,13 +41,79 @@ type RunError struct {
 	Traceback *string `json:"traceback,omitempty"`
 }
 
+const WorkspaceReceiptSchemaVersion = "pysolate.workspace-disposition.v1"
+
+type WorkspaceReceipt struct {
+	SchemaVersion          string                     `json:"schema_version"`
+	RequestSHA256          string                     `json:"request_sha256"`
+	Policy                 WorkspaceDispositionPolicy `json:"policy"`
+	Disposition            WorkspaceDisposition       `json:"disposition"`
+	InitialWorkspaceSHA256 string                     `json:"initial_workspace_sha256"`
+	FinalWorkspaceSHA256   string                     `json:"final_workspace_sha256"`
+	FinalTreeSHA256        string                     `json:"final_tree_sha256"`
+	EntryCount             uint32                     `json:"entry_count"`
+	TotalBytes             uint64                     `json:"total_bytes"`
+	CapsuleSHA256          *string                    `json:"capsule_sha256,omitempty"`
+}
+
+func (receipt WorkspaceReceipt) Validate() error {
+	if receipt.SchemaVersion != WorkspaceReceiptSchemaVersion || !receipt.Policy.Valid() || !validPrefixedSHA256(receipt.RequestSHA256) ||
+		!validPrefixedSHA256(receipt.InitialWorkspaceSHA256) || !validPrefixedSHA256(receipt.FinalWorkspaceSHA256) || !validPrefixedSHA256(receipt.FinalTreeSHA256) {
+		return errors.New("workspace receipt has invalid identity fields")
+	}
+	switch receipt.Disposition {
+	case WorkspaceExported:
+		if receipt.Policy == WorkspaceDiscardPolicy || receipt.CapsuleSHA256 == nil || !validPrefixedSHA256(*receipt.CapsuleSHA256) {
+			return errors.New("exported workspace receipt has invalid capsule identity")
+		}
+	case WorkspaceDiscarded:
+		if receipt.CapsuleSHA256 != nil {
+			return errors.New("discarded workspace receipt contains a capsule identity")
+		}
+	default:
+		return errors.New("workspace receipt has invalid disposition")
+	}
+	return nil
+}
+
+func (receipt WorkspaceReceipt) ValidateForStatus(status RunResponseStatus) error {
+	if err := receipt.Validate(); err != nil {
+		return err
+	}
+	expected := WorkspaceDiscarded
+	if receipt.Policy == WorkspaceExportOnResponse || (receipt.Policy == WorkspaceExportOnSuccess && status == RunResponseOK) {
+		expected = WorkspaceExported
+	}
+	if (status != RunResponseOK && status != RunResponseError) || receipt.Disposition != expected {
+		return errors.New("workspace receipt disposition does not match response status and policy")
+	}
+	return nil
+}
+
+func (policy WorkspaceDispositionPolicy) Valid() bool {
+	return policy == WorkspaceExportOnSuccess || policy == WorkspaceExportOnResponse || policy == WorkspaceDiscardPolicy
+}
+
+func validPrefixedSHA256(value string) bool {
+	if len(value) != len("sha256:")+64 || value[:len("sha256:")] != "sha256:" {
+		return false
+	}
+	for _, character := range value[len("sha256:"):] {
+		if character < '0' || (character > '9' && character < 'a') || character > 'f' {
+			return false
+		}
+	}
+	return true
+}
+
 type RunResponse struct {
-	Status       RunResponseStatus `json:"status"`
-	Result       json.RawMessage   `json:"result"`
-	Receipts     json.RawMessage   `json:"receipts"`
-	Metrics      *RunMetrics       `json:"metrics"`
-	Error        *RunError         `json:"error"`
-	ExecutionRef *ExecutionRef     `json:"execution_ref,omitempty"`
+	Status           RunResponseStatus `json:"status"`
+	Result           json.RawMessage   `json:"result"`
+	Receipts         json.RawMessage   `json:"receipts"`
+	Metrics          *RunMetrics       `json:"metrics"`
+	Error            *RunError         `json:"error"`
+	ExecutionRef     *ExecutionRef     `json:"execution_ref,omitempty"`
+	WorkspaceReceipt *WorkspaceReceipt `json:"workspace_receipt,omitempty"`
 }
 
 func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResponse, error) {
@@ -157,11 +232,55 @@ func hasRequiredAndOnlyExactKeys(values map[string]json.RawMessage, required []s
 	return true
 }
 
+func rejectExplicitNullHostEvidence(data []byte) error {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return errors.New("run response JSON is invalid")
+	}
+	for _, key := range []string{"execution_ref", "workspace_receipt"} {
+		if raw, present := envelope[key]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return errors.New("run response optional Host evidence cannot be null")
+		}
+	}
+	rawReceipt, present := envelope["workspace_receipt"]
+	if !present {
+		return nil
+	}
+	var receipt map[string]json.RawMessage
+	if err := json.Unmarshal(rawReceipt, &receipt); err != nil {
+		return nil
+	}
+	required := []string{
+		"schema_version", "request_sha256", "policy", "disposition",
+		"initial_workspace_sha256", "final_workspace_sha256", "final_tree_sha256",
+		"entry_count", "total_bytes",
+	}
+	for _, key := range required {
+		raw, present := receipt[key]
+		if !present {
+			return errors.New("workspace receipt is missing required fields")
+		}
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return errors.New("workspace receipt fields cannot be null")
+		}
+	}
+	if raw, present := receipt["capsule_sha256"]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return errors.New("workspace receipt fields cannot be null")
+	}
+	return nil
+}
+
 func DecodeAndValidateRunResponse(request RunRequest, data []byte) (RunResponse, error) {
 	return decodeAndValidateRunResponse(request, data, true)
 }
 
 func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEvidence bool) (RunResponse, error) {
+	if err := rejectDuplicateBoundedJSON(data); err != nil {
+		return RunResponse{}, errors.New("run response JSON is invalid or contains duplicate keys")
+	}
+	if err := rejectExplicitNullHostEvidence(data); err != nil {
+		return RunResponse{}, err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var response RunResponse
@@ -171,10 +290,16 @@ func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEv
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return RunResponse{}, errors.New("run response contains trailing JSON")
 	}
-	hostEvidenceInvalid := !requireHostEvidence && response.ExecutionRef != nil
+	hostEvidenceInvalid := !requireHostEvidence && (response.ExecutionRef != nil || response.WorkspaceReceipt != nil)
+	workspaceReceiptInvalid := false
+	if response.WorkspaceReceipt != nil {
+		expectedRequestSHA, err := RunRequestSHA256(request)
+		workspaceReceiptInvalid = err != nil || response.WorkspaceReceipt.RequestSHA256 != expectedRequestSHA ||
+			response.WorkspaceReceipt.ValidateForStatus(response.Status) != nil
+	}
 	if (response.Status != RunResponseOK && response.Status != RunResponseError) || len(response.Result) == 0 || len(response.Receipts) == 0 || response.Metrics == nil ||
 		(response.Metrics.GuestTimeMS != nil && *response.Metrics.GuestTimeMS < 0) || (response.ExecutionRef != nil && response.ExecutionRef.Validate() != nil) ||
-		hostEvidenceInvalid {
+		workspaceReceiptInvalid || hostEvidenceInvalid {
 		return RunResponse{}, errors.New("run response has invalid required fields")
 	}
 	var receipts []any

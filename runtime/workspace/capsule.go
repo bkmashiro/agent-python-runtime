@@ -116,22 +116,7 @@ func (manager *Manager) ExportCapsule(ref Ref, writer io.Writer) (CapsuleInfo, e
 		return CapsuleInfo{}, fmt.Errorf("open workspace capsule root: %w", err)
 	}
 	defer rooted.Close()
-	entries, totalBytes, err := collectCapsuleEntries(rooted, item.root, item.limits)
-	if err != nil {
-		return CapsuleInfo{}, err
-	}
-	manifest := capsuleManifest{
-		SchemaVersion: CapsuleSchemaVersion,
-		EntryCount:    uint32(len(entries)),
-		TotalBytes:    totalBytes,
-		Limits:        limitsForCapsule(item.limits),
-		Entries:       entries,
-	}
-	manifest.TreeSHA256, err = capsuleTreeDigest(entries)
-	if err != nil {
-		return CapsuleInfo{}, err
-	}
-	manifest.WorkspaceSHA256, err = capsuleWorkspaceDigest(manifest)
+	manifest, err := buildCapsuleManifest(rooted, item.root, item.limits)
 	if err != nil {
 		return CapsuleInfo{}, err
 	}
@@ -152,7 +137,7 @@ func (manager *Manager) ExportCapsule(ref Ref, writer io.Writer) (CapsuleInfo, e
 	if _, err := buffered.Write(encoded); err != nil {
 		return CapsuleInfo{}, fmt.Errorf("write workspace capsule manifest: %w", err)
 	}
-	for _, capsuleEntry := range entries {
+	for _, capsuleEntry := range manifest.Entries {
 		if capsuleEntry.Kind != "file" {
 			continue
 		}
@@ -164,6 +149,62 @@ func (manager *Manager) ExportCapsule(ref Ref, writer io.Writer) (CapsuleInfo, e
 		return CapsuleInfo{}, fmt.Errorf("flush workspace capsule: %w", err)
 	}
 	return manifest.info(), nil
+}
+
+// Inspect returns the portable semantic identity of one inactive workspace
+// without serializing capsule framing or payload bytes.
+func (manager *Manager) Inspect(ref Ref) (CapsuleInfo, error) {
+	if manager == nil {
+		return CapsuleInfo{}, ErrWorkspaceClosed
+	}
+	if !validRef(ref) {
+		return CapsuleInfo{}, fmt.Errorf("%w: invalid workspace inspection", ErrInvalidWorkspace)
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return CapsuleInfo{}, ErrWorkspaceClosed
+	}
+	item, exists := manager.entries[ref]
+	if !exists {
+		return CapsuleInfo{}, ErrWorkspaceNotFound
+	}
+	if item.owner != "" {
+		return CapsuleInfo{}, ErrWorkspaceBusy
+	}
+	rooted, err := os.OpenRoot(item.root)
+	if err != nil {
+		return CapsuleInfo{}, fmt.Errorf("open workspace inspection root: %w", err)
+	}
+	defer rooted.Close()
+	manifest, err := buildCapsuleManifest(rooted, item.root, item.limits)
+	if err != nil {
+		return CapsuleInfo{}, err
+	}
+	return manifest.info(), nil
+}
+
+func buildCapsuleManifest(rooted *os.Root, root string, limits Limits) (capsuleManifest, error) {
+	entries, totalBytes, err := collectCapsuleEntries(rooted, root, limits)
+	if err != nil {
+		return capsuleManifest{}, err
+	}
+	manifest := capsuleManifest{
+		SchemaVersion: CapsuleSchemaVersion,
+		EntryCount:    uint32(len(entries)),
+		TotalBytes:    totalBytes,
+		Limits:        limitsForCapsule(limits),
+		Entries:       entries,
+	}
+	manifest.TreeSHA256, err = capsuleTreeDigest(entries)
+	if err != nil {
+		return capsuleManifest{}, err
+	}
+	manifest.WorkspaceSHA256, err = capsuleWorkspaceDigest(manifest)
+	if err != nil {
+		return capsuleManifest{}, err
+	}
+	return manifest, nil
 }
 
 func collectCapsuleEntries(rooted *os.Root, root string, limits Limits) ([]capsuleEntry, uint64, error) {

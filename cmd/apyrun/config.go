@@ -30,10 +30,11 @@ type executionProfileConfig struct {
 }
 
 type mountedWorkspaceConfig struct {
-	SourceDirectory string                 `json:"source_directory,omitempty"`
-	InputCapsule    string                 `json:"input_capsule,omitempty"`
-	OutputCapsule   string                 `json:"output_capsule,omitempty"`
-	Limits          *workspaceLimitsConfig `json:"limits,omitempty"`
+	SourceDirectory string                                   `json:"source_directory,omitempty"`
+	InputCapsule    string                                   `json:"input_capsule,omitempty"`
+	OutputCapsule   string                                   `json:"output_capsule,omitempty"`
+	Disposition     runtimeconfig.WorkspaceDispositionPolicy `json:"disposition"`
+	Limits          *workspaceLimitsConfig                   `json:"limits,omitempty"`
 }
 
 type workspaceLimitsConfig struct {
@@ -101,6 +102,16 @@ func (config *mountedWorkspaceConfig) validate() error {
 	}
 	if config.SourceDirectory != "" && config.InputCapsule != "" {
 		return errors.New("workspace accepts at most one source")
+	}
+	if !config.Disposition.Valid() {
+		return errors.New("workspace disposition is required")
+	}
+	if config.Disposition == runtimeconfig.WorkspaceDiscardPolicy {
+		if config.OutputCapsule != "" {
+			return errors.New("discard workspace cannot configure output_capsule")
+		}
+	} else if config.OutputCapsule == "" {
+		return errors.New("export workspace requires output_capsule")
 	}
 	for _, value := range []string{config.SourceDirectory, config.InputCapsule, config.OutputCapsule} {
 		if value != "" && (!filepath.IsAbs(value) || filepath.Clean(value) != value) {

@@ -98,7 +98,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	if err := runtimeconfig.AdmitRunRequirements(decodedRequest); err != nil {
 		return emitUnsupportedOutcome(request, err, runConfig.MaxResponseBytes, stdout, stderr)
 	}
-	requestData := request
+	requestData, err := runtimeconfig.EncodeRunRequest(decodedRequest)
+	if err != nil {
+		writeDiagnostic(stderr, "encode Host-bound request failed")
+		return 2
+	}
 	if (runConfig.ExecutionProfile != nil) != (*manifestPath != "") {
 		writeDiagnostic(stderr, "execution profile and artifact manifest must be configured together")
 		return 2
@@ -122,16 +126,22 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			writeDiagnostic(stderr, "execution profile source comparison failed")
 			return 2
 		}
-		requestData, err = json.Marshal(boundRequest)
+		decodedRequest = boundRequest
+		requestData, err = runtimeconfig.EncodeRunRequest(decodedRequest)
 		if err != nil {
 			writeDiagnostic(stderr, "encode Host-bound request failed")
 			return 2
 		}
 	}
+	if uint64(len(requestData)) > uint64(runConfig.MaxRequestBytes) {
+		writeDiagnostic(stderr, "Host-bound RunRequest exceeds configured bounds")
+		return 2
+	}
 	ctx := context.Background()
 	factory := wazeroengine.Factory{}
 	trustedPrepare := ""
 	digest := sha256.Sum256(requestData)
+	requestSHA256 := fmt.Sprintf("sha256:%x", digest[:])
 	runIdentity := fmt.Sprintf("host-%x", digest[:8])
 	if operator.WorkspaceFiles != nil {
 		workspaceTool, err := capability.NewWorkspace(operator.WorkspaceFiles)
@@ -189,12 +199,39 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, "execute guest")
 		return 1
 	}
+	var stagedCapsule *stagedWorkspaceCapsule
+	if workspaceBinding != nil {
+		decodedResponse, err := runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, response)
+		if err != nil {
+			writeDiagnostic(stderr, "validate Host run response")
+			return 1
+		}
+		receipt, staged, err := workspaceBinding.prepareDisposition(decodedResponse.Status, requestSHA256)
+		if err != nil {
+			writeDiagnostic(stderr, err.Error())
+			return 1
+		}
+		stagedCapsule = staged
+		if stagedCapsule != nil {
+			defer stagedCapsule.discard()
+		}
+		decodedResponse.WorkspaceReceipt = &receipt
+		response, err = json.Marshal(decodedResponse)
+		if err != nil {
+			writeDiagnostic(stderr, "encode workspace disposition response")
+			return 1
+		}
+		if _, err := runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, response); err != nil {
+			writeDiagnostic(stderr, "validate workspace disposition response")
+			return 1
+		}
+	}
 	if uint64(len(response)) > uint64(runConfig.MaxResponseBytes) {
 		writeDiagnostic(stderr, "response exceeds configured bounds")
 		return 1
 	}
-	if workspaceBinding != nil && workspaceBinding.outputPath != "" {
-		if _, err := workspaceBinding.export(); err != nil {
+	if stagedCapsule != nil {
+		if err := stagedCapsule.publish(); err != nil {
 			writeDiagnostic(stderr, err.Error())
 			return 1
 		}

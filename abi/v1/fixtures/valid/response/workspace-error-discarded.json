@@ -1,0 +1,18 @@
+{
+  "status": "error",
+  "result": null,
+  "receipts": [],
+  "metrics": {"capability_calls": 0, "result_bytes": 4},
+  "error": {"code": "python_error", "message": "failed"},
+  "workspace_receipt": {
+    "schema_version": "pysolate.workspace-disposition.v1",
+    "request_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "policy": "export_on_success",
+    "disposition": "discarded",
+    "initial_workspace_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "final_workspace_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "final_tree_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "entry_count": 1,
+    "total_bytes": 3
+  }
+}

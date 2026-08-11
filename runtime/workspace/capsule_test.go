@@ -127,6 +127,27 @@ func TestWorkspaceCapsuleExportRejectsBusyOrInvalidTrees(t *testing.T) {
 	}
 }
 
+func TestWorkspaceInspectMatchesExportAndRequiresInactiveWorkspace(t *testing.T) {
+	manager := newTestManager(t)
+	ref := capsuleFixture(t, manager, false)
+	inspected, err := manager.Inspect(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, exported := exportCapsule(t, manager, ref)
+	if inspected != exported {
+		t.Fatalf("inspect=%+v export=%+v", inspected, exported)
+	}
+	lease, err := manager.Acquire(ref, "busy-inspect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	if _, err := manager.Inspect(ref); !errors.Is(err, ErrWorkspaceBusy) {
+		t.Fatalf("busy inspect err=%v", err)
+	}
+}
+
 func TestWorkspaceCapsuleImportRejectsTamperingTrailingDataAndHostQuota(t *testing.T) {
 	source := newTestManager(t)
 	capsule, _ := exportCapsule(t, source, capsuleFixture(t, source, false))

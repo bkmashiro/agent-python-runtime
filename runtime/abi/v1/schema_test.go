@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -31,8 +32,8 @@ func compileSchema(t *testing.T, name string) *jsonschema.Schema {
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	var document any
-	if err := json.Unmarshal(data, &document); err != nil {
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
+	if err != nil {
 		t.Fatalf("decode %s schema: %v", name, err)
 	}
 	compiler := jsonschema.NewCompiler()
@@ -68,8 +69,8 @@ func decodeFixture(t *testing.T, path string) any {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
+	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
+	if err != nil {
 		t.Fatalf("decode %s: %v", path, err)
 	}
 	return value

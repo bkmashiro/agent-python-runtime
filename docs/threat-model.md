@@ -48,7 +48,7 @@ When an execution profile is configured, the CLI requires the adjacent distribut
 ## Accepted PoC limitations
 
 - The Host import scanner is intentionally not a complete Python parser and can reject valid programs.
-- The typed in-memory workspace is not durable and has no transaction rollback. The optional rooted workspace can be stored as a complete capsule, but capsule publication is a snapshot operation rather than transactional rollback or per-file effect governance.
+- The typed in-memory workspace is not durable and has no transaction rollback. The optional rooted workspace can be explicitly exported or discarded under Host policy and records initial/final identities in a Host-authored disposition receipt, but capsule publication remains a snapshot operation rather than transactional rollback or per-file effect governance.
 - `write_text` mutations remain if later Python code raises an exception in the same process.
 - The PoC does not provide multi-tenant scheduling, automatic crash recovery or live-service workspace adoption; migration requires an explicitly exported and re-imported capsule.
 - The private workspace root and Host projection source are assumed not to be concurrently mutated by another same-UID Host process. Guest APIs cannot create links, and ingress uses descriptor-rooted traversal with parent-identity checks, but same-UID Host peers are outside the Agent sandbox threat model.

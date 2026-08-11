@@ -35,6 +35,7 @@ func TestOperatorConfigAcceptsOneHostOwnedMountedWorkspace(t *testing.T) {
 		"workspace": map[string]any{
 			"source_directory": root,
 			"output_capsule":   filepath.Join(root, "state.pwc"),
+			"disposition":      "export_on_success",
 			"limits": map[string]any{
 				"max_files": 16, "max_bytes": 1024, "max_file_bytes": 512, "max_depth": 4,
 			},
@@ -61,11 +62,15 @@ func TestOperatorConfigRejectsAmbiguousOrAgentStyleWorkspaceAuthority(t *testing
 	cases := []map[string]any{
 		{"workspace_files": map[string]string{"a": "b"}, "workspace": map[string]any{}},
 		{"max_tool_calls": 1, "workspace": map[string]any{}},
-		{"workspace": map[string]any{"source_directory": root, "input_capsule": filepath.Join(root, "in.pwc")}},
-		{"workspace": map[string]any{"source_directory": "relative"}},
-		{"workspace": map[string]any{"input_capsule": root + "/../" + filepath.Base(root) + "/in.pwc"}},
-		{"workspace": map[string]any{"output_capsule": "relative"}},
-		{"workspace": map[string]any{"limits": map[string]any{"max_files": 0, "max_bytes": 1, "max_file_bytes": 1, "max_depth": 1}}},
+		{"workspace": map[string]any{"source_directory": root, "input_capsule": filepath.Join(root, "in.pwc"), "disposition": "discard"}},
+		{"workspace": map[string]any{"source_directory": "relative", "disposition": "discard"}},
+		{"workspace": map[string]any{"input_capsule": root + "/../" + filepath.Base(root) + "/in.pwc", "disposition": "discard"}},
+		{"workspace": map[string]any{"output_capsule": "relative", "disposition": "export_on_response"}},
+		{"workspace": map[string]any{"output_capsule": filepath.Join(root, "out.pwc")}},
+		{"workspace": map[string]any{"disposition": "export_on_success"}},
+		{"workspace": map[string]any{"disposition": "discard", "output_capsule": filepath.Join(root, "out.pwc")}},
+		{"workspace": map[string]any{"disposition": "export_sometimes", "output_capsule": filepath.Join(root, "out.pwc")}},
+		{"workspace": map[string]any{"disposition": "discard", "limits": map[string]any{"max_files": 0, "max_bytes": 1, "max_file_bytes": 1, "max_depth": 1}}},
 	}
 	for index, value := range cases {
 		encoded, err := json.Marshal(value)

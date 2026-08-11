@@ -24,6 +24,34 @@
         "executed_code_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
+    "workspace_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "request_sha256", "policy", "disposition", "initial_workspace_sha256", "final_workspace_sha256", "final_tree_sha256", "entry_count", "total_bytes"],
+      "properties": {
+        "schema_version": {"const": "pysolate.workspace-disposition.v1"},
+        "request_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "policy": {"enum": ["export_on_success", "export_on_response", "discard"]},
+        "disposition": {"enum": ["exported", "discarded"]},
+        "initial_workspace_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "final_workspace_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "final_tree_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "entry_count": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "total_bytes": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "capsule_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"disposition": {"const": "exported"}}},
+          "then": {"required": ["capsule_sha256"]},
+          "else": {"not": {"required": ["capsule_sha256"]}}
+        },
+        {
+          "if": {"properties": {"policy": {"const": "discard"}}},
+          "then": {"properties": {"disposition": {"const": "discarded"}}}
+        }
+      ]
+    },
 
     "receipts": {
       "type": "array",
@@ -68,5 +96,34 @@
         }
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["workspace_receipt"],
+        "properties": {"workspace_receipt": {"properties": {"policy": {"const": "export_on_response"}}}}
+      },
+      "then": {"properties": {"workspace_receipt": {"properties": {"disposition": {"const": "exported"}}}}}
+    },
+    {
+      "if": {
+        "required": ["workspace_receipt"],
+        "properties": {
+          "status": {"const": "ok"},
+          "workspace_receipt": {"properties": {"policy": {"const": "export_on_success"}}}
+        }
+      },
+      "then": {"properties": {"workspace_receipt": {"properties": {"disposition": {"const": "exported"}}}}}
+    },
+    {
+      "if": {
+        "required": ["workspace_receipt"],
+        "properties": {
+          "status": {"const": "error"},
+          "workspace_receipt": {"properties": {"policy": {"const": "export_on_success"}}}
+        }
+      },
+      "then": {"properties": {"workspace_receipt": {"properties": {"disposition": {"const": "discarded"}}}}}
+    }
+  ]
 }

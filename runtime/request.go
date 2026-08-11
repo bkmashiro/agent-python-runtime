@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,25 @@ func DecodeRunRequest(data []byte) (RunRequest, error) {
 		return RunRequest{}, fmt.Errorf("inputs must be JSON: %w", err)
 	}
 	return request, nil
+}
+
+// EncodeRunRequest produces the deterministic Host projection used for Guest
+// execution and workspace receipt identity.
+func EncodeRunRequest(request RunRequest) ([]byte, error) {
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("encode run request: %w", err)
+	}
+	return encoded, nil
+}
+
+func RunRequestSHA256(request RunRequest) (string, error) {
+	encoded, err := EncodeRunRequest(request)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("sha256:%x", digest[:]), nil
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {

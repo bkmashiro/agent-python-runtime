@@ -41,7 +41,7 @@ printf '%s' '{"run_id":"demo","code":"result = inputs[\"value\"] + 1","inputs":{
   go run ./cmd/apyrun -artifact /path/to/agent-python-runtime.wasm
 ```
 
-The response is a bounded JSON object with status, result, Host receipts, metrics, and an optional Python error.
+The response is a bounded JSON object with status, result, Host receipts, metrics, an optional Python error, and—when a rooted workspace is configured—a Host-authored workspace disposition receipt.
 
 ## Agent-intuitive stdlib and workspace tools
 
@@ -85,7 +85,7 @@ list_files()
 
 The workspace backend is an in-memory PoC store with canonical relative paths and a one-MiB per-file bound. Every Host call is counted and receives a Host-authored receipt.
 
-For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. A run can atomically export the final ordinary-file tree to a new capsule for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
+For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
 
 ## Security boundary
 

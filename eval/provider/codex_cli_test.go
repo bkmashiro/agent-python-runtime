@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const fakeCodexExecutable = "/test/codex"
+
 type capturedCommand struct {
 	command string
 	args    []string
@@ -103,7 +105,7 @@ func TestCodexCLIAdapterParsesRealProbeShape(t *testing.T) {
 		}),
 	}, "\n"))
 	capture := &capturedCommand{}
-	adapter, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, 2*time.Second, commandRunnerFromOutput(t, output, nil, capture))
+	adapter, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, 2*time.Second, commandRunnerFromOutput(t, output, nil, capture))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +140,7 @@ func TestCodexCLIAdapterParsesParallelFunctionCalls(t *testing.T) {
 		),
 		mustUsage(t, map[string]any{"input_tokens": 10, "output_tokens": 4}),
 	}, "\n"))
-	adapter, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, nil))
+	adapter, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +222,7 @@ func TestCodexCLIAdapterRejectsCommandExecutionActivity(t *testing.T) {
 		nonAgentLine,
 		mustUsage(t, map[string]any{"input_tokens": 10, "output_tokens": 4}),
 	}, "\n"))
-	adapter, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, nil))
+	adapter, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +241,7 @@ func TestCodexCLIAdapterPassesPromptViaStdin(t *testing.T) {
 		mustAgentOutputEvent(t, map[string]any{"type": "output_text", "text": "ok"}),
 		mustUsage(t, map[string]any{"input_tokens": 1, "output_tokens": 1}),
 	}, "\n"))
-	adapter, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, capture))
+	adapter, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, capture))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +289,7 @@ func TestCodexCLIAdapterRejectsMissingAndDuplicateEvents(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			raw := []byte(strings.Join(tc.lines, "\n"))
-			adapter, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, raw, nil, nil))
+			adapter, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, raw, nil, nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -316,7 +318,7 @@ func TestCodexCLIAdapterRejectsDuplicateAndUnknownOutputKeys(t *testing.T) {
 		badLine,
 		mustUsage(t, map[string]any{"input_tokens": 1, "output_tokens": 1}),
 	}, "\n"))
-	adapter, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, nil))
+	adapter, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, time.Second, commandRunnerFromOutput(t, output, nil, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +376,7 @@ func TestRunCodexCLICommandBoundsStreamsAndTimeout(t *testing.T) {
 
 func TestCodexCLIAdapterValidatesConstructorInputs(t *testing.T) {
 	workdir := t.TempDir()
-	if _, err := NewCodexCLIAdapterWithRunner("", "gpt-test", workdir, 0, commandRunnerFromOutput(t, []byte{}, nil, nil)); err == nil {
+	if _, err := NewCodexCLIAdapterWithRunner(fakeCodexExecutable, "gpt-test", workdir, 0, commandRunnerFromOutput(t, []byte{}, nil, nil)); err == nil {
 		t.Fatalf("expected non-positive timeout error")
 	}
 	relPath, err := filepath.Abs(".")

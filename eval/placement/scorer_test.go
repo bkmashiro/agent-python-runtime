@@ -92,7 +92,29 @@ func TestScoreBFCLAlternativeArgumentsAndFinalMismatch(t *testing.T) {
 	}
 }
 
-func TestScoreExpectedAdmissionRejection(t *testing.T) {
+func TestScoreWorkspaceStateSemanticsTreatsNativeTraceAsDiagnostic(t *testing.T) {
+	task := Task{
+		ID:        "task-workspace",
+		Admission: map[string]ArmAdmission{"computer": {Status: "admitted", Backend: "worker-javascript", Reason: "eligible"}},
+		Oracle: TaskOracle{
+			FinalState:     raw(`{"files":{"out.txt":"ok"}}`),
+			EffectContract: raw(`{"kind":"workspace_state_semantics","arm_native_trace_oracle":{"kind":"expected_call_trace","turns":[[{"name":"touch","arguments":{"file_name":"out.txt"}}]]},"trace_role":"diagnostic_only","semantic_equivalence":"exact_final_workspace_state","forbidden":["network"]}`),
+		},
+	}
+	result := TrialResult{
+		SchemaVersion: "placement-trial-result/v1", TaskID: task.ID, Arm: "computer", Mode: "scripted", Replicate: 1,
+		Admission: ObservedAdmission{Status: "admitted", Reason: "eligible"},
+		Execution: ExecutionEvidence{Status: "completed"},
+	}
+	result.ObservedFinalState = raw(`{"files":{"out.txt":"ok"}}`)
+	result.ObservedEffects = nil
+	score, err := Score(task, result)
+	if err != nil || !score.Pass || score.EffectComparable || score.EffectPass || !score.FinalStatePass {
+		t.Fatalf("score=%+v err=%v", score, err)
+	}
+}
+
+func TestScoreExpectedRejectionBeforeProvider(t *testing.T) {
 	task := Task{
 		ID: "boundary",
 		Admission: map[string]ArmAdmission{

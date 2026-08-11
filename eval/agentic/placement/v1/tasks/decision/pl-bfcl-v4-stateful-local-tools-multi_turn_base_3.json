@@ -501,8 +501,7 @@
   "model_visible": false,
   "oracle": {
     "effect_contract": {
-      "kind": "bfcl_expected_calls",
-      "oracle": {
+      "arm_native_trace_oracle": {
         "kind": "expected_call_trace",
         "turns": [
           [
@@ -543,7 +542,15 @@
             }
           ]
         ]
-      }
+      },
+      "forbidden": [
+        "network",
+        "credential",
+        "external_effect"
+      ],
+      "kind": "workspace_state_semantics",
+      "semantic_equivalence": "exact_final_workspace_state",
+      "trace_role": "diagnostic_only"
     },
     "final_state": {
       "cwd": "/alex/projects/photography",

@@ -141,6 +141,16 @@ def bfcl_tasks() -> list[dict[str, Any]]:
         source_task = json.loads((root / entry["path"]).read_text())
         stratum = "direct_favored" if entry["track"] == "stateless_function_calling" else "pysolate_favored"
         split = "development" if entry["split"] == "dev" else "decision"
+        if entry["track"] == "stateful_local_tools":
+            effect_contract = {
+                "kind": "workspace_state_semantics",
+                "arm_native_trace_oracle": source_task["oracle"],
+                "trace_role": "diagnostic_only",
+                "semantic_equivalence": "exact_final_workspace_state",
+                "forbidden": ["network", "credential", "external_effect"],
+            }
+        else:
+            effect_contract = {"kind": "bfcl_expected_calls", "oracle": source_task["oracle"]}
         tasks.append({
             "schema_version": "placement-task/v1",
             "id": "pl-" + entry["id"],
@@ -159,7 +169,7 @@ def bfcl_tasks() -> list[dict[str, Any]]:
             "admission": admissions(stratum),
             "oracle": {
                 "final_state": simulate_bfcl_final_state(source_task),
-                "effect_contract": {"kind": "bfcl_expected_calls", "oracle": source_task["oracle"]},
+                "effect_contract": effect_contract,
             },
             "limits": limits(stratum),
         })

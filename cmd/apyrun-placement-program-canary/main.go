@@ -75,6 +75,7 @@ func run(ctx context.Context, args []string) error {
 	computerAdapter := flags.String("computer-adapter", "", "Computer adapter script")
 	pythonPath := flags.String("python", "/Users/yuzhe/.local/bin/python3.11", "acceptance Python")
 	out := flags.String("out", "", "new result path")
+	debugDir := flags.String("debug-dir", "", "private proposal debug directory")
 	timeoutText := flags.String("timeout", "180s", "provider timeout")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || (*arm != "pysolate" && *arm != "computer") ||
 		*datasetRoot == "" || *codexPath == "" || *workdir == "" || *repositoryCommit == "" || *out == "" || *taskID != "rd-003" {
@@ -124,8 +125,16 @@ func run(ctx context.Context, args []string) error {
 		[]map[string]any{submissionTool}, "required", false,
 		map[string]string{submissionTool["name"].(string): submissionTool["name"].(string)},
 	)
-	if err != nil || parsed.HasMessage || parsed.Refused || len(parsed.Calls) != 1 {
-		return errors.New("provider did not return exactly one program proposal")
+	if err != nil {
+		return fmt.Errorf("provider proposal exchange failed: %w", err)
+	}
+	if parsed.HasMessage || parsed.Refused || len(parsed.Calls) != 1 {
+		return fmt.Errorf("provider proposal shape invalid: calls=%d message=%t refused=%t", len(parsed.Calls), parsed.HasMessage, parsed.Refused)
+	}
+	if *debugDir != "" {
+		if err := writePrivateDebug(*debugDir, *arm+"-proposal.json", parsed.Calls[0].Arguments); err != nil {
+			return err
+		}
 	}
 	result := canaryResult{
 		SchemaVersion: "placement-program-canary/v1", TaskID: task.ID, Arm: *arm, Model: model,
@@ -163,11 +172,11 @@ func treatment(arm string, task agentic.Task) (string, map[string]any) {
 	for _, tool := range task.Tools {
 		var parameters any
 		_ = json.Unmarshal(tool.Parameters, &parameters)
-		toolDescriptions = append(toolDescriptions, map[string]any{"name": tool.Name, "parameters": parameters, "response": json.RawMessage(tool.Response)})
+		toolDescriptions = append(toolDescriptions, map[string]any{"name": tool.Name, "description": tool.Description, "parameters": parameters, "response": json.RawMessage(tool.Response)})
 	}
 	toolJSON, _ := json.Marshal(toolDescriptions)
 	if arm == "pysolate" {
-		instructions := `Generate exactly one bounded static Python program for a profile-qualified Pysolate Guest. Return it only through submit_python. The listed task tools are already trusted, prebound Python functions with the same names and keyword arguments; call them directly. Do not import host_tools. Imports, if any, must be consecutive static absolute imports at the top and imports must list their exact top-level roots. Do not use exec, eval, __import__, importlib, reflection, shell, subprocess, files outside the tools, network, credentials, retry, fallback, or markdown fences. Read data inside the program, perform the requested transformation, and set result to a JSON object. Respect the user-requested tool sequence and do not add redundant effects. Tool contracts: ` + string(toolJSON)
+		instructions := `Generate exactly one bounded static Python program for a profile-qualified Pysolate Guest. Return it only through submit_python. The listed task tools are already trusted, prebound Python functions with the same names and keyword arguments; call them directly. Do not import host_tools. The only qualified standard-library import available is json; if the task does not need json, use no imports. Do not request or use csv or any other import. Imports, if any, must be consecutive static absolute imports at the top and imports must list their exact top-level roots. Do not use exec, eval, __import__, importlib, reflection, shell, subprocess, files outside the tools, network, credentials, retry, fallback, or markdown fences. Read data inside the program, perform the requested transformation, and set result to a JSON object. Respect the user-requested tool sequence and do not add redundant externally visible effects. Tool contracts: ` + string(toolJSON)
 		return instructions, map[string]any{
 			"type": "function", "name": "submit_python", "description": "Submit one static bounded Python program.", "strict": false,
 			"parameters": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"code", "imports"}, "properties": map[string]any{
@@ -223,7 +232,7 @@ func runPysolate(ctx context.Context, task agentic.Task, proposal programProposa
 	runResult, err := executor.ExecuteProfileQualified(ctx, "placement-canary-pysolate", proposal.Code, "base", proposal.Imports, 8)
 	wall := time.Since(started)
 	if err != nil || !runResult.Success {
-		return nil, nil, errors.New("profile-qualified Pysolate execution failed")
+		return nil, nil, fmt.Errorf("profile-qualified Pysolate execution failed: error_code=%s err=%v", runResult.ErrorCode, err)
 	}
 	score, err := agentic.ScoreStateful(task, tools.Trace(), tools.FileSystem())
 	if err != nil {
@@ -234,7 +243,12 @@ func runPysolate(ctx context.Context, task agentic.Task, proposal programProposa
 		"profile": "base", "artifact_sha256": bundle.Identity.ArtifactSHA256, "manifest_sha256": bundle.Identity.ManifestSHA256,
 		"capability_calls": runResult.CapabilityCalls, "run_plan_bound": bytes.Contains(runResult.RawResponse, []byte(`"run_plan"`)),
 	}
-	return execution, map[string]any{"strict_effect_passed": score.TracePassed, "final_state_passed": score.FinalStatePassed, "passed": score.TracePassed && score.FinalStatePassed}, nil
+	return execution, map[string]any{
+		"strict_effect_passed": score.TracePassed,
+		"effect_status":        "arm_native_workspace_trace_diagnostic",
+		"final_state_passed":   score.FinalStatePassed,
+		"passed":               score.FinalStatePassed,
+	}, nil
 }
 
 func runComputer(ctx context.Context, proposal computerProposal, checkout, adapterPath, pythonPath string) (map[string]any, map[string]any, error) {
@@ -360,4 +374,26 @@ func nestedNumber(value map[string]any, object, field string) float64 {
 	child, _ := value[object].(map[string]any)
 	result, _ := child[field].(float64)
 	return result
+}
+
+func writePrivateDebug(directory, name string, data []byte) error {
+	if !filepath.IsAbs(directory) || filepath.Base(name) != name || len(data) == 0 || len(data) > 1<<20 {
+		return errors.New("invalid debug destination")
+	}
+	info, err := os.Lstat(directory)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("invalid debug destination")
+	}
+	file, err := os.OpenFile(filepath.Join(directory, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err = file.Write(append(append([]byte(nil), data...), '\n')); err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err == nil {
+		err = closeErr
+	}
+	return err
 }

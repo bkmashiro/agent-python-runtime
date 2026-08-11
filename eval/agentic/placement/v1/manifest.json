@@ -42,7 +42,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_1",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_1.json",
-      "sha256": "sha256:71299cef2ae2405a55555599c4a0c21211b367395ff631422db40c1bae92427c",
+      "sha256": "sha256:99c1d5ae91a0c6494c4a8b51227482365054cabc090e0edbc979ab6e49031a35",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -50,7 +50,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_10",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_10.json",
-      "sha256": "sha256:5c558c49099eb000b24d8450af878a8479e662c1e42cb9c81f179051aeb071b8",
+      "sha256": "sha256:7878d55d8cca424d6fd3f72a7ca21437e40c985c2725daa3eb8900061c7863e8",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -58,7 +58,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_25",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_25.json",
-      "sha256": "sha256:cdf1396a647fecb8f4bc6ec0ef9433049ddc8c2e43c81f0de3ab11cb019f627d",
+      "sha256": "sha256:0070f5605f6bd660629fc616c815f46f4574ff2603b12a1edfe2888e1b060749",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -66,7 +66,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_26",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_26.json",
-      "sha256": "sha256:73a9aa1a2a32811eac275691161342860a24bfb9e4bb03f461bc5d2deecc6395",
+      "sha256": "sha256:22b87237ad205b39e4fb31d38176507d60762a738e7e4c3e8013752f6c7a8efe",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -74,7 +74,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_3",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_3.json",
-      "sha256": "sha256:a2409bc89c7b3b010f518df3f7911d2617aa35b665e6d2bc473c41f98499af2b",
+      "sha256": "sha256:8392274ceed879ea8c8fee62665093a91a6ee4a0cff29b327f86c89bb5ab53da",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -266,7 +266,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_12",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_12.json",
-      "sha256": "sha256:030fddaf95eaffa44af7a22ade8fbf7708013c1d6b508e1b138261cdbaada236",
+      "sha256": "sha256:13e7d17be9549513be62ac1323eb8060b5eeb261d2b525a371d1c0aa5c31bd8a",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -274,7 +274,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_29",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_29.json",
-      "sha256": "sha256:24a02e27b07d70b547f90735a56c0f6844845c0d3bcdde450aa2e3c8dbc9b04b",
+      "sha256": "sha256:7d6636f2866d7801ae16118f2191a783f8f45fbc022e58248d4dff7746bd815a",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -282,7 +282,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_37",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_37.json",
-      "sha256": "sha256:8e945753587c531d7ca965edf571cb03fcdd2934aa9ef7f058b544f0d39f4947",
+      "sha256": "sha256:774ea9a5e60d39d88e36bc6daabaf82a39980dd5c3474c1d3183b5d52e3c4bb7",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -290,7 +290,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_39",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_39.json",
-      "sha256": "sha256:cfa6ec9cb69d640bfadc1fa4647b08696a0b6f88593bdbae870db7633983351a",
+      "sha256": "sha256:bf0ada76a0ac16483478eb228d8cd269aa3b1cf6dbfb686827bdc70f6053a85b",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -298,7 +298,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_9",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_9.json",
-      "sha256": "sha256:5256253e8293068a9a71b360d25037833b76ac491f1cc8ca932d15e1a3ef0ef0",
+      "sha256": "sha256:f3443d0208b5dfa613014b6294995fee93b63b7588fb86966c489f536f4457a9",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"

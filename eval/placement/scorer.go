@@ -68,6 +68,7 @@ type ScoreResult struct {
 	AdmissionPass     bool   `json:"admission_pass"`
 	ExecutionPass     bool   `json:"execution_pass"`
 	FinalStatePass    bool   `json:"final_state_pass"`
+	EffectComparable  bool   `json:"effect_comparable"`
 	EffectPass        bool   `json:"effect_pass"`
 	FailureLayer      string `json:"failure_layer,omitempty"`
 }
@@ -106,7 +107,7 @@ func Score(task Task, result TrialResult) (ScoreResult, error) {
 	if expected.Status == "rejected" {
 		pass := result.Admission.Status == "rejected" && result.Admission.BeforeProvider &&
 			result.Usage.ProviderCalls == 0 && len(result.ObservedEffects) == 0 && result.Execution.Status == "not_started"
-		score := ScoreResult{Pass: pass, ExpectedRejection: true, AdmissionPass: pass, ExecutionPass: pass, FinalStatePass: pass, EffectPass: pass}
+		score := ScoreResult{Pass: pass, ExpectedRejection: true, AdmissionPass: pass, ExecutionPass: pass, FinalStatePass: pass, EffectComparable: true, EffectPass: pass}
 		if !pass {
 			score.FailureLayer = "admission"
 		}
@@ -130,12 +131,13 @@ func Score(task Task, result TrialResult) (ScoreResult, error) {
 		score.FailureLayer = "oracle_final_state"
 		return score, nil
 	}
-	effectPass, err := scoreEffects(task.Oracle.EffectContract, result.ObservedEffects)
+	comparable, effectPass, err := scoreEffects(task.Oracle.EffectContract, result.ObservedEffects)
 	if err != nil {
 		return ScoreResult{}, ErrTrialResult
 	}
+	score.EffectComparable = comparable
 	score.EffectPass = effectPass
-	if !effectPass {
+	if comparable && !effectPass {
 		score.FailureLayer = "oracle_effect"
 		return score, nil
 	}
@@ -144,46 +146,55 @@ func Score(task Task, result TrialResult) (ScoreResult, error) {
 }
 
 type exactEffectContract struct {
-	Kind             string          `json:"kind"`
-	Required         []SemanticCall  `json:"required"`
-	Forbidden        []string        `json:"forbidden"`
-	OrderingEdges    [][]int         `json:"ordering_edges"`
-	RequiredStatus   string          `json:"required_status"`
-	ForbiddenEffects []string        `json:"forbidden_effects"`
-	Oracle           json.RawMessage `json:"oracle"`
+	Kind                 string          `json:"kind"`
+	Required             []SemanticCall  `json:"required"`
+	Forbidden            []string        `json:"forbidden"`
+	OrderingEdges        [][]int         `json:"ordering_edges"`
+	RequiredStatus       string          `json:"required_status"`
+	ForbiddenEffects     []string        `json:"forbidden_effects"`
+	Oracle               json.RawMessage `json:"oracle"`
+	ArmNativeTraceOracle json.RawMessage `json:"arm_native_trace_oracle"`
+	TraceRole            string          `json:"trace_role"`
+	SemanticEquivalence  string          `json:"semantic_equivalence"`
 }
 
-func scoreEffects(raw json.RawMessage, observed []SemanticCall) (bool, error) {
+func scoreEffects(raw json.RawMessage, observed []SemanticCall) (bool, bool, error) {
 	var contract exactEffectContract
 	if decodeStrict(raw, &contract) != nil || contract.Kind == "" {
-		return false, ErrTrialResult
+		return false, false, ErrTrialResult
 	}
 	switch contract.Kind {
+	case "workspace_state_semantics":
+		if contract.TraceRole != "diagnostic_only" || contract.SemanticEquivalence != "exact_final_workspace_state" || len(contract.ArmNativeTraceOracle) == 0 {
+			return false, false, ErrTrialResult
+		}
+		return false, false, nil
 	case "exact_semantic_calls":
 		if len(contract.Required) != len(observed) {
-			return false, nil
+			return true, false, nil
 		}
 		for index := range contract.Required {
 			if contract.Required[index].Name != observed[index].Name {
-				return false, nil
+				return true, false, nil
 			}
 			equal, err := canonicalEqual(contract.Required[index].Arguments, observed[index].Arguments)
 			if err != nil || !equal {
-				return false, err
+				return true, false, err
 			}
 		}
 		for _, edge := range contract.OrderingEdges {
 			if len(edge) != 2 || edge[0] < 0 || edge[1] < 0 || edge[0] >= len(observed) || edge[1] >= len(observed) || edge[0] >= edge[1] {
-				return false, ErrTrialResult
+				return true, false, ErrTrialResult
 			}
 		}
-		return true, nil
+		return true, true, nil
 	case "bfcl_expected_calls":
-		return scoreBFCL(contract.Oracle, observed)
+		pass, err := scoreBFCL(contract.Oracle, observed)
+		return true, pass, err
 	case "admission_rejection":
-		return len(observed) == 0 && contract.RequiredStatus == "rejected", nil
+		return true, len(observed) == 0 && contract.RequiredStatus == "rejected", nil
 	default:
-		return false, ErrTrialResult
+		return false, false, ErrTrialResult
 	}
 }
 

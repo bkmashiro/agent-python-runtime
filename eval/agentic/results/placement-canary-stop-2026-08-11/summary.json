@@ -1,0 +1,74 @@
+{
+  "schema_version": "placement-canary-stop/v1",
+  "status": "stopped_before_three_arm_model_canary",
+  "recorded_at": "2026-08-11",
+  "source_commit": "362f91073cab320cd8a7acd25d5f047ffcb8a208",
+  "corpus_manifest_sha256": "sha256:f756770de51bda5f9dbf78ece677a25bda7cbdd427a66e48409af0cb6db2116a",
+  "canary_binary_sha256": "sha256:ed7be4f220b00fa38c14d04b1ddf91264c0bd776290581feb7d2fb7ac5e41302",
+  "model": "gpt-5.3-codex-spark",
+  "stop_condition": "profile-qualified Pysolate model canary did not close after one minimal interface correction; further prompt tuning would optimize to one task rather than increase placement evidence",
+  "working_mechanism_evidence": [
+    {
+      "arm": "pysolate",
+      "mode": "scripted",
+      "task": "rd-003",
+      "result": "pass",
+      "evidence": "real WASI Guest, base profile, artifact and manifest bound, RunPlan present, exact 4-call trace and final state"
+    },
+    {
+      "arm": "computer",
+      "mode": "scripted",
+      "task": "rd-003-equivalent-workspace-transform",
+      "result": "pass",
+      "evidence": "unmodified Cloudflare Computer v0.1.1 Worker JavaScript backend under Wrangler local; exact output alpha,gamma"
+    },
+    {
+      "arm": "computer",
+      "mode": "scripted",
+      "task": "trusted-module-effect-smoke",
+      "result": "pass",
+      "evidence": "Host-owned fixture, one exact trusted-module call, complete authoritative trace"
+    }
+  ],
+  "model_canary": {
+    "arm": "pysolate",
+    "task": "rd-003",
+    "completed_trial": false,
+    "provider_calls_observed": 1,
+    "usage": "unknown: failed-attempt command did not persist provider usage",
+    "proposal_code_sha256": "sha256:f8cad6071e383b943c7b8ce0cba8e97150f7f3d6d8b30f7e226583b45495153e",
+    "private_debug_sha256": "sha256:039bfc87f64271351c4eeb8489059aaf9ab975afad215d982547e5ee617dfc81",
+    "private_debug_published": false,
+    "declared_imports": [],
+    "admission": "passed",
+    "execution": "python_exception",
+    "failure_layer": "model_program",
+    "sanitized_cause": "the generated program omitted the user-requested directory change and read metrics.csv from the wrong workspace directory"
+  },
+  "pre_canary_corrections": [
+    "initialized the empty read-only provider workdir as a local Git repository because Codex CLI otherwise refuses it",
+    "made the base-profile import surface explicit after a proposal requested the unavailable csv module",
+    "froze workspace-local reversible tasks to exact final-state semantics with arm-native operation traces diagnostic-only; exact Host capability effects remain strict"
+  ],
+  "not_run": [
+    "Direct paid model canary for the new treatment",
+    "Cloudflare Computer paid model canary for the new treatment",
+    "40-task development screen",
+    "sealed 20-task decision cohort",
+    "ICL Linux qualification",
+    "placement FP/FN and cost analysis"
+  ],
+  "claims": {
+    "supported": [
+      "the profile-qualified Pysolate mechanism works on a real scripted WASI Guest",
+      "the pinned Cloudflare Computer Worker JavaScript comparator and trusted-module tracing work locally"
+    ],
+    "forbidden": [
+      "Pysolate is the default agentic execution substrate",
+      "any three-arm placement accuracy or replacement-rate result",
+      "Cloudflare production latency, lifecycle, cost, capacity, durability, or SLA",
+      "the failed model program is a Pysolate runtime defect",
+      "the 14M token budget was measured or exhausted"
+    ]
+  }
+}

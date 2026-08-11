@@ -35,7 +35,7 @@ This is compatibility policy, not the primary sandbox. WASI and Host capabilitie
 
 ### Host-owned tools
 
-Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v3` binds sorted canonical specs, opaque per-Run grant/policy identities and the total call budget; late registration is rejected. Each spec binds capability/version, documentation, effect/playback and handler identities, strict input/output schemas and generated Python projection metadata. Grant policy bytes are Host-owned and cannot be selected or overridden in the Guest call envelope. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access.
+Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v4` binds sorted canonical specs, opaque per-Run grant/policy identities and the total call budget; late registration is rejected. Each spec binds capability/version, documentation, effect/playback and handler identities, strict input/output schemas and generated Python projection metadata. Grant policy bytes are Host-owned and cannot be selected or overridden in the Guest call envelope. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access.
 
 ### Host-authored evidence
 

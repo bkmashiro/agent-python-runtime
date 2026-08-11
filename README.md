@@ -67,22 +67,22 @@ Then submit only Python:
 ```python
 import csv
 
-rows = list(csv.reader(read_text("metrics.csv").splitlines()))
+rows = list(csv.reader(workspace.read_text("metrics.csv").splitlines()))
 total = sum(int(row[1]) for row in rows[1:])
 write_text("summary.txt", str(total))
 result = {
     "total": total,
-    "files": list_files(),
+    "files": workspace.list_files(),
     "summary": read_text("summary.txt"),
 }
 ```
 
-The Host derives `csv`, verifies it against the Host profile and distribution manifest, and prebinds three small workspace tools:
+The Host derives `csv`, verifies it against the Host profile and distribution manifest, and generates a small `workspace` object plus compatibility aliases from the sealed capability specs:
 
 ```python
-read_text(path)
-write_text(path, content)
-list_files()
+workspace.read_text(path)      # alias: read_text(path)
+workspace.write_text(path, content)  # alias: write_text(path, content)
+workspace.list_files()         # alias: list_files()
 ```
 
 The workspace backend is an in-memory PoC store with canonical relative paths and a one-MiB per-file bound. Every Host call is counted and receives a Host-authored receipt.

@@ -21,7 +21,7 @@ func TestAgentSourceGetsProfileAndWorkspaceToolsFromHost(t *testing.T) {
 	if err := os.WriteFile(config, configData, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	request := []byte(`{"run_id":"agent-poc","code":"import csv\nrows=list(csv.reader(read_text('metrics.csv').splitlines()))\ntotal=sum(int(row[1]) for row in rows[1:])\nwrite_text('summary.txt', str(total))\nresult={'total':total,'files':list_files(),'summary':read_text('summary.txt')}","inputs":{}}`)
+	request := []byte(`{"run_id":"agent-poc","code":"import csv\nrows=list(csv.reader(workspace.read_text('metrics.csv').splitlines()))\ntotal=sum(int(row[1]) for row in rows[1:])\nwrite_text('summary.txt', str(total))\nresult={'total':total,'files':workspace.list_files(),'summary':read_text('summary.txt')}","inputs":{}}`)
 	command := exec.Command(binary, "-artifact", artifact, "-manifest", manifest, "-config", config)
 	command.Stdin = bytes.NewReader(request)
 	output, err := command.CombinedOutput()

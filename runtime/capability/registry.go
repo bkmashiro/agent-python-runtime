@@ -23,7 +23,7 @@ var (
 )
 
 const (
-	capabilityPlanSchemaVersion = "pysolate.capability-plan.v3"
+	capabilityPlanSchemaVersion = "pysolate.capability-plan.v4"
 	maxCapabilitySchemaBytes    = 64 << 10
 	maxCapabilityJSONNodes      = 16384
 
@@ -51,7 +51,9 @@ func (function HandlerFunc) Call(ctx context.Context, arguments json.RawMessage)
 // PythonProjection describes a generated convenience wrapper. It is only a
 // presentation surface: the Broker still admits and validates the named Spec.
 type PythonProjection struct {
-	Name        string   `json:"name"`
+	Module      string   `json:"module"`
+	Method      string   `json:"method"`
+	GlobalAlias string   `json:"global_alias,omitempty"`
 	Arguments   []string `json:"arguments"`
 	ResultField string   `json:"result_field,omitempty"`
 }
@@ -87,6 +89,15 @@ type Registry struct {
 
 type CapabilityBinding = Spec
 
+type ToolSchema struct {
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	EffectClass  string          `json:"effect_class"`
+	Playback     string          `json:"playback"`
+	InputSchema  json.RawMessage `json:"input_schema"`
+	OutputSchema json.RawMessage `json:"output_schema"`
+}
+
 type PlanConfig struct {
 	MaxCalls uint32
 }
@@ -121,10 +132,27 @@ func (registry *Registry) Register(spec Spec, grant Grant, handler Handler) erro
 		return ErrToolExists
 	}
 	if canonical.Python != nil {
-		if _, exists := registry.pythonNames[canonical.Python.Name]; exists {
+		projection := canonical.Python
+		methodKey := "method:" + projection.Module + "." + projection.Method
+		moduleKey := "global:" + projection.Module
+		moduleOwner := "module:" + projection.Module
+		if _, exists := registry.pythonNames[methodKey]; exists {
 			return ErrToolExists
 		}
-		registry.pythonNames[canonical.Python.Name] = canonical.Name
+		if owner, exists := registry.pythonNames[moduleKey]; exists && owner != moduleOwner {
+			return ErrToolExists
+		}
+		if projection.GlobalAlias != "" {
+			aliasKey := "global:" + projection.GlobalAlias
+			if _, exists := registry.pythonNames[aliasKey]; exists {
+				return ErrToolExists
+			}
+		}
+		registry.pythonNames[methodKey] = canonical.Name
+		registry.pythonNames[moduleKey] = moduleOwner
+		if projection.GlobalAlias != "" {
+			registry.pythonNames["global:"+projection.GlobalAlias] = canonical.Name
+		}
 	}
 	registry.registrations[canonical.Name] = registration{
 		spec: canonical, grant: grant, handler: handler, inputSchema: inputSchema, outputSchema: outputSchema,
@@ -194,6 +222,20 @@ func (plan *Plan) Specs() []Spec {
 		return nil
 	}
 	return cloneSpecs(plan.specs)
+}
+
+func (plan *Plan) ToolSchemas() []ToolSchema {
+	if plan == nil {
+		return nil
+	}
+	tools := make([]ToolSchema, len(plan.specs))
+	for index, spec := range plan.specs {
+		tools[index] = ToolSchema{
+			Name: spec.Name, Description: spec.Description, EffectClass: spec.EffectClass, Playback: spec.Playback,
+			InputSchema: append(json.RawMessage(nil), spec.InputSchema...), OutputSchema: append(json.RawMessage(nil), spec.OutputSchema...),
+		}
+	}
+	return tools
 }
 
 func (plan *Plan) Grants() []GrantBinding {
@@ -355,21 +397,32 @@ func validateAgainst(schema *jsonschema.Schema, raw []byte) error {
 
 func generatePythonPrelude(specs []Spec) string {
 	projected := make([]Spec, 0, len(specs))
+	modules := make(map[string]struct{})
 	for _, spec := range specs {
 		if spec.Python != nil {
 			projected = append(projected, spec)
+			modules[spec.Python.Module] = struct{}{}
 		}
 	}
 	if len(projected) == 0 {
 		return ""
 	}
+	moduleNames := make([]string, 0, len(modules))
+	for module := range modules {
+		moduleNames = append(moduleNames, module)
+	}
+	sortStrings(moduleNames)
 	var builder strings.Builder
-	builder.WriteString("\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_capability_call_sequence = 0\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": \"capability-\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n")
-	for _, spec := range projected {
+	builder.WriteString("\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_capability_call_sequence = 0\n\nclass _CapabilityModule:\n    pass\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": \"capability-\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n")
+	for _, module := range moduleNames {
+		fmt.Fprintf(&builder, "\n%s = _CapabilityModule()\n", module)
+	}
+	for index, spec := range projected {
 		projection := spec.Python
-		fmt.Fprintf(&builder, "\ndef %s(%s):\n    return _capability_call(%s, {", projection.Name, strings.Join(projection.Arguments, ", "), pythonString(spec.Name))
-		for index, argument := range projection.Arguments {
-			if index != 0 {
+		proxy := fmt.Sprintf("_capability_proxy_%d", index)
+		fmt.Fprintf(&builder, "\ndef %s(%s):\n    return _capability_call(%s, {", proxy, strings.Join(projection.Arguments, ", "), pythonString(spec.Name))
+		for argumentIndex, argument := range projection.Arguments {
+			if argumentIndex != 0 {
 				builder.WriteString(", ")
 			}
 			fmt.Fprintf(&builder, "%s: %s", pythonString(argument), argument)
@@ -379,6 +432,10 @@ func generatePythonPrelude(specs []Spec) string {
 			fmt.Fprintf(&builder, "[%s]", pythonString(projection.ResultField))
 		}
 		builder.WriteByte('\n')
+		fmt.Fprintf(&builder, "%s.%s = %s\n", projection.Module, projection.Method, proxy)
+		if projection.GlobalAlias != "" {
+			fmt.Fprintf(&builder, "%s = %s.%s\n", projection.GlobalAlias, projection.Module, projection.Method)
+		}
 	}
 	return builder.String()
 }
@@ -392,7 +449,9 @@ func validPythonProjection(projection *PythonProjection) bool {
 	if projection == nil {
 		return true
 	}
-	if !validPythonProjectionName(projection.Name) || len(projection.ResultField) > 128 || !utf8.ValidString(projection.ResultField) {
+	if !validPythonProjectionName(projection.Module) || !validPythonProjectionName(projection.Method) ||
+		(projection.GlobalAlias != "" && !validPythonProjectionName(projection.GlobalAlias)) || projection.GlobalAlias == projection.Module ||
+		len(projection.ResultField) > 128 || !utf8.ValidString(projection.ResultField) {
 		return false
 	}
 	seen := make(map[string]struct{}, len(projection.Arguments))
@@ -478,6 +537,14 @@ func cloneSpecs(specs []Spec) []Spec {
 		cloned[index] = cloneSpec(spec)
 	}
 	return cloned
+}
+
+func sortStrings(values []string) {
+	for index := 1; index < len(values); index++ {
+		for current := index; current > 0 && values[current] < values[current-1]; current-- {
+			values[current], values[current-1] = values[current-1], values[current]
+		}
+	}
 }
 
 func sortSpecs(values []Spec) {

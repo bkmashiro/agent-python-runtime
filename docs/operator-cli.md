@@ -73,7 +73,7 @@ The Guest accesses this state with ordinary Python file APIs under `/workspace`.
 
 Agent-facing callers should omit `compatibility`; the Host derives it. `run_id` is an untrusted diagnostic label, not an authority identifier.
 
-When typed Host tools are configured, the Host canonicalizes their versioned `CapabilitySpec` definitions, compiles strict input/output schemas, derives opaque `CapabilityGrant` identities from Host-owned per-Run policy documents, generates the trusted Python wrappers, and seals the sorted specs, grants and total call budget as `pysolate.capability-plan.v3` before Guest startup. The response carries `capability_plan_sha256` even when no tool is called, and every capability receipt binds the same identity. Guest-authored plan or grant evidence is rejected.
+When typed Host tools are configured, the Host canonicalizes their versioned `CapabilitySpec` definitions, compiles strict input/output schemas, derives opaque `CapabilityGrant` identities from Host-owned per-Run policy documents, generates trusted Python module/method objects plus optional aliases and direct tool schemas, and seals the sorted specs, grants and total call budget as `pysolate.capability-plan.v4` before Guest startup. The response carries `capability_plan_sha256` even when no tool is called, and every capability receipt binds the same identity. Guest-authored plan or grant evidence is rejected.
 
 ## Exit behavior
 

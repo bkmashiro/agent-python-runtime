@@ -43,11 +43,11 @@ The current implementation provides:
 - a generic Guest-to-Host JSON call ABI, Host Registry and bounded Broker;
 - canonical Host-owned `CapabilitySpec` definitions for capability/version identity, documentation, effect class, playback treatment, handler identity, strict input/output schemas and Python wrapper projection;
 - opaque per-Run `CapabilityGrant` identities derived from canonical Host policy documents;
-- a sealed `pysolate.capability-plan.v3` identity binding sorted canonical specs, their per-Run grants and the total call budget;
-- three prebound in-memory workspace functions whose wrappers are generated from their sealed specs;
+- a sealed `pysolate.capability-plan.v4` identity binding sorted canonical specs, their per-Run grants and the total call budget;
+- generated Python module/method objects and direct Agent tool schemas from the sealed specs, with compatibility aliases for the three current workspace functions;
 - compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
-The generic Registry can register a versioned spec and handler without changing the WASI import surface. Registration canonicalizes and compiles both schemas. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI generates the fixed `read_text`, `write_text` and `list_files` wrappers from those sealed specs. Dynamic module objects, direct Agent tool-schema generation and a plugin catalog are not Current.
+The generic Registry can register a versioned spec, grant and handler without changing the WASI import surface. Registration canonicalizes and compiles both schemas. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI generates namespaced Python objects and optional compatibility aliases from the sealed specs, while the Plan exposes direct Agent tool schemas from the same definitions. A plugin catalog and installation lifecycle are not Current.
 
 Current receipts bind call and workspace identities, but the repository does not yet claim a durable complete audit archive, deterministic replay, external-effect reconciliation or transaction semantics.
 
@@ -74,25 +74,24 @@ Current `CapabilitySpec` defines:
 
 - stable capability and version identity;
 - Agent-facing documentation;
-- a Python function projection;
+- a Python module/method projection with an optional compatibility alias;
 - strict input and output schemas;
 - Host handler identity;
 - declared effect class and playback treatment.
 
-Registration canonicalizes and compiles both schemas. It also requires an opaque `CapabilityGrant` identity derived from a canonical Host-owned policy document. Sealing binds every sorted spec, its grant identity and the global budget into `pysolate.capability-plan.v3`; changing a per-Run target policy changes the plan without overloading the stable handler identity. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates its trusted Python wrappers from the same sealed specs rather than maintaining a handwritten second surface.
+Registration canonicalizes and compiles both schemas. It also requires an opaque `CapabilityGrant` identity derived from a canonical Host-owned policy document. Sealing binds every sorted spec, its grant identity and the global budget into `pysolate.capability-plan.v4`; changing a per-Run target policy changes the plan without overloading the stable handler identity. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates trusted module objects and optional aliases from the same sealed specs, and the plan exposes defensive direct Agent tool schemas from those definitions rather than maintaining handwritten second surfaces.
 
 The following remain Proposed extensions:
 
-- Python module/object projection;
 - concrete target and credential policy adapters;
 - call, byte, time and external-cost budgets;
 - protected playback records and adapters.
 
-The direct Agent tool schema, documentation and replay adapter should eventually derive from that definition as well. Generated presentation surfaces must not create a second policy path.
+The replay adapter should derive from that definition as well. Generated presentation surfaces do not create a second policy path: execution still crosses the same Broker.
 
 ### Dynamic catalog, frozen per-Run authority
 
-Current Pysolate freezes and identity-binds the registered canonical specs, per-Run grant identities and total call budget before Guest startup. Grant identities are opaque digests: authority-bearing policy bytes remain Host-private. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and dynamic module objects are not Current.
+Current Pysolate freezes and identity-binds the registered canonical specs, per-Run grant identities and total call budget before Guest startup. Grant identities are opaque digests: authority-bearing policy bytes remain Host-private. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and installation are not Current.
 
 Handler identities are trusted Host-owned declarations. A plugin or registry builder must change the identity whenever behavior relevant to authorization, side effects or replay compatibility changes; Guest code cannot supply or override it.
 
@@ -210,12 +209,11 @@ If these conditions cannot be met, the workload belongs in an explicit compatibi
 
 The first foundation is Current. Remaining work should proceed in this order, subject to concrete workload evidence:
 
-1. Extend Current `CapabilitySpec` into module/object projection and direct Agent tool-schema generation without adding a second authority path.
-2. Add one useful read-only Host capability with strict schemas, budgets and receipts.
-3. Add protected execution records and capability playback for pure/read-only calls.
-4. Control or capture clock, randomness and other relevant nondeterminism for a bounded deterministic-verification profile.
-5. Add write effects only through an explicit Host Effect Plane with reconciliation.
-6. Expand safe computer coverage through qualified Git, HTTP, artifact, document, media or browser capabilities.
-7. Consider pinned interpreter sessions only after measured workloads show that explicit workspace state is insufficient.
+1. Add one useful curated read-only information source with strict schemas, budgets and receipts.
+2. Add protected execution records and capability playback for pure/read-only calls.
+3. Control or capture clock, randomness and other relevant nondeterminism for a bounded deterministic-verification profile.
+4. Add write effects only through an explicit Host Effect Plane with reconciliation.
+5. Expand safe computer coverage through qualified Git, HTTP, artifact, document, media or browser capabilities.
+6. Consider pinned interpreter sessions only after measured workloads show that explicit workspace state is insufficient.
 
 The success metric is not the number of APIs or the percentage of Linux commands imitated. It is the share of real Agent work completed without a general Computer while preserving bounded authority, evidence coverage, final-state correctness and honest replay semantics.

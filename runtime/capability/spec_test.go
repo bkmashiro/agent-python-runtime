@@ -73,7 +73,7 @@ func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 		"external schema ref": func(spec *capability.Spec) {
 			spec.InputSchema = json.RawMessage(`{"$ref":"https://example.test/schema.json"}`)
 		},
-		"invalid Python name":        func(spec *capability.Spec) { spec.Python.Name = "not-valid" },
+		"invalid Python name":        func(spec *capability.Spec) { spec.Python.Method = "not-valid" },
 		"missing description":        func(spec *capability.Spec) { spec.Description = "" },
 		"invalid effect class":       func(spec *capability.Spec) { spec.EffectClass = "get" },
 		"invalid playback treatment": func(spec *capability.Spec) { spec.Playback = "retry" },
@@ -84,8 +84,8 @@ func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 		"invalid UTF-8 result field": func(spec *capability.Spec) { spec.Python.ResultField = string([]byte{0xff}) },
 		"Python keyword":             func(spec *capability.Spec) { spec.Python.Arguments = []string{"class"} },
 		"reserved helper":            func(spec *capability.Spec) { spec.Python.Arguments = []string{"_capability_call"} },
-		"Python builtin":             func(spec *capability.Spec) { spec.Python.Name = "len" },
-		"Guest result name":          func(spec *capability.Spec) { spec.Python.Name = "result" },
+		"Python builtin":             func(spec *capability.Spec) { spec.Python.GlobalAlias = "len" },
+		"Guest result name":          func(spec *capability.Spec) { spec.Python.GlobalAlias = "result" },
 		"duplicate argument":         func(spec *capability.Spec) { spec.Python.Arguments = []string{"path", "path"} },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -179,8 +179,10 @@ func TestSealedPlanGeneratesPythonProjectionAndDefensiveSpecs(t *testing.T) {
 	}
 	prelude := plan.PythonPrelude()
 	for _, fragment := range []string{
-		"def read_text(path):",
+		"def _capability_proxy_0(path):",
 		`_capability_call("workspace.read_text", {"path": path})["content"]`,
+		"workspace.read_text = _capability_proxy_0",
+		"read_text = workspace.read_text",
 	} {
 		if !strings.Contains(prelude, fragment) {
 			t.Fatalf("generated prelude missing %q:\n%s", fragment, prelude)
@@ -206,7 +208,9 @@ func testSpec() capability.Spec {
 		InputSchema:     json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`),
 		OutputSchema:    json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"}},"required":["content"],"additionalProperties":false}`),
 		Python: &capability.PythonProjection{
-			Name:        "read_text",
+			Module:      "workspace",
+			Method:      "read_text",
+			GlobalAlias: "read_text",
 			Arguments:   []string{"path"},
 			ResultField: "content",
 		},

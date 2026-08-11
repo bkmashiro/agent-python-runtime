@@ -71,7 +71,7 @@ func workspaceReadTextSpec() Spec {
 		EffectClass: EffectWorkspaceRead, Playback: PlaybackLiveOnly, HandlerIdentity: workspaceTextHandlerIdentity,
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":256}},"required":["path"],"additionalProperties":false}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string","maxLength":1048576}},"required":["content"],"additionalProperties":false}`),
-		Python:       &PythonProjection{Name: "read_text", Arguments: []string{"path"}, ResultField: "content"},
+		Python:       &PythonProjection{Module: "workspace", Method: "read_text", GlobalAlias: "read_text", Arguments: []string{"path"}, ResultField: "content"},
 	}
 }
 
@@ -81,7 +81,7 @@ func workspaceWriteTextSpec() Spec {
 		EffectClass: EffectWorkspaceWrite, Playback: PlaybackLiveOnly, HandlerIdentity: workspaceTextHandlerIdentity,
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":256},"content":{"type":"string","maxLength":1048576}},"required":["path","content"],"additionalProperties":false}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`),
-		Python:       &PythonProjection{Name: "write_text", Arguments: []string{"path", "content"}, ResultField: "written"},
+		Python:       &PythonProjection{Module: "workspace", Method: "write_text", GlobalAlias: "write_text", Arguments: []string{"path", "content"}, ResultField: "written"},
 	}
 }
 
@@ -91,7 +91,7 @@ func workspaceListFilesSpec() Spec {
 		EffectClass: EffectWorkspaceRead, Playback: PlaybackLiveOnly, HandlerIdentity: workspaceTextHandlerIdentity,
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"files":{"type":"array","items":{"type":"string","maxLength":256}}},"required":["files"],"additionalProperties":false}`),
-		Python:       &PythonProjection{Name: "list_files", Arguments: []string{}, ResultField: "files"},
+		Python:       &PythonProjection{Module: "workspace", Method: "list_files", GlobalAlias: "list_files", Arguments: []string{}, ResultField: "files"},
 	}
 }
 

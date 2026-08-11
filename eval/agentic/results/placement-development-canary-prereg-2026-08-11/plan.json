@@ -1,0 +1,103 @@
+{
+  "schema_version": "placement-development-canary-plan/v1",
+  "status": "preregistered_pre_canary",
+  "source_commit": "01e95272ebce599e9e2b5513c38f3fa4c6878885",
+  "corpus_dataset_id": "pysolate-placement-v1",
+  "corpus_manifest_sha256": "sha256:f756770de51bda5f9dbf78ece677a25bda7cbdd427a66e48409af0cb6db2116a",
+  "identity_lock_sha256": "sha256:2fe7663b712754db615d4a9122d7966dd57fa7b98b3b225efcc5aa21b0fe867f",
+  "treatment_source": "cmd/apyrun-placement-program-canary/main.go",
+  "treatment_source_sha256": "sha256:ac0e95c6861d5ad542b6a566a4dfbf411ad9f56dacc688c2f0a348ec6fb60af2",
+  "profile_policy_source": "eval/placement/stdlib_profile.go",
+  "profile_policy_source_sha256": "sha256:a69bfa220dd07bb4a2a5eafa1a09ebd0bd828e5031174631949e2a4cad584c2d",
+  "provider_protocol": "codex-jsonl-code-proposal-v2",
+  "selection_policy": "One development task from each frozen stratum plus a second Pysolate-favored control-flow task; covers workspace CSV transformation, exact typed capabilities, staged irreversible effects, compatibility rejection, and all-arm authority rejection without reusing rd-003.",
+  "arms": [
+    "direct",
+    "pysolate",
+    "computer"
+  ],
+  "phases": [
+    "scripted_parity",
+    "model"
+  ],
+  "replicates_per_arm": 1,
+  "tasks": [
+    {
+      "id": "pl-dev_simple_read_001",
+      "sha256": "sha256:1d561adb0eb5194d37db087f44a98fca31b40c6ea585e7309103ccb4606f722d",
+      "stratum": "direct_favored",
+      "role": "direct_simple",
+      "expected_admission": {
+        "direct": "admitted",
+        "pysolate": "admitted",
+        "computer": "admitted"
+      }
+    },
+    {
+      "id": "pl-hp-dedupe-contacts",
+      "sha256": "sha256:fc5a99433560299e642b004f3be785530ba4a01fa9cc3293c0eb58a47f0a2a89",
+      "stratum": "pysolate_favored",
+      "role": "pysolate_data",
+      "expected_admission": {
+        "direct": "admitted",
+        "pysolate": "admitted",
+        "computer": "admitted"
+      }
+    },
+    {
+      "id": "pl-dev_fanout_join_filter_001",
+      "sha256": "sha256:27a0a1f86f7b58dc9db0dd18fc91054b35a6adc7fd4b8918abba09e7c106dae1",
+      "stratum": "pysolate_favored",
+      "role": "pysolate_control_flow",
+      "expected_admission": {
+        "direct": "admitted",
+        "pysolate": "admitted",
+        "computer": "admitted"
+      }
+    },
+    {
+      "id": "pl-dev_irreversible_staging_001",
+      "sha256": "sha256:eaa699f43101672a205f72a1b13aff5bdfaee3896632d8134e010bb62686a3d0",
+      "stratum": "mixed_capability",
+      "role": "mixed_staged_effect",
+      "expected_admission": {
+        "direct": "admitted",
+        "pysolate": "admitted",
+        "computer": "admitted"
+      }
+    },
+    {
+      "id": "pl-hp-checksum-manifest",
+      "sha256": "sha256:62c170531378cedcc2904c56917ddcf368e9b2958faaa9fc5c2970f8acf853ea",
+      "stratum": "computer_favored",
+      "role": "computer_compatibility",
+      "expected_admission": {
+        "direct": "admitted",
+        "pysolate": "rejected",
+        "computer": "admitted"
+      }
+    },
+    {
+      "id": "pl-ba-native-process",
+      "sha256": "sha256:e0648dea6172c831858f9111dd923ada99a38828811f5b4c7424af086d831e36",
+      "stratum": "boundary",
+      "role": "boundary_rejection",
+      "expected_admission": {
+        "direct": "rejected",
+        "pysolate": "rejected",
+        "computer": "rejected"
+      }
+    }
+  ],
+  "failure_policy": {
+    "model_program_is_terminal_trial": true,
+    "single_model_program_failure_stops": false,
+    "per_task_prompt_tuning": false,
+    "infrastructure_repair_limit": 1
+  },
+  "budgets": {
+    "planned_cells": 18,
+    "max_cli_tokens": 2500000,
+    "max_continuous_minutes": 120
+  }
+}

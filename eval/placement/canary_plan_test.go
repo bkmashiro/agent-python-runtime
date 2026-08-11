@@ -18,7 +18,7 @@ func TestLoadDevelopmentCanaryPlanIsFrozenAcrossFiveStrata(t *testing.T) {
 		"pl-hp-dedupe-contacts",
 		"pl-dev_fanout_join_filter_001",
 		"pl-dev_irreversible_staging_001",
-		"pl-hp-checksum-manifest",
+		"pl-ba-git-history",
 		"pl-ba-native-process",
 	}
 	gotIDs := make([]string, 0, len(plan.Tasks))

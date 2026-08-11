@@ -60,6 +60,7 @@ type TrialResult struct {
 	ObservedEffects       []SemanticCall    `json:"observed_effects,omitempty"`
 	Usage                 UsageEvidence     `json:"usage"`
 	Lifecycle             LifecycleEvidence `json:"lifecycle"`
+	Evidence              map[string]string `json:"evidence,omitempty"`
 }
 
 type ScoreResult struct {
@@ -92,6 +93,11 @@ func ValidateTrialResult(result TrialResult) error {
 	}
 	if result.Lifecycle.StartCount > 64 {
 		return ErrTrialResult
+	}
+	for key, value := range result.Evidence {
+		if key == "" || !validDigest(value) {
+			return ErrTrialResult
+		}
 	}
 	return nil
 }

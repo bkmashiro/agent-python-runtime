@@ -67,8 +67,8 @@
       }
     },
     {
-      "id": "pl-hp-checksum-manifest",
-      "sha256": "sha256:62c170531378cedcc2904c56917ddcf368e9b2958faaa9fc5c2970f8acf853ea",
+      "id": "pl-ba-git-history",
+      "sha256": "sha256:51267785ebef85a3836e55c3f38806eeef2802b73b19762527428d0eeb964cc4",
       "stratum": "computer_favored",
       "role": "computer_compatibility",
       "expected_admission": {

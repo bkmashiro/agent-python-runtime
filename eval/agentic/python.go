@@ -62,7 +62,7 @@ type PythonRunResult struct {
 type PythonExecutor struct {
 	mu              sync.Mutex
 	runner          engine.Runner
-	tools           *ToolRuntime
+	tools           PythonToolRuntime
 	prepare         string
 	controller      *workflowBrokerController
 	compactPrebound bool
@@ -75,18 +75,24 @@ type workflowBrokerController struct {
 	active   bool
 	runID    string
 	maxCalls uint32
-	tools    *ToolRuntime
+	tools    PythonToolRuntime
 }
 
-func NewPythonExecutor(runner engine.Runner, tools *ToolRuntime) (*PythonExecutor, error) {
+type PythonToolRuntime interface {
+	TrustedPrepare() (string, error)
+	TrustedPrepareWithPreboundTools() (string, error)
+	NewWorkflowBroker(runID string, maxCalls uint32) (*capability.Broker, error)
+}
+
+func NewPythonExecutor(runner engine.Runner, tools PythonToolRuntime) (*PythonExecutor, error) {
 	return newPythonExecutor(runner, tools, BaselineTreatment())
 }
 
-func NewPythonExecutorForTreatment(runner engine.Runner, tools *ToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
+func NewPythonExecutorForTreatment(runner engine.Runner, tools PythonToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
 	return newPythonExecutor(runner, tools, treatment)
 }
 
-func newPythonExecutor(runner engine.Runner, tools *ToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
+func newPythonExecutor(runner engine.Runner, tools PythonToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
 	if runner == nil || tools == nil {
 		return nil, ErrAgenticRun
 	}
@@ -116,11 +122,11 @@ func newPythonExecutor(runner engine.Runner, tools *ToolRuntime, treatment Devel
 	return executor, nil
 }
 
-func NewWASIPythonExecutor(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools *ToolRuntime) (*PythonExecutor, error) {
+func NewWASIPythonExecutor(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools PythonToolRuntime) (*PythonExecutor, error) {
 	return NewWASIPythonExecutorForTreatment(ctx, wasm, config, tools, BaselineTreatment())
 }
 
-func NewWASIPythonExecutorForTreatment(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools *ToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
+func NewWASIPythonExecutorForTreatment(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, tools PythonToolRuntime, treatment DevelopmentTreatment) (*PythonExecutor, error) {
 	if len(wasm) < 8 || tools == nil {
 		return nil, ErrAgenticRun
 	}

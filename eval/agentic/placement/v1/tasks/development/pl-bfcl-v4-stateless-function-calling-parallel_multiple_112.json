@@ -1,0 +1,165 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Search for a specific book in the library.",
+        "name": "library.search_book",
+        "parameters": {
+          "properties": {
+            "author": {
+              "description": "The author of the book to ensure the precise book is fetched.",
+              "type": "string"
+            },
+            "platform": {
+              "default": "all",
+              "description": "The library where the book should be fetched from.",
+              "type": "string"
+            },
+            "title": {
+              "description": "The title of the book to be searched.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "author"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Fetch the price of a specific artwork on the auction platform.",
+        "name": "art_auction.fetch_artwork_price",
+        "parameters": {
+          "properties": {
+            "artist": {
+              "description": "The artist's name to ensure the precise artwork is fetched.",
+              "type": "string"
+            },
+            "artwork_name": {
+              "description": "The name of the artwork to be searched.",
+              "type": "string"
+            },
+            "platform": {
+              "default": "all",
+              "description": "The platform where the artwork's price should be fetched from.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "artwork_name",
+            "artist"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_112",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "art_auction.fetch_artwork_price": {
+              "artist": [
+                "Vincent Van Gogh"
+              ],
+              "artwork_name": [
+                "Starry Night"
+              ],
+              "platform": [
+                "Sotheby"
+              ]
+            }
+          },
+          {
+            "art_auction.fetch_artwork_price": {
+              "artist": [
+                "Edvard Munch"
+              ],
+              "artwork_name": [
+                "The Scream"
+              ],
+              "platform": [
+                "Christie"
+              ]
+            }
+          },
+          {
+            "library.search_book": {
+              "author": [
+                "Harper Lee"
+              ],
+              "platform": [
+                "New York Public Library"
+              ],
+              "title": [
+                "To Kill a Mockingbird"
+              ]
+            }
+          },
+          {
+            "library.search_book": {
+              "author": [
+                "George Orwell"
+              ],
+              "platform": [
+                "British Library"
+              ],
+              "title": [
+                "1984"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Could you please help me find the price of the artwork named 'Starry Night' by the artist 'Vincent Van Gogh' on the 'Sotheby' auction platform, and then fetch the price of another artwork called 'The Scream' by 'Edvard Munch' on the 'Christie' platform? After that, I would like to search for a book titled 'To Kill a Mockingbird' by the author 'Harper Lee' in the 'New York Public Library', and then look for another book named '1984' by 'George Orwell' in the 'British Library'.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_112",
+    "record_sha256": "sha256:2eb26cc8c5700776cbd8bf1f7434bed932f27762d0c869da1d903fce74279949",
+    "source_id": "bfcl-v4"
+  },
+  "split": "development",
+  "stratum": "direct_favored"
+}

@@ -1,0 +1,597 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory.",
+        "name": "cat",
+        "parameters": {
+          "properties": {
+            "file_name": {
+              "description": "The name of the file from current directory to display. No path is allowed. ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_name"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "file_content": {
+              "description": "The content of the file.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder.",
+        "name": "cd",
+        "parameters": {
+          "properties": {
+            "folder": {
+              "description": "The folder of the directory to change to. You can only change one folder level at a time. ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "folder"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "current_working_directory": {
+              "description": "The new current working directory path.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Copy a file or directory from one location to another.  If the destination is a directory, the source file or directory will be copied into the destination directory.  Both source and destination must be local to the current directory.",
+        "name": "cp",
+        "parameters": {
+          "properties": {
+            "destination": {
+              "description": "The destination name to copy the file or directory to. If the destination is a directory, the source will be copied into this directory. No file paths allowed. ",
+              "type": "string"
+            },
+            "source": {
+              "description": "The name of the file or directory to copy.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "result": {
+              "description": "The result of the copy operation or an error message if the operation fails.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Compare two files of any extension line by line at the current directory.",
+        "name": "diff",
+        "parameters": {
+          "properties": {
+            "file_name1": {
+              "description": "The name of the first file in current directory.",
+              "type": "string"
+            },
+            "file_name2": {
+              "description": "The name of the second file in current directory. ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_name1",
+            "file_name2"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "diff_lines": {
+              "description": "The differences between the two files.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Estimate the disk usage of a directory and its contents.",
+        "name": "du",
+        "parameters": {
+          "properties": {
+            "human_readable": {
+              "default": false,
+              "description": "If True, returns the size in human-readable format (e.g., KB, MB). ",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "disk_usage": {
+              "description": "The estimated disk usage.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal.",
+        "name": "echo",
+        "parameters": {
+          "properties": {
+            "content": {
+              "description": "The content to write or display.",
+              "type": "string"
+            },
+            "file_name": {
+              "default": "None",
+              "description": "The name of the file at current directory to write the content to. Defaults to None. ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "terminal_output": {
+              "description": "The content if no file name is provided, or None if written to file.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Find any file or directories under specific path that contain name in its file name.  This method searches for files of any extension and directories within a specified path that match the given name. If no name is provided, it returns all files and directories in the specified path and its subdirectories. Note: This method performs a recursive search through all subdirectories of the given path.",
+        "name": "find",
+        "parameters": {
+          "properties": {
+            "name": {
+              "default": "None",
+              "description": "The name of the file or directory to search for. If None, all items are returned. ",
+              "type": "string"
+            },
+            "path": {
+              "default": ".",
+              "description": "The directory path to start the search. Defaults to the current directory (\".\").",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "matches": {
+              "description": "A list of matching file and directory paths relative to the given path.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Search for lines in a file of any extension at current directory that contain the specified pattern.",
+        "name": "grep",
+        "parameters": {
+          "properties": {
+            "file_name": {
+              "description": "The name of the file to search. No path is allowed and you can only perform on file at local directory.",
+              "type": "string"
+            },
+            "pattern": {
+              "description": "The pattern to search for. ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_name",
+            "pattern"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "matching_lines": {
+              "description": "Lines that match the pattern.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: List the contents of the current directory.",
+        "name": "ls",
+        "parameters": {
+          "properties": {
+            "a": {
+              "default": false,
+              "description": "Show hidden files and directories. Defaults to False. ",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "current_directory_content": {
+              "description": "A list of the contents of the specified directory.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Create a new directory in the current directory.",
+        "name": "mkdir",
+        "parameters": {
+          "properties": {
+            "dir_name": {
+              "description": "The name of the new directory at current directory. You can only create directory at current directory.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "dir_name"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {},
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another.",
+        "name": "mv",
+        "parameters": {
+          "properties": {
+            "destination": {
+              "description": "The destination name to move the file or directory to. Destination must be local to the current directory and cannot be a path. If destination is not an existing directory like when renaming something, destination is the new file name. ",
+              "type": "string"
+            },
+            "source": {
+              "description": "Source name of the file or directory to move. Source must be local to the current directory.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "result": {
+              "description": "The result of the move operation.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Return the current working directory path.",
+        "name": "pwd",
+        "parameters": {
+          "properties": {},
+          "required": [],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "current_working_directory": {
+              "description": "The current working directory path.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Sort the contents of a file line by line.",
+        "name": "sort",
+        "parameters": {
+          "properties": {
+            "file_name": {
+              "description": "The name of the file appeared at current directory to sort. ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_name"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "sorted_content": {
+              "description": "The sorted content of the file.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the last part of a file of any extension.",
+        "name": "tail",
+        "parameters": {
+          "properties": {
+            "file_name": {
+              "description": "The name of the file to display. No path is allowed and you can only perform on file at local directory.",
+              "type": "string"
+            },
+            "lines": {
+              "default": 10,
+              "description": "The number of lines to display from the end of the file. Defaults to 10. ",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "file_name"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "last_lines": {
+              "description": "The last part of the file.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Create a new file of any extension in the current directory.",
+        "name": "touch",
+        "parameters": {
+          "properties": {
+            "file_name": {
+              "description": "The name of the new file in the current directory. file_name is local to the current directory and does not allow path.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_name"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {},
+          "type": "object"
+        }
+      },
+      {
+        "description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Count the number of lines, words, and characters in a file of any extension from current directory.",
+        "name": "wc",
+        "parameters": {
+          "properties": {
+            "file_name": {
+              "description": "Name of the file of current directory to perform wc operation on.",
+              "type": "string"
+            },
+            "mode": {
+              "default": "l",
+              "description": "Mode of operation ('l' for lines, 'w' for words, 'c' for characters). ",
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_name"
+          ],
+          "type": "object"
+        },
+        "response": {
+          "properties": {
+            "count": {
+              "description": "The count of the number of lines, words, or characters in the file.",
+              "type": "integer"
+            },
+            "type": {
+              "description": "The type of unit we are counting. [Enum]: [\"lines\", \"words\", \"characters\"]",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {
+      "GorillaFileSystem": {
+        "root": {
+          "alex": {
+            "contents": {
+              "workspace": {
+                "contents": {
+                  ".hidden_file": {
+                    "content": "This is a hidden file.",
+                    "type": "file"
+                  },
+                  "archive": {
+                    "contents": {},
+                    "type": "directory"
+                  },
+                  "log.txt": {
+                    "content": "This is a log file. No errors found. Another line. Yet another line. Error: Something went wrong. Final line.",
+                    "type": "file"
+                  }
+                },
+                "type": "directory"
+              }
+            },
+            "type": "directory"
+          }
+        }
+      }
+    },
+    "kind": "local_stateful"
+  },
+  "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_1",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": false,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          [
+            {
+              "arguments": {
+                "a": true
+              },
+              "name": "ls"
+            }
+          ],
+          [
+            {
+              "arguments": {
+                "folder": "workspace"
+              },
+              "name": "cd"
+            },
+            {
+              "arguments": {
+                "destination": "archive",
+                "source": "log.txt"
+              },
+              "name": "mv"
+            }
+          ],
+          [
+            {
+              "arguments": {
+                "folder": "archive"
+              },
+              "name": "cd"
+            },
+            {
+              "arguments": {
+                "file_name": "log.txt",
+                "pattern": "Error"
+              },
+              "name": "grep"
+            }
+          ],
+          [
+            {
+              "arguments": {
+                "file_name": "log.txt",
+                "lines": 20
+              },
+              "name": "tail"
+            }
+          ]
+        ]
+      }
+    },
+    "final_state": {
+      "cwd": "/alex/workspace/archive",
+      "kind": "exact_workspace",
+      "state": {
+        "GorillaFileSystem": {
+          "root": {
+            "alex": {
+              "contents": {
+                "workspace": {
+                  "contents": {
+                    ".hidden_file": {
+                      "content": "This is a hidden file.",
+                      "type": "file"
+                    },
+                    "archive": {
+                      "contents": {
+                        "log.txt": {
+                          "content": "This is a log file. No errors found. Another line. Yet another line. Error: Something went wrong. Final line.",
+                          "type": "file"
+                        }
+                      },
+                      "type": "directory"
+                    }
+                  },
+                  "type": "directory"
+                }
+              },
+              "type": "directory"
+            }
+          }
+        }
+      }
+    }
+  },
+  "request": "I am alex. Check if the current directory is under my name and list all the visible and hidden contents in the current directory now, please.\n\nGo to workspace directory and move one of the 'log.txt' files into a new directory 'archive'.\n\nInvestigate within 'log.txt' for the occurrence of the keyword 'Error'.\n\nFinally, show the last 20 lines the file.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "multi_turn_base_1",
+    "record_sha256": "sha256:adbf36cd8ecb38eab1413c434b841f741af6a951903a191b7a940a90cf7ce346",
+    "source_id": "bfcl-v4"
+  },
+  "split": "decision",
+  "stratum": "pysolate_favored"
+}

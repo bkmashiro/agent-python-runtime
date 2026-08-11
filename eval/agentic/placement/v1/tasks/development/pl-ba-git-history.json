@@ -1,0 +1,80 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "reason": "task requires a compatibility surface outside placement-base-v1",
+      "status": "rejected"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "history.fixture.json": "[{\"subject\":\"Second\"},{\"subject\":\"First\"}]"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-ba-git-history",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "history.fixture.json": "[{\"subject\":\"Second\"},{\"subject\":\"First\"}]",
+        "history.txt": "Second\nFirst\n"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Use the trusted workspace Git module to summarize the last two fixture commits into history.txt.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "ba-git-history",
+    "record_sha256": "sha256:3c82ef477c7f32c450745f790862a904b7fb531f4f3eb67e88a0f6163d68380a",
+    "source_id": "boundary-lab-v1"
+  },
+  "split": "development",
+  "stratum": "computer_favored"
+}

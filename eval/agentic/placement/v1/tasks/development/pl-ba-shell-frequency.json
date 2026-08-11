@@ -1,0 +1,80 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-shell",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "reason": "task requires a compatibility surface outside placement-base-v1",
+      "status": "rejected"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "values.txt": "a\nb\na\n"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-ba-shell-frequency",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "frequencies.txt": "2 a\n1 b\n",
+        "values.txt": "a\nb\na\n"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Use the bounded worker shell pipeline to count unique lines and write descending frequencies.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "ba-shell-frequency",
+    "record_sha256": "sha256:94c73a3ba10c34c2d4d09e5a9a511ee356e9bd31ec7f545ea6eb6e942119102a",
+    "source_id": "boundary-lab-v1"
+  },
+  "split": "development",
+  "stratum": "computer_favored"
+}

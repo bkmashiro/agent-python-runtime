@@ -1,0 +1,730 @@
+{
+  "candidate_count": 80,
+  "candidates": [
+    {
+      "id": "pl-ba-ambient-network",
+      "record_id": "ba-ambient-network",
+      "record_sha256": "sha256:aec533015e4370f754a16529d45bd1dfebe48ad40f5141701f4c378807e683a4",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-configured-js-library",
+      "record_id": "ba-configured-js-library",
+      "record_sha256": "sha256:9e24963de41d6997ccb1c331f376fb834ec11712d93c8bd452ed495879052e02",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-ba-dynamic-import",
+      "record_id": "ba-dynamic-import",
+      "record_sha256": "sha256:7c5d4bc80b682bb82739a295a6b833efdb8fbb787b1d5038a5ddf39f0059d14f",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-git-history",
+      "record_id": "ba-git-history",
+      "record_sha256": "sha256:3c82ef477c7f32c450745f790862a904b7fb531f4f3eb67e88a0f6163d68380a",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-ba-host-absolute-path",
+      "record_id": "ba-host-absolute-path",
+      "record_sha256": "sha256:81b0a1c91c331f78681aeddf34662fca7dc22a4f0520068425764f8e27599185",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-huge-output",
+      "record_id": "ba-huge-output",
+      "record_sha256": "sha256:fa11500e3728804c672e581c1449377ed41172cad8fbf8f32cae52773cc7db49",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-native-process",
+      "record_id": "ba-native-process",
+      "record_sha256": "sha256:f10bb268abcfd265e09da2b37ae44e12979ad3d92e0b324131ef304dc47256e1",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-package-install",
+      "record_id": "ba-package-install",
+      "record_sha256": "sha256:a33dd21a1b13b1e0f3262a1eb617abe993df9f7ae713228ca32b7ebb68c2e489",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-read-credential",
+      "record_id": "ba-read-credential",
+      "record_sha256": "sha256:ecf776f373d67497bd3dad6df155121d73bdab5f9f002cd6b81c687c35257e89",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-recursive-delete",
+      "record_id": "ba-recursive-delete",
+      "record_sha256": "sha256:c381e579160b5dfb2fda0e00e5445e3ebf072d3752c688e0e0316657401feb88",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-send-without-approval",
+      "record_id": "ba-send-without-approval",
+      "record_sha256": "sha256:89845c51ee13cb406ef5bfce61796612dff488387431f6b4b916db4ea307ca6d",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-shell-fallback",
+      "record_id": "ba-shell-fallback",
+      "record_sha256": "sha256:1eebb1a8eb143364e8053602303cd0898b12f273aebdd9482f535c0a882e39ab",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-shell-frequency",
+      "record_id": "ba-shell-frequency",
+      "record_sha256": "sha256:94c73a3ba10c34c2d4d09e5a9a511ee356e9bd31ec7f545ea6eb6e942119102a",
+      "selected": true,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-ba-sqlite-join",
+      "record_id": "ba-sqlite-join",
+      "record_sha256": "sha256:ed4035ed1e5433b4b4f38082234a6477c943418e1db1e1d37f5abd1df8af2e28",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-ba-symlink-escape",
+      "record_id": "ba-symlink-escape",
+      "record_sha256": "sha256:2f8d53cf4f7a56fa1620a2a42d79c0bccc57653f9991e2af8e2c997ba4709939",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-ba-unbounded-loop",
+      "record_id": "ba-unbounded-loop",
+      "record_sha256": "sha256:d04f654807d1ab6956fa906e3fa22552ee28a39679f5d4d66ab9c4f38256c297",
+      "selected": false,
+      "source_id": "boundary-lab-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_1",
+      "record_id": "multi_turn_base_1",
+      "record_sha256": "sha256:adbf36cd8ecb38eab1413c434b841f741af6a951903a191b7a940a90cf7ce346",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_10",
+      "record_id": "multi_turn_base_10",
+      "record_sha256": "sha256:a5c1f95599d559833abf87b1e8e7c5f4b8e1220f3328ce4455571bcfa8ad322b",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_12",
+      "record_id": "multi_turn_base_12",
+      "record_sha256": "sha256:3f225bf4430b12d1c8d3994e755a7d6baad32cc876a7d744f597bfa47d30e6f8",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_25",
+      "record_id": "multi_turn_base_25",
+      "record_sha256": "sha256:571cdae24dededf7f7eb3f088d5f40c7dca1f7992a938c98eb95022e5cbdccd0",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_26",
+      "record_id": "multi_turn_base_26",
+      "record_sha256": "sha256:6effb6d37b3f1de3455edcd1029b7624475a9ee8d446cd7d33c9305c2781e93e",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_29",
+      "record_id": "multi_turn_base_29",
+      "record_sha256": "sha256:a1ac0460afa5a0e74b69de58a5ed2ae7db23917057ab1ad5da6924a565087555",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_3",
+      "record_id": "multi_turn_base_3",
+      "record_sha256": "sha256:cf8d3c3e9bf4c6857f3f4c13b31e96b5a5eb6e8d9f1cd8e80d0e42f118249785",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_37",
+      "record_id": "multi_turn_base_37",
+      "record_sha256": "sha256:9f58b15a514aff6e6f7b884f568d430e8b9a851a5ceb0e8b1f3666200b4b153e",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_39",
+      "record_id": "multi_turn_base_39",
+      "record_sha256": "sha256:9ffde2771aad176503779865ea9124b5a5346236ad64d5fc14ae1631cfd4dd29",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_9",
+      "record_id": "multi_turn_base_9",
+      "record_sha256": "sha256:e38145761e5cd76284d7ead7710dab957018b580967d387d5aa00bef1ad224d0",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_112",
+      "record_id": "parallel_multiple_112",
+      "record_sha256": "sha256:2eb26cc8c5700776cbd8bf1f7434bed932f27762d0c869da1d903fce74279949",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_147",
+      "record_id": "parallel_multiple_147",
+      "record_sha256": "sha256:b58c080051418462f58ebfbbc4a6f9b0dd47c5609b4ba21a4d98a7ad19dc794c",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_156",
+      "record_id": "parallel_multiple_156",
+      "record_sha256": "sha256:f09617f17b65783de122a9237bc12ef2e1bfbc2ef1a961abe228bd3e01737bde",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_157",
+      "record_id": "parallel_multiple_157",
+      "record_sha256": "sha256:c4313f7446fecab8a9525862722f39846d2b2d538e14833fd69e8167dcc627fb",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_168",
+      "record_id": "parallel_multiple_168",
+      "record_sha256": "sha256:98903c3253c87c20d1c4066fd6cca6d1960529cc46c9a3d2e4b3d4fb1a58734b",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_169",
+      "record_id": "parallel_multiple_169",
+      "record_sha256": "sha256:f49173ba980e34df2155fc4ddbfc71e15d35a572da6fcfbb4de89dc4975aa1f6",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_177",
+      "record_id": "parallel_multiple_177",
+      "record_sha256": "sha256:da87d5fe07a89c77c29193f855343be4334e83d6887b9a202ade166227c20f52",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_2",
+      "record_id": "parallel_multiple_2",
+      "record_sha256": "sha256:f3b4dcde868286c93c54027b3f614dbdc74da122eded3be7136a101016c0bce3",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_62",
+      "record_id": "parallel_multiple_62",
+      "record_sha256": "sha256:f2b88b9261043558c6eea6b01013b88de11a6b9a42c7095265fa2d375ea1e82a",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "decision",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_91",
+      "record_id": "parallel_multiple_91",
+      "record_sha256": "sha256:de13df6060074d66fe00b2dd4d0d9e7fcd6aec68247ed1e3ab6c92861a2af9c2",
+      "selected": true,
+      "source_id": "bfcl-v4",
+      "source_split": "development",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-dev_adversarial_authority_001",
+      "record_id": "dev_adversarial_authority_001",
+      "record_sha256": "sha256:f60186e9b3c66b94ee6cb17ae1c600785e4f6c6c65def03e83fbe45580a1914c",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-dev_compensatable_abort_001",
+      "record_id": "dev_compensatable_abort_001",
+      "record_sha256": "sha256:e38c51a0749cabda3fec6756e82032675dc6eff61692e011aa5c74e12edc3cbe",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-dev_data_dependent_branch_001",
+      "record_id": "dev_data_dependent_branch_001",
+      "record_sha256": "sha256:fa85760a21ba62bd8a4a1cfaf8a0d7697be2fffc8dc5c1205f00157bb1d47cfb",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-dev_dynamic_catalog_policy_001",
+      "record_id": "dev_dynamic_catalog_policy_001",
+      "record_sha256": "sha256:3335955a42e7a5dbe42156124dd67fd3b7fe913e0b82955a59302c124192d525",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-dev_exact_reversible_abort_001",
+      "record_id": "dev_exact_reversible_abort_001",
+      "record_sha256": "sha256:600057516c944e2175fc18b2df43d8515e8b0fb3f9513f85d27d08e85473749b",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-dev_fanout_join_filter_001",
+      "record_id": "dev_fanout_join_filter_001",
+      "record_sha256": "sha256:6cf60ddb062c41f697e5a070a96c0c101940fa33689817d596e783e867599d3a",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-dev_irreversible_staging_001",
+      "record_id": "dev_irreversible_staging_001",
+      "record_sha256": "sha256:fc3019fdb7e29117efc6386cc7c72cbc15df8a5dbe6cd35570d2485315ac5e70",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-dev_partial_timeout_retry_001",
+      "record_id": "dev_partial_timeout_retry_001",
+      "record_sha256": "sha256:489c57947ceb620c20e7a800e0a3e5982766bd17ade8a9b2073fe7bbc604d98e",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-dev_schema_projection_001",
+      "record_id": "dev_schema_projection_001",
+      "record_sha256": "sha256:73a495e9ae1c37d37357773941b42e7338c8a36f6b2f95c808a2e58515b9eb53",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-dev_simple_read_001",
+      "record_id": "dev_simple_read_001",
+      "record_sha256": "sha256:f8aac3220305936e50f3a1ab62b87d6fcb02ffcf4be0a8720d73a4d1a359e206",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "development",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-evaluation_adversarial_authority_001",
+      "record_id": "evaluation_adversarial_authority_001",
+      "record_sha256": "sha256:ebf790130a4a166c2ad852af4582dc1e9db1cf79d2b3c9b9e24585e8705ef903",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "boundary"
+    },
+    {
+      "id": "pl-evaluation_compensatable_abort_001",
+      "record_id": "evaluation_compensatable_abort_001",
+      "record_sha256": "sha256:a1e7b526a4b650cef63421dab48fbe65846b2c914146ce7f9e103248d242d10c",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-evaluation_data_dependent_branch_001",
+      "record_id": "evaluation_data_dependent_branch_001",
+      "record_sha256": "sha256:ed2aefb0ea98338671837d0ec6a6818c3f01da3a9d55d74076bcda704198a05f",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-evaluation_dynamic_catalog_policy_001",
+      "record_id": "evaluation_dynamic_catalog_policy_001",
+      "record_sha256": "sha256:70c4dbc246d9b1690b23d4a6212930e3bc6b45522f43ee3011edbae13b1abd05",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-evaluation_exact_reversible_abort_001",
+      "record_id": "evaluation_exact_reversible_abort_001",
+      "record_sha256": "sha256:aa5bce932b34195145f6157d0b15ee70ad74d64d0e09221ed887a20f87622b28",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-evaluation_fanout_join_filter_001",
+      "record_id": "evaluation_fanout_join_filter_001",
+      "record_sha256": "sha256:ef1971f0bc61d22e5bb131fb143d759b8599d5c431021de8aebc9c3f29d82de1",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-evaluation_irreversible_staging_001",
+      "record_id": "evaluation_irreversible_staging_001",
+      "record_sha256": "sha256:948cfaf17fa8e3eb223d86dcbf0f72db3ac0e5d5aec37eb1057d98a7c04f2413",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-evaluation_partial_timeout_retry_001",
+      "record_id": "evaluation_partial_timeout_retry_001",
+      "record_sha256": "sha256:8e86cbab7a16f53c3a8fd54bbaa7f6ae211fd710a580577c36092aff71016117",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-evaluation_schema_projection_001",
+      "record_id": "evaluation_schema_projection_001",
+      "record_sha256": "sha256:5069cdaab080cfd011450e9aa0c5009213c061600a0b82778ed540cee52d77b7",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-evaluation_simple_read_001",
+      "record_id": "evaluation_simple_read_001",
+      "record_sha256": "sha256:34423db50ba13143748b51d10fe09710b2a32747a492941a163e356337ae8f8a",
+      "selected": true,
+      "source_id": "workflowbench-v1",
+      "source_split": "decision",
+      "stratum": "direct_favored"
+    },
+    {
+      "id": "pl-hp-archive-index",
+      "record_id": "hp-archive-index",
+      "record_sha256": "sha256:b4e9792a7e1c1b1750b8e6fe62809a9c506370ceaeabc79032a6db3b278dafeb",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-checksum-manifest",
+      "record_id": "hp-checksum-manifest",
+      "record_sha256": "sha256:e565f7cb79d6961b97aa4463a308cf953c9204b894e9482567ddb44ab6d8d0c0",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-csv-threshold",
+      "record_id": "hp-csv-threshold",
+      "record_sha256": "sha256:3ba532df1f2081f8823c8e1899815035fc0fc65c874ccb53913f1251046dc6da",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-hp-deadline-drafts",
+      "record_id": "hp-deadline-drafts",
+      "record_sha256": "sha256:f4c8f16106d9a89295871e3acd58030752a013df29d69c5498ade14be7317d4d",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-hp-dedupe-contacts",
+      "record_id": "hp-dedupe-contacts",
+      "record_sha256": "sha256:a5dea79da64029f1a8f2fc3d90e93ba61055630f27cd55e5b9fb70880c3dd5de",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-hp-directory-diff",
+      "record_id": "hp-directory-diff",
+      "record_sha256": "sha256:33589535775d49f13ec78f062bce3d2d6d835147930c5409958af5449f549830",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-feed-digest",
+      "record_id": "hp-feed-digest",
+      "record_sha256": "sha256:a7557a412aac3fee5f6693c09e5b1f07c7bbbfa70fae07a387420790386af098",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-hp-file-classify",
+      "record_id": "hp-file-classify",
+      "record_sha256": "sha256:a637ca5c294da75b7a326346400dd3715c979422f094f5483546381b6faa5d2d",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-git-status",
+      "record_id": "hp-git-status",
+      "record_sha256": "sha256:77bffaec0b0a825198e6ab2c2b9318ebcda60796369a3d79c666628db945159e",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-grep-report",
+      "record_id": "hp-grep-report",
+      "record_sha256": "sha256:ec544b6d322fddcbda93055a613c4c6499046da194c9beb246d5db9d2875e80c",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-invoice-discrepancy",
+      "record_id": "hp-invoice-discrepancy",
+      "record_sha256": "sha256:cb9f554534dd71693eafa31984add2e349564b5c6ac9a9a48ee6d68352838af3",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-hp-json-join",
+      "record_id": "hp-json-join",
+      "record_sha256": "sha256:fc5dfd8f8324411486f1c2c016c95a4eaabad75075b9abb6a4be613309995c38",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-hp-jsonl-csv",
+      "record_id": "hp-jsonl-csv",
+      "record_sha256": "sha256:17a7cbabb7bfa9770a20726f7292e710130a35d83225ba2ae56fb4447d2b9348",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-log-severity",
+      "record_id": "hp-log-severity",
+      "record_sha256": "sha256:c33884310cea512b2fb0b645fe237918e2eacebda341e805117b34aca051a93b",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "pysolate_favored"
+    },
+    {
+      "id": "pl-hp-markdown-render",
+      "record_id": "hp-markdown-render",
+      "record_sha256": "sha256:e4d13954cbe768a0ba59492fe1a8ddde8d0916e3e6a2ce8400df50a4834c56c6",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-package-audit",
+      "record_id": "hp-package-audit",
+      "record_sha256": "sha256:730631dcfb1e59a2eac979f8856dc586aa734a737e65cc1c58e2109eb92c3057",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-package-script",
+      "record_id": "hp-package-script",
+      "record_sha256": "sha256:cfd75853ff02dc882e869af1685727e74ec90e7401bb6986cf2035e1342170d6",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-recursive-rename",
+      "record_id": "hp-recursive-rename",
+      "record_sha256": "sha256:ac3ce1f1d1ee19a012b0acf6e90d5536e63a5352915d17ec84a499aba571f688",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-sqlite-query",
+      "record_id": "hp-sqlite-query",
+      "record_sha256": "sha256:627721c5bac5836fa57aeda9774b95b32b415fc5921b973a7e09604388aa4b04",
+      "selected": false,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-stale-project-drafts",
+      "record_id": "hp-stale-project-drafts",
+      "record_sha256": "sha256:ffb51fa5cf611219dd4ad99e2d0e4338f3cd7df85ddafaaf5cfdd71871e5d3b7",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "mixed_capability"
+    },
+    {
+      "id": "pl-hp-symlink-inspect",
+      "record_id": "hp-symlink-inspect",
+      "record_sha256": "sha256:566b77bc55f74227a4c841494538bc250de784d6a38711f597ce64c55aabb96d",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-tree-replace",
+      "record_id": "hp-tree-replace",
+      "record_sha256": "sha256:1202d030633f6a85f476169f035de3a36106c34a82af4dfb99d4af5318cee021",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-xan-summary",
+      "record_id": "hp-xan-summary",
+      "record_sha256": "sha256:a1152593de9a8a20e0d0d97e6573ba17c089f34fda1ecc9397ae4ac1a2a4265a",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    },
+    {
+      "id": "pl-hp-yaml-project",
+      "record_id": "hp-yaml-project",
+      "record_sha256": "sha256:74b31953ecf9031aef8da847055f5dee00fc5637119581059a024c5a72a3bf83",
+      "selected": true,
+      "source_id": "hermes-patterns-v1",
+      "source_split": "development",
+      "stratum": "computer_favored"
+    }
+  ],
+  "schema_version": "placement-candidate-pool/v1",
+  "selected_count": 60,
+  "selection_policy": "All 20 BFCL and 20 WorkflowBench records; quota-stratified SHA-256 selection of 12/24 anonymized Hermes-pattern candidates and 8/16 boundary-lab candidates.",
+  "selection_seed": "sha256:7d897ccb540b73ca8eb7cf783904de952c7680c5f7a92e1eb74adcc92c8852af",
+  "status": "frozen_pre_model"
+}

@@ -1,0 +1,169 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Check hotel availability for a specific location and time frame.",
+        "name": "hilton_hotel.check_availability",
+        "parameters": {
+          "properties": {
+            "check_in_date": {
+              "description": "The check-in date in the format YYYY-MM-DD.",
+              "type": "string"
+            },
+            "check_out_date": {
+              "description": "The check-out date in the format YYYY-MM-DD.",
+              "type": "string"
+            },
+            "hotel_chain": {
+              "default": "Hilton",
+              "description": "The hotel chain where you want to book the hotel.",
+              "type": "string"
+            },
+            "location": {
+              "description": "The city where you want to check hotel availability.",
+              "type": "string"
+            },
+            "no_of_adults": {
+              "description": "The number of adults for the hotel booking.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "location",
+            "check_in_date",
+            "check_out_date",
+            "no_of_adults"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Search for lawsuits against a specific company within a specific time and location.",
+        "name": "lawsuits_search",
+        "parameters": {
+          "properties": {
+            "case_type": {
+              "description": "The type of the case. Options include: 'civil', 'criminal', 'small_claims', etc. If not specified, default to search for all types.",
+              "type": "string"
+            },
+            "company_name": {
+              "description": "The name of the company.",
+              "type": "string"
+            },
+            "location": {
+              "description": "The location where the lawsuit was filed.",
+              "type": "string"
+            },
+            "year": {
+              "description": "The year when the lawsuit was filed.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "company_name",
+            "location",
+            "year"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_168",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "lawsuits_search": {
+              "case_type": [
+                "civil"
+              ],
+              "company_name": [
+                "TechCorp"
+              ],
+              "location": [
+                "San Francisco",
+                "SF"
+              ],
+              "year": [
+                2018
+              ]
+            }
+          },
+          {
+            "hilton_hotel.check_availability": {
+              "check_in_date": [
+                "2022-10-15",
+                "10/15/2022",
+                "Oct. 15, 2022"
+              ],
+              "check_out_date": [
+                "2022-10-20",
+                "10/20/2022",
+                "Oct. 20, 2022"
+              ],
+              "hotel_chain": [
+                "Hilton",
+                ""
+              ],
+              "location": [
+                "New York City",
+                "NYC"
+              ],
+              "no_of_adults": [
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Could you help me with a two-part request? First, I'd like to know if there were any lawsuits filed against the company 'TechCorp' in the location 'San Francisco' in the year 2018, specifically civil cases. Secondly, I'm planning a trip and need to check the availability of Hilton hotels in 'New York City' for the check-in date '2022-10-15' and check-out date '2022-10-20' for 2 adults. Could you assist me with these?",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_168",
+    "record_sha256": "sha256:98903c3253c87c20d1c4066fd6cca6d1960529cc46c9a3d2e4b3d4fb1a58734b",
+    "source_id": "bfcl-v4"
+  },
+  "split": "development",
+  "stratum": "direct_favored"
+}

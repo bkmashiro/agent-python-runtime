@@ -1,0 +1,171 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Retrieve a humidity forecast for a specific location and time frame.",
+        "name": "weather.humidity_forecast",
+        "parameters": {
+          "properties": {
+            "days": {
+              "description": "Number of days for the forecast.",
+              "type": "integer"
+            },
+            "location": {
+              "description": "The city that you want to get the humidity for.",
+              "type": "string"
+            },
+            "min_humidity": {
+              "description": "Minimum level of humidity (in percentage) to filter the result. Default is 0.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "location",
+            "days"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Retrieves the latest game score, individual player stats, and team stats for a specified sports team.",
+        "name": "get_team_score",
+        "parameters": {
+          "properties": {
+            "include_player_stats": {
+              "default": false,
+              "description": "Indicates if individual player statistics should be included in the result. Default is false.",
+              "type": "boolean"
+            },
+            "league": {
+              "description": "The league that the team is part of.",
+              "type": "string"
+            },
+            "team_name": {
+              "description": "The name of the sports team.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "team_name",
+            "league"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_169",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": false,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "get_team_score": {
+              "include_player_stats": [
+                true
+              ],
+              "league": [
+                "NBA"
+              ],
+              "team_name": [
+                "Los Angeles Lakers",
+                "L.A. Lakers"
+              ]
+            }
+          },
+          {
+            "get_team_score": {
+              "include_player_stats": [
+                true
+              ],
+              "league": [
+                "Premier League",
+                "EPL",
+                "English Premier League"
+              ],
+              "team_name": [
+                "Manchester United",
+                "Man United",
+                "Man Utd"
+              ]
+            }
+          },
+          {
+            "weather.humidity_forecast": {
+              "days": [
+                5
+              ],
+              "location": [
+                "New York",
+                "New York, NY",
+                "NYC"
+              ],
+              "min_humidity": [
+                60
+              ]
+            }
+          },
+          {
+            "weather.humidity_forecast": {
+              "days": [
+                7
+              ],
+              "location": [
+                "London"
+              ],
+              "min_humidity": [
+                ""
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Could you please tell me the latest game score, individual player stats, and team stats for the basketball team 'Los Angeles Lakers' in the 'NBA' league? Also, I would like to know the same information but this time for the football team 'Manchester United' in the 'Premier League'. Additionally, could you provide me with a 5-day humidity forecast for New York, ensuring that the minimum humidity level is 60%? Lastly, I would also like to know the humidity forecast for the next 7 days in London, but without any minimum humidity level filter.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_169",
+    "record_sha256": "sha256:f49173ba980e34df2155fc4ddbfc71e15d35a572da6fcfbb4de89dc4975aa1f6",
+    "source_id": "bfcl-v4"
+  },
+  "split": "decision",
+  "stratum": "direct_favored"
+}

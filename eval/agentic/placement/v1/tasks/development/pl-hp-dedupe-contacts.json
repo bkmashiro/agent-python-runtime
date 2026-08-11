@@ -1,0 +1,81 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "contacts.csv": "Ada,ADA@example.test\nAda Two,ada@example.test\nLin,lin@example.test\n"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-hp-dedupe-contacts",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "contacts-clean.csv": "Ada,ada@example.test\nLin,lin@example.test\n",
+        "contacts.csv": "Ada,ADA@example.test\nAda Two,ada@example.test\nLin,lin@example.test\n"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Normalize email addresses in contacts.csv to lowercase, keep the first row for each email, and write canonical CSV to contacts-clean.csv.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "hp-dedupe-contacts",
+    "record_sha256": "sha256:a5dea79da64029f1a8f2fc3d90e93ba61055630f27cd55e5b9fb70880c3dd5de",
+    "source_id": "hermes-patterns-v1"
+  },
+  "split": "development",
+  "stratum": "pysolate_favored"
+}

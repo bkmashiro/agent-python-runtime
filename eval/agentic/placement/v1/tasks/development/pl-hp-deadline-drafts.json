@@ -1,0 +1,81 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "notes.json": "[{\"text\":\"Submit form by 2026-09-02\"},{\"text\":\"No deadline\"},{\"text\":\"Review on 2026-08-30\"}]"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-hp-deadline-drafts",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "deadline-drafts.json": "[{\"date\":\"2026-08-30\"},{\"date\":\"2026-09-02\"}]\n",
+        "notes.json": "[{\"text\":\"Submit form by 2026-09-02\"},{\"text\":\"No deadline\"},{\"text\":\"Review on 2026-08-30\"}]"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Extract explicit ISO-date deadlines from notes.json, sort them, and write task drafts to deadline-drafts.json without creating real tasks.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "hp-deadline-drafts",
+    "record_sha256": "sha256:f4c8f16106d9a89295871e3acd58030752a013df29d69c5498ade14be7317d4d",
+    "source_id": "hermes-patterns-v1"
+  },
+  "split": "development",
+  "stratum": "mixed_capability"
+}

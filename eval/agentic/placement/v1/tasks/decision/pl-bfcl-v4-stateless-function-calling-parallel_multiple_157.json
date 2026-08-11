@@ -1,0 +1,216 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Perform a statistical t-test to check if the means of two independent datasets are statistically different.",
+        "name": "t_test",
+        "parameters": {
+          "properties": {
+            "alpha": {
+              "description": "Significance level for the test. Default is 0.05.",
+              "type": "number"
+            },
+            "dataset_A": {
+              "description": "Dataset A for comparison.",
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "dataset_B": {
+              "description": "Dataset B for comparison.",
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dataset_A",
+            "dataset_B"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Calculate the area of a triangle.",
+        "name": "geometry.area_triangle",
+        "parameters": {
+          "properties": {
+            "base": {
+              "description": "The length of the base of the triangle.",
+              "type": "integer"
+            },
+            "height": {
+              "description": "The height of the triangle from the base.",
+              "type": "integer"
+            },
+            "unit": {
+              "description": "The measurement unit for the area. Defaults to square meters.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "base",
+            "height"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Find upcoming events of a specific genre in a given location.",
+        "name": "event_finder.find_upcoming",
+        "parameters": {
+          "properties": {
+            "days_ahead": {
+              "default": 7,
+              "description": "The number of days from now to include in the search.",
+              "type": "integer"
+            },
+            "genre": {
+              "description": "The genre of events.",
+              "type": "string"
+            },
+            "location": {
+              "description": "The city and state where the search will take place, e.g. New York, NY.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "location",
+            "genre"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_157",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": false,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "geometry.area_triangle": {
+              "base": [
+                15
+              ],
+              "height": [
+                20
+              ],
+              "unit": [
+                "square meters",
+                "m^2",
+                ""
+              ]
+            }
+          },
+          {
+            "geometry.area_triangle": {
+              "base": [
+                10
+              ],
+              "height": [
+                30
+              ],
+              "unit": [
+                "square meters",
+                "m^2",
+                ""
+              ]
+            }
+          },
+          {
+            "t_test": {
+              "alpha": [
+                0.05,
+                ""
+              ],
+              "dataset_A": [
+                [
+                  12,
+                  15,
+                  18,
+                  20,
+                  22,
+                  25
+                ]
+              ],
+              "dataset_B": [
+                [
+                  14,
+                  16,
+                  19,
+                  21,
+                  23,
+                  26
+                ]
+              ]
+            }
+          },
+          {
+            "event_finder.find_upcoming": {
+              "days_ahead": [
+                14
+              ],
+              "genre": [
+                "rock"
+              ],
+              "location": [
+                "Los Angeles, CA",
+                "Los Angeles",
+                "LA, CA"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Could you help me with a few calculations and searches? First, I'd like to calculate the area of a triangle with a base of 15 meters and a height of 20 meters, and I'd like the result in square meters. Then, I have two datasets that I'd like to compare statistically. The first dataset consists of the numbers 12, 15, 18, 20, 22, and 25, and the second dataset consists of the numbers 14, 16, 19, 21, 23, and 26. I'd like to perform a t-test with a significance level of 0.05. After that, I'm interested in finding upcoming rock concerts in Los Angeles, CA for the next 14 days. Lastly, I'd like to calculate the area of another triangle, this time with a base of 10 meters and a height of 30 meters, and again, I'd like the result in square meters.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_157",
+    "record_sha256": "sha256:c4313f7446fecab8a9525862722f39846d2b2d538e14833fd69e8167dcc627fb",
+    "source_id": "bfcl-v4"
+  },
+  "split": "decision",
+  "stratum": "direct_favored"
+}

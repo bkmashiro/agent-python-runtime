@@ -1,0 +1,231 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Locate nearby restaurants based on location and food preferences.",
+        "name": "find_restaurants",
+        "parameters": {
+          "properties": {
+            "dietary_requirements": {
+              "description": "Special dietary requirements, e.g. vegan, gluten-free. Default is all if not specified.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "food_type": {
+              "description": "The type of food preferred.",
+              "type": "string"
+            },
+            "location": {
+              "description": "The specific location or area.",
+              "type": "string"
+            },
+            "number": {
+              "description": "Number of results to return.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "location",
+            "food_type",
+            "number"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Retrieve the match schedule for a specific sports team.",
+        "name": "sports.match_schedule",
+        "parameters": {
+          "properties": {
+            "league": {
+              "description": "The sports league of the team. This is an optional parameter. Default is 'NBA'",
+              "type": "string"
+            },
+            "num_matches": {
+              "description": "The number of upcoming matches you want to get.",
+              "type": "integer"
+            },
+            "team_name": {
+              "description": "The name of the sports team.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "team_name",
+            "num_matches"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Search for a musical instrument within specified budget and of specific type.",
+        "name": "find_instrument",
+        "parameters": {
+          "properties": {
+            "budget": {
+              "description": "Your budget for the instrument.",
+              "type": "integer"
+            },
+            "make": {
+              "description": "Maker of the instrument, Optional parameter. Default is all if not specified.",
+              "type": "string"
+            },
+            "type": {
+              "description": "Type of the instrument",
+              "type": "string"
+            }
+          },
+          "required": [
+            "budget",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Retrieves information about a specific stock based on company's name.",
+        "name": "get_stock_info",
+        "parameters": {
+          "properties": {
+            "company_name": {
+              "description": "The name of the company.",
+              "type": "string"
+            },
+            "detail_level": {
+              "description": "Level of detail for stock information. Can be 'summary' or 'detailed'.",
+              "type": "string"
+            },
+            "market": {
+              "description": "The stock market of interest. Default is 'NASDAQ'",
+              "type": "string"
+            }
+          },
+          "required": [
+            "company_name",
+            "detail_level"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_147",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "find_restaurants": {
+              "dietary_requirements": [
+                [
+                  "vegan"
+                ]
+              ],
+              "food_type": [
+                "Italian"
+              ],
+              "location": [
+                "San Francisco",
+                "SF",
+                "San Francisco, California",
+                "San Francisco, CA"
+              ],
+              "number": [
+                5
+              ]
+            }
+          },
+          {
+            "sports.match_schedule": {
+              "league": [
+                "NBA",
+                ""
+              ],
+              "num_matches": [
+                3
+              ],
+              "team_name": [
+                "Golden State Warriors"
+              ]
+            }
+          },
+          {
+            "get_stock_info": {
+              "company_name": [
+                "Apple Inc."
+              ],
+              "detail_level": [
+                "detailed"
+              ],
+              "market": [
+                "NASDAQ",
+                ""
+              ]
+            }
+          },
+          {
+            "find_instrument": {
+              "budget": [
+                500
+              ],
+              "make": [
+                "Fender"
+              ],
+              "type": [
+                "guitar"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Can you help me plan a day out? I want to start by having lunch at a restaurant in San Francisco that serves Italian food. I would like to see 5 options and I am a vegan. After lunch, I want to catch a match of the Golden State Warriors. Can you tell me their next 3 match schedules in the NBA? Later in the evening, I am thinking of buying some stocks. Can you provide me a detailed information about the Apple Inc. stocks in the NASDAQ market? And finally, I am thinking of buying a guitar. I have a budget of $500. Can you find me a Fender guitar within my budget?",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_147",
+    "record_sha256": "sha256:b58c080051418462f58ebfbbc4a6f9b0dd47c5609b4ba21a4d98a7ad19dc794c",
+    "source_id": "bfcl-v4"
+  },
+  "split": "development",
+  "stratum": "direct_favored"
+}

@@ -1,0 +1,209 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Runs a two sample t-test for two given data groups.",
+        "name": "run_two_sample_ttest",
+        "parameters": {
+          "properties": {
+            "equal_variance": {
+              "default": true,
+              "description": "Assumption about whether the two samples have equal variance.",
+              "type": "boolean"
+            },
+            "group1": {
+              "description": "First group of data points.",
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "group2": {
+              "description": "Second group of data points.",
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "group1",
+            "group2"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Locate the closest sushi restaurant based on certain criteria, such as the presence of a patio.",
+        "name": "restaurant_search.find_closest",
+        "parameters": {
+          "properties": {
+            "amenities": {
+              "description": "Preferred amenities in the restaurant. Default is none if not specified.",
+              "items": {
+                "enum": [
+                  "Patio",
+                  "Wi-Fi",
+                  "Happy Hour",
+                  "Wheelchair Accessible"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "cuisine": {
+              "description": "Type of food like Sushi.",
+              "type": "string"
+            },
+            "location": {
+              "description": "The city, for instance Boston, MA",
+              "type": "string"
+            }
+          },
+          "required": [
+            "location",
+            "cuisine"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Retrieve the common personality traits of people based on their hobbies or activities.",
+        "name": "get_personality_traits",
+        "parameters": {
+          "properties": {
+            "hobby": {
+              "description": "The hobby or activity of interest.",
+              "type": "string"
+            },
+            "trait_count": {
+              "description": "The number of top traits to return, default is 5",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "hobby"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_156",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": false,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "run_two_sample_ttest": {
+              "equal_variance": [
+                true,
+                ""
+              ],
+              "group1": [
+                [
+                  12,
+                  15,
+                  18,
+                  22,
+                  25
+                ]
+              ],
+              "group2": [
+                [
+                  20,
+                  23,
+                  26,
+                  29,
+                  32
+                ]
+              ]
+            }
+          },
+          {
+            "restaurant_search.find_closest": {
+              "amenities": [
+                [
+                  "Patio",
+                  "Wi-Fi"
+                ],
+                [
+                  "Patio"
+                ],
+                [
+                  "Wi-Fi"
+                ]
+              ],
+              "cuisine": [
+                "Sushi"
+              ],
+              "location": [
+                "Boston, MA",
+                "Boston,MA",
+                "Boston",
+                "MA"
+              ]
+            }
+          },
+          {
+            "get_personality_traits": {
+              "hobby": [
+                "painting"
+              ],
+              "trait_count": [
+                5,
+                ""
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Could you please help me with the following tasks? First, I have two groups of data points: group1 consists of [12, 15, 18, 22, 25] and group2 consists of [20, 23, 26, 29, 32]. I want to run a two-sample t-test on these groups with the assumption that they have equal variance. Second, I'm currently in Boston, MA and I'm craving for some Sushi. Could you find the closest sushi restaurant that has a Patio and Wi-Fi? Lastly, I've recently taken up painting as a hobby and I'm curious about the common personality traits associated with it. Could you retrieve the top 5 personality traits of people who enjoy painting?",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_156",
+    "record_sha256": "sha256:f09617f17b65783de122a9237bc12ef2e1bfbc2ef1a961abe228bd3e01737bde",
+    "source_id": "bfcl-v4"
+  },
+  "split": "decision",
+  "stratum": "direct_favored"
+}

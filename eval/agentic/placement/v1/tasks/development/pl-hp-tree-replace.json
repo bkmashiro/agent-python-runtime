@@ -1,0 +1,82 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-shell",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "reason": "task requires a compatibility surface outside placement-base-v1",
+      "status": "rejected"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "a.txt": "OLD_API\n",
+      "nested/b.txt": "x OLD_API y\n"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-hp-tree-replace",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "a.txt": "OLD_API\n",
+        "changed.txt": "a.txt\nnested/b.txt\n",
+        "nested/b.txt": "x OLD_API y\n"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Replace the exact token OLD_API with NEW_API in all .txt files recursively and write the changed path list.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "hp-tree-replace",
+    "record_sha256": "sha256:1202d030633f6a85f476169f035de3a36106c34a82af4dfb99d4af5318cee021",
+    "source_id": "hermes-patterns-v1"
+  },
+  "split": "development",
+  "stratum": "computer_favored"
+}

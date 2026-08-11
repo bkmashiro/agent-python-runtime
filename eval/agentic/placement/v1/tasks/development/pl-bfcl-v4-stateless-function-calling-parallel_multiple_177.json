@@ -1,0 +1,160 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Retrieve the current market value of a particular sculpture by a specific artist.",
+        "name": "get_sculpture_value",
+        "parameters": {
+          "properties": {
+            "artist": {
+              "description": "The name of the artist who created the sculpture.",
+              "type": "string"
+            },
+            "sculpture": {
+              "description": "The name of the sculpture.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sculpture",
+            "artist"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Retrieve key historical events within a specific period for a certain country.",
+        "name": "history.get_key_events",
+        "parameters": {
+          "properties": {
+            "country": {
+              "description": "The name of the country for which history is queried.",
+              "type": "string"
+            },
+            "end_year": {
+              "description": "End year of the period for which history is queried.",
+              "type": "integer"
+            },
+            "event_type": {
+              "description": "Types of event. If none is provided, default that all types will be considered.",
+              "items": {
+                "enum": [
+                  "War",
+                  "Revolutions",
+                  "Diplomacy",
+                  "Economy"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "start_year": {
+              "description": "Start year of the period for which history is queried.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "country",
+            "start_year",
+            "end_year"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_177",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "history.get_key_events": {
+              "country": [
+                "France"
+              ],
+              "end_year": [
+                1900
+              ],
+              "event_type": [
+                [
+                  "War",
+                  "Economy"
+                ]
+              ],
+              "start_year": [
+                1800
+              ]
+            }
+          },
+          {
+            "get_sculpture_value": {
+              "artist": [
+                "Auguste Rodin"
+              ],
+              "sculpture": [
+                "The Thinker"
+              ]
+            }
+          },
+          {
+            "get_sculpture_value": {
+              "artist": [
+                "Auguste Rodin"
+              ],
+              "sculpture": [
+                "The Kiss"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Can you first find out the key historical events related to 'War' and 'Economy' that took place in France between the years 1800 and 1900? After that, could you please tell me the current market value of the sculpture 'The Thinker' created by the artist 'Auguste Rodin'? Lastly, I would also like to know the market value of the sculpture 'The Kiss', also created by 'Auguste Rodin', in the year 1882.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_177",
+    "record_sha256": "sha256:da87d5fe07a89c77c29193f855343be4334e83d6887b9a202ade166227c20f52",
+    "source_id": "bfcl-v4"
+  },
+  "split": "development",
+  "stratum": "direct_favored"
+}

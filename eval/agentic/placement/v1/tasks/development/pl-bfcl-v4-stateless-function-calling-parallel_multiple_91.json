@@ -1,0 +1,165 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Calculate the biomass from the energy given the energy conversion efficiency.",
+        "name": "biological.calc_biomass",
+        "parameters": {
+          "properties": {
+            "efficiency": {
+              "default": 0.1,
+              "description": "The conversion efficiency, default value is 10%.",
+              "type": "number"
+            },
+            "energy": {
+              "description": "The total energy produced.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "energy"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Calculate energy from amount of substance based on its molecular composition.",
+        "name": "biological.calc_energy",
+        "parameters": {
+          "properties": {
+            "joules_per_mol": {
+              "default": 2800.0,
+              "description": "The energy produced or required for the reaction, default value for glucose is 2800 kJ/mol",
+              "type": "number"
+            },
+            "mols": {
+              "description": "Amount of substance in moles.",
+              "type": "number"
+            },
+            "substance": {
+              "description": "The chemical formula of the substance.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mols",
+            "substance"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Calculate the work from energy.",
+        "name": "physical.calc_work",
+        "parameters": {
+          "properties": {
+            "distance": {
+              "description": "The distance over which the work is done.",
+              "type": "number"
+            },
+            "energy": {
+              "description": "The total energy produced.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "energy",
+            "distance"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_91",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "biological.calc_energy": {
+              "joules_per_mol": [
+                2800.0,
+                ""
+              ],
+              "mols": [
+                5.0
+              ],
+              "substance": [
+                "C6H12O6",
+                "glucose"
+              ]
+            }
+          },
+          {
+            "biological.calc_biomass": {
+              "efficiency": [
+                0.1,
+                ""
+              ],
+              "energy": [
+                14000.0
+              ]
+            }
+          },
+          {
+            "physical.calc_work": {
+              "distance": [
+                2.0
+              ],
+              "energy": [
+                1400.0
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Imagine you are a scientist studying the energy production of a certain type of bacteria. You have a sample of this bacteria that has consumed 5 moles of glucose (C6H12O6) and you know that the energy produced from glucose is typically 2800 kJ/mol. You also know that the bacteria's conversion efficiency, or the percentage of energy from glucose that is converted into biomass, is 10%. \n\nFirst, calculate the total energy produced by the bacteria from consuming the glucose. \n\nSecond, calculate the amount of biomass produced by the bacteria given the energy produced and the conversion efficiency. \n\nNow, imagine you are using this bacteria in a bioreactor to power a small machine. The machine needs to move a distance of 2 meters and you want to calculate the work done by the machine. \n\nThird, calculate the work done by the machine given the total energy produced by the bacteria and the distance the machine needs to move.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_91",
+    "record_sha256": "sha256:de13df6060074d66fe00b2dd4d0d9e7fcd6aec68247ed1e3ab6c92861a2af9c2",
+    "source_id": "bfcl-v4"
+  },
+  "split": "development",
+  "stratum": "direct_favored"
+}

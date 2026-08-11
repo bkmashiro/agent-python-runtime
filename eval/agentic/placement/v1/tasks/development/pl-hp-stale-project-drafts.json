@@ -1,0 +1,83 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "projects.json": "[{\"id\":\"p1\"},{\"id\":\"p2\"}]",
+      "statuses.json": "[{\"id\":\"p1\",\"days\":45},{\"id\":\"p2\",\"days\":4}]"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-hp-stale-project-drafts",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "projects.json": "[{\"id\":\"p1\"},{\"id\":\"p2\"}]",
+        "reminder-drafts.json": "[{\"project_id\":\"p1\",\"status\":\"draft\"}]\n",
+        "statuses.json": "[{\"id\":\"p1\",\"days\":45},{\"id\":\"p2\",\"days\":4}]"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Read projects.json and statuses.json, identify projects stale for over 30 days, and write reminder drafts without sending them.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "hp-stale-project-drafts",
+    "record_sha256": "sha256:ffb51fa5cf611219dd4ad99e2d0e4338f3cd7df85ddafaaf5cfdd71871e5d3b7",
+    "source_id": "hermes-patterns-v1"
+  },
+  "split": "development",
+  "stratum": "mixed_capability"
+}

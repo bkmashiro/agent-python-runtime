@@ -1,0 +1,82 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-shell",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "reason": "task requires a compatibility surface outside placement-base-v1",
+      "status": "rejected"
+    }
+  },
+  "capabilities": {
+    "configured_libraries": [],
+    "kind": "workspace_and_configured_libraries",
+    "workspace": [
+      "workspace.read_text",
+      "workspace.write_text",
+      "workspace.list"
+    ]
+  },
+  "environment": {
+    "files": {
+      "a.log": "OK\nERROR first\n",
+      "nested/b.log": "ERROR second\n"
+    },
+    "kind": "workspace"
+  },
+  "id": "pl-hp-grep-report",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 12,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": true,
+  "oracle": {
+    "effect_contract": {
+      "commutative_groups": [],
+      "forbidden": [
+        "ambient_network",
+        "credential_access",
+        "undeclared_process"
+      ],
+      "kind": "declared_dependency_graph",
+      "ordering_edges": [
+        [
+          "workspace.read_text",
+          "workspace.write_text"
+        ]
+      ],
+      "required": [
+        "workspace.read_text",
+        "workspace.write_text"
+      ]
+    },
+    "final_state": {
+      "files": {
+        "a.log": "OK\nERROR first\n",
+        "errors.txt": "a.log:2:ERROR first\nnested/b.log:1:ERROR second\n",
+        "nested/b.log": "ERROR second\n"
+      },
+      "kind": "exact_files"
+    }
+  },
+  "request": "Search all log files recursively for exact ERROR records and write path, line number, and text to errors.txt.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Original synthetic fixture preserving only an anonymized workload shape; no private session text, names, accounts, repositories, or content are retained.",
+    "record_id": "hp-grep-report",
+    "record_sha256": "sha256:ec544b6d322fddcbda93055a613c4c6499046da194c9beb246d5db9d2875e80c",
+    "source_id": "hermes-patterns-v1"
+  },
+  "split": "development",
+  "stratum": "computer_favored"
+}

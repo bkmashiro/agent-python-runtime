@@ -1,0 +1,128 @@
+{
+  "admission": {
+    "computer": {
+      "backend": "worker-javascript",
+      "reason": "the pinned Worker backend admits the declared workspace or configured library surface",
+      "status": "admitted"
+    },
+    "direct": {
+      "reason": "bounded typed Host tools are available",
+      "status": "admitted"
+    },
+    "pysolate": {
+      "profile": "placement-base-v1",
+      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "status": "admitted"
+    }
+  },
+  "capabilities": {
+    "kind": "typed_host_tools",
+    "tools": [
+      {
+        "description": "Calculate the circumference of a circle based on the diameter.",
+        "name": "circle.calculate_circumference",
+        "parameters": {
+          "properties": {
+            "diameter": {
+              "description": "The diameter of the circle.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "diameter"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Calculate the area of a circle based on the radius.",
+        "name": "circle.calculate_area",
+        "parameters": {
+          "properties": {
+            "radius": {
+              "description": "The radius of the circle.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "radius"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Calculate the perimeter of a rectangle based on the length and breadth.",
+        "name": "rectangle.calculate_perimeter",
+        "parameters": {
+          "properties": {
+            "breadth": {
+              "description": "The breadth of the rectangle.",
+              "type": "integer"
+            },
+            "length": {
+              "description": "The length of the rectangle.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "length",
+            "breadth"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "environment": {
+    "initial_state": {},
+    "kind": "stateless"
+  },
+  "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_2",
+  "limits": {
+    "max_output_bytes": 65536,
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_total_tokens": 160000,
+    "max_workspace_bytes": 1048576,
+    "timeout_millis": 120000
+  },
+  "model_visible": false,
+  "oracle": {
+    "effect_contract": {
+      "kind": "bfcl_expected_calls",
+      "oracle": {
+        "kind": "expected_call_trace",
+        "turns": [
+          {
+            "circle.calculate_area": {
+              "radius": [
+                5
+              ]
+            }
+          },
+          {
+            "circle.calculate_circumference": {
+              "diameter": [
+                10
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "final_state": {
+      "kind": "unchanged",
+      "state": {}
+    }
+  },
+  "request": "Find the area and perimeter of a circle with a radius of 5 and also find the circumference of a circle with diameter of 10.",
+  "schema_version": "placement-task/v1",
+  "source": {
+    "adaptation": "Model-visible request, typed tools, initial state, and expected calls are preserved from the digest-bound BFCL safe subset; a final workspace oracle is added for local-stateful tasks.",
+    "record_id": "parallel_multiple_2",
+    "record_sha256": "sha256:f3b4dcde868286c93c54027b3f614dbdc74da122eded3be7136a101016c0bce3",
+    "source_id": "bfcl-v4"
+  },
+  "split": "decision",
+  "stratum": "direct_favored"
+}

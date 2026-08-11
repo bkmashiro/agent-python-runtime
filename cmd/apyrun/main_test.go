@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +26,59 @@ func TestOperatorConfigOnlyAcceptsPoCResourcePolicy(t *testing.T) {
 	}
 	if _, err := decodeOperatorConfig([]byte(`{"transaction_journal_path":"/tmp/journal"}`)); err == nil {
 		t.Fatal("removed transaction journal was accepted")
+	}
+}
+
+func TestOperatorConfigAcceptsOneHostOwnedMountedWorkspace(t *testing.T) {
+	root := t.TempDir()
+	encoded, err := json.Marshal(map[string]any{
+		"workspace": map[string]any{
+			"source_directory": root,
+			"output_capsule":   filepath.Join(root, "state.pwc"),
+			"limits": map[string]any{
+				"max_files": 16, "max_bytes": 1024, "max_file_bytes": 512, "max_depth": 4,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := decodeOperatorConfig(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.resolve(); err != nil {
+		t.Fatal(err)
+	}
+	limits, err := config.Workspace.resolveLimits()
+	if err != nil || limits.MaxFiles != 16 || limits.MaxBytes != 1024 || limits.MaxFileBytes != 512 || limits.MaxDepth != 4 {
+		t.Fatalf("limits=%+v err=%v", limits, err)
+	}
+}
+
+func TestOperatorConfigRejectsAmbiguousOrAgentStyleWorkspaceAuthority(t *testing.T) {
+	root := t.TempDir()
+	cases := []map[string]any{
+		{"workspace_files": map[string]string{"a": "b"}, "workspace": map[string]any{}},
+		{"max_tool_calls": 1, "workspace": map[string]any{}},
+		{"workspace": map[string]any{"source_directory": root, "input_capsule": filepath.Join(root, "in.pwc")}},
+		{"workspace": map[string]any{"source_directory": "relative"}},
+		{"workspace": map[string]any{"input_capsule": root + "/../" + filepath.Base(root) + "/in.pwc"}},
+		{"workspace": map[string]any{"output_capsule": "relative"}},
+		{"workspace": map[string]any{"limits": map[string]any{"max_files": 0, "max_bytes": 1, "max_file_bytes": 1, "max_depth": 1}}},
+	}
+	for index, value := range cases {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config, err := decodeOperatorConfig(encoded)
+		if err != nil {
+			t.Fatalf("case %d decode: %v", index, err)
+		}
+		if _, err := config.resolve(); err == nil {
+			t.Fatalf("case %d was accepted: %s", index, encoded)
+		}
 	}
 }
 

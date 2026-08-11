@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 type operatorConfig struct {
@@ -19,11 +21,26 @@ type operatorConfig struct {
 	ExecutionProfile *executionProfileConfig `json:"execution_profile,omitempty"`
 	WorkspaceFiles   map[string]string       `json:"workspace_files,omitempty"`
 	MaxToolCalls     uint32                  `json:"max_tool_calls,omitempty"`
+	Workspace        *mountedWorkspaceConfig `json:"workspace,omitempty"`
 }
 
 type executionProfileConfig struct {
 	ID             string   `json:"id"`
 	AllowedImports []string `json:"allowed_imports"`
+}
+
+type mountedWorkspaceConfig struct {
+	SourceDirectory string                 `json:"source_directory,omitempty"`
+	InputCapsule    string                 `json:"input_capsule,omitempty"`
+	OutputCapsule   string                 `json:"output_capsule,omitempty"`
+	Limits          *workspaceLimitsConfig `json:"limits,omitempty"`
+}
+
+type workspaceLimitsConfig struct {
+	MaxFiles     uint32 `json:"max_files"`
+	MaxBytes     uint64 `json:"max_bytes"`
+	MaxFileBytes uint64 `json:"max_file_bytes"`
+	MaxDepth     uint32 `json:"max_depth"`
 }
 
 func decodeOperatorConfig(data []byte) (operatorConfig, error) {
@@ -64,8 +81,46 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 		}
 		runConfig.ExecutionProfile = &profile
 	}
+	if config.Workspace != nil {
+		if config.WorkspaceFiles != nil || config.MaxToolCalls != 0 {
+			return runtimeconfig.RunConfig{}, errors.New("mounted workspace and workspace tools are mutually exclusive")
+		}
+		if err := config.Workspace.validate(); err != nil {
+			return runtimeconfig.RunConfig{}, err
+		}
+	}
 	if err := runConfig.Validate(); err != nil {
 		return runtimeconfig.RunConfig{}, fmt.Errorf("invalid operator resource bounds: %w", err)
 	}
 	return runConfig, nil
+}
+
+func (config *mountedWorkspaceConfig) validate() error {
+	if config == nil {
+		return nil
+	}
+	if config.SourceDirectory != "" && config.InputCapsule != "" {
+		return errors.New("workspace accepts at most one source")
+	}
+	for _, value := range []string{config.SourceDirectory, config.InputCapsule, config.OutputCapsule} {
+		if value != "" && (!filepath.IsAbs(value) || filepath.Clean(value) != value) {
+			return errors.New("workspace paths must be clean and absolute")
+		}
+	}
+	_, err := config.resolveLimits()
+	return err
+}
+
+func (config *mountedWorkspaceConfig) resolveLimits() (workspace.Limits, error) {
+	limits := workspace.DefaultLimits()
+	if config != nil && config.Limits != nil {
+		limits = workspace.Limits{
+			MaxFiles: config.Limits.MaxFiles, MaxBytes: config.Limits.MaxBytes,
+			MaxFileBytes: config.Limits.MaxFileBytes, MaxDepth: config.Limits.MaxDepth,
+		}
+	}
+	if err := limits.Validate(); err != nil {
+		return workspace.Limits{}, errors.New("invalid workspace limits")
+	}
+	return limits, nil
 }

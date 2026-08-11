@@ -131,14 +131,16 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	ctx := context.Background()
 	factory := wazeroengine.Factory{}
 	trustedPrepare := ""
+	digest := sha256.Sum256(requestData)
+	runIdentity := fmt.Sprintf("host-%x", digest[:8])
 	if operator.WorkspaceFiles != nil {
-		workspace, err := capability.NewWorkspace(operator.WorkspaceFiles)
+		workspaceTool, err := capability.NewWorkspace(operator.WorkspaceFiles)
 		if err != nil {
 			writeDiagnostic(stderr, "invalid workspace_files")
 			return 2
 		}
 		registry := capability.NewRegistry()
-		if err := capability.RegisterWorkspaceTools(registry, workspace); err != nil {
+		if err := capability.RegisterWorkspaceTools(registry, workspaceTool); err != nil {
 			writeDiagnostic(stderr, "initialize workspace tools")
 			return 1
 		}
@@ -146,30 +148,56 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		if maxCalls == 0 {
 			maxCalls = 8
 		}
-		digest := sha256.Sum256(requestData)
-		runIdentity := fmt.Sprintf("host-%x", digest[:8])
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{RunIdentity: runIdentity, MaxCalls: maxCalls, Registry: registry})
 		}
 		trustedPrepare = workspaceToolPrelude
+	}
+	workspaceBinding, err := prepareMountedWorkspace(operator.Workspace)
+	if err != nil {
+		writeDiagnostic(stderr, err.Error())
+		return 2
+	}
+	if workspaceBinding != nil {
+		defer workspaceBinding.close()
+		factory.WorkspaceManager = workspaceBinding.manager
+		factory.WorkspaceRef = workspaceBinding.ref
+		factory.WorkspaceOwner = runIdentity
 	}
 	runner, err := factory.New(ctx, wasm, runConfig)
 	if err != nil {
 		writeDiagnostic(stderr, "initialize execution backend")
 		return 1
 	}
-	defer runner.Close(context.Background())
-	response, err := runner.Run(ctx, requestData, trustedPrepare)
-	if err != nil {
-		if _, outcomeErr := runtimeconfig.NewUnsupportedOutcome(request, err); outcomeErr == nil {
-			return emitUnsupportedOutcome(request, err, runConfig.MaxResponseBytes, stdout, stderr)
+	runnerClosed := false
+	defer func() {
+		if !runnerClosed {
+			_ = runner.Close(context.Background())
+		}
+	}()
+	response, runErr := runner.Run(ctx, requestData, trustedPrepare)
+	closeErr := runner.Close(context.Background())
+	runnerClosed = true
+	if runErr != nil {
+		if _, outcomeErr := runtimeconfig.NewUnsupportedOutcome(request, runErr); outcomeErr == nil {
+			return emitUnsupportedOutcome(request, runErr, runConfig.MaxResponseBytes, stdout, stderr)
 		}
 		writeDiagnostic(stderr, "execute guest")
+		return 1
+	}
+	if closeErr != nil {
+		writeDiagnostic(stderr, "close execution backend")
 		return 1
 	}
 	if uint64(len(response)) > uint64(runConfig.MaxResponseBytes) {
 		writeDiagnostic(stderr, "response exceeds configured bounds")
 		return 1
+	}
+	if workspaceBinding != nil && workspaceBinding.outputPath != "" {
+		if _, err := workspaceBinding.export(); err != nil {
+			writeDiagnostic(stderr, err.Error())
+			return 1
+		}
 	}
 	if _, err := stdout.Write(append(response, '\n')); err != nil {
 		writeDiagnostic(stderr, "write response")

@@ -59,6 +59,9 @@ func (limits Limits) validate() error {
 	return nil
 }
 
+// Validate rejects zero, internally inconsistent workspace limits.
+func (limits Limits) Validate() error { return limits.validate() }
+
 // InitialFile is a validated value copy provisioned before any guest starts.
 type InitialFile struct {
 	Path       string

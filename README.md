@@ -15,7 +15,7 @@ Agent Python source
   → Host-authored receipts and result
 ```
 
-The active implementation deliberately does not include prepared pools, COW restore, schedulers, durable transactions, MCP daemons, trace databases, benchmark campaigns, or production recovery machinery. Historical findings are summarized in [docs/research-history.md](docs/research-history.md) and remain available in Git history.
+The active implementation deliberately does not include prepared pools, COW restore, schedulers, durable transactions, MCP daemons, trace databases, benchmark campaigns, or production recovery machinery. It does include an optional Host-owned rooted workspace and a complete deterministic storage capsule; neither is a transaction system. Historical findings are summarized in [docs/research-history.md](docs/research-history.md) and remain available in Git history.
 
 ## Requirements
 
@@ -85,6 +85,8 @@ list_files()
 
 The workspace backend is an in-memory PoC store with canonical relative paths and a one-MiB per-file bound. Every Host call is counted and receives a Host-authored receipt.
 
+For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. A run can atomically export the final ordinary-file tree to a new capsule for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
+
 ## Security boundary
 
 The request can provide code, JSON inputs, an optional output schema, and compatibility requirements. It cannot provide:
@@ -107,7 +109,7 @@ cmd/apyrun/                 JSON stdin/stdout CLI
 runtime/                    request, profile and response contracts
 runtime/engine/wazero/      fresh-instance WASI execution
 runtime/capability/         small Host tool registry and broker
-runtime/workspace/          optional bounded WASI workspace mount
+runtime/workspace/          bounded WASI workspace mount and capsule storage
 runtime/receipt/            Host-authored call receipts
 guest/                      CPython/WASI Guest source and build
 abi/v1/                     active JSON schemas

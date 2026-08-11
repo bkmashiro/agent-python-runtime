@@ -31,6 +31,7 @@ The focused suite exercises:
 - bounded WASI workspace behavior;
 - Host-derived `csv` admission;
 - typed in-memory workspace tools;
+- Host-projected rooted workspace and complete capsule continuation;
 - Host-authored receipts.
 
 ## Manual PoC

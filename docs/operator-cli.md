@@ -43,6 +43,23 @@ list_files()
 
 The workspace is in memory. `max_tool_calls` defaults to eight. It does not grant a Host path, socket, subprocess or package installation.
 
+## Mounted workspace and complete capsule storage
+
+As an alternative to `workspace_files`, the Host config may provision a rooted `/workspace` from a validated Host directory snapshot or a complete capsule:
+
+```json
+{
+  "workspace": {
+    "input_capsule": "/absolute/host/state.pwc",
+    "output_capsule": "/absolute/host/next-state.pwc"
+  }
+}
+```
+
+`source_directory` may replace `input_capsule`; omitting both creates an empty workspace. All configured paths must be clean and absolute. `workspace` and `workspace_files` are rejected together rather than creating two inconsistent state planes. The Agent request cannot select either input/output path or change workspace limits.
+
+The Guest accesses this state with ordinary Python file APIs under `/workspace`. `/tmp` remains per-Run scratch. Output capsules are complete, deterministic storage artifacts and are atomically published with mode `0600`; they are not mounted in place or backed by SQLite. See [workspace-capsules.md](workspace-capsules.md).
+
 ## Request
 
 ```json

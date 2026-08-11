@@ -1,0 +1,88 @@
+{
+  "version": "agentic-development-trial/v4",
+  "trial_id": "dev_7a974315eb6a5752ed649f1f51be76ad",
+  "spec_digest": "sha256:7a974315eb6a5752ed649f1f51be76ad60d5978713975b31eaeba7fb60b8bb3f",
+  "task_id": "rd-004",
+  "task_digest": "sha256:2b624a69d1436cae5711cff503067edf4990fc89d32bbc4ac52b118cd48df8f7",
+  "source_record_digest": "sha256:75caa60b97cd8270fb9cb4a81036903ca9c37a8e52e2118460d5bfcbf00b0222",
+  "condition": "direct",
+  "model": "gpt-5.3-codex-spark",
+  "identity": {
+    "repository_commit": "2cc30b2b05b28ec88c05a1f9ddb82e45daf95fd3",
+    "host_artifact_digest": "sha256:3686a1b762456575bc91997558030e4a85a27d327bd3ead48b3380846030e8e5",
+    "dataset_manifest_digest": "sha256:0fd5c7fb91aef34b230f0cf7aadb07a18495d5fa2b376277161d764a4396da60",
+    "provider_catalog_digest": "sha256:24505616d93bea7608c571b0b8a779682e03c3dae74836d54402ce8e7fc4e364",
+    "provider_catalog_observed_at": "2026-08-11T00:06:05Z"
+  },
+  "replicate": 1,
+  "limits": {
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_python_runs": 4,
+    "max_input_tokens": 500000,
+    "max_output_tokens": 65536,
+    "max_total_tokens": 565536,
+    "max_output_tokens_per_call": 8192
+  },
+  "prompt_digest": "sha256:9ebaec40cf3e7e335941203d7572b697b9a9a1f74c2bc7aada227ef7c4524594",
+  "surface_digest": "sha256:cb0c95cf389210595c65669c4800fc082b5d0c2f2427f855da1d0aa031d9b09c",
+  "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+  "treatment_digest": "sha256:6b4f824e92832795d30d3186ce1ba54e2276ca3b6f5f45267c78d252a3ac8435",
+  "passed": false,
+  "metrics": {
+    "outcome_success": false,
+    "strict_pass": false,
+    "trace_exact": false,
+    "final_state_correct": false,
+    "expected_calls": 4,
+    "actual_calls": 3,
+    "extra_calls": 0
+  },
+  "error_code": "host_application_error",
+  "provider_attempts": 2,
+  "provider_calls": 2,
+  "tool_calls": 3,
+  "python_attempts": 0,
+  "python_runs": 0,
+  "usage": {
+    "input_tokens": 29693,
+    "output_tokens": 3291,
+    "total_tokens": 32984
+  },
+  "catalog_digest": "sha256:19a12ac6bd59347ad70012efdffebcb2929aa9bec8cfc14a6ba50d1cdfaf9314",
+  "initial_state_digest": "sha256:e6e1428ecda21b2408dd668b5ee9964401b63503ae3cefa76082b18b2d7526d4",
+  "final_state_digest": "sha256:4d90c5fe09fa227199439633004673783ada4032837a6efd674bfa6eb2f8b99b",
+  "exchanges": [
+    {
+      "status_code": 200,
+      "request_digest": "sha256:54869743475a38b3275218315db7f121026d1b5338af49044bb1a02df6fa6dce",
+      "response_digest": "sha256:21d77e2e535a1b82893e902c9d8a759112767dc3f3348b9aaf50c32a27ef6f6f",
+      "usage": {
+        "input_tokens": 14745,
+        "output_tokens": 2297,
+        "total_tokens": 17042
+      },
+      "instructions_echo": "exact"
+    },
+    {
+      "status_code": 200,
+      "request_digest": "sha256:f2bc41fe996f45c9bc12eb8107939f6ba129ff9722a8b8b61d2c1e98ba41de6a",
+      "response_digest": "sha256:9d180211ab85d7d959ca2a6504c82d5f4fe7767985d6b44360611c7b4f373404",
+      "usage": {
+        "input_tokens": 14948,
+        "output_tokens": 994,
+        "total_tokens": 15942
+      },
+      "instructions_echo": "exact"
+    }
+  ],
+  "stateful_score": {
+    "passed": false,
+    "trace_passed": false,
+    "final_state_passed": false,
+    "expected_calls": 4,
+    "actual_calls": 3,
+    "expected_state_digest": "sha256:6150da381405445228a8df6da67a65648378b21e20f09318ad4bc0351b2039b7",
+    "actual_state_digest": "sha256:4d90c5fe09fa227199439633004673783ada4032837a6efd674bfa6eb2f8b99b"
+  }
+}

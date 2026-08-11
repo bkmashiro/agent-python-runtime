@@ -32,7 +32,7 @@ func TestLinkAPIResponsesProducesDigestOnlyEvidence(t *testing.T) {
 	}
 	payload := json.RawMessage(`{"model":"openai/gpt-test","input":"private prompt","max_output_tokens":64,"stream":false,"background":false}`)
 	response, err := adapter.Exchange(context.Background(), Request{Model: "openai/gpt-test", Payload: payload})
-	if err != nil || response.StatusCode != 200 || response.RequestID != "req_fixture" || response.Usage == nil || response.Usage.TotalTokens != 10 {
+	if err != nil || response.Protocol != LinkAPIResponsesProtocol || response.Evidence().Protocol != LinkAPIResponsesProtocol || response.StatusCode != 200 || response.RequestID != "req_fixture" || response.Usage == nil || response.Usage.TotalTokens != 10 {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
 	evidenceBytes, err := json.Marshal(response.Evidence())

@@ -40,6 +40,7 @@ type Usage struct {
 }
 
 type Response struct {
+	Protocol       string          `json:"protocol,omitempty"`
 	StatusCode     int             `json:"status_code"`
 	Body           json.RawMessage `json:"-"`
 	RequestID      string          `json:"request_id,omitempty"`
@@ -58,7 +59,11 @@ type Evidence struct {
 }
 
 func (response Response) Evidence() Evidence {
-	return Evidence{Protocol: LinkAPIResponsesProtocol, StatusCode: response.StatusCode, RequestID: response.RequestID, RequestDigest: response.RequestDigest, ResponseDigest: response.ResponseDigest, Usage: response.Usage}
+	protocol := response.Protocol
+	if protocol == "" {
+		protocol = LinkAPIResponsesProtocol
+	}
+	return Evidence{Protocol: protocol, StatusCode: response.StatusCode, RequestID: response.RequestID, RequestDigest: response.RequestDigest, ResponseDigest: response.ResponseDigest, Usage: response.Usage}
 }
 
 type Adapter interface {
@@ -131,7 +136,7 @@ func (adapter *LinkAPIResponses) Exchange(ctx context.Context, request Request) 
 	if err != nil || len(body) == 0 || len(body) > maxExchangeBytes || !json.Valid(body) || json.Unmarshal(body, &responseEnvelope) != nil || len(responseEnvelope) == 0 || len(responseEnvelope) > 128 {
 		return Response{}, fmt.Errorf("%w: invalid bounded response", ErrExchange)
 	}
-	response := Response{StatusCode: httpResponse.StatusCode, Body: append(json.RawMessage(nil), body...), RequestDigest: digest(request.Payload), ResponseDigest: digest(body)}
+	response := Response{Protocol: LinkAPIResponsesProtocol, StatusCode: httpResponse.StatusCode, Body: append(json.RawMessage(nil), body...), RequestDigest: digest(request.Payload), ResponseDigest: digest(body)}
 	if candidate := httpResponse.Header.Get("x-request-id"); boundedIdentity.MatchString(candidate) {
 		response.RequestID = candidate
 	}

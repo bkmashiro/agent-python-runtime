@@ -1,0 +1,121 @@
+{
+  "version": "agentic-development-trial/v4",
+  "trial_id": "dev_5fa1c44c115f5103a39d3a028ed58657",
+  "spec_digest": "sha256:5fa1c44c115f5103a39d3a028ed58657be0e7fc71f7f492895d3f01868946087",
+  "task_id": "rd-002",
+  "task_digest": "sha256:d872699b4154b2d47fd0f7ffd6c0df89c2db82039e10265f798a9ae2252ce05b",
+  "source_record_digest": "sha256:a7e4e4bedcb0f7156cf809f761d65e25b0a21694f4401f657b1846918230202d",
+  "condition": "hybrid",
+  "model": "gpt-5.3-codex-spark",
+  "identity": {
+    "repository_commit": "2cc30b2b05b28ec88c05a1f9ddb82e45daf95fd3",
+    "host_artifact_digest": "sha256:3686a1b762456575bc91997558030e4a85a27d327bd3ead48b3380846030e8e5",
+    "dataset_manifest_digest": "sha256:0fd5c7fb91aef34b230f0cf7aadb07a18495d5fa2b376277161d764a4396da60",
+    "provider_catalog_digest": "sha256:24505616d93bea7608c571b0b8a779682e03c3dae74836d54402ce8e7fc4e364",
+    "provider_catalog_observed_at": "2026-08-11T00:11:24Z",
+    "guest_artifact_digest": "sha256:875faf1cd2ee4e141c4a4d1cf19c9e276c88ce748acda505c487adcba0f66d78",
+    "guest_profile": "core"
+  },
+  "replicate": 2,
+  "limits": {
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_python_runs": 4,
+    "max_input_tokens": 500000,
+    "max_output_tokens": 65536,
+    "max_total_tokens": 565536,
+    "max_output_tokens_per_call": 8192
+  },
+  "prompt_digest": "sha256:00d1ffb07a17c6f8a1884d43eb0fc613c4e2f420b030ce464e2411703e9c25d4",
+  "surface_digest": "sha256:d94c015c0ad2771988b9a431c20279f41c52518ddc5c2cdc608d5b0304209390",
+  "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+  "treatment_digest": "sha256:6b4f824e92832795d30d3186ce1ba54e2276ca3b6f5f45267c78d252a3ac8435",
+  "passed": true,
+  "metrics": {
+    "outcome_success": true,
+    "strict_pass": true,
+    "trace_exact": true,
+    "final_state_correct": true,
+    "expected_calls": 2,
+    "actual_calls": 2,
+    "extra_calls": 0
+  },
+  "hybrid_route": {
+    "route": "direct",
+    "reason_code": "known_arguments",
+    "router_prompt_digest": "sha256:00d1ffb07a17c6f8a1884d43eb0fc613c4e2f420b030ce464e2411703e9c25d4",
+    "router_surface_digest": "sha256:d94c015c0ad2771988b9a431c20279f41c52518ddc5c2cdc608d5b0304209390",
+    "execution_prompt_digest": "sha256:9ebaec40cf3e7e335941203d7572b697b9a9a1f74c2bc7aada227ef7c4524594",
+    "execution_surface_digest": "sha256:353c46fe470c02ae5d33b25e8d7936f71f2c9d02fc530718d2234bcb35bb2008",
+    "router_usage": {
+      "input_tokens": 14275,
+      "output_tokens": 424,
+      "total_tokens": 14699
+    },
+    "execution_usage": {
+      "input_tokens": 29176,
+      "output_tokens": 1646,
+      "total_tokens": 30822
+    }
+  },
+  "provider_attempts": 3,
+  "provider_calls": 3,
+  "tool_calls": 2,
+  "python_attempts": 0,
+  "python_runs": 0,
+  "usage": {
+    "input_tokens": 43451,
+    "output_tokens": 2070,
+    "total_tokens": 45521
+  },
+  "catalog_digest": "sha256:e2e2a3f61c88e99db42ce237a24dc422ff6b788da29835d51eccf4737460f4c5",
+  "initial_state_digest": "sha256:ee958bfdbef071e2826eef808b3208798010aca44f91b64e3c976d208fb86f78",
+  "final_state_digest": "sha256:ee3739c4dd79f5950f12eb5aab516301989eb612547be808780495a8504602ab",
+  "text_digests": [
+    "sha256:41ae591841a652c36002e270a43630581c2494758e0d287f02cc5e92c1b8233a"
+  ],
+  "exchanges": [
+    {
+      "status_code": 200,
+      "request_digest": "sha256:949e4baf2d88c6182c3866ca92e23a54577288be0487a61788b881bd764c1930",
+      "response_digest": "sha256:50f4c6889598a610dc8a6379ce8399d4e1dca9464a5a51ce4e135a00050c27e6",
+      "usage": {
+        "input_tokens": 14275,
+        "output_tokens": 424,
+        "total_tokens": 14699
+      },
+      "instructions_echo": "exact"
+    },
+    {
+      "status_code": 200,
+      "request_digest": "sha256:e438b984b2482706d926706875ad10362178cff5e2812d88ba0778e56cf3680a",
+      "response_digest": "sha256:c684ce962fdba1244ea7cd2af7dd8827a4ae0715e1b4189a51e27e3625f34202",
+      "usage": {
+        "input_tokens": 14494,
+        "output_tokens": 775,
+        "total_tokens": 15269
+      },
+      "instructions_echo": "exact"
+    },
+    {
+      "status_code": 200,
+      "request_digest": "sha256:6cfc70d63095c6c2dbe370b11f101a203d3e1d40fa327a409e9ca343e7e30edf",
+      "response_digest": "sha256:89aed6a205a7ad3d4d55a00d95c2dcf7ced61a45a40a86dfa118e546c9e6c868",
+      "usage": {
+        "input_tokens": 14682,
+        "output_tokens": 871,
+        "total_tokens": 15553
+      },
+      "instructions_echo": "exact"
+    }
+  ],
+  "stateful_score": {
+    "passed": true,
+    "trace_passed": true,
+    "final_state_passed": true,
+    "expected_calls": 2,
+    "actual_calls": 2,
+    "expected_state_digest": "sha256:ee3739c4dd79f5950f12eb5aab516301989eb612547be808780495a8504602ab",
+    "actual_state_digest": "sha256:ee3739c4dd79f5950f12eb5aab516301989eb612547be808780495a8504602ab"
+  }
+}

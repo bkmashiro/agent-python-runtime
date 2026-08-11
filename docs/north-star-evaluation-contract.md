@@ -24,6 +24,8 @@ Current Pysolate implements one untrusted Run per served instance. A served fres
 
 For a bounded data-heavy workflow, generated Python reduces model turns and tokens relative to a direct-tool loop without reducing authoritative final-state correctness.
 
+A bounded development pilot using `gpt-5.3-codex-spark` over the corrected six-task routing diagnostic now provides preliminary evidence for this hypothesis. Across two clean replicates, forced Direct passed 11/12 trials with 31 provider calls and 523,521 total Codex CLI tokens; forced Python/Pysolate passed 10/12 with 12 provider calls and 193,471 tokens. On the nine task/replicate pairs where both conditions passed, Python used 62.15% fewer tokens and 60.87% fewer provider calls. The frozen two-stage Hybrid treatment passed only 5/12 and is not ready as a default router. This is development-only evidence: it has no Computer arm, latency measure, profile-qualified placement claim, or general-workload estimate. Exact trial artifacts and checksums are under `eval/agentic/results/codex-spark-routing-2026-08-11/`.
+
 ### H2 — Lifecycle economics
 
 For a matching prepared profile, Pysolate reduces request-path initialization latency relative to fresh CPython/WASI while preserving one-Run-per-served-instance semantics. Preparation, memory, refill, and miss costs must be included.

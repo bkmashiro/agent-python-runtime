@@ -1,0 +1,119 @@
+{
+  "version": "hybrid-regret-artifact/v1",
+  "treatment_digest": "sha256:6b4f824e92832795d30d3186ce1ba54e2276ca3b6f5f45267c78d252a3ac8435",
+  "tasks": [
+    {
+      "cohort_digest": "sha256:43e80d146d8db2c8f3ae8bd85cf3614f9200d13cecb117e191469dbc2286152a",
+      "task_id": "rd-001",
+      "model": "gpt-5.3-codex-spark",
+      "replicate": 1,
+      "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+      "selected_route": "direct",
+      "reason_code": "known_arguments",
+      "comparison": {
+        "outcome_regret": 1,
+        "strict_regret": 1,
+        "provider_call_regret": 2,
+        "token_regret": 31666,
+        "pareto_dominated": true,
+        "dominating_arm": "direct"
+      }
+    },
+    {
+      "cohort_digest": "sha256:fb8fef922bc1fc8cb41dddf617d13a1b1ce1a202f3513494488b7dead1c2a872",
+      "task_id": "rd-002",
+      "model": "gpt-5.3-codex-spark",
+      "replicate": 1,
+      "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+      "selected_route": "direct",
+      "reason_code": "known_arguments",
+      "comparison": {
+        "outcome_regret": 0,
+        "strict_regret": 0,
+        "provider_call_regret": 2,
+        "token_regret": 30501,
+        "pareto_dominated": true,
+        "dominating_arm": "direct"
+      }
+    },
+    {
+      "cohort_digest": "sha256:bf347a10032d32a930458a9e07a94132a86866af1b227b67fa190c15b30bb248",
+      "task_id": "rd-003",
+      "model": "gpt-5.3-codex-spark",
+      "replicate": 1,
+      "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+      "selected_route": "python",
+      "reason_code": "transformation",
+      "comparison": {
+        "outcome_regret": 0,
+        "strict_regret": 0,
+        "provider_call_regret": 1,
+        "token_regret": 16459,
+        "pareto_dominated": true,
+        "dominating_arm": "python"
+      }
+    },
+    {
+      "cohort_digest": "sha256:9d97c7d5b20bf513789e35ce713b497e6f6f2a4226d53a4d2bbec0f5e31915e7",
+      "task_id": "rd-004",
+      "model": "gpt-5.3-codex-spark",
+      "replicate": 1,
+      "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+      "selected_route": "direct",
+      "reason_code": "transformation",
+      "comparison": {
+        "outcome_regret": 1,
+        "strict_regret": 1,
+        "provider_call_regret": 2,
+        "token_regret": 33522,
+        "pareto_dominated": true,
+        "dominating_arm": "python"
+      }
+    },
+    {
+      "cohort_digest": "sha256:5a3dc0d8646800db67975640410c7a1216bcc494f18479f16f4aef92d2828b1d",
+      "task_id": "rd-005",
+      "model": "gpt-5.3-codex-spark",
+      "replicate": 1,
+      "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+      "selected_route": "direct",
+      "reason_code": "known_arguments",
+      "comparison": {
+        "outcome_regret": 0,
+        "strict_regret": 0,
+        "provider_call_regret": 3,
+        "token_regret": 51999,
+        "pareto_dominated": true,
+        "dominating_arm": "direct"
+      }
+    },
+    {
+      "cohort_digest": "sha256:6f9b1079203153570a2409cb90c2a5b37c1a86a1a75fa2994c7c2a290c7cd4ef",
+      "task_id": "rd-006",
+      "model": "gpt-5.3-codex-spark",
+      "replicate": 1,
+      "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+      "selected_route": "python",
+      "reason_code": "output_dependency",
+      "comparison": {
+        "outcome_regret": 1,
+        "strict_regret": 1,
+        "provider_call_regret": 0,
+        "token_regret": 0,
+        "pareto_dominated": false
+      }
+    }
+  ],
+  "report": {
+    "model": "gpt-5.3-codex-spark",
+    "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+    "aggregate": {
+      "tasks": 6,
+      "outcome_regret_tasks": 3,
+      "strict_regret_tasks": 3,
+      "pareto_dominated_tasks": 5,
+      "total_provider_call_regret": 10,
+      "total_token_regret": 164147
+    }
+  }
+}

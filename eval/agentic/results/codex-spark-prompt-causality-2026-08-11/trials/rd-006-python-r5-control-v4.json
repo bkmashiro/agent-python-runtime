@@ -1,0 +1,112 @@
+{
+  "version": "agentic-development-trial/v4",
+  "trial_id": "dev_c327f43720cae97cba45bbf87a8672eb",
+  "spec_digest": "sha256:c327f43720cae97cba45bbf87a8672eb58ab75db274f9948d7ca47a72607570c",
+  "task_id": "rd-006",
+  "task_digest": "sha256:e25884f5f7c4932ced3c8d06643bd3e56b24c00e5abca7a601e09ccf6d127250",
+  "source_record_digest": "sha256:1276fdeaccb94e706072d9bb9be36e196e20027e05c39d84c240a4d54c5307af",
+  "condition": "python",
+  "model": "gpt-5.3-codex-spark",
+  "identity": {
+    "repository_commit": "2f4b18d6531743ca3539cc21b41d4be100ea9e5d",
+    "host_artifact_digest": "sha256:3fa37cc08464b6efd18816e397786374de6d66aa2f89861d6293476abb077055",
+    "dataset_manifest_digest": "sha256:0fd5c7fb91aef34b230f0cf7aadb07a18495d5fa2b376277161d764a4396da60",
+    "provider_catalog_digest": "sha256:24505616d93bea7608c571b0b8a779682e03c3dae74836d54402ce8e7fc4e364",
+    "provider_catalog_observed_at": "2026-08-11T01:42:21Z",
+    "guest_artifact_digest": "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
+    "guest_profile": "core"
+  },
+  "replicate": 5,
+  "limits": {
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_python_runs": 4,
+    "max_input_tokens": 500000,
+    "max_output_tokens": 65536,
+    "max_total_tokens": 565536,
+    "max_output_tokens_per_call": 8192
+  },
+  "prompt_digest": "sha256:00edee92adc1ff69c57bf97caa05f630bc473a6559cc226ec49a2387922d8a21",
+  "surface_digest": "sha256:0880151d0589942091e7e2f2e3c382584a08dafb5d46bc5cf2feb487f0bd236f",
+  "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+  "treatment_digest": "sha256:6b4f824e92832795d30d3186ce1ba54e2276ca3b6f5f45267c78d252a3ac8435",
+  "passed": false,
+  "metrics": {
+    "outcome_success": false,
+    "strict_pass": false,
+    "trace_exact": false,
+    "final_state_correct": false,
+    "expected_calls": 5,
+    "actual_calls": 1,
+    "extra_calls": 0
+  },
+  "error_code": "python_guest_error",
+  "failure_detail": {
+    "class": "host_tool_error",
+    "turn": 0,
+    "capability_calls_before_failure": 1,
+    "retry_eligible": false
+  },
+  "provider_attempts": 1,
+  "provider_calls": 1,
+  "tool_calls": 1,
+  "python_attempts": 1,
+  "python_runs": 1,
+  "usage": {
+    "input_tokens": 14975,
+    "output_tokens": 655,
+    "total_tokens": 15630
+  },
+  "catalog_digest": "sha256:6e9d494c796e348d98022865da5b418c4d559e034c259f8bc610b36ec54f03a2",
+  "initial_state_digest": "sha256:eb1f721514d947ba9e17b5ea9090c13b8bd7f0d3fcd59d82b061de20c549505b",
+  "final_state_digest": "sha256:eb1f721514d947ba9e17b5ea9090c13b8bd7f0d3fcd59d82b061de20c549505b",
+  "exchanges": [
+    {
+      "status_code": 200,
+      "request_digest": "sha256:0261f5e1e44c66639a1af662f2e5c9f465ba9fa5fbaf8fd2550a2fe4bc82db09",
+      "response_digest": "sha256:3ecc4a53c782e01eeca51116a21ac00330c92713a0324e8b6621065942961f60",
+      "usage": {
+        "input_tokens": 14975,
+        "output_tokens": 655,
+        "total_tokens": 15630
+      },
+      "instructions_echo": "exact"
+    }
+  ],
+  "python_evidence": [
+    {
+      "turn": 0,
+      "success": false,
+      "error_code": "python_exception",
+      "failure_class": "host_tool_error",
+      "capability_calls": 1,
+      "request_digest": "sha256:fb84c4754d72e87b1cebaa8abfc5ce38193cb1994fe1b2e879c40f34e333d9ee",
+      "response_digest": "sha256:4fdc33ae58301784803909a5d63ef5c4e6f44639bca88666d3e3a55caaba187e",
+      "result_digest": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model_code_digest": "sha256:7375724512290c97934dfd357b5d84a20d63f8e86c0981cac4f94e7248485cbb",
+      "effective_code_digest": "sha256:cc0a2a281d5510de5aefc88e5e67c287144af72afe06d86724f1a5a32c8d651b",
+      "wrapper_digest": "sha256:be519d1aa39e75ffe8e21e465250d24ea4b2976eea85385b4d670530be89a58c",
+      "execution_ref": {
+        "agent_run_id": "dev_c327f43720cae97cba45bbf87a8672eb",
+        "turn_seq": 0,
+        "output_item_seq": 0,
+        "segment_seq": 0,
+        "invocation_id": "inv_c327f43720cae97cba45bbf87a8672eb_0_0_0",
+        "invocation_attempt": 1,
+        "execution_id": "exec_c327f43720cae97cba45bbf87a8672eb_1",
+        "executed_code_sha256": "sha256:cc0a2a281d5510de5aefc88e5e67c287144af72afe06d86724f1a5a32c8d651b"
+      },
+      "backend": "wazero",
+      "reset_mode": "fresh-instance"
+    }
+  ],
+  "stateful_score": {
+    "passed": false,
+    "trace_passed": false,
+    "final_state_passed": false,
+    "expected_calls": 5,
+    "actual_calls": 1,
+    "expected_state_digest": "sha256:c3c229576d27e0887d9a7c2414ca2a984f34c8726305e44fcf7f4d5893d8f677",
+    "actual_state_digest": "sha256:eb1f721514d947ba9e17b5ea9090c13b8bd7f0d3fcd59d82b061de20c549505b"
+  }
+}

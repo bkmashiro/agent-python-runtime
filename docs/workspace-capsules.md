@@ -91,7 +91,7 @@ A later invocation can restore the complete state:
 }
 ```
 
-The output is written to a mode-`0600` temporary file, synced, and atomically renamed only after the Guest returns a bounded response and the fresh runner closes. A runtime timeout or infrastructure failure does not publish a partial capsule; a bounded Python-error response may publish the resulting snapshot, which is storage evidence rather than an automatic commit. The original capsule remains a valid previous revision when a different output path is used.
+The output is written to a mode-`0600` temporary file, its contents are synced, and it is atomically renamed only after the Guest returns a bounded response and the fresh runner closes. Parent-directory sync is best-effort, so this is atomic publication rather than a claim of crash durability. A runtime timeout or infrastructure failure does not publish a partial capsule; a bounded Python-error response may publish the resulting snapshot, which is storage evidence rather than an automatic commit. The original capsule remains a valid previous revision when a different output path is used. Generic `Manager.ExportCapsule` callers must provide their own temporary-file publication if they require failure atomicity.
 
 ## Deliberate non-goals
 

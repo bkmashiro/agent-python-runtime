@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
 )
 
@@ -89,5 +91,38 @@ func TestMountedWorkspaceBindingFailsClosedWithoutPublishingPartialCapsule(t *te
 	}
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatalf("failed preparation published output: %v", err)
+	}
+}
+
+func TestMountedWorkspaceBindingClosePreservesActiveLeaseForRetry(t *testing.T) {
+	binding, err := prepareMountedWorkspace(&mountedWorkspaceConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := binding.manager.Acquire(binding.ref, "active-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := binding.close(); !errors.Is(err, workspace.ErrWorkspaceBusy) {
+		t.Fatalf("close with active lease err=%v", err)
+	}
+	if binding.closed {
+		t.Fatal("failed close made binding non-retryable")
+	}
+	if _, err := os.Stat(binding.base); err != nil {
+		t.Fatalf("failed close removed manager root: %v", err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+	base := binding.base
+	if err := binding.close(); err != nil {
+		t.Fatal(err)
+	}
+	if !binding.closed {
+		t.Fatal("successful close did not close binding")
+	}
+	if _, err := os.Stat(base); !os.IsNotExist(err) {
+		t.Fatalf("successful close retained manager root: %v", err)
 	}
 }

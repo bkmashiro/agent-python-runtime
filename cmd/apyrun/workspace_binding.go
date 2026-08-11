@@ -114,11 +114,18 @@ func (binding *mountedWorkspaceBinding) close() error {
 	if binding == nil || binding.closed {
 		return nil
 	}
-	binding.closed = true
-	managerErr := binding.manager.Close()
-	removeErr := os.RemoveAll(binding.base)
-	if err := errors.Join(managerErr, removeErr); err != nil {
-		return fmt.Errorf("close mounted workspace: %w", err)
+	if binding.manager != nil {
+		if err := binding.manager.Close(); err != nil {
+			return fmt.Errorf("close mounted workspace: %w", err)
+		}
+		binding.manager = nil
 	}
+	if binding.base != "" {
+		if err := os.RemoveAll(binding.base); err != nil {
+			return fmt.Errorf("remove mounted workspace root: %w", err)
+		}
+		binding.base = ""
+	}
+	binding.closed = true
 	return nil
 }

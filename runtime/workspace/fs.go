@@ -430,7 +430,8 @@ func (file *quotaFile) Write(buffer []byte) (int, experimentalsys.Errno) {
 	if offset < 0 || uint64(offset) > current {
 		return 0, experimentalsys.EACCES
 	}
-	if !filesystem.reserveSize(file.name, uint64(offset)+uint64(len(buffer))) {
+	end, ok := checkedWriteEnd(offset, uint64(len(buffer)))
+	if !ok || !filesystem.reserveSize(file.name, end) {
 		return 0, experimentalsys.EACCES
 	}
 	n, errno := file.delegate.Write(buffer)
@@ -446,7 +447,8 @@ func (file *quotaFile) Pwrite(buffer []byte, offset int64) (int, experimentalsys
 		return 0, experimentalsys.EBADF
 	}
 	current := filesystem.usage.sizes[file.name]
-	if offset < 0 || uint64(offset) > current || !filesystem.reserveSize(file.name, uint64(offset)+uint64(len(buffer))) {
+	end, ok := checkedWriteEnd(offset, uint64(len(buffer)))
+	if offset < 0 || uint64(offset) > current || !ok || !filesystem.reserveSize(file.name, end) {
 		return 0, experimentalsys.EACCES
 	}
 	n, errno := file.delegate.Pwrite(buffer, offset)
@@ -478,7 +480,7 @@ func (filesystem *rootedFS) reserveSize(name string, size uint64) bool {
 	if size <= current {
 		return true
 	}
-	if size > filesystem.limits.MaxFileBytes {
+	if size > filesystem.limits.MaxFileBytes || filesystem.usage.bytes > filesystem.limits.MaxBytes {
 		return false
 	}
 	delta := size - current
@@ -488,6 +490,17 @@ func (filesystem *rootedFS) reserveSize(name string, size uint64) bool {
 	filesystem.usage.sizes[name] = size
 	filesystem.usage.bytes += delta
 	return true
+}
+
+func checkedWriteEnd(offset int64, length uint64) (uint64, bool) {
+	if offset < 0 {
+		return 0, false
+	}
+	start := uint64(offset)
+	if length > ^uint64(0)-start {
+		return 0, false
+	}
+	return start + length, true
 }
 
 func (filesystem *rootedFS) reconcileSize(name string, fallback uint64) {

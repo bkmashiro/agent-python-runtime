@@ -5,12 +5,14 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
+	wazerosys "github.com/tetratelabs/wazero/sys"
 )
 
 func newTestManager(t *testing.T) *Manager {
@@ -411,7 +413,7 @@ func TestWorkspaceCreateFromDirectoryEnforcesLimits(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCreateFromDirectoryRejectsSymlinkRoot(t *testing.T) {
+func TestWorkspaceCreateFromDirectoryRejectsSymlinkRootWithoutPathLeak(t *testing.T) {
 	source := t.TempDir()
 	alias := filepath.Join(t.TempDir(), "source-alias")
 	if err := os.Symlink(source, alias); err != nil {
@@ -422,6 +424,58 @@ func TestWorkspaceCreateFromDirectoryRejectsSymlinkRoot(t *testing.T) {
 		t.Fatalf("symlink source root err=%v", err)
 	} else if strings.Contains(err.Error(), alias) || strings.Contains(err.Error(), source) {
 		t.Fatalf("source Host path leaked in error: %v", err)
+	}
+}
+
+func TestWorkspaceIngressRejectsParentDirectoryReplacement(t *testing.T) {
+	sourcePath := t.TempDir()
+	victim := filepath.Join(sourcePath, "victim")
+	replacement := filepath.Join(sourcePath, "replacement")
+	if err := os.Mkdir(victim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(replacement, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(victim, "value.txt"), []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(replacement, "value.txt"), []byte("replacement"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.OpenRoot(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	rootInfo, err := source.Lstat(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination := t.TempDir()
+	moved := filepath.Join(sourcePath, "victim-original")
+	var mutationErr error
+	mutated := false
+	hooks := &ingressHooks{afterDirectoryRead: func(logicalPath string) {
+		if logicalPath != "victim" || mutated {
+			return
+		}
+		mutated = true
+		if err := os.Rename(victim, moved); err != nil {
+			mutationErr = err
+			return
+		}
+		mutationErr = os.Symlink("replacement", victim)
+	}}
+	err = copySourceDirectory(source, ".", destination, wazerosys.NewStat_t(rootInfo).Dev, DefaultLimits(), &ingressUsage{}, hooks)
+	if mutationErr != nil {
+		t.Fatal(mutationErr)
+	}
+	if !mutated {
+		t.Fatal("test did not replace the source parent")
+	}
+	if !errors.Is(err, ErrInvalidWorkspace) {
+		t.Fatalf("parent replacement err=%v", err)
 	}
 }
 
@@ -438,8 +492,20 @@ func TestWorkspaceCreateRejectsNonCanonicalAndDuplicateInitialFiles(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := manager.Create(files, DefaultLimits()); !errors.Is(err, ErrInvalidWorkspace) {
-				t.Fatalf("create error=%v", err)
+				t.Fatalf("Create() err=%v", err)
 			}
 		})
+	}
+}
+
+func TestWorkspaceCheckedWriteEndRejectsOverflow(t *testing.T) {
+	if _, ok := checkedWriteEnd(-1, 1); ok {
+		t.Fatal("negative offset was accepted")
+	}
+	if _, ok := checkedWriteEnd(math.MaxInt64, math.MaxUint64); ok {
+		t.Fatal("overflowing write end was accepted")
+	}
+	if end, ok := checkedWriteEnd(7, 5); !ok || end != 12 {
+		t.Fatalf("bounded write end=%d ok=%v", end, ok)
 	}
 }

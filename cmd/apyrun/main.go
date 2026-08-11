@@ -177,16 +177,16 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	}()
 	response, runErr := runner.Run(ctx, requestData, trustedPrepare)
 	closeErr := runner.Close(context.Background())
+	if closeErr != nil {
+		writeDiagnostic(stderr, "close execution backend")
+		return 1
+	}
 	runnerClosed = true
 	if runErr != nil {
 		if _, outcomeErr := runtimeconfig.NewUnsupportedOutcome(request, runErr); outcomeErr == nil {
 			return emitUnsupportedOutcome(request, runErr, runConfig.MaxResponseBytes, stdout, stderr)
 		}
 		writeDiagnostic(stderr, "execute guest")
-		return 1
-	}
-	if closeErr != nil {
-		writeDiagnostic(stderr, "close execution backend")
 		return 1
 	}
 	if uint64(len(response)) > uint64(runConfig.MaxResponseBytes) {

@@ -90,7 +90,8 @@ func (limits capsuleLimits) runtimeLimits() Limits {
 // ExportCapsule serializes one inactive workspace into a deterministic,
 // self-contained stream. Host paths, local Refs, leases, interpreter state,
 // capabilities and per-run temporary files are not workspace contents and are
-// intentionally absent.
+// intentionally absent. If serialization fails, the supplied writer may
+// contain a prefix; atomic file publication is a caller responsibility.
 func (manager *Manager) ExportCapsule(ref Ref, writer io.Writer) (CapsuleInfo, error) {
 	if manager == nil {
 		return CapsuleInfo{}, ErrWorkspaceClosed

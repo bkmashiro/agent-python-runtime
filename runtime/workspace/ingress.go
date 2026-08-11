@@ -61,8 +61,12 @@ func (manager *Manager) CreateFromDirectory(source string, limits Limits) (Ref, 
 		}
 	}()
 	usage := &ingressUsage{}
-	if err := copySourceDirectory(sourceRoot, ".", destination, rootDevice, limits, usage); err != nil {
+	if err := copySourceDirectory(sourceRoot, ".", destination, rootDevice, limits, usage, nil); err != nil {
 		return "", err
+	}
+	finalRootInfo, err := os.Lstat(source)
+	if err != nil || !sameSourceObject(rootInfo, finalRootInfo) || !rootInfo.ModTime().Equal(finalRootInfo.ModTime()) {
+		return "", ingressError("source root changed during provisioning")
 	}
 	if _, err := scanOrdinaryTree(destination, limits); err != nil {
 		return "", err
@@ -77,12 +81,16 @@ type ingressUsage struct {
 	bytes   uint64
 }
 
-func copySourceDirectory(source *os.Root, sourceName, destination string, rootDevice uint64, limits Limits, usage *ingressUsage) error {
-	before, err := source.Lstat(sourceName)
+type ingressHooks struct {
+	afterDirectoryRead func(logicalPath string)
+}
+
+func copySourceDirectory(source *os.Root, logicalPath, destination string, rootDevice uint64, limits Limits, usage *ingressUsage, hooks *ingressHooks) error {
+	before, err := source.Lstat(".")
 	if err != nil || !before.IsDir() || wazerosys.NewStat_t(before).Dev != rootDevice {
 		return ingressError("source directory changed or crosses a filesystem boundary")
 	}
-	directory, err := source.Open(sourceName)
+	directory, err := source.Open(".")
 	if err != nil {
 		return ingressError("source directory cannot be opened")
 	}
@@ -95,18 +103,21 @@ func copySourceDirectory(source *os.Root, sourceName, destination string, rootDe
 	if err != nil {
 		return ingressError("source directory cannot be listed")
 	}
+	if hooks != nil && hooks.afterDirectoryRead != nil {
+		hooks.afterDirectoryRead(logicalPath)
+	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	for _, directoryEntry := range entries {
 		name := directoryEntry.Name()
 		relative := name
-		if sourceName != "." {
-			relative = path.Join(sourceName, name)
+		if logicalPath != "." {
+			relative = path.Join(logicalPath, name)
 		}
 		cleaned, err := cleanGuestPath(relative, limits.MaxDepth, false)
 		if err != nil || cleaned != relative {
 			return ingressError("source contains an invalid path")
 		}
-		info, err := source.Lstat(cleaned)
+		info, err := source.Lstat(name)
 		if err != nil {
 			return ingressError("source entry changed during provisioning")
 		}
@@ -130,8 +141,26 @@ func copySourceDirectory(source *os.Root, sourceName, destination string, rootDe
 			if err := os.Mkdir(destinationPath, 0o700); err != nil {
 				return ingressError("workspace directory cannot be materialized")
 			}
-			if err := copySourceDirectory(source, cleaned, destination, rootDevice, limits, usage); err != nil {
-				return err
+			child, err := source.OpenRoot(name)
+			if err != nil {
+				return ingressError("source directory changed during provisioning")
+			}
+			openedChild, statErr := child.Lstat(".")
+			if statErr != nil || !sameSourceObject(info, openedChild) {
+				_ = child.Close()
+				return ingressError("source directory changed during provisioning")
+			}
+			copyErr := copySourceDirectory(child, cleaned, destination, rootDevice, limits, usage, hooks)
+			closeErr := child.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeErr != nil {
+				return ingressError("source directory cannot be closed")
+			}
+			finalChild, err := source.Lstat(name)
+			if err != nil || !sameSourceObject(info, finalChild) || !info.ModTime().Equal(finalChild.ModTime()) {
+				return ingressError("source directory changed during provisioning")
 			}
 			if err := os.Chmod(destinationPath, 0o755); err != nil {
 				return ingressError("workspace directory mode cannot be canonicalized")
@@ -141,12 +170,12 @@ func copySourceDirectory(source *os.Root, sourceName, destination string, rootDe
 		if info.Size() < 0 || uint64(info.Size()) > limits.MaxFileBytes || usage.bytes > limits.MaxBytes-uint64(info.Size()) {
 			return ingressError("source exceeds the byte limit")
 		}
-		if err := copySourceFile(source, cleaned, destinationPath, info); err != nil {
+		if err := copySourceFile(source, name, destinationPath, info); err != nil {
 			return err
 		}
 		usage.bytes += uint64(info.Size())
 	}
-	after, err := directory.Stat()
+	after, err := source.Lstat(".")
 	if err != nil || !sameSourceObject(before, after) || !before.ModTime().Equal(after.ModTime()) {
 		return ingressError("source directory changed during provisioning")
 	}
@@ -173,13 +202,19 @@ func copySourceFile(source *os.Root, sourceName, destination string, before fs.F
 	if err != nil {
 		return ingressError("workspace file cannot be materialized")
 	}
-	copied, copyErr := io.Copy(output, io.LimitReader(input, before.Size()+1))
+	copied, copyErr := io.CopyN(output, input, before.Size())
+	var extra [1]byte
+	extraBytes, extraErr := input.Read(extra[:])
 	closeErr := output.Close()
-	if copyErr != nil || closeErr != nil || copied != before.Size() {
+	if copyErr != nil || closeErr != nil || copied != before.Size() || extraBytes != 0 || extraErr != io.EOF {
 		return ingressError("source file changed or could not be copied")
 	}
 	after, err := input.Stat()
 	if err != nil || !sameSourceObject(before, after) || !before.ModTime().Equal(after.ModTime()) {
+		return ingressError("source file changed during provisioning")
+	}
+	linkedAfter, err := source.Lstat(sourceName)
+	if err != nil || !sameSourceObject(before, linkedAfter) || !before.ModTime().Equal(linkedAfter.ModTime()) {
 		return ingressError("source file changed during provisioning")
 	}
 	if err := os.Chmod(destination, canonicalMode); err != nil {

@@ -1208,6 +1208,41 @@ func TestExactPlanTreatmentAddsGenericExecutionContract(t *testing.T) {
 	}
 }
 
+func TestExactPlanTreatmentProducesValidPythonArtifact(t *testing.T) {
+	dataset, err := LoadRoutingDataset(filepath.Join(datasetRoot(t), "..", "routing", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task Task
+	for _, candidate := range dataset.Tasks {
+		if candidate.ID == "rd-004" {
+			task = candidate
+			break
+		}
+	}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-exact-plan-v5.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := responseFixture(`{"status":"completed","model":"gpt-5.6-luna","output":[{"type":"function_call","status":"completed","call_id":"exact-plan","name":"run_python","arguments":"{\"code\":\"private code\"}"}]}`, 20, 5)
+	identity := ExecutionIdentity{
+		RepositoryCommit: strings.Repeat("a", 40), HostArtifactDigest: "sha256:" + strings.Repeat("a", 64),
+		DatasetManifestDigest: "sha256:" + strings.Repeat("b", 64), ProviderCatalogDigest: "sha256:" + strings.Repeat("d", 64),
+		ProviderCatalogObservedAt: "2026-07-26T11:00:00Z", GuestArtifactDigest: "sha256:" + strings.Repeat("c", 64), GuestProfile: "core",
+	}
+	factory := func(tools *ToolRuntime) (PythonWorkflow, error) {
+		var oracle StatefulOracle
+		if decodeStrict(task.Oracle, &oracle) != nil {
+			return nil, ErrDataset
+		}
+		return &oracleWorkflow{tools: tools, oracle: oracle, compact: true}, nil
+	}
+	result, err := RunDevelopmentDiagnosticTrialForModelWithIdentityAndTreatment(context.Background(), &scriptedAdapter{responses: []provider.Response{response}}, task, ConditionPython, luna56DevelopmentModel, 0, developmentTrialLimits(1), identity, treatment, factory)
+	if err != nil || !result.Passed || ValidateTrialResult(result) != nil {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func TestCompactPythonSDKPreservesParameterTypes(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_147")
 	runtime, err := NewToolRuntime(task)

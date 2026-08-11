@@ -1,0 +1,148 @@
+{
+  "version": "agentic-development-trial/v4",
+  "trial_id": "dev_b0a2f55152c9cb4ea4e1f592cd525506",
+  "spec_digest": "sha256:b0a2f55152c9cb4ea4e1f592cd5255061ef4968a897be11849ac3951aeb4f460",
+  "task_id": "rd-006",
+  "task_digest": "sha256:e25884f5f7c4932ced3c8d06643bd3e56b24c00e5abca7a601e09ccf6d127250",
+  "source_record_digest": "sha256:1276fdeaccb94e706072d9bb9be36e196e20027e05c39d84c240a4d54c5307af",
+  "condition": "python",
+  "model": "gpt-5.3-codex-spark",
+  "identity": {
+    "repository_commit": "2f4b18d6531743ca3539cc21b41d4be100ea9e5d",
+    "host_artifact_digest": "sha256:3fa37cc08464b6efd18816e397786374de6d66aa2f89861d6293476abb077055",
+    "dataset_manifest_digest": "sha256:0fd5c7fb91aef34b230f0cf7aadb07a18495d5fa2b376277161d764a4396da60",
+    "provider_catalog_digest": "sha256:24505616d93bea7608c571b0b8a779682e03c3dae74836d54402ce8e7fc4e364",
+    "provider_catalog_observed_at": "2026-08-11T01:42:21Z",
+    "guest_artifact_digest": "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
+    "guest_profile": "core"
+  },
+  "replicate": 5,
+  "limits": {
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_python_runs": 4,
+    "max_input_tokens": 500000,
+    "max_output_tokens": 65536,
+    "max_total_tokens": 565536,
+    "max_output_tokens_per_call": 8192
+  },
+  "prompt_digest": "sha256:2ac26b7b8019b4180bb80073f997afc6141e60aeddd31d3b70f2b530a6d4a647",
+  "surface_digest": "sha256:0880151d0589942091e7e2f2e3c382584a08dafb5d46bc5cf2feb487f0bd236f",
+  "treatment_id": "hybrid-two-stage-prebound-exact-plan-v5",
+  "treatment_digest": "sha256:949f369f47d31a76536c8c2ce7d30aa8952ab5d63218228ffd5bc4d5ae41efe7",
+  "passed": false,
+  "metrics": {
+    "outcome_success": false,
+    "strict_pass": false,
+    "trace_exact": false,
+    "final_state_correct": false,
+    "expected_calls": 5,
+    "actual_calls": 5,
+    "extra_calls": 0
+  },
+  "python_repair": {
+    "offered": true,
+    "attempted": true,
+    "succeeded": true,
+    "turn": 0,
+    "original_failure_class": "python_exception",
+    "original_failure_digest": "sha256:053480c9d0ef60628a11fd18aa2a5c1c056a4c567c0bb956952cb73614d00294",
+    "capability_calls_before_failure": 0
+  },
+  "provider_attempts": 2,
+  "provider_calls": 2,
+  "tool_calls": 5,
+  "python_attempts": 2,
+  "python_runs": 2,
+  "usage": {
+    "input_tokens": 30316,
+    "output_tokens": 2786,
+    "total_tokens": 33102
+  },
+  "catalog_digest": "sha256:6e9d494c796e348d98022865da5b418c4d559e034c259f8bc610b36ec54f03a2",
+  "initial_state_digest": "sha256:eb1f721514d947ba9e17b5ea9090c13b8bd7f0d3fcd59d82b061de20c549505b",
+  "final_state_digest": "sha256:e1d4a74a6b093c622c69ca42fbb2cc2bdd435219f09175a269801863e57c784d",
+  "exchanges": [
+    {
+      "status_code": 200,
+      "request_digest": "sha256:c6d923ac996f1ef819cdd4730ba2525c9bd939329172f258ef5d6cd487438af7",
+      "response_digest": "sha256:804f3d91b20be7f80b4a4df090392e2d74e047dd10d975431bfed0a9cd26099b",
+      "usage": {
+        "input_tokens": 15049,
+        "output_tokens": 1709,
+        "total_tokens": 16758
+      },
+      "instructions_echo": "exact"
+    },
+    {
+      "status_code": 200,
+      "request_digest": "sha256:ac97c66b812f45a8536d274b95cc9c6f983c62452c4cdce99dc3e72057c752d6",
+      "response_digest": "sha256:6d5cd5cc3d80c67cd2f05f3a764c4145132bf1ddd00264fed5ff48f81e7a5f05",
+      "usage": {
+        "input_tokens": 15267,
+        "output_tokens": 1077,
+        "total_tokens": 16344
+      },
+      "instructions_echo": "exact"
+    }
+  ],
+  "python_evidence": [
+    {
+      "turn": 0,
+      "success": false,
+      "error_code": "python_exception",
+      "failure_class": "python_exception",
+      "capability_calls": 0,
+      "request_digest": "sha256:3784188048d1f21d03b1e1b5649329df4b51e443f5c8c2549571ee8a82681349",
+      "response_digest": "sha256:5c5ef628cd71676e1a74a65b92025eae6435295dfa8b275e7e2688e49c6c152d",
+      "result_digest": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model_code_digest": "sha256:bb22d911227be88ff27431a7239da5e3d1c48fbd0d5d12327635c7e41c7ae7cc",
+      "effective_code_digest": "sha256:c3903e6661ec9093ddf653f34ee4259fe22da93e8bcbd5b2838aeeeff8f35a0a",
+      "wrapper_digest": "sha256:be519d1aa39e75ffe8e21e465250d24ea4b2976eea85385b4d670530be89a58c",
+      "execution_ref": {
+        "agent_run_id": "dev_b0a2f55152c9cb4ea4e1f592cd525506",
+        "turn_seq": 0,
+        "output_item_seq": 0,
+        "segment_seq": 0,
+        "invocation_id": "inv_b0a2f55152c9cb4ea4e1f592cd525506_0_0_0",
+        "invocation_attempt": 1,
+        "execution_id": "exec_b0a2f55152c9cb4ea4e1f592cd525506_1",
+        "executed_code_sha256": "sha256:c3903e6661ec9093ddf653f34ee4259fe22da93e8bcbd5b2838aeeeff8f35a0a"
+      },
+      "backend": "wazero",
+      "reset_mode": "fresh-instance"
+    },
+    {
+      "turn": 0,
+      "success": true,
+      "capability_calls": 5,
+      "request_digest": "sha256:0ba581b5f864f085f0b293dba280cd536a55b1bd5b699e7ca0f7e9f036b7dbab",
+      "response_digest": "sha256:a7013fe187e22478ee2020de7ba3969fb27a0f7eb304ff7710ba9c803b6a670d",
+      "result_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "model_code_digest": "sha256:6a4147ff6a85e5d2007998b8053bbebfe2cf72a99d1f18f81aff1300f2e00d98",
+      "effective_code_digest": "sha256:67f0cb9159b1a7fdf3050ef34884b73dd1e00e57eff1c2218ccb2d13ee697ebc",
+      "wrapper_digest": "sha256:be519d1aa39e75ffe8e21e465250d24ea4b2976eea85385b4d670530be89a58c",
+      "execution_ref": {
+        "agent_run_id": "dev_b0a2f55152c9cb4ea4e1f592cd525506",
+        "turn_seq": 0,
+        "output_item_seq": 0,
+        "segment_seq": 0,
+        "invocation_id": "inv_b0a2f55152c9cb4ea4e1f592cd525506_0_0_0",
+        "invocation_attempt": 1,
+        "execution_id": "exec_b0a2f55152c9cb4ea4e1f592cd525506_2",
+        "executed_code_sha256": "sha256:67f0cb9159b1a7fdf3050ef34884b73dd1e00e57eff1c2218ccb2d13ee697ebc"
+      },
+      "backend": "wazero",
+      "reset_mode": "fresh-instance"
+    }
+  ],
+  "stateful_score": {
+    "passed": false,
+    "trace_passed": false,
+    "final_state_passed": false,
+    "expected_calls": 5,
+    "actual_calls": 5,
+    "expected_state_digest": "sha256:c3c229576d27e0887d9a7c2414ca2a984f34c8726305e44fcf7f4d5893d8f677",
+    "actual_state_digest": "sha256:e1d4a74a6b093c622c69ca42fbb2cc2bdd435219f09175a269801863e57c784d"
+  }
+}

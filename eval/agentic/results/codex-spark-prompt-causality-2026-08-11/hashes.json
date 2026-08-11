@@ -1,0 +1,161 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "sha256:9ec9a47b173bd1804cbee0e8cccdbf8976801d1b3746f4e27c436c52d28cceef"
+    },
+    {
+      "path": "failure-analysis.json",
+      "sha256": "sha256:963f8a5772562a28d2cebf961d513e605d1b3128d69bd5c41f75e948f4ef592d"
+    },
+    {
+      "path": "summary.json",
+      "sha256": "sha256:0020083a6e361fc88af7bd27c06498b353926caec437dda90cdea3d43f92eb13"
+    },
+    {
+      "path": "trials/rd-004-python-r0-control-v4.json",
+      "sha256": "sha256:46ae0c55639f8253eb08f91896d1227ece19880953bc0a3ad819ea166e5e01fb"
+    },
+    {
+      "path": "trials/rd-004-python-r0-exact-plan-v5.json",
+      "sha256": "sha256:6baaecc91d93f33a40320f58f6fb28d421d5d99e2b8faafae5bc04fc7761c9a3"
+    },
+    {
+      "path": "trials/rd-004-python-r0-initial-cwd-v6.json",
+      "sha256": "sha256:210034ebdff7a6f1c00b19e6e8b6e378ed82e3fe8337d05ff856018ec8df91d1"
+    },
+    {
+      "path": "trials/rd-004-python-r1-control-v4.json",
+      "sha256": "sha256:41f72158e396b1412755562626ae435e0529fbba5b52757db75997b6b59a73f3"
+    },
+    {
+      "path": "trials/rd-004-python-r1-exact-plan-v5.json",
+      "sha256": "sha256:1b4021ac97284cdb3e6855749f2846c9e54ad4eaaf861c42eb7412d18b61d0f1"
+    },
+    {
+      "path": "trials/rd-004-python-r1-initial-cwd-v6.json",
+      "sha256": "sha256:7dc2f29d3828e42742415ae381fdaa4395fa0fcdaf07d273ae616b78986448ad"
+    },
+    {
+      "path": "trials/rd-004-python-r2-control-v4.json",
+      "sha256": "sha256:72892232bb60ebc81941831aa67e2d0aee7c3d824f3001ba159058ff17ab8925"
+    },
+    {
+      "path": "trials/rd-004-python-r2-exact-plan-v5.json",
+      "sha256": "sha256:a13e42bdcb5c3cd62b6ce872ddcda811d46fb21800e35efd897518a5cbd4a90f"
+    },
+    {
+      "path": "trials/rd-004-python-r2-initial-cwd-v6.json",
+      "sha256": "sha256:9491dee4862cf854991696e2e2eb1a8e2f514e206ef2c41ed8e0bdb66049e88c"
+    },
+    {
+      "path": "trials/rd-004-python-r3-control-v4.json",
+      "sha256": "sha256:0426ca86f9f3ab324ecd76afa6d93d5c7b0aec748c3d92ea32328f3a8a9582cc"
+    },
+    {
+      "path": "trials/rd-004-python-r3-exact-plan-v5.json",
+      "sha256": "sha256:4084dff9a02a4ec2752d0fac5aa3fd01eb6fa7180b5b4d0cabd03702b192bffb"
+    },
+    {
+      "path": "trials/rd-004-python-r3-initial-cwd-v6.json",
+      "sha256": "sha256:917f754d00e2a02f5767656c49d40891e90a9f526118c41271fda5200e47297c"
+    },
+    {
+      "path": "trials/rd-004-python-r4-control-v4.json",
+      "sha256": "sha256:633db463755e645e9968ab52b1438f6d20036ca6b9bf4fc7ee4ced7f3e2644ef"
+    },
+    {
+      "path": "trials/rd-004-python-r4-exact-plan-v5.json",
+      "sha256": "sha256:61b524a7fe12d28d507391c5d7ad21f28ff39bfde6e9d29b922ffe379aee5716"
+    },
+    {
+      "path": "trials/rd-004-python-r4-initial-cwd-v6.json",
+      "sha256": "sha256:55cebbf71580695912528dcedc9f9226bb07f45b9e6d141cf865011cb5e133d5"
+    },
+    {
+      "path": "trials/rd-004-python-r5-control-v4.json",
+      "sha256": "sha256:60a5a52794926bb58eebd9deefe7e5f0ed08b8683820f9007a64b97a4ab98a56"
+    },
+    {
+      "path": "trials/rd-004-python-r5-exact-plan-v5.json",
+      "sha256": "sha256:f5a42e734760ef03160d36f3b4c2adbcf12bcd895bad68614323c0cd416bf535"
+    },
+    {
+      "path": "trials/rd-004-python-r5-initial-cwd-v6.json",
+      "sha256": "sha256:6a14ee0095e07542385d0a9e0715ffa3c91cd0eda78d1f1e5ca444311884ddf3"
+    },
+    {
+      "path": "trials/rd-006-python-r0-control-v4.json",
+      "sha256": "sha256:98346f3c2c0e1640384eff048ba612bce2bacd9791ebbc7c6e9b00d46921bd63"
+    },
+    {
+      "path": "trials/rd-006-python-r0-exact-plan-v5.json",
+      "sha256": "sha256:574efba21d894c2ea49222ab16d2170ad1ac25ba8117303c283ba2d3a917ed14"
+    },
+    {
+      "path": "trials/rd-006-python-r0-initial-cwd-v6.json",
+      "sha256": "sha256:2c2d21b910166a6c9234fe0306732876677036505b7a3017af20a438065abe1f"
+    },
+    {
+      "path": "trials/rd-006-python-r1-control-v4.json",
+      "sha256": "sha256:a8816bd4b6748b45a911653ad048f845fde721f35bccd2d7a21cc6c8b6598261"
+    },
+    {
+      "path": "trials/rd-006-python-r1-exact-plan-v5.json",
+      "sha256": "sha256:42b0a5ddacad3925a589a5734b10b34ea95f3b10522e4af8ba7e1f59f824dc96"
+    },
+    {
+      "path": "trials/rd-006-python-r1-initial-cwd-v6.json",
+      "sha256": "sha256:bd71adcaf38f7adecf16d113f35234502915644935cedb68b5398e79545f515b"
+    },
+    {
+      "path": "trials/rd-006-python-r2-control-v4.json",
+      "sha256": "sha256:431427d157581d3a5d8f568776a9a6cb675cb03290a409b78f48e4fc4e738096"
+    },
+    {
+      "path": "trials/rd-006-python-r2-exact-plan-v5.json",
+      "sha256": "sha256:4770c45452b85c53fd0f562eb69154cd4708f0cfde6bc8acc372542639de91c3"
+    },
+    {
+      "path": "trials/rd-006-python-r2-initial-cwd-v6.json",
+      "sha256": "sha256:6db47e853a0fb7b8aea788dfce4c3ae16f9d7a683891a47f616bbc49d464dd1c"
+    },
+    {
+      "path": "trials/rd-006-python-r3-control-v4.json",
+      "sha256": "sha256:f544b8cf577d4966cec15350497a5dd2a521ac4d08bcf516299841ead544d7d1"
+    },
+    {
+      "path": "trials/rd-006-python-r3-exact-plan-v5.json",
+      "sha256": "sha256:50ea9428e187f27e535de9b9085f7c0eb23fded75ada01172a89b3c0c883517f"
+    },
+    {
+      "path": "trials/rd-006-python-r3-initial-cwd-v6.json",
+      "sha256": "sha256:076a308d8368b8d14f9749af896b6b7684c05a9735f279237cbd6d40d6171b77"
+    },
+    {
+      "path": "trials/rd-006-python-r4-control-v4.json",
+      "sha256": "sha256:29117b05112662ecd15a8e840ea0ff86528dcee4b7320bf1e6ff32f127351913"
+    },
+    {
+      "path": "trials/rd-006-python-r4-exact-plan-v5.json",
+      "sha256": "sha256:e94c4b15a15eab52d473d2dec17dfa15aa693d7eea96e774e2441d092ed6ca7f"
+    },
+    {
+      "path": "trials/rd-006-python-r4-initial-cwd-v6.json",
+      "sha256": "sha256:e5118dd510140854eb8cab00ec91ea2294a3c63865728bbc852920a30aa11edb"
+    },
+    {
+      "path": "trials/rd-006-python-r5-control-v4.json",
+      "sha256": "sha256:559b3e8471c3106cd92cd18f11494846546623bcd6f29d63d340233348c0fa2d"
+    },
+    {
+      "path": "trials/rd-006-python-r5-exact-plan-v5.json",
+      "sha256": "sha256:3787be60c4478273f6da57ef5520aa3d2f2b3a59a91287614e79fea47d7a45f9"
+    },
+    {
+      "path": "trials/rd-006-python-r5-initial-cwd-v6.json",
+      "sha256": "sha256:1bb29a0c712a78933948dd1e04293139c4467de809c89280a684ce2bbd8b7056"
+    }
+  ],
+  "schema_version": "codex-spark-prompt-causality-hashes/v1"
+}

@@ -1,0 +1,103 @@
+{
+  "version": "agentic-development-trial/v4",
+  "trial_id": "dev_684648134cabac723f3ae026ec135f80",
+  "spec_digest": "sha256:684648134cabac723f3ae026ec135f806a0ede4ec0172646149c6f364722b19c",
+  "task_id": "rd-004",
+  "task_digest": "sha256:2b624a69d1436cae5711cff503067edf4990fc89d32bbc4ac52b118cd48df8f7",
+  "source_record_digest": "sha256:75caa60b97cd8270fb9cb4a81036903ca9c37a8e52e2118460d5bfcbf00b0222",
+  "condition": "python",
+  "model": "gpt-5.3-codex-spark",
+  "identity": {
+    "repository_commit": "2f4b18d6531743ca3539cc21b41d4be100ea9e5d",
+    "host_artifact_digest": "sha256:3fa37cc08464b6efd18816e397786374de6d66aa2f89861d6293476abb077055",
+    "dataset_manifest_digest": "sha256:0fd5c7fb91aef34b230f0cf7aadb07a18495d5fa2b376277161d764a4396da60",
+    "provider_catalog_digest": "sha256:24505616d93bea7608c571b0b8a779682e03c3dae74836d54402ce8e7fc4e364",
+    "provider_catalog_observed_at": "2026-08-11T01:42:21Z",
+    "guest_artifact_digest": "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
+    "guest_profile": "core"
+  },
+  "replicate": 5,
+  "limits": {
+    "max_provider_calls": 8,
+    "max_tool_calls": 32,
+    "max_python_runs": 4,
+    "max_input_tokens": 500000,
+    "max_output_tokens": 65536,
+    "max_total_tokens": 565536,
+    "max_output_tokens_per_call": 8192
+  },
+  "prompt_digest": "sha256:00edee92adc1ff69c57bf97caa05f630bc473a6559cc226ec49a2387922d8a21",
+  "surface_digest": "sha256:ad9a3d846ac3c358fa1d7782e7ac06806400c3277952f0e452101b6fe96dc2ab",
+  "treatment_id": "hybrid-two-stage-prebound-compact-json-v4",
+  "treatment_digest": "sha256:6b4f824e92832795d30d3186ce1ba54e2276ca3b6f5f45267c78d252a3ac8435",
+  "passed": true,
+  "metrics": {
+    "outcome_success": true,
+    "strict_pass": true,
+    "trace_exact": true,
+    "final_state_correct": true,
+    "expected_calls": 4,
+    "actual_calls": 4,
+    "extra_calls": 0
+  },
+  "provider_attempts": 1,
+  "provider_calls": 1,
+  "tool_calls": 4,
+  "python_attempts": 1,
+  "python_runs": 1,
+  "usage": {
+    "input_tokens": 14872,
+    "output_tokens": 1805,
+    "total_tokens": 16677
+  },
+  "catalog_digest": "sha256:19a12ac6bd59347ad70012efdffebcb2929aa9bec8cfc14a6ba50d1cdfaf9314",
+  "initial_state_digest": "sha256:e6e1428ecda21b2408dd668b5ee9964401b63503ae3cefa76082b18b2d7526d4",
+  "final_state_digest": "sha256:6150da381405445228a8df6da67a65648378b21e20f09318ad4bc0351b2039b7",
+  "exchanges": [
+    {
+      "status_code": 200,
+      "request_digest": "sha256:ca78699133dcbc3373b4556be95ec26f08dca345bb5e36a95175b4f862d7e253",
+      "response_digest": "sha256:dfe2cf161b1746562574a9a511d6d9d4cef1ce0ba6d9a4ad3d928c1337af94a5",
+      "usage": {
+        "input_tokens": 14872,
+        "output_tokens": 1805,
+        "total_tokens": 16677
+      },
+      "instructions_echo": "exact"
+    }
+  ],
+  "python_evidence": [
+    {
+      "turn": 0,
+      "success": true,
+      "capability_calls": 4,
+      "request_digest": "sha256:5f6fcc0840a70a7b5b3294a34a8e1b3bc9973cb03c6e036a34cfc6f3fd3bad21",
+      "response_digest": "sha256:2c63f3685f8e1027f17a8665f071d46fc18093f3fc95b095d49b2bc1b904bf8c",
+      "result_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "model_code_digest": "sha256:f1b335906c8f1199efcc34533f1e938ce8614e50d7f18cce039cf769a4ea9062",
+      "effective_code_digest": "sha256:baf0950ad0c11b01c3c6c02b6cbc56a9a6cf04f7ae53e73a84b56648d6c62323",
+      "wrapper_digest": "sha256:be519d1aa39e75ffe8e21e465250d24ea4b2976eea85385b4d670530be89a58c",
+      "execution_ref": {
+        "agent_run_id": "dev_684648134cabac723f3ae026ec135f80",
+        "turn_seq": 0,
+        "output_item_seq": 0,
+        "segment_seq": 0,
+        "invocation_id": "inv_684648134cabac723f3ae026ec135f80_0_0_0",
+        "invocation_attempt": 1,
+        "execution_id": "exec_684648134cabac723f3ae026ec135f80_1",
+        "executed_code_sha256": "sha256:baf0950ad0c11b01c3c6c02b6cbc56a9a6cf04f7ae53e73a84b56648d6c62323"
+      },
+      "backend": "wazero",
+      "reset_mode": "fresh-instance"
+    }
+  ],
+  "stateful_score": {
+    "passed": true,
+    "trace_passed": true,
+    "final_state_passed": true,
+    "expected_calls": 4,
+    "actual_calls": 4,
+    "expected_state_digest": "sha256:6150da381405445228a8df6da67a65648378b21e20f09318ad4bc0351b2039b7",
+    "actual_state_digest": "sha256:6150da381405445228a8df6da67a65648378b21e20f09318ad4bc0351b2039b7"
+  }
+}

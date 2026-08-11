@@ -240,13 +240,15 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	}
 	var receipts []receipt.Receipt
 	var capabilityCalls uint32
+	var capabilityPlanSHA256 string
 	if broker != nil {
 		receipts, capabilityCalls = broker.Receipts(), broker.CallCount()
+		capabilityPlanSHA256 = broker.CapabilityPlanSHA256()
 	}
 	if _, err := runtimeconfig.DecodeAndValidateGuestRunResponse(runRequest, payload); err != nil && !errors.Is(err, runtimeconfig.ErrRunResultSchemaMismatch) {
 		return payload, err
 	}
-	payload, err = projectHostEvidence(payload, receipts, capabilityCalls, executionRef, engine.config.MaxResponseBytes)
+	payload, err = projectHostEvidence(payload, receipts, capabilityCalls, capabilityPlanSHA256, executionRef, engine.config.MaxResponseBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -301,23 +303,17 @@ func hostCall(
 }
 
 var (
-	ErrGuestClaimedExecutionRef  = errors.New("Guest response claimed Host execution reference")
-	ErrExecutionIdentityMismatch = errors.New("Host execution identity mismatch")
+	ErrGuestClaimedExecutionRef   = errors.New("Guest response claimed Host execution reference")
+	ErrGuestClaimedCapabilityPlan = errors.New("Guest response claimed Host capability plan")
+	ErrExecutionIdentityMismatch  = errors.New("Host execution identity mismatch")
+	ErrCapabilityPlanMismatch     = errors.New("Host capability plan identity mismatch")
 )
-
-func mergeHostEvidence(
-	payload []byte,
-	receipts []receipt.Receipt,
-	capabilityCalls uint32,
-	maxResponse uint32,
-) ([]byte, error) {
-	return projectHostEvidence(payload, receipts, capabilityCalls, nil, maxResponse)
-}
 
 func projectHostEvidence(
 	payload []byte,
 	receipts []receipt.Receipt,
 	capabilityCalls uint32,
+	capabilityPlanSHA256 string,
 	executionRef *runtimeconfig.ExecutionRef,
 	maxResponse uint32,
 ) ([]byte, error) {
@@ -331,6 +327,8 @@ func projectHostEvidence(
 	for key := range envelope {
 		switch key {
 		case "status", "result", "receipts", "metrics", "error":
+		case "capability_plan_sha256":
+			return nil, ErrGuestClaimedCapabilityPlan
 		case "execution_ref":
 			return nil, ErrGuestClaimedExecutionRef
 		default:
@@ -339,6 +337,18 @@ func projectHostEvidence(
 	}
 	if receipts == nil {
 		receipts = []receipt.Receipt{}
+	}
+	for _, hostReceipt := range receipts {
+		if capabilityPlanSHA256 == "" || hostReceipt.CapabilityPlanSHA256 != capabilityPlanSHA256 {
+			return nil, ErrCapabilityPlanMismatch
+		}
+	}
+	if capabilityPlanSHA256 != "" {
+		encodedPlan, err := json.Marshal(capabilityPlanSHA256)
+		if err != nil {
+			return nil, fmt.Errorf("encode Host capability plan identity: %w", err)
+		}
+		envelope["capability_plan_sha256"] = encodedPlan
 	}
 	if executionRef != nil {
 		if executionRef.Validate() != nil {

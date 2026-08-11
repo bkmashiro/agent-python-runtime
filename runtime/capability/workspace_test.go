@@ -17,7 +17,11 @@ func TestWorkspaceToolsAreTypedAndPathLocal(t *testing.T) {
 	if err := capability.RegisterWorkspaceTools(registry, workspace); err != nil {
 		t.Fatal(err)
 	}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "run", MaxCalls: 3, Registry: registry})
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "run", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
 	}

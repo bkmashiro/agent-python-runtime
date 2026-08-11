@@ -10,12 +10,16 @@ import (
 
 func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
 	registry := capability.NewRegistry()
-	if err := registry.Register("workspace.read_text", capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+	if err := registry.Register("workspace.read_text", "test.workspace.read-text.v1", capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"text":"hello"}`), nil
 	})); err != nil {
 		t.Fatal(err)
 	}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", MaxCalls: 1, Registry: registry})
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +37,11 @@ func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
 }
 
 func TestBrokerDeniesUnregisteredTool(t *testing.T) {
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", MaxCalls: 1, Registry: capability.NewRegistry()})
+	plan, err := capability.NewRegistry().Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
 	}

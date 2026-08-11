@@ -158,8 +158,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		if maxCalls == 0 {
 			maxCalls = 8
 		}
+		capabilityPlan, err := registry.Seal(capability.PlanConfig{MaxCalls: maxCalls})
+		if err != nil {
+			writeDiagnostic(stderr, "seal capability plan")
+			return 1
+		}
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
-			return capability.NewBroker(capability.Config{RunIdentity: runIdentity, MaxCalls: maxCalls, Registry: registry})
+			return capability.NewBroker(capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan})
 		}
 		trustedPrepare = workspaceToolPrelude
 	}

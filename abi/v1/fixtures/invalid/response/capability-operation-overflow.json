@@ -1,0 +1,24 @@
+{
+  "status": "ok",
+  "result": {
+    "value": 1
+  },
+  "receipts": [
+    {
+      "receipt_id": "rcpt_fixture",
+      "run_id": "host-run",
+      "capability_plan_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "capability": "workspace.read_text",
+      "operation_index": 4294967296,
+      "request_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "response_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "outcome": "ok"
+    }
+  ],
+  "metrics": {
+    "capability_calls": 1,
+    "result_bytes": 11
+  },
+  "error": null,
+  "capability_plan_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

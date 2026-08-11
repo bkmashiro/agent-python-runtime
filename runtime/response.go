@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
+	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -107,13 +109,14 @@ func validPrefixedSHA256(value string) bool {
 }
 
 type RunResponse struct {
-	Status           RunResponseStatus `json:"status"`
-	Result           json.RawMessage   `json:"result"`
-	Receipts         json.RawMessage   `json:"receipts"`
-	Metrics          *RunMetrics       `json:"metrics"`
-	Error            *RunError         `json:"error"`
-	ExecutionRef     *ExecutionRef     `json:"execution_ref,omitempty"`
-	WorkspaceReceipt *WorkspaceReceipt `json:"workspace_receipt,omitempty"`
+	Status               RunResponseStatus `json:"status"`
+	Result               json.RawMessage   `json:"result"`
+	Receipts             json.RawMessage   `json:"receipts"`
+	Metrics              *RunMetrics       `json:"metrics"`
+	Error                *RunError         `json:"error"`
+	CapabilityPlanSHA256 *string           `json:"capability_plan_sha256,omitempty"`
+	ExecutionRef         *ExecutionRef     `json:"execution_ref,omitempty"`
+	WorkspaceReceipt     *WorkspaceReceipt `json:"workspace_receipt,omitempty"`
 }
 
 func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResponse, error) {
@@ -237,7 +240,7 @@ func rejectExplicitNullHostEvidence(data []byte) error {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return errors.New("run response JSON is invalid")
 	}
-	for _, key := range []string{"execution_ref", "workspace_receipt"} {
+	for _, key := range []string{"capability_plan_sha256", "execution_ref", "workspace_receipt"} {
 		if raw, present := envelope[key]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return errors.New("run response optional Host evidence cannot be null")
 		}
@@ -290,7 +293,8 @@ func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEv
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return RunResponse{}, errors.New("run response contains trailing JSON")
 	}
-	hostEvidenceInvalid := !requireHostEvidence && (response.ExecutionRef != nil || response.WorkspaceReceipt != nil)
+	hostEvidenceInvalid := !requireHostEvidence && (response.CapabilityPlanSHA256 != nil || response.ExecutionRef != nil || response.WorkspaceReceipt != nil)
+	capabilityPlanInvalid := response.CapabilityPlanSHA256 != nil && !validPrefixedSHA256(*response.CapabilityPlanSHA256)
 	workspaceReceiptInvalid := false
 	if response.WorkspaceReceipt != nil {
 		expectedRequestSHA, err := RunRequestSHA256(request)
@@ -299,12 +303,11 @@ func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEv
 	}
 	if (response.Status != RunResponseOK && response.Status != RunResponseError) || len(response.Result) == 0 || len(response.Receipts) == 0 || response.Metrics == nil ||
 		(response.Metrics.GuestTimeMS != nil && *response.Metrics.GuestTimeMS < 0) || (response.ExecutionRef != nil && response.ExecutionRef.Validate() != nil) ||
-		workspaceReceiptInvalid || hostEvidenceInvalid {
+		capabilityPlanInvalid || workspaceReceiptInvalid || hostEvidenceInvalid {
 		return RunResponse{}, errors.New("run response has invalid required fields")
 	}
-	var receipts []any
-	if json.Unmarshal(response.Receipts, &receipts) != nil {
-		return RunResponse{}, errors.New("run response receipts are not an array")
+	if err := validateCapabilityReceipts(response.Receipts, response.CapabilityPlanSHA256); err != nil {
+		return RunResponse{}, err
 	}
 	if response.Status == RunResponseOK {
 		if response.Error != nil {
@@ -321,6 +324,110 @@ func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEv
 		}
 	}
 	return response, nil
+}
+
+func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *string) error {
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return errors.New("run response receipts are not an array")
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return errors.New("run response receipts are not an array")
+	}
+	if len(items) > 256 {
+		return errors.New("run response contains too many receipts")
+	}
+	if len(items) != 0 && capabilityPlanSHA256 == nil {
+		return errors.New("run response receipts are missing capability plan evidence")
+	}
+	allowed := map[string]struct{}{
+		"receipt_id": {}, "run_id": {}, "capability_plan_sha256": {}, "capability": {},
+		"operation_index": {}, "request_sha256": {}, "response_sha256": {}, "outcome": {},
+	}
+	required := []string{"receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "outcome"}
+	for _, item := range items {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
+			return errors.New("run response receipt is not an object")
+		}
+		for name, value := range fields {
+			if _, ok := allowed[name]; !ok {
+				return errors.New("run response receipt contains an unknown field")
+			}
+			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return errors.New("run response receipt contains an explicit null field")
+			}
+		}
+		for _, name := range required {
+			if _, ok := fields[name]; !ok {
+				return errors.New("run response receipt is missing a required field")
+			}
+		}
+		var callReceipt capabilityReceiptDocument
+		decoder := json.NewDecoder(bytes.NewReader(item))
+		decoder.DisallowUnknownFields()
+		decoder.UseNumber()
+		if err := decoder.Decode(&callReceipt); err != nil {
+			return errors.New("run response receipt has invalid field types")
+		}
+		if !boundedString(callReceipt.ReceiptID, 1, 160) || !boundedString(callReceipt.RunID, 1, 128) ||
+			!boundedString(callReceipt.Capability, 1, 128) || !validPrefixedSHA256(callReceipt.CapabilityPlanSHA256) ||
+			(present(fields, "request_sha256") && !validBareSHA256(callReceipt.RequestSHA256)) ||
+			(present(fields, "response_sha256") && !validBareSHA256(callReceipt.ResponseSHA256)) ||
+			!validOperationIndex(callReceipt.OperationIndex) || !validReceiptOutcome(callReceipt.Outcome) {
+			return errors.New("run response receipt has invalid field values")
+		}
+		if capabilityPlanSHA256 == nil || callReceipt.CapabilityPlanSHA256 != *capabilityPlanSHA256 {
+			return errors.New("run response receipt capability plan does not match Host evidence")
+		}
+	}
+	return nil
+}
+
+type capabilityReceiptDocument struct {
+	ReceiptID            string      `json:"receipt_id"`
+	RunID                string      `json:"run_id"`
+	CapabilityPlanSHA256 string      `json:"capability_plan_sha256"`
+	Capability           string      `json:"capability"`
+	OperationIndex       json.Number `json:"operation_index"`
+	RequestSHA256        string      `json:"request_sha256,omitempty"`
+	ResponseSHA256       string      `json:"response_sha256,omitempty"`
+	Outcome              string      `json:"outcome"`
+}
+
+func present(fields map[string]json.RawMessage, name string) bool {
+	_, ok := fields[name]
+	return ok
+}
+
+func boundedString(value string, minimum, maximum int) bool {
+	length := utf8.RuneCountInString(value)
+	return length >= minimum && length <= maximum
+}
+
+func validBareSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func validOperationIndex(value json.Number) bool {
+	rational, ok := new(big.Rat).SetString(value.String())
+	if !ok || rational.Sign() < 0 || !rational.IsInt() {
+		return false
+	}
+	maximum := new(big.Int).SetUint64(uint64(^uint32(0)))
+	return rational.Num().Cmp(maximum) <= 0
+}
+
+func validReceiptOutcome(outcome string) bool {
+	return outcome == "ok" || outcome == "denied" || outcome == "error" || outcome == "timeout"
 }
 
 type denySchemaURLLoader struct{}

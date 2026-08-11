@@ -9,6 +9,7 @@
   "properties": {
     "status": {"enum": ["ok", "error"]},
     "result": {},
+    "capability_plan_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "execution_ref": {
       "type": "object",
       "additionalProperties": false,
@@ -59,12 +60,13 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["receipt_id", "run_id", "capability", "operation_index", "outcome"],
+        "required": ["receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "outcome"],
         "properties": {
           "receipt_id": {"type": "string", "minLength": 1, "maxLength": 160},
           "run_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "capability_plan_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
           "capability": {"type": "string", "minLength": 1, "maxLength": 128},
-          "operation_index": {"type": "integer", "minimum": 0},
+          "operation_index": {"type": "integer", "minimum": 0, "maximum": 4294967295},
           "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "response_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "outcome": {"enum": ["ok", "denied", "error", "timeout"]}
@@ -98,6 +100,10 @@
     }
   },
   "allOf": [
+    {
+      "if": {"properties": {"receipts": {"minItems": 1}}},
+      "then": {"required": ["capability_plan_sha256"]}
+    },
     {
       "if": {
         "required": ["workspace_receipt"],

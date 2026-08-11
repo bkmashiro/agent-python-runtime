@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "result": {"value": 1},
+  "receipts": [],
+  "metrics": {"capability_calls": 0, "result_bytes": 11},
+  "error": null,
+  "capability_plan_sha256": null
+}

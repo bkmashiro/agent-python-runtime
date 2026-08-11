@@ -2,7 +2,7 @@
 
 ## Status and baseline
 
-This document separates the verified implementation from product direction. `Current` statements map to Pysolate commit `626972a580c4fec4e2c6f5634f91f2ded7032216`. `Proposed` statements are decision constraints for later work, not claims that the named capability, record, replay mode or deterministic guarantee exists today.
+This document separates the verified implementation from product direction. `Current` statements describe code and tests present in the repository; `Proposed` statements are decision constraints for later work, not claims that the named capability, record, replay mode or deterministic guarantee exists today. Release or evaluation records should pin a concrete commit rather than treating this living document as a version identifier.
 
 Pysolate's long-term direction is:
 
@@ -41,10 +41,11 @@ The current implementation provides:
 - complete Workspace Capsules for explicit storage, migration and restoration;
 - Host-selected `export_on_success`, `export_on_response` or `discard` disposition;
 - a generic Guest-to-Host JSON call ABI, Host Registry and bounded Broker;
+- a sealed per-Run capability plan whose canonical identity binds sorted capability names, declared handler identities and the total call budget;
 - three prebound in-memory workspace functions as the current tool demonstration;
-- compact Host-authored capability and workspace receipts.
+- compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
-The generic Registry can register named handlers without changing the WASI import surface. The current CLI's Python-facing wrappers are still fixed to `read_text`, `write_text` and `list_files`; a generated dynamic Python SDK and a versioned capability catalog are not Current.
+The generic Registry can register a named handler plus a stable declared handler identity without changing the WASI import surface. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI's Python-facing wrappers are still fixed to `read_text`, `write_text` and `list_files`; a generated dynamic Python SDK, strict capability schemas and a plugin catalog are not Current.
 
 Current receipts bind call and workspace identities, but the repository does not yet claim a durable complete audit archive, deterministic replay, external-effect reconciliation or transaction semantics.
 
@@ -82,7 +83,9 @@ The Python SDK, direct Agent tool schema, Host admission and validation, documen
 
 ### Dynamic catalog, frozen per-Run authority
 
-The Host may install or qualify capability implementations between Runs. Each Run receives a canonical, identity-bound subset selected by Host policy. That subset is frozen before Guest startup.
+Current Pysolate freezes and identity-binds the registered capability set, declared handler identities and total call budget before Guest startup. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and schema generation are not Current.
+
+Handler identities are trusted Host-owned declarations. A plugin or registry builder must change the identity whenever behavior relevant to authorization, side effects or replay compatibility changes; Guest code cannot supply or override it.
 
 A capability must not appear or gain authority midway through a Run. If more authority is required, the current Run terminates with an explicit unsupported or escalation outcome; the Host may checkpoint the workspace and construct a new Run with a newly approved plan. Ordinary Python exceptions never trigger automatic authority escalation.
 
@@ -196,15 +199,14 @@ If these conditions cannot be met, the workload belongs in an explicit compatibi
 
 ## Directional priorities
 
-Future work should proceed in this order, subject to concrete workload evidence:
+The first foundation is Current. Remaining work should proceed in this order, subject to concrete workload evidence:
 
-1. Freeze and identity-bind per-Run capability plans.
-2. Define one versioned `CapabilitySpec` and generate a Python proxy plus direct tool projection.
-3. Add one useful read-only Host capability with strict schemas, budgets and receipts.
-4. Add protected execution records and capability playback for pure/read-only calls.
-5. Control or capture clock, randomness and other relevant nondeterminism for a bounded deterministic-verification profile.
-6. Add write effects only through an explicit Host Effect Plane with reconciliation.
-7. Expand safe computer coverage through qualified Git, HTTP, artifact, document, media or browser capabilities.
-8. Consider pinned interpreter sessions only after measured workloads show that explicit workspace state is insufficient.
+1. Define one versioned `CapabilitySpec` and generate a Python proxy plus direct tool projection.
+2. Add one useful read-only Host capability with strict schemas, budgets and receipts.
+3. Add protected execution records and capability playback for pure/read-only calls.
+4. Control or capture clock, randomness and other relevant nondeterminism for a bounded deterministic-verification profile.
+5. Add write effects only through an explicit Host Effect Plane with reconciliation.
+6. Expand safe computer coverage through qualified Git, HTTP, artifact, document, media or browser capabilities.
+7. Consider pinned interpreter sessions only after measured workloads show that explicit workspace state is insufficient.
 
 The success metric is not the number of APIs or the percentage of Linux commands imitated. It is the share of real Agent work completed without a general Computer while preserving bounded authority, evidence coverage, final-state correctness and honest replay semantics.

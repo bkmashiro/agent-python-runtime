@@ -9,16 +9,18 @@ import (
 
 func TestReceiptIdentityIsDeterministicAndBindsOperation(t *testing.T) {
 	target := "https://api.example.test/data?token=secret"
-	first := receipt.New("host-run", "call-1", "fetch_many", 0, target, "ok", []byte("first"))
-	repeated := receipt.New("host-run", "call-1", "fetch_many", 0, target, "error", nil)
+	plan := "sha256:" + strings.Repeat("a", 64)
+	first := receipt.New("host-run", plan, "call-1", "fetch_many", 0, target, "ok", []byte("first"))
+	repeated := receipt.New("host-run", plan, "call-1", "fetch_many", 0, target, "error", nil)
 	if first.ReceiptID != repeated.ReceiptID {
 		t.Fatalf("outcome changed operation identity: %q != %q", first.ReceiptID, repeated.ReceiptID)
 	}
 	changed := []receipt.Receipt{
-		receipt.New("other-run", "call-1", "fetch_many", 0, target, "ok", nil),
-		receipt.New("host-run", "other-call", "fetch_many", 0, target, "ok", nil),
-		receipt.New("host-run", "call-1", "fetch_many", 1, target, "ok", nil),
-		receipt.New("host-run", "call-1", "fetch_many", 0, "https://api.example.test/other", "ok", nil),
+		receipt.New("other-run", plan, "call-1", "fetch_many", 0, target, "ok", nil),
+		receipt.New("host-run", "sha256:"+strings.Repeat("b", 64), "call-1", "fetch_many", 0, target, "ok", nil),
+		receipt.New("host-run", plan, "other-call", "fetch_many", 0, target, "ok", nil),
+		receipt.New("host-run", plan, "call-1", "fetch_many", 1, target, "ok", nil),
+		receipt.New("host-run", plan, "call-1", "fetch_many", 0, "https://api.example.test/other", "ok", nil),
 	}
 	for _, candidate := range changed {
 		if candidate.ReceiptID == first.ReceiptID {
@@ -30,7 +32,7 @@ func TestReceiptIdentityIsDeterministicAndBindsOperation(t *testing.T) {
 func TestReceiptStoresDigestsNotRawTargetOrResponse(t *testing.T) {
 	target := "https://api.example.test/data?token=secret"
 	response := []byte("secret response")
-	got := receipt.New("host-run", "call-1", "fetch_many", 0, target, "ok", response)
+	got := receipt.New("host-run", "sha256:"+strings.Repeat("a", 64), "call-1", "fetch_many", 0, target, "ok", response)
 	for _, value := range []string{got.RequestSHA256, got.ResponseSHA256, got.ReceiptID} {
 		if strings.Contains(value, "secret") {
 			t.Fatalf("receipt leaked input: %#v", got)

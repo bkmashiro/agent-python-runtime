@@ -35,11 +35,11 @@ This is compatibility policy, not the primary sandbox. WASI and Host capabilitie
 
 ### Host-owned tools
 
-Guest code can only call tools present in the per-run registry. The Host checks the call envelope, capability name, canonical workspace path, per-file size and total call budget. The active workspace tool has no Host path or network access.
+Guest code can only call tools present in the Host Registry sealed before Guest startup. The canonical plan identity binds sorted capability names, declared handler identities and the total call budget; late registration is rejected. The Host checks the call envelope, capability name, canonical workspace path, per-file size and frozen call budget. The active workspace tool has no Host path or network access.
 
 ### Host-authored evidence
 
-The Host replaces Guest receipt and capability-call metric claims. Receipts bind the Host run identity, capability, operation index, request digest, response digest and outcome. The PoC deliberately does not claim durable audit or transaction evidence.
+The Host replaces Guest receipt, capability-plan and capability-call metric claims. Receipts bind the Host run identity, capability-plan identity, capability, operation index, request digest, response digest and outcome. The top-level response carries the plan identity even for a zero-call Run. The PoC deliberately does not claim durable audit, deterministic replay or transaction evidence.
 
 ### Artifact binding
 

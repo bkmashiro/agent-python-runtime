@@ -11,6 +11,7 @@ import (
 )
 
 const maxWorkspaceTextBytes = 1 << 20
+const workspaceTextHandlerIdentity = "pysolate.workspace-text.v1"
 
 // Workspace is the intentionally small PoC workspace backend. It has no Host
 // filesystem path and can only be reached through registered typed tools.
@@ -50,7 +51,7 @@ func RegisterWorkspaceTools(registry *Registry, workspace *Workspace) error {
 		"workspace.write_text": workspace.writeText,
 		"workspace.list_files": workspace.listFiles,
 	} {
-		if err := registry.Register(name, handler); err != nil {
+		if err := registry.Register(name, workspaceTextHandlerIdentity, handler); err != nil {
 			return err
 		}
 	}

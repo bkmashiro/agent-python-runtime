@@ -17,8 +17,7 @@ var ErrInvalidBroker = errors.New("invalid Host tool broker")
 
 type Config struct {
 	RunIdentity string
-	MaxCalls    uint32
-	Registry    *Registry
+	Plan        *Plan
 }
 
 type Broker struct {
@@ -48,7 +47,7 @@ type callError struct {
 }
 
 func NewBroker(config Config) (*Broker, error) {
-	if !validIdentity(config.RunIdentity) || config.MaxCalls == 0 || config.Registry == nil {
+	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 {
 		return nil, ErrInvalidBroker
 	}
 	return &Broker{config: config, seen: make(map[string]struct{})}, nil
@@ -66,7 +65,7 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 	}
 
 	broker.mu.Lock()
-	if broker.calls >= broker.config.MaxCalls {
+	if broker.calls >= broker.config.Plan.MaxCalls() {
 		broker.mu.Unlock()
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "call_budget_exceeded", Message: "Host tool call budget exhausted"}})
 	}
@@ -79,7 +78,7 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 	broker.calls++
 	broker.mu.Unlock()
 
-	handler, ok := broker.config.Registry.lookup(call.Capability)
+	handler, ok := broker.config.Plan.lookup(call.Capability)
 	if !ok {
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}})
@@ -98,7 +97,7 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 }
 
 func (broker *Broker) record(call request, operation uint32, outcome string, result []byte) {
-	created := receipt.New(broker.config.RunIdentity, call.CallID, call.Capability, operation, string(call.Arguments), outcome, result)
+	created := receipt.New(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, call.Capability, operation, string(call.Arguments), outcome, result)
 	broker.mu.Lock()
 	broker.receipts = append(broker.receipts, created)
 	broker.mu.Unlock()
@@ -127,6 +126,13 @@ func (broker *Broker) RunIdentity() string {
 		return ""
 	}
 	return broker.config.RunIdentity
+}
+
+func (broker *Broker) CapabilityPlanSHA256() string {
+	if broker == nil || broker.config.Plan == nil {
+		return ""
+	}
+	return broker.config.Plan.Identity()
 }
 
 func (broker *Broker) Receipts() []receipt.Receipt { return broker.SnapshotReceipts() }

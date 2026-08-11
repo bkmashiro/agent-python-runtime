@@ -73,6 +73,8 @@ The Guest accesses this state with ordinary Python file APIs under `/workspace`.
 
 Agent-facing callers should omit `compatibility`; the Host derives it. `run_id` is an untrusted diagnostic label, not an authority identifier.
 
+When typed Host tools are configured, the Host seals their sorted names, declared handler identities and total call budget before Guest startup. The response carries `capability_plan_sha256` even when no tool is called, and every capability receipt binds the same identity. Guest-authored plan evidence is rejected.
+
 ## Exit behavior
 
 - `0`: a structured Guest response was written;

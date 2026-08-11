@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,7 @@ func TestDecodeAndValidateGuestRunResponseRejectsHostEvidenceAndFoldedAliases(t 
 	request := RunRequest{RunID: "guest", Code: "result = 1", Inputs: []byte(`{}`)}
 	for name, payload := range map[string][]byte{
 		"canonical execution ref": []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"execution_ref":{}}`),
+		"capability plan":         []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"capability_plan_sha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
 		"folded execution ref":    []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"Execution_ref":{}}`),
 		"folded status":           []byte(`{"Status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null}`),
 		"folded metric":           []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"Capability_calls":0,"result_bytes":1},"error":null}`),
@@ -64,6 +66,60 @@ func TestDecodeAndValidateRunResponseAcceptsBoundedGuestError(t *testing.T) {
 	response, err := DecodeAndValidateRunResponse(request, []byte(`{"status":"error","result":null,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":0},"error":{"code":"python_exception","message":"failed"}}`))
 	if err != nil || response.Status != RunResponseError {
 		t.Fatalf("response=%+v err=%v", response, err)
+	}
+}
+
+func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
+	request := RunRequest{RunID: "run", Code: "result = 1", Inputs: []byte(`{}`)}
+	planA := "sha256:" + strings.Repeat("a", 64)
+	planB := "sha256:" + strings.Repeat("b", 64)
+	empty := []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+	if _, err := DecodeAndValidateRunResponse(request, empty); err != nil {
+		t.Fatalf("zero-call Host capability plan was rejected: %v", err)
+	}
+	receipt := `{"receipt_id":"rcpt_test","run_id":"host-run","capability_plan_sha256":"` + planB + `","capability":"workspace.read_text","operation_index":0,"request_sha256":"` + strings.Repeat("c", 64) + `","response_sha256":"` + strings.Repeat("d", 64) + `","outcome":"ok"}`
+	mismatch := []byte(`{"status":"ok","result":1,"receipts":[` + receipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+	if _, err := DecodeAndValidateRunResponse(request, mismatch); err == nil {
+		t.Fatal("receipt with a different capability plan was accepted")
+	}
+	missing := []byte(`{"status":"ok","result":1,"receipts":[` + receipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null}`)
+	if _, err := DecodeAndValidateRunResponse(request, missing); err == nil {
+		t.Fatal("receipt without a response capability plan was accepted")
+	}
+	nullPlan := []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1},"error":null,"capability_plan_sha256":null}`)
+	if _, err := DecodeAndValidateRunResponse(request, nullPlan); err == nil {
+		t.Fatal("explicit null capability plan was accepted")
+	}
+
+	validReceipt := strings.Replace(receipt, planB, planA, 1)
+	invalidReceipts := map[string]string{
+		"null array":             "null",
+		"sparse receipt":         `[{"capability_plan_sha256":"` + planA + `"}]`,
+		"unknown receipt field":  `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"ok","extra":true`, 1) + `]`,
+		"null required field":    `[` + strings.Replace(validReceipt, `"receipt_id":"rcpt_test"`, `"receipt_id":null`, 1) + `]`,
+		"invalid request digest": `[` + strings.Replace(validReceipt, strings.Repeat("c", 64), "xyz", 1) + `]`,
+		"empty response digest":  `[` + strings.Replace(validReceipt, strings.Repeat("d", 64), "", 1) + `]`,
+		"invalid outcome":        `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"unknown"`, 1) + `]`,
+		"fractional operation":   `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":1.5`, 1) + `]`,
+		"operation overflow":     `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":4294967296`, 1) + `]`,
+	}
+	for name, receipts := range invalidReceipts {
+		payload := []byte(`{"status":"ok","result":1,"receipts":` + receipts + `,"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+		if _, err := DecodeAndValidateRunResponse(request, payload); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+	tooMany := strings.Repeat(validReceipt+",", 256) + validReceipt
+	tooManyPayload := []byte(`{"status":"ok","result":1,"receipts":[` + tooMany + `],"metrics":{"capability_calls":257,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+	if _, err := DecodeAndValidateRunResponse(request, tooManyPayload); err == nil {
+		t.Fatal("more than 256 receipts were accepted")
+	}
+	for _, operation := range []string{"1.0", "1e0", "10e-1", "-0.0", "4.294967295e9"} {
+		integralReceipt := strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":`+operation, 1)
+		payload := []byte(`{"status":"ok","result":1,"receipts":[` + integralReceipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+		if _, err := DecodeAndValidateRunResponse(request, payload); err != nil {
+			t.Fatalf("schema-valid integral operation_index %s was rejected: %v", operation, err)
+		}
 	}
 }
 

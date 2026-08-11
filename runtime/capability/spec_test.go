@@ -14,7 +14,7 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	first := capability.NewRegistry()
 	firstSpec := testSpec()
 	firstSpec.InputSchema = json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`)
-	if err := first.Register(firstSpec, noopHandler); err != nil {
+	if err := first.Register(firstSpec, basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
 	firstPlan, err := first.Seal(capability.PlanConfig{MaxCalls: 2})
@@ -30,7 +30,7 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 		"properties": {"path": {"type": "string"}},
 		"type": "object"
 	}`)
-	if err := second.Register(secondSpec, noopHandler); err != nil {
+	if err := second.Register(secondSpec, basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
 	secondPlan, err := second.Seal(capability.PlanConfig{MaxCalls: 2})
@@ -43,6 +43,9 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 
 	mutations := []func(*capability.Spec){
 		func(spec *capability.Spec) { spec.Version = "pysolate.workspace.read-text.v2" },
+		func(spec *capability.Spec) { spec.Description = "Read a different semantic projection." },
+		func(spec *capability.Spec) { spec.EffectClass = capability.EffectExternalRead },
+		func(spec *capability.Spec) { spec.Playback = capability.PlaybackCaptured },
 		func(spec *capability.Spec) { spec.InputSchema = json.RawMessage(`{"type":"object"}`) },
 		func(spec *capability.Spec) { spec.OutputSchema = json.RawMessage(`{"type":"object"}`) },
 		func(spec *capability.Spec) { spec.Python.ResultField = "body" },
@@ -51,7 +54,7 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 		registry := capability.NewRegistry()
 		spec := testSpec()
 		mutate(&spec)
-		if err := registry.Register(spec, noopHandler); err != nil {
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
 			t.Fatal(err)
 		}
 		plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
@@ -70,8 +73,11 @@ func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 		"external schema ref": func(spec *capability.Spec) {
 			spec.InputSchema = json.RawMessage(`{"$ref":"https://example.test/schema.json"}`)
 		},
-		"invalid Python name":    func(spec *capability.Spec) { spec.Python.Name = "not-valid" },
-		"invalid UTF-8 identity": func(spec *capability.Spec) { spec.Version = string([]byte{0xff}) },
+		"invalid Python name":        func(spec *capability.Spec) { spec.Python.Name = "not-valid" },
+		"missing description":        func(spec *capability.Spec) { spec.Description = "" },
+		"invalid effect class":       func(spec *capability.Spec) { spec.EffectClass = "get" },
+		"invalid playback treatment": func(spec *capability.Spec) { spec.Playback = "retry" },
+		"invalid UTF-8 identity":     func(spec *capability.Spec) { spec.Version = string([]byte{0xff}) },
 		"invalid UTF-8 schema": func(spec *capability.Spec) {
 			spec.InputSchema = json.RawMessage{'{', '"', 'x', '"', ':', '"', 0xff, '"', '}'}
 		},
@@ -86,7 +92,7 @@ func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 			registry := capability.NewRegistry()
 			spec := testSpec()
 			mutate(&spec)
-			if err := registry.Register(spec, noopHandler); err != capability.ErrInvalidTool {
+			if err := registry.Register(spec, basicGrant(t), noopHandler); err != capability.ErrInvalidTool {
 				t.Fatalf("error=%v", err)
 			}
 		})
@@ -96,13 +102,13 @@ func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 func TestCapabilitySpecRejectsDuplicatePythonProjection(t *testing.T) {
 	registry := capability.NewRegistry()
 	first := testSpec()
-	if err := registry.Register(first, noopHandler); err != nil {
+	if err := registry.Register(first, basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
 	second := testSpec()
 	second.Name = "workspace.read_alias"
 	second.Version = "pysolate.workspace.read-alias.v1"
-	if err := registry.Register(second, noopHandler); err != capability.ErrToolExists {
+	if err := registry.Register(second, basicGrant(t), noopHandler); err != capability.ErrToolExists {
 		t.Fatalf("duplicate Python projection error=%v", err)
 	}
 }
@@ -115,7 +121,7 @@ func TestBrokerValidatesSpecInputAndOutput(t *testing.T) {
 		calls.Add(1)
 		return json.RawMessage(`{"content":7}`), nil
 	})
-	if err := registry.Register(spec, handler); err != nil {
+	if err := registry.Register(spec, basicGrant(t), handler); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
@@ -164,7 +170,7 @@ func TestBrokerValidatesSpecInputAndOutput(t *testing.T) {
 
 func TestSealedPlanGeneratesPythonProjectionAndDefensiveSpecs(t *testing.T) {
 	registry := capability.NewRegistry()
-	if err := registry.Register(testSpec(), noopHandler); err != nil {
+	if err := registry.Register(testSpec(), basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
@@ -193,6 +199,9 @@ func testSpec() capability.Spec {
 	return capability.Spec{
 		Name:            "workspace.read_text",
 		Version:         "pysolate.workspace.read-text.v1",
+		Description:     "Read one text file from the typed workspace.",
+		EffectClass:     capability.EffectWorkspaceRead,
+		Playback:        capability.PlaybackLiveOnly,
 		HandlerIdentity: "pysolate.workspace-text.v1",
 		InputSchema:     json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`),
 		OutputSchema:    json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"}},"required":["content"],"additionalProperties":false}`),

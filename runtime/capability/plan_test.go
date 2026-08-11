@@ -20,7 +20,7 @@ func TestSealedPlanIsOrderIndependentAndRejectsLateRegistration(t *testing.T) {
 	if _, err := first.Seal(capability.PlanConfig{MaxCalls: 2}); err != capability.ErrRegistrySealed {
 		t.Fatalf("second seal error=%v", err)
 	}
-	if err := first.Register(basicSpec("git.status", "pysolate.git.status.v1"), noopHandler); err != capability.ErrRegistrySealed {
+	if err := first.Register(basicSpec("git.status", "pysolate.git.status.v1"), basicGrant(t), noopHandler); err != capability.ErrRegistrySealed {
 		t.Fatalf("late registration error=%v", err)
 	}
 
@@ -47,6 +47,7 @@ func TestSealedPlanIsOrderIndependentAndRejectsLateRegistration(t *testing.T) {
 func TestRegisterAndSealAreAtomic(t *testing.T) {
 	for iteration := 0; iteration < 100; iteration++ {
 		registry := capability.NewRegistry()
+		grant := basicGrant(t)
 		start := make(chan struct{})
 		var wait sync.WaitGroup
 		wait.Add(2)
@@ -56,7 +57,7 @@ func TestRegisterAndSealAreAtomic(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			registerErr = registry.Register(basicSpec("git.status", "pysolate.git.status.v1"), noopHandler)
+			registerErr = registry.Register(basicSpec("git.status", "pysolate.git.status.v1"), grant, noopHandler)
 		}()
 		go func() {
 			defer wait.Done()
@@ -147,14 +148,24 @@ var noopHandler = capability.HandlerFunc(func(context.Context, json.RawMessage) 
 
 func mustRegister(t *testing.T, registry *capability.Registry, name, handlerIdentity string) {
 	t.Helper()
-	if err := registry.Register(basicSpec(name, handlerIdentity), noopHandler); err != nil {
+	if err := registry.Register(basicSpec(name, handlerIdentity), basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func basicSpec(name, handlerIdentity string) capability.Spec {
 	return capability.Spec{
-		Name: name, Version: "test." + name + ".v1", HandlerIdentity: handlerIdentity,
+		Name: name, Version: "test." + name + ".v1", Description: "Test capability", EffectClass: capability.EffectPure,
+		Playback: capability.PlaybackLiveOnly, HandlerIdentity: handlerIdentity,
 		InputSchema: json.RawMessage(`{}`), OutputSchema: json.RawMessage(`{}`),
 	}
+}
+
+func basicGrant(t *testing.T) capability.Grant {
+	t.Helper()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"test-host-local"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return grant
 }

@@ -41,8 +41,9 @@ The current implementation provides:
 - complete Workspace Capsules for explicit storage, migration and restoration;
 - Host-selected `export_on_success`, `export_on_response` or `discard` disposition;
 - a generic Guest-to-Host JSON call ABI, Host Registry and bounded Broker;
-- canonical Host-owned `CapabilitySpec` definitions for capability/version identity, handler identity, strict input/output schemas and Python wrapper projection;
-- a sealed `pysolate.capability-plan.v2` identity binding sorted canonical specs and the total call budget;
+- canonical Host-owned `CapabilitySpec` definitions for capability/version identity, documentation, effect class, playback treatment, handler identity, strict input/output schemas and Python wrapper projection;
+- opaque per-Run `CapabilityGrant` identities derived from canonical Host policy documents;
+- a sealed `pysolate.capability-plan.v3` identity binding sorted canonical specs, their per-Run grants and the total call budget;
 - three prebound in-memory workspace functions whose wrappers are generated from their sealed specs;
 - compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
@@ -72,25 +73,26 @@ A familiar method name is presentation, not authority. `git.status()` does not i
 Current `CapabilitySpec` defines:
 
 - stable capability and version identity;
+- Agent-facing documentation;
 - a Python function projection;
 - strict input and output schemas;
-- Host handler identity.
+- Host handler identity;
+- declared effect class and playback treatment.
 
-Registration canonicalizes and compiles both schemas while sealing binds the full spec into `pysolate.capability-plan.v2`. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates its trusted Python wrappers from the same sealed specs rather than maintaining a handwritten second surface.
+Registration canonicalizes and compiles both schemas. It also requires an opaque `CapabilityGrant` identity derived from a canonical Host-owned policy document. Sealing binds every sorted spec, its grant identity and the global budget into `pysolate.capability-plan.v3`; changing a per-Run target policy changes the plan without overloading the stable handler identity. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates its trusted Python wrappers from the same sealed specs rather than maintaining a handwritten second surface.
 
 The following remain Proposed extensions:
 
 - Python module/object projection;
-- read/write/effect classification;
-- target and credential policy;
+- concrete target and credential policy adapters;
 - call, byte, time and external-cost budgets;
-- receipt and playback treatment.
+- protected playback records and adapters.
 
 The direct Agent tool schema, documentation and replay adapter should eventually derive from that definition as well. Generated presentation surfaces must not create a second policy path.
 
 ### Dynamic catalog, frozen per-Run authority
 
-Current Pysolate freezes and identity-binds the registered canonical specs and total call budget before Guest startup. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and dynamic module objects are not Current.
+Current Pysolate freezes and identity-binds the registered canonical specs, per-Run grant identities and total call budget before Guest startup. Grant identities are opaque digests: authority-bearing policy bytes remain Host-private. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and dynamic module objects are not Current.
 
 Handler identities are trusted Host-owned declarations. A plugin or registry builder must change the identity whenever behavior relevant to authorization, side effects or replay compatibility changes; Guest code cannot supply or override it.
 

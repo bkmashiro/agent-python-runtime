@@ -23,9 +23,17 @@ var (
 )
 
 const (
-	capabilityPlanSchemaVersion = "pysolate.capability-plan.v2"
+	capabilityPlanSchemaVersion = "pysolate.capability-plan.v3"
 	maxCapabilitySchemaBytes    = 64 << 10
 	maxCapabilityJSONNodes      = 16384
+
+	EffectPure           = "pure"
+	EffectWorkspaceRead  = "workspace_read"
+	EffectWorkspaceWrite = "workspace_write"
+	EffectExternalRead   = "external_read"
+
+	PlaybackLiveOnly = "live_only"
+	PlaybackCaptured = "captured"
 )
 
 // Handler is the entire Host-tool execution contract. Authority and schema
@@ -53,6 +61,9 @@ type PythonProjection struct {
 type Spec struct {
 	Name            string            `json:"capability"`
 	Version         string            `json:"version"`
+	Description     string            `json:"description"`
+	EffectClass     string            `json:"effect_class"`
+	Playback        string            `json:"playback"`
 	HandlerIdentity string            `json:"handler_identity"`
 	InputSchema     json.RawMessage   `json:"input_schema"`
 	OutputSchema    json.RawMessage   `json:"output_schema"`
@@ -61,6 +72,7 @@ type Spec struct {
 
 type registration struct {
 	spec         Spec
+	grant        Grant
 	handler      Handler
 	inputSchema  *jsonschema.Schema
 	outputSchema *jsonschema.Schema
@@ -83,6 +95,7 @@ type Plan struct {
 	identity      string
 	maxCalls      uint32
 	specs         []Spec
+	grants        []GrantBinding
 	registrations map[string]registration
 	pythonPrelude string
 }
@@ -91,10 +104,13 @@ func NewRegistry() *Registry {
 	return &Registry{registrations: make(map[string]registration), pythonNames: make(map[string]string)}
 }
 
-func (registry *Registry) Register(spec Spec, handler Handler) error {
+func (registry *Registry) Register(spec Spec, grant Grant, handler Handler) error {
 	canonical, inputSchema, outputSchema, err := prepareSpec(spec)
 	if registry == nil || err != nil || handler == nil {
 		return ErrInvalidTool
+	}
+	if !validGrant(grant) {
+		return ErrInvalidGrant
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -111,7 +127,7 @@ func (registry *Registry) Register(spec Spec, handler Handler) error {
 		registry.pythonNames[canonical.Python.Name] = canonical.Name
 	}
 	registry.registrations[canonical.Name] = registration{
-		spec: canonical, handler: handler, inputSchema: inputSchema, outputSchema: outputSchema,
+		spec: canonical, grant: grant, handler: handler, inputSchema: inputSchema, outputSchema: outputSchema,
 	}
 	return nil
 }
@@ -127,17 +143,21 @@ func (registry *Registry) Seal(config PlanConfig) (*Plan, error) {
 	}
 	registry.sealed = true
 	specs := make([]Spec, 0, len(registry.registrations))
+	grants := make([]GrantBinding, 0, len(registry.registrations))
 	registrations := make(map[string]registration, len(registry.registrations))
 	for name, registered := range registry.registrations {
 		specs = append(specs, cloneSpec(registered.spec))
+		grants = append(grants, GrantBinding{Capability: name, PolicySHA256: registered.grant.Identity()})
 		registrations[name] = registered
 	}
 	sortSpecs(specs)
+	sortGrants(grants)
 	document := struct {
-		SchemaVersion string `json:"schema_version"`
-		MaxCalls      uint32 `json:"max_calls"`
-		Capabilities  []Spec `json:"capabilities"`
-	}{SchemaVersion: capabilityPlanSchemaVersion, MaxCalls: config.MaxCalls, Capabilities: specs}
+		SchemaVersion string         `json:"schema_version"`
+		MaxCalls      uint32         `json:"max_calls"`
+		Capabilities  []Spec         `json:"capabilities"`
+		Grants        []GrantBinding `json:"grants"`
+	}{SchemaVersion: capabilityPlanSchemaVersion, MaxCalls: config.MaxCalls, Capabilities: specs, Grants: grants}
 	encoded, err := json.Marshal(document)
 	if err != nil {
 		return nil, ErrInvalidTool
@@ -147,6 +167,7 @@ func (registry *Registry) Seal(config PlanConfig) (*Plan, error) {
 		identity:      "sha256:" + hex.EncodeToString(digest[:]),
 		maxCalls:      config.MaxCalls,
 		specs:         cloneSpecs(specs),
+		grants:        append([]GrantBinding(nil), grants...),
 		registrations: registrations,
 		pythonPrelude: generatePythonPrelude(specs),
 	}, nil
@@ -175,6 +196,13 @@ func (plan *Plan) Specs() []Spec {
 	return cloneSpecs(plan.specs)
 }
 
+func (plan *Plan) Grants() []GrantBinding {
+	if plan == nil {
+		return nil
+	}
+	return append([]GrantBinding(nil), plan.grants...)
+}
+
 func (plan *Plan) PythonPrelude() string {
 	if plan == nil {
 		return ""
@@ -192,6 +220,8 @@ func (plan *Plan) lookup(name string) (registration, bool) {
 
 func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error) {
 	if !validName(spec.Name) || !validHandlerIdentity(spec.Version) || !validHandlerIdentity(spec.HandlerIdentity) ||
+		len(spec.Description) == 0 || len(spec.Description) > 1024 || !utf8.ValidString(spec.Description) ||
+		!validEffectClass(spec.EffectClass) || !validPlaybackTreatment(spec.Playback) ||
 		len(spec.InputSchema) == 0 || len(spec.InputSchema) > maxCapabilitySchemaBytes ||
 		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > maxCapabilitySchemaBytes || !validPythonProjection(spec.Python) {
 		return Spec{}, nil, nil, ErrInvalidTool
@@ -456,6 +486,22 @@ func sortSpecs(values []Spec) {
 			values[current], values[current-1] = values[current-1], values[current]
 		}
 	}
+}
+
+func sortGrants(values []GrantBinding) {
+	for index := 1; index < len(values); index++ {
+		for current := index; current > 0 && values[current].Capability < values[current-1].Capability; current-- {
+			values[current], values[current-1] = values[current-1], values[current]
+		}
+	}
+}
+
+func validEffectClass(value string) bool {
+	return value == EffectPure || value == EffectWorkspaceRead || value == EffectWorkspaceWrite || value == EffectExternalRead
+}
+
+func validPlaybackTreatment(value string) bool {
+	return value == PlaybackLiveOnly || value == PlaybackCaptured
 }
 
 func validName(value string) bool {

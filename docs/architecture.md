@@ -51,7 +51,7 @@ The Host scanner intentionally accepts only a small import preamble. It is not a
 
 ## Host tools
 
-The active tool surface uses one generic Guest-to-Host JSON call envelope and a small Host Registry. Each registration binds a canonical `CapabilitySpec`—capability/version identity, handler identity, strict input/output schemas and Python projection—to a Host handler. Before Guest startup, the Host seals the sorted specs and total call budget into an immutable `pysolate.capability-plan.v2`; late registration is rejected. The Broker accepts only that sealed plan, validates arguments before the handler, and validates results before returning them. The CLI generates three workspace functions into the Python globals from those same sealed specs:
+The active tool surface uses one generic Guest-to-Host JSON call envelope and a small Host Registry. Each registration binds a canonical `CapabilitySpec`—capability/version identity, documentation, effect/playback declarations, handler identity, strict input/output schemas and Python projection—to a Host handler, plus an opaque `CapabilityGrant` identity derived from the exact Host-owned per-Run policy. Before Guest startup, the Host seals the sorted specs, grants and total call budget into an immutable `pysolate.capability-plan.v3`; late registration is rejected. Handler identity remains stable implementation compatibility while changing target policy changes the grant and plan identities. The Broker accepts only that sealed plan, validates arguments before the handler, and validates results before returning them. The CLI generates three workspace functions into the Python globals from those same sealed specs:
 
 ```python
 read_text(path)

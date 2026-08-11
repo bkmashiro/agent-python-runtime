@@ -17,6 +17,8 @@ Agent Python source
 
 The active implementation deliberately does not include prepared pools, COW restore, schedulers, durable transactions, MCP daemons, trace databases, benchmark campaigns, or production recovery machinery. It does include an optional Host-owned rooted workspace and a complete deterministic storage capsule; neither is a transaction system. Historical findings are summarized in [docs/research-history.md](docs/research-history.md) and remain available in Git history.
 
+The longer-term product direction is a Python-native capability computer: ordinary Python provides control flow, a persistent Host workspace carries explicit state, and typed Host capabilities replace ambient shell or OS authority. Auditable, evidence-bound state transitions and scoped playback—not generic code execution—are the intended differentiator. Current and Proposed claims are separated in [docs/product-direction.md](docs/product-direction.md).
+
 ## Requirements
 
 - Go 1.25+

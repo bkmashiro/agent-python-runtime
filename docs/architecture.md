@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Pysolate proves that a programming Agent can submit normal Python while the Host retains all authority. It is one execution component, not an Agent planner, package platform, scheduler, transaction service, or general Linux sandbox.
+Pysolate proves that a programming Agent can submit normal Python while the Host retains all authority. It is one execution component, not an Agent planner, package platform, scheduler, transaction service, or general Linux sandbox. Its Current implementation and longer-term Python-native capability-computer direction are separated in [product-direction.md](product-direction.md).
 
 ## Run path
 
@@ -59,13 +59,13 @@ write_text(path, content)
 list_files()
 ```
 
-The backing workspace is an in-memory map, not an ambient Host directory. Paths must be canonical and relative. Calls are bounded and produce small Host receipts.
+The backing workspace for this typed surface is an in-memory map, not an ambient Host directory. Paths must be canonical and relative. Calls are bounded and produce small Host receipts.
 
 This fixed surface replaces the former generalized JSON-Schema-to-Python SDK generator and durable effect workflow.
 
 ## WASI filesystem
 
-The lower-level engine can also bind a Host-selected `runtime/workspace` lease as `/workspace` plus a fresh `/tmp`. The request cannot select the backing Host path. The focused PoC CLI uses typed in-memory workspace tools instead, keeping the demonstrated authority boundary small.
+The CLI can alternatively bind a Host-selected `runtime/workspace` lease as `/workspace` plus a fresh `/tmp`. The request cannot select the backing Host path, Capsule path, workspace limits or final disposition. Mounted workspaces and the typed in-memory workspace tools are mutually exclusive. The Host may restore or snapshot a complete Capsule and must explicitly choose `export_on_success`, `export_on_response` or `discard`; see [workspace-capsules.md](workspace-capsules.md).
 
 ## Active packages
 

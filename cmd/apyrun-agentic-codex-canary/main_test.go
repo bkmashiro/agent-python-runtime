@@ -21,6 +21,10 @@ func TestWritePrivateRawDebugIsExclusiveAndDoesNotLeakIntoFormalResult(t *testin
 	if err := os.Mkdir(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(root, "trial.json")
 	result := agentic.TrialResult{
 		TrialID: "dev_test", TaskID: "rd-006", Condition: agentic.ConditionPython,
@@ -39,6 +43,25 @@ func TestWritePrivateRawDebugIsExclusiveAndDoesNotLeakIntoFormalResult(t *testin
 	formal, _ := json.Marshal(result)
 	if strings.Contains(string(formal), "private prompt") || strings.Contains(string(formal), "secret") {
 		t.Fatalf("formal result leaked raw debug: %s", formal)
+	}
+}
+
+func TestValidatePrivateDebugPathRejectsSymlinkedAncestor(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual := filepath.Join(root, "actual")
+	secure := filepath.Join(actual, "secure")
+	if err := os.MkdirAll(secure, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(actual, alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := validatePrivateDebugPath(filepath.Join(alias, "trial.json")); err == nil {
+		t.Fatal("symlinked ancestor accepted")
 	}
 }
 

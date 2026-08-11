@@ -4,10 +4,7 @@
   "title": "Agent Python Runtime RunResult v1",
   "type": "object",
   "additionalProperties": false,
-  "dependentRequired": {
-    "run_plan": ["import_receipts"],
-    "import_receipts": ["run_plan"]
-  },
+
   "required": ["status", "result", "receipts", "metrics", "error"],
   "properties": {
     "status": {"enum": ["ok", "error"]},
@@ -27,8 +24,7 @@
         "executed_code_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
-    "run_plan": {"$ref": "run-plan.schema.json"},
-    "import_receipts": {"$ref": "import-receipts.schema.json"},
+
     "receipts": {
       "type": "array",
       "maxItems": 256,

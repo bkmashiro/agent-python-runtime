@@ -1,7 +1,6 @@
 package v1_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,13 +8,11 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/bkmashiro/agent-python-runtime/runtime/transaction"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 var schemaNames = []string{
-	"request", "response", "compatibility-result", "source-validation-evidence", "run-plan", "import-receipts", "tool-request", "tool-response", "fetch-many-arguments", "fetch-many-result",
-	"tool-catalog", "transaction-record", "effect-operation", "effect-attempt", "effect-attempt-v2", "effect-attempt-v3", "commit-command", "audit-evidence", "transaction-evidence", "transaction-evidence-v2", "transaction-evidence-v3",
+	"request", "response", "tool-request", "tool-response", "execution-outcome",
 }
 
 func abiRoot(t *testing.T) string {
@@ -40,21 +37,7 @@ func compileSchema(t *testing.T, name string) *jsonschema.Schema {
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.AssertFormat()
-	if name == "response" {
-		for _, dependency := range []string{"run-plan", "import-receipts"} {
-			dependencyData, err := os.ReadFile(filepath.Join(abiRoot(t), dependency+".schema.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			var dependencyDocument any
-			if err := json.Unmarshal(dependencyData, &dependencyDocument); err != nil {
-				t.Fatal(err)
-			}
-			if err := compiler.AddResource("https://agent-runtime.dev/abi/v1/"+dependency+".schema.json", dependencyDocument); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
+
 	url := "https://agent-runtime.dev/abi/v1/" + name + ".schema.json"
 	if err := compiler.AddResource(url, document); err != nil {
 		t.Fatalf("add %s: %v", name, err)
@@ -114,25 +97,6 @@ func TestABIV1Fixtures(t *testing.T) {
 				})
 			}
 		})
-	}
-}
-
-func TestTransactionEvidenceFixturesHaveCanonicalDigest(t *testing.T) {
-	for _, path := range fixtureCases(t, "valid", "transaction-evidence-v3") {
-		encoded, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := transaction.DecodeAndVerifyTransactionEvidence(encoded); err != nil {
-			t.Fatalf("fixture digest is not canonical: %s: %v", path, err)
-		}
-		tampered := bytes.Replace(encoded, []byte(`"run_id": "run_fixture"`), []byte(`"run_id": "run_tampered"`), 1)
-		if bytes.Equal(tampered, encoded) {
-			t.Fatal("tamper seam missing")
-		}
-		if _, err := transaction.DecodeAndVerifyTransactionEvidence(tampered); err == nil {
-			t.Fatal("tampered evidence digest accepted")
-		}
 	}
 }
 

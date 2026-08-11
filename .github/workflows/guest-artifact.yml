@@ -2,597 +2,85 @@ name: Guest artifact
 
 on:
   workflow_dispatch:
-    inputs:
-      artifact_profile:
-        description: Explicit guest artifact profile
-        required: true
-        default: base
-        type: choice
-        options:
-          - base
-          - numpy-core
-      memory_model:
-        description: Explicit linear-memory model
-        required: true
-        default: growable
-        type: choice
-        options:
-          - growable
-          - cow-fixed
 
 permissions:
   contents: read
 
-env:
-  AGENT_RUNTIME_ARTIFACT_PROFILE: ${{ inputs.artifact_profile || 'base' }}
-  AGENT_RUNTIME_MEMORY_MODEL: ${{ inputs.memory_model || 'growable' }}
-  AGENT_RUNTIME_COW_FIXED_MEMORY: ${{ (inputs.memory_model || 'growable') == 'cow-fixed' && '1' || '' }}
-
 concurrency:
-  group: guest-${{ github.workflow }}-${{ github.ref }}-${{ inputs.artifact_profile || 'base' }}-${{ inputs.memory_model || 'growable' }}
+  group: guest-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-core:
-    name: Build neutral CPython WASI guest
+  build:
+    name: Build base CPython/WASI Guest
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
 
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.25.0'
-          cache: true
-
-      - name: Install host build prerequisites
+      - name: Install build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential pkg-config unzip xz-utils
 
-      - name: Verify producer contracts
+      - name: Verify locked build inputs
         run: |
           python3 tools/verify_sources_lock.py
-          python3 tools/verify_sources_lock.py guest/build/sources.numpy-core.lock.json
           python3 -m unittest discover -s guest/tests -v
-          python3 -m unittest tests/test_deterministic_copy.py tests/test_patch_wasi_vfs_storage.py -v
-          go test ./cmd/validate-json-schema
+          python3 -m unittest discover -s tests -v
           bash -n guest/build/build-guest.sh
 
-      - name: Build core guest from locked sources
+      - name: Build base Guest
         env:
+          AGENT_RUNTIME_ARTIFACT_PROFILE: base
+          AGENT_RUNTIME_MEMORY_MODEL: growable
           AGENT_RUNTIME_BUILD_DIR: ${{ runner.temp }}/agent-runtime-build
           AGENT_RUNTIME_VFS_ROOT: /dev/shm/agent-runtime-vfs
-          AGENT_RUNTIME_PREINITIALIZATION_SPIKE: ${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base' && '1' || '0' }}
         run: |
           SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
           export SOURCE_DATE_EPOCH
           guest/build/build-guest.sh
 
-      - name: Verify artifact binding and ABI
+      - name: Verify distribution
         run: |
-          ARTIFACT_FILENAME=$(python3 -c 'import json; print(json.load(open("dist/manifest.json"))["artifact"]["filename"])')
-          python3 guest/build/verify-artifact.py \
-            "dist/${ARTIFACT_FILENAME}" \
-            dist/manifest.json
-          (
-            cd dist
-            sha256sum --check SHA256SUMS
-          )
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          ARTIFACT=$(python3 -c 'import json; print(json.load(open("dist/manifest.json"))["artifact"]["filename"])')
+          python3 guest/build/verify-artifact.py "dist/${ARTIFACT}" dist/manifest.json
+          (cd dist && sha256sum --check SHA256SUMS)
 
-          memory = json.loads(Path("dist/manifest.json").read_text())["wasm"]["memory"]
-          model = os.environ["AGENT_RUNTIME_MEMORY_MODEL"]
-          valid = (
-              model == "growable"
-              and memory["fixed"] is False
-              and memory["initial_pages"] < memory["maximum_pages"]
-          ) or (
-              model == "cow-fixed"
-              and memory["fixed"] is True
-              and memory["initial_pages"] == memory["maximum_pages"]
-          )
-          if not valid:
-              raise SystemExit("artifact memory model drifted")
-          PY
-
-      - name: Upload private evidence bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: agent-python-runtime-${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE }}-${{ github.sha }}
+          name: pysolate-guest-${{ github.sha }}
           path: dist/
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
 
-      - name: Upload exact preinitialization transform input
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: preinitialized-guest-input-${{ github.sha }}
-          path: ${{ runner.temp }}/agent-runtime-build/preinitialize-spike/input/
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
-
-  host-e2e:
-    name: Consume artifact with Go/wazero
-    needs: build-core
+  e2e:
+    name: Run real Guest E2E
+    needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.25.x'
           cache: true
 
-      - name: Download exact guest bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: agent-python-runtime-${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE }}-${{ github.sha }}
-          path: ${{ runner.temp }}/agent-runtime-dist
+          name: pysolate-guest-${{ github.sha }}
+          path: ${{ runner.temp }}/pysolate-dist
 
-      - name: Reverify artifact binding
+      - name: Verify and run
         run: |
-          BUNDLE="${{ runner.temp }}/agent-runtime-dist"
-          ARTIFACT_FILENAME=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact"]["filename"])' "${BUNDLE}/manifest.json")
-          ARTIFACT_PATH="${BUNDLE}/${ARTIFACT_FILENAME}"
-          case "${AGENT_RUNTIME_ARTIFACT_PROFILE}" in
-            base) SOURCE_LOCK=guest/build/sources.lock.json ;;
-            numpy-core) SOURCE_LOCK=guest/build/sources.numpy-core.lock.json ;;
-            *) echo "unsupported artifact profile: ${AGENT_RUNTIME_ARTIFACT_PROFILE}" >&2; exit 2 ;;
-          esac
-          echo "AGENT_RUNTIME_GUEST=${ARTIFACT_PATH}" >> "${GITHUB_ENV}"
-          echo "AGENT_RUNTIME_SOURCE_LOCK=${SOURCE_LOCK}" >> "${GITHUB_ENV}"
-          python3 guest/build/verify-artifact.py \
-            "${ARTIFACT_PATH}" \
-            "${BUNDLE}/manifest.json"
-          (
-            cd "${BUNDLE}"
-            sha256sum --check SHA256SUMS
-          )
-          python3 guest/build/write-supply-chain.py \
-            --artifact "${ARTIFACT_PATH}" \
-            --manifest "${BUNDLE}/manifest.json" \
-            --source-lock "${SOURCE_LOCK}" \
-            --sbom "${BUNDLE}/sbom.spdx.json" \
-            --notices "${BUNDLE}/THIRD_PARTY_NOTICES.md" \
-            --verify
-          python3 tools/fetch_locked_source.py \
-            spdx-2.3-json-schema \
-            "${{ runner.temp }}/spdx-2.3-schema.json" \
-            --lock "${SOURCE_LOCK}"
-          go run ./cmd/validate-json-schema \
-            "${{ runner.temp }}/spdx-2.3-schema.json" \
-            "${{ runner.temp }}/agent-runtime-dist/sbom.spdx.json"
-
-      - name: Run real Host/guest E2E
-        run: go test ./integration/e2e -v -count=1
-
-      - name: Record scripted agentic mechanism baseline
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        run: |
-          go run ./cmd/apyrun-eval-mechanism \
-            -guest "${AGENT_RUNTIME_GUEST}" \
-            -dataset eval/agentic/routing/v1 \
-            -repository-commit "${GITHUB_SHA}" \
-            -output "${{ runner.temp }}/agentic-mechanism-baseline.json"
-          python3 -m json.tool \
-            "${{ runner.temp }}/agentic-mechanism-baseline.json" \
-            >/dev/null
-
-      - name: Record reactor state census
-        run: |
-          case "${AGENT_RUNTIME_ARTIFACT_PROFILE}" in
-            base) EVIDENCE_CLASS=production-safe ;;
-            numpy-core) EVIDENCE_CLASS=profile-candidate ;;
-            *) echo "unsupported artifact profile" >&2; exit 1 ;;
-          esac
-          OUTPUT="${{ runner.temp }}/reactor-census-${AGENT_RUNTIME_ARTIFACT_PROFILE}-linux-amd64.json"
-          go run ./cmd/apyrun-benchmark \
-            -kind reactor-census \
-            -artifact "${AGENT_RUNTIME_GUEST}" \
-            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            -output "${OUTPUT}" \
-            -class "${EVIDENCE_CLASS}"
-          go run ./cmd/validate-json-schema \
-            benchmark/v1/reactor-census.schema.json \
-            "${OUTPUT}"
-
-      - name: Record production-safe runtime benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        run: |
-          go run ./cmd/apyrun-benchmark \
-            -artifact "${AGENT_RUNTIME_GUEST}" \
-            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            -output "${{ runner.temp }}/runtime-production-safe-linux-amd64.json" \
-            -class production-safe \
-            -samples 3
-          python3 -m json.tool \
-            "${{ runner.temp }}/runtime-production-safe-linux-amd64.json" \
-            >/dev/null
-
-      - name: Record production-safe prepared benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        run: |
-          go run ./cmd/apyrun-benchmark \
-            -artifact "${AGENT_RUNTIME_GUEST}" \
-            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            -output "${{ runner.temp }}/prepared-production-safe-linux-amd64.json" \
-            -class production-safe \
-            -strategy single-use-preinitialized \
-            -samples 3
-          python3 -m json.tool \
-            "${{ runner.temp }}/prepared-production-safe-linux-amd64.json" \
-            >/dev/null
-
-      - name: Record lifecycle-density fresh-process sweep
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        run: |
-          go test ./cmd/apyrun-benchmark \
-            -run '^TestCollectPreparedDensityChildWithRealGuestArtifact$' \
-            -count=1 \
-            -v
-          go run ./cmd/apyrun-benchmark \
-            -kind lifecycle-density \
-            -artifact "${AGENT_RUNTIME_GUEST}" \
-            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            -output "${{ runner.temp }}/lifecycle-density-production-safe-linux-amd64.json" \
-            -class production-safe \
-            -strategy single-use-preinitialized \
-            -samples 3 \
-            -max-rss-bytes 5368709120 \
-            -child-timeout 3m
-          python3 -m json.tool \
-            "${{ runner.temp }}/lifecycle-density-production-safe-linux-amd64.json" \
-            >/dev/null
-          go run ./cmd/validate-json-schema \
-            benchmark/v1/lifecycle-density.schema.json \
-            "${{ runner.temp }}/lifecycle-density-production-safe-linux-amd64.json"
-
-      - name: Record NumPy profile-candidate runtime benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
-        run: |
-          go run ./cmd/apyrun-benchmark \
-            -artifact "${AGENT_RUNTIME_GUEST}" \
-            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            -output "${{ runner.temp }}/runtime-profile-candidate-linux-amd64.json" \
-            -class profile-candidate \
-            -samples 3
-          python3 -m json.tool \
-            "${{ runner.temp }}/runtime-profile-candidate-linux-amd64.json" \
-            >/dev/null
-
-      - name: Record NumPy profile-candidate prepared benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
-        run: |
-          go run ./cmd/apyrun-benchmark \
-            -artifact "${AGENT_RUNTIME_GUEST}" \
-            -manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            -output "${{ runner.temp }}/prepared-profile-candidate-linux-amd64.json" \
-            -class profile-candidate \
-            -strategy single-use-preinitialized \
-            -samples 3
-          python3 -m json.tool \
-            "${{ runner.temp }}/prepared-profile-candidate-linux-amd64.json" \
-            >/dev/null
-
-      - name: Write machine-readable evidence index
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        run: |
-          python3 tools/write_evidence_index.py \
-            --artifact "${AGENT_RUNTIME_GUEST}" \
-            --manifest "${{ runner.temp }}/agent-runtime-dist/manifest.json" \
-            --sbom "${{ runner.temp }}/agent-runtime-dist/sbom.spdx.json" \
-            --notices "${{ runner.temp }}/agent-runtime-dist/THIRD_PARTY_NOTICES.md" \
-            --commit "${GITHUB_SHA}" \
-            --run-id "${GITHUB_RUN_ID}" \
-            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --output "${{ runner.temp }}/evidence-index.json"
-          go run ./cmd/validate-json-schema \
-            evidence/v1/index.schema.json \
-            "${{ runner.temp }}/evidence-index.json"
-
-      - name: Upload machine-readable evidence index
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: runtime-evidence-index-${{ github.sha }}
-          path: ${{ runner.temp }}/evidence-index.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload scripted agentic mechanism baseline
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: agentic-mechanism-baseline-${{ github.sha }}
-          path: ${{ runner.temp }}/agentic-mechanism-baseline.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload reactor state census
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: reactor-census-${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE }}-${{ github.sha }}
-          path: ${{ runner.temp }}/reactor-census-${{ env.AGENT_RUNTIME_ARTIFACT_PROFILE }}-linux-amd64.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload NumPy profile-candidate runtime benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: runtime-benchmark-profile-candidate-${{ github.sha }}
-          path: ${{ runner.temp }}/runtime-profile-candidate-linux-amd64.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload NumPy profile-candidate prepared benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'numpy-core'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: prepared-benchmark-profile-candidate-${{ github.sha }}
-          path: ${{ runner.temp }}/prepared-profile-candidate-linux-amd64.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload production-safe runtime benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: runtime-benchmark-production-safe-${{ github.sha }}
-          path: ${{ runner.temp }}/runtime-production-safe-linux-amd64.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload production-safe prepared benchmark
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: prepared-benchmark-production-safe-${{ github.sha }}
-          path: ${{ runner.temp }}/prepared-production-safe-linux-amd64.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload production-safe lifecycle-density sweep
-        if: env.AGENT_RUNTIME_ARTIFACT_PROFILE == 'base'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: lifecycle-density-production-safe-${{ github.sha }}
-          path: ${{ runner.temp }}/lifecycle-density-production-safe-linux-amd64.json
-          if-no-files-found: error
-          retention-days: 7
-
-  preinitialize-spike:
-    name: Explore build-time Python preinitialization
-    if: ${{ (inputs.artifact_profile || 'base') == 'base' }}
-    needs: build-core
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.13'
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.25.x'
-          cache: true
-
-      - name: Download exact transform input
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: preinitialized-guest-input-${{ github.sha }}
-          path: ${{ runner.temp }}/preinitialized-guest/input
-
-      - name: Fetch locked Wasmtime and wasm-tools
-        run: |
-          ROOT="${{ runner.temp }}/preinitialized-guest"
-          mkdir -p "${ROOT}/downloads" "${ROOT}/tools/wasmtime" "${ROOT}/tools/wasm-tools"
-          python3 tools/fetch_locked_source.py \
-            wasmtime-linux-x86_64 \
-            "${ROOT}/downloads/wasmtime.tar.xz" \
-            --lock guest/build/sources.lock.json
-          python3 tools/fetch_locked_source.py \
-            wasm-tools-linux-x86_64 \
-            "${ROOT}/downloads/wasm-tools.tar.gz" \
-            --lock guest/build/sources.lock.json
-          tar -xJf "${ROOT}/downloads/wasmtime.tar.xz" -C "${ROOT}/tools/wasmtime"
-          tar -xzf "${ROOT}/downloads/wasm-tools.tar.gz" -C "${ROOT}/tools/wasm-tools"
-          WASMTIME=$(find "${ROOT}/tools/wasmtime" -type f -name wasmtime -print -quit)
-          WASM_TOOLS=$(find "${ROOT}/tools/wasm-tools" -type f -name wasm-tools -print -quit)
-          test -n "${WASMTIME}" && test -n "${WASM_TOOLS}"
-          chmod +x "${WASMTIME}" "${WASM_TOOLS}"
-          echo "SPIKE_WASMTIME=${WASMTIME}" >> "${GITHUB_ENV}"
-          echo "SPIKE_WASM_TOOLS=${WASM_TOOLS}" >> "${GITHUB_ENV}"
-
-      - name: Transform exact post-runtime-init candidate twice
-        run: |
-          set -o pipefail
-          ROOT="${{ runner.temp }}/preinitialized-guest"
-          INPUT="${ROOT}/input/agent-python-runtime.wasm"
-          CANDIDATE_DIR="${ROOT}/candidate"
-          EVIDENCE_DIR="${ROOT}/evidence"
-          mkdir -p "${CANDIDATE_DIR}" "${EVIDENCE_DIR}"
-          {
-            "${SPIKE_WASMTIME}" --version
-            "${SPIKE_WASMTIME}" wizer --help
-            "${SPIKE_WASM_TOOLS}" parse \
-              experiments/preinitialized-guest/host-call-stub.wat \
-              -o "${ROOT}/host-call-stub.wasm"
-            run_candidate() {
-              local output=$1
-              local log=$2
-              "${SPIKE_WASMTIME}" wizer \
-                -S cli=y \
-                -S inherit-stderr=y \
-                -f runtime_preinitialize \
-                -r _initialize=runtime_preinitialized_initialize \
-                --preload "agent_runtime_v1=${ROOT}/host-call-stub.wasm" \
-                "${INPUT}" \
-                -o "${output}" \
-                2>&1 | tee "${log}"
-              local status=${PIPESTATUS[0]}
-              return "${status}"
-            }
-            run_candidate \
-              "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
-              "${EVIDENCE_DIR}/candidate.log"
-            run_candidate \
-              "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm" \
-              "${EVIDENCE_DIR}/candidate-repeat.log"
-            "${SPIKE_WASM_TOOLS}" validate "${CANDIDATE_DIR}/agent-python-runtime.wasm"
-            "${SPIKE_WASM_TOOLS}" validate "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm"
-
-            export SOURCE_DATE_EPOCH
-            SOURCE_DATE_EPOCH=$(python3 tools/source_date_epoch.py "${GITHUB_SHA}")
-            "${SPIKE_WASM_TOOLS}" print "${CANDIDATE_DIR}/agent-python-runtime.wasm" > "${ROOT}/candidate.wat"
-            python3 guest/build/import_inventory.py request \
-              --profile base \
-              --output "${ROOT}/candidate-inventory-request.json"
-            go run ./cmd/apyrun \
-              -artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
-              < "${ROOT}/candidate-inventory-request.json" \
-              > "${ROOT}/candidate-inventory-response.json"
-            python3 guest/build/import_inventory.py extract \
-              --profile base \
-              --response "${ROOT}/candidate-inventory-response.json" \
-              --output "${CANDIDATE_DIR}/import-inventory.json"
-            go build -o "${ROOT}/apyrun-probe" ./cmd/apyrun
-            python3 guest/build/import_qualification.py requests \
-              --profile base \
-              --output-dir "${ROOT}/candidate-qualification-requests"
-            mkdir -p "${ROOT}/candidate-qualification-responses"
-            # Input and output are in distinct fixed directories; basename cannot alias the source path.
-            # shellcheck disable=SC2094
-            for request in "${ROOT}/candidate-qualification-requests"/*.json; do
-              "${ROOT}/apyrun-probe" \
-                -artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
-                < "${request}" \
-                > "${ROOT}/candidate-qualification-responses/$(basename "${request}")"
-            done
-            python3 guest/build/import_qualification.py extract \
-              --profile base \
-              --responses-dir "${ROOT}/candidate-qualification-responses" \
-              --output "${CANDIDATE_DIR}/import-qualification.json"
-            python3 guest/build/write-manifest.py \
-              --artifact "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
-              --wat "${ROOT}/candidate.wat" \
-              --source-lock guest/build/sources.lock.json \
-              --artifact-profile base \
-              --import-inventory "${CANDIDATE_DIR}/import-inventory.json" \
-              --import-qualification "${CANDIDATE_DIR}/import-qualification.json" \
-              --output "${CANDIDATE_DIR}/manifest.json"
-            python3 guest/build/verify-artifact.py \
-              "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
-              "${CANDIDATE_DIR}/manifest.json"
-            TOOL_VERSION=$("${SPIKE_WASMTIME}" --version)
-            python3 experiments/preinitialized-guest/write_transform_receipt.py \
-              --input "${INPUT}" \
-              --candidate "${CANDIDATE_DIR}/agent-python-runtime.wasm" \
-              --repeat-candidate "${CANDIDATE_DIR}/agent-python-runtime.repeat.wasm" \
-              --tool-version "${TOOL_VERSION}" \
-              --host-revision "${GITHUB_SHA}" \
-              --output "${EVIDENCE_DIR}/transform-receipt.json"
-          } 2>&1 | tee "${EVIDENCE_DIR}/transform.log"
-
-      - name: Execute exact baseline and candidate through wazero
-        run: |
-          ROOT="${{ runner.temp }}/preinitialized-guest"
-          for GUEST in \
-            "${ROOT}/input/agent-python-runtime.wasm" \
-            "${ROOT}/candidate/agent-python-runtime.wasm"; do
-            AGENT_RUNTIME_GUEST="${GUEST}" \
-              go test ./integration/e2e -run '^TestCoreGuestExecutesNeutralRequest$' -v -count=1
-          done
-          go run ./cmd/apyrun-benchmark \
-            -artifact "${ROOT}/input/agent-python-runtime.wasm" \
-            -manifest "${ROOT}/input/manifest.json" \
-            -output "${ROOT}/evidence/runtime-baseline.json" \
-            -class preinitialization-spike \
-            -samples 3
-          go run ./cmd/apyrun-benchmark \
-            -artifact "${ROOT}/candidate/agent-python-runtime.wasm" \
-            -manifest "${ROOT}/candidate/manifest.json" \
-            -output "${ROOT}/evidence/runtime-candidate.json" \
-            -class preinitialization-spike \
-            -samples 3
-          go run ./cmd/apyrun-benchmark \
-            -kind lifecycle-density \
-            -artifact "${ROOT}/candidate/agent-python-runtime.wasm" \
-            -manifest "${ROOT}/candidate/manifest.json" \
-            -output "${ROOT}/evidence/lifecycle-density-candidate.json" \
-            -class preinitialization-spike \
-            -strategy single-use-preinitialized \
-            -samples 3 \
-            -max-rss-bytes 5368709120 \
-            -child-timeout 3m
-          go run ./cmd/apyrun-benchmark \
-            -kind lifecycle-density \
-            -artifact "${ROOT}/candidate/agent-python-runtime.wasm" \
-            -manifest "${ROOT}/candidate/manifest.json" \
-            -output "${ROOT}/evidence/lifecycle-density-shared-cache-candidate.json" \
-            -class preinitialization-spike \
-            -strategy single-use-preinitialized-shared-cache \
-            -samples 3 \
-            -max-rss-bytes 5368709120 \
-            -child-timeout 3m
-          python3 experiments/preinitialized-guest/compare_density.py \
-            --baseline "${ROOT}/evidence/lifecycle-density-candidate.json" \
-            --candidate "${ROOT}/evidence/lifecycle-density-shared-cache-candidate.json" \
-            --intervention shared-compilation-cache \
-            --output "${ROOT}/evidence/lifecycle-density-shared-cache-comparison.json"
-          python3 experiments/preinitialized-guest/compare.py \
-            --baseline "${ROOT}/evidence/runtime-baseline.json" \
-            --candidate "${ROOT}/evidence/runtime-candidate.json" \
-            --receipt "${ROOT}/evidence/transform-receipt.json" \
-            --output "${ROOT}/evidence/verdict.json"
-          go run ./cmd/validate-json-schema \
-            benchmark/v1/evidence.schema.json \
-            "${ROOT}/evidence/runtime-baseline.json"
-          go run ./cmd/validate-json-schema \
-            benchmark/v1/evidence.schema.json \
-            "${ROOT}/evidence/runtime-candidate.json"
-          go run ./cmd/validate-json-schema \
-            benchmark/v1/lifecycle-density.schema.json \
-            "${ROOT}/evidence/lifecycle-density-candidate.json"
-          go run ./cmd/validate-json-schema \
-            benchmark/v1/lifecycle-density.schema.json \
-            "${ROOT}/evidence/lifecycle-density-shared-cache-candidate.json"
-          python3 -m json.tool "${ROOT}/evidence/verdict.json" >/dev/null
-          python3 -m json.tool "${ROOT}/evidence/lifecycle-density-shared-cache-comparison.json" >/dev/null
-
-      - name: Upload preinitialization spike evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: preinitialized-guest-spike-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/preinitialized-guest/candidate/*.wasm
-            ${{ runner.temp }}/preinitialized-guest/candidate/manifest.json
-            ${{ runner.temp }}/preinitialized-guest/candidate/import-inventory.json
-            ${{ runner.temp }}/preinitialized-guest/candidate/import-qualification.json
-            ${{ runner.temp }}/preinitialized-guest/evidence/
-          if-no-files-found: warn
-          retention-days: 7
-          compression-level: 6
+          BUNDLE="${{ runner.temp }}/pysolate-dist"
+          ARTIFACT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact"]["filename"])' "${BUNDLE}/manifest.json")
+          python3 guest/build/verify-artifact.py "${BUNDLE}/${ARTIFACT}" "${BUNDLE}/manifest.json"
+          (cd "${BUNDLE}" && sha256sum --check SHA256SUMS)
+          AGENT_RUNTIME_GUEST="${BUNDLE}/${ARTIFACT}" go test ./integration/e2e -count=1 -v

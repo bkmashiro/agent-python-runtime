@@ -1,483 +1,69 @@
 package capability
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/url"
 	"sync"
-
-	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
-	"github.com/bkmashiro/agent-python-runtime/runtime/toolcatalog"
-	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-type HostCall struct {
-	RunIdentity    string
-	CallID         string
-	ToolID         string
-	CatalogDigest  string
-	HandlerVersion string
-	TransactionID  string
-	OperationID    string
-	AttemptID      string
-	Arguments      json.RawMessage
-}
+var (
+	ErrInvalidTool = errors.New("invalid Host tool")
+	ErrToolExists  = errors.New("Host tool is already registered")
+)
 
-type BoundCall struct {
-	RunIdentity     string
-	CallID          string
-	ToolID          string
-	CatalogDigest   string
-	HandlerVersion  string
-	EffectClass     string
-	Policy          string
-	PolicyVersion   string
-	ArgumentsDigest string
-	RequestDigest   string
-}
-
-type BoundOperation struct {
-	TransactionID  string
-	OperationID    string
-	AttemptID      string
-	OperationIndex uint32
-	ManifestDigest string
-}
-
-type BoundOutcome struct {
-	Status       Status
-	ResultDigest string
-	ErrorCode    string
-	Ambiguous    bool
-}
-
-type CallBinder interface {
-	Begin(context.Context, BoundCall) (BoundOperation, error)
-	Complete(context.Context, BoundOperation, BoundOutcome) error
-}
-
+// Handler is the entire PoC Host-tool contract. The Host owns registration and
+// authority; generated Python can only submit JSON arguments.
 type Handler interface {
-	Handle(context.Context, HostCall) (json.RawMessage, error)
+	Call(context.Context, json.RawMessage) (json.RawMessage, error)
 }
 
-type HandlerFunc func(context.Context, HostCall) (json.RawMessage, error)
+type HandlerFunc func(context.Context, json.RawMessage) (json.RawMessage, error)
 
-type HandlerFailure struct {
-	code      string
-	message   string
-	cause     error
-	ambiguous bool
-}
-
-func NewHandlerFailure(code, message string, cause error) error {
-	if !validIdentifier(code) || message == "" || len(message) > 512 || cause == nil {
-		return errors.New("invalid classified Host handler failure")
-	}
-	return &HandlerFailure{code: code, message: message, cause: cause}
-}
-
-// NewAmbiguousHandlerFailure reports that provider dispatch may have committed.
-// The transaction must be reconciled and must not be blindly retried.
-func NewAmbiguousHandlerFailure(code, message string, cause error) error {
-	failure, ok := NewHandlerFailure(code, message, cause).(*HandlerFailure)
-	if !ok {
-		return errors.New("invalid ambiguous Host handler failure")
-	}
-	failure.ambiguous = true
-	return failure
-}
-
-func (failure *HandlerFailure) Error() string { return failure.message }
-func (failure *HandlerFailure) Unwrap() error { return failure.cause }
-
-type ReceiptDraft struct {
-	RequestIdentity string
-	RequestSHA256   string
-	Outcome         Status
-	Response        []byte
-}
-
-type HandlerEvidence struct {
-	Result   json.RawMessage
-	Receipts []ReceiptDraft
-}
-
-type EvidenceHandler interface {
-	HandleWithEvidence(context.Context, HostCall) (HandlerEvidence, error)
-}
-
-func (function HandlerFunc) Handle(ctx context.Context, call HostCall) (json.RawMessage, error) {
-	return function(ctx, call)
-}
-
-type HandlerSpec struct {
-	ToolID         string
-	HandlerVersion string
-	InputSchema    []byte
-	OutputSchema   []byte
-	Handler        Handler
-}
-
-type registeredHandler struct {
-	spec         HandlerSpec
-	inputSchema  *jsonschema.Schema
-	outputSchema *jsonschema.Schema
+func (function HandlerFunc) Call(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+	return function(ctx, arguments)
 }
 
 type Registry struct {
-	mu            sync.RWMutex
-	handlers      map[string]registeredHandler
-	catalogDigest string
-	sealed        bool
+	mu       sync.RWMutex
+	handlers map[string]Handler
 }
-
-const registryMaxPayloadBytes = 1024 * 1024
 
 func NewRegistry() *Registry {
-	return &Registry{handlers: map[string]registeredHandler{}}
+	return &Registry{handlers: make(map[string]Handler)}
 }
 
-func BuildRegistryFromSnapshot(snapshot toolcatalog.Snapshot, handlers map[string]Handler) (*Registry, map[string]ToolGrant, error) {
-	if !catalogDigestPattern.MatchString(snapshot.Digest()) || snapshot.Revision() == 0 {
-		return nil, nil, errors.New("tool catalog snapshot is empty or invalid")
-	}
-	tools := snapshot.Tools()
-	if len(handlers) != len(tools) {
-		return nil, nil, errors.New("handler set does not exactly match the frozen tool catalog")
-	}
-	registry := NewRegistry()
-	registry.catalogDigest = snapshot.Digest()
-	grants := make(map[string]ToolGrant, len(tools))
-	for _, tool := range tools {
-		handler, exists := handlers[tool.ToolID]
-		if !exists || handler == nil {
-			return nil, nil, fmt.Errorf("catalog tool %q has no Host handler", tool.ToolID)
-		}
-		if err := registry.Register(HandlerSpec{
-			ToolID: tool.ToolID, HandlerVersion: tool.HandlerVersion,
-			InputSchema: tool.InputSchema, OutputSchema: tool.OutputSchema, Handler: handler,
-		}); err != nil {
-			return nil, nil, err
-		}
-		grants[tool.ToolID] = ToolGrant{
-			ToolID: tool.ToolID, HandlerVersion: tool.HandlerVersion,
-			EffectClass: tool.EffectClass, Policy: tool.Policy, PolicyVersion: tool.GrantVersion, MaxCalls: tool.MaxCalls,
-		}
-	}
-	registry.sealed = true
-	return registry, grants, nil
-}
-
-func (registry *Registry) Register(spec HandlerSpec) error {
-	if registry == nil || !validIdentifier(spec.ToolID) || !validIdentifier(spec.HandlerVersion) ||
-		len(spec.InputSchema) == 0 || len(spec.InputSchema) > registryMaxPayloadBytes ||
-		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > registryMaxPayloadBytes || spec.Handler == nil {
-		return errors.New("invalid handler specification")
-	}
-	inputSchema, err := compileRegisteredSchema(spec.ToolID+"-input", spec.InputSchema)
-	if err != nil {
-		return fmt.Errorf("compile input schema: %w", err)
-	}
-	outputSchema, err := compileRegisteredSchema(spec.ToolID+"-output", spec.OutputSchema)
-	if err != nil {
-		return fmt.Errorf("compile output schema: %w", err)
+func (registry *Registry) Register(name string, handler Handler) error {
+	if registry == nil || !validName(name) || handler == nil {
+		return ErrInvalidTool
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	if registry.sealed {
-		return errors.New("Host tool registry is sealed")
+	if _, exists := registry.handlers[name]; exists {
+		return ErrToolExists
 	}
-	if _, exists := registry.handlers[spec.ToolID]; exists {
-		return errors.New("handler already registered")
-	}
-	spec.InputSchema = append([]byte(nil), spec.InputSchema...)
-	spec.OutputSchema = append([]byte(nil), spec.OutputSchema...)
-	registry.handlers[spec.ToolID] = registeredHandler{spec: spec, inputSchema: inputSchema, outputSchema: outputSchema}
+	registry.handlers[name] = handler
 	return nil
 }
 
-type denyExternalSchemaLoader struct{}
-
-func (denyExternalSchemaLoader) Load(string) (any, error) {
-	return nil, errors.New("external schema resources are disabled")
-}
-
-func compileRegisteredSchema(name string, raw []byte) (*jsonschema.Schema, error) {
-	compiler := jsonschema.NewCompiler()
-	compiler.AssertFormat()
-	compiler.UseLoader(denyExternalSchemaLoader{})
-	resource := "mem:///" + url.PathEscape(name) + ".json"
-	var document any
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return nil, err
-	}
-	if err := compiler.AddResource(resource, document); err != nil {
-		return nil, err
-	}
-	return compiler.Compile(resource)
-}
-
-func (registry *Registry) snapshot() *Registry {
+func (registry *Registry) lookup(name string) (Handler, bool) {
 	if registry == nil {
-		return nil
+		return nil, false
 	}
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
-	cloned := &Registry{handlers: make(map[string]registeredHandler, len(registry.handlers)), catalogDigest: registry.catalogDigest, sealed: true}
-	for id, handler := range registry.handlers {
-		handler.spec.InputSchema = append([]byte(nil), handler.spec.InputSchema...)
-		handler.spec.OutputSchema = append([]byte(nil), handler.spec.OutputSchema...)
-		cloned.handlers[id] = handler
-	}
-	return cloned
+	handler, ok := registry.handlers[name]
+	return handler, ok
 }
 
-func (registry *Registry) lookup(toolID string) (registeredHandler, bool) {
-	if registry == nil {
-		return registeredHandler{}, false
-	}
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-	handler, exists := registry.handlers[toolID]
-	return handler, exists
-}
-
-func validateHandlerArguments(schema *jsonschema.Schema, raw json.RawMessage) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New("multiple argument values")
-		}
-		return err
-	}
-	return schema.Validate(value)
-}
-
-type registeredResponse struct {
-	CallID string          `json:"call_id"`
-	Status Status          `json:"status"`
-	Result json.RawMessage `json:"result"`
-	Error  *Error          `json:"error"`
-}
-
-func (broker *Broker) callRegistered(ctx context.Context, request toolRequest) (response []byte, err error) {
-	grant, granted := broker.config.ToolGrants[request.Capability]
-	handler, registered := broker.config.Registry.lookup(request.Capability)
-	if !granted || !registered {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "capability_denied", "capability is not granted")
-	}
-	if request.CatalogDigest == nil || request.HandlerVersion == nil {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "invalid_request", "typed tool request is missing catalog or handler binding")
-	}
-	if *request.CatalogDigest != broker.config.CatalogDigest {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "stale_catalog", "catalog digest does not match this Run")
-	}
-	if *request.HandlerVersion != grant.HandlerVersion || *request.HandlerVersion != handler.spec.HandlerVersion {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "handler_version_mismatch", "handler version does not match the Host grant")
-	}
-	if err := validateHandlerArguments(handler.inputSchema, request.Arguments); err != nil {
-		return encodeRegisteredResponse(request.CallID, StatusError, nil, "invalid_arguments", "arguments do not match the registered schema")
-	}
-	requestDigest := request.EnvelopeDigest
-	if prior, exists := broker.typedCalls[request.CallID]; exists {
-		if prior.RequestDigest != requestDigest {
-			return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "duplicate_call_id", "call_id was already used for a different typed request")
-		}
-		return append([]byte(nil), prior.Response...), nil
-	}
-	admitted := false
-	defer func() {
-		if admitted && err == nil {
-			broker.typedCalls[request.CallID] = typedCallReplay{RequestDigest: requestDigest, Response: append([]byte(nil), response...)}
-		}
-	}()
-	if broker.calls[grant.ToolID] >= grant.MaxCalls {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "call_budget_exceeded", "capability call budget exhausted")
-	}
-	if broker.transactionCalls >= broker.config.MaxTransactionCalls {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "transaction_call_budget_exceeded", "transaction call budget exhausted")
-	}
-	argumentDigest := digestBytes(request.Arguments)
-	bound, bindErr := broker.config.Binder.Begin(ctx, BoundCall{
-		RunIdentity: broker.config.RunIdentity, CallID: request.CallID, ToolID: request.Capability,
-		CatalogDigest: broker.config.CatalogDigest, HandlerVersion: *request.HandlerVersion,
-		EffectClass: grant.EffectClass, Policy: grant.Policy, PolicyVersion: grant.PolicyVersion,
-		ArgumentsDigest: argumentDigest, RequestDigest: request.EnvelopeDigest,
-	})
-	if bindErr != nil {
-		if errors.Is(bindErr, ErrReplayRequiresReconciliation) {
-			return encodeRegisteredResponse(request.CallID, StatusError, nil, "reconciliation_required", "prior admitted call requires reconciliation")
-		}
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "transaction_not_ready", "Host transaction binder denied dispatch")
-	}
-	if !validIdentifier(bound.TransactionID) || !validIdentifier(bound.OperationID) ||
-		!validIdentifier(bound.AttemptID) || bound.OperationIndex == 0 || !catalogDigestPattern.MatchString(bound.ManifestDigest) {
-		return encodeRegisteredResponse(request.CallID, StatusDenied, nil, "transaction_not_ready", "Host transaction binder denied dispatch")
-	}
-	admitted = true
-	broker.calls[grant.ToolID]++
-	broker.transactionCalls++
-	hostCall := HostCall{
-		RunIdentity: broker.config.RunIdentity, CallID: request.CallID, ToolID: request.Capability,
-		CatalogDigest: broker.config.CatalogDigest, HandlerVersion: *request.HandlerVersion,
-		TransactionID: bound.TransactionID, OperationID: bound.OperationID, AttemptID: bound.AttemptID,
-		Arguments: append(json.RawMessage(nil), request.Arguments...),
-	}
-	var result json.RawMessage
-	var drafts []ReceiptDraft
-	var handlerErr error
-	if evidenceHandler, ok := handler.spec.Handler.(EvidenceHandler); ok {
-		evidence, evidenceErr := evidenceHandler.HandleWithEvidence(ctx, hostCall)
-		result, drafts, handlerErr = evidence.Result, evidence.Receipts, evidenceErr
-	} else {
-		result, handlerErr = handler.spec.Handler.Handle(ctx, hostCall)
-	}
-	if handlerErr != nil {
-		status := StatusError
-		code := "handler_failed"
-		message := "Host tool handler failed"
-		ambiguous := false
-		var classified *HandlerFailure
-		if errors.As(handlerErr, &classified) {
-			code, message, ambiguous = classified.code, classified.message, classified.ambiguous
-		}
-		if ambiguous {
-			code, message = "reconciliation_required", "Host tool outcome requires reconciliation"
-		} else if errors.Is(handlerErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			status, code, message = StatusTimeout, "handler_timeout", "Host tool handler timed out"
-		}
-		return broker.finishRegistered(ctx, request, bound, status, nil, nil, ambiguous, code, message)
-	}
-	if len(result) == 0 || len(result) > registryMaxPayloadBytes || !json.Valid(result) ||
-		validateHandlerArguments(handler.outputSchema, result) != nil {
-		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, false, "result_schema_mismatch", "Host tool handler returned a result outside its registered schema")
-	}
-	if !validReceiptDrafts(drafts) {
-		return broker.finishRegistered(ctx, request, bound, StatusError, nil, nil, false, "handler_evidence_invalid", "Host tool handler returned invalid receipt evidence")
-	}
-	return broker.finishRegistered(ctx, request, bound, StatusOK, result, drafts, false, "", "")
-}
-
-func (broker *Broker) finishRegistered(ctx context.Context, request toolRequest, bound BoundOperation, status Status, result json.RawMessage, drafts []ReceiptDraft, ambiguous bool, code, message string) ([]byte, error) {
-	outcome := BoundOutcome{Status: status, ErrorCode: code, Ambiguous: ambiguous}
-	if result != nil {
-		outcome.ResultDigest = digestBytes(result)
-	}
-	receiptStatus := status
-	if ambiguous {
-		receiptStatus = Status("reconciliation_required")
-	}
-	if err := broker.config.Binder.Complete(ctx, bound, outcome); err != nil {
-		receiptStatus = Status("reconciliation_required")
-		status, result, code, message = StatusError, nil, "reconciliation_required", "Host transaction completion requires reconciliation"
-	}
-	if len(drafts) == 0 {
-		broker.recordRegistered(request, bound, receiptStatus, result)
-	} else {
-		broker.recordRegisteredDrafts(request, bound, drafts, receiptStatus == Status("reconciliation_required"))
-	}
-	return encodeRegisteredResponse(request.CallID, status, result, code, message)
-}
-
-func encodeRegisteredResponse(callID string, status Status, result json.RawMessage, code, message string) ([]byte, error) {
-	if result == nil {
-		result = json.RawMessage(`{}`)
-	}
-	var responseError *Error
-	if code != "" {
-		responseError = &Error{Code: code, Message: message}
-	}
-	return json.Marshal(registeredResponse{CallID: callID, Status: status, Result: result, Error: responseError})
-}
-
-func (broker *Broker) recordRegistered(request toolRequest, bound BoundOperation, status Status, response []byte) {
-	target := "tool:" + request.Capability + ":arguments-" + digestBytes(request.Arguments)
-	grant := broker.config.ToolGrants[request.Capability]
-	broker.receipts = append(broker.receipts, receipt.NewBound(
-		broker.config.RunIdentity, request.CallID, request.Capability, bound.OperationIndex,
-		bound.TransactionID, bound.OperationID, bound.AttemptID,
-		broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
-		request.EnvelopeDigest, target, string(status), response,
-	))
-}
-
-func validReceiptDrafts(drafts []ReceiptDraft) bool {
-	if len(drafts) > 4096 {
+func validName(value string) bool {
+	if len(value) == 0 || len(value) > 64 {
 		return false
 	}
-	var total uint64
-	for _, draft := range drafts {
-		digestBytes, digestErr := hex.DecodeString(draft.RequestSHA256)
-		identityValid := draft.RequestIdentity != "" && len(draft.RequestIdentity) <= 2048 && draft.RequestSHA256 == ""
-		digestValid := draft.RequestIdentity == "" && digestErr == nil && len(digestBytes) == sha256.Size
-		if (!identityValid && !digestValid) ||
-			(draft.Outcome != StatusOK && draft.Outcome != StatusDenied && draft.Outcome != StatusError && draft.Outcome != StatusTimeout) ||
-			len(draft.Response) > registryMaxPayloadBytes {
-			return false
-		}
-		total += uint64(len(draft.Response))
-		if total > registryMaxPayloadBytes {
+	for _, character := range value {
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '_' && character != '.' {
 			return false
 		}
 	}
 	return true
-}
-
-func (broker *Broker) recordRegisteredDrafts(request toolRequest, bound BoundOperation, drafts []ReceiptDraft, reconciliation bool) {
-	grant := broker.config.ToolGrants[request.Capability]
-	for _, draft := range drafts {
-		status := draft.Outcome
-		if reconciliation {
-			status = Status("reconciliation_required")
-		}
-		if draft.RequestSHA256 != "" {
-			broker.receipts = append(broker.receipts, receipt.NewBoundFromRequestDigest(
-				broker.config.RunIdentity, request.CallID, request.Capability, bound.OperationIndex,
-				bound.TransactionID, bound.OperationID, bound.AttemptID,
-				broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
-				request.EnvelopeDigest, draft.RequestSHA256, string(status), draft.Response,
-			))
-			continue
-		}
-		broker.receipts = append(broker.receipts, receipt.NewBound(
-			broker.config.RunIdentity, request.CallID, request.Capability, bound.OperationIndex,
-			bound.TransactionID, bound.OperationID, bound.AttemptID,
-			broker.config.CatalogDigest, grant.HandlerVersion, grant.EffectClass, grant.Policy, bound.ManifestDigest,
-			request.EnvelopeDigest, draft.RequestIdentity, string(status), draft.Response,
-		))
-	}
-}
-
-func digestBytes(value []byte) string {
-	digest := sha256.Sum256(value)
-	return "sha256:" + hex.EncodeToString(digest[:])
-}
-
-func validEffectClass(value string) bool {
-	switch value {
-	case "read_only", "reversible", "compensatable", "irreversible":
-		return true
-	default:
-		return false
-	}
-}
-
-func validPolicyOutcome(value string) bool {
-	switch value {
-	case "DENY", "AUTO_COMMIT", "AGENT_COMMIT_REQUIRED", "USER_APPROVAL_REQUIRED":
-		return true
-	default:
-		return false
-	}
 }

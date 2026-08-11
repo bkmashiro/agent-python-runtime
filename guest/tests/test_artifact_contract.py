@@ -48,10 +48,7 @@ class ArtifactVerifierTests(unittest.TestCase):
                     "memory",
                     "runtime_init",
                     "runtime_validate_source",
-                    "runtime_source_validation_result",
-                    "runtime_import_receipts",
                     "runtime_prepare",
-                    "runtime_warmup",
                     "alloc",
                     "dealloc",
                     "execute",
@@ -177,41 +174,6 @@ class ArtifactVerifierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
 
-    def test_numpy_core_requires_bound_core_extension_selection(self):
-        numpy_artifact = pathlib.Path(self.directory.name) / "agent-python-runtime-numpy-core.wasm"
-        numpy_artifact.write_bytes(self.artifact.read_bytes())
-        manifest = copy.deepcopy(self.manifest)
-        manifest["artifact_profile"] = "numpy-core"
-        manifest["artifact"]["filename"] = numpy_artifact.name
-        with self.assertRaisesRegex(ValueError, "extension profile"):
-            self.verifier.verify(numpy_artifact, manifest)
-
-        selection = pathlib.Path(self.directory.name) / "extension-selection.json"
-        selection.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "package": "numpy",
-                    "profile": "core",
-                    "modules": [
-                        {"module": "numpy._core._multiarray_umath"},
-                        {"module": "numpy.linalg._umath_linalg"},
-                    ],
-                    "link_inputs": [{"path": "one.a"}],
-                }
-            )
-        )
-        manifest["extension_profile"] = {
-            "filename": selection.name,
-            "profile": "core",
-            "manifest_sha256": self.verifier.sha256(selection),
-            "modules": [
-                "numpy._core._multiarray_umath",
-                "numpy.linalg._umath_linalg",
-            ],
-            "link_input_count": 1,
-        }
-        self.verifier.verify(numpy_artifact, manifest, selection)
 
 
 if __name__ == "__main__":

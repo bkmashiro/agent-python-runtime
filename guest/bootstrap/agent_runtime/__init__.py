@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import dis
-import hashlib
 import json
 import sys
 import time
@@ -16,14 +15,9 @@ _ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "compati
 _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
-_WARMUP_REQUEST_SHELL_V1 = "request-shell-v1"
-_WARMUP_NUMPY_READY_V1 = "numpy-ready-v1"
-_warmup_profiles: dict[str, Any] = {}
 _validated_request_json: str | None = None
 _validated_code: types.CodeType | None = None
 _validated_import_globals: dict[str, Any] = {}
-_source_validation_evidence: str | None = None
-_native_import_receipts: Any = None
 _SOURCE_CONTRACT_OK = 0
 _SOURCE_CONTRACT_UNSUPPORTED = 1
 _SOURCE_CONTRACT_INVALID = 2
@@ -53,14 +47,13 @@ def _initialize(config_json: str) -> None:
     value = json.loads(config_json)
     if not isinstance(value, dict):
         raise ValueError("runtime config must be an object")
-    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals, _source_validation_evidence, _native_import_receipts
+    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals
     _runtime_config = dict(value)
     _prepared_globals = {}
     _validated_request_json = None
     _validated_code = None
     _validated_import_globals = {}
-    _source_validation_evidence = None
-    _native_import_receipts = None
+
 
 
 def _prepare(source: str) -> None:
@@ -71,52 +64,6 @@ def _prepare(source: str) -> None:
     global _prepared_globals
     _prepared_globals = namespace
 
-
-def register_warmup_profile(name: str, handler: Any) -> None:
-    if not isinstance(name, str) or not name or len(name) > 64:
-        raise ValueError("warmup profile name must contain 1-64 characters")
-    if not name[0].isalnum() or not name.isascii() or any(
-        not (character.islower() or character.isdigit() or character in "-_.")
-        for character in name
-    ):
-        raise ValueError("warmup profile name must use lowercase ASCII identifiers")
-    if not callable(handler):
-        raise TypeError("warmup profile handler must be callable")
-    if name in _warmup_profiles:
-        raise ValueError(f"warmup profile already registered: {name}")
-    _warmup_profiles[name] = handler
-
-
-def _warmup_request_shell_v1() -> None:
-    # Prime deterministic request-shell paths without retaining request data,
-    # wall-clock values, random state, or Host effects in the snapshot.
-    request = json.loads('{"run_id":"warmup","code":"result = None","inputs":{}}')
-    code = compile(request["code"], "<warmup>", "exec")
-    namespace: dict[str, Any] = {"__builtins__": __builtins__, "inputs": request["inputs"]}
-    exec(code, namespace, namespace)
-    json.dumps({"status": "ok", "result": namespace.get("result")}, separators=(",", ":"), allow_nan=False)
-
-
-def _warmup_numpy_ready_v1() -> None:
-    # Import inside the canonical Guest before COW sealing and retain the
-    # audited scientific namespace for request execution. No request data or
-    # Host capabilities are available during this initialization boundary.
-    _prepare("import numpy as np\nprepared = 41")
-    numpy = _prepared_globals["np"]
-    if not isinstance(numpy.__version__, str) or int(numpy.arange(4).sum()) != 6:
-        raise RuntimeError("NumPy warmup self-check failed")
-
-
-register_warmup_profile(_WARMUP_REQUEST_SHELL_V1, _warmup_request_shell_v1)
-register_warmup_profile(_WARMUP_NUMPY_READY_V1, _warmup_numpy_ready_v1)
-
-
-def _warmup(profile: str) -> None:
-    try:
-        handler = _warmup_profiles[profile]
-    except (KeyError, TypeError):
-        raise ValueError(f"unsupported warmup profile: {profile}") from None
-    handler()
 
 
 def _decode_request(request_json: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
@@ -223,33 +170,23 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
     return _SOURCE_CONTRACT_OK, code, import_nodes
 
 
-def _preload_and_seal_imports(
-    import_nodes: list[ast.stmt],
-) -> tuple[dict[str, Any], list[str], list[str], list[str]] | None:
+def _preload_and_seal_imports(import_nodes: list[ast.stmt]) -> dict[str, Any] | None:
     try:
         import _agent_runtime_host  # type: ignore[import-not-found]
         seal = getattr(_agent_runtime_host, "seal_imports")
-        receipt_reader = getattr(_agent_runtime_host, "import_receipts")
-        baseline_modules = sorted(sys.modules)
         namespace: dict[str, Any] = {"__builtins__": __builtins__}
         if import_nodes:
             preamble = ast.fix_missing_locations(ast.Module(body=import_nodes, type_ignores=[]))
             exec(compile(preamble, "<agent-import-preamble>", "exec"), namespace, namespace)
-        sealed_modules = sorted(sys.modules)
-        seal(tuple(sealed_modules))
-        global _native_import_receipts
-        _native_import_receipts = receipt_reader
-        baseline_set = set(baseline_modules)
-        entry_closure_modules = [name for name in sealed_modules if name not in baseline_set]
+        seal(tuple(sorted(sys.modules)))
         namespace.pop("__builtins__", None)
-        return namespace, baseline_modules, entry_closure_modules, sealed_modules
+        return namespace
     except BaseException:
         return None
 
 
 def _validate_request_source(request_json: str) -> int:
-    global _validated_request_json, _validated_code, _validated_import_globals, _source_validation_evidence
-    _source_validation_evidence = None
+    global _validated_request_json, _validated_code, _validated_import_globals
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
     request, error = _decode_request(request_json)
@@ -270,45 +207,10 @@ def _validate_request_source(request_json: str) -> int:
     preload = _preload_and_seal_imports(import_nodes)
     if preload is None:
         return _SOURCE_CONTRACT_UNSUPPORTED
-    import_globals, baseline_modules, entry_closure_modules, sealed_modules = preload
-    ast_import_roots = sorted(request["compatibility"]["imports"])
-    evidence = {
-        "schema_version": 1,
-        "validator": "exact-guest-static-imports-v1",
-        "status": "ready",
-        "source_sha256": "sha256:" + hashlib.sha256(request["code"].encode("utf-8")).hexdigest(),
-        "profile": request["compatibility"]["profile"],
-        "declared_import_roots": ast_import_roots,
-        "ast_import_roots": ast_import_roots,
-        "bytecode_checked": True,
-        "baseline_modules": baseline_modules,
-        "entry_closure_modules": entry_closure_modules,
-        "sealed_modules": sealed_modules,
-    }
-    _source_validation_evidence = json.dumps(evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     _validated_request_json = request_json
     _validated_code = code
-    _validated_import_globals = import_globals
+    _validated_import_globals = preload
     return _SOURCE_CONTRACT_OK
-
-
-def _source_validation_result() -> str | None:
-    return _source_validation_evidence
-
-
-def _import_receipts_result() -> str:
-    if _native_import_receipts is None:
-        raise RuntimeError("native import receipt collector is unavailable")
-    events = [
-        {"sequence": index, "module_name": name, "decision": "admitted" if admitted else "denied"}
-        for index, (name, admitted) in enumerate(_native_import_receipts())
-    ]
-    return json.dumps(
-        {"schema_version": 1, "collector": "cpython-pre-cache-import-gate-v1", "events": events},
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
 
 
 def _encode(response: dict[str, Any]) -> str:

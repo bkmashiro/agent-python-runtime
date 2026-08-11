@@ -1,9 +1,0 @@
-{
-  "files": {
-    "direct-only-v1.txt": "sha256:b0fae95e943f521e644074d855b2d58a2d292462cb62ff58cf7ee6200a881583",
-    "hybrid-v1.txt": "sha256:a6e54c0fb00705bd51cc57e7be2315eec4f30ca86f443d9ddb3c42ec0a0aabab",
-    "python-only-v1.txt": "sha256:10f77cf6a9b6c676fb042c67ae42f29cfdad319ec3063b75ad158f1d14528323",
-    "shared-system-v1.txt": "sha256:510e88b283c624e62d99ced4ed0df1c5afc64ed6842e70ad9338280197a97cd2"
-  },
-  "schema_version": "evaluation-prompt-manifest/v1"
-}

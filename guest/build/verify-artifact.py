@@ -15,10 +15,7 @@ REQUIRED_EXPORTS = {
     "memory",
     "runtime_init",
     "runtime_validate_source",
-    "runtime_source_validation_result",
-    "runtime_import_receipts",
     "runtime_prepare",
-    "runtime_warmup",
     "alloc",
     "dealloc",
     "execute",
@@ -33,12 +30,7 @@ ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v1"}
 REQUIRED_CUSTOM_IMPORTS = {("agent_runtime_v1", "host_call")}
 ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
-    "numpy-core": "agent-python-runtime-numpy-core.wasm",
 }
-NUMPY_CORE_MODULES = (
-    "numpy._core._multiarray_umath",
-    "numpy.linalg._umath_linalg",
-)
 
 
 def load_import_inventory_module():
@@ -141,33 +133,8 @@ def verify(
                 raise ValueError("manifest import qualification does not match sidecar")
 
     extension_profile = manifest.get("extension_profile")
-    if profile == "base":
-        if extension_profile is not None or extension_selection is not None:
-            raise ValueError("base artifact profile forbids extension profile")
-    else:
-        if not isinstance(extension_profile, dict):
-            raise ValueError("numpy-core requires extension profile")
-        if extension_selection is None or not extension_selection.is_file():
-            raise ValueError("numpy-core requires extension profile selection file")
-        if extension_profile.get("filename") != extension_selection.name:
-            raise ValueError("extension profile filename does not match selection file")
-        if extension_profile.get("manifest_sha256") != sha256(extension_selection):
-            raise ValueError("extension profile digest does not match selection file")
-        selection = json.loads(extension_selection.read_text())
-        selected_modules = [
-            row.get("module") for row in selection.get("modules", [])
-        ]
-        manifest_modules = extension_profile.get("modules", [])
-        if (
-            extension_profile.get("profile") != "core"
-            or selection.get("schema_version") != 1
-            or selection.get("package") != "numpy"
-            or selection.get("profile") != "core"
-            or selected_modules != list(NUMPY_CORE_MODULES)
-            or manifest_modules != list(NUMPY_CORE_MODULES)
-            or extension_profile.get("link_input_count") != len(selection.get("link_inputs", []))
-        ):
-            raise ValueError("numpy-core extension profile does not match exact core closure")
+    if extension_profile is not None or extension_selection is not None:
+        raise ValueError("base artifact profile forbids extension profile")
 
     wasm = manifest.get("wasm", {})
     exports = set(wasm.get("exports", []))
@@ -202,13 +169,7 @@ def main() -> int:
     parser.add_argument("manifest", type=pathlib.Path)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text())
-    extension_profile = manifest.get("extension_profile")
-    selection = None
-    if isinstance(extension_profile, dict):
-        filename = extension_profile.get("filename")
-        if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
-            raise ValueError("invalid extension profile filename")
-        selection = args.manifest.parent / filename
+
     inventory_record = manifest.get("python_import_inventory")
     inventory = None
     if isinstance(inventory_record, dict):
@@ -223,7 +184,7 @@ def main() -> int:
         if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
             raise ValueError("invalid import qualification filename")
         qualification = args.manifest.parent / filename
-    verify(args.artifact, manifest, selection, inventory, qualification)
+    verify(args.artifact, manifest, None, inventory, qualification)
     print(json.dumps({"artifact": str(args.artifact), "sha256": sha256(args.artifact)}))
     return 0
 

@@ -1,58 +1,54 @@
 # Development
 
-## Scope
-
-Read the public design documents before changing runtime behavior:
-
-1. `README.md`
-2. `docs/architecture.md`
-3. `docs/threat-model.md`
-4. `docs/research-roadmap.md`
-5. `docs/adr/`
-
-The project is independent from prior domain-specific runtime experiments. Do not introduce unrelated protocols, compatibility exports, or product-specific request fields.
-
-## Local cheap gates
+## Host tests
 
 ```bash
-python3 tools/verify_sources_lock.py
-python3 -m unittest discover -s tests -v
-python3 -m unittest discover -s guest/tests -v
 go test ./...
-go test -race ./...
 go vet ./...
-go build ./...
-git diff --check
 ```
 
-These gates validate contracts and Host code. They are not WASI execution evidence.
+## Build the Guest
 
-## Linux/WASI evidence
-
-The guest workflow must build the actual `wasm32-wasip1` artifact from pinned inputs, validate imports/exports and hashes, and pass that exact artifact to Go/wazero E2E tests. A native Python run, source-contract test, cache hit, or uploaded filename does not prove guest behavior.
-
-The first COW strategy requires an explicit fixed-memory artifact:
+The Guest build uses pinned CPython/WASI inputs and writes a distribution directory:
 
 ```bash
-AGENT_RUNTIME_COW_FIXED_MEMORY=1 guest/build/build-guest.sh
+guest/build/build-guest.sh
 ```
 
-This keeps the default artifact's growable `128 MiB → 512 MiB` contract unchanged, while the COW artifact binds `initial_pages == maximum_pages == 2048` in `manifest.json`. Do not request `cow-ready-single-use` with an unbound or growable artifact.
+Use the resulting `agent-python-runtime.wasm` with its `manifest.json`, `import-inventory.json` and `import-qualification.json` sidecars.
 
-## TDD and commits
+## Real-Guest verification
 
-For behavior changes:
+```bash
+AGENT_RUNTIME_GUEST=/absolute/path/to/agent-python-runtime.wasm \
+  go test ./integration/e2e -count=1 -v
+```
 
-1. write one failing test;
-2. run it and confirm the intended RED;
-3. implement the smallest GREEN change;
-4. run focused and relevant full gates;
-5. inspect the diff;
-6. create a signed conventional commit;
-7. push and inspect the corresponding Actions run.
+The focused suite exercises:
 
-Do not commit large generated guest artifacts. Tiny synthetic ABI fixtures are allowed when their source and reconstruction test are checked in.
+- ordinary Python execution;
+- fresh globals and timeout recovery;
+- bounded WASI workspace behavior;
+- Host-derived `csv` admission;
+- typed in-memory workspace tools;
+- Host-authored receipts.
 
-## Publication boundary
+## Manual PoC
 
-CI may package private Actions artifacts. Tags, GitHub Releases, public visibility, package publication, deployment, and paid infrastructure require a separate explicit decision.
+Build the CLI:
+
+```bash
+go build -o /tmp/apyrun ./cmd/apyrun
+```
+
+Create a Host config with a base profile and `workspace_files`, then pipe an Agent request containing only `run_id`, `code` and `inputs`. See [operator-cli.md](operator-cli.md).
+
+## Change discipline
+
+Keep the active implementation small:
+
+- do not add a service, database, scheduler or new protocol to solve a local PoC problem;
+- prefer conservative rejection over a complex parser;
+- add a dependency only when the core execution proof cannot be expressed without it;
+- preserve real-Guest checks for authority boundaries;
+- put completed research findings in [research-history.md](research-history.md), not in dormant production code.

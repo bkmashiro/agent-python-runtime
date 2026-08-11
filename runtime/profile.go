@@ -248,18 +248,17 @@ func ValidateCompatibilityDeclaration(declaration *CompatibilityDeclaration) err
 	return nil
 }
 
-// EvaluateRunCompatibility compares the caller declaration and obvious static
-// source imports with one Host profile. The returned immutable result is suitable
-// as later RunPlan evidence; it never grants imports or claims syntax validity.
-func EvaluateRunCompatibility(request RunRequest, profile *ExecutionProfile) (CompatibilityResult, error) {
+// EvaluateRunCompatibility checks one conservative source import preamble
+// against the untrusted declaration and the Host-owned profile.
+func EvaluateRunCompatibility(request RunRequest, profile *ExecutionProfile) error {
 	if request.Compatibility == nil {
-		return CompatibilityResult{}, nil
+		return nil
 	}
 	if err := ValidateCompatibilityDeclaration(request.Compatibility); err != nil {
-		return CompatibilityResult{}, err
+		return err
 	}
 	if profile == nil || profile.Validate() != nil || profile.id != request.Compatibility.Profile {
-		return CompatibilityResult{}, &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile}
+		return &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile}
 	}
 	unsupported := make([]string, 0)
 	for _, module := range request.Compatibility.Imports {
@@ -270,25 +269,27 @@ func EvaluateRunCompatibility(request RunRequest, profile *ExecutionProfile) (Co
 	}
 	if len(unsupported) != 0 {
 		sort.Strings(unsupported)
-		return CompatibilityResult{}, &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile, UnsupportedImports: unsupported}
+		return &ExecutionProfileUnsupportedError{RequestedProfile: request.Compatibility.Profile, UnsupportedImports: unsupported}
 	}
-	result := CompareSourceCompatibility(request, *profile)
-	if result.Status() != SourceCompatible {
-		return result, &SourceCompatibilityError{Result: result}
+	observed, err := InferStaticImportRoots(request.Code)
+	if err != nil {
+		return err
 	}
-	return result, nil
+	if !equalStrings(observed, request.Compatibility.Imports) {
+		return fmt.Errorf("%w: declared imports do not match the static preamble", ErrSourceCompatibilityUnsupported)
+	}
+	return nil
 }
 
 // AdmitRunCompatibility compares an untrusted declaration with one Host-bound
 // artifact profile. A missing declaration preserves the v1 request path; when a
 // declaration is present, absence of Host profile policy fails closed.
 func AdmitRunCompatibility(request RunRequest, profile *ExecutionProfile) error {
-	_, err := EvaluateRunCompatibility(request, profile)
-	return err
+	return EvaluateRunCompatibility(request, profile)
 }
 
-func validProfileID(id string) bool {
-	return id == "base" || id == "numpy-core"
+func validProfileID(profileID string) bool {
+	return profileID == "base"
 }
 
 func validImportName(module string) bool {

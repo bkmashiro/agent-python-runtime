@@ -40,13 +40,13 @@ class ImportQualificationTests(unittest.TestCase):
         return responses
 
     def test_requests_are_one_module_per_guest_and_profile_specific(self):
-        requests = self.tool.build_requests("numpy-core")
-        probes = self.tool.probe_specs("numpy-core")
+        requests = self.tool.build_requests("base")
+        probes = self.tool.probe_specs("base")
         self.assertEqual(len(probes), len(requests))
         self.assertEqual(sorted(row["inputs"]["module"] for row in requests), [row["name"] for row in probes])
         self.assertEqual(len(requests), len({row["run_id"] for row in requests}))
         for request in requests:
-            self.assertEqual("numpy-core", request["inputs"]["artifact_profile"])
+            self.assertEqual("base", request["inputs"]["artifact_profile"])
             self.assertNotIn("compatibility", request)
             self.assertIn("guest-import-exec-v1", request["code"])
             compile(request["code"], "<qualification-probe>", "exec")

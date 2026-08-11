@@ -23,9 +23,9 @@ class ImportInventoryTests(unittest.TestCase):
         cls.tool = load_tool()
 
     def test_request_is_bounded_and_profile_specific(self):
-        request = self.tool.build_request("numpy-core")
+        request = self.tool.build_request("base")
         self.assertEqual("artifact-import-inventory", request["run_id"])
-        self.assertEqual({"artifact_profile": "numpy-core"}, request["inputs"])
+        self.assertEqual({"artifact_profile": "base"}, request["inputs"])
         self.assertNotIn("compatibility", request)
         self.assertIn("guest-importlib-find-spec-v1", request["code"])
 
@@ -52,20 +52,20 @@ class ImportInventoryTests(unittest.TestCase):
     def test_write_and_read_inventory_are_strict(self):
         inventory = {
             "schema_version": 1,
-            "artifact_profile": "numpy-core",
+            "artifact_profile": "base",
             "probe": "guest-importlib-find-spec-v1",
             "implementation": "cpython",
             "python_version": "3.14.0",
-            "discoverable_roots": ["agent_runtime", "json", "numpy", "sys"],
+            "discoverable_roots": ["agent_runtime", "json", "sys"],
             "failures": [],
         }
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "import-inventory.json"
             self.tool.write_inventory(path, inventory)
-            self.assertEqual(inventory, self.tool.load_inventory(path, "numpy-core"))
+            self.assertEqual(inventory, self.tool.load_inventory(path, "base"))
             path.write_text('{"schema_version":1,"schema_version":1}')
             with self.assertRaisesRegex(ValueError, "duplicate"):
-                self.tool.load_inventory(path, "numpy-core")
+                self.tool.load_inventory(path, "base")
 
 
 if __name__ == "__main__":

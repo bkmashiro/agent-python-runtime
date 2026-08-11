@@ -160,6 +160,7 @@ func (adapter *CodexCLI) Exchange(ctx context.Context, request Request) (Respons
 		return Response{}, err
 	}
 	return Response{
+		Protocol:       CodexCLIProtocol,
 		StatusCode:     200,
 		Body:           body,
 		RequestID:      threadID,

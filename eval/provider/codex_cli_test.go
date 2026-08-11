@@ -111,7 +111,7 @@ func TestCodexCLIAdapterParsesRealProbeShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exchange err=%v", err)
 	}
-	if response.RequestID != "019f000000000000" || response.Usage == nil || response.Usage.InputTokens != 14445 || response.Usage.OutputTokens != 108 || response.Usage.TotalTokens != 14553 {
+	if response.RequestID != "019f000000000000" || response.Evidence().Protocol != CodexCLIProtocol || response.Usage == nil || response.Usage.InputTokens != 14445 || response.Usage.OutputTokens != 108 || response.Usage.TotalTokens != 14553 {
 		t.Fatalf("response usage=%+v requestID=%s", response.Usage, response.RequestID)
 	}
 	var body struct {

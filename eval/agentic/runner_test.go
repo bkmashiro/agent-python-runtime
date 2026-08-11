@@ -1169,6 +1169,45 @@ func TestCompactPythonSDKIncludesBoundedResponseShapes(t *testing.T) {
 	}
 }
 
+func TestExactPlanTreatmentAddsGenericExecutionContract(t *testing.T) {
+	dataset, err := LoadRoutingDataset(filepath.Join(datasetRoot(t), "..", "routing", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task Task
+	for _, candidate := range dataset.Tasks {
+		if candidate.ID == "rd-006" {
+			task = candidate
+			break
+		}
+	}
+	if task.ID == "" {
+		t.Fatal("task rd-006 not found")
+	}
+	runtime, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatment, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-exact-plan-v5.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, prompt, err := buildConditionSurfaceForTreatment(runtime, ConditionPython, false, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"internally form the exact required Host-call sequence",
+		"Include every directory change required by the user request",
+		"extract the named field shown in the SDK response shape",
+		"Do not catch or suppress Host-tool exceptions",
+	} {
+		if !strings.Contains(prompt, expected) {
+			t.Fatalf("prompt missing %q: %s", expected, prompt)
+		}
+	}
+}
+
 func TestCompactPythonSDKPreservesParameterTypes(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateless-function-calling-parallel_multiple_147")
 	runtime, err := NewToolRuntime(task)

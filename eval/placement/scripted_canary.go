@@ -71,7 +71,7 @@ func CompileScriptedCanaryCase(task Task) (ScriptedCanaryCase, error) {
 		decodeStrict(task.Environment, &environment) != nil || decodeStrict(task.Oracle.FinalState, &final) != nil {
 		return ScriptedCanaryCase{}, ErrScriptedCanaryCase
 	}
-	compiled := ScriptedCanaryCase{InitialFiles: cloneStringMap(environment.Files)}
+	compiled := ScriptedCanaryCase{InitialFiles: cloneStringMap(environment.Files), OutputFiles: make([]string, 0)}
 	if environment.Kind == "fixture_state" {
 		result, err := fixtureResult(final)
 		if err != nil || environment.Fixture == nil || environment.Fixture.InitialStateDigest != final.ExpectedBusinessStateDigest {

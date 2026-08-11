@@ -46,6 +46,9 @@ func TestCompileScriptedCanaryCaseBuildsFixtureResult(t *testing.T) {
 	if json.Unmarshal(compiled.ExpectedResult, &result) != nil || result["value"] != float64(102) {
 		t.Fatalf("result=%s", compiled.ExpectedResult)
 	}
+	if compiled.InitialFiles == nil || compiled.OutputFiles == nil {
+		t.Fatal("Computer workspace request collections must not encode as null")
+	}
 }
 
 func TestCompileScriptedCanaryCaseLeavesRejectedTaskUnstarted(t *testing.T) {

@@ -1,44 +1,27 @@
-# Guest supply-chain evidence
+# Guest supply chain
 
-Each Core Guest build emits two deterministic supply-chain files beside the Wasm artifact:
+Pysolate only binds an execution profile to a verified Guest distribution.
 
-- `sbom.spdx.json`: SPDX 2.3 JSON;
-- `THIRD_PARTY_NOTICES.md`: a generated component/relation summary.
+A distribution contains:
 
-## Inputs and identity
+```text
+agent-python-runtime.wasm
+manifest.json
+import-inventory.json
+import-qualification.json
+SHA256SUMS
+SBOM and notices
+```
 
-[`guest/build/write-supply-chain.py`](../guest/build/write-supply-chain.py) binds both outputs to:
+The CLI checks:
 
-- the artifact SHA-256, size, filename, target, and repository commit from `manifest.json`;
-- the canonical `SOURCE_DATE_EPOCH`;
-- every immutable entry in the selected profile lock: `guest/build/sources.lock.json` for `base` or `guest/build/sources.numpy-core.lock.json` for `numpy-core`;
-- each source's explicit `artifact_relation`: `packaged`, `linked`, or `build-only`;
-- a sorted SHA-256 inventory of actual files staged under `/usr/lib/python3.14`.
+- manifest schema and artifact filename;
+- artifact and manifest digests;
+- declared artifact profile;
+- import inventory digest and roots;
+- import qualification digest and qualified roots;
+- selected Host profile roots are qualified by that exact artifact.
 
-Build-generated `__pycache__`, `.pyc`, and `.pyo` files are excluded from the staged VFS. The SBOM therefore describes source files actually supplied to wasi-vfs, not an aspirational package list. NumPy/Cython are absent from `base`; the explicit `numpy-core` lock and artifact record NumPy as packaged and Cython as build-only. Host-side wazero is not represented as a Guest component. Manifest package versions are derived from exactly one corresponding selected-lock source row rather than duplicated constants.
+The Agent cannot select a manifest, artifact, import inventory or Host profile through `RunRequest`.
 
-The locked wasi-vfs prebuilt static archive is accompanied by the exact upstream `linked_storage.c` at commit `0f4db4b…`. The build applies one fail-closed local patch that zero-initializes four allocated structs before Wizer snapshots linear memory, recompiles only that C object with the pinned wasi-sdk, and replaces the unique old archive member. Both the prebuilt archive and patched source appear as linked SBOM inputs.
-
-The locked wasi-vfs static archive is accompanied by the exact upstream `linked_storage.c` at commit `0f4db4b…`. The build applies one fail-closed local patch that zero-initializes four allocated structs before Wizer snapshots linear memory, recompiles only that C object with the pinned wasi-sdk, and replaces the unique old archive member. Both the release archive and patched source appear as linked SBOM inputs.
-
-## Validation
-
-The producer performs three checks before writing `SHA256SUMS`:
-
-1. rebuild the canonical SBOM/notices from the same artifact, manifest, lock, and VFS and require exact equality;
-2. fetch the official SPDX 2.3 JSON schema from immutable commit `aadf3b0b8dbbabdb4d880b0fc714255fea436ff7` through the source lock and verify its SHA-256;
-3. validate `sbom.spdx.json` with the repository's go.sum-locked JSON Schema engine.
-
-The artifact consumer repeats bundle identity/source-lock/notice validation without trusting producer staging, refetches the hash-locked official schema, and repeats schema validation. `SHA256SUMS` covers the Wasm, manifest, target-Guest-generated `import-inventory.json`, target-Guest-executed `import-qualification.json`, SPDX document, and generated notices; `numpy-core` additionally covers the exact extension-selection sidecar.
-
-Runtime admission uses one canonical `runtime.VerifyDistributionArtifact` verifier shared by the local CLI and the pinned Hermes loader. It rejects duplicate/unknown identity fields and trailing JSON; validates the exact profile/package-set contract, canonical filenames, artifact identity, build/target identity, NumPy extension-profile identity, and schema-v4 inventory/qualification filename, digest, embedded-content, and subset relationships; and computes the manifest SHA-256. During the Linux producer build, the exact target Guest first runs `guest-importlib-find-spec-v1`, then runs each `guest-import-exec-v1` curated module operation in a separate fresh Guest invocation. An enabled `ExecutionProfile` retains both digests plus defensive discoverable and qualified-root sets, and Host `allowed_imports` must be a subset of qualified roots. Schema-v2/v3 bundles remain legacy-readable but cannot bind a profile. This is bounded qualification of the versioned probe set—not a replacement for downloaded-bundle SBOM/source-lock verification, source analysis, transitive closure, or arbitrary behavioral proof.
-
-The generated notice separates packaged/linked components from build-only tools. It records immutable source URLs, versions, archive digests, and license identifiers. License identifiers are provenance metadata, not legal advice or a substitute for upstream license texts.
-
-## Consumer evidence index
-
-After downloaded-bundle verification, exact-artifact E2E, and both canonical production-safe benchmark commands pass for `base`, the artifact workflow writes `evidence-index.json`. Its strict v1 schema binds the workflow run/commit to the artifact, manifest, SPDX document, notices, and completed test classes. Its limitations explicitly preserve the unresolved exact-reproducibility failure and synthetic-benchmark scope.
-
-`numpy-core` deliberately does not write that production-safe index. It uploads separate fresh and prepared `profile-candidate` evidence after downloaded verification and real E2E; class/profile validation prevents either candidate document from being mislabeled as `production-safe`.
-
-The base index is uploaded as a separate consumer-side artifact. It is intentionally not inserted into the Guest bundle: the workflow run ID is evidence about a particular CI execution and would itself make two otherwise identical producer bundles differ.
+The active PoC does not implement a registry, updater, migration protocol, remote artifact service or release promotion database. Distribution creation and publication remain build/release concerns. The runtime consumes one already selected local distribution and fails closed when its sidecars disagree.

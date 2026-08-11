@@ -7,90 +7,13 @@ DIST_DIR=${AGENT_RUNTIME_DIST_DIR:-"${ROOT_DIR}/dist"}
 DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
-ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
-PREINITIALIZATION_SPIKE=${AGENT_RUNTIME_PREINITIALIZATION_SPIKE:-0}
-COW_FIXED_MEMORY=${AGENT_RUNTIME_COW_FIXED_MEMORY:-0}
+SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
+ARTIFACT_PROFILE=base
+ARTIFACT_FILENAME="agent-python-runtime.wasm"
 INITIAL_MEMORY_BYTES=134217728
 MAX_MEMORY_BYTES=536870912
-case "${ARTIFACT_PROFILE}" in
-  base)
-    SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
-    ARTIFACT_FILENAME="agent-python-runtime.wasm"
-    ;;
-  numpy-core)
-    SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.numpy-core.lock.json"
-    ARTIFACT_FILENAME="agent-python-runtime-numpy-core.wasm"
-    ;;
-  *)
-    echo "unsupported artifact profile: ${ARTIFACT_PROFILE}" >&2
-    exit 10
-    ;;
-esac
-case "${PREINITIALIZATION_SPIKE}" in
-  0|1) ;;
-  *)
-    echo "AGENT_RUNTIME_PREINITIALIZATION_SPIKE must be 0 or 1" >&2
-    exit 12
-    ;;
-esac
-if [[ ${PREINITIALIZATION_SPIKE} == 1 && ${ARTIFACT_PROFILE} != base ]]; then
-  echo "preinitialization spike is restricted to the base artifact profile" >&2
-  exit 13
-fi
-case "${COW_FIXED_MEMORY}" in
-  0) ;;
-  1) MAX_MEMORY_BYTES=${INITIAL_MEMORY_BYTES} ;;
-  *)
-    echo "AGENT_RUNTIME_COW_FIXED_MEMORY must be 0 or 1" >&2
-    exit 14
-    ;;
-esac
 MEMORY_INITIAL_PAGES=$((INITIAL_MEMORY_BYTES / 65536))
 MEMORY_MAXIMUM_PAGES=$((MAX_MEMORY_BYTES / 65536))
-
-case ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} in
-  0|1) ;;
-  *)
-    echo "AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER must be 0 or 1" >&2
-    exit 9
-    ;;
-esac
-case ${AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA:-0} in
-  0|1) ;;
-  *)
-    echo "AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA must be 0 or 1" >&2
-    exit 12
-    ;;
-esac
-case ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} in
-  0|1) ;;
-  *)
-    echo "AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING must be 0 or 1" >&2
-    exit 13
-    ;;
-esac
-case ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} in
-  0|1) ;;
-  *)
-    echo "AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER must be 0 or 1" >&2
-    exit 14
-    ;;
-esac
-case ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} in
-  0|1) ;;
-  *)
-    echo "AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK must be 0 or 1" >&2
-    exit 15
-    ;;
-esac
-REBUILD_WASI_VFS_FROM_SOURCE=0
-if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} == 1 \
-  || ${AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA:-0} == 1 \
-  || ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} == 1 \
-  || ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} == 1 \
-  || ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
-  REBUILD_WASI_VFS_FROM_SOURCE=1
-fi
 
 if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
@@ -112,11 +35,6 @@ fetch wasmtime-linux-x86_64 wasmtime.tar.xz
 fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
 fetch wasi-vfs-static-library wasi-vfs-lib.zip
 fetch wasi-vfs-linked-storage-source wasi-vfs-linked-storage.c
-fetch spdx-2.3-json-schema spdx-2.3-schema.json
-if [[ ${REBUILD_WASI_VFS_FROM_SOURCE} == 1 ]]; then
-  fetch wasi-vfs-source wasi-vfs-source.tar.gz
-  fetch wasi-vfs-wasi-submodule-source wasi-spec-source.tar.gz
-fi
 
 mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
   "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"
@@ -149,78 +67,6 @@ done
 chmod +x "${WASMTIME}" "${WASM_TOOLS}" "${WASI_VFS}"
 export WASI_SDK_PATH WASMTIME
 export PATH="$(dirname "${WASMTIME}"):${PATH}"
-
-if [[ ${REBUILD_WASI_VFS_FROM_SOURCE} == 1 ]]; then
-  for required_command in cargo rustup; do
-    if ! command -v "${required_command}" >/dev/null; then
-      echo "missing experimental archive build command: ${required_command}" >&2
-      exit 10
-    fi
-  done
-  WASI_VFS_SOURCE_DIR="${WORK_DIR}/wasi-vfs-source"
-  mkdir -p "${WASI_VFS_SOURCE_DIR}"
-  tar xzf "${DOWNLOAD_DIR}/wasi-vfs-source.tar.gz" \
-    -C "${WASI_VFS_SOURCE_DIR}" --strip-components=1
-  WASI_SPEC_SOURCE_DIR="${WASI_VFS_SOURCE_DIR}/crates/wasi-libc-trampoline-bindgen/WASI"
-  mkdir -p "${WASI_SPEC_SOURCE_DIR}"
-  tar xzf "${DOWNLOAD_DIR}/wasi-spec-source.tar.gz" \
-    -C "${WASI_SPEC_SOURCE_DIR}" --strip-components=1
-  if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_HASHER:-0} == 1 ]]; then
-    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_deterministic_hasher.py" \
-      "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs" \
-      "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs.patched"
-    mv "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs.patched" \
-      "${WASI_VFS_SOURCE_DIR}/src/embed/mod.rs"
-  fi
-  if [[ ${AGENT_RUNTIME_REPRO_AVOID_FILESTAT_METADATA:-0} == 1 ]]; then
-    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_pack_file_size.py" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched"
-    mv "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs"
-  fi
-  if [[ ${AGENT_RUNTIME_REPRO_ZERO_DIRENT_PADDING:-0} == 1 ]]; then
-    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_dirent_padding.py" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched"
-    mv "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs"
-  fi
-  if [[ ${AGENT_RUNTIME_REPRO_CLEAR_DIRENT_BUFFER:-0} == 1 ]]; then
-    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_dirent_buffer_cleanup.py" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched"
-    mv "${WASI_VFS_SOURCE_DIR}/src/lib.rs.patched" \
-      "${WASI_VFS_SOURCE_DIR}/src/lib.rs"
-  fi
-  if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
-    python3 "${ROOT_DIR}/tools/patch_wasi_vfs_deterministic_pack_clock.py" \
-      "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs" \
-      "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs.patched"
-    mv "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs.patched" \
-      "${WASI_VFS_SOURCE_DIR}/crates/wasi-vfs-cli/src/lib.rs"
-  fi
-  (
-    cd "${WASI_VFS_SOURCE_DIR}"
-    CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasip1 --sysroot=${WASI_SDK_PATH}/share/wasi-sysroot" \
-      cargo +1.92.0 build --locked --release --target wasm32-unknown-unknown -p wasi-vfs
-    if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
-      cargo +1.92.0 build --locked --release -p wasi-vfs-cli
-    fi
-  )
-  WASI_VFS_LIB="${WASI_VFS_SOURCE_DIR}/target/wasm32-unknown-unknown/release/libwasi_vfs.a"
-  if [[ ${AGENT_RUNTIME_REPRO_DETERMINISTIC_PACK_CLOCK:-0} == 1 ]]; then
-    WASI_VFS="${WASI_VFS_SOURCE_DIR}/target/release/wasi-vfs"
-    if [[ ! -x ${WASI_VFS} ]]; then
-      echo "deterministic pack-clock CLI was not produced" >&2
-      exit 16
-    fi
-  fi
-  if [[ ! -f ${WASI_VFS_LIB} ]]; then
-    echo "experimental wasi-vfs archive was not produced" >&2
-    exit 11
-  fi
-fi
 
 if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
   SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" HEAD)
@@ -307,8 +153,6 @@ FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
   -lpthread -lm \
   -Wl,--export=runtime_init \
   -Wl,--export=runtime_validate_source \
-  -Wl,--export=runtime_source_validation_result \
-  -Wl,--export=runtime_import_receipts \
   -Wl,--export=runtime_prepare \
   -Wl,--export=alloc \
   -Wl,--export=dealloc \
@@ -339,124 +183,6 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
   --epoch "${SOURCE_DATE_EPOCH}"
 
-MANIFEST_EXTENSION_ARGS=()
-if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
-  NUMPY_PROFILE_DIR="${WORK_DIR}/numpy-core-profile"
-  AGENT_RUNTIME_BUILD_DIR="${WORK_DIR}" \
-  AGENT_RUNTIME_VFS_ROOT="${VFS_PYTHON_DIR}" \
-  NUMPY_WASI_PROBE_DIR="${NUMPY_PROFILE_DIR}" \
-  NUMPY_WASI_FEATURE_PROFILE=core \
-  NUMPY_WASI_SOURCE_LOCK="${SOURCE_LOCK}" \
-    bash "${ROOT_DIR}/experiments/numpy-wasi/probe.sh"
-  python3 - "${NUMPY_PROFILE_DIR}/report.json" <<'PY'
-import json
-import pathlib
-import sys
-
-report_path = pathlib.Path(sys.argv[1])
-report = json.loads(report_path.read_text())
-if report.get("outcome") != "pack_succeeded":
-    raise SystemExit(f"numpy-core probe did not produce a packed artifact: {report.get('outcome')}")
-PY
-
-  PROFILE_OUTPUT_DIR="${NUMPY_PROFILE_DIR}/extension-profile"
-  PROFILE_SELECTION="${PROFILE_OUTPUT_DIR}/selection-report.json"
-  mapfile -t NUMPY_EXTENSION_ARCHIVES <"${PROFILE_OUTPUT_DIR}/extension-archives.txt"
-  mapfile -t NUMPY_STATIC_INPUTS <"${PROFILE_OUTPUT_DIR}/static-inputs.txt"
-  if [[ ${#NUMPY_EXTENSION_ARCHIVES[@]} -ne 2 ]]; then
-    echo "numpy-core profile must select exactly two extension archives" >&2
-    exit 11
-  fi
-  install -m 0644 "${PROFILE_SELECTION}" "${DIST_DIR}/extension-selection.json"
-  touch -d "@${SOURCE_DATE_EPOCH}" "${DIST_DIR}/extension-selection.json"
-  MANIFEST_EXTENSION_ARGS=(--extension-selection "${DIST_DIR}/extension-selection.json")
-  VFS_PYTHON_DIR="${NUMPY_PROFILE_DIR}/vfs-python"
-
-  "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
-    -DAGENT_RUNTIME_EXTENSION_PROFILE=1 \
-    -I"${ROOT_DIR}/guest/include" \
-    -I"${CPYTHON_DIR}/Include" \
-    -I"${WASI_BUILD_DIR}" \
-    -I"${PROFILE_OUTPUT_DIR}" \
-    -c "${ROOT_DIR}/guest/src/runtime.c" -o "${RUNTIME_OBJECT}"
-
-  "${WASI_SDK_PATH}/bin/clang++" --target=wasm32-wasip1 --sysroot="${SYSROOT}" \
-    -fno-exceptions \
-    -mexec-model=reactor \
-    "${RUNTIME_OBJECT}" \
-    -Wl,--whole-archive "${NUMPY_EXTENSION_ARCHIVES[@]}" -Wl,--no-whole-archive \
-    "${NUMPY_STATIC_INPUTS[@]}" \
-    "${PYTHON_LIB}" "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
-    -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
-    -lpthread -lm -lc-printscan-long-double \
-    -Wl,--export=runtime_init \
-    -Wl,--export=runtime_validate_source \
-    -Wl,--export=runtime_source_validation_result \
-    -Wl,--export=runtime_import_receipts \
-    -Wl,--export=runtime_prepare \
-    -Wl,--export=alloc \
-    -Wl,--export=dealloc \
-    -Wl,--export=execute \
-    -Wl,--export-memory \
-    -Wl,--initial-memory="${INITIAL_MEMORY_BYTES}" \
-    -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
-    -Wl,-z,stack-size=16777216 \
-    -Wl,--strip-all \
-    -o "${RAW_GUEST}"
-fi
-
-if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
-  PREINITIALIZATION_SPIKE_DIR="${WORK_DIR}/preinitialize-spike"
-  PREINITIALIZATION_INPUT_DIR="${PREINITIALIZATION_SPIKE_DIR}/input"
-  PREINITIALIZATION_RUNTIME_OBJECT="${PREINITIALIZATION_SPIKE_DIR}/runtime.o"
-  PREINITIALIZATION_RAW_GUEST="${PREINITIALIZATION_SPIKE_DIR}/agent-python-runtime.raw.wasm"
-  PREINITIALIZATION_INPUT_GUEST="${PREINITIALIZATION_INPUT_DIR}/agent-python-runtime.wasm"
-  mkdir -p "${PREINITIALIZATION_INPUT_DIR}"
-
-  "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
-    -DAGENT_RUNTIME_PREINITIALIZATION_SPIKE=1 \
-    -I"${ROOT_DIR}/guest/include" \
-    -I"${CPYTHON_DIR}/Include" \
-    -I"${WASI_BUILD_DIR}" \
-    -c "${ROOT_DIR}/guest/src/runtime.c" -o "${PREINITIALIZATION_RUNTIME_OBJECT}"
-
-  "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
-    -mexec-model=reactor \
-    "${PREINITIALIZATION_RUNTIME_OBJECT}" "${PYTHON_LIB}" \
-    "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
-    -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
-    -lpthread -lm \
-    -Wl,--export=runtime_init \
-    -Wl,--export=runtime_validate_source \
-    -Wl,--export=runtime_source_validation_result \
-    -Wl,--export=runtime_import_receipts \
-    -Wl,--export=runtime_prepare \
-    -Wl,--export=runtime_preinitialize \
-    -Wl,--export=runtime_preinitialized_initialize \
-    -Wl,--export=alloc \
-    -Wl,--export=dealloc \
-    -Wl,--export=execute \
-    -Wl,--export-memory \
-    -Wl,--initial-memory="${INITIAL_MEMORY_BYTES}" \
-    -Wl,--max-memory="${MAX_MEMORY_BYTES}" \
-    -Wl,-z,stack-size=16777216 \
-    -Wl,--strip-all \
-    -o "${PREINITIALIZATION_RAW_GUEST}"
-
-  "${WASI_VFS}" pack "${PREINITIALIZATION_RAW_GUEST}" \
-    --dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14" \
-    -o "${PREINITIALIZATION_INPUT_GUEST}"
-  "${WASM_TOOLS}" validate "${PREINITIALIZATION_INPUT_GUEST}"
-fi
-
-REPRO_VFS_MANIFEST=
-if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
-  REPRO_VFS_MANIFEST="${WORK_DIR}/vfs-manifest.prepack.json"
-  python3 "${ROOT_DIR}/tools/write_guest_stage_evidence.py" manifest \
-    --vfs-root "${VFS_PYTHON_DIR}" \
-    --output "${REPRO_VFS_MANIFEST}"
-fi
-
 pack_guest() {
   local output=$1
   "${WASI_VFS}" pack "${RAW_GUEST}" \
@@ -464,21 +190,21 @@ pack_guest() {
     -o "${output}"
 }
 
-REPEAT_PACKED_GUEST=
 pack_guest "${FINAL_GUEST}"
-if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
-  REPEAT_PACKED_GUEST="${WORK_DIR}/agent-python-runtime.pack-b.wasm"
-  pack_guest "${REPEAT_PACKED_GUEST}"
-  "${WASM_TOOLS}" validate "${REPEAT_PACKED_GUEST}"
-fi
 
 "${WASM_TOOLS}" validate "${FINAL_GUEST}"
 "${WASM_TOOLS}" print "${FINAL_GUEST}" > "${DIST_DIR}/agent-python-runtime.wat"
-PROBE_RUNNER="${WORK_DIR}/apyrun-probe"
-(
-  cd "${ROOT_DIR}"
-  go build -o "${PROBE_RUNNER}" ./cmd/apyrun
-)
+PROBE_RUNNER=${AGENT_RUNTIME_PROBE_RUNNER:-"${WORK_DIR}/apyrun-probe"}
+if [[ -z ${AGENT_RUNTIME_PROBE_RUNNER:-} ]]; then
+  (
+    cd "${ROOT_DIR}"
+    go build -o "${PROBE_RUNNER}" ./cmd/apyrun
+  )
+fi
+if [[ ! -x ${PROBE_RUNNER} ]]; then
+  echo "probe runner is not executable: ${PROBE_RUNNER}" >&2
+  exit 10
+fi
 IMPORT_INVENTORY_REQUEST="${WORK_DIR}/import-inventory-request.json"
 IMPORT_INVENTORY_RESPONSE="${WORK_DIR}/import-inventory-response.json"
 IMPORT_INVENTORY="${DIST_DIR}/import-inventory.json"
@@ -537,39 +263,7 @@ python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --import-qualification "${IMPORT_QUALIFICATION}" \
   --memory-initial-pages "${MEMORY_INITIAL_PAGES}" \
   --memory-maximum-pages "${MEMORY_MAXIMUM_PAGES}" \
-  "${MANIFEST_EXTENSION_ARGS[@]}" \
   --output "${DIST_DIR}/manifest.json"
-
-if [[ ${PREINITIALIZATION_SPIKE} == 1 ]]; then
-  PREINITIALIZATION_WAT="${PREINITIALIZATION_SPIKE_DIR}/input.wat"
-  PREINITIALIZATION_INVENTORY_RESPONSE="${PREINITIALIZATION_SPIKE_DIR}/import-inventory-response.json"
-  PREINITIALIZATION_INVENTORY="${PREINITIALIZATION_INPUT_DIR}/import-inventory.json"
-  PREINITIALIZATION_QUALIFICATION="${PREINITIALIZATION_INPUT_DIR}/import-qualification.json"
-  "${WASM_TOOLS}" print "${PREINITIALIZATION_INPUT_GUEST}" > "${PREINITIALIZATION_WAT}"
-  (
-    cd "${ROOT_DIR}"
-    "${PROBE_RUNNER}" -artifact "${PREINITIALIZATION_INPUT_GUEST}" \
-      < "${IMPORT_INVENTORY_REQUEST}" \
-      > "${PREINITIALIZATION_INVENTORY_RESPONSE}"
-  )
-  python3 "${ROOT_DIR}/guest/build/import_inventory.py" extract \
-    --profile base \
-    --response "${PREINITIALIZATION_INVENTORY_RESPONSE}" \
-    --output "${PREINITIALIZATION_INVENTORY}"
-  run_import_qualification \
-    "${PREINITIALIZATION_INPUT_GUEST}" \
-    base \
-    "${PREINITIALIZATION_SPIKE_DIR}/import-qualification" \
-    "${PREINITIALIZATION_QUALIFICATION}"
-  python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
-    --artifact "${PREINITIALIZATION_INPUT_GUEST}" \
-    --wat "${PREINITIALIZATION_WAT}" \
-    --source-lock "${SOURCE_LOCK}" \
-    --artifact-profile base \
-    --import-inventory "${PREINITIALIZATION_INVENTORY}" \
-    --import-qualification "${PREINITIALIZATION_QUALIFICATION}" \
-    --output "${PREINITIALIZATION_INPUT_DIR}/manifest.json"
-fi
 
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --artifact "${FINAL_GUEST}" \
@@ -586,18 +280,6 @@ python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --sbom "${DIST_DIR}/sbom.spdx.json" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \
   --verify
-if [[ -n ${AGENT_RUNTIME_JSON_SCHEMA_VALIDATOR:-} ]]; then
-  "${AGENT_RUNTIME_JSON_SCHEMA_VALIDATOR}" \
-    "${DOWNLOAD_DIR}/spdx-2.3-schema.json" \
-    "${DIST_DIR}/sbom.spdx.json"
-else
-  (
-    cd "${ROOT_DIR}"
-    go run ./cmd/validate-json-schema \
-      "${DOWNLOAD_DIR}/spdx-2.3-schema.json" \
-      "${DIST_DIR}/sbom.spdx.json"
-  )
-fi
 rm "${DIST_DIR}/agent-python-runtime.wat"
 (
   cd "${DIST_DIR}"
@@ -609,39 +291,8 @@ rm "${DIST_DIR}/agent-python-runtime.wat"
     sbom.spdx.json
     THIRD_PARTY_NOTICES.md
   )
-  if [[ ${ARTIFACT_PROFILE} == numpy-core ]]; then
-    SUM_FILES+=(extension-selection.json)
-  fi
   sha256sum "${SUM_FILES[@]}" > SHA256SUMS
 )
-
-if [[ -n ${AGENT_RUNTIME_REPRO_EVIDENCE_DIR:-} ]]; then
-  REPRO_REPOSITORY_COMMIT=${GITHUB_SHA:-}
-  if [[ -z ${REPRO_REPOSITORY_COMMIT} ]]; then
-    REPRO_REPOSITORY_COMMIT=$(git -C "${ROOT_DIR}" rev-parse HEAD)
-  fi
-  python3 "${ROOT_DIR}/tools/write_guest_stage_evidence.py" evidence \
-    --evidence-dir "${AGENT_RUNTIME_REPRO_EVIDENCE_DIR}" \
-    --raw-wasm "${RAW_GUEST}" \
-    --final-wasm "${FINAL_GUEST}" \
-    --repeat-packed-wasm "${REPEAT_PACKED_GUEST}" \
-    --patched-wasi-vfs-archive "${WASI_VFS_LIB}" \
-    --linked-storage-object "${WASI_VFS_STORAGE_OBJECT}" \
-    --wasi-vfs-cli "${WASI_VFS}" \
-    --source-lock "${SOURCE_LOCK}" \
-    --vfs-manifest "${REPRO_VFS_MANIFEST}" \
-    --repository-commit "${REPRO_REPOSITORY_COMMIT}" \
-    --source-date-epoch "${SOURCE_DATE_EPOCH}" \
-    --run-id "${GITHUB_RUN_ID:-local}" \
-    --run-attempt "${GITHUB_RUN_ATTEMPT:-local}" \
-    --job "${GITHUB_JOB:-local}" \
-    --replica "${AGENT_RUNTIME_REPRO_REPLICA:-local}" \
-    --runner-os "${RUNNER_OS:-$(uname -s)}" \
-    --runner-arch "${RUNNER_ARCH:-$(uname -m)}" \
-    --build-dir "${WORK_DIR}" \
-    --dist-dir "${DIST_DIR}" \
-    --configured-vfs-root "${VFS_PYTHON_DIR}"
-fi
 
 printf 'guest artifact: %s\n' "${FINAL_GUEST}"
 printf 'artifact sha256: '

@@ -3,293 +3,54 @@ package capability_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
-	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
-type fakeFetcher struct {
-	calls []capability.ResolvedRequest
-}
-
-func (fetcher *fakeFetcher) Fetch(_ context.Context, request capability.ResolvedRequest, _ uint32) (capability.FetchOutput, error) {
-	fetcher.calls = append(fetcher.calls, request)
-	if request.URL == "https://api.example.test/fail" {
-		return capability.FetchOutput{}, errors.New("fixture failure")
+func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := registry.Register("workspace.read_text", capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"hello"}`), nil
+	})); err != nil {
+		t.Fatal(err)
 	}
-	if request.URL == "https://api.example.test/large" {
-		return capability.FetchOutput{StatusCode: 200, Body: []byte("0123456789abcdef")}, nil
-	}
-	return capability.FetchOutput{
-		StatusCode:  200,
-		Body:        []byte(`{"value":42}`),
-		ContentType: "application/json",
-	}, nil
-}
-
-func testGrant() capability.Grant {
-	return capability.Grant{
-		Name:               capability.FetchManyCapability,
-		MaxCalls:           2,
-		MaxRequestsPerCall: 3,
-		MaxTotalRequests:   4,
-		MaxConcurrency:     1,
-		MaxResponseBytes:   4096,
-		PerRequestTimeout:  time.Second,
-		Targets: map[string]capability.TargetGrant{
-			"fixture": {
-				BaseURL: "https://api.example.test",
-				Headers: map[string]string{"Authorization": "Host secret"},
-			},
-		},
-	}
-}
-
-func newBroker(t *testing.T, grants map[string]capability.Grant, fetcher capability.Fetcher) *capability.Broker {
-	t.Helper()
-	broker, err := capability.NewBroker(capability.Config{
-		RunIdentity: "host-run-001",
-		Grants:      grants,
-	}, fetcher)
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", MaxCalls: 1, Registry: registry})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return broker
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`))
+	if err != nil || !json.Valid(response) {
+		t.Fatalf("response=%s err=%v", response, err)
+	}
+	if broker.Calls() != 1 || len(broker.SnapshotReceipts()) != 1 || broker.SnapshotReceipts()[0].Outcome != "ok" {
+		t.Fatalf("unexpected broker evidence: calls=%d receipts=%#v", broker.Calls(), broker.SnapshotReceipts())
+	}
+	response, err = broker.Call(context.Background(), []byte(`{"call_id":"two","capability":"workspace.read_text","arguments":{}}`))
+	if err != nil || !containsCode(response, "call_budget_exceeded") {
+		t.Fatalf("budget response=%s err=%v", response, err)
+	}
 }
 
-func call(t *testing.T, broker *capability.Broker, callID, name string, requests []map[string]string) capability.ToolResponse {
-	t.Helper()
-	payload, err := json.Marshal(map[string]any{
-		"call_id":    callID,
-		"capability": name,
-		"arguments":  map[string]any{"requests": requests},
-	})
+func TestBrokerDeniesUnregisteredTool(t *testing.T) {
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", MaxCalls: 1, Registry: capability.NewRegistry()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	responseBytes, err := broker.Call(context.Background(), payload)
-	if err != nil {
-		t.Fatal(err)
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"network.fetch","arguments":{}}`))
+	if err != nil || !containsCode(response, "capability_denied") {
+		t.Fatalf("denial response=%s err=%v", response, err)
 	}
-	var response capability.ToolResponse
-	if err := json.Unmarshal(responseBytes, &response); err != nil {
-		t.Fatalf("decode response: %v: %s", err, responseBytes)
-	}
-	return response
-}
-
-func TestBrokerObserverRecordsBoundedCall(t *testing.T) {
-	var observations []capability.Observation
-	grant := testGrant()
-	var broker *capability.Broker
-	broker, err := capability.NewBroker(capability.Config{
-		RunIdentity: "observed-run",
-		Grants:      map[string]capability.Grant{grant.Name: grant},
-		Observer: func(observation capability.Observation) {
-			_ = broker.CallCount()
-			_ = broker.Receipts()
-			observations = append(observations, observation)
-		},
-	}, &fakeFetcher{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := call(t, broker, "observed-call", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "r1", "target": "fixture", "path": "/ok"},
-	})
-	if response.Status != capability.StatusOK || len(observations) != 1 {
-		t.Fatalf("observation missing: response=%#v observations=%#v", response, observations)
-	}
-	observation := observations[0]
-	if observation.Capability != capability.FetchManyCapability || observation.Duration <= 0 ||
-		observation.RequestBytes == 0 || observation.ResponseBytes == 0 || !observation.Success {
-		t.Fatalf("invalid observation: %#v", observation)
+	if receipts := broker.SnapshotReceipts(); len(receipts) != 1 || receipts[0].Outcome != "denied" {
+		t.Fatalf("denial receipt=%#v", receipts)
 	}
 }
 
-func TestNoGrantAndWrongCapabilityAreDenied(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	broker := newBroker(t, nil, fetcher)
-	requests := []map[string]string{{"request_id": "r1", "target": "fixture", "path": "/ok"}}
-	for _, name := range []string{capability.FetchManyCapability, "arbitrary_tool"} {
-		response := call(t, broker, "call-denied", name, requests)
-		if response.Status != capability.StatusDenied || response.Error == nil {
-			t.Fatalf("expected denial for %q: %#v", name, response)
-		}
+func containsCode(response []byte, code string) bool {
+	var decoded struct {
+		Error *struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
-	if len(fetcher.calls) != 0 {
-		t.Fatalf("denied calls reached fetcher: %d", len(fetcher.calls))
-	}
-}
-
-func TestMatchingGrantResolvesHostOwnedTargetAndHeaders(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	grant := testGrant()
-	grants := map[string]capability.Grant{grant.Name: grant}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "test-run", Grants: grants}, fetcher)
-	if err != nil {
-		t.Fatal(err)
-	}
-	delete(grants, grant.Name)
-	grant.Targets["fixture"].Headers["Authorization"] = "Mutated secret"
-	response := call(t, broker, "call-ok", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "r1", "target": "fixture", "path": "/one?x=1"},
-		{"request_id": "r2", "target": "fixture", "path": "/two"},
-	})
-	if response.Status != capability.StatusOK || response.Error != nil {
-		t.Fatalf("unexpected response: %#v", response)
-	}
-	if len(fetcher.calls) != 2 {
-		t.Fatalf("fetch calls=%d", len(fetcher.calls))
-	}
-	if fetcher.calls[0].URL != "https://api.example.test/one?x=1" {
-		t.Fatalf("unexpected resolved URL %q", fetcher.calls[0].URL)
-	}
-	if fetcher.calls[0].Headers["Authorization"] != "Host secret" {
-		t.Fatalf("Host header missing: %#v", fetcher.calls[0].Headers)
-	}
-	if len(broker.Receipts()) != 2 || broker.Receipts()[0].ReceiptID == "" {
-		t.Fatalf("missing receipts: %#v", broker.Receipts())
-	}
-}
-
-func TestArbitraryDestinationAndAuthorityBearingPathsAreDenied(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	grant := testGrant()
-	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
-	requests := []map[string]string{
-		{"request_id": "unknown", "target": "not-granted", "path": "/ok"},
-		{"request_id": "absolute", "target": "fixture", "path": "https://evil.example/x"},
-		{"request_id": "network-path", "target": "fixture", "path": "//evil.example/x"},
-	}
-	response := call(t, broker, "call-targets", capability.FetchManyCapability, requests)
-	if response.Status != capability.StatusOK {
-		t.Fatalf("batch-level call should return structured partial results: %#v", response)
-	}
-	items := response.Result.Items
-	if len(items) != len(requests) {
-		t.Fatalf("items=%d", len(items))
-	}
-	for _, item := range items {
-		if item.Status != capability.StatusDenied {
-			t.Fatalf("unexpected item: %#v", item)
-		}
-	}
-	if len(fetcher.calls) != 0 {
-		t.Fatalf("denied destinations reached fetcher")
-	}
-}
-
-func TestDuplicateRequestIDsFailBeforeProviderExecution(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	grant := testGrant()
-	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
-	response := call(t, broker, "duplicate-ids", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "same", "target": "fixture", "path": "/one"},
-		{"request_id": "same", "target": "fixture", "path": "/two"},
-	})
-	if response.Status != capability.StatusError || response.Error == nil || response.Error.Code != "invalid_arguments" {
-		t.Fatalf("duplicate request IDs were not rejected: %#v", response)
-	}
-	if len(fetcher.calls) != 0 || broker.CallCount() != 0 || len(broker.Receipts()) != 0 {
-		t.Fatalf("invalid batch consumed authority: calls=%d count=%d receipts=%d", len(fetcher.calls), broker.CallCount(), len(broker.Receipts()))
-	}
-}
-
-func TestGuestHeadersAreRejectedBeforeProviderExecution(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	grant := testGrant()
-	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
-	payload := []byte(`{"call_id":"host-header","capability":"fetch_many","arguments":{"requests":[{"request_id":"r1","target":"fixture","path":"/ok","headers":{"Host":"evil.invalid"}}]}}`)
-	responseBytes, err := broker.Call(context.Background(), payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var response capability.ToolResponse
-	if err := json.Unmarshal(responseBytes, &response); err != nil {
-		t.Fatal(err)
-	}
-	if response.Status != capability.StatusError || response.Error == nil || response.Error.Code != "invalid_arguments" {
-		t.Fatalf("guest headers were not strictly rejected: %#v", response)
-	}
-	if len(fetcher.calls) != 0 || broker.CallCount() != 0 {
-		t.Fatalf("malformed request consumed authority: calls=%d count=%d", len(fetcher.calls), broker.CallCount())
-	}
-}
-
-func TestCallAndRequestBudgetsFailClosed(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	grant := testGrant()
-	grant.MaxCalls = 1
-	grant.MaxRequestsPerCall = 1
-	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
-
-	tooMany := call(t, broker, "call-many", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "r1", "target": "fixture", "path": "/one"},
-		{"request_id": "r2", "target": "fixture", "path": "/two"},
-	})
-	if tooMany.Status != capability.StatusDenied {
-		t.Fatalf("expected per-call budget denial: %#v", tooMany)
-	}
-	ok := call(t, broker, "call-one", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "r3", "target": "fixture", "path": "/one"},
-	})
-	if ok.Status != capability.StatusOK {
-		t.Fatalf("valid call failed: %#v", ok)
-	}
-	exhausted := call(t, broker, "call-two", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "r4", "target": "fixture", "path": "/two"},
-	})
-	if exhausted.Status != capability.StatusDenied {
-		t.Fatalf("expected call budget denial: %#v", exhausted)
-	}
-}
-
-func TestResponseByteBudgetReturnsStablePartialError(t *testing.T) {
-	fetcher := &fakeFetcher{}
-	grant := testGrant()
-	grant.MaxResponseBytes = 8
-	broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
-	response := call(t, broker, "call-large", capability.FetchManyCapability, []map[string]string{
-		{"request_id": "large", "target": "fixture", "path": "/large"},
-	})
-	if response.Status != capability.StatusOK || len(response.Result.Items) != 1 {
-		t.Fatalf("unexpected batch response: %#v", response)
-	}
-	item := response.Result.Items[0]
-	if item.Status != capability.StatusError || item.Error == nil || item.Error.Code != "response_too_large" {
-		t.Fatalf("unexpected oversized response: %#v", item)
-	}
-	if broker.Receipts()[0].ResponseSHA256 != "" {
-		t.Fatalf("oversized bytes must not be admitted: %#v", broker.Receipts()[0])
-	}
-}
-
-func TestPartialFailureAndReceiptIdentityAreStable(t *testing.T) {
-	grant := testGrant()
-	requests := []map[string]string{
-		{"request_id": "ok", "target": "fixture", "path": "/ok"},
-		{"request_id": "fail", "target": "fixture", "path": "/fail"},
-	}
-	var firstIDs []string
-	for iteration := 0; iteration < 2; iteration++ {
-		fetcher := &fakeFetcher{}
-		broker := newBroker(t, map[string]capability.Grant{grant.Name: grant}, fetcher)
-		response := call(t, broker, "stable-call", capability.FetchManyCapability, requests)
-		if response.Status != capability.StatusOK || len(response.Result.Items) != 2 {
-			t.Fatalf("bad partial response: %#v", response)
-		}
-		if response.Result.Items[0].Status != capability.StatusOK || response.Result.Items[1].Status != capability.StatusError {
-			t.Fatalf("partial statuses not preserved: %#v", response.Result.Items)
-		}
-		receipts := broker.Receipts()
-		ids := []string{receipts[0].ReceiptID, receipts[1].ReceiptID}
-		if iteration == 0 {
-			firstIDs = ids
-		} else if ids[0] != firstIDs[0] || ids[1] != firstIDs[1] {
-			t.Fatalf("receipt IDs are not deterministic: %v != %v", ids, firstIDs)
-		}
-	}
+	return json.Unmarshal(response, &decoded) == nil && decoded.Error != nil && decoded.Error.Code == code
 }

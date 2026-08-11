@@ -1,33 +1,16 @@
-# Local operator CLI
+# Operator CLI
 
-`apyrun` is the single local/development entry point for the verified Agent Python Runtime artifact. It is not a hosted service, a generic Agent harness, or evidence of production sandboxing.
+`cmd/apyrun` is the only active integration entry point. It reads one `RunRequest` from stdin and writes one `RunResponse` to stdout.
 
-## Build and invoke
+## Flags
 
-```bash
-go build -o /tmp/apyrun ./cmd/apyrun
-/tmp/apyrun \
-  -artifact /path/to/verified/agent-python-runtime.wasm \
-  -manifest /path/to/verified/manifest.json \
-  -config ./operator.json \
-  < run-request.json
+```text
+-artifact  required path to agent-python-runtime.wasm
+-manifest  required when execution_profile is configured
+-config    optional Host-owned JSON configuration
 ```
 
-`-artifact` is required. `-config` is optional; omitting it uses bounded defaults and grants no capability. When `execution_profile` is configured, `-manifest` is required and must identify the exact artifact bytes; a manifest without profile policy is also rejected.
-
-A successful invocation writes exactly one JSON response and a newline to stdout. Diagnostics go to stderr. Exit status `2` means invocation, config, artifact, or RunRequest input was rejected; exit status `1` means initialization, execution, bounds enforcement, identity generation, or output failed. Exit status `3` writes a schema-validated Host outcome to stdout and means a valid explicit `requirements` declaration cannot enter this Pysolate profile; the caller must make a different execution-placement decision before starting work.
-
-## Authority boundary
-
-`run-request.json` is untrusted guest/model data and follows `abi/v1/request.schema.json`. It may contain only `run_id`, generated `code`, `inputs`, an optional output schema, optional bounded typed `requirements`, and an optional compatibility declaration. Requirements and compatibility metadata only narrow admission; they are not grants. The request cannot carry targets, URLs, headers, credentials, grants, timeout, memory limits, request/response budgets, or receipt identity.
-
-`operator.json` is separate Host-owned policy. The CLI generates a cryptographically random Host run identity for receipts; the request's `run_id` is only an untrusted label and cannot become receipt identity.
-
-Do not commit an operator config containing credentials. The CLI does not print config contents or header values in diagnostics.
-
-## Operator config
-
-All fields are optional unless `fetch_many` is present. Unknown fields and trailing JSON are rejected.
+## Host configuration
 
 ```json
 {
@@ -35,69 +18,48 @@ All fields are optional unless `fetch_many` is present. Unknown fields and trail
   "max_request_bytes": 1048576,
   "max_response_bytes": 1048576,
   "memory_limit_pages": 8192,
-  "prepared_capacity": 1,
   "execution_profile": {
     "id": "base",
-    "allowed_imports": ["collections", "json", "math", "statistics"]
+    "allowed_imports": ["csv", "json"]
   },
-  "transaction_journal_path": "/absolute/private/path/transactions.db",
-  "fetch_many": {
-    "max_calls": 2,
-    "max_requests_per_call": 8,
-    "max_total_requests": 16,
-    "max_concurrency": 4,
-    "max_response_bytes": 1048576,
-    "per_request_timeout_ms": 5000,
-    "targets": {
-      "catalog": {
-        "base_url": "https://catalog.example",
-        "headers": {
-          "Authorization": "Bearer <HOST-OWNED-CREDENTIAL>"
-        }
-      }
-    }
-  }
+  "workspace_files": {
+    "input.txt": "hello"
+  },
+  "max_tool_calls": 8
 }
 ```
 
-`prepared_capacity` is an optional wazero-adapter optimization. `0` preserves synchronous fresh initialization. Values `1`–`4` preinitialize that many never-served instances; each checkout serves exactly one Run and is then closed, while a miss falls back to the synchronous fresh path. The exact current artifact starts at 128 MiB of guest memory per candidate, so capacity remains Host-owned and hard-capped. This is not snapshot/restore and does not change the reported `fresh-instance` safety mode.
+All fields are optional. Unknown fields and trailing JSON are rejected. Resource fields default to the values in `runtime.DefaultRunConfig`.
 
-`execution_profile` is optional Host-owned compatibility policy. When a Run contains a `compatibility` manifest, declarations are root-only and must exactly equal the import roots in one contiguous module-level absolute preamble. `static-agent-imports-v2` rejects obvious drift before artifact access. For an admitted request, the CLI verifies and binds the schema-v4 artifact plus inventory/qualification sidecars. After fresh or never-served Guest checkout, but before workspace activation or Broker construction, `runtime_validate_source` uses the exact target CPython AST/compiler, executes only the preamble, retains aliases, and seals the loaded module set. The Host validates the exact Guest sidecar and freezes an immutable artifact/profile/policy-bound RunPlan before granting authority. Dynamic/conditional/nested/relative/star/late Agent imports, unused declarations, and import/eval/exec entrypoints are unsupported. The pinned CPython gate checks and receipts actual imports before module-cache lookup; Host-bound receipts reference the plan digest. Late denial fails the current Pysolate Run; the CLI never retries or migrates it to a VM. The Host comparison still records `syntax_checked=false` because exact syntax evidence belongs to Guest preparation. A no-manifest legacy path remains for internal artifact qualification and pre-profile ABI compatibility; it does not receive profile-qualified placement claims. See [Execution profile admission](profile-admission.md) and [Static Import Agent Code contract](source-compatibility.md).
+`execution_profile` and `-manifest` must appear together. The CLI reads the manifest-selected import inventory and qualification sidecars, verifies the artifact, then replaces any Agent compatibility bookkeeping with Host-derived static imports.
 
-`transaction_journal_path` is an optional clean absolute path to the Host-owned SQLite/WAL transaction journal. With it, the production CLI creates a workflow transaction before Guest execution, journals every admitted `fetch_many` call as an operation+attempt, finalizes successful Runs, and supports reopen inspection with `apyrun-ledger`. Without it, the same Registry/Coordinator path uses `MemoryLedger` for backward compatibility and must not be presented as durable evidence. The journal rejects symlinks and uses private file permissions.
+When `workspace_files` is present, the CLI prebinds:
 
-The Host maps the opaque guest target `catalog` to the configured origin. A target base URL must be an HTTPS origin with no path, query, fragment, or user info. Plain HTTP is accepted only for explicit IP-loopback test fixtures. Redirects are not followed. The production CLI ignores ambient proxy settings, validates all DNS answers at dial time, rejects mixed or non-public answers, and dials a validated IP directly. Private-network targets and DNS names resolving to loopback are not supported. V1 performs GET only.
+```python
+read_text(path)
+write_text(path, content)
+list_files()
+```
 
-`fetch_many` limits are additionally constrained by compiled hard ceilings. `max_concurrency` is Host-owned, capped at 16, and limits each fixed input-order wave; byte admission and receipts remain ordered after every wave joins. The legacy Python call envelope is Host-adapted into a sealed builtin Registry entry, so Guest code cannot choose the catalog digest or handler version. Bound receipts retain per-request digests and add transaction, operation, attempt, catalog, handler, effect, and policy identity. The CLI rejects the entire operator config before compiling the guest if any resource or capability bound is invalid.
+The workspace is in memory. `max_tool_calls` defaults to eight. It does not grant a Host path, socket, subprocess or package installation.
 
-## Minimal request
+## Request
 
 ```json
 {
-  "run_id": "untrusted-label",
-  "code": "result = inputs['left'] + inputs['right']",
-  "inputs": {
-    "left": 19,
-    "right": 23
-  }
+  "run_id": "demo",
+  "code": "result = inputs['value'] + 1",
+  "inputs": {"value": 41}
 }
 ```
 
-For a request that explicitly requires POSIX and a full browser runtime:
+Agent-facing callers should omit `compatibility`; the Host derives it. `run_id` is an untrusted diagnostic label, not an authority identifier.
 
-```json
-{
-  "run_id": "untrusted-label",
-  "code": "result = None",
-  "inputs": {},
-  "requirements": ["posix", "browser_runtime"]
-}
-```
+## Exit behavior
 
-the CLI does not read the artifact or construct the execution Factory. It emits `abi/v1/execution-outcome.schema.json` with sorted required features, `workspace_disposition` and `effect_disposition` both `not_started`, and a SHA-256 binding to the exact request. It exits `3`. See [Structured unsupported and escalation outcome](unsupported-escalation.md).
+- `0`: a structured Guest response was written;
+- `1`: runtime or I/O failure;
+- `2`: invalid request, config, artifact or source admission;
+- `3`: a requirement requires escalation outside Pysolate.
 
-The normal success/error response retains the strict Guest execution envelope. Before committing the workflow, the Host strictly validates the envelope and the requested `output_schema`. Guest error, timeout/cancellation, invalid output, or failed transaction finalization triggers bounded Host abort; compensation is never automatic unless the Host configured the relevant adapter policy. If Host capabilities were used, Host-authored receipts and capability-call metrics overwrite any guest claims before stdout is written.
-
-## Verification boundary
-
-`go test ./cmd/apyrun` covers strict config decoding, authority separation, response bounds, stream behavior, lifecycle, SQLite reopen, profile admission before artifact access, and credential-safe diagnostics. `TestOperatorCLIWithRealGuestArtifact` builds the actual binary and exercises no-grant execution, Host-granted localhost fetch with a Host-owned credential, transaction-bound receipts, committed-journal reopen, and timeout against the exact artifact selected by `AGENT_RUNTIME_GUEST`.
+Diagnostics are short and do not include credentials, Host file contents, private model traces or Python source.

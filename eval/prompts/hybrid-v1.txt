@@ -1,2 +1,0 @@
-CONDITION: hybrid
-Both direct Host tools and the temporary typed Python workflow surface are available. Choose either surface using only the task, frozen catalog, and observed Host results while preserving every Host authority boundary.

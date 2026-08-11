@@ -9,7 +9,7 @@ import pathlib
 from typing import Any
 
 PROBE_ID = "guest-import-exec-v1"
-PROFILES = {"base", "numpy-core"}
+PROFILES = {"base"}
 STATUSES = {"qualified", "import_failed", "operation_failed"}
 MAX_RESULTS = 64
 
@@ -93,8 +93,6 @@ else:
             assert module.urlparse("https://example.test/a").path == "/a"
         elif operation == "etree_roundtrip":
             assert module.fromstring("<root><item /></root>").tag == "root"
-        elif operation == "array_sum":
-            assert int(module.array([1, 2, 3]).sum()) == 6
         else:
             raise ValueError("unknown qualification operation")
     except Exception as exc:
@@ -133,19 +131,13 @@ def strict_json_loads(value: str) -> Any:
 def required_roots(profile: str) -> set[str]:
     if profile not in PROFILES:
         raise ValueError("unsupported artifact profile")
-    roots = {"agent_runtime", "json", "sys"}
-    if profile == "numpy-core":
-        roots.add("numpy")
-    return roots
+    return {"agent_runtime", "json", "sys"}
 
 
 def probe_specs(profile: str) -> list[dict[str, str]]:
     if profile not in PROFILES:
         raise ValueError("unsupported artifact profile")
-    probes = list(_BASE_PROBES)
-    if profile == "numpy-core":
-        probes.append(("numpy", "array_sum"))
-    return [{"name": name, "operation": operation} for name, operation in sorted(probes)]
+    return [{"name": name, "operation": operation} for name, operation in sorted(_BASE_PROBES)]
 
 
 def build_requests(profile: str) -> list[dict[str, Any]]:

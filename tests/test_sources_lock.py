@@ -6,7 +6,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VERIFIER_PATH = ROOT / "tools" / "verify_sources_lock.py"
 LOCK_PATH = ROOT / "guest" / "build" / "sources.lock.json"
-NUMPY_CORE_LOCK_PATH = ROOT / "guest" / "build" / "sources.numpy-core.lock.json"
+
 
 
 def load_verifier():
@@ -53,25 +53,6 @@ class SourcesLockTests(unittest.TestCase):
         self.assertEqual([], self.verifier.validate_lock(lock))
         self.assertNotIn("numpy-source", {row["id"] for row in lock["sources"]})
 
-    def test_numpy_core_lock_is_valid_and_profile_specific(self):
-        lock = json.loads(NUMPY_CORE_LOCK_PATH.read_text())
-        self.assertEqual([], self.verifier.validate_lock(lock))
-        sources = {row["id"]: row for row in lock["sources"]}
-        base = json.loads(LOCK_PATH.read_text())
-        base_sources = {row["id"]: row for row in base["sources"]}
-        for source_id, source in base_sources.items():
-            self.assertEqual(source, sources[source_id])
-        self.assertEqual(
-            set(base_sources)
-            | {"numpy-source", "cython-host-wheel-linux-x86_64-cp313", "ninja-linux-x86_64"},
-            set(sources),
-        )
-        self.assertEqual("2.5.1", sources["numpy-source"]["version"])
-        self.assertEqual("packaged", sources["numpy-source"]["artifact_relation"])
-        self.assertEqual(
-            "build-only",
-            sources["cython-host-wheel-linux-x86_64-cp313"]["artifact_relation"],
-        )
 
     def test_rejects_missing_sha256(self):
         lock = self.valid_lock()

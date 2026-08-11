@@ -1,126 +1,43 @@
 package engine_test
 
 import (
-	"context"
-	"errors"
-	"strings"
 	"testing"
 
-	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
-type fakeRunner struct{}
-
-func (fakeRunner) Run(context.Context, []byte, string) ([]byte, error) {
-	return []byte("ok"), nil
-}
-func (fakeRunner) Close(context.Context) error { return nil }
-func (fakeRunner) Properties() engine.Properties {
-	return engine.Properties{
-		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
-		RequestedStrategy: engine.StrategyFreshInstance,
-		ActiveStrategy:    engine.StrategyFreshInstance,
-	}
-}
-
-type fakeFactory struct{}
-
-func (fakeFactory) Name() string { return "fake" }
-func (fakeFactory) New(context.Context, []byte, runtime.RunConfig) (engine.Runner, error) {
-	return fakeRunner{}, nil
-}
-
-func TestRunnerAndFactoryAreBackendNeutralContracts(t *testing.T) {
-	var factory engine.Factory = fakeFactory{}
-	runner, err := factory.New(context.Background(), []byte("artifact"), runtime.DefaultRunConfig())
+func TestPropertiesBindOnlyVerifiedProfiles(t *testing.T) {
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if factory.Name() != "fake" {
-		t.Fatalf("unexpected factory name %q", factory.Name())
+	identity := runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID:      "base",
+		ArtifactSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		ManifestSHA256: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		ImportRoots:    []string{"json"}, QualifiedImportRoots: []string{"json"},
 	}
-	if err := runner.Properties().Validate(); err != nil {
-		t.Fatalf("valid properties rejected: %v", err)
+	profile, err = profile.BindVerifiedArtifact(identity)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if runner.Properties().ResetMode != engine.ResetModeFreshInstance {
-		t.Fatalf("unexpected reset mode %q", runner.Properties().ResetMode)
-	}
-	if runner.Properties().RequestedStrategy != engine.StrategyFreshInstance || runner.Properties().ActiveStrategy != engine.StrategyFreshInstance {
-		t.Fatalf("unexpected strategy properties %#v", runner.Properties())
-	}
-}
-
-func TestPropertiesRejectUnknownOrIncompleteClaims(t *testing.T) {
-	cases := []engine.Properties{
-		{},
-		{Backend: "fake"},
-		{Backend: "fake", ResetMode: engine.ResetMode("memcpy-without-contract")},
-		{Backend: "fake", ResetMode: engine.ResetModeFreshInstance},
-		{Backend: "fake", ResetMode: engine.ResetModeFreshInstance, RequestedStrategy: engine.StrategyFreshInstance},
-		{
-			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
-			RequestedStrategy: engine.StrategyCOWReadySingleUse,
-			ActiveStrategy:    engine.StrategyFreshInstance,
-		},
-		{
-			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
-			RequestedStrategy: engine.StrategyCOWReadySingleUse,
-			ActiveStrategy:    engine.StrategyFreshInstance,
-			Fallback:          true,
-		},
-		{
-			Backend: "fake", ResetMode: engine.ResetModePreparedRestore,
-			RequestedStrategy: engine.StrategyCOWReadySingleUse,
-			ActiveStrategy:    engine.StrategyCOWReadySingleUse,
-		},
-	}
-	for _, properties := range cases {
-		if err := properties.Validate(); !errors.Is(err, engine.ErrInvalidProperties) {
-			t.Fatalf("expected invalid properties for %#v, got %v", properties, err)
-		}
-	}
-}
-
-func TestPropertiesRoundTripArtifactBoundProfile(t *testing.T) {
-	digest := "sha256:" + strings.Repeat("a", 64)
 	properties := engine.Properties{
-		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
-		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
-		ExecutionProfileID: "base", AllowedImports: []string{"json"}, AvailableImports: []string{"agent_runtime", "json", "sys"}, QualifiedImports: []string{"agent_runtime", "json", "sys"},
-		ArtifactSHA256: digest, ManifestSHA256: digest,
+		Backend: "wazero", ExecutionProfileID: profile.ID(), AllowedImports: profile.AllowedImports(),
+		AvailableImports: profile.AvailableImports(), QualifiedImports: profile.QualifiedImports(),
+		ArtifactSHA256: profile.ArtifactSHA256(), ManifestSHA256: profile.ManifestSHA256(),
 	}
 	if err := properties.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	profile := properties.ExecutionProfile()
-	if profile == nil || profile.ArtifactSHA256() != digest || profile.ManifestSHA256() != digest {
-		t.Fatalf("profile=%+v", profile)
-	}
-	properties.ManifestSHA256 = ""
-	if !errors.Is(properties.Validate(), engine.ErrInvalidProperties) {
-		t.Fatal("unpaired artifact identity was accepted")
+	if reconstructed := properties.ExecutionProfile(); reconstructed == nil || reconstructed.ArtifactSHA256() != profile.ArtifactSHA256() {
+		t.Fatalf("profile was not reconstructed: %#v", reconstructed)
 	}
 }
 
-func TestPropertiesAcceptTruthfulFallbackAndPreparedRestore(t *testing.T) {
-	valid := []engine.Properties{
-		{
-			Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
-			RequestedStrategy: engine.StrategyCOWReadySingleUse,
-			ActiveStrategy:    engine.StrategyFreshInstance,
-			Fallback:          true,
-			FallbackReason:    "COW is unavailable",
-		},
-		{
-			Backend: "fake", ResetMode: engine.ResetModePreparedRestore,
-			RequestedStrategy: engine.StrategyCOWFullRemapRestore,
-			ActiveStrategy:    engine.StrategyCOWFullRemapRestore,
-		},
-	}
-	for _, properties := range valid {
-		if err := properties.Validate(); err != nil {
-			t.Fatalf("valid properties rejected for %#v: %v", properties, err)
-		}
+func TestPropertiesRejectIncompleteArtifactIdentity(t *testing.T) {
+	properties := engine.Properties{Backend: "wazero", ExecutionProfileID: "base", AllowedImports: []string{"json"}, ArtifactSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	if properties.Validate() == nil {
+		t.Fatal("incomplete artifact identity was accepted")
 	}
 }

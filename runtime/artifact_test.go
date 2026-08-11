@@ -148,17 +148,17 @@ func TestVerifyLegacyArtifactIdentityCannotBindProfile(t *testing.T) {
 }
 
 func TestBindExecutionProfileToVerifiedArtifact(t *testing.T) {
-	profile, err := NewExecutionProfile("numpy-core", []string{"json", "numpy"})
+	profile, err := NewExecutionProfile("base", []string{"csv", "json"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	identity := VerifiedArtifactIdentity{
-		ProfileID:            "numpy-core",
+		ProfileID:            "base",
 		ArtifactSHA256:       "sha256:" + strings.Repeat("1", 64),
 		ManifestSHA256:       "sha256:" + strings.Repeat("2", 64),
-		Packages:             []ArtifactPackage{{Name: "cpython", Version: "3.14.0", Status: "core"}, {Name: "numpy", Version: "2.3.0", Status: "selected-core"}},
-		ImportRoots:          []string{"agent_runtime", "json", "numpy", "sys"},
-		QualifiedImportRoots: []string{"agent_runtime", "json", "numpy", "sys"},
+		Packages:             []ArtifactPackage{{Name: "cpython", Version: "3.14.0", Status: "core"}},
+		ImportRoots:          []string{"agent_runtime", "csv", "json", "sys"},
+		QualifiedImportRoots: []string{"agent_runtime", "csv", "json", "sys"},
 	}
 	bound, err := profile.BindVerifiedArtifact(identity)
 	if err != nil {
@@ -167,11 +167,11 @@ func TestBindExecutionProfileToVerifiedArtifact(t *testing.T) {
 	if profile.ArtifactSHA256() != "" || bound.ArtifactSHA256() != identity.ArtifactSHA256 || bound.ManifestSHA256() != identity.ManifestSHA256 {
 		t.Fatalf("original=%q bound=%q/%q", profile.ArtifactSHA256(), bound.ArtifactSHA256(), bound.ManifestSHA256())
 	}
-	if strings.Join(bound.QualifiedImports(), ",") != "agent_runtime,json,numpy,sys" {
+	if strings.Join(bound.QualifiedImports(), ",") != "agent_runtime,csv,json,sys" {
 		t.Fatalf("qualified=%v", bound.QualifiedImports())
 	}
 	wrong := identity
-	wrong.ProfileID = "base"
+	wrong.ProfileID = "other"
 	if _, err := profile.BindVerifiedArtifact(wrong); !errors.Is(err, ErrExecutionProfileArtifactMismatch) {
 		t.Fatalf("err=%v", err)
 	}

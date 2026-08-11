@@ -149,9 +149,8 @@ class ManifestWriterTests(unittest.TestCase):
             )
             limitations = "\n".join(manifest["limitations"])
             self.assertNotIn("capabilities are not implemented", limitations)
-            self.assertIn("fetch_many", limitations)
-            self.assertIn("built-in capability", limitations)
-            self.assertIn("NumPy is not included", limitations)
+            self.assertIn("Host tools are explicitly registered", limitations)
+            self.assertIn("does not provide package installation", limitations)
             self.assertEqual(
                 [{"name": "cpython", "version": "3.14.test", "status": "core"}],
                 manifest["packages"],
@@ -219,91 +218,6 @@ class ManifestWriterTests(unittest.TestCase):
             ):
                 self.assertEqual(0, self.writer.main())
             self.assertEqual("a" * 40, json.loads(output.read_text())["build"]["repository_commit"])
-
-    def test_numpy_core_profile_requires_and_binds_selection(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            artifact = root / "agent-python-runtime-numpy-core.wasm"
-            artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
-            wat = root / "guest.wat"
-            wat.write_text('(module (export "memory" (memory 0)))')
-            lock = root / "sources.lock.json"
-            lock.write_text(json.dumps({
-                "target": "wasm32-wasip1",
-                "sources": [
-                    {"id": "cpython-source", "version": "3.14.test"},
-                    {"id": "numpy-source", "version": "2.5.test"},
-                ],
-            }))
-            selection = root / "selection-report.json"
-            selection.write_text(json.dumps({
-                "schema_version": 1,
-                "package": "numpy",
-                "profile": "core",
-                "modules": [
-                    {"module": "numpy._core._multiarray_umath"},
-                    {"module": "numpy.linalg._umath_linalg"},
-                ],
-                "link_inputs": [],
-            }))
-
-            inventory = write_inventory(root, "numpy-core")
-            manifest = self.writer.build_manifest(
-                artifact=artifact,
-                wat=wat,
-                source_lock=lock,
-                commit="abc123",
-                source_date_epoch="1234567890",
-                artifact_profile="numpy-core",
-                extension_selection=selection,
-                import_inventory=inventory,
-                import_qualification=write_qualification(root, "numpy-core"),
-                memory_initial_pages=2048,
-                memory_maximum_pages=32768,
-            )
-            self.assertEqual("numpy-core", manifest["artifact_profile"])
-            self.assertEqual("core", manifest["extension_profile"]["profile"])
-            self.assertEqual(2, len(manifest["extension_profile"]["modules"]))
-            self.assertEqual(
-                [
-                    {"name": "cpython", "version": "3.14.test", "status": "core"},
-                    {"name": "numpy", "version": "2.5.test", "status": "selected-core"},
-                ],
-                manifest["packages"],
-            )
-            self.assertNotIn("NumPy is not included", "\n".join(manifest["limitations"]))
-            self.assertIn("NumPy random and FFT are not included", "\n".join(manifest["limitations"]))
-
-            duplicated = json.loads(selection.read_text())
-            duplicated["modules"].append(duplicated["modules"][0])
-            selection.write_text(json.dumps(duplicated))
-            with self.assertRaisesRegex(ValueError, "exact core extension selection"):
-                self.writer.build_manifest(
-                    artifact=artifact,
-                    wat=wat,
-                    source_lock=lock,
-                    commit="abc123",
-                    source_date_epoch="1234567890",
-                    artifact_profile="numpy-core",
-                    extension_selection=selection,
-                    import_inventory=inventory,
-                    import_qualification=write_qualification(root, "numpy-core"),
-                    memory_initial_pages=2048,
-                    memory_maximum_pages=32768,
-                )
-
-            with self.assertRaisesRegex(ValueError, "artifact profile"):
-                self.writer.build_manifest(
-                    artifact=artifact,
-                    wat=wat,
-                    source_lock=lock,
-                    commit="abc123",
-                    source_date_epoch="1234567890",
-                    artifact_profile="unknown",
-                    extension_selection=None,
-                    import_inventory=inventory,
-                    import_qualification=write_qualification(root, "base"),
-                )
 
     def test_locked_source_version_requires_one_versioned_source(self):
         cases = {

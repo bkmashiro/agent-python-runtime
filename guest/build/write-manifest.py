@@ -18,12 +18,7 @@ EXPORT_RE = re.compile(r'\(export\s+"([^"]+)"')
 MEMORY_RE = re.compile(r'^\s*\(memory(?:\s+\(;\d+;\))?\s+(\d+)\s+(\d+)\s*\)', re.MULTILINE)
 ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
-    "numpy-core": "agent-python-runtime-numpy-core.wasm",
 }
-NUMPY_CORE_MODULES = (
-    "numpy._core._multiarray_umath",
-    "numpy.linalg._umath_linalg",
-)
 
 
 def load_import_inventory_module():
@@ -137,29 +132,8 @@ def build_manifest(
     qualification_record["filename"] = import_qualification.name
     qualification_record["sha256"] = sha256(import_qualification)
 
-    extension_profile = None
-    if artifact_profile == "base":
-        if extension_selection is not None:
-            raise ValueError("base artifact profile forbids extension selection")
-    else:
-        if extension_selection is None:
-            raise ValueError("numpy-core artifact profile requires extension selection")
-        selection = json.loads(extension_selection.read_text())
-        modules = [row.get("module") for row in selection.get("modules", [])]
-        if (
-            selection.get("schema_version") != 1
-            or selection.get("package") != "numpy"
-            or selection.get("profile") != "core"
-            or modules != list(NUMPY_CORE_MODULES)
-        ):
-            raise ValueError("numpy-core artifact profile requires exact core extension selection")
-        extension_profile = {
-            "filename": extension_selection.name,
-            "manifest_sha256": sha256(extension_selection),
-            "profile": "core",
-            "modules": modules,
-            "link_input_count": len(selection.get("link_inputs", [])),
-        }
+    if extension_selection is not None:
+        raise ValueError("base artifact profile forbids extension selection")
 
     lock = json.loads(source_lock.read_text())
     wat_text = wat.read_text()
@@ -177,20 +151,9 @@ def build_manifest(
     ]
     limitations = [
         "import qualification covers only the named guest-import-exec-v1 operations and is not transitive closure or arbitrary behavior proof",
-        "fetch_many is the only built-in capability and requires explicit Host grants; frozen catalogs may project additional typed Host tools",
-        "WASI execution evidence is recorded separately",
+        "Host tools are explicitly registered and call-bounded",
+        "the proof of concept does not provide package installation or native extensions",
     ]
-    if artifact_profile == "base":
-        limitations.insert(0, "NumPy is not included in the core artifact")
-    else:
-        packages.append(
-            {
-                "name": "numpy",
-                "version": locked_source_version(lock, "numpy-source"),
-                "status": "selected-core",
-            }
-        )
-        limitations.insert(0, "NumPy random and FFT are not included")
 
     detected_memory = parse_memory_bounds(wat_text)
     if (memory_initial_pages is None) != (memory_maximum_pages is None):
@@ -234,7 +197,7 @@ def build_manifest(
         "sources": lock["sources"],
         "wasm": wasm,
         "packages": packages,
-        "extension_profile": extension_profile,
+        "extension_profile": None,
         "python_import_inventory": inventory_record,
         "python_import_qualification": qualification_record,
         "limitations": limitations,

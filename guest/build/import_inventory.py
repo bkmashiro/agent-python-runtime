@@ -9,7 +9,7 @@ import pathlib
 from typing import Any
 
 PROBE_ID = "guest-importlib-find-spec-v1"
-PROFILES = {"base", "numpy-core"}
+PROFILES = {"base"}
 MAX_ROOTS = 1024
 
 PROBE_CODE = r'''import importlib.util
@@ -108,8 +108,6 @@ def validate_inventory(value: Any, profile: str) -> dict[str, Any]:
     ):
         raise ValueError("discoverable roots must be sorted unique import names")
     required = {"agent_runtime", "json", "sys"}
-    if profile == "numpy-core":
-        required.add("numpy")
     if not required.issubset(roots):
         raise ValueError("required profile import root is not discoverable")
 

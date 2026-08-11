@@ -234,10 +234,7 @@ static int32_t ensure_interpreter(void) {
     config.site_import = 0;
     config.write_bytecode = 0;
     config.module_search_paths_set = 1;
-#ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
-    config.use_hash_seed = 1;
-    config.hash_seed = 0xa9e17f5dUL;
-#endif
+
 
     status = PyWideStringList_Append(&config.module_search_paths,
                                      L"/usr/lib/python3.14");
@@ -321,58 +318,6 @@ int32_t runtime_validate_source(const char *request, int32_t request_len) {
     return (int32_t)status;
 }
 
-uint32_t runtime_source_validation_result(void) {
-    if (!Py_IsInitialized() || runtime_module == NULL) {
-        return write_internal_error();
-    }
-    PyObject *function = PyObject_GetAttrString(runtime_module,
-                                                "_source_validation_result");
-    if (function == NULL) {
-        return write_internal_error();
-    }
-    PyObject *result = PyObject_CallNoArgs(function);
-    Py_DECREF(function);
-    return write_python_unicode(result);
-}
-
-uint32_t runtime_import_receipts(void) {
-    if (!Py_IsInitialized() || runtime_module == NULL) {
-        return write_internal_error();
-    }
-    PyObject *function = PyObject_GetAttrString(runtime_module,
-                                                "_import_receipts_result");
-    if (function == NULL) {
-        return write_internal_error();
-    }
-    PyObject *result = PyObject_CallNoArgs(function);
-    Py_DECREF(function);
-    return write_python_unicode(result);
-}
-
-#ifdef AGENT_RUNTIME_PREINITIALIZATION_SPIKE
-static void preinitialize_python_or_trap(void) {
-    static const char config[] = "{}";
-    fprintf(stderr, "preinitialization-spike: begin\n");
-    fflush(stderr);
-    int32_t status = runtime_init(config, (int32_t)(sizeof(config) - 1));
-    fprintf(stderr,
-            "preinitialization-spike: runtime_init status=%d python_initialized=%d\n",
-            status,
-            Py_IsInitialized());
-    fflush(stderr);
-    if (status != 0) {
-        __builtin_trap();
-    }
-}
-
-__attribute__((export_name("runtime_preinitialize")))
-void runtime_preinitialize(void) {
-    preinitialize_python_or_trap();
-}
-
-__attribute__((export_name("runtime_preinitialized_initialize")))
-void runtime_preinitialized_initialize(void) {}
-#endif
 
 int32_t runtime_prepare(const char *source, int32_t source_len) {
     if (!Py_IsInitialized() || runtime_module == NULL) {
@@ -387,19 +332,6 @@ int32_t runtime_prepare(const char *source, int32_t source_len) {
     return 0;
 }
 
-__attribute__((export_name("runtime_warmup")))
-int32_t runtime_warmup(const char *profile, int32_t profile_len) {
-    if (!Py_IsInitialized() || runtime_module == NULL) {
-        return -1;
-    }
-    PyObject *result = call_with_utf8("_warmup", profile, profile_len);
-    if (result == NULL) {
-        PyErr_Print();
-        return -1;
-    }
-    Py_DECREF(result);
-    return 0;
-}
 
 void *alloc(int32_t size) {
     if (size <= 0 || size > AGENT_RUNTIME_REQUEST_MAX) {

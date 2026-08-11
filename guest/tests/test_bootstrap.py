@@ -85,24 +85,6 @@ class BootstrapTests(unittest.TestCase):
         }
         raw = json.dumps(request)
         self.assertEqual(0, self.runtime._validate_request_source(raw))
-        evidence = json.loads(self.runtime._source_validation_result())
-        self.assertEqual(1, evidence["schema_version"])
-        self.assertEqual("exact-guest-static-imports-v1", evidence["validator"])
-        self.assertEqual("ready", evidence["status"])
-        self.assertEqual(["json", "pathlib"], evidence["ast_import_roots"])
-        self.assertTrue(evidence["bytecode_checked"])
-        self.assertEqual(set(), set(evidence["baseline_modules"]) & set(evidence["entry_closure_modules"]))
-        self.assertEqual(
-            evidence["sealed_modules"],
-            sorted(evidence["baseline_modules"] + evidence["entry_closure_modules"]),
-        )
-        self.assertIn("json.decoder", evidence["sealed_modules"])
-        self.assertRegex(evidence["source_sha256"], r"^sha256:[0-9a-f]{64}$")
-        receipt_evidence = json.loads(self.runtime._import_receipts_result())
-        self.assertEqual(
-            {"schema_version": 1, "collector": "cpython-pre-cache-import-gate-v1", "events": []},
-            receipt_evidence,
-        )
         response = json.loads(self.runtime._execute(raw))
         self.assertEqual("ok", response["status"])
         self.assertEqual(1, response["result"])
@@ -191,7 +173,6 @@ class BootstrapTests(unittest.TestCase):
         )
         self.assertEqual("ok", response["status"])
         self.assertEqual("json", response["result"])
-        self.assertIsNone(self.runtime._source_validation_result())
 
     def test_exception_reporting_preserves_primary_error_when_traceback_formatting_fails(self):
         with mock.patch.object(self.runtime.traceback, "format_exc", side_effect=ImportError("sealed lazy import")):
@@ -254,33 +235,6 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("ok", response["status"])
         self.assertEqual(8, response["result"])
 
-    def test_numpy_ready_warmup_imports_and_retains_numpy_namespace(self):
-        fake_numpy = types.ModuleType("numpy")
-
-        class FakeArray:
-            def sum(self):
-                return 6
-
-        setattr(fake_numpy, "arange", lambda _stop: FakeArray())
-        setattr(fake_numpy, "__version__", "test")
-        with mock.patch.dict(sys.modules, {"numpy": fake_numpy}):
-            self.runtime._warmup("numpy-ready-v1")
-        response = self.execute(code="result = {'prepared': prepared, 'sum': int(np.arange(4).sum())}")
-        self.assertEqual("ok", response["status"])
-        self.assertEqual({"prepared": 41, "sum": 6}, response["result"])
-
-    def test_request_shell_warmup_is_allowlisted(self):
-        self.runtime._warmup("request-shell-v1")
-        called = []
-        self.runtime.register_warmup_profile("custom.v1", lambda: called.append(True))
-        self.runtime._warmup("custom.v1")
-        self.assertEqual([True], called)
-        with self.assertRaises(ValueError):
-            self.runtime.register_warmup_profile("custom.v1", lambda: None)
-        with self.assertRaises(ValueError):
-            self.runtime.register_warmup_profile("Invalid", lambda: None)
-        with self.assertRaises(ValueError):
-            self.runtime._warmup("unknown")
 
     def test_initialize_and_prepare_require_json_or_source_strings(self):
         with self.assertRaises(TypeError):

@@ -920,6 +920,20 @@ func buildConditionSurfaceForTreatment(runtime *ToolRuntime, condition Condition
 	if treatment.UsesExactRequiredHostPlan() {
 		prompt += " Before emitting direct calls or Python code, internally form the exact required Host-call sequence. Include every directory change required by the user request and execute each required call exactly once in dependency-safe order. When a Host response feeds a later argument, extract the named field shown in the SDK response shape instead of converting the whole response object. Do not catch or suppress Host-tool exceptions."
 	}
+	if treatment.UsesInitialCWDContext() {
+		if runtime.FileSystem() == nil {
+			return nil, nil, "", ErrAgenticRun
+		}
+		cwd, err := runtime.FileSystem().CurrentWorkingDirectory()
+		if err != nil {
+			return nil, nil, "", ErrAgenticRun
+		}
+		encodedCWD, err := json.Marshal(cwd)
+		if err != nil {
+			return nil, nil, "", ErrAgenticRun
+		}
+		prompt += " Initial authoritative Host current working directory: " + string(encodedCWD) + "."
+	}
 	if condition != ConditionDirect {
 		prompt += " Each Python Guest run starts fresh, but Host-tool state persists across user turns. Do not replay state-changing setup already completed in earlier turns; use prior successful Host observations as current state unless the user asks to change it."
 	}

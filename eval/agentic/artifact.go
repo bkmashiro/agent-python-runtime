@@ -48,7 +48,7 @@ func ValidateTrialResult(result TrialResult) error {
 	} else if len(result.HostContextDigests) != 0 {
 		return ErrTrialArtifact
 	}
-	routerTrial := result.Condition == ConditionHybrid && (result.TreatmentID == TreatmentHybridTwoStageRouterV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactJSONV4 || result.TreatmentID == TreatmentHybridTwoStagePreboundExactPlanV5)
+	routerTrial := result.Condition == ConditionHybrid && (result.TreatmentID == TreatmentHybridTwoStageRouterV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactJSONV4 || result.TreatmentID == TreatmentHybridTwoStagePreboundExactPlanV5 || result.TreatmentID == TreatmentHybridTwoStagePreboundInitialCWDV6)
 	if result.Route != nil {
 		if !routerTrial {
 			return ErrTrialArtifact
@@ -128,7 +128,7 @@ func ValidateTrialResult(result TrialResult) error {
 	}
 	previousPythonTurn := -1
 	duplicatePythonTurns := 0
-	compactPythonTreatment := result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactJSONV4 || result.TreatmentID == TreatmentHybridTwoStagePreboundExactPlanV5
+	compactPythonTreatment := result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactJSONV4 || result.TreatmentID == TreatmentHybridTwoStagePreboundExactPlanV5 || result.TreatmentID == TreatmentHybridTwoStagePreboundInitialCWDV6
 	for _, evidence := range result.PythonEvidence {
 		if evidence.CapabilityCalls > result.Limits.MaxToolCalls || !validDigest(evidence.RequestDigest) ||
 			!validDigest(evidence.ResponseDigest) || !validDigest(evidence.ResultDigest) ||
@@ -169,7 +169,7 @@ func ValidateTrialResult(result TrialResult) error {
 	} else if result.FailureDetail != nil {
 		return ErrTrialArtifact
 	}
-	repairTreatment := result.TreatmentID == TreatmentPythonSafeRepairV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactJSONV4 || result.TreatmentID == TreatmentHybridTwoStagePreboundExactPlanV5
+	repairTreatment := result.TreatmentID == TreatmentPythonSafeRepairV1 || result.TreatmentID == TreatmentHybridTwoStageSafeRepairV2 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactV3 || result.TreatmentID == TreatmentHybridTwoStagePreboundCompactJSONV4 || result.TreatmentID == TreatmentHybridTwoStagePreboundExactPlanV5 || result.TreatmentID == TreatmentHybridTwoStagePreboundInitialCWDV6
 	if !repairTreatment {
 		if result.Repair != nil || duplicatePythonTurns != 0 {
 			return ErrTrialArtifact

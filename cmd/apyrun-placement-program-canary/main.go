@@ -31,8 +31,7 @@ var limits = agentic.TrialLimits{
 }
 
 type programProposal struct {
-	Code    string   `json:"code"`
-	Imports []string `json:"imports"`
+	Code string `json:"code"`
 }
 
 type computerProposal struct {
@@ -149,6 +148,11 @@ func run(ctx context.Context, args []string) error {
 		result.ProposalSHA256 = digest([]byte(proposal.Code))
 		execution, score, executeErr := runPysolate(ctx, *task, proposal, *guestDir)
 		if executeErr != nil {
+			result.Execution = map[string]any{"status": "invalid", "failure_layer": "infrastructure", "error_code": "pysolate_execution_infrastructure"}
+			result.Score = failedScore()
+			if writeErr := writeNewJSON(*out, result); writeErr != nil {
+				return writeErr
+			}
 			return executeErr
 		}
 		result.Execution, result.Score = execution, score
@@ -160,6 +164,11 @@ func run(ctx context.Context, args []string) error {
 		result.ProposalSHA256 = digest([]byte(proposal.Source))
 		execution, score, executeErr := runComputer(ctx, proposal, *computerCheckout, *computerAdapter, *pythonPath)
 		if executeErr != nil {
+			result.Execution = map[string]any{"status": "invalid", "failure_layer": "infrastructure", "error_code": "computer_execution_infrastructure"}
+			result.Score = failedScore()
+			if writeErr := writeNewJSON(*out, result); writeErr != nil {
+				return writeErr
+			}
 			return executeErr
 		}
 		result.Execution, result.Score = execution, score
@@ -176,11 +185,11 @@ func treatment(arm string, task agentic.Task) (string, map[string]any) {
 	}
 	toolJSON, _ := json.Marshal(toolDescriptions)
 	if arm == "pysolate" {
-		instructions := `Generate exactly one bounded static Python program for a profile-qualified Pysolate Guest. Return it only through submit_python. The listed task tools are already trusted, prebound Python functions with the same names and keyword arguments; call them directly. Do not import host_tools. The only qualified standard-library import available is json; if the task does not need json, use no imports. Do not request or use csv or any other import. Imports, if any, must be consecutive static absolute imports at the top and imports must list their exact top-level roots. Do not use exec, eval, __import__, importlib, reflection, shell, subprocess, files outside the tools, network, credentials, retry, fallback, or markdown fences. Read data inside the program, perform the requested transformation, and set result to a JSON object. Respect the user-requested tool sequence and do not add redundant externally visible effects. Tool contracts: ` + string(toolJSON)
+		instructions := `Generate exactly one bounded static Python program for a profile-qualified Pysolate Guest. Return it only through submit_python. The listed task tools are already trusted, prebound Python functions with the same names and keyword arguments; call them directly. Do not import host_tools. Common pure Python standard library modules are available normally, including csv, json, math, statistics, collections, itertools, functools, decimal, fractions, datetime, pathlib, re, hashlib, base64, and xml. Imports must be consecutive static absolute imports at the top; the Host infers and validates them automatically. The workspace is accessible only through the listed tools. There is no network, shell, subprocess, package installation, native extension, dynamic import, reflection, credential, retry, or fallback authority. Do not use exec, eval, __import__, importlib, os, socket, subprocess, multiprocessing, ctypes, urllib, or markdown fences. Read data inside the program, perform the requested transformation, and set result to a JSON object. Respect the user-requested tool sequence and do not add redundant externally visible effects. Tool contracts: ` + string(toolJSON)
 		return instructions, map[string]any{
 			"type": "function", "name": "submit_python", "description": "Submit one static bounded Python program.", "strict": false,
-			"parameters": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"code", "imports"}, "properties": map[string]any{
-				"code": map[string]any{"type": "string"}, "imports": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "maxItems": 16},
+			"parameters": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"code"}, "properties": map[string]any{
+				"code": map[string]any{"type": "string"},
 			}},
 		}
 	}
@@ -207,7 +216,14 @@ func taskText(task agentic.Task) string {
 }
 
 func runPysolate(ctx context.Context, task agentic.Task, proposal programProposal, guestDir string) (map[string]any, map[string]any, error) {
-	bundle, err := placement.LoadGuestBundle(guestDir, []string{"json"}, placement.GuestIdentityExpectation{
+	imports, err := admittedPythonImports(proposal.Code)
+	if err != nil {
+		return map[string]any{
+			"status": "rejected", "failure_layer": "profile_admission", "error_code": "source_outside_profile",
+			"profile": "base", "policy": placement.AgentStdlibWorkspacePolicyID, "imports": imports,
+		}, failedScore(), nil
+	}
+	bundle, err := placement.LoadGuestBundle(guestDir, placement.AgentStdlibWorkspaceImports(), placement.GuestIdentityExpectation{
 		ArtifactSHA256: "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
 		ManifestSHA256: "sha256:b6baa6f5adb27263ef586faed897cde42c1815b4ce7c415333696800b3bbb6a6",
 	})
@@ -229,10 +245,14 @@ func runPysolate(ctx context.Context, task agentic.Task, proposal programProposa
 	}
 	defer executor.Close(context.Background())
 	started := time.Now()
-	runResult, err := executor.ExecuteProfileQualified(ctx, "placement-canary-pysolate", proposal.Code, "base", proposal.Imports, 8)
+	runResult, err := executor.ExecuteProfileQualified(ctx, "placement-canary-pysolate", proposal.Code, "base", imports, 8)
 	wall := time.Since(started)
-	if err != nil || !runResult.Success {
-		return nil, nil, fmt.Errorf("profile-qualified Pysolate execution failed: error_code=%s err=%v", runResult.ErrorCode, err)
+	if err != nil {
+		return nil, nil, fmt.Errorf("profile-qualified Pysolate execution failed: %w", err)
+	}
+	if !runResult.Success {
+		execution, score := failedPysolateProgram(runResult, placement.AgentStdlibWorkspacePolicyID, imports, wall.Nanoseconds())
+		return execution, score, nil
 	}
 	score, err := agentic.ScoreStateful(task, tools.Trace(), tools.FileSystem())
 	if err != nil {
@@ -240,7 +260,8 @@ func runPysolate(ctx context.Context, task agentic.Task, proposal programProposa
 	}
 	execution := map[string]any{
 		"status": "completed", "wall_ns": wall.Nanoseconds(), "backend": runResult.Backend, "reset_mode": runResult.ResetMode,
-		"profile": "base", "artifact_sha256": bundle.Identity.ArtifactSHA256, "manifest_sha256": bundle.Identity.ManifestSHA256,
+		"profile": "base", "policy": placement.AgentStdlibWorkspacePolicyID, "imports": imports,
+		"artifact_sha256": bundle.Identity.ArtifactSHA256, "manifest_sha256": bundle.Identity.ManifestSHA256,
 		"capability_calls": runResult.CapabilityCalls, "run_plan_bound": bytes.Contains(runResult.RawResponse, []byte(`"run_plan"`)),
 	}
 	return execution, map[string]any{
@@ -249,6 +270,24 @@ func runPysolate(ctx context.Context, task agentic.Task, proposal programProposa
 		"final_state_passed":   score.FinalStatePassed,
 		"passed":               score.FinalStatePassed,
 	}, nil
+}
+
+func failedPysolateProgram(runResult agentic.PythonRunResult, policy string, imports []string, wallNS int64) (map[string]any, map[string]any) {
+	return map[string]any{
+		"status": "failed", "failure_layer": "model_program", "error_code": runResult.ErrorCode,
+		"failure_class": runResult.FailureClass, "backend": runResult.Backend,
+		"capability_calls": runResult.CapabilityCalls, "policy": policy,
+		"imports": append([]string(nil), imports...), "wall_ns": wallNS,
+	}, failedScore()
+}
+
+func failedScore() map[string]any {
+	return map[string]any{
+		"strict_effect_passed": false,
+		"effect_status":        "not_scored_after_failure",
+		"final_state_passed":   false,
+		"passed":               false,
+	}
 }
 
 func runComputer(ctx context.Context, proposal computerProposal, checkout, adapterPath, pythonPath string) (map[string]any, map[string]any, error) {
@@ -290,17 +329,23 @@ func runComputer(ctx context.Context, proposal computerProposal, checkout, adapt
 }
 
 func validatePythonProposal(proposal programProposal) error {
-	if !validSource(proposal.Code) || proposal.Imports == nil || len(proposal.Imports) > 16 {
+	if !validSource(proposal.Code) {
 		return errors.New("invalid")
 	}
-	seen := map[string]bool{}
-	for _, item := range proposal.Imports {
-		if item != "json" || seen[item] {
-			return errors.New("invalid")
-		}
-		seen[item] = true
-	}
 	return nil
+}
+
+func admittedPythonImports(source string) ([]string, error) {
+	imports, err := runtimeconfig.InferStaticImportRoots(source)
+	if err != nil {
+		return imports, errors.New("Python source imports are not statically admissible")
+	}
+	for _, root := range imports {
+		if !placement.AgentStdlibWorkspaceAllows(root) {
+			return imports, fmt.Errorf("Python source import %q is outside %s", root, placement.AgentStdlibWorkspacePolicyID)
+		}
+	}
+	return imports, nil
 }
 func validateComputerProposal(proposal computerProposal) error {
 	if !validSource(proposal.Source) {

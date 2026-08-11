@@ -17,7 +17,7 @@ func TestProfileQualifiedPysolateRealGuest(t *testing.T) {
 	if artifactDir == "" {
 		t.Skip("set APYRUN_GUEST_ARTIFACT_DIR for the pinned real Guest integration")
 	}
-	bundle, err := placement.LoadGuestBundle(artifactDir, []string{"json"}, placement.GuestIdentityExpectation{
+	bundle, err := placement.LoadGuestBundle(artifactDir, placement.AgentStdlibWorkspaceImports(), placement.GuestIdentityExpectation{
 		ArtifactSHA256: "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
 		ManifestSHA256: "sha256:b6baa6f5adb27263ef586faed897cde42c1815b4ce7c415333696800b3bbb6a6",
 	})
@@ -51,24 +51,24 @@ func TestProfileQualifiedPysolateRealGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer executor.Close(context.Background())
-	program := `cd(folder="Documents")
+	program := `import csv
+cd(folder="Documents")
 raw = cat(file_name="metrics.csv")["file_content"]
 labels = []
-for line in raw.splitlines():
-    label, value = line.split(",")
+for label, value in csv.reader(raw.splitlines()):
     if int(value) > 4:
         labels.append(label)
 touch(file_name="high_value_rows.txt")
 echo(content=",".join(labels), file_name="high_value_rows.txt")
 result = {"status": "completed"}
 `
-	result, err := executor.ExecuteProfileQualified(context.Background(), "placement-profile-real-1", program, "base", []string{}, 4)
+	result, err := executor.ExecuteProfileQualified(context.Background(), "placement-profile-real-1", program, "base", []string{"csv"}, 4)
 	if err != nil || !result.Success {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	request, err := runtimeconfig.DecodeRunRequest(result.RawRequest)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || request.Compatibility == nil || len(request.Compatibility.Imports) != 1 || request.Compatibility.Imports[0] != "csv" {
+		t.Fatalf("csv compatibility declaration missing: request=%+v err=%v", request, err)
 	}
 	response, err := runtimeconfig.DecodeAndValidateRunResponse(request, result.RawResponse)
 	if err != nil || response.RunPlan == nil || response.RunPlan.ProfileID() != "base" ||

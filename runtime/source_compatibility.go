@@ -246,6 +246,22 @@ func CompareSourceCompatibility(request RunRequest, profile ExecutionProfile) Co
 	return result
 }
 
+// InferStaticImportRoots derives the exact top-level import declaration for a
+// bounded agent-submitted program. Callers do not need to ask the model to
+// duplicate import metadata. Programs with dynamic, relative, non-preamble, or
+// otherwise ambiguous imports fail closed; target-Guest validation remains the
+// authoritative syntax and bytecode check.
+func InferStaticImportRoots(source string) ([]string, error) {
+	imports, reasons := scanConservativePythonImports(source)
+	if len(reasons) == 0 {
+		return imports, nil
+	}
+	if hasUnsupportedSourceReason(reasons) {
+		return imports, ErrAgentSourceContractUnsupported
+	}
+	return imports, ErrSourceCompatibilityIndeterminate
+}
+
 func cloneStrings(values []string) []string {
 	result := make([]string, len(values))
 	copy(result, values)

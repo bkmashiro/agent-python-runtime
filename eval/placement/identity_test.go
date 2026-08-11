@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -18,6 +19,16 @@ type identityLock struct {
 			ArtifactSHA256 string `json:"artifact_sha256"`
 			ManifestSHA256 string `json:"manifest_sha256"`
 		} `json:"guest"`
+		Policy struct {
+			ID               string   `json:"id"`
+			ArtifactProfile  string   `json:"artifact_profile"`
+			ImportDerivation string   `json:"import_derivation"`
+			AllowedImports   []string `json:"allowed_imports"`
+			Workspace        string   `json:"workspace_authority"`
+			Outbound         string   `json:"outbound"`
+			Process          string   `json:"process"`
+			PackageInstall   string   `json:"package_install"`
+		} `json:"policy"`
 	} `json:"pysolate"`
 	Provider struct {
 		Model           string `json:"model"`
@@ -60,7 +71,7 @@ func TestPlacementIdentityLock(t *testing.T) {
 	if err := decoder.Decode(&lock); err != nil {
 		t.Fatalf("decode identity lock: %v", err)
 	}
-	if lock.SchemaVersion != "placement-identity-lock/v1" || lock.Status != "frozen_pre_model" {
+	if lock.SchemaVersion != "placement-identity-lock/v2" || lock.Status != "development_refrozen_pre_decision" {
 		t.Fatalf("identity lock not frozen: %+v", lock)
 	}
 	for label, value := range map[string]string{
@@ -82,8 +93,15 @@ func TestPlacementIdentityLock(t *testing.T) {
 		}
 	}
 	if lock.Provider.Model != "gpt-5.3-codex-spark" || lock.Provider.Reasoning != "xhigh" ||
-		lock.Provider.CodexCLIVersion != "0.146.0" || lock.Provider.Protocol != "codex-jsonl-function-proposals-v1" {
+		lock.Provider.CodexCLIVersion != "0.146.0" || lock.Provider.Protocol != "codex-jsonl-code-proposal-v2" {
 		t.Fatalf("provider identity drift: %+v", lock.Provider)
+	}
+	if lock.Pysolate.Policy.ID != AgentStdlibWorkspacePolicyID || lock.Pysolate.Policy.ArtifactProfile != "base" ||
+		lock.Pysolate.Policy.ImportDerivation != "host-static-preamble-v1" ||
+		!reflect.DeepEqual(lock.Pysolate.Policy.AllowedImports, AgentStdlibWorkspaceImports()) ||
+		lock.Pysolate.Policy.Workspace != "typed-host-tools-only" || lock.Pysolate.Policy.Outbound != "null" ||
+		lock.Pysolate.Policy.Process != "null" || lock.Pysolate.Policy.PackageInstall != "null" {
+		t.Fatalf("Pysolate policy identity drift: %+v", lock.Pysolate.Policy)
 	}
 	if lock.Computer.Repository != "https://github.com/cloudflare/computer" || lock.Computer.Tag != "v0.1.1" ||
 		lock.Computer.PrimaryBackend != "worker-javascript" || lock.Computer.GlobalOutbound != "null" ||

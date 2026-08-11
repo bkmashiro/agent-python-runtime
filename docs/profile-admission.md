@@ -40,6 +40,21 @@ The Host independently freezes an `ExecutionProfile`:
 
 The request cannot add packages, change the artifact, select a Host path, grant a tool, authorize network, or widen the Host allowlist. A compatibility declaration only narrows admission.
 
+### Agent-facing stdlib workspace policy
+
+General-purpose programming agents should not have to author or repeat admission metadata. The placement harness therefore exposes the versioned `stdlib-workspace-v1` policy as an ordinary bounded Python environment:
+
+- the Agent submits only source code;
+- the Host derives the exact static import roots from the source preamble;
+- the Host binds those roots into the untrusted compatibility declaration;
+- normal qualified data/computation modules such as `csv`, `json`, `statistics`, `decimal`, `pathlib`, and `re` are available without per-task prompt exceptions;
+- workspace access remains available only through typed Host tools;
+- outbound network, processes, package installation, native-library loading, dynamic imports, and Host filesystem access remain unavailable.
+
+This separates language compatibility from authority. A standard-library module does not gain ambient authority merely because it is importable. Authority-sensitive or root-coarse modules such as `socket`, `subprocess`, `ctypes`, `os`, and `urllib` are not part of `stdlib-workspace-v1`; the current root-level admission cannot safely distinguish `urllib.parse` from network-capable siblings such as `urllib.request`.
+
+The exact policy is identity-bound in `eval/agentic/placement/v1/identity-lock.json`. The artifact profile remains `base`: `stdlib-workspace-v1` is a Host treatment policy over that verified artifact, not a caller-selectable artifact profile.
+
 For local CLI execution, Host policy and the distribution manifest are configured together:
 
 ```sh
@@ -139,7 +154,7 @@ It does **not** prove:
 - that transitive package/native-extension requirements were inferred;
 - that a representative workload corpus has high Pysolate admission or completion share.
 
-A profile-qualified request cannot omit or add an Agent-authored import root: the exact Guest AST root set must equal the root-only caller declaration. Data-dependent library behavior can still reach a module path not loaded during preparation; the native CPython gate rejects that path, and the current Run fails without backend escalation.
+A profile-qualified request cannot omit or add an import root: the exact Guest AST root set must equal the caller declaration. A direct protocol caller authors that declaration; an Agent-facing harness may derive it deterministically from the static source preamble before constructing the request. Data-dependent library behavior can still reach a module path not loaded during preparation; the native CPython gate rejects that path, and the current Run fails without backend escalation.
 
 ## Current Static Import Agent Code layer
 

@@ -33,6 +33,31 @@ result = decoder.JSONDecoder().decode("1")
 	}
 }
 
+func TestInferStaticImportRootsForAgentSubmittedProgram(t *testing.T) {
+	imports, err := InferStaticImportRoots("import statistics, csv as rows\nfrom json import loads\nresult = {}")
+	if err != nil || !reflect.DeepEqual(imports, []string{"csv", "json", "statistics"}) {
+		t.Fatalf("imports=%v err=%v", imports, err)
+	}
+	imports, err = InferStaticImportRoots("result = {}")
+	if err != nil || len(imports) != 0 {
+		t.Fatalf("import-free imports=%v err=%v", imports, err)
+	}
+}
+
+func TestInferStaticImportRootsFailsClosedForNonStaticPrograms(t *testing.T) {
+	for name, source := range map[string]string{
+		"dynamic":      `result = __import__(inputs["module"])`,
+		"non preamble": "result = {}\nimport csv",
+		"relative":     "from .helpers import parse\nresult = {}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if imports, err := InferStaticImportRoots(source); err == nil {
+				t.Fatalf("imports=%v admitted", imports)
+			}
+		})
+	}
+}
+
 func TestCompareSourceCompatibilityRejectsDynamicAndRelativeImports(t *testing.T) {
 	for name, code := range map[string]string{
 		"dunder import": `result = __import__(inputs["module"])`,

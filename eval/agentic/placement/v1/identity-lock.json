@@ -1,19 +1,47 @@
 {
-  "schema_version": "placement-identity-lock/v1",
-  "status": "frozen_pre_model",
+  "schema_version": "placement-identity-lock/v2",
+  "status": "development_refrozen_pre_decision",
   "pysolate": {
     "start_commit": "03f05b80073228000fe573e3ee95df574e54b714",
     "guest": {
       "source_commit": "f08cc47b7262f3433747eaabdb54174b00a1af3b",
       "artifact_sha256": "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
       "manifest_sha256": "sha256:b6baa6f5adb27263ef586faed897cde42c1815b4ce7c415333696800b3bbb6a6"
+    },
+    "policy": {
+      "id": "stdlib-workspace-v1",
+      "artifact_profile": "base",
+      "import_derivation": "host-static-preamble-v1",
+      "allowed_imports": [
+        "agent_runtime",
+        "base64",
+        "collections",
+        "csv",
+        "datetime",
+        "decimal",
+        "fractions",
+        "functools",
+        "hashlib",
+        "itertools",
+        "json",
+        "math",
+        "pathlib",
+        "re",
+        "statistics",
+        "sys",
+        "xml"
+      ],
+      "workspace_authority": "typed-host-tools-only",
+      "outbound": "null",
+      "process": "null",
+      "package_install": "null"
     }
   },
   "provider": {
     "model": "gpt-5.3-codex-spark",
     "reasoning": "xhigh",
     "codex_cli_version": "0.146.0",
-    "protocol": "codex-jsonl-function-proposals-v1"
+    "protocol": "codex-jsonl-code-proposal-v2"
   },
   "computer": {
     "repository": "https://github.com/cloudflare/computer",

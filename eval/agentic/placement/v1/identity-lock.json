@@ -24,6 +24,7 @@
     "package_lock_sha256": "sha256:79ae6e5058855758e510622631615c8a2532cd84ee3276149a5f3c2c6f8ad328",
     "wrangler_version": "4.115.0",
     "workerd_version": "1.20260722.1",
+    "harness_sha256": "sha256:c4732ffde8ed5ff329360f7248f4686807733f4c19cbf7002c98b2b5f793f61a",
     "primary_backend": "worker-javascript",
     "global_outbound": "null",
     "execution_mode": "wrangler-local"

@@ -34,6 +34,7 @@ type identityLock struct {
 		PackageLockSHA256 string `json:"package_lock_sha256"`
 		WranglerVersion   string `json:"wrangler_version"`
 		WorkerdVersion    string `json:"workerd_version"`
+		HarnessSHA256     string `json:"harness_sha256"`
 		PrimaryBackend    string `json:"primary_backend"`
 		GlobalOutbound    string `json:"global_outbound"`
 		ExecutionMode     string `json:"execution_mode"`
@@ -71,6 +72,7 @@ func TestPlacementIdentityLock(t *testing.T) {
 		"computer tree":    lock.Computer.Tree,
 		"computer archive": lock.Computer.ArchiveSHA256,
 		"computer lock":    lock.Computer.PackageLockSHA256,
+		"computer harness": lock.Computer.HarnessSHA256,
 	} {
 		if (label == "pysolate start" || label == "guest source" || label == "computer commit" || label == "computer tree") && len(value) == 40 {
 			continue

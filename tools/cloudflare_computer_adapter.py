@@ -14,6 +14,7 @@ import os
 import pathlib
 import re
 import stat
+import shutil
 import subprocess
 import tempfile
 import time
@@ -34,6 +35,8 @@ MAX_SOURCE = 64 << 10
 MAX_FILE = 1 << 20
 MAX_FILES = 64
 WORKSPACE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+HARNESS_SOURCE = pathlib.Path(__file__).resolve().parents[1] / "eval" / "computer-worker-harness"
+HARNESS_DESTINATION = ".placement-harness"
 
 
 def sha256(data: bytes) -> str:
@@ -58,7 +61,7 @@ def load_request(path: pathlib.Path) -> dict[str, Any]:
     if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode) or info.st_size <= 0 or info.st_size > MAX_REQUEST:
         raise ValueError("request must be a bounded regular file")
     value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict) or set(value) != {"schema_version", "workspace_id", "files", "source", "input", "output_files"}:
+    if not isinstance(value, dict) or set(value) != {"schema_version", "workspace_id", "files", "source", "input", "output_files", "tool_fixture"}:
         raise ValueError("invalid request envelope")
     if value["schema_version"] != "cloudflare-computer-local-trial/v1" or not WORKSPACE_ID.fullmatch(value["workspace_id"]):
         raise ValueError("invalid request identity")
@@ -77,6 +80,15 @@ def load_request(path: pathlib.Path) -> dict[str, Any]:
     normalized_outputs = [safe_path(item) for item in outputs]
     if len(set(normalized_outputs)) != len(normalized_outputs):
         raise ValueError("duplicate output path")
+    fixture = value["tool_fixture"]
+    if fixture is not None and (
+        not isinstance(fixture, dict)
+        or set(fixture) != {"schema_version", "calls"}
+        or fixture.get("schema_version") != "placement-computer-tool-fixture/v1"
+        or not isinstance(fixture.get("calls"), list)
+        or len(fixture["calls"]) > 64
+    ):
+        raise ValueError("invalid trusted tool fixture")
     value["files"] = normalized_files
     value["output_files"] = normalized_outputs
     canonical(value["input"])
@@ -93,16 +105,47 @@ def git(checkout: pathlib.Path, *args: str, capture: bool = True) -> bytes:
     return completed.stdout if capture else b""
 
 
-def verify_checkout(checkout: pathlib.Path) -> dict[str, str]:
+def harness_digest(root: pathlib.Path) -> str:
+    payload = bytearray()
+    files = sorted(path for path in root.rglob("*") if path.is_file())
+    if not files:
+        raise ValueError("placement harness is empty")
+    for path in files:
+        relative = path.relative_to(root).as_posix().encode()
+        data = path.read_bytes()
+        payload.extend(len(relative).to_bytes(4, "big"))
+        payload.extend(relative)
+        payload.extend(len(data).to_bytes(8, "big"))
+        payload.extend(data)
+    return "sha256:" + sha256(bytes(payload))
+
+
+def install_harness(checkout: pathlib.Path) -> str:
+    expected = harness_digest(HARNESS_SOURCE)
+    destination = checkout / HARNESS_DESTINATION
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(HARNESS_SOURCE, destination)
+    actual = harness_digest(destination)
+    if actual != expected:
+        raise ValueError("placement harness copy mismatch")
+    return actual
+
+
+def verify_checkout(checkout: pathlib.Path, *, require_harness: bool = False) -> dict[str, str]:
     info = checkout.lstat()
     if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
         raise ValueError("checkout must be a real directory")
     commit = git(checkout, "rev-parse", "HEAD").decode().strip()
     tree = git(checkout, "rev-parse", "HEAD^{tree}").decode().strip()
     tag = git(checkout, "describe", "--tags", "--exact-match", "HEAD").decode().strip()
-    status = git(checkout, "status", "--porcelain").decode()
+    status = git(checkout, "status", "--porcelain", "--untracked-files=no").decode()
     archive = git(checkout, "archive", "--format=tar", "HEAD")
     lock = (checkout / "package-lock.json").read_bytes()
+    harness = checkout / HARNESS_DESTINATION
+    expected_harness = harness_digest(HARNESS_SOURCE)
+    if require_harness and (not harness.is_dir() or harness_digest(harness) != expected_harness):
+        raise ValueError("placement harness identity mismatch")
     if (commit, tree, tag, status, sha256(archive), sha256(lock)) != (COMMIT, TREE, TAG, "", ARCHIVE_SHA256, LOCK_SHA256):
         raise ValueError("Cloudflare Computer checkout identity mismatch")
     return {
@@ -116,6 +159,7 @@ def verify_checkout(checkout: pathlib.Path) -> dict[str, str]:
         "transport": "wrangler-local",
         "wrangler": WRANGLER_VERSION,
         "workerd": WORKERD_VERSION,
+        "harness_sha256": expected_harness,
     }
 
 
@@ -128,10 +172,11 @@ def prepare(checkout: pathlib.Path) -> None:
         verify_checkout(checkout)
     subprocess.run(["npm", "ci"], cwd=checkout, check=True)
     subprocess.run(["npm", "run", "build"], cwd=checkout, check=True)
+    install_harness(checkout)
     version = subprocess.run(["npx", "wrangler", "--version"], cwd=checkout, check=True, capture_output=True, text=True).stdout.strip()
     if version != WRANGLER_VERSION:
         raise ValueError(f"unexpected Wrangler version: {version}")
-    verify_checkout(checkout)
+    verify_checkout(checkout, require_harness=True)
 
 
 def request_bytes(method: str, url: str, body: bytes | None = None, content_type: str | None = None, timeout: float = 30) -> tuple[int, bytes]:
@@ -161,7 +206,7 @@ def wait_ready(base_url: str, process: subprocess.Popen[bytes], deadline: float)
 
 
 def run_trial(checkout: pathlib.Path, request_path: pathlib.Path, port: int) -> dict[str, Any]:
-    identity = verify_checkout(checkout)
+    identity = verify_checkout(checkout, require_harness=True)
     request = load_request(request_path)
     if not (1024 <= port <= 65535):
         raise ValueError("invalid port")
@@ -169,7 +214,7 @@ def run_trial(checkout: pathlib.Path, request_path: pathlib.Path, port: int) -> 
     lifecycle_started = time.monotonic_ns()
     with tempfile.TemporaryDirectory(prefix="cf-computer-local-") as persistent, tempfile.TemporaryFile() as log:
         process = subprocess.Popen(
-            ["npm", "run", "dev", "--workspace", "@example/computer-worker-javascript", "--", "--port", str(port), "--persist-to", persistent],
+            ["npx", "wrangler", "dev", "--config", f"{HARNESS_DESTINATION}/wrangler.jsonc", "--port", str(port), "--persist-to", persistent],
             cwd=checkout,
             stdin=subprocess.DEVNULL,
             stdout=log,
@@ -183,6 +228,15 @@ def run_trial(checkout: pathlib.Path, request_path: pathlib.Path, port: int) -> 
                 status, payload = request_bytes("PUT", f"{base}/c/{workspace}/file/workspace/{path}", content.encode(), "application/octet-stream")
                 if status != 204 or payload:
                     raise RuntimeError(f"fixture write failed: {status}")
+            if request["tool_fixture"] is not None:
+                status, payload = request_bytes(
+                    "PUT",
+                    f"{base}/c/{workspace}/fixture",
+                    canonical(request["tool_fixture"]),
+                    "application/json",
+                )
+                if status != 204 or payload:
+                    raise RuntimeError(f"tool fixture write failed: {status}")
             seeded_ns = time.monotonic_ns()
             exec_payload = canonical({"source": request["source"], "input": request["input"], "cwd": "/workspace"})
             status, payload = request_bytes("POST", f"{base}/c/{workspace}/exec", exec_payload, "application/json", timeout=60)
@@ -196,6 +250,10 @@ def run_trial(checkout: pathlib.Path, request_path: pathlib.Path, port: int) -> 
                 if status != 200 or len(payload) > MAX_FILE:
                     raise RuntimeError(f"output read failed: {path}: {status}")
                 outputs[path] = payload.decode("utf-8")
+            status, payload = request_bytes("GET", f"{base}/c/{workspace}/trace")
+            if status != 200 or len(payload) > MAX_FILE:
+                raise RuntimeError(f"tool trace read failed: {status}")
+            tool_trace = json.loads(payload)
             observed_ns = time.monotonic_ns()
         finally:
             process.terminate()
@@ -213,6 +271,7 @@ def run_trial(checkout: pathlib.Path, request_path: pathlib.Path, port: int) -> 
         "request_sha256": "sha256:" + sha256(canonical(request)),
         "execution": execution,
         "output_files": outputs,
+        "tool_trace": tool_trace,
         "lifecycle": {
             "startup_ns": ready_ns - lifecycle_started,
             "fixture_ns": seeded_ns - ready_ns,

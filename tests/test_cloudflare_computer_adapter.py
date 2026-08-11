@@ -29,6 +29,7 @@ class CloudflareComputerAdapterTests(unittest.TestCase):
             "source": "export default async () => 1;",
             "input": {"n": 1},
             "output_files": ["output.txt"],
+            "tool_fixture": None,
         }
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "request.json"
@@ -64,6 +65,7 @@ class CloudflareComputerAdapterTests(unittest.TestCase):
             ),
             "input": {},
             "output_files": ["high_value_rows.txt"],
+            "tool_fixture": None,
         }
         with tempfile.TemporaryDirectory() as directory, socket.socket() as probe:
             request_path = pathlib.Path(directory) / "request.json"
@@ -76,6 +78,40 @@ class CloudflareComputerAdapterTests(unittest.TestCase):
         self.assertEqual(0, result["execution"]["exitCode"])
         self.assertEqual("alpha,gamma", result["output_files"]["high_value_rows.txt"])
         self.assertEqual(adapter.COMMIT, result["identity"]["commit"])
+        self.assertTrue(result["tool_trace"]["complete"])
+
+    @unittest.skipUnless(os.environ.get("CLOUDFLARE_COMPUTER_CHECKOUT"), "set CLOUDFLARE_COMPUTER_CHECKOUT")
+    def test_real_trusted_module_exact_trace(self):
+        checkout = pathlib.Path(os.environ["CLOUDFLARE_COMPUTER_CHECKOUT"])
+        request = {
+            "schema_version": "cloudflare-computer-local-trial/v1",
+            "workspace_id": "placement-trusted-module",
+            "files": {},
+            "source": (
+                'import { call } from "ws:tools";\n'
+                "export default async () => {\n"
+                '  const value = await call("invoke", "lookup", { id: "item-1" });\n'
+                '  return { status: "completed", value };\n};'
+            ),
+            "input": {},
+            "output_files": [],
+            "tool_fixture": {
+                "schema_version": "placement-computer-tool-fixture/v1",
+                "calls": [{"name": "lookup", "arguments": {"id": "item-1"}, "result": {"score": 7}}],
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory, socket.socket() as probe:
+            request_path = pathlib.Path(directory) / "request.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+            probe.close()
+            result = adapter.run_trial(checkout, request_path, port)
+        self.assertEqual({"status": "completed", "value": {"score": 7}}, result["execution"]["value"])
+        self.assertEqual(
+            {"calls": [{"arguments": {"id": "item-1"}, "matched": True, "name": "lookup", "sequence": 0}], "complete": True, "cursor": 1, "expected_count": 1},
+            result["tool_trace"],
+        )
 
 
 if __name__ == "__main__":

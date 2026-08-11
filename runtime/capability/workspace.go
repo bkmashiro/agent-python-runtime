@@ -46,16 +46,46 @@ func RegisterWorkspaceTools(registry *Registry, workspace *Workspace) error {
 	if registry == nil || workspace == nil {
 		return ErrInvalidTool
 	}
-	for name, handler := range map[string]HandlerFunc{
-		"workspace.read_text":  workspace.readText,
-		"workspace.write_text": workspace.writeText,
-		"workspace.list_files": workspace.listFiles,
+	for _, registered := range []struct {
+		spec    Spec
+		handler Handler
+	}{
+		{workspaceReadTextSpec(), HandlerFunc(workspace.readText)},
+		{workspaceWriteTextSpec(), HandlerFunc(workspace.writeText)},
+		{workspaceListFilesSpec(), HandlerFunc(workspace.listFiles)},
 	} {
-		if err := registry.Register(name, workspaceTextHandlerIdentity, handler); err != nil {
+		if err := registry.Register(registered.spec, registered.handler); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func workspaceReadTextSpec() Spec {
+	return Spec{
+		Name: "workspace.read_text", Version: "pysolate.workspace.read-text.v1", HandlerIdentity: workspaceTextHandlerIdentity,
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":256}},"required":["path"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string","maxLength":1048576}},"required":["content"],"additionalProperties":false}`),
+		Python:       &PythonProjection{Name: "read_text", Arguments: []string{"path"}, ResultField: "content"},
+	}
+}
+
+func workspaceWriteTextSpec() Spec {
+	return Spec{
+		Name: "workspace.write_text", Version: "pysolate.workspace.write-text.v1", HandlerIdentity: workspaceTextHandlerIdentity,
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":256},"content":{"type":"string","maxLength":1048576}},"required":["path","content"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`),
+		Python:       &PythonProjection{Name: "write_text", Arguments: []string{"path", "content"}, ResultField: "written"},
+	}
+}
+
+func workspaceListFilesSpec() Spec {
+	return Spec{
+		Name: "workspace.list_files", Version: "pysolate.workspace.list-files.v1", HandlerIdentity: workspaceTextHandlerIdentity,
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"files":{"type":"array","items":{"type":"string","maxLength":256}}},"required":["files"],"additionalProperties":false}`),
+		Python:       &PythonProjection{Name: "list_files", Arguments: []string{}, ResultField: "files"},
+	}
 }
 
 func (workspace *Workspace) readText(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {

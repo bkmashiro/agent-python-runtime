@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
@@ -58,6 +59,9 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 		return nil, ErrInvalidBroker
 	}
 	var call request
+	if !utf8.Valid(raw) || rejectDuplicateJSON(raw) != nil {
+		return encodeResponse(response{Status: "error", Error: &callError{Code: "invalid_arguments", Message: "invalid Host tool call"}})
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&call); err != nil || !validIdentity(call.CallID) || !validName(call.Capability) || len(call.Arguments) == 0 || !json.Valid(call.Arguments) {
@@ -78,19 +82,23 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 	broker.calls++
 	broker.mu.Unlock()
 
-	handler, ok := broker.config.Plan.lookup(call.Capability)
+	registered, ok := broker.config.Plan.lookup(call.Capability)
 	if !ok {
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}})
 	}
-	result, err := handler.Call(ctx, append(json.RawMessage(nil), call.Arguments...))
+	if err := validateAgainst(registered.inputSchema, call.Arguments); err != nil {
+		broker.record(call, operation, "denied", nil)
+		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
+	}
+	result, err := registered.handler.Call(ctx, append(json.RawMessage(nil), call.Arguments...))
 	if err != nil {
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
 	}
-	if len(result) == 0 || !json.Valid(result) || len(result) > maxCallBytes {
+	if len(result) == 0 || len(result) > maxCallBytes || validateAgainst(registered.outputSchema, result) != nil {
 		broker.record(call, operation, "error", nil)
-		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned invalid JSON"}})
+		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
 	}
 	broker.record(call, operation, "ok", result)
 	return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: result})

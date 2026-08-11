@@ -35,7 +35,7 @@ This is compatibility policy, not the primary sandbox. WASI and Host capabilitie
 
 ### Host-owned tools
 
-Guest code can only call tools present in the Host Registry sealed before Guest startup. The canonical plan identity binds sorted capability names, declared handler identities and the total call budget; late registration is rejected. The Host checks the call envelope, capability name, canonical workspace path, per-file size and frozen call budget. The active workspace tool has no Host path or network access.
+Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v2` binds sorted canonical specs and the total call budget; late registration is rejected. Each current spec binds capability/version and handler identities, strict input/output schemas and generated Python projection metadata. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access.
 
 ### Host-authored evidence
 

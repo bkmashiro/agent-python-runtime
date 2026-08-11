@@ -20,7 +20,7 @@ func TestSealedPlanIsOrderIndependentAndRejectsLateRegistration(t *testing.T) {
 	if _, err := first.Seal(capability.PlanConfig{MaxCalls: 2}); err != capability.ErrRegistrySealed {
 		t.Fatalf("second seal error=%v", err)
 	}
-	if err := first.Register("git.status", "pysolate.git.status.v1", noopHandler); err != capability.ErrRegistrySealed {
+	if err := first.Register(basicSpec("git.status", "pysolate.git.status.v1"), noopHandler); err != capability.ErrRegistrySealed {
 		t.Fatalf("late registration error=%v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestRegisterAndSealAreAtomic(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			registerErr = registry.Register("git.status", "pysolate.git.status.v1", noopHandler)
+			registerErr = registry.Register(basicSpec("git.status", "pysolate.git.status.v1"), noopHandler)
 		}()
 		go func() {
 			defer wait.Done()
@@ -147,7 +147,14 @@ var noopHandler = capability.HandlerFunc(func(context.Context, json.RawMessage) 
 
 func mustRegister(t *testing.T, registry *capability.Registry, name, handlerIdentity string) {
 	t.Helper()
-	if err := registry.Register(name, handlerIdentity, noopHandler); err != nil {
+	if err := registry.Register(basicSpec(name, handlerIdentity), noopHandler); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func basicSpec(name, handlerIdentity string) capability.Spec {
+	return capability.Spec{
+		Name: name, Version: "test." + name + ".v1", HandlerIdentity: handlerIdentity,
+		InputSchema: json.RawMessage(`{}`), OutputSchema: json.RawMessage(`{}`),
 	}
 }

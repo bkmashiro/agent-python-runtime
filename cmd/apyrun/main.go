@@ -17,34 +17,6 @@ import (
 
 const exitEscalationRequired = 3
 
-const workspaceToolPrelude = `
-import json as _host_json
-import _agent_runtime_host as _host_bridge
-_host_call_sequence = 0
-
-def _workspace_call(capability, arguments):
-    global _host_call_sequence
-    _host_call_sequence += 1
-    request = {
-        "call_id": "workspace-" + str(_host_call_sequence),
-        "capability": capability,
-        "arguments": arguments,
-    }
-    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(",", ":"))))
-    if response["status"] != "ok":
-        raise RuntimeError(response["error"]["message"])
-    return response["result"]
-
-def read_text(path):
-    return _workspace_call("workspace.read_text", {"path": path})["content"]
-
-def write_text(path, content):
-    return _workspace_call("workspace.write_text", {"path": path, "content": content})["written"]
-
-def list_files():
-    return _workspace_call("workspace.list_files", {})["files"]
-`
-
 type dependencies struct {
 	readFile func(string) ([]byte, error)
 }
@@ -166,7 +138,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan})
 		}
-		trustedPrepare = workspaceToolPrelude
+		trustedPrepare = capabilityPlan.PythonPrelude()
 	}
 	workspaceBinding, err := prepareMountedWorkspace(operator.Workspace)
 	if err != nil {

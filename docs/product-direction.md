@@ -41,11 +41,12 @@ The current implementation provides:
 - complete Workspace Capsules for explicit storage, migration and restoration;
 - Host-selected `export_on_success`, `export_on_response` or `discard` disposition;
 - a generic Guest-to-Host JSON call ABI, Host Registry and bounded Broker;
-- a sealed per-Run capability plan whose canonical identity binds sorted capability names, declared handler identities and the total call budget;
-- three prebound in-memory workspace functions as the current tool demonstration;
+- canonical Host-owned `CapabilitySpec` definitions for capability/version identity, handler identity, strict input/output schemas and Python wrapper projection;
+- a sealed `pysolate.capability-plan.v2` identity binding sorted canonical specs and the total call budget;
+- three prebound in-memory workspace functions whose wrappers are generated from their sealed specs;
 - compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
-The generic Registry can register a named handler plus a stable declared handler identity without changing the WASI import surface. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI's Python-facing wrappers are still fixed to `read_text`, `write_text` and `list_files`; a generated dynamic Python SDK, strict capability schemas and a plugin catalog are not Current.
+The generic Registry can register a versioned spec and handler without changing the WASI import surface. Registration canonicalizes and compiles both schemas. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI generates the fixed `read_text`, `write_text` and `list_files` wrappers from those sealed specs. Dynamic module objects, direct Agent tool-schema generation and a plugin catalog are not Current.
 
 Current receipts bind call and workspace identities, but the repository does not yet claim a durable complete audit archive, deterministic replay, external-effect reconciliation or transaction semantics.
 
@@ -68,22 +69,28 @@ A familiar method name is presentation, not authority. `git.status()` does not i
 
 ### One canonical capability definition
 
-A Proposed `CapabilitySpec` should define at least:
+Current `CapabilitySpec` defines:
 
 - stable capability and version identity;
-- Python module and method projection;
+- a Python function projection;
 - strict input and output schemas;
+- Host handler identity.
+
+Registration canonicalizes and compiles both schemas while sealing binds the full spec into `pysolate.capability-plan.v2`. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates its trusted Python wrappers from the same sealed specs rather than maintaining a handwritten second surface.
+
+The following remain Proposed extensions:
+
+- Python module/object projection;
 - read/write/effect classification;
 - target and credential policy;
 - call, byte, time and external-cost budgets;
-- Host handler identity;
 - receipt and playback treatment.
 
-The Python SDK, direct Agent tool schema, Host admission and validation, documentation and replay adapter should derive from that definition. Python wrappers must not create a second policy path.
+The direct Agent tool schema, documentation and replay adapter should eventually derive from that definition as well. Generated presentation surfaces must not create a second policy path.
 
 ### Dynamic catalog, frozen per-Run authority
 
-Current Pysolate freezes and identity-binds the registered capability set, declared handler identities and total call budget before Guest startup. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and schema generation are not Current.
+Current Pysolate freezes and identity-binds the registered canonical specs and total call budget before Guest startup. The Host may construct a different Registry between Runs. A future plugin catalog may install or qualify implementations from which Host policy selects each Run's subset; plugin discovery and dynamic module objects are not Current.
 
 Handler identities are trusted Host-owned declarations. A plugin or registry builder must change the identity whenever behavior relevant to authorization, side effects or replay compatibility changes; Guest code cannot supply or override it.
 
@@ -201,7 +208,7 @@ If these conditions cannot be met, the workload belongs in an explicit compatibi
 
 The first foundation is Current. Remaining work should proceed in this order, subject to concrete workload evidence:
 
-1. Define one versioned `CapabilitySpec` and generate a Python proxy plus direct tool projection.
+1. Extend Current `CapabilitySpec` into module/object projection and direct Agent tool-schema generation without adding a second authority path.
 2. Add one useful read-only Host capability with strict schemas, budgets and receipts.
 3. Add protected execution records and capability playback for pure/read-only calls.
 4. Control or capture clock, randomness and other relevant nondeterminism for a bounded deterministic-verification profile.

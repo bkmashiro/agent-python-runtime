@@ -10,7 +10,7 @@ import (
 
 func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
 	registry := capability.NewRegistry()
-	if err := registry.Register("workspace.read_text", "test.workspace.read-text.v1", capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+	if err := registry.Register(basicSpec("workspace.read_text", "test.workspace.read-text.v1"), capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"text":"hello"}`), nil
 	})); err != nil {
 		t.Fatal(err)

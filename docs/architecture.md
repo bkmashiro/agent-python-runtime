@@ -51,7 +51,7 @@ The Host scanner intentionally accepts only a small import preamble. It is not a
 
 ## Host tools
 
-The active tool surface uses one generic Guest-to-Host JSON call envelope and a small Host Registry. Each registration binds a capability name to a declared handler identity. Before Guest startup, the Host seals the sorted registrations and total call budget into an immutable, canonically hashed per-Run plan; late registration is rejected. The Broker accepts only that sealed plan. The CLI can prebind three workspace functions into the Python globals:
+The active tool surface uses one generic Guest-to-Host JSON call envelope and a small Host Registry. Each registration binds a canonical `CapabilitySpec`—capability/version identity, handler identity, strict input/output schemas and Python projection—to a Host handler. Before Guest startup, the Host seals the sorted specs and total call budget into an immutable `pysolate.capability-plan.v2`; late registration is rejected. The Broker accepts only that sealed plan, validates arguments before the handler, and validates results before returning them. The CLI generates three workspace functions into the Python globals from those same sealed specs:
 
 ```python
 read_text(path)
@@ -61,7 +61,7 @@ list_files()
 
 The backing workspace for this typed surface is an in-memory map, not an ambient Host directory. Paths must be canonical and relative. Calls are bounded and produce small Host receipts. Every capability receipt binds the plan identity, and the Host projects that identity into the response even when no tool is called. Guest-authored plan evidence is rejected.
 
-This fixed surface replaces the former generalized JSON-Schema-to-Python SDK generator and durable effect workflow.
+This generated but deliberately small surface does not restore the former generalized SDK generator or durable effect workflow. Dynamic module objects and plugin discovery remain Proposed.
 
 ## WASI filesystem
 

@@ -447,8 +447,13 @@ def build_tree(root: Path) -> None:
 
 
 def compare_trees(expected: Path, actual: Path) -> list[str]:
+    separately_frozen = {Path("identity-lock.json")}
     expected_files = {path.relative_to(expected) for path in expected.rglob("*") if path.is_file()}
-    actual_files = {path.relative_to(actual) for path in actual.rglob("*") if path.is_file()}
+    actual_files = {
+        path.relative_to(actual)
+        for path in actual.rglob("*")
+        if path.is_file() and path.relative_to(actual) not in separately_frozen
+    }
     errors = [f"missing:{path}" for path in sorted(expected_files - actual_files)]
     errors += [f"extra:{path}" for path in sorted(actual_files - expected_files)]
     for path in sorted(expected_files & actual_files):
@@ -471,8 +476,14 @@ def main() -> int:
                 return 1
         print("placement corpus is canonical")
         return 0
+    preserved_identity = None
+    identity_path = OUT / "identity-lock.json"
+    if identity_path.is_file():
+        preserved_identity = identity_path.read_bytes()
     shutil.rmtree(OUT, ignore_errors=True)
     build_tree(OUT)
+    if preserved_identity is not None:
+        identity_path.write_bytes(preserved_identity)
     print(OUT)
     return 0
 

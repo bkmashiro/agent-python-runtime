@@ -1,0 +1,52 @@
+{
+  "schema_version": "placement-identity-lock/v1",
+  "status": "frozen_pre_model",
+  "pysolate": {
+    "start_commit": "03f05b80073228000fe573e3ee95df574e54b714",
+    "guest": {
+      "source_commit": "f08cc47b7262f3433747eaabdb54174b00a1af3b",
+      "artifact_sha256": "sha256:4078dbcec0307e5636c86b84523b8349a557db115bfac7569ff5d003b08ceadb",
+      "manifest_sha256": "sha256:b6baa6f5adb27263ef586faed897cde42c1815b4ce7c415333696800b3bbb6a6"
+    }
+  },
+  "provider": {
+    "model": "gpt-5.3-codex-spark",
+    "reasoning": "xhigh",
+    "codex_cli_version": "0.146.0",
+    "protocol": "codex-jsonl-function-proposals-v1"
+  },
+  "computer": {
+    "repository": "https://github.com/cloudflare/computer",
+    "tag": "v0.1.1",
+    "commit": "63d363632e558f7e077794988d36ed75017c2a62",
+    "tree": "6f4bd936f3154f299f50db79fd4a5f519c0e0447",
+    "archive_sha256": "sha256:e2da083db26d39414da165bb96aa51fde044209541a451c223389355898e6aa1",
+    "package_lock_sha256": "sha256:79ae6e5058855758e510622631615c8a2532cd84ee3276149a5f3c2c6f8ad328",
+    "wrangler_version": "4.115.0",
+    "workerd_version": "1.20260722.1",
+    "primary_backend": "worker-javascript",
+    "global_outbound": "null",
+    "execution_mode": "wrangler-local"
+  },
+  "ci": {
+    "policy": "manual_only_do_not_run",
+    "workflows": [
+      {
+        "path": ".github/workflows/ci.yml",
+        "triggers": ["workflow_dispatch"]
+      },
+      {
+        "path": ".github/workflows/guest-artifact.yml",
+        "triggers": ["workflow_dispatch"]
+      },
+      {
+        "path": ".github/workflows/numpy-wasi-probe.yml",
+        "triggers": ["workflow_dispatch"]
+      },
+      {
+        "path": ".github/workflows/reproducibility.yml",
+        "triggers": ["workflow_dispatch"]
+      }
+    ]
+  }
+}

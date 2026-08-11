@@ -10,18 +10,30 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 type operatorConfig struct {
-	TimeoutMS        int64                   `json:"timeout_ms,omitempty"`
-	MaxRequestBytes  uint32                  `json:"max_request_bytes,omitempty"`
-	MaxResponseBytes uint32                  `json:"max_response_bytes,omitempty"`
-	MemoryLimitPages uint32                  `json:"memory_limit_pages,omitempty"`
-	ExecutionProfile *executionProfileConfig `json:"execution_profile,omitempty"`
-	WorkspaceFiles   map[string]string       `json:"workspace_files,omitempty"`
-	MaxToolCalls     uint32                  `json:"max_tool_calls,omitempty"`
-	Workspace        *mountedWorkspaceConfig `json:"workspace,omitempty"`
+	TimeoutMS          int64                     `json:"timeout_ms,omitempty"`
+	MaxRequestBytes    uint32                    `json:"max_request_bytes,omitempty"`
+	MaxResponseBytes   uint32                    `json:"max_response_bytes,omitempty"`
+	MemoryLimitPages   uint32                    `json:"memory_limit_pages,omitempty"`
+	ExecutionProfile   *executionProfileConfig   `json:"execution_profile,omitempty"`
+	WorkspaceFiles     map[string]string         `json:"workspace_files,omitempty"`
+	MaxToolCalls       uint32                    `json:"max_tool_calls,omitempty"`
+	Workspace          *mountedWorkspaceConfig   `json:"workspace,omitempty"`
+	InformationSources *informationSourcesConfig `json:"information_sources,omitempty"`
+}
+
+type informationSourcesConfig struct {
+	DemoCatalog *demoCatalogSourceConfig `json:"demo_catalog,omitempty"`
+}
+
+type demoCatalogSourceConfig struct {
+	Endpoint         string `json:"endpoint"`
+	TimeoutMS        int64  `json:"timeout_ms"`
+	MaxResponseBytes uint32 `json:"max_response_bytes"`
 }
 
 type executionProfileConfig struct {
@@ -82,8 +94,20 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 		}
 		runConfig.ExecutionProfile = &profile
 	}
+	if config.InformationSources != nil {
+		if config.InformationSources.DemoCatalog == nil {
+			return runtimeconfig.RunConfig{}, errors.New("information_sources must configure a curated source")
+		}
+		if _, err := config.InformationSources.DemoCatalog.resolve(); err != nil {
+			return runtimeconfig.RunConfig{}, err
+		}
+	}
+	hasTools := config.WorkspaceFiles != nil || config.InformationSources != nil
+	if config.MaxToolCalls != 0 && !hasTools {
+		return runtimeconfig.RunConfig{}, errors.New("max_tool_calls requires configured Host tools")
+	}
 	if config.Workspace != nil {
-		if config.WorkspaceFiles != nil || config.MaxToolCalls != 0 {
+		if config.WorkspaceFiles != nil {
 			return runtimeconfig.RunConfig{}, errors.New("mounted workspace and workspace tools are mutually exclusive")
 		}
 		if err := config.Workspace.validate(); err != nil {
@@ -94,6 +118,20 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 		return runtimeconfig.RunConfig{}, fmt.Errorf("invalid operator resource bounds: %w", err)
 	}
 	return runConfig, nil
+}
+
+func (config *demoCatalogSourceConfig) resolve() (capability.DemoCatalogPolicy, error) {
+	if config == nil {
+		return capability.DemoCatalogPolicy{}, errors.New("demo_catalog source is required")
+	}
+	policy := capability.DemoCatalogPolicy{
+		Endpoint: config.Endpoint, Timeout: time.Duration(config.TimeoutMS) * time.Millisecond,
+		MaxResponseBytes: config.MaxResponseBytes,
+	}
+	if _, _, err := capability.DemoCatalogDefinition(policy); err != nil {
+		return capability.DemoCatalogPolicy{}, errors.New("invalid demo_catalog source policy")
+	}
+	return policy, nil
 }
 
 func (config *mountedWorkspaceConfig) validate() error {

@@ -75,6 +75,8 @@ Agent-facing callers should omit `compatibility`; the Host derives it. `run_id` 
 
 When typed Host tools are configured, the Host canonicalizes their versioned `CapabilitySpec` definitions, compiles strict input/output schemas, derives opaque `CapabilityGrant` identities from Host-owned per-Run policy documents, generates trusted Python module/method objects plus optional aliases and direct tool schemas, and seals the sorted specs, grants and total call budget as `pysolate.capability-plan.v4` before Guest startup. The response carries `capability_plan_sha256` even when no tool is called, and every capability receipt binds the same identity. Guest-authored plan or grant evidence is rejected.
 
+`information_sources.demo_catalog` configures one dedicated, credential-free structured source. The Host config must provide an exact `http` or `https` endpoint, positive timeout and bounded response size. The generated Agent surface is `sources.demo_catalog()`; no URL or transport argument crosses the Guest boundary. The adapter performs GET only, disables environment proxies and compression, refuses redirect following, and requires status 200 plus `application/json`. It may coexist with a mounted workspace.
+
 ## Exit behavior
 
 - `0`: a structured Guest response was written;

@@ -45,6 +45,7 @@ The current implementation provides:
 - opaque per-Run `CapabilityGrant` identities derived from canonical Host policy documents;
 - a sealed `pysolate.capability-plan.v4` identity binding sorted canonical specs, their per-Run grants and the total call budget;
 - generated Python module/method objects and direct Agent tool schemas from the sealed specs, with compatibility aliases for the three current workspace functions;
+- one credential-free `sources.demo_catalog()` demonstration backed by a Host-private exact-endpoint GET adapter with redirect, status, media-type, timeout and byte controls;
 - compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
 The generic Registry can register a versioned spec, grant and handler without changing the WASI import surface. Registration canonicalizes and compiles both schemas. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI generates namespaced Python objects and optional compatibility aliases from the sealed specs, while the Plan exposes direct Agent tool schemas from the same definitions. A plugin catalog and installation lifecycle are not Current.
@@ -83,8 +84,8 @@ Registration canonicalizes and compiles both schemas. It also requires an opaque
 
 The following remain Proposed extensions:
 
-- concrete target and credential policy adapters;
-- call, byte, time and external-cost budgets;
+- additional qualified source/target adapters and any credential-bearing adapter;
+- per-target external-cost budgets;
 - protected playback records and adapters.
 
 The replay adapter should derive from that definition as well. Generated presentation surfaces do not create a second policy path: execution still crosses the same Broker.

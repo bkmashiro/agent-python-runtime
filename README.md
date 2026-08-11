@@ -87,7 +87,26 @@ workspace.list_files()         # alias: list_files()
 
 The workspace backend is an in-memory PoC store with canonical relative paths and a one-MiB per-file bound. Every Host call is counted and receives a Host-authored receipt.
 
-For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
+For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory workspace tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
+
+## Curated information source demonstration
+
+The Host can configure one credential-free exact endpoint for the dedicated `sources.demo_catalog()` capability:
+
+```json
+{
+  "information_sources": {
+    "demo_catalog": {
+      "endpoint": "https://host-selected.example/catalog.json",
+      "timeout_ms": 1000,
+      "max_response_bytes": 65536
+    }
+  },
+  "max_tool_calls": 2
+}
+```
+
+Agent Python calls `items = sources.demo_catalog()`. It cannot submit a URL, path, query, method, headers, redirect policy, credentials or transport budgets. The private Host adapter performs one GET, refuses redirects, requires status 200 and JSON media type, bounds time and bytes, canonicalizes the structured response and lets the same sealed capability schema validate it. This source may coexist with a mounted `/workspace`; it is not a generic HTTP client.
 
 ## Security boundary
 

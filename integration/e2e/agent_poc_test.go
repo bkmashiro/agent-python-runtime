@@ -3,9 +3,12 @@ package e2e_test
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 )
 
@@ -58,5 +61,57 @@ func TestAgentSourceGetsProfileAndWorkspaceToolsFromHost(t *testing.T) {
 	}
 	if zeroCallResponse.Status != "ok" || len(zeroCallResponse.Receipts) != 0 || zeroCallResponse.CapabilityPlanSHA256 != response.CapabilityPlanSHA256 {
 		t.Fatalf("zero-call capability plan evidence=%+v want_plan=%s", zeroCallResponse, response.CapabilityPlanSHA256)
+	}
+}
+
+func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
+	artifact := guestArtifact(t)
+	manifest := filepath.Join(filepath.Dir(artifact), "manifest.json")
+	if _, err := os.Stat(manifest); err != nil {
+		t.Skip("distribution manifest is not available beside the Guest artifact")
+	}
+	var hits atomic.Uint32
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		hits.Add(1)
+		if request.Method != http.MethodGet || request.URL.Path != "/catalog" {
+			t.Errorf("unexpected request: %s %s", request.Method, request.URL.String())
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"items":[{"id":"a","title":"Alpha","score":2},{"id":"b","title":"Beta","score":3}]}`))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "host.json")
+	config, err := json.Marshal(map[string]any{
+		"workspace": map[string]any{"source_directory": root, "disposition": "discard"},
+		"information_sources": map[string]any{"demo_catalog": map[string]any{
+			"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
+		}},
+		"max_tool_calls": 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	request := []byte(`{"run_id":"source-mounted-workspace","code":"items=sources.demo_catalog()\ntitles=[item['title'] for item in items]\nwith open('/workspace/summary.txt','w',encoding='utf-8') as handle:\n    handle.write('|'.join(titles))\nwith open('/workspace/summary.txt',encoding='utf-8') as handle:\n    summary=handle.read()\nresult={'titles':titles,'summary':summary}","inputs":{}}`)
+	command := exec.Command(apyrunBinary(t), "-artifact", artifact, "-config", configPath)
+	command.Stdin = bytes.NewReader(request)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run curated source: %v\n%s", err, output)
+	}
+	var response guestResponse
+	if err := json.Unmarshal(output, &response); err != nil {
+		t.Fatal(err)
+	}
+	result, ok := response.Result.(map[string]any)
+	if response.Status != "ok" || !ok || result["summary"] != "Alpha|Beta" || hits.Load() != 1 || len(response.Receipts) != 1 {
+		t.Fatalf("response=%+v hits=%d", response, hits.Load())
+	}
+	if response.Receipts[0]["capability"] != "sources.demo_catalog" || response.WorkspaceReceipt["disposition"] != "discarded" {
+		t.Fatalf("missing source/workspace evidence: %+v", response)
 	}
 }

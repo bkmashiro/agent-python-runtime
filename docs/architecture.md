@@ -61,6 +61,8 @@ workspace.list_files()         # alias: list_files()
 
 The backing workspace for this typed surface is an in-memory map, not an ambient Host directory. Paths must be canonical and relative. Calls are bounded and produce small Host receipts. Every capability receipt binds the plan identity, and the Host projects that identity into the response even when no tool is called. Guest-authored plan evidence is rejected.
 
+The CLI can also register the dedicated `sources.demo_catalog()` information source. Its exact endpoint, GET method, redirect denial, expected status/media type, timeout and response-byte ceiling are Host policy bound through the capability grant. The Agent sees only the typed structured source method, never a URL, transport controls, headers or a generic HTTP client. This source can coexist with a mounted `/workspace`; the mount remains mutually exclusive only with the separate typed in-memory workspace tools.
+
 The plan also derives defensive direct Agent tool schemas from the same definitions. This generated but deliberately small surface does not restore the former generalized SDK generator, plugin discovery or durable effect workflow.
 
 ## WASI filesystem
@@ -84,7 +86,7 @@ cmd/apyrun                 operator and PoC CLI
 - served-instance reset or reuse;
 - prepared/COW execution;
 - durable effect transactions and compensation;
-- network tools or credentials;
+- generic network tools, Guest-controlled URLs or credentials;
 - MCP/daemon/plugin lifecycle;
 - scheduler and benchmark orchestration;
 - package installation and native extensions;

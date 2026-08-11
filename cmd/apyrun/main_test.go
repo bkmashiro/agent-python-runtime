@@ -87,6 +87,38 @@ func TestOperatorConfigRejectsAmbiguousOrAgentStyleWorkspaceAuthority(t *testing
 	}
 }
 
+func TestOperatorConfigAllowsCuratedSourceWithMountedWorkspace(t *testing.T) {
+	config, err := decodeOperatorConfig([]byte(`{"workspace":{"disposition":"discard"},"information_sources":{"demo_catalog":{"endpoint":"http://127.0.0.1:8080/catalog","timeout_ms":500,"max_response_bytes":4096}},"max_tool_calls":2}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.resolve(); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := config.InformationSources.DemoCatalog.resolve()
+	if err != nil || policy.Endpoint != "http://127.0.0.1:8080/catalog" || policy.Timeout != 500*time.Millisecond || policy.MaxResponseBytes != 4096 {
+		t.Fatalf("policy=%#v err=%v", policy, err)
+	}
+}
+
+func TestOperatorConfigRejectsGenericOrInvalidSourceAuthority(t *testing.T) {
+	for _, payload := range []string{
+		`{"information_sources":{"http":{"url":"https://example.test"}}}`,
+		`{"information_sources":{"demo_catalog":{"endpoint":"https://user:pass@example.test/catalog","timeout_ms":500,"max_response_bytes":4096}}}`,
+		`{"information_sources":{"demo_catalog":{"endpoint":"https://example.test/catalog","timeout_ms":0,"max_response_bytes":4096}}}`,
+		`{"information_sources":{"demo_catalog":{"endpoint":"https://example.test/catalog","timeout_ms":500,"max_response_bytes":0}}}`,
+		`{"max_tool_calls":2}`,
+	} {
+		config, err := decodeOperatorConfig([]byte(payload))
+		if err == nil {
+			_, err = config.resolve()
+		}
+		if err == nil {
+			t.Fatalf("source authority was accepted: %s", payload)
+		}
+	}
+}
+
 func TestExecuteRequiresArtifact(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exit := execute(nil, strings.NewReader("{}"), &stdout, &stderr, dependencies{})

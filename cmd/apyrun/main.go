@@ -115,16 +115,30 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	digest := sha256.Sum256(requestData)
 	requestSHA256 := fmt.Sprintf("sha256:%x", digest[:])
 	runIdentity := fmt.Sprintf("host-%x", digest[:8])
-	if operator.WorkspaceFiles != nil {
-		workspaceTool, err := capability.NewWorkspace(operator.WorkspaceFiles)
-		if err != nil {
-			writeDiagnostic(stderr, "invalid workspace_files")
-			return 2
-		}
+	hasHostTools := operator.WorkspaceFiles != nil || operator.InformationSources != nil
+	if hasHostTools {
 		registry := capability.NewRegistry()
-		if err := capability.RegisterWorkspaceTools(registry, workspaceTool); err != nil {
-			writeDiagnostic(stderr, "initialize workspace tools")
-			return 1
+		if operator.WorkspaceFiles != nil {
+			workspaceTool, err := capability.NewWorkspace(operator.WorkspaceFiles)
+			if err != nil {
+				writeDiagnostic(stderr, "invalid workspace_files")
+				return 2
+			}
+			if err := capability.RegisterWorkspaceTools(registry, workspaceTool); err != nil {
+				writeDiagnostic(stderr, "initialize workspace tools")
+				return 1
+			}
+		}
+		if operator.InformationSources != nil && operator.InformationSources.DemoCatalog != nil {
+			policy, err := operator.InformationSources.DemoCatalog.resolve()
+			if err != nil {
+				writeDiagnostic(stderr, "invalid demo_catalog source policy")
+				return 2
+			}
+			if err := capability.RegisterDemoCatalog(registry, policy); err != nil {
+				writeDiagnostic(stderr, "initialize demo_catalog source")
+				return 1
+			}
 		}
 		maxCalls := operator.MaxToolCalls
 		if maxCalls == 0 {

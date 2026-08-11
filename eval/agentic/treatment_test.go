@@ -21,6 +21,7 @@ func TestLoadDevelopmentTreatmentsUsesStrictExactPolicies(t *testing.T) {
 		{"hybrid-two-stage-prebound-compact-v3.json", TreatmentHybridTwoStagePreboundCompactV3, true},
 		{"hybrid-two-stage-prebound-compact-json-v4.json", TreatmentHybridTwoStagePreboundCompactJSONV4, true},
 		{"hybrid-two-stage-prebound-exact-plan-v5.json", TreatmentHybridTwoStagePreboundExactPlanV5, true},
+		{"hybrid-two-stage-prebound-initial-cwd-v6.json", TreatmentHybridTwoStagePreboundInitialCWDV6, true},
 	} {
 		treatment, err := LoadDevelopmentTreatment(filepath.Join(root, "treatments", test.file))
 		if err != nil || treatment.ID != test.id || treatment.Digest == "" || treatment.Implemented() != test.implemented {
@@ -52,6 +53,10 @@ func TestPreboundCompactTreatmentFreezesPythonExecutionPolicies(t *testing.T) {
 	exactPlan, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-exact-plan-v5.json"))
 	if err != nil || !exactPlan.UsesPreboundCompactPython() || !exactPlan.UsesExactRequiredHostPlan() || !exactPlan.AllowsAnyJSONPythonResult() {
 		t.Fatalf("exact-plan treatment=%+v err=%v", exactPlan, err)
+	}
+	initialCWD, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-initial-cwd-v6.json"))
+	if err != nil || !initialCWD.UsesExactRequiredHostPlan() || !initialCWD.UsesInitialCWDContext() {
+		t.Fatalf("initial-cwd treatment=%+v err=%v", initialCWD, err)
 	}
 }
 

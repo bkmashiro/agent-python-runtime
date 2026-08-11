@@ -1206,6 +1206,14 @@ func TestExactPlanTreatmentAddsGenericExecutionContract(t *testing.T) {
 			t.Fatalf("prompt missing %q: %s", expected, prompt)
 		}
 	}
+	initialCWD, err := LoadDevelopmentTreatment(filepath.Join(datasetRoot(t), "treatments", "hybrid-two-stage-prebound-initial-cwd-v6.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, prompt, err = buildConditionSurfaceForTreatment(runtime, ConditionPython, false, initialCWD)
+	if err != nil || !strings.Contains(prompt, `Initial authoritative Host current working directory: "/alex".`) {
+		t.Fatalf("initial-cwd prompt=%q err=%v", prompt, err)
+	}
 }
 
 func TestExactPlanTreatmentProducesValidPythonArtifact(t *testing.T) {

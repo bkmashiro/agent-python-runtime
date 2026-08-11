@@ -57,18 +57,23 @@ type ManifestTask struct {
 	SourceID string `json:"source_id"`
 }
 
+type TaskOracle struct {
+	FinalState     json.RawMessage `json:"final_state"`
+	EffectContract json.RawMessage `json:"effect_contract"`
+}
+
 type Task struct {
 	SchemaVersion string                  `json:"schema_version"`
 	ID            string                  `json:"id"`
 	Split         string                  `json:"split"`
 	Stratum       string                  `json:"stratum"`
-	Source        TaskSource              `json:"source"`
 	ModelVisible  bool                    `json:"model_visible"`
 	Request       string                  `json:"request"`
+	Source        TaskSource              `json:"source"`
 	Environment   json.RawMessage         `json:"environment"`
 	Capabilities  json.RawMessage         `json:"capabilities"`
-	Admission     map[string]ArmAdmission `json:"admission"`
 	Oracle        TaskOracle              `json:"oracle"`
+	Admission     map[string]ArmAdmission `json:"admission"`
 	Limits        TaskLimits              `json:"limits"`
 }
 
@@ -84,11 +89,6 @@ type ArmAdmission struct {
 	Profile string `json:"profile,omitempty"`
 	Backend string `json:"backend,omitempty"`
 	Reason  string `json:"reason"`
-}
-
-type TaskOracle struct {
-	FinalState     json.RawMessage `json:"final_state"`
-	EffectContract json.RawMessage `json:"effect_contract"`
 }
 
 type TaskLimits struct {

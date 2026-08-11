@@ -10,8 +10,8 @@
       "status": "admitted"
     },
     "pysolate": {
-      "profile": "placement-base-v1",
-      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "profile": "base",
+      "reason": "base profile admits the declared static imports and typed capabilities",
       "status": "admitted"
     }
   },

@@ -9,7 +9,7 @@
       "status": "rejected"
     },
     "pysolate": {
-      "reason": "placement-base-v1 rejects the requested ambient authority before execution",
+      "reason": "base profile rejects the requested ambient authority before execution",
       "status": "rejected"
     }
   },

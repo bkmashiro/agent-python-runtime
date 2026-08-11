@@ -99,7 +99,8 @@ func newPythonExecutor(runner engine.Runner, tools *ToolRuntime, treatment Devel
 		return nil, ErrAgenticRun
 	}
 	prepare, err := tools.TrustedPrepare()
-	if treatment.UsesPreboundCompactPython() {
+	profileBound := properties.ExecutionProfileID != "" && properties.ArtifactSHA256 != "" && properties.ManifestSHA256 != ""
+	if treatment.UsesPreboundCompactPython() || profileBound {
 		prepare, err = tools.TrustedPrepareWithPreboundTools()
 	}
 	if err != nil || prepare == "" {
@@ -179,6 +180,37 @@ func (controller *workflowBrokerController) end() {
 }
 
 func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string, maxCalls uint32) (PythonRunResult, error) {
+	return executor.execute(ctx, runID, code, nil, maxCalls)
+}
+
+// ExecuteProfileQualified binds an Agent-authored import declaration to a
+// Host-bound artifact profile before any Guest work. It deliberately rejects the
+// compact development wrapper because that wrapper uses dynamic exec and cannot
+// satisfy the static Agent Code contract.
+func (executor *PythonExecutor) ExecuteProfileQualified(ctx context.Context, runID, code, profileID string, imports []string, maxCalls uint32) (PythonRunResult, error) {
+	if executor == nil || executor.runner == nil || executor.compactPrebound {
+		return PythonRunResult{}, ErrAgenticRun
+	}
+	declaredImports := make([]string, len(imports))
+	copy(declaredImports, imports)
+	compatibility := &runtimeconfig.CompatibilityDeclaration{Profile: profileID, Imports: declaredImports}
+	if runtimeconfig.ValidateCompatibilityDeclaration(compatibility) != nil {
+		return PythonRunResult{}, ErrAgenticRun
+	}
+	properties := executor.runner.Properties()
+	profile := properties.ExecutionProfile()
+	if properties.Validate() != nil || profile == nil || profile.ID() != profileID ||
+		profile.ArtifactSHA256() == "" || profile.ManifestSHA256() == "" {
+		return PythonRunResult{}, ErrAgenticRun
+	}
+	request := runtimeconfig.RunRequest{Code: code, Compatibility: compatibility}
+	if _, err := runtimeconfig.EvaluateRunCompatibility(request, profile); err != nil {
+		return PythonRunResult{}, ErrAgenticRun
+	}
+	return executor.execute(ctx, runID, code, compatibility, maxCalls)
+}
+
+func (executor *PythonExecutor) execute(ctx context.Context, runID, code string, compatibility *runtimeconfig.CompatibilityDeclaration, maxCalls uint32) (PythonRunResult, error) {
 	if executor == nil || executor.runner == nil || !pythonRunIDPattern.MatchString(runID) ||
 		!utf8.ValidString(code) || strings.TrimSpace(code) == "" || strings.ContainsRune(code, 0) || len([]byte(code)) > maxPythonCodeBytes ||
 		maxCalls == 0 || maxCalls > maxFunctionCalls {
@@ -211,7 +243,7 @@ func (executor *PythonExecutor) Execute(ctx context.Context, runID, code string,
 	}
 	request := runtimeconfig.RunRequest{
 		RunID: runID, Code: effectiveCode, Inputs: json.RawMessage(`{}`),
-		OutputSchema: outputSchema,
+		OutputSchema: outputSchema, Compatibility: compatibility,
 	}
 	requestBytes, err := json.Marshal(request)
 	if err != nil {

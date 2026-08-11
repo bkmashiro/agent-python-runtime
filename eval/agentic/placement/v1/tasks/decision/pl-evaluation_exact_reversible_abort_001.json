@@ -10,8 +10,8 @@
       "status": "admitted"
     },
     "pysolate": {
-      "profile": "placement-base-v1",
-      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "profile": "base",
+      "reason": "base profile admits the declared static imports and typed capabilities",
       "status": "admitted"
     }
   },
@@ -50,9 +50,16 @@
         "undeclared_capability",
         "blind_retry_after_ambiguous_outcome"
       ],
-      "kind": "ordered_capability_requirements",
-      "required_capabilities": [
-        "fixture.config_set"
+      "kind": "exact_semantic_calls",
+      "ordering_edges": [],
+      "required": [
+        {
+          "arguments": {
+            "scenario_id": "evaluation_exact_reversible_abort_001",
+            "seed": 205
+          },
+          "name": "fixture.config_set"
+        }
       ]
     },
     "final_state": {

@@ -36,6 +36,50 @@ func successfulGuestPayload() []byte {
 	return []byte(`{"status":"ok","result":{"done":true},"receipts":[],"metrics":{"capability_calls":2,"result_bytes":13},"error":null}`)
 }
 
+func TestPythonExecutorProfileQualifiedRequestIsBoundBeforeGuest(t *testing.T) {
+	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
+	tools, err := NewToolRuntime(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digestA := "sha256:" + strings.Repeat("a", 64)
+	digestB := "sha256:" + strings.Repeat("b", 64)
+	props := engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+		ExecutionProfileID: "base", AllowedImports: []string{"json"},
+		AvailableImports: []string{"agent_runtime", "json", "sys"}, QualifiedImports: []string{"json"},
+		ArtifactSHA256: digestA, ManifestSHA256: digestB,
+	}
+	runner := &fakeGuestRunner{payload: successfulGuestPayload(), props: props}
+	executor, err := NewPythonExecutor(runner, tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := "import json\nresult = {'encoded': json.dumps({'ok': True}, sort_keys=True)}"
+	_, err = executor.ExecuteProfileQualified(context.Background(), "profile-run-1", code, "base", []string{"json"}, 4)
+	if err == nil || runner.runs != 1 {
+		t.Fatalf("fake response lacks Host RunPlan evidence; runs=%d err=%v", runner.runs, err)
+	}
+	request, err := runtimeconfig.DecodeRunRequest(runner.request)
+	if err != nil || request.Compatibility == nil || request.Compatibility.Profile != "base" ||
+		len(request.Compatibility.Imports) != 1 || request.Compatibility.Imports[0] != "json" || request.Code != code {
+		t.Fatalf("request=%+v err=%v", request, err)
+	}
+
+	legacy := &fakeGuestRunner{payload: successfulGuestPayload(), props: engine.Properties{
+		Backend: "fake", ResetMode: engine.ResetModeFreshInstance,
+		RequestedStrategy: engine.StrategyFreshInstance, ActiveStrategy: engine.StrategyFreshInstance,
+	}}
+	legacyExecutor, err := NewPythonExecutor(legacy, tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacyExecutor.ExecuteProfileQualified(context.Background(), "profile-run-2", code, "base", []string{"json"}, 4); err == nil || legacy.runs != 0 {
+		t.Fatalf("unbound runner admitted profile request: runs=%d err=%v", legacy.runs, err)
+	}
+}
+
 func TestPythonExecutorCarriesHostExecutionRefWithoutTrustingGuestRunID(t *testing.T) {
 	task := findAgenticTask(t, "bfcl-v4-stateful-local-tools-multi_turn_base_12")
 	tools, err := NewToolRuntime(task)

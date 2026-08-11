@@ -42,7 +42,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_1",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_1.json",
-      "sha256": "sha256:4f080f23a4a25d366c6b1f7f2462f99fc8f046f1e9c6f3049917074d77e5b11f",
+      "sha256": "sha256:71299cef2ae2405a55555599c4a0c21211b367395ff631422db40c1bae92427c",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -50,7 +50,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_10",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_10.json",
-      "sha256": "sha256:ac11f5398eb60ad9cf95730b23462a433c10a128b9aaca532b71ed09a7af414d",
+      "sha256": "sha256:5c558c49099eb000b24d8450af878a8479e662c1e42cb9c81f179051aeb071b8",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -58,7 +58,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_25",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_25.json",
-      "sha256": "sha256:77e8b9b910275944c0680ec56bc891273fbd5e2dc4c318bcd7921acea178027b",
+      "sha256": "sha256:cdf1396a647fecb8f4bc6ec0ef9433049ddc8c2e43c81f0de3ab11cb019f627d",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -66,7 +66,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_26",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_26.json",
-      "sha256": "sha256:e4b7fe2c93b384aefae6044d7da16c3ba8d823fa2d6739c1199960b1fcf5c180",
+      "sha256": "sha256:73a9aa1a2a32811eac275691161342860a24bfb9e4bb03f461bc5d2deecc6395",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -74,7 +74,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_3",
       "path": "tasks/decision/pl-bfcl-v4-stateful-local-tools-multi_turn_base_3.json",
-      "sha256": "sha256:14bb54007769cbc1a2429c3e4bc682210c2111c3303e0ef36e847e199be48942",
+      "sha256": "sha256:a2409bc89c7b3b010f518df3f7911d2617aa35b665e6d2bc473c41f98499af2b",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -82,7 +82,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_156",
       "path": "tasks/decision/pl-bfcl-v4-stateless-function-calling-parallel_multiple_156.json",
-      "sha256": "sha256:c564b40738064325b2916e7b903062456fc1c155923c5a0d2f6e392feb509b13",
+      "sha256": "sha256:f6d1b8a8bbaa0d2018d19b21cb63b4e3a5e3ecdc1df742979d8a04c0678a55b6",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "direct_favored"
@@ -90,7 +90,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_157",
       "path": "tasks/decision/pl-bfcl-v4-stateless-function-calling-parallel_multiple_157.json",
-      "sha256": "sha256:ca5ee9367dee5121a6ff3f0d66c3c18f8839f785059899c5d0b13a06f3d746f0",
+      "sha256": "sha256:b5612a9daeae0a2a2eff2a8f247ae703d35cdbe78d02a1231e6971132c6bd510",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "direct_favored"
@@ -98,7 +98,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_169",
       "path": "tasks/decision/pl-bfcl-v4-stateless-function-calling-parallel_multiple_169.json",
-      "sha256": "sha256:584db9ffe53ff9ba68376f0f39205c809451ef6a221e7a94c82741913e63db09",
+      "sha256": "sha256:fe4577466d4dc39210d5cdda22fb8723a944dd0ce8d429b55719989c896d8b29",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "direct_favored"
@@ -106,7 +106,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_2",
       "path": "tasks/decision/pl-bfcl-v4-stateless-function-calling-parallel_multiple_2.json",
-      "sha256": "sha256:8772c13baa28b5853f3829952c624a14e66918ea5242f6ff3f5330d1ca0021d0",
+      "sha256": "sha256:0f55d33e1bb4cfaecfc8952375953b8ce117dfde2cab9b5b3ae22e1d7f2f47eb",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "direct_favored"
@@ -114,7 +114,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_62",
       "path": "tasks/decision/pl-bfcl-v4-stateless-function-calling-parallel_multiple_62.json",
-      "sha256": "sha256:8562e57046eb36ce544885254e8bb5d6499485590fdcaf98dbedbb7eecc046df",
+      "sha256": "sha256:3b704b0511584ab9a3b7673ebb50251119a4a93bd10cb06d8cd13386b33565e6",
       "source_id": "bfcl-v4",
       "split": "decision",
       "stratum": "direct_favored"
@@ -122,7 +122,7 @@
     {
       "id": "pl-evaluation_adversarial_authority_001",
       "path": "tasks/decision/pl-evaluation_adversarial_authority_001.json",
-      "sha256": "sha256:d65fd803a43f38b9c70624b3725387626cc79cec205f9502159b3394ad9dd362",
+      "sha256": "sha256:10275c6008f5936e07d28e080ac9aaf0bc972c34854c36dc9af58fdc036071cc",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "boundary"
@@ -130,7 +130,7 @@
     {
       "id": "pl-evaluation_compensatable_abort_001",
       "path": "tasks/decision/pl-evaluation_compensatable_abort_001.json",
-      "sha256": "sha256:e075e4b336e02ac77a781a68e158b7f6b8e3489d06454d6b43e2307f7280b667",
+      "sha256": "sha256:30c2242d9c0262733988a178234a8b786b468a8f1ffdd27704e7f605afa2e43c",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "mixed_capability"
@@ -138,7 +138,7 @@
     {
       "id": "pl-evaluation_data_dependent_branch_001",
       "path": "tasks/decision/pl-evaluation_data_dependent_branch_001.json",
-      "sha256": "sha256:2bd3701465c986c6d7a0bf60d1c0171ecff8c191607e45c8b8ecea7693ee543c",
+      "sha256": "sha256:c0721674da467fbad023074254dab184f228fdd97eafca00610176a18e58e744",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -146,7 +146,7 @@
     {
       "id": "pl-evaluation_dynamic_catalog_policy_001",
       "path": "tasks/decision/pl-evaluation_dynamic_catalog_policy_001.json",
-      "sha256": "sha256:dd9b7e045dae1e8bdbfe83904f9ba73d7159829dad6cbed6f8784e49169bcb60",
+      "sha256": "sha256:c5382ad3570719cf8830761c6ffc8926291833dcc5ffacfb4b8025ba8bfd76ad",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "mixed_capability"
@@ -154,7 +154,7 @@
     {
       "id": "pl-evaluation_exact_reversible_abort_001",
       "path": "tasks/decision/pl-evaluation_exact_reversible_abort_001.json",
-      "sha256": "sha256:662cc8ec6093328a606133584f4241fde407505f6e6fd001d94cbf41690a5bf9",
+      "sha256": "sha256:755e25dae1802ead41c88f683c2a19c715f9fdf98e0bed608b989708eedd259a",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "mixed_capability"
@@ -162,7 +162,7 @@
     {
       "id": "pl-evaluation_fanout_join_filter_001",
       "path": "tasks/decision/pl-evaluation_fanout_join_filter_001.json",
-      "sha256": "sha256:40fd9223f4742fed40a74ebdab73b1a0faec2e181940ad530f9887451ffe6372",
+      "sha256": "sha256:def51ba4e17ba17287224e33dbf9eef84e20e0564c26c5dda36397469100482c",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -170,7 +170,7 @@
     {
       "id": "pl-evaluation_irreversible_staging_001",
       "path": "tasks/decision/pl-evaluation_irreversible_staging_001.json",
-      "sha256": "sha256:dc81f47938394cba9bb97cf0b2b9bf29944812f2835039bc8941c5f63b366813",
+      "sha256": "sha256:f539998a397dbb2945d06c3e4310733cf8100dffa628192baa1f6193f1b076b7",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "mixed_capability"
@@ -178,7 +178,7 @@
     {
       "id": "pl-evaluation_partial_timeout_retry_001",
       "path": "tasks/decision/pl-evaluation_partial_timeout_retry_001.json",
-      "sha256": "sha256:507ada22f4a6c34a11497092710716e6804a559a5ff4026c1ec8cef6d61cc68b",
+      "sha256": "sha256:062f160a0fe3e538c1cd67084392d2fb107f212fcdd45956c626425396354460",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "mixed_capability"
@@ -186,7 +186,7 @@
     {
       "id": "pl-evaluation_schema_projection_001",
       "path": "tasks/decision/pl-evaluation_schema_projection_001.json",
-      "sha256": "sha256:5843157f92d93ed980aa568f71b02725c2c354f580fa73b9577578a4dbaddc0b",
+      "sha256": "sha256:3c5d66f5e10d59de4fd0597844a59de834278f0f3f40bad470a6eff8c046aa4c",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "pysolate_favored"
@@ -194,7 +194,7 @@
     {
       "id": "pl-evaluation_simple_read_001",
       "path": "tasks/decision/pl-evaluation_simple_read_001.json",
-      "sha256": "sha256:18cbf152fed40ee5a23917051298e710565fae7326e63a6e2bbbb594a98627bc",
+      "sha256": "sha256:721d34e4eabb456addeb37f9fcdcb1df828fb651a9da4b8cbff0a433456dcf5d",
       "source_id": "workflowbench-v1",
       "split": "decision",
       "stratum": "direct_favored"
@@ -202,7 +202,7 @@
     {
       "id": "pl-ba-git-history",
       "path": "tasks/development/pl-ba-git-history.json",
-      "sha256": "sha256:cb13c2f33cebc875d4e49c8f8ec64c0949b62ff8aa390054a40c809bce9dca24",
+      "sha256": "sha256:51267785ebef85a3836e55c3f38806eeef2802b73b19762527428d0eeb964cc4",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -210,7 +210,7 @@
     {
       "id": "pl-ba-native-process",
       "path": "tasks/development/pl-ba-native-process.json",
-      "sha256": "sha256:321ed517aa2db21606f09ec86787c1450060f45fc8c820bc5203d19e0d746853",
+      "sha256": "sha256:e0648dea6172c831858f9111dd923ada99a38828811f5b4c7424af086d831e36",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "boundary"
@@ -218,7 +218,7 @@
     {
       "id": "pl-ba-package-install",
       "path": "tasks/development/pl-ba-package-install.json",
-      "sha256": "sha256:8056b2f1189fa659c59c9e4e460649d45829f2d41b2d7ffc211c45e0be1bfcfc",
+      "sha256": "sha256:bbb82d6409fa44919e45b69f55cb4777f001461aa66db0ea174929b8610b1f29",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "boundary"
@@ -226,7 +226,7 @@
     {
       "id": "pl-ba-read-credential",
       "path": "tasks/development/pl-ba-read-credential.json",
-      "sha256": "sha256:1066efc3af60cad90105f93799ce217b75743a31839d4f763f23e8bf95291616",
+      "sha256": "sha256:b88153c1036bfd49c7e520c74e238d314d45c3169705189e3748dd205bd64d0f",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "boundary"
@@ -234,7 +234,7 @@
     {
       "id": "pl-ba-recursive-delete",
       "path": "tasks/development/pl-ba-recursive-delete.json",
-      "sha256": "sha256:b100c1c1fec9f3f4b59af3752846e281937b7c731b86a702bf4dcb551d77ef98",
+      "sha256": "sha256:e91b8e53d4f69ce2207025f9effb8d23e92f47c10b0fc6d44fa5ddd85e06c4d4",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "boundary"
@@ -242,7 +242,7 @@
     {
       "id": "pl-ba-send-without-approval",
       "path": "tasks/development/pl-ba-send-without-approval.json",
-      "sha256": "sha256:b6a93c3e24b8798f02770b266b98514d2901c7801af6f1c9584bb3f6bbbe390a",
+      "sha256": "sha256:84f54b77e094817fe35c322b966dcc50f48415c134c6a2458ac8cc59e6b2bff0",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "boundary"
@@ -250,7 +250,7 @@
     {
       "id": "pl-ba-shell-fallback",
       "path": "tasks/development/pl-ba-shell-fallback.json",
-      "sha256": "sha256:1ae45251156769977e38320f3109e0b696b76f595c6327123b574583bcf36380",
+      "sha256": "sha256:97d019b2c40972d19c3b18215d7a7eed66a77d397768a9dce3fca70170396259",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "boundary"
@@ -258,7 +258,7 @@
     {
       "id": "pl-ba-shell-frequency",
       "path": "tasks/development/pl-ba-shell-frequency.json",
-      "sha256": "sha256:3de8157479672f87bc0f90fa116eb37ee2c4eab5b878303383f6e2b0f965aa59",
+      "sha256": "sha256:d8496391b320da39fde364afa6535f04fa787ef88ca7658e6c284e4033f2d3ad",
       "source_id": "boundary-lab-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -266,7 +266,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_12",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_12.json",
-      "sha256": "sha256:3f224dc83a3cd83cf769b259bd2ad184efbbf59adfbbf60e1595c2c1f9d4ceb3",
+      "sha256": "sha256:030fddaf95eaffa44af7a22ade8fbf7708013c1d6b508e1b138261cdbaada236",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -274,7 +274,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_29",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_29.json",
-      "sha256": "sha256:56edd36c4f9b122c1a49c0d3ce6e30313f8ec90ca1a1d280681e273f462c047c",
+      "sha256": "sha256:24a02e27b07d70b547f90735a56c0f6844845c0d3bcdde450aa2e3c8dbc9b04b",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -282,7 +282,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_37",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_37.json",
-      "sha256": "sha256:d81c93760ad55f076484d83859619150fb7692a7a64fb35166075d5f08761fff",
+      "sha256": "sha256:8e945753587c531d7ca965edf571cb03fcdd2934aa9ef7f058b544f0d39f4947",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -290,7 +290,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_39",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_39.json",
-      "sha256": "sha256:85c17b1d524f8b7255afff74dd36bc4eb3fc08e7d2fe0a1550870da6581868cb",
+      "sha256": "sha256:cfa6ec9cb69d640bfadc1fa4647b08696a0b6f88593bdbae870db7633983351a",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -298,7 +298,7 @@
     {
       "id": "pl-bfcl-v4-stateful-local-tools-multi_turn_base_9",
       "path": "tasks/development/pl-bfcl-v4-stateful-local-tools-multi_turn_base_9.json",
-      "sha256": "sha256:76b6313cc1a01f49f3e0e89887622d33975f7be242e0d19d9c1c6325734f0e4e",
+      "sha256": "sha256:5256253e8293068a9a71b360d25037833b76ac491f1cc8ca932d15e1a3ef0ef0",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -306,7 +306,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_112",
       "path": "tasks/development/pl-bfcl-v4-stateless-function-calling-parallel_multiple_112.json",
-      "sha256": "sha256:bb8d92195da1c81aa1f787d08165963b527379aaa1cc7c4f9dcb6a1aa7c75d28",
+      "sha256": "sha256:ee86618b89a93a8372d99d0159c71bb2603eae380f921318627453138c3d5190",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "direct_favored"
@@ -314,7 +314,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_147",
       "path": "tasks/development/pl-bfcl-v4-stateless-function-calling-parallel_multiple_147.json",
-      "sha256": "sha256:7a335567b4c82821ade679c8724d794030a95dad2082864b36ea1d4e1c58e067",
+      "sha256": "sha256:c3b31d339fc6cdb2348d8de6f0caadd0c7818317ac0bf723e3ea6a9eceb76ab9",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "direct_favored"
@@ -322,7 +322,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_168",
       "path": "tasks/development/pl-bfcl-v4-stateless-function-calling-parallel_multiple_168.json",
-      "sha256": "sha256:f1a52870a8b301d0e35c5348cb9bf9892ef2f8dadbfb1ef7906e9fbf4b2a3608",
+      "sha256": "sha256:cfec8ada867f8487c2b4230206cf3ddfc8dc256b386ee9b261ef5b94827ebeb0",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "direct_favored"
@@ -330,7 +330,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_177",
       "path": "tasks/development/pl-bfcl-v4-stateless-function-calling-parallel_multiple_177.json",
-      "sha256": "sha256:c5b4e31ded687088703334eb3af51031049ee930690c0247f18d1617d7571a35",
+      "sha256": "sha256:e80361002a1ae0f1ff7db1929cbfd84d5acc108a7a9192e8c805836f890f8645",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "direct_favored"
@@ -338,7 +338,7 @@
     {
       "id": "pl-bfcl-v4-stateless-function-calling-parallel_multiple_91",
       "path": "tasks/development/pl-bfcl-v4-stateless-function-calling-parallel_multiple_91.json",
-      "sha256": "sha256:6a320334a14230ae6ebe16b670df65544d94942e0589b5add82772cdd2cd4c6f",
+      "sha256": "sha256:54299e531a40e9142e6d7e7cd25d35e956a45ae437329ff7f3b9880d484e4bd2",
       "source_id": "bfcl-v4",
       "split": "development",
       "stratum": "direct_favored"
@@ -346,7 +346,7 @@
     {
       "id": "pl-dev_adversarial_authority_001",
       "path": "tasks/development/pl-dev_adversarial_authority_001.json",
-      "sha256": "sha256:1194dc80aca2f731f9ca011a2775d2da9b3e47391799688b1b3c276629ad3f71",
+      "sha256": "sha256:d1751ab0abb213e1de7e9099a921497f6d4c128574b025e0820e6e67b0000d5e",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "boundary"
@@ -354,7 +354,7 @@
     {
       "id": "pl-dev_compensatable_abort_001",
       "path": "tasks/development/pl-dev_compensatable_abort_001.json",
-      "sha256": "sha256:08a4bbdae91d50930af63538a5e62161b093fc30e785384d0ce7fe5ed3cbf948",
+      "sha256": "sha256:bc42a711420ad6e024e4df4863ab61d42b0012504a6c5080aa29a492f7c0b7da",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -362,7 +362,7 @@
     {
       "id": "pl-dev_data_dependent_branch_001",
       "path": "tasks/development/pl-dev_data_dependent_branch_001.json",
-      "sha256": "sha256:fcd6c01f82304f67a470f64ec0b7d2fb0dbdf34698b902934356b068927107ab",
+      "sha256": "sha256:a1e4678c57a7de0a76d17d172f0cdeed0401e65df3342c59dfb5005e0c155fed",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -370,7 +370,7 @@
     {
       "id": "pl-dev_dynamic_catalog_policy_001",
       "path": "tasks/development/pl-dev_dynamic_catalog_policy_001.json",
-      "sha256": "sha256:2dd0c267719ac5ccc35f1079c14eb7abc402feec9f3dda1e42bd6be9138eafa6",
+      "sha256": "sha256:3d5d4ec484a1b48211da3be4dabab767731333b2ed924882fc31f6ed11ca71fe",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -378,7 +378,7 @@
     {
       "id": "pl-dev_exact_reversible_abort_001",
       "path": "tasks/development/pl-dev_exact_reversible_abort_001.json",
-      "sha256": "sha256:afce83ebd4d5a48cd89100c52107cd706326679404a14a950553e279f88f4547",
+      "sha256": "sha256:2d527a2b795f3363632c7d997765dc40d8c002ccb80775a0878a0f0ebc3585ea",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -386,7 +386,7 @@
     {
       "id": "pl-dev_fanout_join_filter_001",
       "path": "tasks/development/pl-dev_fanout_join_filter_001.json",
-      "sha256": "sha256:bd3bcf0a2dcef6f18af49e78aecb7cd25c2b27eed7bad8ac7732ce4f5bebc35d",
+      "sha256": "sha256:27a0a1f86f7b58dc9db0dd18fc91054b35a6adc7fd4b8918abba09e7c106dae1",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -394,7 +394,7 @@
     {
       "id": "pl-dev_irreversible_staging_001",
       "path": "tasks/development/pl-dev_irreversible_staging_001.json",
-      "sha256": "sha256:0068fc2b3df8951548f309ff71e0ce5b40f17259e07735524f00ecc42997c6d6",
+      "sha256": "sha256:eaa699f43101672a205f72a1b13aff5bdfaee3896632d8134e010bb62686a3d0",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -402,7 +402,7 @@
     {
       "id": "pl-dev_partial_timeout_retry_001",
       "path": "tasks/development/pl-dev_partial_timeout_retry_001.json",
-      "sha256": "sha256:6e270590c359c42a1d4f89e4f42f3032088f5ed8acf8a954f53ca941f9b4e41d",
+      "sha256": "sha256:79149c6975ac38a9faeb3875c6d89f07993f37df22860053301705741e0d68f6",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -410,7 +410,7 @@
     {
       "id": "pl-dev_schema_projection_001",
       "path": "tasks/development/pl-dev_schema_projection_001.json",
-      "sha256": "sha256:3b23e463d0682f41368906fd118b5e970f3c7fc48c9d41c819b5a337d9ed96ff",
+      "sha256": "sha256:4fcb22848ab0922e037e89aa56e4787f4af8df7d8e80e4e4a5be99e2f7ca89f8",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -418,7 +418,7 @@
     {
       "id": "pl-dev_simple_read_001",
       "path": "tasks/development/pl-dev_simple_read_001.json",
-      "sha256": "sha256:6b8b714fc74ca051852be71fe71155d6871eeedbffe314f62caa4817c9c1ddb9",
+      "sha256": "sha256:1d561adb0eb5194d37db087f44a98fca31b40c6ea585e7309103ccb4606f722d",
       "source_id": "workflowbench-v1",
       "split": "development",
       "stratum": "direct_favored"
@@ -426,7 +426,7 @@
     {
       "id": "pl-hp-checksum-manifest",
       "path": "tasks/development/pl-hp-checksum-manifest.json",
-      "sha256": "sha256:a87996c97ca1d72958485d1b2be784d84d25844b1f020a519cf28369abedb964",
+      "sha256": "sha256:62c170531378cedcc2904c56917ddcf368e9b2958faaa9fc5c2970f8acf853ea",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -434,7 +434,7 @@
     {
       "id": "pl-hp-deadline-drafts",
       "path": "tasks/development/pl-hp-deadline-drafts.json",
-      "sha256": "sha256:183835b192df45721a6a9ccaef5ea28e87d82d2639579c33619e93ec256436ad",
+      "sha256": "sha256:23c37611dd3e25a87c1abfe7f7f2b819b6955b930741f275b27d8ce9a7425e02",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -442,7 +442,7 @@
     {
       "id": "pl-hp-dedupe-contacts",
       "path": "tasks/development/pl-hp-dedupe-contacts.json",
-      "sha256": "sha256:096927f737b93f72dde8389aeba8921a014f9e7c7b64e3c91eb0e5a474e5c64b",
+      "sha256": "sha256:fc5a99433560299e642b004f3be785530ba4a01fa9cc3293c0eb58a47f0a2a89",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -450,7 +450,7 @@
     {
       "id": "pl-hp-directory-diff",
       "path": "tasks/development/pl-hp-directory-diff.json",
-      "sha256": "sha256:abf2b12eafe7fbfbbb2876c5ba8da1fe6ab48150f8001db6102cb50cd31c9599",
+      "sha256": "sha256:e54e5d16af41c94a0d8f8e8a5c9b0fa62deb176e8df9d631a90753046cc344db",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -458,7 +458,7 @@
     {
       "id": "pl-hp-grep-report",
       "path": "tasks/development/pl-hp-grep-report.json",
-      "sha256": "sha256:76a2c92b2a7f9283f38b54c5652a92549289678e246914673d73a1838cb7727a",
+      "sha256": "sha256:db4b84dca0be68c778a2d85102025284da36a2765b28954bd7af651b8ab13273",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -466,7 +466,7 @@
     {
       "id": "pl-hp-json-join",
       "path": "tasks/development/pl-hp-json-join.json",
-      "sha256": "sha256:3553ac60175cdf55742de916421f272464d0200f9244419265d174ffcfa07e39",
+      "sha256": "sha256:553f214e7ce09f000a189f2509985e11e9df40d332a74dfa100b1716f32c7419",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "pysolate_favored"
@@ -474,7 +474,7 @@
     {
       "id": "pl-hp-recursive-rename",
       "path": "tasks/development/pl-hp-recursive-rename.json",
-      "sha256": "sha256:eeea64d3c2722723f2b67d867ee88ba2e29c26f72b14105b9512fe5b6f3d617e",
+      "sha256": "sha256:740097c57dc4ba952cab59da8cb07425ecb75857645ee77f4ddf9b6245438d5d",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -482,7 +482,7 @@
     {
       "id": "pl-hp-stale-project-drafts",
       "path": "tasks/development/pl-hp-stale-project-drafts.json",
-      "sha256": "sha256:4954c8c68ae97da888f26ea38fabde172d919f749f4cc25cf48f052da62edb60",
+      "sha256": "sha256:10e6500b2033f352b7176e27fa0ed6864fd48b211df043433346d8926f5513d3",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "mixed_capability"
@@ -490,7 +490,7 @@
     {
       "id": "pl-hp-symlink-inspect",
       "path": "tasks/development/pl-hp-symlink-inspect.json",
-      "sha256": "sha256:1409364143910e1ce0a671deb984100070a991f2babc61f5921f429c2e3624cd",
+      "sha256": "sha256:4da28f3e8c1499306e93ffc0838cda59a66f7da0767d2a341f387944f54f2bee",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -498,7 +498,7 @@
     {
       "id": "pl-hp-tree-replace",
       "path": "tasks/development/pl-hp-tree-replace.json",
-      "sha256": "sha256:60c1565910ef7e1f8008fe383cd340b318c5ac4822744c40d51d6f411f1f9d8c",
+      "sha256": "sha256:df2bf0f8c3fa871a69e77e7e5bc1b812924c1ab611325db6e8f4695177662f27",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -506,7 +506,7 @@
     {
       "id": "pl-hp-xan-summary",
       "path": "tasks/development/pl-hp-xan-summary.json",
-      "sha256": "sha256:2e8360e24c6641654cd3ee4a51a18dc07384f11144c19f27e7f7e155a290603f",
+      "sha256": "sha256:a8db39136adacd48550a47d33f56a6299b125555806825937ebded00baad565c",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"
@@ -514,7 +514,7 @@
     {
       "id": "pl-hp-yaml-project",
       "path": "tasks/development/pl-hp-yaml-project.json",
-      "sha256": "sha256:ddff479b0a6a536f66eafd920e30b253036c6f2890a33a9514c8e1272ca0dadc",
+      "sha256": "sha256:80d4bbfd843c90d0683a793afc9dfe1fe3538cb6240d3a32a80e79c9c410bdc2",
       "source_id": "hermes-patterns-v1",
       "split": "development",
       "stratum": "computer_favored"

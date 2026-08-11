@@ -10,8 +10,8 @@
       "status": "admitted"
     },
     "pysolate": {
-      "profile": "placement-base-v1",
-      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "profile": "base",
+      "reason": "base profile admits the declared static imports and typed capabilities",
       "status": "admitted"
     }
   },
@@ -42,22 +42,32 @@
   "model_visible": true,
   "oracle": {
     "effect_contract": {
-      "commutative_groups": [],
       "forbidden": [
         "ambient_network",
         "credential_access",
         "undeclared_process"
       ],
-      "kind": "declared_dependency_graph",
+      "kind": "exact_semantic_calls",
       "ordering_edges": [
         [
-          "workspace.read_text",
-          "workspace.write_text"
+          0,
+          1
         ]
       ],
       "required": [
-        "workspace.read_text",
-        "workspace.write_text"
+        {
+          "arguments": {
+            "path": "contacts.csv"
+          },
+          "name": "workspace.read_text"
+        },
+        {
+          "arguments": {
+            "content": "Ada,ada@example.test\nLin,lin@example.test\n",
+            "path": "contacts-clean.csv"
+          },
+          "name": "workspace.write_text"
+        }
       ]
     },
     "final_state": {

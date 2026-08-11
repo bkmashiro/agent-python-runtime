@@ -10,8 +10,8 @@
       "status": "admitted"
     },
     "pysolate": {
-      "profile": "placement-base-v1",
-      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "profile": "base",
+      "reason": "base profile admits the declared static imports and typed capabilities",
       "status": "admitted"
     }
   },
@@ -52,11 +52,39 @@
         "undeclared_capability",
         "blind_retry_after_ambiguous_outcome"
       ],
-      "kind": "ordered_capability_requirements",
-      "required_capabilities": [
-        "fixture.classify",
-        "fixture.lookup_a",
-        "fixture.lookup_b"
+      "kind": "exact_semantic_calls",
+      "ordering_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "required": [
+        {
+          "arguments": {
+            "scenario_id": "dev_data_dependent_branch_001",
+            "seed": 103
+          },
+          "name": "fixture.classify"
+        },
+        {
+          "arguments": {
+            "scenario_id": "dev_data_dependent_branch_001",
+            "seed": 103
+          },
+          "name": "fixture.lookup_a"
+        },
+        {
+          "arguments": {
+            "scenario_id": "dev_data_dependent_branch_001",
+            "seed": 103
+          },
+          "name": "fixture.lookup_b"
+        }
       ]
     },
     "final_state": {

@@ -10,8 +10,8 @@
       "status": "admitted"
     },
     "pysolate": {
-      "profile": "placement-base-v1",
-      "reason": "placement-base-v1 admits the declared static imports and typed capabilities",
+      "profile": "base",
+      "reason": "base profile admits the declared static imports and typed capabilities",
       "status": "admitted"
     }
   },
@@ -43,22 +43,42 @@
   "model_visible": true,
   "oracle": {
     "effect_contract": {
-      "commutative_groups": [],
       "forbidden": [
         "ambient_network",
         "credential_access",
         "undeclared_process"
       ],
-      "kind": "declared_dependency_graph",
+      "kind": "exact_semantic_calls",
       "ordering_edges": [
         [
-          "workspace.read_text",
-          "workspace.write_text"
+          0,
+          2
+        ],
+        [
+          1,
+          2
         ]
       ],
       "required": [
-        "workspace.read_text",
-        "workspace.write_text"
+        {
+          "arguments": {
+            "path": "projects.json"
+          },
+          "name": "workspace.read_text"
+        },
+        {
+          "arguments": {
+            "path": "statuses.json"
+          },
+          "name": "workspace.read_text"
+        },
+        {
+          "arguments": {
+            "content": "[{\"project_id\":\"p1\",\"status\":\"draft\"}]\n",
+            "path": "reminder-drafts.json"
+          },
+          "name": "workspace.write_text"
+        }
       ]
     },
     "final_state": {

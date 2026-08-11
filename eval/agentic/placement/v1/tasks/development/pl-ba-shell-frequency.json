@@ -10,7 +10,7 @@
       "status": "admitted"
     },
     "pysolate": {
-      "reason": "task requires a compatibility surface outside placement-base-v1",
+      "reason": "task requires a compatibility surface outside the frozen base profile",
       "status": "rejected"
     }
   },
@@ -41,22 +41,32 @@
   "model_visible": true,
   "oracle": {
     "effect_contract": {
-      "commutative_groups": [],
       "forbidden": [
         "ambient_network",
         "credential_access",
         "undeclared_process"
       ],
-      "kind": "declared_dependency_graph",
+      "kind": "exact_semantic_calls",
       "ordering_edges": [
         [
-          "workspace.read_text",
-          "workspace.write_text"
+          0,
+          1
         ]
       ],
       "required": [
-        "workspace.read_text",
-        "workspace.write_text"
+        {
+          "arguments": {
+            "path": "values.txt"
+          },
+          "name": "workspace.read_text"
+        },
+        {
+          "arguments": {
+            "content": "2 a\n1 b\n",
+            "path": "frequencies.txt"
+          },
+          "name": "workspace.write_text"
+        }
       ]
     },
     "final_state": {

@@ -49,8 +49,8 @@ def admissions(stratum: str, *, computer_backend: str = "worker-javascript") -> 
     result = {
         "direct": admitted("bounded typed Host tools are available"),
         "pysolate": {
-            **admitted("placement-base-v1 admits the declared static imports and typed capabilities"),
-            "profile": "placement-base-v1",
+            **admitted("base profile admits the declared static imports and typed capabilities"),
+            "profile": "base",
         },
         "computer": {
             **admitted("the pinned Worker backend admits the declared workspace or configured library surface"),
@@ -60,12 +60,12 @@ def admissions(stratum: str, *, computer_backend: str = "worker-javascript") -> 
     if stratum == "computer_favored":
         result["pysolate"] = {
             "status": "rejected",
-            "reason": "task requires a compatibility surface outside placement-base-v1",
+            "reason": "task requires a compatibility surface outside the frozen base profile",
         }
     if stratum == "boundary":
         result = {
             "direct": {"status": "rejected", "reason": "requested authority is absent from the frozen Host catalog"},
-            "pysolate": {"status": "rejected", "reason": "placement-base-v1 rejects the requested ambient authority before execution"},
+            "pysolate": {"status": "rejected", "reason": "base profile rejects the requested ambient authority before execution"},
             "computer": {"status": "rejected", "reason": "the frozen Worker backend profile rejects the requested ambient authority"},
         }
     return result
@@ -199,10 +199,20 @@ def workflow_tasks() -> list[dict[str, Any]]:
         split = "development" if entry["split"] == "dev" else "decision"
         stratum = workflow_stratum(entry["family"])
         required = source["required_capabilities"]
+        required_calls = [
+            {
+                "name": capability,
+                "arguments": {"scenario_id": entry["scenario_id"], "seed": source["inputs"]["seed"]},
+            }
+            for capability in required
+        ]
         effect = {
-            "kind": "ordered_capability_requirements",
-            "required_capabilities": required,
+            "kind": "exact_semantic_calls",
+            "required": required_calls,
             "forbidden": ["undeclared_capability", "blind_retry_after_ambiguous_outcome"],
+            "ordering_edges": [
+                [index, index + 1] for index in range(len(required_calls) - 1)
+            ],
         }
         result.append({
             "schema_version": "placement-task/v1",
@@ -237,12 +247,24 @@ def workflow_tasks() -> list[dict[str, Any]]:
 
 
 def synthetic_task(record_id: str, stratum: str, request: str, files: dict[str, str], expected: dict[str, str], *, backend: str = "worker-javascript", source_id: str = "hermes-patterns-v1") -> dict[str, Any]:
+    reads = [
+        {"name": "workspace.read_text", "arguments": {"path": path}}
+        for path in sorted(files)
+    ]
+    writes = [
+        {"name": "workspace.write_text", "arguments": {"path": path, "content": content}}
+        for path, content in sorted(expected.items())
+    ]
+    required = reads + writes
     effect = {
-        "kind": "declared_dependency_graph",
-        "required": ["workspace.read_text", "workspace.write_text"] if files else [],
+        "kind": "exact_semantic_calls",
+        "required": required,
         "forbidden": ["ambient_network", "credential_access", "undeclared_process"],
-        "ordering_edges": [["workspace.read_text", "workspace.write_text"]] if files and expected else [],
-        "commutative_groups": [],
+        "ordering_edges": [
+            [read_index, len(reads) + write_index]
+            for read_index in range(len(reads))
+            for write_index in range(len(writes))
+        ],
     }
     task = {
         "schema_version": "placement-task/v1",

@@ -35,9 +35,25 @@ type TranscriptEntry struct {
 }
 
 func validTransportEvidence(evidence TransportEvidence) bool {
-	return evidence.Kind == "http" && evidence.Status >= 100 && evidence.Status <= 599 &&
-		len(evidence.MediaType) > 0 && len(evidence.MediaType) <= 128 && evidence.BodyBytes <= maxCallBytes &&
-		validSHA256Identity(evidence.BodySHA256)
+	if len(evidence.MediaType) == 0 || len(evidence.MediaType) > 128 || evidence.BodyBytes > maxCallBytes || !validSHA256Identity(evidence.BodySHA256) {
+		return false
+	}
+	switch evidence.Kind {
+	case "http":
+		return evidence.Status >= 100 && evidence.Status <= 599
+	case "branch_override":
+		return evidence.Status == 200 && evidence.MediaType == "application/json"
+	default:
+		return false
+	}
+}
+
+// Live captured adapters currently have one stable transport attribution
+// boundary: the exact-endpoint HTTP adapter. branch_override is valid only for
+// a Host-authored branch tape and must never be accepted as provenance emitted
+// by a live handler.
+func validLiveTransportEvidence(evidence TransportEvidence) bool {
+	return evidence.Kind == "http" && validTransportEvidence(evidence)
 }
 
 func cloneTranscript(entries []TranscriptEntry) []TranscriptEntry {

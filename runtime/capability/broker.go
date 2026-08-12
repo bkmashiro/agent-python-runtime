@@ -21,6 +21,7 @@ type Config struct {
 	RunIdentity string
 	Plan        *Plan
 	Playback    *PlaybackConfig
+	Branch      *BranchConfig
 }
 
 type Broker struct {
@@ -33,6 +34,7 @@ type Broker struct {
 	playbackEntries  map[uint32]TranscriptEntry
 	playbackConsumed map[uint32]bool
 	playbackFailed   bool
+	branch           *branchState
 }
 
 type request struct {
@@ -54,7 +56,7 @@ type callError struct {
 }
 
 func NewBroker(config Config) (*Broker, error) {
-	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 {
+	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 || (config.Playback != nil && config.Branch != nil) {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -72,6 +74,13 @@ func NewBroker(config Config) (*Broker, error) {
 			}
 			broker.playbackEntries[entry.OperationIndex] = entry
 		}
+	}
+	if config.Branch != nil {
+		branch, err := newBranchState(*config.Branch, config.Plan)
+		if err != nil {
+			return nil, ErrInvalidBroker
+		}
+		broker.branch = branch
 	}
 	return broker, nil
 }
@@ -125,7 +134,37 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
 	}
 	call.Arguments = arguments
-	if broker.playbackEntries != nil {
+	if broker.branch != nil {
+		entry, live, matchErr := broker.matchBranch(operation, call.Capability, arguments)
+		if matchErr != nil {
+			broker.failBranch()
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "branch_mismatch", Message: "Host branch transcript does not match this call"}})
+		}
+		if !live {
+			canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, entry.Result)
+			if resultErr == nil {
+				resultErr = validateSpecResultSemantics(registered.spec, canonicalResult)
+			}
+			if resultErr != nil || len(canonicalResult) > maxCallBytes || playbackDigest(canonicalResult) != entry.ResultSHA256 {
+				broker.failBranch()
+				broker.record(call, operation, "error", nil)
+				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host branch result does not match the capability schema"}})
+			}
+			if err := broker.consumeBranch(entry); err != nil {
+				broker.failBranch()
+				broker.record(call, operation, "error", nil)
+				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "branch_mismatch", Message: "Host branch transcript does not match this call"}})
+			}
+			broker.record(call, operation, "ok", canonicalResult)
+			return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
+		}
+		if registered.spec.EffectClass != EffectExternalRead || registered.spec.Playback != PlaybackCaptured {
+			broker.failBranch()
+			broker.record(call, operation, "denied", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "branch_authority_denied", Message: "Host branch live suffix permits only captured external reads"}})
+		}
+	} else if broker.playbackEntries != nil {
 		entry, matchErr := broker.matchPlayback(operation, call.Capability, arguments)
 		if matchErr != nil {
 			broker.failPlayback()
@@ -133,6 +172,9 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "playback_mismatch", Message: "Host playback transcript does not match this call"}})
 		}
 		canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, entry.Result)
+		if resultErr == nil {
+			resultErr = validateSpecResultSemantics(registered.spec, canonicalResult)
+		}
 		if resultErr != nil || len(canonicalResult) > maxCallBytes || playbackDigest(canonicalResult) != entry.ResultSHA256 {
 			broker.failPlayback()
 			broker.record(call, operation, "error", nil)
@@ -154,11 +196,16 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 		result, err = registered.handler.Call(ctx, append(json.RawMessage(nil), arguments...))
 	}
 	if err != nil {
+		broker.failBranch()
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
 	}
 	canonicalResult, err := canonicalForSchema(registered.outputSchema, result)
-	if err != nil || len(canonicalResult) > maxCallBytes || (registered.spec.Playback == PlaybackCaptured && !validTransportEvidence(evidence)) {
+	if err == nil {
+		err = validateSpecResultSemantics(registered.spec, canonicalResult)
+	}
+	if err != nil || len(canonicalResult) > maxCallBytes || (registered.spec.Playback == PlaybackCaptured && !validLiveTransportEvidence(evidence)) {
+		broker.failBranch()
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
 	}
@@ -243,6 +290,9 @@ func (broker *Broker) Finalize(bool) error {
 	defer broker.mu.Unlock()
 	if broker.playbackEntries != nil && (broker.playbackFailed || len(broker.playbackConsumed) != len(broker.playbackEntries)) {
 		return ErrPlaybackIncomplete
+	}
+	if err := broker.finalizeBranch(); err != nil {
+		return err
 	}
 	return nil
 }

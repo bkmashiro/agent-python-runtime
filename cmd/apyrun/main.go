@@ -93,6 +93,18 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		}
 		runConfig.ExecutionProfile = &bound
 	}
+	if operator.Deterministic != nil {
+		if runConfig.ExecutionProfile == nil || runConfig.ExecutionProfile.ArtifactSHA256() == "" {
+			writeDiagnostic(stderr, "deterministic verification requires a verified artifact profile")
+			return 2
+		}
+		deterministic, err := runtimeconfig.NewDeterministicVerificationProfile(runConfig.ExecutionProfile.ArtifactSHA256(), operator.Deterministic.RandomSeed)
+		if err != nil {
+			writeDiagnostic(stderr, "invalid deterministic verification profile")
+			return 2
+		}
+		runConfig.DeterministicVerification = &deterministic
+	}
 	if runConfig.ExecutionProfile != nil {
 		boundRequest, err := runtimeconfig.BindAgentSource(decodedRequest, runConfig.ExecutionProfile)
 		if err != nil {
@@ -117,7 +129,8 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	requestSHA256 := fmt.Sprintf("sha256:%x", digest[:])
 	runIdentity := fmt.Sprintf("host-%x", digest[:8])
 	var playbackBundle *playback.Bundle
-	if operator.Playback != nil && operator.Playback.Mode == "playback" {
+	var branchManifest *playback.BranchManifest
+	if operator.Playback != nil && (operator.Playback.Mode == "playback" || operator.Playback.Mode == "branch") {
 		bundleFile, openErr := os.Open(operator.Playback.InputBundle)
 		if openErr != nil {
 			writeDiagnostic(stderr, "open playback bundle")
@@ -135,6 +148,25 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			return 2
 		}
 		playbackBundle = &decodedBundle
+		if operator.Playback.Mode == "branch" {
+			manifestFile, openErr := os.Open(operator.Playback.InputBranchManifest)
+			if openErr != nil {
+				writeDiagnostic(stderr, "open playback branch manifest")
+				return 2
+			}
+			manifestBytes, readErr := io.ReadAll(io.LimitReader(manifestFile, playback.MaxBranchBytes+1))
+			closeErr := manifestFile.Close()
+			if readErr != nil || closeErr != nil || len(manifestBytes) > playback.MaxBranchBytes {
+				writeDiagnostic(stderr, "read playback branch manifest")
+				return 2
+			}
+			decodedManifest, decodeErr := playback.DecodeBranchManifest(manifestBytes)
+			if decodeErr != nil || decodedManifest.Identity != operator.Playback.ExpectedBranchSHA256 {
+				writeDiagnostic(stderr, "validate playback branch manifest identity")
+				return 2
+			}
+			branchManifest = &decodedManifest
+		}
 	}
 	var capabilityPlan *capability.Plan
 	var runBroker *capability.Broker
@@ -152,13 +184,14 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 				return 1
 			}
 		}
+		offlineSources := playbackBundle != nil && (branchManifest == nil || branchManifest.SuffixMode != playback.BranchLiveSuffix)
 		if operator.InformationSources != nil && operator.InformationSources.DemoCatalog != nil {
 			policy, err := operator.InformationSources.DemoCatalog.resolve()
 			if err != nil {
 				writeDiagnostic(stderr, "invalid demo_catalog source policy")
 				return 2
 			}
-			if playbackBundle != nil {
+			if offlineSources {
 				spec, grant, definitionErr := capability.DemoCatalogDefinition(policy)
 				if definitionErr != nil || registry.Register(spec, grant, capability.NewPlaybackHandler()) != nil {
 					writeDiagnostic(stderr, "initialize offline demo_catalog source")
@@ -166,6 +199,22 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 				}
 			} else if err := capability.RegisterDemoCatalog(registry, policy); err != nil {
 				writeDiagnostic(stderr, "initialize demo_catalog source")
+				return 1
+			}
+		}
+		if operator.InformationSources != nil && operator.InformationSources.BenchmarkManifest != nil {
+			policy, err := operator.InformationSources.BenchmarkManifest.resolve()
+			if err != nil {
+				writeDiagnostic(stderr, "invalid benchmark_manifest source policy")
+				return 2
+			}
+			if offlineSources {
+				if err := capability.RegisterBenchmarkManifestPlayback(registry, policy); err != nil {
+					writeDiagnostic(stderr, "initialize offline benchmark_manifest source")
+					return 1
+				}
+			} else if err := capability.RegisterBenchmarkManifest(registry, policy); err != nil {
+				writeDiagnostic(stderr, "initialize benchmark_manifest source")
 				return 1
 			}
 		}
@@ -180,7 +229,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		}
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
 			brokerConfig := capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan}
-			if playbackBundle != nil {
+			if branchManifest != nil {
+				prefix := append([]capability.TranscriptEntry(nil), playbackBundle.Entries[:branchManifest.ForkOperation]...)
+				brokerConfig.Branch = &capability.BranchConfig{
+					ForkOperation: branchManifest.ForkOperation, PrefixEntries: prefix,
+					Mode: capability.BranchMode(branchManifest.SuffixMode), SuffixEntries: branchManifest.SuffixEntries,
+				}
+			} else if playbackBundle != nil {
 				brokerConfig.Playback = &capability.PlaybackConfig{Entries: playbackBundle.Entries}
 			}
 			broker, err := capability.NewBroker(brokerConfig)
@@ -203,8 +258,14 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		factory.WorkspaceOwner = runIdentity
 	}
 	if playbackBundle != nil {
-		if err := validatePlaybackAdmission(*playbackBundle, capabilityPlan, runConfig, wasm, requestSHA256, workspaceBinding); err != nil {
-			writeDiagnostic(stderr, err.Error())
+		var admissionErr error
+		if branchManifest != nil {
+			admissionErr = validateBranchAdmission(*playbackBundle, *branchManifest, capabilityPlan, runConfig, wasm, requestSHA256, workspaceBinding)
+		} else {
+			admissionErr = validatePlaybackAdmission(*playbackBundle, capabilityPlan, runConfig, wasm, requestSHA256, workspaceBinding)
+		}
+		if admissionErr != nil {
+			writeDiagnostic(stderr, admissionErr.Error())
 			return 2
 		}
 	}
@@ -269,13 +330,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, "response exceeds configured bounds")
 		return 1
 	}
-	if playbackBundle != nil {
+	if playbackBundle != nil && branchManifest == nil {
 		if err := validatePlaybackOutcome(*playbackBundle, decodedResponse); err != nil {
 			writeDiagnostic(stderr, err.Error())
 			return 1
 		}
 	}
-	if operator.Playback != nil && operator.Playback.Mode == "capture" {
+	if operator.Playback != nil && (operator.Playback.Mode == "capture" || operator.Playback.Mode == "branch") {
 		if capabilityPlan == nil || runBroker == nil {
 			writeDiagnostic(stderr, "capture broker is unavailable")
 			return 1

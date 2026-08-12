@@ -21,6 +21,7 @@ type operatorConfig struct {
 	MaxResponseBytes   uint32                    `json:"max_response_bytes,omitempty"`
 	MemoryLimitPages   uint32                    `json:"memory_limit_pages,omitempty"`
 	ExecutionProfile   *executionProfileConfig   `json:"execution_profile,omitempty"`
+	Deterministic      *deterministicConfig      `json:"deterministic_verification,omitempty"`
 	WorkspaceFiles     map[string]string         `json:"workspace_files,omitempty"`
 	MaxToolCalls       uint32                    `json:"max_tool_calls,omitempty"`
 	Workspace          *mountedWorkspaceConfig   `json:"workspace,omitempty"`
@@ -33,10 +34,13 @@ type playbackConfig struct {
 	OutputBundle         string `json:"output_bundle,omitempty"`
 	InputBundle          string `json:"input_bundle,omitempty"`
 	ExpectedBundleSHA256 string `json:"expected_bundle_sha256,omitempty"`
+	InputBranchManifest  string `json:"input_branch_manifest,omitempty"`
+	ExpectedBranchSHA256 string `json:"expected_branch_sha256,omitempty"`
 }
 
 type informationSourcesConfig struct {
-	DemoCatalog *demoCatalogSourceConfig `json:"demo_catalog,omitempty"`
+	DemoCatalog       *demoCatalogSourceConfig       `json:"demo_catalog,omitempty"`
+	BenchmarkManifest *benchmarkManifestSourceConfig `json:"benchmark_manifest,omitempty"`
 }
 
 type demoCatalogSourceConfig struct {
@@ -45,9 +49,20 @@ type demoCatalogSourceConfig struct {
 	MaxResponseBytes uint32 `json:"max_response_bytes"`
 }
 
+type benchmarkManifestSourceConfig struct {
+	Endpoint         string `json:"endpoint"`
+	TimeoutMS        int64  `json:"timeout_ms"`
+	MaxResponseBytes uint32 `json:"max_response_bytes"`
+}
+
 type executionProfileConfig struct {
 	ID             string   `json:"id"`
 	AllowedImports []string `json:"allowed_imports"`
+}
+
+type deterministicConfig struct {
+	Status     string `json:"status"`
+	RandomSeed string `json:"random_seed"`
 }
 
 type mountedWorkspaceConfig struct {
@@ -184,12 +199,27 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 		}
 		runConfig.ExecutionProfile = &profile
 	}
+	if config.Deterministic != nil {
+		if config.ExecutionProfile == nil || config.Workspace != nil || config.Deterministic.Status != runtimeconfig.DeterministicVerificationExperimentalPartial {
+			return runtimeconfig.RunConfig{}, errors.New("deterministic_verification requires an execution profile, no mounted workspace, and experimental_partial status")
+		}
+		if _, err := runtimeconfig.NewDeterministicVerificationProfile("sha256:0000000000000000000000000000000000000000000000000000000000000000", config.Deterministic.RandomSeed); err != nil {
+			return runtimeconfig.RunConfig{}, errors.New("invalid deterministic_verification random_seed")
+		}
+	}
 	if config.InformationSources != nil {
-		if config.InformationSources.DemoCatalog == nil {
+		if config.InformationSources.DemoCatalog == nil && config.InformationSources.BenchmarkManifest == nil {
 			return runtimeconfig.RunConfig{}, errors.New("information_sources must configure a curated source")
 		}
-		if _, err := config.InformationSources.DemoCatalog.resolve(); err != nil {
-			return runtimeconfig.RunConfig{}, err
+		if config.InformationSources.DemoCatalog != nil {
+			if _, err := config.InformationSources.DemoCatalog.resolve(); err != nil {
+				return runtimeconfig.RunConfig{}, err
+			}
+		}
+		if config.InformationSources.BenchmarkManifest != nil {
+			if _, err := config.InformationSources.BenchmarkManifest.resolve(); err != nil {
+				return runtimeconfig.RunConfig{}, err
+			}
 		}
 	}
 	if config.Playback != nil {
@@ -242,15 +272,21 @@ func (config *playbackConfig) validate() error {
 	}
 	switch config.Mode {
 	case "capture":
-		if !validPath(config.OutputBundle) || config.InputBundle != "" || config.ExpectedBundleSHA256 != "" {
+		if !validPath(config.OutputBundle) || config.InputBundle != "" || config.ExpectedBundleSHA256 != "" || config.InputBranchManifest != "" || config.ExpectedBranchSHA256 != "" {
 			return errors.New("capture playback requires one absolute output_bundle")
 		}
 	case "playback":
-		if !validPath(config.InputBundle) || config.OutputBundle != "" || !validPlaybackDigest(config.ExpectedBundleSHA256) {
+		if !validPath(config.InputBundle) || config.OutputBundle != "" || !validPlaybackDigest(config.ExpectedBundleSHA256) || config.InputBranchManifest != "" || config.ExpectedBranchSHA256 != "" {
 			return errors.New("offline playback requires one absolute input_bundle and expected_bundle_sha256")
 		}
+	case "branch":
+		if !validPath(config.InputBundle) || !validPath(config.InputBranchManifest) || !validPath(config.OutputBundle) ||
+			!validPlaybackDigest(config.ExpectedBundleSHA256) || !validPlaybackDigest(config.ExpectedBranchSHA256) ||
+			config.InputBundle == config.InputBranchManifest || config.InputBundle == config.OutputBundle || config.InputBranchManifest == config.OutputBundle {
+			return errors.New("branch playback requires protected parent, manifest, identities, and a distinct child output_bundle")
+		}
 	default:
-		return errors.New("playback mode must be capture or playback")
+		return errors.New("playback mode must be capture, playback, or branch")
 	}
 	return nil
 }
@@ -265,6 +301,20 @@ func (config *demoCatalogSourceConfig) resolve() (capability.DemoCatalogPolicy, 
 	}
 	if _, _, err := capability.DemoCatalogDefinition(policy); err != nil {
 		return capability.DemoCatalogPolicy{}, errors.New("invalid demo_catalog source policy")
+	}
+	return policy, nil
+}
+
+func (config *benchmarkManifestSourceConfig) resolve() (capability.BenchmarkManifestPolicy, error) {
+	if config == nil {
+		return capability.BenchmarkManifestPolicy{}, errors.New("benchmark_manifest source is required")
+	}
+	policy := capability.BenchmarkManifestPolicy{
+		Endpoint: config.Endpoint, Timeout: time.Duration(config.TimeoutMS) * time.Millisecond,
+		MaxResponseBytes: config.MaxResponseBytes,
+	}
+	if _, _, err := capability.BenchmarkManifestDefinition(policy); err != nil {
+		return capability.BenchmarkManifestPolicy{}, errors.New("invalid benchmark_manifest source policy")
 	}
 	return policy, nil
 }

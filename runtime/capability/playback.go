@@ -65,11 +65,16 @@ func normalizePlaybackEntries(entries []TranscriptEntry) ([]TranscriptEntry, err
 }
 
 func (broker *Broker) failPlayback() {
-	if broker == nil || broker.playbackEntries == nil {
+	if broker == nil || (broker.playbackEntries == nil && broker.branch == nil) {
 		return
 	}
 	broker.mu.Lock()
-	broker.playbackFailed = true
+	if broker.playbackEntries != nil {
+		broker.playbackFailed = true
+	}
+	if broker.branch != nil {
+		broker.branch.failed = true
+	}
 	broker.mu.Unlock()
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -19,25 +18,7 @@ type stagedPlaybackBundle struct {
 }
 
 func executionProfileSHA256(config runtimeconfig.RunConfig) (string, error) {
-	descriptor := struct {
-		SchemaVersion  string   `json:"schema_version"`
-		ID             string   `json:"id"`
-		ArtifactSHA256 string   `json:"artifact_sha256"`
-		ManifestSHA256 string   `json:"manifest_sha256"`
-		AllowedImports []string `json:"allowed_imports"`
-	}{SchemaVersion: "pysolate.execution-profile-binding.v1", ID: "none", AllowedImports: []string{}}
-	if config.ExecutionProfile != nil {
-		profile := *config.ExecutionProfile
-		descriptor.ID = profile.ID()
-		descriptor.ArtifactSHA256 = profile.ArtifactSHA256()
-		descriptor.ManifestSHA256 = profile.ManifestSHA256()
-		descriptor.AllowedImports = profile.AllowedImports()
-	}
-	encoded, err := json.Marshal(descriptor)
-	if err != nil {
-		return "", err
-	}
-	return playback.CanonicalSHA256(encoded)
+	return runtimeconfig.ExecutionProfileBindingSHA256(config)
 }
 
 func validatePlaybackAdmission(bundle playback.Bundle, plan *capability.Plan, config runtimeconfig.RunConfig, wasm []byte, requestSHA256 string, workspaceBinding *mountedWorkspaceBinding) error {
@@ -63,6 +44,34 @@ func validatePlaybackAdmission(bundle playback.Bundle, plan *capability.Plan, co
 		}
 	} else if bundle.InitialWorkspaceSHA256 == "" || bundle.InitialWorkspaceSHA256 != workspaceBinding.initialInfo.WorkspaceSHA256 {
 		return errors.New("playback initial workspace mismatch")
+	}
+	return nil
+}
+
+func validateBranchAdmission(parent playback.Bundle, branch playback.BranchManifest, childPlan *capability.Plan, config runtimeconfig.RunConfig, wasm []byte, requestSHA256 string, workspaceBinding *mountedWorkspaceBinding) error {
+	if err := branch.ValidateParent(parent); err != nil || childPlan == nil || branch.ChildCapabilityPlanSHA256 != childPlan.Identity() ||
+		branch.RequestSHA256 != requestSHA256 || branch.ArtifactSHA256 != playback.SHA256(wasm) {
+		return errors.New("branch admission identity mismatch")
+	}
+	profileSHA256, err := executionProfileSHA256(config)
+	if err != nil || branch.ExecutionProfileSHA256 != profileSHA256 {
+		return errors.New("branch execution profile mismatch")
+	}
+	grants := childPlan.Grants()
+	if len(grants) != len(branch.ChildGrants) {
+		return errors.New("branch child grant mismatch")
+	}
+	for index := range grants {
+		if grants[index] != branch.ChildGrants[index] {
+			return errors.New("branch child grant mismatch")
+		}
+	}
+	if workspaceBinding == nil {
+		if branch.InitialWorkspaceSHA256 != "" {
+			return errors.New("branch initial workspace mismatch")
+		}
+	} else if branch.InitialWorkspaceSHA256 == "" || branch.InitialWorkspaceSHA256 != workspaceBinding.initialInfo.WorkspaceSHA256 {
+		return errors.New("branch initial workspace mismatch")
 	}
 	return nil
 }

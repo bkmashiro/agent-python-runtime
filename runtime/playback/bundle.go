@@ -321,6 +321,9 @@ func validName(value string) bool {
 }
 
 func validEvidence(evidence capability.TransportEvidence) bool {
-	return evidence.Kind == "http" && evidence.Status >= 100 && evidence.Status <= 599 &&
-		len(evidence.MediaType) > 0 && len(evidence.MediaType) <= 128 && evidence.BodyBytes <= 1<<20 && validDigest(evidence.BodySHA256)
+	if len(evidence.MediaType) == 0 || len(evidence.MediaType) > 128 || evidence.BodyBytes > 1<<20 || !validDigest(evidence.BodySHA256) {
+		return false
+	}
+	return (evidence.Kind == "http" && evidence.Status >= 100 && evidence.Status <= 599) ||
+		(evidence.Kind == "branch_override" && evidence.Status == 200 && evidence.MediaType == "application/json")
 }

@@ -42,7 +42,7 @@ matching Runtime source revision under:
 research/labview/testdata/canonical/{ordinary,branched,incomplete,truncated,private}
 ```
 
-The viewer consumes these canonical objects directly; it does not maintain a second draft-shaped envelope. `scripts/sync-canonical.mjs` deterministically emits an exact JavaScript data module from the tracked JSON so browsers do not depend on JSON-module support; tests and builds fail if that module drifts. The only additional metadata is an internal `__sha256` map used to verify that `lab-index.v1` links match the fixture file digests. The browser never contacts an API or external service.
+The viewer consumes these canonical objects directly; it does not maintain a second draft-shaped envelope. `scripts/sync-canonical.mjs` copies the Runtime-owned JSON byte-for-byte and deterministically emits an exact JavaScript data module so browsers do not depend on JSON-module support; tests and builds fail if either copy drifts from `research/labview`. The only additional metadata is an internal `__sha256` map used to verify that `lab-index.v1` links match the fixture file digests. The browser never contacts an API or external service.
 
 `src/lib/canonical-adapter.mjs` is a strict, fail-closed adapter. It validates schema markers, exact object fields, digest/link consistency, source identity, enum vocabularies, pagination bounds, event ordering, branch relations, Guest-relative workspace paths, reference privacy/availability, and explicit incomplete/truncated/private states. Protected prompt/code/provider/workspace bodies and Host paths are not copied into fixtures.
 

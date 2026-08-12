@@ -37,6 +37,10 @@ The Agent and Guest are separate components coordinated by the Host. The Agent p
 
 The product may feel computer-like because files and useful operations remain available across steps. It must remain capability-native internally. Pysolate is not a smaller Linux VM, a shell emulator or an environment that silently expands permissions after an execution failure.
 
+A source-pinned assessment of the distance from the present prototype to the
+research, local-alpha and production finish lines is maintained in
+[product-maturity-and-roadmap.md](product-maturity-and-roadmap.md).
+
 ## Current implementation
 
 The current implementation provides:

@@ -40,7 +40,10 @@ Experimental and Proposed claims are separated in
   - `import-inventory.json`
   - `import-qualification.json`
 
-See [docs/development.md](docs/development.md) for building the Guest.
+See [docs/development.md](docs/development.md) for building the Guest. For a
+five-minute supervisor walkthrough and an explicit assessment of the remaining
+product distance, see [the demo guide](docs/supervisor-demo-guide.md) and
+[product maturity and roadmap](docs/product-maturity-and-roadmap.md).
 
 ## Build
 

@@ -163,6 +163,7 @@ func TestReportConservationRowIdentityAndEvidenceRules(t *testing.T) {
 		"row identity drift":        func(value *evaluation.Report) { value.Rows[0].CorpusSHA256 = digestA },
 		"complete missing refs":     func(value *evaluation.Report) { value.Rows[0].EvidenceRefs = nil },
 		"unsupported passed oracle": func(value *evaluation.Report) { value.Rows[3].OracleStatus = evaluation.OraclePassed },
+		"unsupported evidence refs": func(value *evaluation.Report) { value.Rows[3].EvidenceRefs = []string{digestA} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := validReport()

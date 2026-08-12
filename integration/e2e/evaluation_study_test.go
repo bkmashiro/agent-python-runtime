@@ -72,6 +72,7 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 	}
 	defer store.Close()
 	baselines := map[string]studyBaseline{}
+	evidenceFiles := map[string][]byte{}
 	raw := evaluation.RawStudy{SchemaVersion: evaluation.RawSchemaVersion, CorpusSHA256: corpusID, PlanSHA256: planID, Rows: make([]evaluation.RawRow, len(planned))}
 	byID := map[string]workloads.Workload{}
 	for _, d := range definitions {
@@ -171,10 +172,11 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 			t.Fatal(err)
 		}
 		if row.Status != evaluation.RowUnsupported {
-			evidenceBody, _, err := row.BodyFreeEvidence(corpusID, planID)
+			evidenceBody, evidenceID, err := row.BodyFreeEvidence(corpusID, planID)
 			if err != nil || uint64(len(evidenceBody)) > plan.Ceilings.MaxEvidenceBytesPerRow {
 				t.Fatalf("row %s evidence exceeds ceiling or is invalid: bytes=%d err=%v", item.RowID, len(evidenceBody), err)
 			}
+			evidenceFiles["row-"+strings.TrimPrefix(evidenceID, "sha256:")+".json"] = evidenceBody
 		}
 		raw.Rows[i] = row
 	}
@@ -215,24 +217,20 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(root, 0700); err != nil {
-		t.Fatal(err)
+	files := map[string][]byte{"corpus.json": corpusBytes, "plan.json": planBytes, "raw.json": rawBytes, "report.json": reportBytes, "measurements.json": summaryBytes, "identities.json": []byte(fmt.Sprintf("{\"measurements\":%q,\"raw\":%q,\"report\":%q}\n", summaryID, rawID, reportID))}
+	for name, body := range evidenceFiles {
+		files[name] = body
 	}
-	if err := os.Chmod(root, 0700); err != nil {
+	if err := writePrivateStudy(privateRoot, root, files); err != nil {
 		t.Fatal(err)
-	}
-	for name, body := range map[string][]byte{"corpus.json": corpusBytes, "plan.json": planBytes, "raw.json": rawBytes, "report.json": reportBytes, "measurements.json": summaryBytes, "identities.json": []byte(fmt.Sprintf("{\"measurements\":%q,\"raw\":%q,\"report\":%q}\n", summaryID, rawID, reportID))} {
-		if err := os.WriteFile(filepath.Join(root, name), body, 0600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(filepath.Join(root, name), 0600); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 
 func TestEvaluationStudyOutputRequiresAbsoluteDeclaredPrivateRoot(t *testing.T) {
 	privateRoot := filepath.Join(t.TempDir(), ".artifacts-private")
+	if err := os.MkdirAll(privateRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
 	child := filepath.Join(privateRoot, "study")
 	if got, err := validatePrivateOutput(privateRoot, child); err != nil || got != filepath.Clean(child) {
 		t.Fatalf("child=%q err=%v", got, err)
@@ -241,6 +239,42 @@ func TestEvaluationStudyOutputRequiresAbsoluteDeclaredPrivateRoot(t *testing.T) 
 		if _, err := validatePrivateOutput(invalid[0], invalid[1]); err == nil {
 			t.Fatalf("accepted root=%q output=%q", invalid[0], invalid[1])
 		}
+	}
+	if err := writePrivateStudy(privateRoot, child, map[string][]byte{"report.json": []byte("{}")}); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(child); err != nil || info.Mode().Perm() != 0700 {
+		t.Fatalf("child mode=%v err=%v", info, err)
+	}
+	if info, err := os.Stat(filepath.Join(child, "report.json")); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("file mode=%v err=%v", info, err)
+	}
+	if err := writePrivateStudy(privateRoot, child, map[string][]byte{"report.json": []byte("replacement")}); err == nil {
+		t.Fatal("existing study directory was overwritten")
+	}
+}
+
+func TestPrivateStudyWriterRejectsSymlinkEscape(t *testing.T) {
+	privateRoot := filepath.Join(t.TempDir(), ".artifacts-private")
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.MkdirAll(privateRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(privateRoot, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateStudy(privateRoot, filepath.Join(privateRoot, "escape"), map[string][]byte{"report.json": []byte("{}")}); err == nil {
+		t.Fatal("symlink escape accepted")
+	}
+	linkedRoot := filepath.Join(t.TempDir(), ".artifacts-private")
+	if err := os.Symlink(outside, linkedRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateStudy(linkedRoot, filepath.Join(linkedRoot, "study"), map[string][]byte{"report.json": []byte("{}")}); err == nil {
+		t.Fatal("symlink private root accepted")
 	}
 }
 
@@ -254,6 +288,52 @@ func validatePrivateOutput(privateRoot, output string) (string, error) {
 		return "", fmt.Errorf("evaluation output must be a child of the declared private root")
 	}
 	return output, nil
+}
+
+func writePrivateStudy(privateRoot, output string, files map[string][]byte) error {
+	output, err := validatePrivateOutput(privateRoot, output)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(privateRoot)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("private root must be a real directory")
+	}
+	root, err := os.OpenRoot(privateRoot)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	relative, err := filepath.Rel(privateRoot, output)
+	if err != nil {
+		return err
+	}
+	if relative == "." || strings.ContainsRune(relative, filepath.Separator) {
+		return fmt.Errorf("evaluation output must be one new private-root child")
+	}
+	if err := root.Mkdir(relative, 0700); err != nil {
+		return err
+	}
+	studyRoot, err := root.OpenRoot(relative)
+	if err != nil {
+		return err
+	}
+	defer studyRoot.Close()
+	if err := studyRoot.Chmod(".", 0700); err != nil {
+		return err
+	}
+	for name, body := range files {
+		if filepath.Base(name) != name || name == "." {
+			return fmt.Errorf("invalid private study filename")
+		}
+		if err := studyRoot.WriteFile(name, body, 0600); err != nil {
+			return err
+		}
+		if err := studyRoot.Chmod(name, 0600); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func executeStudyTreatment(t *testing.T, artifactPath string, artifact []byte, definition workloads.Workload, treatment evaluation.Treatment, binding branchWorkspaceBinding, baselines map[string]studyBaseline) (json.RawMessage, string, []capability.TranscriptEntry, bool, bool, bool, bool) {

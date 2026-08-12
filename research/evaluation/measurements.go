@@ -28,6 +28,14 @@ type MeasurementSummary struct {
 	StoredBytes      uint64        `json:"stored_bytes"`
 }
 
+func EncodeMeasurementSummary(summary MeasurementSummary) ([]byte, string, error) {
+	return encodeCanonical(summary, validateMeasurementSummary)
+}
+
+func DecodeMeasurementSummary(data []byte) (MeasurementSummary, string, error) {
+	return decodeStrict(data, validateMeasurementSummary)
+}
+
 func DeriveMeasurementSummary(study RawStudy) (MeasurementSummary, []byte, string, error) {
 	if err := study.Validate(); err != nil {
 		return MeasurementSummary{}, nil, "", err
@@ -73,7 +81,7 @@ func DeriveMeasurementSummary(study RawStudy) (MeasurementSummary, []byte, strin
 		summary.LogicalBytes += row.Metrics.LogicalBytes
 		summary.StoredBytes += row.Metrics.StoredBytes
 	}
-	encoded, identity, err := encodeCanonical(summary, validateMeasurementSummary)
+	encoded, identity, err := EncodeMeasurementSummary(summary)
 	if err != nil {
 		return MeasurementSummary{}, nil, "", err
 	}
@@ -81,7 +89,9 @@ func DeriveMeasurementSummary(study RawStudy) (MeasurementSummary, []byte, strin
 }
 
 func validateMeasurementSummary(summary MeasurementSummary) error {
-	if summary.SchemaVersion != MeasurementSchemaVersion || summary.EvidenceClass != EvidenceMechanismOnly || !digestPattern.MatchString(summary.CorpusSHA256) || !digestPattern.MatchString(summary.PlanSHA256) || !equalStrings(summary.ProhibitedClaims, RequiredProhibitedClaims()) || summary.Offered == 0 || summary.Offered != summary.Completed+summary.Failed+summary.TimedOut+summary.Unsupported || summary.Started != summary.Completed+summary.Failed+summary.TimedOut || summary.OraclePassed > summary.Started || summary.EvidenceComplete > summary.Started || summary.ReplayEquivalent > summary.ReplayChecked || summary.BranchDiverged > summary.BranchChecked || summary.ReusedPuts > summary.ObjectPuts {
+	if summary.SchemaVersion != MeasurementSchemaVersion || summary.EvidenceClass != EvidenceMechanismOnly || !digestPattern.MatchString(summary.CorpusSHA256) || !digestPattern.MatchString(summary.PlanSHA256) || !equalStrings(summary.ProhibitedClaims, RequiredProhibitedClaims()) || summary.Offered == 0 || summary.Offered > maxEvaluationRows ||
+		uint64(summary.Offered) != uint64(summary.Completed)+uint64(summary.Failed)+uint64(summary.TimedOut)+uint64(summary.Unsupported) ||
+		uint64(summary.Started) != uint64(summary.Completed)+uint64(summary.Failed)+uint64(summary.TimedOut) || summary.OraclePassed > summary.Started || summary.EvidenceComplete > summary.Started || summary.ReplayEquivalent > summary.ReplayChecked || summary.BranchDiverged > summary.BranchChecked || summary.ReusedPuts > summary.ObjectPuts {
 		return ErrInvalid
 	}
 	return nil

@@ -23,4 +23,24 @@ func TestDeriveMeasurementSummaryUsesExplicitDenominators(t *testing.T) {
 	if len(summary.ProhibitedClaims) != len(evaluation.RequiredProhibitedClaims()) {
 		t.Fatalf("claims=%v", summary.ProhibitedClaims)
 	}
+	decoded, decodedID, err := evaluation.DecodeMeasurementSummary(encoded)
+	if err != nil || decodedID != identity || decoded.Offered != summary.Offered {
+		t.Fatalf("decoded=%+v identity=%s/%s err=%v", decoded, identity, decodedID, err)
+	}
+	weakened := summary
+	weakened.ProhibitedClaims = weakened.ProhibitedClaims[:len(weakened.ProhibitedClaims)-1]
+	if _, _, err := evaluation.EncodeMeasurementSummary(weakened); err == nil {
+		t.Fatal("weakened prohibited claims accepted")
+	}
+}
+
+func TestMeasurementSummaryRejectsUint32ConservationOverflow(t *testing.T) {
+	summary := evaluation.MeasurementSummary{
+		SchemaVersion: evaluation.MeasurementSchemaVersion, EvidenceClass: evaluation.EvidenceMechanismOnly,
+		CorpusSHA256: digestA, PlanSHA256: digestB, ProhibitedClaims: evaluation.RequiredProhibitedClaims(),
+		Offered: 1, Started: 1, Completed: ^uint32(0), Failed: 2,
+	}
+	if _, _, err := evaluation.EncodeMeasurementSummary(summary); err == nil {
+		t.Fatal("uint32 conservation overflow accepted")
+	}
 }

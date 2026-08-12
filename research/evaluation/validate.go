@@ -187,7 +187,7 @@ func validatePlan(plan Plan) error {
 func validateReport(report Report) error {
 	if report.SchemaVersion != ReportSchemaVersion || report.EvidenceClass != EvidenceMechanismOnly || !digestPattern.MatchString(report.CorpusSHA256) ||
 		!digestPattern.MatchString(report.PlanSHA256) || !slices.Equal(report.ProhibitedClaims, requiredClaims) || len(report.Rows) == 0 || len(report.Rows) > maxEvaluationRows || uint32(len(report.Rows)) != report.Summary.Offered ||
-		report.Summary.Offered != report.Summary.Completed+report.Summary.Failed+report.Summary.TimedOut+report.Summary.Unsupported {
+		uint64(report.Summary.Offered) != uint64(report.Summary.Completed)+uint64(report.Summary.Failed)+uint64(report.Summary.TimedOut)+uint64(report.Summary.Unsupported) {
 		return ErrInvalid
 	}
 	seen := map[string]struct{}{}
@@ -215,8 +215,12 @@ func validateReport(report Report) error {
 				if row.OracleStatus != OracleFailed || (row.EvidenceComplete && len(row.EvidenceRefs) == 0) {
 					return ErrInvalid
 				}
-			case RowTimedOut, RowUnsupported:
+			case RowTimedOut:
 				if row.OracleStatus != OracleNotRun || row.EvidenceComplete {
+					return ErrInvalid
+				}
+			case RowUnsupported:
+				if row.OracleStatus != OracleNotRun || row.EvidenceComplete || len(row.EvidenceRefs) != 0 {
 					return ErrInvalid
 				}
 			}

@@ -12,12 +12,24 @@ Agent Python source
   → Host-owned profile and artifact binding
   → fresh CPython/WASI Guest
   → bounded Host tools
-  → Host-authored receipts and result
+  → Host-authored result, receipts and optional observations
 ```
 
-The active implementation deliberately does not include prepared pools, COW restore, schedulers, durable transactions, MCP daemons, trace databases, benchmark campaigns, or production recovery machinery. It does include an optional Host-owned rooted workspace and a complete deterministic storage capsule; neither is a transaction system. Historical findings are summarized in [docs/research-history.md](docs/research-history.md) and remain available in Git history.
+The active implementation deliberately does not include prepared pools, COW
+restore, pinned sessions, schedulers, durable transactions, MCP daemons, trace
+databases, production benchmark orchestration, or recovery machinery. It does
+include an optional Host-owned rooted workspace and a complete deterministic
+storage capsule; neither is a transaction system. Historical findings are
+summarized in [docs/research-history.md](docs/research-history.md) and remain
+available in Git history.
 
-The longer-term product direction is a Python-native capability computer: ordinary Python provides control flow, a persistent Host workspace carries explicit state, and typed Host capabilities replace ambient shell or OS authority. Auditable, evidence-bound state transitions and scoped playback—not generic code execution—are the intended differentiator. Current and Proposed claims are separated in [docs/product-direction.md](docs/product-direction.md).
+The longer-term product direction is a Python-native capability computer:
+ordinary Python provides control flow, a persistent Host workspace carries
+explicit state, and typed Host capabilities replace ambient shell or OS
+authority. Auditable, evidence-bound state transitions and scoped
+playback—not generic code execution—are the intended differentiator. Current,
+Experimental and Proposed claims are separated in
+[docs/product-direction.md](docs/product-direction.md).
 
 ## Requirements
 
@@ -89,9 +101,11 @@ The workspace backend is an in-memory PoC store with canonical relative paths an
 
 For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory workspace tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
 
-## Curated information source demonstration
+## Curated information sources
 
-The Host can configure one credential-free exact endpoint for the dedicated `sources.demo_catalog()` capability:
+The Current Host CLI can configure two credential-free exact-endpoint sources:
+the flat `sources.demo_catalog()` demonstration and the nested versioned
+`sources.benchmark_manifest()` research manifest.
 
 ```json
 {
@@ -100,15 +114,61 @@ The Host can configure one credential-free exact endpoint for the dedicated `sou
       "endpoint": "https://host-selected.example/catalog.json",
       "timeout_ms": 1000,
       "max_response_bytes": 65536
+    },
+    "benchmark_manifest": {
+      "endpoint": "https://host-selected.example/benchmark.json",
+      "timeout_ms": 1000,
+      "max_response_bytes": 262144
     }
   },
   "max_tool_calls": 2
 }
 ```
 
-Agent Python calls `items = sources.demo_catalog()`. It cannot submit a URL, path, query, method, headers, redirect policy, credentials or transport budgets. The private Host adapter performs one GET, refuses redirects, requires status 200 and JSON media type, bounds time and bytes, canonicalizes the structured response and lets the same sealed capability schema validate it. This source may coexist with a mounted `/workspace`; it is not a generic HTTP client.
+Agent Python calls `items = sources.demo_catalog()` or
+`manifest = sources.benchmark_manifest()`. It cannot submit a URL, path, query,
+method, headers, redirect policy, credentials or transport budgets. Each
+private Host adapter performs one GET, refuses redirects, requires status 200
+and JSON media type, bounds time and bytes, rejects ambiguous JSON, and applies
+its sealed capability schema. The benchmark source additionally validates its
+nested schema, version, semantic ID uniqueness, and metric semantics. The
+sources may coexist with a mounted `/workspace`; neither is a generic HTTP
+client.
 
 The Host may capture schema-validated source calls into a minimal protected [Playback Bundle](docs/playback-bundles.md), then run a second fresh Guest offline after the source is unavailable. Playback requires the capture-issued bundle identity in trusted Host config, constructs no HTTP adapter, strictly consumes the recorded operation sequence through the same Broker schemas and receipts, and verifies response status, Agent-result and final-workspace identities. The bundle binds plan, grants, request, artifact/profile and transcript without storing Agent source, final result body, workspace bodies, endpoint URL or credentials.
+
+## Observation and research prototypes
+
+**Current:** `runtime/observe` defines the bounded Host-only
+`pysolate.runtime-observation.v1` contract. A Go Host can attach an `off`,
+`best_effort` or `required` Session through the Run context. It records
+lifecycle, validated capability calls, and initial/final file-level workspace
+deltas; syscall order is explicitly unavailable. `apyrun` does not currently
+expose a durable Recorder configuration. See
+[Runtime observation](docs/research/runtime-observation.md).
+
+The following surfaces are **Experimental**:
+
+- capability-boundary branches start a fresh Guest, strictly replay a parent
+  prefix, then use a Host-owned override, recorded suffix, or already sealed
+  live external-read suffix;
+- the **Experimental/Partial** deterministic-verification profile controls the
+  wazero random source and virtual clocks for an exact artifact while denying
+  mounted workspaces and named unsupported workload classes;
+- `research/labstore` is a bounded local typed CAS and retention prototype,
+  outside Runtime core;
+- `pysolate-research` provides bounded inspect/compare, protected branch-plan
+  authoring, caller-supplied DAG export, read-only store stats and synthetic
+  store benchmarking.
+
+Research branch execution is currently available through
+`research/operator.RunBranch`, not through the research CLI. A branch is not a
+Python heap or WebAssembly-memory snapshot, and a child may intentionally
+diverge from its parent. The local store and CLI are not a complete Lab,
+database service, authentication boundary, or combined release proof. See
+[Playback Bundles](docs/playback-bundles.md),
+[Deterministic verification](docs/research/deterministic-verification.md), and
+the [Runtime/Lab boundary](docs/research/lab-boundary.md).
 
 ## Security boundary
 
@@ -134,6 +194,11 @@ runtime/engine/wazero/      fresh-instance WASI execution
 runtime/capability/         small Host tool registry and broker
 runtime/workspace/          bounded WASI workspace mount and capsule storage
 runtime/receipt/            Host-authored call receipts
+runtime/observe/            optional bounded Host observation contract
+runtime/playback/           Bundle and Experimental branch contracts
+research/labstore/          Experimental local content-addressed store
+research/operator/          Experimental semantic research APIs
+cmd/pysolate-research/      Experimental local research CLI
 guest/                      CPython/WASI Guest source and build
 abi/v1/                     active JSON schemas
 integration/e2e/            focused real-Guest checks
@@ -150,7 +215,12 @@ AGENT_RUNTIME_GUEST=/path/to/agent-python-runtime.wasm \
   go test ./integration/e2e -count=1
 ```
 
-The real-Guest suite covers ordinary Python, timeout recovery, workspace isolation, automatic `csv` admission, typed workspace tools, and Host receipts.
+With the artifact configured, focused real-Guest tests cover ordinary Python,
+timeout recovery, workspace isolation, automatic import admission, Host
+receipts, Runtime observations, two-source capture/offline playback,
+Experimental/Partial deterministic repeats, and fresh counterfactual branch
+children through the operator API. These focused tests do not by themselves
+claim that the full combined research acceptance workflow has passed.
 
 ## Scope
 

@@ -2,7 +2,14 @@
 
 ## Status and baseline
 
-This document separates the verified implementation from product direction. `Current` statements describe code and tests present in the repository; `Proposed` statements are decision constraints for later work, not claims that the named capability, record, replay mode or deterministic guarantee exists today. Release or evaluation records should pin a concrete commit rather than treating this living document as a version identifier.
+This document separates the verified implementation from product direction.
+`Current` statements describe maintained code and tests present in the
+repository. `Experimental` statements describe implemented, bounded prototypes
+whose limitations remain part of their contract. `Proposed` statements are
+decision constraints for later work, not claims that the named capability,
+record, replay mode or guarantee exists today. Release or evaluation records
+should pin a concrete commit rather than treating this living document as a
+version identifier.
 
 Pysolate's long-term direction is:
 
@@ -45,13 +52,42 @@ The current implementation provides:
 - opaque per-Run `CapabilityGrant` identities derived from canonical Host policy documents;
 - a sealed `pysolate.capability-plan.v4` identity binding sorted canonical specs, their per-Run grants and the total call budget;
 - generated Python module/method objects and direct Agent tool schemas from the sealed specs, with compatibility aliases for the three current workspace functions;
-- one credential-free `sources.demo_catalog()` demonstration backed by a Host-private exact-endpoint GET adapter with redirect, status, media-type, timeout and byte controls;
+- two credential-free, dedicated external-read sources backed by Host-private exact-endpoint GET adapters with redirect, status, media-type, timeout and byte controls: `sources.demo_catalog()` and the nested versioned `sources.benchmark_manifest()` research manifest;
 - canonical minimal Playback Bundle v1 capture and strict offline consumption for curated external reads, with validated capability payloads, bounded transport evidence and plan/grant/request/artifact/profile/status/result/workspace identities; publication is staged `0600`, synced and atomic, trusted Host config anchors the capture-issued bundle identity, playback constructs no HTTP adapter and verifies final identities;
+- the bounded Host-authored `pysolate.runtime-observation.v1` contract, including lifecycle evidence for no-Broker Runs, capability and profile references, optional Host Recorder modes, and initial/final file-level workspace deltas with syscall order explicitly unavailable;
 - compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
 The generic Registry can register a versioned spec, grant and handler without changing the WASI import surface. Registration canonicalizes and compiles both schemas. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI generates namespaced Python objects and optional compatibility aliases from the sealed specs, while the Plan exposes direct Agent tool schemas from the same definitions. A plugin catalog and installation lifecycle are not Current.
 
-Current receipts bind call and workspace identities, but the repository does not yet claim a durable complete audit archive, deterministic replay, external-effect reconciliation or transaction semantics.
+Current receipts and observations bind call, lifecycle and workspace identities,
+but the repository does not claim a durable complete audit archive, full
+deterministic replay, external-effect reconciliation or transaction semantics.
+
+## Experimental research implementation
+
+The repository also contains bounded **Experimental** work whose label is part
+of its contract:
+
+- `pysolate.playback-branch.v1` counterfactual branches at captured
+  capability-operation boundaries, with a strictly replayed parent prefix and
+  Host-owned override, recorded, or sealed live external-read suffix;
+- `pysolate.deterministic-verification.v1`, explicitly
+  **Experimental/Partial**, which binds an exact artifact and controls wazero
+  random plus wall/monotonic clocks while denying mounted workspaces and known
+  unsupported import classes;
+- `research/labstore`, an independent bounded directory CAS prototype with
+  typed identities, workspace/branch relations, privacy policy, read-only
+  access, reachability retention and measured synthetic benchmarks;
+- `research/operator`, which can inspect/compare Bundles, export bounded branch
+  DAGs and run a branch in a fresh Guest from an explicitly sealed Host Plan;
+- a separate local `pysolate-research` CLI with bounded human/JSON inspect and
+  compare, protected branch-manifest planning, caller-supplied branch-DAG
+  export, read-only store stats and a synthetic store benchmark. Branch
+  execution remains an API rather than a research CLI command.
+
+These pieces establish a local research substrate, not a complete Pysolate Lab
+or a release claim. The Runtime/Lab ownership boundary is documented in
+[research/lab-boundary.md](research/lab-boundary.md).
 
 ## Governing design rules
 
@@ -85,9 +121,11 @@ Registration canonicalizes and compiles both schemas. It also requires an opaque
 
 The following remain Proposed extensions:
 
-- additional qualified source/target adapters and any credential-bearing adapter;
+- qualified source adapters beyond the two current credential-free sources,
+  and any credential-bearing adapter;
 - per-target external-cost budgets;
-- protected playback records and adapters.
+- external-write intent/effect records and reconciliation;
+- a plugin catalog, durable research service and full Lab UI.
 
 The replay adapter should derive from that definition as well. Generated presentation surfaces do not create a second policy path: execution still crosses the same Broker.
 
@@ -110,7 +148,11 @@ persistent Host workspace
   -> fresh Guest Run
 ```
 
-Workspace files are inspectable state. Python heap, module globals, WASM memory, open descriptors, Broker handles, credentials and `/tmp` are not continuation state. A future pinned interpreter session, if evidence justifies one, must be an explicit profile with identity, revision, TTL, budgets, health and failure semantics; it must not silently change ordinary Run behavior.
+Workspace files are inspectable state. Python heap, module globals, WASM
+memory, open descriptors, Broker handles, credentials and `/tmp` are not
+continuation state. Pinned interpreter sessions are outside the Current and
+Experimental Runtime paths. Any separately governed compatibility environment
+must not silently change the fresh-per-Run contract or become branch state.
 
 ### Computer-last compatibility
 
@@ -142,6 +184,13 @@ Guest Python call
 ```
 
 Credentials remain Host-private. A record may carry a stable credential reference or `[REDACTED]`, never the secret value.
+
+The Current observation boundary is narrower than all WASI activity. Stable
+wazero integration exposes Host lifecycle, Broker calls and workspace
+snapshots. Pysolate therefore reports bounded initial/final file deltas and
+sets syscall-order availability to false. It never claims Python bytecode,
+locals, heap, stack or WebAssembly-memory visibility. See
+[research/runtime-observation.md](research/runtime-observation.md).
 
 ## Evidence model
 
@@ -184,13 +233,32 @@ A playback Run replaces live capability calls with captured, validated responses
 
 A live re-execution invokes current external systems again. It may test behavior under equivalent declared conditions, but it is not deterministic replay because remote data, service behavior and time may have changed.
 
+### Counterfactual branch
+
+An Experimental branch starts a fresh Guest from the parent's original request
+and initial workspace, strictly re-executes the captured prefix, then follows a
+complete Host-owned suffix policy. It may intentionally produce a different
+result or final workspace. It is not a source-line breakpoint, a heap/WASM
+snapshot restore, or authority selected by the Agent at the fork.
+
 ### Effect reconciliation
 
 An external write such as a push, publication, message or payment is not replayed. A future Effect Plane must journal an immutable intent before dispatch, use stable provider identity or idempotency where supported, and reconcile ambiguous outcomes. Playback returns the recorded effect state; it never repeats an already applied effect.
 
 ### Deterministic verification
 
-An exact deterministic claim requires all relevant nondeterminism to be controlled or captured, including runtime artifact, initial state, clock, randomness, locale, filesystem ordering and external capability results. Until those prerequisites exist and are verified, the stronger honest claim is attribution: no unrecorded ambient authority may affect the Run, and recorded external inputs explain the observed transition within the stated threat model.
+The implemented profile remains **Experimental/Partial**. It controls the
+wazero clocks and random source for an artifact-bound, no-mounted-workspace
+profile and proves repeatability only for qualified real-Guest probes under
+identical captured inputs. Concurrency, mounted-directory ordering, locale
+mutation, cross-platform floating-point behavior and complete-Agent/provider
+execution are outside the claim. See
+[research/deterministic-verification.md](research/deterministic-verification.md).
+
+An exact broader claim would require every relevant source to be controlled,
+captured or denied and identity-bound, including runtime implementation,
+initial state, locale, filesystem ordering and external results. Without that
+evidence, the honest claim remains attribution within the stated threat model.
 
 ## Capability admission test
 
@@ -209,12 +277,19 @@ If these conditions cannot be met, the workload belongs in an explicit compatibi
 
 ## Directional priorities
 
-The first foundation is Current. Remaining work should proceed in this order, subject to concrete workload evidence:
+The first foundation is Current. Remaining work should proceed in this order,
+subject to concrete workload evidence:
 
-1. Extend curated information sources only where a concrete workload justifies another dedicated adapter.
-2. Control or capture clock, randomness and other relevant nondeterminism for a bounded deterministic-verification profile.
-3. Add write effects only through an explicit Host Effect Plane with reconciliation.
-4. Expand safe computer coverage through qualified Git, HTTP, artifact, document, media or browser capabilities.
-5. Consider pinned interpreter sessions only after measured workloads show that explicit workspace state is insufficient.
+1. Complete and independently review the local research acceptance proof and
+   operator surface without moving Lab storage or orchestration into Runtime.
+2. Expand the Experimental/Partial deterministic profile only through a real
+   RED probe, an explicit control or admission denial, and artifact-bound GREEN
+   evidence.
+3. Extend curated information sources only where a concrete workload justifies
+   another dedicated adapter.
+4. Add write effects only through an explicit Host Effect Plane with
+   reconciliation.
+5. Expand safe computer coverage through qualified Git, artifact, document,
+   media or browser capabilities rather than generic HTTP or shell access.
 
 The success metric is not the number of APIs or the percentage of Linux commands imitated. It is the share of real Agent work completed without a general Computer while preserving bounded authority, evidence coverage, final-state correctness and honest replay semantics.

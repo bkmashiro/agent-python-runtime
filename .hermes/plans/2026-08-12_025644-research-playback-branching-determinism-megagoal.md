@@ -117,17 +117,17 @@ All items must be checked with real evidence:
 
 - [x] Previous playback roadmap is marked closed and points to this active successor without losing evidence.
 - [x] A checked-in identity/digest inventory classifies every persisted or externally visible SHA relation; the v1 audit found no compatibility-safe field with zero independent boundary value, so none was removed.
-- [ ] A repository-maintained real-Guest acceptance harness reproduces live capture → source shutdown → offline playback with stable machine-readable evidence.
-- [ ] A versioned Lab-ready Runtime observation contract exists, including no-capability Runs, and does not accept Guest-forged Host evidence.
-- [ ] The strongest honest WASI/filesystem observation level is measured and documented; unsupported internal visibility is not claimed.
-- [ ] A bounded content-addressed research-store prototype stores repeated semantic bodies once, validates them on read, and has measured storage behavior on long and swarm-shaped fixtures.
-- [ ] Counterfactual branch execution works from a capability-operation boundary in a fresh Guest, with strict parent-prefix validation and explicit child lineage.
-- [ ] Branching never restores hidden interpreter state, never lets the Agent select authority, and never silently reuses a live external write.
-- [ ] A bounded deterministic-verification profile controls or captures each claimed nondeterministic input and fails admission for unsupported ones.
-- [ ] A second research-oriented curated source, `sources.benchmark_manifest()`, proves that capture/playback/branching are not hard-coded to `demo_catalog`.
-- [ ] Operator research commands inspect, compare and branch using semantic summaries; users do not manually edit Bundle JSON or copy internal field digests.
-- [ ] Full real E2E demonstrates parent capture, offline replay, two counterfactual children, deterministic repeatability, branch lineage and storage dedup.
-- [ ] Documentation separates Current, Experimental and Proposed claims accurately.
+- [x] A repository-maintained real-Guest acceptance harness reproduces live capture → source shutdown → offline playback with stable machine-readable evidence.
+- [x] A versioned Lab-ready Runtime observation contract exists, including no-capability Runs, and does not accept Guest-forged Host evidence.
+- [x] The strongest honest WASI/filesystem observation level is measured and documented; unsupported internal visibility is not claimed.
+- [x] A bounded content-addressed research-store prototype stores repeated semantic bodies once, validates them on read, and has measured storage behavior on long and swarm-shaped fixtures.
+- [x] Counterfactual branch execution works from a capability-operation boundary in a fresh Guest, with strict parent-prefix validation and explicit child lineage.
+- [x] Branching never restores hidden interpreter state, never lets the Agent select authority, and never silently reuses a live external write.
+- [x] A bounded deterministic-verification profile controls or captures each claimed nondeterministic input and fails admission for unsupported ones.
+- [x] A second research-oriented curated source, `sources.benchmark_manifest()`, proves that capture/playback/branching are not hard-coded to `demo_catalog`.
+- [x] Operator research commands inspect, compare and branch using semantic summaries; users do not manually edit Bundle JSON or copy internal field digests.
+- [x] Full real E2E demonstrates parent capture, offline replay, two counterfactual children, deterministic repeatability, branch lineage and storage dedup.
+- [x] Documentation separates Current, Experimental and Proposed claims accurately.
 - [ ] Full tests/vet/build/race/Python/ABI/tamper/privacy/docs gates pass on the final commit.
 - [ ] Independent final review reports no blocker for identity, branching, authority, recorder privacy, determinism claims and zero-network playback.
 - [ ] Only after all required items pass, signed commits are pushed once and `HEAD == origin/main` with a clean worktree.
@@ -237,21 +237,21 @@ Use separate identities:
 
 ### Tasks
 
-- [ ] Audit existing `InvocationRef`/`ExecutionRef`; extend only missing fields and preserve no-capability Runs.
-- [ ] Define `pysolate.runtime-observation.v1` events/envelopes with exact keys, bounded fields, canonical encoding and Host-only projection.
-- [ ] Record execution lifecycle boundaries, capability calls, plan/artifact/profile references, terminal disposition and initial/final workspace identities.
-- [ ] Ensure Guest responses cannot forge, case-fold, duplicate or override observation fields.
-- [ ] Provide `off`, `best_effort` and `required` recorder modes; in required mode recorder failure invalidates research evidence, not authority.
-- [ ] Make sinks optional interfaces outside engine policy; Runtime core must run without a store.
-- [ ] Test append failures: no sequence gaps, no nonexistent causal parent, immutable payload copies.
-- [ ] Define private body references separately from portable metadata events.
+- [x] Audit existing `InvocationRef`/`ExecutionRef`; extend only missing fields and preserve no-capability Runs.
+- [x] Define `pysolate.runtime-observation.v1` events/envelopes with exact keys, bounded fields, canonical encoding and Host-only projection.
+- [x] Record execution lifecycle boundaries, capability calls, plan/artifact/profile references, terminal disposition and initial/final workspace identities.
+- [x] Ensure Guest responses cannot forge, case-fold, duplicate or override observation fields.
+- [x] Provide `off`, `best_effort` and `required` recorder modes; in required mode recorder failure invalidates research evidence, not authority.
+- [x] Make sinks optional interfaces outside engine policy; Runtime core must run without a store.
+- [x] Test append failures: no sequence gaps, no nonexistent causal parent, immutable payload copies.
+- [x] Define private body references separately from portable metadata events.
 
 ### Honest visibility matrix
 
-- [ ] Measure what wazero exposes for WASI host-function/syscall instrumentation without a fork.
-- [ ] If stable instrumentation exists, capture bounded event type/path-class/status/byte counts—not full sensitive file bodies by default.
-- [ ] If it does not, expose initial/final workspace manifests and file-level deltas, explicitly label syscall order unavailable, and save a decision report.
-- [ ] Never claim Python bytecode/local-variable/internal-memory tracing.
+- [x] Measure what wazero exposes for WASI host-function/syscall instrumentation without a fork.
+- [x] If stable instrumentation exists, capture bounded event type/path-class/status/byte counts—not full sensitive file bodies by default.
+- [x] If it does not, expose initial/final workspace manifests and file-level deltas, explicitly label syscall order unavailable, and save a decision report.
+- [x] Never claim Python bytecode/local-variable/internal-memory tracing.
 
 ### Gates
 
@@ -280,16 +280,16 @@ At minimum distinguish:
 
 ### Tasks
 
-- [ ] Write a decision note comparing at least: CAS directory + append-only index, single-file pack/index, and SQLite metadata + external/internal blob choices.
-- [ ] Define canonical content typing/domain separation so identical bytes with incompatible semantics cannot alias accidentally.
-- [ ] Implement the smallest local prototype supported by measured needs; do not place a new DB dependency in Runtime core.
-- [ ] Enforce `0600`, exclusive creation where applicable, bounded reads, digest validation, atomic object publication and traversal/symlink denial.
-- [ ] Store one body once across repeated events, branches and agents; test reference counting/retention semantics without deleting reachable parents.
-- [ ] Keep credentials forbidden; define redaction/retention and private-vs-portable export policy.
-- [ ] Add read-only/query-only opening that performs no migrations or writes.
-- [ ] Build synthetic long-task and swarm fixtures with repeated system prompts, code, tool results and workspace files.
-- [ ] Measure raw duplicated bytes vs store bytes, object count, ingest/query latency and index growth. Report numbers; do not claim “highly optimized” without them.
-- [ ] Set an explicit stop/reframe threshold if metadata/index overhead overwhelms savings on representative fixtures.
+- [x] Write a decision note comparing at least: CAS directory + append-only index, single-file pack/index, and SQLite metadata + external/internal blob choices.
+- [x] Define canonical content typing/domain separation so identical bytes with incompatible semantics cannot alias accidentally.
+- [x] Implement the smallest local prototype supported by measured needs; do not place a new DB dependency in Runtime core.
+- [x] Enforce `0600`, exclusive creation where applicable, bounded reads, digest validation, atomic object publication and traversal/symlink denial.
+- [x] Store one body once across repeated events, branches and agents; test reference counting/retention semantics without deleting reachable parents.
+- [x] Keep credentials forbidden; define redaction/retention and private-vs-portable export policy.
+- [x] Add read-only/query-only opening that performs no migrations or writes.
+- [x] Build synthetic long-task and swarm fixtures with repeated system prompts, code, tool results and workspace files.
+- [x] Measure raw duplicated bytes vs store bytes, object count, ingest/query latency and index growth. Report numbers; do not claim “highly optimized” without them.
+- [x] Set an explicit stop/reframe threshold if metadata/index overhead overwhelms savings on representative fixtures.
 
 ### Required benchmark shapes
 
@@ -322,16 +322,16 @@ Branch modes required:
 
 ### Tasks
 
-- [ ] Define canonical `pysolate.playback-branch.v1` manifest with parent Bundle identity, fork operation, prefix identity, child plan/grants, suffix policy references and expected initial state.
-- [ ] Keep branch manifest Host-owned and protected; Agent cannot choose fork, payload, endpoint or authority.
-- [ ] Implement mixed Broker routing with strict prefix consumption and fail-poison behavior.
-- [ ] Revalidate every override result against the selected capability output schema and byte limits.
-- [ ] Allow the child to diverge after N; do not compare child final outcome to parent as if it were playback.
-- [ ] Capture child outcome as new evidence with parent/fork lineage.
-- [ ] Reject N outside the transcript, reordered prefix, changed prefix arguments, incompatible capability Spec, stale parent identity, changed initial request/workspace and unused suffix.
-- [ ] Reject branch attempts on non-captured/write-effect capabilities.
-- [ ] Test concurrent branches from one parent without shared mutable Broker state.
-- [ ] Prove every child uses a newly created fresh Guest.
+- [x] Define canonical `pysolate.playback-branch.v1` manifest with parent Bundle identity, fork operation, prefix identity, child plan/grants, suffix policy references and expected initial state.
+- [x] Keep branch manifest Host-owned and protected; Agent cannot choose fork, payload, endpoint or authority.
+- [x] Implement mixed Broker routing with strict prefix consumption and fail-poison behavior.
+- [x] Revalidate every override result against the selected capability output schema and byte limits.
+- [x] Allow the child to diverge after N; do not compare child final outcome to parent as if it were playback.
+- [x] Capture child outcome as new evidence with parent/fork lineage.
+- [x] Reject N outside the transcript, reordered prefix, changed prefix arguments, incompatible capability Spec, stale parent identity, changed initial request/workspace and unused suffix.
+- [x] Reject branch attempts on non-captured/write-effect capabilities.
+- [x] Test concurrent branches from one parent without shared mutable Broker state.
+- [x] Prove every child uses a newly created fresh Guest.
 
 ### Explicit non-goals
 
@@ -358,15 +358,15 @@ Branch modes required:
 
 ### Tasks
 
-- [ ] Build real-Guest probes that run twice and expose current divergences before implementation.
-- [ ] Write a versioned deterministic profile contract binding each controlled/captured source.
-- [ ] Prefer Host-controlled virtual inputs or explicit denial; never monkey-patch Agent source invisibly.
-- [ ] Bind the profile to artifact and execution identity.
-- [ ] Fail pre-execution when code/import requirements use unsupported nondeterminism under verification mode.
-- [ ] Canonicalize filesystem enumeration only where the Runtime actually controls it.
-- [ ] Test deterministic success, explicit unsupported admission and ordinary non-verification behavior unchanged.
-- [ ] Run a matrix of pure computation, workspace transformation, captured-source analysis and branch workloads across multiple fresh Guests.
-- [ ] Document exact claim boundary: deterministic only for the qualified profile and captured inputs.
+- [x] Build real-Guest probes that run twice and expose current divergences before implementation.
+- [x] Write a versioned deterministic profile contract binding each controlled/captured source.
+- [x] Prefer Host-controlled virtual inputs or explicit denial; never monkey-patch Agent source invisibly.
+- [x] Bind the profile to artifact and execution identity.
+- [x] Fail pre-execution when code/import requirements use unsupported nondeterminism under verification mode.
+- [x] Canonicalize filesystem enumeration only where the Runtime actually controls it.
+- [x] Test deterministic success, explicit unsupported admission and ordinary non-verification behavior unchanged.
+- [x] Run a matrix of pure computation, workspace transformation, captured-source analysis and branch workloads across multiple fresh Guests.
+- [x] Document exact claim boundary: deterministic only for the qualified profile and captured inputs.
 
 ### Stop condition
 
@@ -393,14 +393,14 @@ The Agent uses it to generate an experiment matrix or workspace report. It does 
 
 ### Tasks
 
-- [ ] Freeze a concrete local research fixture and expected Agent analysis before defining the Spec.
-- [ ] Define dedicated docs/schema/effect=`external_read`/playback=`captured` and generated `sources.benchmark_manifest()` projection.
-- [ ] Implement an exact-endpoint Host adapter without copying validation logic unnecessarily.
-- [ ] Bind all authority-affecting policy through its per-Run Grant and sealed Plan.
-- [ ] Test nested schema bounds, duplicate IDs, unknown fields, unsupported versions, invalid metric direction/unit, transport failures and privacy.
-- [ ] Capture and offline-play the source after server shutdown.
-- [ ] Branch the same Agent program from the benchmark-manifest operation with an alternate manifest; prove deterministic changed result/workspace and shared-prefix lineage.
-- [ ] Run a multi-source program using both `demo_catalog` and `benchmark_manifest`; test order and fork points across two capabilities.
+- [x] Freeze a concrete local research fixture and expected Agent analysis before defining the Spec.
+- [x] Define dedicated docs/schema/effect=`external_read`/playback=`captured` and generated `sources.benchmark_manifest()` projection.
+- [x] Implement an exact-endpoint Host adapter without copying validation logic unnecessarily.
+- [x] Bind all authority-affecting policy through its per-Run Grant and sealed Plan.
+- [x] Test nested schema bounds, duplicate IDs, unknown fields, unsupported versions, invalid metric direction/unit, transport failures and privacy.
+- [x] Capture and offline-play the source after server shutdown.
+- [x] Branch the same Agent program from the benchmark-manifest operation with an alternate manifest; prove deterministic changed result/workspace and shared-prefix lineage.
+- [x] Run a multi-source program using both `demo_catalog` and `benchmark_manifest`; test order and fork points across two capabilities.
 
 ### Do not
 
@@ -421,12 +421,12 @@ Do not introduce generic GET or make the adapter a generic JSON passthrough. Do 
 
 ### Tasks
 
-- [ ] Design a small coherent CLI surface; do not overload `apyrun` if a separate research CLI preserves boundaries better.
-- [ ] Resolve paths/identities internally from protected artifacts; print short semantic labels by default and full identities only in JSON/detail mode.
-- [ ] Add paged/bounded inspection; no unbounded dump by default.
-- [ ] Open research stores read-only for inspect/compare.
-- [ ] Produce branch DAG nodes/edges suitable for a future UI, including causal parents and shared content references.
-- [ ] Add golden/output-contract tests and execute public examples.
+- [x] Design a small coherent CLI surface; do not overload `apyrun` if a separate research CLI preserves boundaries better.
+- [x] Resolve paths/identities internally from protected artifacts; print short semantic labels by default and full identities only in JSON/detail mode.
+- [x] Add paged/bounded inspection; no unbounded dump by default.
+- [x] Open research stores read-only for inspect/compare.
+- [x] Produce branch DAG nodes/edges suitable for a future UI, including causal parents and shared content references.
+- [x] Add golden/output-contract tests and execute public examples.
 
 ### Future UI boundary
 
@@ -470,10 +470,10 @@ Do not commit sensitive bodies or generated binary evidence.
 
 ## Track 9 — Documentation, independent review and release
 
-- [ ] Update README/operator/architecture/threat/playback/product-direction docs with Current/Experimental/Proposed labels.
-- [ ] Add a Lab boundary document explaining what belongs in Runtime versus future Lab/Harness.
-- [ ] Add Bundle/branch/observation compatibility and version-upgrade policy.
-- [ ] Audit all identity language: digest ≠ security, receipt ≠ success, trace ≠ deterministic replay, branch ≠ heap restore.
+- [x] Update README/operator/architecture/threat/playback/product-direction docs with Current/Experimental/Proposed labels.
+- [x] Add a Lab boundary document explaining what belongs in Runtime versus future Lab/Harness.
+- [x] Add Bundle/branch/observation compatibility and version-upgrade policy.
+- [x] Audit all identity language: digest ≠ security, receipt ≠ success, trace ≠ deterministic replay, branch ≠ heap restore.
 - [ ] Run complete final gates on the exact final candidate.
 - [ ] Obtain independent read-only review of the entire commit range and final worktree, focused on authority, lineage, dedup privacy, tamper, recorder failure, determinism overclaims and real E2E.
 - [ ] Fix every real blocker with RED regression and rerun proportional/full gates.

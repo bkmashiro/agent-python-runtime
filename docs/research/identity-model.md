@@ -1,6 +1,9 @@
 # Runtime and research identity model
 
-Status: Current identity inventory at the Pysolate Research Substrate baseline. This document classifies identities; it does not make every digest an authority credential or a semantic-correctness proof.
+Status: identity inventory for the **Current** Runtime contracts and explicitly
+marked **Experimental** research contracts. This document classifies
+identities; it does not make every digest an authority credential or a
+semantic-correctness proof.
 
 ## Rules
 
@@ -34,6 +37,13 @@ Status: Current identity inventory at the Pysolate Research Substrate baseline. 
 | Playback Bundle identity | encoder hashes canonical Bundle payload excluding its identity field | decode integrity, CAS naming and expected-identity comparison | Content root / evidence relation | Self-hash alone is not authentication |
 | trusted `expected_bundle_sha256` | capture operator records the issued Bundle identity outside the mutable Bundle | pre-Guest offline admission | Protected external trust anchor | Not derived from the candidate during admission; Host config only |
 | execution-profile SHA-256 in Bundle | CLI hashes the Host-selected execution-profile binding document | pre-Guest Playback compatibility | Artifact/config | Recomputable from selected profile context |
+| deterministic-verification profile identity (**Experimental/Partial**) | Host hashes the canonical `pysolate.deterministic-verification.v1` descriptor, including exact artifact, random-seed digest and declared clock/denial policy | artifact admission, execution-profile binding, observation and qualified-repeat comparison | Artifact/config | Recomputable only with the Host seed and descriptor; never Agent-selected |
+| observation `execution_id` plus sequence/parent (**Current**) | Host context supplies the physical execution identity; Session assigns accepted one-based sequence and earlier causal parent | Recorder/future Lab correlation | Evidence/relation, not content identity or authority | Joined to Host `ExecutionRef`; events have canonical bytes but no event self-hash in v1 |
+| branch prefix SHA-256 (**Experimental**) | Host hashes the exact parent identity, fork operation and canonical parent entries before the fork | branch-manifest parent validation and mixed Broker admission | Evidence/relation | Recomputable only from the protected parent Bundle and fork; stale/reordered prefixes fail |
+| branch-manifest identity (**Experimental**) | Host hashes the canonical v1 parent/fork/prefix/request/artifact/profile/workspace/child-Plan/Grant/suffix document | pre-Guest branch admission and lineage display | Content root / evidence relation | Self-hash is not authentication; Host config separately anchors the expected identity |
+| child Playback Bundle identity (**Experimental relation**) | ordinary Bundle v1 encoder hashes the child transcript/outcome relation | child playback and parent/manifest/child lineage outside Bundle v1 | Content root | Does not embed its parent; provenance requires the protected manifest/outcome relation |
+| LabStore typed content reference (**Experimental**) | local Lab hashes domain, exact semantic kind, sorted links and body bytes | deduplication, validated reads, workspace/branch graphs and retention | Domain-separated content identity | Equal bytes under different kinds intentionally differ; storage does not authorize execution |
+| LabStore privacy and named roots (**Experimental**) | local operator writes protected mutable policy/index records | portable export and reachability retention | Mutable policy, deliberately not content identity | May change without changing object identity; missing privacy fails to private |
 
 ## Deliberate overlaps
 
@@ -47,9 +57,10 @@ The following apparent repetitions protect different boundaries and are not remo
 
 Removing any encoded v1 field would change canonical Bundle or Capsule identity and therefore requires an explicit versioned compatibility decision plus RED tamper/admission tests. This baseline found no field whose removal both preserves compatibility and has no independent admission, lookup, privacy-comparison or tamper-localization value.
 
-## Future Lab storage rule
+## Lab storage rule
 
-A future Lab should separate bodies from relations:
+The Experimental local LabStore applies the separation below; a future Lab
+service must preserve it:
 
 ```text
 typed immutable body -> one domain-separated content object

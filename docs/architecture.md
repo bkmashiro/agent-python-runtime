@@ -4,6 +4,11 @@
 
 Pysolate proves that a programming Agent can submit normal Python while the Host retains all authority. It is one execution component, not an Agent planner, package platform, scheduler, transaction service, or general Linux sandbox. Its Current implementation and longer-term Python-native capability-computer direction are separated in [product-direction.md](product-direction.md).
 
+Unless a paragraph says otherwise, the core Run path below is **Current**.
+Counterfactual branching, deterministic verification, and the local research
+store/operator are marked **Experimental**. A complete Lab/Harness and UI are
+**Proposed**. See [research/lab-boundary.md](research/lab-boundary.md).
+
 ## Run path
 
 1. Decode a bounded `RunRequest`.
@@ -13,9 +18,12 @@ Pysolate proves that a programming Agent can submit normal Python while the Host
 5. Instantiate a fresh wazero module with bounded memory and timeout.
 6. Initialize CPython and apply optional trusted Host preparation.
 7. Ask the Guest to validate the Python source contract.
-8. Execute the request with an optional per-run Host tool broker.
-9. Replace Guest receipt/metric claims with Host-authored values.
-10. Close the Guest and per-run resources.
+8. Execute the request with an optional per-run Host tool Broker.
+9. Replace Guest receipt/metric claims with Host-authored values and emit any
+   validated capability observations.
+10. Close the Guest module, inspect final workspace state, then emit final
+    workspace and terminal observations when enabled.
+11. Close remaining per-Run resources.
 
 A failed, trapped, timed-out, or successful module is never reused.
 
@@ -43,6 +51,10 @@ The Host owns:
 - trusted preparation code;
 - receipt identity.
 
+Optional Host context also owns logical invocation/retry coordinates, the
+physical execution identity, and the observation Session. None is accepted
+from `RunRequest`.
+
 ## Python compatibility
 
 `BindAgentSource` derives imports and writes the compatibility declaration. Agent-facing callers therefore submit code, not bookkeeping metadata.
@@ -61,11 +73,86 @@ workspace.list_files()         # alias: list_files()
 
 The backing workspace for this typed surface is an in-memory map, not an ambient Host directory. Paths must be canonical and relative. Calls are bounded and produce small Host receipts. Every capability receipt binds the plan identity, and the Host projects that identity into the response even when no tool is called. Guest-authored plan evidence is rejected.
 
-The CLI can also register the dedicated `sources.demo_catalog()` information source. Its exact endpoint, GET method, redirect denial, expected status/media type, timeout and response-byte ceiling are Host policy bound through the capability grant. The Agent sees only the typed structured source method, never a URL, transport controls, headers or a generic HTTP client. This source can coexist with a mounted `/workspace`; the mount remains mutually exclusive only with the separate typed in-memory workspace tools.
+The CLI can also register the dedicated `sources.demo_catalog()` and
+`sources.benchmark_manifest()` information sources. Each exact endpoint, GET
+method, redirect denial, expected status/media type, timeout and response-byte
+ceiling is Host policy bound through its capability grant. The benchmark
+source additionally validates a nested versioned research schema, semantic ID
+uniqueness, metric direction/unit and bounds. The Agent sees only typed
+structured methods, never a URL, transport controls, headers or a generic HTTP
+client. These sources can coexist with a mounted `/workspace`; the mount
+remains mutually exclusive only with the separate typed in-memory workspace
+tools.
 
 Successful calls for a `captured` spec can be projected into a canonical minimal Playback Bundle. The bundle contains validated capability arguments/results and bounded transport attribution plus relation identities; it excludes Agent source, final result and workspace bodies, endpoint policy and credentials. Capture publication happens after successful runner close and final Host response validation using a synced `0600` same-directory stage and atomic no-overwrite publication. Offline mode requires the capture-issued bundle identity in trusted Host config, registers the same sealed Spec/Grant with a non-network placeholder, admits all Host identities before Guest execution, and lets the Broker strictly consume records instead of calling the handler. Finalization rejects unused records and the CLI verifies the fresh Guest's status, result and workspace identities.
 
 The plan also derives defensive direct Agent tool schemas from the same definitions. This generated but deliberately small surface does not restore the former generalized SDK generator, plugin discovery or durable effect workflow.
+
+## Runtime observation
+
+**Current.** `runtime/observe` defines the exact-key, canonical and bounded
+`pysolate.runtime-observation.v1` envelope. A Host may attach an `off`,
+`best_effort`, or `required` Session through the Run context. Sessions bind the
+Host physical `execution_id`, serialize appends, validate causal parents, copy
+payloads, and impose per-event and per-execution limits. Runtime owns only the
+contract and lifecycle integration; the Recorder and any durable store remain
+outside engine policy.
+
+The stable evidence boundary is execution lifecycle, Host Broker calls, and
+initial/final workspace snapshots with sorted file-level deltas. Syscall order
+is unavailable. Pysolate does not claim Python bytecode, locals, heap, stack,
+WASM-memory, or complete filesystem-operation visibility. The measurement and
+upgrade policy are in
+[research/runtime-observation.md](research/runtime-observation.md).
+
+## Counterfactual branches
+
+**Experimental.** `pysolate.playback-branch.v1` identifies a protected parent
+Bundle, a capability-operation fork, the exact parent prefix, original
+request/artifact/profile/initial workspace, the complete child Plan/Grants,
+and one Host-owned suffix mode. A fresh Guest re-executes the original request
+and initial workspace, strictly consuming parent operations before the fork.
+At and after the fork it consumes schema-validated overrides, a complete
+recorded suffix, or live calls through the already sealed child Plan for
+captured external reads only.
+
+A branch is not a heap or WASM snapshot. Its child result and final workspace
+may intentionally differ from the parent. Parent/manifest/child lineage is a
+separate research relation; it is not retrofitted into Playback Bundle v1. See
+[playback-bundles.md](playback-bundles.md).
+
+## Deterministic verification
+
+**Experimental/Partial.** The Host may select an artifact-bound
+`pysolate.deterministic-verification.v1` profile. The wazero module then gets a
+deterministic random stream and virtual wall/monotonic clocks for every fresh
+Guest. Mounted workspaces and statically detected concurrency/locale import
+classes are denied. The profile identity is included in the execution-profile
+binding and Runtime observation.
+
+This is qualified repeatability for identical artifact/profile/input and
+captured external inputs. It does not claim cross-platform floating-point
+equivalence, concurrent scheduling, mounted-directory ordering, locale
+mutation, live-source stability, or complete-Agent determinism. See
+[research/deterministic-verification.md](research/deterministic-verification.md).
+
+## Research substrate
+
+**Experimental and outside Runtime core.** `research/labstore` provides a
+bounded typed directory CAS, workspace trees, branch relations, read-only
+inspection, privacy metadata, retention reachability and measured synthetic
+benchmarks. `research/operator` provides semantic Bundle inspect/compare,
+branch-DAG export, and a fresh-Guest branch API. The separate
+`pysolate-research` CLI currently exposes bounded human/JSON inspect and
+compare, protected branch-manifest planning, caller-supplied branch-DAG export,
+read-only store stats, and synthetic store benchmarks. Fresh-Guest branch
+execution remains API-only; a complete research workflow CLI and Lab service
+are Proposed.
+
+Branch-DAG export validates child admission bindings, the exact parent prefix,
+and sealed override/recorded suffix tapes. Live suffix results are not sealed,
+and DAG validation is not proof that a result was produced by executing a
+manifest; the Host-owned outcome relation remains the execution evidence.
 
 ## WASI filesystem
 
@@ -79,8 +166,13 @@ runtime/engine/wazero      fresh Guest implementation
 runtime/capability         generic bounded Host calls
 runtime/workspace          optional rooted WASI workspace
 runtime/receipt            compact Host call receipts
+runtime/observe            bounded optional Host observation contract
+runtime/playback           protected Bundle and Experimental branch contracts
 runtime                    request/profile/artifact/response contracts
 cmd/apyrun                 operator and PoC CLI
+research/labstore          Experimental local CAS and retention prototype
+research/operator          Experimental semantic research APIs
+cmd/pysolate-research      partial local research CLI
 ```
 
 ## Explicit non-goals
@@ -90,6 +182,6 @@ cmd/apyrun                 operator and PoC CLI
 - durable effect transactions and compensation;
 - generic network tools, Guest-controlled URLs or credentials;
 - MCP/daemon/plugin lifecycle;
-- scheduler and benchmark orchestration;
+- production scheduler and benchmark-study orchestration;
 - package installation and native extensions;
 - production recovery, migration or multi-tenant operations.

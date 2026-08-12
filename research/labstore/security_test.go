@@ -401,6 +401,38 @@ func TestMissingPrivateClassificationCannotBeRecreatedAsPortable(t *testing.T) {
 	}
 }
 
+func TestOrphanPrivateClassificationPreventsPortablePublication(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	store, err := labstore.Open(root, labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	body := []byte("orphan privacy classification")
+	portable := privatePolicy()
+	portable.Privacy = labstore.PrivacyPortable
+	ref, _, err := store.Put(labstore.KindPrompt, body, portable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := strings.TrimPrefix(ref.SHA256, "sha256:")
+	objectPath := filepath.Join(root, "objects", string(ref.Kind), digest[:2], digest[2:]+".obj")
+	privacyPath := filepath.Join(root, "metadata", "privacy", string(ref.Kind), digest[:2], digest[2:]+".json")
+	if err := os.Remove(objectPath); err != nil {
+		t.Fatal(err)
+	}
+	privateRecord := []byte(`{"schema_version":"pysolate.labstore-privacy.v1","privacy":"private"}`)
+	if err := os.WriteFile(privacyPath, privateRecord, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.Put(labstore.KindPrompt, body, portable); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetPortable(ref); !errors.Is(err, labstore.ErrPrivate) {
+		t.Fatalf("orphan private sidecar was downgraded err=%v", err)
+	}
+}
+
 func TestStructuredObjectsAreCanonicalAndCredentialGuarded(t *testing.T) {
 	store, err := labstore.Open(filepath.Join(t.TempDir(), "store"), labstore.Options{})
 	if err != nil {

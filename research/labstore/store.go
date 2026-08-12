@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 const contentIdentityDomain = "pysolate.labstore.content.v1\x00"
@@ -219,6 +218,14 @@ func (store *Store) Put(kind Kind, body []byte, options PutOptions) (Ref, bool, 
 	if err := store.ensureObjectParentLocked(ref, false); err != nil {
 		return Ref{}, false, err
 	}
+	// Publish or tighten mutable privacy metadata before making the immutable
+	// object visible. This prevents another Store handle from observing an
+	// object without a classification. A crash can leave an orphan sidecar, but
+	// never an exportable unclassified object; a later Put safely reuses or
+	// tightens that sidecar before publishing the object.
+	if err := store.writePrivacyLocked(ref, options.Privacy); err != nil {
+		return Ref{}, false, err
+	}
 	published, err := store.publishExclusiveLocked(objectPath, encoded)
 	if err != nil {
 		return Ref{}, false, err
@@ -228,30 +235,13 @@ func (store *Store) Put(kind Kind, body []byte, options PutOptions) (Ref, bool, 
 		if getErr != nil || !bytes.Equal(existing.Body, body) || !equalRefs(existing.Links, links) {
 			return Ref{}, false, fmt.Errorf("%w: concurrent object publication mismatch", ErrCorrupt)
 		}
-		if err := store.writeExistingPrivacyLocked(ref, options.Privacy); err != nil {
-			return Ref{}, false, err
-		}
 		return ref, false, nil
-	}
-	if err := store.writePrivacyLocked(ref, options.Privacy); err != nil {
-		return Ref{}, false, err
 	}
 	return ref, published, nil
 }
 
 func (store *Store) writeExistingPrivacyLocked(ref Ref, requested Privacy) error {
-	var err error
-	for attempt := 0; attempt < 16; attempt++ {
-		_, err = store.root.Lstat(privacyPath(ref))
-		if !errors.Is(err, fs.ErrNotExist) {
-			break
-		}
-		// Object and mutable classification are separate files. Another Store
-		// handle may have won object publication and still be fsyncing its
-		// sidecar. Bound the convergence wait rather than treating that narrow
-		// window as persistent missing metadata.
-		time.Sleep(time.Millisecond)
-	}
+	_, err := store.root.Lstat(privacyPath(ref))
 	if errors.Is(err, fs.ErrNotExist) {
 		// Missing classification is interpreted as private. A portable
 		// deduplicating Put must not turn that fail-safe state into exportable

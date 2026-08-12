@@ -29,9 +29,10 @@ type operatorConfig struct {
 }
 
 type playbackConfig struct {
-	Mode         string `json:"mode"`
-	OutputBundle string `json:"output_bundle,omitempty"`
-	InputBundle  string `json:"input_bundle,omitempty"`
+	Mode                 string `json:"mode"`
+	OutputBundle         string `json:"output_bundle,omitempty"`
+	InputBundle          string `json:"input_bundle,omitempty"`
+	ExpectedBundleSHA256 string `json:"expected_bundle_sha256,omitempty"`
 }
 
 type informationSourcesConfig struct {
@@ -220,6 +221,18 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 	return runConfig, nil
 }
 
+func validPlaybackDigest(value string) bool {
+	if len(value) != len("sha256:")+64 || value[:len("sha256:")] != "sha256:" {
+		return false
+	}
+	for _, character := range value[len("sha256:"):] {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 func (config *playbackConfig) validate() error {
 	if config == nil {
 		return nil
@@ -229,12 +242,12 @@ func (config *playbackConfig) validate() error {
 	}
 	switch config.Mode {
 	case "capture":
-		if !validPath(config.OutputBundle) || config.InputBundle != "" {
+		if !validPath(config.OutputBundle) || config.InputBundle != "" || config.ExpectedBundleSHA256 != "" {
 			return errors.New("capture playback requires one absolute output_bundle")
 		}
 	case "playback":
-		if !validPath(config.InputBundle) || config.OutputBundle != "" {
-			return errors.New("offline playback requires one absolute input_bundle")
+		if !validPath(config.InputBundle) || config.OutputBundle != "" || !validPlaybackDigest(config.ExpectedBundleSHA256) {
+			return errors.New("offline playback requires one absolute input_bundle and expected_bundle_sha256")
 		}
 	default:
 		return errors.New("playback mode must be capture or playback")

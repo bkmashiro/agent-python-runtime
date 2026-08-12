@@ -101,6 +101,20 @@ func TestOperatorConfigRejectsAmbiguousSourceAndPlaybackJSON(t *testing.T) {
 	}
 }
 
+func TestPlaybackConfigRequiresHostExpectedBundleIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bundle.json")
+	if err := (&playbackConfig{Mode: "playback", InputBundle: path}).validate(); err == nil {
+		t.Fatal("playback without expected bundle identity accepted")
+	}
+	valid := "sha256:" + strings.Repeat("a", 64)
+	if err := (&playbackConfig{Mode: "playback", InputBundle: path, ExpectedBundleSHA256: valid}).validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&playbackConfig{Mode: "capture", OutputBundle: path, ExpectedBundleSHA256: valid}).validate(); err == nil {
+		t.Fatal("capture accepted playback-only expected identity")
+	}
+}
+
 func TestOperatorConfigAllowsCuratedSourceWithMountedWorkspace(t *testing.T) {
 	config, err := decodeOperatorConfig([]byte(`{"workspace":{"disposition":"discard"},"information_sources":{"demo_catalog":{"endpoint":"http://127.0.0.1:8080/catalog","timeout_ms":500,"max_response_bytes":4096}},"max_tool_calls":2}`))
 	if err != nil {

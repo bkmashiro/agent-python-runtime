@@ -6,7 +6,7 @@ Status: capture and strict offline consumption are Current for capturable curate
 
 A Playback Bundle is a Host-protected, canonical artifact containing only the validated capability transcript and the identities required to reject incompatible playback. It is not a Run archive.
 
-The v1 schema is `pysolate.playback-bundle.v1`. Its content identity is a SHA-256 over the canonical payload excluding the identity field itself. The encoded file is canonical JSON and is independently decoded and validated before publication.
+The v1 schema is `pysolate.playback-bundle.v1`. Its content identity is a SHA-256 over the canonical payload excluding the identity field itself. That self-identity detects corruption but is not authentication by itself. Offline Host config must independently provide the capture-issued `expected_bundle_sha256`; playback rejects a validly re-authored bundle before Guest startup. The encoded file is canonical JSON and is independently decoded and validated before publication.
 
 ## Captured fields
 
@@ -14,7 +14,7 @@ The v1 schema is `pysolate.playback-bundle.v1`. Its content identity is a SHA-25
 - Host request digest;
 - Guest artifact digest and Host execution-profile binding digest;
 - initial and final workspace identity digests when a mounted workspace exists;
-- expected canonical Agent-result digest;
+- expected Host response status and canonical Agent-result digest;
 - ordered operation index, capability name, canonical arguments and result payloads plus their digests;
 - bounded non-secret transport evidence: adapter kind, accepted status, media type, raw body byte count and body digest.
 
@@ -47,12 +47,13 @@ Offline playback uses the same Host source policy but never constructs the HTTP 
 {
   "playback": {
     "mode": "playback",
-    "input_bundle": "/absolute/protected/run.playback.json"
+    "input_bundle": "/absolute/protected/run.playback.json",
+    "expected_bundle_sha256": "sha256:<capture-issued bundle identity>"
   }
 }
 ```
 
-Before Guest startup, the Host checks plan, grants, request, artifact, execution profile and initial workspace against the bundle. The Broker then matches each operation by index, capability and canonical arguments, revalidates the recorded result against the sealed output schema, produces ordinary receipts and refuses live-handler execution. Missing, extra, reordered, mismatched or unused records make the Run fail. After the fresh Guest exits, the Host verifies the canonical Agent-result digest and final workspace identity.
+Before Guest startup, the Host checks the independently supplied bundle identity, plan, grants, request, artifact, execution profile and initial workspace against the bundle. The Broker then matches each operation by index, capability and canonical arguments, revalidates the recorded result against the sealed output schema, produces ordinary receipts and refuses live-handler execution. Missing, extra, reordered, mismatched or unused records make the Run fail. After the fresh Guest exits, the Host verifies response status, canonical Agent-result digest and final workspace identity.
 
 Publication occurs only after:
 
@@ -66,4 +67,4 @@ The Host syncs the staged file, atomically publishes it with a same-directory no
 
 ## Integrity behavior
 
-Decoding rejects invalid UTF-8, duplicate keys, trailing data, unknown fields, non-canonical JSON, malformed identities, duplicate operation indices, invalid transport evidence, request/result digest mismatches and bundle-identity mismatch. Plan, grant, Host request and final result/workspace relations are additionally checked against the live Host context when offline playback is admitted.
+Decoding rejects invalid UTF-8, duplicate keys, trailing data, unknown fields, non-canonical JSON, malformed identities, duplicate operation indices, invalid transport evidence, request/result digest mismatches and bundle-identity mismatch. Offline admission additionally anchors the decoded identity in Host config, so recomputing the bundle's self-hash cannot authorize rewritten fields. Plan, grant, Host request, response status and final result/workspace relations are checked against the live Host context.

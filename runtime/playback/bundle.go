@@ -26,6 +26,7 @@ type Metadata struct {
 	RequestSHA256          string
 	ArtifactSHA256         string
 	ExecutionProfileSHA256 string
+	ExpectedStatus         string
 	ExpectedResultSHA256   string
 	InitialWorkspaceSHA256 string
 	FinalWorkspaceSHA256   string
@@ -39,6 +40,7 @@ type Bundle struct {
 	RequestSHA256          string                       `json:"request_sha256"`
 	ArtifactSHA256         string                       `json:"artifact_sha256"`
 	ExecutionProfileSHA256 string                       `json:"execution_profile_sha256"`
+	ExpectedStatus         string                       `json:"expected_status"`
 	ExpectedResultSHA256   string                       `json:"expected_result_sha256"`
 	InitialWorkspaceSHA256 string                       `json:"initial_workspace_sha256,omitempty"`
 	FinalWorkspaceSHA256   string                       `json:"final_workspace_sha256,omitempty"`
@@ -52,6 +54,7 @@ type identityDocument struct {
 	RequestSHA256          string                       `json:"request_sha256"`
 	ArtifactSHA256         string                       `json:"artifact_sha256"`
 	ExecutionProfileSHA256 string                       `json:"execution_profile_sha256"`
+	ExpectedStatus         string                       `json:"expected_status"`
 	ExpectedResultSHA256   string                       `json:"expected_result_sha256"`
 	InitialWorkspaceSHA256 string                       `json:"initial_workspace_sha256,omitempty"`
 	FinalWorkspaceSHA256   string                       `json:"final_workspace_sha256,omitempty"`
@@ -76,7 +79,8 @@ func New(metadata Metadata, entries []capability.TranscriptEntry) (Bundle, error
 	bundle := Bundle{
 		SchemaVersion: SchemaVersion, CapabilityPlanSHA256: metadata.CapabilityPlanSHA256,
 		RequestSHA256: metadata.RequestSHA256, ArtifactSHA256: metadata.ArtifactSHA256,
-		ExecutionProfileSHA256: metadata.ExecutionProfileSHA256, ExpectedResultSHA256: metadata.ExpectedResultSHA256,
+		ExecutionProfileSHA256: metadata.ExecutionProfileSHA256, ExpectedStatus: metadata.ExpectedStatus,
+		ExpectedResultSHA256:   metadata.ExpectedResultSHA256,
 		InitialWorkspaceSHA256: metadata.InitialWorkspaceSHA256, FinalWorkspaceSHA256: metadata.FinalWorkspaceSHA256,
 		Grants: append([]capability.GrantBinding(nil), metadata.Grants...), Entries: cloneEntries(entries),
 	}
@@ -140,7 +144,8 @@ func Decode(raw []byte) (Bundle, error) {
 func normalizeAndValidate(bundle *Bundle) error {
 	if bundle == nil || bundle.SchemaVersion != SchemaVersion || !validDigest(bundle.CapabilityPlanSHA256) ||
 		!validDigest(bundle.RequestSHA256) || !validDigest(bundle.ArtifactSHA256) || !validDigest(bundle.ExecutionProfileSHA256) ||
-		!validDigest(bundle.ExpectedResultSHA256) || len(bundle.Grants) == 0 || len(bundle.Entries) > maxEntries ||
+		(bundle.ExpectedStatus != "ok" && bundle.ExpectedStatus != "error") || !validDigest(bundle.ExpectedResultSHA256) ||
+		len(bundle.Grants) == 0 || len(bundle.Entries) > maxEntries ||
 		(bundle.InitialWorkspaceSHA256 == "") != (bundle.FinalWorkspaceSHA256 == "") {
 		return errors.New("invalid playback bundle metadata")
 	}
@@ -184,7 +189,8 @@ func computeIdentity(bundle Bundle) (string, error) {
 	document := identityDocument{
 		SchemaVersion: bundle.SchemaVersion, CapabilityPlanSHA256: bundle.CapabilityPlanSHA256,
 		RequestSHA256: bundle.RequestSHA256, ArtifactSHA256: bundle.ArtifactSHA256,
-		ExecutionProfileSHA256: bundle.ExecutionProfileSHA256, ExpectedResultSHA256: bundle.ExpectedResultSHA256,
+		ExecutionProfileSHA256: bundle.ExecutionProfileSHA256, ExpectedStatus: bundle.ExpectedStatus,
+		ExpectedResultSHA256:   bundle.ExpectedResultSHA256,
 		InitialWorkspaceSHA256: bundle.InitialWorkspaceSHA256, FinalWorkspaceSHA256: bundle.FinalWorkspaceSHA256,
 		Grants: bundle.Grants, Entries: bundle.Entries,
 	}

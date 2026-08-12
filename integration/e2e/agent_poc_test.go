@@ -145,7 +145,9 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 			"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
 		}},
 		"max_tool_calls": 2,
-		"playback":       map[string]any{"mode": "playback", "input_bundle": bundlePath},
+		"playback": map[string]any{
+			"mode": "playback", "input_bundle": bundlePath, "expected_bundle_sha256": bundle.Identity,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -173,15 +175,18 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 	}
 
 	tamperCases := []struct {
-		name   string
-		mutate func(*playback.Bundle)
-		tail   bool
+		name     string
+		mutate   func(*playback.Bundle)
+		tail     bool
+		expected string
 	}{
+		{name: "expected-identity", expected: playback.SHA256([]byte("different-bundle"))},
 		{name: "plan", mutate: func(value *playback.Bundle) { value.CapabilityPlanSHA256 = playback.SHA256([]byte("different-plan")) }},
 		{name: "grant", mutate: func(value *playback.Bundle) {
 			value.Grants[0].PolicySHA256 = playback.SHA256([]byte("different-grant"))
 		}},
 		{name: "request", mutate: func(value *playback.Bundle) { value.RequestSHA256 = playback.SHA256([]byte("different-request")) }},
+		{name: "status", mutate: func(value *playback.Bundle) { value.ExpectedStatus = "error" }},
 		{name: "operation", mutate: func(value *playback.Bundle) { value.Entries[0].OperationIndex = 1 }},
 		{name: "capability", mutate: func(value *playback.Bundle) { value.Entries[0].Capability = "sources.other_catalog" }},
 		{name: "arguments", mutate: func(value *playback.Bundle) {
@@ -226,13 +231,19 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 				t.Fatal(err)
 			}
 			tamperedConfigPath := filepath.Join(t.TempDir(), "host.json")
+			expectedIdentity := bundle.Identity
+			if testCase.expected != "" {
+				expectedIdentity = testCase.expected
+			}
 			tamperedConfig, _ := json.Marshal(map[string]any{
 				"workspace": map[string]any{"source_directory": t.TempDir(), "disposition": "discard"},
 				"information_sources": map[string]any{"demo_catalog": map[string]any{
 					"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
 				}},
 				"max_tool_calls": 2,
-				"playback":       map[string]any{"mode": "playback", "input_bundle": tamperedPath},
+				"playback": map[string]any{
+					"mode": "playback", "input_bundle": tamperedPath, "expected_bundle_sha256": expectedIdentity,
+				},
 			})
 			if err := os.WriteFile(tamperedConfigPath, tamperedConfig, 0o600); err != nil {
 				t.Fatal(err)

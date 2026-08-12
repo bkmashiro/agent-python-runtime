@@ -109,6 +109,11 @@ func TestBundleRejectsInvalidMetadataAndTranscript(t *testing.T) {
 		t.Fatal("mismatched result digest accepted")
 	}
 	metadata = testMetadata()
+	metadata.ExpectedStatus = "unsupported"
+	if _, err := playback.New(metadata, nil); err == nil {
+		t.Fatal("invalid expected status accepted")
+	}
+	metadata = testMetadata()
 	metadata.InitialWorkspaceSHA256 = digest('1')
 	metadata.FinalWorkspaceSHA256 = ""
 	if _, err := playback.New(metadata, nil); err == nil {
@@ -119,7 +124,7 @@ func TestBundleRejectsInvalidMetadataAndTranscript(t *testing.T) {
 func testMetadata() playback.Metadata {
 	return playback.Metadata{
 		CapabilityPlanSHA256: digest('a'), RequestSHA256: digest('b'), ArtifactSHA256: digest('c'),
-		ExecutionProfileSHA256: digest('d'), ExpectedResultSHA256: digest('e'),
+		ExecutionProfileSHA256: digest('d'), ExpectedStatus: "ok", ExpectedResultSHA256: digest('e'),
 		InitialWorkspaceSHA256: digest('f'), FinalWorkspaceSHA256: digest('0'),
 		Grants: []capability.GrantBinding{{Capability: "sources.demo_catalog", PolicySHA256: digest('1')}},
 	}

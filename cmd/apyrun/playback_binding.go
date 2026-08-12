@@ -68,6 +68,9 @@ func validatePlaybackAdmission(bundle playback.Bundle, plan *capability.Plan, co
 }
 
 func validatePlaybackOutcome(bundle playback.Bundle, response runtimeconfig.RunResponse) error {
+	if string(response.Status) != bundle.ExpectedStatus {
+		return errors.New("playback Agent status mismatch")
+	}
 	resultSHA256, err := playback.CanonicalSHA256(response.Result)
 	if err != nil || resultSHA256 != bundle.ExpectedResultSHA256 {
 		return errors.New("playback Agent result mismatch")

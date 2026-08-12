@@ -130,8 +130,8 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			return 2
 		}
 		decodedBundle, decodeErr := playback.Decode(bundleBytes)
-		if decodeErr != nil {
-			writeDiagnostic(stderr, "validate playback bundle")
+		if decodeErr != nil || decodedBundle.Identity != operator.Playback.ExpectedBundleSHA256 {
+			writeDiagnostic(stderr, "validate playback bundle identity")
 			return 2
 		}
 		playbackBundle = &decodedBundle
@@ -289,7 +289,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		metadata := playback.Metadata{
 			CapabilityPlanSHA256: capabilityPlan.Identity(), RequestSHA256: requestSHA256,
 			ArtifactSHA256: playback.SHA256(wasm), ExecutionProfileSHA256: profileSHA256,
-			ExpectedResultSHA256: resultSHA256, Grants: capabilityPlan.Grants(),
+			ExpectedStatus: string(decodedResponse.Status), ExpectedResultSHA256: resultSHA256, Grants: capabilityPlan.Grants(),
 		}
 		if decodedResponse.WorkspaceReceipt != nil {
 			metadata.InitialWorkspaceSHA256 = decodedResponse.WorkspaceReceipt.InitialWorkspaceSHA256

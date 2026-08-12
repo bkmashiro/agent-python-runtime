@@ -95,7 +95,7 @@ func TestPlaybackAdmissionAndOutcomeBindHostContext(t *testing.T) {
 	bundle, err := playback.New(playback.Metadata{
 		CapabilityPlanSHA256: plan.Identity(), RequestSHA256: requestSHA256,
 		ArtifactSHA256: playback.SHA256(wasm), ExecutionProfileSHA256: profileSHA256,
-		ExpectedResultSHA256: resultSHA256, Grants: plan.Grants(),
+		ExpectedStatus: "ok", ExpectedResultSHA256: resultSHA256, Grants: plan.Grants(),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -122,10 +122,15 @@ func TestPlaybackAdmissionAndOutcomeBindHostContext(t *testing.T) {
 			t.Fatalf("admission mutation %d accepted", index)
 		}
 	}
-	response := runtimeconfig.RunResponse{Result: result}
+	response := runtimeconfig.RunResponse{Status: runtimeconfig.RunResponseOK, Result: result}
 	if err := validatePlaybackOutcome(bundle, response); err != nil {
 		t.Fatal(err)
 	}
+	response.Status = runtimeconfig.RunResponseError
+	if err := validatePlaybackOutcome(bundle, response); err == nil {
+		t.Fatal("status mismatch accepted")
+	}
+	response.Status = runtimeconfig.RunResponseOK
 	response.Result = []byte(`{"ok":false}`)
 	if err := validatePlaybackOutcome(bundle, response); err == nil {
 		t.Fatal("result mismatch accepted")
@@ -139,7 +144,7 @@ func testPlaybackBundle(t *testing.T) playback.Bundle {
 	arguments := []byte(`{}`)
 	bundle, err := playback.New(playback.Metadata{
 		CapabilityPlanSHA256: digest('a'), RequestSHA256: digest('b'), ArtifactSHA256: digest('c'),
-		ExecutionProfileSHA256: digest('d'), ExpectedResultSHA256: digest('e'),
+		ExecutionProfileSHA256: digest('d'), ExpectedStatus: "ok", ExpectedResultSHA256: digest('e'),
 		Grants: []capability.GrantBinding{{Capability: "sources.demo_catalog", PolicySHA256: digest('f')}},
 	}, []capability.TranscriptEntry{{
 		OperationIndex: 0, Capability: "sources.demo_catalog", Arguments: arguments, ArgumentsSHA256: playback.SHA256(arguments),

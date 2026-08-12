@@ -1,8 +1,10 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -30,12 +32,18 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 	var demoHits, benchmarkHits uint32
 	demoServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		demoHits++
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("demo source received credentials")
+		}
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write([]byte(`{"items":[{"id":"alpha","score":7,"title":"Alpha"}]}`))
 	}))
 	benchmarkBody := canonicalFixture(t, "benchmark-manifest.v1.json")
 	benchmarkServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		benchmarkHits++
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("benchmark source received credentials")
+		}
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write(benchmarkBody)
 	}))
@@ -143,13 +151,29 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventRefs := make([]labstore.Ref, 0, len(liveEvents))
+	forbiddenObservation := [][]byte{
+		[]byte("_pysolate_combined_marker"), []byte("Alpha\\n"),
+		[]byte("benchmark-suite"), []byte(demoPolicy.Endpoint), []byte(benchmarkPolicy.Endpoint),
+		[]byte("Authorization"), []byte("credential"),
+	}
 	for _, event := range liveEvents {
 		eventBytes, _ := observe.Encode(event)
+		for _, forbidden := range forbiddenObservation {
+			if bytes.Contains(eventBytes, forbidden) {
+				t.Fatalf("observation leaked forbidden body or transport detail %q: %s", forbidden, eventBytes)
+			}
+		}
 		eventRef, _, putErr := store.PutJSON(labstore.KindMetadataEvent, eventBytes, private)
 		if putErr != nil {
 			t.Fatal(putErr)
 		}
 		eventRefs = append(eventRefs, eventRef)
+	}
+	workspaceEvent, _ := observe.Encode(liveEvents[4])
+	if !bytes.Contains(workspaceEvent, []byte(`"path":"experiment-plan.txt"`)) ||
+		!bytes.Contains(workspaceEvent, []byte(`"after_sha256":"sha256:`)) ||
+		bytes.Contains(workspaceEvent, []byte("Alpha\\n")) {
+		t.Fatalf("workspace observation metadata/body boundary violated: %s", workspaceEvent)
 	}
 	parentBytes, _ := json.Marshal(parent)
 	parentPolicy := private
@@ -174,6 +198,34 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 		if _, _, putErr = store.PutBranch(labstore.Branch{ParentRun: parentRef, ChildExecution: childRef, ForkOperation: 1, Prefix: prefixRef, InitialWorkspace: initialTree, Manifest: manifestRef}, private); putErr != nil {
 			t.Fatalf("branch %d store: %v", index, putErr)
 		}
+	}
+	if _, err := store.GetPortable(parentRef); !errors.Is(err, labstore.ErrPrivate) {
+		t.Fatalf("private parent was exportable err=%v", err)
+	}
+	portableSummary := map[string]any{
+		"schema_version":       "pysolate.portable-research-summary.v1",
+		"parent_bundle_sha256": parent.Identity,
+		"child_bundle_sha256":  []string{children[0].outcome.ChildBundle.Identity, children[1].outcome.ChildBundle.Identity},
+		"network_hits":         demoHits + benchmarkHits,
+		"observation_events":   len(liveEvents),
+	}
+	portableBytes, err := json.Marshal(portableSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portablePolicy := labstore.PutOptions{Privacy: labstore.PrivacyPortable, Credentials: labstore.CredentialsAbsent}
+	portableRef, _, err := store.PutJSON(labstore.KindSemanticDocument, portableBytes, portablePolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, err := store.GetPortable(portableRef)
+	if err != nil || !bytes.Equal(exported.Body, portableBytes) {
+		t.Fatalf("portable summary export err=%v body=%s", err, exported.Body)
+	}
+	credentialPolicy := portablePolicy
+	credentialPolicy.Credentials = labstore.CredentialsPresent
+	if _, _, err := store.PutJSON(labstore.KindSemanticDocument, portableBytes, credentialPolicy); !errors.Is(err, labstore.ErrCredentials) {
+		t.Fatalf("credential-bearing portable evidence accepted err=%v", err)
 	}
 	stats, err := store.Stats()
 	if err != nil || stats.ObjectCount < 8 {

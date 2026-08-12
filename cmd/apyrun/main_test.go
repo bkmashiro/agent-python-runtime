@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	git "github.com/go-git/go-git/v5"
 )
 
 func TestOperatorConfigOnlyAcceptsPoCResourcePolicy(t *testing.T) {
@@ -26,6 +28,42 @@ func TestOperatorConfigOnlyAcceptsPoCResourcePolicy(t *testing.T) {
 	}
 	if _, err := decodeOperatorConfig([]byte(`{"transaction_journal_path":"/tmp/journal"}`)); err == nil {
 		t.Fatal("removed transaction journal was accepted")
+	}
+}
+
+func TestOperatorConfigAcceptsBoundedHostOwnedGitRead(t *testing.T) {
+	repositoryPath := t.TempDir()
+	if _, err := git.PlainInit(repositoryPath, false); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(map[string]any{
+		"git_read": map[string]any{
+			"repository_id": "fixture", "repository_path": repositoryPath,
+			"max_entries": 100, "max_patch_bytes": 65536, "max_blob_bytes": 65536,
+		},
+		"max_tool_calls": 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := decodeOperatorConfig(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.resolve(); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{
+		`{"git_read":{"repository_id":"fixture","repository_path":"relative","max_entries":1,"max_patch_bytes":1,"max_blob_bytes":1}}`,
+		`{"git_read":{"repository_id":"fixture","repository_path":"/missing","max_entries":0,"max_patch_bytes":1,"max_blob_bytes":1}}`,
+	} {
+		candidate, err := decodeOperatorConfig([]byte(invalid))
+		if err == nil {
+			_, err = candidate.resolve()
+		}
+		if err == nil {
+			t.Fatalf("invalid git_read accepted: %s", invalid)
+		}
 	}
 }
 

@@ -108,6 +108,13 @@ The workspace backend is an in-memory PoC store with canonical relative paths an
 
 For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory workspace tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
 
+The Guest also includes bounded semantic replacements for common developer
+binaries: rooted read/write/list/walk/glob/search/stat/digest/diff/copy/move/
+remove operations, plus a separate Host-bound read-only Git capability for
+`status`, `diff`, `log`, `show`, refs and revision resolution. No shell, system
+binary, Git hook or network transport is exposed; see
+[Bounded developer tools](docs/developer-tools.md).
+
 ## Curated information sources
 
 The Current Host CLI can configure two credential-free exact-endpoint sources:

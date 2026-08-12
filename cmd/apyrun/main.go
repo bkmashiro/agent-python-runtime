@@ -170,7 +170,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	}
 	var capabilityPlan *capability.Plan
 	var runBroker *capability.Broker
-	hasHostTools := operator.WorkspaceFiles != nil || operator.InformationSources != nil
+	hasHostTools := operator.WorkspaceFiles != nil || operator.InformationSources != nil || operator.GitRead != nil
 	if hasHostTools {
 		registry := capability.NewRegistry()
 		if operator.WorkspaceFiles != nil {
@@ -181,6 +181,17 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			}
 			if err := capability.RegisterWorkspaceTools(registry, workspaceTool); err != nil {
 				writeDiagnostic(stderr, "initialize workspace tools")
+				return 1
+			}
+		}
+		if operator.GitRead != nil {
+			policy, err := operator.GitRead.resolve()
+			if err != nil {
+				writeDiagnostic(stderr, "invalid git_read policy")
+				return 2
+			}
+			if err := capability.RegisterGitReadTools(registry, policy); err != nil {
+				writeDiagnostic(stderr, "initialize git_read tools")
 				return 1
 			}
 		}

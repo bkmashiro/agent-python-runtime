@@ -182,6 +182,10 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
   --epoch "${SOURCE_DATE_EPOCH}"
+python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+  "${ROOT_DIR}/guest/bootstrap/pysolate" \
+  "${VFS_PYTHON_DIR}/site-packages/pysolate" \
+  --epoch "${SOURCE_DATE_EPOCH}"
 
 pack_guest() {
   local output=$1

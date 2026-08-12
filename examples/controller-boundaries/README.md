@@ -1,16 +1,25 @@
 # Controller-boundary examples
 
-These three small programs are teaching artifacts for the evaluation-v2 paper
+The first three small programs are teaching artifacts for the evaluation-v2 paper
 story. They show where Pysolate changes orchestration placement without turning
 the examples into another benchmark suite.
 
-## The three cases
+## Mechanism cases
 
 | Example | Guest capability calls | Direct controller boundaries | Guest controller boundaries | Point |
 |---|---:|---:|---:|---|
 | `01-local-transform.py` | 0 | 0 | 1 | Pure computation does not need Host authority. Pysolate supplies an execution/evidence boundary, not fewer controller calls. |
 | `02-one-source.py` | 1 | 1 | 1 | One Host read followed by filtering and sorting is a tie. More local computation does not itself reduce controller boundaries. |
 | `03-two-sources.py` | 2 | 2 | 1 | One Guest Run obtains two separately authorised sources and joins them internally. The outer controller submits one Run while both typed calls remain receipted. |
+
+Two additional runnable product specimens exercise the same Runtime without
+extending the evaluation corpus:
+
+- `04-workflow-with-workspace.py` performs two typed source calls and writes a
+  structured report through the rooted Guest filesystem;
+- `05-developer-workflow.py` uses bounded read-only `git.status/log/show`, runs
+  a grep-like `pysolate.workspace.search` inside the Guest, and writes an
+  inspection report to `/workspace/reports/inspection.json`.
 
 The Direct counts are the frozen evaluation-v2 comparison rule: one controller
 boundary per `Broker.Call`. The Guest count is one Runtime submission per
@@ -23,9 +32,9 @@ security, isolation or production-readiness measurements.
 ## Run locally
 
 A verified Guest artifact is required. The runner starts a loopback fixture
-server on an ephemeral port, creates Host-owned source configuration, runs all
-three programs through the real `apyrun` CLI, and checks exact results and
-capability-call counts.
+server on an ephemeral port, creates Host-owned source and Git configuration,
+runs all programs through the real `apyrun` CLI, and checks exact results,
+capability-call counts, receipts, and workspace outcomes.
 
 ```bash
 python3 examples/controller-boundaries/run.py \

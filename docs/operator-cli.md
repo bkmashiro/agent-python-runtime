@@ -92,6 +92,22 @@ As an alternative to `workspace_files`, the Host config may provision a rooted `
 
 The Guest accesses this state with ordinary Python file APIs under `/workspace`. `/tmp` remains per-Run scratch. Every bounded response includes a Host-authored disposition receipt with request, initial state, final state and optional exact capsule identities. Output capsules are complete, deterministic storage artifacts and are atomically published with mode `0600`; they are not mounted in place or backed by SQLite. See [workspace-capsules.md](workspace-capsules.md).
 
+## Bounded developer operations
+
+Mounted workspaces also expose the Guest package `pysolate.workspace`, which
+provides bounded read/write/list/walk/glob/search/stat/digest/diff/copy/move/
+remove semantics without a shell or subprocess. All paths remain relative to
+`/workspace`.
+
+A Host may separately configure `git_read` with an opaque repository ID, one
+clean absolute local repository path, and explicit entry/patch/blob bounds.
+This generates `git.status/diff/log/show/list_refs/resolve_revision`; the private
+repository path never appears in the Guest projection, spec, grant or result.
+The adapter uses `go-git` in-process and exposes no hooks, external filters,
+credential helpers, remote URL or network operation. See
+[developer-tools.md](developer-tools.md) for the current snapshot-coherence
+boundary.
+
 ## Request
 
 ```json

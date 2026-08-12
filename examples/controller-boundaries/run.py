@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run four bounded local examples through the real apyrun CLI."""
+"""Run bounded local examples through the real apyrun CLI."""
 
 from __future__ import annotations
 
@@ -44,6 +44,16 @@ EXAMPLES = (
             "suite_id": "pysolate-core",
         },
     ),
+    (
+        "05-developer-workflow",
+        3,
+        {
+            "clean": True,
+            "commit_message": "initial fixture",
+            "readme": "fixture repository",
+            "todo_locations": ["src/app.py:1"],
+        },
+    ),
 )
 
 
@@ -64,6 +74,18 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as temporary:
             config_path = Path(temporary) / "host.json"
 
+            repository = Path(temporary) / "repository"
+            repository.mkdir()
+            repository.joinpath("src").mkdir()
+            repository.joinpath("README.md").write_text("fixture repository\n")
+            repository.joinpath("src/app.py").write_text("# TODO: replace fixture\nvalue = 1\n")
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            subprocess.run(["git", "-C", str(repository), "add", "README.md", "src/app.py"], check=True)
+            subprocess.run(
+                ["git", "-C", str(repository), "-c", "user.name=Pysolate Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "-m", "initial fixture"],
+                check=True,
+            )
+
             for name, expected_calls, expected_result in EXAMPLES:
                 config = {
                     "information_sources": {
@@ -80,14 +102,28 @@ def main() -> int:
                     },
                     "max_tool_calls": 2,
                 }
-                if name == "04-workflow-with-workspace":
-                    workspace = Path(temporary) / "workspace"
+                if name in {"04-workflow-with-workspace", "05-developer-workflow"}:
+                    workspace = Path(temporary) / f"workspace-{name}"
                     workspace.mkdir()
+                    if name == "05-developer-workflow":
+                        workspace.joinpath("src").mkdir()
+                        workspace.joinpath("README.md").write_text("fixture repository\n")
+                        workspace.joinpath("src/app.py").write_text("# TODO: replace fixture\nvalue = 1\n")
                     config["workspace"] = {
                         "source_directory": str(workspace),
                         "disposition": "discard",
                         "limits": {"max_files": 32, "max_bytes": 1048576, "max_file_bytes": 262144, "max_depth": 8},
                     }
+                if name == "05-developer-workflow":
+                    config.pop("information_sources")
+                    config["git_read"] = {
+                        "repository_id": "developer-fixture",
+                        "repository_path": str(repository),
+                        "max_entries": 32,
+                        "max_patch_bytes": 262144,
+                        "max_blob_bytes": 262144,
+                    }
+                    config["max_tool_calls"] = 3
                 config_path.write_text(json.dumps(config), encoding="utf-8")
                 inputs = json.loads((HERE / "inputs" / f"{name}.json").read_text())
                 request = {"run_id": f"example-{name}", "inputs": inputs}
@@ -118,6 +154,7 @@ def main() -> int:
                     or len(receipts) != expected_calls
                     or any(receipt["outcome"] != "ok" for receipt in receipts)
                     or (name == "04-workflow-with-workspace" and response.get("workspace_receipt", {}).get("entry_count") != 2)
+                    or (name == "05-developer-workflow" and response.get("workspace_receipt", {}).get("entry_count") != 5)
                 ):
                     raise SystemExit(f"{name}: unexpected response: {response}")
                 print(json.dumps({"example": name, "capability_calls": calls, "receipts": len(receipts), "result": response["result"]}, sort_keys=True))

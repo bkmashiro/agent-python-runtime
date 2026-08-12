@@ -26,6 +26,7 @@ type operatorConfig struct {
 	MaxToolCalls       uint32                    `json:"max_tool_calls,omitempty"`
 	Workspace          *mountedWorkspaceConfig   `json:"workspace,omitempty"`
 	InformationSources *informationSourcesConfig `json:"information_sources,omitempty"`
+	GitRead            *gitReadConfig            `json:"git_read,omitempty"`
 	Playback           *playbackConfig           `json:"playback,omitempty"`
 }
 
@@ -41,6 +42,14 @@ type playbackConfig struct {
 type informationSourcesConfig struct {
 	DemoCatalog       *demoCatalogSourceConfig       `json:"demo_catalog,omitempty"`
 	BenchmarkManifest *benchmarkManifestSourceConfig `json:"benchmark_manifest,omitempty"`
+}
+
+type gitReadConfig struct {
+	RepositoryID   string `json:"repository_id"`
+	RepositoryPath string `json:"repository_path"`
+	MaxEntries     uint32 `json:"max_entries"`
+	MaxPatchBytes  uint32 `json:"max_patch_bytes"`
+	MaxBlobBytes   uint32 `json:"max_blob_bytes"`
 }
 
 type demoCatalogSourceConfig struct {
@@ -222,6 +231,11 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 			}
 		}
 	}
+	if config.GitRead != nil {
+		if _, err := config.GitRead.resolve(); err != nil {
+			return runtimeconfig.RunConfig{}, err
+		}
+	}
 	if config.Playback != nil {
 		if err := config.Playback.validate(); err != nil {
 			return runtimeconfig.RunConfig{}, err
@@ -233,7 +247,7 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 			return runtimeconfig.RunConfig{}, errors.New("playback bundle and workspace capsule outputs are mutually exclusive")
 		}
 	}
-	hasTools := config.WorkspaceFiles != nil || config.InformationSources != nil
+	hasTools := config.WorkspaceFiles != nil || config.InformationSources != nil || config.GitRead != nil
 	if config.MaxToolCalls != 0 && !hasTools {
 		return runtimeconfig.RunConfig{}, errors.New("max_tool_calls requires configured Host tools")
 	}
@@ -315,6 +329,21 @@ func (config *benchmarkManifestSourceConfig) resolve() (capability.BenchmarkMani
 	}
 	if _, _, err := capability.BenchmarkManifestDefinition(policy); err != nil {
 		return capability.BenchmarkManifestPolicy{}, errors.New("invalid benchmark_manifest source policy")
+	}
+	return policy, nil
+}
+
+func (config *gitReadConfig) resolve() (capability.GitReadPolicy, error) {
+	if config == nil {
+		return capability.GitReadPolicy{}, errors.New("git_read is required")
+	}
+	policy := capability.GitReadPolicy{
+		RepositoryID: config.RepositoryID, RepositoryPath: config.RepositoryPath,
+		MaxEntries: config.MaxEntries, MaxPatchBytes: config.MaxPatchBytes, MaxBlobBytes: config.MaxBlobBytes,
+	}
+	registry := capability.NewRegistry()
+	if err := capability.RegisterGitReadTools(registry, policy); err != nil {
+		return capability.GitReadPolicy{}, errors.New("invalid git_read policy")
 	}
 	return policy, nil
 }

@@ -141,8 +141,9 @@ func (handler *demoCatalogHandler) CallWithEvidence(ctx context.Context, _ json.
 	if response.StatusCode != http.StatusOK {
 		return nil, TransportEvidence{}, errors.New("demo catalog returned an unexpected status")
 	}
-	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || !strings.EqualFold(mediaType, "application/json") {
+	mediaType, parameters, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	charset := parameters["charset"]
+	if err != nil || !strings.EqualFold(mediaType, "application/json") || (charset != "" && !strings.EqualFold(charset, "utf-8")) {
 		return nil, TransportEvidence{}, errors.New("demo catalog returned an unexpected content type")
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, int64(handler.maximum)+1))

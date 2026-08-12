@@ -93,6 +93,10 @@ func TestDemoCatalogFailsClosedOnTransportAndPayload(t *testing.T) {
 			writer.Header().Set("Content-Type", "text/plain")
 			_, _ = writer.Write([]byte(`{"items":[]}`))
 		},
+		"non UTF-8 charset": func(writer http.ResponseWriter, request *http.Request) {
+			writer.Header().Set("Content-Type", "application/json; charset=iso-8859-1")
+			_, _ = writer.Write([]byte(`{"items":[]}`))
+		},
 		"oversize": func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Content-Type", "application/json")
 			_, _ = writer.Write([]byte(`{"items":[{"id":"` + strings.Repeat("x", 512) + `","title":"x","score":1}]}`))

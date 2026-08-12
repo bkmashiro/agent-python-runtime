@@ -64,8 +64,12 @@ measured overhead are recorded in
 comparison, branch-DAG export, and fresh-Guest branch execution. The separate
 `cmd/pysolate-research` CLI implements human and bounded-JSON `inspect` and
 `compare`, protected `branch plan`, bounded `branch dag`, read-only
-`store stats`, and a synthetic `store benchmark`. It does not execute a branch;
-`research/operator.RunBranch` remains the fresh-Guest API and returns an
+`store stats`, a synthetic `store benchmark`, and read-only canonical Lab v1
+projection from a strict evaluation report plus its matching body-free
+measurement summary. The projection cannot reconstruct absent timeline,
+workspace, branch or typed-object relations; it emits empty views and distinct
+private/unavailable markers under `evidence_incomplete`. It does not execute a
+branch. `research/operator.RunBranch` remains the fresh-Guest API and returns an
 in-memory outcome for a Host caller. The independent `labstore-bench` command
 is also a measurement probe, not a service.
 
@@ -86,7 +90,14 @@ and `store benchmark` creates a new synthetic store destination.
 
 This prototype is deliberately not a service boundary. It has no database,
 authentication, remote API, multi-user authorization, cross-process writer
-lock, migration engine, or production recovery workflow.
+lock, migration engine, or production recovery workflow. Deterministic
+child-process probes show that immutable publication and final fail-private
+classification converge at the tested boundaries, but crashed or live stages
+make aggregate traversal fail closed and cannot yet be distinguished safely.
+The measured next step is explicit filesystem ownership and offline repair;
+SQLite metadata is not admitted for evaluation v1 because it would not remove
+external object stages and no indexed-query or multi-record transaction need
+was demonstrated.
 
 The repository has both focused and combined real-Guest evidence. The focused
 branch test calls `research/operator.RunBranch` directly. The combined research

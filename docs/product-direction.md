@@ -82,8 +82,16 @@ of its contract:
   DAGs and run a branch in a fresh Guest from an explicitly sealed Host Plan;
 - a separate local `pysolate-research` CLI with bounded human/JSON inspect and
   compare, protected branch-manifest planning, caller-supplied branch-DAG
-  export, read-only store stats and a synthetic store benchmark. Branch
-  execution remains an API rather than a research CLI command.
+  export, read-only store stats, a synthetic store benchmark, and read-only
+  canonical Lab v1 projection from a strict evaluation report plus matching
+  body-free measurement summary. Missing relations remain explicitly
+  private/unavailable; the projection does not execute a branch;
+- the fixed three-workload mechanism-only evaluation runner and body-free report
+  rebuild/measurement contracts. Its bounded observed result and prohibited
+  claims are recorded in
+  [research/workload-evaluation-v1.md](research/workload-evaluation-v1.md).
+  This evidence does not promote the runner, LabStore or Lab projection to the
+  Current Runtime surface.
 
 These pieces establish a local research substrate, not a complete Pysolate Lab
 or a release claim. The Runtime/Lab ownership boundary is documented in

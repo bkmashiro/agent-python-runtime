@@ -1,8 +1,8 @@
 # Workload evaluation contract v1
 
-Status: **Current contract; the three-workload execution corpus is qualified for mechanism-only evaluation. No evaluation report or measurement claim exists yet.**
+Status: **Current contract; the three-workload execution corpus and mechanism-only runner are qualified. The completed study remains bounded Observed evidence, not a Runtime or product claim.**
 
-This document freezes the first mechanism-only evaluation vocabulary and workload cohort. The exact corpus identities, task oracles and supported treatment executions are now qualified by the real CPython/WASI gates; this document still reports no aggregate evaluation result, timing, model-quality or product claim.
+This document freezes the first mechanism-only evaluation vocabulary and workload cohort. The exact corpus identities, task oracles and supported treatment executions are qualified by real CPython/WASI gates. The bounded result and limitations are reported separately in [workload-evaluation-v1.md](workload-evaluation-v1.md); aggregate timing, model-quality and product claims remain prohibited.
 
 ## Falsifiable claim
 

@@ -120,11 +120,11 @@ For every family:
 
 ## 9. Track E — CLI and Lab projection bridge
 
-- [ ] Add bounded local commands to ingest an evaluation report and emit Lab v1 index/study/run/timeline/DAG/diff/compare JSON.
-- [ ] Add branch execution only if it can consume an explicitly sealed Host plan without adding authority; otherwise keep the API boundary and record the reason.
-- [ ] Ensure read commands are read-only and mutation commands publish with exclusive protected semantics.
-- [ ] Add `--json` output contracts, maximum output/cursor limits and structured problem responses.
-- [ ] Verify canonical Web fixtures are generated through the same producer, not hand-maintained parallel shapes.
+- [x] Add bounded local commands to ingest an evaluation report and emit Lab v1 index/study/run/timeline/DAG/diff/compare JSON.
+- [x] Add branch execution only if it can consume an explicitly sealed Host plan without adding authority; otherwise keep the API boundary and record the reason.
+- [x] Ensure read commands are read-only and mutation commands publish with exclusive protected semantics.
+- [x] Add `--json` output contracts, maximum output/cursor limits and structured problem responses.
+- [x] Verify canonical Web fixtures are generated through the same producer, not hand-maintained parallel shapes.
 
 ## 10. Track F — Fault and compatibility probes
 
@@ -187,6 +187,7 @@ A successful slice, signed checkpoint, long test, context boundary or pending We
 - 2026-08-12: Track B Lab v1 read contract frozen with nine closed schemas, matching strict Go projection/cross-set validator, six-case 54-document canonical fixture matrix and SHA manifest. Review probes found and closed timeout-enum, Windows Host-path and Go/schema bound/vocabulary drift; final post-fix review passed with zero findings.
 - 2026-08-12: Track C qualified three fixed mechanism-only workloads with Go-produced body-free descriptors, exact code/input/seed/result/workspace/treatment identities, tamper/privacy guards and explicit unsupported dispositions. A qualified local CPython/WASI artifact passed the complete race matrix: three canonical parents, two loopback live-capture/strict-offline pairs, two Host-owned counterfactual branches, two fresh deterministic planning Guests and two fresh seeded no-broker Guests. Full Go/race/vet/build/Python gates passed; bounded independent review returned PASS with no concrete blocker.
 - 2026-08-12: Track D froze deterministic row expansion, fail-closed lifecycle recording, strict private raw/portable measurement codecs and exact report rebuilding. The final signed Host source `4f786e5` ran the 12-row qualified Guest study under race: offered 12, started/completed 9, failed/timed-out 0, unsupported 3, replay-equivalent 4/4, branch-diverged 2/2, evidence complete/materialized 9/9 and LabStore reused puts 16/18. An independent process reproduced the exact report identity; 0700/0600 and portable privacy gates passed. Independent review found uint32 conservation overflow and private-root ancestor-symlink fail-open plus an unsupported-ref probe; all were reproduced, regression-tested, fixed and post-fix reviewed PASS.
+- 2026-08-12: Track E added a protected read-only CLI bridge from strict report plus matching measurement summary to all nine canonical Lab v1 documents. Missing timeline/workspace/branch/object relations remain empty or distinct private/unavailable marker identities under `evidence_incomplete`; measured storage totals preserve physical overhead and count bounds. Real Track D report projection emitted nine canonical documents without mutating inputs. CLI/direct-producer byte equality and existing fixture manifest tests keep Web on the same Go producer. Lab branch execution remains unavailable because the report lacks a sealed Host Plan, Grants, handlers and fresh Guest. Full Go/race/vet/build/Python gates passed; a transient mid-migration review blocker was closed and exact signed-snapshot post-fix review returned PASS.
 
 ## 16. Short prompt
 

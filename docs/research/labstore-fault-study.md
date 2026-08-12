@@ -22,7 +22,7 @@ A separate child holds a live, `fsync`ed stage while a read-only process perform
 - Stage-before-link crash: the object remains absent and non-exportable. Retry publishes one private object. The orphan `.stage-*` remains and aggregate traversal returns `ErrCorrupt` rather than silently excluding its bytes.
 - Link-before-cleanup crash: the linked object is readable and private. Retry reuses it without privacy downgrade. The orphan stage remains and aggregate traversal returns `ErrCorrupt`.
 - Active writer stage: a concurrent read-only aggregate traversal also returns `ErrCorrupt`. The store cannot distinguish a live stage from a crashed orphan.
-- Eight independent processes converge on one immutable object identity and one private classification; no portable export succeeds.
+- Eight independent processes converge on one immutable object identity and a final private classification; portable export fails after convergence. The probe does not claim a linearizable classification transaction during the race.
 - Required observation-recorder rejection does not advance accepted evidence; best-effort rejection is visibly incomplete and cannot later claim complete evidence.
 - Strict report projection rejects missing rows, non-canonical reports, incompatible measurement identities, and schema-forbidden values. Missing object relations are distinct private/unavailable markers, never fabricated available objects.
 - Lab v1 compatibility remains closed: already-declared conditional optional fields can appear or be omitted within their scope; a new nominally optional wire field is rejected by v1 and requires v2.

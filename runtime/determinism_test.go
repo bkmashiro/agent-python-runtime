@@ -91,3 +91,13 @@ func TestDeterministicVerificationDeniesUnsupportedSourceClasses(t *testing.T) {
 		t.Fatalf("qualified deterministic source rejected: %v", err)
 	}
 }
+
+func TestDeterministicExecutionAdmissionRejectsMountedWorkspace(t *testing.T) {
+	request := runtimeconfig.RunRequest{RunID: "det-workspace-admission", Code: "result = 1", Inputs: []byte(`{}`)}
+	if err := runtimeconfig.AdmitDeterministicVerificationExecution(request, true); !errors.Is(err, runtimeconfig.ErrDeterministicVerificationAdmission) {
+		t.Fatalf("mounted workspace admission err=%v", err)
+	}
+	if err := runtimeconfig.AdmitDeterministicVerificationExecution(request, false); err != nil {
+		t.Fatalf("workspace-free admission err=%v", err)
+	}
+}

@@ -205,7 +205,7 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		return nil, err
 	}
 	if engine.config.DeterministicVerification != nil {
-		if err := runtimeconfig.AdmitDeterministicVerification(runRequest); err != nil {
+		if err := runtimeconfig.AdmitDeterministicVerificationExecution(runRequest, engine.workspaceLease != nil); err != nil {
 			return nil, err
 		}
 	}

@@ -131,10 +131,25 @@ func (profile DeterministicVerificationProfile) computeIdentity() (string, error
 	return fmt.Sprintf("sha256:%x", digest.Sum(nil)), nil
 }
 
-// AdmitDeterministicVerification rejects classes whose behavior this bounded
-// profile does not claim to control. The ordinary import/source admission path
-// still runs independently and rejects dynamic or late imports.
+// AdmitDeterministicVerification validates only workload-source classes. Host
+// execution paths should call AdmitDeterministicVerificationExecution so the
+// execution environment is admitted in the same fail-closed decision.
 func AdmitDeterministicVerification(request RunRequest) error {
+	return admitDeterministicVerificationWorkload(request)
+}
+
+// AdmitDeterministicVerificationExecution rejects workload or environment
+// classes whose behavior this bounded profile does not claim to control. The
+// ordinary import/source admission path still runs independently and rejects
+// dynamic or late imports.
+func AdmitDeterministicVerificationExecution(request RunRequest, workspaceMounted bool) error {
+	if workspaceMounted {
+		return ErrDeterministicVerificationAdmission
+	}
+	return admitDeterministicVerificationWorkload(request)
+}
+
+func admitDeterministicVerificationWorkload(request RunRequest) error {
 	imports, err := InferStaticImportRoots(request.Code)
 	if err != nil {
 		return ErrDeterministicVerificationAdmission

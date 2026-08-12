@@ -65,6 +65,70 @@ func PilotDefinitions() ([]Definition, error) {
 	return definitions, nil
 }
 
+func ExpandedDefinitions() ([]Definition, error) {
+	pilot, err := PilotDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	definitions := []Definition{
+		pilot[0],
+		{Code: "manifest=sources.benchmark_manifest()\nresult={'suite':manifest['suite']['id']+'@'+manifest['suite']['version'],'case_count':len(manifest['cases']),'artifact_count':sum(len(case['input_artifacts']) for case in manifest['cases']),'metric_count':sum(len(case['metrics']) for case in manifest['cases'])}", Inputs: json.RawMessage(`{}`), Expected: json.RawMessage(`{"artifact_count":1,"case_count":1,"metric_count":2,"suite":"pysolate-core@2026.08"}`), Workload: Workload{ID: "manifest-suite-direct", Version: 1, RequiredCapabilities: []string{"sources.benchmark_manifest"}, SourceFixtureSHA256: []string{manifestFixtureSHA256}, ExpectedCapabilityCalls: 1}},
+		{Code: "items=sources.demo_catalog()\nminimum=inputs['minimum_score']\nselected=sorted((item for item in items if item['score']>=minimum),key=lambda item:(-item['score'],item['id']))\nresult={'minimum_score':minimum,'ids':[item['id'] for item in selected],'count':len(selected),'score_total':sum(item['score'] for item in selected)}", Inputs: json.RawMessage(`{"minimum_score":5}`), Expected: json.RawMessage(`{"count":2,"ids":["gamma","alpha"],"minimum_score":5,"score_total":17}`), Workload: Workload{ID: "catalog-threshold-loop", Version: 1, RequiredCapabilities: []string{"sources.demo_catalog"}, SourceFixtureSHA256: []string{catalogFixtureSHA256}, ExpectedCapabilityCalls: 1}},
+		{Code: "manifest=sources.benchmark_manifest()\nrows=[]\nfor case in manifest['cases']:\n artifacts=sorted(item['id'] for item in case['input_artifacts'])\n for metric in case['metrics']:\n  rows.append({'case_id':case['id'],'task_class':case['task_class'],'artifact_ids':artifacts,'metric_id':metric['id'],'direction':metric['direction'],'unit':metric['unit'],'minimum':metric['bounds']['minimum'],'maximum':metric['bounds']['maximum']})\nresult={'suite':manifest['suite']['id']+'@'+manifest['suite']['version'],'rows':sorted(rows,key=lambda row:(row['case_id'],row['metric_id']))}", Inputs: json.RawMessage(`{}`), Expected: json.RawMessage(`{"rows":[{"artifact_ids":["metrics-input"],"case_id":"workspace-summary","direction":"minimize","maximum":30000,"metric_id":"latency","minimum":0,"task_class":"workspace_transform","unit":"milliseconds"},{"artifact_ids":["metrics-input"],"case_id":"workspace-summary","direction":"maximize","maximum":100,"metric_id":"quality","minimum":0,"task_class":"workspace_transform","unit":"score"}],"suite":"pysolate-core@2026.08"}`), Workload: Workload{ID: "manifest-matrix", Version: 1, RequiredCapabilities: []string{"sources.benchmark_manifest"}, SourceFixtureSHA256: []string{manifestFixtureSHA256}, ExpectedCapabilityCalls: 1}},
+		pilot[1],
+	}
+	return finalizeDefinitions(definitions)
+}
+
+func finalizeDefinitions(definitions []Definition) ([]Definition, error) {
+	for i := range definitions {
+		codeHash := sha256.Sum256([]byte(definitions[i].Code))
+		inputBytes, err := canonicalJSON(definitions[i].Inputs)
+		if err != nil {
+			return nil, ErrInvalid
+		}
+		definitions[i].Inputs = inputBytes
+		inputHash := sha256.Sum256(inputBytes)
+		expected, err := canonicalJSON(definitions[i].Expected)
+		if err != nil {
+			return nil, ErrInvalid
+		}
+		definitions[i].Expected = expected
+		resultHash := sha256.Sum256(expected)
+		definitions[i].Workload.CodeSHA256 = fmt.Sprintf("sha256:%x", codeHash)
+		definitions[i].Workload.InputSHA256 = fmt.Sprintf("sha256:%x", inputHash)
+		definitions[i].Workload.ExpectedResultSHA256 = fmt.Sprintf("sha256:%x", resultHash)
+	}
+	return definitions, nil
+}
+
+func ExpandedCorpus() (Corpus, error) {
+	definitions, err := ExpandedDefinitions()
+	if err != nil {
+		return Corpus{}, err
+	}
+	workloads := make([]Workload, len(definitions))
+	for i := range definitions {
+		workloads[i] = definitions[i].Workload
+	}
+	corpus := Corpus{SchemaVersion: ExpandedCorpusSchemaVersion, EvidenceClass: EvidenceClass, Workloads: workloads}
+	if validateCorpus(corpus) != nil {
+		return Corpus{}, ErrInvalid
+	}
+	return corpus, nil
+}
+
+func definitionsForCorpusSchema(schema string) ([]Definition, error) {
+	switch schema {
+	case CorpusSchemaVersion:
+		return PilotDefinitions()
+	case ExpandedCorpusSchemaVersion:
+		return ExpandedDefinitions()
+	default:
+		return nil, ErrInvalid
+	}
+}
+
 func PilotCorpus() (Corpus, error) {
 	definitions, err := PilotDefinitions()
 	if err != nil {
@@ -181,7 +245,7 @@ func consumeUniqueJSON(decoder *json.Decoder, depth int, nodes *int) error {
 }
 
 func validateDefinition(definition Definition) error {
-	definitions, err := PilotDefinitions()
+	definitions, err := ExpandedDefinitions()
 	if err != nil {
 		return ErrInvalid
 	}

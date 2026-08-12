@@ -15,11 +15,13 @@ import (
 )
 
 const (
-	CorpusSchemaVersion = "pysolate.workload-corpus.v2"
-	PlanSchemaVersion   = "pysolate.evaluation-plan.v2"
-	EvidenceClass       = "mechanism_only"
-	maxContractBytes    = 4 << 20
-	maxRows             = 32
+	CorpusSchemaVersion         = "pysolate.workload-corpus.v2"
+	PlanSchemaVersion           = "pysolate.evaluation-plan.v2"
+	ExpandedCorpusSchemaVersion = "pysolate.workload-corpus.v2.1"
+	ExpandedPlanSchemaVersion   = "pysolate.evaluation-plan.v2.1"
+	EvidenceClass               = "mechanism_only"
+	maxContractBytes            = 4 << 20
+	maxRows                     = 32
 )
 
 var (
@@ -91,6 +93,13 @@ func PilotPlan(hostCommit, artifactSHA256, manifestSHA256, profileSHA256, corpus
 	}
 }
 
+func ExpandedPlan(hostCommit, artifactSHA256, manifestSHA256, profileSHA256, corpusSHA256 string) Plan {
+	plan := PilotPlan(hostCommit, artifactSHA256, manifestSHA256, profileSHA256, corpusSHA256)
+	plan.SchemaVersion = ExpandedPlanSchemaVersion
+	plan.Ceilings.MaxRows = 10
+	return plan
+}
+
 func RuntimeProfileSHA256(config runtimeconfig.RunConfig) (string, error) {
 	if err := config.Validate(); err != nil || config.ExecutionProfile != nil || config.DeterministicVerification != nil || len(config.CapabilityGrants) != 0 {
 		return "", ErrInvalid
@@ -114,7 +123,7 @@ func RowIdentity(workloadID string, condition Condition, repetition uint32) stri
 }
 
 func ExpandRows(corpus Corpus, plan Plan) ([]PlannedRow, error) {
-	if validateCorpus(corpus) != nil || validatePlan(plan) != nil {
+	if validateCorpus(corpus) != nil || validatePlan(plan) != nil || corpus.SchemaVersion == CorpusSchemaVersion && plan.SchemaVersion != PlanSchemaVersion || corpus.SchemaVersion == ExpandedCorpusSchemaVersion && plan.SchemaVersion != ExpandedPlanSchemaVersion {
 		return nil, ErrInvalid
 	}
 	_, corpusID, err := EncodeCorpus(corpus)
@@ -144,7 +153,8 @@ func EncodePlan(value Plan) ([]byte, string, error)    { return encodeCanonical(
 func DecodePlan(data []byte) (Plan, string, error)     { return decodeStrict(data, validatePlan) }
 
 func validateCorpus(corpus Corpus) error {
-	if corpus.SchemaVersion != CorpusSchemaVersion || corpus.EvidenceClass != EvidenceClass || len(corpus.Workloads) != 2 {
+	expectedDefinitions, err := definitionsForCorpusSchema(corpus.SchemaVersion)
+	if err != nil || corpus.EvidenceClass != EvidenceClass || len(corpus.Workloads) != len(expectedDefinitions) {
 		return ErrInvalid
 	}
 	seen := map[string]struct{}{}
@@ -167,17 +177,8 @@ func validateCorpus(corpus Corpus) error {
 			}
 		}
 	}
-	if corpus.Workloads[0].ID != "catalog-top-direct" || corpus.Workloads[1].ID != "source-join-ranking" ||
-		corpus.Workloads[0].ExpectedCapabilityCalls != 1 || len(corpus.Workloads[0].RequiredCapabilities) != 1 || corpus.Workloads[0].RequiredCapabilities[0] != "sources.demo_catalog" ||
-		corpus.Workloads[1].ExpectedCapabilityCalls != 2 || len(corpus.Workloads[1].RequiredCapabilities) != 2 || corpus.Workloads[1].RequiredCapabilities[0] != "sources.demo_catalog" || corpus.Workloads[1].RequiredCapabilities[1] != "sources.benchmark_manifest" {
-		return ErrInvalid
-	}
-	definitions, err := PilotDefinitions()
-	if err != nil || len(definitions) != len(corpus.Workloads) {
-		return ErrInvalid
-	}
-	for i := range definitions {
-		if !reflect.DeepEqual(corpus.Workloads[i], definitions[i].Workload) {
+	for i := range expectedDefinitions {
+		if !reflect.DeepEqual(corpus.Workloads[i], expectedDefinitions[i].Workload) {
 			return ErrInvalid
 		}
 	}
@@ -186,7 +187,13 @@ func validateCorpus(corpus Corpus) error {
 
 func validatePlan(plan Plan) error {
 	claims := evaluation.RequiredProhibitedClaims()
-	if plan.SchemaVersion != PlanSchemaVersion || plan.EvidenceClass != EvidenceClass || !commitPattern.MatchString(plan.HostCommit) || !digestPattern.MatchString(plan.GuestArtifactSHA256) || !digestPattern.MatchString(plan.GuestManifestSHA256) || !digestPattern.MatchString(plan.RuntimeProfileSHA256) || !digestPattern.MatchString(plan.CorpusSHA256) || len(plan.Conditions) != 2 || plan.Conditions[0] != ConditionDirect || plan.Conditions[1] != ConditionGuest || plan.Repetitions != 1 || plan.Ceilings.MaxRows != 4 || plan.Ceilings.MaxWallMillisPerRow != 60000 || plan.Ceilings.MaxSerializedBytesRow != 1<<20 || len(plan.ProhibitedClaims) != len(claims) {
+	wantRows := uint32(4)
+	if plan.SchemaVersion == ExpandedPlanSchemaVersion {
+		wantRows = 10
+	} else if plan.SchemaVersion != PlanSchemaVersion {
+		return ErrInvalid
+	}
+	if plan.EvidenceClass != EvidenceClass || !commitPattern.MatchString(plan.HostCommit) || !digestPattern.MatchString(plan.GuestArtifactSHA256) || !digestPattern.MatchString(plan.GuestManifestSHA256) || !digestPattern.MatchString(plan.RuntimeProfileSHA256) || !digestPattern.MatchString(plan.CorpusSHA256) || len(plan.Conditions) != 2 || plan.Conditions[0] != ConditionDirect || plan.Conditions[1] != ConditionGuest || plan.Repetitions != 1 || plan.Ceilings.MaxRows != wantRows || plan.Ceilings.MaxWallMillisPerRow != 60000 || plan.Ceilings.MaxSerializedBytesRow != 1<<20 || len(plan.ProhibitedClaims) != len(claims) {
 		return ErrInvalid
 	}
 	for i := range claims {

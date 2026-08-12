@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,50 @@ func TestPilotStudyStrictRoundTripAndSummary(t *testing.T) {
 	}
 	if bytes.Contains(summaryBytes, []byte("Alpha")) || bytes.Contains(summaryBytes, []byte("workspace-summary")) {
 		t.Fatal("summary leaked source body")
+	}
+	forged := summary
+	forged.Completed = ^uint32(0)
+	forged.Failed = 5
+	forged.TimedOut = 0
+	if _, _, err := EncodeSummary(forged); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("overflow summary err=%v", err)
+	}
+}
+
+func TestExpandedStudyTenRowConservation(t *testing.T) {
+	corpus, err := ExpandedCorpus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, corpusID, err := EncodeCorpus(corpus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := ExpandedPlan(strings.Repeat("a", 40), digest('b'), digest('c'), digest('d'), corpusID)
+	_, planID, err := EncodePlan(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planned, err := ExpandRows(corpus, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := make([]PilotRow, len(planned))
+	for i, row := range planned {
+		calls := corpus.Workloads[i/2].ExpectedCapabilityCalls
+		boundaries := calls
+		if row.Condition == ConditionGuest {
+			boundaries = 1
+		}
+		rows[i] = PilotRow{RowID: row.RowID, WorkloadID: row.WorkloadID, Condition: row.Condition, Status: StatusCompleted, OracleStatus: OraclePassed, EvidenceComplete: true, CapabilityPlanSHA256: digest(byte('a' + i/2)), Metrics: PilotMetrics{ControllerBoundaries: boundaries, ControllerRequestBytes: 1, ControllerResponseBytes: 1, CapabilityCalls: calls, CapabilityArgumentBytes: uint64(calls), CapabilityResultBytes: uint64(calls), Receipts: calls, TranscriptEntries: calls}}
+	}
+	study := PilotStudy{SchemaVersion: ExpandedStudySchemaVersion, EvidenceClass: EvidenceClass, CorpusSHA256: corpusID, PlanSHA256: planID, ProhibitedClaims: RequiredProhibitedClaims(), Rows: rows}
+	if err := ValidateStudyAgainst(study, corpus, plan); err != nil {
+		t.Fatal(err)
+	}
+	summary, _, _, err := DeriveSummary(study)
+	if err != nil || summary.SchemaVersion != ExpandedSummarySchemaVersion || summary.Offered != 10 || summary.DirectRows != 5 || summary.GuestRows != 5 || summary.DirectControllerBoundaries != 6 || summary.GuestControllerBoundaries != 5 || summary.DirectCapabilityCalls != 6 || summary.GuestCapabilityCalls != 6 {
+		t.Fatalf("summary=%+v err=%v", summary, err)
 	}
 }
 

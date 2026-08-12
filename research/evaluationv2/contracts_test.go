@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -86,6 +87,46 @@ func TestPilotContractRejectsDrift(t *testing.T) {
 	mutated, _ := json.Marshal(raw)
 	if _, _, err := DecodeCorpus(mutated); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("evidence class err=%v", err)
+	}
+}
+
+func TestExpandedCohortPreservesPilotAndExpandsExactly(t *testing.T) {
+	pilot, err := PilotCorpus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, pilotID, err := EncodeCorpus(pilot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pilotID != "sha256:3151488fe73d188abbf958a33c74c60f928bb858968c77ab2475f924a7b68060" {
+		t.Fatalf("pilot identity drift=%s", pilotID)
+	}
+	corpus, err := ExpandedCorpus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []string{"catalog-top-direct", "manifest-suite-direct", "catalog-threshold-loop", "manifest-matrix", "source-join-ranking"}
+	if corpus.SchemaVersion != ExpandedCorpusSchemaVersion || len(corpus.Workloads) != len(wantIDs) {
+		t.Fatalf("corpus=%+v", corpus)
+	}
+	for i, id := range wantIDs {
+		if corpus.Workloads[i].ID != id {
+			t.Fatalf("workload[%d]=%s", i, corpus.Workloads[i].ID)
+		}
+	}
+	_, corpusID, err := EncodeCorpus(corpus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := ExpandedPlan(strings.Repeat("a", 40), digest('b'), digest('c'), digest('d'), corpusID)
+	mixedPlan := ExpandedPlan(strings.Repeat("a", 40), digest('b'), digest('c'), digest('d'), pilotID)
+	if _, err := ExpandRows(pilot, mixedPlan); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("mixed schema err=%v", err)
+	}
+	rows, err := ExpandRows(corpus, plan)
+	if err != nil || len(rows) != 10 || rows[0].RowID != "catalog-top-direct:direct_broker:0" || rows[9].RowID != "source-join-ranking:pysolate_guest:0" {
+		t.Fatalf("rows=%+v err=%v", rows, err)
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
@@ -101,7 +100,7 @@ func RunDirect(ctx context.Context, definition Definition, broker *capability.Br
 		outcome.BrokerRequestBytes += uint64(len(request))
 		outcome.BrokerResponseBytes += uint64(len(response))
 	}
-	result, err := transformDirect(definition.Workload.ID, results)
+	result, err := transformDirect(definition, results)
 	if err != nil {
 		return ConditionOutcome{}, err
 	}
@@ -127,71 +126,6 @@ func decodeBrokerResponse(raw []byte) (brokerResponse, error) {
 	return value, nil
 }
 
-func transformDirect(id string, results map[string]json.RawMessage) (json.RawMessage, error) {
-	var catalog struct {
-		Items []struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
-			Score uint32 `json:"score"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(results["sources.demo_catalog"], &catalog); err != nil || len(catalog.Items) == 0 {
-		return nil, ErrInvalid
-	}
-	best := catalog.Items[0]
-	for _, item := range catalog.Items[1:] {
-		if item.Score > best.Score || item.Score == best.Score && item.ID < best.ID {
-			best = item
-		}
-	}
-	if id == "catalog-top-direct" {
-		encoded, _ := json.Marshal(struct {
-			ID    string `json:"id"`
-			Score uint32 `json:"score"`
-			Title string `json:"title"`
-		}{best.ID, best.Score, best.Title})
-		return encoded, nil
-	}
-	if id != "source-join-ranking" {
-		return nil, ErrInvalid
-	}
-	var manifest struct {
-		Suite struct {
-			ID      string `json:"id"`
-			Version string `json:"version"`
-		} `json:"suite"`
-		Cases []struct {
-			ID        string `json:"id"`
-			TaskClass string `json:"task_class"`
-			Metrics   []struct {
-				ID string `json:"id"`
-			} `json:"metrics"`
-		} `json:"cases"`
-	}
-	if err := json.Unmarshal(results["sources.benchmark_manifest"], &manifest); err != nil || len(manifest.Cases) == 0 {
-		return nil, ErrInvalid
-	}
-	selected := manifest.Cases[0]
-	for _, item := range manifest.Cases[1:] {
-		if item.ID < selected.ID {
-			selected = item
-		}
-	}
-	metricIDs := make([]string, len(selected.Metrics))
-	for i := range selected.Metrics {
-		metricIDs[i] = selected.Metrics[i].ID
-	}
-	sort.Strings(metricIDs)
-	encoded, err := json.Marshal(struct {
-		CatalogID    string   `json:"catalog_id"`
-		CatalogScore uint32   `json:"catalog_score"`
-		CaseID       string   `json:"case_id"`
-		MetricIDs    []string `json:"metric_ids"`
-		Suite        string   `json:"suite"`
-		TaskClass    string   `json:"task_class"`
-	}{best.ID, best.Score, selected.ID, metricIDs, manifest.Suite.ID + "@" + manifest.Suite.Version, selected.TaskClass})
-	if err != nil {
-		return nil, ErrInvalid
-	}
-	return encoded, nil
+func transformDirect(definition Definition, results map[string]json.RawMessage) (json.RawMessage, error) {
+	return transformExpandedDirect(definition.Workload.ID, results, definition.Inputs)
 }

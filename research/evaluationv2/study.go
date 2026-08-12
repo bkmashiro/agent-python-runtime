@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	StudySchemaVersion   = "pysolate.evaluation-study.v2"
-	SummarySchemaVersion = "pysolate.evaluation-summary.v2"
+	StudySchemaVersion           = "pysolate.evaluation-study.v2"
+	SummarySchemaVersion         = "pysolate.evaluation-summary.v2"
+	ExpandedStudySchemaVersion   = "pysolate.evaluation-study.v2.1"
+	ExpandedSummarySchemaVersion = "pysolate.evaluation-summary.v2.1"
 )
 
 type Status string
@@ -89,6 +91,19 @@ type Summary struct {
 
 func RequiredProhibitedClaims() []string { return evaluation.RequiredProhibitedClaims() }
 
+func definitionsForStudySchema(schema string) ([]Definition, string, error) {
+	switch schema {
+	case StudySchemaVersion:
+		definitions, err := PilotDefinitions()
+		return definitions, SummarySchemaVersion, err
+	case ExpandedStudySchemaVersion:
+		definitions, err := ExpandedDefinitions()
+		return definitions, ExpandedSummarySchemaVersion, err
+	default:
+		return nil, "", ErrInvalid
+	}
+}
+
 func EncodeStudy(value PilotStudy) ([]byte, string, error) {
 	return encodeCanonical(value, validateStudy)
 }
@@ -132,26 +147,25 @@ func ValidateSummaryAgainst(summary Summary, study PilotStudy) error {
 }
 
 func validateStudy(study PilotStudy) error {
-	if study.SchemaVersion != StudySchemaVersion || study.EvidenceClass != EvidenceClass || !digestPattern.MatchString(study.CorpusSHA256) || !digestPattern.MatchString(study.PlanSHA256) || !sameClaims(study.ProhibitedClaims) || len(study.Rows) != 4 {
+	definitions, summaryVersion, err := definitionsForStudySchema(study.SchemaVersion)
+	if err != nil || study.EvidenceClass != EvidenceClass || !digestPattern.MatchString(study.CorpusSHA256) || !digestPattern.MatchString(study.PlanSHA256) || !sameClaims(study.ProhibitedClaims) || len(study.Rows) != len(definitions)*2 || summaryVersion == "" {
 		return ErrInvalid
 	}
 	seen := map[string]struct{}{}
-	expectedRows := []struct {
-		workload  string
-		condition Condition
-	}{
-		{"catalog-top-direct", ConditionDirect}, {"catalog-top-direct", ConditionGuest},
-		{"source-join-ranking", ConditionDirect}, {"source-join-ranking", ConditionGuest},
-	}
 	for index, row := range study.Rows {
-		if row.WorkloadID != expectedRows[index].workload || row.Condition != expectedRows[index].condition || row.RowID != RowIdentity(row.WorkloadID, row.Condition, row.Repetition) || row.Repetition != 0 || !identifierPattern.MatchString(row.WorkloadID) || !digestPattern.MatchString(row.CapabilityPlanSHA256) {
+		definition := definitions[index/2]
+		condition := ConditionDirect
+		if index%2 == 1 {
+			condition = ConditionGuest
+		}
+		if row.WorkloadID != definition.Workload.ID || row.Condition != condition || row.RowID != RowIdentity(row.WorkloadID, row.Condition, row.Repetition) || row.Repetition != 0 || !identifierPattern.MatchString(row.WorkloadID) || !digestPattern.MatchString(row.CapabilityPlanSHA256) {
 			return ErrInvalid
 		}
 		if _, exists := seen[row.RowID]; exists {
 			return ErrInvalid
 		}
 		seen[row.RowID] = struct{}{}
-		if row.WorkloadID == "catalog-top-direct" && row.Status == StatusCompleted && row.Metrics.CapabilityCalls != 1 || row.WorkloadID == "source-join-ranking" && row.Status == StatusCompleted && row.Metrics.CapabilityCalls != 2 {
+		if row.Status == StatusCompleted && row.Metrics.CapabilityCalls != definition.Workload.ExpectedCapabilityCalls {
 			return ErrInvalid
 		}
 		switch row.Status {
@@ -171,8 +185,10 @@ func validateStudy(study PilotStudy) error {
 			return ErrInvalid
 		}
 	}
-	if study.Rows[0].CapabilityPlanSHA256 != study.Rows[1].CapabilityPlanSHA256 || study.Rows[2].CapabilityPlanSHA256 != study.Rows[3].CapabilityPlanSHA256 {
-		return ErrInvalid
+	for i := 0; i < len(study.Rows); i += 2 {
+		if study.Rows[i].CapabilityPlanSHA256 != study.Rows[i+1].CapabilityPlanSHA256 {
+			return ErrInvalid
+		}
 	}
 	return nil
 }
@@ -185,7 +201,11 @@ func DeriveSummary(study PilotStudy) (Summary, []byte, string, error) {
 	if err != nil {
 		return Summary{}, nil, "", err
 	}
-	summary := Summary{SchemaVersion: SummarySchemaVersion, EvidenceClass: EvidenceClass, CorpusSHA256: study.CorpusSHA256, PlanSHA256: study.PlanSHA256, StudySHA256: studyID, ProhibitedClaims: RequiredProhibitedClaims(), Offered: uint32(len(study.Rows))}
+	_, summaryVersion, err := definitionsForStudySchema(study.SchemaVersion)
+	if err != nil {
+		return Summary{}, nil, "", ErrInvalid
+	}
+	summary := Summary{SchemaVersion: summaryVersion, EvidenceClass: EvidenceClass, CorpusSHA256: study.CorpusSHA256, PlanSHA256: study.PlanSHA256, StudySHA256: studyID, ProhibitedClaims: RequiredProhibitedClaims(), Offered: uint32(len(study.Rows))}
 	for _, row := range study.Rows {
 		switch row.Status {
 		case StatusCompleted:
@@ -239,7 +259,13 @@ func DeriveSummary(study PilotStudy) (Summary, []byte, string, error) {
 }
 
 func validateSummary(summary Summary) error {
-	if summary.SchemaVersion != SummarySchemaVersion || summary.EvidenceClass != EvidenceClass || !digestPattern.MatchString(summary.CorpusSHA256) || !digestPattern.MatchString(summary.PlanSHA256) || !digestPattern.MatchString(summary.StudySHA256) || !sameClaims(summary.ProhibitedClaims) || summary.Offered != 4 || summary.Offered != summary.Completed+summary.Failed+summary.TimedOut || summary.OraclePassed > summary.Completed || summary.EvidenceComplete > summary.Completed || summary.DirectRows != 2 || summary.GuestRows != 2 {
+	wantRows := uint32(4)
+	if summary.SchemaVersion == ExpandedSummarySchemaVersion {
+		wantRows = 10
+	} else if summary.SchemaVersion != SummarySchemaVersion {
+		return ErrInvalid
+	}
+	if summary.EvidenceClass != EvidenceClass || !digestPattern.MatchString(summary.CorpusSHA256) || !digestPattern.MatchString(summary.PlanSHA256) || !digestPattern.MatchString(summary.StudySHA256) || !sameClaims(summary.ProhibitedClaims) || summary.Offered != wantRows || summary.Completed > summary.Offered || summary.Failed > summary.Offered || summary.TimedOut > summary.Offered || summary.Offered != summary.Completed+summary.Failed+summary.TimedOut || summary.OraclePassed > summary.Completed || summary.EvidenceComplete > summary.Completed || summary.DirectRows != wantRows/2 || summary.GuestRows != wantRows/2 {
 		return ErrInvalid
 	}
 	if summary.Completed > 0 && (summary.DirectControllerBoundaries+summary.GuestControllerBoundaries == 0 || summary.DirectControllerRequestBytes+summary.GuestControllerRequestBytes == 0 || summary.DirectControllerResponseBytes+summary.GuestControllerResponseBytes == 0 || summary.DirectCapabilityCalls+summary.GuestCapabilityCalls == 0 || summary.DirectCapabilityArgumentBytes+summary.GuestCapabilityArgumentBytes == 0 || summary.DirectCapabilityResultBytes+summary.GuestCapabilityResultBytes == 0) {

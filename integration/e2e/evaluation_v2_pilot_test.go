@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -17,7 +18,16 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
-func TestRealGuestEvaluationV2Pilots(t *testing.T) {
+func TestEvaluationV2EquivalentJSONIgnoresObjectKeyOrder(t *testing.T) {
+	if !equivalentJSON([]byte(`{"a":1,"b":2}`), []byte(`{"b":2,"a":1}`)) || equivalentJSON([]byte(`{"a":1}`), []byte(`{"a":2}`)) {
+		t.Fatal("JSON equivalence drift")
+	}
+}
+
+func TestRealGuestEvaluationV2Pilots(t *testing.T)         { runRealGuestEvaluationV2(t, false) }
+func TestRealGuestEvaluationV2ExpandedCohort(t *testing.T) { runRealGuestEvaluationV2(t, true) }
+
+func runRealGuestEvaluationV2(t *testing.T, expanded bool) {
 	artifactPath := guestArtifact(t)
 	artifact, err := os.ReadFile(artifactPath)
 	if err != nil {
@@ -32,10 +42,16 @@ func TestRealGuestEvaluationV2Pilots(t *testing.T) {
 		t.Fatal("AGENT_RUNTIME_HOST_COMMIT must be exact")
 	}
 	definitions, err := evaluationv2.PilotDefinitions()
+	if expanded {
+		definitions, err = evaluationv2.ExpandedDefinitions()
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 	corpus, err := evaluationv2.PilotCorpus()
+	if expanded {
+		corpus, err = evaluationv2.ExpandedCorpus()
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +65,9 @@ func TestRealGuestEvaluationV2Pilots(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := evaluationv2.PilotPlan(hostCommit, shaID(artifact), shaID(manifestBytes), profileID, corpusID)
+	if expanded {
+		plan = evaluationv2.ExpandedPlan(hostCommit, shaID(artifact), shaID(manifestBytes), profileID, corpusID)
+	}
 	planBytes, planID, err := evaluationv2.EncodePlan(plan)
 	if err != nil {
 		t.Fatal(err)
@@ -133,13 +152,18 @@ func TestRealGuestEvaluationV2Pilots(t *testing.T) {
 			t.Fatalf("metrics=%+v err=%v", metrics, err)
 		}
 		key := row.WorkloadID
-		if previous, ok := results[key]; ok && string(previous) != string(result) {
+		if previous, ok := results[key]; ok && !equivalentJSON(previous, result) {
 			t.Fatalf("condition oracle drift workload=%s direct=%s guest=%s", key, previous, result)
 		}
 		results[key] = append(json.RawMessage(nil), result...)
 		rows[i] = evaluationv2.PilotRow{RowID: row.RowID, WorkloadID: row.WorkloadID, Condition: row.Condition, Repetition: row.Repetition, Status: evaluationv2.StatusCompleted, OracleStatus: evaluationv2.OraclePassed, EvidenceComplete: true, CapabilityPlanSHA256: capabilityPlan.Identity(), Metrics: metrics}
 	}
-	study := evaluationv2.PilotStudy{SchemaVersion: evaluationv2.StudySchemaVersion, EvidenceClass: evaluationv2.EvidenceClass, CorpusSHA256: corpusID, PlanSHA256: planID, ProhibitedClaims: evaluationv2.RequiredProhibitedClaims(), Rows: rows}
+	studySchema := evaluationv2.StudySchemaVersion
+	wantRows, wantDirectBoundaries, wantGuestBoundaries, wantCalls := uint32(4), uint64(3), uint64(2), uint64(3)
+	if expanded {
+		studySchema, wantRows, wantDirectBoundaries, wantGuestBoundaries, wantCalls = evaluationv2.ExpandedStudySchemaVersion, 10, 6, 5, 6
+	}
+	study := evaluationv2.PilotStudy{SchemaVersion: studySchema, EvidenceClass: evaluationv2.EvidenceClass, CorpusSHA256: corpusID, PlanSHA256: planID, ProhibitedClaims: evaluationv2.RequiredProhibitedClaims(), Rows: rows}
 	if err := evaluationv2.ValidateStudyAgainst(study, corpus, plan); err != nil {
 		t.Fatal(err)
 	}
@@ -148,11 +172,15 @@ func TestRealGuestEvaluationV2Pilots(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary, summaryBytes, summaryID, err := evaluationv2.DeriveSummary(study)
-	if err != nil || evaluationv2.ValidateSummaryAgainst(summary, study) != nil || summary.Completed != 4 || summary.OraclePassed != 4 || summary.DirectControllerBoundaries != 3 || summary.GuestControllerBoundaries != 2 {
+	if err != nil || evaluationv2.ValidateSummaryAgainst(summary, study) != nil || summary.Completed != wantRows || summary.OraclePassed != wantRows || summary.DirectControllerBoundaries != wantDirectBoundaries || summary.GuestControllerBoundaries != wantGuestBoundaries || summary.DirectCapabilityCalls != wantCalls || summary.GuestCapabilityCalls != wantCalls {
 		t.Fatalf("summary=%+v err=%v", summary, err)
 	}
 	t.Logf("v2-pilot offered=%d completed=%d oracle=%d direct_boundaries=%d guest_boundaries=%d direct_calls=%d guest_calls=%d", summary.Offered, summary.Completed, summary.OraclePassed, summary.DirectControllerBoundaries, summary.GuestControllerBoundaries, summary.DirectCapabilityCalls, summary.GuestCapabilityCalls)
-	if output := os.Getenv("PYSOLATE_EVALUATION_V2_OUTPUT"); output != "" {
+	outputEnv := "PYSOLATE_EVALUATION_V2_OUTPUT"
+	if expanded {
+		outputEnv = "PYSOLATE_EVALUATION_V2_EXPANDED_OUTPUT"
+	}
+	if output := os.Getenv(outputEnv); output != "" {
 		privateRoot := os.Getenv("PYSOLATE_PRIVATE_ROOT")
 		validated, err := validatePrivateOutput(privateRoot, output)
 		if err != nil {
@@ -165,15 +193,26 @@ func TestRealGuestEvaluationV2Pilots(t *testing.T) {
 	}
 }
 
+func equivalentJSON(left, right []byte) bool {
+	var a, b any
+	return json.Unmarshal(left, &a) == nil && json.Unmarshal(right, &b) == nil && reflect.DeepEqual(a, b)
+}
+
 func evaluationV2CapabilityPlan(t *testing.T, definition evaluationv2.Definition, catalogURL, manifestURL string) *capability.Plan {
 	t.Helper()
 	registry := capability.NewRegistry()
-	if err := capability.RegisterDemoCatalog(registry, capability.DemoCatalogPolicy{Endpoint: catalogURL, Timeout: time.Second, MaxResponseBytes: 4096}); err != nil {
-		t.Fatal(err)
-	}
-	if definition.Workload.ID == "source-join-ranking" {
-		if err := capability.RegisterBenchmarkManifest(registry, capability.BenchmarkManifestPolicy{Endpoint: manifestURL, Timeout: time.Second, MaxResponseBytes: 32 << 10}); err != nil {
-			t.Fatal(err)
+	for _, name := range definition.Workload.RequiredCapabilities {
+		switch name {
+		case "sources.demo_catalog":
+			if err := capability.RegisterDemoCatalog(registry, capability.DemoCatalogPolicy{Endpoint: catalogURL, Timeout: time.Second, MaxResponseBytes: 4096}); err != nil {
+				t.Fatal(err)
+			}
+		case "sources.benchmark_manifest":
+			if err := capability.RegisterBenchmarkManifest(registry, capability.BenchmarkManifestPolicy{Endpoint: manifestURL, Timeout: time.Second, MaxResponseBytes: 32 << 10}); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("unknown capability")
 		}
 	}
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: definition.Workload.ExpectedCapabilityCalls})

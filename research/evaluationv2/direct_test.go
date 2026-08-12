@@ -73,6 +73,67 @@ func TestRunDirectPilotsThroughBroker(t *testing.T) {
 	}
 }
 
+func TestRunDirectExpandedCohortThroughBroker(t *testing.T) {
+	catalog := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(catalogFixture))
+	}))
+	defer catalog.Close()
+	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "runtime", "capability", "testdata", "benchmark-manifest.v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(manifestBytes)
+	}))
+	defer manifest.Close()
+	definitions, err := ExpandedDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, definition := range definitions {
+		t.Run(definition.Workload.ID, func(t *testing.T) {
+			plan := directTestPlan(t, definition, catalog.URL, manifest.URL)
+			broker, err := capability.NewBroker(capability.Config{RunIdentity: definition.Workload.ID, Plan: plan})
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, err := RunDirect(context.Background(), definition, broker)
+			if err != nil || broker.Finalize(true) != nil || VerifyResult(definition, outcome.Result, broker.CallCount()) != nil {
+				t.Fatalf("outcome=%+v err=%v", outcome, err)
+			}
+			if _, err := DeriveMetrics(definition, ConditionDirect, outcome.ControllerRequestBytes, outcome.ControllerResponseBytes, broker); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func directTestPlan(t *testing.T, definition Definition, catalogURL, manifestURL string) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	for _, name := range definition.Workload.RequiredCapabilities {
+		switch name {
+		case "sources.demo_catalog":
+			if err := capability.RegisterDemoCatalog(registry, capability.DemoCatalogPolicy{Endpoint: catalogURL, Timeout: time.Second, MaxResponseBytes: 4096}); err != nil {
+				t.Fatal(err)
+			}
+		case "sources.benchmark_manifest":
+			if err := capability.RegisterBenchmarkManifest(registry, capability.BenchmarkManifestPolicy{Endpoint: manifestURL, Timeout: time.Second, MaxResponseBytes: 32 << 10}); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("unknown capability")
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: definition.Workload.ExpectedCapabilityCalls})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
 func TestPilotCanonicalJSONRejectsMalformedTrailingData(t *testing.T) {
 	definitions, err := PilotDefinitions()
 	if err != nil {

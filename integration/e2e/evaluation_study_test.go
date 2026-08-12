@@ -142,7 +142,7 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 		reused := uint32(0)
 		logical := uint64(0)
 		for _, body := range [][]byte{corpusBytes, planBytes} {
-			_, published, err := store.Put(labstore.KindSemanticDocument, body, labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
+			_, published, err := store.PutJSON(labstore.KindSemanticDocument, body, labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -224,7 +224,7 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 	if err := os.Chmod(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string][]byte{"raw.json": rawBytes, "report.json": reportBytes, "measurements.json": summaryBytes, "identities.json": []byte(fmt.Sprintf("{\"measurements\":%q,\"raw\":%q,\"report\":%q}\n", summaryID, rawID, reportID))} {
+	for name, body := range map[string][]byte{"corpus.json": corpusBytes, "plan.json": planBytes, "raw.json": rawBytes, "report.json": reportBytes, "measurements.json": summaryBytes, "identities.json": []byte(fmt.Sprintf("{\"measurements\":%q,\"raw\":%q,\"report\":%q}\n", summaryID, rawID, reportID))} {
 		if err := os.WriteFile(filepath.Join(root, name), body, 0600); err != nil {
 			t.Fatal(err)
 		}

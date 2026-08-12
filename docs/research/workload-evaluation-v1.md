@@ -88,10 +88,12 @@ Acceptance requires all of the following:
 
 ## Next decision
 
-A read-only candidate audit for a possible successor study is recorded in
-[workload-candidate-audit-v2.md](workload-candidate-audit-v2.md). It proposes a
-ten-workload Direct-versus-Guest mechanism cohort and two pilots; it is not an
-implemented corpus, approved execution roadmap, or evaluation result.
+A read-only candidate audit and its completed two-workload pilot are recorded in
+[workload-candidate-audit-v2.md](workload-candidate-audit-v2.md) and
+[workload-evaluation-v2-pilot.md](workload-evaluation-v2-pilot.md). The pilot is
+bounded mechanism evidence, not the full v2 cohort. Its next prerequisite is a
+reviewed research-only Direct state adapter before any workspace workload is
+admitted.
 
 Do not introduce SQLite metadata for evaluation v1. The remaining measured store gap is online distinction between live and orphan filesystem stages, not demonstrated identity divergence or privacy downgrade. SQLite would add a second durability domain without removing external object stages.
 

@@ -1,6 +1,6 @@
 # Workload candidate audit for evaluation v2
 
-Status: **Proposed, read-only repository audit.** This document selects a candidate cohort and the evidence needed before implementation. It is not an evaluation result, product claim, or implementation roadmap.
+Status: **Current candidate audit with two workspace-free pilots implemented.** This document selects the broader candidate cohort and the evidence needed before expanding beyond those pilots. It is not a product claim or implementation roadmap. The observed pilot result is recorded in [workload-evaluation-v2-pilot.md](workload-evaluation-v2-pilot.md).
 
 ## Decision question
 

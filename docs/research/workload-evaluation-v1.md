@@ -88,6 +88,11 @@ Acceptance requires all of the following:
 
 ## Next decision
 
+A read-only candidate audit for a possible successor study is recorded in
+[workload-candidate-audit-v2.md](workload-candidate-audit-v2.md). It proposes a
+ten-workload Direct-versus-Guest mechanism cohort and two pilots; it is not an
+implemented corpus, approved execution roadmap, or evaluation result.
+
 Do not introduce SQLite metadata for evaluation v1. The remaining measured store gap is online distinction between live and orphan filesystem stages, not demonstrated identity divergence or privacy downgrade. SQLite would add a second durability domain without removing external object stages.
 
 Filesystem recovery hardening now provides exclusive cross-process writer ownership, shared readers, explicit offline orphan-stage audit/repair, and retention/sweep exclusion under exclusive lifecycle ownership. The crash/concurrency matrix was rerun after that change. Online aggregate traversal still cannot distinguish a live stage from an orphan and therefore remains fail-closed. Reconsider SQLite only if this explicit filesystem protocol later shows unacceptable metadata contention, transactional multi-record requirements, indexed-query cost, or recovery complexity.

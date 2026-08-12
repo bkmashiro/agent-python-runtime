@@ -12,7 +12,7 @@ func TestRawStudyLifecycleConservationAndBodyFreeEvidence(t *testing.T) {
 	raw := evaluation.RawStudy{
 		SchemaVersion: "pysolate.evaluation-raw.v1", CorpusSHA256: digestC, PlanSHA256: digestB,
 		Rows: []evaluation.RawRow{
-			{RowID: evaluation.RowIdentity("structured-source-v1", evaluation.TreatmentLiveCapture, 0), WorkloadID: "structured-source-v1", Treatment: evaluation.TreatmentLiveCapture, Repetition: 0, Started: true, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true, PhaseMillis: evaluation.PhaseMillis{Setup: 2, Execution: 8, Oracle: 1, Evidence: 1}, Metrics: evaluation.RowMetrics{ReplayEquivalent: true, LogicalBytes: 200, StoredBytes: 120, ObjectCount: 3, ReusedObjectCount: 1}},
+			{RowID: evaluation.RowIdentity("structured-source-v1", evaluation.TreatmentLiveCapture, 0), WorkloadID: "structured-source-v1", Treatment: evaluation.TreatmentLiveCapture, Repetition: 0, Started: true, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true, PhaseMillis: evaluation.PhaseMillis{Setup: 2, Execution: 8, Oracle: 1, Evidence: 1}, Metrics: evaluation.RowMetrics{ReplayChecked: true, ReplayEquivalent: true, LogicalBytes: 200, StoredBytes: 120, ObjectCount: 3, ReusedObjectCount: 1}},
 			{RowID: evaluation.RowIdentity("stateful-local-v1", evaluation.TreatmentDeterministicVerify, 0), WorkloadID: "stateful-local-v1", Treatment: evaluation.TreatmentDeterministicVerify, Repetition: 0, Started: false, Status: evaluation.RowUnsupported, OracleStatus: evaluation.OracleNotRun, EvidenceComplete: false, ProblemCode: "mounted_workspace_or_unqualified_scope"},
 		},
 	}
@@ -81,6 +81,7 @@ func TestRebuildReportFromRawRowsIsExact(t *testing.T) {
 			r.Status = evaluation.RowCompleted
 			r.OracleStatus = evaluation.OraclePassed
 			r.EvidenceComplete = true
+			r.Metrics.ReplayChecked = true
 			r.Metrics.ReplayEquivalent = true
 		} else {
 			r.Status = evaluation.RowUnsupported

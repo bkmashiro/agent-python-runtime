@@ -19,7 +19,10 @@ type PhaseMillis struct {
 }
 
 type RowMetrics struct {
+	ReplayChecked     bool   `json:"replay_checked"`
 	ReplayEquivalent  bool   `json:"replay_equivalent"`
+	BranchChecked     bool   `json:"branch_checked"`
+	BranchDiverged    bool   `json:"branch_diverged"`
 	LogicalBytes      uint64 `json:"logical_bytes"`
 	StoredBytes       uint64 `json:"stored_bytes"`
 	ObjectCount       uint32 `json:"object_count"`
@@ -90,6 +93,9 @@ func (study RawStudy) Validate() error {
 
 func validateRawRow(row RawRow) error {
 	if row.RowID != RowIdentity(row.WorkloadID, row.Treatment, row.Repetition) || !identifierPattern.MatchString(row.WorkloadID) || !validTreatment(row.Treatment) || !validRowStatus(row.Status) || !validOracleStatus(row.OracleStatus) || row.Metrics.ReusedObjectCount > row.Metrics.ObjectCount {
+		return ErrInvalid
+	}
+	if row.Metrics.ReplayEquivalent && !row.Metrics.ReplayChecked || row.Metrics.BranchDiverged && !row.Metrics.BranchChecked {
 		return ErrInvalid
 	}
 	switch row.Status {

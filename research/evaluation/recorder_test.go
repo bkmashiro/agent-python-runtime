@@ -46,7 +46,9 @@ func TestRowRecorderCompletedTimeoutAndUnsupported(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, step := range []func() error{func() error { return r.RecordSetup(1) }, r.Start, func() error { return r.RecordExecution(5) }, func() error { return r.RecordOracle(evaluation.OraclePassed, 1) }, func() error { return r.RecordEvidence(true, 1, evaluation.RowMetrics{ReplayEquivalent: true}, "") }} {
+	for _, step := range []func() error{func() error { return r.RecordSetup(1) }, r.Start, func() error { return r.RecordExecution(5) }, func() error { return r.RecordOracle(evaluation.OraclePassed, 1) }, func() error {
+		return r.RecordEvidence(true, 1, evaluation.RowMetrics{ReplayChecked: true, ReplayEquivalent: true}, "")
+	}} {
 		if err := step(); err != nil {
 			t.Fatal(err)
 		}

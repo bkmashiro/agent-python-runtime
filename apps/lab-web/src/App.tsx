@@ -30,10 +30,18 @@ const evidenceColor: Record<Evidence, string> = {
   'instrumentation-preview': 'yellow',
 };
 const evidenceLabel: Record<Evidence, string> = {
-  observed: 'OBSERVED',
-  'verified-example': 'VERIFIED RUN',
-  'source-bound': 'SOURCE BOUND',
-  'instrumentation-preview': 'PREVIEW',
+  observed: 'RECORDED',
+  'verified-example': 'CONFIRMED',
+  'source-bound': 'CODE',
+  'instrumentation-preview': 'NOT RECORDED',
+};
+const kindColor: Record<TraceKind, string> = {
+  agent: 'gray', source: 'violet', runtime: 'blue', 'typed-call': 'violet',
+  'python-fs': 'indigo', abi: 'cyan', wasi: 'orange',
+};
+const kindLabel: Record<TraceKind, string> = {
+  agent: 'AGENT', source: 'PYTHON', runtime: 'RUN', 'typed-call': 'TOOL CALL',
+  'python-fs': 'PYTHON FS', abi: 'PYSOLATE ABI', wasi: 'WASI',
 };
 const kindIcon: Record<TraceKind, typeof Bot> = {
   agent: Bot,
@@ -64,6 +72,10 @@ function EvidenceBadge({ evidence }: { evidence: Evidence }) {
   return <Badge color={evidenceColor[evidence]} variant="light" size="xs">{evidenceLabel[evidence]}</Badge>;
 }
 
+function KindBadge({ kind }: { kind: TraceKind }) {
+  return <Badge color={kindColor[kind]} variant="light" size="xs">{kindLabel[kind]}</Badge>;
+}
+
 function TraceRow({ node, active, expanded, hasChildren, onSelect, onToggle }: {
   node: TraceNode; active: boolean; expanded: boolean; hasChildren: boolean;
   onSelect: () => void; onToggle: () => void;
@@ -80,7 +92,7 @@ function TraceRow({ node, active, expanded, hasChildren, onSelect, onToggle }: {
           <span className="trace-title">{node.title}</span>
           <span className="trace-summary">{node.summary}</span>
         </span>
-        <span className="trace-tail"><EvidenceBadge evidence={node.evidence} />{node.duration && <small>{node.duration}</small>}</span>
+        <span className="trace-tail"><KindBadge kind={node.kind} />{node.duration && <small>{node.duration}</small>}</span>
       </button>
     </div>
   );
@@ -117,7 +129,7 @@ function TracePanel({ activeId, onSelect }: { activeId: string; onSelect: (id: s
           })}
         </div>
       </div>
-      <div className="trace-legend"><EvidenceBadge evidence="observed" /><EvidenceBadge evidence="verified-example" /><EvidenceBadge evidence="instrumentation-preview" /></div>
+      <div className="trace-legend"><KindBadge kind="typed-call" /><KindBadge kind="abi" /><KindBadge kind="wasi" /></div>
     </section>
   );
 }
@@ -135,9 +147,9 @@ function Inspector({ node }: { node: TraceNode }) {
       <div className="operation-header">
         <MantineGroup gap={10} wrap="nowrap">
           <ThemeIcon size={32} variant="light" color={node.kind === 'wasi' ? 'orange' : node.kind === 'typed-call' ? 'violet' : 'blue'}><Icon size={17} /></ThemeIcon>
-          <div><Text size="xs" c="dimmed">SELECTED OPERATION · {node.kind.toUpperCase()}</Text><Title order={3}>{node.title}</Title></div>
+          <div><Text size="xs" c="dimmed">SELECTED OPERATION · {kindLabel[node.kind]}</Text><Title order={3}>{node.title}</Title></div>
         </MantineGroup>
-        <MantineGroup gap={7}><EvidenceBadge evidence={node.evidence} />{node.duration && <Badge variant="light" color="gray" leftSection={<Clock3 size={11} />}>{node.duration}</Badge>}</MantineGroup>
+        <MantineGroup gap={7}><KindBadge kind={node.kind} />{node.duration && <Badge variant="light" color="gray" leftSection={<Clock3 size={11} />}>{node.duration}</Badge>}</MantineGroup>
       </div>
       <div className="operation-summary"><Text size="sm">{node.summary}</Text><Code>{node.id}</Code></div>
       <Tabs value={tab} onChange={setTab} className="inspector-tabs">
@@ -207,11 +219,11 @@ export default function App() {
       <AppShell.Header className="app-header">
         <MantineGroup justify="space-between" h="100%" px="md" wrap="nowrap">
           <MantineGroup gap={10}><ThemeIcon variant="gradient" gradient={{ from: 'cyan', to: 'violet' }}><Database size={17} /></ThemeIcon><div><Text fw={800} size="sm">Pysolate Lab</Text><Text size="xs" c="dimmed">Agent trace debugger</Text></div></MantineGroup>
-          <MantineGroup gap={8}><Badge color="yellow" variant="light">INSTRUMENTATION PREVIEW</Badge><Badge color="teal" variant="light" leftSection={<CircleCheck size={11} />}>REAL EXAMPLE VERIFIED</Badge><Tooltip label="Search trace (coming with live ingestion)"><ActionIcon variant="subtle" color="gray"><Search size={16} /></ActionIcon></Tooltip><Button size="compact-sm" variant="light" leftSection={<Play size={13} />}>Replay</Button></MantineGroup>
+          <MantineGroup gap={8}><Badge color="yellow" variant="light">STATIC TARGET VIEW</Badge><Badge color="teal" variant="light" leftSection={<CircleCheck size={11} />}>REAL EXAMPLE</Badge><Tooltip label="Search trace (coming with live ingestion)"><ActionIcon variant="subtle" color="gray"><Search size={16} /></ActionIcon></Tooltip><Button size="compact-sm" variant="light" leftSection={<Play size={13} />}>Replay</Button></MantineGroup>
         </MantineGroup>
       </AppShell.Header>
       <AppShell.Main className="app-main">
-        <div className="preview-notice"><ShieldCheck size={14} /><span><b>Target debugger experience.</b> Typed-call results and final workspace are verified by the real example; Agent turns, ABI/WASI atoms, and intermediate checkpoints are explicitly marked preview until captured by the Runtime/Harness.</span></div>
+        <div className="preview-notice"><ShieldCheck size={14} /><span><b>Target debugger experience.</b> Tool-call results and the final workspace come from the real example. Agent turns, ABI/WASI atoms, and intermediate checkpoints are marked NOT RECORDED until the Runtime/Harness records them.</span></div>
         <Group orientation="horizontal" className="panel-group">
           <Panel defaultSize={27} minSize={19}><TracePanel activeId={activeId} onSelect={setActiveId} /></Panel>
           <Separator className="resize-handle" />

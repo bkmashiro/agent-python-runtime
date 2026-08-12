@@ -27,13 +27,14 @@ observable outcome is:
 
 ## Evidence honesty
 
-The UI separates four evidence classes:
+The trace uses operation labels rather than provenance labels:
 
-- **OBSERVED** — emitted by the current Runtime observation/workspace contract;
-- **VERIFIED RUN** — the runnable example passed through the real verified Guest,
-  but the UI does not claim every displayed subevent was captured;
-- **SOURCE BOUND** — linked to exact source ranges in the runnable Python file;
-- **PREVIEW** — the target instrumentation contract, not current Runtime evidence.
+- **TOOL CALL** — a semantic Python typed-tool invocation;
+- **PYSOLATE ABI** — the `agent_runtime_v1.host_call` Guest↔Host boundary;
+- **WASI** — an ordinary WASI Preview1 host operation.
+
+Evidence provenance is secondary and appears in the Evidence inspector as
+plain-language **RECORDED**, **CONFIRMED**, **CODE**, or **NOT RECORDED**.
 
 A typed Python tool call such as `sources.demo_catalog()` lowers through
 `agent_runtime_v1.host_call`, Pysolate's custom Guest↔Host ABI. It is not a WASI
@@ -43,8 +44,8 @@ these operation classes explicitly.
 
 Current Runtime evidence does not include all Agent turns, decoded ABI memory,
 per-WASI-call events, or intermediate workspace checkpoints. Those nodes and
-checkpoints are marked **PREVIEW**. Initial/final workspace identities remain
-**OBSERVED**.
+checkpoints are marked **NOT RECORDED**. Initial/final workspace identities
+remain **RECORDED**.
 
 ## Technology stack
 

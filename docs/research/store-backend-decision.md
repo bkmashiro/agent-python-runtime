@@ -14,7 +14,12 @@ filesystem namespace is the object index for now.
 This keeps the implementation in the Go standard library and outside every
 Runtime dependency path. It also lets the prototype directly exercise the
 required durability and privacy boundary before a query-engine dependency is
-justified. The choice is deliberately provisional.
+justified. The choice remains provisional, but the deterministic child-process
+fault study in [`labstore-fault-study.md`](labstore-fault-study.md) does not
+admit SQLite for evaluation v1: measured failures are stage ownership,
+aggregate-read liveness and offline recovery gaps, while immutable identities
+and fail-private publication converged. The next step is an explicit filesystem
+ownership/repair protocol, not a second durability domain.
 
 The identity input is domain-separated by `pysolate.labstore.content.v1`, exact
 semantic kind, canonical sorted links, and body bytes. Thus equal prompt and

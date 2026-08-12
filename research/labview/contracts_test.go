@@ -264,6 +264,55 @@ func TestSchemasRejectAdversarialDocuments(t *testing.T) {
 	}
 }
 
+func TestClosedV1CompatibilityKeepsDeclaredOptionalFieldsButRequiresV2ForNewWireFields(t *testing.T) {
+	fixtures, err := labview.CanonicalFixtures()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var base map[string]any
+	for _, fixture := range fixtures {
+		if fixture.Kind == labview.KindProblem {
+			if err := json.Unmarshal(fixture.Bytes, &base); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	if base == nil {
+		t.Fatal("missing problem fixture")
+	}
+	schema := compileSchema(t, labview.KindProblem)
+	withoutDeclaredOptional := make(map[string]any, len(base))
+	for key, value := range base {
+		withoutDeclaredOptional[key] = value
+	}
+	delete(withoutDeclaredOptional, "run_id")
+	delete(withoutDeclaredOptional, "ref_sha256")
+	withoutDeclaredOptional["scope"] = "study"
+	if err := schema.Validate(withoutDeclaredOptional); err != nil {
+		t.Fatalf("declared optional omission requires no v2: %v", err)
+	}
+	withDeclaredOptional := make(map[string]any, len(base)+2)
+	for key, value := range base {
+		withDeclaredOptional[key] = value
+	}
+	withDeclaredOptional["scope"] = "run"
+	withDeclaredOptional["code"] = "evidence_incomplete"
+	withDeclaredOptional["run_id"] = "run-compatible"
+	delete(withDeclaredOptional, "ref_sha256")
+	if err := schema.Validate(withDeclaredOptional); err != nil {
+		t.Fatalf("declared optional addition requires no v2: %v", err)
+	}
+	withUndeclaredOptional := make(map[string]any, len(base)+1)
+	for key, value := range base {
+		withUndeclaredOptional[key] = value
+	}
+	withUndeclaredOptional["future_optional"] = nil
+	if err := schema.Validate(withUndeclaredOptional); err == nil {
+		t.Fatal("new optional wire field was treated as v1-compatible")
+	}
+}
+
 func compileSchema(t *testing.T, kind labview.Kind) *jsonschema.Schema {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "schemas", "lab", "v1", string(kind)+".schema.json"))

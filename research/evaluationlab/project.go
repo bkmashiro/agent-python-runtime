@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -14,9 +15,13 @@ import (
 
 // Project selects one report row and emits a complete, body-free Lab v1 set.
 // Relations absent from the report are represented by distinct unavailable-marker identities.
-func Project(reportBytes []byte, rowID string) (labview.Set, error) {
+func Project(reportBytes, measurementBytes []byte, rowID string) (labview.Set, error) {
 	report, source, err := evaluation.DecodeReport(reportBytes)
 	if err != nil || rowID == "" {
+		return labview.Set{}, labview.ErrInvalid
+	}
+	measurements, _, err := evaluation.DecodeMeasurementSummary(measurementBytes)
+	if err != nil || measurements.CorpusSHA256 != report.CorpusSHA256 || measurements.PlanSHA256 != report.PlanSHA256 || measurements.Offered != report.Summary.Offered || measurements.Completed != report.Summary.Completed || measurements.Failed != report.Summary.Failed || measurements.TimedOut != report.Summary.TimedOut || measurements.Unsupported != report.Summary.Unsupported || measurements.ObjectPuts > math.MaxUint32 || measurements.ReusedPuts > math.MaxUint32 {
 		return labview.Set{}, labview.ErrInvalid
 	}
 	selected := -1
@@ -59,7 +64,7 @@ func Project(reportBytes []byte, rowID string) (labview.Set, error) {
 		workloads[candidate.WorkloadID] = true
 		treatments[string(candidate.Treatment)] = true
 	}
-	study := labview.StudySummary{Header: header(labview.KindStudySummary), StudyID: "study-" + shortID(source), EvidenceClass: string(report.EvidenceClass), WorkloadCount: uint32(len(workloads)), TreatmentCount: uint32(len(treatments)), StatusTotals: []labview.StatusTotal{{Status: "completed", Count: report.Summary.Completed}, {Status: "failed", Count: report.Summary.Failed}, {Status: "timed_out", Count: report.Summary.TimedOut}, {Status: "unsupported", Count: report.Summary.Unsupported}}, ProhibitedClaims: evaluation.RequiredProhibitedClaims(), Storage: labview.StorageSummary{}}
+	study := labview.StudySummary{Header: header(labview.KindStudySummary), StudyID: "study-" + shortID(source), EvidenceClass: string(report.EvidenceClass), WorkloadCount: uint32(len(workloads)), TreatmentCount: uint32(len(treatments)), StatusTotals: []labview.StatusTotal{{Status: "completed", Count: report.Summary.Completed}, {Status: "failed", Count: report.Summary.Failed}, {Status: "timed_out", Count: report.Summary.TimedOut}, {Status: "unsupported", Count: report.Summary.Unsupported}}, ProhibitedClaims: evaluation.RequiredProhibitedClaims(), Storage: labview.StorageSummary{LogicalBytes: measurements.LogicalBytes, StoredBytes: measurements.StoredBytes, ObjectCount: uint32(measurements.ObjectPuts), ReusedObjectCount: uint32(measurements.ReusedPuts)}}
 	set := labview.Set{Study: study, Run: run, Timeline: timeline, DAG: dag, Workspace: workspace, Comparison: comparison, Refs: object, Problem: problem}
 	items := []struct {
 		rel   string

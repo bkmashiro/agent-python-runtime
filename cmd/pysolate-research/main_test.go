@@ -420,18 +420,22 @@ func readManifestForTest(t *testing.T, path string) playback.BranchManifest {
 }
 
 func TestLabProjectEmitsCanonicalGoDocumentsReadOnly(t *testing.T) {
-	reportPath, rowID := writeEvaluationReport(t)
+	reportPath, measurementPath, rowID := writeEvaluationReport(t)
 	before, err := os.ReadFile(reportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	direct, err := evaluationlab.Project(before, rowID)
+	measurementBytes, err := os.ReadFile(measurementPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct, err := evaluationlab.Project(before, measurementBytes, rowID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range labview.AllKinds() {
 		var stdout, stderr bytes.Buffer
-		if code := execute([]string{"lab", "project", "-report", reportPath, "-row", rowID, "-kind", string(kind)}, &stdout, &stderr); code != 0 {
+		if code := execute([]string{"lab", "project", "-report", reportPath, "-measurements", measurementPath, "-row", rowID, "-kind", string(kind)}, &stdout, &stderr); code != 0 {
 			t.Fatalf("kind=%s code=%d stderr=%s", kind, code, stderr.String())
 		}
 		if stdout.Len() > maxOutputBytes {
@@ -472,7 +476,7 @@ func TestLabProjectEmitsCanonicalGoDocumentsReadOnly(t *testing.T) {
 	}
 }
 
-func writeEvaluationReport(t *testing.T) (string, string) {
+func writeEvaluationReport(t *testing.T) (string, string, string) {
 	t.Helper()
 	row := evaluation.Row{RowID: evaluation.RowIdentity("structured-source-v1", evaluation.TreatmentLiveCapture, 0), WorkloadID: "structured-source-v1", Treatment: evaluation.TreatmentLiveCapture, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true, CorpusSHA256: cliDigest('a'), PlanSHA256: cliDigest('b'), EvidenceRefs: []string{cliDigest('c')}}
 	other := evaluation.Row{RowID: evaluation.RowIdentity("bounded-planning-v1", evaluation.TreatmentOfflineReplay, 0), WorkloadID: "bounded-planning-v1", Treatment: evaluation.TreatmentOfflineReplay, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true, CorpusSHA256: cliDigest('a'), PlanSHA256: cliDigest('b'), EvidenceRefs: []string{cliDigest('d')}}
@@ -489,7 +493,16 @@ func writeEvaluationReport(t *testing.T) (string, string) {
 	if err := os.WriteFile(path, body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	return path, row.RowID
+	measurements := evaluation.MeasurementSummary{SchemaVersion: evaluation.MeasurementSchemaVersion, EvidenceClass: evaluation.EvidenceMechanismOnly, CorpusSHA256: cliDigest('a'), PlanSHA256: cliDigest('b'), ProhibitedClaims: evaluation.RequiredProhibitedClaims(), Offered: 2, Started: 2, Completed: 2, OraclePassed: 2, EvidenceComplete: 2, ObjectPuts: 4, ReusedPuts: 2, LogicalBytes: 2048, StoredBytes: 1024}
+	measurementBody, _, err := evaluation.EncodeMeasurementSummary(measurements)
+	if err != nil {
+		t.Fatal(err)
+	}
+	measurementPath := filepath.Join(root, "measurements.json")
+	if err := os.WriteFile(measurementPath, measurementBody, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path, measurementPath, row.RowID
 }
 
 func cliDigest(character byte) string {

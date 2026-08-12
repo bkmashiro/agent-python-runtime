@@ -10,8 +10,8 @@ import (
 )
 
 func TestProjectStrictReportIntoHonestUnavailableLabSet(t *testing.T) {
-	reportBytes, report := reportFixture(t)
-	projected, err := evaluationlab.Project(reportBytes, report.Rows[0].RowID)
+	reportBytes, measurementBytes, report := reportFixture(t)
+	projected, err := evaluationlab.Project(reportBytes, measurementBytes, report.Rows[0].RowID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,14 +57,26 @@ func TestProjectStrictReportIntoHonestUnavailableLabSet(t *testing.T) {
 }
 
 func TestProjectRejectsUnknownRowAndNonCanonicalReport(t *testing.T) {
-	reportBytes, report := reportFixture(t)
-	if _, err := evaluationlab.Project(reportBytes, "missing-row"); err == nil {
+	reportBytes, measurementBytes, report := reportFixture(t)
+	if _, err := evaluationlab.Project(reportBytes, measurementBytes, "missing-row"); err == nil {
 		t.Fatal("missing row accepted")
 	}
-	if _, err := evaluationlab.Project(append(reportBytes, '\n'), report.Rows[0].RowID); err == nil {
+	if _, err := evaluationlab.Project(append(reportBytes, '\n'), measurementBytes, report.Rows[0].RowID); err == nil {
 		t.Fatal("non-canonical report accepted")
 	}
-	projected, err := evaluationlab.Project(reportBytes, report.Rows[0].RowID)
+	measurements, _, err := evaluation.DecodeMeasurementSummary(measurementBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	measurements.PlanSHA256 = "sha256:" + repeat('e', 64)
+	drifted, _, err := evaluation.EncodeMeasurementSummary(measurements)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evaluationlab.Project(reportBytes, drifted, report.Rows[0].RowID); err == nil {
+		t.Fatal("measurement identity drift accepted")
+	}
+	projected, err := evaluationlab.Project(reportBytes, measurementBytes, report.Rows[0].RowID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +86,7 @@ func TestProjectRejectsUnknownRowAndNonCanonicalReport(t *testing.T) {
 	}
 }
 
-func reportFixture(t *testing.T) ([]byte, evaluation.Report) {
+func reportFixture(t *testing.T) ([]byte, []byte, evaluation.Report) {
 	digest := func(ch byte) string { return "sha256:" + string(make([]byte, 0)) + repeat(ch, 64) }
 	report := evaluation.Report{
 		SchemaVersion: evaluation.ReportSchemaVersion, EvidenceClass: evaluation.EvidenceMechanismOnly,
@@ -89,7 +101,12 @@ func reportFixture(t *testing.T) ([]byte, evaluation.Report) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return encoded, report
+	measurements := evaluation.MeasurementSummary{SchemaVersion: evaluation.MeasurementSchemaVersion, EvidenceClass: evaluation.EvidenceMechanismOnly, CorpusSHA256: digest('a'), PlanSHA256: digest('b'), ProhibitedClaims: evaluation.RequiredProhibitedClaims(), Offered: 2, Started: 2, Completed: 2, OraclePassed: 2, EvidenceComplete: 2, ObjectPuts: 4, ReusedPuts: 2, LogicalBytes: 2048, StoredBytes: 4096}
+	measurementBytes, _, err := evaluation.EncodeMeasurementSummary(measurements)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded, measurementBytes, report
 }
 
 func repeat(ch byte, n int) string {

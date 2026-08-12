@@ -93,15 +93,16 @@ func labCommand(arguments []string, stdout, stderr io.Writer) commandError {
 		return commandError{err: errors.New("lab requires project"), usage: true}
 	}
 	flags := newFlagSet("lab project", stderr)
-	var reportPath, rowID, kindValue string
+	var reportPath, measurementPath, rowID, kindValue string
 	flags.StringVar(&reportPath, "report", "", "absolute protected canonical evaluation report path")
+	flags.StringVar(&measurementPath, "measurements", "", "absolute protected canonical measurement summary path")
 	flags.StringVar(&rowID, "row", "", "exact evaluation row identity")
 	flags.StringVar(&kindValue, "kind", "", "Lab v1 document kind")
 	if err := flags.Parse(arguments[1:]); err != nil {
 		return commandError{err: err, usage: true}
 	}
-	if flags.NArg() != 0 || reportPath == "" || rowID == "" || kindValue == "" {
-		return commandError{err: errors.New("lab project requires -report, -row and -kind"), usage: true}
+	if flags.NArg() != 0 || reportPath == "" || measurementPath == "" || rowID == "" || kindValue == "" {
+		return commandError{err: errors.New("lab project requires -report, -measurements, -row and -kind"), usage: true}
 	}
 	kind := labview.Kind(kindValue)
 	valid := false
@@ -115,7 +116,11 @@ func labCommand(arguments []string, stdout, stderr io.Writer) commandError {
 	if err != nil {
 		return commandError{err: fmt.Errorf("read evaluation report: %w", err)}
 	}
-	set, err := evaluationlab.Project(raw, rowID)
+	measurementBytes, err := readProtectedFile(measurementPath, labview.MaxDocumentBytes)
+	if err != nil {
+		return commandError{err: fmt.Errorf("read evaluation measurements: %w", err)}
+	}
+	set, err := evaluationlab.Project(raw, measurementBytes, rowID)
 	if err != nil {
 		return commandError{err: fmt.Errorf("project evaluation report: %w", err)}
 	}
@@ -912,7 +917,7 @@ Usage:
   pysolate-research compare -left PATH -right PATH [-max-calls N] [-json]
   pysolate-research branch plan [flags]
   pysolate-research branch dag [flags]
-  pysolate-research lab project -report PATH -row ID -kind LAB_KIND
+  pysolate-research lab project -report PATH -measurements PATH -row ID -kind LAB_KIND
   pysolate-research store stats -root PATH [-json]
   pysolate-research store benchmark -root NEW_PATH [fixture flags] [-json]
 

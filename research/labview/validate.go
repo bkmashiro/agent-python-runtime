@@ -61,7 +61,7 @@ func validateIndex(v Index) error {
 	return nil
 }
 func validateStudy(v StudySummary) error {
-	if !validHeader(v.Header, KindStudySummary) || !idRE.MatchString(v.StudyID) || !validEvidenceClass(v.EvidenceClass) || v.StatusTotals == nil || v.ProhibitedClaims == nil || !slices.Equal(v.ProhibitedClaims, evaluation.RequiredProhibitedClaims()) || v.Storage.StoredBytes > v.Storage.LogicalBytes || v.Storage.ReusedObjectCount > v.Storage.ObjectCount {
+	if !validHeader(v.Header, KindStudySummary) || !idRE.MatchString(v.StudyID) || !validEvidenceClass(v.EvidenceClass) || v.StatusTotals == nil || v.ProhibitedClaims == nil || !slices.Equal(v.ProhibitedClaims, evaluation.RequiredProhibitedClaims()) || v.Storage.ReusedObjectCount > v.Storage.ObjectCount {
 		return ErrInvalid
 	}
 	if len(v.StatusTotals) != 4 {

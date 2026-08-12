@@ -17,12 +17,15 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
+	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+	wazerosys "github.com/tetratelabs/wazero/sys"
 )
 
 type BrokerFactory func(context.Context) (*capability.Broker, error)
@@ -51,6 +54,9 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if fields != 0 && fields != 3 {
 		return nil, errors.New("workspace binding requires manager, reference, and owner")
 	}
+	if config.DeterministicVerification != nil && fields != 0 {
+		return nil, runtimeconfig.ErrDeterministicVerificationAdmission
+	}
 	var lease *workspace.Lease
 	if factory.WorkspaceManager != nil {
 		var err error
@@ -76,6 +82,7 @@ type Engine struct {
 	brokerFactory  BrokerFactory
 	workspaceLease *workspace.Lease
 	workspaceRun   chan struct{}
+	artifactSHA256 string
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -93,6 +100,12 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
 	}
+	if config.DeterministicVerification != nil {
+		digest := sha256.Sum256(wasm)
+		if fmt.Sprintf("sha256:%x", digest[:]) != config.DeterministicVerification.ArtifactSHA256() || lease != nil {
+			return nil, runtimeconfig.ErrDeterministicVerificationAdmission
+		}
+	}
 	runtimeConfig := wazerort.NewRuntimeConfig().WithCloseOnContextDone(true).WithMemoryLimitPages(config.MemoryLimitPages)
 	wasmRuntime := wazerort.NewRuntimeWithConfig(ctx, runtimeConfig)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, wasmRuntime); err != nil {
@@ -108,7 +121,11 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
-	engine := &Engine{runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceLease: lease}
+	artifactDigest := sha256.Sum256(wasm)
+	engine := &Engine{
+		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceLease: lease,
+		artifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]),
+	}
 	if lease != nil {
 		engine.workspaceRun = make(chan struct{}, 1)
 	}
@@ -142,7 +159,17 @@ func (engine *Engine) Close(ctx context.Context) error {
 }
 
 func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
-	config := wazerort.NewModuleConfig().WithName("").WithRandSource(cryptorand.Reader).WithSysWalltime().WithSysNanotime().WithSysNanosleep().WithStderr(stderr)
+	config := wazerort.NewModuleConfig().WithName("").WithStderr(stderr)
+	if profile := engine.config.DeterministicVerification; profile != nil {
+		clock := newDeterministicClock(profile.WalltimeUnixNano(), profile.MonotonicStartNano(), profile.ClockStepNano())
+		resolution := wazerosys.ClockResolution(profile.ClockStepNano())
+		config = config.WithRandSource(newDeterministicReader(profile.RandomSeed())).
+			WithWalltime(clock.walltime, resolution).
+			WithNanotime(clock.nanotime, resolution).
+			WithNanosleep(clock.nanosleep)
+	} else {
+		config = config.WithRandSource(cryptorand.Reader).WithSysWalltime().WithSysNanotime().WithSysNanosleep()
+	}
 	if engine.workspaceLease == nil {
 		return config, nil, nil
 	}
@@ -177,11 +204,23 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err := runtimeconfig.EvaluateRunCompatibility(runRequest, engine.config.ExecutionProfile); err != nil {
 		return nil, err
 	}
+	if engine.config.DeterministicVerification != nil {
+		if err := runtimeconfig.AdmitDeterministicVerification(runRequest); err != nil {
+			return nil, err
+		}
+	}
 	var executionRef *runtimeconfig.ExecutionRef
-	if invocationRef, ok := enginecontract.InvocationRefFromContext(ctx); ok {
+	invocationRef, hasInvocationRef := enginecontract.InvocationRefFromContext(ctx)
+	if hasInvocationRef {
 		digest := sha256.Sum256([]byte(runRequest.Code))
 		ref := runtimeconfig.ExecutionRef{InvocationRef: invocationRef, ExecutedCodeSHA256: fmt.Sprintf("sha256:%x", digest[:])}
 		executionRef = &ref
+	}
+	observationSession, hasObservation := enginecontract.ObservationSessionFromContext(ctx)
+	if hasObservation && observationSession.Mode() != observe.Off {
+		if !hasInvocationRef || observationSession.ExecutionID() != invocationRef.ExecutionID {
+			return nil, ErrObservationIdentityMismatch
+		}
 	}
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
@@ -192,6 +231,37 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 			return nil, runContext.Err()
 		}
 		defer func() { <-engine.workspaceRun }()
+	}
+	var workspaceInitial *workspace.Snapshot
+	if hasObservation && observationSession.Mode() != observe.Off && engine.workspaceLease != nil {
+		snapshot, snapshotErr := engine.workspaceLease.Snapshot()
+		if snapshotErr != nil {
+			return nil, snapshotErr
+		}
+		workspaceInitial = &snapshot
+	}
+	observation := observationLifecycle{session: observationSession}
+	if hasObservation && observationSession.Mode() != observe.Off {
+		profileSHA256, profileErr := runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
+		if profileErr != nil {
+			return nil, profileErr
+		}
+		start := observe.ExecutionStartedPayload{
+			ArtifactSHA256: engine.artifactSHA256, ExecutedCodeSHA256: executionRef.ExecutedCodeSHA256,
+			ExecutionProfileSHA256: profileSHA256,
+		}
+		if engine.config.DeterministicVerification != nil {
+			start.DeterministicProfileSHA256 = engine.config.DeterministicVerification.Identity()
+		}
+		if err := observation.start(runContext, start); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if runErr != nil && !observation.terminal {
+				terminalErr := observation.fail(context.Background(), "runtime_error")
+				runErr = errors.Join(runErr, terminalErr)
+			}
+		}()
 	}
 	stderr := &bytes.Buffer{}
 	moduleConfig, temporary, err := engine.moduleConfig(stderr)
@@ -205,7 +275,12 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, fmt.Errorf("instantiate guest: %w", err)
 	}
-	defer func() { runErr = errors.Join(runErr, module.Close(context.Background())) }()
+	moduleClosed := false
+	defer func() {
+		if !moduleClosed {
+			runErr = errors.Join(runErr, module.Close(context.Background()))
+		}
+	}()
 	if err := callNoArgs(runContext, module, "_initialize"); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
@@ -232,6 +307,11 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
 			return nil, ErrExecutionIdentityMismatch
 		}
+		if observation.started {
+			if err := observation.capabilityPlan(runContext, broker.CapabilityPlanSHA256()); err != nil {
+				return nil, err
+			}
+		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
 	payload, err = callExecute(runContext, module, request, engine.config.MaxResponseBytes)
@@ -250,6 +330,11 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		receipts, capabilityCalls = broker.Receipts(), broker.CallCount()
 		capabilityPlanSHA256 = broker.CapabilityPlanSHA256()
 	}
+	if observation.started {
+		if err := observation.capabilityCalls(runContext, receipts); err != nil {
+			return payload, err
+		}
+	}
 	if _, err := runtimeconfig.DecodeAndValidateGuestRunResponse(runRequest, payload); err != nil && !errors.Is(err, runtimeconfig.ErrRunResultSchemaMismatch) {
 		return payload, err
 	}
@@ -257,8 +342,41 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, err
 	}
-	if _, err := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload); err != nil {
+	validatedResponse, err := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload)
+	if err != nil {
 		return payload, err
+	}
+	if closeErr := module.Close(context.Background()); closeErr != nil {
+		return payload, closeErr
+	}
+	moduleClosed = true
+	if temporary != nil {
+		if closeErr := temporary.Close(); closeErr != nil {
+			return payload, closeErr
+		}
+		temporary = nil
+	}
+	if observation.started && engine.workspaceLease != nil && workspaceInitial != nil {
+		finalSnapshot, snapshotErr := engine.workspaceLease.Snapshot()
+		if snapshotErr != nil {
+			return payload, snapshotErr
+		}
+		if err := observation.workspace(runContext, *workspaceInitial, finalSnapshot); err != nil {
+			return payload, err
+		}
+	}
+	if observation.started {
+		if validatedResponse.Status == runtimeconfig.RunResponseOK {
+			resultSHA256, digestErr := playback.CanonicalSHA256(validatedResponse.Result)
+			if digestErr != nil {
+				return payload, digestErr
+			}
+			if err := observation.complete(runContext, resultSHA256); err != nil {
+				return payload, err
+			}
+		} else if err := observation.fail(runContext, "guest_error"); err != nil {
+			return payload, err
+		}
 	}
 	return payload, nil
 }
@@ -308,10 +426,11 @@ func hostCall(
 }
 
 var (
-	ErrGuestClaimedExecutionRef   = errors.New("Guest response claimed Host execution reference")
-	ErrGuestClaimedCapabilityPlan = errors.New("Guest response claimed Host capability plan")
-	ErrExecutionIdentityMismatch  = errors.New("Host execution identity mismatch")
-	ErrCapabilityPlanMismatch     = errors.New("Host capability plan identity mismatch")
+	ErrGuestClaimedExecutionRef    = errors.New("Guest response claimed Host execution reference")
+	ErrGuestClaimedCapabilityPlan  = errors.New("Guest response claimed Host capability plan")
+	ErrExecutionIdentityMismatch   = errors.New("Host execution identity mismatch")
+	ErrCapabilityPlanMismatch      = errors.New("Host capability plan identity mismatch")
+	ErrObservationIdentityMismatch = errors.New("Host observation execution identity mismatch")
 )
 
 func projectHostEvidence(

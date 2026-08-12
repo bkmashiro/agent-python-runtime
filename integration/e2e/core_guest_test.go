@@ -1,8 +1,11 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,5 +162,38 @@ func TestTimeoutDiscardsGuestAndNextRunRecovers(t *testing.T) {
 	response := run(t, newEngineWithConfig(t, config), "recovered", "result = 42", map[string]any{})
 	if response.Status != "ok" || response.Result != float64(42) {
 		t.Fatalf("fresh engine did not recover: %#v", response)
+	}
+}
+
+func TestExperimentalDeterministicProfileRepeatsQualifiedFreshGuests(t *testing.T) {
+	artifactPath := guestArtifact(t)
+	wasm, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactDigest := sha256.Sum256(wasm)
+	deterministic, err := runtimeconfig.NewDeterministicVerificationProfile(fmt.Sprintf("sha256:%x", artifactDigest[:]), "e2e-qualified-repeat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"datetime", "sys"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	config.DeterministicVerification = &deterministic
+	runner := newEngineWithConfig(t, config)
+	request := []byte(`{"run_id":"deterministic-e2e","code":"import datetime, sys\nos_module=sys.modules['os']\ntime_module=sys.modules['time']\nresult={'wall':time_module.time_ns(),'datetime':datetime.datetime.now().isoformat(),'urandom':os_module.urandom(16).hex(),'hash':hash('pysolate')}","inputs":{},"compatibility":{"profile":"base","imports":["datetime","sys"]}}`)
+	first, err := runner.Run(context.Background(), request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := runner.Run(context.Background(), request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatalf("qualified fresh Guests diverged:\nfirst=%s\nsecond=%s", first, second)
 	}
 }

@@ -2,7 +2,10 @@ package wazero_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
+	"strings"
 	"testing"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -18,6 +21,36 @@ func TestFactoryIsFreshOnly(t *testing.T) {
 	defer runner.Close(context.Background())
 	if properties := runner.Properties(); properties.Backend != "wazero" || properties.ExecutionProfileID != "" {
 		t.Fatalf("unexpected properties: %#v", properties)
+	}
+}
+
+func TestDeterministicProfileRejectsArtifactSubstitutionBeforeCompile(t *testing.T) {
+	wasm := []byte{0, 97, 115, 109, 1, 0, 0, 0}
+	actual := sha256.Sum256(wasm)
+	expectedArtifact := "sha256:" + strings.Repeat("a", 64)
+	if expectedArtifact == fmt.Sprintf("sha256:%x", actual[:]) {
+		t.Fatal("test artifact unexpectedly matches substitution identity")
+	}
+	deterministic, err := runtimeconfig.NewDeterministicVerificationProfile(expectedArtifact, "artifact-substitution")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"sys"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: expectedArtifact, ManifestSHA256: "sha256:" + strings.Repeat("b", 64),
+		ImportRoots: []string{"sys"}, QualifiedImportRoots: []string{"sys"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &bound
+	config.DeterministicVerification = &deterministic
+	if _, err := (wazeroengine.Factory{}).New(context.Background(), wasm, config); err == nil {
+		t.Fatal("substituted artifact admitted")
 	}
 }
 

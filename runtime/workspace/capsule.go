@@ -39,6 +39,23 @@ type CapsuleInfo struct {
 	Limits          Limits
 }
 
+// SnapshotEntry is bounded file-level metadata for Host observation and
+// research comparison. It never contains file bytes or a Host path.
+type SnapshotEntry struct {
+	Path       string
+	Kind       string
+	Executable bool
+	Size       uint64
+	SHA256     string
+}
+
+// Snapshot contains the semantic workspace identity plus sorted entry
+// metadata. File bodies remain private to the workspace/Capsule boundary.
+type Snapshot struct {
+	Info    CapsuleInfo
+	Entries []SnapshotEntry
+}
+
 type capsuleLimits struct {
 	MaxFiles     uint32 `json:"max_files"`
 	MaxBytes     uint64 `json:"max_bytes"`
@@ -182,6 +199,48 @@ func (manager *Manager) Inspect(ref Ref) (CapsuleInfo, error) {
 		return CapsuleInfo{}, err
 	}
 	return manifest.info(), nil
+}
+
+// Snapshot returns portable entry metadata for one inactive workspace.
+func (manager *Manager) Snapshot(ref Ref) (Snapshot, error) {
+	if manager == nil {
+		return Snapshot{}, ErrWorkspaceClosed
+	}
+	if !validRef(ref) {
+		return Snapshot{}, fmt.Errorf("%w: invalid workspace snapshot", ErrInvalidWorkspace)
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return Snapshot{}, ErrWorkspaceClosed
+	}
+	item, exists := manager.entries[ref]
+	if !exists {
+		return Snapshot{}, ErrWorkspaceNotFound
+	}
+	if item.owner != "" {
+		return Snapshot{}, ErrWorkspaceBusy
+	}
+	return snapshotWorkspaceRoot(item.root, item.limits)
+}
+
+func snapshotWorkspaceRoot(root string, limits Limits) (Snapshot, error) {
+	rooted, err := os.OpenRoot(root)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("open workspace snapshot root: %w", err)
+	}
+	defer rooted.Close()
+	manifest, err := buildCapsuleManifest(rooted, root, limits)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	entries := make([]SnapshotEntry, len(manifest.Entries))
+	for index, entry := range manifest.Entries {
+		entries[index] = SnapshotEntry{
+			Path: entry.Path, Kind: entry.Kind, Executable: entry.Executable, Size: entry.Size, SHA256: entry.SHA256,
+		}
+	}
+	return Snapshot{Info: manifest.info(), Entries: entries}, nil
 }
 
 func buildCapsuleManifest(rooted *os.Root, root string, limits Limits) (capsuleManifest, error) {

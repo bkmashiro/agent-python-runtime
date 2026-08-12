@@ -323,6 +323,32 @@ func (lease *Lease) FS() experimentalsys.FS {
 	return lease.filesystem
 }
 
+// Snapshot returns bounded file metadata while this Host-owned lease is
+// active. Callers must ensure the Guest module is not concurrently mutating
+// the workspace; the Runtime uses it only before instantiation and after the
+// module has closed.
+func (lease *Lease) Snapshot() (Snapshot, error) {
+	if lease == nil {
+		return Snapshot{}, ErrWorkspaceClosed
+	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	if lease.released {
+		return Snapshot{}, ErrWorkspaceClosed
+	}
+	manager := lease.manager
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return Snapshot{}, ErrWorkspaceClosed
+	}
+	item, exists := manager.entries[lease.ref]
+	if !exists || item.owner != lease.owner {
+		return Snapshot{}, errors.New("workspace lease identity changed")
+	}
+	return snapshotWorkspaceRoot(item.root, item.limits)
+}
+
 // NewTemporary creates a private scratch filesystem tied to this lease. It has
 // no Ref and must be closed before the lease can be released.
 func (lease *Lease) NewTemporary() (*Temporary, error) {

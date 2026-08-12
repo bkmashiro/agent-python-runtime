@@ -509,3 +509,30 @@ func TestWorkspaceCheckedWriteEndRejectsOverflow(t *testing.T) {
 		t.Fatalf("bounded write end=%d ok=%v", end, ok)
 	}
 }
+
+func TestLeaseSnapshotReturnsImmutableFileMetadataWithoutBodies(t *testing.T) {
+	manager := newTestManager(t)
+	ref, err := manager.Create([]InitialFile{{Path: "report.txt", Data: []byte("private body")}}, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "snapshot-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := lease.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != "report.txt" || snapshot.Entries[0].Size != uint64(len("private body")) || snapshot.Entries[0].SHA256 == "" {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	snapshot.Entries[0].Path = "changed"
+	fresh, err := lease.Snapshot()
+	if err != nil || fresh.Entries[0].Path != "report.txt" {
+		t.Fatalf("fresh=%+v err=%v", fresh, err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+}

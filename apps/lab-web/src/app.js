@@ -1,136 +1,268 @@
 import { canonicalByState, CANONICAL_STATES } from "./canonical/index.mjs";
 import { validateCanonicalFixture } from "./lib/canonical-adapter.mjs";
-import { decodeLocationState, encodeLocationState } from "./state.js";
 
-for (const state of CANONICAL_STATES) validateCanonicalFixture(canonicalByState[state], state);
-
-const LABELS = {
-  ordinary: { title: "Offline workload evidence study", subtitle: "A complete bounded lifecycle projection with one task, one treatment, and portable evidence metadata." },
-  branched: { title: "Counterfactual branch study", subtitle: "A parent/child run relation with bounded capability and workspace deltas." },
-  incomplete: { title: "Incomplete evidence study", subtitle: "The task failed; the projection remains inspectable without upgrading it to complete evidence." },
-  truncated: { title: "Bounded projection study", subtitle: "The run completed, while one or more canonical pages explicitly report omitted records." },
-  private: { title: "Private evidence study", subtitle: "Portable metadata remains visible; private result and workspace objects remain unavailable." },
+const state = {
+  fixture: CANONICAL_STATES.includes(new URLSearchParams(location.hash.slice(1)).get("fixture"))
+    ? new URLSearchParams(location.hash.slice(1)).get("fixture") : "ordinary",
+  step: 0,
+  playing: false,
+  timer: null,
 };
-const VIEW_TITLES = { overview: "Study overview", runs: "Run detail", timeline: "Capability timeline", lineage: "Branch DAG", workspace: "Workspace diff", comparison: "Comparison" };
-const STATUS_LABELS = { completed: "Completed", failed: "Failed", timed_out: "Timed out", unsupported: "Unsupported" };
-const EVIDENCE_LABELS = { complete: "Complete", incomplete: "Incomplete", truncated: "Truncated" };
-const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
-const shortDigest = (value) => value ? `${value.slice(0, 19)}…${value.slice(-8)}` : "—";
-const formatBytes = (value) => `${(Number(value) / 1024).toFixed(value % 1024 ? 1 : 0)} KB`;
-const fixtureLabel = (state) => state === "private" ? "private / unavailable" : state.replace("_", " ");
-const statusClass = (value) => `tone-${String(value).replaceAll("_", "-")}`;
-const badge = (text, tone = "neutral") => `<span class="badge ${tone}">${escapeHtml(text)}</span>`;
-const metric = (value, label, tone = "") => `<div class="metric"><strong class="metric-value ${tone}">${escapeHtml(value)}</strong><span class="metric-label">${escapeHtml(label)}</span></div>`;
-const emptyState = (title, copy) => `<div class="empty-state"><span class="empty-icon">∅</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(copy)}</p></div>`;
-const panel = (title, copy, body, className = "") => `<section class="panel ${className}" aria-labelledby="${title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-heading"><div class="panel-heading"><div><p class="eyebrow">Canonical object</p><h3 id="${title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-heading">${escapeHtml(title)}</h3></div>${copy ? `<p class="panel-copy">${escapeHtml(copy)}</p>` : ""}</div>${body}</section>`;
-const table = (headers, rows, className = "") => `<div class="table-wrap"><table class="data-table ${className}"><thead><tr>${headers.map((header) => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="${headers.length}">${emptyState("No records in projection", "This canonical page is explicitly empty; the viewer does not invent missing records.")}</td></tr>`}</tbody></table></div>`;
 
-const model = { ...decodeLocationState(window.location.hash), runId: null, compareRunId: null };
-function fixture() { return canonicalByState[model.fixture] ?? canonicalByState.ordinary; }
-function runNodes() { return fixture().branch.nodes; }
-function selectedRunId() { const ids = runNodes().map((node) => node.run_id); return ids.includes(model.runId) ? model.runId : fixture().run.run_id; }
-function announce(text) { document.querySelector("#live-region").textContent = text; }
-function navigate(changes = {}) { Object.assign(model, changes); if (changes.fixture && !changes.runId) model.runId = null; window.history.replaceState(null, "", encodeLocationState(model)); render(); }
-function labelRun(node) { return node.run_id === fixture().run.run_id ? `${node.run_id} · focused` : node.run_id; }
+const $ = (selector) => document.querySelector(selector);
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+const shortDigest = (value) => value ? `${value.slice(0, 15)}…${value.slice(-8)}` : "not recorded";
+const titleCase = (value) => String(value || "none").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-function renderHeader(data) {
-  const info = LABELS[model.fixture];
-  document.querySelector("#study-title").textContent = info.title;
-  document.querySelector("#study-subtitle").textContent = info.subtitle;
-  document.querySelector("#study-badges").innerHTML = [badge("pysolate.lab-index.v1", "violet"), badge("mechanism-only", "blue"), badge("read-only", "green"), badge(fixtureLabel(model.fixture), model.fixture === "private" ? "rose" : "amber")].join("");
-  document.querySelector("#rail-state").innerHTML = `<span class="rail-state-key">${escapeHtml(model.fixture)}</span><span>${escapeHtml(data.run.evidence_completeness)} projection</span>`;
-  document.querySelector("#focus-title").textContent = selectedRunId();
-  document.querySelector("#focus-meta").textContent = `${data.run.workload_id} / ${data.run.treatment} · ${STATUS_LABELS[data.run.status]} · oracle ${data.run.oracle_status}`;
-  document.querySelector("#focus-digest").textContent = `source ${shortDigest(data.index.source_sha256)}`;
-  document.querySelector("#fixture-select").value = model.fixture;
-  document.querySelectorAll(".view-tab").forEach((button) => { button.setAttribute("aria-current", button.dataset.view === model.view ? "page" : "false"); });
-  document.querySelectorAll(".route-list button").forEach((button) => button.classList.toggle("active", button.dataset.view === model.view));
+function model() {
+  const documents = canonicalByState[state.fixture];
+  validateCanonicalFixture(documents);
+  return documents;
 }
-function renderNotices(data) {
-  const notices = [];
-  if (data.run.evidence_completeness === "incomplete") notices.push(["warning", "Evidence incomplete", "Task/oracle status is visible, but the evidence projection is not complete. Do not read this as a successful study."]);
-  if (data.run.evidence_completeness === "truncated") notices.push(["warning", "Projection truncated", `This page returns ${data.timeline.page.returned} of ${data.timeline.page.total} timeline records and exposes a next cursor. No “load more” action is implied.`]);
-  if (data.run.refs.some((ref) => ref.availability === "unavailable")) notices.push(["private", "Private / unavailable", "One or more canonical object references are private. Only policy-safe metadata is shown; protected bodies are not copied or fetched."]);
-  if (data.problem.code !== "none") notices.push(["info", `Problem · ${data.problem.code}`, `Canonical problem object scope: ${data.problem.scope}.`]);
-  document.querySelector("#status-notices").innerHTML = notices.map(([kind, title, copy]) => `<div class="notice ${kind}"><span class="notice-mark">${kind === "private" ? "▣" : kind === "warning" ? "!" : "i"}</span><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(copy)}</p></div></div>`).join("");
+
+function stepsFor(documents) {
+  return documents.timeline.events.map((event, index, events) => {
+    const final = event.type === "execution.completed" || event.type === "execution.failed" || index === events.length - 1;
+    const first = event.type === "execution.started" || index === 0;
+    return {
+      event,
+      title: event.type === "capability.call" ? event.capability : event.type,
+      kind: event.type === "capability.call" ? "Typed Host call" : event.type.startsWith("execution.") ? "Runtime lifecycle" : "Observed event",
+      checkpoint: first ? "initial" : final ? "final" : "unavailable",
+    };
+  });
 }
-function overview(data) {
-  const totals = Object.fromEntries(data.study.status_totals.map(({ status, count }) => [status, count]));
-  const refs = data.run.refs;
-  return `<div class="view-stack">
-    <div class="section-heading"><div><p class="eyebrow">01 / orientation</p><h2 id="view-title">Study overview</h2></div><p>Start here: identify what the projection contains before reading a run as evidence.</p></div>
-    <div class="metric-band">${metric(data.study.workload_count, "workload")}${metric(data.study.treatment_count, "treatment")}${metric(totals.completed, "completed", "green")}${metric(totals.failed, "failed", totals.failed ? "rose" : "")}${metric(data.study.storage.object_count, "objects referenced")}</div>
-    <div class="overview-grid">
-      ${panel("Study contract", "study-summary.v1", `<dl class="definition-list"><div><dt>study_id</dt><dd>${escapeHtml(data.study.study_id)}</dd></div><div><dt>evidence_class</dt><dd>${escapeHtml(data.study.evidence_class)}</dd></div><div><dt>projection source</dt><dd>${shortDigest(data.study.source_sha256)}</dd></div><div><dt>generated_at_policy</dt><dd>${escapeHtml(data.study.generated_at_policy)}</dd></div></dl>`)}
-      ${panel("Status semantics", "task ≠ oracle ≠ evidence", `<div class="legend-list"><div><span class="legend-dot blue"></span><div><strong>Task status</strong><p>${STATUS_LABELS[data.run.status]} — execution outcome.</p></div></div><div><span class="legend-dot violet"></span><div><strong>Oracle status</strong><p>${escapeHtml(data.run.oracle_status)} — bounded result check.</p></div></div><div><span class="legend-dot amber"></span><div><strong>Evidence status</strong><p>${EVIDENCE_LABELS[data.run.evidence_completeness]} — projection completeness.</p></div></div></div>`)}
-    </div>
-    ${panel("Canonical object inventory", "linked from lab-index.v1", table(["relation", "object", "sha256"], data.index.links.map((link) => `<tr><td><span class="relation">${escapeHtml(link.rel)}</span></td><td>${escapeHtml(link.kind)}</td><td class="digest">${shortDigest(link.sha256)}</td></tr>`).join("")))}
-    ${panel("Prohibited claims", "guardrail carried by study-summary.v1", `<div class="claim-grid">${data.study.prohibited_claims.map((claim) => `<span>× ${escapeHtml(claim.replaceAll("_", " "))}</span>`).join("")}</div>`)}
-  </div>`;
+
+function explanation(step) {
+  if (step.event.type === "execution.started") return {
+    lead: "A fresh Guest execution starts with a frozen capability plan and an initial workspace identity.",
+    detail: "The Runtime observes this boundary directly. Python locals and interpreter heap are deliberately outside the trace contract.",
+  };
+  if (step.event.type === "capability.call") return {
+    lead: `Guest code requested the typed Host capability ${step.event.capability}.`,
+    detail: "The Host validates the frozen grant, schema and budget, then records argument/result digests and outcome. The operation can be replayed as recorded evidence without silently repeating an external effect.",
+  };
+  if (step.event.type === "execution.completed") return {
+    lead: "The Guest returned successfully and the Host finalized result and workspace evidence.",
+    detail: "The final workspace checkpoint is compared with the initial checkpoint. This view shows only paths represented by the bounded canonical diff, not an invented full tree.",
+  };
+  if (step.event.type === "execution.failed") return {
+    lead: "Execution reached a terminal failure boundary.",
+    detail: "Failure and evidence completeness are separate: a failed run may still have valid partial evidence, while dropped evidence must remain explicit.",
+  };
+  return { lead: titleCase(step.event.type), detail: "This is an observed operation boundary from the canonical trace." };
 }
-function runs(data) {
-  const nodes = runNodes();
-  const refs = data.run.refs.map((ref) => `<tr><td>${escapeHtml(ref.kind)}</td><td>${badge(ref.privacy, ref.privacy === "private" ? "rose" : "neutral")}</td><td>${badge(ref.availability, ref.availability === "unavailable" ? "rose" : "green")}</td><td class="digest">${shortDigest(ref.sha256)}</td></tr>`).join("");
-  return `<div class="view-stack"><div class="section-heading"><div><p class="eyebrow">02 / inspection</p><h2 id="view-title">Run detail</h2></div><p>The canonical run object keeps task outcome, oracle outcome, evidence completeness, and reference policy separate.</p></div>
-    <div class="run-id-row"><span class="run-id">${escapeHtml(data.run.run_id)}</span>${badge(STATUS_LABELS[data.run.status], statusClass(data.run.status))}${badge(`oracle ${data.run.oracle_status}`, data.run.oracle_status === "passed" ? "green" : "rose")}${badge(EVIDENCE_LABELS[data.run.evidence_completeness], data.run.evidence_completeness === "complete" ? "green" : "amber")}</div>
-    <div class="run-grid"><div class="run-fields"><h3>Run fields</h3><dl class="definition-list"><div><dt>workload_id</dt><dd>${escapeHtml(data.run.workload_id)}</dd></div><div><dt>treatment</dt><dd>${escapeHtml(data.run.treatment)}</dd></div><div><dt>evidence_class</dt><dd>${escapeHtml(data.run.evidence_class)}</dd></div><div><dt>problem_codes</dt><dd>${data.run.problem_codes.length ? data.run.problem_codes.map((code) => badge(code, "amber")).join(" ") : "none"}</dd></div><div><dt>source_sha256</dt><dd class="digest">${shortDigest(data.run.source_sha256)}</dd></div></dl></div>
-      <div class="node-picker"><h3>Projection nodes</h3><p class="muted">Select a canonical branch node to focus its relation.</p>${nodes.map((node) => `<button type="button" class="node-button ${node.run_id === selectedRunId() ? "selected" : ""}" data-run="${escapeHtml(node.run_id)}"><span class="node-dot ${statusClass(node.status)}"></span><span><b>${escapeHtml(labelRun(node))}</b><small>${STATUS_LABELS[node.status]} · ${EVIDENCE_LABELS[node.evidence_completeness]}</small></span></button>`).join("")}</div></div>
-    ${panel("Reference policy", "metadata only · no protected body", table(["kind", "privacy", "availability", "digest"], refs))}
-  </div>`;
+
+function fields(rows) {
+  return rows.map(([name, value, tone]) => `<div><dt>${esc(name)}</dt><dd class="${tone || ""}">${esc(value)}</dd></div>`).join("");
 }
-function timeline(data) {
-  const rows = data.timeline.events.map((event) => `<tr><td class="sequence">${event.sequence.toString().padStart(2, "0")}</td><td><span class="event-type">${escapeHtml(event.type)}</span>${event.capability ? `<small class="event-capability">${escapeHtml(event.capability)}</small>` : ""}</td><td>${badge(event.outcome, event.outcome === "ok" ? "green" : "neutral")}</td><td class="mono">${event.arguments_sha256 ? shortDigest(event.arguments_sha256) : "—"}</td><td class="mono">${event.result_sha256 ? shortDigest(event.result_sha256) : "—"}</td></tr>`).join("");
-  return `<div class="view-stack"><div class="section-heading"><div><p class="eyebrow">03 / observation</p><h2 id="view-title">Capability timeline</h2></div><p>Ordered event metadata from timeline-page.v1. Empty means empty, not hidden success.</p></div>
-    <div class="timeline-summary">${metric(data.timeline.events.length, "events returned")}${metric(data.timeline.page.total, "events total")}${metric(data.timeline.page.truncated ? "YES" : "NO", "page truncated", data.timeline.page.truncated ? "amber" : "green")}${metric(data.timeline.page.next_cursor || "none", "next cursor")}</div>
-    ${panel("Event stream", "sequence / parent relation preserved", table(["seq", "event", "outcome", "arguments", "result"], rows, "timeline-table"))}
-  </div>`;
+
+function renderTrace(documents, steps) {
+  const run = documents.run;
+  $("#fixture-select").value = state.fixture;
+  $("#step-count").textContent = `${state.step + 1} / ${steps.length}`;
+  $("#run-summary").innerHTML = `
+    <strong>${esc(run.run_id)}</strong>
+    <span>${esc(run.workload_id)}</span>
+    <div><b class="${run.status}">${esc(titleCase(run.status))}</b><b>${esc(run.oracle_status === "passed" ? "Oracle passed" : `Oracle ${run.oracle_status}`)}</b><b class="${run.evidence_completeness}">${esc(titleCase(run.evidence_completeness))} evidence</b></div>`;
+  $("#step-list").innerHTML = steps.map((step, index) => `
+    <li><button type="button" data-step="${index}" class="${index === state.step ? "selected" : ""}" aria-current="${index === state.step ? "step" : "false"}">
+      <span class="step-index">${String(index + 1).padStart(2, "0")}</span>
+      <i class="step-line"></i>
+      <span class="step-copy"><small>${esc(step.kind)}</small><strong>${esc(step.title)}</strong><em>${esc(step.event.outcome || "observed")}</em></span>
+    </button></li>`).join("");
+  const completeness = run.evidence_completeness;
+  $("#trace-boundary").innerHTML = `<strong>${completeness === "complete" ? "Trace boundary" : `${titleCase(completeness)} trace`}</strong><p>${completeness === "complete" ? "All canonical operation-boundary events in this projection are present." : "Do not infer omitted events or state from this projection."}</p>`;
 }
-function lineage(data) {
-  const nodes = data.branch.nodes;
-  const edges = data.branch.edges;
-  const nodeRows = nodes.map((node) => `<tr><td><button type="button" class="inline-link" data-run="${escapeHtml(node.run_id)}">${escapeHtml(node.run_id)}</button></td><td>${badge(STATUS_LABELS[node.status], statusClass(node.status))}</td><td>${badge(EVIDENCE_LABELS[node.evidence_completeness], node.evidence_completeness === "complete" ? "green" : "amber")}</td></tr>`).join("");
-  const edgeRows = edges.map((edge) => `<tr><td class="mono">${escapeHtml(edge.parent_run_id)}</td><td class="arrow">→</td><td class="mono">${escapeHtml(edge.child_run_id)}</td><td>fork op ${edge.fork_operation}</td><td>${escapeHtml(edge.suffix_mode)}</td></tr>`).join("");
-  const visual = nodes.map((node, index) => `<div class="dag-node ${node.run_id === selectedRunId() ? "selected" : ""}" style="--dag-index:${index}"><span class="dag-marker">${index === 0 ? "R" : "C"}</span><div><b>${escapeHtml(node.run_id)}</b><small>${STATUS_LABELS[node.status]} · ${EVIDENCE_LABELS[node.evidence_completeness]}</small></div></div>`).join(edges.length ? `<div class="dag-connector" aria-hidden="true">↓</div>` : "");
-  return `<div class="view-stack"><div class="section-heading"><div><p class="eyebrow">04 / lineage</p><h2 id="view-title">Branch DAG</h2></div><p>Branch nodes and edge metadata are inspectable; clicking only changes local focus.</p></div>
-    <div class="dag-stage" role="img" aria-label="Branch lineage diagram">${visual}</div>
-    ${panel("Node table", "accessible DAG representation", table(["run", "task status", "evidence"], nodeRows))}
-    ${panel("Edges", edges.length ? "canonical parent → child relation" : "no branch edges in this projection", table(["parent", "", "child", "fork", "suffix"], edgeRows))}
-  </div>`;
+
+function renderStep(documents, steps) {
+  const step = steps[state.step];
+  const event = step.event;
+  const copy = explanation(step);
+  $("#step-kicker").textContent = `STEP ${String(state.step + 1).padStart(2, "0")} · ${step.kind}`;
+  $("#step-title").textContent = step.title;
+  $("#step-status").textContent = titleCase(event.outcome || "observed");
+  $("#step-status").className = `status-pill ${event.outcome || "none"}`;
+  $("#progress-bar").style.width = `${((state.step + 1) / steps.length) * 100}%`;
+  $("#progress-label").textContent = `Step ${state.step + 1} of ${steps.length}`;
+  $("#previous-step").disabled = state.step === 0;
+  $("#next-step").disabled = state.step === steps.length - 1;
+  $("#play-steps").textContent = state.playing ? "Ⅱ Pause" : "▶ Play";
+  $("#step-explanation").innerHTML = `<strong>${esc(copy.lead)}</strong><p>${esc(copy.detail)}</p>`;
+  $("#operation-sequence").textContent = `sequence ${event.sequence}`;
+  $("#operation-title").textContent = step.title;
+  $("#operation-fields").innerHTML = fields([
+    ["Event type", event.type],
+    ["Parent", event.parent_sequence ? `sequence ${event.parent_sequence}` : "root boundary"],
+    ["Outcome", event.outcome || "not applicable", event.outcome === "ok" ? "good" : ""],
+    ["Operation index", event.type === "capability.call" ? event.operation_index : "not applicable"],
+  ]);
+  $("#authority-fields").innerHTML = fields([
+    ["Capability", event.capability || "none"],
+    ["Arguments", shortDigest(event.arguments_sha256)],
+    ["Result", shortDigest(event.result_sha256)],
+    ["Evidence source", shortDigest(documents.run.source_sha256)],
+  ]);
+  $("#limitations-copy").textContent = step.checkpoint === "unavailable"
+    ? "No filesystem checkpoint exists at this intermediate operation. The UI must not reconstruct one from the final diff."
+    : step.checkpoint === "initial"
+      ? "Initial workspace identity is verified. This fixture exposes only before-state metadata for paths that later changed."
+      : "Final workspace identity and bounded changed-path metadata are verified. File bodies are not included in portable fixtures.";
+  renderFilesystem(documents, step);
 }
-function workspace(data) {
-  const rows = data.workspace.changes.map((change) => `<tr><td><span class="path">${escapeHtml(change.path)}</span></td><td>${badge(change.kind, change.kind === "modified" ? "amber" : "blue")}</td><td>${snapshotCell(change.before)}</td><td>${snapshotCell(change.after)}</td></tr>`).join("");
-  return `<div class="view-stack"><div class="section-heading"><div><p class="eyebrow">05 / artifact view</p><h2 id="view-title">Workspace diff</h2></div><p>Guest-relative path and digest metadata only. File bodies and Host paths are intentionally absent.</p></div>
-    <div class="diff-context"><span>base <b>${escapeHtml(data.workspace.base_run_id)}</b></span><span class="arrow">→</span><span>focused <b>${escapeHtml(data.workspace.run_id)}</b></span><span class="spacer"></span>${badge(`${data.workspace.changes.length} changes`, data.workspace.changes.length ? "blue" : "neutral")}${data.workspace.page.truncated ? badge("projection truncated", "amber") : ""}</div>
-    ${panel("File metadata delta", "workspace-diff.v1", table(["Guest-relative path", "kind", "before", "after"], rows, "workspace-table"))}
-    <div class="privacy-note"><span class="notice-mark">▤</span><p><strong>Privacy boundary</strong> This viewer never reads or reconstructs protected workspace bodies. Digests are equality metadata, not authority or correctness.</p></div>
-  </div>`;
+
+function renderFilesystem(documents, step) {
+  const diff = documents.workspace;
+  const unavailable = step.checkpoint === "unavailable";
+  const privateState = state.fixture === "private";
+  const truncated = documents.timeline.page.truncated || diff.page.truncated;
+  $("#checkpoint-status").textContent = unavailable ? "NOT CHECKPOINTED" : `${step.checkpoint.toUpperCase()} CHECKPOINT`;
+  $("#checkpoint-status").className = `checkpoint-pill ${unavailable ? "missing" : "verified"}`;
+  $("#checkpoint-meta").innerHTML = unavailable
+    ? `<strong>Intermediate state unavailable</strong><p>The Runtime did not capture a workspace manifest at this operation boundary.</p>`
+    : `<strong>${step.checkpoint === "initial" ? "Before Run" : "After Run"}</strong><p>${truncated ? "Bounded / truncated projection" : "Verified changed-path projection"}</p>`;
+  $("#tree-scope").textContent = unavailable ? "no checkpoint" : `${diff.changes.length} changed path${diff.changes.length === 1 ? "" : "s"}${truncated ? " · truncated" : ""}`;
+
+  if (unavailable) {
+    $("#filesystem-tree").innerHTML = `<div class="empty-tree"><span>∅</span><strong>No state at this step</strong><p>Move to Run start or completion.</p></div>`;
+    renderFile(null, null, privateState);
+    return;
+  }
+  const rows = diff.changes.map((change, index) => {
+    const file = step.checkpoint === "initial" ? change.before : change.after;
+    const present = Boolean(file.present);
+    return `<button type="button" class="tree-file ${present ? "" : "absent"}" data-file="${index}" ${present ? "" : "disabled"}>
+      <span class="tree-guide">└─</span><span class="file-icon">${present ? "▱" : "×"}</span>
+      <span><strong>${esc(change.path)}</strong><small>${present ? `${file.size_bytes} bytes · ${shortDigest(file.sha256)}` : `${change.kind} · absent at this checkpoint`}</small></span>
+    </button>`;
+  }).join("");
+  $("#filesystem-tree").innerHTML = `<div class="tree-root"><strong>▾ workspace</strong><span>evidence-scoped tree</span></div>${rows || `<div class="empty-tree"><strong>No changed paths</strong></div>`}`;
+  renderFile(null, null, privateState);
+  $("#filesystem-tree").querySelectorAll("[data-file]").forEach((button) => button.addEventListener("click", () => {
+    const change = diff.changes[Number(button.dataset.file)];
+    renderFile(change, step.checkpoint, privateState);
+    $("#filesystem-tree").querySelectorAll(".tree-file").forEach((node) => node.classList.toggle("selected", node === button));
+  }));
 }
-function snapshotCell(snapshot) { return `<div class="snapshot"><span class="snapshot-state ${snapshot.present ? "present" : "absent"}">${snapshot.present ? "present" : "absent"}</span><span class="mono">${snapshot.present ? `${formatBytes(snapshot.size_bytes)} · ${shortDigest(snapshot.sha256)}` : "—"}</span></div>`; }
-function comparison(data) {
-  const comparison = data.comparison;
-  const callRows = comparison.call_deltas.map((delta) => `<tr><td>operation ${delta.operation_index}</td><td>${badge(delta.kind, delta.kind === "changed" ? "amber" : "neutral")}</td><td class="mono">${shortDigest(delta.left_sha256)}</td><td class="mono">${shortDigest(delta.right_sha256)}</td></tr>`).join("");
-  const workspaceRows = comparison.workspace_deltas.map((delta) => `<tr><td class="path">${escapeHtml(delta.path)}</td><td>${badge(delta.kind, delta.kind === "modified" ? "amber" : "neutral")}</td></tr>`).join("");
-  return `<div class="view-stack"><div class="section-heading"><div><p class="eyebrow">06 / interpretation</p><h2 id="view-title">Comparison</h2></div><p>A bounded relation with explicit sameness, difference, and reason codes — not a quality or performance claim.</p></div>
-    <div class="compare-pair"><div><span class="pair-label">LEFT</span><b>${escapeHtml(comparison.left_run_id)}</b></div><span class="pair-arrow">⇄</span><div><span class="pair-label">RIGHT</span><b>${escapeHtml(comparison.right_run_id)}</b></div></div>
-    <div class="comparison-grid">${panel("Same dimensions", "no observed delta", comparison.same_dimensions.length ? `<div class="chip-list">${comparison.same_dimensions.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : emptyState("No same dimensions", "The canonical comparison does not claim sameness."))}${panel("Different dimensions", "bounded delta", comparison.different_dimensions.length ? `<div class="chip-list different">${comparison.different_dimensions.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : emptyState("No different dimensions", "The canonical comparison does not claim a difference."))}</div>
-    <div class="comparison-grid">${panel("Capability call deltas", "digest equality only", table(["operation", "kind", "left", "right"], callRows))}${panel("Workspace deltas", "path metadata only", table(["path", "kind"], workspaceRows))}</div>
-    ${panel("Reason codes", "why this comparison exists", `<div class="reason-list">${comparison.reason_codes.map((reason) => `<span><b>↳</b> ${escapeHtml(reason)}</span>`).join("")}</div>`)}
-  </div>`;
+
+function renderFile(change, checkpoint, privateState) {
+  if (!change) {
+    $("#file-title").textContent = "Select an available file";
+    $("#file-availability").textContent = "METADATA ONLY";
+    $("#file-fields").innerHTML = fields([["Content", "Not carried in portable Lab fixture"], ["Scope", "Changed paths only"]]);
+    $("#file-preview").hidden = true;
+    return;
+  }
+  const file = checkpoint === "initial" ? change.before : change.after;
+  $("#file-title").textContent = change.path;
+  $("#file-availability").textContent = privateState ? "PRIVATE / UNAVAILABLE" : "BODY NOT BUNDLED";
+  $("#file-fields").innerHTML = fields([
+    ["State", file.present ? "present" : "absent"],
+    ["Size", `${file.size_bytes} bytes`],
+    ["Executable", file.executable ? "yes" : "no"],
+    ["SHA-256", shortDigest(file.sha256)],
+    ["Content", privateState ? "private and unavailable" : "requires authorized private object store"],
+  ]);
+  $("#file-preview").hidden = true;
 }
+
 function render() {
-  const data = fixture();
-  renderHeader(data); renderNotices(data);
-  const view = VIEW_TITLES[model.view] ? model.view : "overview";
-  document.querySelector("#view-root").innerHTML = ({ overview, runs, timeline, lineage, workspace, comparison }[view])(data);
-  document.querySelector("#view-title").textContent = VIEW_TITLES[view];
-  document.querySelectorAll("[data-view]").forEach((element) => element.addEventListener("click", () => navigate({ view: element.dataset.view })));
-  document.querySelectorAll("[data-run]").forEach((element) => element.addEventListener("click", () => navigate({ runId: element.dataset.run, view: "runs" })));
-  announce(`${VIEW_TITLES[view]} opened for ${model.fixture}`);
+  stopPlayback();
+  const documents = model();
+  const steps = stepsFor(documents);
+  state.step = Math.min(state.step, Math.max(0, steps.length - 1));
+  if (!steps.length) {
+    $("#fixture-select").value = state.fixture;
+    $("#step-count").textContent = "0 / 0";
+    $("#run-summary").innerHTML = `<strong>${esc(documents.run.run_id)}</strong><span>${esc(documents.run.workload_id)}</span><div><b class="${documents.run.status}">${esc(titleCase(documents.run.status))}</b><b class="${documents.run.evidence_completeness}">${esc(titleCase(documents.run.evidence_completeness))} evidence</b></div>`;
+    $("#step-list").innerHTML = `<li class="empty-run">No portable timeline events are available for this recorded run.</li>`;
+    $("#trace-boundary").innerHTML = `<strong>Evidence unavailable</strong><p>The UI does not infer steps from private or absent bodies.</p>`;
+    $("#step-count").textContent = "0 / 0";
+    $("#step-kicker").textContent = "NO PORTABLE EVENTS";
+    $("#step-title").textContent = "Execution steps unavailable";
+    $("#step-status").textContent = "UNAVAILABLE";
+    $("#progress-label").textContent = "No steps";
+    $("#progress-bar").style.width = "0";
+    $("#previous-step").disabled = true;
+    $("#next-step").disabled = true;
+    $("#play-steps").disabled = true;
+    $("#step-explanation").innerHTML = `<strong>Portable metadata exists, but this fixture exposes no timeline events.</strong><p>Protected or absent evidence is not reconstructed.</p>`;
+    $("#operation-title").textContent = "No operation selected";
+    $("#operation-fields").innerHTML = "";
+    $("#authority-fields").innerHTML = fields([["Evidence completeness", documents.run.evidence_completeness], ["Problem", documents.run.problem_codes.join(", ") || "none"]]);
+    $("#limitations-copy").textContent = "No Agent or Runtime steps can be replayed from this portable projection.";
+    $("#checkpoint-status").textContent = "UNAVAILABLE";
+    $("#checkpoint-meta").innerHTML = `<strong>Workspace tree unavailable</strong><p>Protected bodies are not copied into this viewer.</p>`;
+    $("#tree-scope").textContent = "no portable tree";
+    $("#filesystem-tree").innerHTML = `<div class="empty-tree"><span>∅</span><strong>No portable filesystem state</strong></div>`;
+    renderFile(null, null, true);
+    return;
+  }
+  $("#play-steps").disabled = false;
+  renderTrace(documents, steps);
+  renderStep(documents, steps);
+  $("#step-list").querySelectorAll("[data-step]").forEach((button) => button.addEventListener("click", () => selectStep(Number(button.dataset.step))));
+  $("#live-region").textContent = `Showing ${steps[state.step].title}, step ${state.step + 1} of ${steps.length}`;
 }
 
-document.querySelector("#fixture-select").addEventListener("change", (event) => navigate({ fixture: event.target.value, view: "overview", runId: null, compareRunId: null }));
-window.addEventListener("hashchange", () => {
-  Object.assign(model, decodeLocationState(window.location.hash));
+function selectStep(index) {
+  const steps = stepsFor(model());
+  if (!steps.length) return;
+  state.step = Math.max(0, Math.min(index, steps.length - 1));
+  renderTrace(model(), steps);
+  renderStep(model(), steps);
+  $("#step-list").querySelectorAll("[data-step]").forEach((button) => button.addEventListener("click", () => selectStep(Number(button.dataset.step))));
+  $("#live-region").textContent = `Step ${state.step + 1}: ${steps[state.step].title}`;
+}
+
+function stopPlayback() {
+  if (state.timer) clearInterval(state.timer);
+  state.timer = null;
+  state.playing = false;
+}
+
+function togglePlayback() {
+  const steps = stepsFor(model());
+  if (!steps.length) return;
+  if (state.playing) { stopPlayback(); selectStep(state.step); return; }
+  if (state.step === steps.length - 1) state.step = 0;
+  state.playing = true;
+  selectStep(state.step);
+  state.playing = true;
+  $("#play-steps").textContent = "Ⅱ Pause";
+  state.timer = setInterval(() => {
+    if (state.step >= steps.length - 1) { stopPlayback(); selectStep(state.step); return; }
+    state.step += 1;
+    renderTrace(model(), steps);
+    renderStep(model(), steps);
+    $("#step-list").querySelectorAll("[data-step]").forEach((button) => button.addEventListener("click", () => selectStep(Number(button.dataset.step))));
+  }, 1400);
+}
+
+$("#fixture-select").addEventListener("change", (event) => {
+  stopPlayback();
+  state.fixture = event.target.value;
+  state.step = 0;
+  state.selectedFile = null;
+  history.replaceState(null, "", `#fixture=${encodeURIComponent(state.fixture)}`);
   render();
+});
+window.addEventListener("hashchange", () => {
+  const fixture = new URLSearchParams(location.hash.slice(1)).get("fixture");
+  if (!CANONICAL_STATES.includes(fixture) || fixture === state.fixture) return;
+  stopPlayback();
+  state.fixture = fixture;
+  state.step = 0;
+  state.selectedFile = null;
+  render();
+});
+$("#previous-step").addEventListener("click", () => selectStep(state.step - 1));
+$("#next-step").addEventListener("click", () => selectStep(state.step + 1));
+$("#play-steps").addEventListener("click", togglePlayback);
+window.addEventListener("keydown", (event) => {
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
+  if (event.key === "ArrowLeft") selectStep(state.step - 1);
+  if (event.key === "ArrowRight") selectStep(state.step + 1);
+  if (event.key === " ") { event.preventDefault(); togglePlayback(); }
 });
 render();

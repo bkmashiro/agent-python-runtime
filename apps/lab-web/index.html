@@ -4,110 +4,106 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
-    <meta name="theme-color" content="#090b0e">
-    <title>Pysolate Lab — canonical Lab v1 viewer</title>
+    <meta name="theme-color" content="#0b0d11">
+    <title>Pysolate Lab — execution replay</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <a class="skip-link" href="#main-content">Skip to Lab view</a>
+    <a class="skip-link" href="#debugger">Skip to execution replay</a>
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">P/</span>
-        <div>
-          <p class="eyebrow">PYsolate / research instrument</p>
-          <p class="product-name">Pysolate Lab</p>
-        </div>
+        <div><strong>Pysolate Lab</strong><small>Agent execution replay</small></div>
       </div>
-      <div class="topbar-context">
-        <span class="topbar-label">Fixture-backed canonical Lab v1 viewer</span>
-        <span class="read-only"><span class="status-dot" aria-hidden="true"></span>READ ONLY</span>
+      <div class="run-context">
+        <span class="live-pill"><i></i> RECORDED EVIDENCE</span>
+        <span>Read-only · operation boundaries</span>
       </div>
       <label class="fixture-picker" for="fixture-select">
-        <span>Canonical fixture</span>
-        <select id="fixture-select" aria-label="Canonical fixture state">
-          <option value="ordinary">ordinary / complete</option>
-          <option value="branched">branched / comparison</option>
-          <option value="incomplete">incomplete evidence</option>
-          <option value="truncated">truncated projection</option>
-          <option value="private">private / unavailable</option>
+        <span>Recorded run</span>
+        <select id="fixture-select" aria-label="Recorded run fixture">
+          <option value="ordinary">Completed run</option>
+          <option value="branched">Counterfactual branch</option>
+          <option value="incomplete">Failed / incomplete</option>
+          <option value="truncated">Truncated evidence</option>
+          <option value="private">Private evidence</option>
         </select>
       </label>
     </header>
 
-    <div class="boundary-banner" role="note">
-      <strong>Canonical Lab v1 · fixture-backed</strong>
-      <span>Static Go-produced JSON projection for tomorrow’s demo. This is a read-only viewer, not a live Runtime or service.</span>
+    <div class="truth-banner" role="note">
+      <strong>What you can replay:</strong>
+      Runtime lifecycle and typed Host calls. Filesystem state is verified at Run start and completion; intermediate filesystem checkpoints were not captured.
     </div>
 
-    <nav class="view-nav" aria-label="Canonical Lab v1 views">
-      <button class="view-tab" type="button" data-view="overview" aria-current="page">01 / Study overview</button>
-      <button class="view-tab" type="button" data-view="runs">02 / Run detail</button>
-      <button class="view-tab" type="button" data-view="timeline">03 / Capability timeline</button>
-      <button class="view-tab" type="button" data-view="lineage">04 / Branch DAG</button>
-      <button class="view-tab" type="button" data-view="workspace">05 / Workspace diff</button>
-      <button class="view-tab" type="button" data-view="comparison">06 / Comparison</button>
-    </nav>
-
-    <div class="app-shell">
-      <aside class="study-rail" aria-labelledby="rail-heading">
-        <div class="rail-heading">
-          <div>
-            <p class="eyebrow">Canonical study</p>
-            <h2 id="rail-heading">Evidence map</h2>
-          </div>
-          <span class="rail-index">v1</span>
+    <main id="debugger" class="debugger" tabindex="-1">
+      <aside class="trace-pane" aria-labelledby="trace-title">
+        <div class="pane-head">
+          <div><span class="kicker">RUN TRACE</span><h1 id="trace-title">Execution steps</h1></div>
+          <span id="step-count" class="counter">0 / 0</span>
         </div>
-        <div id="rail-state" class="rail-state"></div>
-        <ol class="route-list" aria-label="Demo route">
-          <li><button type="button" data-view="overview"><span>01</span><b>Study overview</b><small>What is in this projection?</small></button></li>
-          <li><button type="button" data-view="runs"><span>02</span><b>Run detail</b><small>Task / oracle / evidence</small></button></li>
-          <li><button type="button" data-view="timeline"><span>03</span><b>Capability timeline</b><small>Ordered observation events</small></button></li>
-          <li><button type="button" data-view="lineage"><span>04</span><b>Branch DAG</b><small>Parent / child relation</small></button></li>
-          <li><button type="button" data-view="workspace"><span>05</span><b>Workspace diff</b><small>Guest-relative metadata only</small></button></li>
-          <li><button type="button" data-view="comparison"><span>06</span><b>Comparison</b><small>Bounded deltas and reasons</small></button></li>
-        </ol>
-        <div class="rail-footnote">
-          <p class="eyebrow">Boundary</p>
-          <p>No execute, mutation, auth, API, or protected-body controls exist in this viewer.</p>
-        </div>
+        <div id="run-summary" class="run-summary"></div>
+        <ol id="step-list" class="step-list" aria-label="Recorded execution steps"></ol>
+        <div id="trace-boundary" class="boundary-card"></div>
       </aside>
 
-      <main id="main-content" tabindex="-1">
-        <section class="study-header" aria-labelledby="study-title">
-          <div>
-            <p id="study-kicker" class="eyebrow">Study summary / canonical projection</p>
-            <h1 id="study-title">Loading canonical study…</h1>
-            <p id="study-subtitle" class="muted"></p>
-          </div>
-          <div id="study-badges" class="badge-row" aria-label="Study labels"></div>
+      <section class="inspection-pane" aria-labelledby="step-title">
+        <div class="pane-head inspection-head">
+          <div><span id="step-kicker" class="kicker">SELECT A STEP</span><h2 id="step-title">Execution replay</h2></div>
+          <div id="step-status" class="status-pill"></div>
+        </div>
+
+        <div class="transport" aria-label="Replay controls">
+          <button id="previous-step" type="button" aria-label="Previous step">←</button>
+          <button id="play-steps" class="play" type="button" aria-label="Play recorded steps">▶ Play</button>
+          <button id="next-step" type="button" aria-label="Next step">→</button>
+          <div class="progress"><i id="progress-bar"></i></div>
+          <span id="progress-label">Step 0 of 0</span>
+        </div>
+
+        <article id="step-explanation" class="step-explanation"></article>
+
+        <div class="evidence-grid">
+          <section class="evidence-card" aria-labelledby="operation-title">
+            <div class="card-head"><span class="kicker">CURRENT OPERATION</span><span id="operation-sequence"></span></div>
+            <h3 id="operation-title">No step selected</h3>
+            <dl id="operation-fields" class="field-list"></dl>
+          </section>
+          <section class="evidence-card" aria-labelledby="authority-title">
+            <div class="card-head"><span class="kicker">AUTHORITY &amp; EVIDENCE</span><span class="verified-mark">HOST OBSERVED</span></div>
+            <h3 id="authority-title">Bounded execution evidence</h3>
+            <dl id="authority-fields" class="field-list"></dl>
+          </section>
+        </div>
+
+        <section class="limitations" aria-labelledby="limitations-title">
+          <strong id="limitations-title">Replay boundary</strong>
+          <span id="limitations-copy"></span>
         </section>
+      </section>
 
-        <section id="status-notices" class="notice-stack" aria-label="Projection notices"></section>
-
-        <section class="focus-strip" aria-labelledby="focus-title">
-          <div>
-            <p class="eyebrow">Focused run</p>
-            <h2 id="focus-title">Loading…</h2>
-            <p id="focus-meta" class="muted"></p>
-          </div>
-          <div class="focus-actions">
-            <button type="button" class="action-button" data-view="runs">Open run detail <span aria-hidden="true">→</span></button>
-            <span class="focus-digest" id="focus-digest"></span>
-          </div>
+      <aside class="filesystem-pane" aria-labelledby="filesystem-title">
+        <div class="pane-head">
+          <div><span class="kicker">WORKSPACE CHECKPOINT</span><h2 id="filesystem-title">Filesystem</h2></div>
+          <span id="checkpoint-status" class="checkpoint-pill"></span>
+        </div>
+        <div id="checkpoint-meta" class="checkpoint-meta"></div>
+        <div class="pathbar"><span>/workspace</span><small id="tree-scope"></small></div>
+        <div id="filesystem-tree" class="filesystem-tree"></div>
+        <section id="file-inspector" class="file-inspector" aria-labelledby="file-title">
+          <div class="file-inspector-head"><span class="kicker">FILE INSPECTOR</span><span id="file-availability"></span></div>
+          <h3 id="file-title">Select a file</h3>
+          <dl id="file-fields" class="field-list"></dl>
+          <pre id="file-preview" hidden></pre>
         </section>
+      </aside>
+    </main>
 
-        <section id="view-root" class="view-root" aria-labelledby="view-title">
-          <h2 id="view-title" class="sr-only">Study overview</h2>
-          <noscript>This viewer requires JavaScript to render canonical fixture data.</noscript>
-        </section>
-      </main>
-    </div>
-
-    <footer class="footer">
-      <span>Canonical Lab v1 JSON · deterministic local projection</span>
-      <span>Fixture-backed / read-only / not live Runtime integration</span>
+    <footer>
+      <span>Canonical Lab v1 fixture-backed projection</span>
+      <span>No Python line trace · no locals/heap · no live mutation</span>
     </footer>
-    <p id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    <p id="live-region" class="sr-only" aria-live="polite"></p>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>

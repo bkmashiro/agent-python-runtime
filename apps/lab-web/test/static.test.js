@@ -44,20 +44,22 @@ test("the static shell exposes semantic landmarks and named accessible regions",
   const source = await combinedProductionSource();
 
   assert.match(source, /<header\b/i, "a semantic page header is required");
-  assert.match(source, /<nav\b[^>]*aria-label\s*=/i, "primary navigation needs an accessible name");
-  assert.match(source, /<main\b[^>]*id\s*=\s*["']main-content["']/i, "the primary content landmark must be targetable");
-  assert.match(source, /<section\b[^>]*aria-labelledby\s*=/i, "view sections need heading relations");
-  assert.match(source, /href\s*=\s*["']#main-content["']/i, "keyboard users need a skip link");
-  assert.match(source, /aria-label\s*=\s*["'][^"']*(?:filter|fixture)[^"']*["']/i, "fixture/filter controls need an accessible name");
-  assert.match(source, /aria-label\s*=\s*["'][^"']*(?:branch|lineage)[^"']*["']/i, "the branch DAG needs an accessible name");
+  assert.match(source, /<main\b[^>]*id\s*=\s*["']debugger["']/i, "the debugger landmark must be targetable");
+  assert.match(source, /<ol\b[^>]*aria-label\s*=\s*["'][^"']*execution steps/i, "execution steps need an accessible name");
+  assert.match(source, /<section\b[^>]*aria-labelledby\s*=/i, "inspection sections need heading relations");
+  assert.match(source, /href\s*=\s*["']#debugger["']/i, "keyboard users need a skip link");
+  assert.match(source, /aria-label\s*=\s*["'][^"']*(?:run fixture|recorded run)[^"']*["']/i, "fixture controls need an accessible name");
+  assert.match(source, /aria-labelledby\s*=\s*["']filesystem-title["']/i, "the filesystem inspector needs an accessible name");
   assert.match(source, /aria-live\s*=\s*["']polite["']/i, "selection changes need a polite status announcement");
 });
 
 test("the viewer carries the exact canonical Lab v1 read-only boundary", async () => {
   const source = await combinedProductionSource();
-  assert.match(source, /Fixture-backed canonical Lab v1 viewer/);
+  assert.match(source, /Agent execution replay/);
+  assert.match(source, /Canonical Lab v1 fixture-backed projection/);
   assert.match(source, /read-only/i);
-  assert.match(source, /not a live Runtime or service/i);
+  assert.match(source, /No Python line trace/i);
+  assert.match(source, /intermediate filesystem checkpoints were not captured/i);
   assert.doesNotMatch(source, /(?:connected|integrated)\s+(?:to|with)\s+(?:the\s+)?Runtime/i);
 });
 

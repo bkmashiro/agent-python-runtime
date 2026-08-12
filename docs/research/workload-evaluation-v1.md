@@ -52,6 +52,8 @@ Setup is outside execution timing. Every supported row passes a task-specific or
 | Branch divergent | 2 | 2 branch-checked |
 | Reused LabStore puts | 16 | 18 put attempts |
 
+The replay denominator is four checks, not four distinct replay-treatment rows. Each of the three workloads contributes its planned offline-replay row; the stateful-local row compares against its no-Broker baseline while the two captured-source rows consume their sealed tapes. The fourth check is the bounded-planning deterministic-verification row, whose admitted fixed-input profile also requires two fresh Guests to consume the same captured tape and return equal results. Thus three offline-replay rows plus one deterministic-treatment replay prerequisite gives 4/4; this does not multiply the workload cohort or claim a fourth source semantics.
+
 The body-free measurement summary records 28,215 logical bytes attempted and a 3,714-byte physical-store delta. These are local mechanism accounting values, not a compression, cost, or performance claim. Physical storage can exceed logical input for low-reuse shapes because object framing and privacy indexes add overhead.
 
 The three unsupported rows are explicit rather than omitted:

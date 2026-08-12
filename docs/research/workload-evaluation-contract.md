@@ -41,11 +41,11 @@ The validator requires this complete, sorted list. It cannot be removed or weake
 
 The v1 corpus, plan and report all use `mechanism_only`. Later analysis may label an individual conclusion `qualified_workload`; it must not rewrite the source report's evidence class.
 
-## Reuse inventory and gaps
+## Reuse inventory and closure
 
-Track A introduces contracts, not parallel execution machinery:
+Track A introduced contracts rather than parallel execution machinery. Tracks C–E subsequently closed the original gaps below while preserving the reused Runtime boundaries:
 
-| Existing asset | Reused boundary | Remaining evaluation gap |
+| Existing asset | Reused boundary | Original gap closed by v1 |
 |---|---|---|
 | `pysolate.playback-bundle.v1` | Exact live capture, strict ordered offline transcript and outcome/workspace binding | Expand a corpus plan into repeatable rows and bind every row to the same corpus/plan identity |
 | `pysolate.runtime-observation.v1` | Bounded lifecycle, capability-call digests and workspace metadata | Project completeness and event references into report/Lab rows without bodies |
@@ -55,7 +55,7 @@ Track A introduces contracts, not parallel execution machinery:
 | `pysolate.labstore-object.v1` and typed relations | Private immutable evidence, content dedup and graph links | Ingest evaluation rows and produce a stable body-free Lab read projection |
 | `pysolate-research` CLI | Existing inspect/compare/DAG/store operator surfaces | Add bounded evaluation ingestion/export after Lab v1 freezes |
 
-Still absent after Track A—and therefore not claimed Current—are real workload code and seeds, the row expansion/execution runner, measured reports, Lab v1 schemas/producers, and Web integration with canonical Runtime fixtures.
+The v1 implementation now includes the three workload definitions and seeds, deterministic row expansion/execution, strict raw/report/measurement derivation, all nine Lab v1 schemas/producers, a protected read-only CLI projection, and canonical Go-produced fixtures consumed by Web. These remain mechanism-only evaluation and Experimental Lab surfaces; they are not promoted into the Current Runtime authority path.
 
 ## Versioned contracts
 

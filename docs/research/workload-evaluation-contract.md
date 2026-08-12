@@ -1,8 +1,8 @@
 # Workload evaluation contract v1
 
-Status: **Current contract; execution corpus not yet qualified.**
+Status: **Current contract; the three-workload execution corpus is qualified for mechanism-only evaluation. No evaluation report or measurement claim exists yet.**
 
-This document freezes the first mechanism-only evaluation vocabulary and workload cohort. It does not report workload results; those become Current only after the real CPython/WASI runner and task oracles pass on exact identities.
+This document freezes the first mechanism-only evaluation vocabulary and workload cohort. The exact corpus identities, task oracles and supported treatment executions are now qualified by the real CPython/WASI gates; this document still reports no aggregate evaluation result, timing, model-quality or product claim.
 
 ## Falsifiable claim
 

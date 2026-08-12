@@ -86,26 +86,26 @@ Required envelopes:
 ## 7. Track C — Three real workload families
 
 ### C1 Structured source synthesis
-- [ ] Combine both curated sources, filter/rank records and write a deterministic workspace report.
-- [ ] Oracle verifies canonical result, workspace content identity and source-call count.
-- [ ] Branch changes one captured source result and proves expected result/workspace delta.
+- [x] Combine both curated sources, filter/rank records and write a deterministic workspace report.
+- [x] Oracle verifies canonical result, workspace content identity and source-call count.
+- [x] Branch changes one captured source result and proves expected result/workspace delta.
 
 ### C2 Stateful local analysis
-- [ ] Start from a seeded workspace dataset, perform multi-step local transformation and emit summary/index files.
-- [ ] Oracle verifies exact final tree and semantic summary.
-- [ ] Offline replay proves no network; deterministic profile is used only if the no-mounted-workspace restriction permits a separate equivalent probe.
+- [x] Start from a seeded workspace dataset, perform multi-step local transformation and emit summary/index files.
+- [x] Oracle verifies exact final tree and semantic summary.
+- [x] Offline replay proves no network; deterministic profile is used only if the no-mounted-workspace restriction permits a separate equivalent probe.
 
 ### C3 Bounded planning/search
-- [ ] Run deterministic multi-candidate scoring or bounded search using ordinary Python and typed inputs.
-- [ ] Oracle verifies selected candidate, score trace summary and final evidence identities.
-- [ ] Counterfactual treatment changes a Host-owned input/captured suffix, not Guest authority.
+- [x] Run deterministic multi-candidate scoring or bounded search using ordinary Python and typed inputs.
+- [x] Oracle verifies selected candidate, score trace summary and final evidence identities.
+- [x] Counterfactual treatment changes a Host-owned input/captured suffix, not Guest authority.
 
 For every family:
-- [ ] real Guest smoke and race coverage;
-- [ ] exact corpus identity and negative tamper tests;
-- [ ] direct/live, capture/offline and applicable branch treatments;
-- [ ] no-body/no-credential evidence checks;
-- [ ] explicit unsupported-treatment result rather than silent omission.
+- [x] real Guest smoke and race coverage;
+- [x] exact corpus identity and negative tamper tests;
+- [x] direct/live, capture/offline and applicable branch treatments;
+- [x] no-body/no-credential evidence checks;
+- [x] explicit unsupported-treatment result rather than silent omission.
 
 ## 8. Track D — Evaluation runner and truthful measurements
 
@@ -185,6 +185,7 @@ A successful slice, signed checkpoint, long test, context boundary or pending We
 - 2026-08-12: Roadmap created from clean synchronized baseline `d078841`; implementation not started. First pointer: Track A inventory, then Track B Lab v1 schema freeze before parallel Web consumption.
 - 2026-08-12: Track A frozen with mechanism-only corpus/plan/report contracts, typed captured-read requirements, fixed family admission invariants, bounded strict decoders, deterministic positive/adversarial fixtures and evidence vocabulary. Full Go/race/Python gates passed; independent review blockers were reproduced, fixed and post-fix reviewed PASS.
 - 2026-08-12: Track B Lab v1 read contract frozen with nine closed schemas, matching strict Go projection/cross-set validator, six-case 54-document canonical fixture matrix and SHA manifest. Review probes found and closed timeout-enum, Windows Host-path and Go/schema bound/vocabulary drift; final post-fix review passed with zero findings.
+- 2026-08-12: Track C qualified three fixed mechanism-only workloads with Go-produced body-free descriptors, exact code/input/seed/result/workspace/treatment identities, tamper/privacy guards and explicit unsupported dispositions. A qualified local CPython/WASI artifact passed the complete race matrix: three canonical parents, two loopback live-capture/strict-offline pairs, two Host-owned counterfactual branches, two fresh deterministic planning Guests and two fresh seeded no-broker Guests. Full Go/race/vet/build/Python gates passed; bounded independent review returned PASS with no concrete blocker.
 
 ## 16. Short prompt
 

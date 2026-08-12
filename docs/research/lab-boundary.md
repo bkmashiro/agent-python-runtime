@@ -89,15 +89,16 @@ read-only mode. In contrast, `branch plan` publishes a new protected manifest
 and `store benchmark` creates a new synthetic store destination.
 
 This prototype is deliberately not a service boundary. It has no database,
-authentication, remote API, multi-user authorization, cross-process writer
-lock, migration engine, or production recovery workflow. Deterministic
+authentication, remote API, multi-user authorization, distributed lock,
+migration engine, or production recovery workflow. Deterministic
 child-process probes show that immutable publication and final fail-private
-classification converge at the tested boundaries, but crashed or live stages
-make aggregate traversal fail closed and cannot yet be distinguished safely.
-The measured next step is explicit filesystem ownership and offline repair;
-SQLite metadata is not admitted for evaluation v1 because it would not remove
-external object stages and no indexed-query or multi-record transaction need
-was demonstrated.
+classification converge at the tested boundaries. The store now admits one
+writer, allows concurrent readers, and exposes exclusive offline audit/repair
+for validated orphan stages. Crashed and live stages still cannot be
+distinguished safely during online aggregate traversal, which remains
+fail-closed. SQLite metadata is not admitted for evaluation v1 because it would
+not remove external object stages and no indexed-query or multi-record
+transaction need was demonstrated.
 
 The repository has both focused and combined real-Guest evidence. The focused
 branch test calls `research/operator.RunBranch` directly. The combined research

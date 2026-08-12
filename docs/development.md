@@ -34,6 +34,31 @@ The focused suite exercises:
 - Host-projected rooted workspace and complete capsule continuation;
 - Host-authored receipts.
 
+### Playback acceptance artifact
+
+For a persistent, machine-readable live-capture-to-offline-playback proof, build
+`apyrun`, create a private evidence directory and run the repository-maintained
+acceptance command:
+
+```bash
+go build -o /private/tmp/apyrun ./cmd/apyrun
+install -d -m 0700 /private/tmp/pysolate-acceptance
+go run ./cmd/pysolate-acceptance \
+  -artifact /absolute/path/to/agent-python-runtime.wasm \
+  -apyrun /private/tmp/apyrun \
+  -evidence-dir /private/tmp/pysolate-acceptance \
+  -output /private/tmp/pysolate-acceptance/report.json
+```
+
+The command does not build or substitute a Guest. A missing artifact, qualified
+sidecar, executable or protected evidence directory exits with code 2 and an
+`acceptance unavailable` diagnostic. It starts only a loopback source, runs a
+fresh live Guest, publishes a protected Bundle, closes the source, runs a fresh
+offline Guest and emits bounded `pysolate.playback-acceptance.v1` JSON. The
+report contains identities, equality relations and counts rather than Agent
+source or result/workspace bodies. Bundle and report publication are `0600` and
+no-overwrite.
+
 ## Manual PoC
 
 Build the CLI:

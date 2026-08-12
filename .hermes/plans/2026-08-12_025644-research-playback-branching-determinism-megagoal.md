@@ -199,12 +199,12 @@ Do not perform a cosmetic rename campaign. Do not replace domain-separated ident
 
 ### Tasks
 
-- [ ] Move the temporary live→offline acceptance logic into a repository-maintained fixture/harness.
-- [ ] Require an explicit real Guest artifact; absent artifact must SKIP/UNAVAILABLE truthfully, never fake semantic success.
-- [ ] Emit bounded canonical JSON with source hit count, Bundle identity/path/mode, parent result/workspace identities, privacy scan and exact artifact/profile.
-- [ ] Ensure all servers are loopback-only and test-scoped, with zero residual processes.
-- [ ] Add failure controls for live handler construction during playback and for stale evidence after source edits.
-- [ ] Add a public documented command and execute it exactly as documented.
+- [x] Move the temporary live→offline acceptance logic into repository-maintained `cmd/pysolate-acceptance`.
+- [x] Require an explicit real Guest artifact, qualified sidecars and `apyrun`; absent prerequisites exit 2 with `acceptance unavailable`, never fake semantic success.
+- [x] Emit bounded canonical `pysolate.playback-acceptance.v1` JSON with source hit count, Bundle identity/path/mode, parent result/workspace identities, privacy scan and exact artifact/profile.
+- [x] Ensure the server is loopback-only and synchronously closed before playback; real proof reported one total hit and no residual process.
+- [x] Preserve existing playback controls: offline uses no live handler and stale/re-authored evidence fails the external Bundle identity anchor; focused Bundle/admission tests remain green.
+- [x] Add the public command to `docs/development.md` and execute it exactly as documented against the required artifact.
 
 ### Gates
 

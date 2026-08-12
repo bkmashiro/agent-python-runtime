@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run three bounded local examples through the real apyrun CLI."""
+"""Run four bounded local examples through the real apyrun CLI."""
 
 from __future__ import annotations
 
@@ -31,6 +31,19 @@ EXAMPLES = (
             "suite_id": "pysolate-core",
         },
     ),
+    (
+        "04-workflow-with-workspace",
+        2,
+        {
+            "case_id": "workspace-summary",
+            "ranked": [
+                {"id": "gamma", "normalized_score": 0.1},
+                {"id": "alpha", "normalized_score": 0.07},
+                {"id": "beta", "normalized_score": 0.04},
+            ],
+            "suite_id": "pysolate-core",
+        },
+    ),
 )
 
 
@@ -49,25 +62,33 @@ def main() -> int:
 
     try:
         with tempfile.TemporaryDirectory() as temporary:
-            config = {
-                "information_sources": {
-                    "demo_catalog": {
-                        "endpoint": f"http://127.0.0.1:{server.server_port}/catalog.json",
-                        "timeout_ms": 1000,
-                        "max_response_bytes": 4096,
-                    },
-                    "benchmark_manifest": {
-                        "endpoint": f"http://127.0.0.1:{server.server_port}/benchmark.json",
-                        "timeout_ms": 1000,
-                        "max_response_bytes": 262144,
-                    },
-                },
-                "max_tool_calls": 2,
-            }
             config_path = Path(temporary) / "host.json"
-            config_path.write_text(json.dumps(config), encoding="utf-8")
 
             for name, expected_calls, expected_result in EXAMPLES:
+                config = {
+                    "information_sources": {
+                        "demo_catalog": {
+                            "endpoint": f"http://127.0.0.1:{server.server_port}/catalog.json",
+                            "timeout_ms": 1000,
+                            "max_response_bytes": 4096,
+                        },
+                        "benchmark_manifest": {
+                            "endpoint": f"http://127.0.0.1:{server.server_port}/benchmark.json",
+                            "timeout_ms": 1000,
+                            "max_response_bytes": 262144,
+                        },
+                    },
+                    "max_tool_calls": 2,
+                }
+                if name == "04-workflow-with-workspace":
+                    workspace = Path(temporary) / "workspace"
+                    workspace.mkdir()
+                    config["workspace"] = {
+                        "source_directory": str(workspace),
+                        "disposition": "discard",
+                        "limits": {"max_files": 32, "max_bytes": 1048576, "max_file_bytes": 262144, "max_depth": 8},
+                    }
+                config_path.write_text(json.dumps(config), encoding="utf-8")
                 inputs = json.loads((HERE / "inputs" / f"{name}.json").read_text())
                 request = {"run_id": f"example-{name}", "inputs": inputs}
                 request["code"] = (HERE / f"{name}.py").read_text()
@@ -96,6 +117,7 @@ def main() -> int:
                     or calls != expected_calls
                     or len(receipts) != expected_calls
                     or any(receipt["outcome"] != "ok" for receipt in receipts)
+                    or (name == "04-workflow-with-workspace" and response.get("workspace_receipt", {}).get("entry_count") != 2)
                 ):
                     raise SystemExit(f"{name}: unexpected response: {response}")
                 print(json.dumps({"example": name, "capability_calls": calls, "receipts": len(receipts), "result": response["result"]}, sort_keys=True))

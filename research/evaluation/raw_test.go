@@ -39,6 +39,26 @@ func TestRawStudyLifecycleConservationAndBodyFreeEvidence(t *testing.T) {
 	}
 }
 
+func TestRawStudyStrictCanonicalRoundTrip(t *testing.T) {
+	raw := evaluation.RawStudy{SchemaVersion: evaluation.RawSchemaVersion, CorpusSHA256: digestC, PlanSHA256: digestB, Rows: []evaluation.RawRow{{RowID: evaluation.RowIdentity("bounded-planning-v1", evaluation.TreatmentLiveCapture, 0), WorkloadID: "bounded-planning-v1", Treatment: evaluation.TreatmentLiveCapture, Started: true, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true}}}
+	encoded, identity, err := evaluation.EncodeRawStudy(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, decodedIdentity, err := evaluation.DecodeRawStudy(encoded)
+	if err != nil || identity != decodedIdentity || decoded.Rows[0].RowID != raw.Rows[0].RowID {
+		t.Fatalf("decode=%+v identity=%s/%s err=%v", decoded, identity, decodedIdentity, err)
+	}
+	unknown := append([]byte(nil), encoded[:len(encoded)-1]...)
+	unknown = append(unknown, []byte(`,"unknown":true}`)...)
+	if _, _, err := evaluation.DecodeRawStudy(unknown); !errors.Is(err, evaluation.ErrInvalid) {
+		t.Fatalf("unknown=%v", err)
+	}
+	if _, _, err := evaluation.DecodeRawStudy(append(encoded, []byte("{}")...)); !errors.Is(err, evaluation.ErrInvalid) {
+		t.Fatalf("trailing=%v", err)
+	}
+}
+
 func TestRebuildReportFromRawRowsIsExact(t *testing.T) {
 	corpus, plan := runnerContracts()
 	corpusRaw, corpusID, _ := evaluation.EncodeCorpus(corpus)

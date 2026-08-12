@@ -63,6 +63,14 @@ type rowEvidence struct {
 	ProblemCode      string       `json:"problem_code,omitempty"`
 }
 
+func EncodeRawStudy(value RawStudy) ([]byte, string, error) {
+	return encodeCanonical(value, func(study RawStudy) error { return study.Validate() })
+}
+
+func DecodeRawStudy(data []byte) (RawStudy, string, error) {
+	return decodeStrict(data, func(study RawStudy) error { return study.Validate() })
+}
+
 func (study RawStudy) Validate() error {
 	if study.SchemaVersion != RawSchemaVersion || !digestPattern.MatchString(study.CorpusSHA256) || !digestPattern.MatchString(study.PlanSHA256) || study.Rows == nil || len(study.Rows) == 0 || len(study.Rows) > maxEvaluationRows {
 		return ErrInvalid

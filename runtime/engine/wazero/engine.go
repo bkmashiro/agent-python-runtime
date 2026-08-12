@@ -238,6 +238,11 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
+	if broker != nil {
+		if err := broker.Finalize(true); err != nil {
+			return nil, fmt.Errorf("finalize capability broker: %w", err)
+		}
+	}
 	var receipts []receipt.Receipt
 	var capabilityCalls uint32
 	var capabilityPlanSHA256 string

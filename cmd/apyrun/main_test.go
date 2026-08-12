@@ -87,6 +87,20 @@ func TestOperatorConfigRejectsAmbiguousOrAgentStyleWorkspaceAuthority(t *testing
 	}
 }
 
+func TestOperatorConfigRejectsAmbiguousSourceAndPlaybackJSON(t *testing.T) {
+	cases := []string{
+		`{"information_sources":null}`,
+		`{"playback":null}`,
+		`{"information_sources":{"demo_catalog":{"endpoint":"http://127.0.0.1/a","endpoint":"http://127.0.0.1/b","timeout_ms":1000,"max_response_bytes":4096}}}`,
+		`{"playback":{"mode":"capture","mode":"playback","output_bundle":"/tmp/out"}}`,
+	}
+	for _, raw := range cases {
+		if _, err := decodeOperatorConfig([]byte(raw)); err == nil {
+			t.Fatalf("ambiguous config accepted: %s", raw)
+		}
+	}
+}
+
 func TestOperatorConfigAllowsCuratedSourceWithMountedWorkspace(t *testing.T) {
 	config, err := decodeOperatorConfig([]byte(`{"workspace":{"disposition":"discard"},"information_sources":{"demo_catalog":{"endpoint":"http://127.0.0.1:8080/catalog","timeout_ms":500,"max_response_bytes":4096}},"max_tool_calls":2}`))
 	if err != nil {

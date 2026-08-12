@@ -135,4 +135,116 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 			t.Fatalf("bundle leaked forbidden run material %q", forbidden)
 		}
 	}
+
+	server.Close()
+	playbackRoot := t.TempDir()
+	playbackConfigPath := filepath.Join(t.TempDir(), "host-playback.json")
+	playbackConfig, err := json.Marshal(map[string]any{
+		"workspace": map[string]any{"source_directory": playbackRoot, "disposition": "discard"},
+		"information_sources": map[string]any{"demo_catalog": map[string]any{
+			"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
+		}},
+		"max_tool_calls": 2,
+		"playback":       map[string]any{"mode": "playback", "input_bundle": bundlePath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(playbackConfigPath, playbackConfig, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	playbackCommand := exec.Command(apyrunBinary(t), "-artifact", artifact, "-config", playbackConfigPath)
+	playbackCommand.Stdin = bytes.NewReader(request)
+	playbackOutput, err := playbackCommand.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run offline playback: %v\n%s", err, playbackOutput)
+	}
+	var playbackResponse guestResponse
+	if err := json.Unmarshal(playbackOutput, &playbackResponse); err != nil {
+		t.Fatal(err)
+	}
+	liveResult, _ := json.Marshal(response.Result)
+	offlineResult, _ := json.Marshal(playbackResponse.Result)
+	liveResultSHA, _ := playback.CanonicalSHA256(liveResult)
+	offlineResultSHA, _ := playback.CanonicalSHA256(offlineResult)
+	if hits.Load() != 1 || playbackResponse.Status != "ok" || liveResultSHA != offlineResultSHA ||
+		response.WorkspaceReceipt["final_workspace_sha256"] != playbackResponse.WorkspaceReceipt["final_workspace_sha256"] {
+		t.Fatalf("live=%+v playback=%+v hits=%d", response, playbackResponse, hits.Load())
+	}
+
+	tamperCases := []struct {
+		name   string
+		mutate func(*playback.Bundle)
+		tail   bool
+	}{
+		{name: "plan", mutate: func(value *playback.Bundle) { value.CapabilityPlanSHA256 = playback.SHA256([]byte("different-plan")) }},
+		{name: "grant", mutate: func(value *playback.Bundle) {
+			value.Grants[0].PolicySHA256 = playback.SHA256([]byte("different-grant"))
+		}},
+		{name: "request", mutate: func(value *playback.Bundle) { value.RequestSHA256 = playback.SHA256([]byte("different-request")) }},
+		{name: "operation", mutate: func(value *playback.Bundle) { value.Entries[0].OperationIndex = 1 }},
+		{name: "capability", mutate: func(value *playback.Bundle) { value.Entries[0].Capability = "sources.other_catalog" }},
+		{name: "arguments", mutate: func(value *playback.Bundle) {
+			value.Entries[0].Arguments = json.RawMessage(`{"unused":true}`)
+			value.Entries[0].ArgumentsSHA256 = playback.SHA256(value.Entries[0].Arguments)
+		}},
+		{name: "result", mutate: func(value *playback.Bundle) {
+			value.Entries[0].Result = json.RawMessage(`{"items":[{"id":"a","score":2,"title":"Changed"}]}`)
+			value.Entries[0].ResultSHA256 = playback.SHA256(value.Entries[0].Result)
+		}},
+		{name: "extra", mutate: func(value *playback.Bundle) {
+			extra := value.Entries[0]
+			extra.OperationIndex = 1
+			value.Entries = append(value.Entries, extra)
+		}},
+		{name: "missing", mutate: func(value *playback.Bundle) { value.Entries = nil }},
+		{name: "tail", tail: true},
+	}
+	for _, testCase := range tamperCases {
+		t.Run("tamper-"+testCase.name, func(t *testing.T) {
+			cleanBytes, err := playback.Encode(bundle)
+			if err != nil {
+				t.Fatal(err)
+			}
+			candidate, err := playback.Decode(cleanBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if testCase.mutate != nil {
+				testCase.mutate(&candidate)
+				candidate.Identity = ""
+				cleanBytes, err = playback.Encode(candidate)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if testCase.tail {
+				cleanBytes = append(cleanBytes, []byte("tail")...)
+			}
+			tamperedPath := filepath.Join(t.TempDir(), "tampered.playback.json")
+			if err := os.WriteFile(tamperedPath, cleanBytes, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			tamperedConfigPath := filepath.Join(t.TempDir(), "host.json")
+			tamperedConfig, _ := json.Marshal(map[string]any{
+				"workspace": map[string]any{"source_directory": t.TempDir(), "disposition": "discard"},
+				"information_sources": map[string]any{"demo_catalog": map[string]any{
+					"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
+				}},
+				"max_tool_calls": 2,
+				"playback":       map[string]any{"mode": "playback", "input_bundle": tamperedPath},
+			})
+			if err := os.WriteFile(tamperedConfigPath, tamperedConfig, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command(apyrunBinary(t), "-artifact", artifact, "-config", tamperedConfigPath)
+			command.Stdin = bytes.NewReader(request)
+			if output, err := command.CombinedOutput(); err == nil {
+				t.Fatalf("tampered bundle accepted: %s", output)
+			}
+			if hits.Load() != 1 {
+				t.Fatalf("tamper attempted network: hits=%d", hits.Load())
+			}
+		})
+	}
 }

@@ -1,6 +1,6 @@
 # Playback Bundles
 
-Status: capture is Current; offline consumption is enabled by the subsequent playback stage.
+Status: capture and strict offline consumption are Current for capturable curated-source calls.
 
 ## Purpose
 
@@ -40,6 +40,19 @@ Configure capture with an absolute output path:
 ```
 
 Capture requires a curated information source. Workspace Capsule output and Playback Bundle output are mutually exclusive, avoiding partially published multi-artifact outcomes.
+
+Offline playback uses the same Host source policy but never constructs the HTTP handler:
+
+```json
+{
+  "playback": {
+    "mode": "playback",
+    "input_bundle": "/absolute/protected/run.playback.json"
+  }
+}
+```
+
+Before Guest startup, the Host checks plan, grants, request, artifact, execution profile and initial workspace against the bundle. The Broker then matches each operation by index, capability and canonical arguments, revalidates the recorded result against the sealed output schema, produces ordinary receipts and refuses live-handler execution. Missing, extra, reordered, mismatched or unused records make the Run fail. After the fresh Guest exits, the Host verifies the canonical Agent-result digest and final workspace identity.
 
 Publication occurs only after:
 

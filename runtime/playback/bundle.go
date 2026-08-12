@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	SchemaVersion  = "pysolate.playback-bundle.v1"
-	maxBundleBytes = 16 << 20
-	maxEntries     = 256
-	maxJSONNodes   = 65536
+	SchemaVersion   = "pysolate.playback-bundle.v1"
+	MaxEncodedBytes = 16 << 20
+	maxBundleBytes  = MaxEncodedBytes
+	maxEntries      = 256
+	maxJSONNodes    = 65536
 )
 
 type Metadata struct {

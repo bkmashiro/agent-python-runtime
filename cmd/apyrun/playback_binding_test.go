@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 )
@@ -64,6 +66,69 @@ func TestPlaybackBundleDiscardLeavesNoOutput(t *testing.T) {
 	}
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatalf("output exists after discard: %v", err)
+	}
+}
+
+func TestPlaybackAdmissionAndOutcomeBindHostContext(t *testing.T) {
+	policy := capability.DemoCatalogPolicy{Endpoint: "http://127.0.0.1:1/catalog", Timeout: time.Second, MaxResponseBytes: 4096}
+	spec, grant, err := capability.DemoCatalogDefinition(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	if err := registry.Register(spec, grant, capability.NewPlaybackHandler()); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	wasm := []byte("same-artifact")
+	requestSHA256 := playback.SHA256([]byte("same-request"))
+	profileSHA256, err := executionProfileSHA256(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := []byte(`{"ok":true}`)
+	resultSHA256, _ := playback.CanonicalSHA256(result)
+	bundle, err := playback.New(playback.Metadata{
+		CapabilityPlanSHA256: plan.Identity(), RequestSHA256: requestSHA256,
+		ArtifactSHA256: playback.SHA256(wasm), ExecutionProfileSHA256: profileSHA256,
+		ExpectedResultSHA256: resultSHA256, Grants: plan.Grants(),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validatePlaybackAdmission(bundle, plan, config, wasm, requestSHA256, nil); err != nil {
+		t.Fatal(err)
+	}
+	mutations := []func(*playback.Bundle){
+		func(value *playback.Bundle) { value.CapabilityPlanSHA256 = "sha256:" + repeatByte('1', 64) },
+		func(value *playback.Bundle) { value.RequestSHA256 = "sha256:" + repeatByte('2', 64) },
+		func(value *playback.Bundle) { value.ArtifactSHA256 = "sha256:" + repeatByte('3', 64) },
+		func(value *playback.Bundle) { value.ExecutionProfileSHA256 = "sha256:" + repeatByte('4', 64) },
+		func(value *playback.Bundle) { value.Grants[0].PolicySHA256 = "sha256:" + repeatByte('5', 64) },
+		func(value *playback.Bundle) {
+			value.InitialWorkspaceSHA256 = "sha256:" + repeatByte('6', 64)
+			value.FinalWorkspaceSHA256 = "sha256:" + repeatByte('7', 64)
+		},
+	}
+	for index, mutate := range mutations {
+		changed := bundle
+		changed.Grants = append([]capability.GrantBinding(nil), bundle.Grants...)
+		mutate(&changed)
+		if err := validatePlaybackAdmission(changed, plan, config, wasm, requestSHA256, nil); err == nil {
+			t.Fatalf("admission mutation %d accepted", index)
+		}
+	}
+	response := runtimeconfig.RunResponse{Result: result}
+	if err := validatePlaybackOutcome(bundle, response); err != nil {
+		t.Fatal(err)
+	}
+	response.Result = []byte(`{"ok":false}`)
+	if err := validatePlaybackOutcome(bundle, response); err == nil {
+		t.Fatal("result mismatch accepted")
 	}
 }
 

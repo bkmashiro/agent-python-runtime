@@ -8,6 +8,7 @@ import (
 	"io"
 	"path/filepath"
 	"time"
+	"unicode/utf8"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -63,7 +64,88 @@ type workspaceLimitsConfig struct {
 	MaxDepth     uint32 `json:"max_depth"`
 }
 
+func rejectDuplicateOperatorJSON(data []byte) error {
+	if !utf8.Valid(data) || len(data) > 1<<20 {
+		return errors.New("invalid operator JSON")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	nodes := 0
+	if err := consumeUniqueOperatorJSON(decoder, 0, &nodes); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return errors.New("operator JSON has trailing data")
+	}
+	return nil
+}
+
+func consumeUniqueOperatorJSON(decoder *json.Decoder, depth int, nodes *int) error {
+	if depth > 64 || *nodes >= 65536 {
+		return errors.New("operator JSON is too complex")
+	}
+	*nodes++
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("operator JSON object key is not a string")
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return errors.New("operator JSON has duplicate key")
+			}
+			seen[key] = struct{}{}
+			if err := consumeUniqueOperatorJSON(decoder, depth+1, nodes); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim('}') {
+			return errors.New("invalid operator JSON object")
+		}
+	case '[':
+		for decoder.More() {
+			if err := consumeUniqueOperatorJSON(decoder, depth+1, nodes); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim(']') {
+			return errors.New("invalid operator JSON array")
+		}
+	default:
+		return errors.New("invalid operator JSON delimiter")
+	}
+	return nil
+}
+
 func decodeOperatorConfig(data []byte) (operatorConfig, error) {
+	if err := rejectDuplicateOperatorJSON(data); err != nil {
+		return operatorConfig{}, errors.New("operator config contains ambiguous JSON")
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(data, &envelope) != nil {
+		return operatorConfig{}, errors.New("decode operator config")
+	}
+	for _, field := range []string{"information_sources", "playback"} {
+		if raw, exists := envelope[field]; exists && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return operatorConfig{}, errors.New(field + " cannot be null")
+		}
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var config operatorConfig

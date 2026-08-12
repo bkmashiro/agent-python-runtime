@@ -58,10 +58,6 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, err.Error())
 		return 2
 	}
-	if operator.Playback != nil && operator.Playback.Mode == "playback" {
-		writeDiagnostic(stderr, "offline playback is not available")
-		return 2
-	}
 	request, err := io.ReadAll(io.LimitReader(stdin, int64(runConfig.MaxRequestBytes)+1))
 	if err != nil || uint64(len(request)) > uint64(runConfig.MaxRequestBytes) {
 		writeDiagnostic(stderr, "RunRequest exceeds configured bounds")
@@ -120,6 +116,26 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	digest := sha256.Sum256(requestData)
 	requestSHA256 := fmt.Sprintf("sha256:%x", digest[:])
 	runIdentity := fmt.Sprintf("host-%x", digest[:8])
+	var playbackBundle *playback.Bundle
+	if operator.Playback != nil && operator.Playback.Mode == "playback" {
+		bundleFile, openErr := os.Open(operator.Playback.InputBundle)
+		if openErr != nil {
+			writeDiagnostic(stderr, "open playback bundle")
+			return 2
+		}
+		bundleBytes, readErr := io.ReadAll(io.LimitReader(bundleFile, playback.MaxEncodedBytes+1))
+		closeErr := bundleFile.Close()
+		if readErr != nil || closeErr != nil || len(bundleBytes) > playback.MaxEncodedBytes {
+			writeDiagnostic(stderr, "read playback bundle")
+			return 2
+		}
+		decodedBundle, decodeErr := playback.Decode(bundleBytes)
+		if decodeErr != nil {
+			writeDiagnostic(stderr, "validate playback bundle")
+			return 2
+		}
+		playbackBundle = &decodedBundle
+	}
 	var capabilityPlan *capability.Plan
 	var runBroker *capability.Broker
 	hasHostTools := operator.WorkspaceFiles != nil || operator.InformationSources != nil
@@ -142,7 +158,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 				writeDiagnostic(stderr, "invalid demo_catalog source policy")
 				return 2
 			}
-			if err := capability.RegisterDemoCatalog(registry, policy); err != nil {
+			if playbackBundle != nil {
+				spec, grant, definitionErr := capability.DemoCatalogDefinition(policy)
+				if definitionErr != nil || registry.Register(spec, grant, capability.NewPlaybackHandler()) != nil {
+					writeDiagnostic(stderr, "initialize offline demo_catalog source")
+					return 1
+				}
+			} else if err := capability.RegisterDemoCatalog(registry, policy); err != nil {
 				writeDiagnostic(stderr, "initialize demo_catalog source")
 				return 1
 			}
@@ -157,7 +179,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			return 1
 		}
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
-			broker, err := capability.NewBroker(capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan})
+			brokerConfig := capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan}
+			if playbackBundle != nil {
+				brokerConfig.Playback = &capability.PlaybackConfig{Entries: playbackBundle.Entries}
+			}
+			broker, err := capability.NewBroker(brokerConfig)
 			if err == nil {
 				runBroker = broker
 			}
@@ -175,6 +201,12 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		factory.WorkspaceManager = workspaceBinding.manager
 		factory.WorkspaceRef = workspaceBinding.ref
 		factory.WorkspaceOwner = runIdentity
+	}
+	if playbackBundle != nil {
+		if err := validatePlaybackAdmission(*playbackBundle, capabilityPlan, runConfig, wasm, requestSHA256, workspaceBinding); err != nil {
+			writeDiagnostic(stderr, err.Error())
+			return 2
+		}
 	}
 	runner, err := factory.New(ctx, wasm, runConfig)
 	if err != nil {
@@ -237,6 +269,12 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, "response exceeds configured bounds")
 		return 1
 	}
+	if playbackBundle != nil {
+		if err := validatePlaybackOutcome(*playbackBundle, decodedResponse); err != nil {
+			writeDiagnostic(stderr, err.Error())
+			return 1
+		}
+	}
 	if operator.Playback != nil && operator.Playback.Mode == "capture" {
 		if capabilityPlan == nil || runBroker == nil {
 			writeDiagnostic(stderr, "capture broker is unavailable")
@@ -257,7 +295,12 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			metadata.InitialWorkspaceSHA256 = decodedResponse.WorkspaceReceipt.InitialWorkspaceSHA256
 			metadata.FinalWorkspaceSHA256 = decodedResponse.WorkspaceReceipt.FinalWorkspaceSHA256
 		}
-		bundle, bundleErr := playback.New(metadata, runBroker.SnapshotTranscript())
+		transcript := runBroker.SnapshotTranscript()
+		if uint32(len(transcript)) != runBroker.Calls() {
+			writeDiagnostic(stderr, "capture transcript is incomplete")
+			return 1
+		}
+		bundle, bundleErr := playback.New(metadata, transcript)
 		if bundleErr != nil {
 			writeDiagnostic(stderr, "author playback bundle")
 			return 1

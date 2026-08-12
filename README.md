@@ -108,7 +108,7 @@ The Host can configure one credential-free exact endpoint for the dedicated `sou
 
 Agent Python calls `items = sources.demo_catalog()`. It cannot submit a URL, path, query, method, headers, redirect policy, credentials or transport budgets. The private Host adapter performs one GET, refuses redirects, requires status 200 and JSON media type, bounds time and bytes, canonicalizes the structured response and lets the same sealed capability schema validate it. This source may coexist with a mounted `/workspace`; it is not a generic HTTP client.
 
-The Host may capture schema-validated source calls into a minimal protected [Playback Bundle](docs/playback-bundles.md). Capture binds the sealed plan, grants, request, artifact/profile, capability transcript, expected result and workspace identities without storing Agent source, final result body, workspace bodies, endpoint URL or credentials.
+The Host may capture schema-validated source calls into a minimal protected [Playback Bundle](docs/playback-bundles.md), then run a second fresh Guest offline after the source is unavailable. Playback constructs no HTTP adapter, strictly consumes the recorded operation sequence through the same Broker schemas and receipts, and verifies the Agent-result and final-workspace identities. The bundle binds plan, grants, request, artifact/profile and transcript without storing Agent source, final result body, workspace bodies, endpoint URL or credentials.
 
 ## Security boundary
 

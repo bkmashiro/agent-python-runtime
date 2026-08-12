@@ -20,15 +20,19 @@ var ErrInvalidBroker = errors.New("invalid Host tool broker")
 type Config struct {
 	RunIdentity string
 	Plan        *Plan
+	Playback    *PlaybackConfig
 }
 
 type Broker struct {
-	config     Config
-	mu         sync.Mutex
-	calls      uint32
-	seen       map[string]struct{}
-	receipts   []receipt.Receipt
-	transcript []TranscriptEntry
+	config           Config
+	mu               sync.Mutex
+	calls            uint32
+	seen             map[string]struct{}
+	receipts         []receipt.Receipt
+	transcript       []TranscriptEntry
+	playbackEntries  map[uint32]TranscriptEntry
+	playbackConsumed map[uint32]bool
+	playbackFailed   bool
 }
 
 type request struct {
@@ -53,30 +57,54 @@ func NewBroker(config Config) (*Broker, error) {
 	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 {
 		return nil, ErrInvalidBroker
 	}
-	return &Broker{config: config, seen: make(map[string]struct{})}, nil
+	broker := &Broker{config: config, seen: make(map[string]struct{})}
+	if config.Playback != nil {
+		entries, err := normalizePlaybackEntries(config.Playback.Entries)
+		if err != nil {
+			return nil, ErrInvalidBroker
+		}
+		broker.playbackEntries = make(map[uint32]TranscriptEntry, len(entries))
+		broker.playbackConsumed = make(map[uint32]bool, len(entries))
+		for _, entry := range entries {
+			registered, ok := config.Plan.lookup(entry.Capability)
+			if !ok || registered.spec.Playback != PlaybackCaptured || entry.OperationIndex >= config.Plan.MaxCalls() {
+				return nil, ErrInvalidBroker
+			}
+			broker.playbackEntries[entry.OperationIndex] = entry
+		}
+	}
+	return broker, nil
 }
 
 func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
-	if broker == nil || len(raw) == 0 || len(raw) > maxCallBytes {
+	if broker == nil {
+		return nil, ErrInvalidBroker
+	}
+	if len(raw) == 0 || len(raw) > maxCallBytes {
+		broker.failPlayback()
 		return nil, ErrInvalidBroker
 	}
 	var call request
 	if !utf8.Valid(raw) || rejectDuplicateJSON(raw) != nil {
+		broker.failPlayback()
 		return encodeResponse(response{Status: "error", Error: &callError{Code: "invalid_arguments", Message: "invalid Host tool call"}})
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&call); err != nil || !validIdentity(call.CallID) || !validName(call.Capability) || len(call.Arguments) == 0 || !json.Valid(call.Arguments) {
+		broker.failPlayback()
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_arguments", Message: "invalid Host tool call"}})
 	}
 
 	broker.mu.Lock()
 	if broker.calls >= broker.config.Plan.MaxCalls() {
 		broker.mu.Unlock()
+		broker.failPlayback()
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "call_budget_exceeded", Message: "Host tool call budget exhausted"}})
 	}
 	if _, duplicate := broker.seen[call.CallID]; duplicate {
 		broker.mu.Unlock()
+		broker.failPlayback()
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "duplicate_call_id", Message: "call_id must be unique"}})
 	}
 	broker.seen[call.CallID] = struct{}{}
@@ -86,15 +114,38 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 
 	registered, ok := broker.config.Plan.lookup(call.Capability)
 	if !ok {
+		broker.failPlayback()
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}})
 	}
 	arguments, err := canonicalForSchema(registered.inputSchema, call.Arguments)
 	if err != nil {
+		broker.failPlayback()
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
 	}
 	call.Arguments = arguments
+	if broker.playbackEntries != nil {
+		entry, matchErr := broker.matchPlayback(operation, call.Capability, arguments)
+		if matchErr != nil {
+			broker.failPlayback()
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "playback_mismatch", Message: "Host playback transcript does not match this call"}})
+		}
+		canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, entry.Result)
+		if resultErr != nil || len(canonicalResult) > maxCallBytes || playbackDigest(canonicalResult) != entry.ResultSHA256 {
+			broker.failPlayback()
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host playback result does not match the capability schema"}})
+		}
+		if err := broker.consumePlayback(operation); err != nil {
+			broker.failPlayback()
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "playback_mismatch", Message: "Host playback transcript does not match this call"}})
+		}
+		broker.record(call, operation, "ok", canonicalResult)
+		return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
+	}
 	var result json.RawMessage
 	var evidence TransportEvidence
 	if evidenced, ok := registered.handler.(EvidenceHandler); ok {
@@ -182,9 +233,19 @@ func (broker *Broker) CapabilityPlanSHA256() string {
 func (broker *Broker) Receipts() []receipt.Receipt { return broker.SnapshotReceipts() }
 func (broker *Broker) CallCount() uint32           { return broker.Calls() }
 
-// Finalize and CloseJournal remain tiny lifecycle hooks for the engine. The PoC
-// deliberately has no durable transaction journal or recovery state machine.
-func (broker *Broker) Finalize(bool) error { return nil }
+// Finalize rejects unused offline records. CloseJournal remains a tiny lifecycle
+// hook; this runtime has no durable transaction journal.
+func (broker *Broker) Finalize(bool) error {
+	if broker == nil {
+		return ErrInvalidBroker
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if broker.playbackEntries != nil && (broker.playbackFailed || len(broker.playbackConsumed) != len(broker.playbackEntries)) {
+		return ErrPlaybackIncomplete
+	}
+	return nil
+}
 func (broker *Broker) CloseJournal() error { return nil }
 
 func encodeResponse(value response) ([]byte, error) {

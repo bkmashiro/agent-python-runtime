@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 )
 
@@ -37,6 +38,50 @@ func executionProfileSHA256(config runtimeconfig.RunConfig) (string, error) {
 		return "", err
 	}
 	return playback.CanonicalSHA256(encoded)
+}
+
+func validatePlaybackAdmission(bundle playback.Bundle, plan *capability.Plan, config runtimeconfig.RunConfig, wasm []byte, requestSHA256 string, workspaceBinding *mountedWorkspaceBinding) error {
+	if plan == nil || bundle.CapabilityPlanSHA256 != plan.Identity() || bundle.RequestSHA256 != requestSHA256 || bundle.ArtifactSHA256 != playback.SHA256(wasm) {
+		return errors.New("playback admission identity mismatch")
+	}
+	profileSHA256, err := executionProfileSHA256(config)
+	if err != nil || bundle.ExecutionProfileSHA256 != profileSHA256 {
+		return errors.New("playback execution profile mismatch")
+	}
+	grants := plan.Grants()
+	if len(grants) != len(bundle.Grants) {
+		return errors.New("playback grant mismatch")
+	}
+	for index := range grants {
+		if grants[index] != bundle.Grants[index] {
+			return errors.New("playback grant mismatch")
+		}
+	}
+	if workspaceBinding == nil {
+		if bundle.InitialWorkspaceSHA256 != "" || bundle.FinalWorkspaceSHA256 != "" {
+			return errors.New("playback workspace mismatch")
+		}
+	} else if bundle.InitialWorkspaceSHA256 == "" || bundle.InitialWorkspaceSHA256 != workspaceBinding.initialInfo.WorkspaceSHA256 {
+		return errors.New("playback initial workspace mismatch")
+	}
+	return nil
+}
+
+func validatePlaybackOutcome(bundle playback.Bundle, response runtimeconfig.RunResponse) error {
+	resultSHA256, err := playback.CanonicalSHA256(response.Result)
+	if err != nil || resultSHA256 != bundle.ExpectedResultSHA256 {
+		return errors.New("playback Agent result mismatch")
+	}
+	if response.WorkspaceReceipt == nil {
+		if bundle.FinalWorkspaceSHA256 != "" {
+			return errors.New("playback final workspace mismatch")
+		}
+		return nil
+	}
+	if response.WorkspaceReceipt.InitialWorkspaceSHA256 != bundle.InitialWorkspaceSHA256 || response.WorkspaceReceipt.FinalWorkspaceSHA256 != bundle.FinalWorkspaceSHA256 {
+		return errors.New("playback final workspace mismatch")
+	}
+	return nil
 }
 
 func stagePlaybackBundle(outputPath string, bundle playback.Bundle) (*stagedPlaybackBundle, error) {

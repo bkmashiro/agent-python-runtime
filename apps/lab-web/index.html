@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#090b0e">
+    <title>Pysolate Lab — canonical Lab v1 viewer</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to Lab view</a>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">P/</span>
+        <div>
+          <p class="eyebrow">PYsolate / research instrument</p>
+          <p class="product-name">Pysolate Lab</p>
+        </div>
+      </div>
+      <div class="topbar-context">
+        <span class="topbar-label">Fixture-backed canonical Lab v1 viewer</span>
+        <span class="read-only"><span class="status-dot" aria-hidden="true"></span>READ ONLY</span>
+      </div>
+      <label class="fixture-picker" for="fixture-select">
+        <span>Canonical fixture</span>
+        <select id="fixture-select" aria-label="Canonical fixture state">
+          <option value="ordinary">ordinary / complete</option>
+          <option value="branched">branched / comparison</option>
+          <option value="incomplete">incomplete evidence</option>
+          <option value="truncated">truncated projection</option>
+          <option value="private">private / unavailable</option>
+        </select>
+      </label>
+    </header>
+
+    <div class="boundary-banner" role="note">
+      <strong>Canonical Lab v1 · fixture-backed</strong>
+      <span>Static Go-produced JSON projection for tomorrow’s demo. This is a read-only viewer, not a live Runtime or service.</span>
+    </div>
+
+    <nav class="view-nav" aria-label="Canonical Lab v1 views">
+      <button class="view-tab" type="button" data-view="overview" aria-current="page">01 / Study overview</button>
+      <button class="view-tab" type="button" data-view="runs">02 / Run detail</button>
+      <button class="view-tab" type="button" data-view="timeline">03 / Capability timeline</button>
+      <button class="view-tab" type="button" data-view="lineage">04 / Branch DAG</button>
+      <button class="view-tab" type="button" data-view="workspace">05 / Workspace diff</button>
+      <button class="view-tab" type="button" data-view="comparison">06 / Comparison</button>
+    </nav>
+
+    <div class="app-shell">
+      <aside class="study-rail" aria-labelledby="rail-heading">
+        <div class="rail-heading">
+          <div>
+            <p class="eyebrow">Canonical study</p>
+            <h2 id="rail-heading">Evidence map</h2>
+          </div>
+          <span class="rail-index">v1</span>
+        </div>
+        <div id="rail-state" class="rail-state"></div>
+        <ol class="route-list" aria-label="Demo route">
+          <li><button type="button" data-view="overview"><span>01</span><b>Study overview</b><small>What is in this projection?</small></button></li>
+          <li><button type="button" data-view="runs"><span>02</span><b>Run detail</b><small>Task / oracle / evidence</small></button></li>
+          <li><button type="button" data-view="timeline"><span>03</span><b>Capability timeline</b><small>Ordered observation events</small></button></li>
+          <li><button type="button" data-view="lineage"><span>04</span><b>Branch DAG</b><small>Parent / child relation</small></button></li>
+          <li><button type="button" data-view="workspace"><span>05</span><b>Workspace diff</b><small>Guest-relative metadata only</small></button></li>
+          <li><button type="button" data-view="comparison"><span>06</span><b>Comparison</b><small>Bounded deltas and reasons</small></button></li>
+        </ol>
+        <div class="rail-footnote">
+          <p class="eyebrow">Boundary</p>
+          <p>No execute, mutation, auth, API, or protected-body controls exist in this viewer.</p>
+        </div>
+      </aside>
+
+      <main id="main-content" tabindex="-1">
+        <section class="study-header" aria-labelledby="study-title">
+          <div>
+            <p id="study-kicker" class="eyebrow">Study summary / canonical projection</p>
+            <h1 id="study-title">Loading canonical study…</h1>
+            <p id="study-subtitle" class="muted"></p>
+          </div>
+          <div id="study-badges" class="badge-row" aria-label="Study labels"></div>
+        </section>
+
+        <section id="status-notices" class="notice-stack" aria-label="Projection notices"></section>
+
+        <section class="focus-strip" aria-labelledby="focus-title">
+          <div>
+            <p class="eyebrow">Focused run</p>
+            <h2 id="focus-title">Loading…</h2>
+            <p id="focus-meta" class="muted"></p>
+          </div>
+          <div class="focus-actions">
+            <button type="button" class="action-button" data-view="runs">Open run detail <span aria-hidden="true">→</span></button>
+            <span class="focus-digest" id="focus-digest"></span>
+          </div>
+        </section>
+
+        <section id="view-root" class="view-root" aria-labelledby="view-title">
+          <h2 id="view-title" class="sr-only">Study overview</h2>
+          <noscript>This viewer requires JavaScript to render canonical fixture data.</noscript>
+        </section>
+      </main>
+    </div>
+
+    <footer class="footer">
+      <span>Canonical Lab v1 JSON · deterministic local projection</span>
+      <span>Fixture-backed / read-only / not live Runtime integration</span>
+    </footer>
+    <p id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

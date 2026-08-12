@@ -1,0 +1,14 @@
+{
+  "name": "pysolate-lab-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-dependency, fixture-backed canonical Pysolate Lab v1 read-only viewer.",
+  "scripts": {
+    "sync:canonical": "node scripts/sync-canonical.mjs",
+    "check:canonical": "node scripts/sync-canonical.mjs --check",
+    "test": "npm run check:canonical && node --test test/*.test.js test/*.test.mjs",
+    "build": "npm run check:canonical && node scripts/build.mjs",
+    "serve": "node scripts/serve.mjs"
+  }
+}

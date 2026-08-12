@@ -229,7 +229,7 @@ func TestCrossProcessActiveStageMakesAggregateReadsFailClosed(t *testing.T) {
 	}
 }
 
-func TestCrossProcessWritersConvergeToOnePrivateObject(t *testing.T) {
+func TestCrossProcessWriterOwnershipIsExclusive(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "store")
 	store, err := Open(root, Options{})
 	if err != nil {
@@ -239,6 +239,9 @@ func TestCrossProcessWritersConvergeToOnePrivateObject(t *testing.T) {
 		t.Fatal(err)
 	}
 	const writers = 8
+	control := t.TempDir()
+	start := filepath.Join(control, "start")
+	release := filepath.Join(control, "release")
 	commands := make([]*exec.Cmd, writers)
 	outputs := make([]bytes.Buffer, writers)
 	for i := 0; i < writers; i++ {
@@ -247,16 +250,39 @@ func TestCrossProcessWritersConvergeToOnePrivateObject(t *testing.T) {
 			privacy = "private"
 		}
 		commands[i] = exec.Command(os.Args[0], "-test.run=^TestLabStoreWriterHelper$")
-		commands[i].Env = append(os.Environ(), "PYSOLATE_LABSTORE_WRITER_ROOT="+root, "PYSOLATE_LABSTORE_WRITER_PRIVACY="+privacy)
+		commands[i].Env = append(os.Environ(), "PYSOLATE_LABSTORE_WRITER_ROOT="+root, "PYSOLATE_LABSTORE_WRITER_PRIVACY="+privacy, fmt.Sprintf("PYSOLATE_LABSTORE_WRITER_INDEX=%d", i), "PYSOLATE_LABSTORE_WRITER_CONTROL="+control)
 		commands[i].Stdout, commands[i].Stderr = &outputs[i], &outputs[i]
 		if err := commands[i].Start(); err != nil {
 			t.Fatal(err)
 		}
 	}
+	waitForControlFiles(t, control, "ready-", writers)
+	if err := os.WriteFile(start, []byte("start"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForControlFiles(t, control, "busy-", writers-1)
+	if _, err := os.Stat(filepath.Join(control, "owner")); err != nil {
+		t.Fatal("writer owner was not established")
+	}
+	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	succeeded, busy := 0, 0
 	for i, command := range commands {
-		if err := command.Wait(); err != nil {
-			t.Fatalf("writer %d: %v output=%s", i, err, outputs[i].String())
+		err := command.Wait()
+		if err == nil {
+			succeeded++
+			continue
 		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 75 {
+			busy++
+			continue
+		}
+		t.Fatalf("writer %d: %v output=%s", i, err, outputs[i].String())
+	}
+	if succeeded != 1 || busy != writers-1 {
+		t.Fatalf("succeeded=%d busy=%d", succeeded, busy)
 	}
 	reopened, err := Open(root, Options{})
 	if err != nil {
@@ -267,6 +293,10 @@ func TestCrossProcessWritersConvergeToOnePrivateObject(t *testing.T) {
 	ref, err := contentRef(KindPrompt, nil, body)
 	if err != nil {
 		t.Fatal(err)
+	}
+	got, _, err := reopened.Put(KindPrompt, body, PutOptions{Privacy: PrivacyPrivate, Credentials: CredentialsAbsent})
+	if err != nil || got != ref {
+		t.Fatalf("tighten ref=%v err=%v", got, err)
 	}
 	object, err := reopened.Get(ref)
 	if err != nil || object.Privacy != PrivacyPrivate {
@@ -291,14 +321,68 @@ func TestLabStoreWriterHelper(t *testing.T) {
 		t.Skip("writer helper")
 	}
 	privacy := Privacy(os.Getenv("PYSOLATE_LABSTORE_WRITER_PRIVACY"))
+	control := os.Getenv("PYSOLATE_LABSTORE_WRITER_CONTROL")
+	index := os.Getenv("PYSOLATE_LABSTORE_WRITER_INDEX")
+	if control != "" {
+		if err := os.WriteFile(filepath.Join(control, "ready-"+index), []byte("ready"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		waitForPath(t, filepath.Join(control, "start"))
+	}
 	store, err := Open(root, Options{})
+	if errors.Is(err, ErrBusy) {
+		if control != "" {
+			if err := os.WriteFile(filepath.Join(control, "busy-"+index), []byte("busy"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		os.Exit(75)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	if control != "" {
+		if err := os.WriteFile(filepath.Join(control, "owner"), []byte(index), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		waitForPath(t, filepath.Join(control, "release"))
+	}
 	ref, created, err := store.Put(KindPrompt, []byte("cross-process-body"), PutOptions{Privacy: privacy, Credentials: CredentialsAbsent})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fmt.Printf("%s created=%t\n", ref, created)
+}
+
+func waitForControlFiles(t *testing.T, directory, prefix string, count int) {
+	t.Helper()
+	for attempt := 0; attempt < 500; attempt++ {
+		entries, err := os.ReadDir(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := 0
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), prefix) {
+				found++
+			}
+		}
+		if found == count {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d control files", count)
+}
+
+func waitForPath(t *testing.T, path string) {
+	t.Helper()
+	for attempt := 0; attempt < 500; attempt++ {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for control path")
 }

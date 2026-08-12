@@ -175,6 +175,36 @@ func TestStoreStatsIsReadOnlyAndBenchmarkIsBounded(t *testing.T) {
 		t.Fatal("JSON read-only stats changed store")
 	}
 
+	stdout.Reset()
+	stderr.Reset()
+	if code := execute([]string{"store", "audit", "-root", storeRoot, "-json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("store audit code=%d stderr=%s", code, stderr.String())
+	}
+	var recovery labstore.RecoveryReport
+	if err := json.Unmarshal(stdout.Bytes(), &recovery); err != nil || recovery.SchemaVersion != labstore.RecoverySchemaVersion || recovery.OrphanStages != 0 {
+		t.Fatalf("recovery=%+v err=%v output=%s", recovery, err, stdout.String())
+	}
+	if !reflect.DeepEqual(before, cliTreeSnapshot(t, storeRoot)) {
+		t.Fatal("store audit changed store")
+	}
+	reader, err := labstore.Open(storeRoot, labstore.Options{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := execute([]string{"store", "repair", "-root", storeRoot, "-json"}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "another live owner") {
+		t.Fatalf("busy repair code=%d stderr=%q", code, stderr.String())
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := execute([]string{"store", "repair", "-root", storeRoot, "-json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("store repair code=%d stderr=%s", code, stderr.String())
+	}
+
 	benchmarkRoot := filepath.Join(t.TempDir(), "benchmark")
 	stdout.Reset()
 	stderr.Reset()

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
+
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -271,76 +271,51 @@ func TestConcurrentPublicationIsExclusive(t *testing.T) {
 	}
 }
 
-type concurrentPutResult struct {
-	ref     labstore.Ref
-	created bool
-	err     error
-}
-
-func TestConcurrentStoreHandlesPublishOneObject(t *testing.T) {
+func TestSecondWritableStoreIsRejected(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "store")
 	first, err := labstore.Open(root, labstore.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer first.Close()
-	second, err := labstore.Open(root, labstore.Options{})
+	if second, err := labstore.Open(root, labstore.Options{}); !errors.Is(err, labstore.ErrBusy) || second != nil {
+		t.Fatalf("second=%v err=%v", second, err)
+	}
+	reader, err := labstore.Open(root, labstore.Options{ReadOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer second.Close()
-	start := make(chan struct{})
-	results := make(chan concurrentPutResult, 2)
-	for _, store := range []*labstore.Store{first, second} {
-		go func(store *labstore.Store) {
-			<-start
-			ref, created, err := store.Put(labstore.KindCode, []byte("cross-handle"), privatePolicy())
-			results <- concurrentPutResult{ref: ref, created: created, err: err}
-		}(store)
-	}
-	close(start)
-	left, right := <-results, <-results
-	if left.err != nil || right.err != nil || left.ref != right.ref || left.created == right.created {
-		t.Fatalf("left=%#v right=%#v", left, right)
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestConcurrentPrivacyClassificationAlwaysTightens(t *testing.T) {
+func TestSequentialPrivacyClassificationAlwaysTightens(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "store")
 	first, err := labstore.Open(root, labstore.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer first.Close()
-	second, err := labstore.Open(root, labstore.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer second.Close()
 	portable := portablePolicyWithoutLinks()
-	for iteration := 0; iteration < 32; iteration++ {
-		body := []byte(fmt.Sprintf("classification-%d", iteration))
-		start := make(chan struct{})
-		results := make(chan concurrentPutResult, 2)
-		go func() {
-			<-start
-			ref, created, err := first.Put(labstore.KindPrompt, body, privatePolicy())
-			results <- concurrentPutResult{ref: ref, created: created, err: err}
-		}()
-		go func() {
-			<-start
-			ref, created, err := second.Put(labstore.KindPrompt, body, portable)
-			results <- concurrentPutResult{ref: ref, created: created, err: err}
-		}()
-		close(start)
-		left, right := <-results, <-results
-		if left.err != nil || right.err != nil || left.ref != right.ref {
-			t.Fatalf("iteration=%d results=%#v %#v", iteration, left, right)
-		}
-		object, err := first.Get(left.ref)
-		if err != nil || object.Privacy != labstore.PrivacyPrivate {
-			t.Fatalf("iteration=%d privacy=%q err=%v", iteration, object.Privacy, err)
-		}
+	ref, _, err := first.Put(labstore.KindPrompt, []byte("classification"), portable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := labstore.Open(root, labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	got, _, err := second.Put(labstore.KindPrompt, []byte("classification"), privatePolicy())
+	if err != nil || got != ref {
+		t.Fatalf("ref=%v err=%v", got, err)
+	}
+	object, err := second.Get(ref)
+	if err != nil || object.Privacy != labstore.PrivacyPrivate {
+		t.Fatalf("privacy=%q err=%v", object.Privacy, err)
 	}
 }
 

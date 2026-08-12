@@ -16,10 +16,12 @@ Runtime dependency path. It also lets the prototype directly exercise the
 required durability and privacy boundary before a query-engine dependency is
 justified. The choice remains provisional, but the deterministic child-process
 fault study in [`labstore-fault-study.md`](labstore-fault-study.md) does not
-admit SQLite for evaluation v1: measured failures are stage ownership,
-aggregate-read liveness and offline recovery gaps, while immutable identities
-and fail-private publication converged. The next step is an explicit filesystem
-ownership/repair protocol, not a second durability domain.
+admit SQLite for evaluation v1. The filesystem backend now admits one writable
+Store at a time, keeps ordinary readers concurrent, and exposes explicit
+exclusive offline audit/repair for validated orphan stages plus inspection of
+objectless privacy sidecars. Repair retains those sidecars to preserve durable
+fail-private history. Aggregate reads still fail closed while a stage exists; the
+protocol does not claim snapshot isolation or multi-record transactions.
 
 The identity input is domain-separated by `pysolate.labstore.content.v1`, exact
 semantic kind, canonical sorted links, and body bytes. Thus equal prompt and
@@ -125,6 +127,9 @@ scope now.
 
 ## Integrity, retention, and privacy boundary
 
+- One writable Store owns an OS advisory lock; competing writers fail with
+  `ErrBusy`. Read-only Store handles may coexist. A hard process exit releases
+  ownership without PID or timeout heuristics.
 - Object publication uses a synced `0600` same-directory stage, an exclusive
   hard-link publication, directory sync, and no overwrite. Existing objects are
   validated rather than repaired or replaced.
@@ -133,7 +138,11 @@ scope now.
   symlinks, and digest mismatch. Store-relative names are derived only from
   fixed kinds and validated lowercase digests.
 - Read-only open requires an existing complete layout and performs no creation,
-  migration, repair, staging, pinning, or collection.
+  migration, repair, staging, pinning, or collection. Offline audit/repair is a
+  separate API that requires exclusive lifecycle ownership, validates all
+  candidates before deletion, and never completes an abandoned write. The
+  local operator exposes these boundaries explicitly as `store audit` and
+  `store repair`; neither operation retries around a live owner.
 - Every write requires an explicit credential-absent declaration. Structured
   JSON additionally rejects common credential-bearing field names. This is a
   defense in depth check, **not** a secret detector; callers must redact before
@@ -151,10 +160,11 @@ scope now.
 
 ## Known gaps
 
-The prototype has an in-process mutex but no cross-process writer lock or
-multi-object transaction. A same-UID Host peer racing filesystem replacement is
-outside the Agent threat boundary. Crash-leftover stage names fail strict scans
-and require explicit operator recovery; read-only opens never clean them.
+The prototype has an in-process mutex plus a cross-process single-writer lock,
+but no multi-object transaction or cross-process read snapshot. A same-UID Host
+peer racing filesystem replacement is outside the Agent threat boundary.
+Crash-leftover stage names fail strict scans and require explicit exclusive
+offline recovery; read-only opens never clean them.
 Encryption at rest, multi-user ACLs, authentication, remote replication,
 schema migration, pack compaction, semantic query indexes, and provider/Agent
 trace ingestion remain Proposed future Lab work.

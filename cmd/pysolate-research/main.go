@@ -251,16 +251,56 @@ func branchCommand(arguments []string, stdout, stderr io.Writer) commandError {
 
 func storeCommand(arguments []string, stdout, stderr io.Writer) commandError {
 	if len(arguments) == 0 {
-		return commandError{err: errors.New("store requires stats or benchmark"), usage: true}
+		return commandError{err: errors.New("store requires stats, benchmark, audit or repair"), usage: true}
 	}
 	switch arguments[0] {
 	case "stats":
 		return storeStatsCommand(arguments[1:], stdout, stderr)
 	case "benchmark":
 		return storeBenchmarkCommand(arguments[1:], stdout, stderr)
+	case "audit":
+		return storeRecoveryCommand(arguments[1:], stdout, stderr, false)
+	case "repair":
+		return storeRecoveryCommand(arguments[1:], stdout, stderr, true)
 	default:
 		return commandError{err: fmt.Errorf("unknown store subcommand %q", boundedLabel(arguments[0])), usage: true}
 	}
+}
+
+func storeRecoveryCommand(arguments []string, stdout, stderr io.Writer, repair bool) commandError {
+	name := "store audit"
+	if repair {
+		name = "store repair"
+	}
+	flags := newFlagSet(name, stderr)
+	var rootPath string
+	var jsonOutput bool
+	flags.StringVar(&rootPath, "root", "", "absolute existing research-store root")
+	flags.BoolVar(&jsonOutput, "json", false, "emit bounded machine-readable JSON")
+	if err := flags.Parse(arguments); err != nil {
+		return commandError{err: err, usage: true}
+	}
+	if flags.NArg() != 0 || rootPath == "" {
+		return commandError{err: fmt.Errorf("%s requires -root", name), usage: true}
+	}
+	var report labstore.RecoveryReport
+	var err error
+	if repair {
+		report, err = labstore.RepairOffline(rootPath, labstore.Options{})
+	} else {
+		report, err = labstore.AuditOffline(rootPath, labstore.Options{})
+	}
+	if err != nil {
+		return commandError{err: fmt.Errorf("%s: %w", name, err)}
+	}
+	if jsonOutput {
+		return outputJSON(stdout, report)
+	}
+	var output strings.Builder
+	fmt.Fprintf(&output, "orphan stages: %d (%d bytes)\n", report.OrphanStages, report.OrphanStageBytes)
+	fmt.Fprintf(&output, "objectless privacy records: %d (%d bytes, retained fail-private)\n", report.OrphanPrivacyRecords, report.OrphanPrivacyBytes)
+	fmt.Fprintf(&output, "removed stages: %d\nreclaimed: %d bytes\n", report.RemovedStages, report.ReclaimedBytes)
+	return outputHuman(stdout, output.String())
 }
 
 func storeStatsCommand(arguments []string, stdout, stderr io.Writer) commandError {
@@ -919,11 +959,15 @@ Usage:
   pysolate-research branch dag [flags]
   pysolate-research lab project -report PATH -measurements PATH -row ID -kind LAB_KIND
   pysolate-research store stats -root PATH [-json]
+  pysolate-research store audit -root PATH [-json]
+  pysolate-research store repair -root PATH [-json]
   pysolate-research store benchmark -root NEW_PATH [fixture flags] [-json]
 
 Human output uses semantic labels and shortened identities. JSON output is
-bounded and includes full protected identities. Inspect, compare, DAG and store
-stats are read-only. Branch execution is intentionally not inferred here:
+bounded and includes full protected identities. Inspect, compare, DAG, store
+stats and store audit are read-only. Store repair is an explicit offline
+operation and fails while any Store handle is live. Branch execution is
+intentionally not inferred here:
 research/operator.RunBranch requires a fresh Guest and an explicitly sealed
 Host Plan, Grants and source handlers.
 `

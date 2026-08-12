@@ -34,11 +34,13 @@ type privacyRecord struct {
 }
 
 type Store struct {
-	mu      sync.RWMutex
-	root    *os.Root
-	path    string
-	options Options
-	closed  bool
+	mu            sync.RWMutex
+	root          *os.Root
+	path          string
+	options       Options
+	lifecycleLock *os.File
+	writerLock    *os.File
+	closed        bool
 }
 
 func Open(path string, options Options) (*Store, error) {
@@ -53,10 +55,24 @@ func Open(path string, options Options) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open labstore root: %w", err)
 	}
-	store := &Store{root: rooted, path: path, options: options}
-	if err := store.prepareLayout(options.ReadOnly); err != nil {
+	lifecycleLock, err := acquireAdvisoryLock(path, false)
+	if err != nil {
 		_ = rooted.Close()
 		return nil, err
+	}
+	store := &Store{root: rooted, path: path, options: options, lifecycleLock: lifecycleLock}
+	if err := store.prepareLayout(options.ReadOnly); err != nil {
+		_ = releaseAdvisoryLock(lifecycleLock)
+		_ = rooted.Close()
+		return nil, err
+	}
+	if !options.ReadOnly {
+		store.writerLock, err = acquireAdvisoryLock(filepath.Join(path, "metadata"), true)
+		if err != nil {
+			_ = releaseAdvisoryLock(lifecycleLock)
+			_ = rooted.Close()
+			return nil, err
+		}
 	}
 	return store, nil
 }
@@ -152,7 +168,7 @@ func (store *Store) Close() error {
 		return nil
 	}
 	store.closed = true
-	return store.root.Close()
+	return errors.Join(store.root.Close(), releaseAdvisoryLock(store.writerLock), releaseAdvisoryLock(store.lifecycleLock))
 }
 
 func (store *Store) Put(kind Kind, body []byte, options PutOptions) (Ref, bool, error) {

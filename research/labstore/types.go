@@ -20,6 +20,7 @@ var (
 	ErrCorrupt     = errors.New("corrupt labstore object")
 	ErrCredentials = errors.New("credentials are forbidden in labstore")
 	ErrPrivate     = errors.New("labstore object is private")
+	ErrBusy        = errors.New("labstore is owned by another live owner")
 	digestPattern  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 

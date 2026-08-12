@@ -52,12 +52,12 @@ Before schema v1 is frozen, the Web session may prototype only against explicitl
 
 ## 5. Track A — Freeze experiment and corpus contracts
 
-- [ ] Inventory reusable current fixtures, Bundle/observation/branch schemas and workload gaps.
-- [ ] Define `pysolate.workload-corpus.v1`: workload ID/version, code/input identities, required capabilities, workspace seed, treatments and oracle.
-- [ ] Define `pysolate.evaluation-plan.v1`: exact Host/Guest/corpus/profile identities, treatment order, repetitions, ceilings and prohibited claims.
-- [ ] Define `pysolate.evaluation-report.v1` with strict unknown-field rejection, exact row identity and conservation rules.
-- [ ] Add canonical positive and adversarial fixtures: unknown field, trailing JSON, duplicate ID, missing oracle, incompatible treatment and identity drift.
-- [ ] Document evidence vocabulary: `current`, `mechanism_only`, `qualified_workload`, `experimental_partial`, `not_measured`.
+- [x] Inventory reusable current fixtures, Bundle/observation/branch schemas and workload gaps.
+- [x] Define `pysolate.workload-corpus.v1`: workload ID/version, code/input identities, required capabilities, workspace seed, treatments and oracle.
+- [x] Define `pysolate.evaluation-plan.v1`: exact Host/Guest/corpus/profile identities, treatment order, repetitions, ceilings and prohibited claims.
+- [x] Define `pysolate.evaluation-report.v1` with strict unknown-field rejection, exact row identity and conservation rules.
+- [x] Add canonical positive and adversarial fixtures: unknown field, trailing JSON, duplicate ID, missing oracle, incompatible treatment and identity drift.
+- [x] Document evidence vocabulary: `current`, `mechanism_only`, `qualified_workload`, `experimental_partial`, `not_measured`.
 
 **Gate:** strict schema/model tests plus deterministic fixture regeneration.
 
@@ -183,6 +183,7 @@ A successful slice, signed checkpoint, long test, context boundary or pending We
 ## 15. Completion log
 
 - 2026-08-12: Roadmap created from clean synchronized baseline `d078841`; implementation not started. First pointer: Track A inventory, then Track B Lab v1 schema freeze before parallel Web consumption.
+- 2026-08-12: Track A frozen with mechanism-only corpus/plan/report contracts, typed captured-read requirements, fixed family admission invariants, bounded strict decoders, deterministic positive/adversarial fixtures and evidence vocabulary. Full Go/race/Python gates passed; independent review blockers were reproduced, fixed and post-fix reviewed PASS.
 
 ## 16. Short prompt
 

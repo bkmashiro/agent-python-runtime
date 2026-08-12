@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +170,12 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if row.Status != evaluation.RowUnsupported {
+			evidenceBody, _, err := row.BodyFreeEvidence(corpusID, planID)
+			if err != nil || uint64(len(evidenceBody)) > plan.Ceilings.MaxEvidenceBytesPerRow {
+				t.Fatalf("row %s evidence exceeds ceiling or is invalid: bytes=%d err=%v", item.RowID, len(evidenceBody), err)
+			}
+		}
 		raw.Rows[i] = row
 	}
 	if err := raw.Validate(); err != nil {
@@ -203,20 +210,10 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 		t.Fatal("independent report rebuild drift")
 	}
 	root := os.Getenv("PYSOLATE_EVALUATION_OUTPUT")
-	if root == "" {
-		t.Fatal("PYSOLATE_EVALUATION_OUTPUT is required")
-	}
-	privateBase, err := filepath.Abs(".artifacts-private")
+	privateRoot := os.Getenv("PYSOLATE_PRIVATE_ROOT")
+	root, err = validatePrivateOutput(privateRoot, root)
 	if err != nil {
 		t.Fatal(err)
-	}
-	root, err = filepath.Abs(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	relative, err := filepath.Rel(privateBase, root)
-	if err != nil || relative == "." || relative == ".." || len(relative) >= 3 && relative[:3] == "../" {
-		t.Fatal("evaluation output must be a child of .artifacts-private")
 	}
 	if err := os.MkdirAll(root, 0700); err != nil {
 		t.Fatal(err)
@@ -232,6 +229,31 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestEvaluationStudyOutputRequiresAbsoluteDeclaredPrivateRoot(t *testing.T) {
+	privateRoot := filepath.Join(t.TempDir(), ".artifacts-private")
+	child := filepath.Join(privateRoot, "study")
+	if got, err := validatePrivateOutput(privateRoot, child); err != nil || got != filepath.Clean(child) {
+		t.Fatalf("child=%q err=%v", got, err)
+	}
+	for _, invalid := range [][2]string{{".artifacts-private", "study"}, {privateRoot, privateRoot}, {privateRoot, filepath.Dir(privateRoot)}, {privateRoot, filepath.Join(privateRoot, "..", "public")}} {
+		if _, err := validatePrivateOutput(invalid[0], invalid[1]); err == nil {
+			t.Fatalf("accepted root=%q output=%q", invalid[0], invalid[1])
+		}
+	}
+}
+
+func validatePrivateOutput(privateRoot, output string) (string, error) {
+	if output == "" || privateRoot == "" || !filepath.IsAbs(output) || !filepath.IsAbs(privateRoot) {
+		return "", fmt.Errorf("absolute private output paths required")
+	}
+	privateRoot, output = filepath.Clean(privateRoot), filepath.Clean(output)
+	relative, err := filepath.Rel(privateRoot, output)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("evaluation output must be a child of the declared private root")
+	}
+	return output, nil
 }
 
 func executeStudyTreatment(t *testing.T, artifactPath string, artifact []byte, definition workloads.Workload, treatment evaluation.Treatment, binding branchWorkspaceBinding, baselines map[string]studyBaseline) (json.RawMessage, string, []capability.TranscriptEntry, bool, bool, bool, bool) {

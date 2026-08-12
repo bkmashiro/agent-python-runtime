@@ -67,4 +67,7 @@ This pilot does not admit:
 
 ## Next decision
 
-The negative control and multi-source pilot are now executable and source-bound. Before expanding to workspace workloads, define and review the bounded Direct state adapter described in the candidate audit. Do not treat these two pilots as satisfying the full cohort stop conditions.
+The follow-on five-workload workspace-free cohort is complete. See
+[workload-evaluation-v2-expanded.md](workload-evaluation-v2-expanded.md). It did
+not meet the frozen real-model activation gate, so no paid phase or workspace
+adapter is activated by these pilot results.

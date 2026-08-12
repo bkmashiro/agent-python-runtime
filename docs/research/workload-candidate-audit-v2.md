@@ -1,6 +1,6 @@
 # Workload candidate audit for evaluation v2
 
-Status: **Current candidate audit with two workspace-free pilots implemented.** This document selects the broader candidate cohort and the evidence needed before expanding beyond those pilots. It is not a product claim or implementation roadmap. The observed pilot result is recorded in [workload-evaluation-v2-pilot.md](workload-evaluation-v2-pilot.md).
+Status: **Current candidate audit with the five-workload workspace-free cohort completed.** This document defines the broader candidate set. The expansion result did not meet the real-model activation gate; no paid experiment or workspace implementation is activated. It is not a product claim or implementation roadmap. See [workload-evaluation-v2-expanded.md](workload-evaluation-v2-expanded.md).
 
 ## Decision question
 
@@ -169,4 +169,4 @@ The paid phase then requires a separately approved provider/model matrix, random
 
 ## Decision
 
-Adopt the ten-workload cohort above as the candidate set for evaluation v2. The next implementation slice should be the v2 condition/corpus contract plus two end-to-end pilot workloads: `catalog-top-direct` as the negative control and `source-join-ranking` as the strongest low-risk contrast. Do not implement the other eight until those pilots prove that direct and Guest conditions can share authority and oracle definitions without contract ambiguity.
+The first five-workload workspace-free cohort is complete. It produced four `1:1` condition pairs and one `2:1` pair, so it did not meet the separately frozen real-model activation gate. Stop workspace-free scripted expansion here: do not implement the remaining candidates, invent another two-source task, activate a paid model phase, or infer a general placement advantage. Any future workspace adapter requires a new, separately reviewed decision question.

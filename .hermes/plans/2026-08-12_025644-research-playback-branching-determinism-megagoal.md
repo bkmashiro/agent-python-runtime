@@ -128,9 +128,9 @@ All items must be checked with real evidence:
 - [x] Operator research commands inspect, compare and branch using semantic summaries; users do not manually edit Bundle JSON or copy internal field digests.
 - [x] Full real E2E demonstrates parent capture, offline replay, two counterfactual children, deterministic repeatability, branch lineage and storage dedup.
 - [x] Documentation separates Current, Experimental and Proposed claims accurately.
-- [ ] Full tests/vet/build/race/Python/ABI/tamper/privacy/docs gates pass on the final commit.
-- [ ] Independent final review reports no blocker for identity, branching, authority, recorder privacy, determinism claims and zero-network playback.
-- [ ] Only after all required items pass, signed commits are pushed once and `HEAD == origin/main` with a clean worktree.
+- [x] Full tests/vet/build/race/Python/ABI/tamper/privacy/docs gates pass on the final commit.
+- [x] Independent final review reports no blocker for identity, branching, authority, recorder privacy, determinism claims and zero-network playback.
+- [x] Only after all required items pass, signed commits are pushed once and `HEAD == origin/main` with a clean worktree.
 
 ## 7. Stop conditions
 
@@ -474,11 +474,11 @@ Do not commit sensitive bodies or generated binary evidence.
 - [x] Add a Lab boundary document explaining what belongs in Runtime versus future Lab/Harness.
 - [x] Add Bundle/branch/observation compatibility and version-upgrade policy.
 - [x] Audit all identity language: digest ≠ security, receipt ≠ success, trace ≠ deterministic replay, branch ≠ heap restore.
-- [ ] Run complete final gates on the exact final candidate.
-- [ ] Obtain independent read-only review of the entire commit range and final worktree, focused on authority, lineage, dedup privacy, tamper, recorder failure, determinism overclaims and real E2E.
-- [ ] Fix every real blocker with RED regression and rerun proportional/full gates.
-- [ ] Push `main` once only after all required checkboxes and review pass.
-- [ ] Verify every required commit signature, clean tree and exact `HEAD == origin/main`.
+- [x] Run complete final gates on the exact final candidate.
+- [x] Obtain independent read-only review of the entire commit range and final worktree, focused on authority, lineage, dedup privacy, tamper, recorder failure, determinism overclaims and real E2E.
+- [x] Fix every real blocker with RED regression and rerun proportional/full gates.
+- [x] Push `main` once only after all required checkboxes and review pass.
+- [x] Verify every required commit signature, clean tree and exact `HEAD == origin/main`.
 
 ---
 

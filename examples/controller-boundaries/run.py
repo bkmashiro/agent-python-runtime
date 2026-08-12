@@ -51,7 +51,7 @@ EXAMPLES = (
             "clean": True,
             "commit_message": "initial fixture",
             "readme": "fixture repository",
-            "todo_locations": ["src/app.py:1"],
+            "todo_locations": ["/workspace/src/app.py:1"],
         },
     ),
 )

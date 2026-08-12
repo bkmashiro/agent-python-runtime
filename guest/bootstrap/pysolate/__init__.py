@@ -1,5 +1,5 @@
-"""Bounded, rooted developer operations for a Pysolate workspace."""
+"""Bounded Guest helper APIs shipped with the Pysolate artifact."""
 
-from . import workspace
+from . import fs
 
-__all__ = ["workspace"]
+__all__ = ["fs"]

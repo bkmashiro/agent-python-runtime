@@ -14,11 +14,12 @@ import (
 var ErrObservationEvidenceInvalid = errors.New("required Runtime observation evidence is invalid")
 
 type observationLifecycle struct {
-	session  *observe.Session
-	parent   *uint32
-	active   bool
-	started  bool
-	terminal bool
+	session      *observe.Session
+	parent       *uint32
+	active       bool
+	started      bool
+	terminal     bool
+	evidenceLost bool
 }
 
 func (lifecycle *observationLifecycle) start(ctx context.Context, payload observe.ExecutionStartedPayload) error {
@@ -28,6 +29,7 @@ func (lifecycle *observationLifecycle) start(ctx context.Context, payload observ
 	lifecycle.active = lifecycle.session.Mode() != observe.Off
 	event, err := appendObservation(ctx, lifecycle.session, observe.EventExecutionStarted, nil, payload)
 	if err != nil {
+		lifecycle.evidenceLost = true
 		return errors.Join(ErrObservationEvidenceInvalid, err)
 	}
 	lifecycle.started = event.Sequence != 0
@@ -51,6 +53,7 @@ func (lifecycle *observationLifecycle) capabilityCalls(ctx context.Context, rece
 		}
 		event, err := appendObservation(ctx, lifecycle.session, observe.EventCapabilityCall, lifecycle.parent, payload)
 		if err != nil {
+			lifecycle.evidenceLost = true
 			return errors.Join(ErrObservationEvidenceInvalid, err)
 		}
 		if event.Sequence != 0 {
@@ -68,6 +71,7 @@ func (lifecycle *observationLifecycle) capabilityPlan(ctx context.Context, ident
 		CapabilityPlanSHA256: identity,
 	})
 	if err != nil {
+		lifecycle.evidenceLost = true
 		return errors.Join(ErrObservationEvidenceInvalid, err)
 	}
 	if event.Sequence != 0 {
@@ -81,11 +85,12 @@ func (lifecycle *observationLifecycle) complete(ctx context.Context, resultSHA25
 		return nil
 	}
 	payload := observe.ExecutionCompletedPayload{
-		EvidenceComplete: !lifecycle.session.Incomplete(), ResultSHA256: resultSHA256, Status: "ok",
+		EvidenceComplete: !lifecycle.evidenceLost && !lifecycle.session.Incomplete(), ResultSHA256: resultSHA256, Status: "ok",
 	}
 	_, err := appendObservation(ctx, lifecycle.session, observe.EventExecutionCompleted, lifecycle.parent, payload)
 	lifecycle.terminal = err == nil
 	if err != nil {
+		lifecycle.evidenceLost = true
 		return errors.Join(ErrObservationEvidenceInvalid, err)
 	}
 	return nil
@@ -103,6 +108,7 @@ func (lifecycle *observationLifecycle) workspace(ctx context.Context, initial, f
 	}
 	event, err := appendObservation(ctx, lifecycle.session, observe.EventWorkspaceFinalized, lifecycle.parent, payload)
 	if err != nil {
+		lifecycle.evidenceLost = true
 		return errors.Join(ErrObservationEvidenceInvalid, err)
 	}
 	if event.Sequence != 0 {
@@ -116,11 +122,12 @@ func (lifecycle *observationLifecycle) fail(ctx context.Context, class string) e
 		return nil
 	}
 	payload := observe.ExecutionFailedPayload{
-		ErrorClass: class, EvidenceComplete: !lifecycle.session.Incomplete(), Status: "error",
+		ErrorClass: class, EvidenceComplete: !lifecycle.evidenceLost && !lifecycle.session.Incomplete(), Status: "error",
 	}
 	_, err := appendObservation(ctx, lifecycle.session, observe.EventExecutionFailed, lifecycle.parent, payload)
 	lifecycle.terminal = err == nil
 	if err != nil {
+		lifecycle.evidenceLost = true
 		return errors.Join(ErrObservationEvidenceInvalid, err)
 	}
 	return nil

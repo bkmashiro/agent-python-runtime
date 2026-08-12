@@ -48,6 +48,28 @@ func TestBestEffortObservationRecoversAfterStartFailureWithIncompleteTerminalEve
 	}
 }
 
+func TestRequiredObservationFailurePoisonsRecoveredTerminalEvidence(t *testing.T) {
+	recorder := &recoveringObservationRecorder{failures: 1}
+	session, err := observe.NewSession(observe.Required, recorder, "exec-required-recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle := observationLifecycle{session: session}
+	if err := lifecycle.start(context.Background(), observe.ExecutionStartedPayload{ExecutedCodeSHA256: observationDigest('a')}); !errors.Is(err, ErrObservationEvidenceInvalid) {
+		t.Fatalf("required start err=%v", err)
+	}
+	if err := lifecycle.fail(context.Background(), "observation"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.events) != 1 || recorder.events[0].Type != observe.EventExecutionFailed || recorder.events[0].ParentSequence != nil {
+		t.Fatalf("events=%+v", recorder.events)
+	}
+	var payload observe.ExecutionFailedPayload
+	if err := json.Unmarshal(recorder.events[0].Payload, &payload); err != nil || payload.EvidenceComplete {
+		t.Fatalf("payload=%+v err=%v", payload, err)
+	}
+}
+
 func observationDigest(character byte) string {
 	value := make([]byte, 71)
 	copy(value, "sha256:")

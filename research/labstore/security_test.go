@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -370,6 +371,33 @@ func TestPrivacyNeverDowngradesAndPortableReadIsExplicit(t *testing.T) {
 	object, err := store.Get(ref)
 	if err != nil || object.Privacy != labstore.PrivacyPrivate {
 		t.Fatalf("privacy was downgraded: %#v err=%v", object, err)
+	}
+}
+
+func TestMissingPrivateClassificationCannotBeRecreatedAsPortable(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	store, err := labstore.Open(root, labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	body := []byte("classification must fail closed")
+	ref, _, err := store.Put(labstore.KindPrompt, body, privatePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := strings.TrimPrefix(ref.SHA256, "sha256:")
+	privacyPath := filepath.Join(root, "metadata", "privacy", string(ref.Kind), digest[:2], digest[2:]+".json")
+	if err := os.Remove(privacyPath); err != nil {
+		t.Fatal(err)
+	}
+	portable := privatePolicy()
+	portable.Privacy = labstore.PrivacyPortable
+	if _, _, err := store.Put(labstore.KindPrompt, body, portable); !errors.Is(err, labstore.ErrPrivate) {
+		t.Fatalf("missing private classification upgraded err=%v", err)
+	}
+	if _, err := store.GetPortable(ref); !errors.Is(err, labstore.ErrPrivate) {
+		t.Fatalf("missing classification exported err=%v", err)
 	}
 }
 

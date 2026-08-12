@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 const contentIdentityDomain = "pysolate.labstore.content.v1\x00"
@@ -203,7 +204,7 @@ func (store *Store) Put(kind Kind, body []byte, options PutOptions) (Ref, bool, 
 		if !bytes.Equal(existing.Body, body) || !equalRefs(existing.Links, links) {
 			return Ref{}, false, fmt.Errorf("%w: identity collision", ErrCorrupt)
 		}
-		if err := store.writePrivacyLocked(ref, options.Privacy); err != nil {
+		if err := store.writeExistingPrivacyLocked(ref, options.Privacy); err != nil {
 			return Ref{}, false, err
 		}
 		return ref, false, nil
@@ -227,11 +228,43 @@ func (store *Store) Put(kind Kind, body []byte, options PutOptions) (Ref, bool, 
 		if getErr != nil || !bytes.Equal(existing.Body, body) || !equalRefs(existing.Links, links) {
 			return Ref{}, false, fmt.Errorf("%w: concurrent object publication mismatch", ErrCorrupt)
 		}
+		if err := store.writeExistingPrivacyLocked(ref, options.Privacy); err != nil {
+			return Ref{}, false, err
+		}
+		return ref, false, nil
 	}
 	if err := store.writePrivacyLocked(ref, options.Privacy); err != nil {
 		return Ref{}, false, err
 	}
 	return ref, published, nil
+}
+
+func (store *Store) writeExistingPrivacyLocked(ref Ref, requested Privacy) error {
+	var err error
+	for attempt := 0; attempt < 16; attempt++ {
+		_, err = store.root.Lstat(privacyPath(ref))
+		if !errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		// Object and mutable classification are separate files. Another Store
+		// handle may have won object publication and still be fsyncing its
+		// sidecar. Bound the convergence wait rather than treating that narrow
+		// window as persistent missing metadata.
+		time.Sleep(time.Millisecond)
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		// Missing classification is interpreted as private. A portable
+		// deduplicating Put must not turn that fail-safe state into exportable
+		// metadata; a private Put may repair the missing sidecar in place.
+		if requested == PrivacyPortable {
+			return ErrPrivate
+		}
+		return store.writePrivacyLocked(ref, PrivacyPrivate)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: inspect privacy metadata", ErrCorrupt)
+	}
+	return store.writePrivacyLocked(ref, requested)
 }
 
 // PutJSON canonicalizes a normalized semantic body before publication. It is

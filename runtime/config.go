@@ -23,7 +23,11 @@ type RunConfig struct {
 	// profile preserves legacy requests but rejects any explicit compatibility
 	// declaration.
 	ExecutionProfile *ExecutionProfile
-	CapabilityGrants map[string]CapabilityGrant
+	// DeterministicVerification is an Experimental/Partial Host profile. It
+	// controls the WASI clocks/random source for an exact artifact and rejects
+	// unsupported workload classes before Guest execution.
+	DeterministicVerification *DeterministicVerificationProfile
+	CapabilityGrants          map[string]CapabilityGrant
 }
 
 // CapabilityGrant is deliberately opaque until a typed capability is added.
@@ -57,6 +61,13 @@ func (config RunConfig) Validate() error {
 	}
 	if config.ExecutionProfile != nil && config.ExecutionProfile.Validate() != nil {
 		return errors.New("execution profile is invalid")
+	}
+	if config.DeterministicVerification != nil {
+		profile := config.DeterministicVerification
+		if profile.Validate() != nil || config.ExecutionProfile == nil || config.ExecutionProfile.Validate() != nil ||
+			config.ExecutionProfile.ArtifactSHA256() == "" || config.ExecutionProfile.ArtifactSHA256() != profile.ArtifactSHA256() {
+			return ErrDeterministicVerificationAdmission
+		}
 	}
 	return nil
 }

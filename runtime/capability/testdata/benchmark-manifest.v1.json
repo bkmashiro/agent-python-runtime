@@ -1,0 +1,54 @@
+{
+  "schema_version": "pysolate.benchmark-manifest.v1",
+  "suite": {
+    "id": "pysolate-core",
+    "version": "2026.08",
+    "title": "Pysolate Core Research",
+    "categories": [
+      "agent-runtime",
+      "reproducibility"
+    ]
+  },
+  "cases": [
+    {
+      "id": "workspace-summary",
+      "title": "Summarize workspace metrics",
+      "task_class": "workspace_transform",
+      "input_artifacts": [
+        {
+          "id": "metrics-input",
+          "kind": "dataset",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "media_type": "text/csv",
+          "bytes": 128
+        }
+      ],
+      "metrics": [
+        {
+          "id": "quality",
+          "title": "Quality",
+          "direction": "maximize",
+          "unit": "score",
+          "bounds": {
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        {
+          "id": "latency",
+          "title": "Latency",
+          "direction": "minimize",
+          "unit": "milliseconds",
+          "bounds": {
+            "minimum": 0,
+            "maximum": 30000
+          }
+        }
+      ],
+      "tags": [
+        "baseline",
+        "workspace"
+      ]
+    }
+  ]
+}

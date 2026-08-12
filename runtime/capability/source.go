@@ -28,7 +28,17 @@ type DemoCatalogPolicy struct {
 	MaxResponseBytes uint32
 }
 
-type demoCatalogPolicyDocument struct {
+// exactJSONSourcePolicy and exactJSONSourceAdapter are private transport
+// mechanics shared by dedicated curated sources. They intentionally do not
+// expose a generic capability: each Agent-visible source still has its own
+// zero-argument Spec, result schema, handler identity, and Host-owned Grant.
+type exactJSONSourcePolicy struct {
+	Endpoint         string
+	Timeout          time.Duration
+	MaxResponseBytes uint32
+}
+
+type exactJSONSourcePolicyDocument struct {
 	SchemaVersion     string `json:"schema_version"`
 	Capability        string `json:"capability"`
 	Endpoint          string `json:"endpoint"`
@@ -44,7 +54,7 @@ func DemoCatalogDefinition(policy DemoCatalogPolicy) (Spec, Grant, error) {
 	if err := validateDemoCatalogPolicy(policy); err != nil {
 		return Spec{}, Grant{}, err
 	}
-	policyDocument, err := json.Marshal(demoCatalogPolicyDocument{
+	policyDocument, err := json.Marshal(exactJSONSourcePolicyDocument{
 		SchemaVersion: "pysolate.source-policy.v1", Capability: demoCatalogCapability,
 		Endpoint: policy.Endpoint, Method: http.MethodGet, Redirects: "deny",
 		ExpectedStatus: http.StatusOK, ExpectedMediaType: "application/json",
@@ -84,19 +94,30 @@ func RegisterDemoCatalog(registry *Registry, policy DemoCatalogPolicy) error {
 }
 
 func validateDemoCatalogPolicy(policy DemoCatalogPolicy) error {
+	if err := validateExactJSONSourcePolicy(exactJSONSourcePolicy(policy)); err != nil {
+		return errors.New("invalid demo catalog policy")
+	}
+	return nil
+}
+
+func validateExactJSONSourcePolicy(policy exactJSONSourcePolicy) error {
 	if len(policy.Endpoint) == 0 || len(policy.Endpoint) > 2048 || !utf8.ValidString(policy.Endpoint) ||
 		policy.Timeout <= 0 || policy.Timeout > maxSourceTimeout || policy.Timeout%time.Millisecond != 0 ||
 		policy.MaxResponseBytes == 0 || policy.MaxResponseBytes > maxSourceResponseBytes {
-		return errors.New("invalid demo catalog policy")
+		return errors.New("invalid exact JSON source policy")
 	}
 	parsed, err := url.Parse(policy.Endpoint)
 	if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
-		return errors.New("invalid demo catalog endpoint")
+		return errors.New("invalid exact JSON source endpoint")
 	}
 	return nil
 }
 
 type demoCatalogHandler struct {
+	source *exactJSONSourceAdapter
+}
+
+type exactJSONSourceAdapter struct {
 	endpoint string
 	maximum  uint32
 	client   *http.Client
@@ -104,6 +125,17 @@ type demoCatalogHandler struct {
 
 func newDemoCatalogHandler(policy DemoCatalogPolicy) (Handler, error) {
 	if err := validateDemoCatalogPolicy(policy); err != nil {
+		return nil, err
+	}
+	source, err := newExactJSONSourceAdapter(exactJSONSourcePolicy(policy))
+	if err != nil {
+		return nil, err
+	}
+	return &demoCatalogHandler{source: source}, nil
+}
+
+func newExactJSONSourceAdapter(policy exactJSONSourcePolicy) (*exactJSONSourceAdapter, error) {
+	if err := validateExactJSONSourcePolicy(policy); err != nil {
 		return nil, err
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -114,7 +146,7 @@ func newDemoCatalogHandler(policy DemoCatalogPolicy) (Handler, error) {
 		Timeout:       policy.Timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	return &demoCatalogHandler{endpoint: policy.Endpoint, maximum: policy.MaxResponseBytes, client: client}, nil
+	return &exactJSONSourceAdapter{endpoint: policy.Endpoint, maximum: policy.MaxResponseBytes, client: client}, nil
 }
 
 func (handler *demoCatalogHandler) Call(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
@@ -123,36 +155,43 @@ func (handler *demoCatalogHandler) Call(ctx context.Context, arguments json.RawM
 }
 
 func (handler *demoCatalogHandler) CallWithEvidence(ctx context.Context, _ json.RawMessage) (json.RawMessage, TransportEvidence, error) {
-	if handler == nil || handler.client == nil {
+	if handler == nil || handler.source == nil {
 		return nil, TransportEvidence{}, errors.New("invalid demo catalog call")
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, handler.endpoint, nil)
+	return handler.source.read(ctx, "demo catalog")
+}
+
+func (source *exactJSONSourceAdapter) read(ctx context.Context, label string) (json.RawMessage, TransportEvidence, error) {
+	if source == nil || source.client == nil || label == "" {
+		return nil, TransportEvidence{}, errors.New("invalid curated source call")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source.endpoint, nil)
 	if err != nil {
-		return nil, TransportEvidence{}, errors.New("create demo catalog request")
+		return nil, TransportEvidence{}, fmt.Errorf("create %s request", label)
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("User-Agent", "pysolate-source-adapter/1")
-	response, err := handler.client.Do(request)
+	response, err := source.client.Do(request)
 	if err != nil {
-		return nil, TransportEvidence{}, errors.New("read demo catalog")
+		return nil, TransportEvidence{}, fmt.Errorf("read %s", label)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, TransportEvidence{}, errors.New("demo catalog returned an unexpected status")
+		return nil, TransportEvidence{}, fmt.Errorf("%s returned an unexpected status", label)
 	}
 	mediaType, parameters, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	charset := parameters["charset"]
 	if err != nil || !strings.EqualFold(mediaType, "application/json") || (charset != "" && !strings.EqualFold(charset, "utf-8")) {
-		return nil, TransportEvidence{}, errors.New("demo catalog returned an unexpected content type")
+		return nil, TransportEvidence{}, fmt.Errorf("%s returned an unexpected content type", label)
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, int64(handler.maximum)+1))
-	if err != nil || len(body) > int(handler.maximum) {
-		return nil, TransportEvidence{}, errors.New("demo catalog response exceeds its bound")
+	body, err := io.ReadAll(io.LimitReader(response.Body, int64(source.maximum)+1))
+	if err != nil || len(body) > int(source.maximum) {
+		return nil, TransportEvidence{}, fmt.Errorf("%s response exceeds its bound", label)
 	}
 	_, canonical, err := canonicalJSON(body)
 	if err != nil {
-		return nil, TransportEvidence{}, errors.New("demo catalog returned invalid JSON")
+		return nil, TransportEvidence{}, fmt.Errorf("%s returned invalid JSON", label)
 	}
 	digest := sha256.Sum256(body)
 	evidence := TransportEvidence{

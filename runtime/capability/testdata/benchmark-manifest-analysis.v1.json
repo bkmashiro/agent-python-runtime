@@ -1,0 +1,17 @@
+{
+  "catalog_titles": [
+    "Alpha"
+  ],
+  "experiment_matrix": [
+    {
+      "case_id": "workspace-summary",
+      "metric_ids": [
+        "quality",
+        "latency"
+      ],
+      "task_class": "workspace_transform"
+    }
+  ],
+  "fresh_guest": true,
+  "suite": "pysolate-core@2026.08"
+}

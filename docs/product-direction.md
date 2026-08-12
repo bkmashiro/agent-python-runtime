@@ -46,6 +46,7 @@ The current implementation provides:
 - a sealed `pysolate.capability-plan.v4` identity binding sorted canonical specs, their per-Run grants and the total call budget;
 - generated Python module/method objects and direct Agent tool schemas from the sealed specs, with compatibility aliases for the three current workspace functions;
 - one credential-free `sources.demo_catalog()` demonstration backed by a Host-private exact-endpoint GET adapter with redirect, status, media-type, timeout and byte controls;
+- canonical minimal Playback Bundle v1 capture with validated capability payloads, bounded transport evidence and plan/grant/request/artifact/profile/result/workspace identities; publication is staged `0600`, synced and atomic;
 - compact Host-authored capability and workspace receipts; capability receipts and the top-level Host response bind the sealed plan identity, including for zero-call Runs.
 
 The generic Registry can register a versioned spec, grant and handler without changing the WASI import surface. Registration canonicalizes and compiles both schemas. The Host seals that Registry before Guest startup; late registration is rejected and the Broker accepts only the resulting immutable plan. The current CLI generates namespaced Python objects and optional compatibility aliases from the sealed specs, while the Plan exposes direct Agent tool schemas from the same definitions. A plugin catalog and installation lifecycle are not Current.

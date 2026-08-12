@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+
+	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 )
 
 func TestAgentSourceGetsProfileAndWorkspaceToolsFromHost(t *testing.T) {
@@ -82,6 +84,7 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
+	bundlePath := filepath.Join(t.TempDir(), "source.playback.json")
 	configPath := filepath.Join(t.TempDir(), "host.json")
 	config, err := json.Marshal(map[string]any{
 		"workspace": map[string]any{"source_directory": root, "disposition": "discard"},
@@ -89,6 +92,7 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 			"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
 		}},
 		"max_tool_calls": 2,
+		"playback":       map[string]any{"mode": "capture", "output_bundle": bundlePath},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -113,5 +117,22 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 	}
 	if response.Receipts[0]["capability"] != "sources.demo_catalog" || response.WorkspaceReceipt["disposition"] != "discarded" {
 		t.Fatalf("missing source/workspace evidence: %+v", response)
+	}
+	bundleBytes, err := os.ReadFile(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleInfo, err := os.Stat(bundlePath)
+	if err != nil || bundleInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("bundle mode=%v err=%v", bundleInfo, err)
+	}
+	bundle, err := playback.Decode(bundleBytes)
+	if err != nil || len(bundle.Entries) != 1 || bundle.Entries[0].Capability != "sources.demo_catalog" || bundle.Entries[0].Evidence.Status != 200 {
+		t.Fatalf("bundle=%+v err=%v", bundle, err)
+	}
+	for _, forbidden := range []string{server.URL, "source-mounted-workspace", "/workspace/summary.txt", "Alpha|Beta", `\"summary\"`} {
+		if bytes.Contains(bundleBytes, []byte(forbidden)) {
+			t.Fatalf("bundle leaked forbidden run material %q", forbidden)
+		}
 	}
 }

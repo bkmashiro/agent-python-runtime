@@ -3,6 +3,7 @@ package capability
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,11 +23,12 @@ type Config struct {
 }
 
 type Broker struct {
-	config   Config
-	mu       sync.Mutex
-	calls    uint32
-	seen     map[string]struct{}
-	receipts []receipt.Receipt
+	config     Config
+	mu         sync.Mutex
+	calls      uint32
+	seen       map[string]struct{}
+	receipts   []receipt.Receipt
+	transcript []TranscriptEntry
 }
 
 type request struct {
@@ -87,21 +89,33 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}})
 	}
-	if err := validateAgainst(registered.inputSchema, call.Arguments); err != nil {
+	arguments, err := canonicalForSchema(registered.inputSchema, call.Arguments)
+	if err != nil {
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
 	}
-	result, err := registered.handler.Call(ctx, append(json.RawMessage(nil), call.Arguments...))
+	call.Arguments = arguments
+	var result json.RawMessage
+	var evidence TransportEvidence
+	if evidenced, ok := registered.handler.(EvidenceHandler); ok {
+		result, evidence, err = evidenced.CallWithEvidence(ctx, append(json.RawMessage(nil), arguments...))
+	} else {
+		result, err = registered.handler.Call(ctx, append(json.RawMessage(nil), arguments...))
+	}
 	if err != nil {
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
 	}
-	if len(result) == 0 || len(result) > maxCallBytes || validateAgainst(registered.outputSchema, result) != nil {
+	canonicalResult, err := canonicalForSchema(registered.outputSchema, result)
+	if err != nil || len(canonicalResult) > maxCallBytes || (registered.spec.Playback == PlaybackCaptured && !validTransportEvidence(evidence)) {
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
 	}
-	broker.record(call, operation, "ok", result)
-	return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: result})
+	broker.record(call, operation, "ok", canonicalResult)
+	if registered.spec.Playback == PlaybackCaptured {
+		broker.recordTranscript(operation, call.Capability, arguments, canonicalResult, evidence)
+	}
+	return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
 }
 
 func (broker *Broker) record(call request, operation uint32, outcome string, result []byte) {
@@ -109,6 +123,28 @@ func (broker *Broker) record(call request, operation uint32, outcome string, res
 	broker.mu.Lock()
 	broker.receipts = append(broker.receipts, created)
 	broker.mu.Unlock()
+}
+
+func (broker *Broker) recordTranscript(operation uint32, capability string, arguments, result json.RawMessage, evidence TransportEvidence) {
+	argumentsDigest := sha256.Sum256(arguments)
+	resultDigest := sha256.Sum256(result)
+	entry := TranscriptEntry{
+		OperationIndex: operation, Capability: capability,
+		Arguments: append(json.RawMessage(nil), arguments...), ArgumentsSHA256: fmt.Sprintf("sha256:%x", argumentsDigest[:]),
+		Result: append(json.RawMessage(nil), result...), ResultSHA256: fmt.Sprintf("sha256:%x", resultDigest[:]), Evidence: evidence,
+	}
+	broker.mu.Lock()
+	broker.transcript = append(broker.transcript, entry)
+	broker.mu.Unlock()
+}
+
+func (broker *Broker) SnapshotTranscript() []TranscriptEntry {
+	if broker == nil {
+		return nil
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	return cloneTranscript(broker.transcript)
 }
 
 func (broker *Broker) SnapshotReceipts() []receipt.Receipt {

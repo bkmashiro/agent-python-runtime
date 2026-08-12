@@ -13,6 +13,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 )
 
 const exitEscalationRequired = 3
@@ -55,6 +56,10 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	runConfig, err := operator.resolve()
 	if err != nil {
 		writeDiagnostic(stderr, err.Error())
+		return 2
+	}
+	if operator.Playback != nil && operator.Playback.Mode == "playback" {
+		writeDiagnostic(stderr, "offline playback is not available")
 		return 2
 	}
 	request, err := io.ReadAll(io.LimitReader(stdin, int64(runConfig.MaxRequestBytes)+1))
@@ -115,6 +120,8 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 	digest := sha256.Sum256(requestData)
 	requestSHA256 := fmt.Sprintf("sha256:%x", digest[:])
 	runIdentity := fmt.Sprintf("host-%x", digest[:8])
+	var capabilityPlan *capability.Plan
+	var runBroker *capability.Broker
 	hasHostTools := operator.WorkspaceFiles != nil || operator.InformationSources != nil
 	if hasHostTools {
 		registry := capability.NewRegistry()
@@ -144,13 +151,17 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		if maxCalls == 0 {
 			maxCalls = 8
 		}
-		capabilityPlan, err := registry.Seal(capability.PlanConfig{MaxCalls: maxCalls})
+		capabilityPlan, err = registry.Seal(capability.PlanConfig{MaxCalls: maxCalls})
 		if err != nil {
 			writeDiagnostic(stderr, "seal capability plan")
 			return 1
 		}
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
-			return capability.NewBroker(capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan})
+			broker, err := capability.NewBroker(capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan})
+			if err == nil {
+				runBroker = broker
+			}
+			return broker, err
 		}
 		trustedPrepare = capabilityPlan.PythonPrelude()
 	}
@@ -191,12 +202,17 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		return 1
 	}
 	var stagedCapsule *stagedWorkspaceCapsule
-	if workspaceBinding != nil {
-		decodedResponse, err := runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, response)
+	var stagedPlayback *stagedPlaybackBundle
+	var decodedResponse runtimeconfig.RunResponse
+	needsDecodedResponse := workspaceBinding != nil || operator.Playback != nil
+	if needsDecodedResponse {
+		decodedResponse, err = runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, response)
 		if err != nil {
 			writeDiagnostic(stderr, "validate Host run response")
 			return 1
 		}
+	}
+	if workspaceBinding != nil {
 		receipt, staged, err := workspaceBinding.prepareDisposition(decodedResponse.Status, requestSHA256)
 		if err != nil {
 			writeDiagnostic(stderr, err.Error())
@@ -212,7 +228,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			writeDiagnostic(stderr, "encode workspace disposition response")
 			return 1
 		}
-		if _, err := runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, response); err != nil {
+		if decodedResponse, err = runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, response); err != nil {
 			writeDiagnostic(stderr, "validate workspace disposition response")
 			return 1
 		}
@@ -221,8 +237,46 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 		writeDiagnostic(stderr, "response exceeds configured bounds")
 		return 1
 	}
+	if operator.Playback != nil && operator.Playback.Mode == "capture" {
+		if capabilityPlan == nil || runBroker == nil {
+			writeDiagnostic(stderr, "capture broker is unavailable")
+			return 1
+		}
+		profileSHA256, profileErr := executionProfileSHA256(runConfig)
+		resultSHA256, resultErr := playback.CanonicalSHA256(decodedResponse.Result)
+		if profileErr != nil || resultErr != nil {
+			writeDiagnostic(stderr, "bind playback identities")
+			return 1
+		}
+		metadata := playback.Metadata{
+			CapabilityPlanSHA256: capabilityPlan.Identity(), RequestSHA256: requestSHA256,
+			ArtifactSHA256: playback.SHA256(wasm), ExecutionProfileSHA256: profileSHA256,
+			ExpectedResultSHA256: resultSHA256, Grants: capabilityPlan.Grants(),
+		}
+		if decodedResponse.WorkspaceReceipt != nil {
+			metadata.InitialWorkspaceSHA256 = decodedResponse.WorkspaceReceipt.InitialWorkspaceSHA256
+			metadata.FinalWorkspaceSHA256 = decodedResponse.WorkspaceReceipt.FinalWorkspaceSHA256
+		}
+		bundle, bundleErr := playback.New(metadata, runBroker.SnapshotTranscript())
+		if bundleErr != nil {
+			writeDiagnostic(stderr, "author playback bundle")
+			return 1
+		}
+		stagedPlayback, err = stagePlaybackBundle(operator.Playback.OutputBundle, bundle)
+		if err != nil {
+			writeDiagnostic(stderr, err.Error())
+			return 1
+		}
+		defer stagedPlayback.discard()
+	}
 	if stagedCapsule != nil {
 		if err := stagedCapsule.publish(); err != nil {
+			writeDiagnostic(stderr, err.Error())
+			return 1
+		}
+	}
+	if stagedPlayback != nil {
+		if err := stagedPlayback.publish(); err != nil {
 			writeDiagnostic(stderr, err.Error())
 			return 1
 		}

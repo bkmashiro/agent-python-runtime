@@ -39,6 +39,8 @@ Guest code can only call tools present in the Host Registry sealed before Guest 
 
 The credential-free `sources.demo_catalog()` demonstration is the sole Current external-read adapter. Its exact Host endpoint and transport bounds are grant-bound; redirects, non-200 responses, non-JSON media types and oversized bodies fail closed. The Agent cannot submit a URL, path, query, method, headers, credentials or transport policy. This does not create ambient or generic network authority.
 
+Playback Bundle capture uses only Broker-validated successful `captured` calls. Bundle decoding is strict and canonical; operation and payload digests are revalidated. Publication is delayed until runner close, response bounds and workspace disposition evidence are final. The artifact format has no fields for Agent source, final result body, workspace body, endpoint policy or credentials.
+
 ### Host-authored evidence
 
 The Host replaces Guest receipt, capability-plan and capability-call metric claims. Receipts bind the Host run identity, capability-plan identity, capability, operation index, request digest, response digest and outcome. The top-level response carries the plan identity even for a zero-call Run. The PoC deliberately does not claim durable audit, deterministic replay or transaction evidence.

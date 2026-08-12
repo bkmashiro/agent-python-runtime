@@ -2,8 +2,10 @@ package capability
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -115,36 +117,46 @@ func newDemoCatalogHandler(policy DemoCatalogPolicy) (Handler, error) {
 	return &demoCatalogHandler{endpoint: policy.Endpoint, maximum: policy.MaxResponseBytes, client: client}, nil
 }
 
-func (handler *demoCatalogHandler) Call(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+func (handler *demoCatalogHandler) Call(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+	result, _, err := handler.CallWithEvidence(ctx, arguments)
+	return result, err
+}
+
+func (handler *demoCatalogHandler) CallWithEvidence(ctx context.Context, _ json.RawMessage) (json.RawMessage, TransportEvidence, error) {
 	if handler == nil || handler.client == nil {
-		return nil, errors.New("invalid demo catalog call")
+		return nil, TransportEvidence{}, errors.New("invalid demo catalog call")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, handler.endpoint, nil)
 	if err != nil {
-		return nil, errors.New("create demo catalog request")
+		return nil, TransportEvidence{}, errors.New("create demo catalog request")
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("User-Agent", "pysolate-source-adapter/1")
 	response, err := handler.client.Do(request)
 	if err != nil {
-		return nil, errors.New("read demo catalog")
+		return nil, TransportEvidence{}, errors.New("read demo catalog")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, errors.New("demo catalog returned an unexpected status")
+		return nil, TransportEvidence{}, errors.New("demo catalog returned an unexpected status")
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
-		return nil, errors.New("demo catalog returned an unexpected content type")
+		return nil, TransportEvidence{}, errors.New("demo catalog returned an unexpected content type")
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, int64(handler.maximum)+1))
 	if err != nil || len(body) > int(handler.maximum) {
-		return nil, errors.New("demo catalog response exceeds its bound")
+		return nil, TransportEvidence{}, errors.New("demo catalog response exceeds its bound")
 	}
 	_, canonical, err := canonicalJSON(body)
 	if err != nil {
-		return nil, errors.New("demo catalog returned invalid JSON")
+		return nil, TransportEvidence{}, errors.New("demo catalog returned invalid JSON")
 	}
-	return canonical, nil
+	digest := sha256.Sum256(body)
+	evidence := TransportEvidence{
+		Kind: "http", Status: uint16(response.StatusCode), MediaType: mediaType, BodyBytes: uint32(len(body)),
+		BodySHA256: fmt.Sprintf("sha256:%x", digest[:]),
+	}
+	return canonical, evidence, nil
 }

@@ -120,6 +120,11 @@ func (registry *Registry) Register(spec Spec, grant Grant, handler Handler) erro
 	if registry == nil || err != nil || handler == nil {
 		return ErrInvalidTool
 	}
+	if canonical.Playback == PlaybackCaptured {
+		if _, ok := handler.(EvidenceHandler); !ok {
+			return ErrInvalidTool
+		}
+	}
 	if !validGrant(grant) {
 		return ErrInvalidGrant
 	}
@@ -387,12 +392,20 @@ func consumeUniqueJSON(decoder *json.Decoder, depth int, nodes *int) error {
 	return nil
 }
 
-func validateAgainst(schema *jsonschema.Schema, raw []byte) error {
-	document, _, err := canonicalJSON(raw)
+func canonicalForSchema(schema *jsonschema.Schema, raw []byte) (json.RawMessage, error) {
+	document, canonical, err := canonicalJSON(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return schema.Validate(document)
+	if err := schema.Validate(document); err != nil {
+		return nil, err
+	}
+	return canonical, nil
+}
+
+func validateAgainst(schema *jsonschema.Schema, raw []byte) error {
+	_, err := canonicalForSchema(schema, raw)
+	return err
 }
 
 func generatePythonPrelude(specs []Spec) string {

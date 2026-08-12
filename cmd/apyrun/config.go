@@ -24,6 +24,13 @@ type operatorConfig struct {
 	MaxToolCalls       uint32                    `json:"max_tool_calls,omitempty"`
 	Workspace          *mountedWorkspaceConfig   `json:"workspace,omitempty"`
 	InformationSources *informationSourcesConfig `json:"information_sources,omitempty"`
+	Playback           *playbackConfig           `json:"playback,omitempty"`
+}
+
+type playbackConfig struct {
+	Mode         string `json:"mode"`
+	OutputBundle string `json:"output_bundle,omitempty"`
+	InputBundle  string `json:"input_bundle,omitempty"`
 }
 
 type informationSourcesConfig struct {
@@ -102,6 +109,17 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 			return runtimeconfig.RunConfig{}, err
 		}
 	}
+	if config.Playback != nil {
+		if err := config.Playback.validate(); err != nil {
+			return runtimeconfig.RunConfig{}, err
+		}
+		if config.InformationSources == nil {
+			return runtimeconfig.RunConfig{}, errors.New("playback requires a curated information source")
+		}
+		if config.Workspace != nil && config.Workspace.OutputCapsule != "" {
+			return runtimeconfig.RunConfig{}, errors.New("playback bundle and workspace capsule outputs are mutually exclusive")
+		}
+	}
 	hasTools := config.WorkspaceFiles != nil || config.InformationSources != nil
 	if config.MaxToolCalls != 0 && !hasTools {
 		return runtimeconfig.RunConfig{}, errors.New("max_tool_calls requires configured Host tools")
@@ -118,6 +136,28 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 		return runtimeconfig.RunConfig{}, fmt.Errorf("invalid operator resource bounds: %w", err)
 	}
 	return runConfig, nil
+}
+
+func (config *playbackConfig) validate() error {
+	if config == nil {
+		return nil
+	}
+	validPath := func(value string) bool {
+		return value != "" && filepath.IsAbs(value) && filepath.Clean(value) == value && filepath.Base(value) != "."
+	}
+	switch config.Mode {
+	case "capture":
+		if !validPath(config.OutputBundle) || config.InputBundle != "" {
+			return errors.New("capture playback requires one absolute output_bundle")
+		}
+	case "playback":
+		if !validPath(config.InputBundle) || config.OutputBundle != "" {
+			return errors.New("offline playback requires one absolute input_bundle")
+		}
+	default:
+		return errors.New("playback mode must be capture or playback")
+	}
+	return nil
 }
 
 func (config *demoCatalogSourceConfig) resolve() (capability.DemoCatalogPolicy, error) {

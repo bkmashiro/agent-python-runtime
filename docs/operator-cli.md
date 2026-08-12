@@ -77,6 +77,8 @@ When typed Host tools are configured, the Host canonicalizes their versioned `Ca
 
 `information_sources.demo_catalog` configures one dedicated, credential-free structured source. The Host config must provide an exact `http` or `https` endpoint, positive timeout and bounded response size. The generated Agent surface is `sources.demo_catalog()`; no URL or transport argument crosses the Guest boundary. The adapter performs GET only, disables environment proxies and compression, refuses redirect following, and requires status 200 plus `application/json`. It may coexist with a mounted workspace.
 
+Capture can additionally configure `"playback":{"mode":"capture","output_bundle":"/absolute/run.playback.json"}`. The Host stages the canonical minimal bundle with mode `0600` and publishes it atomically only after runner close, final response validation and workspace inspection. Playback Bundle and Workspace Capsule outputs are rejected together. See [playback-bundles.md](playback-bundles.md).
+
 ## Exit behavior
 
 - `0`: a structured Guest response was written;

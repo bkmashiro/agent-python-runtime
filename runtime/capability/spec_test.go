@@ -54,7 +54,11 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 		registry := capability.NewRegistry()
 		spec := testSpec()
 		mutate(&spec)
-		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+		var handler capability.Handler = noopHandler
+		if spec.Playback == capability.PlaybackCaptured {
+			handler = evidenceHandler{}
+		}
+		if err := registry.Register(spec, basicGrant(t), handler); err != nil {
 			t.Fatal(err)
 		}
 		plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})

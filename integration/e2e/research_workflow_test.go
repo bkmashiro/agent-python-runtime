@@ -32,7 +32,7 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 	var demoHits, benchmarkHits uint32
 	demoServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		demoHits++
-		if request.Header.Get("Authorization") != "" {
+		if len(request.Header.Values("Authorization")) != 0 {
 			t.Errorf("demo source received credentials")
 		}
 		response.Header().Set("Content-Type", "application/json")
@@ -41,7 +41,7 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 	benchmarkBody := canonicalFixture(t, "benchmark-manifest.v1.json")
 	benchmarkServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		benchmarkHits++
-		if request.Header.Get("Authorization") != "" {
+		if len(request.Header.Values("Authorization")) != 0 {
 			t.Errorf("benchmark source received credentials")
 		}
 		response.Header().Set("Content-Type", "application/json")
@@ -152,8 +152,8 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 	}
 	eventRefs := make([]labstore.Ref, 0, len(liveEvents))
 	forbiddenObservation := [][]byte{
-		[]byte("_pysolate_combined_marker"), []byte("Alpha\\n"),
-		[]byte("benchmark-suite"), []byte(demoPolicy.Endpoint), []byte(benchmarkPolicy.Endpoint),
+		[]byte("_pysolate_combined_marker"), []byte(`"title":"Alpha"`), []byte("Alpha"),
+		[]byte("pysolate-core"), []byte(demoPolicy.Endpoint), []byte(benchmarkPolicy.Endpoint),
 		[]byte("Authorization"), []byte("credential"),
 	}
 	for _, event := range liveEvents {
@@ -172,8 +172,23 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 	workspaceEvent, _ := observe.Encode(liveEvents[4])
 	if !bytes.Contains(workspaceEvent, []byte(`"path":"experiment-plan.txt"`)) ||
 		!bytes.Contains(workspaceEvent, []byte(`"after_sha256":"sha256:`)) ||
-		bytes.Contains(workspaceEvent, []byte("Alpha\\n")) {
+		bytes.Contains(workspaceEvent, []byte("Alpha")) {
 		t.Fatalf("workspace observation metadata/body boundary violated: %s", workspaceEvent)
+	}
+	capabilityEvents := 0
+	for _, event := range liveEvents {
+		if event.Type != observe.EventCapabilityCall {
+			continue
+		}
+		capabilityEvents++
+		encoded, _ := observe.Encode(event)
+		if !bytes.Contains(encoded, []byte(`"arguments_sha256":"sha256:`)) ||
+			!bytes.Contains(encoded, []byte(`"result_sha256":"sha256:`)) {
+			t.Fatalf("capability observation omitted digest metadata: %s", encoded)
+		}
+	}
+	if capabilityEvents != 2 {
+		t.Fatalf("capability observation events=%d want=2", capabilityEvents)
 	}
 	parentBytes, _ := json.Marshal(parent)
 	parentPolicy := private

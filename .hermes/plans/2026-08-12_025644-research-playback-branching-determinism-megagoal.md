@@ -115,8 +115,8 @@ Branching in this goal means fresh re-execution from the original initial state 
 
 All items must be checked with real evidence:
 
-- [ ] Previous playback roadmap is marked closed and points to this active successor without losing evidence.
-- [ ] A checked-in identity/digest inventory classifies every persisted or externally visible SHA relation and removes only proven redundancy.
+- [x] Previous playback roadmap is marked closed and points to this active successor without losing evidence.
+- [x] A checked-in identity/digest inventory classifies every persisted or externally visible SHA relation; the v1 audit found no compatibility-safe field with zero independent boundary value, so none was removed.
 - [ ] A repository-maintained real-Guest acceptance harness reproduces live capture → source shutdown → offline playback with stable machine-readable evidence.
 - [ ] A versioned Lab-ready Runtime observation contract exists, including no-capability Runs, and does not accept Guest-forged Host evidence.
 - [ ] The strongest honest WASI/filesystem observation level is measured and documented; unsupported internal visibility is not claimed.
@@ -168,12 +168,12 @@ If blocked, report exact blocker, evidence, modified files, tests, Git status an
 
 ### Tasks
 
-- [ ] Verify `main`, clean state, signed baseline and exact `HEAD == origin/main` before new code.
-- [ ] Convert the previous roadmap into a closed evidence record and point its maintenance handoff to this roadmap.
-- [ ] Produce `docs/research/identity-model.md` with a table for every identity: producer, canonical bytes, consumer, trust owner, admission/lookup/privacy purpose, derivability and tamper test.
-- [ ] Identify duplicate digests that protect no independent boundary; write RED tests before removing any externally encoded field.
-- [ ] Preserve schema compatibility or version the Bundle/contract when a canonical document changes.
-- [ ] Document which identities the Guest, Agent/Harness and Lab can observe.
+- [x] Verify `main`, clean state, signed baseline and exact `HEAD == origin/main` before new code (`b5bd5e5`, valid signature, clean and synchronized; implementation baseline remains `38e06f2`).
+- [x] Convert the previous roadmap into a closed evidence record and point its maintenance handoff to this roadmap.
+- [x] Produce `docs/research/identity-model.md` with producer, canonical bytes, consumer, trust owner, classification, derivability and visibility.
+- [x] Identify duplicate digests that protect no independent boundary; none qualified for removal, so no encoded field or RED compatibility test was manufactured.
+- [x] Preserve schema compatibility: Bundle/Capsule/response encodings were unchanged in Track 0.
+- [x] Document which identities the Guest, Agent/Harness and Lab can observe.
 
 ### Gates
 

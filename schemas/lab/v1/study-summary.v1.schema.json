@@ -1,0 +1,175 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/study-summary.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "evidence_class": {
+      "enum": [
+        "current",
+        "mechanism_only",
+        "qualified_workload",
+        "experimental_partial",
+        "not_measured"
+      ]
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "prohibited_claims": {
+      "items": {
+        "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 0,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "pysolate.study-summary.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status_totals": {
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "status",
+            "count"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "status",
+            "count"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "const": "timed_out"
+            }
+          },
+          "required": [
+            "status",
+            "count"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "const": "unsupported"
+            }
+          },
+          "required": [
+            "status",
+            "count"
+          ],
+          "type": "object"
+        }
+      ],
+      "type": "array"
+    },
+    "storage": {
+      "additionalProperties": false,
+      "properties": {
+        "logical_bytes": {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "object_count": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reused_object_count": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stored_bytes": {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "logical_bytes",
+        "stored_bytes",
+        "object_count",
+        "reused_object_count"
+      ],
+      "type": "object"
+    },
+    "study_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "treatment_count": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workload_count": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "study_id",
+    "evidence_class",
+    "workload_count",
+    "treatment_count",
+    "status_totals",
+    "prohibited_claims",
+    "storage"
+  ],
+  "title": "Pysolate Lab study-summary.v1",
+  "type": "object"
+}

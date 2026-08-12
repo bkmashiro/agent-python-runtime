@@ -1,6 +1,6 @@
 # Pysolate Lab Web Parallel Handoff
 
-**Status:** Accepted direction; Lab v1 schema is not frozen until Track B of the active roadmap passes schema tests and independent review.
+**Status:** Lab v1 is frozen after the Track B validator, fixture, full-gate and independent post-fix review passed. Web consumption must use only the Go-produced canonical v1 fixtures.
 
 **Active Runtime roadmap:** `.hermes/plans/2026-08-12_095911-workload-evaluation-lab-contract-megagoal.md`
 
@@ -64,8 +64,8 @@ The UI should display truncation, incomplete evidence, experimental status, priv
 
 After freeze:
 
-- adding optional fields with fixtures and validators may remain v1;
-- changing requiredness, enum meaning, identity semantics, pagination or privacy behavior requires v2;
+- any wire field addition/removal, requiredness change, enum change, identity/order/pagination/privacy semantic change or relaxed unknown-field behavior requires v2;
+- v1 may receive documentation clarifications and validator fixes only when accepted canonical wire shapes do not change;
 - digest references are not authorization;
 - portable does not mean public or harmless;
 - missing/private objects fail closed and remain visible as structured unavailable states.
@@ -81,6 +81,8 @@ Do not claim integration until the Web session consumes canonical fixtures gener
 - private/unavailable object state;
 - branch DAG and workspace diff rendering;
 - mobile and desktop smoke if the chosen framework supports them.
+
+The canonical producer fixtures are under `research/labview/testdata/canonical/<case>/<schema>.json`. The interrupted draft lane is currently RED because its hand-written draft fixture index is absent; do not repair that second shape. Replace draft fixtures/adapters with direct consumption of the nine Go-produced v1 documents and validate complete index links.
 
 ## Copy-paste prompt for the Web session
 

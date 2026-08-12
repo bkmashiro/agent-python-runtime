@@ -1,0 +1,511 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/run-detail.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "oracle_status": {
+            "const": "passed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "oracle_status": {
+            "const": "failed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "timed_out"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "oracle_status": {
+            "const": "not_run"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "unsupported"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "oracle_status": {
+            "const": "not_run"
+          }
+        }
+      }
+    }
+  ],
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "evidence_class": {
+      "enum": [
+        "current",
+        "mechanism_only",
+        "qualified_workload",
+        "experimental_partial",
+        "not_measured"
+      ]
+    },
+    "evidence_completeness": {
+      "enum": [
+        "complete",
+        "incomplete",
+        "truncated"
+      ]
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "oracle_status": {
+      "enum": [
+        "passed",
+        "failed",
+        "not_run"
+      ]
+    },
+    "problem_codes": {
+      "items": {
+        "enum": [
+          "evidence_incomplete",
+          "projection_truncated",
+          "object_unavailable",
+          "empty_projection"
+        ]
+      },
+      "maxItems": 32,
+      "minItems": 0,
+      "type": "array"
+    },
+    "refs": {
+      "items": false,
+      "maxItems": 7,
+      "minItems": 7,
+      "prefixItems": [
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "artifact"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "capability_plan"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "execution"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "execution_profile"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "invocation"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "result"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  },
+                  "privacy": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "privacy",
+                  "availability"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "kind": {
+              "const": "workspace_tree"
+            },
+            "privacy": {
+              "enum": [
+                "portable",
+                "private"
+              ]
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sha256",
+            "privacy",
+            "availability"
+          ],
+          "type": "object"
+        }
+      ],
+      "type": "array"
+    },
+    "run_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "pysolate.run-detail.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed",
+        "timed_out",
+        "unsupported"
+      ]
+    },
+    "treatment": {
+      "enum": [
+        "live_capture",
+        "offline_replay",
+        "counterfactual_branch",
+        "deterministic_verification"
+      ]
+    },
+    "workload_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "run_id",
+    "workload_id",
+    "treatment",
+    "status",
+    "oracle_status",
+    "evidence_class",
+    "evidence_completeness",
+    "refs",
+    "problem_codes"
+  ],
+  "title": "Pysolate Lab run-detail.v1",
+  "type": "object"
+}

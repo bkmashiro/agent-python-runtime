@@ -67,19 +67,19 @@ Create canonical JSON Schemas under `schemas/lab/v1/` and matching Go projection
 
 Required envelopes:
 
-- [ ] `lab-index.v1`: schema/version, source identity, generated-at policy, bounded links and capability flags.
-- [ ] `study-summary.v1`: cohort, workload/treatment counts, status totals, evidence class and prohibited claims.
-- [ ] `run-detail.v1`: invocation/execution refs, status, profile/artifact/plan refs, result/workspace refs and completeness.
-- [ ] `timeline-page.v1`: ordered bounded events, cursors, truncation and evidence-complete state.
-- [ ] `branch-dag.v1`: typed nodes/edges, fork operation, suffix mode, lineage refs and truncation.
-- [ ] `workspace-diff.v1`: normalized relative paths, change kind, sizes/executable bits/digests; never file bodies or Host paths.
-- [ ] `run-comparison.v1`: same/different dimensions, bounded call/workspace deltas and reason codes.
-- [ ] `object-ref.v1` and `problem.v1`: typed references plus fail-closed structured errors.
-- [ ] Define pagination, sorting, maximum sizes, optionality and forward-compatibility rules.
-- [ ] Add canonical fixtures for empty, ordinary, branched, incomplete-evidence, truncated and private-object cases.
-- [ ] Add cross-schema/link validator and deterministic fixture hashes.
-- [ ] Publish `docs/research/lab-v1-contract.md` with Current/Experimental/Proposed labels and Web integration rules.
-- [ ] Independent schema review passes before the first Web-consumption milestone push.
+- [x] `lab-index.v1`: schema/version, source identity, generated-at policy, bounded links and capability flags.
+- [x] `study-summary.v1`: cohort, workload/treatment counts, status totals, evidence class and prohibited claims.
+- [x] `run-detail.v1`: invocation/execution refs, status, profile/artifact/plan refs, result/workspace refs and completeness.
+- [x] `timeline-page.v1`: ordered bounded events, cursors, truncation and evidence-complete state.
+- [x] `branch-dag.v1`: typed nodes/edges, fork operation, suffix mode, lineage refs and truncation.
+- [x] `workspace-diff.v1`: normalized relative paths, change kind, sizes/executable bits/digests; never file bodies or Host paths.
+- [x] `run-comparison.v1`: same/different dimensions, bounded call/workspace deltas and reason codes.
+- [x] `object-ref.v1` and `problem.v1`: typed references plus fail-closed structured errors.
+- [x] Define pagination, sorting, maximum sizes, optionality and forward-compatibility rules.
+- [x] Add canonical fixtures for empty, ordinary, branched, incomplete-evidence, truncated and private-object cases.
+- [x] Add cross-schema/link validator and deterministic fixture hashes.
+- [x] Publish `docs/research/lab-v1-contract.md` with Current/Experimental/Proposed labels and Web integration rules.
+- [x] Independent schema review passes before the first Web-consumption milestone push.
 
 **Schema rule:** v1 is a read/presentation contract, not the LabStore disk format and not an authority token. Digests are references, not authorization.
 
@@ -184,6 +184,7 @@ A successful slice, signed checkpoint, long test, context boundary or pending We
 
 - 2026-08-12: Roadmap created from clean synchronized baseline `d078841`; implementation not started. First pointer: Track A inventory, then Track B Lab v1 schema freeze before parallel Web consumption.
 - 2026-08-12: Track A frozen with mechanism-only corpus/plan/report contracts, typed captured-read requirements, fixed family admission invariants, bounded strict decoders, deterministic positive/adversarial fixtures and evidence vocabulary. Full Go/race/Python gates passed; independent review blockers were reproduced, fixed and post-fix reviewed PASS.
+- 2026-08-12: Track B Lab v1 read contract frozen with nine closed schemas, matching strict Go projection/cross-set validator, six-case 54-document canonical fixture matrix and SHA manifest. Review probes found and closed timeout-enum, Windows Host-path and Go/schema bound/vocabulary drift; final post-fix review passed with zero findings.
 
 ## 16. Short prompt
 

@@ -1,0 +1,84 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/object-ref.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "ref": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "not": {
+            "properties": {
+              "availability": {
+                "const": "available"
+              },
+              "privacy": {
+                "const": "private"
+              }
+            },
+            "required": [
+              "privacy",
+              "availability"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "availability": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "artifact",
+            "capability_plan",
+            "execution",
+            "execution_profile",
+            "invocation",
+            "result",
+            "workspace_tree"
+          ],
+          "type": "string"
+        },
+        "privacy": {
+          "enum": [
+            "portable",
+            "private"
+          ]
+        },
+        "sha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "sha256",
+        "privacy",
+        "availability"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "pysolate.object-ref.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "ref"
+  ],
+  "title": "Pysolate Lab object-ref.v1",
+  "type": "object"
+}

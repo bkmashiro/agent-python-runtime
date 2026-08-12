@@ -1,0 +1,139 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/branch-dag.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "edges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "branch_sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "child_run_id": {
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "fork_operation": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "parent_run_id": {
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "suffix_mode": {
+            "enum": [
+              "override",
+              "recorded_suffix",
+              "live_suffix"
+            ]
+          }
+        },
+        "required": [
+          "parent_run_id",
+          "child_run_id",
+          "fork_operation",
+          "suffix_mode",
+          "branch_sha256"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "nodes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_completeness": {
+            "enum": [
+              "complete",
+              "incomplete",
+              "truncated"
+            ]
+          },
+          "run_id": {
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "failed",
+              "timed_out",
+              "unsupported"
+            ]
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "evidence_completeness"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "page": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "next_cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "returned": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cursor",
+        "next_cursor",
+        "returned",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "pysolate.branch-dag.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "nodes",
+    "edges",
+    "page"
+  ],
+  "title": "Pysolate Lab branch-dag.v1",
+  "type": "object"
+}

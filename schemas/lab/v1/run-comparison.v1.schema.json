@@ -1,0 +1,296 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/run-comparison.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "call_deltas": {
+      "items": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "same"
+              },
+              "left_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "right_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "changed"
+              },
+              "left_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "right_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "left_only"
+              },
+              "left_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "right_sha256": {
+                "const": ""
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "right_only"
+              },
+              "left_sha256": {
+                "const": ""
+              },
+              "right_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "unavailable"
+              },
+              "left_sha256": {
+                "const": ""
+              },
+              "right_sha256": {
+                "const": ""
+              }
+            }
+          }
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "same",
+              "changed",
+              "left_only",
+              "right_only",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "left_sha256": {
+            "pattern": "^(?:sha256:[0-9a-f]{64})?$",
+            "type": "string"
+          },
+          "operation_index": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "right_sha256": {
+            "pattern": "^(?:sha256:[0-9a-f]{64})?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_index",
+          "kind",
+          "left_sha256",
+          "right_sha256"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "comparison_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "different_dimensions": {
+      "items": {
+        "enum": [
+          "workload",
+          "treatment",
+          "status",
+          "artifact",
+          "profile",
+          "plan",
+          "result",
+          "workspace",
+          "evidence_class",
+          "evidence_completeness",
+          "capability_calls"
+        ]
+      },
+      "maxItems": 32,
+      "minItems": 0,
+      "type": "array"
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "left_run_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "page": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "next_cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "returned": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cursor",
+        "next_cursor",
+        "returned",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "reason_codes": {
+      "items": {
+        "enum": [
+          "no_difference",
+          "capability_result_changed",
+          "workspace_digest_changed",
+          "status_changed",
+          "evidence_incomplete"
+        ]
+      },
+      "maxItems": 32,
+      "minItems": 0,
+      "type": "array"
+    },
+    "right_run_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "same_dimensions": {
+      "items": {
+        "enum": [
+          "workload",
+          "treatment",
+          "status",
+          "artifact",
+          "profile",
+          "plan",
+          "result",
+          "workspace",
+          "evidence_class",
+          "evidence_completeness",
+          "capability_calls"
+        ]
+      },
+      "maxItems": 32,
+      "minItems": 0,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "pysolate.run-comparison.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "workspace_deltas": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "same",
+              "added",
+              "removed",
+              "modified",
+              "unavailable"
+            ]
+          },
+          "path": {
+            "allOf": [
+              {
+                "pattern": "^[^/\\\\:][^\\\\:]*$"
+              },
+              {
+                "not": {
+                  "pattern": "(^|/)\\.\\.(/|$)"
+                }
+              },
+              {
+                "not": {
+                  "pattern": "(^|/)\\.(/|$)"
+                }
+              },
+              {
+                "not": {
+                  "pattern": "//"
+                }
+              }
+            ],
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "comparison_id",
+    "left_run_id",
+    "right_run_id",
+    "same_dimensions",
+    "different_dimensions",
+    "call_deltas",
+    "workspace_deltas",
+    "reason_codes",
+    "page"
+  ],
+  "title": "Pysolate Lab run-comparison.v1",
+  "type": "object"
+}

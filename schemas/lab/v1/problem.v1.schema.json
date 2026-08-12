@@ -1,0 +1,142 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/problem.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "none"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "enum": [
+              "index",
+              "study"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "oneOf": [
+    {
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "run_id"
+            ]
+          },
+          {
+            "required": [
+              "ref_sha256"
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "scope": {
+          "enum": [
+            "index",
+            "study"
+          ]
+        }
+      }
+    },
+    {
+      "properties": {
+        "scope": {
+          "const": "reference"
+        }
+      },
+      "required": [
+        "ref_sha256"
+      ]
+    },
+    {
+      "properties": {
+        "scope": {
+          "enum": [
+            "run",
+            "timeline",
+            "branch",
+            "workspace",
+            "comparison"
+          ]
+        }
+      },
+      "required": [
+        "run_id"
+      ]
+    }
+  ],
+  "properties": {
+    "code": {
+      "enum": [
+        "none",
+        "evidence_incomplete",
+        "projection_truncated",
+        "object_unavailable",
+        "empty_projection"
+      ]
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "problem_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "ref_sha256": {
+      "pattern": "^(?:|sha256:[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^(?:|[a-z0-9][a-z0-9._:-]{0,127})$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "pysolate.problem.v1"
+    },
+    "scope": {
+      "enum": [
+        "index",
+        "study",
+        "run",
+        "timeline",
+        "branch",
+        "workspace",
+        "comparison",
+        "reference"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "problem_id",
+    "code",
+    "severity",
+    "scope"
+  ],
+  "title": "Pysolate Lab problem.v1",
+  "type": "object"
+}

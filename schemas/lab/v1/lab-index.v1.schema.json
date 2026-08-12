@@ -1,0 +1,257 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/lab-index.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "capabilities": {
+      "items": false,
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+        {
+          "const": "branch_dag"
+        },
+        {
+          "const": "comparison"
+        },
+        {
+          "const": "timeline"
+        },
+        {
+          "const": "workspace_diff"
+        }
+      ],
+      "type": "array"
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "links": {
+      "maxItems": 8,
+      "minItems": 8,
+      "prefixItems": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "study-summary.v1"
+            },
+            "rel": {
+              "const": "study"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "run-detail.v1"
+            },
+            "rel": {
+              "const": "run"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "timeline-page.v1"
+            },
+            "rel": {
+              "const": "timeline"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "branch-dag.v1"
+            },
+            "rel": {
+              "const": "branch"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "workspace-diff.v1"
+            },
+            "rel": {
+              "const": "workspace"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "run-comparison.v1"
+            },
+            "rel": {
+              "const": "comparison"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "object-ref.v1"
+            },
+            "rel": {
+              "const": "reference"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "problem.v1"
+            },
+            "rel": {
+              "const": "problem"
+            },
+            "sha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rel",
+            "kind",
+            "sha256"
+          ],
+          "type": "object"
+        }
+      ],
+      "type": "array"
+    },
+    "page": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "next_cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "returned": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cursor",
+        "next_cursor",
+        "returned",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "pysolate.lab-index.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "links",
+    "capabilities",
+    "page"
+  ],
+  "title": "Pysolate Lab lab-index.v1",
+  "type": "object"
+}

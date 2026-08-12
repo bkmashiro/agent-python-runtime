@@ -1,0 +1,415 @@
+{
+  "$id": "https://agent-runtime.dev/lab/v1/timeline-page.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded privacy-safe read projection; not authority and not LabStore disk format.",
+  "properties": {
+    "events": {
+      "items": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "arguments_sha256": {
+                "const": ""
+              },
+              "capability": {
+                "const": ""
+              },
+              "operation_index": {
+                "const": 0
+              },
+              "outcome": {
+                "const": "none"
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "execution.started"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "operation_index",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "const": ""
+              },
+              "capability": {
+                "const": ""
+              },
+              "operation_index": {
+                "const": 0
+              },
+              "outcome": {
+                "const": "none"
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "capability.plan_bound"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "operation_index",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "const": ""
+              },
+              "capability": {
+                "const": ""
+              },
+              "operation_index": {
+                "const": 0
+              },
+              "outcome": {
+                "const": "none"
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "workspace.finalized"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "operation_index",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "const": ""
+              },
+              "capability": {
+                "const": ""
+              },
+              "operation_index": {
+                "const": 0
+              },
+              "outcome": {
+                "const": "ok"
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "execution.completed"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "operation_index",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "const": ""
+              },
+              "capability": {
+                "const": ""
+              },
+              "operation_index": {
+                "const": 0
+              },
+              "outcome": {
+                "const": "error"
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "execution.failed"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "operation_index",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "capability": {
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$"
+              },
+              "outcome": {
+                "const": "ok",
+                "enum": [
+                  "ok",
+                  "error",
+                  "denied",
+                  "timeout"
+                ]
+              },
+              "result_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "type": {
+                "const": "capability.call"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "capability": {
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$"
+              },
+              "outcome": {
+                "const": "error",
+                "enum": [
+                  "ok",
+                  "error",
+                  "denied",
+                  "timeout"
+                ]
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "capability.call"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "capability": {
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$"
+              },
+              "outcome": {
+                "const": "denied",
+                "enum": [
+                  "ok",
+                  "error",
+                  "denied",
+                  "timeout"
+                ]
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "capability.call"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          },
+          {
+            "properties": {
+              "arguments_sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "capability": {
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$"
+              },
+              "outcome": {
+                "const": "timeout"
+              },
+              "result_sha256": {
+                "const": ""
+              },
+              "type": {
+                "const": "capability.call"
+              }
+            },
+            "required": [
+              "type",
+              "outcome",
+              "capability",
+              "arguments_sha256",
+              "result_sha256"
+            ]
+          }
+        ],
+        "properties": {
+          "arguments_sha256": {
+            "pattern": "^(?:|sha256:[0-9a-f]{64})$",
+            "type": "string"
+          },
+          "capability": {
+            "pattern": "^(?:|[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*)$",
+            "type": "string"
+          },
+          "operation_index": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "enum": [
+              "none",
+              "ok",
+              "error",
+              "denied",
+              "timeout"
+            ]
+          },
+          "parent_sequence": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "result_sha256": {
+            "pattern": "^(?:|sha256:[0-9a-f]{64})$",
+            "type": "string"
+          },
+          "sequence": {
+            "maximum": 4294967295,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "execution.started",
+              "capability.plan_bound",
+              "capability.call",
+              "workspace.finalized",
+              "execution.completed",
+              "execution.failed"
+            ]
+          }
+        },
+        "required": [
+          "sequence",
+          "parent_sequence",
+          "type",
+          "outcome",
+          "capability",
+          "operation_index",
+          "arguments_sha256",
+          "result_sha256"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "evidence_completeness": {
+      "enum": [
+        "complete",
+        "incomplete",
+        "truncated"
+      ]
+    },
+    "generated_at_policy": {
+      "const": "omitted"
+    },
+    "page": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "next_cursor": {
+          "pattern": "^(?:[A-Za-z0-9_-]{1,128})?$",
+          "type": "string"
+        },
+        "returned": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cursor",
+        "next_cursor",
+        "returned",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "run_id": {
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "pysolate.timeline-page.v1"
+    },
+    "source_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_sha256",
+    "generated_at_policy",
+    "run_id",
+    "evidence_completeness",
+    "events",
+    "page"
+  ],
+  "title": "Pysolate Lab timeline-page.v1",
+  "type": "object"
+}

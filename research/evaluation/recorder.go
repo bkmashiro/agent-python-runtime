@@ -68,7 +68,7 @@ func (r *RowRecorder) RecordOracle(status OracleStatus, millis uint64) error {
 }
 
 func (r *RowRecorder) RecordEvidence(complete bool, millis uint64, metrics RowMetrics, problemCode string) error {
-	if r == nil || r.phase != phaseOracle || metrics.StoredBytes > metrics.LogicalBytes || metrics.ReusedObjectCount > metrics.ObjectCount || (complete && problemCode != "") || (!complete && problemCode == "") {
+	if r == nil || r.phase != phaseOracle || metrics.ReusedObjectCount > metrics.ObjectCount || (complete && problemCode != "") || (!complete && problemCode == "") {
 		return ErrInvalid
 	}
 	r.row.PhaseMillis.Evidence = millis

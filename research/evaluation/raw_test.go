@@ -31,6 +31,10 @@ func TestRawStudyLifecycleConservationAndBodyFreeEvidence(t *testing.T) {
 			t.Fatalf("leak=%s", forbidden)
 		}
 	}
+	raw.Rows[0].Metrics.StoredBytes = raw.Rows[0].Metrics.LogicalBytes + 1
+	if err := raw.Validate(); err != nil {
+		t.Fatalf("physical storage overhead must be representable: %v", err)
+	}
 	bad := raw
 	bad.Rows = append([]evaluation.RawRow(nil), raw.Rows...)
 	bad.Rows[1].Started = true
@@ -101,8 +105,8 @@ func TestRebuildReportFromRawRowsIsExact(t *testing.T) {
 	if identity != identity2 || !bytes.Equal([]byte(refs[0]), []byte(refs2[0])) {
 		t.Fatal("rebuild drift")
 	}
-	raw.Rows[0].Metrics.StoredBytes = raw.Rows[0].Metrics.LogicalBytes + 1
+	raw.Rows[0].Metrics.ReusedObjectCount = raw.Rows[0].Metrics.ObjectCount + 1
 	if _, _, err := evaluation.RebuildReport(raw, planned); !errors.Is(err, evaluation.ErrInvalid) {
-		t.Fatalf("storage=%v", err)
+		t.Fatalf("reuse=%v", err)
 	}
 }

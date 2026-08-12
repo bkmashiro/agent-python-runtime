@@ -89,7 +89,7 @@ func (study RawStudy) Validate() error {
 }
 
 func validateRawRow(row RawRow) error {
-	if row.RowID != RowIdentity(row.WorkloadID, row.Treatment, row.Repetition) || !identifierPattern.MatchString(row.WorkloadID) || !validTreatment(row.Treatment) || !validRowStatus(row.Status) || !validOracleStatus(row.OracleStatus) || row.Metrics.StoredBytes > row.Metrics.LogicalBytes || row.Metrics.ReusedObjectCount > row.Metrics.ObjectCount {
+	if row.RowID != RowIdentity(row.WorkloadID, row.Treatment, row.Repetition) || !identifierPattern.MatchString(row.WorkloadID) || !validTreatment(row.Treatment) || !validRowStatus(row.Status) || !validOracleStatus(row.OracleStatus) || row.Metrics.ReusedObjectCount > row.Metrics.ObjectCount {
 		return ErrInvalid
 	}
 	switch row.Status {

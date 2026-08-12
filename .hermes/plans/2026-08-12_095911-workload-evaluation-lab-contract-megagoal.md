@@ -41,14 +41,14 @@ Before schema v1 is frozen, the Web session may prototype only against explicitl
 
 ## 4. Definition of done
 
-- [ ] Three versioned workload families execute through the real Guest with exact task oracles.
-- [ ] Each workload has direct/live capture, strict offline replay and at least one meaningful counterfactual treatment where semantically applicable.
-- [ ] A canonical experiment plan and report schema bind Host commit, Guest artifact, corpus, treatment, evidence and prohibited claims.
-- [ ] Lab v1 read schema is frozen, machine-validated and demonstrated by canonical fixtures.
-- [ ] Lab v1 supports overview, run detail, timeline, branch DAG, workspace diff, comparison, object reference and bounded pagination/error metadata.
-- [ ] The research CLI can emit or export the Lab v1 view without exposing protected bodies.
-- [ ] Reports quantify oracle outcomes, replay equivalence, branch differences, evidence reuse, storage cost and execution phases without overclaiming.
-- [ ] Exact final commit passes full Go/race/Python/real-Guest gates and independent review.
+- [x] Three versioned workload families execute through the real Guest with exact task oracles.
+- [x] Each workload has direct/live capture, strict offline replay and at least one meaningful counterfactual treatment where semantically applicable.
+- [x] A canonical experiment plan and report schema bind Host commit, Guest artifact, corpus, treatment, evidence and prohibited claims.
+- [x] Lab v1 read schema is frozen, machine-validated and demonstrated by canonical fixtures.
+- [x] Lab v1 supports overview, run detail, timeline, branch DAG, workspace diff, comparison, object reference and bounded pagination/error metadata.
+- [x] The research CLI can emit or export the Lab v1 view without exposing protected bodies.
+- [x] Reports quantify oracle outcomes, replay equivalence, branch differences, evidence reuse, storage cost and execution phases without overclaiming.
+- [x] Exact final commit passes full Go/race/Python/real-Guest gates and independent review.
 
 ## 5. Track A — Freeze experiment and corpus contracts
 
@@ -128,21 +128,21 @@ For every family:
 
 ## 10. Track F — Fault and compatibility probes
 
-- [ ] Lab v1 producer rejects corrupt, missing, private or incompatible relations fail-closed.
-- [ ] Observation `required` failure invalidates evidence; `best_effort` remains visibly incomplete.
-- [ ] Missing privacy metadata remains private and sidecar-before-object publication remains race-safe.
-- [ ] Schema compatibility tests distinguish additive optional v1 changes from v2-required changes.
-- [ ] Crash/orphan and cross-process-writer limitations are measured and documented; do not add SQLite until evidence justifies it.
+- [x] Lab v1 producer rejects corrupt, missing, private or incompatible relations fail-closed.
+- [x] Observation `required` failure invalidates evidence; `best_effort` remains visibly incomplete.
+- [x] Missing privacy metadata remains private and sidecar-before-object publication remains race-safe.
+- [x] Schema compatibility tests distinguish additive optional v1 changes from v2-required changes.
+- [x] Crash/orphan and cross-process-writer limitations are measured and documented; do not add SQLite until evidence justifies it.
 
 ## 11. Track G — Report, closeout and next decision
 
-- [ ] Generate one private full report and one portable body-free summary from exact final source/artifact identities.
-- [ ] Write `docs/research/workload-evaluation-v1.md` with methodology, results, negative evidence and threats to validity.
-- [ ] Update product direction and Lab boundary without promoting Experimental work to Current.
-- [ ] Decide from measured evidence whether the next step is filesystem recovery hardening, SQLite metadata, more workloads or a minimal Lab service.
-- [ ] Full tests/vet/build/race/Python/real-Guest/docs/privacy gates pass on exact final candidate.
-- [ ] Independent final review reports no blocker or unresolved major finding.
-- [ ] Roadmap checkboxes and completion log are closed, signed commits are verified and remote/worktree state is exact.
+- [x] Generate one private full report and one portable body-free summary from exact final source/artifact identities.
+- [x] Write `docs/research/workload-evaluation-v1.md` with methodology, results, negative evidence and threats to validity.
+- [x] Update product direction and Lab boundary without promoting Experimental work to Current.
+- [x] Decide from measured evidence whether the next step is filesystem recovery hardening, SQLite metadata, more workloads or a minimal Lab service.
+- [x] Full tests/vet/build/race/Python/real-Guest/docs/privacy gates pass on exact final candidate.
+- [x] Independent final review reports no blocker or unresolved major finding.
+- [x] Roadmap checkboxes and completion log are closed, signed commits are verified and remote/worktree state is exact.
 
 ## 12. Global gates
 
@@ -188,6 +188,8 @@ A successful slice, signed checkpoint, long test, context boundary or pending We
 - 2026-08-12: Track C qualified three fixed mechanism-only workloads with Go-produced body-free descriptors, exact code/input/seed/result/workspace/treatment identities, tamper/privacy guards and explicit unsupported dispositions. A qualified local CPython/WASI artifact passed the complete race matrix: three canonical parents, two loopback live-capture/strict-offline pairs, two Host-owned counterfactual branches, two fresh deterministic planning Guests and two fresh seeded no-broker Guests. Full Go/race/vet/build/Python gates passed; bounded independent review returned PASS with no concrete blocker.
 - 2026-08-12: Track D froze deterministic row expansion, fail-closed lifecycle recording, strict private raw/portable measurement codecs and exact report rebuilding. The final signed Host source `4f786e5` ran the 12-row qualified Guest study under race: offered 12, started/completed 9, failed/timed-out 0, unsupported 3, replay-equivalent 4/4, branch-diverged 2/2, evidence complete/materialized 9/9 and LabStore reused puts 16/18. An independent process reproduced the exact report identity; 0700/0600 and portable privacy gates passed. Independent review found uint32 conservation overflow and private-root ancestor-symlink fail-open plus an unsupported-ref probe; all were reproduced, regression-tested, fixed and post-fix reviewed PASS.
 - 2026-08-12: Track E added a protected read-only CLI bridge from strict report plus matching measurement summary to all nine canonical Lab v1 documents. Missing timeline/workspace/branch/object relations remain empty or distinct private/unavailable marker identities under `evidence_incomplete`; measured storage totals preserve physical overhead and count bounds. Real Track D report projection emitted nine canonical documents without mutating inputs. CLI/direct-producer byte equality and existing fixture manifest tests keep Web on the same Go producer. Lab branch execution remains unavailable because the report lacks a sealed Host Plan, Grants, handlers and fresh Guest. Full Go/race/vet/build/Python gates passed; a transient mid-migration review blocker was closed and exact signed-snapshot post-fix review returned PASS.
+- 2026-08-12: Track F added deterministic child-process probes at privacy-sidecar publication, fsynced object staging and linked-before-cleanup boundaries, plus active-stage and eight-process publication races. Immutable object reads and final fail-private classification recovered at tested boundaries; orphan/live stages intentionally make aggregate traversal fail closed because no safe online ownership distinction exists. Fault probes passed repeated race runs and independent review. Closed-schema tests retain declared v1 optional-field semantics while requiring v2 for new wire fields. Evidence does not justify SQLite metadata; the next step is explicit filesystem writer ownership and offline orphan audit/repair.
+- 2026-08-12: Track G published the bounded mechanism-only report and synchronized Product/Lab status without promoting Experimental surfaces. Final signed source `5fa6945` passed the real 12-row Guest study under race: offered 12, started/completed 9, failed/timed-out 0, unsupported 3, replay-equivalent 4/4 (three offline rows plus the deterministic replay prerequisite), branch-diverged 2/2 and evidence materialized 9/9. Independent rebuild reproduced report `sha256:e3868e0d63102db05b6e252fe7a0d0955b181c0a8d49fc6584c88c09db6fbf63`; portable summary `sha256:1457c0adf9c385b0ee1eb14dbc0d21a6f61ac6f062b8b1e754ac9d1001c4d586` passed body/path/authority privacy gates. Full Go/race/vet/build/Python gates passed. Independent docs review blockers were corrected and exact post-fix review returned PASS.
 
 ## 16. Short prompt
 

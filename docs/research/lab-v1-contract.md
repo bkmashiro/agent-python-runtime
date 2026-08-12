@@ -116,7 +116,11 @@ Lab v1 is frozen as an exact strict wire contract. Because v1 consumers reject u
 - any field addition/removal, requiredness change, enum change, identity/order/pagination/privacy semantic change or relaxed unknown-field behavior requires v2;
 - producers and consumers must not maintain a second hand-written shape.
 
-After this freeze, Web must consume the Go producer's checked-in canonical fixtures. The earlier `pysolate.lab-draft.v0` shape is disposable and must not become a compatibility layer.
+After this freeze, Web must consume the Go producer's checked-in canonical fixtures. The `pysolate-research lab project` read command and Web fixtures both use `research/labview` canonical encoding; the command does not maintain a second JSON shape. The earlier `pysolate.lab-draft.v0` shape is disposable and must not become a compatibility layer.
+
+Evaluation-report projection is intentionally incomplete: the report does not carry timeline events, branch lineage, workspace entries, or the seven underlying typed object identities required by `run-detail.v1`. The bridge therefore emits empty observation/delta pages, `evidence_incomplete`, and a distinct canonical unavailable-relation marker digest for each required ref kind. Markers are always `privacy=private` and `availability=unavailable`; they identify the missing relation statement, not an artifact/result/workspace body and not execution authority.
+
+No Lab branch-execution command is added. An evaluation report cannot supply the explicitly sealed Host Plan, Grants, source handlers and fresh Guest required by `operator.RunBranch`. The existing `branch plan` command may publish a protected, exclusive manifest, but projection and all `lab project` commands remain read-only.
 
 ## Current, Experimental and Proposed
 

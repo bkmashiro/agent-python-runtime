@@ -157,6 +157,11 @@ func validateComparison(v RunComparison) error {
 	if !validHeader(v.Header, KindRunComparison) || !idRE.MatchString(v.ComparisonID) || !idRE.MatchString(v.LeftRunID) || !idRE.MatchString(v.RightRunID) || v.LeftRunID == v.RightRunID || !uniqueSorted(v.SameDimensions) || !uniqueSorted(v.DifferentDimensions) || !uniqueSorted(v.ReasonCodes) || v.CallDeltas == nil || v.WorkspaceDeltas == nil || !validPage(v.Page, len(v.CallDeltas)+len(v.WorkspaceDeltas)) {
 		return ErrInvalid
 	}
+	for _, reason := range v.ReasonCodes {
+		if !slices.Contains([]string{"no_difference", "capability_result_changed", "workspace_digest_changed", "status_changed", "evidence_incomplete"}, reason) {
+			return ErrInvalid
+		}
+	}
 	for _, d := range v.SameDimensions {
 		if slices.Contains(v.DifferentDimensions, d) || !validDimension(d) {
 			return ErrInvalid

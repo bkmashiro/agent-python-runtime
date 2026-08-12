@@ -17,7 +17,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/bkmashiro/agent-python-runtime/research/evaluationlab"
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
+	"github.com/bkmashiro/agent-python-runtime/research/labview"
 	"github.com/bkmashiro/agent-python-runtime/research/operator"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
@@ -67,6 +69,8 @@ func execute(arguments []string, stdout, stderr io.Writer) int {
 		failure = branchCommand(arguments[1:], stdout, stderr)
 	case "store":
 		failure = storeCommand(arguments[1:], stdout, stderr)
+	case "lab":
+		failure = labCommand(arguments[1:], stdout, stderr)
 	default:
 		failure = commandError{err: fmt.Errorf("unknown command %q", boundedLabel(arguments[0])), usage: true}
 	}
@@ -82,6 +86,68 @@ func execute(arguments []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	return 1
+}
+
+func labCommand(arguments []string, stdout, stderr io.Writer) commandError {
+	if len(arguments) == 0 || arguments[0] != "project" {
+		return commandError{err: errors.New("lab requires project"), usage: true}
+	}
+	flags := newFlagSet("lab project", stderr)
+	var reportPath, rowID, kindValue string
+	flags.StringVar(&reportPath, "report", "", "absolute protected canonical evaluation report path")
+	flags.StringVar(&rowID, "row", "", "exact evaluation row identity")
+	flags.StringVar(&kindValue, "kind", "", "Lab v1 document kind")
+	if err := flags.Parse(arguments[1:]); err != nil {
+		return commandError{err: err, usage: true}
+	}
+	if flags.NArg() != 0 || reportPath == "" || rowID == "" || kindValue == "" {
+		return commandError{err: errors.New("lab project requires -report, -row and -kind"), usage: true}
+	}
+	kind := labview.Kind(kindValue)
+	valid := false
+	for _, candidate := range labview.AllKinds() {
+		valid = valid || candidate == kind
+	}
+	if !valid {
+		return commandError{err: errors.New("unknown Lab v1 document kind"), usage: true}
+	}
+	raw, err := readProtectedFile(reportPath, labview.MaxDocumentBytes)
+	if err != nil {
+		return commandError{err: fmt.Errorf("read evaluation report: %w", err)}
+	}
+	set, err := evaluationlab.Project(raw, rowID)
+	if err != nil {
+		return commandError{err: fmt.Errorf("project evaluation report: %w", err)}
+	}
+	var value any
+	switch kind {
+	case labview.KindIndex:
+		value = set.Index
+	case labview.KindStudySummary:
+		value = set.Study
+	case labview.KindRunDetail:
+		value = set.Run
+	case labview.KindTimelinePage:
+		value = set.Timeline
+	case labview.KindBranchDAG:
+		value = set.DAG
+	case labview.KindWorkspaceDiff:
+		value = set.Workspace
+	case labview.KindRunComparison:
+		value = set.Comparison
+	case labview.KindObjectRef:
+		value = set.Refs
+	case labview.KindProblem:
+		value = set.Problem
+	}
+	encoded, _, err := labview.Encode(kind, value)
+	if err != nil {
+		return commandError{err: fmt.Errorf("encode Lab v1 document: %w", err)}
+	}
+	if err := writeBounded(stdout, encoded); err != nil {
+		return commandError{err: err}
+	}
+	return commandError{}
 }
 
 func inspectCommand(arguments []string, stdout, stderr io.Writer) commandError {
@@ -846,6 +912,7 @@ Usage:
   pysolate-research compare -left PATH -right PATH [-max-calls N] [-json]
   pysolate-research branch plan [flags]
   pysolate-research branch dag [flags]
+  pysolate-research lab project -report PATH -row ID -kind LAB_KIND
   pysolate-research store stats -root PATH [-json]
   pysolate-research store benchmark -root NEW_PATH [fixture flags] [-json]
 

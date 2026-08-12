@@ -10,7 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/research/evaluation"
+	"github.com/bkmashiro/agent-python-runtime/research/evaluationlab"
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
+	"github.com/bkmashiro/agent-python-runtime/research/labview"
 	"github.com/bkmashiro/agent-python-runtime/research/operator"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
@@ -414,6 +417,79 @@ func readManifestForTest(t *testing.T, path string) playback.BranchManifest {
 		t.Fatal(err)
 	}
 	return manifest
+}
+
+func TestLabProjectEmitsCanonicalGoDocumentsReadOnly(t *testing.T) {
+	reportPath, rowID := writeEvaluationReport(t)
+	before, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct, err := evaluationlab.Project(before, rowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range labview.AllKinds() {
+		var stdout, stderr bytes.Buffer
+		if code := execute([]string{"lab", "project", "-report", reportPath, "-row", rowID, "-kind", string(kind)}, &stdout, &stderr); code != 0 {
+			t.Fatalf("kind=%s code=%d stderr=%s", kind, code, stderr.String())
+		}
+		if stdout.Len() > maxOutputBytes {
+			t.Fatalf("kind=%s bytes=%d", kind, stdout.Len())
+		}
+		if _, _, err := labview.Decode(kind, stdout.Bytes()); err != nil {
+			t.Fatalf("kind=%s: %v", kind, err)
+		}
+		var value any
+		switch kind {
+		case labview.KindIndex:
+			value = direct.Index
+		case labview.KindStudySummary:
+			value = direct.Study
+		case labview.KindRunDetail:
+			value = direct.Run
+		case labview.KindTimelinePage:
+			value = direct.Timeline
+		case labview.KindBranchDAG:
+			value = direct.DAG
+		case labview.KindWorkspaceDiff:
+			value = direct.Workspace
+		case labview.KindRunComparison:
+			value = direct.Comparison
+		case labview.KindObjectRef:
+			value = direct.Refs
+		case labview.KindProblem:
+			value = direct.Problem
+		}
+		expected, _, err := labview.Encode(kind, value)
+		if err != nil || !bytes.Equal(stdout.Bytes(), expected) {
+			t.Fatalf("kind=%s producer drift err=%v", kind, err)
+		}
+	}
+	after, err := os.ReadFile(reportPath)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("lab project mutated report")
+	}
+}
+
+func writeEvaluationReport(t *testing.T) (string, string) {
+	t.Helper()
+	row := evaluation.Row{RowID: evaluation.RowIdentity("structured-source-v1", evaluation.TreatmentLiveCapture, 0), WorkloadID: "structured-source-v1", Treatment: evaluation.TreatmentLiveCapture, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true, CorpusSHA256: cliDigest('a'), PlanSHA256: cliDigest('b'), EvidenceRefs: []string{cliDigest('c')}}
+	other := evaluation.Row{RowID: evaluation.RowIdentity("bounded-planning-v1", evaluation.TreatmentOfflineReplay, 0), WorkloadID: "bounded-planning-v1", Treatment: evaluation.TreatmentOfflineReplay, Status: evaluation.RowCompleted, OracleStatus: evaluation.OraclePassed, EvidenceComplete: true, CorpusSHA256: cliDigest('a'), PlanSHA256: cliDigest('b'), EvidenceRefs: []string{cliDigest('d')}}
+	report := evaluation.Report{SchemaVersion: evaluation.ReportSchemaVersion, EvidenceClass: evaluation.EvidenceMechanismOnly, CorpusSHA256: cliDigest('a'), PlanSHA256: cliDigest('b'), ProhibitedClaims: evaluation.RequiredProhibitedClaims(), Summary: evaluation.Summary{Offered: 2, Completed: 2}, Rows: []evaluation.Row{row, other}}
+	body, _, err := evaluation.EncodeReport(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.Chmod(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "report.json")
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path, row.RowID
 }
 
 func cliDigest(character byte) string {

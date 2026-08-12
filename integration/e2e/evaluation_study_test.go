@@ -227,7 +227,11 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 }
 
 func TestEvaluationStudyOutputRequiresAbsoluteDeclaredPrivateRoot(t *testing.T) {
-	privateRoot := filepath.Join(t.TempDir(), ".artifacts-private")
+	tempRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateRoot := filepath.Join(tempRoot, ".artifacts-private")
 	if err := os.MkdirAll(privateRoot, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +259,11 @@ func TestEvaluationStudyOutputRequiresAbsoluteDeclaredPrivateRoot(t *testing.T) 
 }
 
 func TestPrivateStudyWriterRejectsSymlinkEscape(t *testing.T) {
-	privateRoot := filepath.Join(t.TempDir(), ".artifacts-private")
+	tempRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateRoot := filepath.Join(tempRoot, ".artifacts-private")
 	outside := filepath.Join(t.TempDir(), "outside")
 	if err := os.MkdirAll(privateRoot, 0700); err != nil {
 		t.Fatal(err)
@@ -276,6 +284,19 @@ func TestPrivateStudyWriterRejectsSymlinkEscape(t *testing.T) {
 	if err := writePrivateStudy(linkedRoot, filepath.Join(linkedRoot, "study"), map[string][]byte{"report.json": []byte("{}")}); err == nil {
 		t.Fatal("symlink private root accepted")
 	}
+	ancestorBase := t.TempDir()
+	realParent := filepath.Join(ancestorBase, "real")
+	if err := os.MkdirAll(filepath.Join(realParent, ".artifacts-private"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	linkedParent := filepath.Join(ancestorBase, "linked")
+	if err := os.Symlink(realParent, linkedParent); err != nil {
+		t.Fatal(err)
+	}
+	ancestorRoot := filepath.Join(linkedParent, ".artifacts-private")
+	if err := writePrivateStudy(ancestorRoot, filepath.Join(ancestorRoot, "study"), map[string][]byte{"report.json": []byte("{}")}); err == nil {
+		t.Fatal("symlink ancestor of private root accepted")
+	}
 }
 
 func validatePrivateOutput(privateRoot, output string) (string, error) {
@@ -283,6 +304,10 @@ func validatePrivateOutput(privateRoot, output string) (string, error) {
 		return "", fmt.Errorf("absolute private output paths required")
 	}
 	privateRoot, output = filepath.Clean(privateRoot), filepath.Clean(output)
+	resolvedRoot, err := filepath.EvalSymlinks(privateRoot)
+	if err != nil || resolvedRoot != privateRoot {
+		return "", fmt.Errorf("private root and all ancestors must be symlink-free")
+	}
 	relative, err := filepath.Rel(privateRoot, output)
 	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("evaluation output must be a child of the declared private root")

@@ -57,6 +57,10 @@ printf '%s' '{"run_id":"demo","code":"result = inputs[\"value\"] + 1","inputs":{
 
 The response is a bounded JSON object with status, result, Host receipts, metrics, an optional Python error, and—when a rooted workspace is configured—a Host-authored workspace disposition receipt.
 
+For a small, paper-oriented progression from pure computation to one and two
+curated Host source calls, see the runnable
+[controller-boundary examples](examples/controller-boundaries/README.md).
+
 ## Agent-intuitive stdlib and workspace tools
 
 The Agent does not submit import metadata. Configure the Host profile and workspace:

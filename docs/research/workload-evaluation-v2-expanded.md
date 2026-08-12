@@ -49,6 +49,15 @@ Portable identities:
 - study: `sha256:3f15fc04fb8488392e17e1d1bfcf36c156e00fa96acf24e3208232c258dcabf0`
 - summary: `sha256:1afb2aeb1faee021babd09df1fe2957f2c138ae31d9819b79dc7b2e0dbb1e96f`
 
+## Teaching examples
+
+A runnable three-step walkthrough is available under
+[`examples/controller-boundaries`](../../examples/controller-boundaries/README.md):
+pure local computation (`0` capability calls), one curated source (`1` call),
+and a two-source join (`2` calls). It is an explanatory surface for the
+mechanism and negative cases; the canonical study above remains the measured
+evidence object.
+
 ## Decision
 
 The documented real-model activation gate requires at least two multi-step workloads to reduce Host orchestration boundaries while negative controls remain interpretable. This cohort has one such reduction, not two. The gate is therefore **not met**.

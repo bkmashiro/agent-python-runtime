@@ -28,8 +28,9 @@ selector deliberately shows only three `all`-treatment benchmark runs—one per
 scenario. Trace events are grouped deterministically by mechanism; each group
 expands to the original sequence, outcomes, metadata, and digests.
 
-The Code tab shows a build-bound public excerpt from `runScenarioAllExecution`.
-It is explicitly labelled as source-bound, not runtime-captured Guest source.
+The Code tab shows the complete build-bound public `runScenarioAllExecution`
+function. It is explicitly labelled as source-bound, not runtime-captured Guest
+source.
 
 ## Evidence boundary
 

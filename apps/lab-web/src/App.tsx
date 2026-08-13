@@ -43,15 +43,6 @@ const mechanismPresentation: Record<MechanismGroup, { label: string; color: stri
   cancellation: { label: 'Cancellation', color: 'red', icon: Ban },
 };
 
-function sourceWindow(source: string, needle?: string) {
-  const lines = source.split('\n');
-  const match = needle ? lines.findIndex((line) => line.includes(`\"${needle}\"`)) : lines.findIndex((line) => line.includes('func runScenarioAllExecution'));
-  const center = match >= 0 ? match : 0;
-  const start = Math.max(0, center - 8);
-  const end = Math.min(lines.length, center + 12);
-  return { text: lines.slice(start, end).join('\n'), startLine: start + 1, endLine: end };
-}
-
 function runLabel(run: LabRun): string {
   return `${run.workload_id} · ${run.treatment}`;
 }
@@ -246,9 +237,9 @@ function Inspector({
   run: LabRun;
 }) {
   const [tab, setTab] = useState<string | null>('source');
-  const recordedSource = sourceWindow(acceptanceSource, node.rawEvent?.action);
-  const sourceText = recordedSource.text;
-  const sourceLabel = `Bundled public acceptance harness · runScenarioAllExecution excerpt ${recordedSource.startLine}–${recordedSource.endLine}`;
+  const sourceText = acceptanceSource;
+  const sourceLineCount = sourceText.split('\n').length;
+  const sourceLabel = `Bundled public acceptance harness · complete runScenarioAllExecution function · ${sourceLineCount} lines`;
 
   return (
     <section className="panel inspector-panel" aria-label="Selected operation inspector">

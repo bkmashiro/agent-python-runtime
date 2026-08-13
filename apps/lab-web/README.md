@@ -20,11 +20,11 @@ The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v
 
 The UI offers two deterministic projections of those recorded fields:
 
-1. **Timeline** shows each agent's recorded lifetime, child overlap, fan-out/join boundaries, and readable Host phase clusters;
-2. **Trace tree** preserves the original sequence-first reading mode and adds causal indentation for child spans;
-3. selecting an item in either view opens the matching agent source and highlights its recorded line range;
-4. the filesystem panel shows the matching workspace path changes;
-5. the Inspector explains the event in plain language before exposing raw action/span metadata.
+1. **Timeline** shows each agent's recorded lifetime, child overlap, fan-out/join boundaries, and Host events as points on recorded time;
+2. **Trace tree** preserves an expandable stage-first reading mode, keeps recorded sequence inside each stage, and shows explicit researcher/reviewer branches;
+3. selecting an item in either view opens the matching agent source when a recorded program range exists; the current dataset does not contain AST-node, statement, or interpreter-line execution spans;
+4. the filesystem panel shows one base-snapshot → child-final-snapshot path delta for each child execution; it does not reconstruct intermediate filesystem checkpoints;
+5. the Inspector explains the event in plain language before exposing raw action/span metadata, and explicitly marks ordinary LLM conversation data as unavailable in this Runtime acceptance dataset.
 
 The Host Go acceptance recorder is intentionally not part of the product surface.
 

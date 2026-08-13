@@ -21,8 +21,10 @@ test('switches runs and renders recorded multi-agent lanes', async ({ page }) =>
   await page.getByRole('tab', { name: 'Trace tree' }).click();
   const tree = page.getByRole('tree', { name: 'Causal trace tree' });
   await expect(tree).toBeVisible();
+  await expect(tree.getByText('researcher branch', { exact: true })).toBeVisible();
+  await expect(tree.getByText('reviewer branch', { exact: true })).toBeVisible();
   await expect(tree.getByText('researcher Python', { exact: true })).toBeVisible();
-  await expect(tree.getByText('Run finished', { exact: true })).toBeVisible();
+  await expect(tree.getByText('Wait, resume, and finish', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Timeline' }).click();
 });
 
@@ -36,10 +38,14 @@ test('links an agent span to Python and its workspace diff', async ({ page }) =>
   const pythonPanel = page.getByRole('tabpanel', { name: 'Python' });
   await expect(pythonPanel).toContainText('researcher.py · lines 1–4 · researcher');
   await expect(pythonPanel.locator('.source-line-linked')).toHaveCount(4);
-  await expect(pythonPanel).toContainText('RECORDED SOURCE LINK');
+  await expect(pythonPanel).toContainText('RECORDED PROGRAM RANGE');
+  await expect(pythonPanel).toContainText('AST node / statement execution was not recorded.');
   await expect(pythonPanel).toContainText('Path("/workspace/researcher.txt")');
   const filesystem = page.getByRole('region', { name: 'Filesystem changes' });
   await expect(filesystem).toContainText('workspace-researcher');
   await expect(filesystem).toContainText('researcher.txt');
+  await expect(filesystem).toContainText('Base snapshot → child final snapshot delta.');
+  await page.getByRole('tab', { name: 'LLM conversation' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'LLM conversation' })).toContainText('LLM conversation not recorded in this dataset');
   await expect(filesystem).toContainText('added');
 });

@@ -8,7 +8,7 @@ import { python } from '@codemirror/lang-python';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { Decoration, EditorView } from '@codemirror/view';
 import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
-import { type TraceAdapterEvent, type TraceNode, buildTraceNodes, buildCausalTraceTree, describeEvent } from './trace';
+import { type TraceAdapterEvent, type TraceNode, buildTraceNodes, buildExecutionStageTree, describeEvent } from './trace';
 import { type LabDataset, type LabRun, validateDataset } from './debuggerData';
 
 type RunSource = 'recorded';
@@ -67,7 +67,24 @@ function ExecutionPanel({ run, activeId, onSelect }: { run: LabRun; activeId: st
   const fanoutStart = run.trace.find((event) => event.action === 'fanout.select' && event.outcome === 'started')?.started_millis;
   const joinTime = run.trace.find((event) => event.action === 'fanout.select' && event.outcome === 'selected')?.started_millis;
   const phaseMarkers = [['Parent', run.trace.find((event) => event.action === 'stream.begin')?.started_millis], ['Fan-out', fanoutStart], ['Join + Host checks', joinTime], ['Resume', run.trace.find((event) => event.action === 'resume.fresh')?.started_millis]] as Array<[string, number | undefined]>;
-  const tree = useMemo(() => buildCausalTraceTree(run.trace as ReadonlyArray<TraceAdapterEvent>, 'observed'), [run.trace]);
+  const tree = useMemo(() => buildExecutionStageTree(run.trace as ReadonlyArray<TraceAdapterEvent>, 'observed'), [run.trace]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setExpanded(new Set(['stage:run', 'stage:parallel', 'stage:branch:researcher', 'stage:branch:reviewer']));
+  }, [run.run_id]);
+  const byID = useMemo(() => new Map(tree.map((node) => [node.id, node])), [tree]);
+  const childCount = useMemo(() => tree.reduce((counts, node) => {
+    if (node.parent) counts.set(node.parent, (counts.get(node.parent) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>()), [tree]);
+  const visibleTree = tree.filter((node) => {
+    let parent = node.parent;
+    while (parent) {
+      if (!expanded.has(parent)) return false;
+      parent = byID.get(parent)?.parent;
+    }
+    return true;
+  });
 
   return (
     <section className="panel trace-panel agent-timeline" aria-label="Execution trace">
@@ -122,10 +139,16 @@ function ExecutionPanel({ run, activeId, onSelect }: { run: LabRun; activeId: st
         </div>
         <div className="timeline-legend"><span><i className="legend-source" />Python lifetime</span><span><i className="legend-runtime" />Host event</span><span><i className="legend-fanout" />Fan-out</span><span><i className="legend-join" />Join</span></div>
       </> : <div className="trace-tree" role="tree" aria-label="Causal trace tree">
-        <div className="tree-note">Recorded sequence is preserved; indentation shows causal parentage.</div>
-        {tree.map((node) => {
-          const event = node.rawEvent!; const presentation = describeEvent(event);
-          return <button role="treeitem" aria-level={node.depth + 1} aria-selected={activeId === node.id} className={`trace-tree-row ${activeId === node.id ? 'active' : ''}`} style={{ paddingLeft: `${12 + node.depth * 22}px` }} key={node.id} onClick={() => onSelect(node.id)}><span className="tree-branch">{node.depth ? '└' : '●'}</span><span className="tree-sequence">{event.sequence}</span><span className="tree-copy"><strong>{presentation.label}</strong><small>{presentation.phase} · {event.agent_id} · {event.outcome}</small></span><code>{event.action}</code></button>;
+        <div className="tree-note">Recorded sequence stays inside expandable execution stages; child agents are explicit parallel branches.</div>
+        {visibleTree.map((node) => {
+          const event = node.rawEvent;
+          const presentation = event ? describeEvent(event) : null;
+          const hasChildren = (childCount.get(node.id) ?? 0) > 0;
+          return <div role="treeitem" aria-level={node.depth + 1} aria-expanded={hasChildren ? expanded.has(node.id) : undefined} aria-selected={activeId === node.id} className={`trace-tree-row ${node.synthetic ? 'synthetic-tree-row' : ''} ${activeId === node.id ? 'active' : ''}`} style={{ paddingLeft: `${12 + node.depth * 22}px` }} key={node.id}>
+            {hasChildren ? <button className="tree-toggle" aria-label={`${expanded.has(node.id) ? 'Collapse' : 'Expand'} ${node.title}`} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })}>{expanded.has(node.id) ? '▾' : '▸'}</button> : <span className="tree-branch">{node.depth ? '└' : '●'}</span>}
+            {event && <span className="tree-sequence">{event.sequence}</span>}
+            <button className="tree-select" disabled={!event} onClick={() => event && onSelect(node.id)}><span className="tree-copy"><strong>{presentation?.label ?? node.title}</strong><small>{event ? `${presentation?.phase} · ${event.agent_id} · ${event.outcome}` : node.summary}</small></span>{event && <code>{event.action}</code>}</button>
+          </div>;
         })}
       </div>}
     </section>
@@ -177,15 +200,16 @@ function Inspector({
         <Tabs.List>
           <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Python</Tabs.Tab>
           <Tabs.Tab value="context" leftSection={<Database size={14} />}>Scenario</Tabs.Tab>
+          <Tabs.Tab value="conversation" leftSection={<Bot size={14} />}>LLM conversation</Tabs.Tab>
           <Tabs.Tab value="io" leftSection={<Database size={14} />}>Input / output</Tabs.Tab>
           <Tabs.Tab value="details" leftSection={<Folder size={14} />}>Recorded event</Tabs.Tab>
           <Tabs.Tab value="checkpoint" leftSection={<Workflow size={14} />}>Checkpoint</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="source" className="tab-body source-tab">
           <div className="source-context">
-            <Text size="xs" c="dimmed">{sourceRange ? `${sourceFile} · lines ${sourceRange.start_line}–${sourceRange.end_line} · ${node.rawEvent?.agent_id}` : 'No Python source range recorded for this Runtime event'}</Text>
+            <div><Text size="xs" c="dimmed">{sourceRange ? `${sourceFile} · lines ${sourceRange.start_line}–${sourceRange.end_line} · ${node.rawEvent?.agent_id}` : 'No Python source range recorded for this Runtime event'}</Text>{sourceRange && <small className="recording-limit">Program execution range only — AST node / statement execution was not recorded.</small>}</div>
             <Badge color={sourceRange ? 'green' : 'gray'} variant="light">
-              {sourceRange ? 'RECORDED SOURCE LINK' : 'RUNTIME EVENT'}
+              {sourceRange ? 'RECORDED PROGRAM RANGE' : 'NO SOURCE SPAN'}
             </Badge>
           </div>
           <CodeMirror
@@ -210,6 +234,12 @@ function Inspector({
               has_observation: run.scenario.has_observation,
             }}
           />
+        </Tabs.Panel>
+        <Tabs.Panel value="conversation" className="tab-body absence-panel">
+          <Bot size={22} />
+          <Text fw={700} size="sm">LLM conversation not recorded in this dataset</Text>
+          <Text size="sm" c="dimmed">This public acceptance recording contains Guest Python, Host/runtime events, digests, and child workspace deltas. It does not contain provider turns, message roles, prompt bodies, model responses, tool-call bodies, or final answer text.</Text>
+          <Text size="xs" c="dimmed">A future Harness-owned conversation trace must correlate turns to these Runtime spans without putting provider semantics inside Pysolate.</Text>
         </Tabs.Panel>
         <Tabs.Panel value="io" className="tab-body io-grid">
           <JsonViewer label="Input digest" value={node.input} />
@@ -256,8 +286,9 @@ function FilesystemPanel({
       </div>
       <div className="checkpoint-bar">
         <div>
-          <Text size="xs" c="dimmed">Workspace</Text>
+          <Text size="xs" c="dimmed">Workspace evidence</Text>
           <Text fw={700} size="sm">{node.rawEvent?.workspace_id ?? 'No workspace linked'}</Text>
+          <small className="recording-limit">{node.rawEvent?.workspace_changes?.length ? 'Base snapshot → child final snapshot delta. No intermediate filesystem checkpoints were recorded.' : 'No path-level delta or complete filesystem checkpoint is attached to this event.'}</small>
         </div>
         <code>{node.rawEvent?.agent_id ?? '-'}</code>
       </div>

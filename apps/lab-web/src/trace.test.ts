@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTraceNodes, buildCausalTraceTree, describeEvent, collectCheckpointMetadata, type TraceAdapterEvent } from './trace';
+import { buildTraceNodes, buildCausalTraceTree, buildExecutionStageTree, describeEvent, collectCheckpointMetadata, type TraceAdapterEvent } from './trace';
 
 const trace: TraceAdapterEvent[] = [
   {
@@ -65,6 +65,10 @@ describe('trace adapter', () => {
     expect(tree[2].parent).toBe('event:2');
     expect(describeEvent(trace[0])).toMatchObject({ phase: 'Run', label: 'Run started' });
     expect(tree[2].title).toBe('Run finished');
+    const stages = buildExecutionStageTree(trace, 'observed');
+    expect(stages[0]).toMatchObject({ id: 'stage:run', synthetic: true });
+    expect(stages[1]).toMatchObject({ id: 'stage:parent', title: 'Parent execution' });
+    expect(stages.filter((node) => !node.synthetic).map((node) => node.rawEvent?.sequence)).toEqual([1, 2, 3]);
   });
 
   it('collects checkpoint identities from trace metadata', () => {

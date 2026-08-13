@@ -181,6 +181,37 @@ export function buildTraceNodes(events: ReadonlyArray<TraceAdapterEvent>, eviden
   return events.map((event) => eventNode(event, evidence, '', 0));
 }
 
+export function buildExecutionStageTree(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
+  if (!events.length) return [];
+  const root: TraceNode = { id: 'stage:run', depth: 0, kind: 'run', group: 'run-lifecycle', title: 'Recorded run', summary: `${events.length} events in recorded sequence`, evidence, duration: `${events.at(-1)?.ended_millis.toFixed(1) ?? '0.0'} ms`, params: {}, input: null, output: null, checkpoint: '', synthetic: true };
+  const nodes: TraceNode[] = [root];
+  const addStage = (id: string, title: string, stageEvents: TraceAdapterEvent[]) => {
+    if (!stageEvents.length) return;
+    nodes.push({ id, parent: root.id, depth: 1, kind: 'stage', group: mechanismGroup(stageEvents[0].type), title, summary: `${stageEvents.length} recorded events · seq ${stageEvents[0].sequence}–${stageEvents.at(-1)?.sequence}`, evidence, duration: `${stageEvents[0].started_millis.toFixed(1)}–${stageEvents.at(-1)?.ended_millis.toFixed(1)} ms`, params: {}, input: null, output: null, checkpoint: '', synthetic: true });
+    nodes.push(...stageEvents.map((event) => eventNode(event, evidence, id, 2)));
+  };
+  const fanoutIndex = events.findIndex((event) => event.action === 'fanout.select' && event.outcome === 'started');
+  const waitIndex = events.findIndex((event) => event.action === 'wait.begin');
+  const parallelEnd = events.findIndex((event) => event.action === 'fanout.selected_root');
+  addStage('stage:parent', 'Parent execution', events.slice(0, fanoutIndex < 0 ? events.length : fanoutIndex));
+  if (fanoutIndex >= 0) {
+    const parallelEvents = events.slice(fanoutIndex, parallelEnd < 0 ? waitIndex : parallelEnd + 1);
+    const stageID = 'stage:parallel';
+    nodes.push({ id: stageID, parent: root.id, depth: 1, kind: 'stage', group: 'fanout', title: 'Parallel child work', summary: 'researcher ∥ reviewer · recorded overlap', evidence, duration: `${parallelEvents[0].started_millis.toFixed(1)}–${parallelEvents.at(-1)?.ended_millis.toFixed(1)} ms`, params: {}, input: null, output: null, checkpoint: '', synthetic: true });
+    for (const event of parallelEvents) {
+      if (event.action === 'agent.execute') {
+        const branchID = `stage:branch:${event.agent_id}`;
+        nodes.push({ id: branchID, parent: stageID, depth: 2, kind: 'agent-branch', group: 'fanout', title: `${event.agent_id} branch`, summary: `${event.agent_role} · private workspace`, evidence, duration: `${event.started_millis.toFixed(1)}–${event.ended_millis.toFixed(1)} ms`, params: {}, input: null, output: null, checkpoint: '', synthetic: true });
+        nodes.push(eventNode(event, evidence, branchID, 3));
+      } else nodes.push(eventNode(event, evidence, stageID, 2));
+    }
+  }
+  const checksStart = parallelEnd >= 0 ? parallelEnd + 1 : fanoutIndex;
+  if (checksStart >= 0) addStage('stage:checks', 'Host checks and cache', events.slice(checksStart, waitIndex < 0 ? events.length : waitIndex));
+  if (waitIndex >= 0) addStage('stage:resume', 'Wait, resume, and finish', events.slice(waitIndex));
+  return nodes;
+}
+
 export function buildCausalTraceTree(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
   const bySpan = new Map(events.map((event) => [event.span_id, event]));
   return [...events].sort((a, b) => a.sequence - b.sequence).map((event) => {

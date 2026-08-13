@@ -85,7 +85,11 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 				return broker, err
 			},
 		}
-		runner, err := factory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
+		runConfig := runtimeconfig.DefaultRunConfig()
+		runConfig.Mechanisms = runtimeconfig.MechanismSet{
+			Streaming: true, StagedObservation: true, PrivateWorkspace: true,
+		}
+		runner, err := factory.New(context.Background(), artifact, runConfig)
 		if err != nil {
 			return streaming.RunResult{}, attempt.Ref(), broker, err
 		}

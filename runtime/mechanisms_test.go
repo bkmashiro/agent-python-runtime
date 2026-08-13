@@ -1,0 +1,147 @@
+package runtime_test
+
+import (
+	"encoding/json"
+	"errors"
+	"reflect"
+	"testing"
+
+	runtime "github.com/bkmashiro/agent-python-runtime/runtime"
+)
+
+func TestDefaultMechanismsAreAllOff(t *testing.T) {
+	config := runtime.DefaultRunConfig()
+	if err := config.Mechanisms.Validate(); err != nil {
+		t.Fatalf("default mechanisms: %v", err)
+	}
+	if got := config.Mechanisms.Enabled(); len(got) != 0 {
+		t.Fatalf("default enabled mechanisms = %v", got)
+	}
+}
+
+func TestMechanismDependenciesFailClosed(t *testing.T) {
+	tests := []struct {
+		name string
+		set  runtime.MechanismSet
+	}{
+		{"streaming without private workspace", runtime.MechanismSet{Streaming: true}},
+		{"staged observation without streaming", runtime.MechanismSet{StagedObservation: true}},
+		{"fanout without streaming", runtime.MechanismSet{ImmutableBranches: true, ChildFanout: true}},
+		{"fanout without branches", runtime.MechanismSet{Streaming: true, ChildFanout: true}},
+		{"function cache without branches", runtime.MechanismSet{FunctionCache: true}},
+		{"fresh reevaluation without agent functions", runtime.MechanismSet{FreshReevaluation: true}},
+		{"cow without prepared runtime", runtime.MechanismSet{MemoryCOW: true}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.set.Validate(); !errors.Is(err, runtime.ErrInvalidMechanismSet) {
+				t.Fatalf("Validate() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestSingleFlightDoesNotRequireDurableCache(t *testing.T) {
+	set := runtime.MechanismSet{SingleFlight: true}
+	if err := set.Validate(); err != nil {
+		t.Fatalf("retention-independent single-flight rejected: %v", err)
+	}
+}
+
+func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
+	requested := runtime.MechanismSet{
+		Streaming:         true,
+		StagedObservation: true,
+		ImmutableBranches: true,
+		ChildFanout:       true,
+		FunctionCache:     true,
+		SingleFlight:      true,
+		FreshReevaluation: true,
+		PreparedRuntime:   true,
+		MemoryCOW:         true,
+		PrivateWorkspace:  true,
+	}
+	available := requested
+	available.ChildFanout = false
+	available.MemoryCOW = false
+
+	resolved, evidence, err := runtime.ResolveMechanisms(requested, available)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.ChildFanout || resolved.MemoryCOW || !resolved.Streaming || !resolved.SingleFlight {
+		t.Fatalf("unexpected resolved set: %#v", resolved)
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatalf("evidence invalid: %v", err)
+	}
+	if got := evidence.Disposition(runtime.MechanismChildFanout); got != runtime.MechanismFallback {
+		t.Fatalf("child fanout disposition = %q", got)
+	}
+	if got := evidence.Disposition(runtime.MechanismMemoryCOW); got != runtime.MechanismFallback {
+		t.Fatalf("memory COW disposition = %q", got)
+	}
+	if got := evidence.Disposition(runtime.MechanismStreaming); got != runtime.MechanismSelected {
+		t.Fatalf("streaming disposition = %q", got)
+	}
+	if got := evidence.Disposition(runtime.MechanismPreparedRuntime); got != runtime.MechanismSelected {
+		t.Fatalf("prepared disposition = %q", got)
+	}
+
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(encoded, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sortedKeys(envelope), []string{"mechanisms", "schema_version"}) {
+		t.Fatalf("unexpected evidence fields: %v", sortedKeys(envelope))
+	}
+	if string(encoded) == "" || json.Valid(encoded) == false {
+		t.Fatalf("invalid evidence JSON: %s", encoded)
+	}
+}
+
+func TestMechanismEvidenceRejectsUnknownOrPrivateReason(t *testing.T) {
+	requested := runtime.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	_, evidence, err := runtime.ResolveMechanisms(requested, runtime.MechanismSet{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range evidence.Mechanisms {
+		if evidence.Mechanisms[index].Name == runtime.MechanismStreaming {
+			evidence.Mechanisms[index].Reason = "host path /Users/example/private was unavailable"
+		}
+	}
+	if err := evidence.Validate(); !errors.Is(err, runtime.ErrInvalidMechanismEvidence) {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+func TestMechanismSetDoesNotMutateCapabilityGrants(t *testing.T) {
+	config := runtime.DefaultRunConfig()
+	config.CapabilityGrants["read"] = runtime.CapabilityGrant{Name: "read"}
+	before := map[string]runtime.CapabilityGrant{"read": {Name: "read"}}
+	config.Mechanisms = runtime.MechanismSet{Streaming: true, PrivateWorkspace: true, StagedObservation: true}
+	if err := config.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(config.CapabilityGrants, before) {
+		t.Fatalf("mechanisms widened or changed grants: %#v", config.CapabilityGrants)
+	}
+}
+
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
+}

@@ -28,6 +28,9 @@ type RunConfig struct {
 	// unsupported workload classes before Guest execution.
 	DeterministicVerification *DeterministicVerificationProfile
 	CapabilityGrants          map[string]CapabilityGrant
+	// Mechanisms is an internal Host-owned optional mechanism set. Its zero value
+	// preserves ordinary fresh execution and does not alter capability grants.
+	Mechanisms MechanismSet
 }
 
 // CapabilityGrant is deliberately opaque until a typed capability is added.
@@ -47,6 +50,9 @@ func DefaultRunConfig() RunConfig {
 }
 
 func (config RunConfig) Validate() error {
+	if err := config.Mechanisms.Validate(); err != nil {
+		return err
+	}
 	if config.Timeout <= 0 || config.Timeout > hardMaxTimeout {
 		return errors.New("timeout must be positive and at most five minutes")
 	}

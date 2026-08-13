@@ -1,6 +1,6 @@
 # Megagoal: build the Full Composable Agent Runtime
 
-Status: **Approved successor; implementation starts only through an explicit Hermes `/goal`.**
+Status: **Executing; deterministic fixture phase active.**
 Date: 2026-08-13
 Owner: Yuzhe
 Execution repository: `~/projects/agent-python-runtime`
@@ -245,15 +245,15 @@ substrate is still ambiguous.
 
 **Promise:** Optional mechanisms are explicit, explainable, and removable.
 
-- [ ] Reinspect baseline source/history and reconcile stale roadmap claims.
-- [ ] Define a narrow internal feature-set/config object without freezing public
+- [x] Reinspect baseline source/history and reconcile stale roadmap claims.
+- [x] Define a narrow internal feature-set/config object without freezing public
   CLI names.
-- [ ] Define typed selected/fallback/deferred mechanism evidence with no private
+- [x] Define typed selected/fallback/deferred mechanism evidence with no private
   bodies or Host paths.
-- [ ] Reject invalid feature combinations before Guest startup.
-- [ ] Add baseline and pairwise off/on tests for currently implemented streaming,
+- [x] Reject invalid feature combinations before Guest startup.
+- [x] Add baseline and pairwise off/on tests for currently implemented streaming,
   private attempt, staged-read, and Broker boundaries.
-- [ ] Prove optimizations cannot widen a capability Plan.
+- [x] Prove optimizations cannot widen a capability Plan.
 
 **Exit gate:** fresh execution with all optional mechanisms disabled remains green;
 selected/fallback modes are machine-readable and authority-equivalent.
@@ -567,8 +567,9 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 0 — rediscover live baseline, freeze the internal feature-set/evidence seam,
-and add the first off-state/invalid-combination RED tests.`
+`Track 1 — freeze the versioned staged-observation identity, bind preflight
+records to final source identity, and add one RED mismatch table spanning every
+identity dimension.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -583,6 +584,14 @@ Add entries here before each track implementation.
   the simplest solution for each mechanism first. If cost, architecture conflict,
   or cross-mechanism harm is material, record evidence as `Deferred for joint
   review` and continue independent work. Real external writes remain excluded.
+- 2026-08-13 — Track 0 / `Proceed minimal`: the narrowest seam is a Host-owned
+  zero-default `runtime.MechanismSet` inside `RunConfig`, plus versioned
+  `MechanismEvidence`. Dependencies are validated before Wazero parses the
+  artifact; unavailable requested modes resolve to stable `fallback/unavailable`;
+  mode records contain no paths or data bodies. `single_flight` intentionally has
+  no cache dependency. Streaming now requires explicit streaming + private
+  workspace selection, while the all-off path remains the default. Capability
+  grants are neither derived nor mutated by mechanism resolution.
 
 ## Completion log
 
@@ -592,6 +601,12 @@ Do not mark umbrella tracks complete from implementation presence alone.
 
 - 2026-08-13 — Created and approved successor Megagoal from clean baseline
   `e3715fc7`. No successor implementation started.
+- 2026-08-13 — Track 0 RED/GREEN: added zero-default mechanism selection,
+  dependency validation, stable selected/fallback/off evidence, pre-artifact
+  rejection, explicit streaming enablement, and grant non-widening coverage.
+  Focused `runtime`, `runtime/streaming`, `runtime/engine/wazero`, and integration
+  packages passed; race passed for the three changed Runtime packages; next is
+  Track 1 identity.
 
 ## Final reporting contract
 

@@ -203,6 +203,9 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 // arrive. It is an internal streaming seam; Agent source still enters only
 // through the final validated request.
 func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-chan string) ([]byte, error) {
+	if !engine.config.Mechanisms.Streaming {
+		return nil, runtimeconfig.ErrMechanismDisabled
+	}
 	return engine.runWithPrepares(ctx, request, prepares, true)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,6 +13,34 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
+
+func TestFactoryRejectsInvalidMechanismsBeforeArtifactParsing(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true}
+	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
+	if !errors.Is(err, runtimeconfig.ErrInvalidMechanismSet) {
+		t.Fatalf("factory error = %v", err)
+	}
+}
+
+func TestRunStreamRequiresSelectedMechanism(t *testing.T) {
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), []byte{0, 97, 115, 109, 1, 0, 0, 0}, runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	prepares := make(chan string)
+	close(prepares)
+	streamRunner, ok := runner.(interface {
+		RunStream(context.Context, []byte, <-chan string) ([]byte, error)
+	})
+	if !ok {
+		t.Fatal("runner lacks stream seam")
+	}
+	if _, err := streamRunner.RunStream(context.Background(), []byte(`{}`), prepares); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+		t.Fatalf("RunStream() error = %v", err)
+	}
+}
 
 func TestFactoryIsFreshOnly(t *testing.T) {
 	runner, err := (wazeroengine.Factory{}).New(context.Background(), []byte{0, 97, 115, 109, 1, 0, 0, 0}, runtimeconfig.DefaultRunConfig())

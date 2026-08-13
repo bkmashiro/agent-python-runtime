@@ -33,6 +33,26 @@ cache in the initial scope.
 The cache is local to one trusted Host. Its entries are private to the configured
 user/project partition even when identical bytes exist elsewhere.
 
+## Orthogonality and off-switches
+
+Content-addressed functions are optional. Disabling the local cache executes the
+same admitted invocation in a normal fresh Guest. Disabling single-flight causes
+concurrent callers to execute independently. Neither fallback may widen
+authority, change declared outputs, fabricate capability receipts, or require a
+persistent interpreter.
+
+The initial function cache does not require private workspace attempts,
+playback, external-write support, prepared runtime, memory COW, Lab, or a second
+backend. Conversely, those mechanisms must remain usable without the function
+cache when their own dependencies are satisfied.
+
+Workflow re-evaluation is a separate optional consumer of explicit node
+identities and local completed-output lookup. It may use the function cache in
+the initial implementation, but enabling ordinary function caching must not
+silently turn an Agent Run into a durable workflow. The complete mechanism
+matrix and fallback requirements are maintained in
+[proof-first-authority-roadmap.md](proof-first-authority-roadmap.md).
+
 ## Initial execution contract
 
 A cacheable invocation is identified by a canonical digest over at least:

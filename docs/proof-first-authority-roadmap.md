@@ -1,271 +1,456 @@
-# Proof-first authority-lifecycle roadmap
+# Pysolate composable mechanism roadmap
 
-Status: **Active planning roadmap; implementation not started by this document.**
+Status: **Active source-of-truth roadmap; Proposed work is not Current.**
 Date: 2026-08-13
 
-This roadmap supersedes the post-demo phase ordering in
-[product-maturity-and-roadmap.md](product-maturity-and-roadmap.md). That file's
-source-pinned capability assessment remains historical context. Current Runtime
-contracts remain governed by [product-direction.md](product-direction.md); the
-new positioning decision is [authority-lifecycle-positioning.md](authority-lifecycle-positioning.md).
+This roadmap replaces the earlier linear effect-first ordering. It preserves the
+authority-lifecycle correctness direction while adding the content-addressed
+Agent Function hypothesis as an independent, optional feature track.
 
-## Goal
+Related decisions:
 
-Demonstrate one falsifiable, end-to-end property that adjacent code-mode
-products do not make unique merely by offering sandboxed code, a call ledger,
-approval replay, or compensation:
+- [product direction](product-direction.md)
+- [authority-lifecycle positioning](authority-lifecycle-positioning.md)
+- [content-addressed Agent Functions](content-addressed-agent-functions.md)
+- [Cloudflare comparison](research/cloudflare-code-mode-comparison.md)
 
-> One Agent program executes with immutable identity-bound authority, private
-> attempt state, explicit external-effect uncertainty, and a Host-verified
-> terminal disposition across independent state planes.
+## Product objective
 
-This remains a correctness foundation, not the only candidate differentiator.
-The complementary feature hypothesis is that explicit authority and effect
-boundaries can make selected Agent computations safely reusable across fresh
-Runs on one Host. See
-[content-addressed-agent-functions.md](content-addressed-agent-functions.md).
-
-## Revised phase ordering
-
-Do not treat the numbered effect phases below as an automatic implementation
-queue. Before broad effect-plane work, test a smaller composition:
-
-1. define a binary `cacheable | not_cacheable` whole-Run/function contract;
-2. implement one-Host private memoization and concurrent single-flight;
-3. split one synchronous workflow into live I/O and explicit cacheable nodes;
-4. destroy the Guest at a wait/I/O boundary, then use a fresh Guest to
-   re-evaluate through unchanged cached nodes;
-5. change one live observation and prove that only downstream nodes recompute;
-6. measure cold/warm, cache materialization, prepared-runtime, and optional
-   memory-COW costs;
-7. retain private workspace attempts and detailed effect operation modeling as
-   the later commit/effect correctness path, not as the sole product identity.
-
-Initial scope is one trusted Host. No cross-machine synchronization,
-cross-tenant result sharing, arbitrary-region JIT, or Python heap checkpoint is
-required. "JIT" initially means measured online retention, single-flight,
-explicit-node fusion, and prepared-profile placement.
-
-## Value filter
-
-Proceed only with slices that upgrade at least one of:
-
-- **Safety:** less ambient or accidental authority;
-- **Truth:** uncertainty and terminal state are represented honestly;
-- **Verification:** an independent checker can reject tampering or drift;
-- **Portability:** the authority contract survives a backend change;
-- **Product value:** the target workflow becomes easier to review or recover.
-
-Do not add capabilities, UI, storage machinery, or abstractions solely to appear
-feature-complete against Cloudflare.
-
-## Frozen boundaries
-
-- No shell, arbitrary executable, generic HTTP, Guest credential, package
-  installer, or ambient Host filesystem.
-- Ordinary Python computation and mounted filesystem operations remain local;
-  do not convert them into fake Broker calls.
-- All authority-bearing external effects cross a typed Host boundary.
-- Compensation is never called rollback without a stronger provider-specific
-  proof.
-- Playback never redispatches an already-applied external effect.
-- Ambiguous outcome blocks blind retry.
-- Workspace, interpreter, authority, scratch, effect, and evidence dispositions
-  remain independent.
-- No real provider, paid service, deployment, or credential is required for the
-  first proof.
-- Lab UI follows recorded runtime truth; it does not lead contract design.
-
-## North-star acceptance workflow
-
-A deterministic fake provider must support:
-
-1. accepted mutation with successful response;
-2. rejection before dispatch;
-3. failure before acceptance;
-4. accepted mutation followed by response loss;
-5. readback reporting applied, absent, or still unknown;
-6. explicit forward compensation where qualified.
-
-The full test must prove:
+Pysolate should remain useful as a minimal fresh Python runtime, while optional
+mechanisms compose when a Harness needs stronger state, reuse, effect, evidence,
+or density behavior:
 
 ```text
-freeze authority + base revision
-→ create private attempt
-→ stage exact immutable intent
-→ journal before dispatch
-→ inject accepted-but-response-lost
-→ persist ambiguous outcome
-→ deny blind retry
-→ reconcile by stable operation identity
-→ commit/discard/freeze workspace independently
-→ verify the complete terminal vector offline
+stable minimal Run contract
+├─ optional immutable workspace roots / branches
+├─ optional local content-addressed result reuse
+├─ optional workflow re-evaluation at explicit I/O boundaries
+├─ optional private workspace attempts and publication
+├─ optional qualified external-write lifecycle
+├─ optional playback and independent verification
+├─ optional prepared-runtime / memory-COW acceleration
+└─ optional Lab projection and second-backend conformance
 ```
 
-## Phase 0 — truth reset and contract freeze
+The roadmap succeeds only if disabling an optional mechanism restores a clear,
+tested fallback rather than changing unrelated semantics or making the Runtime
+unusable.
 
-**Purpose:** prevent implementation from outrunning the claim.
+## Always-on substrate versus optional mechanisms
 
-Deliverables:
+### Always-on semantic substrate
 
-- [x] retire `pysolate.fs`; use ordinary Python filesystem APIs;
-- [x] source-reviewed Cloudflare comparison matrix;
-- [x] authority-lifecycle positioning ADR;
-- [x] this proof-first roadmap;
-- [ ] define strict versioned schemas for Run terminal vector, workspace attempt,
-  EffectIntent, operation, attempt, approval, reconciliation, and compensation;
-- [ ] define Current/Proposed mappings to exact Go packages and symbols.
+These are Pysolate's baseline contract, not feature flags:
 
-Exit gate:
+- every Run receives a fresh Guest instance and retires it after execution;
+- no ambient shell, subprocess, network, credential, package installer, or Host
+  filesystem authority;
+- ordinary Python and admitted mounted filesystem operations remain ordinary
+  Python/WASI operations;
+- authority-bearing external operations cross the typed Host Broker;
+- artifact/profile, source/input, limits, workspace binding, and authority plan
+  are Host-selected before Guest startup;
+- `/tmp` is per-Run scratch and never continuation state;
+- interpreter state, workspace state, authority, external effects, and evidence
+  have independent identities and dispositions;
+- truthful fallback modes are named explicitly; an optimization miss or disabled
+  mechanism never silently broadens authority.
 
-- schemas reject unknown fields and cross-plane contradictions;
-- docs make no transactional/effect claim unsupported by tests.
+### Optional mechanism registry
 
-Stop/reframe signal: the model cannot represent partial or ambiguous outcomes
-without one overloaded success/status field.
+| Mechanism | Initial toggle concept | May operate without | Hard dependency | Required fallback when off |
+|---|---|---|---|---|
+| Persistent workspace | `workspace.mode=none|direct` | cache, playback, effects, COW | none | no `/workspace`; structured input/output only |
+| Immutable workspace roots / branches | `workspace.versioning=off|immutable` | result cache, memory COW, effects | persistent workspace | direct rooted workspace |
+| Private workspace attempt | `workspace.write_mode=direct|attempt` | result cache, playback, memory COW | persistent workspace | current explicit direct-write semantics |
+| Local result cache | `function_cache=off|local` | memory COW, attempts, effects, playback | canonical invocation identity; immutable declared inputs | execute a fresh Guest normally |
+| Concurrent single-flight | `singleflight=off|on` | durable result retention, memory COW, attempts | canonical invocation identity | execute each request independently |
+| Workflow re-evaluation | `workflow_resume=off|reevaluate` | memory COW, external writes, Lab | explicit workflow nodes; immutable completed outputs; local lookup | Harness starts a new ordinary Run from explicit state |
+| Live-read capture | per-capability `capture=off|on` | result cache, workspace attempts | typed capability and protected body storage | dispatch current live read normally |
+| Playback | `playback=off|strict` | result cache, memory COW, attempts | matching captured capability results and frozen identities | live execution or explicit refusal |
+| External-write lifecycle | per-capability `effect_mode=deny|qualified` | cache, playback, immutable branches, memory COW | typed qualified adapter | write denied; read/local compute unaffected |
+| Approval/compensation | per-adapter policies | cache, memory COW, workflow re-evaluation | qualified external-write lifecycle | deny or explicitly configured direct policy; never fake rollback |
+| Prepared runtime | `prepared_runtime=off|pool` | every semantic mechanism | compatible backend/artifact | ordinary fresh instantiation |
+| Memory COW | `memory_cow=off|local` | workspace COW, cache, workflow re-evaluation | prepared runtime and qualified platform | private fresh memory per instance |
+| Independent verifier | `verification=off|record` | cache, COW, Lab | versioned records for claims being verified | bounded ordinary receipts/response |
+| Lab projection | `lab=off|recorded` | all performance mechanisms | Runtime records for displayed fields | no Lab artifact |
+| Second backend | Host backend selection | cache, COW, Lab | shared baseline contract | Wazero remains supported path |
 
-## Phase 1 — private workspace attempts
+These are conceptual configuration seams. Exact CLI/config fields require an ADR
+and tests before becoming public API.
 
-**Purpose:** isolate tentative Guest writes from the durable workspace.
+## Composition rules
 
-Required behavior:
+### Rule 1: optimizations cannot change semantic identity
 
-- immutable base workspace revision identity;
-- private per-execution attempt root;
-- ordinary Python sees the attempt as `/workspace`;
-- commit publishes one new revision atomically at the implemented boundary;
-- discard removes attempt state without changing the base;
-- freeze preserves protected evidence for conflict/ambiguity review;
-- conflict rejects commit if the expected base changed;
-- current direct-write mode remains explicit and backward compatible until a
-  migration decision is made.
+For the same admitted invocation, enabling prepared runtime, memory COW,
+single-flight, or a cache hit must not change:
 
-Tests:
+- structured result and output schema;
+- derived filesystem root when one exists;
+- capability/effect behavior;
+- authority plan;
+- failure classification, except for explicitly reported cache/optimizer
+  evidence;
+- privacy partition.
 
-- success, Guest exception, timeout, cancellation, trap, quota failure;
-- base unchanged after discard;
-- no partial publication;
-- stale-base conflict;
-- `/tmp` never promoted;
-- Host-path and symlink denial;
-- Capsule and manifest identity binding.
+### Rule 2: storage mechanisms do not imply execution mechanisms
 
-Exit gate: a real Guest contaminates the attempt under every terminal path and
-an independent base snapshot remains unchanged until explicit commit.
+Immutable workspace roots and branch lineage are portable storage semantics.
+They must not require Linux memory COW, a warm worker, a live Guest, or a pinned
+Sandbox. Memory COW is a local acceleration only.
 
-Stop/reframe signal: copy/overlay cost dominates the bounded target workflow or
-cannot provide atomic publication under the current storage model.
+### Rule 3: caching does not imply effects or playback
 
-## Phase 2 — effect operation/attempt truth
+A cacheable function has no live Host call inside its boundary. Result caching
+must not synthesize a capability receipt or claim that a live read occurred.
+Live-read capture/playback is a separate capability mechanism.
 
-**Purpose:** represent external effects independently from Guest return status.
+### Rule 4: playback does not imply memoization
 
-Required model:
+Strict playback may re-execute the complete fresh Guest with captured capability
+results while function caching is disabled. Conversely, a cacheable function may
+use only immutable input roots and require no capability tape.
 
-- immutable `EffectIntent` with canonical digest;
-- stable workflow, step, operation, and provider request identities;
-- separate logical operation and physical dispatch attempt;
-- journal-before-dispatch transition;
-- effect class: `read_only | reversible | compensatable | irreversible | unknown`;
-- commit policy: `DENY | AUTO_COMMIT | AGENT_COMMIT_REQUIRED | USER_APPROVAL_REQUIRED`;
-- exact terminal states including `not_dispatched`, `rejected`, `applied`,
-  `failed`, `ambiguous`, `reconciled_applied`, `reconciled_absent`, and
-  `reconciliation_required`;
-- unknown writes denied by default.
+### Rule 5: attempts do not imply content-addressed functions
 
-Use an in-process deterministic fake provider. Do not add a real SaaS adapter.
+A normal non-cacheable Run may execute inside a private workspace attempt. A
+cacheable function may instead emit an immutable derived-output root without
+publishing it to a durable workspace.
 
-Exit gate: accepted-but-response-lost produces one applied provider mutation,
-one ambiguous Host attempt, and no automatic second dispatch.
+### Rule 6: effects terminate at explicit boundaries
 
-Stop/reframe signal: operation identity cannot be kept stable across Guest,
-Host, journal, and provider readback.
+External-write lifecycle is optional because writes may remain denied. When a
+qualified write adapter is enabled, no cache, replay, workflow resume, or COW
+optimization may suppress, duplicate, or reinterpret its dispatch.
 
-## Phase 3 — approval and compensation
+### Rule 7: disabled means absent, not emulated
 
-**Purpose:** bind authorization and recovery to exact immutable state.
+- cache off means execute; it does not use an undocumented cache;
+- playback off means live call or refusal; it does not return stale capture;
+- COW off means private allocation; it does not weaken isolation;
+- attempts off means documented direct write; it does not claim rollback;
+- verifier off means no independent-verification claim;
+- Lab off means no projection side effects.
 
-Required behavior:
+## Recommended product profiles
 
-- Agent commit request is distinct from human approval;
-- human approval originates outside Guest/Agent authority;
-- approval binds intent digest, operation identity, policy version, destination
-  scope, expiry, and one authorized transition;
-- staging Run cannot also possess later commit authority;
-- compensation is a new forward attempt with its own identity and evidence;
-- failed/partial compensation remains visible;
-- provider drift or changed target state refuses unsafe compensation.
+Profiles are test fixtures and examples, not mandatory bundles.
 
-Exit gate: stale, altered, replayed, wrong-user, wrong-policy, and expired
-approvals all fail without dispatch; compensation never rewrites historical
-truth to “never happened.”
+### Minimal fresh execution
 
-Stop/reframe signal: the adapter cannot expose a stable readback or qualified
-compensation contract.
+```text
+workspace optional/direct
+cache off
+playback off
+external writes denied
+prepared runtime off
+Lab off
+```
 
-## Phase 4 — terminal-vector verifier
+Purpose: preserve the smallest understandable Pysolate contract.
 
-**Purpose:** make claims independently checkable rather than UI assertions.
+### Dense local compute
 
-Verifier inputs must bind:
+```text
+cache off or local
+single-flight optional
+prepared runtime pool
+memory COW when supported
+external writes denied
+```
 
-- source/input/schema;
-- artifact/manifest/profile;
-- capability plan/spec/grant/handler/policy;
-- base and attempt workspace identities;
-- intent/operation/attempt/approval identities;
-- provider evidence and reconciliation result;
-- terminal interpreter/authority/workspace/effect/evidence dispositions;
-- final response and committed workspace revision.
+Purpose: measure many short fresh Python Runs without requiring workflow or
+effect machinery.
 
-Negative tests mutate each identity, reorder transitions, omit ambiguity, invent
-rollback, reuse stale authority, and substitute another workspace base.
+### Local content-addressed functions
 
-Exit gate: offline verification accepts the canonical north-star record and
-rejects every bounded corruption fixture.
+```text
+immutable declared inputs
+local private cache
+single-flight on
+prepared runtime optional
+memory COW optional
+external writes denied inside functions
+```
 
-Stop/reframe signal: verification depends on mutable live Host state not captured
-or referenced by a stable protected identity.
+Purpose: eliminate repeated pure compute on one Host.
 
-## Phase 5 — backend-neutral conformance
+### React-like workflow re-evaluation
 
-**Purpose:** determine whether authority semantics are independent of
-CPython/WASI rather than merely claimed to be.
+```text
+explicit workflow nodes
+local lookup of completed cacheable nodes
+live I/O only at typed boundaries
+Guest destroyed while waiting
+fresh Guest re-evaluates to next live boundary
+```
 
-Start with a deliberately small second executor or adapter. Freeze source-level
-workload, capability spec, policy, authority, provider, and oracle. Compare:
+Purpose: release instances during waits without interpreter checkpointing.
 
-- plan and grant interpretation;
-- operation/attempt transitions;
-- denial and stale-authority behavior;
-- workspace/effect terminal vectors;
-- evidence accepted by the same verifier.
+### Strict playback verification
 
-Do not build a general Computer backend. Compatibility expansion is not the
-phase goal.
+```text
+function cache off
+strict captured read tape
+fresh full Guest re-execution
+matching frozen artifact/input/workspace identities
+```
 
-Exit gate: both backends pass one shared conformance suite and produce verifier-
-accepted records without gaining undeclared authority.
+Purpose: prove playback remains independent from memoization.
 
-Stop/reframe signal: backend adaptation requires ambient facilities that bypass
-the Broker or changes the meaning of a capability/effect state.
+### Qualified commit workflow
 
-## Phase 6 — evidence-led Lab update
+```text
+cache optional for prior pure nodes
+workspace attempt optional but recommended
+qualified external-write adapter
+operation/attempt journal
+approval/reconciliation as adapter policy requires
+```
 
-Only after Phases 1–4 are real:
+Purpose: keep eventual external commit truthful without making writes a
+prerequisite for local compute.
 
-- visualize operation versus attempt;
-- show workspace and effect dispositions independently;
-- expose ambiguity and reconciliation without implying failure/success;
-- label compensation honestly;
-- link every view to verifier-backed records;
-- retain protected/private body boundaries.
+## Track A — baseline and orthogonality harness
 
-No speculative trace node may be presented as captured runtime truth.
+**Promise:** every optional mechanism has an explicit fallback and combination
+tests prevent hidden coupling.
+
+- [x] ordinary Python filesystem API; no `pysolate.fs` facade;
+- [x] fresh Guest and typed Host authority baseline documented;
+- [x] Cloudflare comparison and Current/Proposed reset;
+- [x] mechanism registry and composition rules in this roadmap;
+- [ ] define an internal feature-set/config object without committing public CLI
+  names;
+- [ ] create pairwise configuration tests for each mechanism and its nearest
+  dependency/fallback;
+- [ ] create negative tests proving optimizations cannot widen Broker authority;
+- [ ] expose selected mode names in Host evidence so behavior is explainable.
+
+Definition of Done:
+
+- Minimal fresh execution passes with every optional mechanism disabled;
+- each optional mechanism passes alone with only its declared hard dependencies;
+- invalid combinations fail before Guest startup with a precise error;
+- disabling an optimization does not change result/effect semantics.
+
+## Track B — local content-addressed Agent Functions
+
+**Promise:** selected explicit Python computations can be safely reused on one
+Host without requiring memory COW, workflow resume, playback, workspace
+transactions, or external-write support.
+
+- [ ] freeze binary `cacheable | not_cacheable` admission contract;
+- [ ] define canonical invocation identity over source/function, artifact/profile,
+  admitted import closure, structured inputs, immutable filesystem roots,
+  deterministic settings, output schema, privacy partition, and policy epoch;
+- [ ] implement whole-Run local private cache behind an internal toggle;
+- [ ] implement concurrent single-flight separately from durable retention;
+- [ ] fail closed if a cacheable invocation attempts a Host call, undeclared
+  filesystem read, shared write, clock/random access, or dynamic import;
+- [ ] support eviction followed by safe recomputation;
+- [ ] measure cold execution, cache lookup/materialization, single-flight, storage
+  amplification, and break-even points.
+
+Definition of Done:
+
+- cache off and cache on return identical semantic outputs;
+- concurrent identical requests execute once only when single-flight is enabled;
+- disabling retention while keeping single-flight works;
+- private partitions do not share lookup existence or results;
+- no external effect is skipped or fabricated by a cache hit.
+
+Stop/reframe if lookup/materialization dominates bounded workloads, conservative
+admission excludes nearly all useful work, or repeated pure computation is rare.
+
+## Track C — explicit workflow re-evaluation
+
+**Promise:** a waiting workflow may release its Guest and later reach the next
+live I/O boundary through cached explicit nodes, without restoring Python state.
+
+Hard dependencies: explicit Harness workflow node identity and immutable
+completed outputs. Initial implementation uses Track B local lookup. It has no
+dependency on prepared runtime, memory COW, external writes, Lab, or Python frame
+checkpointing.
+
+- [ ] define a synchronous workflow skeleton with explicit compute and I/O nodes;
+- [ ] persist node identities, dependency edges, immutable outputs, observation
+  identities, and filesystem roots—not locals, frames, heap, FDs, `/tmp`, or
+  WASM memory;
+- [ ] destroy Guest at one wait/I/O boundary;
+- [ ] create a fresh Guest and re-evaluate unchanged nodes by local lookup;
+- [ ] execute the next live read under current freshness/policy;
+- [ ] prove a changed observation invalidates only transitive downstream nodes;
+- [ ] prove workflow resume off falls back to a normal Harness-directed Run;
+- [ ] measure retained state size, re-evaluation latency, and instance-time
+  released during waits.
+
+Definition of Done:
+
+- no Guest or Sandbox identity survives the wait;
+- no Python hidden state is required to continue;
+- unchanged nodes hit, changed descendants recompute, unrelated nodes remain
+  reusable;
+- cache eviction causes correct recomputation rather than failed continuation.
+
+## Track D — immutable workspace roots, branches, and attempts
+
+**Promise:** filesystem state can move, branch, compare, and optionally publish
+without depending on a live execution instance.
+
+- [ ] define immutable root and parent lineage identities over current
+  manifest/Capsule substrate;
+- [ ] implement child derived roots/deltas without requiring Linux COW;
+- [ ] prove recursive branch-of-branch lineage across fresh Runs;
+- [ ] implement explicit compare/select and bounded three-way merge semantics;
+- [ ] separately implement optional private attempt publication with expected-base
+  conflict detection;
+- [ ] retain current direct-write mode as an explicit fallback during migration;
+- [ ] measure changed bytes, materialization cost, branch depth, merge cost, and
+  garbage collection reachability.
+
+Definition of Done:
+
+- immutable branch semantics pass with memory COW off and cache off;
+- attempts pass for non-cacheable Runs;
+- `/tmp` never becomes a workspace root implicitly;
+- no Host path or authority-bearing reference enters portable state.
+
+## Track E — typed effect truth and late commit
+
+**Promise:** external writes remain denied unless a qualified adapter explicitly
+models dispatch uncertainty and recovery; this track is optional for read/local
+compute deployments.
+
+- [ ] freeze minimal effect classes and deny unknown writes;
+- [ ] define immutable `EffectIntent` and separate logical operation from physical
+  dispatch attempt;
+- [ ] journal before dispatch in an in-process deterministic fake provider;
+- [ ] inject accepted-but-response-lost and record `ambiguous` without blind retry;
+- [ ] reconcile through stable provider readback identity;
+- [ ] bind optional user approval to exact intent/policy/target/expiry;
+- [ ] model compensation as a new forward attempt, never rollback;
+- [ ] prove all Track B/C/D optimizations stop before external dispatch.
+
+Definition of Done:
+
+- with Track E disabled, writes are denied while reads and local compute work;
+- accepted-but-response-lost produces one provider mutation and no automatic
+  second dispatch;
+- cache/playback/workflow re-evaluation cannot suppress or duplicate dispatch;
+- workspace disposition remains independent from effect disposition.
+
+## Track F — worker-local density and online optimization
+
+**Promise:** local performance mechanisms accelerate existing semantics but are
+removable without correctness changes.
+
+- [ ] restore a bounded prepared-runtime baseline behind capability detection;
+- [ ] restore or reimplement Linux memory COW as an optional prepared-runtime
+  strategy;
+- [ ] preserve ordinary fresh instantiation as the control and fallback;
+- [ ] benchmark startup, peak/private/shared RSS, refill pressure, and completion
+  rate for short Runs;
+- [ ] collect bounded local function frequency, concurrency, compute time,
+  input/output size, startup, and materialization statistics;
+- [ ] add measured retention/eviction decisions;
+- [ ] spike explicit-node fusion only after Track B establishes cache economics;
+- [ ] keep splitting, specialization, and arbitrary hot-region extraction behind
+  separate later gates.
+
+Definition of Done:
+
+- strategy off/on produces identical semantic outputs and authority behavior;
+- unsupported platforms skip with a precise reason and use the control path;
+- reported density gains include shared/private memory rather than misleading
+  aggregate RSS;
+- no optimizer decision crosses privacy partitions or live-effect boundaries.
+
+## Track G — playback, evidence, and independent verification
+
+**Promise:** evidence mechanisms can verify selected claims without becoming a
+prerequisite for basic execution or caching.
+
+- [x] scoped capture/playback exists for two curated external reads;
+- [x] bounded Runtime observation and private Lab substrate exist;
+- [ ] prove strict playback with function cache disabled;
+- [ ] record cache mode/key/result relations without exposing private bodies or
+  cross-partition hit existence;
+- [ ] define versioned records for whichever D/E mechanisms are actually built;
+- [ ] build an independent verifier for artifact/profile, authority plan, initial
+  state, capability tape/effect attempts, output roots, and terminal disposition;
+- [ ] add negative mutation/corruption fixtures;
+- [ ] update Lab only with fields captured by the Runtime.
+
+Definition of Done:
+
+- basic Run works with verifier and Lab disabled;
+- playback does not depend on function memoization;
+- cache evidence does not claim code execution on a hit;
+- verifier rejects identity substitution and cross-plane contradictions.
+
+## Track H — backend-neutral conformance
+
+**Promise:** the stable Run/authority contract can survive a deliberately small
+second executor without forcing every optional optimization onto that backend.
+
+- [ ] select one bounded second executor only after A and at least one of B/D/E
+  has a frozen contract worth comparing;
+- [ ] run shared tests for artifact/profile admission, capability plans, denial,
+  stale authority, and terminal dispositions;
+- [ ] mark prepared runtime, memory COW, cache, or filesystem strategy as backend
+  capabilities rather than universal assumptions;
+- [ ] reject adapters that require ambient facilities bypassing the Broker.
+
+Definition of Done:
+
+- both backends pass baseline conformance;
+- an optional mechanism may be unsupported with explicit capability reporting;
+- lack of an optimization never changes authority semantics.
+
+## Recommended execution order
+
+This order minimizes irreversible architecture while preserving independent
+tracks:
+
+```text
+A: orthogonality harness and explicit fallbacks
+→ B: whole-Run local cache + separate single-flight
+→ C: one React-like fresh re-evaluation workflow
+→ D: portable immutable roots / recursive filesystem branches
+→ F: prepared runtime and memory COW measured against the same workload
+```
+
+Tracks E and G proceed only far enough to support the chosen real workflow and
+truthful claims; they are not prerequisites for B, C, D, or F. Track H waits
+until a stable contract has evidence. Lab work follows Runtime records.
+
+The first combined north-star proof should enable only:
+
+```text
+baseline fresh Guest
++ local private cache
++ single-flight
++ explicit workflow nodes
++ immutable input/output roots
+```
+
+Then rerun the same workload independently with:
+
+```text
+prepared runtime off/on
+memory COW off/on
+playback off/strict (on a captured-read variant)
+workspace attempt off/on (on a write-to-workspace variant)
+```
+
+This factorial comparison is more valuable than one everything-enabled demo: it
+shows which mechanism creates which benefit and catches accidental coupling.
 
 ## Global gates
 
-Each implementation slice must run the focused tests plus, before commit:
+Every implementation slice requires focused tests. Before code commits:
 
 ```text
 go test ./... -count=1
@@ -279,13 +464,21 @@ git diff --check
 Real Guest behavior changes additionally require a rebuilt Linux x86_64 artifact
 and the relevant real-Guest acceptance workflow. GitHub CI is not a default gate.
 
+Performance claims require a control path with the mechanism disabled, structured
+machine-readable output, repeated trials, and separate correctness gates.
+
 ## Decision gates
 
-After Phase 2, choose one:
+After the Track B/C proof, decide independently:
 
-- **Proceed:** the full conjunction produces clear safety/truth evidence;
-- **Narrow:** retain Pysolate as a bounded authority-runtime research prototype;
-- **Pause:** adjacent systems cover the same measurable contract at lower cost;
-- **Research-only:** preserve mechanisms without expanding toward a product.
+- retain local content-addressed functions if reuse/single-flight/re-evaluation
+  materially reduces work or instance-time;
+- retain memory COW only if it adds density beyond ordinary compiled-module reuse;
+- retain immutable workspace branching if branch/transfer economics beat direct
+  copies/worktrees for representative Agent tasks;
+- implement broader external-write semantics only for a qualified target workflow;
+- keep each unsuccessful mechanism disabled or research-only without discarding
+  the successful baseline and other tracks.
 
-No later phase is automatic. Proof precedes surface area.
+No track is automatically promoted to default. Proof, compatibility, and a
+working off-switch precede default enablement.

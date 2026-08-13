@@ -27,6 +27,14 @@ the authority boundary is what makes the cacheable region enforceable, and
 fresh execution prevents hidden interpreter state from becoming workflow
 continuation state.
 
+Optional mechanisms must remain orthogonal at their public contract boundaries.
+Result caching, single-flight, workflow re-evaluation, immutable workspace
+branching, private attempts, playback, external-write lifecycle, prepared
+runtime, memory COW, verification, and Lab projection each require an explicit
+off-state and tested fallback. Their dependency and composition rules are the
+source of truth in the
+[composable mechanism roadmap](proof-first-authority-roadmap.md).
+
 Generic code execution is necessary infrastructure, not the differentiator.
 Sandboxed code, mediated connectors, ledgers, approval replay, and compensation
 are also not standalone differentiators. The candidate contribution is an

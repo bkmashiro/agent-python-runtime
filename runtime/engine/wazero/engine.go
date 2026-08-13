@@ -189,7 +189,15 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 }
 
 func (engine *Engine) Properties() enginecontract.Properties {
-	properties := enginecontract.Properties{Backend: "wazero"}
+	properties := enginecontract.Properties{
+		Backend:                   "wazero",
+		WorkspaceMounted:          engine.workspaceLease != nil,
+		CapabilityBrokerAvailable: engine.brokerFactory != nil,
+	}
+	properties.ExecutionProfileBindingSHA256, _ = runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
+	if engine.config.DeterministicVerification != nil {
+		properties.DeterministicProfileSHA256 = engine.config.DeterministicVerification.Identity()
+	}
 	if engine.config.ExecutionProfile != nil {
 		profile := engine.config.ExecutionProfile
 		properties.ExecutionProfileID = profile.ID()
@@ -645,6 +653,7 @@ func hostCall(
 	responsePointer uint32,
 	responseCapacity uint32,
 ) int32 {
+	enginecontract.MarkHostCallAttempt(ctx)
 	if requestLength == 0 || requestLength > hostCallPayloadMax ||
 		responseCapacity == 0 || responseCapacity > hostCallPayloadMax {
 		return -1

@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 
-	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
 var (
 	ErrInvalidGuestCompute = errors.New("invalid fresh Guest compute")
 	ErrGuestResultTooLarge = errors.New("fresh Guest result exceeds bound")
+	ErrGuestNotShareable   = errors.New("fresh Guest execution profile is not shareable")
 )
 
-type GuestRunnerFactory func(context.Context) (physicalExecutionID string, runner engine.Runner, err error)
+type GuestRunnerFactory func(context.Context) (physicalExecutionID string, runner enginecontract.Runner, err error)
 type GuestResultDecoder func([]byte) ([]byte, error)
 
 // FreshGuestCompute adapts an agent-function leader to one single-use Runner.
@@ -37,8 +38,12 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 		_ = runner.Close(context.Background())
 		return nil, err
 	}
-	payload, runErr := runner.Run(ctx, append([]byte(nil), compute.Request...), compute.TrustedPrepare)
+	runContext, effects := enginecontract.WithEffectProbe(ctx)
+	payload, runErr := runner.Run(runContext, append([]byte(nil), compute.Request...), compute.TrustedPrepare)
 	closeErr := runner.Close(context.Background())
+	if effects.HostCallAttempted() {
+		return nil, errors.Join(ErrGuestNotShareable, runErr, closeErr)
+	}
 	if runErr != nil || closeErr != nil {
 		return nil, errors.Join(runErr, closeErr)
 	}
@@ -50,4 +55,29 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 		return nil, ErrGuestResultTooLarge
 	}
 	return append([]byte(nil), value...), nil
+}
+
+// ExecuteGuest binds the invocation identity to the actual Runner properties
+// before single-flight may publish the immutable Guest result.
+func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invocation, compute FreshGuestCompute) (Result, error) {
+	if compute.NewRunner == nil {
+		return Result{}, ErrInvalidGuestCompute
+	}
+	originalFactory := compute.NewRunner
+	compute.NewRunner = func(runContext context.Context) (string, enginecontract.Runner, error) {
+		physicalID, runner, err := originalFactory(runContext)
+		if err != nil || runner == nil {
+			return physicalID, runner, err
+		}
+		properties := runner.Properties()
+		if properties.Backend != "wazero" || properties.ArtifactSHA256 != invocation.ArtifactSHA256 ||
+			properties.ExecutionProfileBindingSHA256 != invocation.ExecutionProfileSHA256 ||
+			properties.DeterministicProfileSHA256 != invocation.DeterministicSettingsSHA256 ||
+			properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
+			_ = runner.Close(context.Background())
+			return "", nil, ErrGuestNotShareable
+		}
+		return physicalID, runner, nil
+	}
+	return functionEngine.Execute(ctx, invocation, compute.Run)
 }

@@ -2,10 +2,12 @@ package e2e_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,10 +24,9 @@ func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	code := "result = {'value': inputs['value'] + 1}"
 	request, err := json.Marshal(map[string]any{
-		"run_id": "shared-physical-guest",
-		"code":   "result = {'value': inputs['value'] + 1}",
-		"inputs": map[string]any{"value": 41},
+		"run_id": "shared-physical-guest", "code": code, "inputs": map[string]any{"value": 41},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -33,6 +34,7 @@ func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
 
 	flights := agentfunction.NewFlightGroup()
 	functionEngine := agentfunction.Engine{Flights: flights}
+	invocation, runConfig := sharedGuestInvocation(t, artifact, code, []string{"sys"}, []byte(`{"value":41}`))
 	var physical atomic.Int32
 	compute := agentfunction.FreshGuestCompute{
 		NewRunner: func(ctx context.Context) (string, engine.Runner, error) {
@@ -41,11 +43,10 @@ func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
 			for flights.Stats().Waiters != 7 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
 			}
-			runner, err := (wazeroengine.Factory{}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
+			runner, err := (wazeroengine.Factory{}).New(ctx, artifact, runConfig)
 			return fmt.Sprintf("physical-%d", id), runner, err
 		},
-		Request: request, MaxResultBytes: 1024,
-		DecodeResult: decodeSuccessfulGuestResult,
+		Request: request, MaxResultBytes: 1024, DecodeResult: decodeSuccessfulGuestResult,
 	}
 
 	const logical = 8
@@ -58,7 +59,7 @@ func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			result, err := functionEngine.Execute(context.Background(), sharedGuestInvocation(), compute.Run)
+			result, err := functionEngine.ExecuteGuest(context.Background(), invocation, compute)
 			results <- result
 			errorsChannel <- err
 		}()
@@ -89,6 +90,38 @@ func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
 	}
 }
 
+func TestHostCallAttemptIsNotPublishedOrRetained(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := "import _agent_runtime_host\ntry:\n    _agent_runtime_host.call('{\"tool\":\"forbidden\",\"arguments\":{}}')\nexcept RuntimeError:\n    pass\nresult = {'caught': True}"
+	request, err := json.Marshal(map[string]any{"run_id": "shared-host-call-negative", "code": code, "inputs": map[string]any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocation, runConfig := sharedGuestInvocation(t, artifact, code, []string{"sys", "_agent_runtime_host"}, []byte(`{}`))
+	var physical atomic.Int32
+	compute := agentfunction.FreshGuestCompute{
+		NewRunner: func(ctx context.Context) (string, engine.Runner, error) {
+			id := physical.Add(1)
+			runner, err := (wazeroengine.Factory{}).New(ctx, artifact, runConfig)
+			return fmt.Sprintf("physical-negative-%d", id), runner, err
+		},
+		Request: request, MaxResultBytes: 1024, DecodeResult: decodeSuccessfulGuestResult,
+	}
+	functionEngine := agentfunction.Engine{Flights: agentfunction.NewFlightGroup()}
+	for range 2 {
+		result, err := functionEngine.ExecuteGuest(context.Background(), invocation, compute)
+		if !errors.Is(err, agentfunction.ErrGuestNotShareable) || len(result.Value) != 0 {
+			t.Fatalf("result=%+v err=%v", result, err)
+		}
+	}
+	if physical.Load() != 2 {
+		t.Fatalf("failed execution was retained: physical=%d", physical.Load())
+	}
+}
+
 func decodeSuccessfulGuestResult(payload []byte) ([]byte, error) {
 	var response struct {
 		Status string          `json:"status"`
@@ -103,13 +136,42 @@ func decodeSuccessfulGuestResult(payload []byte) ([]byte, error) {
 	return response.Result, nil
 }
 
-func sharedGuestInvocation() agentfunction.Invocation {
+func sharedGuestInvocation(t *testing.T, artifact []byte, code string, allowedImports []string, inputs []byte) (agentfunction.Invocation, runtimeconfig.RunConfig) {
+	t.Helper()
+	artifactSHA := digestBytes(artifact)
+	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: hashCharacter('9'),
+		ImportRoots: allowedImports, QualifiedImportRoots: allowedImports,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deterministic, err := runtimeconfig.NewDeterministicVerificationProfile(artifactSHA, "shared-compute")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	config.DeterministicVerification = &deterministic
+	profileSHA, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return agentfunction.Invocation{
 		SchemaVersion: agentfunction.InvocationSchemaVersion, Admission: agentfunction.Cacheable,
-		ProjectSHA256: hashCharacter('1'), FunctionSourceSHA256: hashCharacter('2'),
-		ArtifactSHA256: hashCharacter('3'), ExecutionProfileSHA256: hashCharacter('4'),
-		ImportClosureSHA256: hashCharacter('5'), CanonicalInputs: []byte(`{"value":41}`),
-		ImmutableRootSHA256: []string{hashCharacter('6')}, DeterministicSettingsSHA256: hashCharacter('7'),
+		ProjectSHA256: hashCharacter('1'), FunctionSourceSHA256: digestBytes([]byte(code)),
+		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: profileSHA,
+		ImportClosureSHA256: digestBytes([]byte(strings.Join(allowedImports, "\x00"))), CanonicalInputs: inputs,
+		ImmutableRootSHA256: []string{hashCharacter('6')}, DeterministicSettingsSHA256: deterministic.Identity(),
 		OutputSchemaSHA256: hashCharacter('8'), PrivacyPartition: "shared-guest-test", PolicyEpochSHA256: hashCharacter('9'),
-	}
+	}, config
+}
+
+func digestBytes(value []byte) string {
+	digest := sha256.Sum256(value)
+	return fmt.Sprintf("sha256:%x", digest[:])
 }

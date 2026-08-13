@@ -26,13 +26,17 @@ var ErrInvalidProperties = errors.New("invalid engine properties")
 
 // Properties reports the backend and optional Host-bound artifact profile.
 type Properties struct {
-	Backend            string
-	ExecutionProfileID string
-	AllowedImports     []string
-	AvailableImports   []string
-	QualifiedImports   []string
-	ArtifactSHA256     string
-	ManifestSHA256     string
+	Backend                       string
+	ExecutionProfileID            string
+	AllowedImports                []string
+	AvailableImports              []string
+	QualifiedImports              []string
+	ArtifactSHA256                string
+	ManifestSHA256                string
+	ExecutionProfileBindingSHA256 string
+	DeterministicProfileSHA256    string
+	WorkspaceMounted              bool
+	CapabilityBrokerAvailable     bool
 }
 
 func (properties Properties) Validate() error {

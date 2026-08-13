@@ -19,6 +19,33 @@ approval replay, or compensation:
 > attempt state, explicit external-effect uncertainty, and a Host-verified
 > terminal disposition across independent state planes.
 
+This remains a correctness foundation, not the only candidate differentiator.
+The complementary feature hypothesis is that explicit authority and effect
+boundaries can make selected Agent computations safely reusable across fresh
+Runs on one Host. See
+[content-addressed-agent-functions.md](content-addressed-agent-functions.md).
+
+## Revised phase ordering
+
+Do not treat the numbered effect phases below as an automatic implementation
+queue. Before broad effect-plane work, test a smaller composition:
+
+1. define a binary `cacheable | not_cacheable` whole-Run/function contract;
+2. implement one-Host private memoization and concurrent single-flight;
+3. split one synchronous workflow into live I/O and explicit cacheable nodes;
+4. destroy the Guest at a wait/I/O boundary, then use a fresh Guest to
+   re-evaluate through unchanged cached nodes;
+5. change one live observation and prove that only downstream nodes recompute;
+6. measure cold/warm, cache materialization, prepared-runtime, and optional
+   memory-COW costs;
+7. retain private workspace attempts and detailed effect operation modeling as
+   the later commit/effect correctness path, not as the sole product identity.
+
+Initial scope is one trusted Host. No cross-machine synchronization,
+cross-tenant result sharing, arbitrary-region JIT, or Python heap checkpoint is
+required. "JIT" initially means measured online retention, single-flight,
+explicit-node fusion, and prepared-profile placement.
+
 ## Value filter
 
 Proceed only with slices that upgrade at least one of:

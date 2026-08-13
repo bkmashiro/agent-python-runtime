@@ -128,14 +128,41 @@ bounded demonstration that uncertainty is represented rather than hidden.
 
 ## Consequences
 
+### Extension: content-addressed Agent Functions
+
+The authority-lifecycle direction is a foundation rather than the complete
+feature hypothesis. A proposed extension uses the same fresh-Guest and typed
+effect boundaries to admit selected computations as local content-addressed
+Agent Functions. Live I/O remains explicit; immutable observations and
+filesystem roots become inputs; cacheable computation may be reused by later
+fresh Guests without restoring Python interpreter state.
+
+This extends rather than replaces the existing conjunction:
+
+- frozen authority defines what a cacheable function cannot observe or mutate;
+- typed effects provide hard boundaries at which result caching stops;
+- workspace/Capsule identities provide movable immutable inputs and outputs;
+- fresh execution removes hidden continuation state;
+- optional worker-local memory COW improves density without becoming semantic
+  state;
+- Host-owned disposition still governs the eventual real-world commit.
+
+The initial design is intentionally local and binary (`cacheable` or
+`not_cacheable`); it does not claim automatic arbitrary-Python purity analysis,
+distributed cache coherence, or cross-tenant result sharing. See
+[content-addressed-agent-functions.md](content-addressed-agent-functions.md).
+
 ### We will prioritize
 
-1. private workspace attempts and explicit terminal disposition;
-2. one fake-but-protocol-real external adapter with deterministic fault
+1. a binary `cacheable | not_cacheable` contract and one-Host reuse proof that
+   composes fresh Guests, immutable filesystem roots, and typed I/O boundaries;
+2. private workspace attempts and explicit terminal disposition for derived
+   outputs and eventual commit;
+3. one fake-but-protocol-real external adapter with deterministic fault
    injection and readback reconciliation;
-3. exact intent/approval/operation/attempt identity;
-4. an independent terminal-vector verifier;
-5. conformance of the same capability contract across execution backends only
+4. exact intent/approval/operation/attempt identity;
+5. an independent terminal-vector verifier;
+6. conformance of the same capability contract across execution backends only
    after the single-backend proof is complete.
 
 ### We will not prioritize

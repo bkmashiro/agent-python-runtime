@@ -18,6 +18,15 @@ Pysolate's refined long-term direction is:
 > governs interpreter, workspace, scratch, external-effect, and evidence
 > dispositions.
 
+A complementary Proposed feature layer is
+[content-addressed Agent Functions](content-addressed-agent-functions.md):
+selected explicit computations execute as fresh, locally memoizable Python
+evaluations over immutable filesystem roots, while live I/O and writes remain
+typed Host effects. This does not replace the authority-lifecycle direction;
+the authority boundary is what makes the cacheable region enforceable, and
+fresh execution prevents hidden interpreter state from becoming workflow
+continuation state.
+
 Generic code execution is necessary infrastructure, not the differentiator.
 Sandboxed code, mediated connectors, ledgers, approval replay, and compensation
 are also not standalone differentiators. The candidate contribution is an

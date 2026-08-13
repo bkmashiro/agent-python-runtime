@@ -1,6 +1,8 @@
 # Spark Composable Acceptance
 
-Status: **all 54 direct Linux scenario/treatment rows are recorded with 603 body-free trace events.**
+Status: **the historical conformance recording retains all 54 direct Linux rows and 603 body-free trace events.**
+The primary benchmark/default preview is now deliberately **3 scenarios × the `all` treatment**;
+set `PYSOLATE_ACCEPTANCE_MATRIX=conformance` only for the 18-treatment mechanism regression matrix.
 
 ## Frozen decision corpus
 

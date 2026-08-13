@@ -25,6 +25,41 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
+func benchmarkTreatments(matrix string) []composableacceptance.Treatment {
+	if matrix != "conformance" {
+		return []composableacceptance.Treatment{composableacceptance.TreatmentAll}
+	}
+	return []composableacceptance.Treatment{
+		composableacceptance.TreatmentFresh,
+		composableacceptance.TreatmentStreaming,
+		composableacceptance.TreatmentFanout,
+		composableacceptance.TreatmentCacheOff,
+		composableacceptance.TreatmentCacheOn,
+		composableacceptance.TreatmentSingleFlightOff,
+		composableacceptance.TreatmentSingleFlightOn,
+		composableacceptance.TreatmentReevaluationOff,
+		composableacceptance.TreatmentReevaluationOn,
+		composableacceptance.TreatmentPrepared,
+		composableacceptance.TreatmentCOW,
+		composableacceptance.TreatmentAll,
+		composableacceptance.TreatmentInvalidParent,
+		composableacceptance.TreatmentInvalidChild,
+		composableacceptance.TreatmentChangedObserve,
+		composableacceptance.TreatmentBranchConflict,
+		composableacceptance.TreatmentCacheCorruption,
+		composableacceptance.TreatmentCancellation,
+	}
+}
+
+func TestBenchmarkTreatmentsDefaultToAll(t *testing.T) {
+	if got := benchmarkTreatments(""); len(got) != 1 || got[0] != composableacceptance.TreatmentAll {
+		t.Fatalf("default benchmark treatments = %v, want [all]", got)
+	}
+	if got := benchmarkTreatments("conformance"); len(got) != 18 {
+		t.Fatalf("conformance treatments = %d, want 18", len(got))
+	}
+}
+
 func TestRealGuestSparkScenarioCoreTreatments(t *testing.T) {
 	corpusPath := os.Getenv("PYSOLATE_SPARK_CORPUS")
 	outputPath := os.Getenv("PYSOLATE_ACCEPTANCE_CORE_REPORT")
@@ -58,26 +93,7 @@ func TestRealGuestSparkScenarioCoreTreatments(t *testing.T) {
 			t.Fatal(err)
 		}
 		oracleSHA := composableacceptance.ArtifactIdentity(scenario.ExpectedArtifact)
-		for _, treatment := range []composableacceptance.Treatment{
-			composableacceptance.TreatmentFresh,
-			composableacceptance.TreatmentStreaming,
-			composableacceptance.TreatmentFanout,
-			composableacceptance.TreatmentCacheOff,
-			composableacceptance.TreatmentCacheOn,
-			composableacceptance.TreatmentSingleFlightOff,
-			composableacceptance.TreatmentSingleFlightOn,
-			composableacceptance.TreatmentReevaluationOff,
-			composableacceptance.TreatmentReevaluationOn,
-			composableacceptance.TreatmentPrepared,
-			composableacceptance.TreatmentCOW,
-			composableacceptance.TreatmentAll,
-			composableacceptance.TreatmentInvalidParent,
-			composableacceptance.TreatmentInvalidChild,
-			composableacceptance.TreatmentChangedObserve,
-			composableacceptance.TreatmentBranchConflict,
-			composableacceptance.TreatmentCacheCorruption,
-			composableacceptance.TreatmentCancellation,
-		} {
+		for _, treatment := range benchmarkTreatments(os.Getenv("PYSOLATE_ACCEPTANCE_MATRIX")) {
 			if filter := os.Getenv("PYSOLATE_ACCEPTANCE_TREATMENT"); filter != "" && string(treatment) != filter {
 				continue
 			}

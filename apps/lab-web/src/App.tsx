@@ -5,13 +5,18 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
+import { python } from '@codemirror/lang-python';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { EditorView } from '@codemirror/view';
-import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
-import { type CheckpointMetadata, type TraceAdapterEvent, type TraceNode, buildTraceNodes, collectCheckpointMetadata, exampleRun as exampleLabRun, exampleTrace } from './trace';
+import {
+  Folder, Workflow, FileJson2, Bot, Database, Play, HardDrive,
+  GitFork, Radio, Layers, RefreshCw, Eye, ShieldCheck, PackageCheck, Copy, Ban,
+} from 'lucide-react';
+import { acceptanceSource } from 'virtual:pysolate-demo';
+import { type CheckpointMetadata, type MechanismGroup, type TraceAdapterEvent, type TraceNode, buildTraceNodes, collectCheckpointMetadata } from './trace';
 import { type LabDataset, type LabRun, validateDataset } from './debuggerData';
 
-type RunSource = 'recorded' | 'example';
+type RunSource = 'recorded';
 
 type RunOption = {
   key: string;
@@ -22,25 +27,37 @@ type RunOption = {
   checkpoints: Record<string, CheckpointMetadata>;
 };
 
+const mechanismPresentation: Record<MechanismGroup, { label: string; color: string; icon: typeof Workflow }> = {
+  'run-lifecycle': { label: 'Run lifecycle', color: 'gray', icon: Play },
+  'guest-lifecycle': { label: 'Guest runtime', color: 'blue', icon: Bot },
+  workspace: { label: 'Private workspace', color: 'indigo', icon: HardDrive },
+  streaming: { label: 'Streaming', color: 'cyan', icon: Radio },
+  fanout: { label: 'Fan-out', color: 'violet', icon: GitFork },
+  cache: { label: 'Cache', color: 'orange', icon: Database },
+  'single-flight': { label: 'Single-flight', color: 'grape', icon: Copy },
+  'wait-resume': { label: 'Wait / resume', color: 'yellow', icon: RefreshCw },
+  observation: { label: 'Observation', color: 'teal', icon: Eye },
+  oracle: { label: 'Oracle', color: 'green', icon: ShieldCheck },
+  prepared: { label: 'Prepared state', color: 'lime', icon: PackageCheck },
+  cow: { label: 'Linux COW', color: 'pink', icon: Layers },
+  cancellation: { label: 'Cancellation', color: 'red', icon: Ban },
+};
+
+function sourceWindow(source: string, needle?: string) {
+  const lines = source.split('\n');
+  const match = needle ? lines.findIndex((line) => line.includes(`\"${needle}\"`)) : lines.findIndex((line) => line.includes('func runScenarioAllExecution'));
+  const center = match >= 0 ? match : 0;
+  const start = Math.max(0, center - 8);
+  const end = Math.min(lines.length, center + 12);
+  return { text: lines.slice(start, end).join('\n'), startLine: start + 1, endLine: end };
+}
+
 function runLabel(run: LabRun): string {
   return `${run.workload_id} · ${run.treatment}`;
 }
 
-const exampleRun: RunOption = {
-  key: 'example:example-workflow',
-  source: 'example',
-  label: 'Example trace (UI example)',
-  run: {
-    ...exampleLabRun,
-    trace: exampleTrace,
-  },
-  trace: buildTraceNodes(exampleTrace, 'verified-example'),
-  checkpoints: collectCheckpointMetadata(exampleTrace),
-};
-
 function buildRunOption(run: LabRun, source: RunSource): RunOption {
-  const evidence = source === 'recorded' ? 'observed' : 'verified-example';
-  const trace = buildTraceNodes(run.trace as ReadonlyArray<TraceAdapterEvent>, evidence);
+  const trace = buildTraceNodes(run.trace as ReadonlyArray<TraceAdapterEvent>, 'observed');
   return {
     key: `${source}:${run.run_id}`,
     source,
@@ -90,8 +107,10 @@ function TraceNodeRow({
   onSelect: () => void;
   onToggle: () => void;
 }) {
+  const presentation = mechanismPresentation[node.group];
+  const Icon = node.synthetic && node.id === 'run' ? Workflow : presentation.icon;
   return (
-    <div className={`trace-row ${active ? 'active' : ''}`} style={{ paddingLeft: 10 + node.depth * 18 }} data-testid="trace-node" data-node-id={node.id}>
+    <div className={`trace-row ${active ? 'active' : ''} ${node.synthetic ? 'trace-group-row' : 'trace-event-row'}`} style={{ paddingLeft: 10 + node.depth * 18 }} data-testid="trace-node" data-node-id={node.id} data-node-kind={node.synthetic ? 'group' : 'event'}>
       <span className="trace-branch">
         {hasChildren ? (
           <button
@@ -107,13 +126,13 @@ function TraceNodeRow({
         )}
       </span>
       <button className="trace-main" type="button" onClick={onSelect}>
-        <div className="theme-icon" style={{ width: 24, height: 24 }}><Workflow size={12} /></div>
+        <div className="theme-icon" style={{ width: 24, height: 24, color: `var(--mantine-color-${presentation.color}-5)` }}><Icon size={13} /></div>
         <span className="trace-copy">
-          <span className="trace-title" data-testid="trace-node-title">{node.title}</span>
+          <span className="trace-title" data-testid="trace-node-title">{node.synthetic ? (node.id === 'run' ? node.title : presentation.label) : node.title}</span>
           <span className="trace-summary">{node.summary}</span>
         </span>
         <span className="trace-tail">
-          <Badge color="blue" variant="light" size="xs">{node.kind}</Badge>
+          <Badge color={presentation.color} variant="light" size="xs">{node.synthetic ? presentation.label : node.kind.replaceAll('_', ' ')}</Badge>
           <small>{node.duration}</small>
         </span>
       </button>
@@ -147,8 +166,8 @@ function TracePanel({
   }, [trace]);
 
   useEffect(() => {
-    setExpanded(new Set(rootIds));
-  }, [rootIds]);
+    setExpanded(new Set(trace.filter((node) => !node.parent).map((node) => node.id)));
+  }, [trace]);
 
   const visible = useMemo(() => {
     return trace.filter((node) => {
@@ -174,7 +193,7 @@ function TracePanel({
     <section className="panel trace-panel" aria-label="Run trace">
       <div className="panel-heading">
         <Group gap={8}><Workflow size={16} /><Text fw={700} size="sm">Run trace</Text></Group>
-        <Badge variant="outline" color="gray">{trace.length} nodes</Badge>
+        <Badge variant="outline" color="gray">{trace.filter((node) => !node.synthetic).length} events · {trace.filter((node) => node.synthetic && node.id !== 'run').length} groups</Badge>
       </div>
       <div className="trace-toolbar">
         <Button size="compact-xs" variant="subtle" onClick={() => setExpanded(new Set(trace.map((node) => node.id)))}>Expand all</Button>
@@ -227,6 +246,9 @@ function Inspector({
   run: LabRun;
 }) {
   const [tab, setTab] = useState<string | null>('source');
+  const recordedSource = sourceWindow(acceptanceSource, node.rawEvent?.action);
+  const sourceText = recordedSource.text;
+  const sourceLabel = `Bundled public acceptance harness · runScenarioAllExecution excerpt ${recordedSource.startLine}–${recordedSource.endLine}`;
 
   return (
     <section className="panel inspector-panel" aria-label="Selected operation inspector">
@@ -249,12 +271,29 @@ function Inspector({
       </div>
       <Tabs value={tab} onChange={setTab} className="inspector-tabs">
         <Tabs.List>
-          <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Scenario context</Tabs.Tab>
+          <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Code</Tabs.Tab>
+          <Tabs.Tab value="context" leftSection={<Database size={14} />}>Scenario</Tabs.Tab>
           <Tabs.Tab value="io" leftSection={<Database size={14} />}>Input / output</Tabs.Tab>
-          <Tabs.Tab value="details" leftSection={<Folder size={14} />}>Details</Tabs.Tab>
+          <Tabs.Tab value="details" leftSection={<Folder size={14} />}>Recorded event</Tabs.Tab>
           <Tabs.Tab value="checkpoint" leftSection={<Workflow size={14} />}>Checkpoint</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="source" className="tab-body source-tab">
+          <div className="source-context">
+            <Text size="xs" c="dimmed">{sourceLabel}</Text>
+            <Badge color="violet" variant="light">
+              SOURCE-BOUND · NOT RUNTIME-CAPTURED
+            </Badge>
+          </div>
+          <CodeMirror
+            value={sourceText}
+            height="100%"
+            theme={vscodeDark}
+            extensions={[python(), EditorView.lineWrapping]}
+            editable={false}
+            basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
+          />
+        </Tabs.Panel>
+        <Tabs.Panel value="context" className="tab-body source-tab">
           <JsonViewer
             label="Recorded scenario metadata"
             value={{
@@ -356,7 +395,9 @@ function FilesystemPanel({
 }
 
 function mapDatasetRuns(dataset: LabDataset): RunOption[] {
-  return dataset.runs.map((run) => buildRunOption(run, 'recorded'));
+  return dataset.runs
+    .filter((run) => run.treatment === 'all')
+    .map((run) => buildRunOption(run, 'recorded'));
 }
 
 export default function App() {
@@ -379,11 +420,11 @@ export default function App() {
         const parsed = validateDataset(JSON.parse(body) as LabDataset);
         const recorded = mapDatasetRuns(parsed);
 
-        setRunOptions([...recorded, exampleRun]);
+        setRunOptions(recorded);
         if (recorded[0]) {
           setSelectedRunId(recorded[0].key);
         }
-        setDatasetSummary(`Loaded ${recorded.length} recorded runs`);
+        setDatasetSummary(`Showing ${recorded.length} all-on benchmark runs · ${parsed.runs.length} evidence rows retained`);
         setDatasetError('');
       } catch (error) {
         setRunOptions([]);
@@ -408,7 +449,7 @@ export default function App() {
     if (!searchText.trim()) {
       return runOptions;
     }
-    return [exampleRun, ...filteredRecorded];
+    return filteredRecorded;
   }, [filteredRecorded, searchText]);
 
   useEffect(() => {
@@ -441,11 +482,11 @@ export default function App() {
       const raw = await file.text();
       const parsed = validateDataset(JSON.parse(raw) as LabDataset);
       const recorded = mapDatasetRuns(parsed);
-      setRunOptions([...recorded, exampleRun]);
+      setRunOptions(recorded);
       if (recorded[0]) {
         setSelectedRunId(recorded[0].key);
       }
-      setDatasetSummary(`Loaded ${recorded.length} recorded runs`);
+      setDatasetSummary(`Showing ${recorded.length} all-on benchmark runs · ${parsed.runs.length} evidence rows retained`);
       setDatasetError('');
     } catch (error) {
       setDatasetError(error instanceof Error ? error.message : 'Invalid dataset');
@@ -525,7 +566,7 @@ export default function App() {
               onChange={handleLoad}
             />
             <div style={{ width: 190 }}>
-              <Text size="xs" c="dimmed">{recordedRuns.length} recorded runs</Text>
+              <Text size="xs" c="dimmed">{recordedRuns.length} all-on runs</Text>
               <Text size="xs" c="dimmed">{datasetSummary}</Text>
               {datasetError && <Text size="xs" c="red">{datasetError}</Text>}
             </div>

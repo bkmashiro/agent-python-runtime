@@ -3,11 +3,27 @@ import type { LabRun } from './debuggerData';
 
 export type Evidence = 'observed' | 'verified-example' | 'source-bound' | 'instrumentation-preview';
 
+export type MechanismGroup =
+  | 'run-lifecycle'
+  | 'guest-lifecycle'
+  | 'workspace'
+  | 'streaming'
+  | 'fanout'
+  | 'cache'
+  | 'single-flight'
+  | 'wait-resume'
+  | 'observation'
+  | 'oracle'
+  | 'prepared'
+  | 'cow'
+  | 'cancellation';
+
 export interface TraceNode {
   id: string;
   parent?: string;
   depth: number;
   kind: string;
+  group: MechanismGroup;
   title: string;
   summary: string;
   evidence: Evidence;
@@ -16,6 +32,8 @@ export interface TraceNode {
   input: unknown;
   output: unknown;
   checkpoint: string;
+  synthetic: boolean;
+  rawEvent?: TraceAdapterEvent;
 }
 
 export interface CheckpointMetadata {
@@ -47,16 +65,38 @@ function toDigestField(raw?: string): Record<string, string> | null {
   return { digest: raw };
 }
 
-export function buildTraceNodes(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
-  const nodes = events.map((event) => ({
-    id: String(event.sequence),
-    parent: event.parent_sequence == null ? undefined : String(event.parent_sequence),
+const mechanismOrder: MechanismGroup[] = [
+  'run-lifecycle', 'guest-lifecycle', 'workspace', 'streaming', 'fanout', 'cache',
+  'single-flight', 'wait-resume', 'observation', 'oracle', 'prepared', 'cow', 'cancellation',
+];
+
+function mechanismGroup(type: string): MechanismGroup {
+  switch (type) {
+    case 'run_start':
+    case 'run_terminal':
+      return 'run-lifecycle';
+    case 'guest_lifecycle': return 'guest-lifecycle';
+    case 'single_flight': return 'single-flight';
+    case 'wait_resume': return 'wait-resume';
+    default:
+      return mechanismOrder.includes(type as MechanismGroup) ? type as MechanismGroup : 'run-lifecycle';
+  }
+}
+
+function eventNode(event: TraceAdapterEvent, evidence: Evidence, parent: string, depth: number): TraceNode {
+  return {
+    id: `event:${event.sequence}`,
+    parent,
+    depth,
     kind: event.type,
+    group: mechanismGroup(event.type),
     title: event.action,
-    summary: `${event.type} · ${event.outcome}`,
+    summary: `${event.outcome} · seq ${event.sequence}`,
     evidence,
     duration: `${event.relative_elapsed_millis.toFixed(2)} ms`,
     params: {
+      sequence: event.sequence,
+      parent_sequence: event.parent_sequence ?? null,
       relative_elapsed_millis: event.relative_elapsed_millis,
       count: event.count,
       ...(event.checkpoint_status ? { checkpoint_status: event.checkpoint_status } : {}),
@@ -65,32 +105,41 @@ export function buildTraceNodes(events: ReadonlyArray<TraceAdapterEvent>, eviden
     input: toDigestField(event.input_sha256),
     output: toDigestField(event.output_sha256),
     checkpoint: event.checkpoint_sha256 ?? '',
-  }));
-
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-
-  const depthById = new Map<string, number>();
-  const computeDepth = (id: string, seen: Set<string>): number => {
-    if (depthById.has(id)) {
-      return depthById.get(id) ?? 0;
-    }
-    if (seen.has(id)) {
-      return 0;
-    }
-    const node = byId.get(id);
-    if (!node || !node.parent) {
-      return 0;
-    }
-    seen.add(id);
-    const depth = computeDepth(node.parent, seen) + 1;
-    depthById.set(id, depth);
-    return depth;
+    synthetic: false,
+    rawEvent: event,
   };
+}
 
-  return nodes.map((node) => ({
-    ...node,
-    depth: computeDepth(node.id, new Set()),
-  }));
+export function buildTraceNodes(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
+  if (!events.length) return [];
+
+  const grouped = new Map<MechanismGroup, TraceAdapterEvent[]>();
+  for (const event of events) {
+    const group = mechanismGroup(event.type);
+    grouped.set(group, [...(grouped.get(group) ?? []), event]);
+  }
+
+  const root: TraceNode = {
+    id: 'run', depth: 0, kind: 'run', group: 'run-lifecycle', title: 'Recorded run',
+    summary: `${events.length} recorded events`, evidence, duration: `${events.at(-1)?.relative_elapsed_millis.toFixed(2) ?? '0.00'} ms`,
+    params: { event_count: events.length }, input: null, output: null, checkpoint: '', synthetic: true,
+  };
+  const nodes = [root];
+
+  for (const group of mechanismOrder) {
+    const groupEvents = grouped.get(group);
+    if (!groupEvents?.length) continue;
+    const groupId = `group:${group}`;
+    nodes.push({
+      id: groupId, parent: root.id, depth: 1, kind: group, group,
+      title: group, summary: `${groupEvents.length} recorded ${groupEvents.length === 1 ? 'event' : 'events'}`,
+      evidence, duration: `${groupEvents.at(-1)?.relative_elapsed_millis.toFixed(2) ?? '0.00'} ms`,
+      params: { event_count: groupEvents.length, event_type: group }, input: null, output: null,
+      checkpoint: '', synthetic: true,
+    });
+    nodes.push(...groupEvents.map((event) => eventNode(event, evidence, groupId, 2)));
+  }
+  return nodes;
 }
 
 export function collectCheckpointMetadata(events: ReadonlyArray<TraceAdapterEvent>): Record<string, CheckpointMetadata> {

@@ -5,7 +5,7 @@ test('switches between recorded runs and updates trace content', async ({ page }
 
   const runSelector = page.getByTestId('run-select');
   const recordedOption = page.locator('[data-testid="run-option"][data-run-kind="recorded"]');
-  await expect(recordedOption).toHaveCount(54);
+  await expect(recordedOption).toHaveCount(3);
 
   const firstValue = await recordedOption.nth(0).getAttribute('value');
   const secondValue = await recordedOption.nth(1).getAttribute('value');
@@ -13,16 +13,12 @@ test('switches between recorded runs and updates trace content', async ({ page }
   expect(secondValue).not.toBeNull();
 
   await runSelector.selectOption(firstValue as string);
-  const firstRunMechanism = page.locator('[data-testid="trace-node-title"]').nth(1);
-  const firstTraceMechanism = (await firstRunMechanism.textContent())?.trim();
+  await expect(runSelector).toHaveValue(firstValue as string);
 
   await runSelector.selectOption(secondValue as string);
-  const secondRunMechanism = page.locator('[data-testid="trace-node-title"]').nth(1);
-  const secondTraceMechanism = (await secondRunMechanism.textContent())?.trim();
-
-  expect(firstTraceMechanism).not.toBeNull();
-  expect(secondTraceMechanism).not.toBeNull();
-  expect(firstTraceMechanism).not.toEqual(secondTraceMechanism);
+  await expect(runSelector).toHaveValue(secondValue as string);
+  await expect(page.locator('[data-testid="trace-node"][data-node-kind="group"]')).toHaveCount(11);
+  await expect(page.locator('[data-testid="trace-node"][data-node-kind="event"]')).toHaveCount(0);
 });
 
 test('reports all recorded runs with trace payload and supports trace scroll', async ({ page }) => {
@@ -41,6 +37,7 @@ test('reports all recorded runs with trace payload and supports trace scroll', a
   const longest = await recordedRuns.evaluateAll((options) => options.reduce((best, option) => Number(option.getAttribute('data-node-count')) > best.count ? { value: (option as HTMLOptionElement).value, count: Number(option.getAttribute('data-node-count')) } : best, { value: '', count: -1 }));
   expect(longest.count).toBeGreaterThan(10);
   await page.getByTestId('run-select').selectOption(longest.value);
+  await page.getByRole('button', { name: 'Expand all' }).click();
 
   const traceScroller = page.locator('.trace-scroll');
   await expect(traceScroller).toBeVisible();

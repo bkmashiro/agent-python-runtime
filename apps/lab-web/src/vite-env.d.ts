@@ -2,6 +2,7 @@
 
 declare module 'virtual:pysolate-demo' {
   export const pythonSource: string;
+  export const acceptanceSource: string;
   export const catalog: { items: Array<{ id: string; score: number; title: string }> };
   export const benchmark: Record<string, unknown>;
 }

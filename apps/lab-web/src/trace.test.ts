@@ -45,15 +45,18 @@ const trace: TraceAdapterEvent[] = [
 ];
 
 describe('trace adapter', () => {
-  it('builds one node per recorded event with parent-driven depth', () => {
+  it('groups recorded events by mechanism without losing raw events', () => {
     const nodes = buildTraceNodes(trace, 'observed');
-    expect(nodes).toHaveLength(3);
-    expect(nodes[0].id).toBe('1');
-    expect(nodes[1].parent).toBe('1');
-    expect(nodes[2].parent).toBe('2');
-    expect(nodes[0].duration).toContain('ms');
-    expect(nodes[0].input).toBe(null);
-    expect(nodes[1].input).toMatchObject({ digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' });
+    expect(nodes).toHaveLength(6);
+    expect(nodes[0]).toMatchObject({ id: 'run', synthetic: true, depth: 0 });
+    expect(nodes[1]).toMatchObject({ id: 'group:run-lifecycle', parent: 'run', synthetic: true, depth: 1 });
+    expect(nodes[2]).toMatchObject({ id: 'event:1', parent: 'group:run-lifecycle', synthetic: false, depth: 2 });
+    expect(nodes[3]).toMatchObject({ id: 'event:3', parent: 'group:run-lifecycle', synthetic: false, depth: 2 });
+    expect(nodes[4]).toMatchObject({ id: 'group:workspace', parent: 'run', synthetic: true, depth: 1 });
+    expect(nodes[5]).toMatchObject({ id: 'event:2', parent: 'group:workspace', synthetic: false, depth: 2 });
+    expect(nodes[2].duration).toContain('ms');
+    expect(nodes[2].input).toBe(null);
+    expect(nodes[5].input).toMatchObject({ digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' });
   });
 
   it('collects checkpoint identities from trace metadata', () => {

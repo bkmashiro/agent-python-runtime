@@ -23,8 +23,13 @@ uses a dangling causal parent, disagrees with its terminal status, duplicates a
 from summary metrics and does not fall back from an invalid recorded dataset to
 fabricated experiment rows.
 
-The bundled example trace remains available only as an explicitly labelled UI
-example. It is not counted among recorded experiments.
+The historical 54-row conformance artifact remains intact, while the primary
+selector deliberately shows only three `all`-treatment benchmark runs—one per
+scenario. Trace events are grouped deterministically by mechanism; each group
+expands to the original sequence, outcomes, metadata, and digests.
+
+The Code tab shows a build-bound public excerpt from `runScenarioAllExecution`.
+It is explicitly labelled as source-bound, not runtime-captured Guest source.
 
 ## Evidence boundary
 

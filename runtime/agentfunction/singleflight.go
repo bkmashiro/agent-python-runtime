@@ -45,6 +45,7 @@ func (group *FlightGroup) Do(ctx context.Context, key string, function func() (R
 			result := existing.result
 			result.Value = append([]byte(nil), result.Value...)
 			result.Shared = true
+			result.Disposition = Waiter
 			return result, existing.err
 		case <-ctx.Done():
 			return Result{}, ctx.Err()
@@ -58,6 +59,9 @@ func (group *FlightGroup) Do(ctx context.Context, key string, function func() (R
 
 	current.result, current.err = runFlight(function)
 	current.result.Value = append([]byte(nil), current.result.Value...)
+	if current.err == nil && current.result.Disposition == "" {
+		current.result.Disposition = Leader
+	}
 
 	group.mu.Lock()
 	delete(group.flights, key)

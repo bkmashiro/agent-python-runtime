@@ -177,3 +177,55 @@ func TestSingleFlightSeparatesInvocationIdentities(t *testing.T) {
 		t.Fatalf("calls=%d stats=%+v", calls.Load(), flights.Stats())
 	}
 }
+
+func TestSingleFlightReportsOneLeaderAndWaitersForOnePhysicalExecution(t *testing.T) {
+	flights := agentfunction.NewFlightGroup()
+	engine := agentfunction.Engine{Flights: flights}
+	invocation := cacheableInvocation()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	compute := func(_ context.Context, guard *agentfunction.Guard) ([]byte, error) {
+		if err := guard.BindPhysicalExecution("physical-1"); err != nil {
+			return nil, err
+		}
+		close(started)
+		<-release
+		return []byte("shared"), nil
+	}
+
+	const count = 8
+	results := make(chan agentfunction.Result, count)
+	var wait sync.WaitGroup
+	wait.Add(count)
+	for range count {
+		go func() {
+			defer wait.Done()
+			result, _ := engine.Execute(context.Background(), invocation, compute)
+			results <- result
+		}()
+	}
+	<-started
+	for flights.Stats().Waiters != count-1 {
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	wait.Wait()
+	close(results)
+	leaders, waiters := 0, 0
+	for result := range results {
+		if result.PhysicalExecutionID != "physical-1" {
+			t.Fatalf("result=%+v", result)
+		}
+		switch result.Disposition {
+		case agentfunction.Leader:
+			leaders++
+		case agentfunction.Waiter:
+			waiters++
+		default:
+			t.Fatalf("result=%+v", result)
+		}
+	}
+	if leaders != 1 || waiters != count-1 {
+		t.Fatalf("leaders=%d waiters=%d", leaders, waiters)
+	}
+}

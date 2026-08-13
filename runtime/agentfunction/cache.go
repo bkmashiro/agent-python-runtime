@@ -35,6 +35,7 @@ var (
 	ErrInvalidStore      = errors.New("invalid agent function store")
 	ErrProjectPartition  = errors.New("agent function project partition mismatch")
 	ErrCachePurity       = errors.New("cacheable agent function attempted forbidden authority")
+	ErrPhysicalExecution = errors.New("invalid physical execution identity")
 	ErrResultTooLarge    = errors.New("agent function result exceeds store bound")
 	ErrRetentionLimit    = errors.New("agent function store retention limit reached")
 )
@@ -111,8 +112,9 @@ func canonicalJSON(raw []byte) bool {
 }
 
 type Guard struct {
-	enforce  bool
-	violated bool
+	enforce             bool
+	violated            bool
+	physicalExecutionID string
 }
 
 func (guard *Guard) forbid() error {
@@ -129,13 +131,32 @@ func (guard *Guard) Clock() error                { return guard.forbid() }
 func (guard *Guard) Random() error               { return guard.forbid() }
 func (guard *Guard) DynamicImport(string) error  { return guard.forbid() }
 
+func (guard *Guard) BindPhysicalExecution(id string) error {
+	if guard == nil || !partitionPattern.MatchString(id) || guard.physicalExecutionID != "" {
+		return ErrPhysicalExecution
+	}
+	guard.physicalExecutionID = id
+	return nil
+}
+
 type ComputeFunc func(context.Context, *Guard) ([]byte, error)
 
+type Disposition string
+
+const (
+	Independent Disposition = "independent"
+	Leader      Disposition = "leader"
+	Waiter      Disposition = "waiter"
+	Retained    Disposition = "retained"
+)
+
 type Result struct {
-	Key      string
-	Value    []byte
-	CacheHit bool
-	Shared   bool
+	Key                 string
+	Value               []byte
+	CacheHit            bool
+	Shared              bool
+	PhysicalExecutionID string
+	Disposition         Disposition
 }
 
 type Engine struct {
@@ -162,7 +183,7 @@ func (engine Engine) Execute(ctx context.Context, invocation Invocation, compute
 	execute := func() (Result, error) {
 		if useCache {
 			if value, hit := engine.Store.get(key); hit {
-				return Result{Key: key, Value: value, CacheHit: true}, nil
+				return Result{Key: key, Value: value, CacheHit: true, Disposition: Retained}, nil
 			}
 		}
 		guard := &Guard{enforce: invocation.Admission == Cacheable}
@@ -179,12 +200,16 @@ func (engine Engine) Execute(ctx context.Context, invocation Invocation, compute
 				return Result{}, err
 			}
 		}
-		return Result{Key: key, Value: value}, nil
+		return Result{Key: key, Value: value, PhysicalExecutionID: guard.physicalExecutionID}, nil
 	}
 	if engine.Flights != nil && invocation.Admission == Cacheable {
 		return engine.Flights.Do(ctx, key, execute)
 	}
-	return execute()
+	result, err := execute()
+	if err == nil && result.Disposition == "" {
+		result.Disposition = Independent
+	}
+	return result, err
 }
 
 type Stats struct {

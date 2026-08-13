@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
@@ -87,6 +89,37 @@ func TestIdenticalLogicalInvocationsShareOneRealFreshGuest(t *testing.T) {
 	}
 	if physical.Load() != 1 || leaders != 1 || waiters != logical-1 {
 		t.Fatalf("physical=%d leaders=%d waiters=%d stats=%+v", physical.Load(), leaders, waiters, flights.Stats())
+	}
+	materializePrivateChildWorkspaces(t, []byte(`{"value":42}`), logical)
+}
+
+func materializePrivateChildWorkspaces(t *testing.T, value []byte, count int) {
+	t.Helper()
+	base := filepath.Join(t.TempDir(), "children")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	refs := make(map[workspace.Ref]struct{}, count)
+	hashes := make(map[string]struct{}, count)
+	for index := range count {
+		ref, err := manager.Create([]workspace.InitialFile{{Path: fmt.Sprintf("child-%d/result.json", index), Data: value}}, workspace.DefaultLimits())
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := manager.Inspect(ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		refs[ref] = struct{}{}
+		hashes[info.WorkspaceSHA256] = struct{}{}
+	}
+	if len(refs) != count || len(hashes) != count {
+		t.Fatalf("private workspaces refs=%d hashes=%d want=%d", len(refs), len(hashes), count)
 	}
 }
 

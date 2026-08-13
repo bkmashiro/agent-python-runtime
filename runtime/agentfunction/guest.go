@@ -1,9 +1,13 @@
 package agentfunction
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
@@ -11,6 +15,7 @@ var (
 	ErrInvalidGuestCompute = errors.New("invalid fresh Guest compute")
 	ErrGuestResultTooLarge = errors.New("fresh Guest result exceeds bound")
 	ErrGuestNotShareable   = errors.New("fresh Guest execution profile is not shareable")
+	ErrGuestIdentity       = errors.New("fresh Guest request does not match invocation identity")
 )
 
 type GuestRunnerFactory func(context.Context) (physicalExecutionID string, runner enginecontract.Runner, err error)
@@ -62,6 +67,12 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invocation, compute FreshGuestCompute) (Result, error) {
 	if compute.NewRunner == nil {
 		return Result{}, ErrInvalidGuestCompute
+	}
+	request, err := runtimeconfig.DecodeRunRequest(compute.Request)
+	codeDigest := sha256.Sum256([]byte(request.Code))
+	if err != nil || fmt.Sprintf("sha256:%x", codeDigest[:]) != invocation.FunctionSourceSHA256 ||
+		!bytes.Equal(request.Inputs, invocation.CanonicalInputs) {
+		return Result{}, ErrGuestIdentity
 	}
 	originalFactory := compute.NewRunner
 	compute.NewRunner = func(runContext context.Context) (string, enginecontract.Runner, error) {

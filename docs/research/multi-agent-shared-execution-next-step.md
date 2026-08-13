@@ -1,6 +1,25 @@
 # Multi-agent shared execution: next falsifiable prototype
 
-Status: **research decision draft, 2026-08-13**. This is one bounded next step, not a commitment to build a global scheduler, effect lattice, general Python JIT, or cross-tenant cache.
+Status: **research decision draft, 2026-08-13**. This is one bounded next step, not a commitment to build a global scheduler, effect lattice, prepared-runtime fleet, or cross-tenant cache.
+
+## First prototype result
+
+Implemented and Linux-qualified on 2026-08-13. The bounded mechanism now maps identical concurrent logical invocations onto one real fresh CPython/WASI Guest while retaining separate leader/waiter evidence and copying only the immutable serialized result.
+
+Linux/amd64 Slurm job `273949` at source `2dff358` recorded:
+
+| Logical invocations | Mode | Physical Guests | Wall time |
+|---:|---|---:|---:|
+| 8 | independent | 8 | 13.809 s |
+| 8 | coalesced | 1 | 9.419 s |
+| 32 | independent | 32 | 54.174 s |
+| 32 | coalesced | 1 | 9.545 s |
+
+The physical-execution reductions were 87.5% and 96.875%. The observed wall-time speedups were 1.47× and 5.68×. These are one bounded mechanism run per row, not statistical performance claims. Complete machine-readable evidence is in [`../evidence/shared-guest-linux.json`](../evidence/shared-guest-linux.json).
+
+The shareable entry binds the actual request source and canonical inputs to the invocation identity, and binds the created Runner to the artifact, execution profile, and deterministic profile. Runners with a workspace or capability Broker are rejected before `Run`. A Host-call attempt remains unpublishable even when Guest Python catches the bridge error; a subsequent identical call recomputes rather than retaining the failed value. Child-specific filesystem materialization occurs afterward in separate Host-owned workspaces.
+
+This proves a deliberately narrow substrate claim. It does not prove automatic purity inference, arbitrary WASI syscall provenance, natural overlap in real agent trajectories, cross-tenant safety, prepared/COW density, or a general scheduler.
 
 ## Decision
 

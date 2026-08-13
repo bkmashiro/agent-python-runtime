@@ -1,0 +1,55 @@
+{
+  "schema_version": "pysolate.shared-guest-linux-evidence.v1",
+  "source_commit": "2dff358",
+  "slurm_job_id": "273949",
+  "platform": "linux/amd64",
+  "process_exit": 0,
+  "test_elapsed_seconds": 117.38,
+  "max_rss_kib": 11339640,
+  "rows": [
+    {
+      "logical_invocations": 8,
+      "mode": "independent",
+      "physical_guest_executions": 8,
+      "leaders": 0,
+      "waiters": 0,
+      "elapsed_millis": 13809,
+      "passed": true
+    },
+    {
+      "logical_invocations": 8,
+      "mode": "coalesced",
+      "physical_guest_executions": 1,
+      "leaders": 1,
+      "waiters": 7,
+      "elapsed_millis": 9419,
+      "passed": true
+    },
+    {
+      "logical_invocations": 32,
+      "mode": "independent",
+      "physical_guest_executions": 32,
+      "leaders": 0,
+      "waiters": 0,
+      "elapsed_millis": 54174,
+      "passed": true
+    },
+    {
+      "logical_invocations": 32,
+      "mode": "coalesced",
+      "physical_guest_executions": 1,
+      "leaders": 1,
+      "waiters": 31,
+      "elapsed_millis": 9545,
+      "passed": true
+    }
+  ],
+  "negative_controls": {
+    "caught_host_call_attempt_not_published": "passed",
+    "failed_execution_not_retained": "passed",
+    "workspace_bound_runner_rejected": "passed",
+    "capability_broker_runner_rejected": "passed",
+    "request_source_and_inputs_bound_to_invocation": "passed"
+  },
+  "evidence_boundary": "One bounded run per matrix row; elapsed times are mechanism observations, not statistical performance claims. Peak RSS covers the complete test process and all concurrent Guests, not one Guest."
+}

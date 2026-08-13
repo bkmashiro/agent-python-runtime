@@ -14,7 +14,7 @@ func TestComposableAcceptanceProjectsBodyFreeStudyAndRuns(t *testing.T) {
 	corpus := composableacceptance.Corpus{SchemaVersion: composableacceptance.CorpusSchemaVersion, SourceCommit: strings.Repeat("a", 40), Model: "gpt-5.3-codex-spark"}
 	for index := range 3 {
 		corpus.Scenarios = append(corpus.Scenarios, composableacceptance.Scenario{
-			ID: "scenario-" + string(rune('a'+index)), Task: "bounded private repository scenario task",
+			ID: "scenario-" + string(rune('a'+index)), GuestSource: "values = [3, 1, 2]\nresult = sorted(values)", Task: "bounded private repository scenario task",
 			Files: []string{"a.go", "b.go"}, ChildAnalyses: []string{"private child A", "private child B"},
 			RepeatedTransformation: "normalize twice", WaitBoundary: "wait then resume",
 			Observation: "refresh named observation", SelectedChild: index % 2,

@@ -4,10 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/composableacceptance"
 )
+
+func TestPublicDevelopmentCorpusIsCanonicalAndContainsExecutableGuestSource(t *testing.T) {
+	data, err := os.ReadFile("testdata/public-development-corpus.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corpus, _, err := composableacceptance.DecodeCorpus(data)
+	if err != nil {
+		t.Fatalf("decode public development corpus: %v", err)
+	}
+	if len(corpus.Scenarios) != 3 {
+		t.Fatalf("scenario count = %d, want 3", len(corpus.Scenarios))
+	}
+	for _, scenario := range corpus.Scenarios {
+		if !bytes.Contains([]byte(scenario.GuestSource), []byte("result =")) {
+			t.Fatalf("scenario %s has no complete Guest result assignment", scenario.ID)
+		}
+		if len(scenario.ProhibitedOutputs) != 0 {
+			t.Fatalf("development scenario %s unexpectedly carries private output restrictions", scenario.ID)
+		}
+	}
+}
 
 func TestCorpusStrictCanonicalRoundTrip(t *testing.T) {
 	value := validCorpus()
@@ -491,7 +514,7 @@ func validCorpus() composableacceptance.Corpus {
 	scenarios := make([]composableacceptance.Scenario, 3)
 	for index := range scenarios {
 		scenarios[index] = composableacceptance.Scenario{
-			ID: "scenario-test-" + string(rune('a'+index)), Task: "Inspect a bounded cross-file runtime contract.",
+			ID: "scenario-test-" + string(rune('a'+index)), GuestSource: "values = [3, 1, 2]\nresult = ','.join(str(value) for value in sorted(values))", Task: "Inspect a bounded cross-file runtime contract.",
 			Files: []string{"runtime/a.go", "runtime/b.go"}, ChildAnalyses: []string{"left", "right"},
 			RepeatedTransformation: "canonicalize", WaitBoundary: "wait", Observation: "source digest",
 			SelectedChild: index % 2, ExpectedArtifact: "REPORT: deterministic", ProhibitedOutputs: []string{"credentials"},

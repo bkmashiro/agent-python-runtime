@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTraceNodes, collectCheckpointMetadata, exampleTrace, pythonSource, type TraceAdapterEvent } from './trace';
+import { buildTraceNodes, collectCheckpointMetadata, exampleTrace, type TraceAdapterEvent } from './trace';
 
 const trace: TraceAdapterEvent[] = [
   {
@@ -69,7 +69,6 @@ describe('trace adapter', () => {
   });
 
   it('exposes example trace metadata', () => {
-    expect(pythonSource).toContain('sources.demo_catalog');
     expect(exampleTrace.length).toBeGreaterThan(0);
     expect(exampleTrace[0].action).toBe('run.start');
   });

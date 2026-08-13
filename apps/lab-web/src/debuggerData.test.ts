@@ -47,6 +47,7 @@ const validTrace = [
 
 const scenario = {
   id: 'workload-one',
+  guest_source: 'values = [3, 1, 2]\nresult = sorted(values)',
   file_count: 2,
   child_analysis_count: 2,
   selected_child: 0,
@@ -88,7 +89,7 @@ const baseRun = {
 };
 
 const baseDataset = {
-  schema_version: 'pysolate.lab-web-debugger.v2',
+  schema_version: 'pysolate.lab-web-debugger.v3',
   report_sha256: digest,
   source_commit: 'b'.repeat(40),
   corpus_sha256: digest,
@@ -97,7 +98,7 @@ const baseDataset = {
 };
 
 describe('debugger dataset validation', () => {
-  it('accepts the v2 per-run schema with full trace', () => {
+  it('accepts the v3 per-run schema with complete Guest source and trace', () => {
     const dataset = validateDataset(JSON.parse(JSON.stringify(baseDataset)));
     expect(dataset.runs).toHaveLength(1);
     expect(dataset.runs[0].run_id).toBe('run-workload-one-fresh');

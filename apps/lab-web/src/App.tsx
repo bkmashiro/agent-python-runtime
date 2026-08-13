@@ -236,10 +236,10 @@ function Inspector({
   node: TraceNode;
   run: LabRun;
 }) {
-  const [tab, setTab] = useState<string | null>('source');
-  const sourceText = acceptanceSource;
-  const sourceLineCount = sourceText.split('\n').length;
-  const sourceLabel = `Bundled public acceptance harness · complete runScenarioAllExecution function · ${sourceLineCount} lines`;
+  const [tab, setTab] = useState<string | null>('guest-source');
+  const guestSource = run.scenario.guest_source;
+  const hostSourceLineCount = acceptanceSource.split('\n').length;
+  const hostSourceLabel = `Bundled Host acceptance harness · complete runScenarioAllExecution function · ${hostSourceLineCount} lines`;
 
   return (
     <section className="panel inspector-panel" aria-label="Selected operation inspector">
@@ -262,24 +262,41 @@ function Inspector({
       </div>
       <Tabs value={tab} onChange={setTab} className="inspector-tabs">
         <Tabs.List>
-          <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Code</Tabs.Tab>
+          <Tabs.Tab value="guest-source" leftSection={<FileJson2 size={14} />}>Guest Python</Tabs.Tab>
+          <Tabs.Tab value="host-source" leftSection={<Bot size={14} />}>Host recorder</Tabs.Tab>
           <Tabs.Tab value="context" leftSection={<Database size={14} />}>Scenario</Tabs.Tab>
           <Tabs.Tab value="io" leftSection={<Database size={14} />}>Input / output</Tabs.Tab>
           <Tabs.Tab value="details" leftSection={<Folder size={14} />}>Recorded event</Tabs.Tab>
           <Tabs.Tab value="checkpoint" leftSection={<Workflow size={14} />}>Checkpoint</Tabs.Tab>
         </Tabs.List>
-        <Tabs.Panel value="source" className="tab-body source-tab">
+        <Tabs.Panel value="guest-source" className="tab-body source-tab">
           <div className="source-context">
-            <Text size="xs" c="dimmed">{sourceLabel}</Text>
-            <Badge color="violet" variant="light">
-              SOURCE-BOUND · NOT RUNTIME-CAPTURED
+            <Text size="xs" c="dimmed">Complete Python executed by the selected Guest run · {guestSource.split('\n').length} lines</Text>
+            <Badge color="green" variant="light">
+              RECORDED DEVELOPMENT SOURCE · PUBLIC
             </Badge>
           </div>
           <CodeMirror
-            value={sourceText}
+            value={guestSource}
             height="100%"
             theme={vscodeDark}
             extensions={[python(), EditorView.lineWrapping]}
+            editable={false}
+            basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
+          />
+        </Tabs.Panel>
+        <Tabs.Panel value="host-source" className="tab-body source-tab">
+          <div className="source-context">
+            <Text size="xs" c="dimmed">{hostSourceLabel}</Text>
+            <Badge color="violet" variant="light">
+              HOST RECORDER · NOT GUEST PYTHON
+            </Badge>
+          </div>
+          <CodeMirror
+            value={acceptanceSource}
+            height="100%"
+            theme={vscodeDark}
+            extensions={[EditorView.lineWrapping]}
             editable={false}
             basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
           />
@@ -415,7 +432,7 @@ export default function App() {
         if (recorded[0]) {
           setSelectedRunId(recorded[0].key);
         }
-        setDatasetSummary(`Showing ${recorded.length} all-on benchmark runs · ${parsed.runs.length} evidence rows retained`);
+        setDatasetSummary(`Showing ${recorded.length} public development runs`);
         setDatasetError('');
       } catch (error) {
         setRunOptions([]);
@@ -477,7 +494,7 @@ export default function App() {
       if (recorded[0]) {
         setSelectedRunId(recorded[0].key);
       }
-      setDatasetSummary(`Showing ${recorded.length} all-on benchmark runs · ${parsed.runs.length} evidence rows retained`);
+      setDatasetSummary(`Showing ${recorded.length} public development runs`);
       setDatasetError('');
     } catch (error) {
       setDatasetError(error instanceof Error ? error.message : 'Invalid dataset');
@@ -496,7 +513,7 @@ export default function App() {
               <Text fw={800} size="sm">Pysolate Lab Debugger</Text>
               <Text size="xs" c="dimmed">{datasetSummary}</Text>
             </div>
-            <Button size="compact-xs" onClick={onUpload}>Load v2 JSON</Button>
+            <Button size="compact-xs" onClick={onUpload}>Load v3 JSON</Button>
             <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={handleLoad} />
           </Group>
         </AppShell.Header>
@@ -548,7 +565,7 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <Button size="compact-xs" onClick={onUpload}>Load v2 JSON</Button>
+            <Button size="compact-xs" onClick={onUpload}>Load v3 JSON</Button>
             <input
               ref={fileInputRef}
               type="file"
@@ -557,7 +574,7 @@ export default function App() {
               onChange={handleLoad}
             />
             <div style={{ width: 190 }}>
-              <Text size="xs" c="dimmed">{recordedRuns.length} all-on runs</Text>
+              <Text size="xs" c="dimmed">{recordedRuns.length} development runs</Text>
               <Text size="xs" c="dimmed">{datasetSummary}</Text>
               {datasetError && <Text size="xs" c="red">{datasetError}</Text>}
             </div>

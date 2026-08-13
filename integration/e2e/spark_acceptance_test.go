@@ -1006,10 +1006,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 
 	prepares, err := streaming.BuildPrepareChunks(streaming.PrepareConfig{
 		Inputs: json.RawMessage(`{}`),
-		Chunks: []string{
-			"scenario_identity = " + pythonStringLiteral(t, scenarioSHA) + "\n",
-			"result = " + pythonStringLiteral(t, scenario.ExpectedArtifact) + "\n",
-		},
+		Chunks: []string{scenario.GuestSource + "\n"},
 	})
 	if err != nil {
 		t.Fatal(err)

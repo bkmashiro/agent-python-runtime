@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	CorpusSchemaVersion = "pysolate.spark-scenario-corpus.v1"
+	CorpusSchemaVersion = "pysolate.spark-scenario-corpus.v2"
 	ReportSchemaVersion = "pysolate.composable-acceptance-report.v2"
 )
 
@@ -189,6 +189,7 @@ type Corpus struct {
 
 type Scenario struct {
 	ID                     string   `json:"id"`
+	GuestSource            string   `json:"guest_source"`
 	Task                   string   `json:"task"`
 	Files                  []string `json:"files"`
 	ChildAnalyses          []string `json:"child_analyses"`
@@ -293,7 +294,7 @@ func (value Corpus) Validate() error {
 }
 
 func (scenario Scenario) validate() error {
-	if !idRE.MatchString(scenario.ID) || len(scenario.Task) < 20 || len(scenario.Files) < 2 || len(scenario.ChildAnalyses) != 2 || scenario.SelectedChild < 0 || scenario.SelectedChild > 1 || scenario.ExpectedArtifact == "" || scenario.RepeatedTransformation == "" || scenario.WaitBoundary == "" || scenario.Observation == "" {
+	if !idRE.MatchString(scenario.ID) || len(scenario.GuestSource) < 20 || len(scenario.GuestSource) > 32_768 || len(scenario.Task) < 20 || len(scenario.Files) < 2 || len(scenario.ChildAnalyses) != 2 || scenario.SelectedChild < 0 || scenario.SelectedChild > 1 || scenario.ExpectedArtifact == "" || scenario.RepeatedTransformation == "" || scenario.WaitBoundary == "" || scenario.Observation == "" {
 		return ErrInvalid
 	}
 	for _, path := range scenario.Files {

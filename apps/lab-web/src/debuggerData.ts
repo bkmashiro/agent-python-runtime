@@ -30,6 +30,7 @@ export type LabMetrics = {
 
 export type LabScenario = {
   id: string;
+  guest_source: string;
   file_count: number;
   child_analysis_count: number;
   selected_child: number;
@@ -51,7 +52,7 @@ export type LabRun = {
 };
 
 export type LabDataset = {
-  schema_version: 'pysolate.lab-web-debugger.v2';
+  schema_version: 'pysolate.lab-web-debugger.v3';
   report_sha256: string;
   source_commit: string;
   corpus_sha256: string;
@@ -145,7 +146,7 @@ function isValidTrace(trace: LabTraceEvent[]): { kind: 'ok' | 'skip' } {
 
 export function validateDataset(value: unknown): LabDataset {
   const raw = value as Partial<LabDataset>;
-  const schemaValid = raw.schema_version === 'pysolate.lab-web-debugger.v2';
+  const schemaValid = raw.schema_version === 'pysolate.lab-web-debugger.v3';
   if (!schemaValid || typeof raw.report_sha256 !== 'string' || !digestRE.test(raw.report_sha256) ||
       typeof raw.source_commit !== 'string' || !/^[0-9a-f]{40}$/.test(raw.source_commit) ||
       typeof raw.corpus_sha256 !== 'string' || !digestRE.test(raw.corpus_sha256) ||
@@ -155,7 +156,7 @@ export function validateDataset(value: unknown): LabDataset {
   }
 
   const normalized: LabDataset = {
-    schema_version: 'pysolate.lab-web-debugger.v2',
+    schema_version: 'pysolate.lab-web-debugger.v3',
     report_sha256: raw.report_sha256,
     source_commit: raw.source_commit,
     corpus_sha256: raw.corpus_sha256,
@@ -176,6 +177,7 @@ export function validateDataset(value: unknown): LabDataset {
 
     const scenario = run.scenario;
     assert(typeof scenario?.id === 'string' && scenario.id === run.workload_id, 'scenario/workload mismatch');
+    assert(typeof scenario.guest_source === 'string' && scenario.guest_source.length >= 20 && scenario.guest_source.length <= 32_768, 'invalid Guest source');
     assert(typeof scenario.file_count === 'number' && Number.isInteger(scenario.file_count) && scenario.file_count >= 0, 'invalid file count');
     assert(typeof scenario.child_analysis_count === 'number' && Number.isInteger(scenario.child_analysis_count) && scenario.child_analysis_count >= 0, 'invalid child analysis count');
     assert(typeof scenario.selected_child === 'number' && Number.isInteger(scenario.selected_child), 'invalid selected child');

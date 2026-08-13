@@ -8,8 +8,9 @@ recorded run selector → causal trace → operation input/output/details → ca
 
 ## Recorded experiments
 
-The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v2`. Every run contains, under one `run_id`:
+The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v3`. Every run contains, under one `run_id`:
 
+- the complete public Python source executed by the selected Guest run;
 - scenario identity and shape metadata;
 - passed/rejected/skipped status and terminal disposition;
 - lifecycle/cache/single-flight/workspace metrics;
@@ -23,23 +24,22 @@ uses a dangling causal parent, disagrees with its terminal status, duplicates a
 from summary metrics and does not fall back from an invalid recorded dataset to
 fabricated experiment rows.
 
-The historical 54-row conformance artifact remains intact, while the primary
-selector deliberately shows only three `all`-treatment benchmark runs—one per
-scenario. Trace events are grouped deterministically by mechanism; each group
-expands to the original sequence, outcomes, metadata, and digests.
+The selector contains three checked-in public development scenarios, each recorded
+with the `all` treatment. Trace events are grouped deterministically by mechanism;
+each group expands to the original sequence, outcomes, metadata, and digests.
 
-The Code tab shows the complete build-bound public `runScenarioAllExecution`
-function. It is explicitly labelled as source-bound, not runtime-captured Guest
-source.
+`Guest Python` is the complete source actually sent through the streaming Guest
+execution. `Host recorder` separately shows the complete build-bound public
+`runScenarioAllExecution` function, clearly labelled as Host Go rather than Guest
+Python.
 
 ## Evidence boundary
 
-The canonical acceptance report and static Web dataset are body-free. The Web
-projection contains scenario identity, counts, selected-child index, and mechanism
-presence flags, but no task, file, child-analysis, expected-artifact, or prohibited-
-output body. It contains no model prompt, raw model response, credential, or Host
-absolute path. Workspace and checkpoint bodies are not reconstructed: the debugger
-shows only identities that were actually captured.
+The development corpus, Guest Python, task descriptions, filenames, child-analysis
+labels, observations, and expected artifacts are all checked-in public fixtures.
+The static Web projection intentionally includes `guest_source`. It still contains
+no credential or Host absolute path, and workspace/checkpoint bodies are not
+reconstructed: the debugger shows only identities actually captured.
 
 ## Technology
 

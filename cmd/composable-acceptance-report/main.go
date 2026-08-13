@@ -60,6 +60,7 @@ type webRef struct {
 
 type webScenario struct {
 	ID                        string `json:"id"`
+	GuestSource               string `json:"guest_source"`
 	FileCount                 uint32 `json:"file_count"`
 	ChildAnalysisCount        uint32 `json:"child_analysis_count"`
 	SelectedChild             int    `json:"selected_child"`
@@ -123,7 +124,7 @@ func writeLabProjection(root string, corpus composableacceptance.Corpus, report 
 
 	runsByKey := make(map[string]struct{}, len(projection.Runs))
 	web := webDataset{
-		SchemaVersion: "pysolate.lab-web-debugger.v2",
+		SchemaVersion: "pysolate.lab-web-debugger.v3",
 		ReportSHA256:  reportSHA, SourceCommit: report.SourceCommit,
 		CorpusSHA256: report.CorpusSHA256, Model: report.Model,
 		Runs: make([]webRun, 0, len(projection.Runs)),
@@ -187,6 +188,7 @@ func writeLabProjection(root string, corpus composableacceptance.Corpus, report 
 func projectWebScenario(scenario composableacceptance.Scenario) webScenario {
 	return webScenario{
 		ID:                        scenario.ID,
+		GuestSource:               scenario.GuestSource,
 		FileCount:                 uint32(len(scenario.Files)),
 		ChildAnalysisCount:        uint32(len(scenario.ChildAnalyses)),
 		SelectedChild:             scenario.SelectedChild,

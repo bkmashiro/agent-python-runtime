@@ -1,4 +1,3 @@
-import { pythonSource } from 'virtual:pysolate-demo';
 import type { LabRun } from './debuggerData';
 
 export type Evidence = 'observed' | 'verified-example' | 'source-bound' | 'instrumentation-preview';
@@ -184,6 +183,7 @@ export const exampleRun: Omit<LabRun, 'trace'> = {
   },
   scenario: {
     id: 'workspace-summary',
+    guest_source: 'values = [3, 1, 2]\nresult = sorted(values)',
     file_count: 1,
     child_analysis_count: 2,
     selected_child: 0,
@@ -248,5 +248,3 @@ export const exampleTrace: TraceAdapterEvent[] = [
     terminal_disposition: 'discarded',
   },
 ];
-
-export { pythonSource };

@@ -163,6 +163,10 @@ The transferable lesson is constrained optimization: semantic tools with pre/pos
 
 The transferable lesson is that control-flow isolation alone is insufficient: the provenance of data entering an effect matters. CaMeL obtains value-level provenance through a custom restricted-Python interpreter [1]. Pysolate executes real CPython, so the bounded analogue is provenance on structured Harness messages, immutable observations, shared-node inputs, and typed Host-call arguments—not arbitrary Python object taint.
 
+### Learning to Share
+
+Learning to Share directly targets redundant work across parallel agent teams, but shares textual intermediate steps through task-local global memory: natural-language summaries are keys, raw agent outputs are values, and a learned controller chooses what to admit [5]. This is semantically closer to shared memory/context than to Pysolate's proposed execution identity and effect-enforced physical work sharing.
+
 ### Workload-Aware Caching for Multi-Agent Systems
 
 This concurrent work already caches exact intermediate task results in multi-agent DAGs and contributes an eviction score over dependency count, recomputation cost, and agent frequency [4]. Its cache keys are planner-emitted task description/subject identifiers; its evaluation targets retained LLM/OCR/visual task outputs under finite capacity. Therefore **multi-agent DAG node caching or lower latency from cache hits is not a sufficient Pysolate novelty claim**.
@@ -193,3 +197,4 @@ Use ARIES later as the experiment/harness layer while retaining its task sandbox
 2. Caleb Winston et al., [Agent JIT Compilation for Latency-Optimizing Web Agent Planning and Scheduling](https://arxiv.org/abs/2605.21470), arXiv:2605.21470.
 3. HyScale Lab, [ARIES pinned source](https://github.com/hyscale-lab/ARIES/tree/b8e6df3dd912d7c9fbee3cb1fe66b119e468d5a3), commit `b8e6df3dd912d7c9fbee3cb1fe66b119e468d5a3`.
 4. Anas Mohamed et al., [Workload-Aware Caching for Multi-Agent Systems](https://arxiv.org/abs/2607.20495), arXiv:2607.20495v1.
+5. Joseph Fioresi et al., [Learning to Share: Selective Memory for Efficient Parallel Agentic Systems](https://arxiv.org/abs/2602.05965), arXiv:2602.05965v2.

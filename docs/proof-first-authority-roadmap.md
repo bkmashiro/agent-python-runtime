@@ -1,10 +1,13 @@
 # Pysolate composable mechanism roadmap
 
-Status: **Active source-of-truth roadmap; Proposed work is not Current.**
+Status: **Long-term mechanism inventory; active execution is governed by the approved Full Composable Runtime Megagoal.**
 Date: 2026-08-13
 
-This roadmap replaces the earlier linear effect-first ordering. It preserves the
-authority-lifecycle correctness direction while making streaming
+This roadmap replaces the earlier linear effect-first ordering and remains the
+long-term mechanism inventory. The active executable subset, exploration/deferral
+rules, gates, and stop conditions now live in
+[the approved Full Composable Runtime Megagoal](megagoal-full-composable-agent-runtime.md).
+It preserves the authority-lifecycle correctness direction while making streaming
 authority-staged execution the primary Agent-specific research hypothesis.
 Content-addressed Agent Functions remain an independent optional reuse track.
 
@@ -14,7 +17,8 @@ Related decisions:
 - [authority-lifecycle positioning](authority-lifecycle-positioning.md)
 - [content-addressed Agent Functions](content-addressed-agent-functions.md)
 - [streaming authority-staged execution](streaming-authority-staged-execution.md)
-- [approved streaming execution megagoal](megagoal-streaming-authority-staged-execution.md)
+- [approved Full Composable Runtime successor megagoal](megagoal-full-composable-agent-runtime.md)
+- [completed streaming execution megagoal](megagoal-streaming-authority-staged-execution.md)
 - [Cloudflare comparison](research/cloudflare-code-mode-comparison.md)
 
 ## Product objective

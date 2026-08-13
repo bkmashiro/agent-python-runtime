@@ -279,14 +279,14 @@ physical occurrence that owns it.
 **Promise:** Child filesystem state can branch and move independently of live
 Guests or Linux COW.
 
-- [ ] Explore the current manifest/Capsule/attempt substrate and choose the
+- [x] Explore the current manifest/Capsule/attempt substrate and choose the
   smallest immutable root and parent-lineage contract.
-- [ ] Implement child derived roots/deltas without requiring memory COW.
-- [ ] Prove branch-of-branch lineage across fresh Runs.
-- [ ] Implement explicit select and expected-base conflict detection.
-- [ ] Implement only the bounded compare/merge needed by the north-star; defer
+- [x] Implement child derived roots/deltas without requiring memory COW.
+- [x] Prove branch-of-branch lineage across fresh Runs.
+- [x] Implement explicit select and expected-base conflict detection.
+- [x] Implement only the bounded compare/merge needed by the north-star; defer
   general three-way merge if it materially expands scope.
-- [ ] Keep `/tmp` excluded and direct/private-attempt fallback explicit.
+- [x] Keep `/tmp` excluded and direct/private-attempt fallback explicit.
 - [ ] Measure changed bytes, materialization, branch depth, and reachable garbage
   on deterministic fixtures.
 
@@ -567,9 +567,10 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 1 — freeze the versioned staged-observation identity, bind preflight
-records to final source identity, and add one RED mismatch table spanning every
-identity dimension.`
+`Track 3 — define the versioned structured child descriptor and bounded Host
+orchestrator over fresh child Runs and Track 2 private branches. Track 1
+execution-path integration and Track 2 aggregate measurements remain open and
+must close in the integrated north-star.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -599,6 +600,15 @@ Add entries here before each track implementation.
   freshness/expiry, privacy partition, and parent lineage. Provisional records
   may omit only the unknown final source digest; seal binding is exact and
   one-way. Terminal failure/timeout/cancel/late/orphan clears the staged body.
+- 2026-08-13 — Track 2 / `Proceed minimal`: model a portable sealed root as a
+  digest-only lineage record layered over the existing Capsule and private copy.
+  A child is mutable until seal; seal verifies the expected base, computes a
+  portable workspace digest plus changed-entry/byte counters, and makes the root
+  immutable. Sealed roots support branch-of-branch and Capsule transfer into a
+  new Manager. Explicit select is sufficient for the north-star, so general
+  three-way merge is `Deferred for joint review`: it would add conflict policy
+  without a selected integrated fixture requiring it. Existing direct workspace
+  and private Attempt paths remain unchanged fallbacks.
 
 ## Completion log
 
@@ -619,6 +629,11 @@ Do not mark umbrella tracks complete from implementation presence alone.
   SourceSeal suite binding, and Plan-derived spec/handler/grant identities. This
   freezes the contract but does not yet claim the existing Guest-local eager
   table is fully replaced; the next slice is its execution-path integration.
+- 2026-08-13 — Track 2 mechanism slice: added portable immutable root records,
+  expected-base seal conflict, recursive lineage, Capsule rebind in a fresh
+  Manager, explicit select, and immutable-write rejection. Deterministic focused
+  and race tests passed; aggregate reachability/materialization measurements stay
+  open for the integrated fixture.
 
 ## Final reporting contract
 

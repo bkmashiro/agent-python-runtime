@@ -70,9 +70,11 @@ type InitialFile struct {
 }
 
 type entry struct {
-	root   string
-	limits Limits
-	owner  string
+	root       string
+	limits     Limits
+	owner      string
+	immutable  bool
+	rootRecord *Root
 }
 
 // Manager owns workspace roots beneath one private 0700 Host directory.
@@ -208,6 +210,9 @@ func (manager *Manager) Acquire(ref Ref, owner string) (*Lease, error) {
 	}
 	if item.owner != "" {
 		return nil, ErrWorkspaceBusy
+	}
+	if item.immutable {
+		return nil, ErrWorkspaceImmutable
 	}
 	usage, err := scanOrdinaryTree(item.root, item.limits)
 	if err != nil {

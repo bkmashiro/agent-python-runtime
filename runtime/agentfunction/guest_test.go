@@ -60,6 +60,19 @@ func TestExecuteGuestRejectsRequestIdentityMismatchBeforeRunnerCreation(t *testi
 	}
 }
 
+func TestExecuteGuestRejectsOutputSchemaIdentityMismatch(t *testing.T) {
+	invocation, _ := guestInvocation()
+	request := []byte(`{"run_id":"guest","code":"result = 1","inputs":{"value":1},"output_schema":{"type":"integer"}}`)
+	created := atomic.Int32{}
+	result, err := (agentfunction.Engine{}).ExecuteGuest(context.Background(), invocation, agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) { created.Add(1); return "", nil, nil },
+		Request:   request, MaxResultBytes: 16, DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	})
+	if !errors.Is(err, agentfunction.ErrGuestIdentity) || len(result.Value) != 0 || created.Load() != 0 {
+		t.Fatalf("result=%+v err=%v created=%d", result, err, created.Load())
+	}
+}
+
 func TestFreshGuestComputeClosesPartiallyCreatedRunnerOnFactoryError(t *testing.T) {
 	runner := &probeRunner{}
 	_, err := (agentfunction.FreshGuestCompute{
@@ -126,7 +139,10 @@ func guestInvocation() (agentfunction.Invocation, []byte) {
 	digest := sha256.Sum256([]byte(code))
 	invocation.FunctionSourceSHA256 = fmt.Sprintf("sha256:%x", digest[:])
 	invocation.CanonicalInputs = []byte(`{"value":1}`)
-	return invocation, []byte(`{"run_id":"unit","code":"result = 1","inputs":{"value":1}}`)
+	emptySchema := sha256.Sum256(nil)
+	invocation.OutputSchemaSHA256 = fmt.Sprintf("sha256:%x", emptySchema[:])
+	request := []byte(`{"run_id":"guest","code":"result = 1","inputs":{"value":1}}`)
+	return invocation, request
 }
 
 type probeRunner struct {

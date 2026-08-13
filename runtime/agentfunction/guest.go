@@ -77,8 +77,10 @@ func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invoca
 	}
 	request, err := runtimeconfig.DecodeRunRequest(compute.Request)
 	codeDigest := sha256.Sum256([]byte(request.Code))
+	outputSchemaDigest := sha256.Sum256(request.OutputSchema)
 	if err != nil || fmt.Sprintf("sha256:%x", codeDigest[:]) != invocation.FunctionSourceSHA256 ||
-		!bytes.Equal(request.Inputs, invocation.CanonicalInputs) {
+		!bytes.Equal(request.Inputs, invocation.CanonicalInputs) ||
+		fmt.Sprintf("sha256:%x", outputSchemaDigest[:]) != invocation.OutputSchemaSHA256 {
 		return Result{}, ErrGuestIdentity
 	}
 	originalFactory := compute.NewRunner

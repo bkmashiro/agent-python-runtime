@@ -201,7 +201,7 @@ func sharedGuestInvocation(t *testing.T, artifact []byte, code string, allowedIm
 		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: profileSHA,
 		ImportClosureSHA256: digestBytes([]byte(strings.Join(allowedImports, "\x00"))), CanonicalInputs: inputs,
 		ImmutableRootSHA256: []string{hashCharacter('6')}, DeterministicSettingsSHA256: deterministic.Identity(),
-		OutputSchemaSHA256: hashCharacter('8'), PrivacyPartition: "shared-guest-test", PolicyEpochSHA256: hashCharacter('9'),
+		OutputSchemaSHA256: digestBytes(nil), PrivacyPartition: "shared-guest-test", PolicyEpochSHA256: hashCharacter('9'),
 	}, config
 }
 

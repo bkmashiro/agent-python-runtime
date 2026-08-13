@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bkmashiro/agent-python-runtime/research/composableacceptance"
 	"github.com/bkmashiro/agent-python-runtime/research/evaluation"
 )
 
@@ -291,7 +292,10 @@ func validOracleStatus(v string) bool {
 	return slices.Contains([]string{"passed", "failed", "not_run"}, v)
 }
 func validTreatment(v string) bool {
-	return slices.Contains([]string{"live_capture", "offline_replay", "counterfactual_branch", "deterministic_verification"}, v)
+	if slices.Contains([]string{"live_capture", "offline_replay", "counterfactual_branch", "deterministic_verification"}, v) {
+		return true
+	}
+	return slices.Contains(composableacceptance.TreatmentOrder, composableacceptance.Treatment(v))
 }
 func validSuffix(v SuffixMode) bool {
 	return slices.Contains([]SuffixMode{"override", "recorded_suffix", "live_suffix"}, v)

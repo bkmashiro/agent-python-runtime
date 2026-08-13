@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	CorpusSchemaVersion      = "pysolate.spark-scenario-corpus.v1"
-	ReportSchemaVersion      = "pysolate.composable-acceptance-report.v1"
-	ConformanceSchemaVersion = "pysolate.composable-conformance.v1"
+	CorpusSchemaVersion = "pysolate.spark-scenario-corpus.v1"
+	ReportSchemaVersion = "pysolate.composable-acceptance-report.v1"
 )
 
 type Treatment string
@@ -57,7 +56,8 @@ var (
 	ErrInvalid = errors.New("invalid composable acceptance record")
 	digestRE   = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	commitRE   = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	idRE       = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+	idRE       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	modelRE    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$`)
 )
 
 type Corpus struct {
@@ -78,13 +78,6 @@ type Scenario struct {
 	SelectedChild          int      `json:"selected_child"`
 	ExpectedArtifact       string   `json:"expected_artifact"`
 	ProhibitedOutputs      []string `json:"prohibited_outputs"`
-}
-
-type Conformance struct {
-	SchemaVersion       string               `json:"schema_version"`
-	SourceCommit        string               `json:"source_commit"`
-	GuestArtifactSHA256 string               `json:"guest_artifact_sha256"`
-	Checks              map[Treatment]string `json:"checks"`
 }
 
 type Report struct {
@@ -114,6 +107,17 @@ type Row struct {
 	ConformanceSHA256     string    `json:"conformance_sha256"`
 	TerminalDisposition   string    `json:"terminal_disposition"`
 	EvidenceComplete      bool      `json:"evidence_complete"`
+}
+
+func EncodeCorpus(value Corpus) ([]byte, string, error) {
+	if value.Validate() != nil {
+		return nil, "", ErrInvalid
+	}
+	data, err := encodeCanonical(value)
+	if err != nil {
+		return nil, "", err
+	}
+	return data, digest(data), nil
 }
 
 func DecodeCorpus(data []byte) (Corpus, string, error) {
@@ -150,89 +154,8 @@ func DecodeReport(data []byte, destination *Report) error {
 	return nil
 }
 
-func DecodeConformance(data []byte) (Conformance, string, error) {
-	var value Conformance
-	if err := decodeStrict(data, &value); err != nil || value.Validate() != nil {
-		return Conformance{}, "", ErrInvalid
-	}
-	canonical, err := encodeCanonical(value)
-	if err != nil || !bytes.Equal(data, canonical) {
-		return Conformance{}, "", ErrInvalid
-	}
-	return value, digest(canonical), nil
-}
-
-func EncodeConformance(value Conformance) ([]byte, string, error) {
-	if err := value.Validate(); err != nil {
-		return nil, "", err
-	}
-	data, err := encodeCanonical(value)
-	if err != nil {
-		return nil, "", err
-	}
-	return data, digest(data), nil
-}
-
-func CompleteReport(corpus Corpus, core Report, conformance Conformance) (Report, error) {
-	if corpus.Validate() != nil || core.Validate() != nil || conformance.Validate() != nil ||
-		core.SourceCommit != conformance.SourceCommit || core.GuestArtifactSHA256 != conformance.GuestArtifactSHA256 ||
-		core.Model != corpus.Model {
-		return Report{}, ErrInvalid
-	}
-	rows := append([]Row(nil), core.Rows...)
-	seen := make(map[string]struct{}, len(rows))
-	for _, row := range rows {
-		if row.EvidenceScope != "direct_replay" {
-			return Report{}, ErrInvalid
-		}
-		seen[row.ScenarioID+"/"+string(row.Treatment)] = struct{}{}
-	}
-	for _, scenario := range corpus.Scenarios {
-		scenarioSHA, err := ScenarioIdentity(scenario)
-		if err != nil {
-			return Report{}, err
-		}
-		oracleSHA := ArtifactIdentity(scenario.ExpectedArtifact)
-		for _, treatment := range TreatmentOrder {
-			key := scenario.ID + "/" + string(treatment)
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			checkSHA, exists := conformance.Checks[treatment]
-			if !exists {
-				return Report{}, ErrInvalid
-			}
-			rows = append(rows, Row{
-				ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, Treatment: treatment,
-				Status: "passed", OracleSHA256: oracleSHA, EvidenceScope: "shared_conformance",
-				ConformanceSHA256: checkSHA, TerminalDisposition: "shared_conformance_pass",
-				EvidenceComplete: true,
-			})
-		}
-	}
-	SortRows(rows)
-	completed := core
-	completed.Rows = rows
-	if completed.Validate() != nil {
-		return Report{}, ErrInvalid
-	}
-	return completed, nil
-}
-
-func (value Conformance) Validate() error {
-	if value.SchemaVersion != ConformanceSchemaVersion || !commitRE.MatchString(value.SourceCommit) || !digestRE.MatchString(value.GuestArtifactSHA256) || len(value.Checks) != len(TreatmentOrder) {
-		return ErrInvalid
-	}
-	for _, treatment := range TreatmentOrder {
-		if !digestRE.MatchString(value.Checks[treatment]) {
-			return ErrInvalid
-		}
-	}
-	return nil
-}
-
 func (value Corpus) Validate() error {
-	if value.SchemaVersion != CorpusSchemaVersion || !commitRE.MatchString(value.SourceCommit) || value.Model != "gpt-5.3-codex-spark" || len(value.Scenarios) != 3 {
+	if value.SchemaVersion != CorpusSchemaVersion || !commitRE.MatchString(value.SourceCommit) || !modelRE.MatchString(value.Model) || len(value.Scenarios) == 0 || len(value.Scenarios) > 100 {
 		return ErrInvalid
 	}
 	seen := map[string]struct{}{}
@@ -261,7 +184,7 @@ func (scenario Scenario) validate() error {
 }
 
 func (value Report) Validate() error {
-	if value.SchemaVersion != ReportSchemaVersion || !commitRE.MatchString(value.SourceCommit) || !digestRE.MatchString(value.GuestArtifactSHA256) || !digestRE.MatchString(value.CorpusSHA256) || value.Model != "gpt-5.3-codex-spark" || len(value.Rows) == 0 {
+	if value.SchemaVersion != ReportSchemaVersion || !commitRE.MatchString(value.SourceCommit) || !digestRE.MatchString(value.GuestArtifactSHA256) || !digestRE.MatchString(value.CorpusSHA256) || !modelRE.MatchString(value.Model) || len(value.Rows) == 0 {
 		return ErrInvalid
 	}
 	order := make(map[Treatment]int, len(TreatmentOrder))
@@ -271,7 +194,7 @@ func (value Report) Validate() error {
 	seen := map[string]struct{}{}
 	for index, row := range value.Rows {
 		position, known := order[row.Treatment]
-		if !known || !idRE.MatchString(row.ScenarioID) || !digestRE.MatchString(row.ScenarioSHA256) || !digestRE.MatchString(row.OracleSHA256) || !digestRE.MatchString(row.ConformanceSHA256) || (row.EvidenceScope != "direct_replay" && row.EvidenceScope != "shared_conformance") || row.RelativeElapsedMillis < 0 || row.GuestDestroyed > row.GuestCreated || (row.Status != "passed" && row.Status != "rejected" && row.Status != "skipped") || row.TerminalDisposition == "" {
+		if !known || !idRE.MatchString(row.ScenarioID) || !digestRE.MatchString(row.ScenarioSHA256) || !digestRE.MatchString(row.OracleSHA256) || !digestRE.MatchString(row.ConformanceSHA256) || row.EvidenceScope != "direct_replay" || row.RelativeElapsedMillis < 0 || row.GuestDestroyed > row.GuestCreated || (row.Status != "passed" && row.Status != "rejected" && row.Status != "skipped") || row.TerminalDisposition == "" {
 			return ErrInvalid
 		}
 		key := fmt.Sprintf("%s/%s", row.ScenarioID, row.Treatment)

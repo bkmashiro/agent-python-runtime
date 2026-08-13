@@ -20,6 +20,7 @@ import {
   Search, ShieldCheck, TerminalSquare, Workflow,
 } from 'lucide-react';
 import { checkpoints, pythonSource, reportContent, trace, type Evidence, type FsEntry, type TraceKind, type TraceNode } from './trace';
+import { ExperimentsView } from './Experiments';
 import 'react-complex-tree/lib/style-modern.css';
 import './styles.css';
 
@@ -212,6 +213,7 @@ function FilesystemPanel({ node }: { node: TraceNode }) {
 }
 
 export default function App() {
+  const [surface, setSurface] = useState('debugger');
   const [activeId, setActiveId] = useState('catalog');
   const node = trace.find((item) => item.id === activeId) ?? trace[0];
   return (
@@ -219,18 +221,23 @@ export default function App() {
       <AppShell.Header className="app-header">
         <MantineGroup justify="space-between" h="100%" px="md" wrap="nowrap">
           <MantineGroup gap={10}><ThemeIcon variant="gradient" gradient={{ from: 'cyan', to: 'violet' }}><Database size={17} /></ThemeIcon><div><Text fw={800} size="sm">Pysolate Lab</Text><Text size="xs" c="dimmed">Agent trace debugger</Text></div></MantineGroup>
-          <MantineGroup gap={8}><Badge color="yellow" variant="light">STATIC TARGET VIEW</Badge><Badge color="teal" variant="light" leftSection={<CircleCheck size={11} />}>REAL EXAMPLE</Badge><Tooltip label="Search trace (coming with live ingestion)"><ActionIcon variant="subtle" color="gray"><Search size={16} /></ActionIcon></Tooltip><Button size="compact-sm" variant="light" leftSection={<Play size={13} />}>Replay</Button></MantineGroup>
+          <MantineGroup className="header-actions" gap={8}>
+            <SegmentedControl size="xs" value={surface} onChange={setSurface} data={[{ label: 'Debugger', value: 'debugger' }, { label: 'Experiments', value: 'experiments' }]} />
+            {surface === 'debugger' && <MantineGroup className="header-debug-actions" gap={8}><Badge color="yellow" variant="light">STATIC TARGET VIEW</Badge><Badge color="teal" variant="light" leftSection={<CircleCheck size={11} />}>REAL EXAMPLE</Badge><Tooltip label="Search trace (coming with live ingestion)"><ActionIcon variant="subtle" color="gray"><Search size={16} /></ActionIcon></Tooltip><Button size="compact-sm" variant="light" leftSection={<Play size={13} />}>Replay</Button></MantineGroup>}
+          </MantineGroup>
         </MantineGroup>
       </AppShell.Header>
       <AppShell.Main className="app-main">
-        <div className="preview-notice"><ShieldCheck size={14} /><span><b>Target debugger experience.</b> Tool-call results and the final workspace come from the real example. Agent turns, ABI/WASI atoms, and intermediate checkpoints are marked NOT RECORDED until the Runtime/Harness records them.</span></div>
-        <Group orientation="horizontal" className="panel-group">
-          <Panel defaultSize={27} minSize={19}><TracePanel activeId={activeId} onSelect={setActiveId} /></Panel>
-          <Separator className="resize-handle" />
-          <Panel defaultSize={46} minSize={32}><Inspector key={node.id} node={node} /></Panel>
-          <Separator className="resize-handle" />
-          <Panel defaultSize={27} minSize={20}><FilesystemPanel key={`${node.id}-${node.checkpoint}`} node={node} /></Panel>
-        </Group>
+        {surface === 'experiments' ? <ExperimentsView /> : <>
+          <div className="preview-notice"><ShieldCheck size={14} /><span><b>Target debugger experience.</b> Tool-call results and the final workspace come from the real example. Agent turns, ABI/WASI atoms, and intermediate checkpoints are marked NOT RECORDED until the Runtime/Harness records them.</span></div>
+          <Group orientation="horizontal" className="panel-group">
+            <Panel defaultSize={27} minSize={19}><TracePanel activeId={activeId} onSelect={setActiveId} /></Panel>
+            <Separator className="resize-handle" />
+            <Panel defaultSize={46} minSize={32}><Inspector key={node.id} node={node} /></Panel>
+            <Separator className="resize-handle" />
+            <Panel defaultSize={27} minSize={20}><FilesystemPanel key={`${node.id}-${node.checkpoint}`} node={node} /></Panel>
+          </Group>
+        </>}
       </AppShell.Main>
     </AppShell>
   );

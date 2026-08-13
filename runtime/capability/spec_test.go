@@ -113,6 +113,26 @@ func TestCapabilitySpecRequiresHostQualifiedSpeculationConjunction(t *testing.T)
 	}
 }
 
+func TestStreamingObservationBindingIsPlanAndGrantBound(t *testing.T) {
+	registry := capability.NewRegistry()
+	spec := testSpec()
+	spec.ReadOnly, spec.Idempotent, spec.SpeculativeSafe = true, true, true
+	if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, ok := plan.StreamingObservationBinding(spec.Name)
+	if !ok || binding.Capability != spec.Name || binding.HandlerIdentity != spec.HandlerIdentity || binding.PlanSHA256 != plan.Identity() || binding.SpecSHA256 == "" || binding.GrantPolicySHA256 == "" {
+		t.Fatalf("binding = %+v ok=%v", binding, ok)
+	}
+	if _, ok := plan.StreamingObservationBinding("missing"); ok {
+		t.Fatal("missing capability received binding")
+	}
+}
+
 func TestStreamingPythonPreludeExcludesWriteCapabilities(t *testing.T) {
 	registry := capability.NewRegistry()
 	read := testSpec()

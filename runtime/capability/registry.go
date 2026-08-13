@@ -104,6 +104,17 @@ type Registry struct {
 
 type CapabilityBinding = Spec
 
+// StreamingObservationBinding is the Host-owned capability/policy fragment used
+// by streaming staged-observation identities. It carries digests and stable
+// adapter identity only, never grants or handlers themselves.
+type StreamingObservationBinding struct {
+	Capability        string
+	SpecSHA256        string
+	HandlerIdentity   string
+	PlanSHA256        string
+	GrantPolicySHA256 string
+}
+
 type ToolSchema struct {
 	Name         string          `json:"name"`
 	Description  string          `json:"description"`
@@ -226,6 +237,28 @@ func (plan *Plan) Identity() string {
 		return ""
 	}
 	return plan.identity
+}
+
+func (plan *Plan) StreamingObservationBinding(name string) (StreamingObservationBinding, bool) {
+	if plan == nil {
+		return StreamingObservationBinding{}, false
+	}
+	registered, ok := plan.registrations[name]
+	if !ok || !(SpeculationQualification{
+		ReadOnly: registered.spec.ReadOnly, Idempotent: registered.spec.Idempotent, SpeculativeSafe: registered.spec.SpeculativeSafe,
+	}).EagerEligible() {
+		return StreamingObservationBinding{}, false
+	}
+	specBytes, err := json.Marshal(registered.spec)
+	if err != nil {
+		return StreamingObservationBinding{}, false
+	}
+	specDigest := sha256.Sum256(specBytes)
+	return StreamingObservationBinding{
+		Capability: name, SpecSHA256: "sha256:" + hex.EncodeToString(specDigest[:]),
+		HandlerIdentity: registered.spec.HandlerIdentity, PlanSHA256: plan.identity,
+		GrantPolicySHA256: registered.grant.Identity(),
+	}, true
 }
 
 func (plan *Plan) MaxCalls() uint32 {

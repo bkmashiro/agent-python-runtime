@@ -592,6 +592,13 @@ Add entries here before each track implementation.
   no cache dependency. Streaming now requires explicit streaming + private
   workspace selection, while the all-off path remains the default. Capability
   grants are neither derived nor mutated by mechanism resolution.
+- 2026-08-13 — Track 1 identity contract / `Proceed minimal`: use a private,
+  one-shot Host record rather than argument-keyed memoization. The versioned
+  identity binds stream/workflow epochs, final source and suite range/digest,
+  dynamic occurrence, canonical arguments, capability spec/handler/plan/grant,
+  freshness/expiry, privacy partition, and parent lineage. Provisional records
+  may omit only the unknown final source digest; seal binding is exact and
+  one-way. Terminal failure/timeout/cancel/late/orphan clears the staged body.
 
 ## Completion log
 
@@ -607,6 +614,11 @@ Do not mark umbrella tracks complete from implementation presence alone.
   Focused `runtime`, `runtime/streaming`, `runtime/engine/wazero`, and integration
   packages passed; race passed for the three changed Runtime packages; next is
   Track 1 identity.
+- 2026-08-13 — Track 1 identity slice: added a versioned one-shot Host record,
+  exhaustive identity mismatch tests, terminal disposition handling, exact
+  SourceSeal suite binding, and Plan-derived spec/handler/grant identities. This
+  freezes the contract but does not yet claim the existing Guest-local eager
+  table is fully replaced; the next slice is its execution-path integration.
 
 ## Final reporting contract
 

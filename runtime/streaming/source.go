@@ -98,6 +98,33 @@ type SourceSeal struct {
 	Preamble SuiteRecord
 }
 
+// BindObservation permits final-source binding only when the observation's
+// suite identity was admitted by this exact source seal.
+func (seal SourceSeal) BindObservation(record *StagedObservation) error {
+	if record == nil || !validObservationDigest(seal.Digest) {
+		return ErrStagedObservationMismatch
+	}
+	record.mu.Lock()
+	identity := record.identity
+	disposition := record.disposition
+	record.mu.Unlock()
+	if disposition != ObservationReady || identity.SourceSHA256 != "" {
+		return ErrStagedObservationTerminal
+	}
+	admitted := false
+	for _, suite := range seal.Suites {
+		if suite.Range == identity.SuiteRange && suite.Digest == identity.SuiteSHA256 {
+			admitted = true
+			break
+		}
+	}
+	if !admitted {
+		return ErrStagedObservationMismatch
+	}
+	_, err := record.BindSource(seal.Digest)
+	return err
+}
+
 type streamState uint8
 
 const (

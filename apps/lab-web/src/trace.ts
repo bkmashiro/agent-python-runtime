@@ -65,6 +65,55 @@ export interface TraceAdapterEvent {
   terminal_disposition?: string;
 }
 
+export type EventPresentation = {
+  phase: string;
+  label: string;
+  description: string;
+};
+
+export function describeEvent(event: TraceAdapterEvent): EventPresentation {
+  if (event.action === 'agent.execute') return {
+    phase: 'Child agents', label: `${event.agent_id} Python`,
+    description: `${event.agent_id} ran its recorded Python task in a private workspace.`,
+  };
+  const exact: Record<string, EventPresentation> = {
+    'run.start': { phase: 'Run', label: 'Run started', description: 'The Host started recording this run.' },
+    'workspace.fork': { phase: 'Workspace', label: 'Workspace forked', description: 'The Host created a private workspace for the run.' },
+    'stream.begin': { phase: 'Parent agent', label: 'Parent started', description: 'The parent Guest execution stream started.' },
+    'stream.prepare': { phase: 'Parent agent', label: 'Source prepared', description: 'A recorded Python source chunk was prepared for the parent Guest.' },
+    'guest.python': { phase: 'Parent agent', label: 'Parent Python', description: 'The parent Guest executed the recorded Python program.' },
+    'stream.seal': { phase: 'Parent agent', label: 'Parent sealed', description: 'No more input could be sent to the parent Guest.' },
+    'stream.end': { phase: 'Parent agent', label: 'Parent finished', description: 'The parent Guest execution stream completed.' },
+    'workspace.commit': { phase: 'Workspace', label: 'Parent workspace committed', description: 'The parent workspace result was committed.' },
+    'guest.close': { phase: 'Parent agent', label: 'Parent closed', description: 'The parent Guest was closed.' },
+    'fanout.select': event.outcome === 'started'
+      ? { phase: 'Child agents', label: 'Children started', description: 'The Host launched the recorded child-agent branches.' }
+      : { phase: 'Join', label: 'Workspace selected', description: 'The Host selected the winning child workspace after both children finished.' },
+    'fanout.discard': { phase: 'Join', label: 'Other workspace discarded', description: 'The non-selected child workspace was discarded.' },
+    'fanout.selected_root': { phase: 'Join', label: 'Selected workspace verified', description: 'The selected child workspace identity was verified.' },
+    'cache.lookup': { phase: 'Cache', label: event.outcome === 'hit' ? 'Cache hit' : 'Cache miss', description: `The Host cache lookup returned ${event.outcome}.` },
+    'cache.compute': { phase: 'Cache', label: 'Cache value computed', description: 'The Host computed and stored a missing cache value.' },
+    'cache.hit': { phase: 'Cache', label: 'Cached result reused', description: 'A previously recorded result was reused.' },
+    'single_flight.leader': { phase: 'Cache', label: 'Leader elected', description: 'One caller became the single-flight leader.' },
+    'single_flight.follower': { phase: 'Cache', label: 'Follower joined', description: 'Another caller joined the in-flight computation.' },
+    'single_flight.compute': { phase: 'Cache', label: 'Shared computation finished', description: 'The single-flight computation completed for all callers.' },
+    'wait.begin': { phase: 'Wait / resume', label: 'Wait started', description: 'The run entered a recorded wait boundary.' },
+    'observation.initial': { phase: 'Wait / resume', label: 'Initial state observed', description: 'The Host recorded the state before releasing the wait.' },
+    'wait.release': event.outcome === 'started'
+      ? { phase: 'Wait / resume', label: 'Release requested', description: 'The Host requested release of the waiting run.' }
+      : { phase: 'Wait / resume', label: 'Wait released', description: 'The wait boundary was released.' },
+    'observation.changed': { phase: 'Wait / resume', label: 'Change observed', description: 'The Host recorded the state change after release.' },
+    'resume.fresh': { phase: 'Wait / resume', label: 'Fresh Guest resumed', description: 'Execution resumed in a fresh Guest.' },
+    'oracle.compare': { phase: 'Verification', label: 'Result checked', description: 'The recorded result was compared with its expected identity.' },
+    'run.terminal': { phase: 'Run', label: 'Run finished', description: `The run reached terminal disposition ${event.terminal_disposition ?? event.outcome}.` },
+  };
+  return exact[event.action] ?? {
+    phase: mechanismGroup(event.type).replaceAll('-', ' '),
+    label: event.action.replaceAll('.', ' '),
+    description: `${event.action} recorded outcome ${event.outcome}.`,
+  };
+}
+
 function toDigestField(raw?: string): Record<string, string> | null {
   if (!raw) {
     return null;
@@ -91,14 +140,15 @@ function mechanismGroup(type: string): MechanismGroup {
 }
 
 function eventNode(event: TraceAdapterEvent, evidence: Evidence, parent: string, depth: number): TraceNode {
+  const presentation = describeEvent(event);
   return {
     id: `event:${event.sequence}`,
     parent,
     depth,
     kind: event.type,
     group: mechanismGroup(event.type),
-    title: event.action,
-    summary: `${event.outcome} · seq ${event.sequence}`,
+    title: presentation.label,
+    summary: `${presentation.phase} · ${event.outcome} · seq ${event.sequence}`,
     evidence,
     duration: `${event.relative_elapsed_millis.toFixed(2)} ms`,
     params: {
@@ -129,6 +179,22 @@ function eventNode(event: TraceAdapterEvent, evidence: Evidence, parent: string,
 
 export function buildTraceNodes(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
   return events.map((event) => eventNode(event, evidence, '', 0));
+}
+
+export function buildCausalTraceTree(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
+  const bySpan = new Map(events.map((event) => [event.span_id, event]));
+  return [...events].sort((a, b) => a.sequence - b.sequence).map((event) => {
+    let depth = 0;
+    let parentSpan = event.parent_span_id;
+    const seen = new Set<string>();
+    while (parentSpan && bySpan.has(parentSpan) && !seen.has(parentSpan)) {
+      seen.add(parentSpan);
+      depth += 1;
+      parentSpan = bySpan.get(parentSpan)?.parent_span_id;
+    }
+    const parentEvent = event.parent_span_id ? bySpan.get(event.parent_span_id) : undefined;
+    return eventNode(event, evidence, parentEvent ? `event:${parentEvent.sequence}` : '', depth);
+  });
 }
 
 export function collectCheckpointMetadata(events: ReadonlyArray<TraceAdapterEvent>): Record<string, CheckpointMetadata> {

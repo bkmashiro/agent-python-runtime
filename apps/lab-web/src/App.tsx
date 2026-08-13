@@ -8,7 +8,7 @@ import { python } from '@codemirror/lang-python';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { Decoration, EditorView } from '@codemirror/view';
 import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
-import { type TraceAdapterEvent, type TraceNode, buildTraceNodes } from './trace';
+import { type TraceAdapterEvent, type TraceNode, buildTraceNodes, buildCausalTraceTree, describeEvent } from './trace';
 import { type LabDataset, type LabRun, validateDataset } from './debuggerData';
 
 type RunSource = 'recorded';
@@ -60,50 +60,74 @@ function JsonViewer({ value, label }: { value: unknown; label: string }) {
   );
 }
 
-function AgentTimeline({ run, activeId, onSelect }: { run: LabRun; activeId: string; onSelect: (id: string) => void }) {
+function ExecutionPanel({ run, activeId, onSelect }: { run: LabRun; activeId: string; onSelect: (id: string) => void }) {
+  const [view, setView] = useState<'timeline' | 'tree'>('timeline');
   const maxEnd = Math.max(1, ...run.trace.map((event) => event.ended_millis));
-  const agentOrder = [
-    'orchestrator',
-    ...run.scenario.child_programs.map((child) => child.id),
-    ...run.trace.map((event) => event.agent_id).filter((id) => id !== 'orchestrator' && !run.scenario.child_programs.some((child) => child.id === id)),
-  ].filter((id, index, all) => all.indexOf(id) === index);
+  const agentOrder = ['orchestrator', ...run.scenario.child_programs.map((child) => child.id), ...run.trace.map((event) => event.agent_id).filter((id) => id !== 'orchestrator' && !run.scenario.child_programs.some((child) => child.id === id))].filter((id, index, all) => all.indexOf(id) === index);
+  const fanoutStart = run.trace.find((event) => event.action === 'fanout.select' && event.outcome === 'started')?.started_millis;
+  const joinTime = run.trace.find((event) => event.action === 'fanout.select' && event.outcome === 'selected')?.started_millis;
+  const phaseMarkers = [['Parent', run.trace.find((event) => event.action === 'stream.begin')?.started_millis], ['Fan-out', fanoutStart], ['Join + Host checks', joinTime], ['Resume', run.trace.find((event) => event.action === 'resume.fresh')?.started_millis]] as Array<[string, number | undefined]>;
+  const tree = useMemo(() => buildCausalTraceTree(run.trace as ReadonlyArray<TraceAdapterEvent>, 'observed'), [run.trace]);
+
   return (
-    <section className="panel trace-panel agent-timeline" aria-label="Agent execution timeline">
-      <div className="panel-heading">
-        <Group gap={8}><Workflow size={16} /><Text fw={700} size="sm">Agent execution</Text></Group>
-        <Badge variant="outline" color="violet">{agentOrder.length} lanes · {run.trace.length} spans</Badge>
+    <section className="panel trace-panel agent-timeline" aria-label="Execution trace">
+      <div className="panel-heading execution-heading">
+        <Group gap={8}><Workflow size={16} /><Text fw={700} size="sm">Execution</Text></Group>
+        <div className="view-switch" role="tablist" aria-label="Execution view">
+          <button className={view === 'timeline' ? 'active' : ''} role="tab" aria-selected={view === 'timeline'} onClick={() => setView('timeline')}>Timeline</button>
+          <button className={view === 'tree' ? 'active' : ''} role="tab" aria-selected={view === 'tree'} onClick={() => setView('tree')}>Trace tree</button>
+        </div>
       </div>
-      <div className="pipeline-flow" aria-label="Recorded pipeline">
-        <span>Parent Python</span><b>→</b><span>Fan-out</span><b>→</b><span className="parallel-step">{run.scenario.child_programs.map((child) => child.role).join(' ∥ ')}</span><b>→</b><span>Select</span><b>→</b><span>Resume</span>
-      </div>
-      <div className="timeline-axis"><span>0 ms</span><span>time →</span><span>{maxEnd.toFixed(0)} ms</span></div>
-      <div className="timeline-scroll">
-        {agentOrder.map((agentID) => {
-          const events = run.trace.filter((event) => event.agent_id === agentID);
-          const role = events[0]?.agent_role ?? agentID;
-          return (
-            <div className="timeline-lane" key={agentID} data-agent-id={agentID}>
-              <div className="lane-label"><strong>{agentID}</strong><span>{role}</span></div>
+      {view === 'timeline' ? <>
+        <div className="timeline-axis"><span>0 ms</span><span>Recorded time →</span><span>{maxEnd.toFixed(0)} ms</span></div>
+        <div className="timeline-phase-rail" aria-label="Execution phases">{phaseMarkers.map(([label, at]) => at === undefined ? null : <span key={label} style={{ left: `${(at / maxEnd) * 100}%` }}>{label}</span>)}</div>
+        <div className="timeline-scroll">
+          {agentOrder.map((agentID) => {
+            const events = run.trace.filter((event) => event.agent_id === agentID);
+            const role = events[0]?.agent_role ?? agentID;
+            const lifeStart = Math.min(...events.map((event) => event.started_millis));
+            const lifeEnd = Math.max(...events.map((event) => event.ended_millis));
+            const runtimeClusters = agentID === 'runtime' ? [...events].sort((a, b) => a.started_millis - b.started_millis).reduce((groups, event) => {
+              const current = groups.at(-1);
+              if (current && event.started_millis - current[0].started_millis <= 100) current.push(event);
+              else groups.push([event]);
+              return groups;
+            }, [] as TraceAdapterEvent[][]) : [];
+            return <div className={`timeline-lane ${agentID === 'runtime' ? 'runtime-lane' : ''}`} key={agentID} data-agent-id={agentID}>
+              <div className="lane-label"><strong>{agentID}</strong><span>{role}</span><small>{lifeStart.toFixed(0)}–{lifeEnd.toFixed(0)} ms</small></div>
               <div className="lane-track">
-                {events.map((event) => {
+                <div className={`lane-lifecycle ${agentID === 'runtime' ? 'runtime-life' : ''}`} style={{ left: `${(lifeStart / maxEnd) * 100}%`, width: `${Math.max(0.7, ((lifeEnd - lifeStart) / maxEnd) * 100)}%` }} />
+                {fanoutStart !== undefined && <i className="causal-marker fanout-marker" style={{ left: `${(fanoutStart / maxEnd) * 100}%` }} title="Fan-out: child branches started" />}
+                {joinTime !== undefined && <i className="causal-marker join-marker" style={{ left: `${(joinTime / maxEnd) * 100}%` }} title="Join: child branches completed" />}
+                {agentID === 'runtime' ? runtimeClusters.map((cluster) => {
+                  const first = cluster[0];
+                  const phase = describeEvent(first).phase;
+                  const actions = new Set(cluster.map((event) => event.action));
+                  const label = actions.has('run.terminal') ? 'Resume + finish'
+                    : actions.has('fanout.select') && cluster.some((event) => event.outcome === 'selected') ? 'Join + Host checks'
+                      : actions.has('fanout.select') ? 'Parent done + fan-out'
+                        : cluster.length === 1 ? describeEvent(first).label : `${phase} · ${cluster.length} events`;
+                  const description = cluster.map((event) => describeEvent(event).label).join(', ');
+                  const clusterLeft = (first.started_millis / maxEnd) * 100;
+                  return <button key={`${first.started_millis}-${first.sequence}`} className={`runtime-cluster ${clusterLeft < 8 ? 'edge-start' : clusterLeft > 92 ? 'edge-end' : ''} ${cluster.some((event) => activeId === `event:${event.sequence}`) ? 'active' : ''}`} style={{ left: `${clusterLeft}%` }} title={`${label}: ${description}`} onClick={() => onSelect(`event:${first.sequence}`)} aria-label={`runtime cluster ${label}`}><span>{label}</span></button>;
+                }) : events.map((event) => {
                   const left = (event.started_millis / maxEnd) * 100;
                   const width = Math.max(0.5, ((event.ended_millis - event.started_millis) / maxEnd) * 100);
-                  const sourceLinked = !!event.source;
-                  return <button
-                    key={event.sequence}
-                    className={`timeline-span ${sourceLinked ? 'source-linked' : ''} ${activeId === `event:${event.sequence}` ? 'active' : ''}`}
-                    style={{ left: `${left}%`, width: `${width}%` }}
-                    title={`${event.action} · ${event.started_millis.toFixed(1)}–${event.ended_millis.toFixed(1)} ms${event.source ? ` · ${event.source.file}:${event.source.start_line}-${event.source.end_line}` : ''}`}
-                    onClick={() => onSelect(`event:${event.sequence}`)}
-                    aria-label={`${agentID} ${event.action}`}
-                  ><span>{sourceLinked ? event.action.replace('guest.', '').replace('agent.', '') : ''}</span></button>;
+                  const presentation = describeEvent(event);
+                  return <button key={event.sequence} className={`timeline-span source-linked ${activeId === `event:${event.sequence}` ? 'active' : ''}`} style={{ left: `${left}%`, width: `${width}%` }} title={`${presentation.label}: ${presentation.description} (${event.started_millis.toFixed(1)}–${event.ended_millis.toFixed(1)} ms)`} onClick={() => onSelect(`event:${event.sequence}`)} aria-label={`${agentID} ${event.action}`}><span>{presentation.label.replace(' Python', '')}</span></button>;
                 })}
               </div>
-            </div>
-          );
+            </div>;
+          })}
+        </div>
+        <div className="timeline-legend"><span><i className="legend-source" />Python lifetime</span><span><i className="legend-runtime" />Host event</span><span><i className="legend-fanout" />Fan-out</span><span><i className="legend-join" />Join</span></div>
+      </> : <div className="trace-tree" role="tree" aria-label="Causal trace tree">
+        <div className="tree-note">Recorded sequence is preserved; indentation shows causal parentage.</div>
+        {tree.map((node) => {
+          const event = node.rawEvent!; const presentation = describeEvent(event);
+          return <button role="treeitem" aria-level={node.depth + 1} aria-selected={activeId === node.id} className={`trace-tree-row ${activeId === node.id ? 'active' : ''}`} style={{ paddingLeft: `${12 + node.depth * 22}px` }} key={node.id} onClick={() => onSelect(node.id)}><span className="tree-branch">{node.depth ? '└' : '●'}</span><span className="tree-sequence">{event.sequence}</span><span className="tree-copy"><strong>{presentation.label}</strong><small>{presentation.phase} · {event.agent_id} · {event.outcome}</small></span><code>{event.action}</code></button>;
         })}
-      </div>
-      <div className="timeline-legend"><span><i className="legend-source" />Python execution</span><span><i className="legend-runtime" />Runtime event</span></div>
+      </div>}
     </section>
   );
 }
@@ -117,6 +141,7 @@ function Inspector({
 }) {
   const [tab, setTab] = useState<string | null>('source');
   const sourceRange = node.rawEvent?.source;
+  const eventPresentation = node.rawEvent ? describeEvent(node.rawEvent) : null;
   const childProgram = sourceRange ? run.scenario.child_programs.find((child) => child.id === sourceRange.source_id) : undefined;
   const sourceText = childProgram?.source ?? run.scenario.guest_source;
   const sourceFile = sourceRange?.file ?? 'orchestrator.py';
@@ -136,7 +161,7 @@ function Inspector({
           <div className="theme-icon" style={{ width: 28, height: 28 }}><Bot size={16} /></div>
           <div>
             <Text fw={700} size="sm">{node.title}</Text>
-            <Text size="xs" c="dimmed">{node.summary}</Text>
+            <Text size="xs" c="dimmed">{eventPresentation?.phase} · {node.rawEvent?.agent_id} · seq {node.rawEvent?.sequence}</Text>
           </div>
         </Group>
         <Group gap={6}>
@@ -144,9 +169,9 @@ function Inspector({
           <Badge variant="outline" color="gray">{node.id}</Badge>
         </Group>
       </div>
-      <div className="operation-summary">
-        <Text size="sm">{run.workload_id}</Text>
-        <span>{node.duration}</span>
+      <div className="operation-summary event-explanation">
+        <div><Text size="xs" c="dimmed">What happened</Text><Text size="sm">{eventPresentation?.description}</Text></div>
+        <div className="event-timing"><span>{node.rawEvent ? `${node.rawEvent.started_millis.toFixed(1)}–${node.rawEvent.ended_millis.toFixed(1)} ms` : node.duration}</span><small>{node.rawEvent?.parent_span_id ? `caused by ${node.rawEvent.parent_span_id}` : 'run root'}</small></div>
       </div>
       <Tabs value={tab} onChange={setTab} className="inspector-tabs">
         <Tabs.List>
@@ -194,10 +219,10 @@ function Inspector({
           <div className="detail-block">
             <Text fw={700} size="sm">Event</Text>
             <Divider my="sm" />
-            <div className="detail-row"><Text size="xs" c="dimmed">Type</Text><CodeMirror value={`\"${node.kind}\"`} height="28px" theme={vscodeDark} editable={false} /></div>
-            <div className="detail-row"><Text size="xs" c="dimmed">Outcome</Text><Text size="sm">{node.summary}</Text></div>
-            <div className="detail-row"><Text size="xs" c="dimmed">Evidence</Text><Text size="sm">{node.evidence}</Text></div>
-            <div className="detail-row"><Text size="xs" c="dimmed">Run status</Text><Text size="sm">{run.recorded_status}</Text></div>
+            <div className="detail-row"><Text size="xs" c="dimmed">Recorded action</Text><Text size="sm"><code>{node.rawEvent?.action}</code></Text></div>
+            <div className="detail-row"><Text size="xs" c="dimmed">Outcome</Text><Text size="sm">{node.rawEvent?.outcome}</Text></div>
+            <div className="detail-row"><Text size="xs" c="dimmed">Agent</Text><Text size="sm">{node.rawEvent?.agent_id} ({node.rawEvent?.agent_role})</Text></div>
+            <div className="detail-row"><Text size="xs" c="dimmed">Causal parent</Text><Text size="sm">{node.rawEvent?.parent_span_id ?? 'none'}</Text></div>
           </div>
           <div className="detail-block">
             <Text fw={700} size="sm">Trace params</Text>
@@ -437,7 +462,7 @@ export default function App() {
         </Group>
       </AppShell.Header>
       <AppShell.Main className="app-main">
-        <AgentTimeline run={selectedRun.run} activeId={activeNodeId} onSelect={setActiveNodeId} />
+        <ExecutionPanel run={selectedRun.run} activeId={activeNodeId} onSelect={setActiveNodeId} />
         <Divider orientation="vertical" />
         <Inspector node={selectedNode ?? selectedRun.trace[0]} run={selectedRun.run} />
         <Divider orientation="vertical" />

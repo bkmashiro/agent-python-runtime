@@ -18,13 +18,13 @@ The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v
 - sequential raw event identity from `run.start` to `run.terminal`;
 - input/output, checkpoint, artifact, invocation, execution, result, and workspace identities.
 
-The primary view is a deterministic projection of those recorded fields:
+The UI offers two deterministic projections of those recorded fields:
 
-1. a pipeline strip explains the selected run's stages;
-2. swimlanes preserve agent identity, overlap, and recorded time;
-3. selecting a Python span opens the matching agent source and highlights its recorded line range;
+1. **Timeline** shows each agent's recorded lifetime, child overlap, fan-out/join boundaries, and readable Host phase clusters;
+2. **Trace tree** preserves the original sequence-first reading mode and adds causal indentation for child spans;
+3. selecting an item in either view opens the matching agent source and highlights its recorded line range;
 4. the filesystem panel shows the matching workspace path changes;
-5. the raw event remains available in the Inspector.
+5. the Inspector explains the event in plain language before exposing raw action/span metadata.
 
 The Host Go acceptance recorder is intentionally not part of the product surface.
 

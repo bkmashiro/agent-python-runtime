@@ -1,8 +1,11 @@
 # Megagoal: prove streaming authority-staged Agent execution
 
-Status: **Approved for autonomous execution on 2026-08-13 evening (Europe/London).**
+Status: **Prepared and awaiting Yuzhe's explicit Hermes `/goal` command.**
 Owner: Yuzhe
 Execution repo: `~/projects/agent-python-runtime`
+
+This file is a goal brief only. Preparing or updating it does not schedule,
+automatically start, or otherwise authorize background execution.
 
 ## Mission
 

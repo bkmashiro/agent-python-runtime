@@ -185,6 +185,58 @@ class ManifestWriterTests(unittest.TestCase):
                 manifest["wasm"]["memory"],
             )
 
+    def test_memory_model_is_reflected_in_wasm_memory_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact = root / "agent-python-runtime.wasm"
+            artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
+            wat = root / "guest.wat"
+            wat.write_text('(module (export "memory" (memory 0)))')
+            lock = root / "sources.lock.json"
+            lock.write_text(
+                json.dumps(
+                    {"target": "wasm32-wasip1", "sources": [{"id": "cpython-source", "version": "3.14.test"}]}
+                )
+            )
+            inventory = write_inventory(root, "base")
+            qualification = write_qualification(root, "base")
+
+            fixed_manifest = self.writer.build_manifest(
+                artifact=artifact,
+                wat=wat,
+                source_lock=lock,
+                commit="abc123",
+                source_date_epoch="1234567890",
+                artifact_profile="base",
+                extension_selection=None,
+                import_inventory=inventory,
+                import_qualification=qualification,
+                memory_initial_pages=2048,
+                memory_maximum_pages=2048,
+            )
+            growable_manifest = self.writer.build_manifest(
+                artifact=artifact,
+                wat=wat,
+                source_lock=lock,
+                commit="abc123",
+                source_date_epoch="1234567890",
+                artifact_profile="base",
+                extension_selection=None,
+                import_inventory=inventory,
+                import_qualification=qualification,
+                memory_initial_pages=2048,
+                memory_maximum_pages=3072,
+            )
+
+            self.assertEqual(
+                {"initial_pages": 2048, "maximum_pages": 2048, "fixed": True},
+                fixed_manifest["wasm"]["memory"],
+            )
+            self.assertEqual(
+                {"initial_pages": 2048, "maximum_pages": 3072, "fixed": False},
+                growable_manifest["wasm"]["memory"],
+            )
+
     def test_main_uses_bound_environment_commit_without_git(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

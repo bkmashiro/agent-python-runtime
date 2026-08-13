@@ -126,7 +126,8 @@ of its contract:
   independent single-flight; this is not arbitrary Guest-Python purity;
 - `runtime/workflow` single-wait fresh re-evaluation over explicit immutable state;
 - the Wazero backend's optional one-slot, never-served, single-use prepared module
-  with fresh fallback; memory COW remains fail-closed and deferred;
+  with fresh fallback, plus an Experimental Linux `cow-fixed` lane whose sealed
+  baseline produces one MAP_PRIVATE slot per request and always discards it;
 - `research/labstore`, an independent bounded directory CAS prototype with
   typed identities, workspace/branch relations, privacy policy, read-only
   access, reachability retention and measured synthetic benchmarks;

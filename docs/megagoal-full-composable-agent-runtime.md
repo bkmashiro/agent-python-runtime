@@ -1,6 +1,6 @@
 # Megagoal: build the Full Composable Agent Runtime
 
-Status: **Deterministic Megagoal complete; deferred mechanisms and real Agent acceptance await joint review.**
+Status: **Deterministic Megagoal complete; post-completion Linux COW qualification amendment active.**
 Date: 2026-08-13
 Owner: Yuzhe
 Execution repository: `~/projects/agent-python-runtime`
@@ -672,6 +672,15 @@ Add entries here before each track implementation.
   `MemoryCOWCandidate=false`. Its checksummed body-free result is tracked at
   `docs/evidence/full-composable-linux-prepared-cow.json`; remote staging was
   deleted only after downloaded checksum verification.
+- 2026-08-13 — Post-completion COW amendment / `Proceed outcome-qualified`:
+  Yuzhe requires Linux COW to remain. The acceptance boundary now requires
+  observable result/isolation correctness rather than proof-complete internal
+  state reset. Restore only fixed-memory admission, sealed memfd baseline, and
+  one MAP_PRIVATE mapping per request. A served, cancelled, failed, or
+  shape-drifted slot is always closed/unmapped and never returned to a pool;
+  memory growth is rejected by the fixed profile and discards the slot. The
+  low-level Linux mapping contract passes; full CPython/WASI qualification is the
+  remaining gate.
 
 ## Completion log
 

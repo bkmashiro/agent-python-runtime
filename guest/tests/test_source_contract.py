@@ -59,6 +59,11 @@ class GuestSourceContractTests(unittest.TestCase):
             self.assertIn(static_dependency, text)
         self.assertNotIn("--export=wasi_vfs_pack_fs", text)
         self.assertIn("MAX_MEMORY_BYTES=536870912", text)
+        self.assertIn("if [[ -z ${AGENT_RUNTIME_MEMORY_MODEL+x} ]]; then", text)
+        self.assertIn("case \"${AGENT_RUNTIME_MEMORY_MODEL}\" in", text)
+        self.assertIn("cow-fixed)", text)
+        self.assertIn("AGENT_RUNTIME_MEMORY_MODEL must be growable or cow-fixed", text)
+        self.assertIn("MAX_MEMORY_BYTES=\"${INITIAL_MEMORY_BYTES}\"", text)
         self.assertNotIn("COW_FIXED_MEMORY", text)
         self.assertEqual(1, text.count('-Wl,--max-memory="${MAX_MEMORY_BYTES}"'))
         self.assertEqual(1, text.count('--dir "${VFS_PYTHON_DIR}::/usr/lib/python3.14"'))
@@ -84,11 +89,20 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertNotIn("artifact_profile:", workflow)
         self.assertNotIn("numpy-core", workflow)
 
-    def test_workflow_builds_only_growable_memory(self):
+    def test_workflow_memory_model_dispatch_is_bounded_choice(self):
         workflow = ARTIFACT_WORKFLOW.read_text()
-        self.assertIn("AGENT_RUNTIME_MEMORY_MODEL: growable", workflow)
-        self.assertNotIn("memory_model:", workflow)
-        self.assertNotIn("cow-fixed", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("inputs:", workflow)
+        self.assertIn("memory_model:", workflow)
+        self.assertIn("required: true", workflow)
+        self.assertIn("- growable", workflow)
+        self.assertIn("- cow-fixed", workflow)
+        self.assertIn("AGENT_RUNTIME_MEMORY_MODEL: ${{ inputs.memory_model || 'growable' }}", workflow)
+        self.assertNotIn("AGENT_RUNTIME_MEMORY_MODEL: growable", workflow)
+        self.assertNotIn("AGENT_RUNTIME_COW_FIXED_MEMORY", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertNotIn("schedule:", workflow)
 
     def test_host_call_import_is_narrow_and_bounded(self):
         header = HEADER.read_text()

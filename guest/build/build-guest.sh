@@ -12,6 +12,20 @@ ARTIFACT_PROFILE=base
 ARTIFACT_FILENAME="agent-python-runtime.wasm"
 INITIAL_MEMORY_BYTES=134217728
 MAX_MEMORY_BYTES=536870912
+if [[ -z ${AGENT_RUNTIME_MEMORY_MODEL+x} ]]; then
+  AGENT_RUNTIME_MEMORY_MODEL="growable"
+fi
+case "${AGENT_RUNTIME_MEMORY_MODEL}" in
+  growable)
+    ;;
+  cow-fixed)
+    MAX_MEMORY_BYTES="${INITIAL_MEMORY_BYTES}"
+    ;;
+  *)
+    echo "AGENT_RUNTIME_MEMORY_MODEL must be growable or cow-fixed" >&2
+    exit 11
+    ;;
+esac
 MEMORY_INITIAL_PAGES=$((INITIAL_MEMORY_BYTES / 65536))
 MEMORY_MAXIMUM_PAGES=$((MAX_MEMORY_BYTES / 65536))
 

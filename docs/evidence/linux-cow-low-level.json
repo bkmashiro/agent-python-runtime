@@ -1,0 +1,26 @@
+{
+  "schema_version": "pysolate.linux-cow-low-level-evidence.v1",
+  "base_source_commit": "622c19ed9b2616a1cdbc11020200d597c1d06fff",
+  "test_binary_sha256": "sha256:fb5f21669ec58c446333ee70805b27d46992dd6d7c4d3167962a297e0693decf",
+  "platform": {
+    "os": "linux",
+    "arch": "x86_64",
+    "kernel": "6.17.0-35-generic"
+  },
+  "process_exit": 0,
+  "checksums_verified_before_cleanup": true,
+  "tests": [
+    "TestCOWImagePrivateMappingsIsolateAndDiscard",
+    "TestCOWImageIsSealedAndAllocatorRejectsShapeDrift",
+    "TestWazeroTinyModuleUsesIsolatedSingleUseCOWMappings"
+  ],
+  "contract": {
+    "baseline": "sealed memfd",
+    "slot_mapping": "MAP_PRIVATE",
+    "slot_reuse": false,
+    "post_request_action": "close and unmap",
+    "shape_drift": "reject",
+    "memory_growth": "fixed-memory profile rejects growth; discard slot"
+  },
+  "qualification": "Low-level mapping and artifact-contract evidence only. Full CPython/WASI outcome-isolation qualification remains pending."
+}

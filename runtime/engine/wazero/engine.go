@@ -117,6 +117,7 @@ type Engine struct {
 	preparedMu     sync.Mutex
 	prepared       *preparedInstance
 	preparedState  PreparedState
+	cowRuntime     cowPreparedRuntime
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -130,9 +131,6 @@ func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig
 func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, lease *workspace.Lease) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
-	}
-	if config.Mechanisms.MemoryCOW {
-		return nil, fmt.Errorf("memory COW is unavailable: %w", runtimeconfig.ErrMechanismDisabled)
 	}
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
@@ -167,7 +165,16 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		engine.workspaceRun = make(chan struct{}, 1)
 	}
 	engine.preparedState = PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1", Selected: config.Mechanisms.PreparedRuntime}
-	if config.Mechanisms.PreparedRuntime {
+	if config.Mechanisms.MemoryCOW {
+		started := time.Now()
+		cowRuntime, cowErr := newCOWPreparedRuntime(ctx, engine)
+		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
+		if cowErr != nil {
+			_ = wasmRuntime.Close(ctx)
+			return nil, fmt.Errorf("prepare COW baseline: %w: %w", cowErr, runtimeconfig.ErrMechanismDisabled)
+		}
+		engine.cowRuntime = cowRuntime
+	} else if config.Mechanisms.PreparedRuntime {
 		started := time.Now()
 		prepared, prepareErr := engine.newPrepared(ctx)
 		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
@@ -200,12 +207,17 @@ func (engine *Engine) Close(ctx context.Context) error {
 		return nil
 	}
 	preparedErr := engine.closePrepared()
+	var cowErr error
+	if engine.cowRuntime != nil {
+		cowErr = engine.cowRuntime.close()
+		engine.cowRuntime = nil
+	}
 	runtimeErr := engine.runtime.Close(ctx)
 	var workspaceErr error
 	if engine.workspaceLease != nil {
 		workspaceErr = engine.workspaceLease.Release()
 	}
-	return errors.Join(preparedErr, runtimeErr, workspaceErr)
+	return errors.Join(preparedErr, cowErr, runtimeErr, workspaceErr)
 }
 
 func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
@@ -302,7 +314,6 @@ func (engine *Engine) COWProbe() COWProbe {
 	probe := COWProbe{
 		SchemaVersion: "pysolate.cow-probe.v1", Platform: goruntime.GOOS,
 		PreparedCompatible: engine != nil, Fallback: true,
-		Blockers: []string{"module_instance_state_not_resettable", "wasi_host_state_not_resettable", "static_non_memory_state_not_censused"},
 	}
 	if engine == nil || engine.compiled == nil {
 		probe.Blockers = append(probe.Blockers, "compiled_module_unavailable")
@@ -331,6 +342,11 @@ func (engine *Engine) COWProbe() COWProbe {
 	}
 	if !probe.MemoryCOWCandidate {
 		probe.Blockers = append(probe.Blockers, "linear_memory_not_fixed_private_candidate")
+	}
+	if engine.cowRuntime != nil {
+		probe.COWSelected = true
+		probe.Fallback = false
+		probe.Blockers = nil
 	}
 	sort.Strings(probe.Blockers)
 	return probe
@@ -445,7 +461,20 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			}
 		}()
 	}
-	prepared := engine.takePrepared()
+	var prepared *preparedInstance
+	if engine.cowRuntime != nil {
+		prepared, err = engine.cowRuntime.prepare(runContext, engine)
+		engine.preparedMu.Lock()
+		if prepared != nil {
+			engine.preparedState.PreparedRuns++
+		}
+		engine.preparedMu.Unlock()
+		if err != nil {
+			return nil, fmt.Errorf("prepare single-use COW slot: %w", err)
+		}
+	} else {
+		prepared = engine.takePrepared()
+	}
 	stderr := &bytes.Buffer{}
 	var temporary *workspace.Temporary
 	var module api.Module

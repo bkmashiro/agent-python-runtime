@@ -19,7 +19,7 @@ The measurements cover repository fixtures and the real CPython/WASI Guest artif
 | Workflow wait/resume | The first Guest closed at wait; resume created a distinct Guest; both active-period Guests closed; unchanged explicit work used local lookup |
 | Prepared runtime | Explicit prepared mode created 1 never-served initialized slot, consumed it once, then used 1 ordinary fresh fallback; closing an unused Engine destroyed its slot |
 | `/tmp` freshness | A file written during the prepared Run was absent from the following fresh fallback Run |
-| Memory COW | Not selected; the versioned probe reports fresh fallback and state-reset blockers |
+| Memory COW | The earlier growable-artifact treatment correctly fell back; a later user-approved recovery added a separate `cow-fixed` single-use discard lane whose low-level Linux mapping contract passes, while full CPython/WASI outcome qualification remains pending |
 | All mechanisms off | Typed mode evidence reports fallback/off and repeated ordinary evaluation preserves the normalized result without cache hits |
 
 ## Body-free measurements available
@@ -34,7 +34,10 @@ The Runtime records relative monotonic child start/end, changed and materialized
 - Result retention and single-flight eliminate different work: sequential completed reuse versus concurrent in-flight collapse.
 - Fresh re-evaluation releases the Guest during the explicit wait; no interpreter continuation state is retained.
 - One prepared slot is implementable without pooling or reuse; it changes lifecycle timing only, not selected result semantics.
-- COW is deferred. Historical linear-memory COW code does not establish reset of current module/WASI/static state, and restoring the deleted pool/census/allocator stack is not a minimal change.
+- COW was initially deferred against the growable artifact and proof-complete state
+  reset standard. It has since been reopened under an outcome-qualified contract:
+  fixed memory, sealed baseline, one private mapping per request, and unconditional
+  post-request discard. No served slot is reset or returned to a pool.
 
 ## Linux prepared/COW probe
 
@@ -44,8 +47,12 @@ Prepared/fresh parity passed. The artifact exposed one non-imported memory, but
 its memory contract was not fixed; module-instance, WASI Host, and static
 non-memory state also remained non-resettable or uncensused. The probe therefore
 reported `MemoryCOWCandidate=false`, selected no COW mode, and retained fresh
-fallback. Its preparation and test durations are fixture observations only, not
-product-performance data.
+fallback. That result remains the correct growable-artifact baseline, not a COW
+execution result. The reopened low-level Linux result is preserved separately as
+[`evidence/linux-cow-low-level.json`](evidence/linux-cow-low-level.json): sealed
+memfd, MAP_PRIVATE sibling isolation, pre-serve baseline restoration, whole-slot
+unmap/discard, and shape-drift rejection pass. Full fixed-memory CPython/WASI
+outcome/isolation results are not yet claimed. Timing remains fixture-only.
 
 ## Non-claims
 

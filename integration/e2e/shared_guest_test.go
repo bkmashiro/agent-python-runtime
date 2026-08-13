@@ -188,6 +188,7 @@ func sharedGuestInvocation(t *testing.T, artifact []byte, code string, allowedIm
 		t.Fatal(err)
 	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
 	config.ExecutionProfile = &profile
 	config.DeterministicVerification = &deterministic
 	profileSHA, err := runtimeconfig.ExecutionProfileBindingSHA256(config)

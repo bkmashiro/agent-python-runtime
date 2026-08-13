@@ -280,6 +280,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	if probe.SchemaVersion != "pysolate.cow-probe.v1" || probe.COWSelected || !probe.Fallback || len(probe.Blockers) < 3 {
 		t.Fatalf("cow probe=%+v", probe)
 	}
+	t.Logf("prepared_state=%+v cow_probe=%+v", prepared.PreparedState(), probe)
 	first, err := prepared.Run(context.Background(), request, "")
 	if err != nil || responseResult(t, first) != responseResult(t, baseline) {
 		t.Fatalf("prepared parity err=%v\nfirst=%s\nbaseline=%s", err, first, baseline)

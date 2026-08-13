@@ -94,10 +94,10 @@ The Guest accesses this state with ordinary Python file APIs under `/workspace`.
 
 ## Bounded developer operations
 
-Mounted workspaces also expose the Guest package `pysolate.fs`, which provides
-bounded read/write/list/walk/glob/search/stat/digest/diff/copy/move/remove
-semantics without a shell or subprocess. Every path explicitly names either
-the durable `/workspace` mount or the separate per-Run `/tmp` scratch mount.
+Agent code uses ordinary Python filesystem APIs against the durable
+`/workspace` mount and the separate per-Run `/tmp` scratch mount. These calls
+lower through CPython/WASI into bounded Host mounts; they are not typed Broker
+calls and do not expose a shell or subprocess.
 
 A Host may separately configure `git_read` with an opaque repository ID, one
 clean absolute local repository path, and explicit entry/patch/blob bounds.

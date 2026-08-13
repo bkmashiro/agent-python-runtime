@@ -1,5 +1,10 @@
 # Distance to the Pysolate product direction
 
+> Historical source-pinned assessment. The capability inventory remains useful,
+> but its post-demo phase order is superseded by
+> [proof-first-authority-roadmap.md](proof-first-authority-roadmap.md) after the
+> 2026-08-13 adjacent-product comparison reset.
+
 Status: **Planning assessment at source baseline
 `fe342b2d929dd842c5ce015d23d5a74f8bd014a3`.** This document estimates
 remaining engineering and research work. It does not make schedule or release

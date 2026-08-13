@@ -28,9 +28,9 @@ The fresh CPython/WASI Guest sees:
 
 Both mounts use the same bounded `rootedFS` implementation, but they are
 separate instances with separate Host directories, usage accounting and
-lifecycles. `pysolate.fs` accepts explicit absolute paths under either mount;
-`workspace` refers to the durable state lifecycle rather than ordinary file
-commands.
+lifecycles. Agent code uses ordinary Python filesystem APIs with explicit paths
+under either mount; `workspace` refers to the durable state lifecycle rather
+than ordinary file commands.
 
 The workspace enforces Host-selected bounds for entry count, total bytes, per-file bytes and path depth. A workspace lease has one writer, and its state can continue across fresh Guest instances when the Host keeps the same workspace alive.
 

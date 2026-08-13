@@ -23,12 +23,15 @@ storage capsule; neither is a transaction system. Historical findings are
 summarized in [docs/research-history.md](docs/research-history.md) and remain
 available in Git history.
 
-The longer-term product direction is a Python-native capability computer:
-ordinary Python provides control flow, a persistent Host workspace carries
-explicit state, and typed Host capabilities replace ambient shell or OS
-authority. Auditable, evidence-bound state transitions and scoped
-playback—not generic code execution—are the intended differentiator. Current,
-Experimental and Proposed claims are separated in
+The refined product direction is an authority-lifecycle runtime for Agent-authored
+programs: ordinary Python provides control flow, while the Host freezes
+identity-bound authority and independently governs workspace, scratch,
+external-effect, and evidence dispositions. CPython/WASI is the current
+substrate, not the intended differentiator. See the
+[authority-lifecycle positioning decision](docs/authority-lifecycle-positioning.md),
+the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.md),
+and the [proof-first roadmap](docs/proof-first-authority-roadmap.md).
+Current, Experimental and Proposed claims remain separated in
 [docs/product-direction.md](docs/product-direction.md).
 
 ## Requirements
@@ -108,9 +111,9 @@ The workspace backend is an in-memory PoC store with canonical relative paths an
 
 For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory workspace tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
 
-The Guest also includes bounded semantic replacements for common developer
-binaries through `pysolate.fs`: explicit `/workspace` and `/tmp` paths support
-read/write/list/walk/glob/search/stat/digest/diff/copy/move/remove operations.
+Agent code uses ordinary Python filesystem APIs (`pathlib`, `open`, `shutil`,
+`re`, `difflib`, and `hashlib`) against explicit `/workspace` and `/tmp` paths.
+Their authority is bounded by the WASI mounts; they are not Broker tool calls.
 A separate Host-bound read-only Git capability provides `status`, `diff`, `log`,
 `show`, refs and revision resolution. No shell, system binary, Git hook or
 network transport is exposed; see

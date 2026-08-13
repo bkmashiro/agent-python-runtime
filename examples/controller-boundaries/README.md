@@ -18,8 +18,9 @@ extending the evaluation corpus:
 - `04-workflow-with-workspace.py` performs two typed source calls and writes a
   structured report through the rooted Guest filesystem;
 - `05-developer-workflow.py` uses bounded read-only `git.status/log/show`, runs
-  a grep-like `pysolate.fs.search` against `/workspace`, stages an inspection
-  report under per-Run `/tmp`, then copies it into `/workspace/reports`.
+  a grep-like search with ordinary `pathlib` against `/workspace`, stages an
+  inspection report under per-Run `/tmp`, then copies it into
+  `/workspace/reports`.
 
 The Direct counts are the frozen evaluation-v2 comparison rule: one controller
 boundary per `Broker.Call`. The Guest count is one Runtime submission per

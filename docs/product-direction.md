@@ -1,4 +1,4 @@
-# Product direction: a Python-native capability computer
+# Product direction: an authority-lifecycle runtime
 
 ## Status and baseline
 
@@ -11,11 +11,20 @@ record, replay mode or guarantee exists today. Release or evaluation records
 should pin a concrete commit rather than treating this living document as a
 version identifier.
 
-Pysolate's long-term direction is:
+Pysolate's refined long-term direction is:
 
-> A Python-native capability computer for Agents: ordinary Python provides control flow, a Host-owned workspace carries named durable state, and every external authority crosses a narrow Host-mediated boundary.
+> An authority-lifecycle runtime for Agent-authored programs: ordinary Python
+> provides control flow, while the Host freezes authority and independently
+> governs interpreter, workspace, scratch, external-effect, and evidence
+> dispositions.
 
-Generic code execution is necessary infrastructure, not the differentiator. The intended differentiator is an auditable, evidence-bound state transition that can support scoped playback and verification without introducing ambient Computer authority.
+Generic code execution is necessary infrastructure, not the differentiator.
+Sandboxed code, mediated connectors, ledgers, approval replay, and compensation
+are also not standalone differentiators. The candidate contribution is an
+identity-bound conjunction of least authority, private attempt state, honest
+effect ambiguity, terminal disposition, and verification. See
+[the authority-lifecycle ADR](authority-lifecycle-positioning.md) and the
+[Cloudflare comparison reset](research/cloudflare-code-mode-comparison.md).
 
 ## Positioning
 
@@ -108,15 +117,18 @@ or a release claim. The Runtime/Lab ownership boundary is documented in
 Pysolate will not expose an ambient shell or arbitrary subprocess API. Ordinary Python supplies branching, loops, structured data handling, errors and composition. Common computer operations should be ordinary Python libraries or typed Host capabilities:
 
 ```python
-from pysolate import artifacts, git, workspace
+from pathlib import Path
 
-matches = workspace.grep(query="TODO", path="/workspace")
-status = git.status(repository="/workspace/repo")
-published = artifacts.publish(path="/workspace/report.md")
-result = {"matches": matches, "status": status, "published": published}
+matches = [path for path in Path("/workspace").rglob("*.py")
+           if "TODO" in path.read_text(encoding="utf-8")]
+status = git.status()
+Path("/workspace/report.txt").write_text("\n".join(map(str, matches)), encoding="utf-8")
+result = {"matches": [str(path) for path in matches], "status": status}
 ```
 
-A familiar method name is presentation, not authority. `git.status()` does not imply a Git binary, credentials, arbitrary network access, hooks or Host paths. Its implementation remains behind a reviewed Host contract.
+Ordinary file operations above lower through Python/WASI. The generated
+`git.status()` proxy crosses the typed Host Broker because repository semantics
+operate on a separately Host-selected authority.
 
 ### One canonical capability definition
 

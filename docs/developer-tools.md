@@ -1,111 +1,77 @@
-# Bounded developer tools
+# Developer operations without an ambient computer
 
-Pysolate provides familiar developer operations as bounded Python semantics, not
-as a shell or arbitrary executable surface.
-
-## Generic filesystem operations
-
-The `pysolate.fs` Guest package operates on the two filesystems visible to the
-Guest:
-
-```text
-/workspace   task state; snapshotted and optionally continued across Runs
-/tmp         per-Run scratch; deleted at the end of the Run
-```
-
-Both mounts use the same rooted filesystem implementation, but they are separate
-instances with separate Host directories, accounting limits, and lifecycles.
-Every API path must explicitly name one mount:
+Pysolate does not add a second filesystem SDK. Agent code uses ordinary Python
+against the Guest-visible WASI mounts:
 
 ```python
-from pysolate import fs
+from pathlib import Path
+import difflib
+import hashlib
+import re
+import shutil
 
-fs.read_text("/workspace/README.md")
-fs.write_text("/tmp/result.json", "...\n")
-fs.list("/workspace/src")
-fs.walk("/workspace/src", max_files=500)
-fs.glob("*.py", path="/workspace/src")
-fs.search("TODO", path="/workspace/src", glob="*.py")
-fs.stat("/workspace/src/app.py")
-fs.digest("/workspace/src/app.py")
-fs.diff("/workspace/before.py", "/tmp/after.py")
-fs.mkdir("/tmp/output", parents=True)
-fs.copy("/workspace/input.json", "/tmp/output/input.json")
-fs.move("/tmp/output/input.json", "/tmp/output/final.json")
-fs.remove("/tmp/output/final.json")
+text = Path("/workspace/README.md").read_text(encoding="utf-8")
+files = sorted(Path("/workspace/src").rglob("*.py"))
+Path("/tmp/report.txt").write_text("...\n", encoding="utf-8")
+shutil.copyfile("/tmp/report.txt", "/workspace/report.txt")
 ```
 
-These replace the common semantics of `cat`, `grep`, `find`, `ls`, `mkdir`,
-`cp`, `mv`, `rm`, `diff`, and `sha256sum`. They do not start subprocesses.
-Paths are canonical absolute Guest paths, are restricted to the two visible
-mounts, exclude `.git`, and reject symlinks. Text, files walked, bytes read,
-matches, and diff output all have fixed upper bounds. Copy may cross mounts;
-move must remain within one mount because cross-mount rename is not atomic.
+`pathlib`, `open`, `re`, `difflib`, `hashlib`, and `shutil` are computation and
+filesystem presentation. They grant no Host authority. CPython lowers ordinary
+file operations through WASI into the Host-configured mounts.
 
-`workspace` is reserved for the durable-state lifecycle—identity, snapshots,
-Capsules, continuation, and replay—not ordinary filesystem commands. Currently
-both mounts are provisioned when the Host configures a mounted workspace; `/tmp`
-is not yet independently mounted for Runs without one.
+## Filesystem boundary
 
-## Read-only local Git
+- `/workspace` is Host-selected task state. It may be retained, snapshotted, or
+  exported as a Capsule according to the Host disposition.
+- `/tmp` is a separate per-Run scratch filesystem and is deleted when the Run
+  ends.
+- Both are separate instances of the same bounded Host `rootedFS`
+  implementation, with separate roots, quotas, and accounting.
+- No Host path, ambient filesystem, shell, subprocess, package installer, or
+  socket is made available.
 
-The operator can bind one Host-selected local repository through:
+The mounted filesystem currently enforces the authority boundary. Individual
+`Path.read_text()` or `Path.write_text()` calls are **not** typed Host capability
+calls and do not receive per-call Broker receipts. Runtime evidence records
+bounded initial/final workspace state, not every Python or WASI filesystem
+operation.
 
-```json
-{
-  "git_read": {
-    "repository_id": "project",
-    "repository_path": "/host-selected/private/path",
-    "max_entries": 1000,
-    "max_patch_bytes": 1048576,
-    "max_blob_bytes": 1048576
-  }
-}
-```
+The current mounted workspace uses direct-write semantics: bytes written before
+a Guest failure may remain in that workspace depending on Host disposition. It
+is not a transactional attempt overlay.
 
-`repository_path` is Host-private. Specs, grants, Guest source, results and
-receipts carry only the opaque `repository_id`.
+## Read-only Git inspection
 
-The generated typed Python namespace exposes:
+Git repository semantics remain a Host-mediated typed capability because they
+operate on a separately selected Host repository and metadata model:
 
 ```python
-git.status()
-git.diff()
-git.log(20)
-git.show("HEAD", "README.md")
-git.list_refs()
-git.resolve_revision("HEAD")
+status = git.status()
+commits = git.log(10)
+readme = git.show("HEAD", "README.md")
+refs = git.list_refs()
+resolved = git.resolve_revision("HEAD")
 ```
 
-The adapter uses `go-git` in-process. It does not invoke the Host `git` binary
-and does not expose remotes, network transports, hooks, external diff/textconv,
-credential helpers, submodule traversal or mutation. Entries, patch bytes and
-blob bytes are bounded. Worktree diff rejects symlinks and non-ordinary files.
-Calls pass through the ordinary capability Broker and produce receipts.
+The implementation uses `go-git`; it does not execute a system Git binary. The
+Host policy binds an opaque repository identity, a private local path, and
+entry/blob/patch bounds. Guest-visible calls cannot provide a Host path,
+network target, credentials, hook, external diff, textconv, remote operation,
+or write operation.
 
-## Snapshot coherence
+This is intentionally not full Git compatibility. Local mutations and remote
+effects require separate future contracts.
 
-The mounted `/workspace` and `git_read` repository are independently
-Host-selected inputs. A source directory is copied into `/workspace`; it is not
-a live bind mount. Therefore Git inspection describes the repository snapshot
-selected by the Host, while later Guest writes change only `/workspace`.
+## Workflow boundary
 
-A coherent developer flow in the current release is:
+A current developer workflow is:
 
-1. inspect the selected repository with read-only Git calls;
-2. inspect and modify `/workspace` with `pysolate.fs` or ordinary Python file APIs;
-3. inspect the Runtime's initial/final workspace manifests and derived diff.
+1. inspect a Host-selected repository through bounded read-only Git tools;
+2. inspect and transform the mounted workspace with ordinary Python;
+3. stage scratch data under `/tmp` when useful;
+4. copy the selected durable result into `/workspace`;
+5. inspect the Runtime's initial/final workspace manifests and derived diff.
 
-A future repository-to-workspace binding may relate one Git baseline identity to
-one imported workspace snapshot. The current API does not claim that relation.
-
-## Deliberately absent
-
-This surface does **not** add:
-
-- shell execution or `subprocess`;
-- arbitrary binaries;
-- arbitrary Host paths;
-- Git mutation, commit, checkout or merge;
-- Git clone, fetch, pull or push;
-- credentials or network authority.
+The Git repository and mounted workspace are independently Host-bound. Current
+Git calls do not automatically observe Guest workspace mutations.

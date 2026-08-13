@@ -576,7 +576,7 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	if got := responseResult(t, first); got != `{"parity":"same","fraction":"1/2"}` {
 		t.Fatalf("first result=%s", got)
 	}
-	if got := responseResult(t, second); got != `{"globals_clean":true,"module_clean":true,"tmp_clean":true}` {
+	if got := responseResult(t, second); got != `{"globals_clean":true,"tmp_clean":true,"module_clean":true}` {
 		t.Fatalf("second result=%s", got)
 	}
 

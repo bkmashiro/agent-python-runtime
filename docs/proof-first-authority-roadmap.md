@@ -14,6 +14,7 @@ Related decisions:
 - [authority-lifecycle positioning](authority-lifecycle-positioning.md)
 - [content-addressed Agent Functions](content-addressed-agent-functions.md)
 - [streaming authority-staged execution](streaming-authority-staged-execution.md)
+- [approved streaming execution megagoal](megagoal-streaming-authority-staged-execution.md)
 - [Cloudflare comparison](research/cloudflare-code-mode-comparison.md)
 
 ## Product objective

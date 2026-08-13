@@ -214,6 +214,14 @@ func (service *serviceExecutor) execute(ctx context.Context, envelope executeReq
 	if err != nil {
 		return executeResponse{}, err
 	}
+	decoded, err = runtimeconfig.BindAgentSource(decoded, &profile)
+	if err != nil {
+		return executeResponse{}, err
+	}
+	requestBytes, err = runtimeconfig.EncodeRunRequest(decoded)
+	if err != nil {
+		return executeResponse{}, err
+	}
 	deterministic, err := runtimeconfig.NewDeterministicVerificationProfile(service.artifactSHA, service.randomSeed)
 	if err != nil {
 		return executeResponse{}, err

@@ -61,6 +61,8 @@ Record:
 
 All records join through `run_id`, `task_id`, `agent_id`, `span_id`, `invocation_id`, and `physical_execution_id`.
 
+The capability broker/guard remains the enforcement point; the recorder only reports what the Host admitted and observed. Each event must declare an evidence level such as `host_boundary_only` or `backend_observed_wasi` plus completeness, rather than implying value-level Python provenance or a complete syscall trace.
+
 “Record everything” means full causal evidence for the experiment, not copying secrets or private arbitrary content into public JSON.
 
 ## Implementation slices
@@ -148,7 +150,7 @@ Narrow or stop if:
 ## What follows only if this works
 
 1. Replay the mechanism on a small number of real multi-agent trajectories and measure natural overlap.
-2. Add a tiny scheduling choice set—`SERIAL`, `PARALLEL`, `HEDGE`—using observed latency distributions, rather than general Python auto-parallelization.
+2. Add a tiny scheduling choice set—`SERIAL`, `PARALLEL`, `HEDGE`—using observed latency distributions, rather than general Python auto-parallelization. `HEDGE` intentionally duplicates physical execution to reduce tail latency, so it is the opposite trade-off from coalescing and must be measured separately.
 3. Add prepared/COW as an orthogonal physical-density treatment.
 4. Consider a richer effect classification only when a concrete scheduler or admission rule needs it.
 5. Consider cross-project or cross-tenant reuse only after privacy/equality-side-channel analysis; current reuse remains project-private.
@@ -161,7 +163,7 @@ The transferable lesson is constrained optimization: semantic tools with pre/pos
 
 ### CaMeL
 
-The transferable lesson is that control-flow isolation alone is insufficient: the provenance of data entering an effect matters. CaMeL obtains value-level provenance through a custom restricted-Python interpreter [1]. Pysolate executes real CPython, so the bounded analogue is provenance on structured Harness messages, immutable observations, shared-node inputs, and typed Host-call arguments—not arbitrary Python object taint.
+The transferable lesson is that control-flow isolation alone is insufficient: the provenance of data entering an effect matters. CaMeL obtains value-level provenance through a custom restricted-Python interpreter and enforces policy before tool calls [1]. Pysolate executes real CPython, so the bounded analogue is provenance on structured Harness messages, immutable observations, shared-node inputs, and typed Host-call arguments—not arbitrary Python object taint. CaMeL's enforcement is not a durable multi-agent recorder or a transaction system: it does not provide atomicity or rollback for effects that happened before an exception.
 
 ### Learning to Share
 

@@ -188,6 +188,8 @@ fresh Guest re-evaluates to next live boundary
 
 Purpose: release instances during waits without interpreter checkpointing.
 
+The cost and correctness boundary...[truncated]
+
 ### Strict playback verification
 
 ```text

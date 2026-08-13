@@ -103,9 +103,12 @@ live read E1
 → external-write intent E3
 ```
 
-Live reads and writes are never hidden by the pure-function result cache. A live
-read produces a new immutable observation value. Its digest becomes an input to
-all downstream cacheable nodes.
+Live reads and writes are never hidden by the pure-function result cache. A
+completed prior I/O observation remains immutable history for the current
+workflow epoch. Only an explicit wakeup or refresh boundary obtains new live
+data; its digest becomes an input to downstream cacheable nodes and invalidates
+only transitive descendants rather than silently re-running every earlier I/O
+operation.
 
 This enables a React-like re-evaluation model without retaining interpreter
 state:
@@ -127,7 +130,9 @@ state.
 
 A workflow may therefore release compute capacity while waiting for user input,
 a timer, an external event, or a permitted fresh observation. Durable state is
-small and explicit rather than a pinned Python process.
+small and explicit rather than a pinned Python process. The alternative waiting
+strategies, break-even model, and matched experiment are documented in
+[wait-suspension-and-reuse-tradeoffs.md](wait-suspension-and-reuse-tradeoffs.md).
 
 ## Why separation can improve single-Host throughput
 

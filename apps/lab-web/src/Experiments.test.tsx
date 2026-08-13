@@ -10,6 +10,7 @@ const dataset = {
   model: 'example-model',
   study: { study_id: 'study-any', evidence_class: 'qualified_workload', workload_count: 1, treatment_count: 1, status_totals: [{ status: 'completed', count: 1 }], prohibited_claims: [] },
   runs: [{ run_id: 'run-any', workload_id: 'workload-any', treatment: 'cow', status: 'completed', oracle_status: 'passed', evidence_class: 'qualified_workload', evidence_completeness: 'complete', refs: [{ kind: 'result', sha256: digest, privacy: 'private', availability: 'unavailable' }], problem_codes: [] }],
+  records: [{ run_id: 'run-any', workload_id: 'workload-any', treatment: 'cow', recorded_status: 'passed', guest_created: 1, guest_destroyed: 1, cache_hits: 0, flight_followers: 0, changed_bytes: 0, materialized_bytes: 0, relative_elapsed_millis: 1.5, terminal_disposition: 'discarded_after_single_use' }],
 };
 
 describe('generic experiment dataset', () => {

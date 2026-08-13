@@ -71,6 +71,20 @@ func writeLabProjection(root string, report composableacceptance.Report, reportS
 		return err
 	}
 	manifest := []string{"study-summary.json " + studySHA}
+	type webRecord struct {
+		RunID                 string  `json:"run_id"`
+		WorkloadID            string  `json:"workload_id"`
+		Treatment             string  `json:"treatment"`
+		RecordedStatus        string  `json:"recorded_status"`
+		GuestCreated          uint64  `json:"guest_created"`
+		GuestDestroyed        uint64  `json:"guest_destroyed"`
+		CacheHits             uint64  `json:"cache_hits"`
+		FlightFollowers       uint64  `json:"flight_followers"`
+		ChangedBytes          uint64  `json:"changed_bytes"`
+		MaterializedBytes     uint64  `json:"materialized_bytes"`
+		RelativeElapsedMillis float64 `json:"relative_elapsed_millis"`
+		TerminalDisposition   string  `json:"terminal_disposition"`
+	}
 	type webDataset struct {
 		SchemaVersion string               `json:"schema_version"`
 		ReportSHA256  string               `json:"report_sha256"`
@@ -79,11 +93,20 @@ func writeLabProjection(root string, report composableacceptance.Report, reportS
 		Model         string               `json:"model"`
 		Study         labview.StudySummary `json:"study"`
 		Runs          []labview.RunDetail  `json:"runs"`
+		Records       []webRecord          `json:"records"`
 	}
 	web := webDataset{
 		SchemaVersion: "pysolate.lab-web-experiments.v1", ReportSHA256: reportSHA,
 		SourceCommit: report.SourceCommit, CorpusSHA256: report.CorpusSHA256, Model: report.Model,
-		Study: projection.Study, Runs: projection.Runs,
+		Study: projection.Study, Runs: projection.Runs, Records: make([]webRecord, 0, len(report.Rows)),
+	}
+	for index, row := range report.Rows {
+		web.Records = append(web.Records, webRecord{
+			RunID: projection.Runs[index].RunID, WorkloadID: row.ScenarioID, Treatment: string(row.Treatment), RecordedStatus: row.Status,
+			GuestCreated: row.GuestCreated, GuestDestroyed: row.GuestDestroyed, CacheHits: row.CacheHits, FlightFollowers: row.FlightFollowers,
+			ChangedBytes: row.ChangedBytes, MaterializedBytes: row.MaterializedBytes, RelativeElapsedMillis: row.RelativeElapsedMillis,
+			TerminalDisposition: row.TerminalDisposition,
+		})
 	}
 	webRaw, err := json.Marshal(web)
 	if err != nil {

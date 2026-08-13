@@ -1,81 +1,60 @@
-# Spark Composable Acceptance
+# Public Development Composable Acceptance
 
-Status: **the historical conformance recording retains all 54 direct Linux rows and 603 body-free trace events.**
-The primary benchmark/default preview is now deliberately **3 scenarios × the `all` treatment**;
-set `PYSOLATE_ACCEPTANCE_MATRIX=conformance` only for the 18-treatment mechanism regression matrix.
+Status: **3 checked-in public development scenarios × the `all` treatment passed on Linux/amd64 with 120 recorded events.**
 
-## Frozen decision corpus
+## Public development corpus
 
-- Model: `gpt-5.3-codex-spark`
-- Corpus schema: `pysolate.spark-scenario-corpus.v1`
-- Corpus SHA-256: `5f55faca56080845110a20b226832f5d5c22c7e0ab10d6c63a0163063a30e454`
-- Frozen source: `2451cc35cff566ad556c18c2f57064e233994675`
-- Scenarios: 3
+- Corpus: [`../research/composableacceptance/testdata/public-development-corpus.json`](../research/composableacceptance/testdata/public-development-corpus.json)
+- Corpus schema: `pysolate.spark-scenario-corpus.v2`
+- Corpus SHA-256: `sha256:685bc6ca31de7f0218acc682c24d472a0671ec522b53c821fb3151570103dd9c`
+- Scenarios: `dev-ranking-report`, `dev-workspace-summary`, `dev-wait-resume-report`
+- Treatment: `all`
 
-The private corpus contains the task, two child analyses, wait boundary,
-observation refresh, deterministic repeated transformation, selected child, and
-expected private artifact for each scenario. It is not published by Lab.
+The corpus is normal checked-in development data. Its task descriptions, filenames,
+child-analysis labels, observations, expected artifacts, and complete Guest Python
+sources are public. No private frozen corpus is required by the default benchmark.
 
-## Direct results
+Set `PYSOLATE_ACCEPTANCE_MATRIX=conformance` only when running the separate
+18-treatment mechanism regression matrix.
 
-Host source `1cd96dccf38416dbec5a3593ad1b0d97d044a214` ran all three frozen scenarios
-in Linux job `273812` against the fixed-memory Guest artifact
+## Linux direct recording
+
+Host source `71066f975deb044b484df7f84357f161fcea2238` ran all three public scenarios
+in Linux job `273851` against Guest artifact
 `sha256:591978964aae541d0758404f325c482898aa2ba5386a721dd2a5dcf049dbe9fb`.
-Exactly 54 direct rows were recorded:
 
-| Treatment | Direct rows | Expected status |
-|---|---:|---|
-| fresh | 3 | passed |
-| streaming | 3 | passed |
-| fanout | 3 | passed |
-| cache off | 3 | passed |
-| cache on | 3 | passed |
-| single-flight off | 3 | passed |
-| single-flight on | 3 | passed |
-| reevaluation off | 3 | rejected |
-| reevaluation on | 3 | passed |
-| prepared | 3 | passed |
-| COW | 3 | passed |
-| all bounded | 3 | passed |
-| invalid parent | 3 | rejected |
-| invalid child | 3 | rejected |
-| changed observation | 3 | passed |
-| branch conflict | 3 | rejected |
-| cache corruption recovery | 3 | passed |
-| cancellation recovery | 3 | passed |
+- 3/3 runs passed;
+- every run used treatment `all`;
+- every run recorded 40 sequential events from `run.start` to `run.terminal`;
+- total recorded events: 120;
+- the Python source published by Lab is byte-for-byte the scenario `guest_source`
+  used by the streaming Guest execution;
+- test elapsed time: 110.26 seconds;
+- process exit: 0;
+- remote stage was removed after artifact retrieval.
 
-The canonical body-free report is
+The canonical report is
 [`evidence/spark-composable-direct-report.json`](evidence/spark-composable-direct-report.json).
-No private expected artifact body appears in that file. The exact Linux binary,
-artifact, corpus, report, exit status, and cleanup checksums are bound in
+The binary, Guest artifact, corpus, report, debugger dataset, log, exit, and identity
+checksums are bound in
 [`evidence/spark-composable-linux-run.json`](evidence/spark-composable-linux-run.json).
-
-## Shared conformance is separate
-
-An earlier generic conformance artifact remains documented separately in
-[`evidence/spark-composable-shared-conformance.json`](evidence/spark-composable-shared-conformance.json).
-It is **not** part of the current per-run trace report and is never used to
-synthesize missing scenario/treatment rows.
 
 ## Lab projection contract
 
-`cmd/composable-acceptance-report` validates the corpus/report identity and
-projects each recorded row as one `pysolate.lab-web-debugger.v2` run keyed by
-`run_id`. The canonical report remains body-free. Every non-skipped run must carry
-a real, sequential trace from `run.start` through the treatment operations to
-`run.terminal`; missing traces, dangling parents, duplicate run IDs, or terminal
-status mismatches fail closed. The Web dataset does not retain the old parallel
-summary/record arrays and the UI never derives trace nodes from aggregate metrics.
+`cmd/composable-acceptance-report` validates corpus/report identity and projects each
+row as one `pysolate.lab-web-debugger.v3` run keyed by `run_id`.
 
-The Web dataset publishes only reviewed scenario identity and shape metadata:
-scenario ID, file/child counts, selected-child index, and presence flags for
-repeated transformation, wait boundary, and observation. It never publishes
-task, file, child-analysis, expected-artifact, or prohibited-output bodies.
-Workspace and checkpoint bodies are not reconstructed; only identities captured
-at actual operation sites are shown. The view also exposes runtime metrics,
-terminal disposition, model/source/corpus/report identities, and typed refs.
+Each run contains:
 
-A compatible corpus/report produced by another model uses the same UI. Any future
-unrecorded treatment stays absent until Pysolate executes that frozen scenario
-and records its trace. Shared conformance and front-end prose cannot create rows
-or trace events.
+- complete public `guest_source` executed by that Guest run;
+- a real sequential trace and terminal disposition;
+- scenario shape metadata;
+- runtime metrics, captured digests, checkpoint identities, and typed refs.
+
+The UI presents `Guest Python` as the default code view. The public Go
+`runScenarioAllExecution` harness is available separately as `Host recorder`; it is
+never labelled as Guest Python. Missing source, trace gaps, dangling parents,
+duplicate run IDs, schema mismatch, or terminal mismatch fail closed.
+
+Workspace/checkpoint bodies are not reconstructed. Credentials and Host absolute
+paths remain forbidden from the static dataset.

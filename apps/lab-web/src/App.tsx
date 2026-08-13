@@ -220,9 +220,9 @@ export default function App() {
     <AppShell header={{ height: 52 }} padding={0}>
       <AppShell.Header className="app-header">
         <MantineGroup justify="space-between" h="100%" px="md" wrap="nowrap">
-          <MantineGroup gap={10}><ThemeIcon variant="gradient" gradient={{ from: 'cyan', to: 'violet' }}><Database size={17} /></ThemeIcon><div><Text fw={800} size="sm">Pysolate Lab</Text><Text size="xs" c="dimmed">Agent trace debugger</Text></div></MantineGroup>
+          <MantineGroup gap={10}><ThemeIcon variant="gradient" gradient={{ from: 'cyan', to: 'violet' }}><Database size={17} /></ThemeIcon><div><Text fw={800} size="sm">Pysolate Debugger</Text><Text size="xs" c="dimmed">Trace and experiment evidence</Text></div></MantineGroup>
           <MantineGroup className="header-actions" gap={8}>
-            <SegmentedControl size="xs" value={surface} onChange={setSurface} data={[{ label: 'Debugger', value: 'debugger' }, { label: 'Experiments', value: 'experiments' }]} />
+            <SegmentedControl size="xs" value={surface} onChange={setSurface} data={[{ label: 'Example trace', value: 'debugger' }, { label: 'Experiment runs', value: 'experiments' }]} />
             {surface === 'debugger' && <MantineGroup className="header-debug-actions" gap={8}><Badge color="yellow" variant="light">STATIC TARGET VIEW</Badge><Badge color="teal" variant="light" leftSection={<CircleCheck size={11} />}>REAL EXAMPLE</Badge><Tooltip label="Search trace (coming with live ingestion)"><ActionIcon variant="subtle" color="gray"><Search size={16} /></ActionIcon></Tooltip><Button size="compact-sm" variant="light" leftSection={<Play size={13} />}>Replay</Button></MantineGroup>}
           </MantineGroup>
         </MantineGroup>

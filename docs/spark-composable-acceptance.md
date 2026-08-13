@@ -60,12 +60,16 @@ scenario/treatment rows.
 ## Lab projection contract
 
 `cmd/composable-acceptance-report` validates the corpus/report identity and
-projects only recorded rows into generic `research/labview` contracts. The web
-view loads `pysolate.lab-web-experiments.v1` data and displays recorded status,
-oracle status, evidence class/completeness, model/source/corpus/report identities,
-and typed refs. It contains no Spark-specific interpretation. A compatible
-report produced by another model or corpus uses the same fields and UI.
+projects only recorded rows into generic `research/labview` contracts. The
+canonical report remains body-free. The Web dataset additionally publishes the
+reviewed, credential-free frozen scenario fixture—task, files, child analyses,
+wait/observation boundary, and expected artifact—so the Debugger can inspect the
+experiment rather than showing result digests alone. Workspace tree bodies that
+were not captured remain identity-only. The view also displays recorded status,
+oracle status, metrics, terminal disposition, model/source/corpus/report
+identities, and typed refs.
 
-The projection remains fail-closed: any future unrecorded treatment stays absent
+A compatible corpus/report produced by another model uses the same UI. The
+projection remains fail-closed: any future unrecorded treatment stays absent
 until Pysolate executes that frozen scenario and produces a direct row. Shared
 conformance and front-end prose cannot create rows.

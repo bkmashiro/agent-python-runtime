@@ -47,14 +47,14 @@ func main() {
 		fatal(err.Error())
 	}
 	if *labDir != "" {
-		if err := writeLabProjection(*labDir, report, identity); err != nil {
+		if err := writeLabProjection(*labDir, corpus, report, identity); err != nil {
 			fatal(err.Error())
 		}
 	}
 	fmt.Println(identity)
 }
 
-func writeLabProjection(root string, report composableacceptance.Report, reportSHA string) error {
+func writeLabProjection(root string, corpus composableacceptance.Corpus, report composableacceptance.Report, reportSHA string) error {
 	projection, err := labview.ProjectComposableAcceptance(report, reportSHA)
 	if err != nil {
 		return err
@@ -71,6 +71,18 @@ func writeLabProjection(root string, report composableacceptance.Report, reportS
 		return err
 	}
 	manifest := []string{"study-summary.json " + studySHA}
+	type webScenario struct {
+		ID                     string   `json:"id"`
+		Task                   string   `json:"task"`
+		Files                  []string `json:"files"`
+		ChildAnalyses          []string `json:"child_analyses"`
+		RepeatedTransformation string   `json:"repeated_transformation"`
+		WaitBoundary           string   `json:"wait_boundary"`
+		Observation            string   `json:"observation"`
+		SelectedChild          int      `json:"selected_child"`
+		ExpectedArtifact       string   `json:"expected_artifact"`
+		ProhibitedOutputs      []string `json:"prohibited_outputs"`
+	}
 	type webRecord struct {
 		RunID                 string  `json:"run_id"`
 		WorkloadID            string  `json:"workload_id"`
@@ -94,11 +106,19 @@ func writeLabProjection(root string, report composableacceptance.Report, reportS
 		Study         labview.StudySummary `json:"study"`
 		Runs          []labview.RunDetail  `json:"runs"`
 		Records       []webRecord          `json:"records"`
+		Scenarios     []webScenario        `json:"scenarios"`
 	}
 	web := webDataset{
 		SchemaVersion: "pysolate.lab-web-experiments.v1", ReportSHA256: reportSHA,
 		SourceCommit: report.SourceCommit, CorpusSHA256: report.CorpusSHA256, Model: report.Model,
-		Study: projection.Study, Runs: projection.Runs, Records: make([]webRecord, 0, len(report.Rows)),
+		Study: projection.Study, Runs: projection.Runs, Records: make([]webRecord, 0, len(report.Rows)), Scenarios: make([]webScenario, 0, len(corpus.Scenarios)),
+	}
+	for _, scenario := range corpus.Scenarios {
+		web.Scenarios = append(web.Scenarios, webScenario{
+			ID: scenario.ID, Task: scenario.Task, Files: scenario.Files, ChildAnalyses: scenario.ChildAnalyses,
+			RepeatedTransformation: scenario.RepeatedTransformation, WaitBoundary: scenario.WaitBoundary, Observation: scenario.Observation,
+			SelectedChild: scenario.SelectedChild, ExpectedArtifact: scenario.ExpectedArtifact, ProhibitedOutputs: scenario.ProhibitedOutputs,
+		})
 	}
 	for index, row := range report.Rows {
 		web.Records = append(web.Records, webRecord{

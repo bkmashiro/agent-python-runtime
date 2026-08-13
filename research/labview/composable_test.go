@@ -32,10 +32,15 @@ func TestComposableAcceptanceProjectsBodyFreeStudyAndRuns(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, treatment := range []composableacceptance.Treatment{composableacceptance.TreatmentFresh, composableacceptance.TreatmentPrepared, composableacceptance.TreatmentCOW} {
+			trace := []composableacceptance.TraceEvent{
+				{Sequence: 1, Type: composableacceptance.TraceEventTypeRunStart, Action: "run.start", Outcome: composableacceptance.TraceEventOutcomeStarted},
+				{Sequence: 2, ParentSequence: traceParent(1), Type: composableacceptance.TraceEventTypeGuestLifecycle, Action: "guest.run", Outcome: composableacceptance.TraceEventOutcomeOK},
+				{Sequence: 3, ParentSequence: traceParent(2), Type: composableacceptance.TraceEventTypeRunTerminal, Action: "run.terminal", Outcome: composableacceptance.TraceEventOutcomeOK, TerminalDisposition: "closed"},
+			}
 			core.Rows = append(core.Rows, composableacceptance.Row{
 				ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, Treatment: treatment, Status: "passed",
 				OracleSHA256: composableacceptance.ArtifactIdentity(scenario.ExpectedArtifact), GuestCreated: 1, GuestDestroyed: 1,
-				EvidenceScope: "direct_replay", ConformanceSHA256: digest('f'), TerminalDisposition: "closed", EvidenceComplete: true,
+				EvidenceScope: "direct_replay", ConformanceSHA256: digest('f'), TerminalDisposition: "closed", EvidenceComplete: true, Trace: trace,
 			})
 		}
 	}
@@ -61,3 +66,5 @@ func TestComposableAcceptanceProjectsBodyFreeStudyAndRuns(t *testing.T) {
 		}
 	}
 }
+
+func traceParent(sequence uint32) *uint32 { return &sequence }

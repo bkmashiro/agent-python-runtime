@@ -2,12 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/research/composableacceptance"
 	"github.com/bkmashiro/agent-python-runtime/research/labview"
@@ -54,106 +53,154 @@ func main() {
 	fmt.Println(identity)
 }
 
+type webRef struct {
+	Kind   string `json:"kind"`
+	SHA256 string `json:"sha256"`
+}
+
+type webScenario struct {
+	ID                        string `json:"id"`
+	FileCount                 uint32 `json:"file_count"`
+	ChildAnalysisCount        uint32 `json:"child_analysis_count"`
+	SelectedChild             int    `json:"selected_child"`
+	HasRepeatedTransformation bool   `json:"has_repeated_transformation"`
+	HasWaitBoundary           bool   `json:"has_wait_boundary"`
+	HasObservation            bool   `json:"has_observation"`
+}
+
+type webMetrics struct {
+	GuestCreated          uint64  `json:"guest_created"`
+	GuestDestroyed        uint64  `json:"guest_destroyed"`
+	CacheHits             uint64  `json:"cache_hits"`
+	FlightFollowers       uint64  `json:"flight_followers"`
+	ChangedBytes          uint64  `json:"changed_bytes"`
+	MaterializedBytes     uint64  `json:"materialized_bytes"`
+	RelativeElapsedMillis float64 `json:"relative_elapsed_millis"`
+}
+
+type webRun struct {
+	RunID               string                            `json:"run_id"`
+	WorkloadID          string                            `json:"workload_id"`
+	Treatment           string                            `json:"treatment"`
+	RecordedStatus      string                            `json:"recorded_status"`
+	TerminalDisposition string                            `json:"terminal_disposition"`
+	Refs                []webRef                          `json:"refs"`
+	Metrics             webMetrics                        `json:"metrics"`
+	Scenario            webScenario                       `json:"scenario"`
+	Trace               []composableacceptance.TraceEvent `json:"trace"`
+}
+
+type webDataset struct {
+	SchemaVersion string   `json:"schema_version"`
+	ReportSHA256  string   `json:"report_sha256"`
+	SourceCommit  string   `json:"source_commit"`
+	CorpusSHA256  string   `json:"corpus_sha256"`
+	Model         string   `json:"model"`
+	Runs          []webRun `json:"runs"`
+}
+
 func writeLabProjection(root string, corpus composableacceptance.Corpus, report composableacceptance.Report, reportSHA string) error {
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return err
+	}
 	projection, err := labview.ProjectComposableAcceptance(report, reportSHA)
 	if err != nil {
 		return err
 	}
-	runsDir := filepath.Join(root, "runs")
-	if err := os.MkdirAll(runsDir, 0o700); err != nil {
-		return err
-	}
-	studyRaw, studySHA, err := labview.Encode(labview.KindStudySummary, projection.Study)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(root, "study-summary.json"), studyRaw, 0o600); err != nil {
-		return err
-	}
-	manifest := []string{"study-summary.json " + studySHA}
-	type webScenario struct {
-		ID                     string   `json:"id"`
-		Task                   string   `json:"task"`
-		Files                  []string `json:"files"`
-		ChildAnalyses          []string `json:"child_analyses"`
-		RepeatedTransformation string   `json:"repeated_transformation"`
-		WaitBoundary           string   `json:"wait_boundary"`
-		Observation            string   `json:"observation"`
-		SelectedChild          int      `json:"selected_child"`
-		ExpectedArtifact       string   `json:"expected_artifact"`
-		ProhibitedOutputs      []string `json:"prohibited_outputs"`
-	}
-	type webRecord struct {
-		RunID                 string  `json:"run_id"`
-		WorkloadID            string  `json:"workload_id"`
-		Treatment             string  `json:"treatment"`
-		RecordedStatus        string  `json:"recorded_status"`
-		GuestCreated          uint64  `json:"guest_created"`
-		GuestDestroyed        uint64  `json:"guest_destroyed"`
-		CacheHits             uint64  `json:"cache_hits"`
-		FlightFollowers       uint64  `json:"flight_followers"`
-		ChangedBytes          uint64  `json:"changed_bytes"`
-		MaterializedBytes     uint64  `json:"materialized_bytes"`
-		RelativeElapsedMillis float64 `json:"relative_elapsed_millis"`
-		TerminalDisposition   string  `json:"terminal_disposition"`
-	}
-	type webDataset struct {
-		SchemaVersion string               `json:"schema_version"`
-		ReportSHA256  string               `json:"report_sha256"`
-		SourceCommit  string               `json:"source_commit"`
-		CorpusSHA256  string               `json:"corpus_sha256"`
-		Model         string               `json:"model"`
-		Study         labview.StudySummary `json:"study"`
-		Runs          []labview.RunDetail  `json:"runs"`
-		Records       []webRecord          `json:"records"`
-		Scenarios     []webScenario        `json:"scenarios"`
-	}
-	web := webDataset{
-		SchemaVersion: "pysolate.lab-web-experiments.v1", ReportSHA256: reportSHA,
-		SourceCommit: report.SourceCommit, CorpusSHA256: report.CorpusSHA256, Model: report.Model,
-		Study: projection.Study, Runs: projection.Runs, Records: make([]webRecord, 0, len(report.Rows)), Scenarios: make([]webScenario, 0, len(corpus.Scenarios)),
-	}
+	scenariosByID := make(map[string]composableacceptance.Scenario, len(corpus.Scenarios))
 	for _, scenario := range corpus.Scenarios {
-		web.Scenarios = append(web.Scenarios, webScenario{
-			ID: scenario.ID, Task: scenario.Task, Files: scenario.Files, ChildAnalyses: scenario.ChildAnalyses,
-			RepeatedTransformation: scenario.RepeatedTransformation, WaitBoundary: scenario.WaitBoundary, Observation: scenario.Observation,
-			SelectedChild: scenario.SelectedChild, ExpectedArtifact: scenario.ExpectedArtifact, ProhibitedOutputs: scenario.ProhibitedOutputs,
-		})
+		scenariosByID[scenario.ID] = scenario
 	}
-	for index, row := range report.Rows {
-		web.Records = append(web.Records, webRecord{
-			RunID: projection.Runs[index].RunID, WorkloadID: row.ScenarioID, Treatment: string(row.Treatment), RecordedStatus: row.Status,
-			GuestCreated: row.GuestCreated, GuestDestroyed: row.GuestDestroyed, CacheHits: row.CacheHits, FlightFollowers: row.FlightFollowers,
-			ChangedBytes: row.ChangedBytes, MaterializedBytes: row.MaterializedBytes, RelativeElapsedMillis: row.RelativeElapsedMillis,
+
+	rowsByKey := make(map[string]composableacceptance.Row, len(report.Rows))
+	for _, row := range report.Rows {
+		key := rowKey(row.ScenarioID, string(row.Treatment))
+		if _, found := rowsByKey[key]; found {
+			return errors.New("report rows are not unique by workload + treatment")
+		}
+		rowsByKey[key] = row
+	}
+
+	runsByKey := make(map[string]struct{}, len(projection.Runs))
+	web := webDataset{
+		SchemaVersion: "pysolate.lab-web-debugger.v2",
+		ReportSHA256:  reportSHA, SourceCommit: report.SourceCommit,
+		CorpusSHA256: report.CorpusSHA256, Model: report.Model,
+		Runs: make([]webRun, 0, len(projection.Runs)),
+	}
+	for _, run := range projection.Runs {
+		key := rowKey(run.WorkloadID, run.Treatment)
+		if _, found := runsByKey[key]; found {
+			return errors.New("runs are not unique by workload + treatment")
+		}
+		runsByKey[key] = struct{}{}
+
+		row, found := rowsByKey[key]
+		if !found {
+			return fmt.Errorf("missing core row for run %s", key)
+		}
+		scenario, found := scenariosByID[row.ScenarioID]
+		if !found {
+			return errors.New("run workload has no matching scenario")
+		}
+		refs := make([]webRef, 0, len(run.Refs))
+		for _, ref := range run.Refs {
+			refs = append(refs, webRef{Kind: ref.Kind, SHA256: ref.SHA256})
+		}
+		trace := make([]composableacceptance.TraceEvent, len(row.Trace))
+		copy(trace, row.Trace)
+		web.Runs = append(web.Runs, webRun{
+			RunID:               run.RunID,
+			WorkloadID:          row.ScenarioID,
+			Treatment:           string(run.Treatment),
+			RecordedStatus:      row.Status,
 			TerminalDisposition: row.TerminalDisposition,
+			Refs:                refs,
+			Metrics: webMetrics{
+				GuestCreated:          row.GuestCreated,
+				GuestDestroyed:        row.GuestDestroyed,
+				CacheHits:             row.CacheHits,
+				FlightFollowers:       row.FlightFollowers,
+				ChangedBytes:          row.ChangedBytes,
+				MaterializedBytes:     row.MaterializedBytes,
+				RelativeElapsedMillis: row.RelativeElapsedMillis,
+			},
+			Scenario: projectWebScenario(scenario),
+			Trace:    trace,
 		})
 	}
+	if len(runsByKey) != len(rowsByKey) {
+		return errors.New("dataset projection and report rows are not aligned")
+	}
+
 	webRaw, err := json.Marshal(web)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(root, "experiments.json"), webRaw, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "debugger.json"), webRaw, 0o600); err != nil {
 		return err
 	}
-	manifest = append(manifest, "experiments.json "+composableacceptance.ArtifactIdentity(string(webRaw)))
-	for _, run := range projection.Runs {
-		raw, identity, err := labview.Encode(labview.KindRunDetail, run)
-		if err != nil {
-			return err
-		}
-		name := run.RunID + ".json"
-		if err := os.WriteFile(filepath.Join(runsDir, name), raw, 0o600); err != nil {
-			return err
-		}
-		manifest = append(manifest, "runs/"+name+" "+identity)
+	manifest := "debugger.json " + composableacceptance.ArtifactIdentity(string(webRaw)) + "\n"
+	return os.WriteFile(filepath.Join(root, "manifest.txt"), []byte(manifest), 0o600)
+}
+
+func projectWebScenario(scenario composableacceptance.Scenario) webScenario {
+	return webScenario{
+		ID:                        scenario.ID,
+		FileCount:                 uint32(len(scenario.Files)),
+		ChildAnalysisCount:        uint32(len(scenario.ChildAnalyses)),
+		SelectedChild:             scenario.SelectedChild,
+		HasRepeatedTransformation: scenario.RepeatedTransformation != "",
+		HasWaitBoundary:           scenario.WaitBoundary != "",
+		HasObservation:            scenario.Observation != "",
 	}
-	sort.Strings(manifest)
-	return os.WriteFile(filepath.Join(root, "manifest.txt"), []byte(strings.Join(manifest, "\n")+"\n"), 0o600)
+}
+
+func rowKey(scenarioID string, treatment string) string {
+	return scenarioID + "/" + treatment
 }
 
 func decodeReport(raw []byte, destination *composableacceptance.Report) error {
-	// EncodeReport is the canonicality oracle after strict JSON decoding through
-	// a temporary wrapper supplied by this package.
 	if err := composableacceptance.DecodeReport(raw, destination); err != nil {
 		return err
 	}

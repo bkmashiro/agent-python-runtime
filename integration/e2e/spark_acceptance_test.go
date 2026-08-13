@@ -50,6 +50,9 @@ func TestRealGuestSparkScenarioCoreTreatments(t *testing.T) {
 		GuestArtifactSHA256: artifactSHA, CorpusSHA256: corpusSHA, Model: corpus.Model,
 	}
 	for _, scenario := range corpus.Scenarios {
+		if filter := os.Getenv("PYSOLATE_ACCEPTANCE_SCENARIO"); filter != "" && scenario.ID != filter {
+			continue
+		}
 		scenarioSHA, err := composableacceptance.ScenarioIdentity(scenario)
 		if err != nil {
 			t.Fatal(err)
@@ -75,14 +78,25 @@ func TestRealGuestSparkScenarioCoreTreatments(t *testing.T) {
 			composableacceptance.TreatmentCacheCorruption,
 			composableacceptance.TreatmentCancellation,
 		} {
+			if filter := os.Getenv("PYSOLATE_ACCEPTANCE_TREATMENT"); filter != "" && string(treatment) != filter {
+				continue
+			}
 			t.Logf("direct treatment start scenario=%s treatment=%s", scenario.ID, treatment)
 			row, ok := runScenarioCoreTreatment(t, artifact, artifactSHA, scenario, scenarioSHA, oracleSHA, treatment)
 			if ok {
+				assertTreatmentTrace(t, row)
 				report.Rows = append(report.Rows, row)
 			}
 		}
 	}
 	composableacceptance.SortRows(report.Rows)
+	for _, row := range report.Rows {
+		single := report
+		single.Rows = []composableacceptance.Row{row}
+		if _, _, err := composableacceptance.EncodeReport(single); err != nil {
+			t.Fatalf("invalid direct row scenario=%s treatment=%s row=%+v trace=%+v: %v", row.ScenarioID, row.Treatment, row, row.Trace, err)
+		}
+	}
 	encoded, _, err := composableacceptance.EncodeReport(report)
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +125,168 @@ func TestRealGuestSparkScenarioCoreTreatments(t *testing.T) {
 	if err := os.Rename(temporaryPath, outputPath); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTraceRecorderLifecycle(t *testing.T) {
+	t.Setenv("PYSOLATE_HOST_SOURCE_COMMIT", strings.Repeat("1", 40))
+	scenario := composableacceptance.Scenario{
+		ID:               "trace-recorder-lifecycle",
+		ExpectedArtifact: "ok",
+	}
+	scenarioSHA := hashBytes([]byte("trace-scenario-lifecycle"))
+	oracleSHA := hashBytes([]byte("ok"))
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentFresh, started, 1)
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.create", composableacceptance.TraceEventOutcomeOK, nil, []byte("artifact"), nil, "", "", 1)
+	bad := row
+	bad.Trace = append([]composableacceptance.TraceEvent{}, recorder.events...)
+	if err := assertTraceLifecycleValid(t, bad, true); err == nil {
+		t.Fatalf("expected invalid trace without terminal to fail validation")
+	}
+	completeTraceRow(&row, started, recorder)
+	if err := assertTraceLifecycleValid(t, row, true); err != nil {
+		t.Fatalf("trace with terminal must validate: %v", err)
+	}
+}
+
+func TestRepresentativeTreatmentTraceHelpers(t *testing.T) {
+	t.Setenv("PYSOLATE_HOST_SOURCE_COMMIT", strings.Repeat("1", 40))
+	scenario := composableacceptance.Scenario{
+		ID:               "trace-helper-sample",
+		ExpectedArtifact: "trace-helper-output",
+	}
+	scenarioSHA := hashBytes([]byte("trace-helper-scenario"))
+	oracleSHA := hashBytes([]byte("trace-helper-output"))
+	artifactSHA := hashBytes([]byte("trace-helper-artifact"))
+	cases := []struct {
+		name    string
+		run     func(*testing.T) (composableacceptance.Row, bool)
+		actions map[string]struct{}
+	}{
+		{
+			name: "cache_on",
+			run: func(t *testing.T) (composableacceptance.Row, bool) {
+				return runScenarioCacheExecution(t, artifactSHA, scenario, scenarioSHA, oracleSHA, true)
+			},
+			actions: map[string]struct{}{
+				"run.start":      {},
+				"cache.lookup":   {},
+				"cache.compute":  {},
+				"cache.store":    {},
+				"oracle.compare": {},
+				"run.terminal":   {},
+			},
+		},
+		{
+			name: "single_flight_on",
+			run: func(t *testing.T) (composableacceptance.Row, bool) {
+				return runScenarioSingleFlightExecution(t, artifactSHA, scenario, scenarioSHA, oracleSHA, true)
+			},
+			actions: map[string]struct{}{
+				"run.start":              {},
+				"single_flight.leader":   {},
+				"single_flight.follower": {},
+				"single_flight.compute":  {},
+				"oracle.compare":         {},
+				"run.terminal":           {},
+			},
+		},
+	}
+	for _, c := range cases {
+		tc := c
+		t.Run(tc.name, func(t *testing.T) {
+			row, ok := tc.run(t)
+			if !ok {
+				t.Fatalf("expected helper %s to run", tc.name)
+			}
+			if err := assertTraceLifecycleValid(t, row, true); err != nil {
+				t.Fatalf("helper %s row validation: %v", tc.name, err)
+			}
+			actions := map[string]struct{}{}
+			for _, event := range row.Trace {
+				actions[event.Action] = struct{}{}
+			}
+			for action := range tc.actions {
+				if _, ok := actions[action]; !ok {
+					t.Fatalf("helper %s missing action %q in trace", tc.name, action)
+				}
+			}
+		})
+	}
+}
+
+func assertTreatmentTrace(t *testing.T, row composableacceptance.Row) {
+	t.Helper()
+	if err := assertTraceLifecycleValid(t, row, true); err != nil {
+		t.Fatalf("scenario=%s treatment=%s invalid trace: %v", row.ScenarioID, row.Treatment, err)
+	}
+	if row.Status == "skipped" {
+		return
+	}
+	actions := make(map[string]int, len(row.Trace))
+	for _, event := range row.Trace {
+		actions[event.Action]++
+	}
+	required := map[composableacceptance.Treatment][]string{
+		composableacceptance.TreatmentFresh:           {"guest.create", "guest.run", "oracle.compare", "guest.close"},
+		composableacceptance.TreatmentStreaming:       {"workspace.fork", "stream.begin", "stream.seal", "stream.end", "workspace.commit", "oracle.compare"},
+		composableacceptance.TreatmentFanout:          {"fanout.child_start", "fanout.child_end", "fanout.select", "fanout.selected_root", "fanout.discard"},
+		composableacceptance.TreatmentCacheOff:        {"cache.lookup", "cache.compute", "oracle.compare"},
+		composableacceptance.TreatmentCacheOn:         {"cache.lookup", "cache.compute", "cache.store", "cache.hit", "oracle.compare"},
+		composableacceptance.TreatmentSingleFlightOff: {"single_flight.leader", "single_flight.compute", "oracle.compare"},
+		composableacceptance.TreatmentSingleFlightOn:  {"single_flight.leader", "single_flight.follower", "single_flight.compute", "oracle.compare"},
+		composableacceptance.TreatmentReevaluationOff: {"wait.begin", "wait.release", "resume.disabled"},
+		composableacceptance.TreatmentReevaluationOn:  {"wait.begin", "wait.release", "resume.reuse", "oracle.compare"},
+		composableacceptance.TreatmentPrepared:        {"prepared.create", "prepared.consume", "guest.run", "oracle.compare"},
+		composableacceptance.TreatmentCOW:             {"cow.map_private", "cow.discard", "guest.run", "oracle.compare"},
+		composableacceptance.TreatmentAll:             {"stream.begin", "fanout.child_start", "cache.lookup", "single_flight.leader", "wait.begin", "resume.fresh", "oracle.compare"},
+		composableacceptance.TreatmentInvalidParent:   {"validation.reject", "workspace.discard"},
+		composableacceptance.TreatmentInvalidChild:    {"fanout.child_error", "workspace.discard"},
+		composableacceptance.TreatmentChangedObserve:  {"observation.changed", "resume.fresh", "oracle.compare"},
+		composableacceptance.TreatmentBranchConflict:  {"workspace.conflict", "workspace.discard"},
+		composableacceptance.TreatmentCacheCorruption: {"cache.corrupt", "cache.detect", "cache.compute", "cache.hit"},
+		composableacceptance.TreatmentCancellation:    {"cancellation.requested", "cancellation.observed", "cleanup.discard", "oracle.compare"},
+	}
+	for _, action := range required[row.Treatment] {
+		if actions[action] == 0 {
+			t.Fatalf("scenario=%s treatment=%s missing recorded action %q", row.ScenarioID, row.Treatment, action)
+		}
+	}
+	if row.Treatment == composableacceptance.TreatmentCacheOff && actions["cache.hit"] != 0 {
+		t.Fatalf("scenario=%s cache_off recorded a cache hit", row.ScenarioID)
+	}
+	if row.Treatment == composableacceptance.TreatmentSingleFlightOff && actions["single_flight.follower"] != 0 {
+		t.Fatalf("scenario=%s single_flight_off recorded a follower", row.ScenarioID)
+	}
+}
+
+func assertTraceLifecycleValid(t *testing.T, row composableacceptance.Row, requireTerminal bool) error {
+	t.Helper()
+	if len(row.Trace) == 0 {
+		return errors.New("no trace events")
+	}
+	if row.Trace[0].Sequence != 1 || row.Trace[0].Action != "run.start" {
+		return errors.New("trace missing run.start as first event")
+	}
+	for i, event := range row.Trace {
+		if int(event.Sequence) != i+1 {
+			return fmt.Errorf("trace sequence gap at index %d (%q)", i, event.Action)
+		}
+	}
+	if requireTerminal {
+		last := row.Trace[len(row.Trace)-1]
+		if last.Action != "run.terminal" {
+			return errors.New("trace missing run.terminal")
+		}
+	}
+	if !requireTerminal {
+		for _, event := range row.Trace {
+			if event.Action == "run.terminal" {
+				return errors.New("trace unexpectedly has terminal")
+			}
+		}
+	}
+	return nil
 }
 
 func runScenarioCoreTreatment(t *testing.T, artifact []byte, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, treatment composableacceptance.Treatment) (composableacceptance.Row, bool) {
@@ -165,7 +341,8 @@ func runScenarioCoreTreatment(t *testing.T, artifact []byte, artifactSHA string,
 
 func runScenarioGuestExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, treatment composableacceptance.Treatment, config runtimeconfig.RunConfig) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, treatment, 1)
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, treatment, started, 1)
 	if treatment == composableacceptance.TreatmentPrepared {
 		row.TerminalDisposition = "consumed_single_use"
 	}
@@ -175,7 +352,6 @@ func runScenarioGuestExecution(t *testing.T, artifact []byte, scenario composabl
 	manager, base := newComposableWorkspace(t)
 	defer manager.Close()
 	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "spark-" + scenario.ID}
-	started := time.Now()
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if treatment == composableacceptance.TreatmentCOW && runtime.GOOS != "linux" {
@@ -183,43 +359,80 @@ func runScenarioGuestExecution(t *testing.T, artifact []byte, scenario composabl
 			row.GuestCreated = 0
 			row.GuestDestroyed = 0
 			row.TerminalDisposition = "platform_unavailable"
-			row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+			completeTraceRow(&row, started, recorder)
 			return row, true
 		}
 		t.Fatal(err)
 	}
-	if treatment == composableacceptance.TreatmentCOW {
-		probe := runner.(*wazeroengine.Engine).COWProbe()
-		if !probe.COWSelected || probe.Fallback || len(probe.Blockers) != 0 {
-			t.Fatalf("scenario=%s COW probe=%+v", scenario.ID, probe)
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.create", composableacceptance.TraceEventOutcomeOK, nil, artifact, nil, "", "", 1)
+	if treatment == composableacceptance.TreatmentPrepared {
+		preparedRunner := runner.(*wazeroengine.Engine)
+		state := preparedRunner.PreparedState()
+		stateJSON, err := json.Marshal(state)
+		if err != nil {
+			_ = runner.Close(context.Background())
+			t.Fatal(err)
 		}
+		recorder.append(composableacceptance.TraceEventTypePrepared, "prepared.create", composableacceptance.TraceEventOutcomeOK, nil, artifact, stateJSON, "", "", 1)
 	}
+	if treatment == composableacceptance.TreatmentCOW {
+		cowRunner, ok := runner.(*wazeroengine.Engine)
+		if !ok {
+			_ = runner.Close(context.Background())
+			t.Fatalf("scenario=%s treatment=%s expected wazero runner", scenario.ID, treatment)
+		}
+		probe := cowRunner.COWProbe()
+		outcome := composableacceptance.TraceEventOutcomeMapped
+		if !probe.COWSelected {
+			outcome = composableacceptance.TraceEventOutcomeSkipped
+		}
+		probeJSON, err := json.Marshal(probe)
+		if err != nil {
+			_ = runner.Close(context.Background())
+			t.Fatal(err)
+		}
+		recorder.append(composableacceptance.TraceEventTypeCOW, "cow.map_private", outcome, nil, nil, probeJSON, "", "", 1)
+	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.run", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	request := scenarioRequest(t, scenario, scenarioSHA)
 	response, err := runner.Run(context.Background(), request, "")
 	if err != nil {
 		_ = runner.Close(context.Background())
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.run", composableacceptance.TraceEventOutcomeOK, nil, request, response, "", "", 1)
+	output := responseStringResult(t, response)
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(output), "", "", 1)
 	if err := runner.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if got := responseStringResult(t, response); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
+	if treatment == composableacceptance.TreatmentCOW {
+		recorder.append(composableacceptance.TraceEventTypeCOW, "cow.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, nil, nil, "", "", 1)
+	}
+	if output != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(output) != oracleSHA {
 		t.Fatalf("scenario=%s treatment=%s outcome mismatch", scenario.ID, treatment)
 	}
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	if treatment == composableacceptance.TreatmentPrepared {
+		prepared := runner.(*wazeroengine.Engine)
+		recorder.append(composableacceptance.TraceEventTypePrepared, "prepared.consume", composableacceptance.TraceEventOutcomeConsumed, nil, []byte(prepared.Properties().ExecutionProfileID), nil, "", "", 1)
+	}
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioStreamingExecution(t *testing.T, artifact []byte, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
 	_ = artifactSHA
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentStreaming, 1)
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentStreaming, started, 1)
 	manager, base := newComposableWorkspace(t)
 	defer manager.Close()
 	attempt, err := manager.ForkAttempt(base)
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	prepares, err := streaming.BuildPrepareChunks(streaming.PrepareConfig{
 		Inputs: json.RawMessage(`{}`),
 		Chunks: []string{
@@ -235,7 +448,6 @@ func runScenarioStreamingExecution(t *testing.T, artifact []byte, artifactSHA st
 	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
-	started := time.Now()
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
@@ -245,14 +457,19 @@ func runScenarioStreamingExecution(t *testing.T, artifact []byte, artifactSHA st
 		_ = runner.Close(context.Background())
 		row.Status = "skipped"
 		row.TerminalDisposition = "streaming_unavailable"
-		row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+		if err := attempt.Discard(); err != nil {
+			t.Fatal(err)
+		}
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, nil, nil, "", "", 1)
+		completeTraceRow(&row, started, recorder)
 		return row, true
 	}
 	type outcome struct {
 		result streaming.RunResult
 		err    error
 	}
-	prepareChannel := make(chan string)
+	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.begin", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
+	prepareChannel := make(chan string, len(prepares))
 	completed := make(chan outcome, 1)
 	go func() {
 		request := []byte(`{"run_id":"streaming-spark-` + scenario.ID + `","code":"result = stream_final['result']","inputs":{}}`)
@@ -260,36 +477,45 @@ func runScenarioStreamingExecution(t *testing.T, artifact []byte, artifactSHA st
 		completed <- outcome{result: result, err: runErr}
 	}()
 	for _, prepare := range prepares {
-		select {
-		case prepareChannel <- prepare:
-		case finished := <-completed:
-			close(prepareChannel)
-			if finished.err != nil {
-				t.Fatalf("scenario=%s treatment=%s stream error=%v", scenario.ID, composableacceptance.TreatmentStreaming, finished.err)
-			}
-			response := finished.result.Response
-			if got := responseStringResult(t, response); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
-				t.Fatalf("scenario=%s treatment=%s outcome mismatch", scenario.ID, composableacceptance.TreatmentStreaming)
-			}
-			row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
-			return row, true
-		}
+		prepareChannel <- prepare
+		recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.prepare", composableacceptance.TraceEventOutcomeOK, nil, []byte(prepare), nil, "", "", 1)
 	}
 	close(prepareChannel)
 	finished := <-completed
 	if finished.err != nil {
+		row.Status = "rejected"
+		row.TerminalDisposition = "streaming_failed"
+		recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.end", composableacceptance.TraceEventOutcomeError, nil, nil, nil, "", "", 1)
+		_ = attempt.Discard()
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, nil, nil, "", "", 1)
+		if err := runner.Close(context.Background()); err != nil {
+			recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeError, nil, nil, nil, "", "", 1)
+			t.Fatal(err)
+		}
+		recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 		t.Fatalf("scenario=%s treatment=%s stream error=%v", scenario.ID, composableacceptance.TreatmentStreaming, finished.err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.seal", composableacceptance.TraceEventOutcomeSealed, nil, nil, nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.end", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
+	if publishedInfo, err := manager.Inspect(finished.result.PublishedWorkspace); err == nil {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.commit", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(publishedInfo.WorkspaceSHA256), "", "", 1)
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	if got := responseStringResult(t, finished.result.Response); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s treatment=%s outcome mismatch", scenario.ID, composableacceptance.TreatmentStreaming)
 	}
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(finished.result.Response), "", "", 1)
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioCacheExecution(t *testing.T, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, cacheOn bool) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCacheOff, 0)
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCacheOff, started, 0)
 	if cacheOn {
 		row.Treatment = composableacceptance.TreatmentCacheOn
 	}
@@ -303,7 +529,12 @@ func runScenarioCacheExecution(t *testing.T, artifactSHA string, scenario compos
 		t.Fatal(err)
 	}
 	engine := agentfunction.Engine{Store: store, CacheEnabled: cacheOn}
+	invocationIdentity, _, err := invocation.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var calls atomic.Int32
+	before := store.Stats()
 	compute := func(context.Context, *agentfunction.Guard) ([]byte, error) {
 		calls.Add(1)
 		return []byte(scenario.ExpectedArtifact), nil
@@ -312,9 +543,23 @@ func runScenarioCacheExecution(t *testing.T, artifactSHA string, scenario compos
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(first.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	if first.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, first.Value, "", "", 1)
+	}
+	if !first.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), first.Value, "", "", 1)
+	}
 	second, err := engine.Execute(context.Background(), invocation, compute)
 	if err != nil {
 		t.Fatal(err)
+	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(second.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	if second.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, second.Value, "", "", 1)
+	}
+	if !second.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), second.Value, "", "", 1)
 	}
 	if string(first.Value) != scenario.ExpectedArtifact || string(second.Value) != scenario.ExpectedArtifact {
 		t.Fatalf("scenario=%s treatment=%s outcome mismatch", scenario.ID, row.Treatment)
@@ -334,21 +579,35 @@ func runScenarioCacheExecution(t *testing.T, artifactSHA string, scenario compos
 			t.Fatalf("scenario=%s treatment=%s cache-off behavior unexpected first=%+v second=%+v calls=%d stats=%+v", scenario.ID, row.Treatment, first, second, calls.Load(), stats)
 		}
 	}
+	if before.Writes < stats.Writes {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.store", composableacceptance.TraceEventOutcomeOK, nil, nil, first.Value, "", "", 1)
+	}
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), first.Value, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), second.Value, "", "", 1)
+	completeTraceRow(&row, started, recorder)
 	return row, true
+}
+
+func cacheLookupOutcome(hit bool) composableacceptance.TraceEventOutcome {
+	if hit {
+		return composableacceptance.TraceEventOutcomeHit
+	}
+	return composableacceptance.TraceEventOutcomeMiss
 }
 
 func runScenarioSingleFlightExecution(t *testing.T, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, singleFlight bool) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentSingleFlightOff, 0)
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentSingleFlightOff, started, 0)
 	if singleFlight {
 		row.Treatment = composableacceptance.TreatmentSingleFlightOn
 	}
-	storeDir := filepath.Join(t.TempDir(), "single-flight-"+scenario.ID)
-	store, err := agentfunction.NewStore(storeDir, scenarioSHA, 1<<20)
+	invocation, err := scenarioFunctionInvocation(scenario, scenarioSHA, artifactSHA)
 	if err != nil {
 		t.Fatal(err)
 	}
-	invocation, err := scenarioFunctionInvocation(scenario, scenarioSHA, artifactSHA)
+	storeDir := filepath.Join(t.TempDir(), "single-flight-"+scenario.ID)
+	store, err := agentfunction.NewStore(storeDir, scenarioSHA, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,18 +699,30 @@ func runScenarioSingleFlightExecution(t *testing.T, artifactSHA string, scenario
 		if calls.Load() != 1 || flights.Stats().Leaders != 1 || row.FlightFollowers != 1 {
 			t.Fatalf("scenario=%s treatment=%s calls=%d stats=%+v", scenario.ID, row.Treatment, calls.Load(), flights.Stats())
 		}
+		recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.leader", composableacceptance.TraceEventOutcomeLeader, nil, []byte(scenarioSHA), []byte(first.result.Value), "", "", 1)
+		if second.result.Shared {
+			recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.follower", composableacceptance.TraceEventOutcomeFollower, nil, []byte(scenarioSHA), []byte(second.result.Value), "", "", 1)
+		}
 	} else {
 		if calls.Load() != 2 {
 			t.Fatalf("scenario=%s treatment=%s calls=%d", scenario.ID, row.Treatment, calls.Load())
 		}
+		recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.leader", composableacceptance.TraceEventOutcomeLeader, nil, []byte(scenarioSHA), []byte(first.result.Value), "", "", 1)
+		recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.leader", composableacceptance.TraceEventOutcomeLeader, nil, []byte(scenarioSHA), []byte(second.result.Value), "", "", 1)
 	}
+	for i := int64(0); i < int64(calls.Load()); i++ {
+		recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(scenario.ExpectedArtifact), "", "", 1)
+	}
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), first.result.Value, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), second.result.Value, "", "", 1)
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioFanoutExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentFanout, 2)
 	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentFanout, started, 2)
 
 	manager, base := newComposableWorkspace(t)
 	parentLineage, _, err := manager.PortableIdentity(base)
@@ -497,32 +768,44 @@ func runScenarioFanoutExecution(t *testing.T, artifact []byte, scenario composab
 		t.Fatal(err)
 	}
 	for index, child := range scenario.ChildAnalyses {
-		if err := orchestrator.Stage(context.Background(), scenarioFanoutDescriptor(index, child, scenarioSHA, parentLineage)); err != nil {
+		descriptor := scenarioFanoutDescriptor(index, child, scenarioSHA, parentLineage)
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeOK, nil, []byte(descriptor.ChildID), nil, "", "", 1)
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_start", composableacceptance.TraceEventOutcomeStarted, nil, []byte(descriptor.ChildID), nil, "", "", 1)
+		if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
+			recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_end", composableacceptance.TraceEventOutcomeRejected, nil, []byte(descriptor.ChildID), nil, "", "", 1)
 			t.Fatal(err)
 		}
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_end", composableacceptance.TraceEventOutcomeOK, nil, []byte(descriptor.ChildID), nil, "", "", 1)
 	}
 	selected := fmt.Sprintf("child-%d", scenario.SelectedChild)
+	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeSelected, nil, []byte(selected), nil, "", "", 1)
 	joined, err := orchestrator.Seal(context.Background(), selected)
 	if err != nil {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), nil, "", "", 1)
 		t.Fatal(err)
 	}
 	if joined.SelectedChildID != selected {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), []byte(joined.SelectedChildID), "", "", 1)
 		t.Fatalf("scenario=%s fanout selected=%s got=%s", scenario.ID, selected, joined.SelectedChildID)
 	}
+	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.selected_root", composableacceptance.TraceEventOutcomeOK, nil, []byte(joined.SelectedRoot.IdentitySHA256), nil, "", "", 1)
 	if !rootContainsWithSHA(t, manager, joined.SelectedRoot, safeIdentifier(selected)+".txt", oracleSHA) {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.selected_root", composableacceptance.TraceEventOutcomeRejected, nil, nil, nil, "", "", 1)
 		t.Fatalf("scenario=%s fanout selected branch missing expected output", scenario.ID)
 	}
 	for _, discarded := range joined.DiscardedRefs {
 		if _, err := manager.Inspect(discarded); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
+			recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.discard", composableacceptance.TraceEventOutcomeRejected, nil, []byte(discarded), nil, "", "", 1)
 			t.Fatalf("scenario=%s fanout sibling ref=%s present: %v", scenario.ID, discarded, err)
 		}
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(discarded), nil, "", "", 1)
 	}
 	row.SelectedRootSHA256 = joined.SelectedRoot.IdentitySHA256
 	row.ChangedBytes = joined.ChangedBytes
 	row.MaterializedBytes = joined.MaterializedBytes
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
 	row.GuestCreated = uint64(2)
 	row.GuestDestroyed = uint64(2)
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
@@ -534,8 +817,8 @@ func runScenarioReevaluationExecution(t *testing.T, artifact []byte, scenario co
 		treatment = composableacceptance.TreatmentReevaluationOn
 		guestCount = 2
 	}
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, treatment, guestCount)
 	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, treatment, started, guestCount)
 	manager, base := newComposableWorkspace(t)
 	baseInfo, err := manager.Inspect(base)
 	if err != nil {
@@ -591,31 +874,43 @@ func runScenarioReevaluationExecution(t *testing.T, artifact []byte, scenario co
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "guest.workflow", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.begin", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenario.WaitBoundary), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.initial", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	suspended, err := evaluator.Start(context.Background(), []byte(`{"scenario":"`+scenario.ID+`"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "guest.workflow", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), []byte(suspended.State.WaitNodeID), "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.begin", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.WaitBoundary), []byte(suspended.State.WaitNodeID), "", "", 1)
 	if suspended.Disposition != workflow.Suspended {
 		t.Fatalf("scenario=%s reevaluation start=%+v", scenario.ID, suspended)
 	}
 	if suspended.State.WaitNodeID != waitID {
 		t.Fatalf("scenario=%s reevaluation wait=%s got=%s", scenario.ID, waitID, suspended.State.WaitNodeID)
 	}
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.initial", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), []byte(scenario.Observation), "", "", 1)
 	if !resumeEnabled {
 		row.Status = "rejected"
 		row.TerminalDisposition = "mechanism_disabled"
 		row.GuestCreated = uint64(factory.created)
 		row.GuestDestroyed = uint64(factory.closed)
-		row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.release", composableacceptance.TraceEventOutcomeRejected, nil, nil, []byte("disabled"), "", "", 1)
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.disabled", composableacceptance.TraceEventOutcomeRejected, nil, nil, []byte("disabled"), "", "", 1)
 		if _, err := evaluator.Resume(context.Background(), suspended.State); !errors.Is(err, workflow.ErrResumeDisabled) {
 			t.Fatalf("scenario=%s reevaluation off resume=%v", scenario.ID, err)
 		}
+		completeTraceRow(&row, started, recorder)
 		return row, true
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "guest.workflow", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.release", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	resumed, err := evaluator.Resume(context.Background(), suspended.State)
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "guest.workflow", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), []byte(resumed.State.WaitNodeID), "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.release", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(resumed.State.WaitNodeID), "", "", 1)
 	if resumed.Disposition != workflow.Completed {
 		t.Fatalf("scenario=%s reevaluation resume=%+v", scenario.ID, resumed)
 	}
@@ -628,16 +923,23 @@ func runScenarioReevaluationExecution(t *testing.T, artifact []byte, scenario co
 	if got := string(resumed.Output); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s reevaluation output mismatch", scenario.ID)
 	}
+	if resumed.Metrics.Invalidated > 0 {
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.reuse", composableacceptance.TraceEventOutcomeRejected, nil, nil, nil, "", "", 1)
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.fresh", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(resumed.Output), "", "", 1)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.reuse", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(resumed.Output), "", "", 1)
+	}
 	row.GuestCreated = uint64(factory.created)
 	row.GuestDestroyed = uint64(factory.closed)
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), resumed.Output, "", "", 1)
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentAll, 1)
 	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentAll, started, 1)
 	manager, base := newComposableWorkspace(t)
 
 	baseInfo, err := manager.Inspect(base)
@@ -655,6 +957,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
 	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "all-spark-parent-" + scenario.ID}
@@ -665,7 +968,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 			row.GuestCreated = 0
 			row.GuestDestroyed = 0
 			row.TerminalDisposition = "streaming_unavailable"
-			row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+			completeTraceRow(&row, started, recorder)
 			return row, true
 		}
 		t.Fatal(err)
@@ -677,7 +980,11 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		row.GuestCreated = 0
 		row.GuestDestroyed = 0
 		row.TerminalDisposition = "streaming_unavailable"
-		row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+		if err := parentAttempt.Discard(); err != nil {
+			t.Fatal(err)
+		}
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, nil, nil, "", "", 1)
+		completeTraceRow(&row, started, recorder)
 		return row, true
 	}
 
@@ -723,11 +1030,6 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index, child := range scenario.ChildAnalyses {
-		if err := orchestrator.Stage(context.Background(), scenarioFanoutDescriptor(index, child, scenarioSHA, parentLineage)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	type streamOutcome struct {
 		result streaming.RunResult
 		err    error
@@ -739,34 +1041,80 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		result, runErr := streaming.ExecuteStream(context.Background(), streamRunner, parentAttempt, request, prepareChannel)
 		completed <- streamOutcome{result: result, err: runErr}
 	}()
+	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.begin", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	for _, prepare := range prepares {
 		prepareChannel <- prepare
+		recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.prepare", composableacceptance.TraceEventOutcomeOK, nil, []byte(prepare), nil, "", "", 1)
 	}
 	close(prepareChannel)
 	finished := <-completed
 	if finished.err != nil {
+		row.Status = "rejected"
+		row.TerminalDisposition = "streaming_failed"
+		recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.end", composableacceptance.TraceEventOutcomeError, nil, nil, nil, "", "", 1)
+		_ = parentAttempt.Discard()
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, nil, nil, "", "", 1)
+		if err := parentRunner.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeError, nil, nil, nil, "", "", 1)
 		t.Fatalf("scenario=%s treatment=%s stream error=%v", scenario.ID, composableacceptance.TreatmentAll, finished.err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.seal", composableacceptance.TraceEventOutcomeSealed, nil, nil, nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.end", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
+	if publishedInfo, err := manager.Inspect(finished.result.PublishedWorkspace); err == nil {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.commit", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(publishedInfo.WorkspaceSHA256), "", "", 1)
+	}
+	if err := parentRunner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	if got := responseStringResult(t, finished.result.Response); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s treatment=%s stream outcome mismatch", scenario.ID, composableacceptance.TreatmentAll)
 	}
-	joined, err := orchestrator.Seal(context.Background(), fmt.Sprintf("child-%d", scenario.SelectedChild))
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(finished.result.Response), "", "", 1)
+
+	selected := fmt.Sprintf("child-%d", scenario.SelectedChild)
+	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeStarted, nil, []byte(selected), nil, "", "", 1)
+	for index, child := range scenario.ChildAnalyses {
+		descriptor := scenarioFanoutDescriptor(index, child, scenarioSHA, parentLineage)
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeOK, nil, []byte(descriptor.ChildID), nil, "", "", 1)
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_start", composableacceptance.TraceEventOutcomeStarted, nil, []byte(descriptor.ChildID), nil, "", "", 1)
+		if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
+			recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_end", composableacceptance.TraceEventOutcomeRejected, nil, []byte(descriptor.ChildID), nil, "", "", 1)
+			t.Fatal(err)
+		}
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_end", composableacceptance.TraceEventOutcomeOK, nil, []byte(descriptor.ChildID), nil, "", "", 1)
+	}
+	joined, err := orchestrator.Seal(context.Background(), selected)
 	if err != nil {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), nil, "", "", 1)
 		t.Fatal(err)
 	}
-	if joined.SelectedChildID != fmt.Sprintf("child-%d", scenario.SelectedChild) {
-		t.Fatalf("scenario=%s treatment=%s selected=%s got=%s", scenario.ID, composableacceptance.TreatmentAll, fmt.Sprintf("child-%d", scenario.SelectedChild), joined.SelectedChildID)
+	if joined.SelectedChildID != selected {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), []byte(joined.SelectedChildID), "", "", 1)
+		t.Fatalf("scenario=%s treatment=%s selected=%s got=%s", scenario.ID, composableacceptance.TreatmentAll, selected, joined.SelectedChildID)
 	}
-	selectedRootPath := safeIdentifier(fmt.Sprintf("child-%d", scenario.SelectedChild)) + ".txt"
+	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeSelected, nil, []byte(joined.SelectedChildID), nil, "", "", 1)
+	selectedRootPath := safeIdentifier(selected) + ".txt"
 	if !rootContainsWithSHA(t, manager, joined.SelectedRoot, selectedRootPath, oracleSHA) {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.selected_root", composableacceptance.TraceEventOutcomeRejected, nil, nil, nil, "", "", 1)
 		t.Fatalf("scenario=%s treatment=%s selected root missing artifact", scenario.ID, composableacceptance.TreatmentAll)
 	}
+	for _, discarded := range joined.DiscardedRefs {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(discarded), nil, "", "", 1)
+	}
+	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.selected_root", composableacceptance.TraceEventOutcomeOK, nil, []byte(joined.SelectedRoot.IdentitySHA256), nil, "", "", 1)
 
 	invocation, err := scenarioFunctionInvocation(scenario, scenarioSHA, artifactSHA)
 	if err != nil {
 		t.Fatal(err)
 	}
 	invocation.ImmutableRootSHA256 = []string{joined.SelectedRoot.WorkspaceSHA256}
+	invocationIdentity, _, err := invocation.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
 	storeDir := filepath.Join(t.TempDir(), "all-cache-"+scenario.ID)
 	store, err := agentfunction.NewStore(storeDir, scenarioSHA, 1<<20)
 	if err != nil {
@@ -796,16 +1144,31 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		err    error
 	}
 	var cacheWait sync.WaitGroup
-	cacheWait.Add(2)
+	cacheWait.Add(1)
 	go func() {
 		defer cacheWait.Done()
 		first.result, first.err = cache.Execute(context.Background(), invocation, compute)
 	}()
+	<-computeReady
+	cacheWait.Add(1)
 	go func() {
 		defer cacheWait.Done()
 		second.result, second.err = cache.Execute(context.Background(), invocation, compute)
 	}()
-	<-computeReady
+	followerReady := make(chan struct{})
+	go func() {
+		for {
+			if cache.Flights.Stats().Waiters == 1 {
+				close(followerReady)
+				return
+			}
+		}
+	}()
+	select {
+	case <-followerReady:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("scenario=%s treatment=%s failed to establish single-flight follower", scenario.ID, composableacceptance.TreatmentAll)
+	}
 	close(release)
 	cacheWait.Wait()
 	if first.err != nil {
@@ -813,6 +1176,22 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	}
 	if second.err != nil {
 		t.Fatalf("scenario=%s treatment=%s second cache err=%v", scenario.ID, composableacceptance.TreatmentAll, second.err)
+	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(first.result.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	if first.result.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, first.result.Value, "", "", 1)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), first.result.Value, "", "", 1)
+	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(second.result.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	if second.result.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, second.result.Value, "", "", 1)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), second.result.Value, "", "", 1)
+	}
+	recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.leader", composableacceptance.TraceEventOutcomeLeader, nil, []byte(invocationIdentity), first.result.Value, "", "", 1)
+	if second.result.Shared {
+		recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.follower", composableacceptance.TraceEventOutcomeFollower, nil, []byte(invocationIdentity), second.result.Value, "", "", 1)
 	}
 	if string(first.result.Value) != scenario.ExpectedArtifact || string(second.result.Value) != scenario.ExpectedArtifact {
 		t.Fatalf("scenario=%s treatment=%s cache outcome mismatch", scenario.ID, composableacceptance.TreatmentAll)
@@ -824,8 +1203,15 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	if err != nil || !replay.CacheHit || string(replay.Value) != scenario.ExpectedArtifact {
 		t.Fatalf("scenario=%s treatment=%s cache replay=%+v err=%v", scenario.ID, composableacceptance.TreatmentAll, replay, err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(replay.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, replay.Value, "", "", 1)
+	for i := 0; i < int(calls.Load()); i++ {
+		recorder.append(composableacceptance.TraceEventTypeSingleFlight, "single_flight.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), first.result.Value, "", "", 1)
+	}
 	row.CacheHits = cache.Store.Stats().Hits
 	row.FlightFollowers = cache.Flights.Stats().Waiters
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), first.result.Value, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), second.result.Value, "", "", 1)
 
 	if callStats := cache.Flights.Stats(); callStats.Waiters != 1 {
 		t.Fatalf("scenario=%s treatment=%s flight stats=%+v", scenario.ID, composableacceptance.TreatmentAll, callStats)
@@ -866,10 +1252,13 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.begin", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	suspended, err := workflowEvaluator.Start(context.Background(), []byte(`{"scenario":"`+scenario.ID+`"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.initial", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.release", composableacceptance.TraceEventOutcomeStarted, nil, []byte(suspended.State.WaitNodeID), nil, "", "", 1)
 	if suspended.Disposition != workflow.Suspended {
 		t.Fatalf("scenario=%s treatment=%s reeval start=%+v", scenario.ID, composableacceptance.TreatmentAll, suspended)
 	}
@@ -880,33 +1269,39 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.release", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(resumed.State.WaitNodeID), "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.changed", composableacceptance.TraceEventOutcomeOK, nil, nil, []byte(scenario.Observation), "", "", 1)
 	if resumed.Disposition != workflow.Completed {
 		t.Fatalf("scenario=%s treatment=%s reeval resume=%+v", scenario.ID, composableacceptance.TreatmentAll, resumed)
 	}
 	if got := string(resumed.Output); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s treatment=%s reeval output mismatch", scenario.ID, composableacceptance.TreatmentAll)
 	}
+	if resumed.Metrics.Invalidated > 0 || resumed.Metrics.Recomputed > 0 {
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.fresh", composableacceptance.TraceEventOutcomeOK, nil, nil, resumed.Output, "", "", 1)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.reuse", composableacceptance.TraceEventOutcomeOK, nil, nil, resumed.Output, "", "", 1)
+	}
 	if resumed.Metrics.Lookups == 0 {
 		t.Fatalf("scenario=%s treatment=%s reeval metrics %+v", scenario.ID, composableacceptance.TreatmentAll, resumed.Metrics)
 	}
-	if err := parentRunner.Close(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), resumed.Output, "", "", 1)
 	row.SelectedRootSHA256 = joined.SelectedRoot.IdentitySHA256
 	row.ChangedBytes = joined.ChangedBytes
 	row.MaterializedBytes = joined.MaterializedBytes
 	row.GuestCreated = uint64(1) + uint64(childGuests.Load()) + uint64(workflowFactory.created)
 	row.GuestDestroyed = row.GuestCreated
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioInvalidParentExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentInvalidParent, uint64(2))
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentInvalidParent, started, 0)
 	row.TerminalDisposition = "parent_invalid"
 	row.Status = "rejected"
-	started := time.Now()
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
 	manager, base := newComposableWorkspace(t)
 	baseInfo, err := manager.Inspect(base)
 	if err != nil {
@@ -956,10 +1351,14 @@ func runScenarioInvalidParentExecution(t *testing.T, artifact []byte, scenario c
 		t.Fatalf("scenario=%s invalid_parent private refs=%d", scenario.ID, len(refs))
 	}
 	if err := orchestrator.Abort(context.Background(), subagent.ParentInvalid); err != nil {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "validation.reject", composableacceptance.TraceEventOutcomeError, nil, nil, []byte(err.Error()), "", "", 1)
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "validation.reject", composableacceptance.TraceEventOutcomeRejected, nil, []byte(string(subagent.ParentInvalid)), nil, "", "", 1)
 	for _, ref := range refs {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(ref), nil, "", "", 1)
 		if _, err := manager.Inspect(ref); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
+			recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeRejected, nil, []byte(ref), nil, "", "", 1)
 			t.Fatalf("scenario=%s invalid_parent private ref=%s retained: %v", scenario.ID, ref, err)
 		}
 	}
@@ -968,21 +1367,22 @@ func runScenarioInvalidParentExecution(t *testing.T, artifact []byte, scenario c
 		t.Fatal(err)
 	}
 	if final.WorkspaceSHA256 != baseInfo.WorkspaceSHA256 {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.conflict", composableacceptance.TraceEventOutcomeConflict, nil, []byte(baseInfo.WorkspaceSHA256), []byte(final.WorkspaceSHA256), "", "", 1)
 		t.Fatalf("scenario=%s invalid_parent mutated base", scenario.ID)
 	}
 	row.GuestCreated = uint64(childGuests.Load())
 	row.GuestDestroyed = row.GuestCreated
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
-	row.TerminalDisposition = "parent_invalid"
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioInvalidChildExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentInvalidChild, uint64(2))
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentInvalidChild, started, uint64(2))
 	row.Status = "rejected"
 	row.TerminalDisposition = "child_execution_failed"
-	started := time.Now()
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
 	manager, base := newComposableWorkspace(t)
 	baseInfo, err := manager.Inspect(base)
 	if err != nil {
@@ -1036,10 +1436,19 @@ func runScenarioInvalidChildExecution(t *testing.T, artifact []byte, scenario co
 			t.Fatal(err)
 		}
 	}
-	if _, err := orchestrator.Seal(context.Background(), selectedChild); !errors.Is(err, subagent.ErrChildExecution) {
-		t.Fatalf("scenario=%s invalid_child expected child execution failure got=%v", scenario.ID, err)
+	var sealErr error
+	_, sealErr = orchestrator.Seal(context.Background(), selectedChild)
+	if sealErr == nil {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_error", composableacceptance.TraceEventOutcomeSkipped, nil, []byte(selectedChild), nil, "", "", 1)
+		t.Fatalf("scenario=%s invalid_child expected child execution failure got=nil", scenario.ID)
 	}
+	if !errors.Is(sealErr, subagent.ErrChildExecution) {
+		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_error", composableacceptance.TraceEventOutcomeConflict, nil, []byte(hashBytes([]byte(selectedChild))), []byte(hashBytes([]byte(sealErr.Error()))), "", "", 1)
+		t.Fatalf("scenario=%s invalid_child expected child execution failure got=%v", scenario.ID, sealErr)
+	}
+	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_error", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selectedChild), []byte(subagent.ErrChildExecution.Error()), "", "", 1)
 	for _, ref := range orchestrator.PrivateRefs() {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(ref), nil, "", "", 1)
 		if _, err := manager.Inspect(ref); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
 			t.Fatalf("invalid_child private ref=%s: %v", ref, err)
 		}
@@ -1053,15 +1462,14 @@ func runScenarioInvalidChildExecution(t *testing.T, artifact []byte, scenario co
 	}
 	row.GuestCreated = uint64(childGuests.Load())
 	row.GuestDestroyed = row.GuestCreated
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioChangedObservationExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentChangedObserve, 1)
 	started := time.Now()
-
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentChangedObserve, started, 1)
 	manager, base := newComposableWorkspace(t)
 	baseInfo, err := manager.Inspect(base)
 	if err != nil {
@@ -1102,18 +1510,24 @@ func runScenarioChangedObservationExecution(t *testing.T, artifact []byte, scena
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.begin", composableacceptance.TraceEventOutcomeStarted, nil, []byte(waitID), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.initial", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	suspended, err := evaluator.Start(context.Background(), []byte(`{"scenario":"`+scenario.ID+`"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "wait.begin", composableacceptance.TraceEventOutcomeOK, nil, []byte(waitID), []byte(suspended.State.WaitNodeID), "", "", 1)
 	if suspended.Disposition != workflow.Suspended || suspended.State.WaitNodeID != waitID {
 		t.Fatalf("scenario=%s changed_observation start=%+v", scenario.ID, suspended)
 	}
 	observation = scenario.RepeatedTransformation
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.initial", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.Observation), []byte(observation), "", "", 1)
 	resumed, err := evaluator.Resume(context.Background(), suspended.State)
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeObservation, "observation.changed", composableacceptance.TraceEventOutcomeOK, nil, []byte(observation), []byte(scenario.RepeatedTransformation), "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeWaitResume, "resume.fresh", composableacceptance.TraceEventOutcomeOK, nil, nil, resumed.Output, "", "", 1)
 	if resumed.Disposition != workflow.Completed {
 		t.Fatalf("scenario=%s changed_observation resume=%+v", scenario.ID, resumed)
 	}
@@ -1123,20 +1537,20 @@ func runScenarioChangedObservationExecution(t *testing.T, artifact []byte, scena
 	if got := string(resumed.Output); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s changed_observation output mismatch", scenario.ID)
 	}
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), resumed.Output, "", "", 1)
 	row.GuestCreated = uint64(factory.created)
 	row.GuestDestroyed = uint64(factory.closed)
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioBranchConflictExecution(t *testing.T, _ []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentBranchConflict, 0)
+	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentBranchConflict, started, 0)
 	row.Status = "rejected"
 	row.TerminalDisposition = "expected_base_conflict"
-	row.GuestCreated = 0
-	row.GuestDestroyed = 0
-	started := time.Now()
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
 	manager, base := newComposableWorkspace(t)
 	baseInfo, err := manager.Inspect(base)
 	if err != nil {
@@ -1152,22 +1566,27 @@ func runScenarioBranchConflictExecution(t *testing.T, _ []byte, scenario composa
 	}
 	wrongParent := hashBytes([]byte("branch-conflict:" + scenario.ID + ":" + scenarioSHA))
 	if _, err := manager.SelectRoot(wrongParent, []workspace.Root{root}, root.IdentitySHA256); !errors.Is(err, workspace.ErrWorkspaceConflict) {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.commit", composableacceptance.TraceEventOutcomeConflict, nil, []byte(wrongParent), nil, "", "", 1)
 		t.Fatalf("scenario=%s expected root conflict err=%v", scenario.ID, err)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.conflict", composableacceptance.TraceEventOutcomeConflict, nil, []byte(wrongParent), []byte(baseInfo.WorkspaceSHA256), "", "", 1)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, nil, nil, "", "", 1)
 	if err := manager.Destroy(root.Ref()); err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(root.IdentitySHA256), nil, "", "", 1)
 	if _, err := manager.Inspect(base); err != nil {
 		t.Fatal(err)
 	}
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioCacheCorruptionExecution(t *testing.T, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCacheCorruption, 0)
 	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCacheCorruption, started, 0)
 	storeDir := filepath.Join(t.TempDir(), "cache-corruption-"+scenario.ID)
 	store, err := agentfunction.NewStore(storeDir, scenarioSHA, 1<<20)
 	if err != nil {
@@ -1191,6 +1610,17 @@ func runScenarioCacheCorruptionExecution(t *testing.T, artifactSHA string, scena
 	if err != nil {
 		t.Fatal(err)
 	}
+	invocationIdentity, _, err := invocation.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(first.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	if first.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, first.Value, "", "", 1)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), first.Value, "", "", 1)
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.write", composableacceptance.TraceEventOutcomeOK, nil, []byte(first.Value), []byte(scenario.ExpectedArtifact), "", "", 1)
+	}
 	if got := string(first.Value); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s cache_corruption first mismatch", scenario.ID)
 	}
@@ -1198,9 +1628,17 @@ func runScenarioCacheCorruptionExecution(t *testing.T, artifactSHA string, scena
 	if err := os.WriteFile(corruptedPath, []byte("invalid cache record"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.corrupt", composableacceptance.TraceEventOutcomeError, nil, []byte(key), nil, "", "", 1)
 	second, err := engine.Execute(context.Background(), invocation, compute)
 	if err != nil {
 		t.Fatal(err)
+	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.detect", composableacceptance.TraceEventOutcomeRecovered, nil, []byte(invocationIdentity), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(second.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	if second.CacheHit {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, second.Value, "", "", 1)
+	} else {
+		recorder.append(composableacceptance.TraceEventTypeCache, "cache.compute", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenarioSHA), second.Value, "", "", 1)
 	}
 	if got := string(second.Value); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
 		t.Fatalf("scenario=%s cache_corruption replay mismatch", scenario.ID)
@@ -1216,20 +1654,24 @@ func runScenarioCacheCorruptionExecution(t *testing.T, artifactSHA string, scena
 	if err != nil || !replay.CacheHit {
 		t.Fatalf("scenario=%s cache_corruption replay cache_hit=%v err=%v", scenario.ID, replay.CacheHit, err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.lookup", cacheLookupOutcome(replay.CacheHit), nil, []byte(invocationIdentity), nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeCache, "cache.hit", composableacceptance.TraceEventOutcomeHit, nil, nil, replay.Value, "", "", 1)
 	if calls.Load() != 2 {
 		t.Fatalf("scenario=%s cache_corruption callcount=%d", scenario.ID, calls.Load())
 	}
 	row.CacheHits = store.Stats().Hits
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
 func runScenarioCancellationExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	row := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCancellation, 2)
 	started := time.Now()
+	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCancellation, started, 2)
+	row.TerminalDisposition = "cancelled_recovered"
 	manager, base := newComposableWorkspace(t)
 
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
 	attempt, err := manager.ForkAttempt(base)
 	if err != nil {
 		t.Fatal(err)
@@ -1239,6 +1681,8 @@ func runScenarioCancellationExecution(t *testing.T, artifact []byte, scenario co
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.create", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.run", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	longRequest := []byte(`{"run_id":"spark-cancel-long","code":"import time\nwhile True:\n    time.sleep(0.25)","inputs":{}}`)
 	type cancellationOutcome struct {
@@ -1250,18 +1694,24 @@ func runScenarioCancellationExecution(t *testing.T, artifact []byte, scenario co
 		complete <- cancellationOutcome{err: runErr}
 	}()
 	time.Sleep(20 * time.Millisecond)
+	recorder.append(composableacceptance.TraceEventTypeCancellation, "cancellation.requested", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	cancel()
+	recorder.append(composableacceptance.TraceEventTypeCancellation, "cancellation.observed", composableacceptance.TraceEventOutcomeCancelled, nil, nil, nil, "", "", 1)
 	res := <-complete
 	if res.err == nil || !errors.Is(res.err, context.Canceled) {
 		t.Fatalf("scenario=%s cancellation expected context canceled err=%v", scenario.ID, res.err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.run", composableacceptance.TraceEventOutcomeError, nil, nil, nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeCancellation, "cleanup.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(fmt.Sprintf("%v", attempt.Ref())), nil, "", "", 1)
 	if err := runner.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	if err := attempt.Discard(); err != nil {
 		t.Fatal(err)
 	}
 
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
 	recoveryAttempt, err := manager.ForkAttempt(base)
 	if err != nil {
 		t.Fatal(err)
@@ -1271,20 +1721,26 @@ func runScenarioCancellationExecution(t *testing.T, artifact []byte, scenario co
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.create", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.run", composableacceptance.TraceEventOutcomeStarted, nil, nil, nil, "", "", 1)
 	response, err := recoveryRunner.Run(context.Background(), scenarioRequest(t, scenario, scenarioSHA), "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.run", composableacceptance.TraceEventOutcomeOK, nil, nil, response, "", "", 1)
 	if recovered := responseStringResult(t, response); recovered != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(recovered) != oracleSHA {
 		t.Fatalf("scenario=%s cancellation recovery mismatch", scenario.ID)
 	}
+	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(response), "", "", 1)
 	if err := recoveryRunner.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	if err := recoveryAttempt.Discard(); err != nil {
 		t.Fatal(err)
 	}
-	row.RelativeElapsedMillis = float64(time.Since(started).Microseconds()) / 1000
+	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.discard", composableacceptance.TraceEventOutcomeDiscarded, nil, []byte(fmt.Sprintf("%v", recoveryAttempt.Ref())), nil, "", "", 1)
+	completeTraceRow(&row, started, recorder)
 	return row, true
 }
 
@@ -1433,15 +1889,6 @@ func suffixedIdentifier(base string, suffix string) string {
 	return identifier + suffix
 }
 
-func scenarioRow(scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, treatment composableacceptance.Treatment, guestCount uint64) composableacceptance.Row {
-	return composableacceptance.Row{
-		ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, Treatment: treatment,
-		Status: "passed", OracleSHA256: oracleSHA, GuestCreated: guestCount, GuestDestroyed: guestCount,
-		EvidenceScope: "direct_replay", ConformanceSHA256: composableacceptance.ArtifactIdentity("TestRealGuestSparkScenarioCoreTreatments@" + os.Getenv("PYSOLATE_HOST_SOURCE_COMMIT")),
-		TerminalDisposition: "closed", EvidenceComplete: true,
-	}
-}
-
 func scenarioRequest(t *testing.T, scenario composableacceptance.Scenario, scenarioSHA string) []byte {
 	t.Helper()
 	return plainRequest(t, "scenario_identity = "+pythonStringLiteral(t, scenarioSHA)+"\nresult = "+pythonStringLiteral(t, scenario.ExpectedArtifact))
@@ -1493,4 +1940,99 @@ func responseStringResult(t *testing.T, response []byte) string {
 		t.Fatalf("invalid response err=%v envelope=%+v", err, envelope)
 	}
 	return envelope.Result
+}
+
+type traceRecorder struct {
+	started time.Time
+	events  []composableacceptance.TraceEvent
+}
+
+func newTraceRecorder(started time.Time) *traceRecorder {
+	return &traceRecorder{started: started}
+}
+
+func uint32Pointer(value uint32) *uint32 {
+	return &value
+}
+
+func (recorder *traceRecorder) append(
+	category composableacceptance.TraceEventType,
+	action string,
+	outcome composableacceptance.TraceEventOutcome,
+	parent *uint32,
+	input, output []byte,
+	checkpointSHA256 string,
+	checkpointStatus string,
+	count uint64,
+) {
+	sequence := uint32(len(recorder.events) + 1)
+	elapsed := float64(time.Since(recorder.started).Milliseconds())
+	if sequence == 1 {
+		elapsed = 0
+	}
+	event := composableacceptance.TraceEvent{
+		Sequence:              sequence,
+		Type:                  category,
+		Action:                action,
+		Outcome:               outcome,
+		CheckpointSHA256:      checkpointSHA256,
+		CheckpointStatus:      checkpointStatus,
+		Count:                 count,
+		RelativeElapsedMillis: elapsed,
+	}
+	if len(input) > 0 {
+		event.InputSHA256 = hashBytes(input)
+	}
+	if len(output) > 0 {
+		event.OutputSHA256 = hashBytes(output)
+	}
+	if parent != nil {
+		event.ParentSequence = parent
+	} else if sequence > 1 {
+		event.ParentSequence = uint32Pointer(1)
+	}
+	recorder.events = append(recorder.events, event)
+}
+
+func completeTraceRow(row *composableacceptance.Row, started time.Time, recorder *traceRecorder) {
+	if len(recorder.events) == 0 {
+		recorder.append(composableacceptance.TraceEventTypeRunStart, "run.start", composableacceptance.TraceEventOutcomeStarted, nil, []byte(row.ScenarioSHA256), nil, "", "", 1)
+	}
+	terminalDisposition := row.TerminalDisposition
+	if terminalDisposition == "" {
+		terminalDisposition = "closed"
+		row.TerminalDisposition = terminalDisposition
+	}
+	terminalOutcome := composableacceptance.TraceEventOutcomeOK
+	switch row.Status {
+	case "rejected":
+		terminalOutcome = composableacceptance.TraceEventOutcomeRejected
+	case "skipped":
+		terminalOutcome = composableacceptance.TraceEventOutcomeSkipped
+	}
+	recorder.append(composableacceptance.TraceEventTypeRunTerminal, "run.terminal", terminalOutcome, nil, nil, nil, "", "", 1)
+	terminal := &recorder.events[len(recorder.events)-1]
+	terminal.TerminalDisposition = terminalDisposition
+	if terminal.ParentSequence == nil {
+		terminal.ParentSequence = uint32Pointer(1)
+	}
+	if terminal.RelativeElapsedMillis > float64(time.Since(started).Milliseconds()) {
+		terminal.RelativeElapsedMillis = float64(time.Since(started).Milliseconds())
+	}
+	row.Trace = recorder.events
+	row.RelativeElapsedMillis = terminal.RelativeElapsedMillis
+	row.TerminalDisposition = terminalDisposition
+	row.EvidenceComplete = true
+}
+
+func scenarioRow(scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, treatment composableacceptance.Treatment, started time.Time, guestCount uint64) (composableacceptance.Row, *traceRecorder) {
+	row := composableacceptance.Row{
+		ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, Treatment: treatment,
+		Status: "passed", OracleSHA256: oracleSHA, GuestCreated: guestCount, GuestDestroyed: guestCount,
+		EvidenceScope: "direct_replay", ConformanceSHA256: composableacceptance.ArtifactIdentity("TestRealGuestSparkScenarioCoreTreatments@" + os.Getenv("PYSOLATE_HOST_SOURCE_COMMIT")),
+		TerminalDisposition: "closed", EvidenceComplete: true,
+	}
+	recorder := newTraceRecorder(started)
+	recorder.append(composableacceptance.TraceEventTypeRunStart, "run.start", composableacceptance.TraceEventOutcomeStarted, nil, []byte(scenarioSHA), nil, "", "", 1)
+	return row, recorder
 }

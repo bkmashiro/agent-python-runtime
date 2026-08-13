@@ -1,6 +1,6 @@
 # Spark Composable Acceptance
 
-Status: **all 54 direct Linux scenario/treatment rows are recorded and body-free.**
+Status: **all 54 direct Linux scenario/treatment rows are recorded with 603 body-free trace events.**
 
 ## Frozen decision corpus
 
@@ -16,8 +16,8 @@ expected private artifact for each scenario. It is not published by Lab.
 
 ## Direct results
 
-Host source `0dcbb33e131c68d8d2d747f6fcf80c5d5b85c6d8` ran all three frozen scenarios
-against the fixed-memory Linux Guest artifact
+Host source `bae1eca3d0f98cec3580bf56fd356d0e8ca69d5c` ran all three frozen scenarios
+in Linux job `273802` against the fixed-memory Guest artifact
 `sha256:591978964aae541d0758404f325c482898aa2ba5386a721dd2a5dcf049dbe9fb`.
 Exactly 54 direct rows were recorded:
 
@@ -50,26 +50,30 @@ artifact, corpus, report, exit status, and cleanup checksums are bound in
 
 ## Shared conformance is separate
 
-The same Linux job also ran the generic north-star, feature matrix,
-invalid-parent cleanup, Agent Function, workflow, streaming, subagent, and
-workspace suites. Their checksum-bound statuses are stored in
+An earlier generic conformance artifact remains documented separately in
 [`evidence/spark-composable-shared-conformance.json`](evidence/spark-composable-shared-conformance.json).
-They are **not** scenario results and are never used to synthesize missing
-scenario/treatment rows.
+It is **not** part of the current per-run trace report and is never used to
+synthesize missing scenario/treatment rows.
 
 ## Lab projection contract
 
 `cmd/composable-acceptance-report` validates the corpus/report identity and
-projects only recorded rows into generic `research/labview` contracts. The
-canonical report remains body-free. The Web dataset additionally publishes the
-reviewed, credential-free frozen scenario fixture—task, files, child analyses,
-wait/observation boundary, and expected artifact—so the Debugger can inspect the
-experiment rather than showing result digests alone. Workspace tree bodies that
-were not captured remain identity-only. The view also displays recorded status,
-oracle status, metrics, terminal disposition, model/source/corpus/report
-identities, and typed refs.
+projects each recorded row as one `pysolate.lab-web-debugger.v2` run keyed by
+`run_id`. The canonical report remains body-free. Every non-skipped run must carry
+a real, sequential trace from `run.start` through the treatment operations to
+`run.terminal`; missing traces, dangling parents, duplicate run IDs, or terminal
+status mismatches fail closed. The Web dataset does not retain the old parallel
+summary/record arrays and the UI never derives trace nodes from aggregate metrics.
 
-A compatible corpus/report produced by another model uses the same UI. The
-projection remains fail-closed: any future unrecorded treatment stays absent
-until Pysolate executes that frozen scenario and produces a direct row. Shared
-conformance and front-end prose cannot create rows.
+The Web dataset publishes only reviewed scenario identity and shape metadata:
+scenario ID, file/child counts, selected-child index, and presence flags for
+repeated transformation, wait boundary, and observation. It never publishes
+task, file, child-analysis, expected-artifact, or prohibited-output bodies.
+Workspace and checkpoint bodies are not reconstructed; only identities captured
+at actual operation sites are shown. The view also exposes runtime metrics,
+terminal disposition, model/source/corpus/report identities, and typed refs.
+
+A compatible corpus/report produced by another model uses the same UI. Any future
+unrecorded treatment stays absent until Pysolate executes that frozen scenario
+and records its trace. Shared conformance and front-end prose cannot create rows
+or trace events.

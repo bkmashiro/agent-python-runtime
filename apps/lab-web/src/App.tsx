@@ -29,7 +29,7 @@ function runLabel(run: LabRun): string {
 const exampleRun: RunOption = {
   key: 'example:example-workflow',
   source: 'example',
-  label: 'Example trace (fallback only)',
+  label: 'Example trace (UI example)',
   run: {
     ...exampleLabRun,
     trace: exampleTrace,

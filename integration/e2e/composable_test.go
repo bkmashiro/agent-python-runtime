@@ -524,6 +524,63 @@ func (guest *realWorkflowGuest) Close(ctx context.Context) error {
 	return errors.Join(guest.runner.Close(ctx), guest.branch.Discard())
 }
 
+func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, base := newComposableWorkspace(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{PreparedRuntime: true, MemoryCOW: true}
+
+	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
+	runner, err := factory.New(context.Background(), artifact, config)
+	if err != nil {
+		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+			t.Skipf("COW fixed-memory Linux treatment unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	engine := runner.(*wazeroengine.Engine)
+	defer engine.Close(context.Background())
+	probe := engine.COWProbe()
+	if !probe.COWSelected || probe.Fallback || !probe.MemoryFixed || !probe.MemoryCOWCandidate {
+		t.Fatalf("COW probe=%+v", probe)
+	}
+
+	first, err := engine.Run(context.Background(), plainRequest(t, "import builtins, fractions, sys\nfrom pathlib import Path\nbuiltins._cow_private = 91\nPath('/tmp/cow-private').write_text('private')\nresult = {'parity':'same','fraction':str(fractions.Fraction(1, 2))}"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := engine.Run(context.Background(), plainRequest(t, "import builtins, sys\nfrom pathlib import Path\nresult = {'globals_clean': not hasattr(builtins, '_cow_private'), 'tmp_clean': not Path('/tmp/cow-private').exists(), 'module_clean': 'fractions' not in sys.modules}"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := responseResult(t, first); got != `{"fraction":"1/2","parity":"same"}` {
+		t.Fatalf("first result=%s", got)
+	}
+	if got := responseResult(t, second); got != `{"globals_clean":true,"module_clean":true,"tmp_clean":true}` {
+		t.Fatalf("second result=%s", got)
+	}
+
+	cancelContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _ = engine.Run(cancelContext, plainRequest(t, "result = 'cancelled'"), "")
+	recovered, err := engine.Run(context.Background(), plainRequest(t, "result = {'after_cancel': True}"), "")
+	if err != nil || responseResult(t, recovered) != `{"after_cancel":true}` {
+		t.Fatalf("post-cancellation recovery err=%v response=%s", err, recovered)
+	}
+
+	_, _ = engine.Run(context.Background(), plainRequest(t, "try:\n    bytearray(200_000_000)\n    result = {'allocation':'unexpected'}\nexcept MemoryError:\n    result = {'allocation':'rejected'}"), "")
+	afterGrowth, err := engine.Run(context.Background(), plainRequest(t, "result = {'after_growth': True}"), "")
+	if err != nil || responseResult(t, afterGrowth) != `{"after_growth":true}` {
+		t.Fatalf("post-growth recovery err=%v response=%s", err, afterGrowth)
+	}
+	if state := engine.PreparedState(); state.PreparedRuns < 4 || state.FreshFallbackRuns != 0 || state.Ready {
+		t.Fatalf("COW state=%+v", state)
+	}
+}
+
 func newComposableWorkspace(t *testing.T) (*workspace.Manager, workspace.Ref) {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "workspace-manager")

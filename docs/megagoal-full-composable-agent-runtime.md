@@ -297,19 +297,19 @@ Guests or Linux COW.
 **Promise:** A parent can start useful child work before parent EOF without giving
 unsealed work publication or write authority.
 
-- [ ] Define one versioned structured child descriptor and source occurrence
+- [x] Define one versioned structured child descriptor and source occurrence
   identity; do not infer arbitrary children from free-form Python.
 - [ ] Stage two children before parent seal, each as a fresh Guest over a private
   immutable child root.
-- [ ] Derive child Plan explicitly; do not inherit parent grants, budgets,
+- [x] Derive child Plan explicitly; do not inherit parent grants, budgets,
   approvals, transactions, or provider handles by default.
-- [ ] Add bounded fan-out/depth/cancellation budgets.
-- [ ] Implement explicit join/select; use merge only if Track 2 provides the
+- [x] Add bounded fan-out/depth/cancellation budgets.
+- [x] Implement explicit join/select; use merge only if Track 2 provides the
   required bounded semantics.
-- [ ] Cascade parent invalid/cancel/timeout to child disposal and zero publication.
-- [ ] Prove child invalidity cannot corrupt siblings or parent base.
-- [ ] Record parent/child lineage and critical-path timeline without private bodies.
-- [ ] Extend from two-child to recursive depth only if the same contract composes
+- [x] Cascade parent invalid/cancel/timeout to child disposal and zero publication.
+- [x] Prove child invalidity cannot corrupt siblings or parent base.
+- [x] Record parent/child lineage and critical-path timeline without private bodies.
+- [x] Extend from two-child to recursive depth only if the same contract composes
   without broad scheduler work; otherwise defer recursion depth for joint review.
 
 **Exit gate:** deterministic valid and parent-invalid fan-out fixtures pass with
@@ -567,10 +567,9 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 3 — define the versioned structured child descriptor and bounded Host
-orchestrator over fresh child Runs and Track 2 private branches. Track 1
-execution-path integration and Track 2 aggregate measurements remain open and
-must close in the integrated north-star.`
+`Track 4 — freeze binary Agent Function admission and canonical invocation
+identity, then implement the smallest project-private cache with cache-off
+semantic fallback. Track 3 real-Guest fan-out remains an integrated-fixture gate.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -609,6 +608,15 @@ Add entries here before each track implementation.
   three-way merge is `Deferred for joint review`: it would add conflict policy
   without a selected integrated fixture requiring it. Existing direct workspace
   and private Attempt paths remain unchanged fallbacks.
+- 2026-08-13 — Track 3 / `Proceed minimal`: use an explicit versioned descriptor
+  and a bounded Host orchestrator, not free-form Python discovery or a general
+  scheduler. `Stage` starts child execution immediately on private branches;
+  `Seal` performs explicit select and destroys unselected roots; invalid/cancel/
+  timeout cascades cancellation and branch discard. Descriptor identity binds the
+  child Plan but the runner factory receives no parent Plan/grants. A dedicated
+  executor creates and retires one single-use Runner per child. Recursive depth 2
+  composes without new scheduler machinery. Real Wazero Guest fan-out remains an
+  integrated-fixture gate rather than being claimed from fake runners.
 
 ## Completion log
 
@@ -634,6 +642,11 @@ Do not mark umbrella tracks complete from implementation presence alone.
   Manager, explicit select, and immutable-write rejection. Deterministic focused
   and race tests passed; aggregate reachability/materialization measurements stay
   open for the integrated fixture.
+- 2026-08-13 — Track 3 mechanism slice: added structured descriptors, bounded
+  concurrent staging, private branch ownership, cancellation/invalidity cleanup,
+  explicit select, depth-2 recursion, digest-only relative timeline, sibling/base
+  isolation, and a fresh single-use Runner executor. Focused and race tests pass;
+  real Guest proof remains open for Track 7.
 
 ## Final reporting contract
 

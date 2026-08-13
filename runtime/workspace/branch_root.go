@@ -33,6 +33,31 @@ type Root struct {
 
 func (root Root) Ref() Ref { return root.ref }
 
+// PortableIdentity returns the digest-only lineage identity and depth for a
+// mutable base or sealed root.
+func (manager *Manager) PortableIdentity(ref Ref) (string, uint32, error) {
+	if manager == nil || !validRef(ref) {
+		return "", 0, ErrInvalidWorkspace
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return "", 0, ErrWorkspaceClosed
+	}
+	item, ok := manager.entries[ref]
+	if !ok {
+		return "", 0, ErrWorkspaceNotFound
+	}
+	if item.owner != "" {
+		return "", 0, ErrWorkspaceBusy
+	}
+	snapshot, err := snapshotWorkspaceRoot(item.root, item.limits)
+	if err != nil {
+		return "", 0, err
+	}
+	return rootParentIdentity(item, snapshot.Info.WorkspaceSHA256)
+}
+
 // BindImportedRoot attaches a verified portable lineage record to a capsule
 // materialization, replacing any source-manager local Ref.
 func (manager *Manager) BindImportedRoot(ref Ref, portable Root) (Root, error) {
@@ -150,6 +175,31 @@ func (branch *Branch) Ref() Ref {
 		return ""
 	}
 	return branch.ref
+}
+
+// Discard destroys an unsealed private branch.
+func (branch *Branch) Discard() error {
+	if branch == nil || branch.manager == nil {
+		return ErrInvalidWorkspace
+	}
+	branch.manager.mu.Lock()
+	defer branch.manager.mu.Unlock()
+	if branch.terminal {
+		return ErrAttemptTerminal
+	}
+	item, ok := branch.manager.entries[branch.ref]
+	if !ok {
+		return ErrWorkspaceNotFound
+	}
+	if item.owner != "" {
+		return ErrWorkspaceBusy
+	}
+	if err := os.RemoveAll(item.root); err != nil {
+		return fmt.Errorf("discard workspace branch: %w", err)
+	}
+	delete(branch.manager.entries, branch.ref)
+	branch.terminal = true
+	return nil
 }
 
 func (manager *Manager) ForkBranch(base Ref, expectedBaseSHA256 string) (*Branch, error) {

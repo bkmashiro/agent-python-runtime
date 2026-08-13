@@ -60,6 +60,52 @@ func TestExecuteGuestRejectsRequestIdentityMismatchBeforeRunnerCreation(t *testi
 	}
 }
 
+func TestExecuteGuestIsDomainSeparatedFromCallbackFlights(t *testing.T) {
+	invocation, request := guestInvocation()
+	flights := agentfunction.NewFlightGroup()
+	functionEngine := agentfunction.Engine{Flights: flights}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	callbackDone := make(chan error, 1)
+	go func() {
+		_, err := functionEngine.Execute(context.Background(), invocation, func(context.Context, *agentfunction.Guard) ([]byte, error) {
+			close(started)
+			<-release
+			return []byte("callback"), nil
+		})
+		callbackDone <- err
+	}()
+	<-started
+	runner := &probeRunner{properties: engine.Properties{
+		Backend: "wazero", ArtifactSHA256: invocation.ArtifactSHA256,
+		ExecutionProfileBindingSHA256: invocation.ExecutionProfileSHA256,
+		DeterministicProfileSHA256:    invocation.DeterministicSettingsSHA256,
+	}}
+	compute := agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) { return "physical-guest", runner, nil },
+		Request:   request, MaxResultBytes: 16, DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	}
+	result, err := functionEngine.ExecuteGuest(context.Background(), invocation, compute)
+	close(release)
+	if err != nil || string(result.Value) != "result" || result.PhysicalExecutionID != "physical-guest" || runner.runs.Load() != 1 {
+		t.Fatalf("result=%+v err=%v runs=%d", result, err, runner.runs.Load())
+	}
+	if err := <-callbackDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExecuteGuestRejectsCompletedRetention(t *testing.T) {
+	invocation, request := guestInvocation()
+	result, err := (agentfunction.Engine{CacheEnabled: true}).ExecuteGuest(context.Background(), invocation, agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) { return "", nil, nil },
+		Request:   request, MaxResultBytes: 16, DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	})
+	if !errors.Is(err, agentfunction.ErrGuestRetention) || len(result.Value) != 0 {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func guestInvocation() (agentfunction.Invocation, []byte) {
 	invocation := cacheableInvocation()
 	code := "result = 1"

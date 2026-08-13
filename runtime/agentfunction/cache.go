@@ -166,6 +166,10 @@ type Engine struct {
 }
 
 func (engine Engine) Execute(ctx context.Context, invocation Invocation, compute ComputeFunc) (Result, error) {
+	return engine.execute(ctx, invocation, compute, "callback")
+}
+
+func (engine Engine) execute(ctx context.Context, invocation Invocation, compute ComputeFunc, flightDomain string) (Result, error) {
 	if compute == nil {
 		return Result{}, ErrInvalidInvocation
 	}
@@ -203,7 +207,7 @@ func (engine Engine) Execute(ctx context.Context, invocation Invocation, compute
 		return Result{Key: key, Value: value, PhysicalExecutionID: guard.physicalExecutionID}, nil
 	}
 	if engine.Flights != nil && invocation.Admission == Cacheable {
-		return engine.Flights.Do(ctx, key, execute)
+		return engine.Flights.Do(ctx, flightDomain+":"+key, execute)
 	}
 	result, err := execute()
 	if err == nil && result.Disposition == "" {

@@ -16,6 +16,7 @@ var (
 	ErrGuestResultTooLarge = errors.New("fresh Guest result exceeds bound")
 	ErrGuestNotShareable   = errors.New("fresh Guest execution profile is not shareable")
 	ErrGuestIdentity       = errors.New("fresh Guest request does not match invocation identity")
+	ErrGuestRetention      = errors.New("fresh Guest completed-result retention is unsupported")
 )
 
 type GuestRunnerFactory func(context.Context) (physicalExecutionID string, runner enginecontract.Runner, err error)
@@ -68,6 +69,9 @@ func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invoca
 	if compute.NewRunner == nil {
 		return Result{}, ErrInvalidGuestCompute
 	}
+	if functionEngine.CacheEnabled {
+		return Result{}, ErrGuestRetention
+	}
 	request, err := runtimeconfig.DecodeRunRequest(compute.Request)
 	codeDigest := sha256.Sum256([]byte(request.Code))
 	if err != nil || fmt.Sprintf("sha256:%x", codeDigest[:]) != invocation.FunctionSourceSHA256 ||
@@ -90,5 +94,5 @@ func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invoca
 		}
 		return physicalID, runner, nil
 	}
-	return functionEngine.Execute(ctx, invocation, compute.Run)
+	return functionEngine.execute(ctx, invocation, compute.Run, "fresh-guest")
 }

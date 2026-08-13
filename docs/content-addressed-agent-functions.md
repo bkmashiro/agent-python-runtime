@@ -1,6 +1,6 @@
 # Proposed design: content-addressed Agent Functions
 
-Status: **Design hypothesis; not implemented.**
+Status: **Bounded Experimental mechanism; arbitrary Guest-Python purity admission is deferred.**
 Date: 2026-08-13
 
 ## Purpose and relationship to existing direction
@@ -16,8 +16,15 @@ parts of an Agent workflow as locally reusable computations:
 > result and derived filesystem root, while all live I/O and authority-bearing
 > effects remain outside the cacheable boundary.
 
-This is not a claim that arbitrary Python is pure, that current Runs are cached,
-or that Pysolate provides a distributed execution graph.
+This is not a claim that arbitrary Python is pure or that Pysolate provides a
+distributed execution graph. `runtime/agentfunction` now implements the bounded
+Host-instrumented version: binary admission, canonical invocation identity,
+project-private retention, eviction/recomputation, and independent
+single-flight. Its `Guard` is a deterministic Host-fixture boundary, not proof
+that arbitrary Guest Python lacks clock, randomness, dynamic import, undeclared
+filesystem reads, or unknown imported behavior. A cacheable arbitrary-Guest
+adapter remains **Deferred for joint review** until the Runtime can enforce that
+complete admission contract without duplicating authority state.
 
 ## Initial scope
 

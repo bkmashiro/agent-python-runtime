@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
+	"github.com/bkmashiro/agent-python-runtime/runtime/composable"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
@@ -210,31 +212,32 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		t.Fatalf("resumed=%+v guest=%+v err=%v", resumed, guestFactory, err)
 	}
 
-	evidence := struct {
-		Schema          string                   `json:"schema"`
-		ParentWorkspace string                   `json:"parent_workspace_sha256"`
-		SelectedRoot    string                   `json:"selected_root_sha256"`
-		ChildTimeline   []subagent.TimelineEvent `json:"child_timeline"`
-		BranchMetrics   struct {
-			ChangedBytes      uint64 `json:"changed_bytes"`
-			MaterializedBytes uint64 `json:"materialized_bytes"`
-			MaxDepth          uint32 `json:"max_depth"`
-			ReachableRoots    uint32 `json:"reachable_roots"`
-			DiscardedRoots    uint32 `json:"discarded_roots"`
-		} `json:"branch_metrics"`
-		FunctionStats   agentfunction.Stats       `json:"function_stats"`
-		FlightStats     agentfunction.FlightStats `json:"flight_stats"`
-		WorkflowMetrics workflow.Metrics          `json:"workflow_metrics"`
-	}{
-		Schema: "pysolate.composable-north-star.v1", ParentWorkspace: baseInfo.WorkspaceSHA256,
-		SelectedRoot: joined.SelectedRoot.IdentitySHA256, ChildTimeline: joined.Timeline,
-		FunctionStats: functionStore.Stats(), FlightStats: flights.Stats(), WorkflowMetrics: resumed.Metrics,
+	selected := runtimeconfig.MechanismSet{
+		Streaming: true, StagedObservation: true, PrivateWorkspace: true, ImmutableBranches: true,
+		ChildFanout: true, FunctionCache: true, SingleFlight: true, FreshReevaluation: true,
 	}
-	evidence.BranchMetrics.ChangedBytes = joined.ChangedBytes
-	evidence.BranchMetrics.MaterializedBytes = joined.MaterializedBytes
-	evidence.BranchMetrics.MaxDepth = joined.MaxBranchDepth
-	evidence.BranchMetrics.ReachableRoots = joined.ReachableRoots
-	evidence.BranchMetrics.DiscardedRoots = joined.DiscardedRoots
+	_, mechanismEvidence, err := runtimeconfig.ResolveMechanisms(selected, selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := composable.Evidence{
+		SchemaVersion: composable.EvidenceSchemaVersion, SourceCommit: strings.Repeat("a", 40), ArtifactSHA256: hashBytes(artifact),
+		ParentWorkspaceSHA256: baseInfo.WorkspaceSHA256, SelectedRootSHA256: joined.SelectedRoot.IdentitySHA256,
+		Mechanisms: mechanismEvidence,
+		Branch: composable.BranchEvidence{
+			ChangedBytes: joined.ChangedBytes, MaterializedBytes: joined.MaterializedBytes, MaxDepth: joined.MaxBranchDepth,
+			ReachableRoots: joined.ReachableRoots, DiscardedRoots: joined.DiscardedRoots,
+		},
+		Children:  composable.ChildEvidence{Count: joined.ChildCount, Completed: joined.Completed, Timeline: joined.Timeline},
+		Functions: functionStore.Stats(), Flights: flights.Stats(), Workflow: resumed.Metrics,
+		GuestCreated: 4, GuestDestroyed: 4,
+		Prepared: wazeroengine.PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1"},
+		COW:      wazeroengine.COWProbe{SchemaVersion: "pysolate.cow-probe.v1", Platform: goruntime.GOOS},
+		Claims:   []composable.Claim{composable.ClaimCacheReuse, composable.ClaimFreshResume, composable.ClaimRealChildFanout},
+	}
+	if err := evidence.Validate(); err != nil {
+		t.Fatal(err)
+	}
 	encodedEvidence, err := json.Marshal(evidence)
 	if err != nil {
 		t.Fatal(err)

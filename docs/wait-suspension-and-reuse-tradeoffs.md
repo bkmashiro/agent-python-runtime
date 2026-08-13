@@ -1,6 +1,6 @@
 # Wait suspension, re-evaluation, and reuse trade-offs
 
-Status: **Design and measurement plan; no new mechanism is implemented.**
+Status: **Bounded Experimental fresh re-evaluation implemented; comparative waiting-strategy measurements remain planned.**
 Date: 2026-08-13
 
 ## Decision summary
@@ -16,11 +16,13 @@ explicit workflow nodes
 + Host-selected live refresh/wakeup boundary
 ```
 
-At a wait, the per-workflow Guest is destroyed. On wakeup, the Harness either
-starts directly from the next ready explicit node or re-evaluates a code-first
-workflow whose completed nodes return local cached values. It does not restore
-Python frames, heap, module globals, WASM memory, descriptors, Broker objects,
-or `/tmp`.
+At a wait, the bounded `runtime/workflow` mechanism now destroys the per-workflow
+Guest. On wakeup, its single-wait, versioned synchronous graph re-evaluates in a
+fresh Guest: unchanged explicit nodes use local records, one selected live
+observation refreshes under current freshness/policy, and only transitive
+successors are invalidated. It does not restore Python frames, heap, module
+globals, WASM memory, descriptors, Broker objects, or `/tmp`. A general
+multi-wait DAG scheduler and real repository-shaped acceptance remain deferred.
 
 Worker-level prepared runtime and optional Linux memory COW remain resident
 optimizations shared by many workflows. Destroying one waiting workflow's Guest

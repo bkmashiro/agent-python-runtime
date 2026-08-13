@@ -6,6 +6,9 @@ Owner: Yuzhe
 Execution repository: `~/projects/agent-python-runtime`
 Predecessor proof: [`megagoal-streaming-authority-staged-execution.md`](megagoal-streaming-authority-staged-execution.md)
 Supporting roadmap: [`proof-first-authority-roadmap.md`](proof-first-authority-roadmap.md)
+Final decision matrix: [`full-composable-runtime-mechanism-matrix.md`](full-composable-runtime-mechanism-matrix.md)
+Deterministic summary: [`composable-runtime-measurement-summary.md`](composable-runtime-measurement-summary.md)
+Post-goal acceptance contract: [`real-agent-composable-runtime-acceptance.md`](real-agent-composable-runtime-acceptance.md)
 
 > **For Hermes:** This is the long-running `/goal` handoff. Read this file fully,
 > inspect live repository state, and execute it across multiple independently
@@ -456,16 +459,16 @@ outcome for this track.
 **Promise:** Final claims are independently checkable and the next real-workload
 experiment is ready but not silently run.
 
-- [ ] Version records for every implemented mechanism and fallback.
-- [ ] Add negative corruption/identity-substitution fixtures.
-- [ ] Prove strict playback independently of function cache.
-- [ ] Extend independent verification only to claims backed by Runtime records.
-- [ ] Audit docs for Current/Proposed/Deferred truth and remove stale claims.
-- [ ] Produce a final mechanism matrix: implemented, rejected, deferred for joint
+- [x] Version records for every implemented mechanism and fallback.
+- [x] Add negative corruption/identity-substitution fixtures.
+- [x] Prove strict playback independently of function cache.
+- [x] Extend independent verification only to claims backed by Runtime records.
+- [x] Audit docs for Current/Proposed/Deferred truth and remove stale claims.
+- [x] Produce a final mechanism matrix: implemented, rejected, deferred for joint
   review, exact reason, evidence, and smallest next decision.
-- [ ] Produce a deterministic measurement summary without extrapolating to real
+- [x] Produce a deterministic measurement summary without extrapolating to real
   Agent workloads.
-- [ ] Draft the separate real repository-shaped Agent acceptance contract for
+- [x] Draft the separate real repository-shaped Agent acceptance contract for
   Yuzhe/Hermes joint review; do not execute it in this Megagoal.
 - [ ] Run final local and real-Guest gates, verify signed commits/pushes and a clean
   tree.
@@ -708,6 +711,11 @@ Do not mark umbrella tracks complete from implementation presence alone.
   module, prepared/fresh semantic parity, isolated `/tmp`, one-use accounting,
   unused-slot destruction, and a versioned COW blocker probe. Focused and race
   tests pass; exact Linux probe remains next.
+- 2026-08-13 — Track 9 evidence slice: added strict body-free composable evidence
+  decoding/claim verification, negative unknown-field/private-body/identity
+  substitution fixtures, a Current/Experimental/Deferred mechanism matrix, a
+  deterministic non-performance summary, and a separate real repository-shaped
+  acceptance contract. Arbitrary Guest-Python purity remains explicitly deferred.
 
 ## Final reporting contract
 

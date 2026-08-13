@@ -18,23 +18,27 @@ Pysolate's refined long-term direction is:
 > governs interpreter, workspace, scratch, external-effect, and evidence
 > dispositions.
 
-A complementary Proposed feature layer is
+A complementary **Experimental** feature layer is
 [content-addressed Agent Functions](content-addressed-agent-functions.md):
-selected explicit computations execute as fresh, locally memoizable Python
-evaluations over immutable filesystem roots, while live I/O and writes remain
-typed Host effects. This does not replace the authority-lifecycle direction;
-the authority boundary is what makes the cacheable region enforceable, and
-fresh execution prevents hidden interpreter state from becoming workflow
-continuation state.
+selected explicit Host-instrumented computations use canonical project-private
+result reuse and independent single-flight over immutable input identities.
+Arbitrary Guest-Python purity admission remains Deferred; live I/O and writes
+remain typed Host effects. This does not replace the authority-lifecycle
+direction; fresh execution prevents hidden interpreter state from becoming
+workflow continuation state.
 
 The primary Agent-specific direction is
 [streaming authority-staged execution](streaming-authority-staged-execution.md).
 A minimal mechanism now incrementally validates and executes append-only Python
 inside one live target-Guest session, stages filesystem changes in a private
 workspace attempt, and supports Host-qualified eager reads with reach-gated
-fallback and a Broker-enforced pre-seal write denial. Recursive subagent fan-out,
-prepared-runtime/COW density, generalized write commit/reconciliation, and
-performance claims remain Proposed.
+fallback and a Broker-enforced pre-seal write denial. Bounded Experimental
+successors now add portable immutable roots, structured recursive child
+orchestration, Host-instrumented Agent Function reuse/single-flight, explicit
+single-wait fresh re-evaluation, and one never-served single-use prepared module.
+General arbitrary-Python purity, production fan-out scheduling, memory COW,
+generalized write commit/reconciliation, and performance claims remain
+Deferred or Proposed as documented by the active Megagoal.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace
@@ -114,6 +118,15 @@ of its contract:
   **Experimental/Partial**, which binds an exact artifact and controls wazero
   random plus wall/monotonic clocks while denying mounted workspaces and known
   unsupported import classes;
+- `runtime/composable`, a strict body-free evidence decoder/verifier that accepts
+  only claims supported by versioned mechanism records;
+- `runtime/workspace` portable immutable root/lineage records and explicit select,
+  plus `runtime/subagent` bounded structured fork/join with private child branches;
+- `runtime/agentfunction` project-private Host-instrumented result retention and
+  independent single-flight; this is not arbitrary Guest-Python purity;
+- `runtime/workflow` single-wait fresh re-evaluation over explicit immutable state;
+- the Wazero backend's optional one-slot, never-served, single-use prepared module
+  with fresh fallback; memory COW remains fail-closed and deferred;
 - `research/labstore`, an independent bounded directory CAS prototype with
   typed identities, workspace/branch relations, privacy policy, read-only
   access, reachability retention and measured synthetic benchmarks;

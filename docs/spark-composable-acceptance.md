@@ -1,60 +1,51 @@
-# Public Development Composable Acceptance
+# Public Multi-Agent Composable Acceptance
 
-Status: **3 checked-in public development scenarios × the `all` treatment passed on Linux/amd64 with 120 recorded events.**
+Status: **3 checked-in public development scenarios × the `all` treatment passed on Linux/amd64 with real parent/child Guest spans, source ranges, and workspace path diffs.**
 
 ## Public development corpus
 
 - Corpus: [`../research/composableacceptance/testdata/public-development-corpus.json`](../research/composableacceptance/testdata/public-development-corpus.json)
-- Corpus schema: `pysolate.spark-scenario-corpus.v2`
-- Corpus SHA-256: `sha256:685bc6ca31de7f0218acc682c24d472a0671ec522b53c821fb3151570103dd9c`
+- Corpus schema: `pysolate.spark-scenario-corpus.v3`
+- Corpus SHA-256: `sha256:f88e94b462dd39d094512f71f9b8a397e0627b745c217442ccee98dbaed4904a`
 - Scenarios: `dev-ranking-report`, `dev-workspace-summary`, `dev-wait-resume-report`
 - Treatment: `all`
 
-The corpus is normal checked-in development data. Its task descriptions, filenames,
-child-analysis labels, observations, expected artifacts, and complete Guest Python
-sources are public. No private frozen corpus is required by the default benchmark.
+Each scenario contains a public parent Guest program and two public child programs (`researcher` and `reviewer`). The children execute in fresh Wazero Guests over sibling-private workspace branches and write different public fixture paths. The Host selects one branch and discards the other. No private corpus is required.
 
-Set `PYSOLATE_ACCEPTANCE_MATRIX=conformance` only when running the separate
-18-treatment mechanism regression matrix.
+Set `PYSOLATE_ACCEPTANCE_MATRIX=conformance` only for the separate 18-treatment mechanism regression matrix.
 
 ## Linux direct recording
 
-Host source `71066f975deb044b484df7f84357f161fcea2238` ran all three public scenarios
-in Linux job `273851` against Guest artifact
-`sha256:591978964aae541d0758404f325c482898aa2ba5386a721dd2a5dcf049dbe9fb`.
+Source commit `62538a0a61056056ef0e0aaaa1276f3b2a776b1c` ran all three scenarios in Slurm job `273895` on Linux/amd64 against Guest artifact `sha256:591978964aae541d0758404f325c482898aa2ba5386a721dd2a5dcf049dbe9fb`.
 
-- 3/3 runs passed;
-- every run used treatment `all`;
-- every run recorded 40 sequential events from `run.start` to `run.terminal`;
-- total recorded events: 120;
-- the Python source published by Lab is byte-for-byte the scenario `guest_source`
-  used by the streaming Guest execution;
-- test elapsed time: 110.26 seconds;
+- 3/3 runs passed with treatment `all`;
+- each run recorded 37 sequential raw events from `run.start` to `run.terminal`;
+- total recorded events: 111;
+- each run records four lanes: Host runtime, parent Guest, researcher Guest, and reviewer Guest;
+- each run records two child `agent.execute` spans with `parent_agent_id=orchestrator` and `parent_span_id=orchestrator-python`;
+- the two child spans overlap in recorded monotonic time;
+- parent and child execution spans carry their actual public source IDs, files, and line ranges;
+- each child span carries an actual workspace snapshot diff with its added output path, size, and content digest;
+- test elapsed time: 114.41 seconds;
 - process exit: 0;
-- remote stage was removed after artifact retrieval.
+- the remote staging directory was removed after artifact retrieval.
 
-The canonical report is
-[`evidence/spark-composable-direct-report.json`](evidence/spark-composable-direct-report.json).
-The binary, Guest artifact, corpus, report, debugger dataset, log, exit, and identity
-checksums are bound in
-[`evidence/spark-composable-linux-run.json`](evidence/spark-composable-linux-run.json).
+The canonical report is [`evidence/spark-composable-direct-report.json`](evidence/spark-composable-direct-report.json). Binary, Guest artifact, corpus, report, debugger dataset, log, exit, and identity checksums are bound in [`evidence/spark-composable-linux-run.json`](evidence/spark-composable-linux-run.json).
 
 ## Lab projection contract
 
-`cmd/composable-acceptance-report` validates corpus/report identity and projects each
-row as one `pysolate.lab-web-debugger.v3` run keyed by `run_id`.
+`cmd/composable-acceptance-report` validates corpus/report identity and projects each row as one `pysolate.lab-web-debugger.v4` run keyed by `run_id`.
 
-Each run contains:
+The primary projection is now:
 
-- complete public `guest_source` executed by that Guest run;
-- a real sequential trace and terminal disposition;
-- scenario shape metadata;
-- runtime metrics, captured digests, checkpoint identities, and typed refs.
+```text
+recorded pipeline → agent swimlanes → Python source span → workspace path diff → raw event
+```
 
-The UI presents `Guest Python` as the default code view. The public Go
-`runScenarioAllExecution` harness is available separately as `Host recorder`; it is
-never labelled as Guest Python. Missing source, trace gaps, dangling parents,
-duplicate run IDs, schema mismatch, or terminal mismatch fail closed.
+Graph, timeline, source, filesystem, and raw-event views use the same recorded span/event IDs. Layout nodes do not claim additional runtime events. Selecting a child span opens that child's executed Python and highlights the recorded line range; the filesystem panel shows the same span's workspace changes.
 
-Workspace/checkpoint bodies are not reconstructed. Credentials and Host absolute
-paths remain forbidden from the static dataset.
+The Host Go acceptance recorder is not exposed as a product tab. Host/runtime events remain visible as recorded evidence in the runtime lane and raw-event Inspector.
+
+## Evidence boundary
+
+Source ranges identify the recorded Guest program span. They do **not** claim per-opcode or interpreter program-counter tracing. Workspace entries are actual snapshot differences from the public child branches; file contents are not published or reconstructed from digests. Credentials, Host absolute paths, private source, prompts, and model output remain excluded. Missing source/span metadata, duplicate or dangling spans, trace gaps, invalid workspace changes, duplicate run IDs, schema mismatch, or terminal mismatch fail closed.

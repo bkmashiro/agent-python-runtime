@@ -74,7 +74,7 @@ function AgentTimeline({ run, activeId, onSelect }: { run: LabRun; activeId: str
         <Badge variant="outline" color="violet">{agentOrder.length} lanes · {run.trace.length} spans</Badge>
       </div>
       <div className="pipeline-flow" aria-label="Recorded pipeline">
-        <span>Runtime start</span><b>→</b><span>Parent Guest</span><b>→</b><span>Host fan-out</span><b>→</b><span className="parallel-step">{run.scenario.child_programs.map((child) => child.role).join(' ∥ ')}</span><b>→</b><span>Select workspace</span><b>→</b><span>Resume + terminal</span>
+        <span>Parent Python</span><b>→</b><span>Fan-out</span><b>→</b><span className="parallel-step">{run.scenario.child_programs.map((child) => child.role).join(' ∥ ')}</span><b>→</b><span>Select</span><b>→</b><span>Resume</span>
       </div>
       <div className="timeline-axis"><span>0 ms</span><span>time →</span><span>{maxEnd.toFixed(0)} ms</span></div>
       <div className="timeline-scroll">
@@ -321,7 +321,9 @@ export default function App() {
   const selectedRun = runOptions.find((run) => run.key === selectedRunId) ?? null;
 
   useEffect(() => {
-    const defaultNode = selectedRun?.trace.find((node) => node.rawEvent?.agent_id === 'orchestrator' && node.rawEvent.source) ?? selectedRun?.trace[0];
+    const defaultNode = selectedRun?.trace.find((node) => (node.rawEvent?.workspace_changes?.length ?? 0) > 0)
+      ?? selectedRun?.trace.find((node) => node.rawEvent?.agent_id === 'orchestrator' && node.rawEvent.source)
+      ?? selectedRun?.trace[0];
     setActiveNodeId(defaultNode?.id ?? '');
   }, [selectedRun]);
 

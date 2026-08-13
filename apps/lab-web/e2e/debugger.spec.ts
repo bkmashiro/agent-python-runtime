@@ -20,6 +20,7 @@ test('links an agent span to Python and its workspace diff', async ({ page }) =>
   await researcher.click();
   const pythonPanel = page.getByRole('tabpanel', { name: 'Python' });
   await expect(pythonPanel).toContainText('researcher.py · lines 1–4 · researcher');
+  await expect(pythonPanel.locator('.source-line-linked')).toHaveCount(4);
   await expect(pythonPanel).toContainText('RECORDED SOURCE LINK');
   await expect(pythonPanel).toContainText('Path("/workspace/researcher.txt")');
   const filesystem = page.getByRole('region', { name: 'Filesystem changes' });

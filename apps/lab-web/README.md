@@ -1,52 +1,46 @@
 # Pysolate Lab Web
 
-A static debugger for recorded Pysolate runs.
+A static multi-agent debugger for recorded Pysolate development runs.
 
 ```text
-recorded run selector → causal trace → operation input/output/details → captured identities
+recorded run → pipeline + agent swimlanes → Python source span → workspace diff → raw evidence
 ```
 
-## Recorded experiments
+## Recorded development runs
 
-The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v3`. Every run contains, under one `run_id`:
+The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v4`. Every run carries one evidence-linked model under its `run_id`:
 
-- the complete public Python source executed by the selected Guest run;
-- scenario identity and shape metadata;
-- passed/rejected/skipped status and terminal disposition;
-- lifecycle/cache/single-flight/workspace metrics;
-- a sequential, causal trace from `run.start` to `run.terminal`;
-- input/output and checkpoint digests captured at actual operation sites;
-- artifact, invocation, execution, result, and workspace identities.
+- the complete public orchestrator and child-agent Python sources actually executed;
+- stable `span_id`, `parent_span_id`, `agent_id`, `parent_agent_id`, and role metadata;
+- recorded start/end times for the orchestrator, two concurrent child Guests, and Host runtime operations;
+- a source file and line range for every recorded Python execution span;
+- per-child workspace IDs and actual added/modified/deleted path evidence with content digests;
+- sequential raw event identity from `run.start` to `run.terminal`;
+- input/output, checkpoint, artifact, invocation, execution, result, and workspace identities.
 
-The app rejects the whole dataset if a run is missing a trace, has a sequence gap,
-uses a dangling causal parent, disagrees with its terminal status, duplicates a
-`run_id`, or contains an unsupported schema. It does not synthesize trace events
-from summary metrics and does not fall back from an invalid recorded dataset to
-fabricated experiment rows.
+The primary view is a deterministic projection of those recorded fields:
 
-The selector contains three checked-in public development scenarios, each recorded
-with the `all` treatment. Trace events are grouped deterministically by mechanism;
-each group expands to the original sequence, outcomes, metadata, and digests.
+1. a pipeline strip explains the selected run's stages;
+2. swimlanes preserve agent identity, overlap, and recorded time;
+3. selecting a Python span opens the matching agent source and highlights its recorded line range;
+4. the filesystem panel shows the matching workspace path changes;
+5. the raw event remains available in the Inspector.
 
-`Guest Python` is the complete source actually sent through the streaming Guest
-execution. `Host recorder` separately shows the complete build-bound public
-`runScenarioAllExecution` function, clearly labelled as Host Go rather than Guest
-Python.
+The Host Go acceptance recorder is intentionally not part of the product surface.
 
-## Evidence boundary
+## Validation and evidence boundary
 
-The development corpus, Guest Python, task descriptions, filenames, child-analysis
-labels, observations, and expected artifacts are all checked-in public fixtures.
-The static Web projection intentionally includes `guest_source`. It still contains
-no credential or Host absolute path, and workspace/checkpoint bodies are not
-reconstructed: the debugger shows only identities actually captured.
+The app rejects the whole dataset if a run has a sequence gap, duplicate or dangling span, invalid source range, invalid workspace change, inconsistent terminal status, duplicate `run_id`, or unsupported schema. It does not synthesize events from summary metrics and does not fall back to fabricated data.
+
+The selector contains three checked-in public development scenarios, each recorded with the `all` treatment. Each scenario runs a public orchestrator Guest and two fresh child Guests over sibling-private workspace branches; one branch is selected and the other discarded.
+
+Source locations are recorded execution spans, not a Python interpreter program-counter trace. Filesystem entries are actual recorder snapshots/diffs for public fixture paths; they are not reconstructed from digests. Credentials, Host absolute paths, private source, prompts, and model output remain excluded.
 
 ## Technology
 
 - React + TypeScript + Vite;
 - Mantine;
 - CodeMirror 6;
-- TanStack Virtual;
 - Vitest and Playwright.
 
 ## Development
@@ -61,5 +55,4 @@ npm run dev
 
 ## Product boundary
 
-This deployment is static and read-only. It has no Runtime execution control,
-private object-store access, ingestion API, or mutation surface.
+This deployment is static and read-only. It has no Runtime execution control, private object-store access, ingestion API, or mutation surface.

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -255,7 +257,7 @@ func assertTreatmentTrace(t *testing.T, row composableacceptance.Row) {
 		composableacceptance.TreatmentReevaluationOn:  {"wait.begin", "wait.release", "resume.reuse", "oracle.compare"},
 		composableacceptance.TreatmentPrepared:        {"prepared.create", "prepared.consume", "guest.run", "oracle.compare"},
 		composableacceptance.TreatmentCOW:             {"cow.map_private", "cow.discard", "guest.run", "oracle.compare"},
-		composableacceptance.TreatmentAll:             {"stream.begin", "fanout.child_start", "cache.lookup", "single_flight.leader", "wait.begin", "resume.fresh", "oracle.compare"},
+		composableacceptance.TreatmentAll:             {"stream.begin", "guest.python", "agent.execute", "cache.lookup", "single_flight.leader", "wait.begin", "resume.fresh", "oracle.compare"},
 		composableacceptance.TreatmentInvalidParent:   {"validation.reject", "workspace.discard"},
 		composableacceptance.TreatmentInvalidChild:    {"fanout.child_error", "workspace.discard"},
 		composableacceptance.TreatmentChangedObserve:  {"observation.changed", "resume.fresh", "oracle.compare"},
@@ -273,6 +275,25 @@ func assertTreatmentTrace(t *testing.T, row composableacceptance.Row) {
 	}
 	if row.Treatment == composableacceptance.TreatmentSingleFlightOff && actions["single_flight.follower"] != 0 {
 		t.Fatalf("scenario=%s single_flight_off recorded a follower", row.ScenarioID)
+	}
+	if row.Treatment == composableacceptance.TreatmentAll {
+		children := make([]composableacceptance.TraceEvent, 0, 2)
+		for _, event := range row.Trace {
+			if event.Action == "agent.execute" {
+				children = append(children, event)
+			}
+		}
+		if len(children) != 2 || children[0].ParentAgentID != "orchestrator" || children[1].ParentAgentID != "orchestrator" {
+			t.Fatalf("scenario=%s missing two causal child spans", row.ScenarioID)
+		}
+		for _, child := range children {
+			if child.Source == nil || len(child.WorkspaceChanges) == 0 || child.WorkspaceID == "" {
+				t.Fatalf("scenario=%s child=%s missing source or workspace evidence", row.ScenarioID, child.AgentID)
+			}
+		}
+		if max(children[0].StartedMillis, children[1].StartedMillis) > min(children[0].EndedMillis, children[1].EndedMillis) {
+			t.Fatalf("scenario=%s child spans did not overlap", row.ScenarioID)
+		}
 	}
 }
 
@@ -1013,6 +1034,12 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	}
 
 	var childGuests atomic.Int32
+	baseSnapshot, err := manager.Snapshot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var childSnapshotsMu sync.Mutex
+	childSnapshots := make(map[string]workspace.Snapshot, len(scenario.ChildPrograms))
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(_ context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			childGuests.Add(1)
@@ -1020,11 +1047,14 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 			return factory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
+			index, err := strconv.Atoi(strings.TrimPrefix(descriptor.ChildID, "child-"))
+			if err != nil || index < 0 || index >= len(scenario.ChildPrograms) {
+				return subagent.ChildProgram{}, subagent.ErrChildExecution
+			}
+			child := scenario.ChildPrograms[index]
 			request, err := json.Marshal(map[string]any{
-				"run_id": "spark-all-child",
-				"code": "from pathlib import Path\n" +
-					"Path('/workspace/" + safeIdentifier(descriptor.ChildID) + ".txt').write_text(" + pythonStringLiteral(t, scenario.ExpectedArtifact) + ")\n" +
-					"result = " + pythonStringLiteral(t, scenario.ExpectedArtifact),
+				"run_id": "spark-all-" + child.ID,
+				"code":   child.Source,
 				"inputs": map[string]any{},
 			})
 			if err != nil {
@@ -1037,7 +1067,17 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: baseInfo.WorkspaceSHA256,
 		ParentLineage: parentLineage, MaxFanout: uint32(len(scenario.ChildAnalyses)), MaxDepth: 2,
 		Executor: subagent.ExecutorFunc(func(ctx context.Context, invocation subagent.Invocation) error {
-			return childRunner.Execute(ctx, invocation)
+			if err := childRunner.Execute(ctx, invocation); err != nil {
+				return err
+			}
+			snapshot, err := manager.Snapshot(invocation.WorkspaceRef)
+			if err != nil {
+				return err
+			}
+			childSnapshotsMu.Lock()
+			childSnapshots[invocation.Descriptor.ChildID] = snapshot
+			childSnapshotsMu.Unlock()
+			return nil
 		}),
 	})
 	if err != nil {
@@ -1049,6 +1089,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	}
 	prepareChannel := make(chan string, len(prepares))
 	completed := make(chan streamOutcome, 1)
+	parentStarted := float64(time.Since(started).Milliseconds())
 	go func() {
 		request := []byte(`{"run_id":"all-spark-parent","code":"result = stream_final['result']","inputs":{}}`)
 		result, runErr := streaming.ExecuteStream(context.Background(), streamRunner, parentAttempt, request, prepareChannel)
@@ -1073,6 +1114,12 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeError, nil, nil, nil, "", "", 1)
 		t.Fatalf("scenario=%s treatment=%s stream error=%v", scenario.ID, composableacceptance.TreatmentAll, finished.err)
 	}
+	parentEnded := float64(time.Since(started).Milliseconds())
+	recorder.appendWith(traceEventContext{
+		spanID: "orchestrator-python", parentSpanID: "run", agentID: "orchestrator", agentRole: "orchestrator",
+		startedMillis: parentStarted, endedMillis: parentEnded,
+		source: sourceRange("orchestrator", "orchestrator.py", scenario.GuestSource), workspaceID: "workspace-orchestrator",
+	}, composableacceptance.TraceEventTypeGuestLifecycle, "guest.python", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.GuestSource), finished.result.Response, "", "", 1)
 	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.seal", composableacceptance.TraceEventOutcomeSealed, nil, nil, nil, "", "", 1)
 	recorder.append(composableacceptance.TraceEventTypeStreaming, "stream.end", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	if publishedInfo, err := manager.Inspect(finished.result.PublishedWorkspace); err == nil {
@@ -1091,26 +1138,50 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeStarted, nil, []byte(selected), nil, "", "", 1)
 	for index, child := range scenario.ChildAnalyses {
 		descriptor := scenarioFanoutDescriptor(index, child, scenarioSHA, parentLineage)
-		recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeOK, nil, []byte(descriptor.ChildID), nil, "", "", 1)
-		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_start", composableacceptance.TraceEventOutcomeStarted, nil, []byte(descriptor.ChildID), nil, "", "", 1)
 		if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
 			recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_end", composableacceptance.TraceEventOutcomeRejected, nil, []byte(descriptor.ChildID), nil, "", "", 1)
 			t.Fatal(err)
 		}
-		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.child_end", composableacceptance.TraceEventOutcomeOK, nil, []byte(descriptor.ChildID), nil, "", "", 1)
 	}
 	joined, err := orchestrator.Seal(context.Background(), selected)
 	if err != nil {
 		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), nil, "", "", 1)
 		t.Fatal(err)
 	}
+	for _, childEvent := range joined.Timeline {
+		index, parseErr := strconv.Atoi(strings.TrimPrefix(childEvent.ChildID, "child-"))
+		if parseErr != nil || index < 0 || index >= len(scenario.ChildPrograms) {
+			t.Fatalf("invalid child timeline id %q", childEvent.ChildID)
+		}
+		child := scenario.ChildPrograms[index]
+		childSnapshotsMu.Lock()
+		snapshot, found := childSnapshots[childEvent.ChildID]
+		childSnapshotsMu.Unlock()
+		if !found {
+			t.Fatalf("missing child snapshot %q", childEvent.ChildID)
+		}
+		childRecordedEnd := float64(time.Since(started).Milliseconds())
+		childDuration := childEvent.EndMS - childEvent.StartMS
+		childRecordedStart := childRecordedEnd - childDuration
+		if childRecordedStart < 0 {
+			childRecordedStart = 0
+		}
+		recorder.appendWith(traceEventContext{
+			spanID: "agent-" + child.ID, parentSpanID: "orchestrator-python", agentID: child.ID, parentAgentID: "orchestrator", agentRole: child.Role,
+			startedMillis: childRecordedStart, endedMillis: childRecordedEnd,
+			source: sourceRange(child.ID, child.ID+".py", child.Source), workspaceID: "workspace-" + child.ID,
+			workspaceChanges: workspaceChanges(baseSnapshot, snapshot),
+		}, composableacceptance.TraceEventTypeFanout, "agent.execute", composableacceptance.TraceEventOutcomeOK, nil, []byte(child.Source), []byte(child.ExpectedResult), snapshot.Info.WorkspaceSHA256, "captured", 1)
+	}
 	if joined.SelectedChildID != selected {
 		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), []byte(joined.SelectedChildID), "", "", 1)
 		t.Fatalf("scenario=%s treatment=%s selected=%s got=%s", scenario.ID, composableacceptance.TreatmentAll, selected, joined.SelectedChildID)
 	}
 	recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeSelected, nil, []byte(joined.SelectedChildID), nil, "", "", 1)
-	selectedRootPath := safeIdentifier(selected) + ".txt"
-	if !rootContainsWithSHA(t, manager, joined.SelectedRoot, selectedRootPath, oracleSHA) {
+	selectedProgram := scenario.ChildPrograms[scenario.SelectedChild]
+	selectedRootPath := selectedProgram.OutputPath
+	selectedResultSHA := composableacceptance.ArtifactIdentity(selectedProgram.ExpectedResult)
+	if !rootContainsWithSHA(t, manager, joined.SelectedRoot, selectedRootPath, selectedResultSHA) {
 		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.selected_root", composableacceptance.TraceEventOutcomeRejected, nil, nil, nil, "", "", 1)
 		t.Fatalf("scenario=%s treatment=%s selected root missing artifact", scenario.ID, composableacceptance.TreatmentAll)
 	}
@@ -1968,6 +2039,56 @@ func uint32Pointer(value uint32) *uint32 {
 	return &value
 }
 
+func workspaceChanges(before, after workspace.Snapshot) []composableacceptance.WorkspaceChange {
+	beforeByPath := make(map[string]workspace.SnapshotEntry, len(before.Entries))
+	for _, entry := range before.Entries {
+		beforeByPath[entry.Path] = entry
+	}
+	changes := make([]composableacceptance.WorkspaceChange, 0)
+	for _, entry := range after.Entries {
+		previous, existed := beforeByPath[entry.Path]
+		delete(beforeByPath, entry.Path)
+		kind := "added"
+		if existed && previous.SHA256 == entry.SHA256 && previous.Kind == entry.Kind {
+			continue
+		}
+		if existed {
+			kind = "modified"
+		}
+		changes = append(changes, composableacceptance.WorkspaceChange{Path: entry.Path, Kind: kind, BeforeSHA256: previous.SHA256, AfterSHA256: entry.SHA256, Size: entry.Size})
+	}
+	for _, entry := range beforeByPath {
+		changes = append(changes, composableacceptance.WorkspaceChange{Path: entry.Path, Kind: "deleted", BeforeSHA256: entry.SHA256, Size: entry.Size})
+	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].Path < changes[j].Path })
+	return changes
+}
+
+func sourceRange(sourceID, file, source string) *composableacceptance.SourceRange {
+	return &composableacceptance.SourceRange{SourceID: sourceID, File: file, StartLine: 1, EndLine: uint32(strings.Count(source, "\n") + 1)}
+}
+
+type traceEventContext struct {
+	spanID, parentSpanID       string
+	agentID, parentAgentID     string
+	agentRole                  string
+	startedMillis, endedMillis float64
+	source                     *composableacceptance.SourceRange
+	workspaceID                string
+	workspaceChanges           []composableacceptance.WorkspaceChange
+}
+
+func rootEventContext(sequence uint32, elapsed float64) traceEventContext {
+	parentSpan, spanID := "run", fmt.Sprintf("event-%d", sequence)
+	if sequence == 1 {
+		parentSpan, spanID = "", "run"
+	}
+	return traceEventContext{
+		spanID: spanID, parentSpanID: parentSpan,
+		agentID: "runtime", agentRole: "host-runtime", startedMillis: elapsed, endedMillis: elapsed,
+	}
+}
+
 func (recorder *traceRecorder) append(
 	category composableacceptance.TraceEventType,
 	action string,
@@ -1983,8 +2104,27 @@ func (recorder *traceRecorder) append(
 	if sequence == 1 {
 		elapsed = 0
 	}
+	recorder.appendWith(rootEventContext(sequence, elapsed), category, action, outcome, parent, input, output, checkpointSHA256, checkpointStatus, count)
+}
+
+func (recorder *traceRecorder) appendWith(
+	traceContext traceEventContext,
+	category composableacceptance.TraceEventType,
+	action string,
+	outcome composableacceptance.TraceEventOutcome,
+	parent *uint32,
+	input, output []byte,
+	checkpointSHA256 string,
+	checkpointStatus string,
+	count uint64,
+) {
+	sequence := uint32(len(recorder.events) + 1)
+	elapsed := traceContext.endedMillis
 	event := composableacceptance.TraceEvent{
-		Sequence:              sequence,
+		Sequence: sequence, SpanID: traceContext.spanID, ParentSpanID: traceContext.parentSpanID,
+		AgentID: traceContext.agentID, ParentAgentID: traceContext.parentAgentID, AgentRole: traceContext.agentRole,
+		StartedMillis: traceContext.startedMillis, EndedMillis: traceContext.endedMillis, Source: traceContext.source,
+		WorkspaceID: traceContext.workspaceID, WorkspaceChanges: traceContext.workspaceChanges,
 		Type:                  category,
 		Action:                action,
 		Outcome:               outcome,

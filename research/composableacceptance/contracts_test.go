@@ -26,6 +26,14 @@ func TestPublicDevelopmentCorpusIsCanonicalAndContainsExecutableGuestSource(t *t
 		if !bytes.Contains([]byte(scenario.GuestSource), []byte("result =")) {
 			t.Fatalf("scenario %s has no complete Guest result assignment", scenario.ID)
 		}
+		if len(scenario.ChildPrograms) != 2 {
+			t.Fatalf("scenario %s has no two-agent development program", scenario.ID)
+		}
+		for _, child := range scenario.ChildPrograms {
+			if !bytes.Contains([]byte(child.Source), []byte("/workspace/")) || !bytes.Contains([]byte(child.Source), []byte("result =")) {
+				t.Fatalf("scenario %s child %s has no executable source/workspace output", scenario.ID, child.ID)
+			}
+		}
 		if len(scenario.ProhibitedOutputs) != 0 {
 			t.Fatalf("development scenario %s unexpectedly carries private output restrictions", scenario.ID)
 		}
@@ -514,8 +522,10 @@ func validCorpus() composableacceptance.Corpus {
 	scenarios := make([]composableacceptance.Scenario, 3)
 	for index := range scenarios {
 		scenarios[index] = composableacceptance.Scenario{
-			ID: "scenario-test-" + string(rune('a'+index)), GuestSource: "values = [3, 1, 2]\nresult = ','.join(str(value) for value in sorted(values))", Task: "Inspect a bounded cross-file runtime contract.",
-			Files: []string{"runtime/a.go", "runtime/b.go"}, ChildAnalyses: []string{"left", "right"},
+			ID: "scenario-test-" + string(rune('a'+index)), GuestSource: "values = [3, 1, 2]\nresult = ','.join(str(value) for value in sorted(values))",
+			ChildPrograms: []composableacceptance.ChildProgram{{ID: "left", Role: "researcher", Source: "result = 'left child result'", ExpectedResult: "left child result", OutputPath: "left.txt"}, {ID: "right", Role: "reviewer", Source: "result = 'right child result'", ExpectedResult: "right child result", OutputPath: "right.txt"}},
+			Task:          "Inspect a bounded cross-file runtime contract.",
+			Files:         []string{"runtime/a.go", "runtime/b.go"}, ChildAnalyses: []string{"left", "right"},
 			RepeatedTransformation: "canonicalize", WaitBoundary: "wait", Observation: "source digest",
 			SelectedChild: index % 2, ExpectedArtifact: "REPORT: deterministic", ProhibitedOutputs: []string{"credentials"},
 		}
@@ -532,6 +542,11 @@ func minimalTrace(status string, terminalDisposition string) []composableaccepta
 	trace := []composableacceptance.TraceEvent{
 		{
 			Sequence:              1,
+			SpanID:                "run",
+			AgentID:               "orchestrator",
+			AgentRole:             "orchestrator",
+			StartedMillis:         1,
+			EndedMillis:           1,
 			Type:                  composableacceptance.TraceEventTypeRunStart,
 			Action:                "run.start",
 			Outcome:               composableacceptance.TraceEventOutcomeStarted,
@@ -539,9 +554,16 @@ func minimalTrace(status string, terminalDisposition string) []composableaccepta
 		},
 	}
 	parent := uint32(1)
+	parentSpan := "run"
 	if status != "skipped" {
 		trace = append(trace, composableacceptance.TraceEvent{
 			Sequence:              2,
+			SpanID:                "guest-run",
+			ParentSpanID:          "run",
+			AgentID:               "orchestrator",
+			AgentRole:             "orchestrator",
+			StartedMillis:         1,
+			EndedMillis:           1,
 			Type:                  composableacceptance.TraceEventTypeGuestLifecycle,
 			Action:                "guest.run",
 			Outcome:               composableacceptance.TraceEventOutcomeOK,
@@ -549,9 +571,16 @@ func minimalTrace(status string, terminalDisposition string) []composableaccepta
 			RelativeElapsedMillis: 1,
 		})
 		parent = 2
+		parentSpan = "guest-run"
 	}
 	trace = append(trace, composableacceptance.TraceEvent{
 		Sequence:              parent + 1,
+		SpanID:                "run-terminal",
+		ParentSpanID:          parentSpan,
+		AgentID:               "orchestrator",
+		AgentRole:             "orchestrator",
+		StartedMillis:         1,
+		EndedMillis:           1,
 		Type:                  composableacceptance.TraceEventTypeRunTerminal,
 		Action:                "run.terminal",
 		Outcome:               disposition,

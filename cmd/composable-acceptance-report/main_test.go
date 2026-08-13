@@ -13,6 +13,7 @@ func TestProjectWebScenarioPublishesGuestSourceOnly(t *testing.T) {
 	scenario := composableacceptance.Scenario{
 		ID:                     "scenario-one",
 		GuestSource:            "values = [3, 1, 2]\nresult = sorted(values)",
+		ChildPrograms:          []composableacceptance.ChildProgram{{ID: "left", Role: "researcher", Source: "result = 'left child result'", ExpectedResult: "left child result", OutputPath: "left.txt"}, {ID: "right", Role: "reviewer", Source: "result = 'right child result'", ExpectedResult: "right child result", OutputPath: "right.txt"}},
 		Task:                   secret + "-task",
 		Files:                  []string{secret + "-path"},
 		ChildAnalyses:          []string{secret + "-child"},
@@ -32,8 +33,8 @@ func TestProjectWebScenarioPublishesGuestSourceOnly(t *testing.T) {
 	if strings.Contains(string(encoded), secret) {
 		t.Fatalf("private scenario body leaked: %s", encoded)
 	}
-	if projected.GuestSource != scenario.GuestSource {
-		t.Fatalf("guest source missing: %+v", projected)
+	if projected.GuestSource != scenario.GuestSource || len(projected.ChildPrograms) != 2 || projected.ChildPrograms[0].Source != scenario.ChildPrograms[0].Source {
+		t.Fatalf("Guest/child source missing: %+v", projected)
 	}
 	if projected.ID != scenario.ID || projected.FileCount != 1 || projected.ChildAnalysisCount != 1 || projected.SelectedChild != 2 {
 		t.Fatalf("identity-only projection mismatch: %+v", projected)

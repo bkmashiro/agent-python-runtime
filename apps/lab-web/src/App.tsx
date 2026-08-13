@@ -1,19 +1,14 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AppShell, Alert, Badge, Button, Divider, Group, Select, Tabs, Text,
+  AppShell, Alert, Badge, Button, Divider, Group, Tabs, Text,
 } from '@mantine/core';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
-import { EditorView } from '@codemirror/view';
-import {
-  Folder, Workflow, FileJson2, Bot, Database, Play, HardDrive,
-  GitFork, Radio, Layers, RefreshCw, Eye, ShieldCheck, PackageCheck, Copy, Ban,
-} from 'lucide-react';
-import { acceptanceSource } from 'virtual:pysolate-demo';
-import { type CheckpointMetadata, type MechanismGroup, type TraceAdapterEvent, type TraceNode, buildTraceNodes, collectCheckpointMetadata } from './trace';
+import { Decoration, EditorView } from '@codemirror/view';
+import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
+import { type TraceAdapterEvent, type TraceNode, buildTraceNodes } from './trace';
 import { type LabDataset, type LabRun, validateDataset } from './debuggerData';
 
 type RunSource = 'recorded';
@@ -24,23 +19,6 @@ type RunOption = {
   label: string;
   run: LabRun;
   trace: TraceNode[];
-  checkpoints: Record<string, CheckpointMetadata>;
-};
-
-const mechanismPresentation: Record<MechanismGroup, { label: string; color: string; icon: typeof Workflow }> = {
-  'run-lifecycle': { label: 'Run lifecycle', color: 'gray', icon: Play },
-  'guest-lifecycle': { label: 'Guest runtime', color: 'blue', icon: Bot },
-  workspace: { label: 'Private workspace', color: 'indigo', icon: HardDrive },
-  streaming: { label: 'Streaming', color: 'cyan', icon: Radio },
-  fanout: { label: 'Fan-out', color: 'violet', icon: GitFork },
-  cache: { label: 'Cache', color: 'orange', icon: Database },
-  'single-flight': { label: 'Single-flight', color: 'grape', icon: Copy },
-  'wait-resume': { label: 'Wait / resume', color: 'yellow', icon: RefreshCw },
-  observation: { label: 'Observation', color: 'teal', icon: Eye },
-  oracle: { label: 'Oracle', color: 'green', icon: ShieldCheck },
-  prepared: { label: 'Prepared state', color: 'lime', icon: PackageCheck },
-  cow: { label: 'Linux COW', color: 'pink', icon: Layers },
-  cancellation: { label: 'Cancellation', color: 'red', icon: Ban },
 };
 
 function runLabel(run: LabRun): string {
@@ -55,7 +33,6 @@ function buildRunOption(run: LabRun, source: RunSource): RunOption {
     label: runLabel(run),
     run,
     trace,
-    checkpoints: collectCheckpointMetadata(run.trace),
   };
 }
 
@@ -83,148 +60,50 @@ function JsonViewer({ value, label }: { value: unknown; label: string }) {
   );
 }
 
-function TraceNodeRow({
-  node,
-  active,
-  expanded,
-  hasChildren,
-  onSelect,
-  onToggle,
-}: {
-  node: TraceNode;
-  active: boolean;
-  expanded: boolean;
-  hasChildren: boolean;
-  onSelect: () => void;
-  onToggle: () => void;
-}) {
-  const presentation = mechanismPresentation[node.group];
-  const Icon = node.synthetic && node.id === 'run' ? Workflow : presentation.icon;
+function AgentTimeline({ run, activeId, onSelect }: { run: LabRun; activeId: string; onSelect: (id: string) => void }) {
+  const maxEnd = Math.max(1, ...run.trace.map((event) => event.ended_millis));
+  const agentOrder = [
+    'orchestrator',
+    ...run.scenario.child_programs.map((child) => child.id),
+    ...run.trace.map((event) => event.agent_id).filter((id) => id !== 'orchestrator' && !run.scenario.child_programs.some((child) => child.id === id)),
+  ].filter((id, index, all) => all.indexOf(id) === index);
   return (
-    <div className={`trace-row ${active ? 'active' : ''} ${node.synthetic ? 'trace-group-row' : 'trace-event-row'}`} style={{ paddingLeft: 10 + node.depth * 18 }} data-testid="trace-node" data-node-id={node.id} data-node-kind={node.synthetic ? 'group' : 'event'}>
-      <span className="trace-branch">
-        {hasChildren ? (
-          <button
-            className="trace-toggle"
-            type="button"
-            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.title}`}
-            onClick={onToggle}
-          >
-            {expanded ? '▾' : '▸'}
-          </button>
-        ) : (
-          <span className="trace-dot" />
-        )}
-      </span>
-      <button className="trace-main" type="button" onClick={onSelect}>
-        <div className="theme-icon" style={{ width: 24, height: 24, color: `var(--mantine-color-${presentation.color}-5)` }}><Icon size={13} /></div>
-        <span className="trace-copy">
-          <span className="trace-title" data-testid="trace-node-title">{node.synthetic ? (node.id === 'run' ? node.title : presentation.label) : node.title}</span>
-          <span className="trace-summary">{node.summary}</span>
-        </span>
-        <span className="trace-tail">
-          <Badge color={presentation.color} variant="light" size="xs">{node.synthetic ? presentation.label : node.kind.replaceAll('_', ' ')}</Badge>
-          <small>{node.duration}</small>
-        </span>
-      </button>
-    </div>
-  );
-}
-
-function TracePanel({
-  trace,
-  activeId,
-  onSelect,
-}: {
-  trace: TraceNode[];
-  activeId: string;
-  onSelect: (id: string) => void;
-}) {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const rootIds = trace.filter((node) => !node.parent).map((node) => node.id);
-  const [expanded, setExpanded] = useState(new Set<string>(rootIds));
-  const byId = useMemo(() => new Map(trace.map((node) => [node.id, node])), [trace]);
-  const children = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const node of trace) {
-      if (node.parent) {
-        const list = map.get(node.parent) ?? [];
-        list.push(node.id);
-        map.set(node.parent, list);
-      }
-    }
-    return map;
-  }, [trace]);
-
-  useEffect(() => {
-    setExpanded(new Set(trace.filter((node) => !node.parent).map((node) => node.id)));
-  }, [trace]);
-
-  const visible = useMemo(() => {
-    return trace.filter((node) => {
-      let parent = node.parent;
-      while (parent) {
-        if (!expanded.has(parent)) {
-          return false;
-        }
-        parent = byId.get(parent)?.parent;
-      }
-      return true;
-    });
-  }, [byId, expanded, trace]);
-
-  const virtualizer = useVirtualizer({
-    count: visible.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 52,
-    overscan: 8,
-  });
-
-  return (
-    <section className="panel trace-panel" aria-label="Run trace">
+    <section className="panel trace-panel agent-timeline" aria-label="Agent execution timeline">
       <div className="panel-heading">
-        <Group gap={8}><Workflow size={16} /><Text fw={700} size="sm">Run trace</Text></Group>
-        <Badge variant="outline" color="gray">{trace.filter((node) => !node.synthetic).length} events · {trace.filter((node) => node.synthetic && node.id !== 'run').length} groups</Badge>
+        <Group gap={8}><Workflow size={16} /><Text fw={700} size="sm">Agent execution</Text></Group>
+        <Badge variant="outline" color="violet">{agentOrder.length} lanes · {run.trace.length} spans</Badge>
       </div>
-      <div className="trace-toolbar">
-        <Button size="compact-xs" variant="subtle" onClick={() => setExpanded(new Set(trace.map((node) => node.id)))}>Expand all</Button>
-        <Button size="compact-xs" variant="subtle" onClick={() => setExpanded(new Set(rootIds))}>Collapse</Button>
+      <div className="pipeline-flow" aria-label="Recorded pipeline">
+        <span>Runtime start</span><b>→</b><span>Parent Guest</span><b>→</b><span>Host fan-out</span><b>→</b><span className="parallel-step">{run.scenario.child_programs.map((child) => child.role).join(' ∥ ')}</span><b>→</b><span>Select workspace</span><b>→</b><span>Resume + terminal</span>
       </div>
-      <div ref={parentRef} className="trace-scroll">
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualizer.getVirtualItems().map((virtualItem) => {
-            const node = visible[virtualItem.index];
-            if (!node) {
-              return null;
-            }
-            const hasChildren = !!children.get(node.id)?.length;
-            const rowChildren = children.get(node.id) ?? [];
-            return (
-              <div
-                key={node.id}
-                style={{ position: 'absolute', transform: `translateY(${virtualItem.start}px)`, width: '100%' }}
-              >
-                <TraceNodeRow
-                  node={node}
-                  active={node.id === activeId}
-                  expanded={expanded.has(node.id)}
-                  hasChildren={rowChildren.length > 0}
-                  onSelect={() => onSelect(node.id)}
-                  onToggle={() => setExpanded((current) => {
-                    const next = new Set(current);
-                    if (next.has(node.id)) {
-                      next.delete(node.id);
-                    } else {
-                      next.add(node.id);
-                    }
-                    return next;
-                  })}
-                />
+      <div className="timeline-axis"><span>0 ms</span><span>time →</span><span>{maxEnd.toFixed(0)} ms</span></div>
+      <div className="timeline-scroll">
+        {agentOrder.map((agentID) => {
+          const events = run.trace.filter((event) => event.agent_id === agentID);
+          const role = events[0]?.agent_role ?? agentID;
+          return (
+            <div className="timeline-lane" key={agentID} data-agent-id={agentID}>
+              <div className="lane-label"><strong>{agentID}</strong><span>{role}</span></div>
+              <div className="lane-track">
+                {events.map((event) => {
+                  const left = (event.started_millis / maxEnd) * 100;
+                  const width = Math.max(0.5, ((event.ended_millis - event.started_millis) / maxEnd) * 100);
+                  const sourceLinked = !!event.source;
+                  return <button
+                    key={event.sequence}
+                    className={`timeline-span ${sourceLinked ? 'source-linked' : ''} ${activeId === `event:${event.sequence}` ? 'active' : ''}`}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                    title={`${event.action} · ${event.started_millis.toFixed(1)}–${event.ended_millis.toFixed(1)} ms${event.source ? ` · ${event.source.file}:${event.source.start_line}-${event.source.end_line}` : ''}`}
+                    onClick={() => onSelect(`event:${event.sequence}`)}
+                    aria-label={`${agentID} ${event.action}`}
+                  ><span>{sourceLinked ? event.action.replace('guest.', '').replace('agent.', '') : ''}</span></button>;
+                })}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
+      <div className="timeline-legend"><span><i className="legend-source" />Python execution</span><span><i className="legend-runtime" />Runtime event</span></div>
     </section>
   );
 }
@@ -236,10 +115,19 @@ function Inspector({
   node: TraceNode;
   run: LabRun;
 }) {
-  const [tab, setTab] = useState<string | null>('guest-source');
-  const guestSource = run.scenario.guest_source;
-  const hostSourceLineCount = acceptanceSource.split('\n').length;
-  const hostSourceLabel = `Bundled Host acceptance harness · complete runScenarioAllExecution function · ${hostSourceLineCount} lines`;
+  const [tab, setTab] = useState<string | null>('source');
+  const sourceRange = node.rawEvent?.source;
+  const childProgram = sourceRange ? run.scenario.child_programs.find((child) => child.id === sourceRange.source_id) : undefined;
+  const sourceText = childProgram?.source ?? run.scenario.guest_source;
+  const sourceFile = sourceRange?.file ?? 'orchestrator.py';
+  const sourceHighlight = useMemo(() => EditorView.decorations.compute(['doc'], (state) => {
+    if (!sourceRange) return Decoration.none;
+    const ranges = [];
+    for (let line = sourceRange.start_line; line <= Math.min(sourceRange.end_line, state.doc.lines); line += 1) {
+      ranges.push(Decoration.line({ class: 'source-line-linked' }).range(state.doc.line(line).from));
+    }
+    return Decoration.set(ranges);
+  }), [sourceRange]);
 
   return (
     <section className="panel inspector-panel" aria-label="Selected operation inspector">
@@ -262,41 +150,24 @@ function Inspector({
       </div>
       <Tabs value={tab} onChange={setTab} className="inspector-tabs">
         <Tabs.List>
-          <Tabs.Tab value="guest-source" leftSection={<FileJson2 size={14} />}>Guest Python</Tabs.Tab>
-          <Tabs.Tab value="host-source" leftSection={<Bot size={14} />}>Host recorder</Tabs.Tab>
+          <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Python</Tabs.Tab>
           <Tabs.Tab value="context" leftSection={<Database size={14} />}>Scenario</Tabs.Tab>
           <Tabs.Tab value="io" leftSection={<Database size={14} />}>Input / output</Tabs.Tab>
           <Tabs.Tab value="details" leftSection={<Folder size={14} />}>Recorded event</Tabs.Tab>
           <Tabs.Tab value="checkpoint" leftSection={<Workflow size={14} />}>Checkpoint</Tabs.Tab>
         </Tabs.List>
-        <Tabs.Panel value="guest-source" className="tab-body source-tab">
+        <Tabs.Panel value="source" className="tab-body source-tab">
           <div className="source-context">
-            <Text size="xs" c="dimmed">Complete Python executed by the selected Guest run · {guestSource.split('\n').length} lines</Text>
-            <Badge color="green" variant="light">
-              RECORDED DEVELOPMENT SOURCE · PUBLIC
+            <Text size="xs" c="dimmed">{sourceRange ? `${sourceFile} · lines ${sourceRange.start_line}–${sourceRange.end_line} · ${node.rawEvent?.agent_id}` : 'No Python source range recorded for this Runtime event'}</Text>
+            <Badge color={sourceRange ? 'green' : 'gray'} variant="light">
+              {sourceRange ? 'RECORDED SOURCE LINK' : 'RUNTIME EVENT'}
             </Badge>
           </div>
           <CodeMirror
-            value={guestSource}
+            value={sourceText}
             height="100%"
             theme={vscodeDark}
-            extensions={[python(), EditorView.lineWrapping]}
-            editable={false}
-            basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
-          />
-        </Tabs.Panel>
-        <Tabs.Panel value="host-source" className="tab-body source-tab">
-          <div className="source-context">
-            <Text size="xs" c="dimmed">{hostSourceLabel}</Text>
-            <Badge color="violet" variant="light">
-              HOST RECORDER · NOT GUEST PYTHON
-            </Badge>
-          </div>
-          <CodeMirror
-            value={acceptanceSource}
-            height="100%"
-            theme={vscodeDark}
-            extensions={[EditorView.lineWrapping]}
+            extensions={[python(), EditorView.lineWrapping, sourceHighlight]}
             editable={false}
             basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
           />
@@ -348,55 +219,36 @@ function Inspector({
 function FilesystemPanel({
   run,
   node,
-  checkpoints,
 }: {
   run: LabRun;
   node: TraceNode;
-  checkpoints: Record<string, CheckpointMetadata>;
 }) {
-  const [selectedCheckpoint, setSelectedCheckpoint] = useState('');
-  const options = useMemo(() => Object.values(checkpoints), [checkpoints]);
-
-  useEffect(() => {
-    if (node.checkpoint && checkpoints[node.checkpoint]) {
-      setSelectedCheckpoint(node.checkpoint);
-      return;
-    }
-    setSelectedCheckpoint(options[0]?.identity ?? '');
-  }, [node.checkpoint, options, checkpoints]);
-
-  const selected = selectedCheckpoint ? checkpoints[selectedCheckpoint] : undefined;
-
   return (
-    <section className="panel fs-panel" aria-label="Recorded identities">
+    <section className="panel fs-panel" aria-label="Filesystem changes">
       <div className="panel-heading">
-        <Group gap={8}><Folder size={16} /><Text fw={700} size="sm">Recorded identities</Text></Group>
-        <Badge color="teal" variant="light">digests only</Badge>
+        <Group gap={8}><Folder size={16} /><Text fw={700} size="sm">Filesystem changes</Text></Group>
+        <Badge color={node.rawEvent?.workspace_changes?.length ? 'teal' : 'gray'} variant="light">{node.rawEvent?.workspace_changes?.length ?? 0} paths</Badge>
       </div>
       <div className="checkpoint-bar">
         <div>
-          <Text size="xs" c="dimmed">Selected checkpoint identity</Text>
-          <Text fw={700} size="sm">{selected ? selected.identity : 'none'}</Text>
+          <Text size="xs" c="dimmed">Workspace</Text>
+          <Text fw={700} size="sm">{node.rawEvent?.workspace_id ?? 'No workspace linked'}</Text>
         </div>
-        <code>{selected ? selected.status : '-'}</code>
+        <code>{node.rawEvent?.agent_id ?? '-'}</code>
       </div>
       <div className="fs-tree">
-        <Select
-          data={options.map((item) => ({
-            value: item.identity,
-            label: `${item.identity.slice(0, 24)} (${item.status}, seq ${item.sequence})`,
-          }))}
-          value={selected?.identity ?? ''}
-          onChange={(value) => setSelectedCheckpoint(value ?? '')}
-          placeholder="Select checkpoint"
-          size="xs"
-          disabled={!options.length}
-        />
+        {(node.rawEvent?.workspace_changes ?? []).length ? (node.rawEvent?.workspace_changes ?? []).map((change) => (
+          <button className="fs-change" key={change.path} type="button">
+            <Badge size="xs" color={change.kind === 'added' ? 'green' : change.kind === 'deleted' ? 'red' : 'yellow'}>{change.kind}</Badge>
+            <span>{change.path}</span>
+            <code>{change.size ?? 0} B</code>
+          </button>
+        )) : <Text size="sm" c="dimmed">No path-level change recorded for this span.</Text>}
       </div>
       <Divider />
-      <div className="file-preview">
-        <Text size="xs" c="dimmed">Captured references (digests)</Text>
-        <JsonViewer label="run.refs" value={run.refs} />
+      <div className="file-preview ref-summary">
+        <Text size="xs" c="dimmed">Run evidence identities</Text>
+        {run.refs.map((ref) => <div className="ref-row" key={ref.kind}><span>{ref.kind}</span><code>{ref.sha256.slice(0, 18)}…</code></div>)}
       </div>
     </section>
   );
@@ -469,7 +321,8 @@ export default function App() {
   const selectedRun = runOptions.find((run) => run.key === selectedRunId) ?? null;
 
   useEffect(() => {
-    setActiveNodeId(selectedRun?.trace[0]?.id ?? '');
+    const defaultNode = selectedRun?.trace.find((node) => node.rawEvent?.agent_id === 'orchestrator' && node.rawEvent.source) ?? selectedRun?.trace[0];
+    setActiveNodeId(defaultNode?.id ?? '');
   }, [selectedRun]);
 
   const selectedNode = useMemo(() => {
@@ -513,7 +366,7 @@ export default function App() {
               <Text fw={800} size="sm">Pysolate Lab Debugger</Text>
               <Text size="xs" c="dimmed">{datasetSummary}</Text>
             </div>
-            <Button size="compact-xs" onClick={onUpload}>Load v3 JSON</Button>
+            <Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button>
             <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={handleLoad} />
           </Group>
         </AppShell.Header>
@@ -534,7 +387,7 @@ export default function App() {
             <div className="theme-icon" style={{ width: 28, height: 28 }}><Workflow size={16} /></div>
             <div>
               <Text fw={800} size="sm">Pysolate Lab Debugger</Text>
-              <Text size="xs" c="dimmed">Per-run recorded traces and captured identities</Text>
+              <Text size="xs" c="dimmed">Agent causality, Python source spans, and workspace diffs</Text>
             </div>
           </Group>
 
@@ -565,7 +418,7 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <Button size="compact-xs" onClick={onUpload}>Load v3 JSON</Button>
+            <Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button>
             <input
               ref={fileInputRef}
               type="file"
@@ -582,11 +435,11 @@ export default function App() {
         </Group>
       </AppShell.Header>
       <AppShell.Main className="app-main">
-        <TracePanel trace={selectedRun.trace} activeId={activeNodeId} onSelect={setActiveNodeId} />
+        <AgentTimeline run={selectedRun.run} activeId={activeNodeId} onSelect={setActiveNodeId} />
         <Divider orientation="vertical" />
         <Inspector node={selectedNode ?? selectedRun.trace[0]} run={selectedRun.run} />
         <Divider orientation="vertical" />
-        <FilesystemPanel key={selectedRun.key} run={selectedRun.run} node={selectedNode ?? selectedRun.trace[0]} checkpoints={selectedRun.checkpoints} />
+        <FilesystemPanel key={selectedRun.key} run={selectedRun.run} node={selectedNode ?? selectedRun.trace[0]} />
       </AppShell.Main>
     </AppShell>
   );

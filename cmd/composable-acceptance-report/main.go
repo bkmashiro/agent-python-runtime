@@ -58,15 +58,24 @@ type webRef struct {
 	SHA256 string `json:"sha256"`
 }
 
+type webChildProgram struct {
+	ID             string `json:"id"`
+	Role           string `json:"role"`
+	Source         string `json:"source"`
+	ExpectedResult string `json:"expected_result"`
+	OutputPath     string `json:"output_path"`
+}
+
 type webScenario struct {
-	ID                        string `json:"id"`
-	GuestSource               string `json:"guest_source"`
-	FileCount                 uint32 `json:"file_count"`
-	ChildAnalysisCount        uint32 `json:"child_analysis_count"`
-	SelectedChild             int    `json:"selected_child"`
-	HasRepeatedTransformation bool   `json:"has_repeated_transformation"`
-	HasWaitBoundary           bool   `json:"has_wait_boundary"`
-	HasObservation            bool   `json:"has_observation"`
+	ID                        string            `json:"id"`
+	GuestSource               string            `json:"guest_source"`
+	ChildPrograms             []webChildProgram `json:"child_programs"`
+	FileCount                 uint32            `json:"file_count"`
+	ChildAnalysisCount        uint32            `json:"child_analysis_count"`
+	SelectedChild             int               `json:"selected_child"`
+	HasRepeatedTransformation bool              `json:"has_repeated_transformation"`
+	HasWaitBoundary           bool              `json:"has_wait_boundary"`
+	HasObservation            bool              `json:"has_observation"`
 }
 
 type webMetrics struct {
@@ -124,7 +133,7 @@ func writeLabProjection(root string, corpus composableacceptance.Corpus, report 
 
 	runsByKey := make(map[string]struct{}, len(projection.Runs))
 	web := webDataset{
-		SchemaVersion: "pysolate.lab-web-debugger.v3",
+		SchemaVersion: "pysolate.lab-web-debugger.v4",
 		ReportSHA256:  reportSHA, SourceCommit: report.SourceCommit,
 		CorpusSHA256: report.CorpusSHA256, Model: report.Model,
 		Runs: make([]webRun, 0, len(projection.Runs)),
@@ -186,9 +195,14 @@ func writeLabProjection(root string, corpus composableacceptance.Corpus, report 
 }
 
 func projectWebScenario(scenario composableacceptance.Scenario) webScenario {
+	children := make([]webChildProgram, 0, len(scenario.ChildPrograms))
+	for _, child := range scenario.ChildPrograms {
+		children = append(children, webChildProgram{ID: child.ID, Role: child.Role, Source: child.Source, ExpectedResult: child.ExpectedResult, OutputPath: child.OutputPath})
+	}
 	return webScenario{
 		ID:                        scenario.ID,
 		GuestSource:               scenario.GuestSource,
+		ChildPrograms:             children,
 		FileCount:                 uint32(len(scenario.Files)),
 		ChildAnalysisCount:        uint32(len(scenario.ChildAnalyses)),
 		SelectedChild:             scenario.SelectedChild,

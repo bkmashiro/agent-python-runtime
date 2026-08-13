@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	CorpusSchemaVersion = "pysolate.spark-scenario-corpus.v2"
-	ReportSchemaVersion = "pysolate.composable-acceptance-report.v2"
+	CorpusSchemaVersion = "pysolate.spark-scenario-corpus.v3"
+	ReportSchemaVersion = "pysolate.composable-acceptance-report.v3"
 )
 
 const (
@@ -121,9 +121,34 @@ var terminalByRowStatus = map[string]terminalExpectation{
 	rowStatusSkipped:  {outcome: TraceEventOutcomeSkipped},
 }
 
+type SourceRange struct {
+	SourceID  string `json:"source_id"`
+	File      string `json:"file"`
+	StartLine uint32 `json:"start_line"`
+	EndLine   uint32 `json:"end_line"`
+}
+
+type WorkspaceChange struct {
+	Path         string `json:"path"`
+	Kind         string `json:"kind"`
+	BeforeSHA256 string `json:"before_sha256,omitempty"`
+	AfterSHA256  string `json:"after_sha256,omitempty"`
+	Size         uint64 `json:"size,omitempty"`
+}
+
 type TraceEvent struct {
 	Sequence              uint32            `json:"sequence"`
 	ParentSequence        *uint32           `json:"parent_sequence,omitempty"`
+	SpanID                string            `json:"span_id"`
+	ParentSpanID          string            `json:"parent_span_id,omitempty"`
+	AgentID               string            `json:"agent_id"`
+	ParentAgentID         string            `json:"parent_agent_id,omitempty"`
+	AgentRole             string            `json:"agent_role"`
+	StartedMillis         float64           `json:"started_millis"`
+	EndedMillis           float64           `json:"ended_millis"`
+	Source                *SourceRange      `json:"source,omitempty"`
+	WorkspaceID           string            `json:"workspace_id,omitempty"`
+	WorkspaceChanges      []WorkspaceChange `json:"workspace_changes,omitempty"`
 	Type                  TraceEventType    `json:"type"`
 	Action                string            `json:"action"`
 	Outcome               TraceEventOutcome `json:"outcome"`
@@ -187,18 +212,27 @@ type Corpus struct {
 	Scenarios     []Scenario `json:"scenarios"`
 }
 
+type ChildProgram struct {
+	ID             string `json:"id"`
+	Role           string `json:"role"`
+	Source         string `json:"source"`
+	ExpectedResult string `json:"expected_result"`
+	OutputPath     string `json:"output_path"`
+}
+
 type Scenario struct {
-	ID                     string   `json:"id"`
-	GuestSource            string   `json:"guest_source"`
-	Task                   string   `json:"task"`
-	Files                  []string `json:"files"`
-	ChildAnalyses          []string `json:"child_analyses"`
-	RepeatedTransformation string   `json:"repeated_transformation"`
-	WaitBoundary           string   `json:"wait_boundary"`
-	Observation            string   `json:"observation"`
-	SelectedChild          int      `json:"selected_child"`
-	ExpectedArtifact       string   `json:"expected_artifact"`
-	ProhibitedOutputs      []string `json:"prohibited_outputs"`
+	ID                     string         `json:"id"`
+	GuestSource            string         `json:"guest_source"`
+	ChildPrograms          []ChildProgram `json:"child_programs"`
+	Task                   string         `json:"task"`
+	Files                  []string       `json:"files"`
+	ChildAnalyses          []string       `json:"child_analyses"`
+	RepeatedTransformation string         `json:"repeated_transformation"`
+	WaitBoundary           string         `json:"wait_boundary"`
+	Observation            string         `json:"observation"`
+	SelectedChild          int            `json:"selected_child"`
+	ExpectedArtifact       string         `json:"expected_artifact"`
+	ProhibitedOutputs      []string       `json:"prohibited_outputs"`
 }
 
 type Report struct {
@@ -294,8 +328,13 @@ func (value Corpus) Validate() error {
 }
 
 func (scenario Scenario) validate() error {
-	if !idRE.MatchString(scenario.ID) || len(scenario.GuestSource) < 20 || len(scenario.GuestSource) > 32_768 || len(scenario.Task) < 20 || len(scenario.Files) < 2 || len(scenario.ChildAnalyses) != 2 || scenario.SelectedChild < 0 || scenario.SelectedChild > 1 || scenario.ExpectedArtifact == "" || scenario.RepeatedTransformation == "" || scenario.WaitBoundary == "" || scenario.Observation == "" {
+	if !idRE.MatchString(scenario.ID) || len(scenario.GuestSource) < 20 || len(scenario.GuestSource) > 32_768 || len(scenario.ChildPrograms) != 2 || len(scenario.Task) < 20 || len(scenario.Files) < 2 || len(scenario.ChildAnalyses) != 2 || scenario.SelectedChild < 0 || scenario.SelectedChild > 1 || scenario.ExpectedArtifact == "" || scenario.RepeatedTransformation == "" || scenario.WaitBoundary == "" || scenario.Observation == "" {
 		return ErrInvalid
+	}
+	for _, child := range scenario.ChildPrograms {
+		if !idRE.MatchString(child.ID) || !idRE.MatchString(child.Role) || len(child.Source) < 20 || len(child.Source) > 32_768 || child.ExpectedResult == "" || child.OutputPath == "" || child.OutputPath[0] == '/' || bytes.Contains([]byte(child.OutputPath), []byte("..")) {
+			return ErrInvalid
+		}
 	}
 	for _, path := range scenario.Files {
 		if path == "" || path[0] == '/' || bytes.Contains([]byte(path), []byte("..")) {
@@ -375,10 +414,37 @@ func (value Row) validateTrace(expectation terminalExpectation) error {
 	}
 	var previousElapsed float64
 	wasPreviousSet := false
+	seenSpans := make(map[string]struct{}, len(value.Trace))
 	for index, event := range value.Trace {
 		if !isTraceEventTypeValid(event.Type) || !isTraceEventOutcomeValid(event.Outcome) || !isTraceEventActionValid(event.Action) {
 			return invalidTrace("invalid trace enum")
 		}
+		if !idRE.MatchString(event.SpanID) || !idRE.MatchString(event.AgentID) || !idRE.MatchString(event.AgentRole) || !isFiniteNonNegativeFloat(event.StartedMillis) || !isFiniteNonNegativeFloat(event.EndedMillis) || event.EndedMillis < event.StartedMillis {
+			return invalidTrace("invalid span metadata")
+		}
+		if _, duplicate := seenSpans[event.SpanID]; duplicate {
+			return invalidTrace("duplicate span id")
+		}
+		if event.ParentSpanID != "" {
+			if _, found := seenSpans[event.ParentSpanID]; !found {
+				return invalidTrace("missing parent span")
+			}
+		}
+		if event.ParentAgentID != "" && !idRE.MatchString(event.ParentAgentID) {
+			return invalidTrace("invalid parent agent")
+		}
+		if event.Source != nil && (!idRE.MatchString(event.Source.SourceID) || event.Source.File == "" || event.Source.File[0] == '/' || event.Source.StartLine == 0 || event.Source.EndLine < event.Source.StartLine) {
+			return invalidTrace("invalid source range")
+		}
+		if event.WorkspaceID != "" && !idRE.MatchString(event.WorkspaceID) {
+			return invalidTrace("invalid workspace id")
+		}
+		for _, change := range event.WorkspaceChanges {
+			if change.Path == "" || change.Path[0] == '/' || bytes.Contains([]byte(change.Path), []byte("..")) || !idRE.MatchString(change.Kind) || (change.BeforeSHA256 != "" && !digestRE.MatchString(change.BeforeSHA256)) || (change.AfterSHA256 != "" && !digestRE.MatchString(change.AfterSHA256)) {
+				return invalidTrace("invalid workspace change")
+			}
+		}
+		seenSpans[event.SpanID] = struct{}{}
 		expectedSequence := uint32(index + 1)
 		if event.Sequence != expectedSequence {
 			return invalidTrace("non-sequential trace")

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildTraceNodes, collectCheckpointMetadata, exampleTrace, type TraceAdapterEvent } from './trace';
+import { buildTraceNodes, collectCheckpointMetadata, type TraceAdapterEvent } from './trace';
 
 const trace: TraceAdapterEvent[] = [
   {
     sequence: 1,
     parent_sequence: null,
+    span_id: 'run', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0, ended_millis: 0,
     type: 'run_start',
     action: 'run.start',
     outcome: 'started',
@@ -18,6 +19,7 @@ const trace: TraceAdapterEvent[] = [
   {
     sequence: 2,
     parent_sequence: 1,
+    span_id: 'workspace', parent_span_id: 'run', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0.1, ended_millis: 0.2,
     type: 'workspace',
     action: 'run.mechanism',
     outcome: 'ok',
@@ -31,6 +33,7 @@ const trace: TraceAdapterEvent[] = [
   {
     sequence: 3,
     parent_sequence: 2,
+    span_id: 'terminal', parent_span_id: 'workspace', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0.4, ended_millis: 0.4,
     type: 'run_terminal',
     action: 'run.terminal',
     outcome: 'ok',
@@ -45,18 +48,14 @@ const trace: TraceAdapterEvent[] = [
 ];
 
 describe('trace adapter', () => {
-  it('groups recorded events by mechanism without losing raw events', () => {
+  it('preserves chronological recorded events for the timeline', () => {
     const nodes = buildTraceNodes(trace, 'observed');
-    expect(nodes).toHaveLength(6);
-    expect(nodes[0]).toMatchObject({ id: 'run', synthetic: true, depth: 0 });
-    expect(nodes[1]).toMatchObject({ id: 'group:run-lifecycle', parent: 'run', synthetic: true, depth: 1 });
-    expect(nodes[2]).toMatchObject({ id: 'event:1', parent: 'group:run-lifecycle', synthetic: false, depth: 2 });
-    expect(nodes[3]).toMatchObject({ id: 'event:3', parent: 'group:run-lifecycle', synthetic: false, depth: 2 });
-    expect(nodes[4]).toMatchObject({ id: 'group:workspace', parent: 'run', synthetic: true, depth: 1 });
-    expect(nodes[5]).toMatchObject({ id: 'event:2', parent: 'group:workspace', synthetic: false, depth: 2 });
-    expect(nodes[2].duration).toContain('ms');
-    expect(nodes[2].input).toBe(null);
-    expect(nodes[5].input).toMatchObject({ digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' });
+    expect(nodes).toHaveLength(3);
+    expect(nodes.map((node) => node.id)).toEqual(['event:1', 'event:2', 'event:3']);
+    expect(nodes.every((node) => !node.synthetic)).toBe(true);
+    expect(nodes[0].duration).toContain('ms');
+    expect(nodes[0].input).toBe(null);
+    expect(nodes[1].input).toMatchObject({ digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' });
   });
 
   it('collects checkpoint identities from trace metadata', () => {
@@ -68,8 +67,4 @@ describe('trace adapter', () => {
     });
   });
 
-  it('exposes example trace metadata', () => {
-    expect(exampleTrace.length).toBeGreaterThan(0);
-    expect(exampleTrace[0].action).toBe('run.start');
-  });
 });

@@ -6,6 +6,7 @@ const validTrace = [
   {
     sequence: 1,
     parent_sequence: null,
+    span_id: 'run', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0, ended_millis: 0,
     type: 'run_start',
     action: 'run.start',
     outcome: 'started',
@@ -19,6 +20,7 @@ const validTrace = [
   {
     sequence: 2,
     parent_sequence: 1,
+    span_id: 'workspace', parent_span_id: 'run', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0, ended_millis: 0,
     type: 'workspace',
     action: 'run.mechanism',
     outcome: 'ok',
@@ -32,6 +34,7 @@ const validTrace = [
   {
     sequence: 3,
     parent_sequence: 2,
+    span_id: 'terminal', parent_span_id: 'workspace', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0, ended_millis: 0,
     type: 'run_terminal',
     action: 'run.terminal',
     outcome: 'ok',
@@ -48,6 +51,10 @@ const validTrace = [
 const scenario = {
   id: 'workload-one',
   guest_source: 'values = [3, 1, 2]\nresult = sorted(values)',
+  child_programs: [
+    { id: 'researcher', role: 'researcher', source: "result = 'research result'", expected_result: 'research result', output_path: 'researcher.txt' },
+    { id: 'reviewer', role: 'reviewer', source: "result = 'review result'", expected_result: 'review result', output_path: 'reviewer.txt' },
+  ],
   file_count: 2,
   child_analysis_count: 2,
   selected_child: 0,
@@ -89,7 +96,7 @@ const baseRun = {
 };
 
 const baseDataset = {
-  schema_version: 'pysolate.lab-web-debugger.v3',
+  schema_version: 'pysolate.lab-web-debugger.v4',
   report_sha256: digest,
   source_commit: 'b'.repeat(40),
   corpus_sha256: digest,
@@ -98,7 +105,7 @@ const baseDataset = {
 };
 
 describe('debugger dataset validation', () => {
-  it('accepts the v3 per-run schema with complete Guest source and trace', () => {
+  it('accepts the v4 per-run schema with agent spans, Guest source, and trace', () => {
     const dataset = validateDataset(JSON.parse(JSON.stringify(baseDataset)));
     expect(dataset.runs).toHaveLength(1);
     expect(dataset.runs[0].run_id).toBe('run-workload-one-fresh');
@@ -127,6 +134,7 @@ describe('debugger dataset validation', () => {
       {
         ...validTrace[2],
         parent_sequence: 1,
+    span_id: 'workspace', parent_span_id: 'run', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0, ended_millis: 0,
       },
     ];
     expect(() => validateDataset(invalid)).toThrow(/mechanism/i);
@@ -143,6 +151,7 @@ describe('debugger dataset validation', () => {
         action: 'run.terminal',
         sequence: 2,
         parent_sequence: 1,
+    span_id: 'workspace', parent_span_id: 'run', agent_id: 'runtime', agent_role: 'host-runtime', started_millis: 0, ended_millis: 0,
         outcome: 'skipped',
       },
     ];

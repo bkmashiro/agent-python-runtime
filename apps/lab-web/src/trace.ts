@@ -1,5 +1,3 @@
-import type { LabRun } from './debuggerData';
-
 export type Evidence = 'observed' | 'verified-example' | 'source-bound' | 'instrumentation-preview';
 
 export type MechanismGroup =
@@ -45,6 +43,16 @@ export interface CheckpointMetadata {
 export interface TraceAdapterEvent {
   sequence: number;
   parent_sequence?: number | null;
+  span_id: string;
+  parent_span_id?: string;
+  agent_id: string;
+  parent_agent_id?: string;
+  agent_role: string;
+  started_millis: number;
+  ended_millis: number;
+  source?: { source_id: string; file: string; start_line: number; end_line: number };
+  workspace_id?: string;
+  workspace_changes?: Array<{ path: string; kind: string; before_sha256?: string; after_sha256?: string; size?: number }>;
   type: string;
   action: string;
   outcome: string;
@@ -95,6 +103,16 @@ function eventNode(event: TraceAdapterEvent, evidence: Evidence, parent: string,
     duration: `${event.relative_elapsed_millis.toFixed(2)} ms`,
     params: {
       sequence: event.sequence,
+      span_id: event.span_id,
+      parent_span_id: event.parent_span_id ?? null,
+      agent_id: event.agent_id,
+      parent_agent_id: event.parent_agent_id ?? null,
+      agent_role: event.agent_role,
+      started_millis: event.started_millis,
+      ended_millis: event.ended_millis,
+      source: event.source ?? null,
+      workspace_id: event.workspace_id ?? null,
+      workspace_changes: event.workspace_changes ?? [],
       parent_sequence: event.parent_sequence ?? null,
       relative_elapsed_millis: event.relative_elapsed_millis,
       count: event.count,
@@ -110,35 +128,7 @@ function eventNode(event: TraceAdapterEvent, evidence: Evidence, parent: string,
 }
 
 export function buildTraceNodes(events: ReadonlyArray<TraceAdapterEvent>, evidence: Evidence): TraceNode[] {
-  if (!events.length) return [];
-
-  const grouped = new Map<MechanismGroup, TraceAdapterEvent[]>();
-  for (const event of events) {
-    const group = mechanismGroup(event.type);
-    grouped.set(group, [...(grouped.get(group) ?? []), event]);
-  }
-
-  const root: TraceNode = {
-    id: 'run', depth: 0, kind: 'run', group: 'run-lifecycle', title: 'Recorded run',
-    summary: `${events.length} recorded events`, evidence, duration: `${events.at(-1)?.relative_elapsed_millis.toFixed(2) ?? '0.00'} ms`,
-    params: { event_count: events.length }, input: null, output: null, checkpoint: '', synthetic: true,
-  };
-  const nodes = [root];
-
-  for (const group of mechanismOrder) {
-    const groupEvents = grouped.get(group);
-    if (!groupEvents?.length) continue;
-    const groupId = `group:${group}`;
-    nodes.push({
-      id: groupId, parent: root.id, depth: 1, kind: group, group,
-      title: group, summary: `${groupEvents.length} recorded ${groupEvents.length === 1 ? 'event' : 'events'}`,
-      evidence, duration: `${groupEvents.at(-1)?.relative_elapsed_millis.toFixed(2) ?? '0.00'} ms`,
-      params: { event_count: groupEvents.length, event_type: group }, input: null, output: null,
-      checkpoint: '', synthetic: true,
-    });
-    nodes.push(...groupEvents.map((event) => eventNode(event, evidence, groupId, 2)));
-  }
-  return nodes;
+  return events.map((event) => eventNode(event, evidence, '', 0));
 }
 
 export function collectCheckpointMetadata(events: ReadonlyArray<TraceAdapterEvent>): Record<string, CheckpointMetadata> {
@@ -159,92 +149,3 @@ export function collectCheckpointMetadata(events: ReadonlyArray<TraceAdapterEven
   }
   return checkpoints;
 }
-
-export const exampleRun: Omit<LabRun, 'trace'> = {
-  run_id: 'example-workflow',
-  workload_id: 'workspace-summary',
-  treatment: 'fresh',
-  recorded_status: 'passed',
-  terminal_disposition: 'discarded',
-  refs: [
-    { kind: 'artifact', sha256: 'sha256:1111111111111111111111111111111111111111111111111111111111111111' },
-    { kind: 'capability_plan', sha256: 'sha256:2222222222222222222222222222222222222222222222222222222222222222' },
-    { kind: 'execution', sha256: 'sha256:3333333333333333333333333333333333333333333333333333333333333333' },
-    { kind: 'workspace_tree', sha256: 'sha256:4444444444444444444444444444444444444444444444444444444444444444' },
-  ],
-  metrics: {
-    guest_created: 1,
-    guest_destroyed: 1,
-    cache_hits: 0,
-    flight_followers: 0,
-    changed_bytes: 279,
-    materialized_bytes: 279,
-    relative_elapsed_millis: 0.16,
-  },
-  scenario: {
-    id: 'workspace-summary',
-    guest_source: 'values = [3, 1, 2]\nresult = sorted(values)',
-    file_count: 1,
-    child_analysis_count: 2,
-    selected_child: 0,
-    has_repeated_transformation: true,
-    has_wait_boundary: true,
-    has_observation: true,
-  },
-};
-
-export const exampleTrace: TraceAdapterEvent[] = [
-  {
-    sequence: 1,
-    parent_sequence: null,
-    type: 'run_start',
-    action: 'run.start',
-    outcome: 'started',
-    count: 0,
-    relative_elapsed_millis: 0.01,
-    input_sha256: '',
-    output_sha256: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
-    checkpoint_sha256: 'sha256:aaaa111111111111111111111111111111111111111111111111111111111111aa',
-    checkpoint_status: 'captured',
-  },
-  {
-    sequence: 2,
-    parent_sequence: 1,
-    type: 'observation',
-    action: 'sources.demo_catalog',
-    outcome: 'ok',
-    count: 1,
-    relative_elapsed_millis: 0.08,
-    input_sha256: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
-    output_sha256: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
-    checkpoint_sha256: 'sha256:bb11222222222222222222222222222222222222222222222222222222222222bb',
-    checkpoint_status: 'captured',
-  },
-  {
-    sequence: 3,
-    parent_sequence: 2,
-    type: 'workspace',
-    action: 'sources.benchmark_manifest',
-    outcome: 'ok',
-    count: 1,
-    relative_elapsed_millis: 0.12,
-    input_sha256: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
-    output_sha256: 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
-    checkpoint_sha256: 'sha256:cc33333333333333333333333333333333333333333333333333333333333333cc',
-    checkpoint_status: 'captured',
-  },
-  {
-    sequence: 4,
-    parent_sequence: 3,
-    type: 'run_terminal',
-    action: 'run.terminal',
-    outcome: 'ok',
-    count: 1,
-    relative_elapsed_millis: 0.16,
-    input_sha256: 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
-    output_sha256: 'sha256:4444444444444444444444444444444444444444444444444444444444444444',
-    checkpoint_sha256: 'sha256:dd44444444444444444444444444444444444444444444444444444444444444dd',
-    checkpoint_status: 'captured',
-    terminal_disposition: 'discarded',
-  },
-];

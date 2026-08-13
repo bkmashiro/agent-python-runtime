@@ -14,7 +14,8 @@ func TestComposableAcceptanceProjectsBodyFreeStudyAndRuns(t *testing.T) {
 	corpus := composableacceptance.Corpus{SchemaVersion: composableacceptance.CorpusSchemaVersion, SourceCommit: strings.Repeat("a", 40), Model: "gpt-5.3-codex-spark"}
 	for index := range 3 {
 		corpus.Scenarios = append(corpus.Scenarios, composableacceptance.Scenario{
-			ID: "scenario-" + string(rune('a'+index)), GuestSource: "values = [3, 1, 2]\nresult = sorted(values)", Task: "bounded private repository scenario task",
+			ID: "scenario-" + string(rune('a'+index)), GuestSource: "values = [3, 1, 2]\nresult = sorted(values)",
+			ChildPrograms: []composableacceptance.ChildProgram{{ID: "left", Role: "researcher", Source: "result = 'left child result'", ExpectedResult: "left child result", OutputPath: "left.txt"}, {ID: "right", Role: "reviewer", Source: "result = 'right child result'", ExpectedResult: "right child result", OutputPath: "right.txt"}}, Task: "bounded private repository scenario task",
 			Files: []string{"a.go", "b.go"}, ChildAnalyses: []string{"private child A", "private child B"},
 			RepeatedTransformation: "normalize twice", WaitBoundary: "wait then resume",
 			Observation: "refresh named observation", SelectedChild: index % 2,
@@ -33,9 +34,9 @@ func TestComposableAcceptanceProjectsBodyFreeStudyAndRuns(t *testing.T) {
 		}
 		for _, treatment := range []composableacceptance.Treatment{composableacceptance.TreatmentFresh, composableacceptance.TreatmentPrepared, composableacceptance.TreatmentCOW} {
 			trace := []composableacceptance.TraceEvent{
-				{Sequence: 1, Type: composableacceptance.TraceEventTypeRunStart, Action: "run.start", Outcome: composableacceptance.TraceEventOutcomeStarted},
-				{Sequence: 2, ParentSequence: traceParent(1), Type: composableacceptance.TraceEventTypeGuestLifecycle, Action: "guest.run", Outcome: composableacceptance.TraceEventOutcomeOK},
-				{Sequence: 3, ParentSequence: traceParent(2), Type: composableacceptance.TraceEventTypeRunTerminal, Action: "run.terminal", Outcome: composableacceptance.TraceEventOutcomeOK, TerminalDisposition: "closed"},
+				{Sequence: 1, SpanID: "run", AgentID: "orchestrator", AgentRole: "orchestrator", Type: composableacceptance.TraceEventTypeRunStart, Action: "run.start", Outcome: composableacceptance.TraceEventOutcomeStarted},
+				{Sequence: 2, ParentSequence: traceParent(1), SpanID: "guest-run", ParentSpanID: "run", AgentID: "orchestrator", AgentRole: "orchestrator", Type: composableacceptance.TraceEventTypeGuestLifecycle, Action: "guest.run", Outcome: composableacceptance.TraceEventOutcomeOK},
+				{Sequence: 3, ParentSequence: traceParent(2), SpanID: "run-terminal", ParentSpanID: "guest-run", AgentID: "orchestrator", AgentRole: "orchestrator", Type: composableacceptance.TraceEventTypeRunTerminal, Action: "run.terminal", Outcome: composableacceptance.TraceEventOutcomeOK, TerminalDisposition: "closed"},
 			}
 			core.Rows = append(core.Rows, composableacceptance.Row{
 				ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, Treatment: treatment, Status: "passed",

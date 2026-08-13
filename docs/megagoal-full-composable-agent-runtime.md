@@ -356,17 +356,17 @@ physical evaluation without requiring durable cache retention.
 **Promise:** A waiting workflow releases its Guest and later continues from small,
 explicit, immutable state—not a Python continuation.
 
-- [ ] Define a minimal synchronous workflow skeleton with explicit compute,
+- [x] Define a minimal synchronous workflow skeleton with explicit compute,
   observation, wait/refresh, join, and terminal nodes.
-- [ ] Persist only node identities, edges, immutable outputs/observations/roots,
+- [x] Persist only node identities, edges, immutable outputs/observations/roots,
   structured continuation input, freshness/policy, and disposition.
-- [ ] Destroy the Guest at a deterministic wait boundary and prove destruction.
-- [ ] Start a fresh Guest and re-evaluate unchanged compute nodes through local
+- [x] Destroy the Guest at a deterministic wait boundary and prove destruction.
+- [x] Start a fresh Guest and re-evaluate unchanged compute nodes through local
   lookup.
-- [ ] Execute the next live fixture read under current freshness/policy.
-- [ ] Prove changed observation invalidates only transitive descendants.
-- [ ] Prove cache eviction causes safe recomputation.
-- [ ] Prove resume off falls back to an ordinary Harness-directed fresh Run.
+- [x] Execute the next live fixture read under current freshness/policy.
+- [x] Prove changed observation invalidates only transitive descendants.
+- [x] Prove cache eviction causes safe recomputation.
+- [x] Prove resume off falls back to an ordinary Harness-directed fresh Run.
 - [ ] Measure retained explicit bytes, lookup/recompute counts, re-evaluation
   latency, and Guest instance-time released in the deterministic model.
 
@@ -567,9 +567,9 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 6 — implement a minimal explicit workflow state machine that destroys a
-Guest at wait, starts a fresh Guest at wake, reuses immutable compute outputs,
-and invalidates only descendants of a refreshed observation.`
+`Track 7 — build the integrated deterministic north-star over real Wazero child
+Guests, streamed parent staging, portable branches, Agent Function reuse,
+single-flight, wait/fresh resume, off-state equivalence, and invalid disposal.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -629,6 +629,16 @@ Add entries here before each track implementation.
   `Guard` proves deterministic Host fixture boundaries only; actual Guest-level
   unknown-behavior enforcement stays open for the integrated fixture and must not
   be described as arbitrary Python purity.
+- 2026-08-13 — Track 6 / `Proceed minimal`: implement exactly one explicit wait
+  per versioned synchronous graph; a general multi-wait DAG scheduler is not
+  required for the north-star. State contains graph/edge identity, node result
+  digests and bodies, observation freshness/policy, immutable root identities,
+  canonical continuation input, wait position, and disposition—never frames,
+  heap, FDs, `/tmp`, Wasm memory, or Guest identity. The Guest is always closed
+  at suspend and completion; resume requires an exact graph/root binding, creates
+  a fresh Guest, refreshes live observations fail-closed, and invalidates only
+  recorded transitive descendants. Multi-wait/general scheduler remains
+  `Deferred for joint review` unless real acceptance work needs it.
 
 ## Completion log
 
@@ -664,6 +674,11 @@ Do not mark umbrella tracks complete from implementation presence alone.
   result records, corruption/eviction recomputation, authority guard fixtures,
   and independent single-flight with cancellation/panic cleanup. Focused and race
   tests pass; Guest-level unknown behavior enforcement stays open.
+- 2026-08-13 — Track 6 mechanism slice: added a graph-bound single-wait workflow,
+  explicit persisted state, fresh Guest factory lifecycle, observation refresh,
+  transitive invalidation, eviction recomputation, resume-off fallback, and
+  body-bounded metrics. Focused and race tests pass; aggregate wait instance-time
+  measurement remains for Track 7.
 
 ## Final reporting contract
 

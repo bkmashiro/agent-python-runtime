@@ -4,14 +4,16 @@ Status: **Active source-of-truth roadmap; Proposed work is not Current.**
 Date: 2026-08-13
 
 This roadmap replaces the earlier linear effect-first ordering. It preserves the
-authority-lifecycle correctness direction while adding the content-addressed
-Agent Function hypothesis as an independent, optional feature track.
+authority-lifecycle correctness direction while making streaming
+authority-staged execution the primary Agent-specific research hypothesis.
+Content-addressed Agent Functions remain an independent optional reuse track.
 
 Related decisions:
 
 - [product direction](product-direction.md)
 - [authority-lifecycle positioning](authority-lifecycle-positioning.md)
 - [content-addressed Agent Functions](content-addressed-agent-functions.md)
+- [streaming authority-staged execution](streaming-authority-staged-execution.md)
 - [Cloudflare comparison](research/cloudflare-code-mode-comparison.md)
 
 ## Product objective
@@ -22,6 +24,9 @@ or density behavior:
 
 ```text
 stable minimal Run contract
+├─ optional incremental source validation / streaming local execution
+├─ optional eager preflight of Host-qualified speculative-safe reads
+├─ optional streamed subagent fan-out
 ├─ optional immutable workspace roots / branches
 ├─ optional local content-addressed result reuse
 ├─ optional workflow re-evaluation at explicit I/O boundaries
@@ -60,6 +65,10 @@ These are Pysolate's baseline contract, not feature flags:
 
 | Mechanism | Initial toggle concept | May operate without | Hard dependency | Required fallback when off |
 |---|---|---|---|---|
+| Incremental source validation | `incremental_validation=off|on` | every execution optimization | append-only source stream; exact target-Guest parser contract | buffer and validate complete source |
+| Streaming local execution | `streaming_execution=off|local` | tools, cache, memory COW, subagent fan-out | incremental validation; private unpublished state | ordinary complete-source fresh Run |
+| Eager speculative reads | per-capability `speculative_read=off|eager` | result cache, memory COW, external writes | Host-qualified `read_only + idempotent + speculative_safe`; canonical closed arguments; speculation budget | dispatch only when normally reached after admission |
+| Streamed subagent fan-out | `streamed_fanout=off|staged` | cache, external writes, memory COW | closed child descriptor; private child state; publication barrier | launch children after parent plan seals |
 | Persistent workspace | `workspace.mode=none|direct` | cache, playback, effects, COW | none | no `/workspace`; structured input/output only |
 | Immutable workspace roots / branches | `workspace.versioning=off|immutable` | result cache, memory COW, effects | persistent workspace | direct rooted workspace |
 | Private workspace attempt | `workspace.write_mode=direct|attempt` | result cache, playback, memory COW | persistent workspace | current explicit direct-write semantics |
@@ -132,6 +141,59 @@ optimization may suppress, duplicate, or reinterpret its dispatch.
 - attempts off means documented direct write; it does not claim rollback;
 - verifier off means no independent-verification claim;
 - Lab off means no projection side effects.
+
+### Rule 8: eager read speculation is explicit authority
+
+A closed call may dispatch before control-flow reach only when the Host adapter
+qualifies it as `read_only + idempotent + speculative_safe` and a separate
+speculation budget admits it. Other calls require confirmed dynamic reach;
+writes additionally require the final source/authority/approval barrier. An
+invalid or abandoned program may waste eager read resources, but may not publish
+filesystem state or dispatch a write.
+
+## Track S — streaming authority-staged execution
+
+**Promise:** overlap model generation with exact incremental admission, local
+Python execution, selected real reads, and recursive subagent launch without
+allowing incomplete programs to publish files or dispatch writes.
+
+- [ ] freeze append-only stream, import-preamble, complete-suite, and final-seal
+  contracts using the exact target Guest compiler;
+- [ ] execute closed suites in one private module namespace over an immutable
+  input root, private filesystem overlay, and `/tmp`;
+- [ ] discard Guest, overlay, outputs, and unpublished state when the final
+  source is invalid or abandoned;
+- [ ] admit eager preflight only for Host-qualified
+  `read_only + idempotent + speculative_safe` calls with canonical immediate
+  arguments and an independent budget;
+- [ ] require actual dynamic reach for all other allowed calls, and keep writes
+  behind final source/authority/approval seal;
+- [ ] bind staged read results to source range, dynamic occurrence, canonical
+  arguments, adapter/grant/policy, freshness, and privacy partition so formal
+  continuation cannot dispatch twice;
+- [ ] count unused eager requests as orphaned speculation rather than hiding
+  their quota, cost, access-log, or privacy consequences;
+- [ ] pipeline one structured parent stream into two staged child Agents, each
+  with a private filesystem branch and no publication/write authority;
+- [ ] compare complete-source baseline, validation-only, local streaming,
+  eager-read streaming, invalid suffix, and parent-invalid fan-out treatments;
+- [ ] measure overlap, end-of-source-to-result latency, invalid/abandoned waste,
+  read cost, overlay bytes, and fan-out critical path.
+
+Definition of Done:
+
+- valid supported programs match ordinary complete-source semantics;
+- eager-qualified unreachable calls may dispatch once and are reported as
+  orphaned waste; unreachable non-qualified calls never dispatch;
+- a reached or preflighted read is never duplicated by final execution;
+- invalid suffixes and invalid parent plans publish no files/results and dispatch
+  no writes;
+- streaming, eager reads, fan-out, prepared runtime, memory COW, and cache each
+  retain an independent off-state.
+
+Stop/reframe if useful calls rarely close early, generation/read overlap is
+small, invalid-source waste is excessive, provider policy excludes most reads,
+or supported Python semantics become unnaturally narrow.
 
 ## Recommended product profiles
 
@@ -418,33 +480,40 @@ tracks:
 
 ```text
 A: orthogonality harness and explicit fallbacks
-→ B: whole-Run local cache + separate single-flight
-→ C: one React-like fresh re-evaluation workflow
-→ D: portable immutable roots / recursive filesystem branches
-→ F: prepared runtime and memory COW measured against the same workload
+→ S1: incremental target-Guest validation, no execution
+→ S2: streaming local execution with all tools denied and private FS overlay
+→ S3: eager qualified reads plus reach-gated controls
+→ S4: staged two-child streamed fan-out
+→ F: prepared runtime and memory COW measured against the streaming workload
 ```
 
-Tracks E and G proceed only far enough to support the chosen real workflow and
-truthful claims; they are not prerequisites for B, C, D, or F. Track H waits
-until a stable contract has evidence. Lab work follows Runtime records.
+Tracks B/C remain optional compute-reuse and wait-re-evaluation experiments, not
+the critical path. Track D provides the portable immutable roots/private overlay
+needed by S2/S4 but need not implement general merge first. Tracks E and G
+proceed only far enough to enforce and evidence the streaming read/write
+barriers. Track H waits until a stable contract has evidence. Lab work follows
+Runtime records.
 
 The first combined north-star proof should enable only:
 
 ```text
 baseline fresh Guest
-+ local private cache
-+ single-flight
-+ explicit workflow nodes
-+ immutable input/output roots
++ append-only source stream and exact incremental validation
++ private unpublished filesystem overlay
++ streaming local execution
++ one eager Host-qualified speculative-safe read
++ one non-qualified reach-gated control
++ final write/publication barrier
 ```
 
 Then rerun the same workload independently with:
 
 ```text
+eager speculative reads off/on
+streamed fan-out off/on
 prepared runtime off/on
 memory COW off/on
-playback off/strict (on a captured-read variant)
-workspace attempt off/on (on a write-to-workspace variant)
+local content-addressed cache off/on (optional secondary treatment)
 ```
 
 This factorial comparison is more valuable than one everything-enabled demo: it

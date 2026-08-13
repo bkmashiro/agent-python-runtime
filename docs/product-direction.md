@@ -27,6 +27,17 @@ the authority boundary is what makes the cacheable region enforceable, and
 fresh execution prevents hidden interpreter state from becoming workflow
 continuation state.
 
+The primary Agent-specific Proposed hypothesis is
+[streaming authority-staged execution](streaming-authority-staged-execution.md):
+while a model is still producing append-only Python or structured child tasks,
+Pysolate incrementally validates and speculatively executes closed local suites
+inside unpublished state. Host-qualified `read_only + idempotent +
+speculative_safe` calls with canonical closed arguments may preflight before
+control-flow reach; other calls require actual reach, and external writes remain
+behind complete-source, authority, and approval barriers. Invalid or abandoned
+streams may waste bounded read resources but cannot publish filesystem state or
+dispatch writes.
+
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace
 branching, private attempts, playback, external-write lifecycle, prepared

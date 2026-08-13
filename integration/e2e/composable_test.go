@@ -311,6 +311,38 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	if err := unused.Close(context.Background()); err != nil || unused.PreparedState().Ready {
 		t.Fatalf("unused close err=%v state=%+v", err, unused.PreparedState())
 	}
+
+	cancelRunner, err := baselineFactory.New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelEngine := cancelRunner.(*wazeroengine.Engine)
+	cancelContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := cancelEngine.Run(cancelContext, request, ""); err == nil {
+		t.Fatal("cancelled prepared run succeeded")
+	}
+	if state := cancelEngine.PreparedState(); state.Ready || state.PreparedRuns != 1 || state.FreshFallbackRuns != 0 {
+		t.Fatalf("cancelled prepared slot remained reusable: %+v", state)
+	}
+	if err := cancelEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	replacementRunner, err := baselineFactory.New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacementEngine := replacementRunner.(*wazeroengine.Engine)
+	afterCancel, err := replacementEngine.Run(context.Background(), plainRequest(t, "result = {'after_cancel': True}"), "")
+	if err != nil || responseResult(t, afterCancel) != `{"after_cancel":true}` {
+		t.Fatalf("replacement Engine after cancellation err=%v response=%s", err, afterCancel)
+	}
+	if state := replacementEngine.PreparedState(); state.PreparedRuns != 1 || state.FreshFallbackRuns != 0 || state.Ready {
+		t.Fatalf("replacement prepared state=%+v", state)
+	}
+	if err := replacementEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	cowConfig := config
 	cowConfig.Mechanisms.MemoryCOW = true
 	if _, err := baselineFactory.New(context.Background(), artifact, cowConfig); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {

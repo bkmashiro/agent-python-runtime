@@ -98,6 +98,12 @@ func (evidence Evidence) Validate() error {
 		!sort.StringsAreSorted(evidence.COW.Blockers) {
 		return ErrInvalidEvidence
 	}
+	if (!evidence.Prepared.Selected && (evidence.Prepared.Ready || evidence.Prepared.PreparedRuns != 0 || evidence.Prepared.FreshFallbackRuns != 0 || evidence.Prepared.PrepareMS != 0)) ||
+		(evidence.Prepared.Ready && evidence.Prepared.PreparedRuns != 0) ||
+		(evidence.COW.COWSelected && (!evidence.COW.MemoryCOWCandidate || evidence.COW.Fallback || len(evidence.COW.Blockers) != 0)) ||
+		(evidence.COW.COWSelected && evidence.Mechanisms.Disposition(runtimeconfig.MechanismMemoryCOW) != runtimeconfig.MechanismSelected) {
+		return ErrInvalidEvidence
+	}
 	for index, claim := range evidence.Claims {
 		if (index > 0 && evidence.Claims[index-1] == claim) || !validClaim(claim) {
 			return ErrInvalidEvidence

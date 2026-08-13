@@ -1,0 +1,47 @@
+{
+  "schema_version": "pysolate.linux-prepared-cow-evidence.v1",
+  "source_commit": "4d774960807d720f057950665e46d6ff013dd88b",
+  "source_vcs_modified": false,
+  "test_binary_sha256": "sha256:ee17451ba2a218c24d7c873f1acd47ca828d9efaa5f6461effd753092b66b3a1",
+  "guest_artifact_sha256": "sha256:535b842fde91af9416cd2d52ee22ef4eda7f1eb01a843ba3355945cadf27909c",
+  "platform": {
+    "os": "linux",
+    "arch": "x86_64",
+    "kernel": "6.17.0-35-generic"
+  },
+  "process_exit": 0,
+  "test": {
+    "name": "TestRealGuestPreparedRuntimeSingleUseParity",
+    "status": "pass"
+  },
+  "prepared_probe": {
+    "selected": true,
+    "ready_before_first_run": true,
+    "prepared_runs_before_first_run": 0,
+    "fresh_fallback_runs_before_first_run": 0,
+    "prepare_ms_fixture_observation": 5853.151974
+  },
+  "cow_probe": {
+    "prepared_compatible": true,
+    "memory_count": 1,
+    "imported_memory_count": 0,
+    "memory_fixed": false,
+    "memory_cow_candidate": false,
+    "cow_selected": false,
+    "fallback": true,
+    "blockers": [
+      "linear_memory_not_fixed_private_candidate",
+      "module_instance_state_not_resettable",
+      "static_non_memory_state_not_censused",
+      "wasi_host_state_not_resettable"
+    ]
+  },
+  "integrity": {
+    "remote_input_checksums_verified": true,
+    "downloaded_bundle_checksums_verified": true,
+    "ready_sentinel_observed": true,
+    "remote_staging_removed_after_ack": true,
+    "scheduler_accounting_database_available": false
+  },
+  "interpretation": "Correctness and capability evidence only; fixture timing is not a product-performance result. Memory COW remains fail-closed and deferred."
+}

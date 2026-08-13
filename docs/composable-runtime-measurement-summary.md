@@ -36,6 +36,17 @@ The Runtime records relative monotonic child start/end, changed and materialized
 - One prepared slot is implementable without pooling or reuse; it changes lifecycle timing only, not selected result semantics.
 - COW is deferred. Historical linear-memory COW code does not establish reset of current module/WASI/static state, and restoring the deleted pool/census/allocator stack is not a minimal change.
 
+## Linux prepared/COW probe
+
+The exact Linux x86_64 result is preserved as
+[`evidence/full-composable-linux-prepared-cow.json`](evidence/full-composable-linux-prepared-cow.json).
+Prepared/fresh parity passed. The artifact exposed one non-imported memory, but
+its memory contract was not fixed; module-instance, WASI Host, and static
+non-memory state also remained non-resettable or uncensused. The probe therefore
+reported `MemoryCOWCandidate=false`, selected no COW mode, and retained fresh
+fallback. Its preparation and test durations are fixture observations only, not
+product-performance data.
+
 ## Non-claims
 
 Focused E2E wall times are correctness-run durations, not product latency or speedup measurements. This summary does not claim arbitrary Python purity, real Agent productivity, general fan-out benefit, cache benefit across private partitions, provider behavior, exactly-once writes, deterministic replay, production readiness, or memory savings from COW.

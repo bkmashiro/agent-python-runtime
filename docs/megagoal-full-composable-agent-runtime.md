@@ -1,6 +1,6 @@
 # Megagoal: build the Full Composable Agent Runtime
 
-Status: **Executing; deterministic fixture phase active.**
+Status: **Deterministic Megagoal complete; deferred mechanisms and real Agent acceptance await joint review.**
 Date: 2026-08-13
 Owner: Yuzhe
 Execution repository: `~/projects/agent-python-runtime`
@@ -330,7 +330,9 @@ ordinary work remains a fresh Run.
 - [x] Implement the smallest local project-private whole-function cache behind an
   internal toggle.
 - [ ] Fail closed on Host capability calls, undeclared reads, shared writes,
-  clock/random access, dynamic import, and unknown behavior.
+  clock/random access, dynamic import, and unknown behavior. **Deferred for joint
+  review for arbitrary Guest Python; current Host-instrumented Guard fixtures are
+  bounded and must not be generalized.**
 - [x] Store immutable output/result identity separately from execution evidence.
 - [x] Support bounded retention and eviction followed by safe fresh recomputation.
 - [x] Prove cache off/on output/root equivalence and no fabricated receipts/effects.
@@ -439,16 +441,18 @@ execution.
   capability detection and an off-switch.
 - [x] If supported without weakening freshness, implement and test it; otherwise
   record exact blocker and defer.
-- [ ] On Linux only, probe whether exact prepared memories and fixed-memory artifact
+- [x] On Linux only, probe whether exact prepared memories and fixed-memory artifact
   contracts support private COW safely.
 - [x] If bounded and truthful, implement optional COW with fresh fallback;
   otherwise defer it with source/runtime evidence.
-- [ ] Verify exact artifact/profile, authority reset, private workspace, `/tmp`,
+- [x] Verify exact artifact/profile, authority reset, private workspace, `/tmp`,
   Broker namespace, cancellation, replacement, and no stale Host handles.
-- [ ] Run deterministic fresh/prepared/COW treatment parity before any performance
+- [x] Run deterministic fresh/prepared/COW treatment parity before any performance
   interpretation.
 - [ ] Measure startup phase, request phase, teardown/refill, shared/private memory,
-  and completion rate separately on an authorized Linux environment.
+  and completion rate separately on an authorized Linux environment. **Deferred:
+  the exact Linux probe rejected COW admission before performance interpretation;
+  only the fixture preparation duration was retained as non-performance evidence.**
 
 **Stop/reframe:** Do not recreate a VM, fork Wazero, or claim linear-memory-only
 continuation merely to obtain COW. A well-supported deferral is an acceptable
@@ -470,7 +474,7 @@ experiment is ready but not silently run.
   Agent workloads.
 - [x] Draft the separate real repository-shaped Agent acceptance contract for
   Yuzhe/Hermes joint review; do not execute it in this Megagoal.
-- [ ] Run final local and real-Guest gates, verify signed commits/pushes and a clean
+- [x] Run final local and real-Guest gates, verify signed commits/pushes and a clean
   tree.
 
 ## Deterministic experiment contract
@@ -570,9 +574,10 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 8 — run the prepared/COW probe on an authorized Linux host with the exact
-artifact, verify prepared authority/tmp/workspace teardown parity, and freeze the
-COW deferral or bounded implementation decision from that evidence.`
+`Complete — all feasible deterministic mechanisms are implemented and verified;
+arbitrary Guest-Python purity, general merge/multi-wait scheduling, and Linux COW
+are Deferred for joint review with explicit fresh/off fallback. The separate real
+Agent acceptance contract is prepared but was not executed.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -661,7 +666,12 @@ Add entries here before each track implementation.
   reset of module-instance state, WASI host state, tables/passive segments, or
   unexported mutable globals. The current probe therefore records exact blockers
   and fresh fallback; re-importing the deleted subsystem would be a broad
-  architecture reversal, not a minimal COW patch.
+  architecture reversal, not a minimal COW patch. The exact Linux x86_64 probe
+  subsequently passed prepared/fresh parity but reported one non-imported,
+  non-fixed memory and the same module/WASI/static-state blockers;
+  `MemoryCOWCandidate=false`. Its checksummed body-free result is tracked at
+  `docs/evidence/full-composable-linux-prepared-cow.json`; remote staging was
+  deleted only after downloaded checksum verification.
 
 ## Completion log
 
@@ -711,11 +721,21 @@ Do not mark umbrella tracks complete from implementation presence alone.
   module, prepared/fresh semantic parity, isolated `/tmp`, one-use accounting,
   unused-slot destruction, and a versioned COW blocker probe. Focused and race
   tests pass; exact Linux probe remains next.
+- 2026-08-13 — Track 8 Linux closure: after one wrapper-only retry for this
+  cluster's absent `SLURM_TMPDIR`, the checksummed clean-source-bound Linux test
+  passed. It confirmed prepared/fresh parity and rejected COW candidacy because
+  the one memory was non-fixed plus non-memory reset blockers. The evidence bundle
+  was downloaded and verified before ACK/remote deletion. COW and its performance
+  treatment are deferred for joint review.
 - 2026-08-13 — Track 9 evidence slice: added strict body-free composable evidence
   decoding/claim verification, negative unknown-field/private-body/identity
   substitution fixtures, a Current/Experimental/Deferred mechanism matrix, a
   deterministic non-performance summary, and a separate real repository-shaped
   acceptance contract. Arbitrary Guest-Python purity remains explicitly deferred.
+- 2026-08-13 — Final closure: full Go/vet/Python/syntax/diff gates, focused races,
+  and the five-test real-Guest composable/streaming set passed on current source.
+  Prepared cancellation consumes and retires its slot; replacement is an explicit
+  fresh Engine, not an implicit pool refill. All feasible roadmap gates are closed.
 
 ## Final reporting contract
 

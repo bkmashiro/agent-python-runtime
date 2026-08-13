@@ -49,6 +49,12 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 		func(spec *capability.Spec) { spec.InputSchema = json.RawMessage(`{"type":"object"}`) },
 		func(spec *capability.Spec) { spec.OutputSchema = json.RawMessage(`{"type":"object"}`) },
 		func(spec *capability.Spec) { spec.Python.ResultField = "body" },
+		func(spec *capability.Spec) {
+			spec.EffectClass = capability.EffectExternalRead
+			spec.ReadOnly = true
+			spec.Idempotent = true
+			spec.SpeculativeSafe = true
+		},
 	}
 	for index, mutate := range mutations {
 		registry := capability.NewRegistry()
@@ -68,6 +74,74 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 		if plan.Identity() == firstPlan.Identity() {
 			t.Fatalf("mutation %d did not change plan identity", index)
 		}
+	}
+}
+
+func TestCapabilitySpecRequiresHostQualifiedSpeculationConjunction(t *testing.T) {
+	valid := testSpec()
+	valid.EffectClass = capability.EffectExternalRead
+	valid.ReadOnly = true
+	valid.Idempotent = true
+	valid.SpeculativeSafe = true
+	registry := capability.NewRegistry()
+	if err := registry.Register(valid, basicGrant(t), noopHandler); err != nil {
+		t.Fatalf("qualified speculative read rejected: %v", err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualification, ok := plan.Speculation(valid.Name)
+	if !ok || !qualification.EagerEligible() {
+		t.Fatalf("qualification=%+v ok=%v", qualification, ok)
+	}
+
+	for name, mutate := range map[string]func(*capability.Spec){
+		"not read only":        func(spec *capability.Spec) { spec.ReadOnly = false },
+		"not idempotent":       func(spec *capability.Spec) { spec.Idempotent = false },
+		"not speculative safe": func(spec *capability.Spec) { spec.SpeculativeSafe = false },
+		"workspace write":      func(spec *capability.Spec) { spec.EffectClass = capability.EffectWorkspaceWrite },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			mutate(&candidate)
+			registry := capability.NewRegistry()
+			if err := registry.Register(candidate, basicGrant(t), noopHandler); err != capability.ErrInvalidTool {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
+func TestStreamingPythonPreludeExcludesWriteCapabilities(t *testing.T) {
+	registry := capability.NewRegistry()
+	read := testSpec()
+	read.Name = "fixture.read"
+	read.Version = "fixture.read.v1"
+	read.Description = "read"
+	read.EffectClass = capability.EffectExternalRead
+	read.Python = &capability.PythonProjection{Module: "fixture", Method: "read", Arguments: []string{"path"}}
+	write := read
+	write.Name = "fixture.write"
+	write.Version = "fixture.write.v1"
+	write.Description = "write"
+	write.EffectClass = capability.EffectWorkspaceWrite
+	write.Python = &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"path"}}
+	for _, spec := range []capability.Spec{read, write} {
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamingPrelude := plan.StreamingPythonPrelude()
+	if !strings.Contains(streamingPrelude, "fixture.read") || strings.Contains(streamingPrelude, "fixture.write") {
+		t.Fatalf("unsafe streaming projection: %s", streamingPrelude)
+	}
+	if !strings.Contains(plan.PythonPrelude(), "fixture.write") {
+		t.Fatal("final plan lost write capability")
 	}
 }
 

@@ -3,6 +3,7 @@ package capability_test
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -51,6 +52,36 @@ func TestBrokerDeniesUnregisteredTool(t *testing.T) {
 	}
 	if receipts := broker.SnapshotReceipts(); len(receipts) != 1 || receipts[0].Outcome != "denied" {
 		t.Fatalf("denial receipt=%#v", receipts)
+	}
+}
+
+func TestStreamingBrokerDeniesWriteEvenThroughRawBridge(t *testing.T) {
+	var calls atomic.Uint32
+	registry := capability.NewRegistry()
+	spec := basicSpec("workspace.write_text", "test.workspace.write-text.v1")
+	spec.EffectClass = capability.EffectWorkspaceWrite
+	if err := registry.Register(spec, basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		calls.Add(1)
+		return json.RawMessage(`{}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := []byte(`{"call_id":"stream-write","capability":"workspace.write_text","arguments":{}}`)
+	response, err := broker.CallStreaming(context.Background(), request)
+	if err != nil || !containsCode(response, "streaming_write_denied") || calls.Load() != 0 {
+		t.Fatalf("response=%s calls=%d err=%v", response, calls.Load(), err)
+	}
+	response, err = broker.Call(context.Background(), []byte(`{"call_id":"sealed-write","capability":"workspace.write_text","arguments":{}}`))
+	if err != nil || containsCode(response, "streaming_write_denied") || calls.Load() != 1 {
+		t.Fatalf("sealed response=%s calls=%d err=%v", response, calls.Load(), err)
 	}
 }
 

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ast
+import codeop
 import dis
+import hashlib
 import json
+import operator
 import sys
 import time
 import traceback
@@ -18,11 +21,217 @@ _runtime_config: dict[str, Any] = {}
 _validated_request_json: str | None = None
 _validated_code: types.CodeType | None = None
 _validated_import_globals: dict[str, Any] = {}
+_stream_session: _StreamingSession | None = None
 _SOURCE_CONTRACT_OK = 0
 _SOURCE_CONTRACT_UNSUPPORTED = 1
 _SOURCE_CONTRACT_INVALID = 2
 _FORBIDDEN_DYNAMIC_NAMES = {"__import__", "eval", "exec", "import_module"}
 _FORBIDDEN_IMPORT_ROOTS = {"builtins", "importlib"}
+
+
+class _StreamingSession:
+    """Trusted append-only executor using this exact Guest interpreter."""
+
+    def __init__(self, inputs: Any, speculation_max_calls: int):
+        if not isinstance(speculation_max_calls, int) or isinstance(speculation_max_calls, bool) or speculation_max_calls < 0:
+            raise ValueError("speculation_max_calls must be a non-negative integer")
+        builtins_source = vars(__builtins__) if isinstance(__builtins__, types.ModuleType) else __builtins__
+        restricted = dict(builtins_source)
+        for forbidden in ("__import__", "eval", "exec", "compile"):
+            restricted.pop(forbidden, None)
+        self.namespace: dict[str, Any] = dict(_prepared_globals)
+        self.namespace.update({"__builtins__": restricted, "inputs": inputs})
+        self.compiler = codeop.CommandCompiler()
+        self.started = time.monotonic()
+        self.timeline: list[dict[str, Any]] = []
+        self.source = ""
+        self.pending = ""
+        self.executed_bytes = 0
+        self.suites: list[dict[str, Any]] = []
+        self.ended = False
+        self.preamble_open = True
+        self.imports_sealed = False
+        self.staged_results: dict[str, tuple[bool, Any]] = {}
+        self.preflighted_occurrences: set[str] = set()
+        self.speculation_max_calls = speculation_max_calls
+        self.consumed_occurrences: set[str] = set()
+        self.namespace["_stream_invoke_eager"] = self._invoke_eager
+
+    def _occurrence(self, node: ast.Call) -> str:
+        return f"{self.executed_bytes}:{node.lineno}:{node.col_offset}"
+
+    def _elapsed_ms(self) -> float:
+        return max(0.0, (time.monotonic() - self.started) * 1000.0)
+
+    def _invoke_eager(self, occurrence: str, target: Any, *args: Any, **kwargs: Any) -> Any:
+        if occurrence in self.staged_results:
+            self.consumed_occurrences.add(occurrence)
+            succeeded, value = self.staged_results.pop(occurrence)
+            if not succeeded:
+                raise value
+            return value
+        result = target(*args, **kwargs)
+        self.consumed_occurrences.add(occurrence)
+        return result
+
+    def _eager_preflight(self, tree: ast.Module) -> None:
+        eager = self.namespace.get("_stream_eager_calls", {})
+        if not isinstance(eager, dict):
+            return
+        calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+        calls.sort(key=operator.attrgetter("lineno", "col_offset"))
+        for node in calls:
+            if len(self.preflighted_occurrences) >= self.speculation_max_calls:
+                return
+
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                name = node.func.value.id + "." + node.func.attr
+            else:
+                continue
+            target = eager.get(name)
+            if target is None or any(keyword.arg is None for keyword in node.keywords):
+                continue
+            try:
+                arguments = [ast.literal_eval(value) for value in node.args]
+                keywords = {keyword.arg: ast.literal_eval(keyword.value) for keyword in node.keywords}
+            except (ValueError, TypeError):
+                continue
+            occurrence = self._occurrence(node)
+            started = self._elapsed_ms()
+            try:
+                staged = (True, target(*arguments, **keywords))
+                outcome = "ok"
+            except BaseException as exc:
+                staged = (False, exc)
+                outcome = "error"
+            self.staged_results[occurrence] = staged
+            self.timeline.append({"kind": "eager_read", "occurrence": occurrence, "outcome": outcome, "start_ms": started, "end_ms": self._elapsed_ms()})
+            self.preflighted_occurrences.add(occurrence)
+
+    def _rewrite_eager(self, tree: ast.Module) -> ast.Module:
+        eager = self.namespace.get("_stream_eager_calls", {})
+        session = self
+
+        class Rewriter(ast.NodeTransformer):
+            def visit_Call(self, node: ast.Call) -> ast.AST:
+                self.generic_visit(node)
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                    name = node.func.value.id + "." + node.func.attr
+                else:
+                    return node
+                if not isinstance(eager, dict) or name not in eager:
+                    return node
+                return ast.copy_location(ast.Call(
+                    func=ast.Name(id="_stream_invoke_eager", ctx=ast.Load()),
+                    args=[ast.Constant(session._occurrence(node)), node.func, *node.args],
+                    keywords=node.keywords,
+                ), node)
+
+        return ast.fix_missing_locations(Rewriter().visit(tree))
+
+    def chunk(self, text: str) -> dict[str, Any]:
+        if self.ended or not isinstance(text, str) or not text:
+            raise ValueError("stream chunk must be non-empty before end")
+        encoded = text.encode("utf-8")
+        if len(self.source.encode("utf-8")) + len(encoded) > 1_048_576:
+            raise ValueError("stream source exceeds one MiB")
+        self.source += text
+        self.pending += text
+        try:
+            code = self.compiler(self.pending, "<agent-stream>", "exec")
+        except (SyntaxError, ValueError, TypeError, MemoryError) as exc:
+            raise SyntaxError("invalid streamed Python source") from exc
+        if code is None:
+            return {"status": "incomplete", "suites": []}
+        status, admitted, imports = _validate_agent_source(self.source, None)
+        if status != _SOURCE_CONTRACT_OK or admitted is None:
+            raise SyntaxError("stream source violates the static preamble contract")
+        pending_tree = ast.parse(self.pending, filename="<agent-stream>", mode="exec")
+        pending_has_import = any(isinstance(node, (ast.Import, ast.ImportFrom)) for node in pending_tree.body)
+        pending_is_preamble = all(isinstance(node, (ast.Import, ast.ImportFrom)) or _module_docstring(node) for node in pending_tree.body)
+        execution_started = self._elapsed_ms()
+        if pending_has_import and (not self.preamble_open or not pending_is_preamble):
+            raise SyntaxError("late import in streamed Python source")
+        if pending_is_preamble:
+            import_namespace = {"__builtins__": __builtins__}
+            exec(code, import_namespace, import_namespace)
+            for key, value in import_namespace.items():
+                if key != "__builtins__":
+                    self.namespace[key] = value
+        else:
+            if not self.imports_sealed:
+                import _agent_runtime_host  # type: ignore[import-not-found]
+                _agent_runtime_host.seal_imports(tuple(sorted(sys.modules)))
+                self.imports_sealed = True
+            self.preamble_open = False
+            self._eager_preflight(pending_tree)
+            rewritten = self._rewrite_eager(pending_tree)
+            exec(compile(rewritten, "<agent-stream>", "exec"), self.namespace, self.namespace)
+        start = self.executed_bytes
+        end = len(self.source.encode("utf-8"))
+        digest = hashlib.sha256(self.pending.encode("utf-8")).hexdigest()
+        suite = {"start": start, "end": end, "sha256": "sha256:" + digest}
+        suite["end_ms"] = self._elapsed_ms()
+        if not pending_is_preamble:
+            suite["start_ms"] = execution_started
+        else:
+            suite["start_ms"] = suite["end_ms"]
+        self.suites.append(suite)
+        self.timeline.append({"kind": "suite", **suite})
+        self.executed_bytes = end
+        self.pending = ""
+        return {"status": "complete", "suites": [dict(suite)]}
+
+    def end(self) -> dict[str, Any]:
+        if self.ended:
+            raise ValueError("stream already ended")
+        self.ended = True
+        if self.pending:
+            try:
+                code = self.compiler(self.pending, "<agent-stream>", "exec")
+            except (SyntaxError, ValueError, TypeError, MemoryError) as exc:
+                raise SyntaxError("invalid final streamed Python source") from exc
+            if code is None:
+                raise SyntaxError("incomplete final streamed Python source")
+        status, _, _ = _validate_agent_source(self.source, None)
+        if status != _SOURCE_CONTRACT_OK:
+            raise SyntaxError("final stream violates the source contract")
+        return {
+            "result": self.namespace.get("result"),
+            "suites": [dict(value) for value in self.suites],
+            "timeline": [dict(value) for value in self.timeline],
+            "eager": {
+                "dispatched": len(self.preflighted_occurrences),
+                "consumed": len(self.consumed_occurrences),
+                "orphaned": len(self.preflighted_occurrences - self.consumed_occurrences),
+            },
+        }
+
+
+def _stream_begin(inputs: Any, speculation_max_calls: int = 0) -> None:
+    global _stream_session
+    _stream_session = _StreamingSession(inputs, speculation_max_calls)
+
+
+def _stream_chunk(text: str) -> dict[str, Any]:
+    if _stream_session is None:
+        raise ValueError("stream has not begun")
+    return _stream_session.chunk(text)
+
+
+def _stream_end() -> dict[str, Any]:
+    if _stream_session is None:
+        raise ValueError("stream has not begun")
+    return _stream_session.end()
+
+
+def _stream_cancel() -> None:
+    global _stream_session
+    _stream_session = None
 
 
 def _error(code: str, message: str, *, error_type: str | None = None, trace: str | None = None) -> dict[str, Any]:
@@ -60,9 +269,11 @@ def _prepare(source: str) -> None:
     if not isinstance(source, str):
         raise TypeError("source must be a string")
     namespace: dict[str, Any] = {"__builtins__": __builtins__}
-    exec(compile(source, "<trusted-prepare>", "exec"), namespace, namespace)
     global _prepared_globals
+    # Trusted preparation may intentionally build a streaming session while
+    # definitions are still being installed into this private namespace.
     _prepared_globals = namespace
+    exec(compile(source, "<trusted-prepare>", "exec"), namespace, namespace)
 
 
 
@@ -136,9 +347,10 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
                 if node.level != 0 or node.module is None or any(alias.name == "*" for alias in node.names):
                     return _SOURCE_CONTRACT_UNSUPPORTED, None, []
                 root = node.module.partition(".")[0]
-                if root in _FORBIDDEN_IMPORT_ROOTS or root == "__future__":
+                if root in _FORBIDDEN_IMPORT_ROOTS:
                     return _SOURCE_CONTRACT_UNSUPPORTED, None, []
-                imported_roots.add(root)
+                if root != "__future__":
+                    imported_roots.add(root)
             continue
         preamble_open = False
 

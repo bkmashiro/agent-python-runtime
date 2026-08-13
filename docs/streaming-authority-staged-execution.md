@@ -1,6 +1,6 @@
 # Streaming authority-staged Agent execution
 
-Status: **Primary research hypothesis; not implemented.**
+Status: **Minimal mechanism implemented; recursive fan-out and performance claims remain Proposed.**
 Date: 2026-08-13
 
 ## Research question
@@ -13,6 +13,32 @@ Date: 2026-08-13
 This hypothesis follows directly from an Agent-specific timing boundary:
 traditional functions exist before invocation, whereas an Agent's Python program
 is still being produced while the Runtime is otherwise idle.
+
+## Current minimal mechanism
+
+The implemented proof now provides:
+
+- an append-only Host state machine whose semantic verdicts and complete-suite
+  ranges come from an injected exact-Guest compiler oracle;
+- a trusted bootstrap streaming session in target Guest CPython using one private
+  namespace, `CommandCompiler` future flags, a frozen import preamble, and
+  complete-suite execution;
+- Host-owned private workspace attempts with distinct identities, discard on
+  invalid/error/cancel paths, and publication only after a successful final
+  Guest response;
+- Host-qualified `read_only + idempotent + speculative_safe` metadata, an
+  independent speculation-call budget, literal-call eager preflight,
+  occurrence-bound one-time consumption, orphan accounting, and relative timing;
+- reach-gated execution for non-qualified reads, a streaming-specific Python
+  projection that omits write capabilities, and Broker-level pre-seal write
+  denial even if Agent code reaches a private bridge helper;
+- a real-WASI north-star fixture for eager unreachable reads, unreachable
+  reach-gated reads, no duplicate dispatch, private filesystem publication, and
+  invalid-suffix discard.
+
+This remains a narrow proof. Recursive streamed subagents, general external-write
+commit/reconciliation, prepared-runtime/COW optimization, and performance-benefit
+claims remain Proposed.
 
 ## Core model
 

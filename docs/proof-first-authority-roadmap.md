@@ -158,21 +158,21 @@ filesystem state or dispatch a write.
 Python execution, selected real reads, and recursive subagent launch without
 allowing incomplete programs to publish files or dispatch writes.
 
-- [ ] freeze append-only stream, import-preamble, complete-suite, and final-seal
+- [x] freeze append-only stream, import-preamble, complete-suite, and final-seal
   contracts using the exact target Guest compiler;
-- [ ] execute closed suites in one private module namespace over an immutable
+- [x] execute closed suites in one private module namespace over an immutable
   input root, private filesystem overlay, and `/tmp`;
-- [ ] discard Guest, overlay, outputs, and unpublished state when the final
+- [x] discard Guest, overlay, outputs, and unpublished state when the final
   source is invalid or abandoned;
-- [ ] admit eager preflight only for Host-qualified
+- [x] admit eager preflight only for Host-qualified
   `read_only + idempotent + speculative_safe` calls with canonical immediate
   arguments and an independent budget;
-- [ ] require actual dynamic reach for all other allowed calls, and keep writes
+- [x] require actual dynamic reach for all other allowed calls, and keep writes
   behind final source/authority/approval seal;
 - [ ] bind staged read results to source range, dynamic occurrence, canonical
   arguments, adapter/grant/policy, freshness, and privacy partition so formal
   continuation cannot dispatch twice;
-- [ ] count unused eager requests as orphaned speculation rather than hiding
+- [x] count unused eager requests as orphaned speculation rather than hiding
   their quota, cost, access-log, or privacy consequences;
 - [ ] pipeline one structured parent stream into two staged child Agents, each
   with a private filesystem branch and no publication/write authority;

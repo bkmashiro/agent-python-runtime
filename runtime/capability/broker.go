@@ -86,6 +86,16 @@ func NewBroker(config Config) (*Broker, error) {
 }
 
 func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
+	return broker.call(ctx, raw, false)
+}
+
+// CallStreaming applies the pre-seal authority ceiling at the Broker itself;
+// Python projection names are not a security boundary.
+func (broker *Broker) CallStreaming(ctx context.Context, raw []byte) ([]byte, error) {
+	return broker.call(ctx, raw, true)
+}
+
+func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]byte, error) {
 	if broker == nil {
 		return nil, ErrInvalidBroker
 	}
@@ -126,6 +136,11 @@ func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
 		broker.failPlayback()
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}})
+	}
+	if streaming && registered.spec.EffectClass == EffectWorkspaceWrite {
+		broker.failPlayback()
+		broker.record(call, operation, "denied", nil)
+		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "streaming_write_denied", Message: "write authority is unavailable before final seal"}})
 	}
 	arguments, err := canonicalForSchema(registered.inputSchema, call.Arguments)
 	if err != nil {

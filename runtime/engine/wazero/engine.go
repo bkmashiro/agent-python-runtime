@@ -190,7 +190,23 @@ func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *wo
 	return config.WithFSConfig(withWorkspace.WithSysFSMount(temporary.FS(), "tmp")), temporary, nil
 }
 
-func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) (payload []byte, runErr error) {
+func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
+	prepares := make(chan string, 1)
+	if trustedPrepare != "" {
+		prepares <- trustedPrepare
+	}
+	close(prepares)
+	return engine.runWithPrepares(ctx, request, prepares, false)
+}
+
+// RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
+// arrive. It is an internal streaming seam; Agent source still enters only
+// through the final validated request.
+func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-chan string) ([]byte, error) {
+	return engine.runWithPrepares(ctx, request, prepares, true)
+}
+
+func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool) (payload []byte, runErr error) {
 	if len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
 		return nil, errors.New("request exceeds configured bounds")
 	}
@@ -287,11 +303,6 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 	if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
-	if trustedPrepare != "" {
-		if err := callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare)); err != nil {
-			return nil, withGuestDiagnostic(err, stderr.String())
-		}
-	}
 	if err := callSourceValidation(runContext, module, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
@@ -314,6 +325,25 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
+	runContext = context.WithValue(runContext, streamingContextKey{}, streaming)
+	for {
+		select {
+		case <-runContext.Done():
+			return nil, runContext.Err()
+		case trustedPrepare, ok := <-prepares:
+			if !ok {
+				goto prepareComplete
+			}
+			if trustedPrepare == "" {
+				return nil, errors.New("stream prepare chunk is empty")
+			}
+			if err := callStatusWithBytes(runContext, module, "runtime_prepare", []byte(trustedPrepare)); err != nil {
+				return nil, withGuestDiagnostic(err, stderr.String())
+			}
+		}
+	}
+
+prepareComplete:
 	payload, err = callExecute(runContext, module, request, engine.config.MaxResponseBytes)
 	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
@@ -382,6 +412,7 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 }
 
 type brokerContextKey struct{}
+type streamingContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
 
@@ -415,7 +446,13 @@ func hostCall(
 		return -1
 	}
 	request := append([]byte(nil), requestView...)
-	response, err := broker.Call(ctx, request)
+	var response []byte
+	var err error
+	if streaming, _ := ctx.Value(streamingContextKey{}).(bool); streaming {
+		response, err = broker.CallStreaming(ctx, request)
+	} else {
+		response, err = broker.Call(ctx, request)
+	}
 	if err != nil || len(response) > int(responseCapacity) {
 		return -1
 	}

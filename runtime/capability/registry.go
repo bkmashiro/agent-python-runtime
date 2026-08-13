@@ -70,6 +70,21 @@ type Spec struct {
 	InputSchema     json.RawMessage   `json:"input_schema"`
 	OutputSchema    json.RawMessage   `json:"output_schema"`
 	Python          *PythonProjection `json:"python,omitempty"`
+	ReadOnly        bool              `json:"read_only,omitempty"`
+	Idempotent      bool              `json:"idempotent,omitempty"`
+	SpeculativeSafe bool              `json:"speculative_safe,omitempty"`
+}
+
+// SpeculationQualification is Host-authored adapter policy, never inferred
+// from an HTTP verb, capability name, or Agent-produced request.
+type SpeculationQualification struct {
+	ReadOnly        bool
+	Idempotent      bool
+	SpeculativeSafe bool
+}
+
+func (qualification SpeculationQualification) EagerEligible() bool {
+	return qualification.ReadOnly && qualification.Idempotent && qualification.SpeculativeSafe
 }
 
 type registration struct {
@@ -250,11 +265,38 @@ func (plan *Plan) Grants() []GrantBinding {
 	return append([]GrantBinding(nil), plan.grants...)
 }
 
+func (plan *Plan) Speculation(name string) (SpeculationQualification, bool) {
+	registered, ok := plan.lookup(name)
+	if !ok {
+		return SpeculationQualification{}, false
+	}
+	return SpeculationQualification{
+		ReadOnly: registered.spec.ReadOnly, Idempotent: registered.spec.Idempotent,
+		SpeculativeSafe: registered.spec.SpeculativeSafe,
+	}, true
+}
+
 func (plan *Plan) PythonPrelude() string {
 	if plan == nil {
 		return ""
 	}
 	return plan.pythonPrelude
+}
+
+// StreamingPythonPrelude projects only capabilities that are safe to invoke
+// before final source/workspace/effect seal. Write-class capabilities remain
+// absent even when they exist in the final sealed Plan.
+func (plan *Plan) StreamingPythonPrelude() string {
+	if plan == nil {
+		return ""
+	}
+	allowed := make([]Spec, 0, len(plan.specs))
+	for _, spec := range plan.specs {
+		if spec.EffectClass == EffectPure || spec.EffectClass == EffectWorkspaceRead || spec.EffectClass == EffectExternalRead {
+			allowed = append(allowed, spec)
+		}
+	}
+	return generatePythonPrelude(allowed)
 }
 
 func (plan *Plan) lookup(name string) (registration, bool) {
@@ -270,7 +312,8 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 		len(spec.Description) == 0 || len(spec.Description) > 1024 || !utf8.ValidString(spec.Description) ||
 		!validEffectClass(spec.EffectClass) || !validPlaybackTreatment(spec.Playback) ||
 		len(spec.InputSchema) == 0 || len(spec.InputSchema) > maxCapabilitySchemaBytes ||
-		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > maxCapabilitySchemaBytes || !validPythonProjection(spec.Python) {
+		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > maxCapabilitySchemaBytes || !validPythonProjection(spec.Python) ||
+		!validSpeculationQualification(spec) {
 		return Spec{}, nil, nil, ErrInvalidTool
 	}
 	inputDocument, inputCanonical, err := canonicalJSON(spec.InputSchema)
@@ -293,6 +336,15 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 	canonical.InputSchema = inputCanonical
 	canonical.OutputSchema = outputCanonical
 	return canonical, inputSchema, outputSchema, nil
+}
+
+func validSpeculationQualification(spec Spec) bool {
+	any := spec.ReadOnly || spec.Idempotent || spec.SpeculativeSafe
+	if !any {
+		return true
+	}
+	readClass := spec.EffectClass == EffectPure || spec.EffectClass == EffectWorkspaceRead || spec.EffectClass == EffectExternalRead
+	return readClass && spec.ReadOnly && spec.Idempotent && spec.SpeculativeSafe
 }
 
 type denyCapabilitySchemaLoader struct{}
@@ -426,7 +478,7 @@ func generatePythonPrelude(specs []Spec) string {
 	}
 	sortStrings(moduleNames)
 	var builder strings.Builder
-	builder.WriteString("\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_capability_call_sequence = 0\n\nclass _CapabilityModule:\n    pass\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": \"capability-\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n")
+	builder.WriteString("\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_capability_call_sequence = 0\n_stream_eager_calls = {}\n\nclass _CapabilityModule:\n    pass\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": \"capability-\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n")
 	for _, module := range moduleNames {
 		fmt.Fprintf(&builder, "\n%s = _CapabilityModule()\n", module)
 	}
@@ -448,6 +500,12 @@ func generatePythonPrelude(specs []Spec) string {
 		fmt.Fprintf(&builder, "%s.%s = %s\n", projection.Module, projection.Method, proxy)
 		if projection.GlobalAlias != "" {
 			fmt.Fprintf(&builder, "%s = %s.%s\n", projection.GlobalAlias, projection.Module, projection.Method)
+		}
+		if spec.ReadOnly && spec.Idempotent && spec.SpeculativeSafe {
+			fmt.Fprintf(&builder, "_stream_eager_calls[%s] = %s\n", pythonString(projection.Module+"."+projection.Method), proxy)
+			if projection.GlobalAlias != "" {
+				fmt.Fprintf(&builder, "_stream_eager_calls[%s] = %s\n", pythonString(projection.GlobalAlias), proxy)
+			}
 		}
 	}
 	return builder.String()

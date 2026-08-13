@@ -126,6 +126,65 @@ func TestWorkspaceContinuesOrdinaryFilesAcrossExclusiveLeasesWithoutCopy(t *test
 	}
 }
 
+func TestWorkspaceAttemptForkIsPrivateAndDiscardOrPublishUsesIdentity(t *testing.T) {
+	manager := newTestManager(t)
+	base, err := manager.Create([]InitialFile{{Path: "input.txt", Data: []byte("base")}}, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, err := manager.ForkAttempt(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempt.BaseRef() != base || attempt.Ref() == base || attempt.Ref() == "" {
+		t.Fatalf("attempt identity base=%q attempt=%q", attempt.BaseRef(), attempt.Ref())
+	}
+	lease, err := manager.Acquire(attempt.Ref(), "stream-attempt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, errno := lease.FS().OpenFile("derived.txt", experimentalsys.O_WRONLY|experimentalsys.O_CREAT|experimentalsys.O_EXCL, 0o600)
+	if errno != 0 {
+		t.Fatalf("create attempt file: %v", errno)
+	}
+	if _, errno := file.Write([]byte("private")); errno != 0 {
+		t.Fatalf("write attempt file: %v", errno)
+	}
+	_ = file.Close()
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+
+	baseLease, err := manager.Acquire(base, "base-check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, errno := baseLease.FS().OpenFile("derived.txt", experimentalsys.O_RDONLY, 0); errno == 0 {
+		t.Fatal("private attempt mutated base")
+	}
+	_ = baseLease.Release()
+
+	published, err := attempt.Publish()
+	if err != nil || published != attempt.Ref() {
+		t.Fatalf("publish ref=%q err=%v", published, err)
+	}
+	if err := attempt.Discard(); !errors.Is(err, ErrAttemptTerminal) {
+		t.Fatalf("discard published attempt: %v", err)
+	}
+
+	discarded, err := manager.ForkAttempt(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discardedRef := discarded.Ref()
+	if err := discarded.Discard(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Acquire(discardedRef, "gone"); !errors.Is(err, ErrWorkspaceNotFound) {
+		t.Fatalf("discarded attempt still exists: %v", err)
+	}
+}
+
 func TestWorkspaceFilesystemRejectsEscapeLinksAndSpecialEntries(t *testing.T) {
 	manager := newTestManager(t)
 	ref, err := manager.Create(nil, DefaultLimits())

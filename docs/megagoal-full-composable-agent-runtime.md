@@ -320,18 +320,18 @@ fan-out off/on and identical selected semantic result.
 **Promise:** Explicit admitted computations can reuse immutable local results while
 ordinary work remains a fresh Run.
 
-- [ ] Freeze binary `cacheable | not_cacheable` admission.
-- [ ] Freeze canonical invocation identity over function/source, artifact/profile,
+- [x] Freeze binary `cacheable | not_cacheable` admission.
+- [x] Freeze canonical invocation identity over function/source, artifact/profile,
   admitted import closure, canonical input, immutable roots, deterministic
   settings, output schema, privacy partition, and policy epoch.
-- [ ] Implement the smallest local project-private whole-function cache behind an
+- [x] Implement the smallest local project-private whole-function cache behind an
   internal toggle.
 - [ ] Fail closed on Host capability calls, undeclared reads, shared writes,
   clock/random access, dynamic import, and unknown behavior.
-- [ ] Store immutable output/result identity separately from execution evidence.
-- [ ] Support bounded retention and eviction followed by safe fresh recomputation.
-- [ ] Prove cache off/on output/root equivalence and no fabricated receipts/effects.
-- [ ] Record hit/miss/recompute/materialization evidence without revealing bodies
+- [x] Store immutable output/result identity separately from execution evidence.
+- [x] Support bounded retention and eviction followed by safe fresh recomputation.
+- [x] Prove cache off/on output/root equivalence and no fabricated receipts/effects.
+- [x] Record hit/miss/recompute/materialization evidence without revealing bodies
   or cross-partition existence.
 
 **Do not:** claim arbitrary Python purity or cache LLM/provider calls.
@@ -341,15 +341,15 @@ ordinary work remains a fresh Run.
 **Promise:** Concurrent identical admitted computations may share one in-flight
 physical evaluation without requiring durable cache retention.
 
-- [ ] Define leader/follower identity, cancellation, timeout, panic/error, and late
+- [x] Define leader/follower identity, cancellation, timeout, panic/error, and late
   completion ownership.
-- [ ] Implement single-flight behind a separate toggle from durable cache.
-- [ ] Prove retention off + single-flight on works.
-- [ ] Prove single-flight off permits independent fresh evaluations.
-- [ ] Prove one follower cancellation does not cancel a still-owned leader and a
+- [x] Implement single-flight behind a separate toggle from durable cache.
+- [x] Prove retention off + single-flight on works.
+- [x] Prove single-flight off permits independent fresh evaluations.
+- [x] Prove one follower cancellation does not cancel a still-owned leader and a
   leader terminal failure does not strand followers.
-- [ ] Prove privacy/policy/root/source mismatches never coalesce.
-- [ ] Add race tests and bounded memory/entry cleanup tests.
+- [x] Prove privacy/policy/root/source mismatches never coalesce.
+- [x] Add race tests and bounded memory/entry cleanup tests.
 
 ### Track 6 — Explicit workflow and fresh re-evaluation
 
@@ -567,9 +567,9 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 4 — freeze binary Agent Function admission and canonical invocation
-identity, then implement the smallest project-private cache with cache-off
-semantic fallback. Track 3 real-Guest fan-out remains an integrated-fixture gate.`
+`Track 6 — implement a minimal explicit workflow state machine that destroys a
+Guest at wait, starts a fresh Guest at wake, reuses immutable compute outputs,
+and invalidates only descendants of a refreshed observation.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -617,6 +617,18 @@ Add entries here before each track implementation.
   executor creates and retires one single-use Runner per child. Recursive depth 2
   composes without new scheduler machinery. Real Wazero Guest fan-out remains an
   integrated-fixture gate rather than being claimed from fake runners.
+- 2026-08-13 — Tracks 4/5 / `Proceed minimal`: an Agent Function is an explicit
+  binary-admitted Host invocation, not inferred pure Python. Its key binds source,
+  artifact/profile/import closure, canonical inputs, immutable roots,
+  deterministic settings, output schema, privacy partition, project, and policy.
+  Results live in a bounded 0700 project-private store with digest verification,
+  corruption-as-miss, atomic replacement, eviction, and body-free counters.
+  Single-flight is a separate in-memory group: concurrent identical keys share a
+  leader, completed values are immediately forgotten, follower cancellation does
+  not own the leader, and panic/error always releases followers. The current
+  `Guard` proves deterministic Host fixture boundaries only; actual Guest-level
+  unknown-behavior enforcement stays open for the integrated fixture and must not
+  be described as arbitrary Python purity.
 
 ## Completion log
 
@@ -647,6 +659,11 @@ Do not mark umbrella tracks complete from implementation presence alone.
   explicit select, depth-2 recursion, digest-only relative timeline, sibling/base
   isolation, and a fresh single-use Runner executor. Focused and race tests pass;
   real Guest proof remains open for Track 7.
+- 2026-08-13 — Tracks 4/5 mechanism slice: added binary Agent Function admission,
+  full canonical invocation identity, bounded private disk retention, verified
+  result records, corruption/eviction recomputation, authority guard fixtures,
+  and independent single-flight with cancellation/panic cleanup. Focused and race
+  tests pass; Guest-level unknown behavior enforcement stays open.
 
 ## Final reporting contract
 

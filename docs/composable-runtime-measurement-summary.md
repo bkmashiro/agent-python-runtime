@@ -19,7 +19,7 @@ The measurements cover repository fixtures and the real CPython/WASI Guest artif
 | Workflow wait/resume | The first Guest closed at wait; resume created a distinct Guest; both active-period Guests closed; unchanged explicit work used local lookup |
 | Prepared runtime | Explicit prepared mode created 1 never-served initialized slot, consumed it once, then used 1 ordinary fresh fallback; closing an unused Engine destroyed its slot |
 | `/tmp` freshness | A file written during the prepared Run was absent from the following fresh fallback Run |
-| Memory COW | The earlier growable-artifact treatment correctly fell back; a later user-approved recovery added a separate `cow-fixed` single-use discard lane whose low-level Linux mapping contract passes, while full CPython/WASI outcome qualification remains pending |
+| Memory COW | The earlier growable-artifact treatment correctly fell back; the later exact-source `cow-fixed` artifact passed low-level Linux mapping tests and real CPython/WASI outcome isolation across consecutive requests, cancellation recovery, and allocation pressure |
 | All mechanisms off | Typed mode evidence reports fallback/off and repeated ordinary evaluation preserves the normalized result without cache hits |
 
 ## Body-free measurements available
@@ -51,8 +51,13 @@ fallback. That result remains the correct growable-artifact baseline, not a COW
 execution result. The reopened low-level Linux result is preserved separately as
 [`evidence/linux-cow-low-level.json`](evidence/linux-cow-low-level.json): sealed
 memfd, MAP_PRIVATE sibling isolation, pre-serve baseline restoration, whole-slot
-unmap/discard, and shape-drift rejection pass. Full fixed-memory CPython/WASI
-outcome/isolation results are not yet claimed. Timing remains fixture-only.
+unmap/discard, and shape-drift rejection pass. The exact-source fixed-memory
+CPython/WASI follow-up is preserved as
+[`evidence/linux-cow-fixed-outcome.json`](evidence/linux-cow-fixed-outcome.json):
+prepared parity and COW selection pass; consecutive requests preserve result
+semantics while isolating Python globals, `/tmp`, and imported modules; fresh
+slots recover after cancellation and allocation pressure. Timing remains
+fixture-only.
 
 ## Non-claims
 

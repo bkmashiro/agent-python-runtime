@@ -1,0 +1,53 @@
+{
+  "schema_version": "pysolate.linux-cow-fixed-outcome-evidence.v1",
+  "guest_source_commit": "2451cc35cff566ad556c18c2f57064e233994675",
+  "host_test_commit": "996265f",
+  "guest_artifact_sha256": "sha256:591978964aae541d0758404f325c482898aa2ba5386a721dd2a5dcf049dbe9fb",
+  "host_test_binary_sha256": "sha256:10246d3fad43921ad5a8b5f9fb5da18f95ce22ac0e558ba48a8cab433d52d739",
+  "platform": {
+    "os": "linux",
+    "arch": "x86_64",
+    "kernel": "6.17.0-35-generic"
+  },
+  "artifact_memory": {
+    "initial_pages": 2048,
+    "maximum_pages": 2048,
+    "fixed": true
+  },
+  "artifact_build": {
+    "status": "pass",
+    "manifest_verified": true,
+    "bundle_checksums_verified": true,
+    "source_bound_git_bundle": true
+  },
+  "tests": [
+    {
+      "name": "TestRealGuestPreparedRuntimeSingleUseParity",
+      "status": "pass",
+      "observations": [
+        "prepared semantic parity",
+        "fresh fallback tmp isolation",
+        "fixed memory reported as COW candidate while COW remained unselected"
+      ]
+    },
+    {
+      "name": "TestRealGuestCOWSingleUseOutcomeIsolation",
+      "status": "pass",
+      "observations": [
+        "COW selected with no fresh fallback",
+        "consecutive CPython results correct",
+        "Python builtins did not leak",
+        "tmp did not leak",
+        "imported module state did not leak",
+        "post-cancellation run recovered",
+        "post-allocation-pressure run recovered",
+        "every request used a single-use slot"
+      ]
+    }
+  ],
+  "integrity": {
+    "remote_result_checksums_verified": true,
+    "process_exit": 0
+  },
+  "interpretation": "Outcome-qualified Experimental Linux COW. Each request uses a fresh MAP_PRIVATE slot from a sealed fixed-memory baseline; served, cancelled, failed, or pressure-exposed slots are discarded, not pooled or reset for reuse."
+}

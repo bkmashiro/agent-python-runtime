@@ -681,6 +681,13 @@ Add entries here before each track implementation.
   memory growth is rejected by the fixed profile and discards the slot. The
   low-level Linux mapping contract passes; full CPython/WASI qualification is the
   remaining gate.
+- 2026-08-13 — Post-completion COW qualification closure: an exact-source
+  `cow-fixed` CPython/WASI artifact (2048 initial == maximum pages) passed
+  Prepared parity and selected the Linux COW lane. Consecutive requests preserved
+  result semantics and isolated Python globals, `/tmp`, and imported modules;
+  later fresh slots recovered after cancellation and allocation pressure. All
+  result bundles were checksum-verified before remote cleanup. COW is retained as
+  Experimental, outcome-qualified, and mandatory in the real scenario matrix.
 
 ## Completion log
 

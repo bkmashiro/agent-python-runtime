@@ -39,8 +39,8 @@ func TestReportRejectsIncompletePassedRowsAndSorts(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := []composableacceptance.Row{
-		{ScenarioID: scenario.ID, ScenarioSHA256: scenarioID, Treatment: composableacceptance.TreatmentCOW, Status: "passed", OracleSHA256: digest('b'), GuestCreated: 2, GuestDestroyed: 2, TerminalDisposition: "completed", EvidenceComplete: true},
-		{ScenarioID: scenario.ID, ScenarioSHA256: scenarioID, Treatment: composableacceptance.TreatmentFresh, Status: "passed", OracleSHA256: digest('b'), GuestCreated: 1, GuestDestroyed: 1, TerminalDisposition: "completed", EvidenceComplete: true},
+		{ScenarioID: scenario.ID, ScenarioSHA256: scenarioID, Treatment: composableacceptance.TreatmentCOW, Status: "passed", OracleSHA256: digest('b'), GuestCreated: 2, GuestDestroyed: 2, EvidenceScope: "direct_replay", ConformanceSHA256: digest('c'), TerminalDisposition: "completed", EvidenceComplete: true},
+		{ScenarioID: scenario.ID, ScenarioSHA256: scenarioID, Treatment: composableacceptance.TreatmentFresh, Status: "passed", OracleSHA256: digest('b'), GuestCreated: 1, GuestDestroyed: 1, EvidenceScope: "direct_replay", ConformanceSHA256: digest('c'), TerminalDisposition: "completed", EvidenceComplete: true},
 	}
 	composableacceptance.SortRows(rows)
 	if rows[0].Treatment != composableacceptance.TreatmentFresh {

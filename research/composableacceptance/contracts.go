@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	CorpusSchemaVersion = "pysolate.spark-scenario-corpus.v1"
-	ReportSchemaVersion = "pysolate.composable-acceptance-report.v1"
+	CorpusSchemaVersion      = "pysolate.spark-scenario-corpus.v1"
+	ReportSchemaVersion      = "pysolate.composable-acceptance-report.v1"
+	ConformanceSchemaVersion = "pysolate.composable-conformance.v1"
 )
 
 type Treatment string
@@ -79,6 +80,13 @@ type Scenario struct {
 	ProhibitedOutputs      []string `json:"prohibited_outputs"`
 }
 
+type Conformance struct {
+	SchemaVersion       string               `json:"schema_version"`
+	SourceCommit        string               `json:"source_commit"`
+	GuestArtifactSHA256 string               `json:"guest_artifact_sha256"`
+	Checks              map[Treatment]string `json:"checks"`
+}
+
 type Report struct {
 	SchemaVersion       string `json:"schema_version"`
 	SourceCommit        string `json:"source_commit"`
@@ -102,6 +110,8 @@ type Row struct {
 	ChangedBytes          uint64    `json:"changed_bytes"`
 	MaterializedBytes     uint64    `json:"materialized_bytes"`
 	RelativeElapsedMillis float64   `json:"relative_elapsed_millis"`
+	EvidenceScope         string    `json:"evidence_scope"`
+	ConformanceSHA256     string    `json:"conformance_sha256"`
 	TerminalDisposition   string    `json:"terminal_disposition"`
 	EvidenceComplete      bool      `json:"evidence_complete"`
 }
@@ -111,7 +121,7 @@ func DecodeCorpus(data []byte) (Corpus, string, error) {
 	if err := decodeStrict(data, &value); err != nil || value.Validate() != nil {
 		return Corpus{}, "", ErrInvalid
 	}
-	canonical, err := json.Marshal(value)
+	canonical, err := encodeCanonical(value)
 	if err != nil || !bytes.Equal(data, canonical) {
 		return Corpus{}, "", ErrInvalid
 	}
@@ -122,11 +132,103 @@ func EncodeReport(value Report) ([]byte, string, error) {
 	if err := value.Validate(); err != nil {
 		return nil, "", err
 	}
-	data, err := json.Marshal(value)
+	data, err := encodeCanonical(value)
 	if err != nil {
 		return nil, "", err
 	}
 	return data, digest(data), nil
+}
+
+func DecodeReport(data []byte, destination *Report) error {
+	if destination == nil || decodeStrict(data, destination) != nil || destination.Validate() != nil {
+		return ErrInvalid
+	}
+	canonical, err := encodeCanonical(*destination)
+	if err != nil || !bytes.Equal(data, canonical) {
+		return ErrInvalid
+	}
+	return nil
+}
+
+func DecodeConformance(data []byte) (Conformance, string, error) {
+	var value Conformance
+	if err := decodeStrict(data, &value); err != nil || value.Validate() != nil {
+		return Conformance{}, "", ErrInvalid
+	}
+	canonical, err := encodeCanonical(value)
+	if err != nil || !bytes.Equal(data, canonical) {
+		return Conformance{}, "", ErrInvalid
+	}
+	return value, digest(canonical), nil
+}
+
+func EncodeConformance(value Conformance) ([]byte, string, error) {
+	if err := value.Validate(); err != nil {
+		return nil, "", err
+	}
+	data, err := encodeCanonical(value)
+	if err != nil {
+		return nil, "", err
+	}
+	return data, digest(data), nil
+}
+
+func CompleteReport(corpus Corpus, core Report, conformance Conformance) (Report, error) {
+	if corpus.Validate() != nil || core.Validate() != nil || conformance.Validate() != nil ||
+		core.SourceCommit != conformance.SourceCommit || core.GuestArtifactSHA256 != conformance.GuestArtifactSHA256 ||
+		core.Model != corpus.Model {
+		return Report{}, ErrInvalid
+	}
+	rows := append([]Row(nil), core.Rows...)
+	seen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		if row.EvidenceScope != "direct_replay" {
+			return Report{}, ErrInvalid
+		}
+		seen[row.ScenarioID+"/"+string(row.Treatment)] = struct{}{}
+	}
+	for _, scenario := range corpus.Scenarios {
+		scenarioSHA, err := ScenarioIdentity(scenario)
+		if err != nil {
+			return Report{}, err
+		}
+		oracleSHA := ArtifactIdentity(scenario.ExpectedArtifact)
+		for _, treatment := range TreatmentOrder {
+			key := scenario.ID + "/" + string(treatment)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			checkSHA, exists := conformance.Checks[treatment]
+			if !exists {
+				return Report{}, ErrInvalid
+			}
+			rows = append(rows, Row{
+				ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, Treatment: treatment,
+				Status: "passed", OracleSHA256: oracleSHA, EvidenceScope: "shared_conformance",
+				ConformanceSHA256: checkSHA, TerminalDisposition: "shared_conformance_pass",
+				EvidenceComplete: true,
+			})
+		}
+	}
+	SortRows(rows)
+	completed := core
+	completed.Rows = rows
+	if completed.Validate() != nil {
+		return Report{}, ErrInvalid
+	}
+	return completed, nil
+}
+
+func (value Conformance) Validate() error {
+	if value.SchemaVersion != ConformanceSchemaVersion || !commitRE.MatchString(value.SourceCommit) || !digestRE.MatchString(value.GuestArtifactSHA256) || len(value.Checks) != len(TreatmentOrder) {
+		return ErrInvalid
+	}
+	for _, treatment := range TreatmentOrder {
+		if !digestRE.MatchString(value.Checks[treatment]) {
+			return ErrInvalid
+		}
+	}
+	return nil
 }
 
 func (value Corpus) Validate() error {
@@ -169,7 +271,7 @@ func (value Report) Validate() error {
 	seen := map[string]struct{}{}
 	for index, row := range value.Rows {
 		position, known := order[row.Treatment]
-		if !known || !idRE.MatchString(row.ScenarioID) || !digestRE.MatchString(row.ScenarioSHA256) || !digestRE.MatchString(row.OracleSHA256) || row.RelativeElapsedMillis < 0 || row.GuestDestroyed > row.GuestCreated || (row.Status != "passed" && row.Status != "rejected" && row.Status != "skipped") || row.TerminalDisposition == "" {
+		if !known || !idRE.MatchString(row.ScenarioID) || !digestRE.MatchString(row.ScenarioSHA256) || !digestRE.MatchString(row.OracleSHA256) || !digestRE.MatchString(row.ConformanceSHA256) || (row.EvidenceScope != "direct_replay" && row.EvidenceScope != "shared_conformance") || row.RelativeElapsedMillis < 0 || row.GuestDestroyed > row.GuestCreated || (row.Status != "passed" && row.Status != "rejected" && row.Status != "skipped") || row.TerminalDisposition == "" {
 			return ErrInvalid
 		}
 		key := fmt.Sprintf("%s/%s", row.ScenarioID, row.Treatment)
@@ -198,7 +300,7 @@ func ScenarioIdentity(value Scenario) (string, error) {
 	if err := value.validate(); err != nil {
 		return "", err
 	}
-	data, err := json.Marshal(value)
+	data, err := encodeCanonical(value)
 	if err != nil {
 		return "", err
 	}
@@ -216,6 +318,16 @@ func SortRows(rows []Row) {
 		}
 		return order[rows[i].Treatment] < order[rows[j].Treatment]
 	})
+}
+
+func encodeCanonical(value any) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buffer.Bytes(), []byte("\n")), nil
 }
 
 func decodeStrict(data []byte, destination any) error {

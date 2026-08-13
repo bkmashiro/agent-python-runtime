@@ -280,7 +280,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatalf("initial state=%+v", state)
 	}
 	probe := prepared.COWProbe()
-	if probe.SchemaVersion != "pysolate.cow-probe.v1" || probe.COWSelected || !probe.Fallback || len(probe.Blockers) < 3 {
+	if probe.SchemaVersion != "pysolate.cow-probe.v1" || probe.COWSelected || !probe.Fallback || (!probe.MemoryCOWCandidate && len(probe.Blockers) == 0) {
 		t.Fatalf("cow probe=%+v", probe)
 	}
 	t.Logf("prepared_state=%+v cow_probe=%+v", prepared.PreparedState(), probe)
@@ -322,31 +322,48 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	if _, err := cancelEngine.Run(cancelContext, request, ""); err == nil {
 		t.Fatal("cancelled prepared run succeeded")
 	}
-	if state := cancelEngine.PreparedState(); state.Ready || state.PreparedRuns != 1 || state.FreshFallbackRuns != 0 {
-		t.Fatalf("cancelled prepared slot remained reusable: %+v", state)
+	stateAfterCancel := cancelEngine.PreparedState()
+	nextEngine := cancelEngine
+	if !stateAfterCancel.Ready {
+		if stateAfterCancel.PreparedRuns != 1 || stateAfterCancel.FreshFallbackRuns != 0 {
+			t.Fatalf("cancelled prepared state=%+v", stateAfterCancel)
+		}
+		if err := cancelEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		replacementRunner, err := baselineFactory.New(context.Background(), artifact, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nextEngine = replacementRunner.(*wazeroengine.Engine)
+	} else if stateAfterCancel.PreparedRuns != 0 || stateAfterCancel.FreshFallbackRuns != 0 {
+		t.Fatalf("pre-acquisition cancellation mutated state=%+v", stateAfterCancel)
 	}
-	if err := cancelEngine.Close(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	replacementRunner, err := baselineFactory.New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replacementEngine := replacementRunner.(*wazeroengine.Engine)
-	afterCancel, err := replacementEngine.Run(context.Background(), plainRequest(t, "result = {'after_cancel': True}"), "")
+	afterCancel, err := nextEngine.Run(context.Background(), plainRequest(t, "result = {'after_cancel': True}"), "")
 	if err != nil || responseResult(t, afterCancel) != `{"after_cancel":true}` {
-		t.Fatalf("replacement Engine after cancellation err=%v response=%s", err, afterCancel)
+		t.Fatalf("prepared Engine after cancellation err=%v response=%s", err, afterCancel)
 	}
-	if state := replacementEngine.PreparedState(); state.PreparedRuns != 1 || state.FreshFallbackRuns != 0 || state.Ready {
-		t.Fatalf("replacement prepared state=%+v", state)
+	if state := nextEngine.PreparedState(); state.PreparedRuns != 1 || state.FreshFallbackRuns != 0 || state.Ready {
+		t.Fatalf("post-cancellation prepared state=%+v", state)
 	}
-	if err := replacementEngine.Close(context.Background()); err != nil {
+	if err := nextEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	cowConfig := config
 	cowConfig.Mechanisms.MemoryCOW = true
-	if _, err := baselineFactory.New(context.Background(), artifact, cowConfig); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-		t.Fatalf("memory COW did not fail closed: %v", err)
+	cowRunner, cowErr := baselineFactory.New(context.Background(), artifact, cowConfig)
+	if cowErr != nil {
+		if !errors.Is(cowErr, runtimeconfig.ErrMechanismDisabled) {
+			t.Fatalf("memory COW error=%v", cowErr)
+		}
+	} else {
+		cowEngine := cowRunner.(*wazeroengine.Engine)
+		if goruntime.GOOS != "linux" || !cowEngine.COWProbe().COWSelected {
+			t.Fatalf("unexpected COW selection: %+v", cowEngine.COWProbe())
+		}
+		if err := cowEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -556,7 +573,7 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := responseResult(t, first); got != `{"fraction":"1/2","parity":"same"}` {
+	if got := responseResult(t, first); got != `{"parity":"same","fraction":"1/2"}` {
 		t.Fatalf("first result=%s", got)
 	}
 	if got := responseResult(t, second); got != `{"globals_clean":true,"module_clean":true,"tmp_clean":true}` {

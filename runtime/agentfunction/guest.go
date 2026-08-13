@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
@@ -47,9 +49,16 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 		_ = runner.Close(context.Background())
 		return nil, err
 	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = runner.Close(context.Background())
+		}
+	}()
 	runContext, effects := enginecontract.WithEffectProbe(ctx)
 	payload, runErr := runner.Run(runContext, append([]byte(nil), compute.Request...), compute.TrustedPrepare)
 	closeErr := runner.Close(context.Background())
+	closed = true
 	if effects.HostCallAttempted() {
 		return nil, errors.Join(ErrGuestNotShareable, runErr, closeErr)
 	}
@@ -93,6 +102,7 @@ func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invoca
 		if properties.Backend != "wazero" || properties.ArtifactSHA256 != invocation.ArtifactSHA256 ||
 			properties.ExecutionProfileBindingSHA256 != invocation.ExecutionProfileSHA256 ||
 			properties.DeterministicProfileSHA256 != invocation.DeterministicSettingsSHA256 ||
+			ImportClosureIdentity(properties.AvailableImports, properties.QualifiedImports) != invocation.ImportClosureSHA256 ||
 			properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
 			_ = runner.Close(context.Background())
 			return "", nil, ErrGuestNotShareable
@@ -100,4 +110,18 @@ func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invoca
 		return physicalID, runner, nil
 	}
 	return functionEngine.execute(ctx, invocation, compute.Run, "fresh-guest")
+}
+
+// ImportClosureIdentity binds the exact artifact import inventory reported by
+// the Runner. Sorting makes the identity independent of slice construction.
+func ImportClosureIdentity(available, qualified []string) string {
+	available = append([]string(nil), available...)
+	qualified = append([]string(nil), qualified...)
+	sort.Strings(available)
+	sort.Strings(qualified)
+	descriptor := append([]string{"pysolate.import-closure.v1", "available"}, available...)
+	descriptor = append(descriptor, "qualified")
+	descriptor = append(descriptor, qualified...)
+	digest := sha256.Sum256([]byte(strings.Join(descriptor, "\x00")))
+	return fmt.Sprintf("sha256:%x", digest[:])
 }

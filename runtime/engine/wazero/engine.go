@@ -135,9 +135,13 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
 	}
+	artifactDigest := sha256.Sum256(wasm)
+	artifactSHA256 := fmt.Sprintf("sha256:%x", artifactDigest[:])
+	if profile := config.ExecutionProfile; profile != nil && profile.ArtifactSHA256() != "" && profile.ArtifactSHA256() != artifactSHA256 {
+		return nil, runtimeconfig.ErrExecutionProfileArtifactMismatch
+	}
 	if config.DeterministicVerification != nil {
-		digest := sha256.Sum256(wasm)
-		if fmt.Sprintf("sha256:%x", digest[:]) != config.DeterministicVerification.ArtifactSHA256() || lease != nil {
+		if artifactSHA256 != config.DeterministicVerification.ArtifactSHA256() || lease != nil {
 			return nil, runtimeconfig.ErrDeterministicVerificationAdmission
 		}
 	}
@@ -156,10 +160,9 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		_ = wasmRuntime.Close(ctx)
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
-	artifactDigest := sha256.Sum256(wasm)
 	engine := &Engine{
 		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceLease: lease,
-		artifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]),
+		artifactSHA256: artifactSHA256,
 	}
 	if lease != nil {
 		engine.workspaceRun = make(chan struct{}, 1)
@@ -204,7 +207,7 @@ func (engine *Engine) Properties() enginecontract.Properties {
 		properties.AllowedImports = profile.AllowedImports()
 		properties.AvailableImports = profile.AvailableImports()
 		properties.QualifiedImports = profile.QualifiedImports()
-		properties.ArtifactSHA256 = profile.ArtifactSHA256()
+		properties.ArtifactSHA256 = engine.artifactSHA256
 		properties.ManifestSHA256 = profile.ManifestSHA256()
 	}
 	return properties

@@ -18,12 +18,15 @@ func TestExecuteGuestRejectsUnshareableRunnerBeforeRun(t *testing.T) {
 		Backend: "wazero", ArtifactSHA256: invocation.ArtifactSHA256,
 		ExecutionProfileBindingSHA256: invocation.ExecutionProfileSHA256,
 		DeterministicProfileSHA256:    invocation.DeterministicSettingsSHA256,
+		AvailableImports:              []string{"sys"},
+		QualifiedImports:              []string{"sys"},
 	}
 	for name, mutate := range map[string]func(*engine.Properties){
 		"wrong artifact":           func(properties *engine.Properties) { properties.ArtifactSHA256 = digest('0') },
 		"workspace":                func(properties *engine.Properties) { properties.WorkspaceMounted = true },
 		"broker":                   func(properties *engine.Properties) { properties.CapabilityBrokerAvailable = true },
 		"no deterministic profile": func(properties *engine.Properties) { properties.DeterministicProfileSHA256 = "" },
+		"wrong import closure":     func(properties *engine.Properties) { properties.QualifiedImports = []string{"json"} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			properties := base
@@ -87,6 +90,20 @@ func TestFreshGuestComputeClosesPartiallyCreatedRunnerOnFactoryError(t *testing.
 	}
 }
 
+func TestFreshGuestComputeClosesRunnerAfterPanic(t *testing.T) {
+	runner := &probeRunner{panicRun: true}
+	defer func() {
+		if recovered := recover(); recovered == nil || runner.closes.Load() != 1 {
+			t.Fatalf("recovered=%v closes=%d", recovered, runner.closes.Load())
+		}
+	}()
+	_, _ = (agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) { return "physical-panic", runner, nil },
+		Request:   []byte(`{"run_id":"panic","code":"result = 1","inputs":{}}`), MaxResultBytes: 16,
+		DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	}).Run(context.Background(), &agentfunction.Guard{})
+}
+
 func TestExecuteGuestIsDomainSeparatedFromCallbackFlights(t *testing.T) {
 	invocation, request := guestInvocation()
 	flights := agentfunction.NewFlightGroup()
@@ -107,6 +124,7 @@ func TestExecuteGuestIsDomainSeparatedFromCallbackFlights(t *testing.T) {
 		Backend: "wazero", ArtifactSHA256: invocation.ArtifactSHA256,
 		ExecutionProfileBindingSHA256: invocation.ExecutionProfileSHA256,
 		DeterministicProfileSHA256:    invocation.DeterministicSettingsSHA256,
+		AvailableImports:              []string{"sys"}, QualifiedImports: []string{"sys"},
 	}}
 	compute := agentfunction.FreshGuestCompute{
 		NewRunner: func(context.Context) (string, engine.Runner, error) { return "physical-guest", runner, nil },
@@ -141,6 +159,7 @@ func guestInvocation() (agentfunction.Invocation, []byte) {
 	invocation.CanonicalInputs = []byte(`{"value":1}`)
 	emptySchema := sha256.Sum256(nil)
 	invocation.OutputSchemaSHA256 = fmt.Sprintf("sha256:%x", emptySchema[:])
+	invocation.ImportClosureSHA256 = agentfunction.ImportClosureIdentity([]string{"sys"}, []string{"sys"})
 	request := []byte(`{"run_id":"guest","code":"result = 1","inputs":{"value":1}}`)
 	return invocation, request
 }
@@ -149,10 +168,14 @@ type probeRunner struct {
 	properties engine.Properties
 	runs       atomic.Int32
 	closes     atomic.Int32
+	panicRun   bool
 }
 
 func (runner *probeRunner) Run(context.Context, []byte, string) ([]byte, error) {
 	runner.runs.Add(1)
+	if runner.panicRun {
+		panic("runner panic")
+	}
 	return []byte("result"), nil
 }
 func (runner *probeRunner) Close(context.Context) error   { runner.closes.Add(1); return nil }

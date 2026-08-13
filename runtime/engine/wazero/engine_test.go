@@ -83,6 +83,27 @@ func TestDeterministicProfileRejectsArtifactSubstitutionBeforeCompile(t *testing
 	}
 }
 
+func TestExecutionProfileRejectsArtifactSubstitutionWithoutDeterministicProfile(t *testing.T) {
+	wasm := []byte{0, 97, 115, 109, 1, 0, 0, 0}
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"sys"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: "sha256:" + strings.Repeat("a", 64),
+		ManifestSHA256: "sha256:" + strings.Repeat("b", 64), ImportRoots: []string{"sys"},
+		QualifiedImportRoots: []string{"sys"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &bound
+	if _, err := (wazeroengine.Factory{}).New(context.Background(), wasm, config); !errors.Is(err, runtimeconfig.ErrExecutionProfileArtifactMismatch) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
 func TestLegacyGuestFailsSourceValidationBeforeBroker(t *testing.T) {
 	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
 	if err != nil {

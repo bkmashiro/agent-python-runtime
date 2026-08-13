@@ -38,6 +38,9 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 	}
 	physicalID, runner, err := compute.NewRunner(ctx)
 	if err != nil || runner == nil {
+		if runner != nil {
+			_ = runner.Close(context.Background())
+		}
 		return nil, errors.Join(ErrInvalidGuestCompute, err)
 	}
 	if err := guard.BindPhysicalExecution(physicalID); err != nil {

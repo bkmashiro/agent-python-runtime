@@ -60,6 +60,20 @@ func TestExecuteGuestRejectsRequestIdentityMismatchBeforeRunnerCreation(t *testi
 	}
 }
 
+func TestFreshGuestComputeClosesPartiallyCreatedRunnerOnFactoryError(t *testing.T) {
+	runner := &probeRunner{}
+	_, err := (agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) {
+			return "physical-partial", runner, errors.New("factory failed")
+		},
+		Request: []byte(`{"run_id":"partial","code":"result = 1","inputs":{}}`), MaxResultBytes: 16,
+		DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	}).Run(context.Background(), &agentfunction.Guard{})
+	if !errors.Is(err, agentfunction.ErrInvalidGuestCompute) || runner.runs.Load() != 0 || runner.closes.Load() != 1 {
+		t.Fatalf("err=%v runs=%d closes=%d", err, runner.runs.Load(), runner.closes.Load())
+	}
+}
+
 func TestExecuteGuestIsDomainSeparatedFromCallbackFlights(t *testing.T) {
 	invocation, request := guestInvocation()
 	flights := agentfunction.NewFlightGroup()

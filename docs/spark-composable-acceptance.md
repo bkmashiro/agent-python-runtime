@@ -16,8 +16,8 @@ expected private artifact for each scenario. It is not published by Lab.
 
 ## Direct results
 
-Host source `bae1eca3d0f98cec3580bf56fd356d0e8ca69d5c` ran all three frozen scenarios
-in Linux job `273802` against the fixed-memory Guest artifact
+Host source `1cd96dccf38416dbec5a3593ad1b0d97d044a214` ran all three frozen scenarios
+in Linux job `273812` against the fixed-memory Guest artifact
 `sha256:591978964aae541d0758404f325c482898aa2ba5386a721dd2a5dcf049dbe9fb`.
 Exactly 54 direct rows were recorded:
 

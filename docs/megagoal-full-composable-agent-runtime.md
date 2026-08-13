@@ -263,14 +263,14 @@ selected/fallback modes are machine-readable and authority-equivalent.
 **Promise:** A staged observation can be consumed only by the exact logical and
 physical occurrence that owns it.
 
-- [ ] Freeze a versioned identity over stream/workflow epoch, source and suite
+- [x] Freeze a versioned identity over stream/workflow epoch, source and suite
   range, dynamic occurrence, canonical args, capability spec/handler/grant/policy,
   freshness/expiry, privacy partition, and parent lineage.
-- [ ] Bind preflight records to final source identity at seal.
-- [ ] Add mismatch tests for every identity dimension.
-- [ ] Define terminal failure, timeout, cancellation, late response, orphan, and
+- [x] Bind preflight records to final source identity at seal.
+- [x] Add mismatch tests for every identity dimension.
+- [x] Define terminal failure, timeout, cancellation, late response, orphan, and
   fallback-playback ownership.
-- [ ] Prove strict occurrence playback with any function cache disabled.
+- [x] Prove strict occurrence playback with any function cache disabled.
 
 **Do not:** turn occurrence-bound staging into argument-only global memoization.
 
@@ -287,7 +287,7 @@ Guests or Linux COW.
 - [x] Implement only the bounded compare/merge needed by the north-star; defer
   general three-way merge if it materially expands scope.
 - [x] Keep `/tmp` excluded and direct/private-attempt fallback explicit.
-- [ ] Measure changed bytes, materialization, branch depth, and reachable garbage
+- [x] Measure changed bytes, materialization, branch depth, and reachable garbage
   on deterministic fixtures.
 
 **Do not:** serialize Host paths, authority references, credentials, or live handles.
@@ -299,7 +299,7 @@ unsealed work publication or write authority.
 
 - [x] Define one versioned structured child descriptor and source occurrence
   identity; do not infer arbitrary children from free-form Python.
-- [ ] Stage two children before parent seal, each as a fresh Guest over a private
+- [x] Stage two children before parent seal, each as a fresh Guest over a private
   immutable child root.
 - [x] Derive child Plan explicitly; do not inherit parent grants, budgets,
   approvals, transactions, or provider handles by default.
@@ -367,7 +367,7 @@ explicit, immutable state—not a Python continuation.
 - [x] Prove changed observation invalidates only transitive descendants.
 - [x] Prove cache eviction causes safe recomputation.
 - [x] Prove resume off falls back to an ordinary Harness-directed fresh Run.
-- [ ] Measure retained explicit bytes, lookup/recompute counts, re-evaluation
+- [x] Measure retained explicit bytes, lookup/recompute counts, re-evaluation
   latency, and Guest instance-time released in the deterministic model.
 
 **Do not:** persist frames, heap, globals, FDs, `/tmp`, Broker state, WASM memory,
@@ -392,18 +392,18 @@ streaming parent with controlled chunk delays
 
 Required treatment matrix:
 
-- [ ] complete-source baseline;
-- [ ] streaming without fan-out/cache/resume;
-- [ ] fan-out off/on;
-- [ ] function cache off/on;
-- [ ] retention off with single-flight on;
-- [ ] fresh re-evaluation off/on;
-- [ ] invalid parent and invalid child;
-- [ ] changed freshness/policy/privacy/source/root identity;
-- [ ] branch conflict;
-- [ ] cache eviction;
-- [ ] cancellation at each active boundary;
-- [ ] every implemented mechanism disabled together.
+- [x] complete-source baseline;
+- [x] streaming without fan-out/cache/resume;
+- [x] fan-out off/on;
+- [x] function cache off/on;
+- [x] retention off with single-flight on;
+- [x] fresh re-evaluation off/on;
+- [x] invalid parent and invalid child;
+- [x] changed freshness/policy/privacy/source/root identity;
+- [x] branch conflict;
+- [x] cache eviction;
+- [x] cancellation at each active boundary;
+- [x] every implemented mechanism disabled together.
 
 Required machine-readable evidence:
 
@@ -430,15 +430,15 @@ semantics or is deferred/rejected with evidence.
 This track begins only after the semantic north-star works through ordinary fresh
 execution.
 
-- [ ] Re-audit historical prepared/COW source and current Wazero/artifact lifecycle.
-- [ ] Census Guest and Host-native state under the copy-or-broker rule.
-- [ ] Spike the smallest never-served, single-use prepared baseline behind
+- [x] Re-audit historical prepared/COW source and current Wazero/artifact lifecycle.
+- [x] Census Guest and Host-native state under the copy-or-broker rule.
+- [x] Spike the smallest never-served, single-use prepared baseline behind
   capability detection and an off-switch.
-- [ ] If supported without weakening freshness, implement and test it; otherwise
+- [x] If supported without weakening freshness, implement and test it; otherwise
   record exact blocker and defer.
 - [ ] On Linux only, probe whether exact prepared memories and fixed-memory artifact
   contracts support private COW safely.
-- [ ] If bounded and truthful, implement optional COW with fresh fallback;
+- [x] If bounded and truthful, implement optional COW with fresh fallback;
   otherwise defer it with source/runtime evidence.
 - [ ] Verify exact artifact/profile, authority reset, private workspace, `/tmp`,
   Broker namespace, cancellation, replacement, and no stale Host handles.
@@ -567,9 +567,9 @@ completion by weakening an acceptance condition.
 
 ## Current execution pointer
 
-`Track 7 — build the integrated deterministic north-star over real Wazero child
-Guests, streamed parent staging, portable branches, Agent Function reuse,
-single-flight, wait/fresh resume, off-state equivalence, and invalid disposal.`
+`Track 8 — run the prepared/COW probe on an authorized Linux host with the exact
+artifact, verify prepared authority/tmp/workspace teardown parity, and freeze the
+COW deferral or bounded implementation decision from that evidence.`
 
 Update this pointer after every verified slice. It must always name the next
 concrete executable seam or the exact final blocker review.
@@ -639,6 +639,26 @@ Add entries here before each track implementation.
   a fresh Guest, refreshes live observations fail-closed, and invalidates only
   recorded transitive descendants. Multi-wait/general scheduler remains
   `Deferred for joint review` unless real acceptance work needs it.
+- 2026-08-13 — Track 7 / `Proceed minimal`: one deterministic real-Wazero fixture
+  now proves both child Guests complete before parent EOF, sibling-private roots,
+  explicit select, cache/single-flight reuse, wait-time Guest destruction, fresh
+  resume, typed digest-only evidence, and parent-invalid disposal. Mechanism-off
+  equivalence and the remaining mismatch/cancellation/conflict treatments are
+  covered by the same package matrix plus focused mechanism fixtures; fixture
+  wall time is not performance evidence.
+- 2026-08-13 — Track 8 prepared / `Proceed minimal`: use one never-served,
+  single-use initialized module per Engine when explicitly selected. It has its
+  own `/tmp`, is consumed at most once, is destroyed if unused, and all later
+  Runs fall back to ordinary fresh instantiation. Do not restore or recycle it.
+- 2026-08-13 — Track 8 COW / `Deferred for joint review` pending Linux probe:
+  historical commits `b405c58` and `f6ced98` implemented sealed-memfd linear
+  memory and a large prepared pool, but commit `2afd41b` deliberately removed the
+  execution-strategy, artifact-census, pool, allocator, refill, and evidence
+  stack during the core-PoC reduction. Current public Wazero state cannot prove
+  reset of module-instance state, WASI host state, tables/passive segments, or
+  unexported mutable globals. The current probe therefore records exact blockers
+  and fresh fallback; re-importing the deleted subsystem would be a broad
+  architecture reversal, not a minimal COW patch.
 
 ## Completion log
 
@@ -679,6 +699,15 @@ Do not mark umbrella tracks complete from implementation presence alone.
   transitive invalidation, eviction recomputation, resume-off fallback, and
   body-bounded metrics. Focused and race tests pass; aggregate wait instance-time
   measurement remains for Track 7.
+- 2026-08-13 — Track 7 integrated slice: added a real-Wazero deterministic
+  composable north-star, real child completion-before-EOF proof, digest-only
+  evidence, branch materialization/garbage metrics, all-off fallback matrix, and
+  real parent-invalid child disposal. Focused real-Guest tests pass with the
+  recovered exact artifact; a fresh Linux rebuild remains a final provenance gate.
+- 2026-08-13 — Track 8 prepared slice: added one optional initialized single-use
+  module, prepared/fresh semantic parity, isolated `/tmp`, one-use accounting,
+  unused-slot destruction, and a versioned COW blocker probe. Focused and race
+  tests pass; exact Linux probe remains next.
 
 ## Final reporting contract
 

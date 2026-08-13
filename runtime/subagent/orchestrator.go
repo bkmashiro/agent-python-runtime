@@ -188,12 +188,17 @@ type TimelineEvent struct {
 }
 
 type JoinResult struct {
-	SelectedChildID string
-	SelectedRoot    workspace.Root
-	ChildCount      uint32
-	Completed       uint32
-	DiscardedRefs   []workspace.Ref
-	Timeline        []TimelineEvent
+	SelectedChildID   string
+	SelectedRoot      workspace.Root
+	ChildCount        uint32
+	Completed         uint32
+	DiscardedRefs     []workspace.Ref
+	Timeline          []TimelineEvent
+	ChangedBytes      uint64
+	MaterializedBytes uint64
+	MaxBranchDepth    uint32
+	ReachableRoots    uint32
+	DiscardedRoots    uint32
 }
 
 func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID string) (JoinResult, error) {
@@ -227,6 +232,21 @@ func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID stri
 	result := JoinResult{
 		SelectedChildID: selectedChildID, SelectedRoot: selected,
 		ChildCount: uint32(len(children)), Completed: uint32(len(children)), Timeline: timeline(children),
+		ReachableRoots: 1, DiscardedRoots: uint32(len(children) - 1),
+	}
+	for _, root := range roots {
+		result.ChangedBytes += root.ChangedBytes
+		if root.Depth > result.MaxBranchDepth {
+			result.MaxBranchDepth = root.Depth
+		}
+		info, inspectErr := orchestrator.config.Manager.Inspect(root.Ref())
+		if inspectErr != nil {
+			for _, sealed := range roots {
+				_ = orchestrator.config.Manager.Destroy(sealed.Ref())
+			}
+			return JoinResult{}, inspectErr
+		}
+		result.MaterializedBytes += info.TotalBytes
 	}
 	for childID, root := range roots {
 		if childID == selectedChildID {

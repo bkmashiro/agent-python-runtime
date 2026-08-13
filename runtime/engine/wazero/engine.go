@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	goruntime "runtime"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -75,6 +78,34 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 var _ enginecontract.Factory = Factory{}
 var _ enginecontract.Runner = (*Engine)(nil)
 
+type preparedInstance struct {
+	module    api.Module
+	stderr    *bytes.Buffer
+	temporary *workspace.Temporary
+}
+
+type PreparedState struct {
+	SchemaVersion     string  `json:"schema_version"`
+	Selected          bool    `json:"selected"`
+	Ready             bool    `json:"ready"`
+	PreparedRuns      uint64  `json:"prepared_runs"`
+	FreshFallbackRuns uint64  `json:"fresh_fallback_runs"`
+	PrepareMS         float64 `json:"prepare_ms"`
+}
+
+type COWProbe struct {
+	SchemaVersion       string   `json:"schema_version"`
+	Platform            string   `json:"platform"`
+	PreparedCompatible  bool     `json:"prepared_compatible"`
+	MemoryCount         int      `json:"memory_count"`
+	ImportedMemoryCount int      `json:"imported_memory_count"`
+	MemoryFixed         bool     `json:"memory_fixed"`
+	MemoryCOWCandidate  bool     `json:"memory_cow_candidate"`
+	COWSelected         bool     `json:"cow_selected"`
+	Fallback            bool     `json:"fallback"`
+	Blockers            []string `json:"blockers"`
+}
+
 type Engine struct {
 	runtime        wazerort.Runtime
 	compiled       wazerort.CompiledModule
@@ -83,6 +114,9 @@ type Engine struct {
 	workspaceLease *workspace.Lease
 	workspaceRun   chan struct{}
 	artifactSHA256 string
+	preparedMu     sync.Mutex
+	prepared       *preparedInstance
+	preparedState  PreparedState
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -96,6 +130,9 @@ func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig
 func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, lease *workspace.Lease) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
+	}
+	if config.Mechanisms.MemoryCOW {
+		return nil, fmt.Errorf("memory COW is unavailable: %w", runtimeconfig.ErrMechanismDisabled)
 	}
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
@@ -129,6 +166,18 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 	if lease != nil {
 		engine.workspaceRun = make(chan struct{}, 1)
 	}
+	engine.preparedState = PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1", Selected: config.Mechanisms.PreparedRuntime}
+	if config.Mechanisms.PreparedRuntime {
+		started := time.Now()
+		prepared, prepareErr := engine.newPrepared(ctx)
+		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
+		if prepareErr != nil {
+			_ = wasmRuntime.Close(ctx)
+			return nil, fmt.Errorf("prepare single-use guest: %w", prepareErr)
+		}
+		engine.prepared = prepared
+		engine.preparedState.Ready = true
+	}
 	return engine, nil
 }
 
@@ -150,12 +199,13 @@ func (engine *Engine) Close(ctx context.Context) error {
 	if engine == nil || engine.runtime == nil {
 		return nil
 	}
+	preparedErr := engine.closePrepared()
 	runtimeErr := engine.runtime.Close(ctx)
 	var workspaceErr error
 	if engine.workspaceLease != nil {
 		workspaceErr = engine.workspaceLease.Release()
 	}
-	return errors.Join(runtimeErr, workspaceErr)
+	return errors.Join(preparedErr, runtimeErr, workspaceErr)
 }
 
 func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
@@ -188,6 +238,119 @@ func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *wo
 		return nil, nil, errors.New("wazero does not support multiple rooted mounts")
 	}
 	return config.WithFSConfig(withWorkspace.WithSysFSMount(temporary.FS(), "tmp")), temporary, nil
+}
+
+func (engine *Engine) newPrepared(ctx context.Context) (*preparedInstance, error) {
+	prepareContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
+	defer cancel()
+	stderr := &bytes.Buffer{}
+	moduleConfig, temporary, err := engine.moduleConfig(stderr)
+	if err != nil {
+		return nil, err
+	}
+	module, err := engine.runtime.InstantiateModule(prepareContext, engine.compiled, moduleConfig)
+	if err != nil {
+		if temporary != nil {
+			_ = temporary.Close()
+		}
+		return nil, err
+	}
+	failed := true
+	defer func() {
+		if failed {
+			_ = module.Close(context.Background())
+			if temporary != nil {
+				_ = temporary.Close()
+			}
+		}
+	}()
+	if err := callNoArgs(prepareContext, module, "_initialize"); err != nil {
+		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	if err := callStatusWithBytes(prepareContext, module, "runtime_init", []byte("{}")); err != nil {
+		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	stderr.Reset()
+	failed = false
+	return &preparedInstance{module: module, stderr: stderr, temporary: temporary}, nil
+}
+
+func (engine *Engine) takePrepared() *preparedInstance {
+	engine.preparedMu.Lock()
+	defer engine.preparedMu.Unlock()
+	prepared := engine.prepared
+	engine.prepared = nil
+	if prepared != nil {
+		engine.preparedState.Ready = false
+		engine.preparedState.PreparedRuns++
+	} else if engine.preparedState.Selected {
+		engine.preparedState.FreshFallbackRuns++
+	}
+	return prepared
+}
+
+func (engine *Engine) PreparedState() PreparedState {
+	if engine == nil {
+		return PreparedState{}
+	}
+	engine.preparedMu.Lock()
+	defer engine.preparedMu.Unlock()
+	return engine.preparedState
+}
+
+func (engine *Engine) COWProbe() COWProbe {
+	probe := COWProbe{
+		SchemaVersion: "pysolate.cow-probe.v1", Platform: goruntime.GOOS,
+		PreparedCompatible: engine != nil, Fallback: true,
+		Blockers: []string{"module_instance_state_not_resettable", "wasi_host_state_not_resettable", "static_non_memory_state_not_censused"},
+	}
+	if engine == nil || engine.compiled == nil {
+		probe.Blockers = append(probe.Blockers, "compiled_module_unavailable")
+		sort.Strings(probe.Blockers)
+		return probe
+	}
+	imported := engine.compiled.ImportedMemories()
+	exported := engine.compiled.ExportedMemories()
+	definitions := make(map[uint32]api.MemoryDefinition, len(imported)+len(exported))
+	for _, definition := range imported {
+		definitions[definition.Index()] = definition
+	}
+	for _, definition := range exported {
+		definitions[definition.Index()] = definition
+	}
+	probe.MemoryCount = len(definitions)
+	probe.ImportedMemoryCount = len(imported)
+	memory, exportedMemory := exported["memory"]
+	if exportedMemory {
+		maximum, declared := memory.Max()
+		probe.MemoryFixed = declared && maximum == memory.Min()
+	}
+	probe.MemoryCOWCandidate = goruntime.GOOS == "linux" && exportedMemory && probe.MemoryCount == 1 && len(imported) == 0 && probe.MemoryFixed
+	if goruntime.GOOS != "linux" {
+		probe.Blockers = append(probe.Blockers, "linux_memfd_private_mapping_unavailable")
+	}
+	if !probe.MemoryCOWCandidate {
+		probe.Blockers = append(probe.Blockers, "linear_memory_not_fixed_private_candidate")
+	}
+	sort.Strings(probe.Blockers)
+	return probe
+}
+
+func (engine *Engine) closePrepared() error {
+	engine.preparedMu.Lock()
+	prepared := engine.prepared
+	engine.prepared = nil
+	engine.preparedState.Ready = false
+	engine.preparedMu.Unlock()
+	if prepared == nil {
+		return nil
+	}
+	moduleErr := prepared.module.Close(context.Background())
+	var temporaryErr error
+	if prepared.temporary != nil {
+		temporaryErr = prepared.temporary.Close()
+	}
+	return errors.Join(moduleErr, temporaryErr)
 }
 
 func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
@@ -282,17 +445,32 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			}
 		}()
 	}
+	prepared := engine.takePrepared()
 	stderr := &bytes.Buffer{}
-	moduleConfig, temporary, err := engine.moduleConfig(stderr)
-	if err != nil {
-		return nil, err
+	var temporary *workspace.Temporary
+	var module api.Module
+	initialized := false
+	if prepared != nil {
+		stderr = prepared.stderr
+		temporary = prepared.temporary
+		module = prepared.module
+		initialized = true
+	} else {
+		moduleConfig, moduleTemporary, moduleErr := engine.moduleConfig(stderr)
+		if moduleErr != nil {
+			return nil, moduleErr
+		}
+		temporary = moduleTemporary
+		module, err = engine.runtime.InstantiateModule(runContext, engine.compiled, moduleConfig)
+		if err != nil {
+			if temporary != nil {
+				_ = temporary.Close()
+			}
+			return nil, fmt.Errorf("instantiate guest: %w", err)
+		}
 	}
 	if temporary != nil {
 		defer func() { runErr = errors.Join(runErr, temporary.Close()) }()
-	}
-	module, err := engine.runtime.InstantiateModule(runContext, engine.compiled, moduleConfig)
-	if err != nil {
-		return nil, fmt.Errorf("instantiate guest: %w", err)
 	}
 	moduleClosed := false
 	defer func() {
@@ -300,11 +478,13 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			runErr = errors.Join(runErr, module.Close(context.Background()))
 		}
 	}()
-	if err := callNoArgs(runContext, module, "_initialize"); err != nil {
-		return nil, withGuestDiagnostic(err, stderr.String())
-	}
-	if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
-		return nil, withGuestDiagnostic(err, stderr.String())
+	if !initialized {
+		if err := callNoArgs(runContext, module, "_initialize"); err != nil {
+			return nil, withGuestDiagnostic(err, stderr.String())
+		}
+		if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
+			return nil, withGuestDiagnostic(err, stderr.String())
+		}
 	}
 	if err := callSourceValidation(runContext, module, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())

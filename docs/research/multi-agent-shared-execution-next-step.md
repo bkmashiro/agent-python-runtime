@@ -173,6 +173,12 @@ This concurrent work already caches exact intermediate task results in multi-age
 
 The narrower Pysolate question remains distinct only if the prototype proves execution semantics the caching paper does not study: content-/environment-bound invocation identity, runtime-enforced rejection of effects, in-flight coalescing into one physical CPython Guest, private workspace isolation, and a logical-to-physical execution trace. Eviction policy should not be the first contribution.
 
+### FlowMesh
+
+FlowMesh already frames multi-tenant LLM/post-training workflows as a shared service, decomposes them into lineage-bearing operators, deduplicates work across users, and runs stateless workers over a content-addressable store [6]. Its primary domain is heterogeneous GPU workflow execution, batching, and placement rather than authority-constrained ephemeral CPython.
+
+Consequently, a broad claim such as “logical DAGs multiplexed over fewer physical workers” is also not novel enough. Pysolate must stay narrower: real agent-generated Python; exact runtime/environment/authority identity; effect-enforced shareability; private reversible workspace branches; and evidence that one admitted physical Guest result safely serves multiple logical agents.
+
 ### ARIES
 
 At pinned source `b8e6df3dd912d7c9fbee3cb1fe66b119e468d5a3`, ARIES separates Benchmark, AgentHarness, ToolSandbox, ToolBridge, model, and monitoring [3]. Its Hermes harness already exports message-level `sessions.jsonl` telemetry. However, `ToolSandbox` is a full task environment with `Exec`, `Upload`, and `Download`, used by benchmark preparation and evaluation. A direct Pysolate-as-ToolSandbox adapter would force Pysolate to emulate a general computer.
@@ -198,3 +204,4 @@ Use ARIES later as the experiment/harness layer while retaining its task sandbox
 3. HyScale Lab, [ARIES pinned source](https://github.com/hyscale-lab/ARIES/tree/b8e6df3dd912d7c9fbee3cb1fe66b119e468d5a3), commit `b8e6df3dd912d7c9fbee3cb1fe66b119e468d5a3`.
 4. Anas Mohamed et al., [Workload-Aware Caching for Multi-Agent Systems](https://arxiv.org/abs/2607.20495), arXiv:2607.20495v1.
 5. Joseph Fioresi et al., [Learning to Share: Selective Memory for Efficient Parallel Agentic Systems](https://arxiv.org/abs/2602.05965), arXiv:2602.05965v2.
+6. Junyi Shen et al., [FlowMesh: A Service Fabric for Composable LLM Workflows](https://arxiv.org/abs/2510.26913), arXiv:2510.26913v1.

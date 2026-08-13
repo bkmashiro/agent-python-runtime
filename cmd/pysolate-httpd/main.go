@@ -193,6 +193,14 @@ func (service *serviceExecutor) execute(ctx context.Context, envelope executeReq
 	if err != nil {
 		return executeResponse{}, err
 	}
+	var canonicalInputs any
+	if err := json.Unmarshal(decoded.Inputs, &canonicalInputs); err != nil {
+		return executeResponse{}, err
+	}
+	decoded.Inputs, err = json.Marshal(canonicalInputs)
+	if err != nil {
+		return executeResponse{}, err
+	}
 	if err := runtimeconfig.AdmitRunRequirements(decoded); err != nil {
 		return executeResponse{}, err
 	}

@@ -60,6 +60,23 @@ func TestExecutionEndpointRejectsUnknownAndOversizedJSON(t *testing.T) {
 	}
 }
 
+func TestExecutionEndpointCanonicalizesObjectInputs(t *testing.T) {
+	server := newHTTPServer("secret", func(_ context.Context, request executeRequest) (executeResponse, error) {
+		if string(request.RunRequest.Inputs) != `{"z":1,"a":2}` {
+			t.Fatalf("HTTP decode changed caller bytes before executor: %s", request.RunRequest.Inputs)
+		}
+		return executeResponse{ProtocolVersion: protocolVersion, RequestID: request.RequestID, Result: json.RawMessage(`{"ok":true}`)}, nil
+	})
+	body := `{"protocol_version":"pysolate.remote-execution.v1","request_id":"canonical","run_request":{"run_id":"canonical","code":"result=1","inputs":{"z":1,"a":2}}}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/executions", bytes.NewBufferString(body))
+	request.Header.Set("Authorization", "Bearer secret")
+	result := httptest.NewRecorder()
+	server.ServeHTTP(result, request)
+	if result.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", result.Code, result.Body.String())
+	}
+}
+
 func TestHealthDoesNotRequireAuthentication(t *testing.T) {
 	server := newHTTPServer("secret", nil)
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)

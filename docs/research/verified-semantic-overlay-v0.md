@@ -40,7 +40,7 @@ The overlay is capped at 256 records. Arguments are scalar JSON literals capped 
 4 KiB each; the Host caps the complete canonical argument object at 64 KiB. Values
 whose Python and Host encoders do not agree byte-for-byte are rejected by the Host.
 Schema and analyzer identities advance to `semantic-analysis.v2` and
-`semantic-analyzer.v4`.
+`semantic-analyzer.v5`.
 
 ## Host validation and provenance
 

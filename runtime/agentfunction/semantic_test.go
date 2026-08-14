@@ -169,7 +169,7 @@ func (runner *verifiedFixtureRunner) Properties() enginecontract.Properties {
 }
 
 func semanticAnalyzerIdentity() string {
-	digest := sha256.Sum256([]byte("pysolate.semantic-analyzer.v4"))
+	digest := sha256.Sum256([]byte("pysolate.semantic-analyzer.v5"))
 	return fmt.Sprintf("sha256:%x", digest[:])
 }
 

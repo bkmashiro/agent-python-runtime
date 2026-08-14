@@ -7,7 +7,7 @@ import re
 
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v2"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v4").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v5").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
@@ -164,6 +164,11 @@ class _ScopeAnalyzer(ast.NodeVisitor):
     def visit_Delete(self, node):
         if any(isinstance(target, (ast.Attribute, ast.Subscript)) for target in node.targets):
             self.barrier("unsupported_control_flow", node)
+        for target in node.targets:
+            for name in self._assigned_names(target):
+                if name in self.capabilities["tool_roots"]:
+                    self.barrier("tool_rebinding", target)
+                self.shadowed.add(name)
         self.generic_visit(node)
 
     def visit_Import(self, node):

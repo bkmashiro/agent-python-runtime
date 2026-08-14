@@ -3,13 +3,17 @@ package agentfunction_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
 func TestExecuteGuestRejectsUnshareableRunnerBeforeRun(t *testing.T) {
@@ -104,6 +108,19 @@ func TestFreshGuestComputeClosesRunnerAfterPanic(t *testing.T) {
 	}).Run(context.Background(), &agentfunction.Guard{})
 }
 
+func TestFreshGuestComputeRejectsSuccessAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := &probeRunner{cancelRun: cancel, payload: []byte("result")}
+	value, err := (agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) { return "physical-cancel", runner, nil },
+		Request:   []byte(`{"run_id":"cancel","code":"result = 1","inputs":{}}`), MaxResultBytes: 16,
+		DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	}).Run(ctx, &agentfunction.Guard{})
+	if !errors.Is(err, context.Canceled) || len(value) != 0 || runner.closes.Load() != 1 {
+		t.Fatalf("value=%q err=%v closes=%d", value, err, runner.closes.Load())
+	}
+}
+
 func TestExecuteGuestIsDomainSeparatedFromCallbackFlights(t *testing.T) {
 	invocation, request := guestInvocation()
 	flights := agentfunction.NewFlightGroup()
@@ -151,6 +168,230 @@ func TestExecuteGuestRejectsCompletedRetention(t *testing.T) {
 	}
 }
 
+func TestExecuteQualifiedGuestCollapsesAndRetainsExactResult(t *testing.T) {
+	invocation, request := guestInvocation()
+	request = qualifiedGuestRequest(t, request)
+	qualified := qualifiedGuestInvocation(t, invocation, request)
+	store, err := agentfunction.NewBoundedStore(t.TempDir(), invocation.ProjectSHA256, 16, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flights := agentfunction.NewFlightGroup()
+	functionEngine := agentfunction.Engine{Store: store, CacheEnabled: true, Flights: flights}
+	properties := engine.Properties{
+		Backend: "wazero", ArtifactSHA256: invocation.ArtifactSHA256,
+		ExecutionProfileBindingSHA256: invocation.ExecutionProfileSHA256,
+		DeterministicProfileSHA256:    invocation.DeterministicSettingsSHA256,
+		AvailableImports:              []string{"sys"}, QualifiedImports: []string{"sys"},
+	}
+	var created atomic.Int32
+	started := make(chan struct{})
+	release := make(chan struct{})
+	once := sync.Once{}
+	compute := agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) {
+			created.Add(1)
+			once.Do(func() { close(started) })
+			<-release
+			return "physical-qualified", &probeRunner{properties: properties, payload: []byte(`{"status":"ok","result":{"v":1}}`)}, nil
+		},
+		Request: request, MaxResultBytes: 16,
+		DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	}
+	type outcome struct {
+		result agentfunction.Result
+		err    error
+	}
+	outcomes := make(chan outcome, 2)
+	go func() {
+		result, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
+		outcomes <- outcome{result, err}
+	}()
+	<-started
+	go func() {
+		result, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
+		outcomes <- outcome{result, err}
+	}()
+	deadline := time.Now().Add(time.Second)
+	for flights.Stats().Waiters != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if flights.Stats().Waiters != 1 {
+		t.Fatal("second invocation did not join flight")
+	}
+	close(release)
+	seen := map[agentfunction.Disposition]int{}
+	for range 2 {
+		outcome := <-outcomes
+		if outcome.err != nil || string(outcome.result.Value) != `{"v":1}` {
+			t.Fatalf("result=%+v err=%v", outcome.result, outcome.err)
+		}
+		seen[outcome.result.Disposition]++
+	}
+	if seen[agentfunction.Leader] != 1 || seen[agentfunction.Waiter] != 1 || created.Load() != 1 {
+		t.Fatalf("dispositions=%v created=%d", seen, created.Load())
+	}
+	retained, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
+	if err != nil || retained.Disposition != agentfunction.Retained || retained.PhysicalExecutionID != "" || created.Load() != 1 {
+		t.Fatalf("retained=%+v err=%v created=%d", retained, err, created.Load())
+	}
+	small := compute
+	small.MaxResultBytes = 1
+	if result, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, small); !errors.Is(err, agentfunction.ErrGuestResultTooLarge) || len(result.Value) != 0 || created.Load() != 1 {
+		t.Fatalf("small-limit=%+v err=%v created=%d", result, err, created.Load())
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if result, err := functionEngine.ExecuteQualifiedGuest(cancelled, qualified, compute); !errors.Is(err, context.Canceled) || len(result.Value) != 0 || created.Load() != 1 {
+		t.Fatalf("cancelled=%+v err=%v created=%d", result, err, created.Load())
+	}
+	var changedEnvelope map[string]any
+	if err := json.Unmarshal(request, &changedEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	changedEnvelope["compatibility"] = map[string]any{"profile": "base", "imports": []string{"sys"}}
+	changedRequest, err := json.Marshal(changedEnvelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedCompute := compute
+	changedCompute.Request = changedRequest
+	changed, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, changedCompute)
+	if !errors.Is(err, agentfunction.ErrGuestQualification) || len(changed.Value) != 0 || created.Load() != 1 {
+		t.Fatalf("changed-contract=%+v err=%v created=%d", changed, err, created.Load())
+	}
+	stats := store.Stats()
+	if stats.Hits != 2 || stats.Writes != 1 {
+		t.Fatalf("store stats=%+v", stats)
+	}
+}
+
+func TestQualifiedGuestFailuresNeverPublishRetention(t *testing.T) {
+	for name, fixture := range map[string]struct {
+		hostCall bool
+		runErr   error
+		panicRun bool
+		payload  []byte
+	}{
+		"host call": {hostCall: true},
+		"run error": {runErr: errors.New("trap")},
+		"cancelled": {runErr: context.Canceled},
+		"timeout":   {runErr: context.DeadlineExceeded},
+		"oom":       {runErr: errors.New("MemoryError")},
+		"panic":     {panicRun: true},
+		"decode":    {payload: []byte("not-json")},
+		"oversized": {payload: []byte(`{"status":"ok","result":"12345678901234567"}`)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			invocation, request := guestInvocation()
+			request = qualifiedGuestRequest(t, request)
+			qualified := qualifiedGuestInvocation(t, invocation, request)
+			store, err := agentfunction.NewBoundedStore(t.TempDir(), invocation.ProjectSHA256, 16, 4096)
+			if err != nil {
+				t.Fatal(err)
+			}
+			properties := engine.Properties{
+				Backend: "wazero", ArtifactSHA256: invocation.ArtifactSHA256,
+				ExecutionProfileBindingSHA256: invocation.ExecutionProfileSHA256,
+				DeterministicProfileSHA256:    invocation.DeterministicSettingsSHA256,
+				AvailableImports:              []string{"sys"}, QualifiedImports: []string{"sys"},
+			}
+			var created atomic.Int32
+			payload := fixture.payload
+			if payload == nil {
+				payload = []byte(`{"status":"ok","result":{"v":1}}`)
+			}
+			compute := agentfunction.FreshGuestCompute{
+				NewRunner: func(context.Context) (string, engine.Runner, error) {
+					created.Add(1)
+					return fmt.Sprintf("physical-%d", created.Load()), &probeRunner{
+						properties: properties, hostCall: fixture.hostCall, runErr: fixture.runErr,
+						panicRun: fixture.panicRun, payload: payload,
+					}, nil
+				},
+				Request: request, MaxResultBytes: 16,
+				DecodeResult: func([]byte) ([]byte, error) {
+					t.Fatal("qualified path must use the fixed decoder")
+					return nil, nil
+				},
+			}
+			functionEngine := agentfunction.Engine{Store: store, CacheEnabled: true, Flights: agentfunction.NewFlightGroup()}
+			for attempt := 0; attempt < 2; attempt++ {
+				result, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
+				if err == nil || len(result.Value) != 0 {
+					t.Fatalf("attempt=%d result=%+v err=%v", attempt, result, err)
+				}
+			}
+			if created.Load() != 2 || store.Stats().Writes != 0 || store.Stats().Hits != 0 {
+				t.Fatalf("created=%d stats=%+v", created.Load(), store.Stats())
+			}
+		})
+	}
+}
+
+func TestExecuteQualifiedGuestRequiresCompleteQualification(t *testing.T) {
+	invocation, request := guestInvocation()
+	result, err := (agentfunction.Engine{CacheEnabled: true}).ExecuteQualifiedGuest(context.Background(), agentfunction.QualifiedGuestInvocation{}, agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) { return "", nil, nil },
+		Request:   request, MaxResultBytes: 16, DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	})
+	if !errors.Is(err, agentfunction.ErrGuestQualification) || len(result.Value) != 0 {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	qualified := qualifiedGuestInvocation(t, invocation, qualifiedGuestRequest(t, request))
+	result, err = (agentfunction.Engine{CacheEnabled: true}).ExecuteQualifiedGuest(context.Background(), qualified, agentfunction.FreshGuestCompute{
+		NewRunner: func(context.Context) (string, engine.Runner, error) {
+			t.Fatal("runner must not start")
+			return "", nil, nil
+		},
+		Request: request, MaxResultBytes: 16, DecodeResult: func(value []byte) ([]byte, error) { return value, nil },
+	})
+	if !errors.Is(err, agentfunction.ErrGuestQualification) || len(result.Value) != 0 {
+		t.Fatalf("source-contract result=%+v err=%v", result, err)
+	}
+}
+
+func qualifiedGuestInvocation(t *testing.T, invocation agentfunction.Invocation, request []byte) agentfunction.QualifiedGuestInvocation {
+	t.Helper()
+	analysis := semantic.Analysis{
+		SchemaVersion: semantic.AnalysisSchemaVersion,
+		SourceSHA256:  invocation.FunctionSourceSHA256, ASTSHA256: digest('a'), AnalyzerSHA256: digest('b'),
+		ArtifactSHA256: invocation.ArtifactSHA256, ExecutionProfileSHA256: invocation.ExecutionProfileSHA256,
+		ImportClosureSHA256: invocation.ImportClosureSHA256, CapabilityPlanSHA256: digest('c'),
+		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1},
+		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
+	}
+	dependencies, err := agentfunction.SemanticWholeRunDependencies(invocation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, _, err := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{
+		Dependencies: dependencies, InputsCanonical: true, OutputsCanonical: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, analysis, plan, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return qualified
+}
+
+func qualifiedGuestRequest(t *testing.T, request []byte) []byte {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal(request, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	envelope["compatibility"] = map[string]any{"profile": "base", "imports": []string{}}
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
 func guestInvocation() (agentfunction.Invocation, []byte) {
 	invocation := cacheableInvocation()
 	code := "result = 1"
@@ -169,12 +410,28 @@ type probeRunner struct {
 	runs       atomic.Int32
 	closes     atomic.Int32
 	panicRun   bool
+	hostCall   bool
+	runErr     error
+	payload    []byte
+	cancelRun  context.CancelFunc
 }
 
-func (runner *probeRunner) Run(context.Context, []byte, string) ([]byte, error) {
+func (runner *probeRunner) Run(ctx context.Context, _ []byte, _ string) ([]byte, error) {
 	runner.runs.Add(1)
+	if runner.hostCall {
+		engine.MarkHostCallAttempt(ctx)
+	}
 	if runner.panicRun {
 		panic("runner panic")
+	}
+	if runner.runErr != nil {
+		return nil, runner.runErr
+	}
+	if runner.cancelRun != nil {
+		runner.cancelRun()
+	}
+	if runner.payload != nil {
+		return append([]byte(nil), runner.payload...), nil
 	}
 	return []byte("result"), nil
 }

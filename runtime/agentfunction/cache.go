@@ -20,7 +20,7 @@ import (
 
 const (
 	InvocationSchemaVersion  = "pysolate.agent-function.v1"
-	cacheRecordSchemaVersion = "pysolate.agent-function-cache.v1"
+	cacheRecordSchemaVersion = "pysolate.agent-function-cache.v2"
 )
 
 type Admission string
@@ -44,19 +44,24 @@ var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 var partitionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 type Invocation struct {
-	SchemaVersion               string          `json:"schema_version"`
-	Admission                   Admission       `json:"admission"`
-	ProjectSHA256               string          `json:"project_sha256"`
-	FunctionSourceSHA256        string          `json:"function_source_sha256"`
-	ArtifactSHA256              string          `json:"artifact_sha256"`
-	ExecutionProfileSHA256      string          `json:"execution_profile_sha256"`
-	ImportClosureSHA256         string          `json:"import_closure_sha256"`
-	CanonicalInputs             json.RawMessage `json:"canonical_inputs"`
-	ImmutableRootSHA256         []string        `json:"immutable_root_sha256"`
-	DeterministicSettingsSHA256 string          `json:"deterministic_settings_sha256"`
-	OutputSchemaSHA256          string          `json:"output_schema_sha256"`
-	PrivacyPartition            string          `json:"privacy_partition"`
-	PolicyEpochSHA256           string          `json:"policy_epoch_sha256"`
+	SchemaVersion                 string          `json:"schema_version"`
+	Admission                     Admission       `json:"admission"`
+	ProjectSHA256                 string          `json:"project_sha256"`
+	FunctionSourceSHA256          string          `json:"function_source_sha256"`
+	ArtifactSHA256                string          `json:"artifact_sha256"`
+	ExecutionProfileSHA256        string          `json:"execution_profile_sha256"`
+	ImportClosureSHA256           string          `json:"import_closure_sha256"`
+	CanonicalInputs               json.RawMessage `json:"canonical_inputs"`
+	ImmutableRootSHA256           []string        `json:"immutable_root_sha256"`
+	DeterministicSettingsSHA256   string          `json:"deterministic_settings_sha256"`
+	OutputSchemaSHA256            string          `json:"output_schema_sha256"`
+	PrivacyPartition              string          `json:"privacy_partition"`
+	PolicyEpochSHA256             string          `json:"policy_epoch_sha256"`
+	SemanticAnalysisSHA256        string          `json:"semantic_analysis_sha256,omitempty"`
+	SemanticPlanSHA256            string          `json:"semantic_plan_sha256,omitempty"`
+	SemanticAnalyzerSHA256        string          `json:"semantic_analyzer_sha256,omitempty"`
+	SemanticRegionID              string          `json:"semantic_region_id,omitempty"`
+	SemanticRequestContractSHA256 string          `json:"semantic_request_contract_sha256,omitempty"`
 }
 
 func (invocation Invocation) Validate() error {
@@ -73,6 +78,23 @@ func (invocation Invocation) Validate() error {
 		if !digestPattern.MatchString(digest) {
 			return ErrInvalidInvocation
 		}
+	}
+	semantic := []string{
+		invocation.SemanticAnalysisSHA256, invocation.SemanticPlanSHA256,
+		invocation.SemanticAnalyzerSHA256, invocation.SemanticRegionID,
+		invocation.SemanticRequestContractSHA256,
+	}
+	semanticSet := 0
+	for _, digest := range semantic {
+		if digest != "" {
+			semanticSet++
+			if !digestPattern.MatchString(digest) {
+				return ErrInvalidInvocation
+			}
+		}
+	}
+	if semanticSet != 0 && semanticSet != len(semantic) {
+		return ErrInvalidInvocation
 	}
 	if !sort.StringsAreSorted(invocation.ImmutableRootSHA256) {
 		return ErrInvalidInvocation
@@ -169,9 +191,12 @@ func (engine Engine) Execute(ctx context.Context, invocation Invocation, compute
 	return engine.execute(ctx, invocation, compute, "callback")
 }
 
-func (engine Engine) execute(ctx context.Context, invocation Invocation, compute ComputeFunc, flightDomain string) (Result, error) {
+func (engine Engine) execute(ctx context.Context, invocation Invocation, compute ComputeFunc, cacheDomain string) (Result, error) {
 	if compute == nil {
 		return Result{}, ErrInvalidInvocation
+	}
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
 	}
 	key, _, err := invocation.Identity()
 	if err != nil {
@@ -186,7 +211,10 @@ func (engine Engine) execute(ctx context.Context, invocation Invocation, compute
 	}
 	execute := func() (Result, error) {
 		if useCache {
-			if value, hit := engine.Store.get(key); hit {
+			if value, hit := engine.Store.get(cacheDomain, key); hit {
+				if ctx.Err() != nil {
+					return Result{}, ctx.Err()
+				}
 				return Result{Key: key, Value: value, CacheHit: true, Disposition: Retained}, nil
 			}
 		}
@@ -195,19 +223,22 @@ func (engine Engine) execute(ctx context.Context, invocation Invocation, compute
 		if err != nil {
 			return Result{}, err
 		}
+		if ctx.Err() != nil {
+			return Result{}, ctx.Err()
+		}
 		if guard.violated {
 			return Result{}, ErrCachePurity
 		}
 		value = append([]byte(nil), value...)
 		if useCache {
-			if err := engine.Store.put(key, value); err != nil {
+			if err := engine.Store.put(cacheDomain, key, value); err != nil {
 				return Result{}, err
 			}
 		}
 		return Result{Key: key, Value: value, PhysicalExecutionID: guard.physicalExecutionID}, nil
 	}
 	if engine.Flights != nil && invocation.Admission == Cacheable {
-		return engine.Flights.Do(ctx, flightDomain+":"+key, execute)
+		return engine.Flights.Do(ctx, cacheDomain+":"+key, execute)
 	}
 	result, err := execute()
 	if err == nil && result.Disposition == "" {
@@ -217,12 +248,12 @@ func (engine Engine) execute(ctx context.Context, invocation Invocation, compute
 }
 
 type Stats struct {
-	Hits        uint64
-	Misses      uint64
-	Writes      uint64
-	Evictions   uint64
-	Corruptions uint64
-	StoredBytes uint64
+	Hits        uint64 `json:"hits"`
+	Misses      uint64 `json:"misses"`
+	Writes      uint64 `json:"writes"`
+	Evictions   uint64 `json:"evictions"`
+	Corruptions uint64 `json:"corruptions"`
+	StoredBytes uint64 `json:"stored_bytes"`
 }
 
 type Store struct {
@@ -236,6 +267,7 @@ type Store struct {
 
 type cacheRecord struct {
 	SchemaVersion string `json:"schema_version"`
+	Domain        string `json:"domain"`
 	Key           string `json:"key"`
 	Result        []byte `json:"result"`
 	ResultSHA256  string `json:"result_sha256"`
@@ -300,10 +332,11 @@ func (store *Store) Stats() Stats {
 	return store.stats
 }
 
-func (store *Store) get(key string) ([]byte, bool) {
+func (store *Store) get(domain, key string) ([]byte, bool) {
+	storageKey := cacheStorageKey(domain, key)
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	path, ok := store.path(key)
+	path, ok := store.path(storageKey)
 	if !ok {
 		store.stats.Misses++
 		return nil, false
@@ -326,7 +359,7 @@ func (store *Store) get(key string) ([]byte, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&record) != nil || decoder.Decode(&struct{}{}) != io.EOF ||
-		record.SchemaVersion != cacheRecordSchemaVersion || record.Key != key || uint64(len(record.Result)) > store.maxResultBytes {
+		record.SchemaVersion != cacheRecordSchemaVersion || record.Domain != domain || record.Key != key || uint64(len(record.Result)) > store.maxResultBytes {
 		store.corruptLocked(path)
 		return nil, false
 	}
@@ -348,19 +381,20 @@ func (store *Store) corruptLocked(path string) {
 	store.stats.Misses++
 }
 
-func (store *Store) put(key string, result []byte) error {
+func (store *Store) put(domain, key string, result []byte) error {
+	storageKey := cacheStorageKey(domain, key)
 	if uint64(len(result)) > store.maxResultBytes {
 		return ErrResultTooLarge
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	path, ok := store.path(key)
+	path, ok := store.path(storageKey)
 	if !ok {
 		return ErrInvalidInvocation
 	}
 	digest := sha256.Sum256(result)
 	record := cacheRecord{
-		SchemaVersion: cacheRecordSchemaVersion, Key: key, Result: append(json.RawMessage(nil), result...),
+		SchemaVersion: cacheRecordSchemaVersion, Domain: domain, Key: key, Result: append(json.RawMessage(nil), result...),
 		ResultSHA256: "sha256:" + hex.EncodeToString(digest[:]),
 	}
 	raw, err := json.Marshal(record)
@@ -414,7 +448,7 @@ func (store *Store) Evict(key string) error {
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	path, ok := store.path(key)
+	path, ok := store.path(cacheStorageKey("callback", key))
 	if !ok {
 		return ErrInvalidInvocation
 	}
@@ -433,6 +467,11 @@ func (store *Store) Evict(key string) error {
 		store.stats.StoredBytes -= uint64(info.Size())
 	}
 	return nil
+}
+
+func cacheStorageKey(domain, key string) string {
+	digest := sha256.Sum256([]byte(domain + "\x00" + key))
+	return fmt.Sprintf("sha256:%x", digest[:])
 }
 
 func (store *Store) path(key string) (string, bool) {

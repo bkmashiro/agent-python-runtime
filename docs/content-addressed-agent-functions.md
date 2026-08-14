@@ -1,7 +1,7 @@
 # Proposed design: content-addressed Agent Functions
 
-Status: **Bounded Experimental mechanism; arbitrary Guest-Python purity admission is deferred.**
-Date: 2026-08-13
+Status: **Bounded Experimental mechanism; exact AST-qualified whole-Run Guest retention implemented, arbitrary Guest-Python purity remains fail-closed.**
+Date: 2026-08-14
 
 ## Purpose and relationship to existing direction
 
@@ -17,14 +17,16 @@ parts of an Agent workflow as locally reusable computations:
 > effects remain outside the cacheable boundary.
 
 This is not a claim that arbitrary Python is pure or that Pysolate provides a
-distributed execution graph. `runtime/agentfunction` now implements the bounded
-Host-instrumented version: binary admission, canonical invocation identity,
+distributed execution graph. `runtime/agentfunction` implements the bounded
+Host-instrumented substrate: binary admission, canonical invocation identity,
 project-private retention, eviction/recomputation, and independent
-single-flight. Its `Guard` is a deterministic Host-fixture boundary, not proof
-that arbitrary Guest Python lacks clock, randomness, dynamic import, undeclared
-filesystem reads, or unknown imported behavior. A cacheable arbitrary-Guest
-adapter remains **Deferred for joint review** until the Runtime can enforce that
-complete admission contract without duplicating authority state.
+single-flight. The Experimental semantic adapter now admits only one exact
+whole-Run region whose target-Guest AST analysis and Host-validated Plan are
+reusable, whose exact source/artifact/profile/import/input/root identities are
+bound, and whose first physical Guest execution completes with canonical output
+and no runtime Host-call attempt. The original `Guard` remains a deterministic
+Host-fixture boundary, not general Python purity proof; anything outside that
+narrow semantic path remains fail-closed and unretained.
 
 ## Initial scope
 
@@ -65,7 +67,8 @@ matrix and fallback requirements are maintained in
 A cacheable invocation is identified by a canonical digest over at least:
 
 ```text
-function source / explicit function identity
+function source / exact source identity
+semantic analyzer, analysis, Plan, and whole-Run region identity
 Guest artifact and execution profile
 transitive admitted import closure
 canonical structured input
@@ -94,6 +97,40 @@ proof. Any unknown behavior makes the invocation `not_cacheable`.
 Internal mutation is allowed. Python objects and private temporary files may be
 mutable during the fresh Run; referential transparency is required only at the
 Host-visible function boundary.
+
+### Implemented exact whole-Run adapter
+
+The current Experimental adapter is narrower than the general contract above:
+
+1. the exact packaged Guest analyzes the exact source with Python `ast`;
+2. the Host validates a versioned analysis and one-region `SemanticPlan`;
+3. reuse qualification requires no publish, live observation, suspension, or
+   unknown effect, plus canonical boundaries and exact canonical-input and
+   immutable-root dependencies;
+4. `agentfunction.NewQualifiedGuestInvocation` mints an opaque token only after
+   revalidating analysis, Plan, region, dependencies, and source/artifact/profile/
+   import/input/root/determinism/output/project/privacy/policy bindings, including
+   the exact compatibility/requirements request contract;
+5. the qualified executor rejects trusted prepare hooks, replaces arbitrary
+   result callbacks with one fixed canonical Guest-response decoder, isolates
+   semantic records from callback records by cache domain/provenance, and checks
+   cancellation and each call's result-size bound even on retained hits;
+6. the first physical Fresh Guest must pass the strict compatibility/source
+   contract, succeed, decode canonically, fit the configured bound, and record no
+   Host-call attempt before publication;
+7. concurrent exact calls may share that physical result and a later exact call
+   may read the bounded worker-local record.
+
+The ordinary Fresh Guest entry point still rejects completed-result retention.
+The optimizer, cache, and single-flight each retain independent off-switches.
+Errors, traps, cancellation, timeout, OOM, noncanonical or oversized output,
+and runtime Host-call attempts do not publish. Structured real-Guest evidence is
+in [semantic-reuse-observation.json](evidence/semantic-reuse-observation.json):
+one leader, one waiter, and one later hit used one physical Guest; the later
+qualification/lookup/materialization took 335 microseconds versus a 10,331,129
+microsecond physical batch in that bounded Zao run. This is evidence for exact
+repeated expensive work, not an adaptive policy or a claim about cheap one-shot
+code.
 
 ## Workflow split at I/O boundaries
 

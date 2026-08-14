@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -19,6 +20,7 @@ var (
 	ErrGuestNotShareable   = errors.New("fresh Guest execution profile is not shareable")
 	ErrGuestIdentity       = errors.New("fresh Guest request does not match invocation identity")
 	ErrGuestRetention      = errors.New("fresh Guest completed-result retention is unsupported")
+	ErrGuestQualification  = errors.New("fresh Guest semantic qualification is invalid")
 )
 
 type GuestRunnerFactory func(context.Context) (physicalExecutionID string, runner enginecontract.Runner, err error)
@@ -57,6 +59,9 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 	}()
 	runContext, effects := enginecontract.WithEffectProbe(ctx)
 	payload, runErr := runner.Run(runContext, append([]byte(nil), compute.Request...), compute.TrustedPrepare)
+	if runErr == nil && ctx.Err() != nil {
+		runErr = ctx.Err()
+	}
 	closeErr := runner.Close(context.Background())
 	closed = true
 	if effects.HostCallAttempted() {
@@ -75,19 +80,91 @@ func (compute FreshGuestCompute) Run(ctx context.Context, guard *Guard) ([]byte,
 	return append([]byte(nil), value...), nil
 }
 
-// ExecuteGuest binds the invocation identity to the actual Runner properties
-// before single-flight may publish the immutable Guest result.
+func decodeQualifiedGuestResult(payload []byte) ([]byte, error) {
+	var response struct {
+		Status string          `json:"status"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(payload, &response); err != nil || response.Status != "ok" ||
+		len(response.Result) == 0 || !canonicalJSON(response.Result) {
+		return nil, ErrInvalidGuestCompute
+	}
+	return append([]byte(nil), response.Result...), nil
+}
+
+// GuestRequestContractSHA256 binds the exact untrusted compatibility and
+// requirements declarations that must be admitted before a retained hit.
+func GuestRequestContractSHA256(raw []byte) (string, error) {
+	request, err := runtimeconfig.DecodeRunRequest(raw)
+	if err != nil || request.Compatibility == nil {
+		return "", ErrGuestQualification
+	}
+	descriptor := struct {
+		Compatibility runtimeconfig.CompatibilityDeclaration `json:"compatibility"`
+		Requirements  []runtimeconfig.RequiredFeature        `json:"requirements"`
+	}{
+		Compatibility: *request.Compatibility,
+		Requirements:  append([]runtimeconfig.RequiredFeature{}, request.Requirements...),
+	}
+	encoded, err := json.Marshal(descriptor)
+	if err != nil {
+		return "", ErrGuestQualification
+	}
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("sha256:%x", digest[:]), nil
+}
+
+// ExecuteGuest binds the invocation identity to actual Runner properties before
+// single-flight may publish an immutable Guest result; retention stays denied.
 func (functionEngine Engine) ExecuteGuest(ctx context.Context, invocation Invocation, compute FreshGuestCompute) (Result, error) {
+	return functionEngine.executeGuest(ctx, invocation, compute, false)
+}
+
+// ExecuteQualifiedGuest is the only completed-result retention path for a Fresh
+// Guest. Only the opaque token constructor can bind all static qualification
+// identities; runtime effect probes remain the publication backstop.
+func (functionEngine Engine) ExecuteQualifiedGuest(ctx context.Context, qualified QualifiedGuestInvocation, compute FreshGuestCompute) (Result, error) {
+	invocation := qualified.invocation
+	if err := invocation.Validate(); err != nil ||
+		invocation.SemanticAnalysisSHA256 == "" || invocation.SemanticPlanSHA256 == "" ||
+		invocation.SemanticAnalyzerSHA256 == "" || invocation.SemanticRegionID == "" ||
+		invocation.SemanticRequestContractSHA256 == "" {
+		return Result{}, ErrGuestQualification
+	}
+	if compute.TrustedPrepare != "" {
+		return Result{}, ErrGuestQualification
+	}
+	compute.DecodeResult = decodeQualifiedGuestResult
+	result, err := functionEngine.executeGuest(ctx, invocation, compute, true)
+	if err == nil && uint64(len(result.Value)) > compute.MaxResultBytes {
+		return Result{}, ErrGuestResultTooLarge
+	}
+	return result, err
+}
+
+func (functionEngine Engine) executeGuest(ctx context.Context, invocation Invocation, compute FreshGuestCompute, allowRetention bool) (Result, error) {
 	if compute.NewRunner == nil {
 		return Result{}, ErrInvalidGuestCompute
 	}
-	if functionEngine.CacheEnabled {
+	if functionEngine.CacheEnabled && !allowRetention {
 		return Result{}, ErrGuestRetention
 	}
+	if allowRetention {
+		requestContract, contractErr := GuestRequestContractSHA256(compute.Request)
+		if contractErr != nil || requestContract != invocation.SemanticRequestContractSHA256 {
+			return Result{}, ErrGuestQualification
+		}
+	}
 	request, err := runtimeconfig.DecodeRunRequest(compute.Request)
+	if err != nil {
+		return Result{}, ErrGuestIdentity
+	}
+	if allowRetention && request.Compatibility == nil {
+		return Result{}, ErrGuestQualification
+	}
 	codeDigest := sha256.Sum256([]byte(request.Code))
 	outputSchemaDigest := sha256.Sum256(request.OutputSchema)
-	if err != nil || fmt.Sprintf("sha256:%x", codeDigest[:]) != invocation.FunctionSourceSHA256 ||
+	if fmt.Sprintf("sha256:%x", codeDigest[:]) != invocation.FunctionSourceSHA256 ||
 		!bytes.Equal(request.Inputs, invocation.CanonicalInputs) ||
 		fmt.Sprintf("sha256:%x", outputSchemaDigest[:]) != invocation.OutputSchemaSHA256 {
 		return Result{}, ErrGuestIdentity

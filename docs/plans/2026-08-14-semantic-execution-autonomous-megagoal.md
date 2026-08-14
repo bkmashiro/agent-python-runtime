@@ -5,7 +5,7 @@
 > slices. A green slice, signed checkpoint, push, or context boundary is not a
 > stopping condition.
 
-**Status:** Approved, active, implementation not started
+**Status:** Active; Tracks 0-D implemented and verified, Track E closeout in progress
 **Date:** 2026-08-14
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -335,26 +335,26 @@ Guest control.
 **Promise:** One semantic-plan pass eliminates real duplicate Guest computation
 without suppressing or fabricating effects.
 
-- [ ] Write RED integration tests where two sibling Agents submit the same
+- [x] Write RED integration tests where two sibling Agents submit the same
   AST-qualified whole-function/whole-Run invocation and a third later repeats it.
-- [ ] Convert only an eligible semantic region into the existing
+- [x] Convert only an eligible semantic region into the existing
   `agentfunction.Invocation`; bind semantic-plan/analyzer identity in the canonical
   key without weakening existing fields.
-- [ ] Route concurrent exact invocations through the existing independent
+- [x] Route concurrent exact invocations through the existing independent
   single-flight: one physical Fresh Guest leader, copied immutable follower result.
-- [ ] Enable bounded completed-result retention for the real Fresh Guest path only
+- [x] Enable bounded completed-result retention for the real Fresh Guest path only
   after static eligibility and runtime effect-probe publication checks pass.
-- [ ] Prove the later exact invocation is a local retained hit and reports no
+- [x] Prove the later exact invocation is a local retained hit and reports no
   fabricated physical execution/effect.
-- [ ] Prove source/AST, input, output schema, artifact/profile, import closure,
+- [x] Prove source/AST, input, output schema, artifact/profile, import closure,
   deterministic settings, dependency root, Plan, policy epoch, project, or privacy
   changes miss/reject independently.
-- [ ] Prove Host call, live read/write, clock/random, dynamic import, unknown call,
+- [x] Prove Host call, live read/write, clock/random, dynamic import, unknown call,
   noncanonical output, error, trap, cancellation, timeout, OOM, corruption, and
   oversized result never publish retained state.
-- [ ] Keep `single-flight=off`, `retention=off`, and optimizer-off controls
+- [x] Keep `single-flight=off`, `retention=off`, and optimizer-off controls
   independent and semantically equal.
-- [ ] Record lookup, analysis, serialization/materialization, compute, waiter,
+- [x] Record lookup, analysis, serialization/materialization, compute, waiter,
   hit/miss/write/eviction, and physical-compute counters; apply no adaptive policy
   beyond a documented bounded test threshold.
 
@@ -433,8 +433,8 @@ the controller owns design, diffs, tests, signatures, push, and final claims.
 
 ## Roadmap tracking
 
-**Current execution pointer:** Track D — bind one eligible whole-Run semantic plan
-to the existing single-flight and completed-result cache without weakening identity.
+**Current execution pointer:** Track E — run independent closure review, global and
+real-platform gates, then close the evidence and roadmap without widening scope.
 
 After each slice:
 
@@ -498,7 +498,30 @@ After each slice:
   definition-time defaults, class/complex-control opacity, and higher-order
   builtin callback barriers; all were closed with focused tests. Host admission
   now also requires the requested artifact/profile identities to match the live
-  analyzer engine before Guest analysis starts.
+  analyzer engine before Guest analysis starts. Tracks B-C were committed and
+  pushed as `08e2eb5`.
+- 2026-08-14: Track D complete. A default-off exact whole-Run `ReusePass` now
+  requires a reusable one-region Plan, exact canonical-input and immutable-root
+  dependencies, and strict source compatibility before entering the existing
+  Agent Function single-flight/store. Analyzer, analysis, Plan, region, source,
+  artifact, profile, import, input, root, deterministic, output, project, privacy,
+  and policy identity plus the untrusted compatibility/requirements contract are
+  bound without weakening the existing key. Publication
+  still requires a successful canonical bounded Fresh Guest result and a zero
+  Host-call effect probe; failures, cancellation, timeout, OOM, panic, corruption,
+  oversize, live/unknown static effects, and ordinary unqualified Guest retention
+  remain fail-closed. The rebuilt real Guest on Zao proved two exact siblings and
+  one later repeat used one physical execution (leader/waiter/retained). The
+  retained path took 335 microseconds versus a 10,331,129-microsecond physical
+  batch, stored 274 bytes, and reported no physical execution. Including the
+  separate 10,429,083-microsecond analyzer phase, this bounded three-call trial
+  saved 10,232,840 microseconds (33.0%) versus three physical computations; this
+  is exact-workload evidence, not an adaptive policy. Independent Track D review
+  reported six P1s and no P0s. Closure replaced the forgeable retention entry
+  with a Host-minted opaque qualification token, bound compatibility/requirements,
+  rejected trusted prepare and arbitrary result decoders, added per-hit size and
+  cancellation checks, separated callback/semantic cache provenance, and aligned
+  emitted stats with checked-in evidence. Focused race and real-Guest reruns pass.
 
 ## Stop conditions
 

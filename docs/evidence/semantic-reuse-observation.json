@@ -1,0 +1,65 @@
+{
+  "schema_version": "pysolate.semantic-reuse-observation.v0",
+  "status": "Experimental",
+  "date": "2026-08-14",
+  "target_guest": {
+    "artifact_sha256": "d5fb9f137d9ea522bc0b772b0377e74f1848026e8773495ef56217adb521d0c4",
+    "runtime": "CPython 3.14.0 / wasm32-wasip1",
+    "host": "Zao Linux ARM64",
+    "test": "TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun"
+  },
+  "workload": {
+    "logical_invocations": 3,
+    "physical_computes": 1,
+    "concurrent_leaders": 1,
+    "concurrent_waiters": 1,
+    "later_retained_hits": 1,
+    "canonical_result_bytes": 12,
+    "result_bodies_recorded": false
+  },
+  "timing_micros": {
+    "analysis_phase_including_analyzer_guest_initialization": 10429083,
+    "concurrent_batch_including_one_guest_initialization_and_compute": 10331129,
+    "later_qualification_lookup_and_materialization": 335
+  },
+  "pass_stats": {
+    "attempts": 3,
+    "rejected": 0,
+    "leaders": 1,
+    "waiters": 1,
+    "retained": 1,
+    "physical_computes": 1,
+    "result_bytes_total": 36,
+    "qualification_nanos_total": 707443,
+    "execution_nanos_total": 20661773151
+  },
+  "store_stats": {
+    "hits": 1,
+    "misses": 1,
+    "writes": 1,
+    "evictions": 0,
+    "corruptions": 0,
+    "stored_bytes": 274
+  },
+  "economics": {
+    "hit_probability_break_even_excluding_one_time_analysis": 0.000032426272094753634,
+    "retained_hits_to_amortize_one_time_analysis": 1.0095141767418845,
+    "three_physical_compute_baseline_micros": 30993387,
+    "observed_analysis_plus_reuse_micros": 20760547,
+    "observed_saved_micros": 10232840,
+    "observed_saved_fraction": 0.33016204392246645
+  },
+  "interpretation": {
+    "outcome": "useful for exact repeated work in the current expensive fresh-Guest pipeline",
+    "scope": "one pure whole-Run exact identity, two concurrent siblings, and one later worker-local hit",
+    "qualification": "AST-qualified, plan-bound, exact source/artifact/profile/import/input/root/determinism/output/privacy/policy/project plus compatibility/requirements request identity",
+    "publication": "only successful canonical output with zero runtime Host-call attempts",
+    "not_proven": [
+      "cross-worker or distributed retention",
+      "arbitrary statement-region reuse",
+      "normalized-source equivalence",
+      "profitability for cheap or one-shot work",
+      "service-level latency under sustained concurrency"
+    ]
+  }
+}

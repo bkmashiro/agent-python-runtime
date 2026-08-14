@@ -2,7 +2,9 @@ package agentfunction_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -81,6 +83,36 @@ func TestCacheOffAndNotCacheableAlwaysUseFreshCompute(t *testing.T) {
 	}
 }
 
+func TestSemanticQualificationParticipatesInInvocationIdentity(t *testing.T) {
+	base := cacheableInvocation()
+	base.SemanticAnalysisSHA256 = digest('a')
+	base.SemanticPlanSHA256 = digest('b')
+	base.SemanticAnalyzerSHA256 = digest('c')
+	base.SemanticRegionID = digest('d')
+	base.SemanticRequestContractSHA256 = digest('f')
+	baseKey, _, err := base.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	variants := []agentfunction.Invocation{base, base, base, base, base}
+	variants[0].SemanticAnalysisSHA256 = digest('e')
+	variants[1].SemanticPlanSHA256 = digest('e')
+	variants[2].SemanticAnalyzerSHA256 = digest('e')
+	variants[3].SemanticRegionID = digest('e')
+	variants[4].SemanticRequestContractSHA256 = digest('e')
+	for index, variant := range variants {
+		key, _, err := variant.Identity()
+		if err != nil || key == baseKey {
+			t.Fatalf("variant %d key=%q err=%v", index, key, err)
+		}
+	}
+	partial := base
+	partial.SemanticRegionID = ""
+	if err := partial.Validate(); !errors.Is(err, agentfunction.ErrInvalidInvocation) {
+		t.Fatalf("partial semantic identity error=%v", err)
+	}
+}
+
 func TestCacheableFunctionFailsClosedOnForbiddenAuthority(t *testing.T) {
 	for name, operation := range map[string]func(*agentfunction.Guard) error{
 		"host call":       func(guard *agentfunction.Guard) error { return guard.HostCall("fixture.read") },
@@ -125,7 +157,7 @@ func TestEvictionAndCorruptionSafelyRecompute(t *testing.T) {
 	if err != nil || second.CacheHit || calls.Load() != 2 {
 		t.Fatalf("eviction result=%+v calls=%d err=%v", second, calls.Load(), err)
 	}
-	if err := os.WriteFile(filepath.Join(store.Directory(), second.Key+".json"), []byte("corrupt"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(store.Directory(), cacheStorageFilename("callback", second.Key)), []byte("corrupt"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	third, err := engine.Execute(context.Background(), invocation, compute)
@@ -196,6 +228,11 @@ func newStore(t *testing.T, project string) *agentfunction.Store {
 		t.Fatal(err)
 	}
 	return store
+}
+
+func cacheStorageFilename(domain, key string) string {
+	digest := sha256.Sum256([]byte(domain + "\x00" + key))
+	return fmt.Sprintf("sha256:%x.json", digest[:])
 }
 
 func cacheableInvocation() agentfunction.Invocation {

@@ -50,23 +50,25 @@ Capability-plan v5 has no coalescing, durable-cache or backend-requirement contr
 - qualified speculative physical work and consumed/cancelled/late/orphaned outcomes;
 - explicit post-effect replay rejection.
 
-The comparator ignores only qualified physical scheduling differences whose logical
-trace is unchanged and whose unclaimed work has a typed terminal disposition. Missing
-or extra logical effects, event-order changes, argument/resource drift, freshness,
+The comparator ignores only qualified pure/read physical scheduling differences whose
+logical trace is unchanged and whose unclaimed work has a typed terminal disposition.
+Unknown effects and all write-class speculative physical events are unclassifiable.
+Missing or extra logical effects, event-order changes, argument/resource drift, freshness,
 authority, workspace, cancellation, ambiguity and replay are classified as typed
 divergences. Invalid or unqualified traces fail as `trace_unclassifiable`.
 
 The executable matrix at
 [`docs/evidence/effect-aware-differential-oracle.json`](../evidence/effect-aware-differential-oracle.json)
-contains 16 cases. All 16 matched their expected result, including one equivalent
+contains 17 cases. All 17 matched their expected result, including one equivalent
 qualified discard and adversarial terminal, result, argument, missing/extra effect,
 sequence/edge order, freshness, authority, workspace, cancellation, ambiguity,
-post-effect replay and invalid/unqualified-physical cases. Report SHA-256:
-`83dc9cbf71bd922916113cb14c6d3627a50595c30f5d28c415d41368a952664a`.
+post-effect replay, qualified-write speculation and invalid/unqualified-physical
+cases. Report SHA-256:
+`4df33cbc8d446153ee7523377beb921fe5fae7b78815269910d70cc55b62f52f`.
 Cross-compiled ARM64 semantic and effectgraph test binaries passed on Linux
 `6.12.0-202.76.4.1.el9uek.aarch64`; binary SHA-256 values were
-`3ab52e4bb693c43bf3474b64a6ceb93cbdc089fcc81eb010940b0fe3ad053a28` and
-`c2b7f47fb2f8619ece23628ba593b504e662de8ffc9ac699bdfd2d472c94c7ee`.
+`a75ffa82dbc090914f931d750278378e76df33540cfdfb9be5f5c42869d104b9` and
+`58e608e69aa89e4b500f44b7f26257ebdbfbba5487a2a6262ee328de635e8cb1`.
 The ARM64 oracle binary independently reproduced the exact report SHA-256 above.
 
 ## Opportunity comparison

@@ -1,8 +1,6 @@
 package semantic
 
-import (
-	"sort"
-)
+import "sort"
 
 const (
 	ObservableTraceSchemaVersion = "pysolate.observable-trace.v0"
@@ -15,6 +13,17 @@ type EventSurface string
 type EventStatus string
 type TerminalClass string
 type DivergenceClass string
+
+type TraceEffectClass string
+
+const (
+	TraceEffectPure           TraceEffectClass = "pure"
+	TraceEffectWorkspaceRead  TraceEffectClass = "workspace_read"
+	TraceEffectWorkspaceWrite TraceEffectClass = "workspace_write"
+	TraceEffectExternalRead   TraceEffectClass = "external_read"
+	TraceEffectExternalWrite  TraceEffectClass = "external_write"
+	TraceEffectUnknown        TraceEffectClass = "unknown"
+)
 
 const (
 	EventRunStart               EventKind = "run_start"
@@ -74,6 +83,7 @@ type TraceEvent struct {
 	Kind                 EventKind
 	Surface              EventSurface
 	Capability           string
+	EffectClass          TraceEffectClass
 	ArgumentsSHA256      string
 	ResourceSHA256       string
 	ResultSHA256         string
@@ -167,7 +177,7 @@ func CompareObservableTraces(baseline, candidate ObservableTrace) TraceCompariso
 		if !ok {
 			return diverged(DivergenceMissingEffectEvent)
 		}
-		if expected.Kind != actual.Kind || expected.Capability != actual.Capability {
+		if expected.Kind != actual.Kind || expected.Capability != actual.Capability || expected.EffectClass != actual.EffectClass {
 			return diverged(DivergenceMissingEffectEvent)
 		}
 		if expected.ArgumentsSHA256 != actual.ArgumentsSHA256 || expected.ResourceSHA256 != actual.ResourceSHA256 {
@@ -275,7 +285,9 @@ func validTerminalTrace(terminal TerminalTrace) bool {
 }
 
 func validSpeculativePhysical(event TraceEvent) bool {
-	if !event.QualifiedSpeculation || len(event.Predecessors) != 0 {
+	if !event.QualifiedSpeculation || len(event.Predecessors) != 0 ||
+		(event.EffectClass != TraceEffectPure && event.EffectClass != TraceEffectWorkspaceRead &&
+			event.EffectClass != TraceEffectExternalRead) {
 		return false
 	}
 	if event.ClaimedLogicalID != "" {
@@ -294,7 +306,7 @@ func validEventPayload(event TraceEvent) bool {
 	switch event.Kind {
 	case EventCapabilityAttempt, EventCapabilityObservation, EventExternalEffectIntent,
 		EventExternalEffectAttempt, EventExternalEffectTerminal:
-		return capabilityPattern.MatchString(event.Capability) && requireDigest(event.ArgumentsSHA256) &&
+		return capabilityPattern.MatchString(event.Capability) && validTraceEffectClass(event.EffectClass) && requireDigest(event.ArgumentsSHA256) &&
 			requireDigest(event.ResourceSHA256) && requireDigest(event.FreshnessSHA256) && requireDigest(event.AuthoritySHA256) &&
 			(event.ResultSHA256 == "" || requireDigest(event.ResultSHA256))
 	case EventWorkspaceRead, EventWorkspaceWrite:
@@ -303,7 +315,7 @@ func validEventPayload(event TraceEvent) bool {
 	case EventResult, EventRaise:
 		return requireDigest(event.ResultSHA256)
 	default:
-		return event.Capability == "" && event.ArgumentsSHA256 == "" && event.ResourceSHA256 == "" &&
+		return event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" && event.ResourceSHA256 == "" &&
 			event.ResultSHA256 == "" && event.FreshnessSHA256 == "" && event.AuthoritySHA256 == ""
 	}
 }
@@ -338,6 +350,16 @@ func sameSortedStrings(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+func validTraceEffectClass(class TraceEffectClass) bool {
+	switch class {
+	case TraceEffectPure, TraceEffectWorkspaceRead, TraceEffectWorkspaceWrite,
+		TraceEffectExternalRead, TraceEffectExternalWrite:
+		return true
+	default:
+		return false
+	}
 }
 
 func validEventKind(kind EventKind) bool {

@@ -1,7 +1,7 @@
 {
   "schema_version": "pysolate.differential-oracle.v0",
-  "cases": 16,
-  "matched": 16,
+  "cases": 17,
+  "matched": 17,
   "results": [
     {
       "id": "argument-mismatch",
@@ -70,6 +70,13 @@
       "id": "post-effect-replay",
       "expected": "post_effect_replay",
       "observed": "post_effect_replay",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "qualified-write-physical",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
       "equivalent": false,
       "matched": true
     },

@@ -99,7 +99,7 @@ func DefaultDifferentialCases() []DifferentialCase {
 		{"extra-logical-effect", semantic.DivergenceExtraEffectEvent, func(trace *semantic.ObservableTrace) {
 			trace.Events = append(trace.Events, semantic.TraceEvent{
 				ID: differentialDigest("extra"), Kind: semantic.EventExternalEffectAttempt, Surface: semantic.SurfaceLogical,
-				Capability: "mail.send", ArgumentsSHA256: differentialDigest("extra-args"), ResourceSHA256: differentialDigest("extra-resource"),
+				Capability: "mail.send", EffectClass: semantic.TraceEffectExternalWrite, ArgumentsSHA256: differentialDigest("extra-args"), ResourceSHA256: differentialDigest("extra-resource"),
 				FreshnessSHA256: differentialDigest("extra-freshness"), AuthoritySHA256: differentialDigest("extra-authority"),
 				Status: semantic.EventSucceeded, Predecessors: []string{},
 			})
@@ -113,6 +113,15 @@ func DefaultDifferentialCases() []DifferentialCase {
 		}},
 		{"missing-logical-effect", semantic.DivergenceMissingEffectEvent, func(trace *semantic.ObservableTrace) { trace.Events = trace.Events[:1] }},
 		{"post-effect-replay", semantic.DivergencePostEffectReplay, func(trace *semantic.ObservableTrace) { trace.Terminal.PostEffectReplay = true }},
+		{"qualified-write-physical", semantic.DivergenceTraceUnclassifiable, func(trace *semantic.ObservableTrace) {
+			trace.Events = append(trace.Events, semantic.TraceEvent{
+				ID: differentialDigest("write-physical"), Kind: semantic.EventExternalEffectAttempt,
+				Surface: semantic.SurfaceSpeculativePhysical, Capability: "mail.send", EffectClass: semantic.TraceEffectExternalWrite,
+				ArgumentsSHA256: differentialDigest("write-args"), ResourceSHA256: differentialDigest("write-resource"),
+				FreshnessSHA256: differentialDigest("write-freshness"), AuthoritySHA256: differentialDigest("write-authority"),
+				Status: semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: true,
+			})
+		}},
 		{"required-order", semantic.DivergenceRequiredOrderInversion, func(trace *semantic.ObservableTrace) { trace.Events[1].Predecessors = []string{} }},
 		{"result-mismatch", semantic.DivergenceResultMismatch, func(trace *semantic.ObservableTrace) { trace.Terminal.ValueSHA256 = differentialDigest("different") }},
 		{"terminal-ambiguity", semantic.DivergenceTerminalDispositionMismatch, func(trace *semantic.ObservableTrace) { trace.Terminal.Ambiguity = "ambiguous" }},
@@ -125,7 +134,7 @@ func DefaultDifferentialCases() []DifferentialCase {
 		{"unqualified-physical", semantic.DivergenceTraceUnclassifiable, func(trace *semantic.ObservableTrace) {
 			trace.Events = append(trace.Events, semantic.TraceEvent{
 				ID: differentialDigest("physical-unqualified"), Kind: semantic.EventCapabilityObservation,
-				Surface: semantic.SurfaceSpeculativePhysical, Capability: "sources.read",
+				Surface: semantic.SurfaceSpeculativePhysical, Capability: "sources.read", EffectClass: semantic.TraceEffectExternalRead,
 				ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
 				FreshnessSHA256: differentialDigest("freshness"), AuthoritySHA256: differentialDigest("authority"),
 				Status: semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: false,
@@ -142,7 +151,7 @@ func DefaultDifferentialCases() []DifferentialCase {
 	candidate := cloneDifferentialTrace(baseline)
 	candidate.Events = append(candidate.Events, semantic.TraceEvent{
 		ID: differentialDigest("physical-discard"), Kind: semantic.EventCapabilityObservation,
-		Surface: semantic.SurfaceSpeculativePhysical, Capability: "sources.read",
+		Surface: semantic.SurfaceSpeculativePhysical, Capability: "sources.read", EffectClass: semantic.TraceEffectExternalRead,
 		ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
 		FreshnessSHA256: differentialDigest("freshness"), AuthoritySHA256: differentialDigest("authority"),
 		Status: semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: true,
@@ -159,7 +168,7 @@ func differentialTraceFixture() semantic.ObservableTrace {
 		FrozenContextSHA256: differentialDigest("context"),
 		Events: []semantic.TraceEvent{
 			{ID: readID, Kind: semantic.EventCapabilityObservation, Surface: semantic.SurfaceLogical,
-				Capability: "sources.read", ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
+				Capability: "sources.read", EffectClass: semantic.TraceEffectExternalRead, ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
 				ResultSHA256: differentialDigest("observation"), FreshnessSHA256: differentialDigest("freshness"),
 				AuthoritySHA256: differentialDigest("authority"), Status: semantic.EventSucceeded, Predecessors: []string{}},
 			{ID: differentialDigest("result-event"), Kind: semantic.EventResult, Surface: semantic.SurfaceLogical,

@@ -7,7 +7,7 @@ func TestCompareObservableTracesAcceptsEquivalentLogicalTraceAndQualifiedDiscard
 	candidate := observableTraceFixture()
 	candidate.Events = append(candidate.Events, TraceEvent{
 		ID: legalityDigest("physical-extra"), Kind: EventCapabilityObservation,
-		Surface: SurfaceSpeculativePhysical, Capability: "sources.read",
+		Surface: SurfaceSpeculativePhysical, Capability: "sources.read", EffectClass: TraceEffectExternalRead,
 		ArgumentsSHA256: legalityDigest("args"), ResourceSHA256: legalityDigest("resource"),
 		FreshnessSHA256: legalityDigest("freshness"), AuthoritySHA256: legalityDigest("authority"),
 		Status: EventOrphaned, QualifiedSpeculation: true,
@@ -40,6 +40,15 @@ func TestCompareObservableTracesClassifiesAdversarialDivergence(t *testing.T) {
 		"cancel":         {func(trace *ObservableTrace) { trace.Terminal.Cancellation = "requested" }, DivergenceCancellationBoundaryMismatch},
 		"ambiguity":      {func(trace *ObservableTrace) { trace.Terminal.Ambiguity = "reconciliation_required" }, DivergenceTerminalDispositionMismatch},
 		"replay":         {func(trace *ObservableTrace) { trace.Terminal.PostEffectReplay = true }, DivergencePostEffectReplay},
+		"qualified write physical": {func(trace *ObservableTrace) {
+			trace.Events = append(trace.Events, TraceEvent{
+				ID: legalityDigest("write-physical"), Kind: EventExternalEffectAttempt,
+				Surface: SurfaceSpeculativePhysical, Capability: "mail.send", EffectClass: TraceEffectExternalWrite,
+				ArgumentsSHA256: legalityDigest("write-args"), ResourceSHA256: legalityDigest("write-resource"),
+				FreshnessSHA256: legalityDigest("write-freshness"), AuthoritySHA256: legalityDigest("write-authority"),
+				Status: EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: true,
+			})
+		}, DivergenceTraceUnclassifiable},
 		"unqualified physical": {func(trace *ObservableTrace) {
 			trace.Events = append(trace.Events, TraceEvent{ID: legalityDigest("bad-physical"), Kind: EventCapabilityObservation, Surface: SurfaceSpeculativePhysical, Status: EventReady})
 		}, DivergenceTraceUnclassifiable},
@@ -61,7 +70,7 @@ func TestCompareObservableTracesRejectsExtraLogicalEventAndInvalidContext(t *tes
 	candidate := observableTraceFixture()
 	candidate.Events = append(candidate.Events, TraceEvent{
 		ID: legalityDigest("extra-logical"), Kind: EventExternalEffectAttempt,
-		Surface: SurfaceLogical, Capability: "mail.send",
+		Surface: SurfaceLogical, Capability: "mail.send", EffectClass: TraceEffectExternalWrite,
 		ArgumentsSHA256: legalityDigest("extra-args"), ResourceSHA256: legalityDigest("extra-resource"),
 		FreshnessSHA256: legalityDigest("extra-freshness"), AuthoritySHA256: legalityDigest("extra-authority"),
 		Status: EventSucceeded, Predecessors: []string{},
@@ -86,7 +95,7 @@ func observableTraceFixture() ObservableTrace {
 		Events: []TraceEvent{
 			{
 				ID: first, Kind: EventCapabilityObservation, Surface: SurfaceLogical,
-				Capability: "sources.read", ArgumentsSHA256: legalityDigest("args"),
+				Capability: "sources.read", EffectClass: TraceEffectExternalRead, ArgumentsSHA256: legalityDigest("args"),
 				ResourceSHA256: legalityDigest("resource"), ResultSHA256: legalityDigest("observation"),
 				FreshnessSHA256: legalityDigest("freshness"), AuthoritySHA256: legalityDigest("authority"),
 				Status: EventSucceeded, Predecessors: []string{},

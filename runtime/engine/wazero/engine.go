@@ -345,7 +345,7 @@ func (engine *Engine) Close(ctx context.Context) error {
 	return errors.Join(preparedErr, runtimeErr, workspaceErr)
 }
 
-func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
+func (engine *Engine) baseModuleConfig(stderr io.Writer) wazerort.ModuleConfig {
 	config := wazerort.NewModuleConfig().WithName("").WithStderr(stderr)
 	if profile := engine.config.DeterministicVerification; profile != nil {
 		clock := newDeterministicClock(profile.WalltimeUnixNano(), profile.MonotonicStartNano(), profile.ClockStepNano())
@@ -357,6 +357,11 @@ func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *wo
 	} else {
 		config = config.WithRandSource(cryptorand.Reader).WithSysWalltime().WithSysNanotime().WithSysNanosleep()
 	}
+	return config
+}
+
+func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
+	config := engine.baseModuleConfig(stderr)
 	if engine.workspaceLease == nil {
 		return config, nil, nil
 	}
@@ -496,6 +501,31 @@ func (engine *Engine) closePrepared() error {
 		temporaryErr = prepared.temporary.Close()
 	}
 	return errors.Join(moduleErr, temporaryErr)
+}
+
+func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payload []byte, analysisErr error) {
+	if engine == nil || !engine.config.Mechanisms.SemanticAnalysis {
+		return nil, runtimeconfig.ErrMechanismDisabled
+	}
+	analysisContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
+	defer cancel()
+	stderr := &bytes.Buffer{}
+	module, err := engine.runtime.InstantiateModule(analysisContext, engine.compiled, engine.baseModuleConfig(stderr))
+	if err != nil {
+		return nil, fmt.Errorf("instantiate semantic analyzer Guest: %w", err)
+	}
+	defer func() { analysisErr = errors.Join(analysisErr, module.Close(context.Background())) }()
+	if err := callNoArgs(analysisContext, module, "_initialize"); err != nil {
+		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	if err := callStatusWithBytes(analysisContext, module, "runtime_init", []byte("{}")); err != nil {
+		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	payload, err = callGuestResponse(analysisContext, module, "runtime_analyze_source", request, engine.config.MaxResponseBytes)
+	if err != nil {
+		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	return payload, nil
 }
 
 func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
@@ -976,7 +1006,11 @@ func callStatusWithBytes(ctx context.Context, module api.Module, name string, da
 }
 
 func callExecute(ctx context.Context, module api.Module, request []byte, maxResponse uint32) ([]byte, error) {
-	results, release, err := callWithBytes(ctx, module, "execute", request)
+	return callGuestResponse(ctx, module, "execute", request, maxResponse)
+}
+
+func callGuestResponse(ctx context.Context, module api.Module, name string, request []byte, maxResponse uint32) ([]byte, error) {
+	results, release, err := callWithBytes(ctx, module, name, request)
 	if release != nil {
 		defer release()
 	}
@@ -984,7 +1018,7 @@ func callExecute(ctx context.Context, module api.Module, request []byte, maxResp
 		return nil, err
 	}
 	if len(results) != 1 {
-		return nil, errors.New("execute returned an unexpected result count")
+		return nil, fmt.Errorf("%s returned an unexpected result count", name)
 	}
 	return readGuestResponse(module.Memory(), uint32(results[0]), maxResponse)
 }

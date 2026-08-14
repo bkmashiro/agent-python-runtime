@@ -15,6 +15,7 @@ REQUIRED_EXPORTS = {
     "memory",
     "runtime_init",
     "runtime_validate_source",
+    "runtime_analyze_source",
     "runtime_prepare",
     "alloc",
     "dealloc",

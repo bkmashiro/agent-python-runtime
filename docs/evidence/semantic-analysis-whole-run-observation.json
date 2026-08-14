@@ -1,0 +1,64 @@
+{
+  "schema_version": "pysolate.semantic-analysis-observation.v0",
+  "status": "Experimental",
+  "date": "2026-08-14",
+  "target_guest": {
+    "artifact_sha256": "d5fb9f137d9ea522bc0b772b0377e74f1848026e8773495ef56217adb521d0c4",
+    "semantic_source_set_sha256": "a4fd7aacabc0e8dd8fc8e080dea277346a946d9a4e929dd4e2d65ef372fd750b",
+    "platform": "Linux ARM64",
+    "test": "TestRealGuestSemanticAnalysisBuildsReusableWholeRunPlan",
+    "result": "PASS"
+  },
+  "contract": {
+    "analysis_schema": "pysolate.semantic-analysis.v0",
+    "plan_schema": "pysolate.semantic-plan.v0",
+    "region_kind": "whole_run",
+    "optimizer_enabled": false,
+    "workspace_mounted_in_analysis_instance": false,
+    "capability_broker_available_in_analysis_instance": false
+  },
+  "synthetic_census": {
+    "cases": 11,
+    "unique_exact_source": 10,
+    "unique_position_stripped_ast": 9,
+    "reusable_candidates": 5,
+    "unknown_barrier_cases": 3,
+    "analysis_micros_total": 635,
+    "analysis_micros_median": 52,
+    "serialization_sample_cases": 5,
+    "analysis_request_bytes_total": 2432,
+    "analysis_request_bytes_min": 454,
+    "analysis_request_bytes_max": 516,
+    "analysis_report_bytes_total": 6236,
+    "analysis_report_bytes_min": 1028,
+    "analysis_report_bytes_max": 1302,
+    "concurrency_overlap": "not represented by the synthetic corpus",
+    "case_names": [
+      "pure",
+      "pure_whitespace",
+      "pure_duplicate",
+      "local_mutation",
+      "tool_read",
+      "tool_write",
+      "recursion",
+      "dynamic_eval",
+      "clock",
+      "open_read",
+      "decorator"
+    ]
+  },
+  "verified_fail_closed_classes": [
+    "dynamic call",
+    "dynamic import",
+    "eval/exec/compile",
+    "tool rebinding",
+    "unsupported decorator",
+    "nested function or unsupported control flow"
+  ],
+  "non_claims": [
+    "The census is a bounded synthetic mechanism check, not a real trajectory profitability study.",
+    "Position-stripped AST identity is observation-only and is not a production cache key.",
+    "No statement-level extraction, SSA, arbitrary Python purity proof, adaptive policy, or optimization execution is implemented in this slice.",
+    "The target-Guest pass proves exact parser/ABI compatibility for one pure whole-Run plan; broader workload economics remain deferred to the ReusePass evidence."
+  ]
+}

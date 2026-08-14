@@ -1,0 +1,106 @@
+package e2e_test
+
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"os"
+	"testing"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
+)
+
+func TestRealGuestSemanticAnalysisBuildsReusableWholeRunPlan(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactDigest := sha256.Sum256(artifact)
+	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
+	allowedImports := []string{"math"}
+	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA,
+		ManifestSHA256: semanticTestDigest('9'), ImportRoots: allowedImports,
+		QualifiedImportRoots: allowedImports,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, err := semantic.NewRequest(
+		"def double(value):\n    return value * 2\nresult = double(inputs['value'])\n",
+		semantic.Bindings{
+			ArtifactSHA256:         artifactSHA,
+			ExecutionProfileSHA256: runner.Properties().ExecutionProfileBindingSHA256,
+			ImportClosureSHA256:    agentfunction.ImportClosureIdentity(allowedImports, allowedImports),
+			CapabilityPlanSHA256:   semanticTestDigest('2'),
+		}, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := semantic.Analyze(context.Background(), runner, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(analysis.Functions) != 1 || analysis.ModuleEffects != (semantic.EffectSummary{}) || len(analysis.Barriers) != 0 {
+		t.Fatalf("analysis=%+v", analysis)
+	}
+	plan, census, err := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{InputsCanonical: true, OutputsCanonical: true})
+	if err != nil || !plan.Regions[0].Reusable() || census.ReusableRegions != 1 {
+		t.Fatalf("plan=%+v census=%+v err=%v", plan, census, err)
+	}
+	unknownRequest := request
+	unknownRequest.Source = "result=eval('1+1')\n"
+	unknown, err := semantic.Analyze(context.Background(), runner, unknownRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, blockedCensus, err := semantic.BuildWholeRunPlan(unknown, semantic.WholeRunConfig{InputsCanonical: true, OutputsCanonical: true})
+	if err != nil || blocked.Regions[0].Reusable() || len(blockedCensus.BarrierCounts) == 0 {
+		t.Fatalf("blocked=%+v census=%+v err=%v", blocked, blockedCensus, err)
+	}
+}
+
+func TestSemanticAnalyzerIsDefaultOff(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	analyzer := runner.(*wazeroengine.Engine)
+	if _, err := analyzer.AnalyzeSemantic(context.Background(), []byte(`{}`)); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+		t.Fatalf("default-off error=%v", err)
+	}
+}
+
+func semanticTestDigest(value byte) string {
+	return "sha256:" + string(makeSemanticBytes(value, 64))
+}
+
+func makeSemanticBytes(value byte, count int) []byte {
+	result := make([]byte, count)
+	for index := range result {
+		result[index] = value
+	}
+	return result
+}

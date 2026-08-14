@@ -24,6 +24,9 @@ int32_t runtime_init(const char *config, int32_t config_len);
 AGENT_RUNTIME_EXPORT("runtime_validate_source")
 int32_t runtime_validate_source(const char *request, int32_t request_len);
 
+AGENT_RUNTIME_EXPORT("runtime_analyze_source")
+uint32_t runtime_analyze_source(const char *request, int32_t request_len);
+
 AGENT_RUNTIME_EXPORT("runtime_prepare")
 int32_t runtime_prepare(const char *source, int32_t source_len);
 

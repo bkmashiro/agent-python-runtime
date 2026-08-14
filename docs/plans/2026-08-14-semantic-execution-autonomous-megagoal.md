@@ -282,22 +282,22 @@ future joint approval before adding general pressure scheduling.
 **Promise:** The exact Guest parser produces a conservative, inspectable map of
 known effects and unknown barriers without changing execution.
 
-- [ ] Write RED Guest tests for direct projected Tool calls, local pure/local
+- [x] Write RED Guest tests for direct projected Tool calls, local pure/local
   mutation, live reads/writes, aliases/rebinding, local function calls,
   recursion/mutual recursion, dynamic calls/imports, clock/random, and compound
   control flow.
-- [ ] Implement a small analyzer module using `ast`/`symtable`; reuse the sealed
-  Plan projection and existing source/import contract.
-- [ ] Bind every report to source digest, analyzer schema, Guest artifact/profile,
+- [x] Implement a small analyzer module using the target Guest's built-in `ast`;
+  reuse the sealed Plan projection and existing source/import contract.
+- [x] Bind every report to source digest, analyzer schema, Guest artifact/profile,
   import closure, and capability Plan digest.
-- [ ] Propagate summaries across statically resolved local calls by SCC/fixed point;
+- [x] Propagate summaries across statically resolved local calls by SCC/fixed point;
   unsupported or unresolved behavior becomes `MayBeUnknown`.
-- [ ] Produce stable source spans, direct-call evidence, function summary,
+- [x] Produce stable source spans, direct-call evidence, function summary,
   dependencies, and bounded rejection reasons. Never include private bodies in
   Host-facing evidence.
-- [ ] Add deterministic canonicalization tests across equivalent parse runs and
+- [x] Add deterministic canonicalization tests across equivalent parse runs and
   mutations proving identity changes when source/profile/Plan changes.
-- [ ] Keep analyzer-only mode behaviorally inert and prove original source still
+- [x] Keep analyzer-only mode behaviorally inert and prove original source still
   executes unchanged when optimization is off.
 
 **Likely files:** a focused module under
@@ -312,18 +312,18 @@ or packaged Guest behavior changes.
 **Promise:** Analysis becomes one bounded optimizer input without becoming a
 traditional compiler IR.
 
-- [ ] Define whole-module/whole-function region IDs, source/AST identity, control
-  parent, direct dependencies, effect summary, canonical live-in/live-out schema,
-  cost counters, eligibility, and exact rejection reason.
-- [ ] Treat loops, `try`, async/generator behavior, unresolved calls, and complex
+- [x] Define one root whole-Run region ID, source/AST identity, direct
+  dependencies, effect summary, canonical input/output boundary flags, derived
+  eligibility, and exact rejection reasons; v0 has no child control parent.
+- [x] Treat loops, `try`, async/generator behavior, unresolved calls, and complex
   object boundaries as opaque in v0.
-- [ ] Form only coarse maximal whole-function/whole-Run candidates. Do not enumerate
+- [x] Form only coarse maximal whole-function/whole-Run candidates. Do not enumerate
   arbitrary subgraphs or split statements.
-- [ ] Validate that every region belongs to exactly one source/analysis identity
+- [x] Validate that every region belongs to exactly one source/analysis identity
   and cannot claim weaker effects than its function/SCC summary.
-- [ ] Add a deterministic analyzer/report-only CLI or test surface suitable for
+- [x] Add a deterministic analyzer/report-only CLI or test surface suitable for
   offline trajectory census without executing optimizations.
-- [ ] Measure exact-source and position-stripped-AST candidate frequency,
+- [x] Measure exact-source and position-stripped-AST candidate frequency,
   concurrency overlap, duration, input/output size, and unknown-barrier rate on a
   bounded private local corpus when available; do not publish private source.
 
@@ -433,8 +433,8 @@ the controller owns design, diffs, tests, signatures, push, and final claims.
 
 ## Roadmap tracking
 
-**Current execution pointer:** Track B — implement analyzer-only target-Guest AST
-coloring and conservative function summaries.
+**Current execution pointer:** Track D — bind one eligible whole-Run semantic plan
+to the existing single-flight and completed-result cache without weakening identity.
 
 After each slice:
 
@@ -476,7 +476,29 @@ After each slice:
   wait now releases the copied-argument slot on `ctx.Done()`, discards any late
   result, and has a bounded regression test. The official Guest also returned a
   structured `MemoryError` above its declared maximum and served a clean slot
-  afterward. No outstanding Track A P0/P1 finding remains.
+  afterward. Track A was committed and pushed as `ebdbf9e`. Its delayed
+  independent review then found that independently armed timers could select
+  pageout before cold advice and that the checked resource evidence no longer
+  matched the emitting test schema. Pageout is now armed only after cold advice,
+  evidence accounting is stricter, the three Zao observations were regenerated
+  directly from the test output, and the Darwin e2e skip occurs before engine
+  construction. No outstanding Track A P0/P1 finding remains.
+- 2026-08-14: Tracks B-C reached analysis-only closure. The exact packaged Guest
+  now exports a bounded `runtime_analyze_source` ABI backed by built-in `ast`,
+  typed Plan projections, conservative direct/WASI coloring, recursive SCC/fixed-
+  point summaries, and opaque dynamic barriers. The Host decodes the report
+  strictly, verifies all source/artifact/profile/import/Plan bindings, and forms
+  one effect-covering whole-Run region plus a body-free census. Rebuilt target
+  artifact `d5fb9f1...` passed the real Linux ARM64 semantic e2e. An 11-case
+  synthetic census produced 10 exact-source and 9 position-stripped AST identities,
+  5 reusable candidates, and 3 unknown-barrier cases in 635 microseconds total;
+  concurrency overlap was intentionally unrepresented, so this is mechanism
+  evidence rather than a profitability claim. The bounded independent review
+  timed out without a final summary, but its completed probes exposed missing
+  definition-time defaults, class/complex-control opacity, and higher-order
+  builtin callback barriers; all were closed with focused tests. Host admission
+  now also requires the requested artifact/profile identities to match the live
+  analyzer engine before Guest analysis starts.
 
 ## Stop conditions
 

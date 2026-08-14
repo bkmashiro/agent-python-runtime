@@ -319,6 +319,33 @@ int32_t runtime_validate_source(const char *request, int32_t request_len) {
 }
 
 
+uint32_t runtime_analyze_source(const char *request, int32_t request_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL || request == NULL ||
+        request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
+        return write_internal_error();
+    }
+    PyObject *module = PyImport_ImportModule("agent_runtime.semantic");
+    if (module == NULL) {
+        return write_python_unicode(NULL);
+    }
+    PyObject *function = PyObject_GetAttrString(module, "analyze_request_json");
+    Py_DECREF(module);
+    if (function == NULL) {
+        return write_python_unicode(NULL);
+    }
+    PyObject *argument = PyUnicode_DecodeUTF8(request, (Py_ssize_t)request_len,
+                                              "strict");
+    if (argument == NULL) {
+        Py_DECREF(function);
+        return write_python_unicode(NULL);
+    }
+    PyObject *result = PyObject_CallOneArg(function, argument);
+    Py_DECREF(argument);
+    Py_DECREF(function);
+    return write_python_unicode(result);
+}
+
+
 int32_t runtime_prepare(const char *source, int32_t source_len) {
     if (!Py_IsInitialized() || runtime_module == NULL) {
         return -1;

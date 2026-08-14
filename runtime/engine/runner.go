@@ -17,6 +17,13 @@ type Runner interface {
 	Properties() Properties
 }
 
+// SemanticAnalyzer is an optional analyzer-only surface. Implementations must
+// use the exact target Guest artifact while withholding workspace and capability
+// authority from the analysis instance.
+type SemanticAnalyzer interface {
+	AnalyzeSemantic(ctx context.Context, request []byte) ([]byte, error)
+}
+
 type Factory interface {
 	Name() string
 	New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (Runner, error)

@@ -68,8 +68,8 @@ cases. Report SHA-256:
 `4df33cbc8d446153ee7523377beb921fe5fae7b78815269910d70cc55b62f52f`.
 Cross-compiled ARM64 semantic and effectgraph test binaries passed on Linux
 `6.12.0-202.76.4.1.el9uek.aarch64`; binary SHA-256 values were
-`a75ffa82dbc090914f931d750278378e76df33540cfdfb9be5f5c42869d104b9` and
-`58e608e69aa89e4b500f44b7f26257ebdbfbba5487a2a6262ee328de635e8cb1`.
+`17a6fafa5f6d6babdaaf9576721a865d575b0e413a911cd12de3bd51c603f6bc` and
+`07898bd5ae0dd8a500df8bc38c37b0049441a33d73051aaf801f3a6d3c97631f`.
 The ARM64 oracle binary independently reproduced the exact report SHA-256 above.
 
 ## Opportunity comparison

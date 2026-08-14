@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 )
 
 // RejectionReason is a stable fail-closed explanation emitted by every shared
@@ -34,6 +35,8 @@ const (
 	RejectCoalescingContractMissing   RejectionReason = "coalescing_contract_missing"
 	RejectCacheContractMissing        RejectionReason = "cache_contract_missing"
 	RejectBackendContractMissing      RejectionReason = "backend_contract_missing"
+	RejectWholeRunShapeInvalid        RejectionReason = "whole_run_shape_invalid"
+	RejectWholeRunNotReusable         RejectionReason = "whole_run_not_reusable"
 )
 
 // Decision is immutable to callers. A consumer receives authority only when Allowed
@@ -42,6 +45,7 @@ type Decision struct {
 	allowed    bool
 	rejections []RejectionReason
 	call       *QualifiedCall
+	wholeRun   *QualifiedWholeRun
 }
 
 func (decision Decision) Allowed() bool { return decision.allowed }
@@ -55,6 +59,67 @@ func (decision Decision) QualifiedCall() (QualifiedCall, bool) {
 		return QualifiedCall{}, false
 	}
 	return decision.call.clone(), true
+}
+
+func (decision Decision) QualifiedWholeRun() (QualifiedWholeRun, bool) {
+	if !decision.allowed || decision.wholeRun == nil || !decision.wholeRun.valid() {
+		return QualifiedWholeRun{}, false
+	}
+	return *decision.wholeRun, true
+}
+
+// QualifiedWholeRun is an opaque shared-legality proof for the existing exact
+// whole-Run reuse consumer. It carries no execution or cache authority.
+type QualifiedWholeRun struct {
+	verified VerifiedWholeRunPlan
+	regionID string
+}
+
+func (qualified QualifiedWholeRun) RegionID() string { return qualified.regionID }
+
+func (qualified QualifiedWholeRun) valid() bool {
+	analysis, plan, _, err := qualified.verified.Bound()
+	if err != nil || len(plan.Regions) != 1 {
+		return false
+	}
+	region := plan.Regions[0]
+	return region.ID == qualified.regionID && region.Kind == RegionWholeRun &&
+		region.FunctionID == "" && region.ASTSHA256 == analysis.ASTSHA256 && region.Reusable()
+}
+
+func (qualified QualifiedWholeRun) Bound() (Analysis, Plan, enginecontract.Properties, Region, error) {
+	if !qualified.valid() {
+		return Analysis{}, Plan{}, enginecontract.Properties{}, Region{}, ErrUnverifiedAnalysis
+	}
+	analysis, plan, properties, err := qualified.verified.Bound()
+	if err != nil {
+		return Analysis{}, Plan{}, enginecontract.Properties{}, Region{}, ErrUnverifiedAnalysis
+	}
+	return analysis, plan, properties, plan.Regions[0], nil
+}
+
+// CanReuseWholeRun centralizes the behavior-preserving static legality question for
+// exact whole-Run reuse. It neither executes nor publishes a reusable result.
+func CanReuseWholeRun(verified VerifiedWholeRunPlan) Decision {
+	analysis, plan, _, err := verified.Bound()
+	if err != nil {
+		return rejected(RejectUnverifiedAnalysis)
+	}
+	if len(plan.Regions) != 1 {
+		return rejected(RejectWholeRunShapeInvalid)
+	}
+	region := plan.Regions[0]
+	if region.Kind != RegionWholeRun || region.FunctionID != "" || region.ASTSHA256 != analysis.ASTSHA256 {
+		return rejected(RejectWholeRunShapeInvalid)
+	}
+	if !region.Reusable() {
+		return rejected(RejectWholeRunNotReusable)
+	}
+	qualified := &QualifiedWholeRun{verified: verified, regionID: region.ID}
+	if !qualified.valid() {
+		return rejected(RejectWholeRunShapeInvalid)
+	}
+	return Decision{allowed: true, wholeRun: qualified}
 }
 
 // PreissueContext is Host-authored per-Run state. It contains identity and budget

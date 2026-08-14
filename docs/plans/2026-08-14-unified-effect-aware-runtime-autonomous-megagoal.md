@@ -492,8 +492,9 @@ current exact whole-Run contract.
 
 - [x] Script repeated focused/full/Guest/Lab gates and read-only delivery verification;
   keep commit, push and deployment as explicit separate actions.
-- [ ] Refactor current whole-Run qualification to consume shared legality outputs
-  without behavior change.
+- [x] Refactor current whole-Run qualification to consume shared legality outputs
+  without behavior change; full/race/Guest gates preserve one physical compute across
+  leader/waiter/retained outcomes.
 - [ ] Define one analysis-only candidate region graph with exact source spans,
   control/effect barriers, canonical live-ins/live-outs, capability occurrences and
   stable rejection reasons. It carries no execution authority and must not require

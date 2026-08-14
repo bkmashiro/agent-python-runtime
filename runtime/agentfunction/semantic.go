@@ -16,7 +16,12 @@ type QualifiedGuestInvocation struct {
 }
 
 func NewQualifiedGuestInvocation(invocation Invocation, verified semantic.VerifiedWholeRunPlan, requestRaw []byte) (QualifiedGuestInvocation, error) {
-	analysis, plan, properties, verifiedErr := verified.Bound()
+	decision := semantic.CanReuseWholeRun(verified)
+	qualifiedWholeRun, ok := decision.QualifiedWholeRun()
+	if !ok {
+		return QualifiedGuestInvocation{}, ErrGuestQualification
+	}
+	analysis, plan, properties, region, verifiedErr := qualifiedWholeRun.Bound()
 	if verifiedErr != nil {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}
@@ -26,7 +31,7 @@ func NewQualifiedGuestInvocation(invocation Invocation, verified semantic.Verifi
 		invocation.SemanticRequestContractSHA256 != "" {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}
-	if err := analysis.Validate(); err != nil || plan.Validate() != nil || len(plan.Regions) != 1 {
+	if err := analysis.Validate(); err != nil || plan.Validate() != nil {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}
 	analysisIdentity, _, err := analysis.Identity()
@@ -56,13 +61,10 @@ func NewQualifiedGuestInvocation(invocation Invocation, verified semantic.Verifi
 	if err != nil {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}
-	region := plan.Regions[0]
 	if plan.Analysis.SourceSHA256 != invocation.FunctionSourceSHA256 ||
 		plan.Analysis.ArtifactSHA256 != invocation.ArtifactSHA256 ||
 		plan.Analysis.ExecutionProfileSHA256 != invocation.ExecutionProfileSHA256 ||
 		plan.Analysis.ImportClosureSHA256 != invocation.ImportClosureSHA256 ||
-		region.Kind != semantic.RegionWholeRun || region.FunctionID != "" ||
-		region.ASTSHA256 != analysis.ASTSHA256 || !region.Reusable() ||
 		!semanticDependenciesMatchInvocation(region.Dependencies, invocation) {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}

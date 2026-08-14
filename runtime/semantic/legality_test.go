@@ -116,6 +116,64 @@ func TestUnsupportedSharedLegalityQuestionsFailClosed(t *testing.T) {
 	}
 }
 
+func TestCanReuseWholeRunMintsOnlyExactEffectFreeCanonicalPlan(t *testing.T) {
+	capabilityPlan := legalityTestPlan(t, true)
+	verifiedAnalysis, _ := legalityVerifiedAnalysis(t, capabilityPlan, true)
+	analysis, err := verifiedAnalysis.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis.ModuleEffects = EffectSummary{}
+	analysis.CallSites = []CallSite{}
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedAnalysis = VerifiedAnalysis{analysisJSON: encoded}
+	plan, _, err := BuildWholeRunPlan(analysis, WholeRunConfig{
+		Dependencies:    []Dependency{{Kind: DependencyCanonicalInputs, IdentitySHA256: legalityDigest("inputs")}},
+		InputsCanonical: true, OutputsCanonical: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedPlan, err := BindVerifiedWholeRunPlan(verifiedAnalysis, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := CanReuseWholeRun(verifiedPlan)
+	qualified, ok := decision.QualifiedWholeRun()
+	if !decision.Allowed() || !ok || qualified.RegionID() != plan.Regions[0].ID {
+		t.Fatalf("decision=%+v qualified=%+v ok=%v", decision, qualified, ok)
+	}
+	boundAnalysis, boundPlan, _, boundRegion, err := qualified.Bound()
+	if err != nil || boundAnalysis.ASTSHA256 != analysis.ASTSHA256 || boundPlan.Regions[0].ID != boundRegion.ID {
+		t.Fatalf("analysis=%+v plan=%+v region=%+v err=%v", boundAnalysis, boundPlan, boundRegion, err)
+	}
+
+	if got := CanReuseWholeRun(VerifiedWholeRunPlan{}); got.Allowed() || !hasRejection(got, RejectUnverifiedAnalysis) {
+		t.Fatalf("forged plan accepted: %+v", got)
+	}
+	unsafe := analysis
+	unsafe.ModuleEffects.MayObserveLive = true
+	_, unsafeEncoded, err := unsafe.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsafeVerified := VerifiedAnalysis{analysisJSON: unsafeEncoded}
+	unsafePlan, _, err := BuildWholeRunPlan(unsafe, WholeRunConfig{InputsCanonical: true, OutputsCanonical: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsafeBound, err := BindVerifiedWholeRunPlan(unsafeVerified, unsafePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := CanReuseWholeRun(unsafeBound); got.Allowed() || !hasRejection(got, RejectWholeRunNotReusable) {
+		t.Fatalf("effectful plan accepted: %+v", got)
+	}
+}
+
 func TestSemanticPreDispatchConsumerRequiresExclusiveDynamicCallSurface(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, _ := legalityVerifiedAnalysis(t, plan, true)

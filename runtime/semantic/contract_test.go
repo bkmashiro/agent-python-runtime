@@ -122,6 +122,40 @@ func TestEffectfulUnknownOrNoncanonicalRegionIsNotReusable(t *testing.T) {
 	}
 }
 
+func TestAnalysisRejectsMalformedSemanticCallSites(t *testing.T) {
+	valid := validAnalysis()
+	valid.CallSites = []semantic.CallSite{{
+		ID: digest('a'), Span: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 1},
+		Capability: "sources.read", ControlRegionID: digest('b'), NecessarilyReached: true,
+		ArgumentsCanonical: true, CanonicalArguments: json.RawMessage(`{"key":"x"}`), DynamicOccurrence: 1,
+	}}
+	if err := valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*semantic.Analysis){
+		"unknown capability": func(value *semantic.Analysis) { value.CallSites[0].Capability = "" },
+		"non-canonical arguments": func(value *semantic.Analysis) {
+			value.CallSites[0].CanonicalArguments = json.RawMessage(`{ "key":"x"}`)
+		},
+		"non-object arguments": func(value *semantic.Analysis) { value.CallSites[0].CanonicalArguments = json.RawMessage(`[]`) },
+		"dynamic occurrence":   func(value *semantic.Analysis) { value.CallSites[0].DynamicOccurrence = 2 },
+		"outside module": func(value *semantic.Analysis) {
+			value.CallSites[0].Span.StartLine = 3
+			value.CallSites[0].Span.EndLine = 3
+		},
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			candidate.CallSites = append([]semantic.CallSite(nil), valid.CallSites...)
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, semantic.ErrInvalidAnalysis) {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
 func validAnalysis() semantic.Analysis {
 	return semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
@@ -133,6 +167,7 @@ func validAnalysis() semantic.Analysis {
 			ID: digest('8'), Name: "compute", SCCID: digest('8'),
 			Span: semantic.SourceSpan{StartLine: 1, EndLine: 2},
 		}},
+		CallSites: []semantic.CallSite{},
 	}
 }
 

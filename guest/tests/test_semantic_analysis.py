@@ -29,6 +29,7 @@ CAPABILITIES = [
         "module": "sources",
         "method": "read",
         "global_alias": "",
+        "arguments": [],
     },
     {
         "name": "mail.send",
@@ -37,6 +38,7 @@ CAPABILITIES = [
         "module": "mail",
         "method": "send",
         "global_alias": "send_mail",
+        "arguments": [],
     },
 ]
 
@@ -86,6 +88,41 @@ class SemanticAnalysisTests(unittest.TestCase):
         self.assertTrue(report["module_effects"]["may_observe_live"])
         self.assertEqual(["sources.read"], by_name["load"]["direct_capabilities"])
         self.assertEqual(["mail.send"], by_name["publish"]["direct_capabilities"])
+
+    def test_overlay_emits_only_exact_module_entry_call_facts(self):
+        capabilities = [
+            {**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]},
+            {**copy.deepcopy(CAPABILITIES[1]), "arguments": ["value"]},
+        ]
+        report = self.analyze(
+            "first = sources.read('alpha')\n"
+            "second = sources.read('beta')\n"
+            "if inputs['flag']:\n"
+            "    sources.read('conditional')\n"
+            "result = first\n",
+            capabilities=capabilities,
+        )
+        self.assertEqual("pysolate.semantic-analysis.v1", report["schema_version"])
+        self.assertEqual(2, len(report["call_sites"]))
+        first, second = sorted(report["call_sites"], key=lambda row: row["span"]["start_line"])
+        self.assertTrue(first["necessarily_reached"])
+        self.assertEqual(1, first["dynamic_occurrence"])
+        self.assertEqual({"key": "alpha"}, first["canonical_arguments"])
+        self.assertFalse(second["necessarily_reached"])
+        self.assertEqual({"key": "beta"}, second["canonical_arguments"])
+        self.assertNotEqual(first["id"], second["id"])
+
+    def test_overlay_rejects_dynamic_arguments_aliases_and_control_flow(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}, copy.deepcopy(CAPABILITIES[1])]
+        for source in (
+            "key = inputs['key']\nresult = sources.read(key)\n",
+            "alias = sources.read\nresult = alias('x')\n",
+            "if True:\n    result = sources.read('x')\n",
+            "result = sources.read(key='x', extra='y')\n",
+        ):
+            with self.subTest(source=source):
+                report = self.analyze(source, capabilities=capabilities)
+                self.assertEqual([], report["call_sites"])
 
     def test_dynamic_calls_eval_import_and_tool_rebinding_fail_closed(self):
         report = self.analyze(

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	AnalysisSchemaVersion = "pysolate.semantic-analysis.v0"
+	AnalysisSchemaVersion = "pysolate.semantic-analysis.v1"
 	PlanSchemaVersion     = "pysolate.semantic-plan.v0"
 	MaxDocumentBytes      = 1 << 20
 
@@ -24,6 +24,7 @@ const (
 	maxReferences      = 256
 	maxDependencies    = 128
 	maxBarriers        = 256
+	maxCallSites       = 256
 	maxIdentifierBytes = 256
 )
 
@@ -99,6 +100,17 @@ type Barrier struct {
 	Span       SourceSpan  `json:"span"`
 }
 
+type CallSite struct {
+	ID                 string          `json:"id"`
+	Span               SourceSpan      `json:"span"`
+	Capability         string          `json:"capability"`
+	ControlRegionID    string          `json:"control_region_id"`
+	NecessarilyReached bool            `json:"necessarily_reached"`
+	ArgumentsCanonical bool            `json:"arguments_canonical"`
+	CanonicalArguments json.RawMessage `json:"canonical_arguments"`
+	DynamicOccurrence  uint32          `json:"dynamic_occurrence"`
+}
+
 type Analysis struct {
 	SchemaVersion          string            `json:"schema_version"`
 	SourceSHA256           string            `json:"source_sha256"`
@@ -112,11 +124,13 @@ type Analysis struct {
 	ModuleEffects          EffectSummary     `json:"module_effects"`
 	Functions              []FunctionSummary `json:"functions"`
 	Barriers               []Barrier         `json:"barriers"`
+	CallSites              []CallSite        `json:"call_sites"`
 }
 
 func (analysis Analysis) Validate() error {
 	if analysis.SchemaVersion != AnalysisSchemaVersion || !analysis.ModuleSpan.valid() ||
-		len(analysis.Functions) > maxFunctions || len(analysis.Barriers) > maxBarriers {
+		len(analysis.Functions) > maxFunctions || len(analysis.Barriers) > maxBarriers ||
+		len(analysis.CallSites) > maxCallSites || analysis.CallSites == nil {
 		return ErrInvalidAnalysis
 	}
 	for _, digest := range []string{
@@ -175,6 +189,17 @@ func (analysis Analysis) Validate() error {
 		}
 		function, ok := functions[barrier.FunctionID]
 		if !ok || !function.Effects.MayBeUnknown || !function.Span.contains(barrier.Span) {
+			return ErrInvalidAnalysis
+		}
+	}
+	if !sort.SliceIsSorted(analysis.CallSites, func(i, j int) bool { return analysis.CallSites[i].ID < analysis.CallSites[j].ID }) {
+		return ErrInvalidAnalysis
+	}
+	for index, site := range analysis.CallSites {
+		if !digestPattern.MatchString(site.ID) || !digestPattern.MatchString(site.ControlRegionID) ||
+			!capabilityPattern.MatchString(site.Capability) || !analysis.ModuleSpan.contains(site.Span) ||
+			!site.ArgumentsCanonical || site.DynamicOccurrence != 1 || !validCanonicalArguments(site.CanonicalArguments) ||
+			(index > 0 && analysis.CallSites[index-1].ID == site.ID) {
 			return ErrInvalidAnalysis
 		}
 	}
@@ -296,6 +321,20 @@ func strictDecode(raw []byte, destination any) error {
 		return errors.New("semantic document has trailing data")
 	}
 	return nil
+}
+
+func validCanonicalArguments(raw json.RawMessage) bool {
+	if len(raw) == 0 || len(raw) > 64<<10 || !json.Valid(raw) {
+		return false
+	}
+	var arguments map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&arguments); err != nil || arguments == nil {
+		return false
+	}
+	canonical, err := json.Marshal(arguments)
+	return err == nil && bytes.Equal(raw, canonical)
 }
 
 func identity(value any) (string, []byte, error) {

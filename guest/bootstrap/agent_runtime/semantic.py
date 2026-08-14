@@ -6,12 +6,13 @@ import json
 import re
 
 
-ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v0"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v1").hexdigest()
+ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v1"
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v2").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
 MAX_BARRIERS = 256
+MAX_CALL_SITES = 256
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _BINDING_KEYS = (
     "artifact_sha256",
@@ -320,10 +321,14 @@ def _capability_index(capabilities):
     calls = {}
     roots = set()
     for row in capabilities:
-        required = {"name", "effect_class", "playback", "module", "method", "global_alias"}
+        required = {"name", "effect_class", "playback", "module", "method", "global_alias", "arguments"}
         if not isinstance(row, dict) or set(row) != required:
             raise ValueError("invalid semantic capability projection")
-        if not row["name"] or not row["module"] or not row["method"]:
+        if (not row["name"] or not row["module"] or not row["method"] or
+                not isinstance(row["arguments"], list) or
+                len(row["arguments"]) > 64 or
+                any(not isinstance(argument, str) or not argument for argument in row["arguments"]) or
+                len(set(row["arguments"])) != len(row["arguments"])):
             raise ValueError("invalid semantic capability projection")
         keys = [row["module"] + "." + row["method"]]
         roots.add(row["module"])
@@ -335,6 +340,85 @@ def _capability_index(capabilities):
                 raise ValueError("duplicate semantic capability projection")
             calls[key] = dict(row)
     return {"calls": calls, "tool_roots": roots}
+
+
+def _literal_json(node):
+    if not isinstance(node, ast.Constant) or not isinstance(node.value, (type(None), bool, int, float, str)):
+        raise ValueError("non-canonical semantic argument")
+    value = node.value
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        raise ValueError("non-finite semantic argument")
+    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    if len(encoded.encode("utf-8")) > 4096:
+        raise ValueError("semantic argument bound exceeded")
+    return value
+
+
+def _canonical_call_arguments(node, capability):
+    names = capability["arguments"]
+    if any(isinstance(argument, ast.Starred) for argument in node.args) or any(keyword.arg is None for keyword in node.keywords):
+        return None
+    if len(node.args) > len(names):
+        return None
+    values = {}
+    try:
+        for index, argument in enumerate(node.args):
+            values[names[index]] = _literal_json(argument)
+        for keyword in node.keywords:
+            if keyword.arg not in names or keyword.arg in values:
+                return None
+            values[keyword.arg] = _literal_json(keyword.value)
+    except ValueError:
+        return None
+    if set(values) != set(names):
+        return None
+    return {name: values[name] for name in names}
+
+
+def _direct_statement_call(statement):
+    value = None
+    if isinstance(statement, ast.Expr):
+        value = statement.value
+    elif isinstance(statement, ast.Assign) and all(isinstance(target, ast.Name) for target in statement.targets):
+        value = statement.value
+    elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+        value = statement.value
+    return value if isinstance(value, ast.Call) else None
+
+
+def _module_call_sites(tree, source_sha256, capability_index):
+    sites = []
+    necessarily_reached = True
+    control_region = _digest(("pysolate.semantic-control-region.v0\x00" + source_sha256 + "\x00module-entry").encode("ascii"))
+    for statement in tree.body:
+        if (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and
+                isinstance(statement.value.value, str)):
+            continue
+        call = _direct_statement_call(statement)
+        if call is not None:
+            analyzer = _ScopeAnalyzer("", {}, capability_index)
+            capability = analyzer._capability(call.func)
+            arguments = _canonical_call_arguments(call, capability) if capability is not None else None
+            if capability is not None and arguments is not None:
+                span = _span(call)
+                descriptor = "pysolate.semantic-call-site.v0\x00%s\x00%s\x00%d:%d:%d:%d" % (
+                    source_sha256, capability["name"], span["start_line"], span["start_column"],
+                    span["end_line"], span["end_column"],
+                )
+                sites.append({
+                    "id": _digest(descriptor.encode("utf-8")),
+                    "span": span,
+                    "capability": capability["name"],
+                    "control_region_id": control_region,
+                    "necessarily_reached": necessarily_reached,
+                    "arguments_canonical": True,
+                    "canonical_arguments": arguments,
+                    "dynamic_occurrence": 1,
+                })
+        necessarily_reached = False
+    if len(sites) > MAX_CALL_SITES:
+        raise ValueError("semantic call-site bound exceeded")
+    return sorted(sites, key=lambda row: row["id"])
 
 
 def _parameters(node):
@@ -400,6 +484,7 @@ def analyze_source(source, bindings, capabilities):
     ast_dump = ast.dump(tree, annotate_fields=True, include_attributes=False)
     ast_sha256 = _digest(ast_dump.encode("utf-8"))
     capability_index = _capability_index(capabilities)
+    call_sites = _module_call_sites(tree, source_sha256, capability_index)
     function_nodes = {}
     function_ids = {}
     module_barriers = []
@@ -480,6 +565,7 @@ def analyze_source(source, bindings, capabilities):
         "module_effects": module_effects,
         "functions": sorted(rows.values(), key=lambda row: row["id"]),
         "barriers": all_barriers,
+        "call_sites": call_sites,
     }
 
 

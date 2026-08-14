@@ -82,6 +82,39 @@ func TestAnalyzeVerifiedWithholdsAuthorityAndReturnsDetachedReports(t *testing.T
 	}
 }
 
+func TestAnalyzeBindsCallSitesToSourceCapabilityAndCanonicalArguments(t *testing.T) {
+	policy := capability.DemoCatalogPolicy{Endpoint: "http://127.0.0.1:1", Timeout: time.Second, MaxResponseBytes: 1024}
+	spec, grant, err := capability.DemoCatalogDefinition(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	if err := registry.Register(spec, grant, capability.NewPlaybackHandler()); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings := semantic.Bindings{
+		ArtifactSHA256: digestFor('1'), ExecutionProfileSHA256: digestFor('2'),
+		ImportClosureSHA256: digestFor('3'), CapabilityPlanSHA256: plan.Identity(),
+	}
+	request, err := semantic.NewRequest("result = sources.demo_catalog()\n", bindings, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeSemanticRunner{bindings: bindings, emitCall: true}
+	analysis, err := semantic.Analyze(context.Background(), runner, request)
+	if err != nil || len(analysis.CallSites) != 1 || !analysis.CallSites[0].NecessarilyReached {
+		t.Fatalf("analysis=%+v err=%v", analysis, err)
+	}
+	runner.tamperCall = true
+	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
+		t.Fatalf("tampered call-site error=%v", err)
+	}
+}
+
 func TestNewRequestProjectsTypedCapabilityMetadataAndRejectsAmbiguity(t *testing.T) {
 	policy := capability.DemoCatalogPolicy{Endpoint: "http://127.0.0.1:1", Timeout: time.Second, MaxResponseBytes: 1024}
 	spec, grant, err := capability.DemoCatalogDefinition(policy)
@@ -114,11 +147,13 @@ func TestNewRequestProjectsTypedCapabilityMetadataAndRejectsAmbiguity(t *testing
 }
 
 type fakeSemanticRunner struct {
-	calls     int
-	mismatch  bool
-	workspace bool
-	broker    bool
-	bindings  semantic.Bindings
+	calls      int
+	mismatch   bool
+	workspace  bool
+	broker     bool
+	emitCall   bool
+	tamperCall bool
+	bindings   semantic.Bindings
 }
 
 func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []byte) ([]byte, error) {
@@ -139,8 +174,23 @@ func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []b
 		ArtifactSHA256: artifact, ExecutionProfileSHA256: request.Bindings.ExecutionProfileSHA256,
 		ImportClosureSHA256:  request.Bindings.ImportClosureSHA256,
 		CapabilityPlanSHA256: request.Bindings.CapabilityPlanSHA256,
-		ModuleSpan:           semantic.SourceSpan{StartLine: 1, EndLine: 1},
-		Functions:            []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
+		ModuleSpan:           semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 128},
+		Functions:            []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{}, CallSites: []semantic.CallSite{},
+	}
+	if runner.emitCall {
+		sourceSHA := analysis.SourceSHA256
+		span := semantic.SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 1}
+		callID := testSemanticDigest(fmt.Sprintf("pysolate.semantic-call-site.v0\x00%s\x00%s\x00%d:%d:%d:%d",
+			sourceSHA, request.Capabilities[0].Name, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn))
+		if runner.tamperCall {
+			callID = digestFor('f')
+		}
+		analysis.ModuleEffects = semantic.EffectSummary{MayObserveLive: true, MaySuspend: true}
+		analysis.CallSites = []semantic.CallSite{{
+			ID: callID, Span: span, Capability: request.Capabilities[0].Name,
+			ControlRegionID:    testSemanticDigest("pysolate.semantic-control-region.v0\x00" + sourceSHA + "\x00module-entry"),
+			NecessarilyReached: true, ArgumentsCanonical: true, CanonicalArguments: json.RawMessage(`{}`), DynamicOccurrence: 1,
+		}}
 	}
 	return json.Marshal(analysis)
 }
@@ -165,6 +215,11 @@ func (plainRunner) Run(context.Context, []byte, string) ([]byte, error) { return
 func (plainRunner) Close(context.Context) error                         { return nil }
 func (plainRunner) Properties() enginecontract.Properties {
 	return enginecontract.Properties{Backend: "plain"}
+}
+
+func testSemanticDigest(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("sha256:%x", digest[:])
 }
 
 func digestFor(value byte) string { return "sha256:" + string(makeBytes(value, 64)) }

@@ -28,12 +28,13 @@ type Bindings struct {
 }
 
 type CapabilityProjection struct {
-	Name        string `json:"name"`
-	EffectClass string `json:"effect_class"`
-	Playback    string `json:"playback"`
-	Module      string `json:"module"`
-	Method      string `json:"method"`
-	GlobalAlias string `json:"global_alias"`
+	Name        string   `json:"name"`
+	EffectClass string   `json:"effect_class"`
+	Playback    string   `json:"playback"`
+	Module      string   `json:"module"`
+	Method      string   `json:"method"`
+	GlobalAlias string   `json:"global_alias"`
+	Arguments   []string `json:"arguments"`
 }
 
 type Request struct {
@@ -53,6 +54,7 @@ func NewRequest(source string, bindings Bindings, plan *capability.Plan) (Reques
 				Name: spec.Name, EffectClass: spec.EffectClass, Playback: spec.Playback,
 				Module: spec.Python.Module, Method: spec.Python.Method,
 				GlobalAlias: spec.Python.GlobalAlias,
+				Arguments:   append([]string{}, spec.Python.Arguments...),
 			})
 		}
 	}
@@ -82,6 +84,7 @@ func (request Request) Validate() error {
 		if !capabilityPattern.MatchString(projection.Name) || !validIdentifier(projection.Module) ||
 			!validIdentifier(projection.Method) || projection.GlobalAlias != "" && !validIdentifier(projection.GlobalAlias) ||
 			!validProjectionEffect(projection.EffectClass) || !validProjectionPlayback(projection.Playback) ||
+			projection.Arguments == nil || len(projection.Arguments) > maxReferences || !validProjectionArguments(projection.Arguments) ||
 			index > 0 && projection.Name <= lastName {
 			return ErrInvalidRequest
 		}
@@ -144,11 +147,70 @@ func Analyze(ctx context.Context, runner enginecontract.Runner, request Request)
 
 func analysisMatchesRequest(analysis Analysis, request Request) bool {
 	sourceDigest := sha256.Sum256([]byte(request.Source))
-	return analysis.SourceSHA256 == fmt.Sprintf("sha256:%x", sourceDigest[:]) &&
-		analysis.ArtifactSHA256 == request.Bindings.ArtifactSHA256 &&
-		analysis.ExecutionProfileSHA256 == request.Bindings.ExecutionProfileSHA256 &&
-		analysis.ImportClosureSHA256 == request.Bindings.ImportClosureSHA256 &&
-		analysis.CapabilityPlanSHA256 == request.Bindings.CapabilityPlanSHA256
+	sourceSHA := fmt.Sprintf("sha256:%x", sourceDigest[:])
+	if analysis.SourceSHA256 != sourceSHA ||
+		analysis.ArtifactSHA256 != request.Bindings.ArtifactSHA256 ||
+		analysis.ExecutionProfileSHA256 != request.Bindings.ExecutionProfileSHA256 ||
+		analysis.ImportClosureSHA256 != request.Bindings.ImportClosureSHA256 ||
+		analysis.CapabilityPlanSHA256 != request.Bindings.CapabilityPlanSHA256 {
+		return false
+	}
+	projections := make(map[string]CapabilityProjection, len(request.Capabilities))
+	for _, projection := range request.Capabilities {
+		projections[projection.Name] = projection
+	}
+	controlRegion := semanticDigest("pysolate.semantic-control-region.v0\x00" + sourceSHA + "\x00module-entry")
+	for _, site := range analysis.CallSites {
+		projection, ok := projections[site.Capability]
+		if !ok || site.ControlRegionID != controlRegion || site.ID != semanticCallSiteID(sourceSHA, site) ||
+			!argumentsMatchProjection(site.CanonicalArguments, projection.Arguments) {
+			return false
+		}
+		if (projection.EffectClass == capability.EffectWorkspaceRead || projection.EffectClass == capability.EffectExternalRead) &&
+			(!analysis.ModuleEffects.MayObserveLive || !analysis.ModuleEffects.MaySuspend) {
+			return false
+		}
+	}
+	return true
+}
+
+func validProjectionArguments(arguments []string) bool {
+	seen := make(map[string]struct{}, len(arguments))
+	for _, argument := range arguments {
+		if !validIdentifier(argument) {
+			return false
+		}
+		if _, exists := seen[argument]; exists {
+			return false
+		}
+		seen[argument] = struct{}{}
+	}
+	return true
+}
+
+func semanticDigest(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("sha256:%x", digest[:])
+}
+
+func semanticCallSiteID(sourceSHA string, site CallSite) string {
+	return semanticDigest(fmt.Sprintf("pysolate.semantic-call-site.v0\x00%s\x00%s\x00%d:%d:%d:%d",
+		sourceSHA, site.Capability, site.Span.StartLine, site.Span.StartColumn, site.Span.EndLine, site.Span.EndColumn))
+}
+
+func argumentsMatchProjection(raw json.RawMessage, expected []string) bool {
+	var arguments map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if decoder.Decode(&arguments) != nil || len(arguments) != len(expected) {
+		return false
+	}
+	for _, name := range expected {
+		if _, ok := arguments[name]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func validProjectionEffect(value string) bool {

@@ -134,7 +134,7 @@ func validAnalysis(effects semantic.EffectSummary, barriers []semantic.Barrier) 
 		ArtifactSHA256: sha([]byte("artifact")), ExecutionProfileSHA256: sha([]byte("profile")),
 		ImportClosureSHA256: sha([]byte("imports")), CapabilityPlanSHA256: sha([]byte("plan")),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 30}, ModuleEffects: effects,
-		Functions: []semantic.FunctionSummary{}, Barriers: barriers,
+		Functions: []semantic.FunctionSummary{}, Barriers: barriers, CallSites: []semantic.CallSite{},
 	}
 }
 

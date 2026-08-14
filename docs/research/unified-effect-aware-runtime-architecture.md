@@ -116,34 +116,24 @@ consistency or mismatch frozen runtime identities.
 
 ## Semantic representation recommendation
 
-Do not replace the existing `Analysis` and `Plan` immediately. First measure whether
-a graph enables a legality question they cannot answer. If justified, add a thin
-versioned graph containing only:
+Track C keeps the existing `Analysis` and adds the smallest measured overlay rather
+than a general graph. `pysolate.semantic-analysis.v1` contains bounded source-indexed
+call records for exact top-level projected calls with scalar literal arguments. Only a
+first executable module call may assert `necessarily_reached`; later straight-line
+calls remain structural but not necessarily reached, while calls under control flow,
+aliases and dynamic arguments are omitted as unknown.
 
-- stable source-located node identity;
-- node category such as pure compute, capability/WASI call, branch/merge, return or
-  raise;
-- basic-block or conservative control-region identity;
-- bounded definitions and uses;
-- data dependencies;
-- control dependencies or explicit branch containment;
-- references to Host-owned effect/resource contracts;
-- capability/backend requirements;
-- exception and cancellation markers;
-- explicit unknown/barrier reasons.
+Each record binds exact source occurrence, capability, module-entry control region,
+canonical arguments and one dynamic occurrence. The Host recomputes its source and
+control identities, checks canonical argument names against the sealed projection and
+requires conservative effect coverage. The complete report remains bound to analyzer
+schema, artifact, execution profile, import closure and capability Plan through opaque
+`VerifiedAnalysis`.
 
-The first graph should not contain:
-
-- general SSA or phi semantics beyond what one legality predicate needs;
-- arbitrary object/heap aliasing;
-- normalized semantic program equivalence;
-- executable authority or Host grants;
-- physical scheduling decisions;
-- cached values or result bodies.
-
-Graph identity must bind the exact source region, analyzer/schema, artifact, execution
-profile, import closure and sealed capability Plan. Host-decoded reports remain
-bounded, canonical and unknown-field rejecting.
+See [the verified semantic overlay v0](verified-semantic-overlay-v0.md). CFG, def-use,
+SSA, arbitrary heap/resource aliasing, conditional reachability, executable authority,
+physical scheduling decisions and cached result bodies remain deliberately absent.
+They may be added only when a later legality predicate cannot stay sound without them.
 
 ## Canonical effect contracts
 

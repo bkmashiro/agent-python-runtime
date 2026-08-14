@@ -16,6 +16,15 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
+func TestFactoryRequiresBrokerForSemanticPreDispatch(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true}
+	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
+	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
+		t.Fatalf("factory error = %v", err)
+	}
+}
+
 func TestFactoryRejectsInvalidMechanismsBeforeArtifactParsing(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true}

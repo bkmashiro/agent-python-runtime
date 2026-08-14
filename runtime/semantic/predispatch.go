@@ -164,14 +164,20 @@ func (controller *SemanticPreDispatch) execute(ctx context.Context) {
 		controller.closeDoneLocked()
 		return
 	}
-	record, err := streaming.NewStagedObservation(controller.identity, result)
+	encodedOutcome, err := json.Marshal(result)
+	if err == nil {
+		var record *streaming.StagedObservation
+		record, err = streaming.NewStagedObservation(controller.identity, encodedOutcome)
+		if err == nil {
+			controller.record = record
+		}
+	}
 	if err != nil {
 		controller.runErr = err
 		controller.disposition = streaming.ObservationFailed
 		controller.closeDoneLocked()
 		return
 	}
-	controller.record = record
 	controller.disposition = streaming.ObservationReady
 	controller.closeDoneLocked()
 }
@@ -179,14 +185,14 @@ func (controller *SemanticPreDispatch) execute(ctx context.Context) {
 // Claim is called by Broker only after normal capability and schema validation.
 // A configured but mismatching staged call fails closed; it never falls back to
 // a second live physical request.
-func (controller *SemanticPreDispatch) Claim(ctx context.Context, capabilityName string, arguments json.RawMessage) (json.RawMessage, error) {
+func (controller *SemanticPreDispatch) Claim(ctx context.Context, capabilityName string, arguments json.RawMessage) (capability.StagedCapabilityOutcome, error) {
 	if controller == nil {
-		return nil, ErrPreDispatchInvalid
+		return capability.StagedCapabilityOutcome{}, ErrPreDispatchInvalid
 	}
 	controller.mu.Lock()
 	if !controller.started {
 		controller.mu.Unlock()
-		return nil, ErrPreDispatchNotStarted
+		return capability.StagedCapabilityOutcome{}, ErrPreDispatchNotStarted
 	}
 	expectedCapability := controller.call.capability
 	expectedArguments := append([]byte(nil), controller.call.canonicalArguments...)
@@ -196,11 +202,11 @@ func (controller *SemanticPreDispatch) Claim(ctx context.Context, capabilityName
 		controller.mu.Lock()
 		controller.rejected++
 		controller.mu.Unlock()
-		return nil, ErrPreDispatchClaimMismatch
+		return capability.StagedCapabilityOutcome{}, ErrPreDispatchClaimMismatch
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return capability.StagedCapabilityOutcome{}, ctx.Err()
 	case <-done:
 	}
 	controller.mu.Lock()
@@ -213,26 +219,33 @@ func (controller *SemanticPreDispatch) Claim(ctx context.Context, capabilityName
 		controller.mu.Lock()
 		controller.rejected++
 		controller.mu.Unlock()
-		return nil, runErr
+		return capability.StagedCapabilityOutcome{}, runErr
 	}
 	if !CanClaimStagedObservation(controller.call, claim).Allowed() {
 		controller.mu.Lock()
 		controller.rejected++
 		controller.mu.Unlock()
-		return nil, ErrPreDispatchClaimMismatch
+		return capability.StagedCapabilityOutcome{}, ErrPreDispatchClaimMismatch
 	}
-	result, err := record.Consume(identity)
+	encoded, err := record.Consume(identity)
 	if err != nil {
 		controller.mu.Lock()
 		controller.rejected++
 		controller.mu.Unlock()
-		return nil, err
+		return capability.StagedCapabilityOutcome{}, err
+	}
+	var outcome capability.StagedCapabilityOutcome
+	if err := json.Unmarshal(encoded, &outcome); err != nil || outcome.Validate() != nil {
+		controller.mu.Lock()
+		controller.rejected++
+		controller.mu.Unlock()
+		return capability.StagedCapabilityOutcome{}, ErrPreDispatchClaimMismatch
 	}
 	controller.mu.Lock()
 	controller.logical++
 	controller.disposition = streaming.ObservationConsumed
 	controller.mu.Unlock()
-	return json.RawMessage(result), nil
+	return outcome, nil
 }
 
 func (controller *SemanticPreDispatch) TerminateUnclaimed(disposition streaming.ObservationDisposition) error {

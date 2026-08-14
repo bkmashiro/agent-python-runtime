@@ -6,7 +6,9 @@ Status: **Track E first consumer implemented; default-off; G2 pending**
 
 The prototype consumes only the G1 subset: one verified module-entry,
 `necessarily_reached`, single-occurrence scalar read with a sealed eligible
-`PreDispatchContract`. It does not admit writes, unknown effects, conditional calls,
+live-only `PreDispatchContract`. Captured-playback reads remain excluded because the
+prototype does not mint a second transport transcript. It does not admit writes,
+unknown effects, conditional calls,
 coalescing, caching, hoisting, replay or backend inference.
 
 `MechanismSet.SemanticPreDispatch` is false by default. Enabling it requires both
@@ -27,6 +29,8 @@ coalescing, caching, hoisting, replay or backend inference.
 6. At the unchanged Python Host-call boundary, `capability.Broker` revalidates the normal
    capability/schema contract and atomically consumes the exact staged result. A mismatch
    is an error; it never issues a duplicate live request.
+   Handler and invalid-result outcomes are staged as typed logical outcomes, preserving
+   the same baseline Broker error code/message and exception placement.
 7. `ExecuteSemanticPreDispatch` owns start-to-terminal lifecycle. Failed Runs cancel
    running physical reads; successful Runs that never claim a result mark it orphaned.
    The Wazero Broker path also finalizes staged work on both success and failure.
@@ -48,6 +52,25 @@ The real CPython/WASI E2E test
 handler starts before Guest execution, unchanged Python reaches the ordinary Broker
 boundary, the staged result is consumed once, and no duplicate physical call occurs.
 
+The checked-in machine report
+[`semantic-predispatch-experiment.json`](../evidence/semantic-predispatch-experiment.json)
+runs five alternating real-Guest baseline/optimized pairs with a bounded 1 s physical
+read. Both conditions produce the same result digest, one logical call and one physical
+call per trial. The optimized condition additionally records exactly one
+issue/start/finish and zero rejected claims. On this run the baseline median was
+3,214,550 µs, the optimized median was 2,196,151 µs, and measured median critical-path
+savings were 1,018,399 µs. Report SHA-256:
+`9ca672d010cad1f6b191919e4a2f7bc972048b57db1b17c3da7cb39b4e49bcf7`.
+
+Reproduce with:
+
+```sh
+go run ./research/effectgraph/cmd/semantic-predispatch-experiment \
+  -artifact /tmp/pysolate-overlay-f64be2d.wasm \
+  -trials 5 -delay 1s \
+  -output docs/evidence/semantic-predispatch-experiment.json
+```
+
 Current gates pass:
 
 - full Go tests and build;
@@ -55,8 +78,9 @@ Current gates pass:
 - `go vet ./...`;
 - Guest Python 78/78 and compileall;
 - real-Guest semantic pre-dispatch, legality and overlay E2E;
+- exact Broker-response differential tests for handler and invalid-result exceptions;
+- cancellation, unclaimed disposition, budget exhaustion, dynamic mismatch,
+  captured-playback rejection and explicit-enable regressions;
 - `git diff --check`.
 
-G2 remains closed until adversarial exception/control coverage, machine-readable
-differential traces and a bounded off/control latency experiment are complete and an
-independent post-fix review reports no blocking finding.
+G2 remains closed until an independent post-fix review reports no blocking finding.

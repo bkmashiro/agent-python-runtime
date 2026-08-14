@@ -100,7 +100,7 @@ func TestBrokerClaimsExactStagedObservationWithoutCallingLiveHandler(t *testing.
 		t.Fatal(err)
 	}
 	claimer := &stagedClaimer{capability: "workspace.read_text", arguments: json.RawMessage(`{"path":"note.txt"}`), result: json.RawMessage(`{"text":"staged"}`)}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer, SemanticPreDispatch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestBrokerFailsClosedWhenConfiguredStageRejectsDynamicClaim(t *testing.T) {
 	}
 	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
 	claimer := &stagedClaimer{claimErr: errors.New("exact claim mismatch")}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer, SemanticPreDispatch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,14 +143,31 @@ type stagedClaimer struct {
 
 func (claimer *stagedClaimer) Finalize(bool) error { return nil }
 
-func (claimer *stagedClaimer) Claim(_ context.Context, capabilityName string, arguments json.RawMessage) (json.RawMessage, error) {
+func (claimer *stagedClaimer) Claim(_ context.Context, capabilityName string, arguments json.RawMessage) (capability.StagedCapabilityOutcome, error) {
 	if claimer.claimErr != nil {
-		return nil, claimer.claimErr
+		return capability.StagedCapabilityOutcome{}, claimer.claimErr
 	}
 	if capabilityName != claimer.capability || string(arguments) != string(claimer.arguments) {
-		return nil, errors.New("exact staged claim mismatch")
+		return capability.StagedCapabilityOutcome{}, errors.New("exact staged claim mismatch")
 	}
-	return append(json.RawMessage(nil), claimer.result...), nil
+	return capability.StagedCapabilityOutcome{Result: append(json.RawMessage(nil), claimer.result...)}, nil
+}
+
+func TestBrokerRequiresExplicitSemanticPreDispatchEnablement(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"live"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	claimer := &stagedClaimer{capability: "workspace.read_text", arguments: json.RawMessage(`{"path":"a"}`), result: json.RawMessage(`{"text":"staged"}`)}
+	if _, err := capability.NewBroker(capability.Config{RunIdentity: "disabled-stage", Plan: plan, StagedClaimer: claimer}); !errors.Is(err, capability.ErrInvalidBroker) {
+		t.Fatalf("disabled staged broker error=%v", err)
+	}
+	if _, err := capability.NewBroker(capability.Config{RunIdentity: "missing-claimer", Plan: plan, SemanticPreDispatch: true}); !errors.Is(err, capability.ErrInvalidBroker) {
+		t.Fatalf("enabled broker without claimer error=%v", err)
+	}
 }
 
 func TestBrokerRejectsStagedClaimerForUnqualifiedCapability(t *testing.T) {
@@ -164,7 +181,7 @@ func TestBrokerRejectsStagedClaimerForUnqualifiedCapability(t *testing.T) {
 	}
 	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
 	claimer := &stagedClaimer{capability: "plain.read", arguments: json.RawMessage(`{}`), result: json.RawMessage(`{}`)}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unqualified-stage", Plan: plan, StagedClaimer: claimer})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unqualified-stage", Plan: plan, StagedClaimer: claimer, SemanticPreDispatch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,11 +216,24 @@ func TestPreparedPreDispatchExecutesEligibleHandlerExactlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := prepared.Call(context.Background())
-	if err != nil || string(result) != `{"value":"ready"}` || calls.Load() != 1 {
-		t.Fatalf("result=%s calls=%d err=%v", result, calls.Load(), err)
+	if err != nil || string(result.Result) != `{"value":"ready"}` || calls.Load() != 1 {
+		t.Fatalf("result=%s calls=%d err=%v", result.Result, calls.Load(), err)
 	}
 	if _, err := prepared.Call(context.Background()); !errors.Is(err, capability.ErrPreDispatchAlreadyStarted) || calls.Load() != 1 {
 		t.Fatalf("second call err=%v calls=%d", err, calls.Load())
+	}
+}
+
+func TestPreparedPreDispatchRejectsCapturedPlaybackUntilTranscriptBindingExists(t *testing.T) {
+	registry := capability.NewRegistry()
+	spec := stagedTestSpec()
+	spec.Playback = capability.PlaybackCaptured
+	if err := registry.Register(spec, basicGrant(t), &countingEvidenceHandler{}); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if _, err := plan.PreparePreDispatch("workspace.read_text", json.RawMessage(`{"path":"a.txt"}`)); !errors.Is(err, capability.ErrPreDispatchUnavailable) {
+		t.Fatalf("prepare error=%v", err)
 	}
 }
 

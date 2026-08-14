@@ -13,6 +13,20 @@ var (
 	ErrPreDispatchInvalidResult  = errors.New("pre-dispatch result is outside the capability contract")
 )
 
+type StagedCapabilityOutcome struct {
+	Result    json.RawMessage `json:"result,omitempty"`
+	ErrorCode string          `json:"error_code,omitempty"`
+}
+
+func (outcome StagedCapabilityOutcome) Validate() error {
+	hasResult := len(outcome.Result) != 0
+	hasError := outcome.ErrorCode != ""
+	if hasResult == hasError || (hasError && outcome.ErrorCode != "handler_error" && outcome.ErrorCode != "invalid_result") {
+		return ErrPreDispatchUnavailable
+	}
+	return nil
+}
+
 // PreparedPreDispatch is a Host-only one-shot physical read prepared from a
 // sealed Plan. Creating it validates capability eligibility and canonical
 // arguments but starts no work.
@@ -29,7 +43,7 @@ type PreparedPreDispatch struct {
 func (plan *Plan) PreparePreDispatch(name string, raw json.RawMessage) (*PreparedPreDispatch, error) {
 	registered, ok := plan.lookup(name)
 	qualification, qualified := preDispatchQualification(registered.spec)
-	if !ok || !qualified || !qualification.Eligible() || len(raw) == 0 {
+	if !ok || !qualified || !qualification.Eligible() || registered.spec.Playback != PlaybackLiveOnly || len(raw) == 0 {
 		return nil, ErrPreDispatchUnavailable
 	}
 	arguments, err := canonicalForSchema(registered.inputSchema, raw)
@@ -49,15 +63,17 @@ func (prepared *PreparedPreDispatch) Arguments() json.RawMessage {
 }
 
 // Call starts the physical operation exactly once. Scheduling is intentionally
-// external: this method never creates a goroutine or task.
-func (prepared *PreparedPreDispatch) Call(ctx context.Context) (json.RawMessage, error) {
+// external: this method never creates a goroutine or task. Ordinary handler and
+// result-schema failures are staged as logical outcomes so the unchanged Broker
+// boundary can reproduce baseline exception semantics.
+func (prepared *PreparedPreDispatch) Call(ctx context.Context) (StagedCapabilityOutcome, error) {
 	if prepared == nil {
-		return nil, ErrPreDispatchUnavailable
+		return StagedCapabilityOutcome{}, ErrPreDispatchUnavailable
 	}
 	prepared.mu.Lock()
 	if prepared.started {
 		prepared.mu.Unlock()
-		return nil, ErrPreDispatchAlreadyStarted
+		return StagedCapabilityOutcome{}, ErrPreDispatchAlreadyStarted
 	}
 	prepared.started = true
 	registered := prepared.registered
@@ -73,7 +89,10 @@ func (prepared *PreparedPreDispatch) Call(ctx context.Context) (json.RawMessage,
 		result, err = registered.handler.Call(ctx, arguments)
 	}
 	if err != nil {
-		return nil, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return StagedCapabilityOutcome{}, err
+		}
+		return StagedCapabilityOutcome{ErrorCode: "handler_error"}, nil
 	}
 	canonical, err := canonicalForSchema(registered.outputSchema, result)
 	if err == nil {
@@ -81,7 +100,7 @@ func (prepared *PreparedPreDispatch) Call(ctx context.Context) (json.RawMessage,
 	}
 	if err != nil || len(canonical) > maxCallBytes ||
 		(registered.spec.Playback == PlaybackCaptured && !validLiveTransportEvidence(evidence)) {
-		return nil, ErrPreDispatchInvalidResult
+		return StagedCapabilityOutcome{ErrorCode: "invalid_result"}, nil
 	}
-	return append(json.RawMessage(nil), canonical...), nil
+	return StagedCapabilityOutcome{Result: append(json.RawMessage(nil), canonical...)}, nil
 }

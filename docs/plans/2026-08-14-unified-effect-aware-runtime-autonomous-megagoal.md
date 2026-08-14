@@ -461,14 +461,14 @@ analysis-only and the original source remains executable authority.
 
 - [x] Spike by connecting verified semantic call facts to the existing
   `runtime/streaming.StagedObservation`; add no second cache or execution ABI.
-- [ ] RED-test data/control/effect conflicts, exception ordering, cancellation,
+- [x] RED-test data/control/effect conflicts, exception ordering, cancellation,
   freshness, aliases and unknown contracts.
 - [x] Implement default-off pre-dispatch for one exact call shape; leave original
   Python and its dynamic Host-call boundary unchanged.
-- [ ] Preserve deterministic result placement and baseline exception/effect order.
+- [x] Preserve deterministic result placement and baseline exception/effect order.
 - [x] Add runtime observations distinguishing logical calls, issue/start/finish,
   physical operations and rejected opportunities.
-- [ ] Run exact Guest differential E2E and bounded latency/critical-path experiment.
+- [x] Run exact Guest differential E2E and bounded latency/critical-path experiment.
 - [ ] Independent post-fix review; run G2.
 
 **Do not:** rewrite Python, execute the overlay, pre-dispatch writes or unknown calls,

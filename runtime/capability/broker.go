@@ -18,15 +18,16 @@ const maxCallBytes = 1 << 20
 var ErrInvalidBroker = errors.New("invalid Host tool broker")
 
 type Config struct {
-	RunIdentity   string
-	Plan          *Plan
-	Playback      *PlaybackConfig
-	Branch        *BranchConfig
-	StagedClaimer StagedObservationClaimer
+	RunIdentity         string
+	Plan                *Plan
+	Playback            *PlaybackConfig
+	Branch              *BranchConfig
+	StagedClaimer       StagedObservationClaimer
+	SemanticPreDispatch bool
 }
 
 type StagedObservationClaimer interface {
-	Claim(context.Context, string, json.RawMessage) (json.RawMessage, error)
+	Claim(context.Context, string, json.RawMessage) (StagedCapabilityOutcome, error)
 	Finalize(bool) error
 }
 
@@ -63,7 +64,8 @@ type callError struct {
 
 func NewBroker(config Config) (*Broker, error) {
 	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 ||
-		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) {
+		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) ||
+		(config.StagedClaimer != nil) != config.SemanticPreDispatch {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -158,7 +160,7 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	call.Arguments = arguments
 	if broker.config.StagedClaimer != nil {
 		qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
-		if !qualified || !qualification.Eligible() || (registered.spec.EffectClass != EffectPure && registered.spec.EffectClass != EffectWorkspaceRead && registered.spec.EffectClass != EffectExternalRead) {
+		if !qualified || !qualification.Eligible() || registered.spec.Playback != PlaybackLiveOnly || (registered.spec.EffectClass != EffectPure && registered.spec.EffectClass != EffectWorkspaceRead && registered.spec.EffectClass != EffectExternalRead) {
 			broker.record(call, operation, "denied", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "staged_observation_unqualified", Message: "capability is not eligible for staged observation"}})
 		}
@@ -167,7 +169,18 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			broker.record(call, operation, "error", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}})
 		}
-		canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, staged)
+		if staged.Validate() != nil {
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
+		}
+		if staged.ErrorCode != "" {
+			broker.record(call, operation, "error", nil)
+			if staged.ErrorCode == "handler_error" {
+				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
+			}
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
+		}
+		canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, staged.Result)
 		if resultErr == nil {
 			resultErr = validateSpecResultSemantics(registered.spec, canonicalResult)
 		}
@@ -312,6 +325,10 @@ func (broker *Broker) RunIdentity() string {
 		return ""
 	}
 	return broker.config.RunIdentity
+}
+
+func (broker *Broker) SemanticPreDispatchEnabled() bool {
+	return broker != nil && broker.config.SemanticPreDispatch
 }
 
 func (broker *Broker) CapabilityPlanSHA256() string {

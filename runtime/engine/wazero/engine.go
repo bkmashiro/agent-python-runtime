@@ -44,6 +44,12 @@ type Factory struct {
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+	if config.Mechanisms.SemanticPreDispatch && factory.BrokerFactory == nil {
+		return nil, errors.New("semantic pre-dispatch requires a capability Broker factory")
+	}
 	fields := 0
 	if factory.WorkspaceManager != nil {
 		fields++
@@ -702,6 +708,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		if broker == nil {
 			return nil, errors.New("capability broker factory returned nil")
+		}
+		if broker.SemanticPreDispatchEnabled() != engine.config.Mechanisms.SemanticPreDispatch {
+			return nil, errors.New("capability Broker semantic pre-dispatch mode does not match Run configuration")
 		}
 		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
 			return nil, ErrExecutionIdentityMismatch

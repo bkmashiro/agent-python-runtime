@@ -125,7 +125,7 @@ func TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall(t *testing.T) {
 		SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true,
 	}
 	factory := wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{RunIdentity: "semantic-pre-dispatch-e2e", Plan: plan, StagedClaimer: controller})
+		return capability.NewBroker(capability.Config{RunIdentity: "semantic-pre-dispatch-e2e", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
 	}}
 	executionRunner, err := factory.New(context.Background(), artifact, executionConfig)
 	if err != nil {

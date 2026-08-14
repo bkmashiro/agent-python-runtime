@@ -36,7 +36,7 @@ func TestSemanticPreDispatchClaimsExactlyOnceAtUnchangedBrokerBoundary(t *testin
 	}
 	launcher.RunAll()
 
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "semantic-stage", Plan: plan, StagedClaimer: controller})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "semantic-stage", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +76,59 @@ func TestSemanticPreDispatchBudgetAndMismatchFailClosed(t *testing.T) {
 		t.Fatalf("mismatch error=%v", err)
 	}
 	if snapshot := firstController.Snapshot(); snapshot.LogicalClaims != 0 || snapshot.RejectedClaims != 1 || snapshot.PhysicalIssues != 1 || snapshot.PhysicalStarts != 1 || snapshot.PhysicalFinishes != 1 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestSemanticPreDispatchPreservesBaselineExceptions(t *testing.T) {
+	cases := map[string]capability.Handler{
+		"handler_error": capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+			return nil, errors.New("private handler detail")
+		}),
+		"invalid_result": capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{"wrong":"shape"}`), nil
+		}),
+	}
+	for name, handler := range cases {
+		t.Run(name, func(t *testing.T) { assertSemanticPreDispatchErrorEquivalent(t, handler) })
+	}
+}
+
+func assertSemanticPreDispatchErrorEquivalent(t *testing.T, handler capability.Handler) {
+	t.Helper()
+	plan := legalityTestPlanWithHandler(t, true, handler)
+	request := []byte(`{"call_id":"same-call","capability":"sources.read","arguments":{"key":"profile"}}`)
+	baseline, err := capability.NewBroker(capability.Config{RunIdentity: "exception-equivalence", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineResponse, err := baseline.Call(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	budget, _ := NewPreDispatchBudget(1)
+	controller, _ := NewSemanticPreDispatch(call, plan, budget)
+	launcher := &queuedLauncher{}
+	if err := controller.Start(context.Background(), launcher); err != nil {
+		t.Fatal(err)
+	}
+	launcher.RunAll()
+	staged, err := capability.NewBroker(capability.Config{RunIdentity: "exception-equivalence", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stagedResponse, err := staged.Call(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stagedResponse) != string(baselineResponse) {
+		t.Fatalf("baseline=%s staged=%s", baselineResponse, stagedResponse)
+	}
+	if snapshot := controller.Snapshot(); snapshot.LogicalClaims != 1 || snapshot.Disposition != streaming.ObservationConsumed {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 }

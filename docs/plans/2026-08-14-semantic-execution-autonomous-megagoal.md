@@ -1,11 +1,11 @@
 # Semantic Execution Experimental Autonomous Mega-Goal
 
-> **For Hermes:** This is the active long-running `/goal` handoff. Read this file
-> fully, inspect live repository state, and execute multiple independently verified
-> slices. A green slice, signed checkpoint, push, or context boundary is not a
-> stopping condition.
+> **For Hermes:** This is the completed historical `/goal` handoff. Its active
+> successor is `2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md`.
+> Preserve this file as verified foundation evidence; do not resume its closed queue.
 
 **Status:** Complete; Tracks 0-E implemented, independently reviewed, and verified
+**Successor:** [`2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md`](2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md)
 **Date:** 2026-08-14
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`

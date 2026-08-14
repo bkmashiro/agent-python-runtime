@@ -6,9 +6,10 @@ Date: 2026-08-14
 This roadmap replaces the earlier linear effect-first ordering and remains the
 long-term mechanism inventory. The active executable subset, exploration/deferral
 rules, gates, and stop conditions now live in
-[the approved Semantic Execution Experimental Megagoal](plans/2026-08-14-semantic-execution-autonomous-megagoal.md).
-The completed Full Composable Runtime Megagoal remains historical implementation
-evidence. This inventory preserves the authority-lifecycle correctness direction
+[the Unified Effect-Aware Runtime Megagoal](plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md).
+The completed Semantic Execution Experimental Megagoal remains the verified AST,
+whole-Run reuse and cold-continuation foundation; the completed Full Composable
+Runtime Megagoal remains historical implementation evidence. This inventory preserves the authority-lifecycle correctness direction
 while adding bounded AST semantic planning, whole-function reuse, and
 continuation-preserving cold-I/O experiments as explicitly Experimental successor
 work.
@@ -19,7 +20,8 @@ Related decisions:
 - [authority-lifecycle positioning](authority-lifecycle-positioning.md)
 - [content-addressed Agent Functions](content-addressed-agent-functions.md)
 - [streaming authority-staged execution](streaming-authority-staged-execution.md)
-- [active Semantic Execution Experimental Megagoal](plans/2026-08-14-semantic-execution-autonomous-megagoal.md)
+- [active Unified Effect-Aware Runtime Megagoal](plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md)
+- [completed Semantic Execution Experimental Megagoal](plans/2026-08-14-semantic-execution-autonomous-megagoal.md)
 - [completed Full Composable Runtime megagoal](megagoal-full-composable-agent-runtime.md)
 - [completed streaming execution megagoal](megagoal-streaming-authority-staged-execution.md)
 - [Cloudflare comparison](research/cloudflare-code-mode-comparison.md)

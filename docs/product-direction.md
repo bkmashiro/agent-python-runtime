@@ -13,10 +13,18 @@ version identifier.
 
 Pysolate's refined long-term direction is:
 
-> An authority-lifecycle runtime for Agent-authored programs: ordinary Python
-> provides control flow, while the Host freezes authority and independently
-> governs interpreter, workspace, scratch, external-effect, and evidence
-> dispositions.
+> A unified effect-aware authority-lifecycle runtime for semantically inspectable
+> Agent-authored programs: ordinary Python provides control flow; the exact target
+> Guest exposes a bounded analyzable subset; and the Host freezes authority while
+> independently governing semantic legality, interpreter, workspace, scratch,
+> external-effect, evidence and placement dispositions.
+
+The active research execution contract is the
+[Unified Effect-Aware Runtime Megagoal](plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md),
+with its [architecture recommendation](research/unified-effect-aware-runtime-architecture.md).
+It treats scheduling, exact reuse and pre-execution placement as decision-gated
+consumers of one conservative semantic layer; it does not make arbitrary Python,
+automatic caching or post-effect replay Current.
 
 A complementary **Experimental** feature layer is
 [content-addressed Agent Functions](content-addressed-agent-functions.md):

@@ -39,9 +39,11 @@ substrate, not the intended differentiator. See the
 [authority-lifecycle positioning decision](docs/authority-lifecycle-positioning.md),
 the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.md),
 and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active
-Experimental successor is the
-[semantic execution Megagoal](docs/plans/2026-08-14-semantic-execution-autonomous-megagoal.md),
-which now records bounded Experimental target-Guest AST planning, exact whole-Run
+research successor is the
+[unified effect-aware runtime Megagoal](docs/plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md),
+which starts from the completed [semantic execution Megagoal](docs/plans/2026-08-14-semantic-execution-autonomous-megagoal.md).
+The completed foundation records bounded Experimental target-Guest AST planning,
+exact whole-Run
 single-flight/retention, and continuation-preserving cold-I/O evidence while
 keeping every mechanism off by default.
 Current, Experimental and Proposed claims remain separated in

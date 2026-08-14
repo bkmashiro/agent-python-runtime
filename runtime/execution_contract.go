@@ -43,6 +43,7 @@ type ExecutionArtifact struct {
 	ArtifactSHA256 string           `json:"artifact_sha256,omitempty"`
 	ManifestSHA256 string           `json:"manifest_sha256,omitempty"`
 	ImageDigest    string           `json:"image_digest,omitempty"`
+	RootFSSHA256   string           `json:"rootfs_sha256,omitempty"`
 }
 
 func (artifact ExecutionArtifact) Validate() error {
@@ -53,12 +54,12 @@ func (artifact ExecutionArtifact) Validate() error {
 	case BackendPysolateWASM:
 		if artifact.Kind != ArtifactWASMDistribution || artifact.ProfileID != "base" || artifact.ShardID != "plain" ||
 			artifact.Target != "wasm32-wasip1" || !validProfileDigest(artifact.ArtifactSHA256) ||
-			!validProfileDigest(artifact.ManifestSHA256) || artifact.ImageDigest != "" {
+			!validProfileDigest(artifact.ManifestSHA256) || artifact.ImageDigest != "" || artifact.RootFSSHA256 != "" {
 			return ErrInvalidExecutionArtifact
 		}
 	case BackendNativeSandbox:
 		if artifact.Kind != ArtifactOCIImage || artifact.ProfileID != "native-python" || artifact.ShardID != "" ||
-			artifact.Target != "linux/amd64" || !validProfileDigest(artifact.ImageDigest) ||
+			(artifact.Target != "linux/amd64" && artifact.Target != "linux/arm64") || !validProfileDigest(artifact.ImageDigest) || !validProfileDigest(artifact.RootFSSHA256) ||
 			artifact.ArtifactSHA256 != "" || artifact.ManifestSHA256 != "" {
 			return ErrInvalidExecutionArtifact
 		}
@@ -139,6 +140,18 @@ func (profile ShardProfile) ManifestSHA256() string         { return profile.man
 func (profile ShardProfile) PreparedBaselineSHA256() string { return profile.preparedBaselineSHA256 }
 func (profile ShardProfile) IdlePolicy() ShardIdlePolicy    { return profile.idlePolicy }
 func (profile ShardProfile) Identity() string               { return profile.identity }
+
+func (artifact ExecutionArtifact) Identity() string {
+	if artifact.Validate() != nil {
+		return ""
+	}
+	encoded, err := json.Marshal(artifact)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
 
 type NativeStateClass string
 

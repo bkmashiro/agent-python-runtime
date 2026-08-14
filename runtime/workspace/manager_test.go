@@ -595,3 +595,28 @@ func TestLeaseSnapshotReturnsImmutableFileMetadataWithoutBodies(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBindMountSourceRequiresActiveExactLease(t *testing.T) {
+	manager := newTestManager(t)
+	ref, err := manager.Create(nil, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "native-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := lease.BindMountSource()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(source) != manager.base || filepath.Base(source) != string(ref) {
+		t.Fatalf("source=%q base=%q ref=%q", source, manager.base, ref)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lease.BindMountSource(); !errors.Is(err, ErrWorkspaceClosed) {
+		t.Fatalf("released BindMountSource() err=%v", err)
+	}
+}

@@ -276,8 +276,8 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	prepared := preparedRunner.(*wazeroengine.Engine)
-	if state := prepared.PreparedState(); !state.Selected || !state.Ready || state.PrepareMS < 0 {
-		t.Fatalf("initial state=%+v", state)
+	if state := prepared.PreparedState(); !state.Selected || state.Ready || state.PreparedRuns != 0 || state.FreshFallbackRuns != 0 {
+		t.Fatalf("workspace-bound prepared runtime initialized before request admission: %+v", state)
 	}
 	probe := prepared.COWProbe()
 	if probe.SchemaVersion != "pysolate.cow-probe.v1" || probe.COWSelected || !probe.Fallback || (!probe.MemoryCOWCandidate && len(probe.Blockers) == 0) {
@@ -305,8 +305,8 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	unused := unusedRunner.(*wazeroengine.Engine)
-	if !unused.PreparedState().Ready {
-		t.Fatal("unused prepared slot was not ready")
+	if unused.PreparedState().Ready {
+		t.Fatal("unused workspace-bound prepared slot initialized before admission")
 	}
 	if err := unused.Close(context.Background()); err != nil || unused.PreparedState().Ready {
 		t.Fatalf("unused close err=%v state=%+v", err, unused.PreparedState())
@@ -325,8 +325,8 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	stateAfterCancel := cancelEngine.PreparedState()
 	nextEngine := cancelEngine
 	if !stateAfterCancel.Ready {
-		if stateAfterCancel.PreparedRuns != 1 || stateAfterCancel.FreshFallbackRuns != 0 {
-			t.Fatalf("cancelled prepared state=%+v", stateAfterCancel)
+		if stateAfterCancel.PreparedRuns != 0 || stateAfterCancel.FreshFallbackRuns != 0 {
+			t.Fatalf("pre-admission cancellation started physical execution: %+v", stateAfterCancel)
 		}
 		if err := cancelEngine.Close(context.Background()); err != nil {
 			t.Fatal(err)
@@ -358,8 +358,17 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		}
 	} else {
 		cowEngine := cowRunner.(*wazeroengine.Engine)
-		if goruntime.GOOS != "linux" || !cowEngine.COWProbe().COWSelected {
-			t.Fatalf("unexpected COW selection: %+v", cowEngine.COWProbe())
+		if pre := cowEngine.COWProbe(); pre.COWSelected {
+			t.Fatalf("COW selected before request admission: %+v", pre)
+		}
+		_, runErr := cowEngine.Run(context.Background(), plainRequest(t, "result = {'cow_probe': True}"), "")
+		post := cowEngine.COWProbe()
+		if post.MemoryCOWCandidate {
+			if runErr != nil || !post.COWSelected {
+				t.Fatalf("COW candidate not selected err=%v probe=%+v", runErr, post)
+			}
+		} else if !errors.Is(runErr, runtimeconfig.ErrMechanismDisabled) || !post.Fallback || len(post.Blockers) == 0 {
+			t.Fatalf("non-candidate COW did not fail closed err=%v probe=%+v", runErr, post)
 		}
 		if err := cowEngine.Close(context.Background()); err != nil {
 			t.Fatal(err)
@@ -560,14 +569,19 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	}
 	engine := runner.(*wazeroengine.Engine)
 	defer engine.Close(context.Background())
-	probe := engine.COWProbe()
-	if !probe.COWSelected || probe.Fallback || !probe.MemoryFixed || !probe.MemoryCOWCandidate {
-		t.Fatalf("COW probe=%+v", probe)
+	if pre := engine.COWProbe(); pre.COWSelected {
+		t.Fatalf("COW selected before request admission: %+v", pre)
 	}
-
 	first, err := engine.Run(context.Background(), plainRequest(t, "import builtins, fractions, sys\nfrom pathlib import Path\nbuiltins._cow_private = 91\nPath('/tmp/cow-private').write_text('private')\nresult = {'parity':'same','fraction':str(fractions.Fraction(1, 2))}"), "")
+	probe := engine.COWProbe()
+	if !probe.MemoryCOWCandidate && errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+		t.Skipf("COW fixed-memory treatment unavailable for this artifact: %+v", probe)
+	}
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !probe.COWSelected || probe.Fallback || !probe.MemoryFixed || !probe.MemoryCOWCandidate {
+		t.Fatalf("COW probe=%+v", probe)
 	}
 	second, err := engine.Run(context.Background(), plainRequest(t, "import builtins, sys\nfrom pathlib import Path\nresult = {'globals_clean': not hasattr(builtins, '_cow_private'), 'tmp_clean': not Path('/tmp/cow-private').exists(), 'module_clean': 'fractions' not in sys.modules}"), "")
 	if err != nil {

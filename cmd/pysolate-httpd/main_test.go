@@ -86,7 +86,7 @@ func TestHealthDoesNotRequireAuthentication(t *testing.T) {
 	if err := json.Unmarshal(result.Body.Bytes(), &health); err != nil {
 		t.Fatal(err)
 	}
-	if result.Code != http.StatusOK || health["status"] != "ready" || health["protocol_version"] != protocolVersion {
+	if result.Code != http.StatusOK || health["status"] != "ready" || health["protocol_version"] != protocolVersion || health["execution_instance"] != "fresh_per_physical_execution" || health["prepared_runtime"] != "disabled" || health["memory_cow"] != "disabled" {
 		t.Fatalf("status=%d health=%v", result.Code, health)
 	}
 }

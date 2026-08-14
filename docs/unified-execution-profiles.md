@@ -24,13 +24,13 @@ Fresh bounded CPython/WASI, no ambient Host authority, no live native workspace,
 
 ### `native_sandbox`
 
-Ordinary native Python with profile-declared local filesystem, shell/subprocess and native-package compatibility. It is a compatibility superset, not a security or determinism superset. Host tools still require the same sealed Plan and Broker and cross a private, run-bound RPC channel. No handler or Host credential enters the sandbox.
+Ordinary native Python with profile-declared local filesystem, shell/subprocess and native-package compatibility. It is a compatibility superset, not a security or determinism superset. Host tools still require the same sealed Plan and Broker and cross a private, run-bound RPC channel. No Handler or ambient Host credential enters the sandbox; one expiring channel credential is injected solely for that bound RPC channel.
 
 The first qualified implementation target is pinned gVisor/runsc on Linux. gVisor is a userspace application kernel/OCI runtime, not a hardware VM. A local process implementation is only an insecure contract fixture.
 
 ## Artifact and shard identity
 
-`pysolate.execution-artifact.v1` separates a verified WASM distribution from a verified OCI/native image. A native image is never accepted by the `wasm32-wasip1` verifier. Both artifact kinds bind their backend, profile and shard identity.
+`pysolate.execution-artifact.v1` separates a verified WASM distribution from a native OCI artifact. The native backend independently hashes the pinned OCI image config JSON and the exact extracted rootfs tree before Broker or process creation; the rootfs, not a mutable image tag, is mounted for execution. A native artifact is never accepted by the `wasm32-wasip1` verifier. Both artifact kinds bind their backend, profile and shard identity.
 
 `ShardProfile` binds:
 
@@ -81,13 +81,27 @@ The Unix socket is an implementation transport, not an authority grant. A future
 Native state classes are:
 
 - `portable_value`: eligible for a later Pysolate admission;
-- `workspace_ref`: requires the native workspace but not a permanent compute instance;
-- `process_ref`: requires an explicit bounded live-process lease;
-- `installed_environment` and `opaque_native_state`: native-affine.
+- `native_workspace_ref`: requires the native workspace but not a permanent compute instance;
+- `native_process_ref`: requires an explicit bounded live-process lease;
+- `opaque`: native-affine and never inferred portable.
 
 Lease classes are one-shot, workspace grace and live process. No-state compute is destroyed immediately. Workspace may outlive compute under a short measured grace. Live process state exists only under an explicit deadline. No dirty served instance crosses session boundaries.
 
-The gVisor workspace root is runtime-owned. Agent input cannot nominate a Host path. Mount, gofer/file-access mode, scratch, process, socket and teardown evidence must be recorded.
+The gVisor workspace root is runtime-owned. Agent input cannot nominate a Host path. The workspace Manager issues an exclusive lease and only that lease can expose a privileged bind source. Every invocation records before/after tree identity and releases the lease after its disposable container exits. The current bind-mount vertical slice enforces bounded post-run snapshots but does not yet provide a live filesystem quota; this is an explicit Experimental limitation, not production multi-tenant readiness.
+
+## Qualified gVisor vertical slice
+
+The repository includes an Experimental OCI backend in `runtime/engine/native` and bounded probes in `cmd/pysolate-native-probe` and `cmd/pysolate-native-workspace-probe`. Qualification used pinned `runsc release-20260810.0` on Linux/arm64 with:
+
+- verified OCI image-config identity plus deterministic rootfs tree digest checked before Broker or process creation;
+- read-only rootfs, pre-created mountpoints, private tmpfs `/tmp` and `/dev`;
+- isolated network namespace without external interfaces, and `host-uds=open` only for the private bind-mounted Broker socket;
+- OCI cgroup memory+swap and PID limits, no-new-privileges and an empty process capability set;
+- direct privileged launcher ownership of runsc. The backend intentionally does not invoke `sudo` internally because that breaks process-group cancellation;
+- unconditional `runsc delete --force`, empty-container-list reconciliation, cgroup removal, control-root namespace unmount and scratch removal;
+- one-shot workspace reactivation across different container/execution identities.
+
+Real gates covered success, Host-tool RPC, network denial, timeout, exit-17 crash, output flood, dirty-page OOM (exit 137), artifact substitution, workspace write/reactivation and portable re-placement. `pysolate.lifecycle-evidence.v1` records aggregate CPU, cgroup memory, RSS, PSS/private dirty, I/O, PID and cleanup observations. These bounded results qualify the vertical slice, not gVisor generally or production safety.
 
 ## Current implementation seams
 
@@ -95,7 +109,9 @@ The gVisor workspace root is runtime-owned. Agent input cannot nominate a Host p
 - `runtime/capabilityrpc`: private channel and replay/ambiguity contract.
 - `native/python/_agent_runtime_host.py`: native implementation of the existing generated bridge.
 - `runtime/placement`: deterministic analyser and L1/L2 orchestrator.
-- `runtime/engine/wazero`: unchanged WASM adapter; direct paths must not acquire workspace before request admission.
+- `runtime/engine/native`: verified OCI bundle, bounded runsc lifecycle, cgroup/resource sampling and workspace bind adapter.
+- `runtime/lifecycle`: backend-neutral body-free lifecycle/resource evidence.
+- `runtime/engine/wazero`: existing WASM adapter with lazy workspace acquisition after request admission.
 
 ## Non-goals
 

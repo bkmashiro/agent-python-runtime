@@ -114,6 +114,31 @@ func (registry *Registry) Open(config ChannelConfig) error {
 	return nil
 }
 
+func (registry *Registry) Check(credential string, request Request) error {
+	if registry == nil || len(credential) == 0 || request.ValidateIdentity() != nil {
+		return ErrChannelDenied
+	}
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	opened := registry.channels[request.ChannelID]
+	if opened == nil || opened.revoked || !opened.config.ExpiresAt.After(registry.now()) ||
+		subtle.ConstantTimeCompare([]byte(credential), []byte(opened.config.Credential)) != 1 ||
+		request.InvocationID != opened.config.InvocationID || request.ExecutionID != opened.config.ExecutionID ||
+		request.PlanSHA256 != opened.config.Broker.CapabilityPlanSHA256() {
+		return ErrChannelDenied
+	}
+	return nil
+}
+
+func (request Request) ValidateIdentity() error {
+	if request.SchemaVersion != SchemaVersion || !identityPattern.MatchString(request.ChannelID) ||
+		!identityPattern.MatchString(request.InvocationID) || !identityPattern.MatchString(request.ExecutionID) ||
+		!digestPattern.MatchString(request.PlanSHA256) {
+		return ErrInvalidRequest
+	}
+	return nil
+}
+
 func (registry *Registry) Revoke(channelID string) {
 	if registry == nil {
 		return

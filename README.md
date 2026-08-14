@@ -15,9 +15,11 @@ Agent Python source
   → Host-authored result, receipts and optional observations
 ```
 
-The active implementation deliberately does not include prepared pools, COW
+The active default path deliberately does not enable prepared pools, COW
 restore, pinned sessions, schedulers, durable transactions, MCP daemons, trace
-databases, production benchmark orchestration, or recovery machinery. It does
+databases, production benchmark orchestration, or recovery machinery. Experimental
+prepared/COW mechanisms remain fail-closed and are reported as disabled by the
+HTTP service unless a fixed-memory candidate is explicitly selected. It does
 include an optional Host-owned rooted workspace and a complete deterministic
 storage capsule; neither is a transaction system. Historical findings are
 summarized in [docs/research-history.md](docs/research-history.md) and remain
@@ -33,6 +35,14 @@ the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.
 and the [proof-first roadmap](docs/proof-first-authority-roadmap.md).
 Current, Experimental and Proposed claims remain separated in
 [docs/product-direction.md](docs/product-direction.md).
+
+An **Experimental** unified execution-profile slice adds deterministic Host
+placement, a verified one-shot native OCI/gVisor backend, private Unix-socket
+transport to the same capability Broker, and runtime-owned native workspace
+leases. It is not an automatic security-equivalent fallback: only preflight or
+Host-authored `runtime_unsupported` outcomes with `not_started/not_started`
+may start a new native execution. See
+[Unified execution profiles](docs/unified-execution-profiles.md).
 
 ## Requirements
 
@@ -209,7 +219,12 @@ See [docs/threat-model.md](docs/threat-model.md) and [docs/source-compatibility.
 cmd/apyrun/                 JSON stdin/stdout CLI
 runtime/                    request, profile and response contracts
 runtime/engine/wazero/      fresh-instance WASI execution
+runtime/engine/native/      Experimental verified one-shot OCI/gVisor execution
+runtime/placement/          deterministic Host-owned execution placement
 runtime/capability/         small Host tool registry and broker
+runtime/capabilityrpc/      Experimental private native transport adapter
+runtime/lifecycle/          backend-neutral lifecycle/resource evidence
+runtime/verification/       independent native evidence verifier
 runtime/workspace/          bounded WASI workspace mount and capsule storage
 runtime/receipt/            Host-authored call receipts
 runtime/observe/            optional bounded Host observation contract

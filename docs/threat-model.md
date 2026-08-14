@@ -74,10 +74,9 @@ Host research relation, not proof that the child's semantics are correct.
 
 ### Unified native capability transport
 
-**Experimental.** Native CPython receives no Broker handler or Host credential.
-Its generated `_agent_runtime_host.call` bridge reaches a private Unix socket
+**Experimental.** Native CPython receives no Broker handler, ambient Host credential or capability implementation. Its generated `_agent_runtime_host.call` bridge reaches a private Unix socket
 whose channel is bound to invocation, execution, sealed Plan, expiry and a
-transport-only credential. Completed exact retries are replayed from the Host
+transport-only credential injected for that channel. Completed exact retries are replayed from the Host
 channel record without redispatch. Changed duplicate IDs, in-flight ambiguity,
 identity mismatch, expiry, revocation and oversized frames fail closed. The
 socket itself grants no capability.

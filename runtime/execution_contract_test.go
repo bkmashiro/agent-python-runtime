@@ -79,7 +79,8 @@ func TestExecutionArtifactValidationIsBackendSpecific(t *testing.T) {
 	native := ExecutionArtifact{
 		SchemaVersion: ExecutionArtifactSchemaVersion, Backend: BackendNativeSandbox,
 		Kind: ArtifactOCIImage, ProfileID: "native-python", Target: "linux/amd64",
-		ImageDigest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		ImageDigest:  "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		RootFSSHA256: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 	}
 	if err := native.Validate(); err != nil {
 		t.Fatal(err)

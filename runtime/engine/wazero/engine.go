@@ -171,12 +171,6 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		engine.workspaceRun = make(chan struct{}, 1)
 	}
 	engine.preparedState = PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1", Selected: config.Mechanisms.PreparedRuntime}
-	if binding == nil {
-		if err := engine.ensurePrepared(ctx); err != nil {
-			_ = wasmRuntime.Close(ctx)
-			return nil, err
-		}
-	}
 	return engine, nil
 }
 

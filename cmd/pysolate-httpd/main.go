@@ -310,7 +310,7 @@ func decodeSuccessfulGuestResult(payload []byte) ([]byte, error) {
 func newHTTPServer(token string, run executor) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
-		writeJSON(writer, http.StatusOK, map[string]string{"status": "ready", "protocol_version": protocolVersion})
+		writeJSON(writer, http.StatusOK, map[string]string{"status": "ready", "protocol_version": protocolVersion, "execution_instance": "fresh_per_physical_execution", "prepared_runtime": "disabled", "memory_cow": "disabled"})
 	})
 	mux.HandleFunc("POST /v1/executions", func(writer http.ResponseWriter, request *http.Request) {
 		if !validBearer(request.Header.Get("Authorization"), token) {

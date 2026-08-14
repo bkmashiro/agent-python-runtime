@@ -83,8 +83,12 @@ export WASI_SDK_PATH WASMTIME
 export PATH="$(dirname "${WASMTIME}"):${PATH}"
 
 if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
-  SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" HEAD)
+  SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" --repository "${ROOT_DIR}" HEAD)
 fi
+if [[ -z ${GITHUB_SHA:-} ]]; then
+  GITHUB_SHA=$(git -C "${ROOT_DIR}" rev-parse HEAD)
+fi
+export GITHUB_SHA
 if [[ ! ${SOURCE_DATE_EPOCH} =~ ^[1-9][0-9]*$ ]]; then
   echo "SOURCE_DATE_EPOCH must be a positive integer" >&2
   exit 6

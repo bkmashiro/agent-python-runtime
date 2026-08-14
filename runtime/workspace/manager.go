@@ -354,6 +354,31 @@ func (lease *Lease) Snapshot() (Snapshot, error) {
 	return snapshotWorkspaceRoot(item.root, item.limits)
 }
 
+// BindMountSource returns the runtime-owned root for a privileged native
+// sandbox adapter. It is available only while this exact exclusive lease is
+// active; callers must never accept or substitute an arbitrary Host path.
+func (lease *Lease) BindMountSource() (string, error) {
+	if lease == nil {
+		return "", ErrWorkspaceClosed
+	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	if lease.released {
+		return "", ErrWorkspaceClosed
+	}
+	manager := lease.manager
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return "", ErrWorkspaceClosed
+	}
+	item, exists := manager.entries[lease.ref]
+	if !exists || item.owner != lease.owner {
+		return "", errors.New("workspace lease identity changed")
+	}
+	return item.root, nil
+}
+
 // NewTemporary creates a private scratch filesystem tied to this lease. It has
 // no Ref and must be closed before the lease can be released.
 func (lease *Lease) NewTemporary() (*Temporary, error) {

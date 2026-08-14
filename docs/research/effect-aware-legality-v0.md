@@ -34,7 +34,8 @@ Wazero engine; Host-internal test/composition minting is gated by Go's `runtime/
 package boundary, so an external `engine.Runner` plugin cannot self-report properties and
 mint authority. `CanClaimStagedObservation` compares a body-free claim against
 that exact call, capability/spec/handler/plan/grant, occurrence, argument, epoch,
-privacy, lineage and budget-reservation identity. It remains a pure check: Track E must
+privacy, lineage and budget-reservation identity. `ClaimIdentitySHA256` domain-hashes
+that entire expected claim for trace cross-binding. It remains a pure check: Track E must
 atomically enforce one-shot state and typed unclaimed disposition.
 
 Capability-plan v5 has no coalescing, durable-cache or backend-requirement contract.

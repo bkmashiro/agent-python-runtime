@@ -58,15 +58,18 @@ func (decision Decision) QualifiedCall() (QualifiedCall, bool) {
 }
 
 // PreissueContext is Host-authored per-Run state. It contains identity and budget
-// facts only; it carries no provider handle or executable authority.
+// snapshot facts only; it carries no provider handle or executable authority. The
+// reservation identity must be minted by a Host budget manager, and Track E must
+// consume it atomically before starting physical work.
 type PreissueContext struct {
-	StreamEpoch            string
-	WorkflowEpoch          string
-	FreshnessEpoch         string
-	ExpiryEpoch            string
-	PrivacyPartition       string
-	ParentLineageSHA256    string
-	RemainingPhysicalReads uint32
+	StreamEpoch             string
+	WorkflowEpoch           string
+	FreshnessEpoch          string
+	ExpiryEpoch             string
+	PrivacyPartition        string
+	ParentLineageSHA256     string
+	BudgetReservationSHA256 string
+	RemainingPhysicalReads  uint32
 }
 
 var legalityTokenPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`)
@@ -77,26 +80,28 @@ func (context PreissueContext) valid() bool {
 		legalityTokenPattern.MatchString(context.FreshnessEpoch) &&
 		legalityTokenPattern.MatchString(context.ExpiryEpoch) &&
 		legalityTokenPattern.MatchString(context.PrivacyPartition) &&
-		digestPattern.MatchString(context.ParentLineageSHA256)
+		digestPattern.MatchString(context.ParentLineageSHA256) &&
+		digestPattern.MatchString(context.BudgetReservationSHA256)
 }
 
 // QualifiedCall is an opaque proof that one exact verified source occurrence joined
 // successfully with one sealed Host capability contract and frozen per-Run context.
 type QualifiedCall struct {
-	callSiteID          string
-	sourceSHA256        string
-	capability          string
-	canonicalArguments  []byte
-	argumentsSHA256     string
-	resourceSHA256      string
-	dynamicOccurrence   uint32
-	binding             capability.StreamingObservationBinding
-	streamEpoch         string
-	workflowEpoch       string
-	freshnessEpoch      string
-	expiryEpoch         string
-	privacyPartition    string
-	parentLineageSHA256 string
+	callSiteID              string
+	sourceSHA256            string
+	capability              string
+	canonicalArguments      []byte
+	argumentsSHA256         string
+	resourceSHA256          string
+	dynamicOccurrence       uint32
+	binding                 capability.StreamingObservationBinding
+	streamEpoch             string
+	workflowEpoch           string
+	freshnessEpoch          string
+	expiryEpoch             string
+	privacyPartition        string
+	parentLineageSHA256     string
+	budgetReservationSHA256 string
 }
 
 func (call QualifiedCall) CallSiteID() string      { return call.callSiteID }
@@ -118,7 +123,8 @@ func (call QualifiedCall) valid() bool {
 		digestPattern.MatchString(call.binding.PlanSHA256) && digestPattern.MatchString(call.binding.GrantPolicySHA256) &&
 		legalityTokenPattern.MatchString(call.streamEpoch) && legalityTokenPattern.MatchString(call.workflowEpoch) &&
 		legalityTokenPattern.MatchString(call.freshnessEpoch) && legalityTokenPattern.MatchString(call.expiryEpoch) &&
-		legalityTokenPattern.MatchString(call.privacyPartition) && digestPattern.MatchString(call.parentLineageSHA256)
+		legalityTokenPattern.MatchString(call.privacyPartition) && digestPattern.MatchString(call.parentLineageSHA256) &&
+		digestPattern.MatchString(call.budgetReservationSHA256)
 }
 
 func (call QualifiedCall) clone() QualifiedCall {
@@ -130,22 +136,23 @@ func (call QualifiedCall) clone() QualifiedCall {
 // Python Host-call boundary. Ready is state, not identity. This pure predicate does
 // not mutate one-shot state; the Track E consumer must claim atomically.
 type ObservationClaim struct {
-	CallSiteID          string
-	SourceSHA256        string
-	DynamicOccurrence   uint32
-	ArgumentsSHA256     string
-	Capability          string
-	SpecSHA256          string
-	HandlerIdentity     string
-	PlanSHA256          string
-	GrantPolicySHA256   string
-	StreamEpoch         string
-	WorkflowEpoch       string
-	FreshnessEpoch      string
-	ExpiryEpoch         string
-	PrivacyPartition    string
-	ParentLineageSHA256 string
-	Ready               bool
+	CallSiteID              string
+	SourceSHA256            string
+	DynamicOccurrence       uint32
+	ArgumentsSHA256         string
+	Capability              string
+	SpecSHA256              string
+	HandlerIdentity         string
+	PlanSHA256              string
+	GrantPolicySHA256       string
+	StreamEpoch             string
+	WorkflowEpoch           string
+	FreshnessEpoch          string
+	ExpiryEpoch             string
+	PrivacyPartition        string
+	ParentLineageSHA256     string
+	BudgetReservationSHA256 string
+	Ready                   bool
 }
 
 func (call QualifiedCall) ExpectedObservationClaim() ObservationClaim {
@@ -158,6 +165,7 @@ func (call QualifiedCall) ExpectedObservationClaim() ObservationClaim {
 		WorkflowEpoch: call.workflowEpoch, FreshnessEpoch: call.freshnessEpoch,
 		ExpiryEpoch: call.expiryEpoch, PrivacyPartition: call.privacyPartition,
 		ParentLineageSHA256: call.parentLineageSHA256, Ready: true,
+		BudgetReservationSHA256: call.budgetReservationSHA256,
 	}
 }
 
@@ -221,6 +229,7 @@ func CanPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 		streamEpoch: context.StreamEpoch, workflowEpoch: context.WorkflowEpoch,
 		freshnessEpoch: context.FreshnessEpoch, expiryEpoch: context.ExpiryEpoch,
 		privacyPartition: context.PrivacyPartition, parentLineageSHA256: context.ParentLineageSHA256,
+		budgetReservationSHA256: context.BudgetReservationSHA256,
 	}
 	if !call.valid() {
 		return rejected(RejectQualifiedCallInvalid)

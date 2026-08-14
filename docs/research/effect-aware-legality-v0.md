@@ -24,14 +24,15 @@ identity, plus an executable observable-trace comparator. No predicate starts wo
 4. `necessarily_reached=true` and `dynamic_occurrence=1`;
 5. canonical scalar arguments and an instantiable logical resource identity;
 6. a sealed eligible `PreDispatchContract` and exact observation binding;
-7. frozen stream, workflow, freshness, expiry, privacy and parent-lineage identity;
-8. a non-zero physical-read budget.
+7. frozen stream/workflow/freshness/expiry/privacy/parent-lineage identities;
+8. a non-zero physical-read budget plus an exact Host-authored budget-reservation
+   identity.
 
 A successful decision carries an opaque `QualifiedCall`; callers cannot construct its
 private proof fields. `CanClaimStagedObservation` compares a body-free claim against
 that exact call, capability/spec/handler/plan/grant, occurrence, argument, epoch,
-privacy and lineage identity. It remains a pure check: Track E must atomically enforce
-one-shot state and typed unclaimed disposition.
+privacy, lineage and budget-reservation identity. It remains a pure check: Track E must
+atomically enforce one-shot state and typed unclaimed disposition.
 
 Capability-plan v5 has no coalescing, durable-cache or backend-requirement contract.
 `CanCoalesce`, `CanCache` and `RequiredBackend` therefore return typed rejections.

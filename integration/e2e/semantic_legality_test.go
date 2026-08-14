@@ -87,7 +87,8 @@ func TestRealGuestSharedLegalityQualifiesOnlyExactMustReachCall(t *testing.T) {
 	}
 	decision := semantic.CanPreissue(verified, plan, analysis.CallSites[0].ID, semantic.PreissueContext{
 		StreamEpoch: "stream-1", WorkflowEpoch: "workflow-1", FreshnessEpoch: "plan-1", ExpiryEpoch: "expiry-1",
-		PrivacyPartition: "private-1", ParentLineageSHA256: semanticTestDigest('6'), RemainingPhysicalReads: 1,
+		PrivacyPartition: "private-1", ParentLineageSHA256: semanticTestDigest('6'),
+		BudgetReservationSHA256: semanticTestDigest('5'), RemainingPhysicalReads: 1,
 	})
 	call, qualified := decision.QualifiedCall()
 	if !decision.Allowed() || !qualified || call.Capability() != spec.Name || call.ResourceSHA256() == "" {

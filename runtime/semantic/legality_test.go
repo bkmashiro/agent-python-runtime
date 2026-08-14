@@ -34,6 +34,11 @@ func TestCanPreissueRequiresVerifiedExactNecessarilyReachedCallAndFrozenContext(
 			candidate.RemainingPhysicalReads = 0
 			return CanPreissue(verified, plan, site.ID, candidate)
 		},
+		"reservation": func() Decision {
+			candidate := ctx
+			candidate.BudgetReservationSHA256 = ""
+			return CanPreissue(verified, plan, site.ID, candidate)
+		},
 		"freshness": func() Decision {
 			candidate := ctx
 			candidate.FreshnessEpoch = ""
@@ -55,7 +60,7 @@ func TestCanPreissueRequiresVerifiedExactNecessarilyReachedCallAndFrozenContext(
 	}
 }
 
-func TestCanClaimStagedObservationRequiresExactOneShotIdentity(t *testing.T) {
+func TestCanClaimStagedObservationRequiresExactIdentityAndReadyState(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, plan, true)
 	decision := CanPreissue(verified, plan, site.ID, legalityContext())
@@ -70,6 +75,11 @@ func TestCanClaimStagedObservationRequiresExactOneShotIdentity(t *testing.T) {
 	claim.ArgumentsSHA256 = legalityDigest("wrong")
 	if got := CanClaimStagedObservation(call, claim); got.Allowed() || !hasRejection(got, RejectObservationIdentityMismatch) {
 		t.Fatalf("mismatch accepted: %+v", got)
+	}
+	claim = call.ExpectedObservationClaim()
+	claim.BudgetReservationSHA256 = legalityDigest("wrong-reservation")
+	if got := CanClaimStagedObservation(call, claim); got.Allowed() || !hasRejection(got, RejectObservationIdentityMismatch) {
+		t.Fatalf("budget reservation mismatch accepted: %+v", got)
 	}
 	claim = call.ExpectedObservationClaim()
 	claim.Ready = false
@@ -100,7 +110,7 @@ func legalityContext() PreissueContext {
 		StreamEpoch: "stream-1", WorkflowEpoch: "workflow-1",
 		FreshnessEpoch: "plan-epoch-1", ExpiryEpoch: "expiry-1",
 		PrivacyPartition: "private-1", ParentLineageSHA256: legalityDigest("parent"),
-		RemainingPhysicalReads: 1,
+		BudgetReservationSHA256: legalityDigest("budget-reservation"), RemainingPhysicalReads: 1,
 	}
 }
 

@@ -163,7 +163,7 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 					StreamEpoch: "effectgraph-stream", WorkflowEpoch: "effectgraph-workflow",
 					FreshnessEpoch: "effectgraph-plan-epoch", ExpiryEpoch: "effectgraph-expiry-epoch",
 					PrivacyPartition: "effectgraph-public", ParentLineageSHA256: digest([]byte("effectgraph-lineage")),
-					RemainingPhysicalReads: 1,
+					BudgetReservationSHA256: digest([]byte("effectgraph-budget-reservation")), RemainingPhysicalReads: 1,
 				})
 				if decision.Allowed() {
 					result.PreissueLegal++

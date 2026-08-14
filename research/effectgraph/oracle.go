@@ -125,6 +125,7 @@ func (report DifferentialReport) validateShape() error {
 func validDivergence(value semantic.DivergenceClass) bool {
 	switch value {
 	case semantic.DivergenceNone, semantic.DivergenceTerminalClassMismatch,
+		semantic.DivergenceUnclaimedPhysicalWork,
 		semantic.DivergenceResultMismatch, semantic.DivergenceExceptionMismatch,
 		semantic.DivergenceMissingEffectEvent, semantic.DivergenceExtraEffectEvent,
 		semantic.DivergenceEffectArgumentMismatch, semantic.DivergenceRequiredOrderInversion,
@@ -186,7 +187,7 @@ func DefaultDifferentialCases() []DifferentialCase {
 			physical.Status = semantic.EventConsumed
 			physical.Predecessors = []string{}
 			physical.QualifiedSpeculation = true
-			physical.QualificationSHA256 = differentialDigest("qualification")
+			physical.QualificationSHA256 = physical.ClaimIdentitySHA256
 			physical.ClaimedLogicalID = logical.ID
 			physical.ArgumentsSHA256 = differentialDigest("wrong")
 			trace.Events = append(trace.Events, physical)
@@ -201,7 +202,7 @@ func DefaultDifferentialCases() []DifferentialCase {
 				physical.Status = semantic.EventConsumed
 				physical.Predecessors = []string{}
 				physical.QualifiedSpeculation = true
-				physical.QualificationSHA256 = differentialDigest("qualification-" + suffix)
+				physical.QualificationSHA256 = physical.ClaimIdentitySHA256
 				physical.ClaimedLogicalID = logical.ID
 				trace.Events = append(trace.Events, physical)
 			}
@@ -211,6 +212,19 @@ func DefaultDifferentialCases() []DifferentialCase {
 			trace.Terminal.PhysicalStarted = true
 		}},
 		{"post-effect-replay", semantic.DivergencePostEffectReplay, func(trace *semantic.ObservableTrace) { trace.Terminal.PostEffectReplay = true }},
+		{"qualification-mismatch", semantic.DivergenceTraceUnclassifiable, func(trace *semantic.ObservableTrace) {
+			logical := trace.Events[0]
+			physical := logical
+			physical.ID = differentialDigest("qualification-mismatch")
+			physical.Surface = semantic.SurfaceSpeculativePhysical
+			physical.Status = semantic.EventConsumed
+			physical.Predecessors = []string{}
+			physical.QualifiedSpeculation = true
+			physical.QualificationSHA256 = differentialDigest("wrong-qualification")
+			physical.ClaimedLogicalID = logical.ID
+			trace.Events = append(trace.Events, physical)
+			trace.Terminal.PhysicalStarted = true
+		}},
 		{"qualified-write-physical", semantic.DivergenceTraceUnclassifiable, func(trace *semantic.ObservableTrace) {
 			trace.Events = append(trace.Events, semantic.TraceEvent{
 				ID: differentialDigest("write-physical"), Kind: semantic.EventExternalEffectAttempt,
@@ -264,10 +278,10 @@ func DefaultDifferentialCases() []DifferentialCase {
 		FreshnessSHA256: differentialDigest("freshness"), AuthoritySHA256: differentialDigest("authority"),
 		ClaimIdentitySHA256: differentialDigest("claim-identity"),
 		Status:              semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: true,
-		QualificationSHA256: differentialDigest("qualification"),
+		QualificationSHA256: differentialDigest("claim-identity"),
 	})
 	candidate.Terminal.PhysicalStarted = true
-	cases = append(cases, DifferentialCase{ID: "equivalent-qualified-discard", Baseline: cloneDifferentialTrace(baseline), Candidate: candidate, Expected: semantic.DivergenceNone})
+	cases = append(cases, DifferentialCase{ID: "qualified-unclaimed-discard", Baseline: cloneDifferentialTrace(baseline), Candidate: candidate, Expected: semantic.DivergenceUnclaimedPhysicalWork})
 
 	consumed := cloneDifferentialTrace(baseline)
 	logical := consumed.Events[0]
@@ -277,7 +291,7 @@ func DefaultDifferentialCases() []DifferentialCase {
 	physical.Status = semantic.EventConsumed
 	physical.Predecessors = []string{}
 	physical.QualifiedSpeculation = true
-	physical.QualificationSHA256 = differentialDigest("qualification-consumed")
+	physical.QualificationSHA256 = physical.ClaimIdentitySHA256
 	physical.ClaimedLogicalID = logical.ID
 	consumed.Events = append(consumed.Events, physical)
 	consumed.Terminal.PhysicalStarted = true

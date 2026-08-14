@@ -26,7 +26,7 @@ func TestDefaultDifferentialOracleMatchesEveryAdversarialCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("report=%+v err=%v", report, err)
 	}
-	if report.Cases != 25 || report.Matched != report.Cases || len(report.Results) != int(report.Cases) {
+	if report.Cases != 26 || report.Matched != report.Cases || len(report.Results) != int(report.Cases) {
 		t.Fatalf("report=%+v", report)
 	}
 	encoded, err := effectgraph.EncodeDifferentialReport(report)

@@ -1,7 +1,7 @@
 {
   "schema_version": "pysolate.differential-oracle.v0",
-  "cases": 25,
-  "matched": 25,
+  "cases": 26,
+  "matched": 26,
   "results": [
     {
       "id": "argument-mismatch",
@@ -40,13 +40,6 @@
     },
     {
       "id": "equivalent-consumed-claim",
-      "expected": "",
-      "observed": "",
-      "equivalent": true,
-      "matched": true
-    },
-    {
-      "id": "equivalent-qualified-discard",
       "expected": "",
       "observed": "",
       "equivalent": true,
@@ -119,6 +112,20 @@
       "id": "post-effect-replay",
       "expected": "post_effect_replay",
       "observed": "post_effect_replay",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "qualification-mismatch",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "qualified-unclaimed-discard",
+      "expected": "unclaimed_physical_work",
+      "observed": "unclaimed_physical_work",
       "equivalent": false,
       "matched": true
     },

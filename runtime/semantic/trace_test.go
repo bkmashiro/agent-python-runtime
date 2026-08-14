@@ -2,7 +2,7 @@ package semantic
 
 import "testing"
 
-func TestCompareObservableTracesAcceptsEquivalentLogicalTraceAndQualifiedDiscard(t *testing.T) {
+func TestCompareObservableTracesRejectsQualifiedUnclaimedPhysicalRead(t *testing.T) {
 	baseline := observableTraceFixture()
 	candidate := observableTraceFixture()
 	candidate.Terminal.PhysicalStarted = true
@@ -12,11 +12,11 @@ func TestCompareObservableTracesAcceptsEquivalentLogicalTraceAndQualifiedDiscard
 		ArgumentsSHA256: legalityDigest("args"), ResourceSHA256: legalityDigest("resource"),
 		FreshnessSHA256: legalityDigest("freshness"), AuthoritySHA256: legalityDigest("authority"),
 		ClaimIdentitySHA256: legalityDigest("claim-identity"),
-		Status:              EventOrphaned, QualifiedSpeculation: true, QualificationSHA256: legalityDigest("qualification"),
+		Status:              EventOrphaned, QualifiedSpeculation: true, QualificationSHA256: legalityDigest("claim-identity"),
 	})
 	result := CompareObservableTraces(baseline, candidate)
-	if !result.Equivalent || result.Divergence != DivergenceNone {
-		t.Fatalf("comparison=%+v", result)
+	if result.Equivalent || result.Divergence != DivergenceUnclaimedPhysicalWork {
+		t.Fatalf("qualified unclaimed physical read accepted: %+v", result)
 	}
 }
 
@@ -30,7 +30,7 @@ func TestCompareObservableTracesAcceptsExactlyBoundConsumedPhysicalRead(t *testi
 	physical.Status = EventConsumed
 	physical.Predecessors = []string{}
 	physical.QualifiedSpeculation = true
-	physical.QualificationSHA256 = legalityDigest("qualified-call")
+	physical.QualificationSHA256 = physical.ClaimIdentitySHA256
 	physical.ClaimedLogicalID = logical.ID
 	candidate.Terminal.PhysicalStarted = true
 	candidate.Events = append(candidate.Events, physical)
@@ -39,10 +39,16 @@ func TestCompareObservableTracesAcceptsExactlyBoundConsumedPhysicalRead(t *testi
 	}
 
 	mismatched := candidate
-	mismatched.Events = append([]TraceEvent{}, candidate.Events...)
+	mismatched.Events = append([]TraceEvent(nil), candidate.Events...)
 	mismatched.Events[len(mismatched.Events)-1].ArgumentsSHA256 = legalityDigest("wrong-args")
 	if got := CompareObservableTraces(baseline, mismatched); got.Divergence != DivergenceTraceUnclassifiable {
 		t.Fatalf("mismatched physical claim accepted: %+v", got)
+	}
+	badQualification := candidate
+	badQualification.Events = append([]TraceEvent(nil), candidate.Events...)
+	badQualification.Events[len(badQualification.Events)-1].QualificationSHA256 = legalityDigest("wrong-qualification")
+	if got := CompareObservableTraces(baseline, badQualification); got.Divergence != DivergenceTraceUnclassifiable {
+		t.Fatalf("mismatched qualification accepted: %+v", got)
 	}
 
 	duplicate := candidate

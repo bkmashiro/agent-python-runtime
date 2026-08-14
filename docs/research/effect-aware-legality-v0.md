@@ -55,11 +55,11 @@ Capability-plan v5 has no coalescing, durable-cache or backend-requirement contr
 - qualified speculative physical work and consumed/cancelled/late/orphaned outcomes;
 - explicit post-effect replay rejection.
 
-The comparator ignores only qualified pure/read physical scheduling differences whose
-logical trace is unchanged. Unclaimed work needs a typed terminal disposition; consumed
-work must bind one-to-one to the exact logical event across the canonical observation-
-claim identity plus capability, effect, arguments, resource, result, freshness and
-authority. `PhysicalStarted` must exactly match the
+The comparator permits only qualified pure/read physical work that is consumed and
+binds one-to-one to the exact logical event across the canonical observation-claim
+identity plus capability, effect, arguments, resource, result, freshness and authority.
+Typed cancelled/late/orphaned work remains auditable but is always an observable
+`unclaimed_physical_work` divergence. `PhysicalStarted` must exactly match the
 presence of accounted physical events. Unknown effects, malformed/cyclic predecessor
 graphs and all write-class speculative physical events are unclassifiable.
 Missing or extra logical effects, event-order changes, argument/resource drift, freshness,
@@ -68,17 +68,17 @@ divergences. Invalid or unqualified traces fail as `trace_unclassifiable`.
 
 The executable matrix at
 [`docs/evidence/effect-aware-differential-oracle.json`](../evidence/effect-aware-differential-oracle.json)
-contains 25 cases. All 25 matched their expected result, including equivalent
-qualified discard and exact consumed-claim cases plus adversarial terminal, result,
-argument, missing/extra effect, sequence/edge order, freshness, authority, workspace,
+contains 26 cases. All 26 matched their expected result, including one equivalent
+qualified exact-consumed-claim case plus adversarial terminal, result, argument,
+missing/extra effect, sequence/edge order, freshness, authority, workspace,
 cancellation, ambiguity, post-effect replay, qualification/claim mismatch, duplicate
-claim, physical-start inconsistency,
+claim, unclaimed physical work, physical-start inconsistency,
 write-class speculation and invalid/unqualified physical work. Report SHA-256:
-`6d7513e709fb01bd1d1a6ec16aa87020bf6bedf9294afb831f53632d87d684a5`.
+`718e613147129cbdb5127d21cc596553e3b118be446a4407f53d5e4776e04ffd`.
 Cross-compiled ARM64 semantic and effectgraph test binaries passed on Linux
 `6.12.0-202.76.4.1.el9uek.aarch64`; binary SHA-256 values were
-`170cfe845becfc1c3c0f01cad9def03446b14635f888c91dc0283f1137f52fba` and
-`7782fe20f227a0d241421e0231657c73d1e815daad3a6d49508686b1a9e2748e`.
+`7c574f385a4fce15fb3f549cb3f40fe07bdcffd777c43f0ae306cff5ce15e021` and
+`26f38ce504d57f41b572a90f1433daa1573357b3bd4c3a60de7005313eb763a6`.
 The ARM64 oracle binary independently reproduced the exact report SHA-256 above.
 
 ## Opportunity comparison

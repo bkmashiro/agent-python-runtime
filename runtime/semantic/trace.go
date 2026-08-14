@@ -76,6 +76,7 @@ const (
 	DivergenceTerminalDispositionMismatch  DivergenceClass = "terminal_disposition_mismatch"
 	DivergencePostEffectReplay             DivergenceClass = "post_effect_replay"
 	DivergenceTraceUnclassifiable          DivergenceClass = "trace_unclassifiable"
+	DivergenceUnclaimedPhysicalWork        DivergenceClass = "unclaimed_physical_work"
 )
 
 type TraceEvent struct {
@@ -137,6 +138,9 @@ func CompareObservableTraces(baseline, candidate ObservableTrace) TraceCompariso
 	}
 	if baseline.Terminal.PostEffectReplay || candidate.Terminal.PostEffectReplay {
 		return diverged(DivergencePostEffectReplay)
+	}
+	if hasUnclaimedPhysical(baseline.Events) || hasUnclaimedPhysical(candidate.Events) {
+		return diverged(DivergenceUnclaimedPhysicalWork)
 	}
 	if baseline.FrozenContextSHA256 != candidate.FrozenContextSHA256 {
 		return diverged(DivergenceAuthorityBindingMismatch)
@@ -300,6 +304,7 @@ func validTerminalTrace(terminal TerminalTrace) bool {
 
 func validSpeculativePhysical(event TraceEvent) bool {
 	if !event.QualifiedSpeculation || !digestPattern.MatchString(event.QualificationSHA256) ||
+		event.QualificationSHA256 != event.ClaimIdentitySHA256 ||
 		event.Kind != EventCapabilityObservation || len(event.Predecessors) != 0 ||
 		(event.EffectClass != TraceEffectPure && event.EffectClass != TraceEffectWorkspaceRead &&
 			event.EffectClass != TraceEffectExternalRead) {
@@ -349,6 +354,15 @@ func validEventPayload(event TraceEvent) bool {
 		return event.ClaimIdentitySHA256 == "" && event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" && event.ResourceSHA256 == "" &&
 			event.ResultSHA256 == "" && event.FreshnessSHA256 == "" && event.AuthoritySHA256 == ""
 	}
+}
+
+func hasUnclaimedPhysical(events []TraceEvent) bool {
+	for _, event := range events {
+		if event.Surface == SurfaceSpeculativePhysical && event.Status != EventConsumed {
+			return true
+		}
+	}
+	return false
 }
 
 func physicalClaimsLogical(physical, logical TraceEvent) bool {

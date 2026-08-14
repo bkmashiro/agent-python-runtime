@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ type sharedMatrixRow struct {
 	Leaders       int    `json:"leaders"`
 	Waiters       int    `json:"waiters"`
 	ElapsedMillis int64  `json:"elapsed_millis"`
+	CPUTimeNanos  int64  `json:"process_cpu_time_nanoseconds"`
 	Passed        bool   `json:"passed"`
 }
 
@@ -88,6 +90,7 @@ func runSharedMatrixRow(t *testing.T, artifact []byte, logical int, coalesced bo
 	start := make(chan struct{})
 	var wait sync.WaitGroup
 	wait.Add(logical)
+	startedCPU := processCPUTime(t)
 	started := time.Now()
 	for range logical {
 		go func() {
@@ -133,6 +136,16 @@ func runSharedMatrixRow(t *testing.T, artifact []byte, logical int, coalesced bo
 	}
 	return sharedMatrixRow{
 		Logical: logical, Mode: mode, Physical: physical.Load(), Leaders: leaders, Waiters: waiters,
-		ElapsedMillis: elapsed.Milliseconds(), Passed: passed,
+		ElapsedMillis: elapsed.Milliseconds(), CPUTimeNanos: (processCPUTime(t) - startedCPU).Nanoseconds(), Passed: passed,
 	}
+}
+
+func processCPUTime(t *testing.T) time.Duration {
+	t.Helper()
+	var usage syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
+		t.Fatalf("read process CPU time: %v", err)
+	}
+	return time.Duration(usage.Utime.Sec+usage.Stime.Sec)*time.Second +
+		time.Duration(usage.Utime.Usec+usage.Stime.Usec)*time.Microsecond
 }

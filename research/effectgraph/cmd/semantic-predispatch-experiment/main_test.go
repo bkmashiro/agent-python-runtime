@@ -10,17 +10,31 @@ func TestValidateReportRejectsInternallyConsistentMutationWithoutReseal(t *testi
 		{Condition: "semantic_pre_dispatch", DurationMicros: 1100, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
 		{Condition: "baseline", DurationMicros: 2200, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
 		{Condition: "semantic_pre_dispatch", DurationMicros: 1200, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
+		{Condition: "baseline", DurationMicros: 2300, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1300, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
+		{Condition: "baseline", DurationMicros: 2400, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1400, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
 	}
 	report := report{
 		SchemaVersion: reportSchema, ArtifactSHA256: digest([]byte("artifact")),
 		SourceSHA256: digest([]byte("source")), CapabilityPlanSHA256: digest([]byte("plan")),
-		TrialsPerCondition: 3, PhysicalDelayMicros: 1000,
-		BaselineMedianMicros: 2100, OptimizedMedianMicros: 1100, MedianSavingsMicros: 1000,
+		TrialsPerCondition: 5, PhysicalDelayMicros: 1000,
+		BaselineMedianMicros: 2200, OptimizedMedianMicros: 1200, MedianSavingsMicros: 1000,
 		EquivalentResults: true, NoDuplicatePhysicalCall: true, Trials: rows,
 	}
 	report.ContentSHA256 = sealReport(report)
 	if err := validateReport(report); err != nil {
 		t.Fatalf("valid report: %v", err)
+	}
+	short := report
+	short.TrialsPerCondition = 3
+	short.Trials = short.Trials[:6]
+	short.BaselineMedianMicros = 2100
+	short.OptimizedMedianMicros = 1100
+	short.MedianSavingsMicros = 1000
+	short.ContentSHA256 = sealReport(short)
+	if err := validateReport(short); err == nil {
+		t.Fatal("resealed three-trial report unexpectedly validated")
 	}
 	report.Trials[1].PhysicalStarts = 2
 	if err := validateReport(report); err == nil {

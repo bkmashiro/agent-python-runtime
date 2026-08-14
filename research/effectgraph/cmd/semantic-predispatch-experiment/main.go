@@ -54,11 +54,11 @@ type report struct {
 func main() {
 	artifactPath := flag.String("artifact", "", "reviewed CPython/WASI artifact")
 	output := flag.String("output", "docs/evidence/semantic-predispatch-experiment.json", "report path")
-	trials := flag.Int("trials", 5, "trials per condition")
+	trials := flag.Int("trials", 5, "trials per condition (fixed at 5 for v0 evidence)")
 	delay := flag.Duration("delay", 250*time.Millisecond, "physical read latency")
 	flag.Parse()
-	if *artifactPath == "" || *trials < 3 || *trials > 20 || *delay < 10*time.Millisecond || *delay > 2*time.Second {
-		fatal(errors.New("artifact, 3..20 trials, and a 10ms..2s delay are required"))
+	if *artifactPath == "" || *trials != 5 || *delay < 10*time.Millisecond || *delay > 2*time.Second {
+		fatal(errors.New("artifact, exactly 5 trials, and a 10ms..2s delay are required"))
 	}
 	artifact, err := os.ReadFile(*artifactPath)
 	if err != nil {
@@ -291,7 +291,7 @@ func sealReport(value report) string {
 }
 
 func validateReport(value report) error {
-	if value.SchemaVersion != reportSchema || value.TrialsPerCondition < 3 ||
+	if value.SchemaVersion != reportSchema || value.TrialsPerCondition != 5 ||
 		len(value.Trials) != value.TrialsPerCondition*2 || value.PhysicalDelayMicros <= 0 ||
 		!validSHA256(value.ArtifactSHA256) || !validSHA256(value.SourceSHA256) || !validSHA256(value.CapabilityPlanSHA256) ||
 		!value.EquivalentResults || !value.NoDuplicatePhysicalCall ||

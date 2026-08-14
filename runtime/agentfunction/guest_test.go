@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -260,8 +262,26 @@ func TestExecuteQualifiedGuestCollapsesAndRetainsExactResult(t *testing.T) {
 	if !errors.Is(err, agentfunction.ErrGuestQualification) || len(changed.Value) != 0 || created.Load() != 1 {
 		t.Fatalf("changed-contract=%+v err=%v created=%d", changed, err, created.Load())
 	}
+	key, _, err := qualified.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(store.Directory(), cacheStorageFilename("fresh-guest", key)), []byte("corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recomputed, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
+	if err != nil || recomputed.CacheHit || string(recomputed.Value) != `{"v":1}` || created.Load() != 2 {
+		t.Fatalf("recomputed=%+v err=%v created=%d", recomputed, err, created.Load())
+	}
+	if err := store.EvictQualified(qualified); err != nil {
+		t.Fatal(err)
+	}
+	afterEviction, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
+	if err != nil || afterEviction.CacheHit || string(afterEviction.Value) != `{"v":1}` || created.Load() != 3 {
+		t.Fatalf("after-eviction=%+v err=%v created=%d", afterEviction, err, created.Load())
+	}
 	stats := store.Stats()
-	if stats.Hits != 2 || stats.Writes != 1 {
+	if stats.Hits != 2 || stats.Writes != 3 || stats.Corruptions != 1 || stats.Evictions != 1 {
 		t.Fatalf("store stats=%+v", stats)
 	}
 }
@@ -361,17 +381,8 @@ func qualifiedGuestInvocation(t *testing.T, invocation agentfunction.Invocation,
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1},
 		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
 	}
-	dependencies, err := agentfunction.SemanticWholeRunDependencies(invocation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plan, _, err := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{
-		Dependencies: dependencies, InputsCanonical: true, OutputsCanonical: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, analysis, plan, request)
+	verified := verifiedSemanticPlanFor(t, invocation, analysis)
+	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, request)
 	if err != nil {
 		t.Fatal(err)
 	}

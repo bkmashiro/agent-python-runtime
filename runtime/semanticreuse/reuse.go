@@ -32,12 +32,12 @@ type Pass struct {
 	stats          Stats
 }
 
-func (pass *Pass) ExecuteGuest(ctx context.Context, invocation agentfunction.Invocation, analysis semantic.Analysis, plan semantic.Plan, compute agentfunction.FreshGuestCompute) (agentfunction.Result, error) {
+func (pass *Pass) ExecuteGuest(ctx context.Context, invocation agentfunction.Invocation, verified semantic.VerifiedWholeRunPlan, compute agentfunction.FreshGuestCompute) (agentfunction.Result, error) {
 	if pass == nil || !pass.Enabled {
 		return agentfunction.Result{}, ErrReuseQualification
 	}
 	qualificationStarted := time.Now()
-	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, analysis, plan, compute.Request)
+	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, compute.Request)
 	qualificationNanos := uint64(time.Since(qualificationStarted))
 	pass.mu.Lock()
 	pass.stats.Attempts++

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
@@ -14,7 +15,11 @@ type QualifiedGuestInvocation struct {
 	invocation Invocation
 }
 
-func NewQualifiedGuestInvocation(invocation Invocation, analysis semantic.Analysis, plan semantic.Plan, request []byte) (QualifiedGuestInvocation, error) {
+func NewQualifiedGuestInvocation(invocation Invocation, verified semantic.VerifiedWholeRunPlan, requestRaw []byte) (QualifiedGuestInvocation, error) {
+	analysis, plan, properties, verifiedErr := verified.Bound()
+	if verifiedErr != nil {
+		return QualifiedGuestInvocation{}, ErrGuestQualification
+	}
 	if err := invocation.Validate(); err != nil || invocation.Admission != Cacheable ||
 		invocation.SemanticAnalysisSHA256 != "" || invocation.SemanticPlanSHA256 != "" ||
 		invocation.SemanticAnalyzerSHA256 != "" || invocation.SemanticRegionID != "" ||
@@ -36,7 +41,18 @@ func NewQualifiedGuestInvocation(invocation Invocation, analysis semantic.Analys
 	if err != nil || planAnalysisIdentity != analysisIdentity {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}
-	requestContract, err := GuestRequestContractSHA256(request)
+	decodedRequest, err := runtimeconfig.DecodeRunRequest(requestRaw)
+	if err != nil || decodedRequest.Compatibility == nil || len(decodedRequest.Requirements) != 0 ||
+		properties.ArtifactSHA256 != invocation.ArtifactSHA256 ||
+		properties.ExecutionProfileBindingSHA256 != invocation.ExecutionProfileSHA256 ||
+		ImportClosureIdentity(properties.AvailableImports, properties.QualifiedImports) != invocation.ImportClosureSHA256 {
+		return QualifiedGuestInvocation{}, ErrGuestQualification
+	}
+	profile, err := runtimeconfig.NewExecutionProfile(properties.ExecutionProfileID, properties.AllowedImports)
+	if err != nil || runtimeconfig.AdmitRunCompatibility(decodedRequest, &profile) != nil {
+		return QualifiedGuestInvocation{}, ErrGuestQualification
+	}
+	requestContract, err := GuestRequestContractSHA256(requestRaw)
 	if err != nil {
 		return QualifiedGuestInvocation{}, ErrGuestQualification
 	}
@@ -63,6 +79,16 @@ func NewQualifiedGuestInvocation(invocation Invocation, analysis semantic.Analys
 
 func (qualified QualifiedGuestInvocation) Identity() (string, []byte, error) {
 	return qualified.invocation.Identity()
+}
+
+// EvictQualified removes one exact semantic Guest record without exposing its
+// cache domain or mutable invocation fields.
+func (store *Store) EvictQualified(qualified QualifiedGuestInvocation) error {
+	key, _, err := qualified.Identity()
+	if err != nil {
+		return ErrGuestQualification
+	}
+	return store.evict("fresh-guest", key)
 }
 
 func SemanticWholeRunDependencies(invocation Invocation) ([]semantic.Dependency, error) {

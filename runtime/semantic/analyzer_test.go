@@ -45,6 +45,43 @@ func TestAnalyzeUsesOptionalExactGuestSurfaceAndChecksBindings(t *testing.T) {
 	}
 }
 
+func TestAnalyzeVerifiedWithholdsAuthorityAndReturnsDetachedReports(t *testing.T) {
+	bindings := semantic.Bindings{
+		ArtifactSHA256: digestFor('1'), ExecutionProfileSHA256: digestFor('2'),
+		ImportClosureSHA256: digestFor('3'), CapabilityPlanSHA256: digestFor('4'),
+	}
+	request, err := semantic.NewRequest("result = 1", bindings, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeSemanticRunner{bindings: bindings}
+	verified, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report.AnalyzerSHA256 = digestFor('9')
+	again, err := verified.Analysis()
+	if err != nil || again.AnalyzerSHA256 == report.AnalyzerSHA256 {
+		t.Fatalf("detached report=%+v err=%v", again, err)
+	}
+	for name, mutate := range map[string]func(*fakeSemanticRunner){
+		"workspace": func(value *fakeSemanticRunner) { value.workspace = true },
+		"broker":    func(value *fakeSemanticRunner) { value.broker = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := &fakeSemanticRunner{bindings: bindings}
+			mutate(candidate)
+			if _, err := semantic.AnalyzeVerified(context.Background(), candidate, request); !errors.Is(err, semantic.ErrAnalyzerEngineBinding) {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
 func TestNewRequestProjectsTypedCapabilityMetadataAndRejectsAmbiguity(t *testing.T) {
 	policy := capability.DemoCatalogPolicy{Endpoint: "http://127.0.0.1:1", Timeout: time.Second, MaxResponseBytes: 1024}
 	spec, grant, err := capability.DemoCatalogDefinition(policy)
@@ -77,9 +114,11 @@ func TestNewRequestProjectsTypedCapabilityMetadataAndRejectsAmbiguity(t *testing
 }
 
 type fakeSemanticRunner struct {
-	calls    int
-	mismatch bool
-	bindings semantic.Bindings
+	calls     int
+	mismatch  bool
+	workspace bool
+	broker    bool
+	bindings  semantic.Bindings
 }
 
 func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []byte) ([]byte, error) {
@@ -112,8 +151,11 @@ func (runner *fakeSemanticRunner) Run(context.Context, []byte, string) ([]byte, 
 func (runner *fakeSemanticRunner) Close(context.Context) error { return nil }
 func (runner *fakeSemanticRunner) Properties() enginecontract.Properties {
 	return enginecontract.Properties{
-		Backend: "fake", ArtifactSHA256: runner.bindings.ArtifactSHA256,
+		Backend: "fake", ExecutionProfileID: "base", AllowedImports: []string{"sys"},
+		ArtifactSHA256: runner.bindings.ArtifactSHA256, ManifestSHA256: digestFor('7'),
+		AvailableImports: []string{"sys"}, QualifiedImports: []string{"sys"},
 		ExecutionProfileBindingSHA256: runner.bindings.ExecutionProfileSHA256,
+		WorkspaceMounted:              runner.workspace, CapabilityBrokerAvailable: runner.broker,
 	}
 }
 

@@ -96,7 +96,7 @@ func decodeQualifiedGuestResult(payload []byte) ([]byte, error) {
 // requirements declarations that must be admitted before a retained hit.
 func GuestRequestContractSHA256(raw []byte) (string, error) {
 	request, err := runtimeconfig.DecodeRunRequest(raw)
-	if err != nil || request.Compatibility == nil {
+	if err != nil || request.Compatibility == nil || len(request.Requirements) != 0 {
 		return "", ErrGuestQualification
 	}
 	descriptor := struct {

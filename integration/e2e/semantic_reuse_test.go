@@ -44,9 +44,13 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	analysis, err := semantic.Analyze(context.Background(), analysisRunner, analysisRequest)
+	verifiedAnalysis, err := semantic.AnalyzeVerified(context.Background(), analysisRunner, analysisRequest)
+	analysis, reportErr := verifiedAnalysis.Analysis()
 	if closeErr := analysisRunner.Close(context.Background()); err == nil {
 		err = closeErr
+	}
+	if err == nil {
+		err = reportErr
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +65,10 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 	})
 	if err != nil || !plan.Regions[0].Reusable() {
 		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+	verifiedPlan, err := semantic.BindVerifiedWholeRunPlan(verifiedAnalysis, plan)
+	if err != nil {
+		t.Fatal(err)
 	}
 	request, err := json.Marshal(map[string]any{
 		"run_id": "semantic-reuse", "code": code,
@@ -104,7 +112,7 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			result, executeErr := pass.ExecuteGuest(context.Background(), invocation, analysis, plan, compute)
+			result, executeErr := pass.ExecuteGuest(context.Background(), invocation, verifiedPlan, compute)
 			outcomes <- outcome{result: result, err: executeErr}
 		}()
 	}
@@ -123,7 +131,7 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 		t.Fatalf("physical=%d dispositions=%v", physical.Load(), dispositions)
 	}
 	retainedStarted := time.Now()
-	retained, err := pass.ExecuteGuest(context.Background(), invocation, analysis, plan, compute)
+	retained, err := pass.ExecuteGuest(context.Background(), invocation, verifiedPlan, compute)
 	retainedMicros := time.Since(retainedStarted).Microseconds()
 	if err != nil || retained.Disposition != agentfunction.Retained || retained.PhysicalExecutionID != "" || physical.Load() != 1 {
 		t.Fatalf("retained=%+v physical=%d err=%v", retained, physical.Load(), err)
@@ -149,7 +157,7 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 	}
 	t.Logf("semantic_reuse_observation=%s", evidence)
 	disabled := &semanticreuse.Pass{FunctionEngine: pass.FunctionEngine}
-	if _, err := disabled.ExecuteGuest(context.Background(), invocation, analysis, plan, compute); !errorsIsReuseQualification(err) {
+	if _, err := disabled.ExecuteGuest(context.Background(), invocation, verifiedPlan, compute); !errorsIsReuseQualification(err) {
 		t.Fatalf("disabled optimizer error=%v", err)
 	}
 }

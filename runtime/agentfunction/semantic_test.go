@@ -1,29 +1,32 @@
 package agentfunction_test
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
-func TestQualifiedGuestInvocationIsOpaquePlanBoundAndRequestBound(t *testing.T) {
+func TestQualifiedGuestInvocationRequiresVerifiedProvenanceAndCompatibility(t *testing.T) {
 	invocation := cacheableInvocation()
+	invocation.ImportClosureSHA256 = agentfunction.ImportClosureIdentity([]string{"sys"}, []string{"sys"})
 	request := qualifiedSemanticRequest(t, []string{})
+	decoded, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceDigest := sha256.Sum256([]byte(decoded.Code))
+	invocation.FunctionSourceSHA256 = fmt.Sprintf("sha256:%x", sourceDigest[:])
 	analysis := semanticAnalysisFor(invocation)
-	dependencies, err := agentfunction.SemanticWholeRunDependencies(invocation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plan, _, err := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{
-		Dependencies: dependencies, InputsCanonical: true, OutputsCanonical: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, analysis, plan, request)
+	verified := verifiedSemanticPlanFor(t, invocation, analysis)
+	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,15 +34,48 @@ func TestQualifiedGuestInvocationIsOpaquePlanBoundAndRequestBound(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedRequest := qualifiedSemanticRequest(t, []string{"sys"})
-	changedQualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, analysis, plan, changedRequest)
+
+	if _, err := agentfunction.NewQualifiedGuestInvocation(invocation, semantic.VerifiedWholeRunPlan{}, request); !errors.Is(err, agentfunction.ErrGuestQualification) {
+		t.Fatalf("forged provenance error=%v", err)
+	}
+
+	mismatchedImports := qualifiedSemanticRequest(t, []string{"sys"})
+	if _, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, mismatchedImports); !errors.Is(err, agentfunction.ErrGuestQualification) {
+		t.Fatalf("compatibility error=%v", err)
+	}
+
+	var unsupported map[string]any
+	if err := json.Unmarshal(request, &unsupported); err != nil {
+		t.Fatal(err)
+	}
+	unsupported["requirements"] = []string{"browser_runtime"}
+	unsupportedRequest, err := json.Marshal(unsupported)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedKey, _, _ := changedQualified.Identity()
-	if changedKey == baseKey {
-		t.Fatal("compatibility contract did not change identity")
+	if _, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, unsupportedRequest); !errors.Is(err, agentfunction.ErrGuestQualification) {
+		t.Fatalf("requirements error=%v", err)
 	}
+
+	for name, mutate := range map[string]func(*semantic.Analysis){
+		"analyzer":        func(value *semantic.Analysis) { value.AnalyzerSHA256 = digest('d') },
+		"capability plan": func(value *semantic.Analysis) { value.CapabilityPlanSHA256 = digest('e') },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := analysis
+			mutate(&changed)
+			changedVerified := verifiedSemanticPlanFor(t, invocation, changed)
+			changedQualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, changedVerified, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			changedKey, _, _ := changedQualified.Identity()
+			if changedKey == baseKey {
+				t.Fatal("semantic qualification change did not change identity")
+			}
+		})
+	}
+
 	for name, mutate := range map[string]func(*agentfunction.Invocation){
 		"source":   func(value *agentfunction.Invocation) { value.FunctionSourceSHA256 = digest('a') },
 		"artifact": func(value *agentfunction.Invocation) { value.ArtifactSHA256 = digest('b') },
@@ -51,16 +87,85 @@ func TestQualifiedGuestInvocationIsOpaquePlanBoundAndRequestBound(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			candidate := invocation
 			mutate(&candidate)
-			if _, err := agentfunction.NewQualifiedGuestInvocation(candidate, analysis, plan, request); !errors.Is(err, agentfunction.ErrGuestQualification) {
+			if _, err := agentfunction.NewQualifiedGuestInvocation(candidate, verified, request); !errors.Is(err, agentfunction.ErrGuestQualification) {
 				t.Fatalf("error=%v", err)
 			}
 		})
 	}
-	unsafe := plan
-	unsafe.Regions = append([]semantic.Region{}, plan.Regions...)
-	unsafe.Regions[0].Effects.MayObserveLive = true
-	if _, err := agentfunction.NewQualifiedGuestInvocation(invocation, analysis, unsafe, request); !errors.Is(err, agentfunction.ErrGuestQualification) {
+
+	unsafeAnalysis := analysis
+	unsafeAnalysis.ModuleEffects.MayObserveLive = true
+	unsafeVerified := verifiedSemanticPlanFor(t, invocation, unsafeAnalysis)
+	if _, err := agentfunction.NewQualifiedGuestInvocation(invocation, unsafeVerified, request); !errors.Is(err, agentfunction.ErrGuestQualification) {
 		t.Fatalf("unsafe error=%v", err)
+	}
+}
+
+func verifiedSemanticPlanFor(t *testing.T, invocation agentfunction.Invocation, template semantic.Analysis) semantic.VerifiedWholeRunPlan {
+	t.Helper()
+	bindings := semantic.Bindings{
+		ArtifactSHA256: invocation.ArtifactSHA256, ExecutionProfileSHA256: invocation.ExecutionProfileSHA256,
+		ImportClosureSHA256: invocation.ImportClosureSHA256, CapabilityPlanSHA256: template.CapabilityPlanSHA256,
+	}
+	request, err := semantic.NewRequest("result = 1", bindings, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &verifiedFixtureRunner{template: template, bindings: bindings}
+	verifiedAnalysis, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := verifiedAnalysis.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependencies, err := agentfunction.SemanticWholeRunDependencies(invocation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, _, err := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{
+		Dependencies: dependencies, InputsCanonical: true, OutputsCanonical: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedPlan, err := semantic.BindVerifiedWholeRunPlan(verifiedAnalysis, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return verifiedPlan
+}
+
+type verifiedFixtureRunner struct {
+	template semantic.Analysis
+	bindings semantic.Bindings
+}
+
+func (runner *verifiedFixtureRunner) AnalyzeSemantic(_ context.Context, payload []byte) ([]byte, error) {
+	var request semantic.Request
+	if err := json.Unmarshal(payload, &request); err != nil {
+		return nil, err
+	}
+	sourceDigest := sha256.Sum256([]byte(request.Source))
+	analysis := runner.template
+	analysis.SourceSHA256 = fmt.Sprintf("sha256:%x", sourceDigest[:])
+	analysis.ArtifactSHA256 = request.Bindings.ArtifactSHA256
+	analysis.ExecutionProfileSHA256 = request.Bindings.ExecutionProfileSHA256
+	analysis.ImportClosureSHA256 = request.Bindings.ImportClosureSHA256
+	analysis.CapabilityPlanSHA256 = request.Bindings.CapabilityPlanSHA256
+	return json.Marshal(analysis)
+}
+func (runner *verifiedFixtureRunner) Run(context.Context, []byte, string) ([]byte, error) {
+	return nil, nil
+}
+func (runner *verifiedFixtureRunner) Close(context.Context) error { return nil }
+func (runner *verifiedFixtureRunner) Properties() enginecontract.Properties {
+	return enginecontract.Properties{
+		Backend: "verified-fixture", ExecutionProfileID: "base", AllowedImports: []string{"sys"},
+		AvailableImports: []string{"sys"}, QualifiedImports: []string{"sys"},
+		ArtifactSHA256: runner.bindings.ArtifactSHA256, ManifestSHA256: digest('f'),
+		ExecutionProfileBindingSHA256: runner.bindings.ExecutionProfileSHA256,
 	}
 }
 

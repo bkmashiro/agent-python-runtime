@@ -12,7 +12,7 @@ import (
 
 func TestPassIsDefaultOff(t *testing.T) {
 	pass := &semanticreuse.Pass{}
-	result, err := pass.ExecuteGuest(context.Background(), agentfunction.Invocation{}, semantic.Analysis{}, semantic.Plan{}, agentfunction.FreshGuestCompute{})
+	result, err := pass.ExecuteGuest(context.Background(), agentfunction.Invocation{}, semantic.VerifiedWholeRunPlan{}, agentfunction.FreshGuestCompute{})
 	if !errors.Is(err, semanticreuse.ErrReuseQualification) || len(result.Value) != 0 || pass.Stats().Attempts != 0 {
 		t.Fatalf("result=%+v stats=%+v err=%v", result, pass.Stats(), err)
 	}

@@ -443,12 +443,16 @@ func (store *Store) put(domain, key string, result []byte) error {
 }
 
 func (store *Store) Evict(key string) error {
+	return store.evict("callback", key)
+}
+
+func (store *Store) evict(domain, key string) error {
 	if store == nil {
 		return ErrInvalidStore
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	path, ok := store.path(cacheStorageKey("callback", key))
+	path, ok := store.path(cacheStorageKey(domain, key))
 	if !ok {
 		return ErrInvalidInvocation
 	}

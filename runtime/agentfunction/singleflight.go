@@ -42,6 +42,9 @@ func (group *FlightGroup) Do(ctx context.Context, key string, function func() (R
 		group.mu.Unlock()
 		select {
 		case <-existing.done:
+			if err := ctx.Err(); err != nil {
+				return Result{}, err
+			}
 			result := existing.result
 			result.Value = append([]byte(nil), result.Value...)
 			result.Shared = true

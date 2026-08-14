@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-const ObservationIdentitySchemaVersion = "pysolate.staged-observation.v1"
+const ObservationIdentitySchemaVersion = "pysolate.staged-observation.v2"
 
 var (
 	ErrInvalidObservationIdentity   = errors.New("invalid staged observation identity")
@@ -18,27 +18,36 @@ var (
 
 var observationTokenPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`)
 
+const (
+	ObservationBindingStreamSuite  = "stream_suite"
+	ObservationBindingSemanticCall = "semantic_call"
+)
+
 // ObservationIdentity binds one staged read to its exact source occurrence and
 // Host policy context. It contains identities only, never result bodies, paths,
 // endpoints, credentials, or authority handles.
 type ObservationIdentity struct {
-	SchemaVersion       string    `json:"schema_version"`
-	StreamEpoch         string    `json:"stream_epoch"`
-	WorkflowEpoch       string    `json:"workflow_epoch"`
-	SourceSHA256        string    `json:"source_sha256,omitempty"`
-	SuiteRange          ByteRange `json:"suite_range"`
-	SuiteSHA256         string    `json:"suite_sha256"`
-	DynamicOccurrence   uint32    `json:"dynamic_occurrence"`
-	ArgumentsSHA256     string    `json:"arguments_sha256"`
-	Capability          string    `json:"capability"`
-	SpecSHA256          string    `json:"spec_sha256"`
-	HandlerIdentity     string    `json:"handler_identity"`
-	PlanSHA256          string    `json:"plan_sha256"`
-	GrantPolicySHA256   string    `json:"grant_policy_sha256"`
-	FreshnessEpoch      string    `json:"freshness_epoch"`
-	ExpiryEpoch         string    `json:"expiry_epoch"`
-	PrivacyPartition    string    `json:"privacy_partition"`
-	ParentLineageSHA256 string    `json:"parent_lineage_sha256"`
+	SchemaVersion           string    `json:"schema_version"`
+	BindingKind             string    `json:"binding_kind"`
+	StreamEpoch             string    `json:"stream_epoch"`
+	WorkflowEpoch           string    `json:"workflow_epoch"`
+	SourceSHA256            string    `json:"source_sha256,omitempty"`
+	SuiteRange              ByteRange `json:"suite_range,omitempty"`
+	SuiteSHA256             string    `json:"suite_sha256,omitempty"`
+	CallSiteID              string    `json:"call_site_id,omitempty"`
+	ClaimIdentitySHA256     string    `json:"claim_identity_sha256,omitempty"`
+	BudgetReservationSHA256 string    `json:"budget_reservation_sha256,omitempty"`
+	DynamicOccurrence       uint32    `json:"dynamic_occurrence"`
+	ArgumentsSHA256         string    `json:"arguments_sha256"`
+	Capability              string    `json:"capability"`
+	SpecSHA256              string    `json:"spec_sha256"`
+	HandlerIdentity         string    `json:"handler_identity"`
+	PlanSHA256              string    `json:"plan_sha256"`
+	GrantPolicySHA256       string    `json:"grant_policy_sha256"`
+	FreshnessEpoch          string    `json:"freshness_epoch"`
+	ExpiryEpoch             string    `json:"expiry_epoch"`
+	PrivacyPartition        string    `json:"privacy_partition"`
+	ParentLineageSHA256     string    `json:"parent_lineage_sha256"`
 }
 
 // Validate validates a provisional or sealed identity. Sealed identities must
@@ -47,9 +56,7 @@ func (identity ObservationIdentity) Validate(sealed bool) error {
 	if identity.SchemaVersion != ObservationIdentitySchemaVersion ||
 		!observationTokenPattern.MatchString(identity.StreamEpoch) ||
 		!observationTokenPattern.MatchString(identity.WorkflowEpoch) ||
-		identity.SuiteRange.Start < 0 || identity.SuiteRange.End <= identity.SuiteRange.Start ||
 		identity.DynamicOccurrence == 0 ||
-		!validObservationDigest(identity.SuiteSHA256) ||
 		!validObservationDigest(identity.ArgumentsSHA256) ||
 		!observationTokenPattern.MatchString(identity.Capability) ||
 		!validObservationDigest(identity.SpecSHA256) ||
@@ -63,6 +70,22 @@ func (identity ObservationIdentity) Validate(sealed bool) error {
 		return ErrInvalidObservationIdentity
 	}
 	if sealed != validObservationDigest(identity.SourceSHA256) {
+		return ErrInvalidObservationIdentity
+	}
+	switch identity.BindingKind {
+	case ObservationBindingStreamSuite:
+		if identity.SuiteRange.Start < 0 || identity.SuiteRange.End <= identity.SuiteRange.Start ||
+			!validObservationDigest(identity.SuiteSHA256) || identity.CallSiteID != "" ||
+			identity.ClaimIdentitySHA256 != "" || identity.BudgetReservationSHA256 != "" {
+			return ErrInvalidObservationIdentity
+		}
+	case ObservationBindingSemanticCall:
+		if !sealed || identity.SuiteRange != (ByteRange{}) || identity.SuiteSHA256 != "" ||
+			!validObservationDigest(identity.CallSiteID) || !validObservationDigest(identity.ClaimIdentitySHA256) ||
+			!validObservationDigest(identity.BudgetReservationSHA256) {
+			return ErrInvalidObservationIdentity
+		}
+	default:
 		return ErrInvalidObservationIdentity
 	}
 	return nil

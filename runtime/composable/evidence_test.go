@@ -81,8 +81,8 @@ func selectedModes(t *testing.T) runtimeconfig.MechanismEvidence {
 
 func observationIdentity() streaming.ObservationIdentity {
 	return streaming.ObservationIdentity{
-		SchemaVersion: streaming.ObservationIdentitySchemaVersion,
-		StreamEpoch:   "stream-1", WorkflowEpoch: "workflow-1", SourceSHA256: digest('1'), SuiteSHA256: digest('2'), SuiteRange: streaming.ByteRange{Start: 0, End: 10},
+		SchemaVersion: streaming.ObservationIdentitySchemaVersion, BindingKind: streaming.ObservationBindingStreamSuite,
+		StreamEpoch: "stream-1", WorkflowEpoch: "workflow-1", SourceSHA256: digest('1'), SuiteSHA256: digest('2'), SuiteRange: streaming.ByteRange{Start: 0, End: 10},
 		DynamicOccurrence: 1, ArgumentsSHA256: digest('3'), Capability: "fixture.read", SpecSHA256: digest('4'),
 		HandlerIdentity: "fixture-handler-v1", PlanSHA256: digest('5'), GrantPolicySHA256: digest('6'),
 		FreshnessEpoch: "freshness-1", ExpiryEpoch: "expiry-1", PrivacyPartition: "project-private", ParentLineageSHA256: digest('9'),

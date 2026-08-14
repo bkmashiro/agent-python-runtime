@@ -12,19 +12,20 @@ type MechanismDisposition string
 type MechanismReason string
 
 const (
-	MechanismColdIOContinuation MechanismName = "cold_io_continuation"
-	MechanismStreaming          MechanismName = "streaming"
-	MechanismStagedObservation  MechanismName = "staged_observation"
-	MechanismPrivateWorkspace   MechanismName = "private_workspace"
-	MechanismImmutableBranches  MechanismName = "immutable_branches"
-	MechanismChildFanout        MechanismName = "child_fanout"
-	MechanismFunctionCache      MechanismName = "function_cache"
-	MechanismSingleFlight       MechanismName = "single_flight"
-	MechanismFreshReevaluation  MechanismName = "fresh_reevaluation"
-	MechanismPreparedRuntime    MechanismName = "prepared_runtime"
-	MechanismMemoryCOW          MechanismName = "memory_cow"
-	MechanismSemanticAnalysis   MechanismName = "semantic_analysis"
-	MechanismSemanticReuse      MechanismName = "semantic_reuse"
+	MechanismColdIOContinuation  MechanismName = "cold_io_continuation"
+	MechanismStreaming           MechanismName = "streaming"
+	MechanismStagedObservation   MechanismName = "staged_observation"
+	MechanismPrivateWorkspace    MechanismName = "private_workspace"
+	MechanismImmutableBranches   MechanismName = "immutable_branches"
+	MechanismChildFanout         MechanismName = "child_fanout"
+	MechanismFunctionCache       MechanismName = "function_cache"
+	MechanismSingleFlight        MechanismName = "single_flight"
+	MechanismFreshReevaluation   MechanismName = "fresh_reevaluation"
+	MechanismPreparedRuntime     MechanismName = "prepared_runtime"
+	MechanismMemoryCOW           MechanismName = "memory_cow"
+	MechanismSemanticAnalysis    MechanismName = "semantic_analysis"
+	MechanismSemanticPreDispatch MechanismName = "semantic_pre_dispatch"
+	MechanismSemanticReuse       MechanismName = "semantic_reuse"
 
 	MechanismOff      MechanismDisposition = "off"
 	MechanismSelected MechanismDisposition = "selected"
@@ -49,6 +50,7 @@ var mechanismNames = []MechanismName{
 	MechanismPreparedRuntime,
 	MechanismPrivateWorkspace,
 	MechanismSemanticAnalysis,
+	MechanismSemanticPreDispatch,
 	MechanismSemanticReuse,
 	MechanismSingleFlight,
 	MechanismStagedObservation,
@@ -58,26 +60,30 @@ var mechanismNames = []MechanismName{
 // MechanismSet is an internal Host-owned feature set. Zero value means ordinary
 // fresh execution with every optional mechanism disabled.
 type MechanismSet struct {
-	Streaming          bool
-	StagedObservation  bool
-	PrivateWorkspace   bool
-	ImmutableBranches  bool
-	ChildFanout        bool
-	FunctionCache      bool
-	SingleFlight       bool
-	FreshReevaluation  bool
-	PreparedRuntime    bool
-	MemoryCOW          bool
-	ColdIOContinuation bool
-	SemanticAnalysis   bool
-	SemanticReuse      bool
+	Streaming           bool
+	StagedObservation   bool
+	PrivateWorkspace    bool
+	ImmutableBranches   bool
+	ChildFanout         bool
+	FunctionCache       bool
+	SingleFlight        bool
+	FreshReevaluation   bool
+	PreparedRuntime     bool
+	MemoryCOW           bool
+	ColdIOContinuation  bool
+	SemanticAnalysis    bool
+	SemanticPreDispatch bool
+	SemanticReuse       bool
 }
 
 func (set MechanismSet) Validate() error {
 	if set.Streaming && !set.PrivateWorkspace {
 		return ErrInvalidMechanismSet
 	}
-	if set.StagedObservation && !set.Streaming {
+	if set.StagedObservation && !set.Streaming && !set.SemanticPreDispatch {
+		return ErrInvalidMechanismSet
+	}
+	if set.SemanticPreDispatch && (!set.SemanticAnalysis || !set.StagedObservation) {
 		return ErrInvalidMechanismSet
 	}
 	if set.ChildFanout && (!set.Streaming || !set.ImmutableBranches) {
@@ -137,6 +143,8 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.MemoryCOW
 	case MechanismSemanticAnalysis:
 		return set.SemanticAnalysis
+	case MechanismSemanticPreDispatch:
+		return set.SemanticPreDispatch
 	case MechanismSemanticReuse:
 		return set.SemanticReuse
 	default:
@@ -170,6 +178,8 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.MemoryCOW = enabled
 	case MechanismSemanticAnalysis:
 		set.SemanticAnalysis = enabled
+	case MechanismSemanticPreDispatch:
+		set.SemanticPreDispatch = enabled
 	case MechanismSemanticReuse:
 		set.SemanticReuse = enabled
 	}

@@ -26,6 +26,8 @@ func TestMechanismDependenciesFailClosed(t *testing.T) {
 	}{
 		{"streaming without private workspace", runtime.MechanismSet{Streaming: true}},
 		{"staged observation without streaming", runtime.MechanismSet{StagedObservation: true}},
+		{"semantic pre-dispatch without analysis", runtime.MechanismSet{SemanticPreDispatch: true, StagedObservation: true}},
+		{"semantic pre-dispatch without staged observation", runtime.MechanismSet{SemanticPreDispatch: true, SemanticAnalysis: true}},
 		{"fanout without streaming", runtime.MechanismSet{ImmutableBranches: true, ChildFanout: true}},
 		{"fanout without branches", runtime.MechanismSet{Streaming: true, ChildFanout: true}},
 		{"function cache without branches", runtime.MechanismSet{FunctionCache: true}},

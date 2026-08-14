@@ -148,6 +148,33 @@ func TestStagedObservationTerminalDispositionPreventsConsume(t *testing.T) {
 	}
 }
 
+func TestSemanticCallObservationIdentityRequiresExactClaimAndBudget(t *testing.T) {
+	identity := observationIdentity()
+	identity.BindingKind = streaming.ObservationBindingSemanticCall
+	identity.SuiteRange = streaming.ByteRange{}
+	identity.SuiteSHA256 = ""
+	identity.CallSiteID = digest('1')
+	identity.ClaimIdentitySHA256 = digest('2')
+	identity.BudgetReservationSHA256 = digest('3')
+	if err := identity.Validate(true); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*streaming.ObservationIdentity){
+		"call site": func(value *streaming.ObservationIdentity) { value.CallSiteID = "" },
+		"claim":     func(value *streaming.ObservationIdentity) { value.ClaimIdentitySHA256 = "" },
+		"budget":    func(value *streaming.ObservationIdentity) { value.BudgetReservationSHA256 = "" },
+		"suite":     func(value *streaming.ObservationIdentity) { value.SuiteRange = streaming.ByteRange{Start: 1, End: 2} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := identity
+			mutate(&candidate)
+			if err := candidate.Validate(true); !errors.Is(err, streaming.ErrInvalidObservationIdentity) {
+				t.Fatalf("Validate() error=%v", err)
+			}
+		})
+	}
+}
+
 func TestObservationIdentityContainsOnlyBoundedIdentityFields(t *testing.T) {
 	identity := observationIdentity()
 	if err := identity.Validate(true); err != nil {
@@ -167,6 +194,7 @@ func TestObservationIdentityContainsOnlyBoundedIdentityFields(t *testing.T) {
 func observationIdentity() streaming.ObservationIdentity {
 	return streaming.ObservationIdentity{
 		SchemaVersion:       streaming.ObservationIdentitySchemaVersion,
+		BindingKind:         streaming.ObservationBindingStreamSuite,
 		StreamEpoch:         "stream-1",
 		WorkflowEpoch:       "workflow-1",
 		SourceSHA256:        digest('f'),

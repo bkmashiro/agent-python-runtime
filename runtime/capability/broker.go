@@ -18,10 +18,16 @@ const maxCallBytes = 1 << 20
 var ErrInvalidBroker = errors.New("invalid Host tool broker")
 
 type Config struct {
-	RunIdentity string
-	Plan        *Plan
-	Playback    *PlaybackConfig
-	Branch      *BranchConfig
+	RunIdentity   string
+	Plan          *Plan
+	Playback      *PlaybackConfig
+	Branch        *BranchConfig
+	StagedClaimer StagedObservationClaimer
+}
+
+type StagedObservationClaimer interface {
+	Claim(context.Context, string, json.RawMessage) (json.RawMessage, error)
+	Finalize(bool) error
 }
 
 type Broker struct {
@@ -56,7 +62,8 @@ type callError struct {
 }
 
 func NewBroker(config Config) (*Broker, error) {
-	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 || (config.Playback != nil && config.Branch != nil) {
+	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 ||
+		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -149,6 +156,28 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
 	}
 	call.Arguments = arguments
+	if broker.config.StagedClaimer != nil {
+		qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
+		if !qualified || !qualification.Eligible() || (registered.spec.EffectClass != EffectPure && registered.spec.EffectClass != EffectWorkspaceRead && registered.spec.EffectClass != EffectExternalRead) {
+			broker.record(call, operation, "denied", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "staged_observation_unqualified", Message: "capability is not eligible for staged observation"}})
+		}
+		staged, claimErr := broker.config.StagedClaimer.Claim(ctx, call.Capability, append(json.RawMessage(nil), arguments...))
+		if claimErr != nil {
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}})
+		}
+		canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, staged)
+		if resultErr == nil {
+			resultErr = validateSpecResultSemantics(registered.spec, canonicalResult)
+		}
+		if resultErr != nil || len(canonicalResult) > maxCallBytes {
+			broker.record(call, operation, "error", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
+		}
+		broker.record(call, operation, "ok", canonicalResult)
+		return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
+	}
 	if broker.branch != nil {
 		entry, live, matchErr := broker.matchBranch(operation, call.Capability, arguments)
 		if matchErr != nil {
@@ -297,17 +326,23 @@ func (broker *Broker) CallCount() uint32           { return broker.Calls() }
 
 // Finalize rejects unused offline records. CloseJournal remains a tiny lifecycle
 // hook; this runtime has no durable transaction journal.
-func (broker *Broker) Finalize(bool) error {
+func (broker *Broker) Finalize(success bool) error {
 	if broker == nil {
 		return ErrInvalidBroker
 	}
 	broker.mu.Lock()
-	defer broker.mu.Unlock()
 	if broker.playbackEntries != nil && (broker.playbackFailed || len(broker.playbackConsumed) != len(broker.playbackEntries)) {
+		broker.mu.Unlock()
 		return ErrPlaybackIncomplete
 	}
 	if err := broker.finalizeBranch(); err != nil {
+		broker.mu.Unlock()
 		return err
+	}
+	claimer := broker.config.StagedClaimer
+	broker.mu.Unlock()
+	if claimer != nil {
+		return claimer.Finalize(success)
 	}
 	return nil
 }

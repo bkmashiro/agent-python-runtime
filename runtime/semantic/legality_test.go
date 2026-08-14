@@ -154,6 +154,12 @@ func legalityVerifiedAnalysis(t *testing.T, plan *capability.Plan, necessarilyRe
 }
 
 func legalityTestPlan(t *testing.T, qualified bool) *capability.Plan {
+	return legalityTestPlanWithHandler(t, qualified, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"value":"ok"}`), nil
+	}))
+}
+
+func legalityTestPlanWithHandler(t *testing.T, qualified bool, handler capability.Handler) *capability.Plan {
 	t.Helper()
 	registry := capability.NewRegistry()
 	grant, err := capability.NewGrant(json.RawMessage(`{"principal":"test"}`))
@@ -175,9 +181,7 @@ func legalityTestPlan(t *testing.T, qualified bool) *capability.Plan {
 			Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
 		}
 	}
-	if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		return json.RawMessage(`{"value":"ok"}`), nil
-	})); err != nil {
+	if err := registry.Register(spec, grant, handler); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})

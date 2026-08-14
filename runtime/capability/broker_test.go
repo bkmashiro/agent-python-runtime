@@ -3,6 +3,7 @@ package capability_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync/atomic"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 
 func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
 	registry := capability.NewRegistry()
-	if err := registry.Register(basicSpec("workspace.read_text", "test.workspace.read-text.v1"), basicGrant(t), capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"text":"hello"}`), nil
 	})); err != nil {
 		t.Fatal(err)
@@ -83,6 +84,150 @@ func TestStreamingBrokerDeniesWriteEvenThroughRawBridge(t *testing.T) {
 	if err != nil || containsCode(response, "streaming_write_denied") || calls.Load() != 1 {
 		t.Fatalf("sealed response=%s calls=%d err=%v", response, calls.Load(), err)
 	}
+}
+
+func TestBrokerClaimsExactStagedObservationWithoutCallingLiveHandler(t *testing.T) {
+	var liveCalls atomic.Uint32
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		liveCalls.Add(1)
+		return json.RawMessage(`{"text":"live"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimer := &stagedClaimer{capability: "workspace.read_text", arguments: json.RawMessage(`{"path":"note.txt"}`), result: json.RawMessage(`{"text":"staged"}`)}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`))
+	if err != nil || liveCalls.Load() != 0 || !json.Valid(response) || !containsResult(response, "staged") {
+		t.Fatalf("response=%s live=%d err=%v", response, liveCalls.Load(), err)
+	}
+	if receipts := broker.SnapshotReceipts(); len(receipts) != 1 || receipts[0].Outcome != "ok" {
+		t.Fatalf("receipts=%#v", receipts)
+	}
+}
+
+func TestBrokerFailsClosedWhenConfiguredStageRejectsDynamicClaim(t *testing.T) {
+	var liveCalls atomic.Uint32
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		liveCalls.Add(1)
+		return json.RawMessage(`{"text":"live"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	claimer := &stagedClaimer{claimErr: errors.New("exact claim mismatch")}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"workspace.read_text","arguments":{"path":"other.txt"}}`))
+	if err != nil || liveCalls.Load() != 0 || !containsCode(response, "staged_observation_mismatch") {
+		t.Fatalf("response=%s live=%d err=%v", response, liveCalls.Load(), err)
+	}
+}
+
+type stagedClaimer struct {
+	capability string
+	arguments  json.RawMessage
+	result     json.RawMessage
+	claimErr   error
+}
+
+func (claimer *stagedClaimer) Finalize(bool) error { return nil }
+
+func (claimer *stagedClaimer) Claim(_ context.Context, capabilityName string, arguments json.RawMessage) (json.RawMessage, error) {
+	if claimer.claimErr != nil {
+		return nil, claimer.claimErr
+	}
+	if capabilityName != claimer.capability || string(arguments) != string(claimer.arguments) {
+		return nil, errors.New("exact staged claim mismatch")
+	}
+	return append(json.RawMessage(nil), claimer.result...), nil
+}
+
+func TestBrokerRejectsStagedClaimerForUnqualifiedCapability(t *testing.T) {
+	var liveCalls atomic.Uint32
+	registry := capability.NewRegistry()
+	if err := registry.Register(basicSpec("plain.read", "test.plain.read.v1"), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		liveCalls.Add(1)
+		return json.RawMessage(`{}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	claimer := &stagedClaimer{capability: "plain.read", arguments: json.RawMessage(`{}`), result: json.RawMessage(`{}`)}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unqualified-stage", Plan: plan, StagedClaimer: claimer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"plain.read","arguments":{}}`))
+	if err != nil || liveCalls.Load() != 0 || !containsCode(response, "staged_observation_unqualified") {
+		t.Fatalf("response=%s live=%d err=%v", response, liveCalls.Load(), err)
+	}
+}
+
+func TestPreparedPreDispatchExecutesEligibleHandlerExactlyOnce(t *testing.T) {
+	var calls atomic.Uint32
+	registry := capability.NewRegistry()
+	spec := basicSpec("sources.read", "test.sources.read.v1")
+	spec.EffectClass = capability.EffectExternalRead
+	spec.InputSchema = json.RawMessage(`{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`)
+	spec.OutputSchema = json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`)
+	spec.Python = &capability.PythonProjection{Module: "sources", Method: "read", Arguments: []string{"key"}}
+	spec.ReadOnly, spec.Idempotent = true, true
+	spec.PreDispatch = &capability.PreDispatchContract{
+		Resource:  capability.ResourceReference{Namespace: "source", Argument: "key"},
+		Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+	}
+	if err := registry.Register(spec, basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		calls.Add(1)
+		return json.RawMessage(`{"value":"ready"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	prepared, err := plan.PreparePreDispatch("sources.read", json.RawMessage(`{"key":"a"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := prepared.Call(context.Background())
+	if err != nil || string(result) != `{"value":"ready"}` || calls.Load() != 1 {
+		t.Fatalf("result=%s calls=%d err=%v", result, calls.Load(), err)
+	}
+	if _, err := prepared.Call(context.Background()); !errors.Is(err, capability.ErrPreDispatchAlreadyStarted) || calls.Load() != 1 {
+		t.Fatalf("second call err=%v calls=%d", err, calls.Load())
+	}
+}
+
+func stagedTestSpec() capability.Spec {
+	spec := basicSpec("workspace.read_text", "test.workspace.read-text.v1")
+	spec.EffectClass = capability.EffectWorkspaceRead
+	spec.InputSchema = json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`)
+	spec.OutputSchema = json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}`)
+	spec.Python = &capability.PythonProjection{Module: "workspace", Method: "read_text", Arguments: []string{"path"}}
+	spec.ReadOnly, spec.Idempotent = true, true
+	spec.PreDispatch = &capability.PreDispatchContract{
+		Resource:  capability.ResourceReference{Namespace: "workspace", Argument: "path"},
+		Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+	}
+	return spec
+}
+
+func containsResult(response []byte, text string) bool {
+	var decoded struct {
+		Result struct {
+			Text string `json:"text"`
+		} `json:"result"`
+	}
+	return json.Unmarshal(response, &decoded) == nil && decoded.Result.Text == text
 }
 
 func containsCode(response []byte, code string) bool {

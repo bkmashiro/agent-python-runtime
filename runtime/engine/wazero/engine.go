@@ -694,6 +694,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
 	var broker *capability.Broker
+	brokerFinalized := false
 	if engine.brokerFactory != nil {
 		broker, err = engine.brokerFactory(runContext)
 		if err != nil {
@@ -712,6 +713,12 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
+	defer func() {
+		if broker != nil && !brokerFinalized {
+			cancel()
+			runErr = errors.Join(runErr, broker.Finalize(false))
+		}
+	}()
 	runContext = context.WithValue(runContext, streamingContextKey{}, streaming)
 	for {
 		select {
@@ -736,6 +743,7 @@ prepareComplete:
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
 	if broker != nil {
+		brokerFinalized = true
 		if err := broker.Finalize(true); err != nil {
 			return nil, fmt.Errorf("finalize capability broker: %w", err)
 		}

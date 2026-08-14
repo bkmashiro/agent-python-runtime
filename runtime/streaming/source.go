@@ -108,7 +108,7 @@ func (seal SourceSeal) BindObservation(record *StagedObservation) error {
 	identity := record.identity
 	disposition := record.disposition
 	record.mu.Unlock()
-	if disposition != ObservationReady || identity.SourceSHA256 != "" {
+	if disposition != ObservationReady || identity.SourceSHA256 != "" || identity.BindingKind != ObservationBindingStreamSuite {
 		return ErrStagedObservationTerminal
 	}
 	admitted := false

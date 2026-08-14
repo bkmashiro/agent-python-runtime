@@ -265,9 +265,8 @@ func runTrial(artifact []byte, profile runtimeconfig.ExecutionProfile, source st
 
 type goroutineLauncher struct{}
 
-func (goroutineLauncher) Launch(task func()) error {
+func (goroutineLauncher) Launch(task func()) {
 	go task()
-	return nil
 }
 
 func median(rows []trial, condition string) int64 {

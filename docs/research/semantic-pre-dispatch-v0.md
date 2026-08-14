@@ -21,8 +21,9 @@ coalescing, caching, hoisting, replay or backend inference.
    canonical arguments, capability plan/grant/handler, epochs, privacy, lineage and
    budget-reservation identity.
 2. `PreDispatchBudget` atomically consumes that reservation before physical start.
-3. `SemanticPreDispatch.Start` requires an explicit Host `PreDispatchLauncher`; it never
-   creates an implicit goroutine or task.
+3. `SemanticPreDispatch.Start` requires an explicit Host `PreDispatchLauncher`; scheduler
+   capacity is acquired first, and `Launch` accepts exactly one eventual execution with no
+   ambiguous error return. The semantic package never creates an implicit goroutine or task.
 4. `capability.PreparedPreDispatch` executes the sealed eligible read handler exactly
    once and validates the output contract.
 5. The result is held in the existing Run-private `streaming.StagedObservation`, now

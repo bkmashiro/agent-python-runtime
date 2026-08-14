@@ -158,7 +158,6 @@ func TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall(t *testing.T) {
 
 type explicitGoroutineLauncher struct{}
 
-func (explicitGoroutineLauncher) Launch(task func()) error {
+func (explicitGoroutineLauncher) Launch(task func()) {
 	go task()
-	return nil
 }

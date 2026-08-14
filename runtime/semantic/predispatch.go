@@ -19,10 +19,12 @@ var (
 	ErrPreDispatchClaimMismatch   = errors.New("semantic pre-dispatch claim mismatch")
 )
 
-// PreDispatchLauncher makes physical concurrency an explicit Host decision. The
-// semantic consumer never creates a goroutine or hidden task.
+// PreDispatchLauncher makes physical concurrency an explicit Host decision. Launch
+// must accept exactly one eventual execution; callers acquire any fallible scheduler
+// capacity before Start. This removes an ambiguous "may have launched" error state.
+// The semantic consumer never creates a goroutine or hidden task.
 type PreDispatchLauncher interface {
-	Launch(func()) error
+	Launch(func())
 }
 
 // PreDispatchBudget atomically consumes distinct Host-authored reservation
@@ -136,14 +138,7 @@ func (controller *SemanticPreDispatch) Start(ctx context.Context, launcher PreDi
 	controller.issues++
 	controller.mu.Unlock()
 
-	if err := launcher.Launch(func() { controller.execute(ctx) }); err != nil {
-		controller.mu.Lock()
-		controller.runErr = err
-		controller.disposition = streaming.ObservationFailed
-		controller.closeDoneLocked()
-		controller.mu.Unlock()
-		return err
-	}
+	launcher.Launch(func() { controller.execute(ctx) })
 	return nil
 }
 

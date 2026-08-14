@@ -222,9 +222,8 @@ func TestSemanticPreDispatchUnclaimedResultHasTypedTerminalDisposition(t *testin
 
 type goroutineTestLauncher struct{}
 
-func (goroutineTestLauncher) Launch(task func()) error {
+func (goroutineTestLauncher) Launch(task func()) {
 	go task()
-	return nil
 }
 
 type queuedLauncher struct {
@@ -232,11 +231,10 @@ type queuedLauncher struct {
 	tasks []func()
 }
 
-func (launcher *queuedLauncher) Launch(task func()) error {
+func (launcher *queuedLauncher) Launch(task func()) {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	launcher.tasks = append(launcher.tasks, task)
-	return nil
 }
 
 func (launcher *queuedLauncher) Count() int {

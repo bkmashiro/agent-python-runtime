@@ -164,6 +164,9 @@ func DefaultDifferentialCases() []DifferentialCase {
 		{"freshness-mismatch", semantic.DivergenceFreshnessContextMismatch, func(trace *semantic.ObservableTrace) {
 			trace.Events[0].FreshnessSHA256 = differentialDigest("different")
 		}},
+		{"claim-identity-mismatch", semantic.DivergenceAuthorityBindingMismatch, func(trace *semantic.ObservableTrace) {
+			trace.Events[0].ClaimIdentitySHA256 = differentialDigest("different")
+		}},
 		{"cyclic-predecessor", semantic.DivergenceTraceUnclassifiable, func(trace *semantic.ObservableTrace) {
 			trace.Events[0].Predecessors = []string{trace.Events[1].ID}
 		}},
@@ -233,7 +236,8 @@ func DefaultDifferentialCases() []DifferentialCase {
 				Surface: semantic.SurfaceSpeculativePhysical, Capability: "sources.read", EffectClass: semantic.TraceEffectExternalRead,
 				ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
 				FreshnessSHA256: differentialDigest("freshness"), AuthoritySHA256: differentialDigest("authority"),
-				Status: semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: false,
+				ClaimIdentitySHA256: differentialDigest("claim-identity"),
+				Status:              semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: false,
 			})
 		}},
 		{"workspace-unknown-effect", semantic.DivergenceTraceUnclassifiable, func(trace *semantic.ObservableTrace) {
@@ -258,7 +262,8 @@ func DefaultDifferentialCases() []DifferentialCase {
 		Surface: semantic.SurfaceSpeculativePhysical, Capability: "sources.read", EffectClass: semantic.TraceEffectExternalRead,
 		ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
 		FreshnessSHA256: differentialDigest("freshness"), AuthoritySHA256: differentialDigest("authority"),
-		Status: semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: true,
+		ClaimIdentitySHA256: differentialDigest("claim-identity"),
+		Status:              semantic.EventOrphaned, Predecessors: []string{}, QualifiedSpeculation: true,
 		QualificationSHA256: differentialDigest("qualification"),
 	})
 	candidate.Terminal.PhysicalStarted = true
@@ -291,7 +296,8 @@ func differentialTraceFixture() semantic.ObservableTrace {
 			{ID: readID, Kind: semantic.EventCapabilityObservation, Surface: semantic.SurfaceLogical,
 				Capability: "sources.read", EffectClass: semantic.TraceEffectExternalRead, ArgumentsSHA256: differentialDigest("arguments"), ResourceSHA256: differentialDigest("resource"),
 				ResultSHA256: differentialDigest("observation"), FreshnessSHA256: differentialDigest("freshness"),
-				AuthoritySHA256: differentialDigest("authority"), Status: semantic.EventSucceeded, Predecessors: []string{}},
+				AuthoritySHA256: differentialDigest("authority"), ClaimIdentitySHA256: differentialDigest("claim-identity"),
+				Status: semantic.EventSucceeded, Predecessors: []string{}},
 			{ID: differentialDigest("result-event"), Kind: semantic.EventResult, Surface: semantic.SurfaceLogical,
 				ResultSHA256: differentialDigest("result"), Status: semantic.EventSucceeded, Predecessors: []string{readID}},
 		},

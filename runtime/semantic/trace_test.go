@@ -11,7 +11,8 @@ func TestCompareObservableTracesAcceptsEquivalentLogicalTraceAndQualifiedDiscard
 		Surface: SurfaceSpeculativePhysical, Capability: "sources.read", EffectClass: TraceEffectExternalRead,
 		ArgumentsSHA256: legalityDigest("args"), ResourceSHA256: legalityDigest("resource"),
 		FreshnessSHA256: legalityDigest("freshness"), AuthoritySHA256: legalityDigest("authority"),
-		Status: EventOrphaned, QualifiedSpeculation: true, QualificationSHA256: legalityDigest("qualification"),
+		ClaimIdentitySHA256: legalityDigest("claim-identity"),
+		Status:              EventOrphaned, QualifiedSpeculation: true, QualificationSHA256: legalityDigest("qualification"),
 	})
 	result := CompareObservableTraces(baseline, candidate)
 	if !result.Equivalent || result.Divergence != DivergenceNone {
@@ -72,6 +73,7 @@ func TestCompareObservableTracesClassifiesAdversarialDivergence(t *testing.T) {
 		"order":                   {func(trace *ObservableTrace) { trace.Events[1].Predecessors = []string{} }, DivergenceRequiredOrderInversion},
 		"workspace":               {func(trace *ObservableTrace) { trace.Workspace.FinalSHA256 = legalityDigest("different") }, DivergenceWorkspaceStateMismatch},
 		"freshness":               {func(trace *ObservableTrace) { trace.Events[0].FreshnessSHA256 = legalityDigest("different") }, DivergenceFreshnessContextMismatch},
+		"claim identity":          {func(trace *ObservableTrace) { trace.Events[0].ClaimIdentitySHA256 = legalityDigest("different") }, DivergenceAuthorityBindingMismatch},
 		"authority":               {func(trace *ObservableTrace) { trace.Events[0].AuthoritySHA256 = legalityDigest("different") }, DivergenceAuthorityBindingMismatch},
 		"cancel":                  {func(trace *ObservableTrace) { trace.Terminal.Cancellation = "requested" }, DivergenceCancellationBoundaryMismatch},
 		"ambiguity":               {func(trace *ObservableTrace) { trace.Terminal.Ambiguity = "reconciliation_required" }, DivergenceTerminalDispositionMismatch},
@@ -148,7 +150,8 @@ func observableTraceFixture() ObservableTrace {
 				Capability: "sources.read", EffectClass: TraceEffectExternalRead, ArgumentsSHA256: legalityDigest("args"),
 				ResourceSHA256: legalityDigest("resource"), ResultSHA256: legalityDigest("observation"),
 				FreshnessSHA256: legalityDigest("freshness"), AuthoritySHA256: legalityDigest("authority"),
-				Status: EventSucceeded, Predecessors: []string{},
+				ClaimIdentitySHA256: legalityDigest("claim-identity"),
+				Status:              EventSucceeded, Predecessors: []string{},
 			},
 			{
 				ID: second, Kind: EventResult, Surface: SurfaceLogical,

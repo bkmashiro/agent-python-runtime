@@ -69,6 +69,17 @@ func TestCanClaimStagedObservationRequiresExactIdentityAndReadyState(t *testing.
 		t.Fatalf("preissue decision=%+v", decision)
 	}
 	claim := call.ExpectedObservationClaim()
+	identity := call.ClaimIdentitySHA256()
+	if identity == "" {
+		t.Fatal("missing claim identity")
+	}
+	otherContext := legalityContext()
+	otherContext.BudgetReservationSHA256 = legalityDigest("other-budget-reservation")
+	otherDecision := CanPreissue(verified, plan, site.ID, otherContext)
+	otherCall, otherOK := otherDecision.QualifiedCall()
+	if !otherOK || otherCall.ClaimIdentitySHA256() == identity {
+		t.Fatal("budget reservation did not change exact claim identity")
+	}
 	if got := CanClaimStagedObservation(call, claim); !got.Allowed() {
 		t.Fatalf("claim rejected: %+v", got)
 	}

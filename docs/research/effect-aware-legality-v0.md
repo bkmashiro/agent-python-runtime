@@ -56,8 +56,9 @@ Capability-plan v5 has no coalescing, durable-cache or backend-requirement contr
 
 The comparator ignores only qualified pure/read physical scheduling differences whose
 logical trace is unchanged. Unclaimed work needs a typed terminal disposition; consumed
-work must bind one-to-one to the exact logical event across capability, effect, arguments,
-resource, result, freshness and authority. `PhysicalStarted` must exactly match the
+work must bind one-to-one to the exact logical event across the canonical observation-
+claim identity plus capability, effect, arguments, resource, result, freshness and
+authority. `PhysicalStarted` must exactly match the
 presence of accounted physical events. Unknown effects, malformed/cyclic predecessor
 graphs and all write-class speculative physical events are unclassifiable.
 Missing or extra logical effects, event-order changes, argument/resource drift, freshness,
@@ -66,13 +67,13 @@ divergences. Invalid or unqualified traces fail as `trace_unclassifiable`.
 
 The executable matrix at
 [`docs/evidence/effect-aware-differential-oracle.json`](../evidence/effect-aware-differential-oracle.json)
-contains 24 cases. All 24 matched their expected result, including equivalent
+contains 25 cases. All 25 matched their expected result, including equivalent
 qualified discard and exact consumed-claim cases plus adversarial terminal, result,
 argument, missing/extra effect, sequence/edge order, freshness, authority, workspace,
 cancellation, ambiguity, post-effect replay, qualification/claim mismatch, duplicate
 claim, physical-start inconsistency,
 write-class speculation and invalid/unqualified physical work. Report SHA-256:
-`ac0e311244a5c62ac471bfee7626f3396b77f67f50f03dd67c58973a1206a48d`.
+`6d7513e709fb01bd1d1a6ec16aa87020bf6bedf9294afb831f53632d87d684a5`.
 Cross-compiled ARM64 semantic and effectgraph test binaries passed on Linux
 `6.12.0-202.76.4.1.el9uek.aarch64`; binary SHA-256 values were
 `8094054fbaa4a93efba71b46108c652c6dd6a1c8feef0c10850d505b6a00497c` and

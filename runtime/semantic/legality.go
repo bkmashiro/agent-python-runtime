@@ -237,6 +237,18 @@ func CanPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 	return Decision{allowed: true, call: &call}
 }
 
+func (call QualifiedCall) ClaimIdentitySHA256() string {
+	if !call.valid() {
+		return ""
+	}
+	encoded, err := json.Marshal(call.ExpectedObservationClaim())
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(append([]byte("pysolate.observation-claim.v0\x00"), encoded...))
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
 func CanClaimStagedObservation(call QualifiedCall, claim ObservationClaim) Decision {
 	if !call.valid() {
 		return rejected(RejectQualifiedCallInvalid)

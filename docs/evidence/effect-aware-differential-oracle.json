@@ -1,7 +1,7 @@
 {
   "schema_version": "pysolate.differential-oracle.v0",
-  "cases": 24,
-  "matched": 24,
+  "cases": 25,
+  "matched": 25,
   "results": [
     {
       "id": "argument-mismatch",
@@ -21,6 +21,13 @@
       "id": "cancellation-mismatch",
       "expected": "cancellation_boundary_mismatch",
       "observed": "cancellation_boundary_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "claim-identity-mismatch",
+      "expected": "authority_binding_mismatch",
+      "observed": "authority_binding_mismatch",
       "equivalent": false,
       "matched": true
     },

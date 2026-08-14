@@ -93,6 +93,7 @@ type TraceEvent struct {
 	Predecessors         []string
 	QualifiedSpeculation bool
 	QualificationSHA256  string
+	ClaimIdentitySHA256  string
 	ClaimedLogicalID     string
 }
 
@@ -187,7 +188,7 @@ func CompareObservableTraces(baseline, candidate ObservableTrace) TraceCompariso
 		if expected.FreshnessSHA256 != actual.FreshnessSHA256 {
 			return diverged(DivergenceFreshnessContextMismatch)
 		}
-		if expected.AuthoritySHA256 != actual.AuthoritySHA256 {
+		if expected.AuthoritySHA256 != actual.AuthoritySHA256 || expected.ClaimIdentitySHA256 != actual.ClaimIdentitySHA256 {
 			return diverged(DivergenceAuthorityBindingMismatch)
 		}
 		if expected.ResultSHA256 != actual.ResultSHA256 {
@@ -318,9 +319,14 @@ func validSpeculativePhysical(event TraceEvent) bool {
 func validEventPayload(event TraceEvent) bool {
 	requireDigest := func(value string) bool { return digestPattern.MatchString(value) }
 	switch event.Kind {
-	case EventCapabilityAttempt, EventCapabilityObservation, EventExternalEffectIntent,
-		EventExternalEffectAttempt, EventExternalEffectTerminal:
-		return capabilityPattern.MatchString(event.Capability) && validTraceEffectClass(event.EffectClass) && requireDigest(event.ArgumentsSHA256) &&
+	case EventCapabilityObservation:
+		return capabilityPattern.MatchString(event.Capability) && validTraceEffectClass(event.EffectClass) &&
+			requireDigest(event.ClaimIdentitySHA256) && requireDigest(event.ArgumentsSHA256) &&
+			requireDigest(event.ResourceSHA256) && requireDigest(event.FreshnessSHA256) && requireDigest(event.AuthoritySHA256) &&
+			(event.ResultSHA256 == "" || requireDigest(event.ResultSHA256))
+	case EventCapabilityAttempt, EventExternalEffectIntent, EventExternalEffectAttempt, EventExternalEffectTerminal:
+		return event.ClaimIdentitySHA256 == "" && capabilityPattern.MatchString(event.Capability) &&
+			validTraceEffectClass(event.EffectClass) && requireDigest(event.ArgumentsSHA256) &&
 			requireDigest(event.ResourceSHA256) && requireDigest(event.FreshnessSHA256) && requireDigest(event.AuthoritySHA256) &&
 			(event.ResultSHA256 == "" || requireDigest(event.ResultSHA256))
 	case EventWorkspaceRead, EventWorkspaceWrite:
@@ -332,15 +338,15 @@ func validEventPayload(event TraceEvent) bool {
 		if event.Kind == EventWorkspaceRead {
 			freshnessValid = requireDigest(event.FreshnessSHA256)
 		}
-		return event.Capability == "" && event.EffectClass == expected && event.ArgumentsSHA256 == "" &&
+		return event.ClaimIdentitySHA256 == "" && event.Capability == "" && event.EffectClass == expected && event.ArgumentsSHA256 == "" &&
 			requireDigest(event.ResourceSHA256) && requireDigest(event.AuthoritySHA256) && freshnessValid &&
 			(event.ResultSHA256 == "" || requireDigest(event.ResultSHA256))
 	case EventResult, EventRaise:
-		return event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" &&
+		return event.ClaimIdentitySHA256 == "" && event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" &&
 			event.ResourceSHA256 == "" && requireDigest(event.ResultSHA256) && event.FreshnessSHA256 == "" &&
 			event.AuthoritySHA256 == ""
 	default:
-		return event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" && event.ResourceSHA256 == "" &&
+		return event.ClaimIdentitySHA256 == "" && event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" && event.ResourceSHA256 == "" &&
 			event.ResultSHA256 == "" && event.FreshnessSHA256 == "" && event.AuthoritySHA256 == ""
 	}
 }
@@ -349,7 +355,8 @@ func physicalClaimsLogical(physical, logical TraceEvent) bool {
 	return physical.Kind == logical.Kind && physical.Capability == logical.Capability &&
 		physical.EffectClass == logical.EffectClass && physical.ArgumentsSHA256 == logical.ArgumentsSHA256 &&
 		physical.ResourceSHA256 == logical.ResourceSHA256 && physical.ResultSHA256 == logical.ResultSHA256 &&
-		physical.FreshnessSHA256 == logical.FreshnessSHA256 && physical.AuthoritySHA256 == logical.AuthoritySHA256
+		physical.FreshnessSHA256 == logical.FreshnessSHA256 && physical.AuthoritySHA256 == logical.AuthoritySHA256 &&
+		physical.ClaimIdentitySHA256 == logical.ClaimIdentitySHA256
 }
 
 func validLogicalStatus(kind EventKind, status EventStatus) bool {

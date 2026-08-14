@@ -116,6 +116,29 @@ func TestUnsupportedSharedLegalityQuestionsFailClosed(t *testing.T) {
 	}
 }
 
+func TestSemanticPreDispatchConsumerRequiresExclusiveDynamicCallSurface(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, _ := legalityVerifiedAnalysis(t, plan, true)
+	analysis, err := verified.Analysis()
+	if err != nil || !exclusiveDynamicCallAnalysis(analysis) {
+		t.Fatalf("exclusive baseline analysis=%+v err=%v", analysis, err)
+	}
+	analysis.CallSites = append(analysis.CallSites, analysis.CallSites[0])
+	if exclusiveDynamicCallAnalysis(analysis) {
+		t.Fatal("multiple positive call sites accepted")
+	}
+	analysis.CallSites = analysis.CallSites[:1]
+	analysis.Barriers = append(analysis.Barriers, Barrier{})
+	if exclusiveDynamicCallAnalysis(analysis) {
+		t.Fatal("opaque/dynamic barrier accepted")
+	}
+	analysis.Barriers = nil
+	analysis.ModuleEffects.MayBeUnknown = true
+	if exclusiveDynamicCallAnalysis(analysis) {
+		t.Fatal("unknown module effect accepted")
+	}
+}
+
 func legalityContext() PreissueContext {
 	return PreissueContext{
 		StreamEpoch: "stream-1", WorkflowEpoch: "workflow-1",

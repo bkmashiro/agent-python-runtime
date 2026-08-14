@@ -5,8 +5,9 @@ Status: **Track E first consumer implemented; default-off; G2 pending**
 ## Accepted shape
 
 The prototype consumes only the G1 subset: one verified module-entry,
-`necessarily_reached`, single-occurrence scalar read with a sealed eligible
-live-only `PreDispatchContract`. Captured-playback reads remain excluded because the
+`necessarily_reached`, single-occurrence scalar read with exactly one positive call site,
+no semantic barrier or unknown module effect, and a sealed eligible live-only
+`PreDispatchContract`. Captured-playback reads remain excluded because the
 prototype does not mint a second transport transcript. It does not admit writes,
 unknown effects, conditional calls,
 coalescing, caching, hoisting, replay or backend inference.

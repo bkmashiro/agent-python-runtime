@@ -80,6 +80,18 @@ func TestSemanticPreDispatchBudgetAndMismatchFailClosed(t *testing.T) {
 	}
 }
 
+func TestSemanticPreDispatchRejectsNonExclusiveQualifiedCall(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	call.exclusiveDynamicCall = false
+	budget, _ := NewPreDispatchBudget(1)
+	if _, err := NewSemanticPreDispatch(call, plan, budget); !errors.Is(err, ErrPreDispatchInvalid) {
+		t.Fatalf("constructor error=%v", err)
+	}
+}
+
 func TestSemanticPreDispatchPreservesBaselineExceptions(t *testing.T) {
 	cases := map[string]capability.Handler{
 		"handler_error": capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {

@@ -102,6 +102,7 @@ type QualifiedCall struct {
 	privacyPartition        string
 	parentLineageSHA256     string
 	budgetReservationSHA256 string
+	exclusiveDynamicCall    bool
 }
 
 func (call QualifiedCall) CallSiteID() string      { return call.callSiteID }
@@ -230,6 +231,7 @@ func CanPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 		freshnessEpoch: context.FreshnessEpoch, expiryEpoch: context.ExpiryEpoch,
 		privacyPartition: context.PrivacyPartition, parentLineageSHA256: context.ParentLineageSHA256,
 		budgetReservationSHA256: context.BudgetReservationSHA256,
+		exclusiveDynamicCall:    exclusiveDynamicCallAnalysis(analysis),
 	}
 	if !call.valid() {
 		return rejected(RejectQualifiedCallInvalid)
@@ -301,6 +303,11 @@ func RequiredBackend(verified VerifiedAnalysis) BackendDecision {
 		return BackendDecision{Backend: BackendUnknown, Decision: rejected(RejectUnverifiedAnalysis)}
 	}
 	return BackendDecision{Backend: BackendUnknown, Decision: rejected(RejectBackendContractMissing)}
+}
+
+func exclusiveDynamicCallAnalysis(analysis Analysis) bool {
+	return len(analysis.CallSites) == 1 && len(analysis.Barriers) == 0 &&
+		!analysis.ModuleEffects.MayBeUnknown
 }
 
 func findCallSite(sites []CallSite, id string) (CallSite, bool) {

@@ -74,6 +74,7 @@ type preparedInstance struct {
 	module    api.Module
 	stderr    *bytes.Buffer
 	temporary *workspace.Temporary
+	cold      coldIOContinuation
 }
 
 type PreparedState struct {
@@ -130,6 +131,7 @@ type Engine struct {
 	cowRuntime          cowPreparedRuntime
 	cowActive           uint64
 	cowClosing          bool
+	coldEvidence        coldEvidenceStore
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -143,6 +145,10 @@ func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig
 func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
+	}
+	if config.ColdIO != nil {
+		policy := *config.ColdIO
+		config.ColdIO = &policy
 	}
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
@@ -642,6 +648,10 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			runErr = errors.Join(runErr, module.Close(context.Background()))
 		}
 	}()
+	if prepared != nil && prepared.cold != nil {
+		runContext = withColdIOContinuation(runContext, prepared.cold)
+		defer func() { engine.coldEvidence.set(prepared.cold.finish()) }()
+	}
 	if !initialized {
 		if err := callNoArgs(runContext, module, "_initialize"); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
@@ -794,12 +804,18 @@ func hostCall(
 		return -1
 	}
 	request := append([]byte(nil), requestView...)
+	call := func(callContext context.Context) ([]byte, error) {
+		if streaming, _ := callContext.Value(streamingContextKey{}).(bool); streaming {
+			return broker.CallStreaming(callContext, request)
+		}
+		return broker.Call(callContext, request)
+	}
 	var response []byte
 	var err error
-	if streaming, _ := ctx.Value(streamingContextKey{}).(bool); streaming {
-		response, err = broker.CallStreaming(ctx, request)
+	if continuation := coldIOContinuationFromContext(ctx); continuation != nil {
+		response, err = continuation.wait(ctx, call)
 	} else {
-		response, err = broker.Call(ctx, request)
+		response, err = call(ctx)
 	}
 	if err != nil || len(response) > int(responseCapacity) {
 		return -1

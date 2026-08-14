@@ -16,6 +16,7 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/composable"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
@@ -638,6 +639,102 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	if state := engine.PreparedState(); state.PreparedRuns < 6 || state.FreshFallbackRuns != 0 || state.Ready {
 		t.Fatalf("COW state=%+v", state)
 	}
+}
+
+func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := coldIOCapabilityPlan(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{
+		PreparedRuntime: true, MemoryCOW: true, ColdIOContinuation: true,
+	}
+	config.ColdIO = &runtimeconfig.ColdIOPolicy{
+		ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
+	}
+	factory := wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "cold-python", Plan: plan})
+	}}
+	runner, err := factory.New(context.Background(), artifact, config)
+	if err != nil {
+		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+			t.Skipf("cold COW continuation unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	engine := runner.(*wazeroengine.Engine)
+	defer engine.Close(context.Background())
+	code := "import builtins\npayload=bytearray(200_000_000)\npayload[-1]=7\nstate={'value':91}\nbuiltins._cold_marker=state\nbefore=id(state)\nok=testio.wait()\nresult={'same':id(state)==before and builtins._cold_marker is state,'value':state['value'],'last':payload[-1],'ok':ok}"
+	payload, err := engine.Run(context.Background(), plainRequest(t, code), plan.PythonPrelude())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := responseResult(t, payload); got != `{"same":true,"value":91,"last":7,"ok":true}` {
+		t.Fatalf("cold continuation result=%s", got)
+	}
+	evidence := engine.ColdIOEvidence()
+	if err := evidence.Validate(); err != nil || evidence.State != wazeroengine.ColdIOTerminal ||
+		evidence.Waits != 1 || evidence.ColdAttempts != 1 || evidence.PageOutAttempts != 1 || evidence.Resumes != 1 {
+		t.Fatalf("cold evidence=%+v err=%v", evidence, err)
+	}
+	fresh, err := engine.Run(context.Background(), plainRequest(t, "import builtins\nresult={'clean':not hasattr(builtins,'_cold_marker')}"), plan.PythonPrelude())
+	if err != nil || responseResult(t, fresh) != `{"clean":true}` {
+		t.Fatalf("fresh slot err=%v response=%s", err, fresh)
+	}
+	overflow, err := engine.Run(context.Background(), plainRequest(t, "payload=bytearray(600_000_000)\nresult=1"), plan.PythonPrelude())
+	if err != nil {
+		t.Fatalf("cold profile OOM escaped as runtime error: %v", err)
+	}
+	var failed struct {
+		Status string `json:"status"`
+		Error  struct {
+			Type string `json:"error_type"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(overflow, &failed); err != nil || failed.Status != "error" || failed.Error.Type != "MemoryError" {
+		t.Fatalf("cold profile OOM response=%s err=%v", overflow, err)
+	}
+	afterOOM, err := engine.Run(context.Background(), plainRequest(t, "result=42"), plan.PythonPrelude())
+	if err != nil || responseResult(t, afterOOM) != "42" {
+		t.Fatalf("post-OOM slot err=%v response=%s", err, afterOOM)
+	}
+}
+
+func coldIOCapabilityPlan(t *testing.T) *capability.Plan {
+	t.Helper()
+	grant, err := capability.NewGrant(json.RawMessage(`{"wait":"bounded"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	spec := capability.Spec{
+		Name: "test.wait", Version: "pysolate.test.wait.v1", Description: "Wait for a bounded Host timer.",
+		EffectClass: capability.EffectPure, Playback: capability.PlaybackLiveOnly,
+		HandlerIdentity: hashCharacter('9'),
+		InputSchema:     json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+		OutputSchema:    json.RawMessage(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}`),
+		Python:          &capability.PythonProjection{Module: "testio", Method: "wait", Arguments: []string{}, ResultField: "ok"},
+	}
+	handler := capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		timer := time.NewTimer(100 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			return json.RawMessage(`{"ok":true}`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+	if err := registry.Register(spec, grant, handler); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
 
 func newComposableWorkspace(t *testing.T) (*workspace.Manager, workspace.Ref) {

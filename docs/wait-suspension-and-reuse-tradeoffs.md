@@ -1,7 +1,7 @@
 # Wait suspension, re-evaluation, and reuse trade-offs
 
-Status: **Bounded Experimental fresh re-evaluation implemented; comparative waiting-strategy measurements remain planned.**
-Date: 2026-08-13
+Status: **Bounded Experimental fresh re-evaluation and continuation-preserving cold-I/O spike implemented; broader policy remains deferred.**
+Date: 2026-08-14
 
 ## Decision summary
 

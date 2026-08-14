@@ -230,6 +230,7 @@ type cowLinearMemory struct {
 	image  *cowImage
 	buffer []byte
 	max    uint64
+	size   uint64
 	freed  bool
 }
 
@@ -241,7 +242,21 @@ func (memory *cowLinearMemory) Reallocate(size uint64) []byte {
 	if memory.freed || size > memory.max {
 		return nil
 	}
+	memory.size = size
 	return memory.buffer[:int(size)]
+}
+
+func (memory *cowLinearMemory) advise(advice int) (uint64, error) {
+	memory.mu.Lock()
+	defer memory.mu.Unlock()
+	if memory.freed || memory.size == 0 {
+		return 0, errCOWAllocationShape
+	}
+	view := memory.buffer[:int(memory.size)]
+	if err := unix.Madvise(view, advice); err != nil {
+		return memory.size, err
+	}
+	return memory.size, nil
 }
 
 func (memory *cowLinearMemory) restoreBaselineBeforeServe() error {

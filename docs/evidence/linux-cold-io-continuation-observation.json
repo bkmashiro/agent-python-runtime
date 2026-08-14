@@ -1,0 +1,106 @@
+{
+  "schema_version": "pysolate.cold-io-observation.v0",
+  "status": "Experimental",
+  "date": "2026-08-14",
+  "host": {
+    "label": "Zao Linux ARM64",
+    "kernel": "6.12.0-202.76.4.1.el9uek.aarch64",
+    "page_size_bytes": 4096,
+    "swap_devices": 1,
+    "swap_size_kib": 4194300,
+    "zswap_enabled": false
+  },
+  "fixture": {
+    "kind": "synthetic bounded Wazero COW mapping",
+    "mapping_bytes": 134217728,
+    "private_dirty_bytes": 100663296,
+    "wait_seconds": 0.5,
+    "continuation_check": "The same Wazero call resumed after the Host wait and read the pre-wait private-memory sentinel value 91.",
+    "is_official_python_guest": false
+  },
+  "official_guest_verification": {
+    "artifact_sha256": "3731087ebeb0573d407e35adae6095fd7b69ce97d26b520dfcd1bc1585b60041",
+    "test": "TestRealGuestColdIOContinuationPreservesPythonState",
+    "result": "PASS",
+    "guest_state": "A 200,000,000-byte bytearray, Python dict identity, builtins reference, scalar value, and execution position survived the 100 ms Host capability wait.",
+    "advice": {
+      "cold_attempts": 1,
+      "cold_succeeded": 1,
+      "pageout_attempts": 1,
+      "pageout_succeeded": 1,
+      "resumes": 1,
+      "advice_failures": 0
+    },
+    "fresh_slot_clean": true,
+    "over_maximum_outcome": "structured Python MemoryError",
+    "post_oom_slot_clean": true
+  },
+  "observations": [
+    {
+      "mode": "control",
+      "before": {
+        "rss_kib": 98304,
+        "pss_kib": 98304,
+        "private_dirty_kib": 98304,
+        "swap_kib": 0
+      },
+      "during_wait": {
+        "rss_kib": 98304,
+        "pss_kib": 98304,
+        "private_dirty_kib": 98304,
+        "swap_kib": 0
+      },
+      "resume_micros": 954
+    },
+    {
+      "mode": "madv_cold",
+      "before": {
+        "rss_kib": 98304,
+        "pss_kib": 98304,
+        "private_dirty_kib": 98304,
+        "swap_kib": 0
+      },
+      "during_wait": {
+        "rss_kib": 98304,
+        "pss_kib": 98304,
+        "private_dirty_kib": 98304,
+        "swap_kib": 0
+      },
+      "resume_micros": 961
+    },
+    {
+      "mode": "madv_pageout",
+      "before": {
+        "rss_kib": 98304,
+        "pss_kib": 98304,
+        "private_dirty_kib": 98304,
+        "swap_kib": 0
+      },
+      "during_wait": {
+        "rss_kib": 0,
+        "pss_kib": 0,
+        "private_dirty_kib": 0,
+        "swap_kib": 98304
+      },
+      "after_resume": {
+        "rss_kib": 98304,
+        "pss_kib": 98304,
+        "swap_kib": 0
+      },
+      "resume_micros": 16380
+    }
+  ],
+  "bounded_conclusion": {
+    "madv_cold_immediate_rss_reduction_observed": false,
+    "madv_pageout_private_dirty_rss_reduction_observed": true,
+    "same_continuation_private_state_preserved": true,
+    "pageout_resume_cost_relative_to_control": "approximately 17x for the 96 MiB full-page refault scan in this single run"
+  },
+  "non_claims": [
+    "This is one outcome-qualified synthetic observation, not a production policy or capacity certification.",
+    "The resource delta is from the synthetic controlled mapping; the separate official CPython/WASI verification proves outcome and fresh-slot isolation but is not a per-slot RSS measurement.",
+    "MADV_COLD is only a reclaim hint and did not reduce RSS without ambient pressure in this observation.",
+    "MADV_PAGEOUT depends on Host swap/reclaim configuration and remains fail-closed and off by default.",
+    "MADV_DONTNEED is not used for resumable private dirty execution pages."
+  ]
+}

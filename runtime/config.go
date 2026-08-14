@@ -12,6 +12,13 @@ const (
 	hardMaxMemoryPages   = 16384 // 1 GiB in 64 KiB WebAssembly pages.
 )
 
+// ColdIOPolicy is Host-owned Experimental timing policy for one same-slot
+// capability wait. A zero PageOutAfter selects MADV_COLD only.
+type ColdIOPolicy struct {
+	ColdAfter    time.Duration
+	PageOutAfter time.Duration
+}
+
 // RunConfig is Host-owned authority and resource policy. It is never decoded
 // from RunRequest JSON.
 type RunConfig struct {
@@ -28,6 +35,9 @@ type RunConfig struct {
 	// unsupported workload classes before Guest execution.
 	DeterministicVerification *DeterministicVerificationProfile
 	CapabilityGrants          map[string]CapabilityGrant
+	// ColdIO is required exactly when continuation-preserving cold I/O is selected.
+	// It is Host policy and is never accepted from Guest input.
+	ColdIO *ColdIOPolicy
 	// Mechanisms is an internal Host-owned optional mechanism set. Its zero value
 	// preserves ordinary fresh execution and does not alter capability grants.
 	Mechanisms MechanismSet
@@ -49,9 +59,32 @@ func DefaultRunConfig() RunConfig {
 	}
 }
 
+func validateColdIOPolicy(policy ColdIOPolicy, timeout time.Duration) error {
+	if policy.ColdAfter <= 0 || policy.ColdAfter >= timeout {
+		return errors.New("cold I/O threshold must be inside the Run timeout")
+	}
+	if policy.PageOutAfter < 0 {
+		return errors.New("cold I/O pageout threshold cannot be negative")
+	}
+	if policy.PageOutAfter != 0 && (policy.PageOutAfter <= policy.ColdAfter || policy.PageOutAfter >= timeout) {
+		return errors.New("cold I/O pageout threshold must follow cold and precede timeout")
+	}
+	return nil
+}
+
 func (config RunConfig) Validate() error {
 	if err := config.Mechanisms.Validate(); err != nil {
 		return err
+	}
+	if config.Mechanisms.ColdIOContinuation {
+		if config.ColdIO == nil {
+			return errors.New("cold I/O policy is required")
+		}
+		if err := validateColdIOPolicy(*config.ColdIO, config.Timeout); err != nil {
+			return err
+		}
+	} else if config.ColdIO != nil {
+		return errors.New("cold I/O policy requires the cold continuation mechanism")
 	}
 	if config.Timeout <= 0 || config.Timeout > hardMaxTimeout {
 		return errors.New("timeout must be positive and at most five minutes")

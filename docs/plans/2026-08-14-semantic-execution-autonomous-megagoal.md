@@ -250,23 +250,23 @@ new semantic contract package if justified, Guest bootstrap schemas/tests, docs.
 **Promise:** Determine whether one live COW Guest can wait on Host I/O, reduce
 working-set residency, and resume the same Python continuation without replay.
 
-- [ ] Establish Linux capability/host facts: page size, swap/zswap availability,
+- [x] Establish Linux capability/host facts: page size, swap/zswap availability,
   `MADV_COLD`, `MADV_PAGEOUT`, and observable `/proc` counters.
-- [ ] Add one bounded Host-call suspension fixture that writes a known private
+- [x] Add one bounded Host-call suspension fixture that writes a known private
   linear-memory state, copies Host-call arguments out of Guest memory, enters a
   verified quiescent barrier, waits, and resumes with the same slot identity.
-- [ ] Model `running → parked_hot → parked_cold/pageout → resuming → terminal` with
+- [x] Model `running → parked_hot → parked_cold/pageout → resuming → terminal` with
   one owner/lease; reject park after close, concurrent resume, pool publication,
   and new-request acquisition.
-- [ ] Add Linux-only memory advice behind capability detection. Never expose raw
+- [x] Add Linux-only memory advice behind capability detection. Never expose raw
   mapping slices across the suspension boundary.
-- [ ] Compare control, `MADV_COLD`, and `MADV_PAGEOUT`; record RSS, PSS,
+- [x] Compare control, `MADV_COLD`, and `MADV_PAGEOUT`; record RSS, PSS,
   `Shared_Clean`, `Private_Dirty`, swap, faults, park cost, and resume latency.
-- [ ] Verify Python object/locals/global state and execution position survive;
+- [x] Verify Python object/locals/global state and execution position survive;
   cancellation/timeout/OOM remain terminal; final mapping residue is zero; a
   subsequent request receives a fresh clean slot.
-- [ ] Run focused Linux tests and one bounded Zao outcome/resource observation.
-- [ ] Classify result as useful, kernel-dependent/neutral, or negative. Do not
+- [x] Run focused Linux tests and one bounded Zao outcome/resource observation.
+- [x] Classify result as useful, kernel-dependent/neutral, or negative. Do not
   productize a scheduler or swap policy in this goal.
 
 **Likely files:** `runtime/engine/wazero/cow_memory_linux.go`, Linux-specific
@@ -433,8 +433,8 @@ the controller owns design, diffs, tests, signatures, push, and final claims.
 
 ## Roadmap tracking
 
-**Current execution pointer:** Track A — build the bounded same-slot cold-I/O
-suspension fixture and Linux memory-advice seam.
+**Current execution pointer:** Track B — implement analyzer-only target-Guest AST
+coloring and conservative function summaries.
 
 After each slice:
 
@@ -458,6 +458,25 @@ After each slice:
   malformed/unknown/oversized/duplicate/weaker-effect negative tests. Focused
   runtime tests, race tests, `go vet ./runtime/...`, and `git diff --check` pass.
   Current pointer is Track A.
+- 2026-08-14: Track 0 was committed and pushed as `c06f09e`. Track A added
+  Host-owned bounded cold-I/O policy, same-slot wait state, and body-free evidence.
+  Linux COW Host calls now copy request bytes before asynchronous waiting, advise
+  only the live logical range, resume before response write, and retain terminal
+  one-shot teardown. A synthetic Wazero continuation preserved dirty state and
+  instruction position; cancellation terminated cleanly and a fresh mapping was
+  zero-clean. Zao control/cold/pageout observations over 96 MiB private dirty state
+  found no immediate RSS reduction for `MADV_COLD`; `MADV_PAGEOUT` moved all
+  98,304 KiB to swap, restored it intact, and raised full refault from about 1 ms
+  to 16.38 ms. This is positive but kernel/swap-dependent Experimental evidence,
+  not approval for a scheduler. The official CPython/WASI Guest then passed the
+  same-slot check with a 200,000,000-byte allocation, preserved Python object and
+  global identity across one capability wait, recorded successful cold/pageout
+  advice, and proved the following slot clean. Independent review found that a
+  context-ignoring handler could otherwise pin the slot after cancellation; the
+  wait now releases the copied-argument slot on `ctx.Done()`, discards any late
+  result, and has a bounded regression test. The official Guest also returned a
+  structured `MemoryError` above its declared maximum and served a clean slot
+  afterward. No outstanding Track A P0/P1 finding remains.
 
 ## Stop conditions
 

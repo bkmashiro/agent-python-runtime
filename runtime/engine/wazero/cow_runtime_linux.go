@@ -113,8 +113,16 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 		return nil, errors.New("COW slot memory shape drifted")
 	}
 	stderr.Reset()
+	var cold coldIOContinuation
+	if engine.config.Mechanisms.ColdIOContinuation {
+		continuation, continuationErr := newColdIOContinuation(allocation, *engine.config.ColdIO)
+		if continuationErr != nil {
+			return nil, fmt.Errorf("create cold I/O continuation: %w", continuationErr)
+		}
+		cold = continuation
+	}
 	failed = false
-	return &preparedInstance{module: module, stderr: stderr, temporary: temporary}, nil
+	return &preparedInstance{module: module, stderr: stderr, temporary: temporary, cold: cold}, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) close() error {

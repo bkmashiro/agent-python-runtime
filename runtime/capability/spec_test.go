@@ -53,7 +53,7 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 			spec.EffectClass = capability.EffectExternalRead
 			spec.ReadOnly = true
 			spec.Idempotent = true
-			spec.SpeculativeSafe = true
+			spec.PreDispatch = preDispatchArgument("path")
 		},
 	}
 	for index, mutate := range mutations {
@@ -77,12 +77,32 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	}
 }
 
-func TestCapabilitySpecRequiresHostQualifiedSpeculationConjunction(t *testing.T) {
+func TestCapabilityPlanIdentityBindsPreDispatchContract(t *testing.T) {
+	identity := func(namespace string) string {
+		registry := capability.NewRegistry()
+		spec := testSpec()
+		spec.ReadOnly, spec.Idempotent, spec.PreDispatch = true, true, preDispatchArgument("path")
+		spec.PreDispatch.Resource.Namespace = namespace
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+			t.Fatal(err)
+		}
+		plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return plan.Identity()
+	}
+	if identity("workspace") == identity("repository") {
+		t.Fatal("resource contract did not affect capability plan identity")
+	}
+}
+
+func TestCapabilitySpecRequiresHostQualifiedPreDispatchConjunction(t *testing.T) {
 	valid := testSpec()
 	valid.EffectClass = capability.EffectExternalRead
 	valid.ReadOnly = true
 	valid.Idempotent = true
-	valid.SpeculativeSafe = true
+	valid.PreDispatch = preDispatchArgument("path")
 	registry := capability.NewRegistry()
 	if err := registry.Register(valid, basicGrant(t), noopHandler); err != nil {
 		t.Fatalf("qualified speculative read rejected: %v", err)
@@ -91,16 +111,16 @@ func TestCapabilitySpecRequiresHostQualifiedSpeculationConjunction(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	qualification, ok := plan.Speculation(valid.Name)
-	if !ok || !qualification.EagerEligible() {
+	qualification, ok := plan.PreDispatch(valid.Name)
+	if !ok || !qualification.Eligible() {
 		t.Fatalf("qualification=%+v ok=%v", qualification, ok)
 	}
 
 	for name, mutate := range map[string]func(*capability.Spec){
-		"not read only":        func(spec *capability.Spec) { spec.ReadOnly = false },
-		"not idempotent":       func(spec *capability.Spec) { spec.Idempotent = false },
-		"not speculative safe": func(spec *capability.Spec) { spec.SpeculativeSafe = false },
-		"workspace write":      func(spec *capability.Spec) { spec.EffectClass = capability.EffectWorkspaceWrite },
+		"not read only":                 func(spec *capability.Spec) { spec.ReadOnly = false },
+		"not idempotent":                func(spec *capability.Spec) { spec.Idempotent = false },
+		"missing pre-dispatch contract": func(spec *capability.Spec) { spec.PreDispatch = nil },
+		"workspace write":               func(spec *capability.Spec) { spec.EffectClass = capability.EffectWorkspaceWrite },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := valid
@@ -113,10 +133,32 @@ func TestCapabilitySpecRequiresHostQualifiedSpeculationConjunction(t *testing.T)
 	}
 }
 
+func TestCapabilitySpecRejectsIncompletePreDispatchContracts(t *testing.T) {
+	mutations := map[string]func(*capability.Spec){
+		"freshness":          func(spec *capability.Spec) { spec.PreDispatch.Freshness = "latest" },
+		"unclaimed":          func(spec *capability.Spec) { spec.PreDispatch.Unclaimed = "ignore" },
+		"namespace":          func(spec *capability.Spec) { spec.PreDispatch.Resource.Namespace = "" },
+		"missing key":        func(spec *capability.Spec) { spec.PreDispatch.Resource.Argument = "" },
+		"two keys":           func(spec *capability.Spec) { spec.PreDispatch.Resource.Constant = "fixed" },
+		"unknown argument":   func(spec *capability.Spec) { spec.PreDispatch.Resource.Argument = "missing" },
+		"missing projection": func(spec *capability.Spec) { spec.Python = nil },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			spec := testSpec()
+			spec.ReadOnly, spec.Idempotent, spec.PreDispatch = true, true, preDispatchArgument("path")
+			mutate(&spec)
+			if err := capability.NewRegistry().Register(spec, basicGrant(t), noopHandler); err != capability.ErrInvalidTool {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
 func TestStreamingObservationBindingIsPlanAndGrantBound(t *testing.T) {
 	registry := capability.NewRegistry()
 	spec := testSpec()
-	spec.ReadOnly, spec.Idempotent, spec.SpeculativeSafe = true, true, true
+	spec.ReadOnly, spec.Idempotent, spec.PreDispatch = true, true, preDispatchArgument("path")
 	if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
@@ -130,6 +172,9 @@ func TestStreamingObservationBindingIsPlanAndGrantBound(t *testing.T) {
 	}
 	if _, ok := plan.StreamingObservationBinding("missing"); ok {
 		t.Fatal("missing capability received binding")
+	}
+	if strings.Contains(plan.StreamingPythonPrelude(), `_stream_eager_calls[`) {
+		t.Fatal("capability metadata alone activated legacy eager dispatch")
 	}
 }
 
@@ -268,7 +313,9 @@ func TestBrokerValidatesSpecInputAndOutput(t *testing.T) {
 
 func TestSealedPlanGeneratesPythonProjectionAndDefensiveSpecs(t *testing.T) {
 	registry := capability.NewRegistry()
-	if err := registry.Register(testSpec(), basicGrant(t), noopHandler); err != nil {
+	spec := testSpec()
+	spec.ReadOnly, spec.Idempotent, spec.PreDispatch = true, true, preDispatchArgument("path")
+	if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
@@ -289,9 +336,18 @@ func TestSealedPlanGeneratesPythonProjectionAndDefensiveSpecs(t *testing.T) {
 	specs := plan.Specs()
 	specs[0].Python.Arguments[0] = "mutated"
 	specs[0].InputSchema[0] = 'x'
+	specs[0].PreDispatch.Resource.Namespace = "mutated"
 	fresh := plan.Specs()[0]
-	if fresh.Python.Arguments[0] != "path" || !json.Valid(fresh.InputSchema) {
+	if fresh.Python.Arguments[0] != "path" || !json.Valid(fresh.InputSchema) || fresh.PreDispatch.Resource.Namespace != "workspace" {
 		t.Fatalf("Plan.Specs leaked mutable state: %#v", fresh)
+	}
+}
+
+func preDispatchArgument(argument string) *capability.PreDispatchContract {
+	return &capability.PreDispatchContract{
+		Resource:  capability.ResourceReference{Namespace: "workspace", Argument: argument},
+		Freshness: capability.FreshnessPlanEpoch,
+		Unclaimed: capability.UnclaimedDiscardWithDisposition,
 	}
 }
 

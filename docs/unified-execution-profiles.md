@@ -73,7 +73,7 @@ Python exceptions, import errors, timeout, OOM, cancellation, capability denial,
 
 ## Capability transport
 
-The sealed `pysolate.capability-plan.v4` and `Broker.Call` remain authoritative.
+The sealed `pysolate.capability-plan.v5` and `Broker.Call` remain authoritative.
 
 - WASM: generated projection -> `_agent_runtime_host.call` -> Host function -> Broker.
 - Native: the identical generated projection -> native `_agent_runtime_host.py` -> bounded HTTP/JSON over a private Unix socket -> channel registry -> same Broker.

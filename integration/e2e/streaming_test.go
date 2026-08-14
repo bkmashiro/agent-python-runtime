@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -36,9 +35,9 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var eagerDispatch, reachedDispatch atomic.Uint32
+	var qualifiedDispatch, reachedDispatch atomic.Uint32
 	registry := capability.NewRegistry()
-	register := func(name string, speculative bool, counter *atomic.Uint32) {
+	register := func(name string, qualified bool, counter *atomic.Uint32) {
 		t.Helper()
 		grant, err := capability.NewGrant(json.RawMessage(`{"scope":"stream-fixture"}`))
 		if err != nil {
@@ -51,8 +50,12 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			OutputSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
 			Python:       &capability.PythonProjection{Module: "tools", Method: name[len("fixture."):], Arguments: []string{"value"}},
 		}
-		if speculative {
-			spec.ReadOnly, spec.Idempotent, spec.SpeculativeSafe = true, true, true
+		if qualified {
+			spec.ReadOnly, spec.Idempotent = true, true
+			spec.PreDispatch = &capability.PreDispatchContract{
+				Resource:  capability.ResourceReference{Namespace: "fixture", Argument: "value"},
+				Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+			}
 		}
 		if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
 			counter.Add(1)
@@ -61,14 +64,14 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	register("fixture.eager", true, &eagerDispatch)
+	register("fixture.eager", true, &qualifiedDispatch)
 	register("fixture.reached", false, &reachedDispatch)
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 8})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	run := func(chunks []string, proveBeforeEOF bool) (streaming.RunResult, workspace.Ref, *capability.Broker, error) {
+	run := func(chunks []string) (streaming.RunResult, workspace.Ref, *capability.Broker, error) {
 		attempt, err := manager.ForkAttempt(base)
 		if err != nil {
 			return streaming.RunResult{}, "", nil, err
@@ -108,28 +111,12 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			result, err := streaming.ExecuteStream(context.Background(), streamRunner, attempt, request, prepareChannel)
 			completed <- outcome{result: result, err: err}
 		}()
-		before := eagerDispatch.Load()
-		for index, prepare := range prepares {
+		for _, prepare := range prepares {
 			select {
 			case prepareChannel <- prepare:
 			case finished := <-completed:
 				close(prepareChannel)
 				return finished.result, attempt.Ref(), broker, finished.err
-			}
-			if proveBeforeEOF && index == 2 {
-				deadline := time.Now().Add(2 * time.Second)
-				for eagerDispatch.Load() == before && time.Now().Before(deadline) {
-					time.Sleep(time.Millisecond)
-				}
-				if eagerDispatch.Load() == before {
-					close(prepareChannel)
-					return streaming.RunResult{}, attempt.Ref(), broker, errors.New("eager read did not dispatch before EOF")
-				}
-				select {
-				case <-completed:
-					return streaming.RunResult{}, attempt.Ref(), broker, errors.New("stream completed before EOF")
-				default:
-				}
 			}
 		}
 		close(prepareChannel)
@@ -145,12 +132,12 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 		"reached = tools.reached('reached')['value']\n",
 		"Path('/workspace/output.txt').write_text(used + ':' + reached)\n",
 		"result = {'used': used, 'reached': reached}\n",
-	}, true)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if eagerDispatch.Load() != 2 || reachedDispatch.Load() != 1 || broker == nil || broker.Calls() != 3 {
-		t.Fatalf("dispatch eager=%d reached=%d broker=%v", eagerDispatch.Load(), reachedDispatch.Load(), broker)
+	if qualifiedDispatch.Load() != 1 || reachedDispatch.Load() != 1 || broker == nil || broker.Calls() != 2 {
+		t.Fatalf("dispatch qualified=%d reached=%d broker=%v", qualifiedDispatch.Load(), reachedDispatch.Load(), broker)
 	}
 	var envelope struct {
 		Result struct {
@@ -162,21 +149,16 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			} `json:"timeline"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(valid.Response, &envelope); err != nil || envelope.Result.Eager["dispatched"] != 2 || envelope.Result.Eager["consumed"] != 1 || envelope.Result.Eager["orphaned"] != 1 || len(envelope.Result.Timeline) == 0 {
-		t.Fatalf("invalid stream evidence err=%v result=%+v", err, envelope.Result)
-	}
-	for _, event := range envelope.Result.Timeline {
-		if event.Kind == "" || event.StartMS < 0 || event.EndMS < event.StartMS {
-			t.Fatalf("invalid timeline event: %+v", event)
-		}
+	if err := json.Unmarshal(valid.Response, &envelope); err != nil || envelope.Result.Eager["dispatched"] != 0 || envelope.Result.Eager["consumed"] != 0 || envelope.Result.Eager["orphaned"] != 0 {
+		t.Fatalf("capability metadata activated eager stream dispatch err=%v result=%+v", err, envelope.Result)
 	}
 	assertSnapshotPath(t, manager, base, "output.txt", false)
 	assertSnapshotPath(t, manager, valid.PublishedWorkspace, "output.txt", true)
 
-	beforeEager := eagerDispatch.Load()
-	_, invalidRef, invalidBroker, err := run([]string{"if False:\n    tools.eager('wasted-invalid')\n", "result = )\n"}, false)
-	if err == nil || invalidBroker == nil || invalidBroker.Calls() != 1 || eagerDispatch.Load() != beforeEager+1 {
-		t.Fatalf("invalid suffix err=%v eager=%d broker=%v", err, eagerDispatch.Load(), invalidBroker)
+	beforeEager := qualifiedDispatch.Load()
+	_, invalidRef, invalidBroker, err := run([]string{"if False:\n    tools.eager('wasted-invalid')\n", "result = )\n"})
+	if err == nil || invalidBroker == nil || invalidBroker.Calls() != 0 || qualifiedDispatch.Load() != beforeEager {
+		t.Fatalf("invalid suffix err=%v qualified=%d broker=%v", err, qualifiedDispatch.Load(), invalidBroker)
 	}
 	if _, err := manager.Acquire(invalidRef, "discarded"); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
 		t.Fatalf("invalid attempt published: %v", err)

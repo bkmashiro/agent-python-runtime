@@ -43,6 +43,9 @@ func TestBenchmarkManifestIsTypedExactEndpointSource(t *testing.T) {
 	if len(specs) != 1 || specs[0].Name != "sources.benchmark_manifest" || specs[0].Version != "pysolate.sources.benchmark-manifest.v1" || specs[0].EffectClass != EffectExternalRead || specs[0].Playback != PlaybackCaptured || specs[0].Python == nil || specs[0].Python.Module != "sources" || specs[0].Python.Method != "benchmark_manifest" || specs[0].Python.GlobalAlias != "" || specs[0].Python.ResultField != "" {
 		t.Fatalf("specs=%#v", specs)
 	}
+	if qualification, ok := plan.PreDispatch("sources.benchmark_manifest"); ok || qualification.Eligible() {
+		t.Fatalf("live manifest source received unsupported pre-dispatch qualification: %+v", qualification)
+	}
 	if strings.Contains(string(mustBenchmarkJSON(t, specs[0])), policy.Endpoint) || strings.Contains(plan.PythonPrelude(), "endpoint") || strings.Contains(plan.PythonPrelude(), "headers") || strings.Contains(plan.PythonPrelude(), "method") {
 		t.Fatalf("Agent surface leaked transport authority: spec=%s prelude=%s", mustBenchmarkJSON(t, specs[0]), plan.PythonPrelude())
 	}

@@ -191,7 +191,8 @@ pre-dispatch only an exact call that satisfies all of the following:
 
 - the target-Guest overlay identifies an exact source occurrence;
 - capability name and canonical arguments are available before Guest execution;
-- the Host capability binding is `read_only + idempotent + speculative_safe`;
+- the Host capability binding is `read_only + idempotent` and carries the exact v0
+  pre-dispatch resource/freshness/unclaimed contract;
 - spec, handler, Plan, grant/policy, freshness, expiry and privacy identities are
   frozen;
 - an independent per-Run speculation budget admits the physical request;

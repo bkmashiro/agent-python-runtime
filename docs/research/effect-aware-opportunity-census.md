@@ -13,6 +13,8 @@ It does not claim that any call is legal to pre-dispatch, overlap, retain or rep
 - Machine-readable census: [`docs/evidence/effect-aware-opportunity-census.json`](../evidence/effect-aware-opportunity-census.json)
 - Guest source commit used to build the analyzer artifact:
   `950249a92eaec648b88850300c5653ab62aff888`
+- Census/evidence source commit (checkout this commit for the frozen v4 result):
+  `c97f98bfbfbb0dd23aaab29fb4fe5c3b04f6dac4`
 - Guest artifact SHA-256:
   `a62ae62b13a502152673e1c40c7bee80412d1724302bf8922eb7e3d86ce70473`
 - Corpus identity:

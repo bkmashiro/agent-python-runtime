@@ -168,7 +168,11 @@ func censusPlan() (*capability.Plan, string, error) {
 		InputSchema:     json.RawMessage(`{"type":"object","properties":{"key":{"type":"string","minLength":1,"maxLength":256}},"required":["key"],"additionalProperties":false}`),
 		OutputSchema:    json.RawMessage(`{"type":"object","properties":{"value":{}},"required":["value"],"additionalProperties":false}`),
 		Python:          &capability.PythonProjection{Module: "sources", Method: "read", Arguments: []string{"key"}, ResultField: "value"},
-		ReadOnly:        true, Idempotent: true, SpeculativeSafe: true,
+		ReadOnly:        true, Idempotent: true,
+		PreDispatch: &capability.PreDispatchContract{
+			Resource:  capability.ResourceReference{Namespace: "sources", Argument: "key"},
+			Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+		},
 	}
 	if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"value":null}`), nil
@@ -184,7 +188,11 @@ func censusPlan() (*capability.Plan, string, error) {
 			InputSchema:     json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
 			OutputSchema:    json.RawMessage(`{"type":"object"}`),
 			Python:          &capability.PythonProjection{Module: "sources", Method: method, Arguments: []string{}},
-			ReadOnly:        true, Idempotent: true, SpeculativeSafe: true,
+			ReadOnly:        true, Idempotent: true,
+			PreDispatch: &capability.PreDispatchContract{
+				Resource:  capability.ResourceReference{Namespace: "sources", Constant: method},
+				Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+			},
 		}
 		if err := registry.Register(sourceSpec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
 			return json.RawMessage(`{}`), nil

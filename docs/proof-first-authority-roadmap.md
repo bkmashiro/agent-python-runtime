@@ -14,6 +14,12 @@ while adding bounded AST semantic planning, whole-function reuse, and
 continuation-preserving cold-I/O experiments as explicitly Experimental successor
 work.
 
+The 2026-08-14 Track B contract supersedes the inventory's old
+`SpeculativeSafe`/literal eager-preflight admission rule. That legacy dispatch path is
+disabled; capability-plan v5 metadata alone cannot start work. Future pre-dispatch
+requires the verified overlay and legality gates in the active roadmap. See
+[the canonical v0 contract](research/effect-aware-contract-v0.md).
+
 Related decisions:
 
 - [product direction](product-direction.md)
@@ -35,7 +41,7 @@ or density behavior:
 ```text
 stable minimal Run contract
 ├─ optional incremental source validation / streaming local execution
-├─ optional eager preflight of Host-qualified speculative-safe reads
+├─ future verified semantic pre-dispatch of exact qualified reads
 ├─ optional streamed subagent fan-out
 ├─ optional immutable workspace roots / branches
 ├─ optional local content-addressed result reuse
@@ -173,9 +179,10 @@ allowing incomplete programs to publish files or dispatch writes.
   input root, private filesystem overlay, and `/tmp`;
 - [x] discard Guest, overlay, outputs, and unpublished state when the final
   source is invalid or abandoned;
-- [x] admit eager preflight only for Host-qualified
+- [x] historical proof admitted eager preflight only for Host-qualified
   `read_only + idempotent + speculative_safe` calls with canonical immediate
-  arguments and an independent budget;
+  arguments and an independent budget; that path is now disabled and superseded by
+  capability-plan v5 plus the future verified overlay;
 - [x] require actual dynamic reach for all other allowed calls, and keep writes
   behind final source/authority/approval seal;
 - [ ] bind staged read results to source range, dynamic occurrence, canonical

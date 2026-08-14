@@ -148,12 +148,16 @@ bounded, canonical and unknown-field rejecting.
 ## Canonical effect contracts
 
 The existing `capability.Spec` remains the only canonical typed capability definition.
-Its current fields—effect class, playback, handler/version identity, schemas,
-`ReadOnly`, `Idempotent` and `SpeculativeSafe`—are not sufficient by themselves to
-prove parallelism, hoisting or reuse.
+Capability-plan v5 adds one optional, bounded `PreDispatchContract` beside effect
+class, playback, handler/version identity, schemas, `ReadOnly` and `Idempotent`. The
+contract names one argument- or constant-keyed logical read resource, admits only the
+exact `plan_epoch` freshness mode, and requires unclaimed physical work to end with a
+typed discard disposition. The old undifferentiated `SpeculativeSafe` bit is removed.
 
-Only after the opportunity census identifies the first concrete legality question,
-consider bounded additions for:
+This is the minimum Host-owned metadata required by the Track A question. It does not
+by itself prove control reachability, argument availability, resource non-conflict or
+claim identity. Later contract fields should be added only when a measured legality
+question requires them:
 
 - canonical resource reads and writes;
 - determinism;
@@ -200,10 +204,11 @@ RequiredBackend(program, context)
 `CanHoist` should not be implemented initially. Moving a call across control flow can
 change whether it executes, exception order, cancellation, freshness and resource
 lifetime. The first runtime consumer does not rewrite Python or execute a graph. It
-may pre-dispatch only exact calls whose canonical arguments and Host-owned
-`read_only + idempotent + speculative_safe` qualification all admit. The result
-enters the existing one-shot, run-scoped staged-observation path and unchanged
-Python claims it at the original call boundary.
+may pre-dispatch only exact calls whose canonical arguments, resource proof and
+Host-owned `read_only + idempotent + pre_dispatch{resource, plan_epoch,
+discard_with_disposition}` contract all admit. The result enters the existing
+one-shot, run-scoped staged-observation path and unchanged Python claims it at the
+original call boundary.
 
 Unknown input to any predicate returns rejection, never a weaker assumption.
 

@@ -73,7 +73,10 @@ This is compatibility policy, not the primary sandbox. WASI and Host capabilitie
 
 ### Host-owned tools
 
-Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v4` binds sorted canonical specs, their opaque Host policy grants and the total call budget; late registration is rejected. Each current spec binds capability/version and handler identities, documentation, effect/playback declarations, strict input/output schemas and generated Python projection metadata. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access.
+Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v5` binds sorted canonical specs, their opaque Host policy grants and the total call budget; late registration is rejected. Each current spec binds capability/version and handler identities, documentation, effect/playback declarations, strict input/output schemas, generated Python projection metadata and any optional bounded pre-dispatch qualification. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access. Capability metadata
+alone never starts pre-dispatch or populates the legacy streaming eager-call map; a
+future consumer additionally requires verified program facts and exact observation
+authority.
 
 The credential-free `sources.demo_catalog()` and
 `sources.benchmark_manifest()` adapters are the two Current external-read

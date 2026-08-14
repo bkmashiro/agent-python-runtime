@@ -37,6 +37,9 @@ func TestDemoCatalogIsTypedExactEndpointSource(t *testing.T) {
 	if specs := plan.Specs(); len(specs) != 1 || specs[0].Name != "sources.demo_catalog" || specs[0].EffectClass != capability.EffectExternalRead || specs[0].Playback != capability.PlaybackCaptured || specs[0].Python.Module != "sources" || specs[0].Python.Method != "demo_catalog" || specs[0].Python.GlobalAlias != "" {
 		t.Fatalf("specs=%#v", specs)
 	}
+	if qualification, ok := plan.PreDispatch("sources.demo_catalog"); ok || qualification.Eligible() {
+		t.Fatalf("live source received unsupported pre-dispatch qualification: %+v", qualification)
+	}
 	broker, err := capability.NewBroker(capability.Config{RunIdentity: "source-run", Plan: plan})
 	if err != nil {
 		t.Fatal(err)

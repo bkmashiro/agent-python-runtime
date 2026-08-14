@@ -327,27 +327,29 @@ falsifiable overlay experiment, not a population-level opportunity claim.
 **Do not:** expose private source/bodies; treat structural candidates as legal; call a
 small fixture set representative.
 
-### Track B — Minimal canonical effect-contract extension
+### Track B — Minimal canonical effect-contract extension — **Complete**
 
 **Promise:** Add only the Host-owned metadata that a measured legality question
 requires.
 
-Candidate fields, to be accepted or reduced after Track A:
+Accepted v0 fields after Track A:
 
-- resource reads/writes as bounded canonical expressions;
-- determinism and coalescing/shareability;
-- freshness/snapshot semantics;
-- exception and cancellation behavior;
-- capability/backend requirements.
+- one Host-authored logical read resource, keyed by an exact Python argument or a
+  Host constant;
+- exact `plan_epoch` freshness;
+- mandatory `discard_with_disposition` handling for unclaimed physical work.
 
-- [ ] Write strict v0 contract and identity/versioning tests before changing built-in
+Determinism, coalescing/shareability, multi-resource sets, writes, arbitrary freshness,
+exception transformation and backend requirements remain absent until measured.
+
+- [x] Write strict v0 contract and identity/versioning tests before changing built-in
   specs.
-- [ ] Keep absent/unknown metadata maximally conservative.
-- [ ] Extend sealed Plan/spec identity so semantic changes invalidate analysis and
+- [x] Keep absent/unknown metadata maximally conservative.
+- [x] Extend sealed Plan/spec identity so semantic changes invalidate analysis and
   execution identity.
-- [ ] Annotate only a minimal public fixture/built-in set needed by the first
-  experiment.
-- [ ] Verify generated Python/direct tool surfaces remain presentation only and
+- [x] Annotate only a checked-in capability fixture and the Track A research fixture;
+  leave production built-ins unqualified until a real freshness snapshot exists.
+- [x] Verify generated Python/direct tool surfaces remain presentation only and
   receive no authority from metadata.
 
 **Primary files:**
@@ -356,6 +358,12 @@ Candidate fields, to be accepted or reduced after Track A:
 - `runtime/capability/plan_test.go`
 - `runtime/semantic/analyzer.go`
 - capability fixtures and tests
+
+**Decision:** capability-plan v5 replaces the undifferentiated `SpeculativeSafe` bit
+with one exact `PreDispatchContract{resource, plan_epoch,
+discard_with_disposition}`. It is necessary but never sufficient for legality; Track C
+must supply source occurrence, canonical arguments, control and dependency facts. See
+[the Track B contract](../research/effect-aware-contract-v0.md).
 
 **Do not:** infer purity from HTTP method, capability name, `ReadOnly`, or
 `Idempotent`; create a second effect registry.
@@ -552,11 +560,9 @@ not permission to manufacture a broader optimizer.
 
 ## Current execution pointer
 
-**Track B:** define only the canonical Host-owned contract metadata required to
-answer exact request pre-issue/claim legality for the measured corpus. Track A is
-closed with 18 exact analyzed programs, three body-free prospective seeds, zero
-unclassifiable reports, ten structural pre-dispatch sites and no legality claim.
-Do not implement pre-dispatch or broaden the Python subset in Track B.
+**Track C:** implement only the target-Guest source-indexed semantic overlay required
+to instantiate and conservatively reject/qualify the v0 pre-dispatch contract. Tracks
+A and B are closed; no runtime request may be started by the overlay.
 
 ## Short prompt to start/resume this Mega-Goal
 

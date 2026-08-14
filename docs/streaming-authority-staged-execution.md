@@ -1,7 +1,14 @@
 # Streaming authority-staged Agent execution
 
-Status: **Minimal mechanism implemented; recursive fan-out and performance claims remain Proposed.**
+Status: **Historical mechanism evidence; literal eager preflight disabled by the 2026-08-14 successor contract.**
 Date: 2026-08-13
+
+> **2026-08-14 successor decision:** the literal-call eager-preflight path described
+> below is now disabled. Capability metadata no longer populates
+> `_stream_eager_calls`; unchanged Python must dynamically reach a call unless a
+> future verified semantic overlay proves the stricter pre-dispatch contract. See
+> [the v0 contract](research/effect-aware-contract-v0.md). The remaining text is
+> retained as historical mechanism evidence, not current admission policy.
 
 ## Research question
 
@@ -14,7 +21,7 @@ This hypothesis follows directly from an Agent-specific timing boundary:
 traditional functions exist before invocation, whereas an Agent's Python program
 is still being produced while the Runtime is otherwise idle.
 
-## Current minimal mechanism
+## Historical minimal mechanism
 
 The implemented proof now provides:
 
@@ -183,7 +190,7 @@ or scarce calls, and calls without stable argument/result identity stop
 speculation. They execute only after normal complete-source admission, or remain
 denied.
 
-## Dispatch rules: eager preflight versus confirmed reach
+## Historical dispatch rules: eager preflight versus confirmed reach
 
 For an eager-preflight read, a closed call with canonical immediate arguments is
 sufficient even when the call may be unreachable:

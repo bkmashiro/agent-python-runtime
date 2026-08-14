@@ -23,7 +23,7 @@ var (
 )
 
 const (
-	capabilityPlanSchemaVersion = "pysolate.capability-plan.v4"
+	capabilityPlanSchemaVersion = "pysolate.capability-plan.v5"
 	maxCapabilitySchemaBytes    = 64 << 10
 	maxCapabilityJSONNodes      = 16384
 
@@ -34,6 +34,9 @@ const (
 
 	PlaybackLiveOnly = "live_only"
 	PlaybackCaptured = "captured"
+
+	FreshnessPlanEpoch              = "plan_epoch"
+	UnclaimedDiscardWithDisposition = "discard_with_disposition"
 )
 
 // Handler is the entire Host-tool execution contract. Authority and schema
@@ -58,33 +61,55 @@ type PythonProjection struct {
 	ResultField string   `json:"result_field,omitempty"`
 }
 
+// ResourceReference names one Host-owned logical read resource. Exactly one key
+// selector is present: an exact Python argument or a Host-authored constant.
+type ResourceReference struct {
+	Namespace string `json:"namespace"`
+	Argument  string `json:"argument,omitempty"`
+	Constant  string `json:"constant,omitempty"`
+}
+
+// PreDispatchContract is the minimal v0 contract for starting one exact read
+// before unchanged Python reaches and claims its original call boundary.
+type PreDispatchContract struct {
+	Resource  ResourceReference `json:"resource"`
+	Freshness string            `json:"freshness"`
+	Unclaimed string            `json:"unclaimed"`
+}
+
 // Spec is the canonical Host-owned definition shared by registration, plan
 // identity, Broker validation and Python projection.
 type Spec struct {
-	Name            string            `json:"capability"`
-	Version         string            `json:"version"`
-	Description     string            `json:"description"`
-	EffectClass     string            `json:"effect_class"`
-	Playback        string            `json:"playback"`
-	HandlerIdentity string            `json:"handler_identity"`
-	InputSchema     json.RawMessage   `json:"input_schema"`
-	OutputSchema    json.RawMessage   `json:"output_schema"`
-	Python          *PythonProjection `json:"python,omitempty"`
-	ReadOnly        bool              `json:"read_only,omitempty"`
-	Idempotent      bool              `json:"idempotent,omitempty"`
-	SpeculativeSafe bool              `json:"speculative_safe,omitempty"`
+	Name            string               `json:"capability"`
+	Version         string               `json:"version"`
+	Description     string               `json:"description"`
+	EffectClass     string               `json:"effect_class"`
+	Playback        string               `json:"playback"`
+	HandlerIdentity string               `json:"handler_identity"`
+	InputSchema     json.RawMessage      `json:"input_schema"`
+	OutputSchema    json.RawMessage      `json:"output_schema"`
+	Python          *PythonProjection    `json:"python,omitempty"`
+	ReadOnly        bool                 `json:"read_only,omitempty"`
+	Idempotent      bool                 `json:"idempotent,omitempty"`
+	PreDispatch     *PreDispatchContract `json:"pre_dispatch,omitempty"`
 }
 
-// SpeculationQualification is Host-authored adapter policy, never inferred
+// PreDispatchQualification is Host-authored adapter policy, never inferred
 // from an HTTP verb, capability name, or Agent-produced request.
-type SpeculationQualification struct {
-	ReadOnly        bool
-	Idempotent      bool
-	SpeculativeSafe bool
+type PreDispatchQualification struct {
+	readOnly   bool
+	idempotent bool
+	contract   PreDispatchContract
 }
 
-func (qualification SpeculationQualification) EagerEligible() bool {
-	return qualification.ReadOnly && qualification.Idempotent && qualification.SpeculativeSafe
+func (qualification PreDispatchQualification) Eligible() bool {
+	return qualification.readOnly && qualification.idempotent && validPreDispatchContract(nil, &qualification.contract)
+}
+
+// Contract returns the defensive Host-authored contract carried by this sealed
+// qualification.
+func (qualification PreDispatchQualification) Contract() PreDispatchContract {
+	return qualification.contract
 }
 
 type registration struct {
@@ -239,14 +264,16 @@ func (plan *Plan) Identity() string {
 	return plan.identity
 }
 
+// StreamingObservationBinding returns frozen identity material for a future verified
+// consumer. It does not add the capability to the streaming eager-call map or start
+// physical work.
 func (plan *Plan) StreamingObservationBinding(name string) (StreamingObservationBinding, bool) {
 	if plan == nil {
 		return StreamingObservationBinding{}, false
 	}
 	registered, ok := plan.registrations[name]
-	if !ok || !(SpeculationQualification{
-		ReadOnly: registered.spec.ReadOnly, Idempotent: registered.spec.Idempotent, SpeculativeSafe: registered.spec.SpeculativeSafe,
-	}).EagerEligible() {
+	qualification, qualified := preDispatchQualification(registered.spec)
+	if !ok || !qualified || !qualification.Eligible() {
 		return StreamingObservationBinding{}, false
 	}
 	specBytes, err := json.Marshal(registered.spec)
@@ -298,14 +325,22 @@ func (plan *Plan) Grants() []GrantBinding {
 	return append([]GrantBinding(nil), plan.grants...)
 }
 
-func (plan *Plan) Speculation(name string) (SpeculationQualification, bool) {
+// PreDispatch returns a defensive, Host-sealed capability-side qualification. A
+// caller still needs verified program facts and exact authority/observation identity.
+func (plan *Plan) PreDispatch(name string) (PreDispatchQualification, bool) {
 	registered, ok := plan.lookup(name)
 	if !ok {
-		return SpeculationQualification{}, false
+		return PreDispatchQualification{}, false
 	}
-	return SpeculationQualification{
-		ReadOnly: registered.spec.ReadOnly, Idempotent: registered.spec.Idempotent,
-		SpeculativeSafe: registered.spec.SpeculativeSafe,
+	return preDispatchQualification(registered.spec)
+}
+
+func preDispatchQualification(spec Spec) (PreDispatchQualification, bool) {
+	if spec.PreDispatch == nil {
+		return PreDispatchQualification{}, false
+	}
+	return PreDispatchQualification{
+		readOnly: spec.ReadOnly, idempotent: spec.Idempotent, contract: *spec.PreDispatch,
 	}, true
 }
 
@@ -346,7 +381,7 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 		!validEffectClass(spec.EffectClass) || !validPlaybackTreatment(spec.Playback) ||
 		len(spec.InputSchema) == 0 || len(spec.InputSchema) > maxCapabilitySchemaBytes ||
 		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > maxCapabilitySchemaBytes || !validPythonProjection(spec.Python) ||
-		!validSpeculationQualification(spec) {
+		!validPreDispatchQualification(spec) {
 		return Spec{}, nil, nil, ErrInvalidTool
 	}
 	inputDocument, inputCanonical, err := canonicalJSON(spec.InputSchema)
@@ -371,13 +406,36 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 	return canonical, inputSchema, outputSchema, nil
 }
 
-func validSpeculationQualification(spec Spec) bool {
-	any := spec.ReadOnly || spec.Idempotent || spec.SpeculativeSafe
+func validPreDispatchQualification(spec Spec) bool {
+	any := spec.ReadOnly || spec.Idempotent || spec.PreDispatch != nil
 	if !any {
 		return true
 	}
 	readClass := spec.EffectClass == EffectPure || spec.EffectClass == EffectWorkspaceRead || spec.EffectClass == EffectExternalRead
-	return readClass && spec.ReadOnly && spec.Idempotent && spec.SpeculativeSafe
+	return readClass && spec.ReadOnly && spec.Idempotent && spec.Python != nil && validPreDispatchContract(spec.Python, spec.PreDispatch)
+}
+
+func validPreDispatchContract(projection *PythonProjection, contract *PreDispatchContract) bool {
+	if contract == nil || contract.Freshness != FreshnessPlanEpoch ||
+		contract.Unclaimed != UnclaimedDiscardWithDisposition || !validHandlerIdentity(contract.Resource.Namespace) ||
+		(contract.Resource.Argument == "") == (contract.Resource.Constant == "") {
+		return false
+	}
+	if contract.Resource.Constant != "" {
+		return validHandlerIdentity(contract.Resource.Constant)
+	}
+	if !validPythonIdentifier(contract.Resource.Argument) {
+		return false
+	}
+	if projection == nil {
+		return true
+	}
+	for _, argument := range projection.Arguments {
+		if argument == contract.Resource.Argument {
+			return true
+		}
+	}
+	return false
 }
 
 type denyCapabilitySchemaLoader struct{}
@@ -534,12 +592,6 @@ func generatePythonPrelude(specs []Spec) string {
 		if projection.GlobalAlias != "" {
 			fmt.Fprintf(&builder, "%s = %s.%s\n", projection.GlobalAlias, projection.Module, projection.Method)
 		}
-		if spec.ReadOnly && spec.Idempotent && spec.SpeculativeSafe {
-			fmt.Fprintf(&builder, "_stream_eager_calls[%s] = %s\n", pythonString(projection.Module+"."+projection.Method), proxy)
-			if projection.GlobalAlias != "" {
-				fmt.Fprintf(&builder, "_stream_eager_calls[%s] = %s\n", pythonString(projection.GlobalAlias), proxy)
-			}
-		}
 	}
 	return builder.String()
 }
@@ -631,6 +683,10 @@ func cloneSpec(spec Spec) Spec {
 		projection := *spec.Python
 		projection.Arguments = append([]string{}, spec.Python.Arguments...)
 		cloned.Python = &projection
+	}
+	if spec.PreDispatch != nil {
+		contract := *spec.PreDispatch
+		cloned.PreDispatch = &contract
 	}
 	return cloned
 }

@@ -1,6 +1,6 @@
 # Shared effect-aware legality and differential oracle v0
 
-Status: **Track D implemented; G1 review pending**
+Status: **Track D complete; G1 passed**
 
 Track D introduces no runtime transformation. It provides a single fail-closed Host
 join for verified Guest facts, sealed capability-plan v5 metadata and frozen per-Run
@@ -106,6 +106,13 @@ three of four annotated calls for pre-execution issue.
 Current machine census SHA-256:
 `72992e95f97d5f19a9363af03d10b529e3e6303ea88be04949eca623afeebb9f`.
 The exact Guest artifact and analyzer identities remain those frozen by Track C.
+
+The final independent read-only review froze commit `4be718e`, ran the full Go suite,
+focused race and adversarial overlay probes, Guest semantic tests, evidence assertions
+and consumer searches, and recorded no Blocking/High/Medium finding. Its delivery
+process reached the 15-minute deadline after completing the audit rather than emitting
+a final prose summary; the complete transcript retains the commands and outputs. G1
+therefore passes on the reviewed code and machine evidence, not on the missing summary.
 
 ## Boundary for Track E
 

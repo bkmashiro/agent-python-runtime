@@ -433,7 +433,17 @@ optimization passes do not invent their own semantics.
 - [x] Keep `CanHoist` disabled until branch/exception reachability is represented.
 - [x] Build baseline-vs-candidate trace comparator and adversarial matrix.
 - [x] Compare overlay predicates with a call-level resource-annotation baseline.
-- [ ] Run G1 review and decision gate.
+- [x] Run G1 review and decision gate.
+
+**G1 decision:** pass. The accepted subset is exactly one module-entry,
+necessarily-reached, single-occurrence scalar `sources.read` shape with a sealed
+read-only pre-dispatch contract, exact resource/freshness/authority/lineage/privacy
+identity and a Host-owned budget reservation. The first consumer may only be a
+default-off Track E spike over `runtime/streaming.StagedObservation`; it must atomically
+consume the budget and claim the observation once at the unchanged dynamic Python
+Host-call boundary. Writes, conditional calls, durable caching, coalescing, hoisting,
+replay and backend inference remain excluded. The reviewed comparator treats every
+unclaimed physical operation as a divergence.
 
 **Likely files:**
 

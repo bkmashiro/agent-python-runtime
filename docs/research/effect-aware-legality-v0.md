@@ -76,7 +76,7 @@ write-class speculation and invalid/unqualified physical work. Report SHA-256:
 Cross-compiled ARM64 semantic and effectgraph test binaries passed on Linux
 `6.12.0-202.76.4.1.el9uek.aarch64`; binary SHA-256 values were
 `8094054fbaa4a93efba71b46108c652c6dd6a1c8feef0c10850d505b6a00497c` and
-`0b1ac638d3608881fa47b0d79b8a3c74d50f604938d13a8016088fc2e2e44adc`.
+`4ea4804e0d94509bdc0ad6b0a4edff1dd31f7de3c8acdfca655f0461fd9f06e0`.
 The ARM64 oracle binary independently reproduced the exact report SHA-256 above.
 
 ## Opportunity comparison

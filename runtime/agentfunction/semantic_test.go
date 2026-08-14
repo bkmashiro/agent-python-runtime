@@ -11,6 +11,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	"github.com/bkmashiro/agent-python-runtime/runtime/internal/semantictrusted"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
@@ -111,7 +112,7 @@ func verifiedSemanticPlanFor(t *testing.T, invocation agentfunction.Invocation, 
 		t.Fatal(err)
 	}
 	runner := &verifiedFixtureRunner{template: template, bindings: bindings}
-	verifiedAnalysis, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	verifiedAnalysis, err := semantic.AnalyzeVerifiedTrusted(context.Background(), semantictrusted.New(runner), request)
 	if err != nil {
 		t.Fatal(err)
 	}

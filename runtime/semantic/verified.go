@@ -6,6 +6,8 @@ import (
 	"reflect"
 
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/internal/semantictrusted"
 )
 
 var ErrUnverifiedAnalysis = errors.New("semantic analysis provenance is unverified")
@@ -17,7 +19,21 @@ type VerifiedAnalysis struct {
 	properties   enginecontract.Properties
 }
 
-func AnalyzeVerified(ctx context.Context, runner enginecontract.Runner, request Request) (VerifiedAnalysis, error) {
+// AnalyzeVerified accepts only the concrete target-Guest Wazero engine. Arbitrary
+// engine.Runner implementations may be used with Analyze for untrusted reports, but
+// cannot mint VerifiedAnalysis.
+func AnalyzeVerified(ctx context.Context, runner *wazeroengine.Engine, request Request) (VerifiedAnalysis, error) {
+	return analyzeVerified(ctx, runner, request)
+}
+
+// AnalyzeVerifiedTrusted is restricted by Go's internal-package boundary to runtime
+// TCB code. It exists for Host-internal composition and tests; external plugins cannot
+// name or construct semantictrusted.Authority.
+func AnalyzeVerifiedTrusted(ctx context.Context, authority semantictrusted.Authority, request Request) (VerifiedAnalysis, error) {
+	return analyzeVerified(ctx, authority.Runner(), request)
+}
+
+func analyzeVerified(ctx context.Context, runner enginecontract.Runner, request Request) (VerifiedAnalysis, error) {
 	if runner == nil {
 		return VerifiedAnalysis{}, ErrAnalyzerUnavailable
 	}

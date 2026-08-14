@@ -1,7 +1,7 @@
 {
   "schema_version": "pysolate.differential-oracle.v0",
-  "cases": 17,
-  "matched": 17,
+  "cases": 24,
+  "matched": 24,
   "results": [
     {
       "id": "argument-mismatch",
@@ -22,6 +22,20 @@
       "expected": "cancellation_boundary_mismatch",
       "observed": "cancellation_boundary_mismatch",
       "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "cyclic-predecessor",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "equivalent-consumed-claim",
+      "expected": "",
+      "observed": "",
+      "equivalent": true,
       "matched": true
     },
     {
@@ -54,8 +68,15 @@
     },
     {
       "id": "logical-event-order",
-      "expected": "required_order_inversion",
-      "observed": "required_order_inversion",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "logical-invalid-status",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
       "equivalent": false,
       "matched": true
     },
@@ -63,6 +84,27 @@
       "id": "missing-logical-effect",
       "expected": "missing_effect_event",
       "observed": "missing_effect_event",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "physical-claim-argument-mismatch",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "physical-claim-duplicate",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "physical-flag-without-event",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
       "equivalent": false,
       "matched": true
     },
@@ -119,6 +161,13 @@
       "id": "workspace-mismatch",
       "expected": "workspace_state_mismatch",
       "observed": "workspace_state_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "workspace-unknown-effect",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
       "equivalent": false,
       "matched": true
     }

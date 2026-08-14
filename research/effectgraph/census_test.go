@@ -89,20 +89,31 @@ func TestRunCensusAppliesSharedLegalityAndKeepsCallLevelBaselineSeparate(t *test
 		}}
 		return analysis, nil
 	}
+	if _, err := effectgraph.RunCensus(context.Background(), corpus, root, analyzer,
+		func([]byte) (string, error) { return effectgraph.PlacementWASM, nil },
+		func(analysis semantic.Analysis) (effectgraph.ProgramLegality, error) {
+			return effectgraph.ProgramLegality{
+				CallLevelQualified: 1, PreissueLegal: 1, PreissueRejected: 1,
+				Rejections: []effectgraph.LegalityRejectionCount{{Reason: semantic.RejectCallNotNecessarilyReached, Count: 1}},
+			}, nil
+		},
+	); err == nil {
+		t.Fatal("inconsistent legality aggregate accepted")
+	}
 	report, err := effectgraph.RunCensus(context.Background(), corpus, root, analyzer,
 		func([]byte) (string, error) { return effectgraph.PlacementWASM, nil },
 		func(analysis semantic.Analysis) (effectgraph.ProgramLegality, error) {
 			return effectgraph.ProgramLegality{
 				CallLevelQualified: 1, PreissueLegal: 1,
-				Rejections: []effectgraph.LegalityRejectionCount{{Reason: semantic.RejectCallNotNecessarilyReached, Count: 1}},
+				Rejections: []effectgraph.LegalityRejectionCount{},
 			}, nil
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.CallLevelQualified != 1 || report.PreissueLegal != 1 || report.Programs[0].PreissueLegal != 1 ||
-		len(report.LegalityRejections) != 1 || report.LegalityRejections[0].Count != 1 {
+	if report.CallLevelQualified != 1 || report.PreissueLegal != 1 || report.PreissueRejected != 0 ||
+		report.Programs[0].PreissueLegal != 1 || len(report.LegalityRejections) != 0 {
 		t.Fatalf("report=%+v", report)
 	}
 	for _, opportunity := range report.Opportunities {
@@ -110,6 +121,11 @@ func TestRunCensusAppliesSharedLegalityAndKeepsCallLevelBaselineSeparate(t *test
 			(opportunity.Structural != 2 || opportunity.ProvedLegal != 1 || opportunity.Legality != effectgraph.Evaluated) {
 			t.Fatalf("opportunity=%+v", opportunity)
 		}
+	}
+	forged := report
+	forged.PreissueLegal++
+	if _, err := effectgraph.EncodeReport(forged); err == nil {
+		t.Fatal("forged census aggregate encoded")
 	}
 }
 

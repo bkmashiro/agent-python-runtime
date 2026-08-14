@@ -6,13 +6,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/internal/semantictrusted"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
+
+func TestAnalyzeVerifiedPublicAuthorityIsConcreteTargetWazero(t *testing.T) {
+	functionType := reflect.TypeOf(semantic.AnalyzeVerified)
+	if got, want := functionType.In(1), reflect.TypeOf((*wazeroengine.Engine)(nil)); got != want {
+		t.Fatalf("runner parameter=%v want=%v", got, want)
+	}
+}
 
 func TestAnalyzeUsesOptionalExactGuestSurfaceAndChecksBindings(t *testing.T) {
 	bindings := semantic.Bindings{
@@ -60,7 +70,7 @@ func TestAnalyzeVerifiedWithholdsAuthorityAndReturnsDetachedReports(t *testing.T
 		t.Fatal(err)
 	}
 	runner := &fakeSemanticRunner{bindings: bindings}
-	verified, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	verified, err := semantic.AnalyzeVerifiedTrusted(context.Background(), semantictrusted.New(runner), request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +90,7 @@ func TestAnalyzeVerifiedWithholdsAuthorityAndReturnsDetachedReports(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			candidate := &fakeSemanticRunner{bindings: bindings}
 			mutate(candidate)
-			if _, err := semantic.AnalyzeVerified(context.Background(), candidate, request); !errors.Is(err, semantic.ErrAnalyzerEngineBinding) {
+			if _, err := semantic.AnalyzeVerifiedTrusted(context.Background(), semantictrusted.New(candidate), request); !errors.Is(err, semantic.ErrAnalyzerEngineBinding) {
 				t.Fatalf("error=%v", err)
 			}
 		})

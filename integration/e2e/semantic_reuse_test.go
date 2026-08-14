@@ -44,7 +44,7 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifiedAnalysis, err := semantic.AnalyzeVerified(context.Background(), analysisRunner, analysisRequest)
+	verifiedAnalysis, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, analysisRunner), analysisRequest)
 	analysis, reportErr := verifiedAnalysis.Analysis()
 	if closeErr := analysisRunner.Close(context.Background()); err == nil {
 		err = closeErr

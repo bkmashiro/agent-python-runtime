@@ -67,6 +67,10 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 	if err != nil {
 		return err
 	}
+	trustedRunner, ok := runner.(*wazeroengine.Engine)
+	if !ok {
+		return fmt.Errorf("effectgraph census requires target Wazero semantic authority, got %T", runner)
+	}
 	defer runner.Close(context.Background())
 
 	bindings := semantic.Bindings{
@@ -122,7 +126,7 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 			if err != nil {
 				return semantic.Analysis{}, err
 			}
-			verified, err := semantic.AnalyzeVerified(ctx, runner, request)
+			verified, err := semantic.AnalyzeVerified(ctx, trustedRunner, request)
 			if err != nil {
 				return semantic.Analysis{}, err
 			}
@@ -167,6 +171,8 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 				})
 				if decision.Allowed() {
 					result.PreissueLegal++
+				} else {
+					result.PreissueRejected++
 				}
 				for _, reason := range decision.Rejections() {
 					rejections[reason]++

@@ -1,5 +1,5 @@
 {
-  "schema_version": "pysolate.effectgraph-opportunity-census.v2",
+  "schema_version": "pysolate.effectgraph-opportunity-census.v3",
   "corpus_sha256": "sha256:33ad95a0f55658e74a288213b352f173f665b1c95828b8fa8f07d14b469c1136",
   "analyzer_sha256": "sha256:acf0c8e51b5da65c3e589ccf0ae4f0edea3c77af15987772fc9a82179539c971",
   "target": {
@@ -20,6 +20,7 @@
   "necessarily_reached_call_sites": 1,
   "call_level_qualified": 4,
   "preissue_legal": 1,
+  "preissue_rejected": 3,
   "body_free_historical_seeds": 3,
   "placement_counts": {
     "pysolate_wasm": 16,
@@ -102,6 +103,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -122,6 +124,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 1,
       "preissue_legal": 0,
+      "preissue_rejected": 1,
       "legality_rejections": [
         {
           "reason": "call_not_necessarily_reached",
@@ -143,6 +146,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -159,6 +163,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -175,6 +180,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -193,6 +199,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -211,6 +218,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "native_sandbox"
@@ -229,6 +237,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -245,6 +254,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -261,6 +271,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -279,6 +290,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -295,6 +307,7 @@
       "necessarily_reached_call_sites": 1,
       "call_level_qualified": 1,
       "preissue_legal": 1,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -314,6 +327,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "native_sandbox"
@@ -330,6 +344,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": true,
       "placement": "pysolate_wasm"
@@ -346,6 +361,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
@@ -362,6 +378,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": true,
       "placement": "pysolate_wasm"
@@ -382,6 +399,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "native_sandbox"
@@ -402,6 +420,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 2,
       "preissue_legal": 0,
+      "preissue_rejected": 2,
       "legality_rejections": [
         {
           "reason": "call_not_necessarily_reached",
@@ -426,6 +445,7 @@
       "necessarily_reached_call_sites": 0,
       "call_level_qualified": 0,
       "preissue_legal": 0,
+      "preissue_rejected": 0,
       "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"

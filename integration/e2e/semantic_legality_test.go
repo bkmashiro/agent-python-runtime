@@ -77,7 +77,7 @@ func TestRealGuestSharedLegalityQualifiesOnlyExactMustReachCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verified, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	verified, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, runner), request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestRealGuestSharedLegalityQualifiesOnlyExactMustReachCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conditionalVerified, err := semantic.AnalyzeVerified(context.Background(), runner, conditional)
+	conditionalVerified, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, runner), conditional)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,12 +7,23 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/research/effectgraph"
 )
 
+func TestEncodeDifferentialReportRejectsForgedAggregate(t *testing.T) {
+	report, err := effectgraph.RunDifferentialOracle(effectgraph.DefaultDifferentialCases())
+	if err != nil {
+		t.Fatal(err)
+	}
+	report.Results[0].Observed = report.Results[1].Observed
+	if _, err := effectgraph.EncodeDifferentialReport(report); err == nil {
+		t.Fatal("forged report encoded")
+	}
+}
+
 func TestDefaultDifferentialOracleMatchesEveryAdversarialCase(t *testing.T) {
 	report, err := effectgraph.RunDifferentialOracle(effectgraph.DefaultDifferentialCases())
 	if err != nil {
 		t.Fatalf("report=%+v err=%v", report, err)
 	}
-	if report.Cases != 17 || report.Matched != report.Cases || len(report.Results) != int(report.Cases) {
+	if report.Cases != 24 || report.Matched != report.Cases || len(report.Results) != int(report.Cases) {
 		t.Fatalf("report=%+v", report)
 	}
 	encoded, err := effectgraph.EncodeDifferentialReport(report)

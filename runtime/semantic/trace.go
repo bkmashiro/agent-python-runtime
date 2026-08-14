@@ -92,6 +92,7 @@ type TraceEvent struct {
 	Status               EventStatus
 	Predecessors         []string
 	QualifiedSpeculation bool
+	QualificationSHA256  string
 	ClaimedLogicalID     string
 }
 
@@ -214,9 +215,11 @@ func validObservableTrace(trace ObservableTrace) bool {
 		len(trace.Events) == 0 || len(trace.Events) > maxObservableTraceEvents {
 		return false
 	}
-	logical := make(map[string]struct{}, len(trace.Events))
+	logical := make(map[string]TraceEvent, len(trace.Events))
 	all := make(map[string]struct{}, len(trace.Events))
-	for _, event := range trace.Events {
+	positions := make(map[string]int, len(trace.Events))
+	physicalStarted := false
+	for eventIndex, event := range trace.Events {
 		if !digestPattern.MatchString(event.ID) || !validEventKind(event.Kind) || !validEventSurface(event.Surface) ||
 			!validEventStatus(event.Status) || len(event.Predecessors) > maxTracePredecessors ||
 			!sort.StringsAreSorted(event.Predecessors) {
@@ -226,6 +229,7 @@ func validObservableTrace(trace ObservableTrace) bool {
 			return false
 		}
 		all[event.ID] = struct{}{}
+		positions[event.ID] = eventIndex
 		for index, predecessor := range event.Predecessors {
 			if !digestPattern.MatchString(predecessor) || predecessor == event.ID ||
 				(index > 0 && event.Predecessors[index-1] == predecessor) {
@@ -233,30 +237,39 @@ func validObservableTrace(trace ObservableTrace) bool {
 			}
 		}
 		if event.Surface == SurfaceLogical {
-			if event.QualifiedSpeculation || event.ClaimedLogicalID != "" {
+			if event.QualifiedSpeculation || event.QualificationSHA256 != "" || event.ClaimedLogicalID != "" ||
+				!validLogicalStatus(event.Kind, event.Status) {
 				return false
 			}
-			logical[event.ID] = struct{}{}
+			logical[event.ID] = event
 		} else if !validSpeculativePhysical(event) {
 			return false
+		} else {
+			physicalStarted = true
 		}
 		if !validEventPayload(event) {
 			return false
 		}
 	}
-	for _, event := range trace.Events {
+	claimed := make(map[string]struct{})
+	for eventIndex, event := range trace.Events {
 		for _, predecessor := range event.Predecessors {
-			if _, exists := logical[predecessor]; !exists {
+			if _, exists := logical[predecessor]; !exists || positions[predecessor] >= eventIndex {
 				return false
 			}
 		}
 		if event.Surface == SurfaceSpeculativePhysical && event.ClaimedLogicalID != "" {
-			if _, exists := logical[event.ClaimedLogicalID]; !exists {
+			logicalEvent, exists := logical[event.ClaimedLogicalID]
+			if !exists || !physicalClaimsLogical(event, logicalEvent) {
 				return false
 			}
+			if _, duplicate := claimed[event.ClaimedLogicalID]; duplicate {
+				return false
+			}
+			claimed[event.ClaimedLogicalID] = struct{}{}
 		}
 	}
-	return true
+	return trace.Terminal.PhysicalStarted == physicalStarted
 }
 
 func validWorkspaceTrace(workspace WorkspaceTrace) bool {
@@ -285,7 +298,8 @@ func validTerminalTrace(terminal TerminalTrace) bool {
 }
 
 func validSpeculativePhysical(event TraceEvent) bool {
-	if !event.QualifiedSpeculation || len(event.Predecessors) != 0 ||
+	if !event.QualifiedSpeculation || !digestPattern.MatchString(event.QualificationSHA256) ||
+		event.Kind != EventCapabilityObservation || len(event.Predecessors) != 0 ||
 		(event.EffectClass != TraceEffectPure && event.EffectClass != TraceEffectWorkspaceRead &&
 			event.EffectClass != TraceEffectExternalRead) {
 		return false
@@ -310,13 +324,49 @@ func validEventPayload(event TraceEvent) bool {
 			requireDigest(event.ResourceSHA256) && requireDigest(event.FreshnessSHA256) && requireDigest(event.AuthoritySHA256) &&
 			(event.ResultSHA256 == "" || requireDigest(event.ResultSHA256))
 	case EventWorkspaceRead, EventWorkspaceWrite:
-		return requireDigest(event.ResourceSHA256) && requireDigest(event.AuthoritySHA256) &&
+		expected := TraceEffectWorkspaceRead
+		if event.Kind == EventWorkspaceWrite {
+			expected = TraceEffectWorkspaceWrite
+		}
+		freshnessValid := event.FreshnessSHA256 == ""
+		if event.Kind == EventWorkspaceRead {
+			freshnessValid = requireDigest(event.FreshnessSHA256)
+		}
+		return event.Capability == "" && event.EffectClass == expected && event.ArgumentsSHA256 == "" &&
+			requireDigest(event.ResourceSHA256) && requireDigest(event.AuthoritySHA256) && freshnessValid &&
 			(event.ResultSHA256 == "" || requireDigest(event.ResultSHA256))
 	case EventResult, EventRaise:
-		return requireDigest(event.ResultSHA256)
+		return event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" &&
+			event.ResourceSHA256 == "" && requireDigest(event.ResultSHA256) && event.FreshnessSHA256 == "" &&
+			event.AuthoritySHA256 == ""
 	default:
 		return event.Capability == "" && event.EffectClass == "" && event.ArgumentsSHA256 == "" && event.ResourceSHA256 == "" &&
 			event.ResultSHA256 == "" && event.FreshnessSHA256 == "" && event.AuthoritySHA256 == ""
+	}
+}
+
+func physicalClaimsLogical(physical, logical TraceEvent) bool {
+	return physical.Kind == logical.Kind && physical.Capability == logical.Capability &&
+		physical.EffectClass == logical.EffectClass && physical.ArgumentsSHA256 == logical.ArgumentsSHA256 &&
+		physical.ResourceSHA256 == logical.ResourceSHA256 && physical.ResultSHA256 == logical.ResultSHA256 &&
+		physical.FreshnessSHA256 == logical.FreshnessSHA256 && physical.AuthoritySHA256 == logical.AuthoritySHA256
+}
+
+func validLogicalStatus(kind EventKind, status EventStatus) bool {
+	switch kind {
+	case EventRunStart:
+		return status == EventAttempted
+	case EventCapabilityAttempt, EventExternalEffectIntent, EventExternalEffectAttempt,
+		EventWorkspaceRead, EventWorkspaceWrite:
+		return status == EventAttempted || status == EventSucceeded || status == EventFailed || status == EventAmbiguous
+	case EventCapabilityObservation, EventExternalEffectTerminal, EventResult, EventRaise, EventRunTerminal:
+		return status == EventSucceeded || status == EventFailed || status == EventAmbiguous
+	case EventCancel:
+		return status == EventCancelled
+	case EventTimeout, EventTrap:
+		return status == EventFailed
+	default:
+		return false
 	}
 }
 

@@ -34,7 +34,7 @@ versioned Track C follow-up and do not masquerade as the old census.
 - Corpus file SHA-256:
   `514fab7cf24c278d831255e350980f86e3bd0317080c8ba2262c792410fa0edf`
 - Report file SHA-256:
-  `fe82029a703af6619b172b30817e6721e53c7533cab5bd56ceebe5937b6d0c1e`
+  `72992e95f97d5f19a9363af03d10b529e3e6303ea88be04949eca623afeebb9f`
 
 The raw CPython/WASI Guest and toolchain were built on Linux x86-64 from the signed
 implementation lineage. The review-fix commit changed only Guest Python, Go and docs;
@@ -81,6 +81,7 @@ validation proves digest shape and body-free status, not derivation. They remain
 | Overlay calls necessarily reached | 1 |
 | Call-level resource-contract baseline | 4 |
 | Shared `CanPreissue` legal calls | 1 |
+| Shared `CanPreissue` rejected calls | 3 |
 | Barrier instances | 39 |
 
 Structural annotations remain non-authoritative:

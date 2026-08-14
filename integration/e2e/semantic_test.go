@@ -126,7 +126,7 @@ func TestRealGuestSemanticOverlayBindsExactModuleEntryCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verified, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	verified, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, runner), request)
 	if err != nil {
 		t.Fatal(err)
 	}

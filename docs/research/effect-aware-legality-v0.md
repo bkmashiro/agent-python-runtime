@@ -29,7 +29,10 @@ identity, plus an executable observable-trace comparator. No predicate starts wo
    identity.
 
 A successful decision carries an opaque `QualifiedCall`; callers cannot construct its
-private proof fields. `CanClaimStagedObservation` compares a body-free claim against
+private proof fields. Public `VerifiedAnalysis` minting accepts only the concrete target
+Wazero engine; Host-internal test/composition minting is gated by Go's `runtime/internal`
+package boundary, so an external `engine.Runner` plugin cannot self-report properties and
+mint authority. `CanClaimStagedObservation` compares a body-free claim against
 that exact call, capability/spec/handler/plan/grant, occurrence, argument, epoch,
 privacy, lineage and budget-reservation identity. It remains a pure check: Track E must
 atomically enforce one-shot state and typed unclaimed disposition.
@@ -52,32 +55,38 @@ Capability-plan v5 has no coalescing, durable-cache or backend-requirement contr
 - explicit post-effect replay rejection.
 
 The comparator ignores only qualified pure/read physical scheduling differences whose
-logical trace is unchanged and whose unclaimed work has a typed terminal disposition.
-Unknown effects and all write-class speculative physical events are unclassifiable.
+logical trace is unchanged. Unclaimed work needs a typed terminal disposition; consumed
+work must bind one-to-one to the exact logical event across capability, effect, arguments,
+resource, result, freshness and authority. `PhysicalStarted` must exactly match the
+presence of accounted physical events. Unknown effects, malformed/cyclic predecessor
+graphs and all write-class speculative physical events are unclassifiable.
 Missing or extra logical effects, event-order changes, argument/resource drift, freshness,
 authority, workspace, cancellation, ambiguity and replay are classified as typed
 divergences. Invalid or unqualified traces fail as `trace_unclassifiable`.
 
 The executable matrix at
 [`docs/evidence/effect-aware-differential-oracle.json`](../evidence/effect-aware-differential-oracle.json)
-contains 17 cases. All 17 matched their expected result, including one equivalent
-qualified discard and adversarial terminal, result, argument, missing/extra effect,
-sequence/edge order, freshness, authority, workspace, cancellation, ambiguity,
-post-effect replay, qualified-write speculation and invalid/unqualified-physical
-cases. Report SHA-256:
-`4df33cbc8d446153ee7523377beb921fe5fae7b78815269910d70cc55b62f52f`.
+contains 24 cases. All 24 matched their expected result, including equivalent
+qualified discard and exact consumed-claim cases plus adversarial terminal, result,
+argument, missing/extra effect, sequence/edge order, freshness, authority, workspace,
+cancellation, ambiguity, post-effect replay, qualification/claim mismatch, duplicate
+claim, physical-start inconsistency,
+write-class speculation and invalid/unqualified physical work. Report SHA-256:
+`ac0e311244a5c62ac471bfee7626f3396b77f67f50f03dd67c58973a1206a48d`.
 Cross-compiled ARM64 semantic and effectgraph test binaries passed on Linux
 `6.12.0-202.76.4.1.el9uek.aarch64`; binary SHA-256 values were
-`17a6fafa5f6d6babdaaf9576721a865d575b0e413a911cd12de3bd51c603f6bc` and
-`07898bd5ae0dd8a500df8bc38c37b0049441a33d73051aaf801f3a6d3c97631f`.
+`8094054fbaa4a93efba71b46108c652c6dd6a1c8feef0c10850d505b6a00497c` and
+`0b1ac638d3608881fa47b0d79b8a3c74d50f604938d13a8016088fc2e2e44adc`.
 The ARM64 oracle binary independently reproduced the exact report SHA-256 above.
 
 ## Opportunity comparison
 
-The v2 machine census joins each real-Guest `VerifiedAnalysis` to the shared
+The v3 machine census joins each real-Guest `VerifiedAnalysis` to the shared
 `CanPreissue` predicate. A deliberately weaker call-level baseline asks only whether
 an exact overlay call names a capability with an eligible resource contract; it does
-not use control reachability.
+not use control reachability. Census v3 and the oracle report validate sorted rows,
+per-row/aggregate counters, rejection accounting and case-result consistency before
+encoding evidence.
 
 | Stage | Accepted calls |
 |---|---:|
@@ -91,7 +100,7 @@ the intended value of the semantic join: call-level metadata alone would over-ad
 three of four annotated calls for pre-execution issue.
 
 Current machine census SHA-256:
-`fe82029a703af6619b172b30817e6721e53c7533cab5bd56ceebe5937b6d0c1e`.
+`72992e95f97d5f19a9363af03d10b529e3e6303ea88be04949eca623afeebb9f`.
 The exact Guest artifact and analyzer identities remain those frozen by Track C.
 
 ## Boundary for Track E

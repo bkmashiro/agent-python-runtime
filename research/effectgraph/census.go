@@ -12,7 +12,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
-const ReportSchemaVersion = "pysolate.effectgraph-opportunity-census.v2"
+const ReportSchemaVersion = "pysolate.effectgraph-opportunity-census.v3"
 
 var ErrCensus = errors.New("effect-aware opportunity census failed")
 
@@ -46,6 +46,7 @@ type LegalityRejectionCount struct {
 type ProgramLegality struct {
 	CallLevelQualified uint32
 	PreissueLegal      uint32
+	PreissueRejected   uint32
 	Rejections         []LegalityRejectionCount
 }
 
@@ -81,6 +82,7 @@ type ProgramResult struct {
 	NecessarilyReachedCallSites          uint32                   `json:"necessarily_reached_call_sites"`
 	CallLevelQualified                   uint32                   `json:"call_level_qualified"`
 	PreissueLegal                        uint32                   `json:"preissue_legal"`
+	PreissueRejected                     uint32                   `json:"preissue_rejected"`
 	LegalityRejections                   []LegalityRejectionCount `json:"legality_rejections"`
 	WholeRunReusable                     bool                     `json:"whole_run_reusable"`
 	Placement                            string                   `json:"placement"`
@@ -101,6 +103,7 @@ type Report struct {
 	NecessarilyReachedCallSites          uint32                   `json:"necessarily_reached_call_sites"`
 	CallLevelQualified                   uint32                   `json:"call_level_qualified"`
 	PreissueLegal                        uint32                   `json:"preissue_legal"`
+	PreissueRejected                     uint32                   `json:"preissue_rejected"`
 	HistoricalSeeds                      uint32                   `json:"body_free_historical_seeds"`
 	PlacementCounts                      PlacementCounts          `json:"placement_counts"`
 	BarrierCounts                        []ReportBarrierCount     `json:"barrier_counts"`
@@ -234,9 +237,11 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 			}
 			row.CallLevelQualified = programLegality.CallLevelQualified
 			row.PreissueLegal = programLegality.PreissueLegal
+			row.PreissueRejected = programLegality.PreissueRejected
 			row.LegalityRejections = append([]LegalityRejectionCount{}, programLegality.Rejections...)
 			report.CallLevelQualified += row.CallLevelQualified
 			report.PreissueLegal += row.PreissueLegal
+			report.PreissueRejected += row.PreissueRejected
 			for _, rejection := range programLegality.Rejections {
 				legalityRejections[rejection.Reason] += rejection.Count
 			}
@@ -278,7 +283,13 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 }
 
 func validProgramLegality(value ProgramLegality, callSites uint32) bool {
-	if value.PreissueLegal > value.CallLevelQualified || value.CallLevelQualified > callSites ||
+	rejectionReasons := uint32(0)
+	for _, rejection := range value.Rejections {
+		rejectionReasons += rejection.Count
+	}
+	if value.PreissueLegal+value.PreissueRejected != callSites ||
+		value.PreissueLegal > value.CallLevelQualified || value.CallLevelQualified > callSites ||
+		rejectionReasons < value.PreissueRejected ||
 		!sort.SliceIsSorted(value.Rejections, func(i, j int) bool { return value.Rejections[i].Reason < value.Rejections[j].Reason }) {
 		return false
 	}
@@ -292,11 +303,113 @@ func validProgramLegality(value ProgramLegality, callSites uint32) bool {
 }
 
 func EncodeReport(report Report) ([]byte, error) {
+	if err := report.Validate(); err != nil {
+		return nil, err
+	}
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return nil, ErrCensus
+		return nil, err
 	}
 	return append(encoded, '\n'), nil
+}
+
+func (report Report) Validate() error {
+	if report.SchemaVersion != ReportSchemaVersion || !digestPattern.MatchString(report.CorpusSHA256) ||
+		report.ProgramsAnalyzed == 0 || len(report.Programs) != int(report.ProgramsAnalyzed) ||
+		report.ProgramsUnclassifiable > report.ProgramsAnalyzed || report.ProgramsOpaque > report.ProgramsAnalyzed ||
+		report.NecessarilyReachedCallSites > report.OverlayCallSites || report.CallLevelQualified > report.OverlayCallSites ||
+		report.PreissueLegal > report.CallLevelQualified || report.PreissueLegal+report.PreissueRejected > report.OverlayCallSites {
+		return ErrInvalidCorpus
+	}
+	legalityEvaluated := false
+	lastOpportunity := ""
+	for _, opportunity := range report.Opportunities {
+		if opportunity.Kind <= lastOpportunity || opportunity.Structural > report.ProgramsAnalyzed ||
+			opportunity.ProvedLegal > opportunity.Structural ||
+			(opportunity.Legality != NotEvaluated && opportunity.Legality != Evaluated) ||
+			opportunity.Equivalence != NotEvaluated {
+			return ErrInvalidCorpus
+		}
+		if opportunity.Kind == CandidatePreDispatch {
+			if opportunity.ProvedLegal != report.PreissueLegal {
+				return ErrInvalidCorpus
+			}
+			legalityEvaluated = opportunity.Legality == Evaluated
+		}
+		lastOpportunity = opportunity.Kind
+	}
+	if len(report.Opportunities) != 5 {
+		return ErrInvalidCorpus
+	}
+	var programs, unclassifiable, opaque, calls, reached, baseline, legal, rejected uint32
+	placements := PlacementCounts{}
+	rejectionTotals := map[semantic.RejectionReason]uint32{}
+	lastProgram := ""
+	for _, row := range report.Programs {
+		if !identifierPattern.MatchString(row.ID) || row.ID <= lastProgram || !digestPattern.MatchString(row.SourceSHA256) ||
+			row.NecessarilyReachedCallSites > row.OverlayCallSites || row.CallLevelQualified > row.OverlayCallSites ||
+			row.PreissueLegal > row.CallLevelQualified || row.PreissueLegal+row.PreissueRejected > row.OverlayCallSites {
+			return ErrInvalidCorpus
+		}
+		programs++
+		if row.AnalysisStatus == AnalysisUnclassifiable {
+			unclassifiable++
+		} else if row.AnalysisStatus != AnalysisAccepted {
+			return ErrInvalidCorpus
+		}
+		if row.Opaque {
+			opaque++
+		}
+		calls += row.OverlayCallSites
+		reached += row.NecessarilyReachedCallSites
+		baseline += row.CallLevelQualified
+		legal += row.PreissueLegal
+		rejected += row.PreissueRejected
+		switch row.Placement {
+		case PlacementWASM:
+			placements.WASM++
+		case PlacementNative:
+			placements.Native++
+		case PlacementUnknown:
+			placements.Unknown++
+		default:
+			return ErrInvalidCorpus
+		}
+		lastReason := semantic.RejectionReason("")
+		for _, item := range row.LegalityRejections {
+			if item.Reason == "" || item.Reason <= lastReason || item.Count == 0 {
+				return ErrInvalidCorpus
+			}
+			rejectionTotals[item.Reason] += item.Count
+			lastReason = item.Reason
+		}
+		lastProgram = row.ID
+	}
+	if programs != report.ProgramsAnalyzed || unclassifiable != report.ProgramsUnclassifiable || opaque != report.ProgramsOpaque ||
+		calls != report.OverlayCallSites || reached != report.NecessarilyReachedCallSites ||
+		baseline != report.CallLevelQualified || legal != report.PreissueLegal || rejected != report.PreissueRejected ||
+		placements != report.PlacementCounts {
+		return ErrInvalidCorpus
+	}
+	if legalityEvaluated {
+		if legal+rejected != calls {
+			return ErrInvalidCorpus
+		}
+	} else if baseline != 0 || legal != 0 || rejected != 0 || len(report.LegalityRejections) != 0 {
+		return ErrInvalidCorpus
+	}
+	lastReason := semantic.RejectionReason("")
+	for _, item := range report.LegalityRejections {
+		if item.Reason == "" || item.Reason <= lastReason || item.Count == 0 || rejectionTotals[item.Reason] != item.Count {
+			return ErrInvalidCorpus
+		}
+		delete(rejectionTotals, item.Reason)
+		lastReason = item.Reason
+	}
+	if len(rejectionTotals) != 0 {
+		return ErrInvalidCorpus
+	}
+	return nil
 }
 
 func loadSource(root string, program Program) ([]byte, error) {

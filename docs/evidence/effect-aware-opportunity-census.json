@@ -1,5 +1,5 @@
 {
-  "schema_version": "pysolate.effectgraph-opportunity-census.v1",
+  "schema_version": "pysolate.effectgraph-opportunity-census.v2",
   "corpus_sha256": "sha256:33ad95a0f55658e74a288213b352f173f665b1c95828b8fa8f07d14b469c1136",
   "analyzer_sha256": "sha256:acf0c8e51b5da65c3e589ccf0ae4f0edea3c77af15987772fc9a82179539c971",
   "target": {
@@ -18,6 +18,8 @@
   "distinct_function_capability_references": 7,
   "overlay_call_sites": 4,
   "necessarily_reached_call_sites": 1,
+  "call_level_qualified": 4,
+  "preissue_legal": 1,
   "body_free_historical_seeds": 3,
   "placement_counts": {
     "pysolate_wasm": 16,
@@ -40,6 +42,12 @@
     {
       "code": "unsupported_control_flow",
       "count": 12
+    }
+  ],
+  "legality_rejections": [
+    {
+      "reason": "call_not_necessarily_reached",
+      "count": 3
     }
   ],
   "opportunities": [
@@ -67,8 +75,8 @@
     {
       "kind": "pre_dispatch",
       "structural_candidates": 11,
-      "proved_legal": 0,
-      "legality": "not_evaluated",
+      "proved_legal": 1,
+      "legality": "evaluated",
       "equivalence": "not_evaluated"
     },
     {
@@ -92,6 +100,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -109,6 +120,14 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 1,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 1,
+      "preissue_legal": 0,
+      "legality_rejections": [
+        {
+          "reason": "call_not_necessarily_reached",
+          "count": 1
+        }
+      ],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -122,6 +141,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -135,6 +157,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -148,6 +173,9 @@
       "distinct_function_capability_references": 2,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -163,6 +191,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -178,6 +209,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "native_sandbox"
     },
@@ -193,6 +227,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -206,6 +243,9 @@
       "distinct_function_capability_references": 1,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -219,6 +259,9 @@
       "distinct_function_capability_references": 2,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -234,6 +277,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -247,6 +293,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 1,
       "necessarily_reached_call_sites": 1,
+      "call_level_qualified": 1,
+      "preissue_legal": 1,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -263,6 +312,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "native_sandbox"
     },
@@ -276,6 +328,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": true,
       "placement": "pysolate_wasm"
     },
@@ -289,6 +344,9 @@
       "distinct_function_capability_references": 2,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -302,6 +360,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": true,
       "placement": "pysolate_wasm"
     },
@@ -319,6 +380,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "native_sandbox"
     },
@@ -336,6 +400,14 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 2,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 2,
+      "preissue_legal": 0,
+      "legality_rejections": [
+        {
+          "reason": "call_not_necessarily_reached",
+          "count": 2
+        }
+      ],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     },
@@ -352,6 +424,9 @@
       "distinct_function_capability_references": 0,
       "overlay_call_sites": 0,
       "necessarily_reached_call_sites": 0,
+      "call_level_qualified": 0,
+      "preissue_legal": 0,
+      "legality_rejections": [],
       "whole_run_reusable": false,
       "placement": "pysolate_wasm"
     }

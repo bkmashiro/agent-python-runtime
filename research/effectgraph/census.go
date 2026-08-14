@@ -12,7 +12,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
-const ReportSchemaVersion = "pysolate.effectgraph-opportunity-census.v1"
+const ReportSchemaVersion = "pysolate.effectgraph-opportunity-census.v2"
 
 var ErrCensus = errors.New("effect-aware opportunity census failed")
 
@@ -22,7 +22,10 @@ const (
 	PlacementUnknown = "unknown"
 )
 
-const NotEvaluated = "not_evaluated"
+const (
+	NotEvaluated = "not_evaluated"
+	Evaluated    = "evaluated"
+)
 
 const (
 	AnalysisAccepted       = "accepted"
@@ -33,6 +36,18 @@ const (
 
 type AnalyzeFunc func(context.Context, []byte) (semantic.Analysis, error)
 type PlacementFunc func([]byte) (string, error)
+type LegalityFunc func(semantic.Analysis) (ProgramLegality, error)
+
+type LegalityRejectionCount struct {
+	Reason semantic.RejectionReason `json:"reason"`
+	Count  uint32                   `json:"count"`
+}
+
+type ProgramLegality struct {
+	CallLevelQualified uint32
+	PreissueLegal      uint32
+	Rejections         []LegalityRejectionCount
+}
 
 type OpportunityCount struct {
 	Kind        string `json:"kind"`
@@ -54,38 +69,44 @@ type ReportBarrierCount struct {
 }
 
 type ProgramResult struct {
-	ID                                   string                 `json:"id"`
-	SourceSHA256                         string                 `json:"source_sha256"`
-	Opaque                               bool                   `json:"opaque"`
-	AnalysisStatus                       string                 `json:"analysis_status"`
-	FailureClass                         string                 `json:"failure_class,omitempty"`
-	BarrierCodes                         []semantic.BarrierCode `json:"barrier_codes"`
-	FunctionCount                        uint32                 `json:"function_count"`
-	DistinctFunctionCapabilityReferences uint32                 `json:"distinct_function_capability_references"`
-	OverlayCallSites                     uint32                 `json:"overlay_call_sites"`
-	NecessarilyReachedCallSites          uint32                 `json:"necessarily_reached_call_sites"`
-	WholeRunReusable                     bool                   `json:"whole_run_reusable"`
-	Placement                            string                 `json:"placement"`
+	ID                                   string                   `json:"id"`
+	SourceSHA256                         string                   `json:"source_sha256"`
+	Opaque                               bool                     `json:"opaque"`
+	AnalysisStatus                       string                   `json:"analysis_status"`
+	FailureClass                         string                   `json:"failure_class,omitempty"`
+	BarrierCodes                         []semantic.BarrierCode   `json:"barrier_codes"`
+	FunctionCount                        uint32                   `json:"function_count"`
+	DistinctFunctionCapabilityReferences uint32                   `json:"distinct_function_capability_references"`
+	OverlayCallSites                     uint32                   `json:"overlay_call_sites"`
+	NecessarilyReachedCallSites          uint32                   `json:"necessarily_reached_call_sites"`
+	CallLevelQualified                   uint32                   `json:"call_level_qualified"`
+	PreissueLegal                        uint32                   `json:"preissue_legal"`
+	LegalityRejections                   []LegalityRejectionCount `json:"legality_rejections"`
+	WholeRunReusable                     bool                     `json:"whole_run_reusable"`
+	Placement                            string                   `json:"placement"`
 }
 
 type Report struct {
-	SchemaVersion                        string               `json:"schema_version"`
-	CorpusSHA256                         string               `json:"corpus_sha256"`
-	AnalyzerSHA256                       string               `json:"analyzer_sha256"`
-	Target                               Target               `json:"target"`
-	ProgramsAnalyzed                     uint32               `json:"programs_analyzed"`
-	ProgramsOpaque                       uint32               `json:"programs_opaque"`
-	ProgramsUnclassifiable               uint32               `json:"programs_unclassifiable"`
-	ProgramsWithoutBarriers              uint32               `json:"programs_without_barriers"`
-	WholeRunReusable                     uint32               `json:"whole_run_reusable"`
-	DistinctFunctionCapabilityReferences uint32               `json:"distinct_function_capability_references"`
-	OverlayCallSites                     uint32               `json:"overlay_call_sites"`
-	NecessarilyReachedCallSites          uint32               `json:"necessarily_reached_call_sites"`
-	HistoricalSeeds                      uint32               `json:"body_free_historical_seeds"`
-	PlacementCounts                      PlacementCounts      `json:"placement_counts"`
-	BarrierCounts                        []ReportBarrierCount `json:"barrier_counts"`
-	Opportunities                        []OpportunityCount   `json:"opportunities"`
-	Programs                             []ProgramResult      `json:"programs"`
+	SchemaVersion                        string                   `json:"schema_version"`
+	CorpusSHA256                         string                   `json:"corpus_sha256"`
+	AnalyzerSHA256                       string                   `json:"analyzer_sha256"`
+	Target                               Target                   `json:"target"`
+	ProgramsAnalyzed                     uint32                   `json:"programs_analyzed"`
+	ProgramsOpaque                       uint32                   `json:"programs_opaque"`
+	ProgramsUnclassifiable               uint32                   `json:"programs_unclassifiable"`
+	ProgramsWithoutBarriers              uint32                   `json:"programs_without_barriers"`
+	WholeRunReusable                     uint32                   `json:"whole_run_reusable"`
+	DistinctFunctionCapabilityReferences uint32                   `json:"distinct_function_capability_references"`
+	OverlayCallSites                     uint32                   `json:"overlay_call_sites"`
+	NecessarilyReachedCallSites          uint32                   `json:"necessarily_reached_call_sites"`
+	CallLevelQualified                   uint32                   `json:"call_level_qualified"`
+	PreissueLegal                        uint32                   `json:"preissue_legal"`
+	HistoricalSeeds                      uint32                   `json:"body_free_historical_seeds"`
+	PlacementCounts                      PlacementCounts          `json:"placement_counts"`
+	BarrierCounts                        []ReportBarrierCount     `json:"barrier_counts"`
+	LegalityRejections                   []LegalityRejectionCount `json:"legality_rejections"`
+	Opportunities                        []OpportunityCount       `json:"opportunities"`
+	Programs                             []ProgramResult          `json:"programs"`
 }
 
 func (corpus Corpus) Identity() (string, error) {
@@ -100,8 +121,9 @@ func (corpus Corpus) Identity() (string, error) {
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 
-func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeFunc, place PlacementFunc) (Report, error) {
-	if err := corpus.Validate(); err != nil || analyze == nil || place == nil || root == "" {
+func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeFunc, place PlacementFunc, legality ...LegalityFunc) (Report, error) {
+	if err := corpus.Validate(); err != nil || analyze == nil || place == nil || root == "" || len(legality) > 1 ||
+		(len(legality) == 1 && legality[0] == nil) {
 		return Report{}, ErrCensus
 	}
 	corpusIdentity, err := corpus.Identity()
@@ -111,10 +133,12 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 	report := Report{
 		SchemaVersion: ReportSchemaVersion, CorpusSHA256: corpusIdentity, Target: corpus.Target,
 		HistoricalSeeds: uint32(len(corpus.HistoricalSeeds)),
-		BarrierCounts:   []ReportBarrierCount{}, Opportunities: []OpportunityCount{}, Programs: []ProgramResult{},
+		BarrierCounts:   []ReportBarrierCount{}, LegalityRejections: []LegalityRejectionCount{},
+		Opportunities: []OpportunityCount{}, Programs: []ProgramResult{},
 	}
 	structural := map[string]uint32{}
 	barriers := map[semantic.BarrierCode]uint32{}
+	legalityRejections := map[semantic.RejectionReason]uint32{}
 	for _, program := range corpus.Programs {
 		if err := ctx.Err(); err != nil {
 			return Report{}, err
@@ -201,7 +225,21 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 			AnalysisStatus: AnalysisAccepted, BarrierCodes: codes,
 			FunctionCount: uint32(len(analysis.Functions)), DistinctFunctionCapabilityReferences: directReferences,
 			OverlayCallSites: uint32(len(analysis.CallSites)), NecessarilyReachedCallSites: reachedCallSites,
-			WholeRunReusable: reusable, Placement: placement,
+			WholeRunReusable: reusable, Placement: placement, LegalityRejections: []LegalityRejectionCount{},
+		}
+		if len(legality) == 1 {
+			programLegality, legalityErr := legality[0](analysis)
+			if legalityErr != nil || !validProgramLegality(programLegality, uint32(len(analysis.CallSites))) {
+				return Report{}, fmt.Errorf("%w: legality %s", ErrCensus, program.ID)
+			}
+			row.CallLevelQualified = programLegality.CallLevelQualified
+			row.PreissueLegal = programLegality.PreissueLegal
+			row.LegalityRejections = append([]LegalityRejectionCount{}, programLegality.Rejections...)
+			report.CallLevelQualified += row.CallLevelQualified
+			report.PreissueLegal += row.PreissueLegal
+			for _, rejection := range programLegality.Rejections {
+				legalityRejections[rejection.Reason] += rejection.Count
+			}
 		}
 		report.Programs = append(report.Programs, row)
 		if opaque {
@@ -220,15 +258,37 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 		report.BarrierCounts = append(report.BarrierCounts, ReportBarrierCount{Code: code, Count: count})
 	}
 	sort.Slice(report.BarrierCounts, func(i, j int) bool { return report.BarrierCounts[i].Code < report.BarrierCounts[j].Code })
+	for reason, count := range legalityRejections {
+		report.LegalityRejections = append(report.LegalityRejections, LegalityRejectionCount{Reason: reason, Count: count})
+	}
+	sort.Slice(report.LegalityRejections, func(i, j int) bool {
+		return report.LegalityRejections[i].Reason < report.LegalityRejections[j].Reason
+	})
 	for _, kind := range []string{
 		CandidateExactRegionReuse, CandidateNativePlacement, CandidateOverlapWindow, CandidatePreDispatch, CandidateWASMPlacement,
 	} {
-		report.Opportunities = append(report.Opportunities, OpportunityCount{
-			Kind: kind, Structural: structural[kind], ProvedLegal: 0,
-			Legality: NotEvaluated, Equivalence: NotEvaluated,
-		})
+		count := OpportunityCount{Kind: kind, Structural: structural[kind], Legality: NotEvaluated, Equivalence: NotEvaluated}
+		if kind == CandidatePreDispatch && len(legality) == 1 {
+			count.ProvedLegal = report.PreissueLegal
+			count.Legality = Evaluated
+		}
+		report.Opportunities = append(report.Opportunities, count)
 	}
 	return report, nil
+}
+
+func validProgramLegality(value ProgramLegality, callSites uint32) bool {
+	if value.PreissueLegal > value.CallLevelQualified || value.CallLevelQualified > callSites ||
+		!sort.SliceIsSorted(value.Rejections, func(i, j int) bool { return value.Rejections[i].Reason < value.Rejections[j].Reason }) {
+		return false
+	}
+	for index, rejection := range value.Rejections {
+		if rejection.Reason == "" || rejection.Count == 0 ||
+			(index > 0 && value.Rejections[index-1].Reason == rejection.Reason) {
+			return false
+		}
+	}
+	return true
 }
 
 func EncodeReport(report Report) ([]byte, error) {

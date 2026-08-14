@@ -1,0 +1,119 @@
+{
+  "schema_version": "pysolate.differential-oracle.v0",
+  "cases": 16,
+  "matched": 16,
+  "results": [
+    {
+      "id": "argument-mismatch",
+      "expected": "effect_argument_mismatch",
+      "observed": "effect_argument_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "authority-mismatch",
+      "expected": "authority_binding_mismatch",
+      "observed": "authority_binding_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "cancellation-mismatch",
+      "expected": "cancellation_boundary_mismatch",
+      "observed": "cancellation_boundary_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "equivalent-qualified-discard",
+      "expected": "",
+      "observed": "",
+      "equivalent": true,
+      "matched": true
+    },
+    {
+      "id": "extra-logical-effect",
+      "expected": "extra_effect_event",
+      "observed": "extra_effect_event",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "freshness-mismatch",
+      "expected": "freshness_context_mismatch",
+      "observed": "freshness_context_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "invalid-context",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "logical-event-order",
+      "expected": "required_order_inversion",
+      "observed": "required_order_inversion",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "missing-logical-effect",
+      "expected": "missing_effect_event",
+      "observed": "missing_effect_event",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "post-effect-replay",
+      "expected": "post_effect_replay",
+      "observed": "post_effect_replay",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "required-order",
+      "expected": "required_order_inversion",
+      "observed": "required_order_inversion",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "result-mismatch",
+      "expected": "result_mismatch",
+      "observed": "result_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "terminal-ambiguity",
+      "expected": "terminal_disposition_mismatch",
+      "observed": "terminal_disposition_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "terminal-class",
+      "expected": "terminal_class_mismatch",
+      "observed": "terminal_class_mismatch",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "unqualified-physical",
+      "expected": "trace_unclassifiable",
+      "observed": "trace_unclassifiable",
+      "equivalent": false,
+      "matched": true
+    },
+    {
+      "id": "workspace-mismatch",
+      "expected": "workspace_state_mismatch",
+      "observed": "workspace_state_mismatch",
+      "equivalent": false,
+      "matched": true
+    }
+  ]
+}

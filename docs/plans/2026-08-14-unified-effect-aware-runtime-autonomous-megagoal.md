@@ -424,15 +424,15 @@ execution, or Host-side Python parsing.
 **Promise:** One set of fail-closed predicates consumes the verified representation;
 optimization passes do not invent their own semantics.
 
-- [ ] Define explicit observable trace model: result/exception, ordered Host effects,
+- [x] Define explicit observable trace model: result/exception, ordered Host effects,
   workspace disposition, capability calls, freshness/snapshot identity,
   cancellation and terminal ambiguity.
-- [ ] Implement pure predicates with typed rejection reasons:
+- [x] Implement pure predicates with typed rejection reasons:
   `CanPreissue`, `CanClaimStagedObservation`, `CanCoalesce`, `CanCache`,
   `RequiredBackend`.
-- [ ] Keep `CanHoist` disabled until branch/exception reachability is represented.
-- [ ] Build baseline-vs-candidate trace comparator and adversarial matrix.
-- [ ] Compare overlay predicates with a call-level resource-annotation baseline.
+- [x] Keep `CanHoist` disabled until branch/exception reachability is represented.
+- [x] Build baseline-vs-candidate trace comparator and adversarial matrix.
+- [x] Compare overlay predicates with a call-level resource-annotation baseline.
 - [ ] Run G1 review and decision gate.
 
 **Likely files:**

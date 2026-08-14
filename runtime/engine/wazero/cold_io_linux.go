@@ -62,11 +62,11 @@ func (continuation *linuxColdIOContinuation) wait(ctx context.Context, call func
 	defer coldTimer.Stop()
 	var pageOutTimer *time.Timer
 	var pageOut <-chan time.Time
-	if continuation.policy.PageOutAfter != 0 {
-		pageOutTimer = time.NewTimer(continuation.policy.PageOutAfter)
-		pageOut = pageOutTimer.C
-		defer pageOutTimer.Stop()
-	}
+	defer func() {
+		if pageOutTimer != nil {
+			pageOutTimer.Stop()
+		}
+	}()
 	cold := coldTimer.C
 	for {
 		select {
@@ -82,6 +82,10 @@ func (continuation *linuxColdIOContinuation) wait(ctx context.Context, call func
 		case <-cold:
 			continuation.advise(unix.MADV_COLD, ColdIOCold, coldAdviceFailed)
 			cold = nil
+			if continuation.policy.PageOutAfter != 0 {
+				pageOutTimer = time.NewTimer(continuation.policy.PageOutAfter - continuation.policy.ColdAfter)
+				pageOut = pageOutTimer.C
+			}
 		case <-pageOut:
 			continuation.advise(unix.MADV_PAGEOUT, ColdIOPageOut, pageOutAdviceFailed)
 			pageOut = nil

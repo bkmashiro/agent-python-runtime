@@ -48,7 +48,9 @@ func (evidence ColdIOEvidence) Validate() error {
 	}
 	if !evidence.Selected {
 		if evidence.State != ColdIODisabled || evidence.Waits != 0 || evidence.ColdAttempts != 0 ||
-			evidence.PageOutAttempts != 0 || evidence.Resumes != 0 || len(evidence.Blockers) != 0 {
+			evidence.ColdSucceeded != 0 || evidence.PageOutAttempts != 0 || evidence.PageOutSucceeded != 0 ||
+			evidence.Resumes != 0 || evidence.AdvisedBytes != 0 || evidence.AdviceFailures != 0 ||
+			len(evidence.Blockers) != 0 {
 			return errColdIOState
 		}
 		return nil
@@ -60,6 +62,8 @@ func (evidence ColdIOEvidence) Validate() error {
 	if evidence.ColdAttempts > evidence.Waits || evidence.PageOutAttempts > evidence.ColdAttempts ||
 		evidence.ColdSucceeded > evidence.ColdAttempts || evidence.PageOutSucceeded > evidence.PageOutAttempts ||
 		evidence.Resumes > evidence.Waits || evidence.AdviceFailures > evidence.ColdAttempts+evidence.PageOutAttempts ||
+		evidence.ColdSucceeded+evidence.PageOutSucceeded+evidence.AdviceFailures != evidence.ColdAttempts+evidence.PageOutAttempts ||
+		(evidence.ColdSucceeded+evidence.PageOutSucceeded == 0) != (evidence.AdvisedBytes == 0) ||
 		len(evidence.Blockers) > 2 {
 		return errColdIOState
 	}

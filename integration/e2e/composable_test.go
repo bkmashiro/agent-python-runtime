@@ -642,6 +642,9 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 }
 
 func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("cold COW continuation requires Linux")
+	}
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {
 		t.Fatal(err)

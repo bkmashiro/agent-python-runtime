@@ -38,63 +38,34 @@
   "observations": [
     {
       "mode": "control",
-      "before": {
-        "rss_kib": 98304,
-        "pss_kib": 98304,
-        "private_dirty_kib": 98304,
-        "swap_kib": 0
-      },
-      "during_wait": {
-        "rss_kib": 98304,
-        "pss_kib": 98304,
-        "private_dirty_kib": 98304,
-        "swap_kib": 0
-      },
-      "resume_micros": 954
+      "bytes": 134217728,
+      "before": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "after": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "after_resume": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "resume_micros": 967
     },
     {
-      "mode": "madv_cold",
-      "before": {
-        "rss_kib": 98304,
-        "pss_kib": 98304,
-        "private_dirty_kib": 98304,
-        "swap_kib": 0
-      },
-      "during_wait": {
-        "rss_kib": 98304,
-        "pss_kib": 98304,
-        "private_dirty_kib": 98304,
-        "swap_kib": 0
-      },
-      "resume_micros": 961
+      "mode": "cold",
+      "bytes": 134217728,
+      "before": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "after": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "after_resume": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "resume_micros": 1093
     },
     {
-      "mode": "madv_pageout",
-      "before": {
-        "rss_kib": 98304,
-        "pss_kib": 98304,
-        "private_dirty_kib": 98304,
-        "swap_kib": 0
-      },
-      "during_wait": {
-        "rss_kib": 0,
-        "pss_kib": 0,
-        "private_dirty_kib": 0,
-        "swap_kib": 98304
-      },
-      "after_resume": {
-        "rss_kib": 98304,
-        "pss_kib": 98304,
-        "swap_kib": 0
-      },
-      "resume_micros": 16380
+      "mode": "pageout",
+      "bytes": 134217728,
+      "before": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
+      "after": {"rss_kib": 0, "pss_kib": 0, "shared_clean_kib": 0, "private_dirty_kib": 0, "swap_kib": 98304},
+      "after_resume": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 0, "swap_kib": 0},
+      "resume_micros": 17074
     }
   ],
   "bounded_conclusion": {
     "madv_cold_immediate_rss_reduction_observed": false,
     "madv_pageout_private_dirty_rss_reduction_observed": true,
     "same_continuation_private_state_preserved": true,
-    "pageout_resume_cost_relative_to_control": "approximately 17x for the 96 MiB full-page refault scan in this single run"
+    "pageout_resume_cost_relative_to_control": "approximately 17.7x for the 96 MiB full-page refault scan in this single run"
   },
   "non_claims": [
     "This is one outcome-qualified synthetic observation, not a production policy or capacity certification.",

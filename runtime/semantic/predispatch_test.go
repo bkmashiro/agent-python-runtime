@@ -97,6 +97,9 @@ func TestSemanticPreDispatchPreservesBaselineExceptions(t *testing.T) {
 		"handler_error": capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
 			return nil, errors.New("private handler detail")
 		}),
+		"handler_deadline_error": capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+			return nil, context.DeadlineExceeded
+		}),
 		"invalid_result": capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
 			return json.RawMessage(`{"wrong":"shape"}`), nil
 		}),

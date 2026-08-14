@@ -89,7 +89,7 @@ func (prepared *PreparedPreDispatch) Call(ctx context.Context) (StagedCapability
 		result, err = registered.handler.Call(ctx, arguments)
 	}
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return StagedCapabilityOutcome{}, err
 		}
 		return StagedCapabilityOutcome{ErrorCode: "handler_error"}, nil

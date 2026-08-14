@@ -228,6 +228,14 @@ Proceed to region reuse/placement integration only if:
 - at least one bounded workload shows non-trivial opportunity and benefit;
 - default-off fallback and authority equivalence are verified.
 
+**G2 decision:** pass on frozen implementation `5210ac9`. No known observable
+divergence remains in the admitted shape; cancellation and terminal dispositions are
+typed and serialized; a real unchanged-Guest five-by-two experiment preserved exact
+results with one physical call and measured a non-trivial critical-path reduction; and
+the final independent post-fix review reported no Blocking, High or Medium finding.
+This gate does not widen or enable the consumer: it remains default-off and accepts
+only one exclusive exact live-only read.
+
 ### Gate G3 — paper-scope gate
 
 Before combining pre-dispatch, reuse and placement into a paper claim, decide whether
@@ -469,7 +477,8 @@ analysis-only and the original source remains executable authority.
 - [x] Add runtime observations distinguishing logical calls, issue/start/finish,
   physical operations and rejected opportunities.
 - [x] Run exact Guest differential E2E and bounded latency/critical-path experiment.
-- [ ] Independent post-fix review; run G2.
+- [x] Independent post-fix review; G2 passed on frozen `5210ac9` with no Blocking,
+  High or Medium finding.
 
 **Do not:** rewrite Python, execute the overlay, pre-dispatch writes or unknown calls,
 turn one-shot observations into durable cache records, merge repeated logical calls

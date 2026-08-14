@@ -1,6 +1,6 @@
 # Semantic pre-dispatch prototype v0
 
-Status: **Track E first consumer implemented; default-off; G2 pending**
+Status: **Track E first consumer implemented; default-off; G2 passed**
 
 ## Accepted shape
 
@@ -97,4 +97,8 @@ Current gates pass:
   capability-plan provenance differs from the actual runtime inputs;
 - `git diff --check`.
 
-G2 remains closed until an independent post-fix review reports no blocking finding.
+G2 passed on the frozen `5210ac9` implementation. The final bounded independent
+post-fix review reported no Blocking, High or Medium finding after checking terminal
+transition serialization/idempotence, cancellation error equivalence, runtime-bound
+provenance and the exact five-by-two trial matrix. Passing G2 does not enable the
+consumer: it remains default-off and limited to one exclusive exact live-only read.

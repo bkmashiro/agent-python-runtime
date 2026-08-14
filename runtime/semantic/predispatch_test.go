@@ -148,6 +148,84 @@ func assertSemanticPreDispatchErrorEquivalent(t *testing.T, handler capability.H
 	}
 }
 
+func TestSemanticPreDispatchCancelledClaimPreservesBaselineErrorClass(t *testing.T) {
+	started := make(chan struct{})
+	handler := capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		select {
+		case <-started:
+		default:
+			close(started)
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	plan := legalityTestPlanWithHandler(t, true, handler)
+	request := []byte(`{"call_id":"cancel-class","capability":"sources.read","arguments":{"key":"profile"}}`)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	baseline, _ := capability.NewBroker(capability.Config{RunIdentity: "cancel-baseline", Plan: plan})
+	baselineResponse, err := baseline.Call(cancelled, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	budget, _ := NewPreDispatchBudget(1)
+	controller, _ := NewSemanticPreDispatch(call, plan, budget)
+	if err := controller.Start(context.Background(), goroutineTestLauncher{}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	staged, _ := capability.NewBroker(capability.Config{RunIdentity: "cancel-staged", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
+	stagedResponse, err := staged.Call(cancelled, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stagedResponse) != string(baselineResponse) {
+		t.Fatalf("baseline=%s staged=%s", baselineResponse, stagedResponse)
+	}
+	if err := staged.Finalize(false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSemanticPreDispatchConcurrentFinalizeIsIdempotent(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	budget, _ := NewPreDispatchBudget(1)
+	controller, _ := NewSemanticPreDispatch(call, plan, budget)
+	launcher := &queuedLauncher{}
+	if err := controller.Start(context.Background(), launcher); err != nil {
+		t.Fatal(err)
+	}
+	launcher.RunAll()
+
+	const workers = 32
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, workers)
+	for index := 0; index < workers; index++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			errorsSeen <- controller.Finalize(true)
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		if err != nil {
+			t.Fatalf("concurrent finalize error=%v", err)
+		}
+	}
+	if snapshot := controller.Snapshot(); snapshot.Disposition != streaming.ObservationOrphaned {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func TestBrokerFailureFinalizeCancelsPhysicalReadBeforeWrapperReturns(t *testing.T) {
 	physicalStarted := make(chan struct{})
 	plan := legalityTestPlanWithHandler(t, true, capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {

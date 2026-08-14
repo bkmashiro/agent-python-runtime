@@ -208,41 +208,31 @@ func (controller *SemanticPreDispatch) Claim(ctx context.Context, capabilityName
 	case <-done:
 	}
 	controller.mu.Lock()
+	defer controller.mu.Unlock()
 	runErr := controller.runErr
 	record := controller.record
 	claim := controller.claim
 	identity := controller.identity
-	controller.mu.Unlock()
 	if runErr != nil {
-		controller.mu.Lock()
 		controller.rejected++
-		controller.mu.Unlock()
 		return capability.StagedCapabilityOutcome{}, runErr
 	}
 	if !CanClaimStagedObservation(controller.call, claim).Allowed() {
-		controller.mu.Lock()
 		controller.rejected++
-		controller.mu.Unlock()
 		return capability.StagedCapabilityOutcome{}, ErrPreDispatchClaimMismatch
 	}
 	encoded, err := record.Consume(identity)
 	if err != nil {
-		controller.mu.Lock()
 		controller.rejected++
-		controller.mu.Unlock()
 		return capability.StagedCapabilityOutcome{}, err
 	}
 	var outcome capability.StagedCapabilityOutcome
 	if err := json.Unmarshal(encoded, &outcome); err != nil || outcome.Validate() != nil {
-		controller.mu.Lock()
 		controller.rejected++
-		controller.mu.Unlock()
 		return capability.StagedCapabilityOutcome{}, ErrPreDispatchClaimMismatch
 	}
-	controller.mu.Lock()
 	controller.logical++
 	controller.disposition = streaming.ObservationConsumed
-	controller.mu.Unlock()
 	return outcome, nil
 }
 
@@ -269,6 +259,9 @@ func (controller *SemanticPreDispatch) TerminateUnclaimed(disposition streaming.
 			return nil
 		}
 		return controller.runErr
+	}
+	if controller.disposition != streaming.ObservationReady {
+		return nil
 	}
 	if err := controller.record.Terminate(disposition); err != nil {
 		return err
@@ -302,8 +295,8 @@ func (controller *SemanticPreDispatch) Finalize(success bool) error {
 		return nil
 	}
 	record := controller.record
-	controller.mu.Unlock()
 	if record == nil {
+		controller.mu.Unlock()
 		return nil
 	}
 	disposition := streaming.ObservationCancelled
@@ -311,9 +304,9 @@ func (controller *SemanticPreDispatch) Finalize(success bool) error {
 		disposition = streaming.ObservationOrphaned
 	}
 	if err := record.Terminate(disposition); err != nil {
+		controller.mu.Unlock()
 		return err
 	}
-	controller.mu.Lock()
 	controller.disposition = disposition
 	controller.mu.Unlock()
 	return nil

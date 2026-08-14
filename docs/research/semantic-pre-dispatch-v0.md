@@ -84,16 +84,17 @@ Current gates pass:
 - real-Guest semantic pre-dispatch, legality and overlay E2E;
 - exact Broker-response differential tests for handler and invalid-result exceptions;
 - cancellation, unclaimed disposition, budget exhaustion, dynamic mismatch,
-  captured-playback rejection and explicit-enable regressions;
+  concurrent finalization, cancelled-claim error equivalence, captured-playback rejection
+  and explicit-enable regressions;
 - Linux ARM64 execution of cross-compiled `semantic`, `capability`, `streaming` and
   experiment-validator test binaries. SHA-256 respectively:
-  `eb79d31287ab984830eea9f56e72de8f36db7a70af565d8f794e153c94cf087d`,
-  `e7c73de57f358de4f6f523944d978f6da97bbd186d965d3c858c5f7b185d1e92`,
+  `79c2e21773c24a3ccbd6d079c21aefcefb9d926cee79e117e550c26a19d81e9d`,
+  `fde2e6cda244b244bc874d0ba3b78e8d8c37cf41937cd4997cf73d4fc8e68d82`,
   `a890cd69ce53877936890e2ac65e9ccfee1bef90086af5ca51c75e3aa3f717a2`,
-  `66a1be11f2bf49fa02d22239a9fc5269057b8161c48361f3f221f471809338fb`;
+  `b80b3d348b8f2d783eeed4458383bee33d2bab05beec978281c2b251c7ce3e1c`;
 - report validation requires exactly five trials per condition, rejects
-  aggregate/observation mutation, and rejects resealed reports missing artifact, source or
-  capability-plan provenance identities;
+  aggregate/observation mutation, and rejects resealed reports whose artifact, source or
+  capability-plan provenance differs from the actual runtime inputs;
 - `git diff --check`.
 
 G2 remains closed until an independent post-fix review reports no blocking finding.

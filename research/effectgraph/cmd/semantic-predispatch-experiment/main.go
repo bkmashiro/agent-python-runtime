@@ -23,6 +23,12 @@ import (
 
 const reportSchema = "pysolate.semantic-predispatch-experiment.v0"
 
+type reportProvenance struct {
+	ArtifactSHA256       string
+	SourceSHA256         string
+	CapabilityPlanSHA256 string
+}
+
 type trial struct {
 	Condition        string `json:"condition"`
 	DurationMicros   int64  `json:"duration_micros"`
@@ -116,9 +122,12 @@ func main() {
 	}
 	verified, siteID := analyze(artifact, profile, artifactSHA, source, plan)
 
+	expectedProvenance := reportProvenance{
+		ArtifactSHA256: artifactSHA, SourceSHA256: digest([]byte(source)), CapabilityPlanSHA256: plan.Identity(),
+	}
 	result := report{
-		SchemaVersion: reportSchema, ArtifactSHA256: artifactSHA, SourceSHA256: digest([]byte(source)),
-		CapabilityPlanSHA256: plan.Identity(), TrialsPerCondition: *trials, PhysicalDelayMicros: delay.Microseconds(),
+		SchemaVersion: reportSchema, ArtifactSHA256: expectedProvenance.ArtifactSHA256, SourceSHA256: expectedProvenance.SourceSHA256,
+		CapabilityPlanSHA256: expectedProvenance.CapabilityPlanSHA256, TrialsPerCondition: *trials, PhysicalDelayMicros: delay.Microseconds(),
 		EquivalentResults: true, NoDuplicatePhysicalCall: true, Trials: make([]trial, 0, *trials*2),
 	}
 	for index := 0; index < *trials; index++ {
@@ -143,7 +152,7 @@ func main() {
 		fatal(errors.New("runtime differential invariant failed"))
 	}
 	result.ContentSHA256 = sealReport(result)
-	if err := validateReport(result); err != nil {
+	if err := validateReport(result, expectedProvenance); err != nil {
 		fatal(err)
 	}
 	encoded, err := json.MarshalIndent(result, "", "  ")
@@ -290,10 +299,12 @@ func sealReport(value report) string {
 	return digest(encoded)
 }
 
-func validateReport(value report) error {
+func validateReport(value report, expected reportProvenance) error {
 	if value.SchemaVersion != reportSchema || value.TrialsPerCondition != 5 ||
 		len(value.Trials) != value.TrialsPerCondition*2 || value.PhysicalDelayMicros <= 0 ||
 		!validSHA256(value.ArtifactSHA256) || !validSHA256(value.SourceSHA256) || !validSHA256(value.CapabilityPlanSHA256) ||
+		value.ArtifactSHA256 != expected.ArtifactSHA256 || value.SourceSHA256 != expected.SourceSHA256 ||
+		value.CapabilityPlanSHA256 != expected.CapabilityPlanSHA256 ||
 		!value.EquivalentResults || !value.NoDuplicatePhysicalCall ||
 		value.ContentSHA256 == "" || value.ContentSHA256 != sealReport(value) {
 		return errors.New("invalid semantic pre-dispatch report envelope")

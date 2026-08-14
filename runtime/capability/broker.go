@@ -167,6 +167,9 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		staged, claimErr := broker.config.StagedClaimer.Claim(ctx, call.Capability, append(json.RawMessage(nil), arguments...))
 		if claimErr != nil {
 			broker.record(call, operation, "error", nil)
+			if errors.Is(claimErr, context.Canceled) || errors.Is(claimErr, context.DeadlineExceeded) {
+				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
+			}
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}})
 		}
 		if staged.Validate() != nil {

@@ -22,8 +22,12 @@ func TestValidateReportRejectsInternallyConsistentMutationWithoutReseal(t *testi
 		BaselineMedianMicros: 2200, OptimizedMedianMicros: 1200, MedianSavingsMicros: 1000,
 		EquivalentResults: true, NoDuplicatePhysicalCall: true, Trials: rows,
 	}
+	expected := reportProvenance{
+		ArtifactSHA256: report.ArtifactSHA256, SourceSHA256: report.SourceSHA256,
+		CapabilityPlanSHA256: report.CapabilityPlanSHA256,
+	}
 	report.ContentSHA256 = sealReport(report)
-	if err := validateReport(report); err != nil {
+	if err := validateReport(report, expected); err != nil {
 		t.Fatalf("valid report: %v", err)
 	}
 	short := report
@@ -33,17 +37,17 @@ func TestValidateReportRejectsInternallyConsistentMutationWithoutReseal(t *testi
 	short.OptimizedMedianMicros = 1100
 	short.MedianSavingsMicros = 1000
 	short.ContentSHA256 = sealReport(short)
-	if err := validateReport(short); err == nil {
+	if err := validateReport(short, expected); err == nil {
 		t.Fatal("resealed three-trial report unexpectedly validated")
 	}
 	report.Trials[1].PhysicalStarts = 2
-	if err := validateReport(report); err == nil {
+	if err := validateReport(report, expected); err == nil {
 		t.Fatal("mutated report unexpectedly validated")
 	}
 	report.Trials[1].PhysicalStarts = 1
-	report.ArtifactSHA256 = ""
+	report.ArtifactSHA256 = digest([]byte("plausible-but-unbound-artifact"))
 	report.ContentSHA256 = sealReport(report)
-	if err := validateReport(report); err == nil {
-		t.Fatal("resealed report without artifact provenance unexpectedly validated")
+	if err := validateReport(report, expected); err == nil {
+		t.Fatal("resealed report with unbound artifact provenance unexpectedly validated")
 	}
 }

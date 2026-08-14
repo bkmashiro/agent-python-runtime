@@ -25,7 +25,7 @@ func TestCheckedInManifestBuildsBodySafeCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(corpus.Programs) != 18 || len(corpus.HistoricalSeeds) != 3 {
+	if len(corpus.Programs) != 19 || len(corpus.HistoricalSeeds) != 3 {
 		t.Fatalf("programs=%d seeds=%d", len(corpus.Programs), len(corpus.HistoricalSeeds))
 	}
 	counts := map[string]uint32{}
@@ -36,8 +36,8 @@ func TestCheckedInManifestBuildsBodySafeCorpus(t *testing.T) {
 	}
 	want := map[string]uint32{
 		effectgraph.CandidateExactRegionReuse: 2, effectgraph.CandidateNativePlacement: 3,
-		effectgraph.CandidateOverlapWindow: 5, effectgraph.CandidatePreDispatch: 10,
-		effectgraph.CandidateWASMPlacement: 15,
+		effectgraph.CandidateOverlapWindow: 5, effectgraph.CandidatePreDispatch: 11,
+		effectgraph.CandidateWASMPlacement: 16,
 	}
 	if !reflect.DeepEqual(counts, want) {
 		t.Fatalf("candidate counts=%v want=%v", counts, want)

@@ -385,15 +385,21 @@ Minimum candidate content:
 - exception/cancellation markers;
 - explicit unknown/barrier reasons.
 
-- [ ] Freeze schema, bounds, canonical ordering and identity.
-- [ ] Add Guest RED tests for straight-line independent calls and adversarial
+The implementation deliberately selected only the measured subset needed for the
+first question: exact top-level capability call records, canonical literal arguments,
+module-entry control identity and a strict must-reach bit. Pure-compute nodes, general
+branch/merge regions, definitions/uses and exception graphs remain deferred because
+v0 does not consume them.
+
+- [x] Freeze schema, bounds, canonical ordering and identity.
+- [x] Add Guest RED tests for straight-line independent calls and adversarial
   constructs.
-- [ ] Implement target-Guest extraction for only the accepted subset.
-- [ ] Add strict Host decoder/validator with overlay consistency and effect-coverage
+- [x] Implement target-Guest extraction for only the accepted subset.
+- [x] Add strict Host decoder/validator with overlay consistency and effect-coverage
   checks.
-- [ ] Bind overlay provenance through `VerifiedAnalysis` or a replacement with equal
-  or stronger opacity and Runner-property validation.
-- [ ] Run real-Guest parity/negative E2E and corpus census.
+- [x] Bind overlay provenance through `VerifiedAnalysis` with unchanged opacity and
+  Runner-property validation.
+- [x] Run real-Guest parity/negative E2E and corpus census.
 
 **Primary files:**
 
@@ -403,6 +409,12 @@ Minimum candidate content:
 - `runtime/semantic/analyzer.go`
 - `runtime/semantic/verified.go`
 - `integration/e2e/semantic_test.go`
+
+**Decision:** G1 continues to Track D with the runtime consumer still disabled. The
+19-program follow-up narrows 11 structural annotations to four exact overlay call
+records and one necessarily-reached record; Linux ARM64 reproduces the exact local
+machine evidence. See [overlay v0](../research/verified-semantic-overlay-v0.md) and the
+[census follow-up](../research/effect-aware-opportunity-census.md).
 
 **Do not:** add SSA, general alias analysis, arbitrary heap regions, statement
 execution, or Host-side Python parsing.

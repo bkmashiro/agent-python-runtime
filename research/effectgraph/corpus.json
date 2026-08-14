@@ -1,12 +1,12 @@
 {
   "schema_version": "pysolate.effectgraph-corpus.v0",
   "target": {
-    "artifact_source_commit": "950249a92eaec648b88850300c5653ab62aff888",
-    "artifact_sha256": "sha256:a62ae62b13a502152673e1c40c7bee80412d1724302bf8922eb7e3d86ce70473",
-    "execution_profile_sha256": "sha256:bd39842309a3373f66b8065d48cafd674dddeedc6ed51b9f5d7c0e6f40f383c7",
+    "artifact_source_commit": "44d060d3ff9b4fc5cdd9b2bad56170182bab840c",
+    "artifact_sha256": "sha256:370ebb7d680d166123928be9b584b13679db34aab6f846303d75b4005d9dbb5f",
+    "execution_profile_sha256": "sha256:b223899e7e0904347aeb6e835841e61c5a3a070d5864837a81ad7d230ce9293f",
     "import_closure_sha256": "sha256:6bf7414ef5fe446ed320118d1c29d006a850ffc9d0c80c449edc1d6cd5443e9e",
-    "capability_plan_sha256": "sha256:869bf36f307221dc62713a2334bcde5e968d1d1fa622ccf36d8c2bc54f9ffb0d",
-    "contract_set_sha256": "sha256:0fd240c897b739b7b95382181f4f80aaefed1d1f7de4762562ed4b1cdf9cf282"
+    "capability_plan_sha256": "sha256:231868d44c4e2d0bbda114199852e422242464bd0bdb1d150995a09127b02cf7",
+    "contract_set_sha256": "sha256:a51a01560ebbaa9d20ce702e09805a6e37f10e0313bf7000cfd3cc50a5666b01"
   },
   "programs": [
     {
@@ -200,6 +200,25 @@
       "provenance": "public_synthetic",
       "source_path": "testdata/programs/loop_reads.py",
       "source_sha256": "sha256:6fede655fbabeb039cb178d76febe89e9f9c5f6e3edd4618e5cf3d922a5c5133",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {
+          "kind": "pre_dispatch",
+          "occurrences": 1
+        },
+        {
+          "kind": "wasm_placement",
+          "occurrences": 1
+        }
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "module-entry-read",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/module_entry_read.py",
+      "source_sha256": "sha256:ac8374c2988c50d7377959f3056d633b3ad3083ec2dad31973ae4e9935e3ab39",
       "oracle_class": "live_read",
       "structural_candidates": [
         {

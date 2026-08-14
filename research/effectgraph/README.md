@@ -30,8 +30,10 @@ occurrences. They are not legality proofs. Every opportunity row therefore recor
 `observational_equivalence=not_evaluated` in Track A.
 
 An analyzer rejection remains in the denominator as `unclassifiable`; it is never
-silently dropped. The report contains digests, bounded classifications and aggregate
-counts, but no program source.
+silently dropped. Report v1 also counts bounded verified-overlay call sites and the
+strict subset marked necessarily reached. These remain structural Guest facts, not
+Host legality proofs. The report contains digests, bounded classifications and
+aggregate counts, but no program source.
 
 The target-Guest CPython AST remains the frontend authority and the original Python
 remains executable authority. This package performs no source rewriting, graph

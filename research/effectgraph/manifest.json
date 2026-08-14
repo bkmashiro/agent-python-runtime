@@ -133,6 +133,18 @@
       "outputs_canonical": true
     },
     {
+      "id": "module-entry-read",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/module_entry_read.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
       "id": "native-subprocess",
       "provenance": "public_synthetic",
       "source_path": "testdata/programs/native_subprocess.py",

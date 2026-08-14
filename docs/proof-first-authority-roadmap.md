@@ -293,12 +293,12 @@ tests prevent hidden coupling.
 - [x] fresh Guest and typed Host authority baseline documented;
 - [x] Cloudflare comparison and Current/Proposed reset;
 - [x] mechanism registry and composition rules in this roadmap;
-- [ ] define an internal feature-set/config object without committing public CLI
+- [x] define an internal feature-set/config object without committing public CLI
   names;
-- [ ] create pairwise configuration tests for each mechanism and its nearest
+- [x] create pairwise configuration tests for each mechanism and its nearest
   dependency/fallback;
-- [ ] create negative tests proving optimizations cannot widen Broker authority;
-- [ ] expose selected mode names in Host evidence so behavior is explainable.
+- [x] create negative tests proving optimizations cannot widen Broker authority;
+- [x] expose selected mode names in Host evidence so behavior is explainable.
 
 Definition of Done:
 
@@ -313,17 +313,23 @@ Definition of Done:
 Host without requiring memory COW, workflow resume, playback, workspace
 transactions, or external-write support.
 
-- [ ] freeze binary `cacheable | not_cacheable` admission contract;
-- [ ] define canonical invocation identity over source/function, artifact/profile,
+- [x] freeze binary `cacheable | not_cacheable` admission contract;
+- [x] define canonical invocation identity over source/function, artifact/profile,
   admitted import closure, structured inputs, immutable filesystem roots,
   deterministic settings, output schema, privacy partition, and policy epoch;
-- [ ] implement whole-Run local private cache behind an internal toggle;
-- [ ] implement concurrent single-flight separately from durable retention;
-- [ ] fail closed if a cacheable invocation attempts a Host call, undeclared
+- [x] implement whole-Run local private cache behind an internal toggle;
+- [x] implement concurrent single-flight separately from durable retention;
+- [x] fail closed if a cacheable invocation attempts a Host call, undeclared
   filesystem read, shared write, clock/random access, or dynamic import;
-- [ ] support eviction followed by safe recomputation;
-- [ ] measure cold execution, cache lookup/materialization, single-flight, storage
+- [x] support eviction followed by safe recomputation;
+- [x] measure cold execution, cache lookup/materialization, single-flight, storage
   amplification, and break-even points.
+
+Bounded closure evidence: the exact target-Guest AST path and opaque Host-minted
+whole-Run qualification are implemented Experimental/default-off; see
+[content-addressed-agent-functions.md](content-addressed-agent-functions.md) and
+[evidence/semantic-reuse-observation.json](evidence/semantic-reuse-observation.json).
+Arbitrary Guest Python remains `not_cacheable`.
 
 Definition of Done:
 

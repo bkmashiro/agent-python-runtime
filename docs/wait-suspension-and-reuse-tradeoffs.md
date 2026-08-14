@@ -1,6 +1,8 @@
 # Wait suspension, re-evaluation, and reuse trade-offs
 
-Status: **Bounded Experimental fresh re-evaluation and continuation-preserving cold-I/O spike implemented; broader policy remains deferred.**
+Status: **Bounded Experimental fresh re-evaluation, exact AST-qualified
+whole-Run reuse, and continuation-preserving cold-I/O implemented; broader policy
+remains deferred.**
 Date: 2026-08-14
 
 ## Decision summary
@@ -27,6 +29,13 @@ multi-wait DAG scheduler and real repository-shaped acceptance remain deferred.
 Worker-level prepared runtime and optional Linux memory COW remain resident
 optimizations shared by many workflows. Destroying one waiting workflow's Guest
 must not require discarding that shared baseline.
+
+A separate default-off semantic adapter can now coalesce and retain only one
+exact AST-qualified whole-Run result. It binds the full invocation and request
+contract, keeps callback/semantic cache provenance separate, and publishes only
+a canonical bounded zero-Host-call result from a successful Fresh Guest. This is
+not frame restoration, a general workflow scheduler, statement-region extraction,
+or permission to reuse live observations/effects.
 
 Dirty-page checkpoint/restore remains a later comparison candidate only if
 measurements show that explicit output materialization/recomputation dominates

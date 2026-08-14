@@ -5,7 +5,7 @@
 > slices. A green slice, signed checkpoint, push, or context boundary is not a
 > stopping condition.
 
-**Status:** Active; Tracks 0-D implemented and verified, Track E closeout in progress
+**Status:** Complete; Tracks 0-E implemented, independently reviewed, and verified
 **Date:** 2026-08-14
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -58,7 +58,7 @@ boundary may remain the same execution while Linux reclaims or pages out cold
 linear-memory pages. This is useful only if measured RSS/PSS reduction outweighs
 pageout/refault cost.
 
-## Current verified implementation
+## Historical verified baseline
 
 At the baseline:
 
@@ -84,8 +84,10 @@ At the baseline:
 - no AST-wide effect summary, semantic region plan, automatic Guest retention,
   continuation-preserving parked/cold slot, or adaptive optimizer exists.
 
-These facts are Current/Implemented Experimental only at the cited baseline.
-Everything introduced by this file remains Proposed until code and evidence land.
+These facts describe only the cited baseline. Tracks 0-D subsequently landed as
+Implemented Experimental with evidence; the roadmap pointer, completion log, and
+mechanism matrix below are the live status. Adaptive optimization and every
+explicitly deferred family remain Proposed/Deferred.
 
 ## Desired future state
 
@@ -370,19 +372,19 @@ real Guest run for the exact selected profile.
 **Promise:** The paper claim is bounded by real evidence and future optimizer work
 is discoverable without becoming current scope.
 
-- [ ] Run an independent read-only security/correctness review of analyzer
+- [x] Run an independent read-only security/correctness review of analyzer
   soundness boundaries, identity binding, cache publication, lifecycle races, and
   parked-slot teardown; close P0/P1 findings with tests.
-- [ ] Run all global gates and Linux-specific gates supported by changed code.
-- [ ] Produce structured Experimental evidence for analyzer coverage, exact
+- [x] Run all global gates and Linux-specific gates supported by changed code.
+- [x] Produce structured Experimental evidence for analyzer coverage, exact
   coalescing/retention behavior, semantic parity, and cold-I/O measurements.
-- [ ] Update README, architecture/threat model, mechanism matrix, wait trade-offs,
+- [x] Update README, architecture/threat model, mechanism matrix, wait trade-offs,
   Agent Functions, and long-term roadmap with Current/Observed/Proposed/Deferred
   labels.
-- [ ] Preserve the deferred optimizer family list and activation evidence. Do not
+- [x] Preserve the deferred optimizer family list and activation evidence. Do not
   silently start statement-region extraction, adaptive fusion, or distributed
   caching.
-- [ ] Verify every final commit signature, remote branch SHA, clean worktree, and
+- [x] Verify every final commit signature, remote branch SHA, clean worktree, and
   no credential/private-body leakage.
 
 ## Global gates
@@ -433,8 +435,8 @@ the controller owns design, diffs, tests, signatures, push, and final claims.
 
 ## Roadmap tracking
 
-**Current execution pointer:** Track E — run independent closure review, global and
-real-platform gates, then close the evidence and roadmap without widening scope.
+**Current execution pointer:** Complete — Tracks 0-E are closed; all optimizer/
+COW mechanisms remain Experimental, independently default-off, and fail-closed.
 
 After each slice:
 
@@ -467,7 +469,8 @@ After each slice:
   zero-clean. Zao control/cold/pageout observations over 96 MiB private dirty state
   found no immediate RSS reduction for `MADV_COLD`; `MADV_PAGEOUT` moved all
   98,304 KiB to swap, restored it intact, and raised full refault from about 1 ms
-  to 16.38 ms. This is positive but kernel/swap-dependent Experimental evidence,
+  to 17.91 ms in the final closeout rerun. This is positive but kernel/swap-
+  dependent Experimental evidence,
   not approval for a scheduler. The official CPython/WASI Guest then passed the
   same-slot check with a 200,000,000-byte allocation, preserved Python object and
   global identity across one capability wait, recorded successful cold/pageout
@@ -482,7 +485,8 @@ After each slice:
   matched the emitting test schema. Pageout is now armed only after cold advice,
   evidence accounting is stricter, the three Zao observations were regenerated
   directly from the test output, and the Darwin e2e skip occurs before engine
-  construction. No outstanding Track A P0/P1 finding remains.
+  construction. No outstanding Track A P0/P1 finding remains; the review closure
+  was committed and pushed as `864c94b`.
 - 2026-08-14: Tracks B-C reached analysis-only closure. The exact packaged Guest
   now exports a bounded `runtime_analyze_source` ABI backed by built-in `ast`,
   typed Plan projections, conservative direct/WASI coloring, recursive SCC/fixed-
@@ -499,29 +503,40 @@ After each slice:
   builtin callback barriers; all were closed with focused tests. Host admission
   now also requires the requested artifact/profile identities to match the live
   analyzer engine before Guest analysis starts. Tracks B-C were committed and
-  pushed as `08e2eb5`.
+  pushed as `c7c232f`.
 - 2026-08-14: Track D complete. A default-off exact whole-Run `ReusePass` now
   requires a reusable one-region Plan, exact canonical-input and immutable-root
   dependencies, and strict source compatibility before entering the existing
   Agent Function single-flight/store. Analyzer, analysis, Plan, region, source,
   artifact, profile, import, input, root, deterministic, output, project, privacy,
-  and policy identity plus the untrusted compatibility/requirements contract are
-  bound without weakening the existing key. Publication
-  still requires a successful canonical bounded Fresh Guest result and a zero
+  and policy identity plus the untrusted compatibility declaration are bound
+  without weakening the existing key; non-empty runtime requirements reject
+  semantic retention. Publication still requires a successful canonical bounded
+  Fresh Guest result and a zero
   Host-call effect probe; failures, cancellation, timeout, OOM, panic, corruption,
   oversize, live/unknown static effects, and ordinary unqualified Guest retention
   remain fail-closed. The rebuilt real Guest on Zao proved two exact siblings and
   one later repeat used one physical execution (leader/waiter/retained). The
-  retained path took 335 microseconds versus a 10,331,129-microsecond physical
+  retained path took 433 microseconds versus a 9,964,299-microsecond physical
   batch, stored 274 bytes, and reported no physical execution. Including the
-  separate 10,429,083-microsecond analyzer phase, this bounded three-call trial
-  saved 10,232,840 microseconds (33.0%) versus three physical computations; this
+  separate 9,985,089-microsecond analyzer phase, the observed three-call workload
+  saved 9,943,076 microseconds (33.3%) versus three physical computations; this
   is exact-workload evidence, not an adaptive policy. Independent Track D review
   reported six P1s and no P0s. Closure replaced the forgeable retention entry
   with a Host-minted opaque qualification token, bound compatibility/requirements,
   rejected trusted prepare and arbitrary result decoders, added per-hit size and
   cancellation checks, separated callback/semantic cache provenance, and aligned
-  emitted stats with checked-in evidence. Focused race and real-Guest reruns pass.
+  emitted stats with checked-in evidence. A second closure review found three P1s
+  and no P0s: forgeable analysis provenance, retained-hit compatibility admission,
+  and the completed-flight/canceled-waiter race. Closure now requires stable valid
+  authority-free Runner properties through `semantic.AnalyzeVerified`, carries
+  opaque detached analysis/Plan provenance into the cache token, admits exact
+  compatibility before lookup while rejecting non-empty requirements, and rechecks
+  waiter cancellation after completion. Focused race and final real-Guest analysis/
+  reuse reruns pass. Track D was committed and pushed as `2541820`; these Track E
+  closure fixes landed in signed commit `8e5ed54`; a final independent read-only
+  P0/P1 review returned **CLOSED**, and focused race plus committed-source real-
+  Guest analysis/reuse reruns pass.
 
 ## Stop conditions
 

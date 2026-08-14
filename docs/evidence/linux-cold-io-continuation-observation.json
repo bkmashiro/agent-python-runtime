@@ -2,6 +2,7 @@
   "schema_version": "pysolate.cold-io-observation.v0",
   "status": "Experimental",
   "date": "2026-08-14",
+  "source_commit": "25418202c0e10e1aea248a13176d961d5ee07217",
   "host": {
     "label": "Zao Linux ARM64",
     "kernel": "6.12.0-202.76.4.1.el9uek.aarch64",
@@ -42,7 +43,7 @@
       "before": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
       "after": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
       "after_resume": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
-      "resume_micros": 967
+      "resume_micros": 914
     },
     {
       "mode": "cold",
@@ -50,7 +51,7 @@
       "before": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
       "after": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
       "after_resume": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
-      "resume_micros": 1093
+      "resume_micros": 1007
     },
     {
       "mode": "pageout",
@@ -58,14 +59,14 @@
       "before": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 98304, "swap_kib": 0},
       "after": {"rss_kib": 0, "pss_kib": 0, "shared_clean_kib": 0, "private_dirty_kib": 0, "swap_kib": 98304},
       "after_resume": {"rss_kib": 98304, "pss_kib": 98304, "shared_clean_kib": 0, "private_dirty_kib": 0, "swap_kib": 0},
-      "resume_micros": 17074
+      "resume_micros": 17907
     }
   ],
   "bounded_conclusion": {
     "madv_cold_immediate_rss_reduction_observed": false,
     "madv_pageout_private_dirty_rss_reduction_observed": true,
     "same_continuation_private_state_preserved": true,
-    "pageout_resume_cost_relative_to_control": "approximately 17.7x for the 96 MiB full-page refault scan in this single run"
+    "pageout_resume_cost_relative_to_control": "approximately 19.6x for the 96 MiB full-page refault scan in this single run"
   },
   "non_claims": [
     "This is one outcome-qualified synthetic observation, not a production policy or capacity certification.",

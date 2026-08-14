@@ -2,6 +2,7 @@
   "schema_version": "pysolate.semantic-analysis-observation.v0",
   "status": "Experimental",
   "date": "2026-08-14",
+  "source_commit": "c7c232f361cef4567bfa56cdef0b276723d2c9b5",
   "target_guest": {
     "artifact_sha256": "d5fb9f137d9ea522bc0b772b0377e74f1848026e8773495ef56217adb521d0c4",
     "semantic_source_set_sha256": "a4fd7aacabc0e8dd8fc8e080dea277346a946d9a4e929dd4e2d65ef372fd750b",

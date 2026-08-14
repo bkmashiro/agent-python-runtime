@@ -1,4 +1,4 @@
-# Proposed design: content-addressed Agent Functions
+# Content-addressed Agent Functions
 
 Status: **Bounded Experimental mechanism; exact AST-qualified whole-Run Guest retention implemented, arbitrary Guest-Python purity remains fail-closed.**
 Date: 2026-08-14
@@ -103,23 +103,29 @@ Host-visible function boundary.
 The current Experimental adapter is narrower than the general contract above:
 
 1. the exact packaged Guest analyzes the exact source with Python `ast`;
-2. the Host validates a versioned analysis and one-region `SemanticPlan`;
+2. `semantic.AnalyzeVerified` validates stable Host-owned Runner properties, exact
+   artifact/profile binding, and absence of workspace/Broker authority, then mints
+   opaque detached analysis/Plan provenance;
 3. reuse qualification requires no publish, live observation, suspension, or
    unknown effect, plus canonical boundaries and exact canonical-input and
    immutable-root dependencies;
-4. `agentfunction.NewQualifiedGuestInvocation` mints an opaque token only after
-   revalidating analysis, Plan, region, dependencies, and source/artifact/profile/
-   import/input/root/determinism/output/project/privacy/policy bindings, including
-   the exact compatibility/requirements request contract;
+4. `agentfunction.NewQualifiedGuestInvocation` accepts only that verified opaque
+   Plan and revalidates region, dependencies, source/artifact/profile/import/
+   input/root/determinism/output/project/privacy/policy bindings and the exact
+   compatibility declaration; non-empty runtime requirements reject;
 5. the qualified executor rejects trusted prepare hooks, replaces arbitrary
    result callbacks with one fixed canonical Guest-response decoder, isolates
    semantic records from callback records by cache domain/provenance, and checks
    cancellation and each call's result-size bound even on retained hits;
-6. the first physical Fresh Guest must pass the strict compatibility/source
-   contract, succeed, decode canonically, fit the configured bound, and record no
-   Host-call attempt before publication;
+6. compatibility/source admission occurs before cache lookup, and the first
+   physical Fresh Guest must additionally succeed, decode canonically, fit the
+   configured bound, and record no Host-call attempt before publication;
 7. concurrent exact calls may share that physical result and a later exact call
    may read the bounded worker-local record.
+
+`run_id` is intentionally not result identity: it is Host lifecycle correlation,
+is not exposed to the analyzed Guest source, and retained hits never reuse a prior
+physical execution ID, receipts, metrics, or effect transcript.
 
 The ordinary Fresh Guest entry point still rejects completed-result retention.
 The optimizer, cache, and single-flight each retain independent off-switches.
@@ -127,7 +133,7 @@ Errors, traps, cancellation, timeout, OOM, noncanonical or oversized output,
 and runtime Host-call attempts do not publish. Structured real-Guest evidence is
 in [semantic-reuse-observation.json](evidence/semantic-reuse-observation.json):
 one leader, one waiter, and one later hit used one physical Guest; the later
-qualification/lookup/materialization took 335 microseconds versus a 10,331,129
+qualification/lookup/materialization took 433 microseconds versus a 9,964,299
 microsecond physical batch in that bounded Zao run. This is evidence for exact
 repeated expensive work, not an adaptive policy or a claim about cheap one-shot
 code.

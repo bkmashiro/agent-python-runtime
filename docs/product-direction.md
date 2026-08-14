@@ -34,11 +34,12 @@ inside one live target-Guest session, stages filesystem changes in a private
 workspace attempt, and supports Host-qualified eager reads with reach-gated
 fallback and a Broker-enforced pre-seal write denial. Bounded Experimental
 successors now add portable immutable roots, structured recursive child
-orchestration, Host-instrumented Agent Function reuse/single-flight, explicit
-single-wait fresh re-evaluation, and one never-served single-use prepared module.
-General arbitrary-Python purity, production fan-out scheduling, memory COW,
-generalized write commit/reconciliation, and performance claims remain
-Deferred or Proposed as documented by the active Megagoal.
+orchestration, exact AST-qualified whole-Run Agent Function reuse/single-flight,
+explicit single-wait fresh re-evaluation, one never-served single-use prepared
+module, bounded Linux private-memory COW, and continuation-preserving cold-I/O.
+General arbitrary-Python purity, production fan-out scheduling, automatic
+cold/reuse policy, generalized write commit/reconciliation, and broad performance
+claims remain Deferred or Proposed as documented by the active Megagoal.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

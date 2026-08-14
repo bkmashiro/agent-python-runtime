@@ -18,10 +18,13 @@ Agent Python source
 The active default path deliberately does not enable prepared pools, COW
 restore, pinned sessions, schedulers, durable transactions, MCP daemons, trace
 databases, production benchmark orchestration, or recovery machinery. Experimental
-prepared/COW mechanisms remain fail-closed and are reported as disabled by the
-HTTP service unless a bounded, single-exported-memory candidate is explicitly
-selected by an embedding profile. Growable memories are eligible when they
-declare a finite maximum; the sealed image reserves that virtual extent while
+prepared/COW, continuation-preserving cold-I/O, and AST-qualified exact whole-Run
+reuse mechanisms remain fail-closed and off by default. The HTTP service reports
+prepared/COW disabled unless a bounded, single-exported-memory candidate is
+explicitly selected by an embedding profile; semantic reuse is an internal
+Experimental adapter, not an ordinary arbitrary-Python cache. Growable memories
+are eligible when they declare a finite maximum; the sealed image reserves that
+virtual extent while
 keeping the prepared prefix and zero growth tail sparse. It does
 include an optional Host-owned rooted workspace and a complete deterministic
 storage capsule; neither is a transaction system. Historical findings are
@@ -38,8 +41,9 @@ the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.
 and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active
 Experimental successor is the
 [semantic execution Megagoal](docs/plans/2026-08-14-semantic-execution-autonomous-megagoal.md),
-which keeps AST planning/reuse and continuation-preserving cold-I/O work proposed
-and off by default until implemented and qualified.
+which now records bounded Experimental target-Guest AST planning, exact whole-Run
+single-flight/retention, and continuation-preserving cold-I/O evidence while
+keeping every mechanism off by default.
 Current, Experimental and Proposed claims remain separated in
 [docs/product-direction.md](docs/product-direction.md).
 

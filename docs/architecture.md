@@ -136,6 +136,33 @@ equivalence, concurrent scheduling, mounted-directory ordering, locale
 mutation, live-source stability, or complete-Agent determinism. See
 [research/deterministic-verification.md](research/deterministic-verification.md).
 
+## Semantic execution optimization
+
+**Experimental and default-off.** The exact packaged Guest can emit a bounded
+Python-AST analysis bound to source, artifact, execution profile, admitted import
+closure, and capability Plan. `semantic.AnalyzeVerified` accepts only stable valid
+Runner properties with the exact artifact/profile binding and no workspace/Broker
+authority, then mints detached opaque provenance. The Host decodes only a strict
+versioned report,
+propagates conservative function summaries through recursive components, and
+builds one coarse whole-Run region. Dynamic dispatch, unsupported control flow,
+unknown imports/calls, live observation, publication, and suspension are opaque
+barriers rather than optimization opportunities.
+
+A separate `ReusePass` may convert exactly one reusable region into the existing
+Agent Function identity. Analyzer, analysis, Plan and region identities augment
+rather than replace source/artifact/profile/import/input/root/deterministic/output/
+project/privacy/policy plus the exact compatibility declaration all enter or
+constrain the invocation identity; non-empty runtime requirements reject semantic
+retention. Compatibility/source admission occurs before cache lookup. The first
+physical Fresh Guest still passes the runtime effect probe; only a
+successful canonical bounded result with no Host-call attempt can be published.
+Single-flight and worker-local retention are independent and remain off unless
+explicitly selected. A hit returns immutable result bytes and reports no physical
+execution; it does not replay or suppress an effect. See
+[content-addressed-agent-functions.md](content-addressed-agent-functions.md) and
+[evidence/semantic-reuse-observation.json](evidence/semantic-reuse-observation.json).
+
 ## Research substrate
 
 **Experimental and outside Runtime core.** `research/labstore` provides a

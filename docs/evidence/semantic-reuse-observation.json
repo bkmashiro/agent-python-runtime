@@ -2,6 +2,7 @@
   "schema_version": "pysolate.semantic-reuse-observation.v0",
   "status": "Experimental",
   "date": "2026-08-14",
+  "source_commit": "8e5ed54f168114221a8f4f8a5e4e4bda7030b5c6",
   "target_guest": {
     "artifact_sha256": "d5fb9f137d9ea522bc0b772b0377e74f1848026e8773495ef56217adb521d0c4",
     "runtime": "CPython 3.14.0 / wasm32-wasip1",
@@ -18,9 +19,9 @@
     "result_bodies_recorded": false
   },
   "timing_micros": {
-    "analysis_phase_including_analyzer_guest_initialization": 10429083,
-    "concurrent_batch_including_one_guest_initialization_and_compute": 10331129,
-    "later_qualification_lookup_and_materialization": 335
+    "analysis_phase_including_analyzer_guest_initialization": 9985089,
+    "concurrent_batch_including_one_guest_initialization_and_compute": 9964299,
+    "later_qualification_lookup_and_materialization": 433
   },
   "pass_stats": {
     "attempts": 3,
@@ -30,8 +31,8 @@
     "retained": 1,
     "physical_computes": 1,
     "result_bytes_total": 36,
-    "qualification_nanos_total": 707443,
-    "execution_nanos_total": 20661773151
+    "qualification_nanos_total": 922045,
+    "execution_nanos_total": 19928009397
   },
   "store_stats": {
     "hits": 1,
@@ -42,17 +43,17 @@
     "stored_bytes": 274
   },
   "economics": {
-    "hit_probability_break_even_excluding_one_time_analysis": 0.000032426272094753634,
-    "retained_hits_to_amortize_one_time_analysis": 1.0095141767418845,
-    "three_physical_compute_baseline_micros": 30993387,
-    "observed_analysis_plus_reuse_micros": 20760547,
-    "observed_saved_micros": 10232840,
-    "observed_saved_fraction": 0.33016204392246645
+    "hit_probability_break_even_excluding_one_time_analysis": 0.0000434551391924309,
+    "retained_hits_to_amortize_one_time_analysis": 1.0021299965294594,
+    "three_physical_compute_baseline_micros": 29892897,
+    "observed_analysis_plus_reuse_micros": 19949821,
+    "observed_saved_micros": 9943076,
+    "observed_saved_fraction": 0.3326233653432787
   },
   "interpretation": {
     "outcome": "useful for exact repeated work in the current expensive fresh-Guest pipeline",
     "scope": "one pure whole-Run exact identity, two concurrent siblings, and one later worker-local hit",
-    "qualification": "AST-qualified, plan-bound, exact source/artifact/profile/import/input/root/determinism/output/privacy/policy/project plus compatibility/requirements request identity",
+    "qualification": "AST-qualified, plan-bound, exact source/artifact/profile/import/input/root/determinism/output/privacy/policy/project plus compatibility identity; non-empty runtime requirements rejected",
     "publication": "only successful canonical output with zero runtime Host-call attempts",
     "not_proven": [
       "cross-worker or distributed retention",

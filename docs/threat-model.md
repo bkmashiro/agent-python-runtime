@@ -26,9 +26,40 @@ or self-identity is not an authority credential.
 
 The wazero module receives no inherited process arguments, environment, sockets, credentials, package manager, native loader, or arbitrary preopened directory. Optional mounts are selected by the Host.
 
-### Fresh module per run
+### Fresh module per physical run
 
-Every request creates a new module and closes it on every outcome. Python globals, WebAssembly memory, Host-call context and temporary resources are not reused. Experimental Linux COW changes only the backing allocation: a bounded Guest receives a new `MAP_PRIVATE` mapping of a sealed sparse image, may grow within its declared maximum, and is then unmapped rather than reset or returned to a pool.
+Every physical request execution creates a new module and closes it on every
+outcome. Python globals, WebAssembly memory, Host-call context and temporary
+resources are not reused. Experimental Linux COW changes only the backing
+allocation: a bounded Guest receives a new `MAP_PRIVATE` mapping of a sealed
+sparse image, may grow within its declared maximum, and is then unmapped rather
+than reset or returned to a pool.
+
+When the separate cold-I/O experiment is selected, one active physical run may
+keep that same private module/mapping across a copied-argument Host-call wait and
+apply `MADV_COLD`/`MADV_PAGEOUT` to the live logical range. It is never reassigned,
+reset, checkpointed, or replayed; cancellation and terminal outcomes close the
+slot, and the Host writes a response only after resume.
+
+The default-off semantic reuse path is not a module pool. It may avoid a physical
+run only after the exact source was statically qualified and an earlier exact
+Fresh Guest completed successfully with canonical bounded output and no Host-call
+attempt. The retained value is immutable result bytes partitioned by project and
+privacy identity; no Python heap, WASM state, workspace attempt, capability,
+receipt, or effect transcript is retained or fabricated. Unknown/live/effectful
+analysis and every failed physical outcome remain unretained. Qualification begins
+only with `semantic.AnalyzeVerified`, which validates stable Runner properties,
+exact artifact/profile binding, and absence of workspace/Broker authority before
+minting opaque detached provenance; caller-supplied digest fields cannot mint the
+retention token. The exact compatibility declaration is identity-bound and
+admitted before lookup; any non-empty runtime requirement rejects semantic
+retention. The qualified path rejects trusted prepare hooks,
+uses one fixed canonical decoder, checks cancellation and each call's output bound
+on retained hits, and isolates semantic records from generic callback records by
+cache provenance. Cache corruption or eviction recomputes through a new physical
+Guest. A malicious Host or same-UID process that can rewrite the private cache
+directory is outside the Agent sandbox boundary, as with other Host-owned runtime
+state.
 
 ### Bounded execution
 

@@ -5,8 +5,7 @@
 > authority model. A green slice or signed checkpoint is not a stopping condition;
 > the decision gates below are.
 
-**Status:** Active — Track 0 architecture baseline landed; opportunity census and
-source-pinned related-work audit are next
+**Status:** Active — Track 0 research contract closed; Track A opportunity census next
 **Date:** 2026-08-14
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -276,14 +275,16 @@ work, not from the supplied handoff's unchecked assumptions.
 
 - [x] Inspect live semantic, capability, placement, reuse and workload seams.
 - [x] Write the architecture recommendation and successor roadmap.
-- [ ] Pin and verify primary papers/source; produce a claim-by-claim related-work
+- [x] Pin and verify primary papers/source; produce a claim-by-claim related-work
   matrix with evidence anchors and prohibited formulations.
-- [ ] Define the exact research questions, observable semantics and divergence
+- [x] Define the exact research questions, observable semantics and divergence
   oracle before implementing a graph.
 
 **Primary files:**
 
 - `docs/research/unified-effect-aware-runtime-architecture.md`
+- `docs/research/effect-aware-related-work-matrix.md`
+- `docs/research/effect-aware-observable-semantics.md`
 - `docs/research/multi-agent-shared-execution-next-step.md`
 - `docs/product-direction.md`
 - this roadmap
@@ -535,9 +536,10 @@ not permission to manufacture a broader optimizer.
 
 ## Current execution pointer
 
-**Track 0:** source-pin and verify the related-work claims, then define the observable
-trace/divergence oracle and corpus contract before implementing Semantic Execution
-Graph code.
+**Track A:** build the body-safe generated-program corpus and opportunity census.
+Track 0 is closed with source-pinned related-work claims and a frozen observable-
+semantics/divergence contract; do not implement Semantic Execution Graph or
+scheduling before the census.
 
 ## Short prompt to start/resume this Mega-Goal
 

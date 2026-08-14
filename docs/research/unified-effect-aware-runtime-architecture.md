@@ -8,6 +8,11 @@ Baseline: `3bd022fa074f8e8178b9bdd0fd9efaa5e4f8c37c`
 
 Active execution roadmap: [`../plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md`](../plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md)
 
+Frozen research contracts:
+
+- [source-pinned related-work truth matrix](effect-aware-related-work-matrix.md)
+- [observable-semantics and divergence contract](effect-aware-observable-semantics.md)
+
 ## Decision
 
 Evolve Pysolate toward:
@@ -247,10 +252,11 @@ A low opportunity or high conservatism result is a legitimate research outcome.
 
 ## Related-work claim discipline
 
-The supplied handoff identifies likely comparisons with AsyncFC, Agent JIT, PASTE,
-workload-aware caching, CaMeL, A1, ARIES and public Cloudflare systems. Those
-comparisons are hypotheses until their primary papers and pinned public sources are
-rechecked.
+The supplied handoff identifies comparisons with AsyncFC, Agent JIT, PASTE,
+workload-aware caching, CaMeL, A1, ARIES and public Cloudflare systems. Their
+public claims are now frozen in the
+[related-work truth matrix](effect-aware-related-work-matrix.md); unpublished
+behavior remains unknown.
 
 The intended distinction is not “others are unsafe” or “others do not inspect code.”
 It is whether Pysolate can combine exact generated-program structure and Host-owned

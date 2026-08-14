@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	AnalysisSchemaVersion = "pysolate.semantic-analysis.v1"
+	AnalysisSchemaVersion = "pysolate.semantic-analysis.v2"
 	PlanSchemaVersion     = "pysolate.semantic-plan.v0"
 	MaxDocumentBytes      = 1 << 20
 
@@ -124,13 +124,15 @@ type Analysis struct {
 	ModuleEffects          EffectSummary     `json:"module_effects"`
 	Functions              []FunctionSummary `json:"functions"`
 	Barriers               []Barrier         `json:"barriers"`
+	CallSiteCoverage       string            `json:"call_site_coverage"`
 	CallSites              []CallSite        `json:"call_sites"`
 }
 
 func (analysis Analysis) Validate() error {
 	if analysis.SchemaVersion != AnalysisSchemaVersion || !analysis.ModuleSpan.valid() ||
 		len(analysis.Functions) > maxFunctions || len(analysis.Barriers) > maxBarriers ||
-		len(analysis.CallSites) > maxCallSites || analysis.CallSites == nil {
+		len(analysis.CallSites) > maxCallSites || analysis.CallSites == nil ||
+		analysis.CallSiteCoverage != "positive_only" {
 		return ErrInvalidAnalysis
 	}
 	for _, digest := range []string{
@@ -333,8 +335,20 @@ func validCanonicalArguments(raw json.RawMessage) bool {
 	if err := decoder.Decode(&arguments); err != nil || arguments == nil {
 		return false
 	}
-	canonical, err := json.Marshal(arguments)
-	return err == nil && bytes.Equal(raw, canonical)
+	for _, value := range arguments {
+		switch value.(type) {
+		case nil, bool, string, json.Number:
+		default:
+			return false
+		}
+	}
+	var canonical bytes.Buffer
+	encoder := json.NewEncoder(&canonical)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(arguments); err != nil {
+		return false
+	}
+	return bytes.Equal(raw, bytes.TrimSuffix(canonical.Bytes(), []byte{'\n'}))
 }
 
 func identity(value any) (string, []byte, error) {

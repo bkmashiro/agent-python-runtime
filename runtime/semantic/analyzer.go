@@ -148,7 +148,8 @@ func Analyze(ctx context.Context, runner enginecontract.Runner, request Request)
 func analysisMatchesRequest(analysis Analysis, request Request) bool {
 	sourceDigest := sha256.Sum256([]byte(request.Source))
 	sourceSHA := fmt.Sprintf("sha256:%x", sourceDigest[:])
-	if analysis.SourceSHA256 != sourceSHA ||
+	if analysis.AnalyzerSHA256 != semanticDigest("pysolate.semantic-analyzer.v3") ||
+		analysis.SourceSHA256 != sourceSHA ||
 		analysis.ArtifactSHA256 != request.Bindings.ArtifactSHA256 ||
 		analysis.ExecutionProfileSHA256 != request.Bindings.ExecutionProfileSHA256 ||
 		analysis.ImportClosureSHA256 != request.Bindings.ImportClosureSHA256 ||
@@ -166,9 +167,15 @@ func analysisMatchesRequest(analysis Analysis, request Request) bool {
 			!argumentsMatchProjection(site.CanonicalArguments, projection.Arguments) {
 			return false
 		}
-		if (projection.EffectClass == capability.EffectWorkspaceRead || projection.EffectClass == capability.EffectExternalRead) &&
-			(!analysis.ModuleEffects.MayObserveLive || !analysis.ModuleEffects.MaySuspend) {
-			return false
+		switch projection.EffectClass {
+		case capability.EffectWorkspaceRead, capability.EffectExternalRead:
+			if !analysis.ModuleEffects.MayObserveLive || !analysis.ModuleEffects.MaySuspend {
+				return false
+			}
+		case capability.EffectWorkspaceWrite:
+			if !analysis.ModuleEffects.MayPublish || !analysis.ModuleEffects.MaySuspend {
+				return false
+			}
 		}
 	}
 	return true

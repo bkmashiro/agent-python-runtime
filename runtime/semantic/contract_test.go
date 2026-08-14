@@ -132,12 +132,20 @@ func TestAnalysisRejectsMalformedSemanticCallSites(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	unicode := valid
+	unicode.CallSites = append([]semantic.CallSite(nil), valid.CallSites...)
+	unicode.CallSites[0].CanonicalArguments = json.RawMessage(`{"key":"<\u2028>"}`)
+	if err := unicode.Validate(); err != nil {
+		t.Fatalf("shared Python/Go canonical string rejected: %v", err)
+	}
 	mutations := map[string]func(*semantic.Analysis){
 		"unknown capability": func(value *semantic.Analysis) { value.CallSites[0].Capability = "" },
 		"non-canonical arguments": func(value *semantic.Analysis) {
 			value.CallSites[0].CanonicalArguments = json.RawMessage(`{ "key":"x"}`)
 		},
 		"non-object arguments": func(value *semantic.Analysis) { value.CallSites[0].CanonicalArguments = json.RawMessage(`[]`) },
+		"structured argument":  func(value *semantic.Analysis) { value.CallSites[0].CanonicalArguments = json.RawMessage(`{"key":[]}`) },
+		"coverage":             func(value *semantic.Analysis) { value.CallSiteCoverage = "complete" },
 		"dynamic occurrence":   func(value *semantic.Analysis) { value.CallSites[0].DynamicOccurrence = 2 },
 		"outside module": func(value *semantic.Analysis) {
 			value.CallSites[0].Span.StartLine = 3
@@ -167,7 +175,7 @@ func validAnalysis() semantic.Analysis {
 			ID: digest('8'), Name: "compute", SCCID: digest('8'),
 			Span: semantic.SourceSpan{StartLine: 1, EndLine: 2},
 		}},
-		CallSites: []semantic.CallSite{},
+		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
 	}
 }
 

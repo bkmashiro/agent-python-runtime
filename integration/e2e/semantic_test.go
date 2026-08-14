@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -74,6 +76,75 @@ func TestRealGuestSemanticAnalysisBuildsReusableWholeRunPlan(t *testing.T) {
 	blocked, blockedCensus, err := semantic.BuildWholeRunPlan(unknown, semantic.WholeRunConfig{InputsCanonical: true, OutputsCanonical: true})
 	if err != nil || blocked.Regions[0].Reusable() || len(blockedCensus.BarrierCounts) == 0 {
 		t.Fatalf("blocked=%+v census=%+v err=%v", blocked, blockedCensus, err)
+	}
+}
+
+func TestRealGuestSemanticOverlayBindsExactModuleEntryCall(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactDigest := sha256.Sum256(artifact)
+	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: semanticTestDigest('8'),
+		ImportRoots: []string{"json"}, QualifiedImportRoots: []string{"json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	spec, grant, err := capability.DemoCatalogDefinition(capability.DemoCatalogPolicy{
+		Endpoint: "http://127.0.0.1:1", Timeout: time.Second, MaxResponseBytes: 1024,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	if err := registry.Register(spec, grant, capability.NewPlaybackHandler()); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := semantic.NewRequest("result = sources.demo_catalog()\n", semantic.Bindings{
+		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: runner.Properties().ExecutionProfileBindingSHA256,
+		ImportClosureSHA256: agentfunction.ImportClosureIdentity([]string{"json"}, []string{"json"}), CapabilityPlanSHA256: plan.Identity(),
+	}, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := semantic.AnalyzeVerified(context.Background(), runner, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := verified.Analysis()
+	if err != nil || len(analysis.CallSites) != 1 {
+		t.Fatalf("analysis=%+v err=%v", analysis, err)
+	}
+	site := analysis.CallSites[0]
+	if !site.NecessarilyReached || site.Capability != spec.Name || string(site.CanonicalArguments) != `{}` || site.DynamicOccurrence != 1 {
+		t.Fatalf("call site=%+v", site)
+	}
+	conditional, err := semantic.NewRequest("if inputs['flag']:\n    result = sources.demo_catalog()\n", request.Bindings, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditionalAnalysis, err := semantic.Analyze(context.Background(), runner, conditional)
+	if err != nil || len(conditionalAnalysis.CallSites) != 0 {
+		t.Fatalf("conditional analysis=%+v err=%v", conditionalAnalysis, err)
 	}
 }
 

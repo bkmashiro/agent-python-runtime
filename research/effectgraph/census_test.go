@@ -31,6 +31,11 @@ func TestRunCensusSeparatesStructuralCandidatesFromCurrentProof(t *testing.T) {
 	analyzer := func(_ context.Context, _ []byte) (semantic.Analysis, error) {
 		analysis := validAnalysis(semantic.EffectSummary{}, nil)
 		analysis.SourceSHA256 = sha(source)
+		analysis.CallSites = []semantic.CallSite{{
+			ID: sha([]byte("call")), Span: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 10},
+			Capability: "sources.read", ControlRegionID: sha([]byte("region")), NecessarilyReached: true,
+			ArgumentsCanonical: true, CanonicalArguments: []byte(`{}`), DynamicOccurrence: 1,
+		}}
 		return analysis, nil
 	}
 	report, err := effectgraph.RunCensus(context.Background(), corpus, root, analyzer, func([]byte) (string, error) {
@@ -39,7 +44,9 @@ func TestRunCensusSeparatesStructuralCandidatesFromCurrentProof(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.ProgramsAnalyzed != 1 || report.ProgramsOpaque != 0 || report.WholeRunReusable != 1 {
+	if report.ProgramsAnalyzed != 1 || report.ProgramsOpaque != 0 || report.WholeRunReusable != 1 ||
+		report.OverlayCallSites != 1 || report.NecessarilyReachedCallSites != 1 ||
+		report.Programs[0].OverlayCallSites != 1 || report.Programs[0].NecessarilyReachedCallSites != 1 {
 		t.Fatalf("report=%+v", report)
 	}
 	counts := map[string]effectgraph.OpportunityCount{}
@@ -134,7 +141,8 @@ func validAnalysis(effects semantic.EffectSummary, barriers []semantic.Barrier) 
 		ArtifactSHA256: sha([]byte("artifact")), ExecutionProfileSHA256: sha([]byte("profile")),
 		ImportClosureSHA256: sha([]byte("imports")), CapabilityPlanSHA256: sha([]byte("plan")),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 30}, ModuleEffects: effects,
-		Functions: []semantic.FunctionSummary{}, Barriers: barriers, CallSites: []semantic.CallSite{},
+		Functions: []semantic.FunctionSummary{}, Barriers: barriers,
+		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
 	}
 }
 

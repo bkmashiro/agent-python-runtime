@@ -40,6 +40,11 @@ func TestAnalyzeUsesOptionalExactGuestSurfaceAndChecksBindings(t *testing.T) {
 	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
 		t.Fatalf("mismatch error=%v", err)
 	}
+	runner.mismatch = false
+	runner.badAnalyzer = true
+	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
+		t.Fatalf("analyzer identity error=%v", err)
+	}
 	if _, err := semantic.Analyze(context.Background(), plainRunner{}, request); !errors.Is(err, semantic.ErrAnalyzerUnavailable) {
 		t.Fatalf("unavailable error=%v", err)
 	}
@@ -79,6 +84,28 @@ func TestAnalyzeVerifiedWithholdsAuthorityAndReturnsDetachedReports(t *testing.T
 				t.Fatalf("error=%v", err)
 			}
 		})
+	}
+}
+
+func TestAnalyzeRejectsMissingWriteEffectCoverage(t *testing.T) {
+	bindings := semantic.Bindings{
+		ArtifactSHA256: digestFor('1'), ExecutionProfileSHA256: digestFor('2'),
+		ImportClosureSHA256: digestFor('3'), CapabilityPlanSHA256: digestFor('4'),
+	}
+	request := semantic.Request{
+		Source: "result = workspace.write_text()\n", Bindings: bindings,
+		Capabilities: []semantic.CapabilityProjection{{
+			Name: "workspace.write_text", EffectClass: capability.EffectWorkspaceWrite,
+			Playback: capability.PlaybackLiveOnly, Module: "workspace", Method: "write_text", Arguments: []string{},
+		}},
+	}
+	runner := &fakeSemanticRunner{bindings: bindings, emitCall: true}
+	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
+		t.Fatalf("missing write coverage error=%v", err)
+	}
+	runner.writeEffects = true
+	if _, err := semantic.Analyze(context.Background(), runner, request); err != nil {
+		t.Fatalf("covered write rejected: %v", err)
 	}
 }
 
@@ -147,13 +174,15 @@ func TestNewRequestProjectsTypedCapabilityMetadataAndRejectsAmbiguity(t *testing
 }
 
 type fakeSemanticRunner struct {
-	calls      int
-	mismatch   bool
-	workspace  bool
-	broker     bool
-	emitCall   bool
-	tamperCall bool
-	bindings   semantic.Bindings
+	calls        int
+	badAnalyzer  bool
+	mismatch     bool
+	writeEffects bool
+	workspace    bool
+	broker       bool
+	emitCall     bool
+	tamperCall   bool
+	bindings     semantic.Bindings
 }
 
 func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []byte) ([]byte, error) {
@@ -170,22 +199,30 @@ func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []b
 	analysis := semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
 		SourceSHA256:  fmt.Sprintf("sha256:%x", sourceDigest[:]),
-		ASTSHA256:     digestFor('5'), AnalyzerSHA256: digestFor('6'),
+		ASTSHA256:     digestFor('5'), AnalyzerSHA256: testSemanticDigest("pysolate.semantic-analyzer.v3"),
 		ArtifactSHA256: artifact, ExecutionProfileSHA256: request.Bindings.ExecutionProfileSHA256,
 		ImportClosureSHA256:  request.Bindings.ImportClosureSHA256,
 		CapabilityPlanSHA256: request.Bindings.CapabilityPlanSHA256,
 		ModuleSpan:           semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 128},
-		Functions:            []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{}, CallSites: []semantic.CallSite{},
+		Functions:            []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
+		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
+	}
+	if runner.badAnalyzer {
+		analysis.AnalyzerSHA256 = digestFor('6')
 	}
 	if runner.emitCall {
 		sourceSHA := analysis.SourceSHA256
-		span := semantic.SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 1}
+		span := semantic.SourceSpan{StartLine: 1, StartColumn: 9, EndLine: 1, EndColumn: 31}
 		callID := testSemanticDigest(fmt.Sprintf("pysolate.semantic-call-site.v0\x00%s\x00%s\x00%d:%d:%d:%d",
 			sourceSHA, request.Capabilities[0].Name, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn))
 		if runner.tamperCall {
 			callID = digestFor('f')
 		}
-		analysis.ModuleEffects = semantic.EffectSummary{MayObserveLive: true, MaySuspend: true}
+		if runner.writeEffects {
+			analysis.ModuleEffects = semantic.EffectSummary{MayPublish: true, MaySuspend: true}
+		} else {
+			analysis.ModuleEffects = semantic.EffectSummary{MayObserveLive: true, MaySuspend: true}
+		}
 		analysis.CallSites = []semantic.CallSite{{
 			ID: callID, Span: span, Capability: request.Capabilities[0].Name,
 			ControlRegionID:    testSemanticDigest("pysolate.semantic-control-region.v0\x00" + sourceSHA + "\x00module-entry"),

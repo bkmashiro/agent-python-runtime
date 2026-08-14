@@ -375,11 +375,12 @@ func qualifiedGuestInvocation(t *testing.T, invocation agentfunction.Invocation,
 	t.Helper()
 	analysis := semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
-		SourceSHA256:  invocation.FunctionSourceSHA256, ASTSHA256: digest('a'), AnalyzerSHA256: digest('b'),
+		SourceSHA256:  invocation.FunctionSourceSHA256, ASTSHA256: digest('a'), AnalyzerSHA256: semanticAnalyzerIdentity(),
 		ArtifactSHA256: invocation.ArtifactSHA256, ExecutionProfileSHA256: invocation.ExecutionProfileSHA256,
 		ImportClosureSHA256: invocation.ImportClosureSHA256, CapabilityPlanSHA256: digest('c'),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1},
-		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{}, CallSites: []semantic.CallSite{},
+		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
+		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
 	}
 	verified := verifiedSemanticPlanFor(t, invocation, analysis)
 	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, request)

@@ -102,7 +102,8 @@ class SemanticAnalysisTests(unittest.TestCase):
             "result = first\n",
             capabilities=capabilities,
         )
-        self.assertEqual("pysolate.semantic-analysis.v1", report["schema_version"])
+        self.assertEqual("pysolate.semantic-analysis.v2", report["schema_version"])
+        self.assertEqual("positive_only", report["call_site_coverage"])
         self.assertEqual(2, len(report["call_sites"]))
         first, second = sorted(report["call_sites"], key=lambda row: row["span"]["start_line"])
         self.assertTrue(first["necessarily_reached"])
@@ -119,10 +120,22 @@ class SemanticAnalysisTests(unittest.TestCase):
             "alias = sources.read\nresult = alias('x')\n",
             "if True:\n    result = sources.read('x')\n",
             "result = sources.read(key='x', extra='y')\n",
+            "sources = object()\nresult = sources.read('x')\n",
+            "import sources\nresult = sources.read('x')\n",
         ):
             with self.subTest(source=source):
                 report = self.analyze(source, capabilities=capabilities)
                 self.assertEqual([], report["call_sites"])
+
+    def test_overlay_does_not_skip_non_docstring_string_statement(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}, copy.deepcopy(CAPABILITIES[1])]
+        report = self.analyze(
+            '"doc"\n"second"\nresult = sources.read("<\u2028>")\n', capabilities=capabilities
+        )
+        self.assertEqual(1, len(report["call_sites"]))
+        self.assertFalse(report["call_sites"][0]["necessarily_reached"])
+        encoded = canonical_analysis_json(report)
+        self.assertIn('"<\\u2028>"', encoded)
 
     def test_dynamic_calls_eval_import_and_tool_rebinding_fail_closed(self):
         report = self.analyze(

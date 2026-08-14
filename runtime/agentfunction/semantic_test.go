@@ -58,7 +58,6 @@ func TestQualifiedGuestInvocationRequiresVerifiedProvenanceAndCompatibility(t *t
 	}
 
 	for name, mutate := range map[string]func(*semantic.Analysis){
-		"analyzer":        func(value *semantic.Analysis) { value.AnalyzerSHA256 = digest('d') },
 		"capability plan": func(value *semantic.Analysis) { value.CapabilityPlanSHA256 = digest('e') },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -169,14 +168,20 @@ func (runner *verifiedFixtureRunner) Properties() enginecontract.Properties {
 	}
 }
 
+func semanticAnalyzerIdentity() string {
+	digest := sha256.Sum256([]byte("pysolate.semantic-analyzer.v3"))
+	return fmt.Sprintf("sha256:%x", digest[:])
+}
+
 func semanticAnalysisFor(invocation agentfunction.Invocation) semantic.Analysis {
 	return semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
-		SourceSHA256:  invocation.FunctionSourceSHA256, ASTSHA256: digest('a'), AnalyzerSHA256: digest('b'),
+		SourceSHA256:  invocation.FunctionSourceSHA256, ASTSHA256: digest('a'), AnalyzerSHA256: semanticAnalyzerIdentity(),
 		ArtifactSHA256: invocation.ArtifactSHA256, ExecutionProfileSHA256: invocation.ExecutionProfileSHA256,
 		ImportClosureSHA256: invocation.ImportClosureSHA256, CapabilityPlanSHA256: digest('c'),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1},
-		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{}, CallSites: []semantic.CallSite{},
+		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
+		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
 	}
 }
 

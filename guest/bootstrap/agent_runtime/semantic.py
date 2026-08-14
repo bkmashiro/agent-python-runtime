@@ -6,8 +6,8 @@ import json
 import re
 
 
-ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v1"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v2").hexdigest()
+ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v2"
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v3").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
@@ -389,15 +389,15 @@ def _direct_statement_call(statement):
 def _module_call_sites(tree, source_sha256, capability_index):
     sites = []
     necessarily_reached = True
+    state = _ScopeAnalyzer("", {}, capability_index)
     control_region = _digest(("pysolate.semantic-control-region.v0\x00" + source_sha256 + "\x00module-entry").encode("ascii"))
-    for statement in tree.body:
-        if (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and
-                isinstance(statement.value.value, str)):
+    for position, statement in enumerate(tree.body):
+        if (position == 0 and isinstance(statement, ast.Expr) and
+                isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str)):
             continue
         call = _direct_statement_call(statement)
         if call is not None:
-            analyzer = _ScopeAnalyzer("", {}, capability_index)
-            capability = analyzer._capability(call.func)
+            capability = state._capability(call.func)
             arguments = _canonical_call_arguments(call, capability) if capability is not None else None
             if capability is not None and arguments is not None:
                 span = _span(call)
@@ -415,6 +415,7 @@ def _module_call_sites(tree, source_sha256, capability_index):
                     "canonical_arguments": arguments,
                     "dynamic_occurrence": 1,
                 })
+        state.visit(statement)
         necessarily_reached = False
     if len(sites) > MAX_CALL_SITES:
         raise ValueError("semantic call-site bound exceeded")
@@ -469,7 +470,8 @@ def _strong_components(edges):
 
 
 def canonical_analysis_json(report):
-    return json.dumps(report, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    encoded = json.dumps(report, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return encoded.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
 
 def analyze_source(source, bindings, capabilities):
@@ -565,6 +567,7 @@ def analyze_source(source, bindings, capabilities):
         "module_effects": module_effects,
         "functions": sorted(rows.values(), key=lambda row: row["id"]),
         "barriers": all_barriers,
+        "call_site_coverage": "positive_only",
         "call_sites": call_sites,
     }
 

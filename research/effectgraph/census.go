@@ -12,7 +12,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
-const ReportSchemaVersion = "pysolate.effectgraph-opportunity-census.v0"
+const ReportSchemaVersion = "pysolate.effectgraph-opportunity-census.v1"
 
 var ErrCensus = errors.New("effect-aware opportunity census failed")
 
@@ -62,6 +62,8 @@ type ProgramResult struct {
 	BarrierCodes                         []semantic.BarrierCode `json:"barrier_codes"`
 	FunctionCount                        uint32                 `json:"function_count"`
 	DistinctFunctionCapabilityReferences uint32                 `json:"distinct_function_capability_references"`
+	OverlayCallSites                     uint32                 `json:"overlay_call_sites"`
+	NecessarilyReachedCallSites          uint32                 `json:"necessarily_reached_call_sites"`
 	WholeRunReusable                     bool                   `json:"whole_run_reusable"`
 	Placement                            string                 `json:"placement"`
 }
@@ -77,6 +79,8 @@ type Report struct {
 	ProgramsWithoutBarriers              uint32               `json:"programs_without_barriers"`
 	WholeRunReusable                     uint32               `json:"whole_run_reusable"`
 	DistinctFunctionCapabilityReferences uint32               `json:"distinct_function_capability_references"`
+	OverlayCallSites                     uint32               `json:"overlay_call_sites"`
+	NecessarilyReachedCallSites          uint32               `json:"necessarily_reached_call_sites"`
 	HistoricalSeeds                      uint32               `json:"body_free_historical_seeds"`
 	PlacementCounts                      PlacementCounts      `json:"placement_counts"`
 	BarrierCounts                        []ReportBarrierCount `json:"barrier_counts"`
@@ -166,6 +170,14 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 		for _, function := range analysis.Functions {
 			directReferences += uint32(len(function.DirectCapabilities))
 		}
+		reachedCallSites := uint32(0)
+		for _, site := range analysis.CallSites {
+			if site.NecessarilyReached {
+				reachedCallSites++
+			}
+		}
+		report.OverlayCallSites += uint32(len(analysis.CallSites))
+		report.NecessarilyReachedCallSites += reachedCallSites
 		plan, _, planErr := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{
 			InputsCanonical: program.InputsCanonical, OutputsCanonical: program.OutputsCanonical,
 		})
@@ -176,7 +188,9 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 				ID: program.ID, SourceSHA256: program.SourceSHA256, Opaque: true,
 				AnalysisStatus: AnalysisUnclassifiable, FailureClass: FailurePlanInvalid,
 				BarrierCodes: codes, FunctionCount: uint32(len(analysis.Functions)),
-				DistinctFunctionCapabilityReferences: directReferences, Placement: placement,
+				DistinctFunctionCapabilityReferences: directReferences,
+				OverlayCallSites:                     uint32(len(analysis.CallSites)), NecessarilyReachedCallSites: reachedCallSites,
+				Placement: placement,
 			})
 			continue
 		}
@@ -186,6 +200,7 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 			ID: program.ID, SourceSHA256: program.SourceSHA256, Opaque: opaque,
 			AnalysisStatus: AnalysisAccepted, BarrierCodes: codes,
 			FunctionCount: uint32(len(analysis.Functions)), DistinctFunctionCapabilityReferences: directReferences,
+			OverlayCallSites: uint32(len(analysis.CallSites)), NecessarilyReachedCallSites: reachedCallSites,
 			WholeRunReusable: reusable, Placement: placement,
 		}
 		report.Programs = append(report.Programs, row)

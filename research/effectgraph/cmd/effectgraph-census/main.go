@@ -150,7 +150,9 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 	if err := writeAtomic(reportPath, reportJSON); err != nil {
 		return err
 	}
-	fmt.Printf("corpus_sha256=%s programs=%d unclassifiable=%d opaque=%d\n", report.CorpusSHA256, report.ProgramsAnalyzed, report.ProgramsUnclassifiable, report.ProgramsOpaque)
+	fmt.Printf("corpus_sha256=%s programs=%d unclassifiable=%d opaque=%d overlay_calls=%d necessarily_reached=%d\n",
+		report.CorpusSHA256, report.ProgramsAnalyzed, report.ProgramsUnclassifiable, report.ProgramsOpaque,
+		report.OverlayCallSites, report.NecessarilyReachedCallSites)
 	return nil
 }
 

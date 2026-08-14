@@ -117,7 +117,7 @@ consistency or mismatch frozen runtime identities.
 ## Semantic representation recommendation
 
 Track C keeps the existing `Analysis` and adds the smallest measured overlay rather
-than a general graph. `pysolate.semantic-analysis.v1` contains bounded source-indexed
+than a general graph. `pysolate.semantic-analysis.v2` contains bounded source-indexed
 call records for exact top-level projected calls with scalar literal arguments. Only a
 first executable module call may assert `necessarily_reached`; later straight-line
 calls remain structural but not necessarily reached, while calls under control flow,

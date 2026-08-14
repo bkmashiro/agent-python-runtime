@@ -90,7 +90,7 @@ Current gates pass:
   `eb79d31287ab984830eea9f56e72de8f36db7a70af565d8f794e153c94cf087d`,
   `e7c73de57f358de4f6f523944d978f6da97bbd186d965d3c858c5f7b185d1e92`,
   `a890cd69ce53877936890e2ac65e9ccfee1bef90086af5ca51c75e3aa3f717a2`,
-  `4a17a63d876a8d7443ce80a95472e35b61a98c0c172adba600ad04a88a2b673c`;
+  `635b548d36f09607ab823c0196684dc75629c1d4345cd8bce88c6fbeb17118b9`;
 - report validation rejects aggregate/observation mutation and resealed reports missing
   artifact, source or capability-plan provenance identities;
 - `git diff --check`.

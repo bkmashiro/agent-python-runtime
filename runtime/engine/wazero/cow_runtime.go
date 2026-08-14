@@ -11,6 +11,7 @@ type cowPreparedRuntime interface {
 // PreparedImageState is bounded, body-free evidence about the sealed linear-memory baseline.
 type PreparedImageState struct {
 	Available            bool   `json:"available"`
+	BaselineBytes        uint64 `json:"baseline_bytes"`
 	VirtualBytes         uint64 `json:"virtual_bytes"`
 	AllocatedBytes       uint64 `json:"allocated_bytes"`
 	PageSizeBytes        uint64 `json:"page_size_bytes"`
@@ -20,7 +21,12 @@ type PreparedImageState struct {
 }
 
 func (engine *Engine) PreparedImageState() PreparedImageState {
-	if engine == nil || engine.cowRuntime == nil {
+	if engine == nil {
+		return PreparedImageState{}
+	}
+	engine.cowMu.Lock()
+	defer engine.cowMu.Unlock()
+	if engine.cowRuntime == nil {
 		return PreparedImageState{}
 	}
 	return engine.cowRuntime.imageState()

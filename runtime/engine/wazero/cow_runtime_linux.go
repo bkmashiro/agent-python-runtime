@@ -8,11 +8,36 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 )
 
 type linuxCOWPreparedRuntime struct {
 	image *cowImage
+}
+
+func cowMaximumMemoryBytes(engine *Engine) (uint64, error) {
+	if engine == nil || engine.compiled == nil {
+		return 0, errors.New("COW maximum requires a compiled module")
+	}
+	memory, ok := engine.compiled.ExportedMemories()["memory"]
+	if !ok {
+		return 0, errors.New("COW maximum requires exported memory")
+	}
+	maximumPages, declared := memory.Max()
+	if !declared || maximumPages < memory.Min() {
+		return 0, errors.New("COW maximum requires bounded memory")
+	}
+	return uint64(maximumPages) * wasmLinearPageSize, nil
+}
+
+func instantiateCOWModule(ctx context.Context, runtime wazero.Runtime, compiled wazero.CompiledModule, config wazero.ModuleConfig, allocator *cowAllocator) (api.Module, error) {
+	module, err := runtime.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), compiled, config)
+	if err != nil {
+		allocator.releaseAllocation()
+	}
+	return module, err
 }
 
 func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRuntime, error) {
@@ -21,7 +46,11 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	}
 	probe := engine.COWProbe()
 	if !probe.MemoryCOWCandidate {
-		return nil, errors.New("artifact linear memory is not a fixed private COW candidate")
+		return nil, errors.New("artifact linear memory is not a bounded private COW candidate")
+	}
+	maximumBytes, err := cowMaximumMemoryBytes(engine)
+	if err != nil {
+		return nil, err
 	}
 	canonical, err := engine.newPrepared(ctx)
 	if err != nil {
@@ -36,7 +65,7 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if !ok {
 		return nil, errors.New("read canonical COW linear memory")
 	}
-	image, err := newCOWImage(baseline)
+	image, err := newCOWImageWithMaximum(baseline, maximumBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +82,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	if err != nil {
 		return nil, err
 	}
-	module, err := engine.runtime.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), engine.compiled, moduleConfig)
+	module, err := instantiateCOWModule(ctx, engine.runtime, engine.compiled, moduleConfig, allocator)
 	if err != nil {
 		if temporary != nil {
 			_ = temporary.Close()
@@ -80,7 +109,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 		return nil, fmt.Errorf("attach COW baseline: %w", err)
 	}
 	memory := module.Memory()
-	if memory == nil || uint64(memory.Size()) != runtime.image.size {
+	if memory == nil || uint64(memory.Size()) != runtime.image.baselineSize {
 		return nil, errors.New("COW slot memory shape drifted")
 	}
 	stderr.Reset()

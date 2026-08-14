@@ -19,7 +19,10 @@ The active default path deliberately does not enable prepared pools, COW
 restore, pinned sessions, schedulers, durable transactions, MCP daemons, trace
 databases, production benchmark orchestration, or recovery machinery. Experimental
 prepared/COW mechanisms remain fail-closed and are reported as disabled by the
-HTTP service unless a fixed-memory candidate is explicitly selected. It does
+HTTP service unless a bounded, single-exported-memory candidate is explicitly
+selected by an embedding profile. Growable memories are eligible when they
+declare a finite maximum; the sealed image reserves that virtual extent while
+keeping the prepared prefix and zero growth tail sparse. It does
 include an optional Host-owned rooted workspace and a complete deterministic
 storage capsule; neither is a transaction system. Historical findings are
 summarized in [docs/research-history.md](docs/research-history.md) and remain

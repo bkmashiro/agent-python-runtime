@@ -126,7 +126,8 @@ func (evidence Evidence) Validate() error {
 	}
 	allowedBlocker := map[string]bool{
 		"compiled_module_unavailable": true, "linear_memory_not_fixed_private_candidate": true,
-		"linux_memfd_private_mapping_unavailable": true, "module_instance_state_not_resettable": true,
+		"linear_memory_not_bounded_private_candidate": true,
+		"linux_memfd_private_mapping_unavailable":     true, "module_instance_state_not_resettable": true,
 		"static_non_memory_state_not_censused": true, "wasi_host_state_not_resettable": true,
 	}
 	for _, blocker := range evidence.COW.Blockers {

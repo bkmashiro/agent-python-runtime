@@ -563,7 +563,7 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-			t.Skipf("COW fixed-memory Linux treatment unavailable: %v", err)
+			t.Skipf("COW bounded-memory Linux treatment unavailable: %v", err)
 		}
 		t.Fatal(err)
 	}
@@ -575,14 +575,19 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	first, err := engine.Run(context.Background(), plainRequest(t, "import builtins, fractions, sys\nfrom pathlib import Path\nbuiltins._cow_private = 91\nPath('/tmp/cow-private').write_text('private')\nresult = {'parity':'same','fraction':str(fractions.Fraction(1, 2))}"), "")
 	probe := engine.COWProbe()
 	if !probe.MemoryCOWCandidate && errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-		t.Skipf("COW fixed-memory treatment unavailable for this artifact: %+v", probe)
+		t.Skipf("COW bounded-memory treatment unavailable for this artifact: %+v", probe)
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !probe.COWSelected || probe.Fallback || !probe.MemoryFixed || !probe.MemoryCOWCandidate {
+	if !probe.COWSelected || probe.Fallback || !probe.MemoryMaximumDeclared || !probe.MemoryCOWCandidate {
 		t.Fatalf("COW probe=%+v", probe)
 	}
+	imageState := engine.PreparedImageState()
+	if !imageState.Available || imageState.BaselineBytes == 0 || imageState.VirtualBytes != 512<<20 || imageState.BaselineBytes >= imageState.VirtualBytes || imageState.SparsePotentialBytes != imageState.VirtualBytes-imageState.BaselineBytes {
+		t.Fatalf("growable COW image state=%+v", imageState)
+	}
+	t.Logf("growable COW probe=%+v image=%+v", probe, imageState)
 	second, err := engine.Run(context.Background(), plainRequest(t, "import builtins, sys\nfrom pathlib import Path\nresult = {'globals_clean': not hasattr(builtins, '_cow_private'), 'tmp_clean': not Path('/tmp/cow-private').exists(), 'module_clean': 'fractions' not in sys.modules}"), "")
 	if err != nil {
 		t.Fatal(err)
@@ -602,12 +607,35 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 		t.Fatalf("post-cancellation recovery err=%v response=%s", err, recovered)
 	}
 
-	_, _ = engine.Run(context.Background(), plainRequest(t, "try:\n    bytearray(200_000_000)\n    result = {'allocation':'unexpected'}\nexcept MemoryError:\n    result = {'allocation':'rejected'}"), "")
+	growth, err := engine.Run(context.Background(), plainRequest(t, "payload = bytearray(200_000_000)\npayload[-1] = 7\nresult = {'allocation_bytes': len(payload), 'last': payload[-1]}"), "")
+	if err != nil || responseResult(t, growth) != `{"allocation_bytes":200000000,"last":7}` {
+		t.Fatalf("growable COW request err=%v response=%s", err, growth)
+	}
 	afterGrowth, err := engine.Run(context.Background(), plainRequest(t, "result = {'after_growth': True}"), "")
 	if err != nil || responseResult(t, afterGrowth) != `{"after_growth":true}` {
 		t.Fatalf("post-growth recovery err=%v response=%s", err, afterGrowth)
 	}
-	if state := engine.PreparedState(); state.PreparedRuns < 4 || state.FreshFallbackRuns != 0 || state.Ready {
+	overflow, overflowErr := engine.Run(context.Background(), plainRequest(t, "payload = bytearray(600_000_000)\nresult = {'allocation':'unexpected', 'size':len(payload)}"), "")
+	t.Logf("over-maximum outcome err=%v response=%s", overflowErr, overflow)
+	if overflowErr != nil {
+		t.Fatalf("over-maximum request returned unclassified runtime error: %v", overflowErr)
+	}
+	var overflowResponse struct {
+		Status string `json:"status"`
+		Error  struct {
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			ErrorType string `json:"error_type"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(overflow, &overflowResponse); err != nil || overflowResponse.Status != "error" || overflowResponse.Error.Code != "python_exception" || overflowResponse.Error.Message != "MemoryError" || overflowResponse.Error.ErrorType != "MemoryError" {
+		t.Fatalf("over-maximum request had unexpected outcome: err=%v response=%s", err, overflow)
+	}
+	afterOverflow, err := engine.Run(context.Background(), plainRequest(t, "result = {'after_overflow': True}"), "")
+	if err != nil || responseResult(t, afterOverflow) != `{"after_overflow":true}` {
+		t.Fatalf("post-overflow refill err=%v response=%s", err, afterOverflow)
+	}
+	if state := engine.PreparedState(); state.PreparedRuns < 6 || state.FreshFallbackRuns != 0 || state.Ready {
 		t.Fatalf("COW state=%+v", state)
 	}
 }

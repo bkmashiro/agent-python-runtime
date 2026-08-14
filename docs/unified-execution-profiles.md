@@ -42,6 +42,12 @@ The first qualified implementation target is pinned gVisor/runsc on Linux. gViso
 
 The first instantiated shard is `plain` / `base`. Static imports choose the smallest Host-qualified shard. A future `numpy` / `numpy-core` shard has a separate artifact and COW pool and is created lazily. Unknown imports, dynamic package installation and unavailable shards route native or fail typed-unavailable; they never mutate a served Pysolate instance.
 
+### Growable COW memory
+
+The experimental Linux COW path accepts one exported, non-imported linear memory when the artifact declares a finite maximum. The sealed memfd separates the prepared baseline extent from the maximum virtual mapping extent: prepared non-zero pages are materialized, baseline zero pages and the growth tail remain sparse, and each request receives a `MAP_PRIVATE` mapping. `memory.grow` exposes zero pages up to the declared maximum without changing the sealed baseline. Every served, failed, cancelled or over-maximum physical execution is destroyed; an executed mapping is never reset and returned to a pool. A later checkout creates a new private mapping, and post-start failures are never transparently replayed on another profile.
+
+The real ARM64 Linux treatment for the current 128 MiB → 512 MiB CPython/WASI artifact is recorded in [`evidence/linux-cow-growable-outcome.json`](evidence/linux-cow-growable-outcome.json). It is an experimental correctness and bounded-resource observation, not production certification or a latency claim.
+
 ## Placement
 
 `pysolate.placement-decision.v1` is Host-authored and binds request, analyser version, state class, selected backend, reason, optional shard, and parent decision.

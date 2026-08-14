@@ -28,7 +28,7 @@ The wazero module receives no inherited process arguments, environment, sockets,
 
 ### Fresh module per run
 
-Every request creates a new module and closes it on every outcome. Python globals, WebAssembly memory, Host-call context and temporary resources are not reused.
+Every request creates a new module and closes it on every outcome. Python globals, WebAssembly memory, Host-call context and temporary resources are not reused. Experimental Linux COW changes only the backing allocation: a bounded Guest receives a new `MAP_PRIVATE` mapping of a sealed sparse image, may grow within its declared maximum, and is then unmapped rather than reset or returned to a pool.
 
 ### Bounded execution
 

@@ -86,16 +86,17 @@ type PreparedState struct {
 }
 
 type COWProbe struct {
-	SchemaVersion       string   `json:"schema_version"`
-	Platform            string   `json:"platform"`
-	PreparedCompatible  bool     `json:"prepared_compatible"`
-	MemoryCount         int      `json:"memory_count"`
-	ImportedMemoryCount int      `json:"imported_memory_count"`
-	MemoryFixed         bool     `json:"memory_fixed"`
-	MemoryCOWCandidate  bool     `json:"memory_cow_candidate"`
-	COWSelected         bool     `json:"cow_selected"`
-	Fallback            bool     `json:"fallback"`
-	Blockers            []string `json:"blockers"`
+	SchemaVersion         string   `json:"schema_version"`
+	Platform              string   `json:"platform"`
+	PreparedCompatible    bool     `json:"prepared_compatible"`
+	MemoryCount           int      `json:"memory_count"`
+	ImportedMemoryCount   int      `json:"imported_memory_count"`
+	MemoryFixed           bool     `json:"memory_fixed"`
+	MemoryMaximumDeclared bool     `json:"memory_maximum_declared"`
+	MemoryCOWCandidate    bool     `json:"memory_cow_candidate"`
+	COWSelected           bool     `json:"cow_selected"`
+	Fallback              bool     `json:"fallback"`
+	Blockers              []string `json:"blockers"`
 }
 
 type workspaceBinding struct {
@@ -103,6 +104,11 @@ type workspaceBinding struct {
 	ref     workspace.Ref
 	owner   string
 }
+
+var (
+	errCOWEngineClosing = errors.New("COW engine is closing")
+	errCOWRunsActive    = errors.New("COW engine still has active runs")
+)
 
 type Engine struct {
 	runtime             wazerort.Runtime
@@ -120,7 +126,10 @@ type Engine struct {
 	preparedInitErr     error
 	prepared            *preparedInstance
 	preparedState       PreparedState
+	cowMu               sync.Mutex
 	cowRuntime          cowPreparedRuntime
+	cowActive           uint64
+	cowClosing          bool
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -213,9 +222,28 @@ func (engine *Engine) ensureWorkspace() error {
 	return nil
 }
 
+func (engine *Engine) cowIsClosing() bool {
+	engine.cowMu.Lock()
+	defer engine.cowMu.Unlock()
+	return engine.cowClosing
+}
+
+func (engine *Engine) publishCOWRuntime(runtime cowPreparedRuntime) error {
+	engine.cowMu.Lock()
+	defer engine.cowMu.Unlock()
+	if engine.cowClosing {
+		return errCOWEngineClosing
+	}
+	engine.cowRuntime = runtime
+	return nil
+}
+
 func (engine *Engine) ensurePrepared(ctx context.Context) error {
 	engine.preparedInitMu.Lock()
 	defer engine.preparedInitMu.Unlock()
+	if engine.cowIsClosing() {
+		return errCOWEngineClosing
+	}
 	if engine.preparedInitialized {
 		return engine.preparedInitErr
 	}
@@ -223,23 +251,73 @@ func (engine *Engine) ensurePrepared(ctx context.Context) error {
 	if engine.config.Mechanisms.MemoryCOW {
 		started := time.Now()
 		cowRuntime, err := newCOWPreparedRuntime(ctx, engine)
-		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
+		prepareMS := float64(time.Since(started)) / float64(time.Millisecond)
+		engine.preparedMu.Lock()
+		engine.preparedState.PrepareMS = prepareMS
+		engine.preparedMu.Unlock()
 		if err != nil {
 			engine.preparedInitErr = fmt.Errorf("prepare COW baseline: %w: %w", err, runtimeconfig.ErrMechanismDisabled)
 			return engine.preparedInitErr
 		}
-		engine.cowRuntime = cowRuntime
+		if err := engine.publishCOWRuntime(cowRuntime); err != nil {
+			_ = cowRuntime.close()
+			engine.preparedInitErr = err
+			return err
+		}
 	} else if engine.config.Mechanisms.PreparedRuntime {
 		started := time.Now()
 		prepared, err := engine.newPrepared(ctx)
-		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
+		prepareMS := float64(time.Since(started)) / float64(time.Millisecond)
+		engine.preparedMu.Lock()
+		engine.preparedState.PrepareMS = prepareMS
+		engine.preparedMu.Unlock()
 		if err != nil {
 			engine.preparedInitErr = fmt.Errorf("prepare single-use guest: %w", err)
 			return engine.preparedInitErr
 		}
+		engine.preparedMu.Lock()
 		engine.prepared = prepared
 		engine.preparedState.Ready = true
+		engine.preparedMu.Unlock()
 	}
+	return nil
+}
+
+func (engine *Engine) acquireCOWRuntime() (cowPreparedRuntime, func(), bool, error) {
+	engine.cowMu.Lock()
+	defer engine.cowMu.Unlock()
+	if engine.cowClosing {
+		return nil, nil, false, errCOWEngineClosing
+	}
+	if engine.cowRuntime == nil {
+		return nil, nil, false, nil
+	}
+	engine.cowActive++
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			engine.cowMu.Lock()
+			engine.cowActive--
+			engine.cowMu.Unlock()
+		})
+	}
+	return engine.cowRuntime, release, true, nil
+}
+
+func (engine *Engine) closeCOWRuntime() error {
+	engine.cowMu.Lock()
+	defer engine.cowMu.Unlock()
+	engine.cowClosing = true
+	if engine.cowActive != 0 {
+		return errCOWRunsActive
+	}
+	if engine.cowRuntime == nil {
+		return nil
+	}
+	if err := engine.cowRuntime.close(); err != nil {
+		return err
+	}
+	engine.cowRuntime = nil
 	return nil
 }
 
@@ -247,18 +325,18 @@ func (engine *Engine) Close(ctx context.Context) error {
 	if engine == nil || engine.runtime == nil {
 		return nil
 	}
-	preparedErr := engine.closePrepared()
-	var cowErr error
-	if engine.cowRuntime != nil {
-		cowErr = engine.cowRuntime.close()
-		engine.cowRuntime = nil
+	engine.preparedInitMu.Lock()
+	defer engine.preparedInitMu.Unlock()
+	if err := engine.closeCOWRuntime(); err != nil {
+		return err
 	}
+	preparedErr := engine.closePrepared()
 	runtimeErr := engine.runtime.Close(ctx)
 	var workspaceErr error
 	if engine.workspaceLease != nil {
 		workspaceErr = engine.workspaceLease.Release()
 	}
-	return errors.Join(preparedErr, cowErr, runtimeErr, workspaceErr)
+	return errors.Join(preparedErr, runtimeErr, workspaceErr)
 }
 
 func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
@@ -375,16 +453,20 @@ func (engine *Engine) COWProbe() COWProbe {
 	memory, exportedMemory := exported["memory"]
 	if exportedMemory {
 		maximum, declared := memory.Max()
+		probe.MemoryMaximumDeclared = declared
 		probe.MemoryFixed = declared && maximum == memory.Min()
 	}
-	probe.MemoryCOWCandidate = goruntime.GOOS == "linux" && exportedMemory && probe.MemoryCount == 1 && len(imported) == 0 && probe.MemoryFixed
+	probe.MemoryCOWCandidate = goruntime.GOOS == "linux" && exportedMemory && probe.MemoryCount == 1 && len(imported) == 0 && probe.MemoryMaximumDeclared
 	if goruntime.GOOS != "linux" {
 		probe.Blockers = append(probe.Blockers, "linux_memfd_private_mapping_unavailable")
 	}
 	if !probe.MemoryCOWCandidate {
-		probe.Blockers = append(probe.Blockers, "linear_memory_not_fixed_private_candidate")
+		probe.Blockers = append(probe.Blockers, "linear_memory_not_bounded_private_candidate")
 	}
-	if engine.cowRuntime != nil {
+	engine.cowMu.Lock()
+	cowSelected := engine.cowRuntime != nil
+	engine.cowMu.Unlock()
+	if cowSelected {
 		probe.COWSelected = true
 		probe.Fallback = false
 		probe.Blockers = nil
@@ -509,16 +591,22 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}()
 	}
 	var prepared *preparedInstance
-	if engine.cowRuntime != nil {
-		prepared, err = engine.cowRuntime.prepare(runContext, engine)
+	cowRuntime, releaseCOW, cowSelected, acquireErr := engine.acquireCOWRuntime()
+	if acquireErr != nil {
+		return nil, acquireErr
+	}
+	if cowSelected {
+		prepared, err = cowRuntime.prepare(runContext, engine)
+		if err != nil {
+			releaseCOW()
+			return nil, fmt.Errorf("prepare single-use COW slot: %w", err)
+		}
+		defer releaseCOW()
 		engine.preparedMu.Lock()
 		if prepared != nil {
 			engine.preparedState.PreparedRuns++
 		}
 		engine.preparedMu.Unlock()
-		if err != nil {
-			return nil, fmt.Errorf("prepare single-use COW slot: %w", err)
-		}
 	} else {
 		prepared = engine.takePrepared()
 	}

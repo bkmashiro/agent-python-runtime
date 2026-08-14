@@ -5,6 +5,7 @@ package wazero
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/tetratelabs/wazero/experimental"
@@ -21,16 +22,47 @@ var (
 const wasmLinearPageSize = 64 * 1024
 
 type cowImage struct {
-	mu       sync.Mutex
-	fd       int
-	size     uint64
-	mappings int
-	closed   bool
+	mu             sync.Mutex
+	fd             int
+	baselineSize   uint64
+	size           uint64
+	allocatedBytes uint64
+	pageSizeBytes  uint64
+	zeroPages      uint64
+	nonZeroPages   uint64
+	mappings       int
+	closed         bool
+}
+
+func pageAllZero(page []byte) bool {
+	for _, value := range page {
+		if value != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func newCOWImage(baseline []byte) (*cowImage, error) {
+	return newCOWImageWithMaximum(baseline, uint64(len(baseline)))
+}
+
+func newCOWImageWithMaximum(baseline []byte, maximum uint64) (*cowImage, error) {
 	if len(baseline) == 0 || len(baseline)%wasmLinearPageSize != 0 {
 		return nil, errors.New("COW image baseline must contain whole Wasm pages")
+	}
+	if maximum < uint64(len(baseline)) || maximum%wasmLinearPageSize != 0 || maximum > uint64(^uint(0)>>1) {
+		return nil, errors.New("COW image maximum must be a whole Wasm page range containing the baseline")
+	}
+	pageSize := os.Getpagesize()
+	var zeroPages, nonZeroPages uint64
+	for start := 0; start < len(baseline); start += pageSize {
+		end := min(start+pageSize, len(baseline))
+		if pageAllZero(baseline[start:end]) {
+			zeroPages++
+		} else {
+			nonZeroPages++
+		}
 	}
 	fd, err := unix.MemfdCreate("apyrun-cow-image", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
 	if err != nil {
@@ -42,25 +74,40 @@ func newCOWImage(baseline []byte) (*cowImage, error) {
 			_ = unix.Close(fd)
 		}
 	}()
-	if err := unix.Ftruncate(fd, int64(len(baseline))); err != nil {
+	if err := unix.Ftruncate(fd, int64(maximum)); err != nil {
 		return nil, fmt.Errorf("size COW memfd: %w", err)
 	}
-	for written := 0; written < len(baseline); {
-		n, err := unix.Pwrite(fd, baseline[written:], int64(written))
-		if err != nil {
-			return nil, fmt.Errorf("write COW baseline: %w", err)
+	for start := 0; start < len(baseline); start += pageSize {
+		end := min(start+pageSize, len(baseline))
+		page := baseline[start:end]
+		if pageAllZero(page) {
+			continue
 		}
-		if n == 0 {
-			return nil, errors.New("write COW baseline made no progress")
+		for written := 0; written < len(page); {
+			n, err := unix.Pwrite(fd, page[written:], int64(start+written))
+			if err != nil {
+				return nil, fmt.Errorf("write COW baseline: %w", err)
+			}
+			if n == 0 {
+				return nil, errors.New("write COW baseline made no progress")
+			}
+			written += n
 		}
-		written += n
 	}
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil {
+		return nil, fmt.Errorf("stat COW memfd: %w", err)
+	}
+	allocatedBytes := uint64(stat.Blocks) * 512
 	seals := unix.F_SEAL_SEAL | unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE
 	if _, err := unix.FcntlInt(uintptr(fd), unix.F_ADD_SEALS, seals); err != nil {
 		return nil, fmt.Errorf("seal COW memfd: %w", err)
 	}
 	failed = false
-	return &cowImage{fd: fd, size: uint64(len(baseline))}, nil
+	return &cowImage{
+		fd: fd, baselineSize: uint64(len(baseline)), size: maximum,
+		allocatedBytes: allocatedBytes, pageSizeBytes: uint64(pageSize), zeroPages: zeroPages, nonZeroPages: nonZeroPages,
+	}, nil
 }
 
 func (image *cowImage) newAllocator() *cowAllocator {
@@ -73,7 +120,12 @@ func (image *cowImage) preparedImageState() PreparedImageState {
 	if image.closed {
 		return PreparedImageState{}
 	}
-	return PreparedImageState{Available: true, VirtualBytes: image.size}
+	return PreparedImageState{
+		Available: true, BaselineBytes: image.baselineSize, VirtualBytes: image.size,
+		AllocatedBytes: image.allocatedBytes, PageSizeBytes: image.pageSizeBytes,
+		ZeroPages: image.zeroPages, NonZeroPages: image.nonZeroPages,
+		SparsePotentialBytes: image.size - image.baselineSize,
+	}
 }
 
 func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
@@ -145,6 +197,15 @@ func (allocator *cowAllocator) Allocate(capacity, maximum uint64) experimental.L
 	}
 	allocator.allocation = memory
 	return memory
+}
+
+func (allocator *cowAllocator) releaseAllocation() {
+	allocator.mu.Lock()
+	allocation := allocator.allocation
+	allocator.mu.Unlock()
+	if allocation != nil {
+		allocation.Free()
+	}
 }
 
 func (allocator *cowAllocator) Allocation() (*cowLinearMemory, error) {

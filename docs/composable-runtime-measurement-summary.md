@@ -19,7 +19,7 @@ The measurements cover repository fixtures and the real CPython/WASI Guest artif
 | Workflow wait/resume | The first Guest closed at wait; resume created a distinct Guest; both active-period Guests closed; unchanged explicit work used local lookup |
 | Prepared runtime | Explicit prepared mode created 1 never-served initialized slot, consumed it once, then used 1 ordinary fresh fallback; closing an unused Engine destroyed its slot |
 | `/tmp` freshness | A file written during the prepared Run was absent from the following fresh fallback Run |
-| Memory COW | The earlier growable-artifact treatment correctly fell back; the later exact-source `cow-fixed` artifact passed low-level Linux mapping tests and real CPython/WASI outcome isolation across consecutive requests, cancellation recovery, and allocation pressure |
+| Memory COW | The earlier growable-artifact treatment correctly fell back under the fixed-memory-only allocator. The current bounded-growable treatment reserves the declared maximum as a sparse sealed image and passed real CPython/WASI outcome isolation, 200 MB growth, over-maximum rejection and clean refill on ARM64 Linux |
 | All mechanisms off | Typed mode evidence reports fallback/off and repeated ordinary evaluation preserves the normalized result without cache hits |
 
 ## Body-free measurements available
@@ -35,9 +35,11 @@ The Runtime records relative monotonic child start/end, changed and materialized
 - Fresh re-evaluation releases the Guest during the explicit wait; no interpreter continuation state is retained.
 - One prepared slot is implementable without pooling or reuse; it changes lifecycle timing only, not selected result semantics.
 - COW was initially deferred against the growable artifact and proof-complete state
-  reset standard. It has since been reopened under an outcome-qualified contract:
-  fixed memory, sealed baseline, one private mapping per request, and unconditional
-  post-request discard. No served slot is reset or returned to a pool.
+  reset standard, then reopened under a fixed-memory contract. The current
+  treatment also admits bounded growable memory by separating the prepared
+  baseline extent from a sparse maximum mapping. Every request still receives a
+  single-use private mapping that is unconditionally discarded; no served slot
+  is reset or returned to a pool.
 
 ## Linux prepared/COW probe
 
@@ -56,8 +58,13 @@ CPython/WASI follow-up is preserved as
 [`evidence/linux-cow-fixed-outcome.json`](evidence/linux-cow-fixed-outcome.json):
 prepared parity and COW selection pass; consecutive requests preserve result
 semantics while isolating Python globals, `/tmp`, and imported modules; fresh
-slots recover after cancellation and allocation pressure. Timing remains
-fixture-only.
+slots recover after cancellation and allocation pressure. The current bounded-
+growable follow-up is preserved as
+[`evidence/linux-cow-growable-outcome.json`](evidence/linux-cow-growable-outcome.json):
+the same 128 MiB → 512 MiB artifact selects COW, keeps 384 MiB of growth
+capacity sparse, succeeds at a 200 MB Python allocation, rejects an allocation
+above the declared maximum, and refills with a clean mapping. Timing remains
+correctness-run observation, not a latency benchmark.
 
 ## Non-claims
 

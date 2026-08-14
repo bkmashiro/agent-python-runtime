@@ -1,7 +1,7 @@
 # Full Composable Runtime mechanism matrix
 
 Status: **Deterministic implementation decision record.**
-Date: 2026-08-13
+Date: 2026-08-14
 
 | Mechanism | Decision | Exact bounded result | Primary evidence | Smallest next decision |
 |---|---|---|---|---|
@@ -16,7 +16,7 @@ Date: 2026-08-13
 | General multi-wait workflow engine | Deferred for joint review | Not required by the north-star; would broaden into scheduler/compiler work | Track 6 decision ledger | Reopen only from a concrete acceptance blocker |
 | Integrated composable north-star | Implemented Experimental | Two real children complete before parent EOF; select → cache/single-flight → wait/fresh resume; parent-invalid disposal; all-off fallback | `integration/e2e/composable_test.go` | Run the separately approved repository-shaped acceptance, not during this Megagoal |
 | Never-served prepared runtime | Implemented Experimental | One initialized single-use module per selected Engine; no request reuse; unused slot destruction; second Run fresh fallback; `/tmp` freshness | prepared parity focused E2E and `PreparedState` | Measure startup/request/teardown phases on approved workloads |
-| Linux memory COW | Implemented Experimental, outcome-qualified | `cow-fixed` exact-source CPython/WASI artifact plus sealed memfd baseline; every request gets a MAP_PRIVATE single-use mapping and every served/cancelled/failed/pressure-exposed slot is closed/unmapped, never reset into a pool; shape drift is rejected | [`evidence/linux-cow-low-level.json`](evidence/linux-cow-low-level.json), [`evidence/linux-cow-fixed-outcome.json`](evidence/linux-cow-fixed-outcome.json); history `b405c58`, `f6ced98` | Keep COW in the Spark scenario treatment matrix and compare only matched outcome/isolation and resource measurements |
+| Linux memory COW | Implemented Experimental, outcome-qualified | Bounded fixed or growable CPython/WASI memory uses a sealed sparse memfd with separate prepared-baseline and maximum-mapping extents; every request gets a `MAP_PRIVATE` single-use mapping and every served/cancelled/failed/over-maximum slot is closed/unmapped, never reset into a pool | [`evidence/linux-cow-low-level.json`](evidence/linux-cow-low-level.json), [`evidence/linux-cow-fixed-outcome.json`](evidence/linux-cow-fixed-outcome.json), [`evidence/linux-cow-growable-outcome.json`](evidence/linux-cow-growable-outcome.json) | Compare only matched outcome/isolation and bounded resource measurements; do not report whole-process correctness timing as product latency |
 | General filesystem three-way merge | Deferred for joint review | North-star only needs explicit select; merge adds conflict policy and publication semantics | Track 2 decision ledger | Select a concrete merge policy from a real task before implementation |
 | Real external writes/effects | Out of scope, denied | Streaming projection and Broker pre-seal barrier remain the safety contract | existing capability/streaming tests | Separate external-effect intent/approval/journal/reconciliation Megagoal |
 

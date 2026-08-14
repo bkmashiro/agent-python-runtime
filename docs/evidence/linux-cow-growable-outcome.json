@@ -1,0 +1,59 @@
+{
+  "schema_version": "pysolate.cow-growable-evidence.v1",
+  "recorded_on": "2026-08-14",
+  "claim_scope": "experimental correctness and bounded resource observation; not production certification or a latency benchmark",
+  "host": {
+    "os": "linux",
+    "architecture": "arm64",
+    "kernel": "6.12.0-202.76.4.1.el9uek.aarch64",
+    "page_size_bytes": 4096
+  },
+  "guest": {
+    "sha256": "b6ae99897e1be6dd0cfd45f06eb2d446de4abe7276c768af0d5ba011495f4770",
+    "memory_initial_pages": 2048,
+    "memory_maximum_pages": 8192,
+    "memory_fixed": false
+  },
+  "probe": {
+    "memory_count": 1,
+    "imported_memory_count": 0,
+    "memory_maximum_declared": true,
+    "memory_cow_candidate": true,
+    "cow_selected": true,
+    "fallback": false,
+    "blockers": []
+  },
+  "sealed_image": {
+    "baseline_bytes": 134217728,
+    "maximum_virtual_bytes": 536870912,
+    "memfd_allocated_bytes": 57307136,
+    "zero_baseline_pages": 18777,
+    "nonzero_baseline_pages": 13991,
+    "sparse_growth_tail_bytes": 402653184
+  },
+  "outcomes": {
+    "private_state_isolation": true,
+    "temporary_filesystem_isolation": true,
+    "module_import_isolation": true,
+    "cancelled_request_recovery": true,
+    "allocation_200000000_bytes": "succeeded",
+    "post_growth_clean_checkout": true,
+    "allocation_600000000_bytes": "rejected_above_declared_maximum",
+    "over_maximum_error": {
+      "status": "error",
+      "code": "python_exception",
+      "message": "MemoryError",
+      "error_type": "MemoryError"
+    },
+    "post_overflow_refill": true
+  },
+  "process_observation": {
+    "focused_test_wall_seconds": 11.49,
+    "focused_test_max_rss_kib": 582748,
+    "major_page_faults": 0,
+    "minor_page_faults": 153000,
+    "exit_status": 0,
+    "scope": "whole focused test process, including compile/prepare and sequential requests; not per-slot RSS"
+  },
+  "test": "TestRealGuestCOWSingleUseOutcomeIsolation"
+}

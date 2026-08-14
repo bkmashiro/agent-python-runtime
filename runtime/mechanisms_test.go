@@ -31,6 +31,9 @@ func TestMechanismDependenciesFailClosed(t *testing.T) {
 		{"function cache without branches", runtime.MechanismSet{FunctionCache: true}},
 		{"fresh reevaluation without agent functions", runtime.MechanismSet{FreshReevaluation: true}},
 		{"cow without prepared runtime", runtime.MechanismSet{MemoryCOW: true}},
+		{"cold continuation without cow", runtime.MechanismSet{ColdIOContinuation: true}},
+		{"semantic reuse without analysis", runtime.MechanismSet{SingleFlight: true, SemanticReuse: true}},
+		{"semantic reuse without reuse mechanism", runtime.MechanismSet{SemanticAnalysis: true, SemanticReuse: true}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -50,26 +53,32 @@ func TestSingleFlightDoesNotRequireDurableCache(t *testing.T) {
 
 func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 	requested := runtime.MechanismSet{
-		Streaming:         true,
-		StagedObservation: true,
-		ImmutableBranches: true,
-		ChildFanout:       true,
-		FunctionCache:     true,
-		SingleFlight:      true,
-		FreshReevaluation: true,
-		PreparedRuntime:   true,
-		MemoryCOW:         true,
-		PrivateWorkspace:  true,
+		Streaming:          true,
+		StagedObservation:  true,
+		ImmutableBranches:  true,
+		ChildFanout:        true,
+		FunctionCache:      true,
+		SingleFlight:       true,
+		FreshReevaluation:  true,
+		PreparedRuntime:    true,
+		MemoryCOW:          true,
+		PrivateWorkspace:   true,
+		ColdIOContinuation: true,
+		SemanticAnalysis:   true,
+		SemanticReuse:      true,
 	}
 	available := requested
 	available.ChildFanout = false
 	available.MemoryCOW = false
+	available.ColdIOContinuation = false
+	available.SemanticReuse = false
 
 	resolved, evidence, err := runtime.ResolveMechanisms(requested, available)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.ChildFanout || resolved.MemoryCOW || !resolved.Streaming || !resolved.SingleFlight {
+	if resolved.ChildFanout || resolved.MemoryCOW || resolved.ColdIOContinuation || resolved.SemanticReuse ||
+		!resolved.Streaming || !resolved.SingleFlight || !resolved.SemanticAnalysis {
 		t.Fatalf("unexpected resolved set: %#v", resolved)
 	}
 	if err := evidence.Validate(); err != nil {
@@ -80,6 +89,15 @@ func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 	}
 	if got := evidence.Disposition(runtime.MechanismMemoryCOW); got != runtime.MechanismFallback {
 		t.Fatalf("memory COW disposition = %q", got)
+	}
+	if got := evidence.Disposition(runtime.MechanismColdIOContinuation); got != runtime.MechanismFallback {
+		t.Fatalf("cold continuation disposition = %q", got)
+	}
+	if got := evidence.Disposition(runtime.MechanismSemanticReuse); got != runtime.MechanismFallback {
+		t.Fatalf("semantic reuse disposition = %q", got)
+	}
+	if got := evidence.Disposition(runtime.MechanismSemanticAnalysis); got != runtime.MechanismSelected {
+		t.Fatalf("semantic analysis disposition = %q", got)
 	}
 	if got := evidence.Disposition(runtime.MechanismStreaming); got != runtime.MechanismSelected {
 		t.Fatalf("streaming disposition = %q", got)

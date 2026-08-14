@@ -5,23 +5,26 @@ import (
 	"sort"
 )
 
-const MechanismEvidenceSchemaVersion = "pysolate.mechanisms.v1"
+const MechanismEvidenceSchemaVersion = "pysolate.mechanisms.v2"
 
 type MechanismName string
 type MechanismDisposition string
 type MechanismReason string
 
 const (
-	MechanismStreaming         MechanismName = "streaming"
-	MechanismStagedObservation MechanismName = "staged_observation"
-	MechanismPrivateWorkspace  MechanismName = "private_workspace"
-	MechanismImmutableBranches MechanismName = "immutable_branches"
-	MechanismChildFanout       MechanismName = "child_fanout"
-	MechanismFunctionCache     MechanismName = "function_cache"
-	MechanismSingleFlight      MechanismName = "single_flight"
-	MechanismFreshReevaluation MechanismName = "fresh_reevaluation"
-	MechanismPreparedRuntime   MechanismName = "prepared_runtime"
-	MechanismMemoryCOW         MechanismName = "memory_cow"
+	MechanismColdIOContinuation MechanismName = "cold_io_continuation"
+	MechanismStreaming          MechanismName = "streaming"
+	MechanismStagedObservation  MechanismName = "staged_observation"
+	MechanismPrivateWorkspace   MechanismName = "private_workspace"
+	MechanismImmutableBranches  MechanismName = "immutable_branches"
+	MechanismChildFanout        MechanismName = "child_fanout"
+	MechanismFunctionCache      MechanismName = "function_cache"
+	MechanismSingleFlight       MechanismName = "single_flight"
+	MechanismFreshReevaluation  MechanismName = "fresh_reevaluation"
+	MechanismPreparedRuntime    MechanismName = "prepared_runtime"
+	MechanismMemoryCOW          MechanismName = "memory_cow"
+	MechanismSemanticAnalysis   MechanismName = "semantic_analysis"
+	MechanismSemanticReuse      MechanismName = "semantic_reuse"
 
 	MechanismOff      MechanismDisposition = "off"
 	MechanismSelected MechanismDisposition = "selected"
@@ -38,12 +41,15 @@ var (
 
 var mechanismNames = []MechanismName{
 	MechanismChildFanout,
+	MechanismColdIOContinuation,
 	MechanismFreshReevaluation,
 	MechanismFunctionCache,
 	MechanismImmutableBranches,
 	MechanismMemoryCOW,
 	MechanismPreparedRuntime,
 	MechanismPrivateWorkspace,
+	MechanismSemanticAnalysis,
+	MechanismSemanticReuse,
 	MechanismSingleFlight,
 	MechanismStagedObservation,
 	MechanismStreaming,
@@ -52,16 +58,19 @@ var mechanismNames = []MechanismName{
 // MechanismSet is an internal Host-owned feature set. Zero value means ordinary
 // fresh execution with every optional mechanism disabled.
 type MechanismSet struct {
-	Streaming         bool
-	StagedObservation bool
-	PrivateWorkspace  bool
-	ImmutableBranches bool
-	ChildFanout       bool
-	FunctionCache     bool
-	SingleFlight      bool
-	FreshReevaluation bool
-	PreparedRuntime   bool
-	MemoryCOW         bool
+	Streaming          bool
+	StagedObservation  bool
+	PrivateWorkspace   bool
+	ImmutableBranches  bool
+	ChildFanout        bool
+	FunctionCache      bool
+	SingleFlight       bool
+	FreshReevaluation  bool
+	PreparedRuntime    bool
+	MemoryCOW          bool
+	ColdIOContinuation bool
+	SemanticAnalysis   bool
+	SemanticReuse      bool
 }
 
 func (set MechanismSet) Validate() error {
@@ -83,6 +92,12 @@ func (set MechanismSet) Validate() error {
 	if set.MemoryCOW && !set.PreparedRuntime {
 		return ErrInvalidMechanismSet
 	}
+	if set.ColdIOContinuation && !set.MemoryCOW {
+		return ErrInvalidMechanismSet
+	}
+	if set.SemanticReuse && (!set.SemanticAnalysis || (!set.FunctionCache && !set.SingleFlight)) {
+		return ErrInvalidMechanismSet
+	}
 	return nil
 }
 
@@ -98,6 +113,8 @@ func (set MechanismSet) Enabled() []MechanismName {
 
 func (set MechanismSet) enabled(name MechanismName) bool {
 	switch name {
+	case MechanismColdIOContinuation:
+		return set.ColdIOContinuation
 	case MechanismStreaming:
 		return set.Streaming
 	case MechanismStagedObservation:
@@ -118,6 +135,10 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.PreparedRuntime
 	case MechanismMemoryCOW:
 		return set.MemoryCOW
+	case MechanismSemanticAnalysis:
+		return set.SemanticAnalysis
+	case MechanismSemanticReuse:
+		return set.SemanticReuse
 	default:
 		return false
 	}
@@ -125,6 +146,8 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 
 func (set *MechanismSet) set(name MechanismName, enabled bool) {
 	switch name {
+	case MechanismColdIOContinuation:
+		set.ColdIOContinuation = enabled
 	case MechanismStreaming:
 		set.Streaming = enabled
 	case MechanismStagedObservation:
@@ -145,6 +168,10 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.PreparedRuntime = enabled
 	case MechanismMemoryCOW:
 		set.MemoryCOW = enabled
+	case MechanismSemanticAnalysis:
+		set.SemanticAnalysis = enabled
+	case MechanismSemanticReuse:
+		set.SemanticReuse = enabled
 	}
 }
 

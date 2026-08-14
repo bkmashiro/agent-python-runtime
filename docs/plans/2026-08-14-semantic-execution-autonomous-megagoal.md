@@ -197,6 +197,7 @@ Eligibility is derived, not stored as a user assertion:
 reusable =
   !MayPublish
   && !MayObserveLive
+  && !MaySuspend
   && !MayBeUnknown
   && every dependency is version-bound
 
@@ -229,15 +230,15 @@ Do not describe the raw AST or arbitrary Python call graph as a DAG.
 
 **Promise:** Current, Proposed, and Deferred claims remain unambiguous.
 
-- [ ] Re-read live source and history; reconcile this baseline if the branch moved.
-- [ ] Add typed feature/evidence names only after identifying the smallest existing
+- [x] Re-read live source and history; reconcile this baseline if the branch moved.
+- [x] Add typed feature/evidence names only after identifying the smallest existing
   configuration seam; default all new mechanisms off.
-- [ ] Freeze canonical analyzer and semantic-plan schemas, bounds, identities, and
+- [x] Freeze canonical analyzer and semantic-plan schemas, bounds, identities, and
   rejection reasons before implementation.
-- [ ] Add tests that reject unknown fields, malformed identities, oversized plans,
+- [x] Add tests that reject unknown fields, malformed identities, oversized plans,
   duplicate region/function IDs, invalid source spans, and eligibility assertions
   unsupported by effect/dependency summaries.
-- [ ] Update mechanism matrix and roadmap status without promoting Proposed work.
+- [x] Update mechanism matrix and roadmap status without promoting Proposed work.
 
 **Likely files:** `runtime/mechanisms.go`, `runtime/composable/evidence.go`, a small
 new semantic contract package if justified, Guest bootstrap schemas/tests, docs.
@@ -432,8 +433,8 @@ the controller owns design, diffs, tests, signatures, push, and final claims.
 
 ## Roadmap tracking
 
-**Current execution pointer:** Track 0 — rediscover live state and freeze semantic
-analysis/plan contracts.
+**Current execution pointer:** Track A — build the bounded same-slot cold-I/O
+suspension fixture and Linux memory-advice seam.
 
 After each slice:
 
@@ -448,7 +449,15 @@ After each slice:
 
 - 2026-08-14: Roadmap approved and materialized against
   `cd20d78e7dda1f5b01b2df40f662e34f640f0160`; implementation intentionally
-  unstarted. Current pointer is Track 0 contract rediscovery.
+  unstarted.
+- 2026-08-14: Track 0 complete. Added default-off `semantic_analysis`,
+  `semantic_reuse`, and `cold_io_continuation` mechanism identities with explicit
+  dependencies and bumped mechanism evidence to v2. Added strict bounded
+  `pysolate.semantic-analysis.v0` and `pysolate.semantic-plan.v0` Host contracts,
+  canonical identities, coarse-region validation, derived reuse eligibility, and
+  malformed/unknown/oversized/duplicate/weaker-effect negative tests. Focused
+  runtime tests, race tests, `go vet ./runtime/...`, and `git diff --check` pass.
+  Current pointer is Track A.
 
 ## Stop conditions
 

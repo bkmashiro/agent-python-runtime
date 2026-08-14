@@ -85,6 +85,12 @@ Current gates pass:
 - exact Broker-response differential tests for handler and invalid-result exceptions;
 - cancellation, unclaimed disposition, budget exhaustion, dynamic mismatch,
   captured-playback rejection and explicit-enable regressions;
+- Linux ARM64 execution of cross-compiled `semantic`, `capability`, `streaming` and
+  experiment-validator test binaries. SHA-256 respectively:
+  `eb79d31287ab984830eea9f56e72de8f36db7a70af565d8f794e153c94cf087d`,
+  `e7c73de57f358de4f6f523944d978f6da97bbd186d965d3c858c5f7b185d1e92`,
+  `a890cd69ce53877936890e2ac65e9ccfee1bef90086af5ca51c75e3aa3f717a2`,
+  `4a17a63d876a8d7443ce80a95472e35b61a98c0c172adba600ad04a88a2b673c`;
 - `git diff --check`.
 
 G2 remains closed until an independent post-fix review reports no blocking finding.

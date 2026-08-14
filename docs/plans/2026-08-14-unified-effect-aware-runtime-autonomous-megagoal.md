@@ -490,6 +490,8 @@ physical requests without a typed terminal disposition.
 **Promise:** Reuse consumes the same verified semantic facts and never weakens the
 current exact whole-Run contract.
 
+- [x] Script repeated focused/full/Guest/Lab gates and read-only delivery verification;
+  keep commit, push and deployment as explicit separate actions.
 - [ ] Refactor current whole-Run qualification to consume shared legality outputs
   without behavior change.
 - [ ] Define one analysis-only candidate region graph with exact source spans,

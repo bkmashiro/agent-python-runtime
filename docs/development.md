@@ -7,6 +7,22 @@ go test ./...
 go vet ./...
 ```
 
+For Track F semantic-region and Lab work, use the repository gate wrapper instead of
+reconstructing long commands by hand:
+
+```bash
+scripts/track-f-gate.sh --list
+scripts/track-f-gate.sh focused
+scripts/track-f-gate.sh full
+AGENT_RUNTIME_GUEST=/absolute/path/to/agent-python-runtime.wasm \
+  scripts/track-f-gate.sh guest
+scripts/track-f-gate.sh lab
+```
+
+`release-check` is read-only and intentionally requires an already clean, signed and
+upstream-aligned tree. The wrapper never commits, pushes, deploys or substitutes a
+missing Guest artifact.
+
 ## Build the Guest
 
 The Guest build uses pinned CPython/WASI inputs and writes a distribution directory:

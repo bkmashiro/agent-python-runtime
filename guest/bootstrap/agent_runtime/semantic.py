@@ -7,7 +7,7 @@ import re
 
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v0"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v0").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v1").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
@@ -461,9 +461,12 @@ def analyze_source(source, bindings, capabilities):
         _merge(module_effects, rows[target]["effects"])
     if any(barrier["function_id"] == "" for barrier in all_barriers):
         module_effects["may_be_unknown"] = True
+    all_barriers = sorted(
+        {_barrier_key(barrier): barrier for barrier in all_barriers}.values(),
+        key=_barrier_key,
+    )
     if len(all_barriers) > MAX_BARRIERS:
         raise ValueError("semantic barrier bound exceeded")
-    all_barriers.sort(key=_barrier_key)
     return {
         "schema_version": ANALYSIS_SCHEMA_VERSION,
         "source_sha256": source_sha256,

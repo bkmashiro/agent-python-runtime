@@ -153,6 +153,15 @@ class SemanticAnalysisTests(unittest.TestCase):
         self.assertTrue(report["module_effects"]["may_be_unknown"])
         self.assertIn("dynamic_import", {row["code"] for row in report["barriers"]})
 
+    def test_multiple_forbidden_imports_at_one_statement_are_deduplicated(self):
+        report = self.analyze("import csv,json\nresult=1\n")
+        keys = [
+            (row["function_id"], row["code"], json.dumps(row["span"], separators=(",", ":")))
+            for row in report["barriers"]
+        ]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertEqual(["dynamic_import"], [row["code"] for row in report["barriers"]])
+
     def test_clock_random_wasi_and_compound_flow_are_conservative(self):
         report = self.analyze(
             "import random, time\n"

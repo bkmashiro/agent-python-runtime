@@ -20,7 +20,7 @@ func verificationFixture() (placement.Plan, runtimeconfig.ExecutionArtifact, nat
 	}
 	artifact := runtimeconfig.ExecutionArtifact{SchemaVersion: runtimeconfig.ExecutionArtifactSchemaVersion, Backend: runtimeconfig.BackendNativeSandbox, Kind: runtimeconfig.ArtifactOCIImage, ProfileID: "native-python", Target: "linux/arm64", ImageDigest: d('a'), RootFSSHA256: d('b')}
 	decision := placement.Decision{SchemaVersion: placement.DecisionSchemaVersion, Status: placement.StatusSelected, Backend: runtimeconfig.BackendNativeSandbox, Reason: placement.ReasonRequiredNativeFeature, AnalyzerVersion: placement.AnalyzerStaticV1, RequestSHA256: d('c'), StateClass: runtimeconfig.StatePortableValue, Identity: d('d')}
-	evidence := nativeengine.Evidence{SchemaVersion: "pysolate.native-lifecycle.v1", Backend: string(runtimeconfig.BackendNativeSandbox), ImageDigest: artifact.ImageDigest, ImageConfigVerified: true, RootFSSHA256: artifact.RootFSSHA256, ArtifactIdentity: artifact.Identity(), DecisionID: decision.Identity, ExecutionID: "native-exec", CapabilityPlanSHA256: d('e'), Ready: true, ExitStatus: 0, WallNanoseconds: 1, RootFSVerifyNanoseconds: 1, DeleteReconciled: true, CgroupReconciled: true, ControlRootUnmounted: true, ScratchRemoved: true, WorkspaceLeaseReleased: true, CapabilityReceipts: []receipt.Receipt{{ReceiptID: "rcpt_1", RunID: "native-exec", CapabilityPlanSHA256: d('e'), Capability: "math.double", OperationIndex: 0, RequestSHA256: "request", ResponseSHA256: "response", Outcome: "ok"}}}
+	evidence := nativeengine.Evidence{SchemaVersion: nativeengine.EvidenceSchemaVersion, Backend: string(runtimeconfig.BackendNativeSandbox), ImageDigest: artifact.ImageDigest, ImageConfigVerified: true, RootFSSHA256: artifact.RootFSSHA256, ArtifactIdentity: artifact.Identity(), DecisionID: decision.Identity, ExecutionID: "native-exec", CapabilityPlanSHA256: d('e'), Ready: true, ExitStatus: 0, WallNanoseconds: 1, RootFSVerifyNanoseconds: 1, DeleteReconciled: true, CgroupReconciled: true, ControlRootUnmounted: true, ScratchRemoved: true, WorkspaceLeaseReleased: true, CapabilityReceipts: []receipt.Receipt{{ReceiptID: "rcpt_1", RunID: "native-exec", CapabilityPlanSHA256: d('e'), Capability: "math.double", OperationIndex: 0, RequestSHA256: "request", ResponseSHA256: "response", Outcome: "ok"}}}
 	return placement.Plan{Decision: decision}, artifact, evidence
 }
 
@@ -43,6 +43,9 @@ func TestVerifyNativeAndRejectIdentityMutations(t *testing.T) {
 		name   string
 		mutate func(*placement.Plan, *runtimeconfig.ExecutionArtifact, *nativeengine.Evidence)
 	}{
+		{"schema", func(_ *placement.Plan, _ *runtimeconfig.ExecutionArtifact, e *nativeengine.Evidence) {
+			e.SchemaVersion = "pysolate.native-lifecycle.v0"
+		}},
 		{"decision", func(p *placement.Plan, _ *runtimeconfig.ExecutionArtifact, _ *nativeengine.Evidence) {
 			p.Decision.Identity = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 		}},

@@ -22,7 +22,7 @@ func VerifyNativeAttempt(plan placement.Plan, artifact runtimeconfig.ExecutionAr
 	if plan.Decision.SchemaVersion != placement.DecisionSchemaVersion || plan.Decision.Status != placement.StatusSelected ||
 		plan.Decision.Backend != runtimeconfig.BackendNativeSandbox || plan.Decision.Identity == "" ||
 		artifact.Validate() != nil || artifact.Backend != runtimeconfig.BackendNativeSandbox || artifact.ProfileID != "native-python" ||
-		evidence.Backend != string(runtimeconfig.BackendNativeSandbox) || evidence.DecisionID != plan.Decision.Identity ||
+		evidence.SchemaVersion != nativeengine.EvidenceSchemaVersion || evidence.Backend != string(runtimeconfig.BackendNativeSandbox) || evidence.DecisionID != plan.Decision.Identity ||
 		evidence.ArtifactIdentity != artifact.Identity() || evidence.ImageDigest != artifact.ImageDigest || !evidence.ImageConfigVerified || evidence.RootFSSHA256 != artifact.RootFSSHA256 ||
 		evidence.ExecutionID == "" || evidence.CapabilityPlanSHA256 == "" ||
 		!evidence.DeleteReconciled || !evidence.CgroupReconciled || !evidence.ControlRootUnmounted || !evidence.ScratchRemoved || !evidence.WorkspaceLeaseReleased ||

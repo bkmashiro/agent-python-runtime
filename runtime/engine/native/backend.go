@@ -28,6 +28,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
+const EvidenceSchemaVersion = "pysolate.native-lifecycle.v1"
+
 var (
 	ErrInvalidConfig          = errors.New("invalid native backend config")
 	ErrNativeExecution        = errors.New("native sandbox execution failed")
@@ -120,14 +122,14 @@ func (backend Backend) ExecuteWithEvidence(ctx context.Context, plan placement.P
 	}
 	imageVerifyStarted := time.Now()
 	if err := VerifyOCIImageConfig(config.ImageConfigPath, config.ImageDigest); err != nil {
-		return nil, Evidence{SchemaVersion: "pysolate.native-lifecycle.v1", Backend: string(runtimeconfig.BackendNativeSandbox), ImageDigest: config.ImageDigest, ImageVerifyNanoseconds: time.Since(imageVerifyStarted).Nanoseconds()}, errors.Join(ErrImageIdentityMismatch, err)
+		return nil, Evidence{SchemaVersion: EvidenceSchemaVersion, Backend: string(runtimeconfig.BackendNativeSandbox), ImageDigest: config.ImageDigest, ImageVerifyNanoseconds: time.Since(imageVerifyStarted).Nanoseconds()}, errors.Join(ErrImageIdentityMismatch, err)
 	}
 	imageVerifyNanoseconds := time.Since(imageVerifyStarted).Nanoseconds()
 	verifyStarted := time.Now()
 	verifiedRootFS, err := RootFSIdentity(config.RootFS)
 	verifyNanoseconds := time.Since(verifyStarted).Nanoseconds()
 	if err != nil || verifiedRootFS != config.Artifact.RootFSSHA256 {
-		return nil, Evidence{SchemaVersion: "pysolate.native-lifecycle.v1", Backend: string(runtimeconfig.BackendNativeSandbox), Platform: config.Platform, HostUDS: config.HostUDS, NetworkMode: config.NetworkMode, ImageDigest: config.ImageDigest, ImageConfigVerified: true, ImageVerifyNanoseconds: imageVerifyNanoseconds, RootFSSHA256: verifiedRootFS, RootFSVerifyNanoseconds: verifyNanoseconds, ArtifactIdentity: config.Artifact.Identity(), DecisionID: plan.Decision.Identity}, ErrRootFSIdentityMismatch
+		return nil, Evidence{SchemaVersion: EvidenceSchemaVersion, Backend: string(runtimeconfig.BackendNativeSandbox), Platform: config.Platform, HostUDS: config.HostUDS, NetworkMode: config.NetworkMode, ImageDigest: config.ImageDigest, ImageConfigVerified: true, ImageVerifyNanoseconds: imageVerifyNanoseconds, RootFSSHA256: verifiedRootFS, RootFSVerifyNanoseconds: verifyNanoseconds, ArtifactIdentity: config.Artifact.Identity(), DecisionID: plan.Decision.Identity}, ErrRootFSIdentityMismatch
 	}
 	request, err := runtimeconfig.DecodeRunRequest(raw)
 	if err != nil {
@@ -282,7 +284,7 @@ func (backend Backend) ExecuteWithEvidence(ctx context.Context, plan placement.P
 		resources = <-samples
 	}
 	wall := time.Since(started)
-	evidence := Evidence{SchemaVersion: "pysolate.native-lifecycle.v1", Backend: string(runtimeconfig.BackendNativeSandbox), Platform: config.Platform, HostUDS: config.HostUDS, NetworkMode: config.NetworkMode,
+	evidence := Evidence{SchemaVersion: EvidenceSchemaVersion, Backend: string(runtimeconfig.BackendNativeSandbox), Platform: config.Platform, HostUDS: config.HostUDS, NetworkMode: config.NetworkMode,
 		ImageDigest: config.ImageDigest, ImageConfigVerified: true, ImageVerifyNanoseconds: imageVerifyNanoseconds, RootFSSHA256: verifiedRootFS, RootFSVerifyNanoseconds: verifyNanoseconds, ArtifactIdentity: config.Artifact.Identity(), DecisionID: plan.Decision.Identity, ExecutionID: executionID,
 		CapabilityPlanSHA256: config.Plan.Identity(), WorkspaceRef: string(config.WorkspaceRef), WorkspaceTreeBefore: workspaceTreeBefore, ExitStatus: exitStatus(runErr), WallNanoseconds: wall.Nanoseconds(), MemoryLimitBytes: config.MemoryLimitBytes, PidsLimit: config.PidsLimit}
 	evidence.ResourceSamples = resources.Samples

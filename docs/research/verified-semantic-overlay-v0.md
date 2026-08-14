@@ -63,9 +63,9 @@ verified program facts with capability-plan v5 and return typed rejection reason
 ## Evidence
 
 The signed implementation commit is
-`44d060d3ff9b4fc5cdd9b2bad56170182bab840c`. A target-Guest artifact built from that
+`76a4efeabcb3344f354845dd3c7700b46e42a539`. A target-Guest artifact built from that
 commit has SHA-256
-`370ebb7d680d166123928be9b584b13679db34aab6f846303d75b4005d9dbb5f`.
+`ff6d2e3dfa424e9d1f064711b6845b6cd13383f337fb9c153e206c4b7c6f7c5e`.
 Real-Guest regressions prove an exact first-statement source call emits one bound
 necessarily-reached site while the corresponding conditional call emits none.
 Independent review then tightened the boundary: top-level shadowing/import rebinding is

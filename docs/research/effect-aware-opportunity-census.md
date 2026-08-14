@@ -24,17 +24,17 @@ versioned Track C follow-up and do not masquerade as the old census.
 - Machine census: [`docs/evidence/effect-aware-opportunity-census.json`](../evidence/effect-aware-opportunity-census.json)
 - Overlay contract: [`verified-semantic-overlay-v0.md`](verified-semantic-overlay-v0.md)
 - Guest artifact source commit:
-  `44d060d3ff9b4fc5cdd9b2bad56170182bab840c`
+  `76a4efeabcb3344f354845dd3c7700b46e42a539`
 - Guest artifact SHA-256:
-  `370ebb7d680d166123928be9b584b13679db34aab6f846303d75b4005d9dbb5f`
+  `ff6d2e3dfa424e9d1f064711b6845b6cd13383f337fb9c153e206c4b7c6f7c5e`
 - Analyzer identity:
-  `sha256:99e54e5d7982ad49df318b943fa7236f1a9ef8f029c078c22f64c90f43f70b33`
+  `sha256:99b45fb47682547354048af86e701cb7ed929f446219de58292a59b863dfa6e2`
 - Corpus identity:
-  `sha256:db2fe15f9decd8419ea1090ed80c813dab6bab4748e3a226c07f828ec994edce`
+  `sha256:ee773aa9cc6e2d06c5e11372c8b7dcdb3d82b2603848fcdefb1a8c3e1d5be241`
 - Corpus file SHA-256:
-  `0c0437ac98f417600f395ad2dbf787e06767cd7b848e57dd8e0f34a27b3749d8`
+  `96a97186f38fc2f078679adad22f82d456d2f81ac07753e92e09eb0cd3948ed7`
 - Report file SHA-256:
-  `6ced72cfc44fb0428e7df358b735dad741401c2cd3c6d46cead2021e559ce354`
+  `e4c77dde645add8a23e776f03eee04a800dea89ec02d6e40f6f2391c8a100402`
 
 The raw CPython/WASI Guest and toolchain were built on Linux x86-64 from the signed
 implementation lineage. The review-fix commit changed only Guest Python, Go and docs;

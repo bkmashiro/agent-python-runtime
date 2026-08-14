@@ -7,7 +7,7 @@ import re
 
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v2"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v3").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v4").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
@@ -196,7 +196,13 @@ class _ScopeAnalyzer(ast.NodeVisitor):
             self.effects["may_observe_live"] = True
         self.generic_visit(node)
 
+    def _track_definition_name(self, node):
+        if node.name in self.capabilities["tool_roots"]:
+            self.barrier("tool_rebinding", node)
+        self.shadowed.add(node.name)
+
     def visit_ClassDef(self, node):
+        self._track_definition_name(node)
         self.barrier("unsupported_control_flow", node)
         self.generic_visit(node)
 
@@ -220,9 +226,11 @@ class _ScopeAnalyzer(ast.NodeVisitor):
     visit_YieldFrom = _visit_opaque_control
 
     def visit_FunctionDef(self, node):
+        self._track_definition_name(node)
         self.barrier("unsupported_control_flow", node)
 
     def visit_AsyncFunctionDef(self, node):
+        self._track_definition_name(node)
         self.barrier("unsupported_control_flow", node)
 
     def visit_Lambda(self, node):

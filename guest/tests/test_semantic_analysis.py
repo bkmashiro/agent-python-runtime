@@ -122,6 +122,8 @@ class SemanticAnalysisTests(unittest.TestCase):
             "result = sources.read(key='x', extra='y')\n",
             "sources = object()\nresult = sources.read('x')\n",
             "import sources\nresult = sources.read('x')\n",
+            "def sources():\n    return None\nresult = sources.read('x')\n",
+            "class sources:\n    pass\nresult = sources.read('x')\n",
         ):
             with self.subTest(source=source):
                 report = self.analyze(source, capabilities=capabilities)

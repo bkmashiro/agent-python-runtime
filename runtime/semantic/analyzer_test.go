@@ -199,7 +199,7 @@ func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []b
 	analysis := semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
 		SourceSHA256:  fmt.Sprintf("sha256:%x", sourceDigest[:]),
-		ASTSHA256:     digestFor('5'), AnalyzerSHA256: testSemanticDigest("pysolate.semantic-analyzer.v3"),
+		ASTSHA256:     digestFor('5'), AnalyzerSHA256: testSemanticDigest("pysolate.semantic-analyzer.v4"),
 		ArtifactSHA256: artifact, ExecutionProfileSHA256: request.Bindings.ExecutionProfileSHA256,
 		ImportClosureSHA256:  request.Bindings.ImportClosureSHA256,
 		CapabilityPlanSHA256: request.Bindings.CapabilityPlanSHA256,

@@ -13,6 +13,9 @@ func TestEncodeDifferentialReportRejectsForgedAggregate(t *testing.T) {
 		t.Fatal(err)
 	}
 	report.Results[0].Observed = report.Results[1].Observed
+	report.Results[0].Expected = report.Results[1].Observed
+	report.Results[0].Equivalent = false
+	report.Results[0].Matched = true
 	if _, err := effectgraph.EncodeDifferentialReport(report); err == nil {
 		t.Fatal("forged report encoded")
 	}

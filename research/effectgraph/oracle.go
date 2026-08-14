@@ -34,6 +34,7 @@ type DifferentialReport struct {
 	Cases         uint32                   `json:"cases"`
 	Matched       uint32                   `json:"matched"`
 	Results       []DifferentialCaseResult `json:"results"`
+	seal          [sha256.Size]byte
 }
 
 func RunDifferentialOracle(cases []DifferentialCase) (DifferentialReport, error) {
@@ -63,9 +64,10 @@ func RunDifferentialOracle(cases []DifferentialCase) (DifferentialReport, error)
 		report.Results = append(report.Results, result)
 		lastID = testCase.ID
 	}
-	if report.Matched != report.Cases || report.Validate() != nil {
+	if report.Matched != report.Cases || report.validateShape() != nil {
 		return report, ErrDifferentialOracle
 	}
+	report.seal = differentialReportSeal(report)
 	return report, nil
 }
 
@@ -81,6 +83,21 @@ func EncodeDifferentialReport(report DifferentialReport) ([]byte, error) {
 }
 
 func (report DifferentialReport) Validate() error {
+	if err := report.validateShape(); err != nil || report.seal != differentialReportSeal(report) {
+		return ErrDifferentialOracle
+	}
+	return nil
+}
+
+func differentialReportSeal(report DifferentialReport) [sha256.Size]byte {
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		return [sha256.Size]byte{}
+	}
+	return sha256.Sum256(encoded)
+}
+
+func (report DifferentialReport) validateShape() error {
 	if report.SchemaVersion != DifferentialOracleSchemaVersion || report.Cases == 0 || report.Cases > 128 ||
 		report.Matched > report.Cases || len(report.Results) != int(report.Cases) {
 		return ErrDifferentialOracle

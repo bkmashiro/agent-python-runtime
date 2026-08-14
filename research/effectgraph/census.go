@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
@@ -35,15 +36,15 @@ const (
 )
 
 type AnalyzeFunc func(context.Context, []byte) (semantic.Analysis, error)
+type VerifiedAnalyzeFunc func(context.Context, []byte) (semantic.VerifiedAnalysis, error)
 type PlacementFunc func([]byte) (string, error)
-type LegalityFunc func(semantic.Analysis) (ProgramLegality, error)
 
 type LegalityRejectionCount struct {
 	Reason semantic.RejectionReason `json:"reason"`
 	Count  uint32                   `json:"count"`
 }
 
-type ProgramLegality struct {
+type programLegality struct {
 	CallLevelQualified uint32
 	PreissueLegal      uint32
 	PreissueRejected   uint32
@@ -110,6 +111,7 @@ type Report struct {
 	LegalityRejections                   []LegalityRejectionCount `json:"legality_rejections"`
 	Opportunities                        []OpportunityCount       `json:"opportunities"`
 	Programs                             []ProgramResult          `json:"programs"`
+	seal                                 [sha256.Size]byte
 }
 
 func (corpus Corpus) Identity() (string, error) {
@@ -124,9 +126,74 @@ func (corpus Corpus) Identity() (string, error) {
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 
-func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeFunc, place PlacementFunc, legality ...LegalityFunc) (Report, error) {
-	if err := corpus.Validate(); err != nil || analyze == nil || place == nil || root == "" || len(legality) > 1 ||
-		(len(legality) == 1 && legality[0] == nil) {
+func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeFunc, place PlacementFunc) (Report, error) {
+	return runCensus(ctx, corpus, root, analyze, place, nil)
+}
+
+// RunVerifiedCensus is the only census path that may emit legality results. It always
+// calls the shared runtime predicate; callers cannot inject claimed legal counts.
+func RunVerifiedCensus(
+	ctx context.Context,
+	corpus Corpus,
+	root string,
+	plan *capability.Plan,
+	baseContext semantic.PreissueContext,
+	analyze VerifiedAnalyzeFunc,
+	place PlacementFunc,
+) (Report, error) {
+	if analyze == nil || plan == nil || baseContext.BudgetReservationSHA256 != "" || baseContext.RemainingPhysicalReads == 0 {
+		return Report{}, ErrCensus
+	}
+	verifiedBySource := make(map[string]semantic.VerifiedAnalysis, len(corpus.Programs))
+	analysisFunc := func(ctx context.Context, source []byte) (semantic.Analysis, error) {
+		verified, err := analyze(ctx, source)
+		if err != nil {
+			return semantic.Analysis{}, err
+		}
+		analysis, err := verified.Analysis()
+		if err != nil {
+			return semantic.Analysis{}, err
+		}
+		verifiedBySource[analysis.SourceSHA256] = verified
+		return analysis, nil
+	}
+	evaluate := func(analysis semantic.Analysis) (programLegality, error) {
+		verified, ok := verifiedBySource[analysis.SourceSHA256]
+		if !ok {
+			return programLegality{}, ErrCensus
+		}
+		result := programLegality{Rejections: []LegalityRejectionCount{}}
+		rejections := map[semantic.RejectionReason]uint32{}
+		for _, site := range analysis.CallSites {
+			if qualification, qualified := plan.PreDispatch(site.Capability); qualified && qualification.Eligible() {
+				result.CallLevelQualified++
+			}
+			context := baseContext
+			reservation := sha256.Sum256([]byte("pysolate.effectgraph-budget-reservation.v0\x00" + analysis.SourceSHA256 + "\x00" + site.ID))
+			context.BudgetReservationSHA256 = fmt.Sprintf("sha256:%x", reservation[:])
+			decision := semantic.CanPreissue(verified, plan, site.ID, context)
+			if decision.Allowed() {
+				result.PreissueLegal++
+			} else {
+				result.PreissueRejected++
+			}
+			for _, reason := range decision.Rejections() {
+				rejections[reason]++
+			}
+		}
+		for reason, count := range rejections {
+			result.Rejections = append(result.Rejections, LegalityRejectionCount{Reason: reason, Count: count})
+		}
+		sort.Slice(result.Rejections, func(i, j int) bool { return result.Rejections[i].Reason < result.Rejections[j].Reason })
+		return result, nil
+	}
+	return runCensus(ctx, corpus, root, analysisFunc, place, evaluate)
+}
+
+type legalityEvaluator func(semantic.Analysis) (programLegality, error)
+
+func runCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeFunc, place PlacementFunc, legality legalityEvaluator) (Report, error) {
+	if err := corpus.Validate(); err != nil || analyze == nil || place == nil || root == "" {
 		return Report{}, ErrCensus
 	}
 	corpusIdentity, err := corpus.Identity()
@@ -230,8 +297,8 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 			OverlayCallSites: uint32(len(analysis.CallSites)), NecessarilyReachedCallSites: reachedCallSites,
 			WholeRunReusable: reusable, Placement: placement, LegalityRejections: []LegalityRejectionCount{},
 		}
-		if len(legality) == 1 {
-			programLegality, legalityErr := legality[0](analysis)
+		if legality != nil {
+			programLegality, legalityErr := legality(analysis)
 			if legalityErr != nil || !validProgramLegality(programLegality, uint32(len(analysis.CallSites))) {
 				return Report{}, fmt.Errorf("%w: legality %s", ErrCensus, program.ID)
 			}
@@ -273,16 +340,20 @@ func RunCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 		CandidateExactRegionReuse, CandidateNativePlacement, CandidateOverlapWindow, CandidatePreDispatch, CandidateWASMPlacement,
 	} {
 		count := OpportunityCount{Kind: kind, Structural: structural[kind], Legality: NotEvaluated, Equivalence: NotEvaluated}
-		if kind == CandidatePreDispatch && len(legality) == 1 {
+		if kind == CandidatePreDispatch && legality != nil {
 			count.ProvedLegal = report.PreissueLegal
 			count.Legality = Evaluated
 		}
 		report.Opportunities = append(report.Opportunities, count)
 	}
+	if err := report.validateShape(); err != nil {
+		return Report{}, err
+	}
+	report.seal = censusReportSeal(report)
 	return report, nil
 }
 
-func validProgramLegality(value ProgramLegality, callSites uint32) bool {
+func validProgramLegality(value programLegality, callSites uint32) bool {
 	rejectionReasons := uint32(0)
 	for _, rejection := range value.Rejections {
 		rejectionReasons += rejection.Count
@@ -314,6 +385,21 @@ func EncodeReport(report Report) ([]byte, error) {
 }
 
 func (report Report) Validate() error {
+	if err := report.validateShape(); err != nil || report.seal != censusReportSeal(report) {
+		return ErrInvalidCorpus
+	}
+	return nil
+}
+
+func censusReportSeal(report Report) [sha256.Size]byte {
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		return [sha256.Size]byte{}
+	}
+	return sha256.Sum256(encoded)
+}
+
+func (report Report) validateShape() error {
 	if report.SchemaVersion != ReportSchemaVersion || !digestPattern.MatchString(report.CorpusSHA256) ||
 		report.ProgramsAnalyzed == 0 || len(report.Programs) != int(report.ProgramsAnalyzed) ||
 		report.ProgramsUnclassifiable > report.ProgramsAnalyzed || report.ProgramsOpaque > report.ProgramsAnalyzed ||
@@ -324,7 +410,7 @@ func (report Report) Validate() error {
 	legalityEvaluated := false
 	lastOpportunity := ""
 	for _, opportunity := range report.Opportunities {
-		if opportunity.Kind <= lastOpportunity || opportunity.Structural > report.ProgramsAnalyzed ||
+		if opportunity.Kind <= lastOpportunity ||
 			opportunity.ProvedLegal > opportunity.Structural ||
 			(opportunity.Legality != NotEvaluated && opportunity.Legality != Evaluated) ||
 			opportunity.Equivalence != NotEvaluated {

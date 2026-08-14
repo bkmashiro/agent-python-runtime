@@ -119,22 +119,20 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 		AnalyzerVersion: placement.AnalyzerStaticV1, PysolateAvailable: true,
 		NativeAvailable: true, PlainShard: shard,
 	}
-	verifiedBySource := make(map[string]semantic.VerifiedAnalysis, len(corpus.Programs))
-	report, err := effectgraph.RunCensus(ctx, corpus, root,
-		func(ctx context.Context, source []byte) (semantic.Analysis, error) {
+	report, err := effectgraph.RunVerifiedCensus(
+		ctx, corpus, root, plan,
+		semantic.PreissueContext{
+			StreamEpoch: "effectgraph-stream", WorkflowEpoch: "effectgraph-workflow",
+			FreshnessEpoch: "effectgraph-plan-epoch", ExpiryEpoch: "effectgraph-expiry-epoch",
+			PrivacyPartition: "effectgraph-public", ParentLineageSHA256: digest([]byte("effectgraph-lineage")),
+			RemainingPhysicalReads: 1,
+		},
+		func(ctx context.Context, source []byte) (semantic.VerifiedAnalysis, error) {
 			request, err := semantic.NewRequest(string(source), bindings, plan)
 			if err != nil {
-				return semantic.Analysis{}, err
+				return semantic.VerifiedAnalysis{}, err
 			}
-			verified, err := semantic.AnalyzeVerified(ctx, trustedRunner, request)
-			if err != nil {
-				return semantic.Analysis{}, err
-			}
-			analysis, err := verified.Analysis()
-			if err == nil {
-				verifiedBySource[analysis.SourceSHA256] = verified
-			}
-			return analysis, err
+			return semantic.AnalyzeVerified(ctx, trustedRunner, request)
 		},
 		func(source []byte) (string, error) {
 			decision, err := placement.Analyze(runtimeconfig.RunRequest{
@@ -151,38 +149,6 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 			default:
 				return effectgraph.PlacementUnknown, nil
 			}
-		},
-		func(analysis semantic.Analysis) (effectgraph.ProgramLegality, error) {
-			verified, ok := verifiedBySource[analysis.SourceSHA256]
-			if !ok {
-				return effectgraph.ProgramLegality{}, semantic.ErrUnverifiedAnalysis
-			}
-			result := effectgraph.ProgramLegality{Rejections: []effectgraph.LegalityRejectionCount{}}
-			rejections := map[semantic.RejectionReason]uint32{}
-			for _, site := range analysis.CallSites {
-				if qualification, qualified := plan.PreDispatch(site.Capability); qualified && qualification.Eligible() {
-					result.CallLevelQualified++
-				}
-				decision := semantic.CanPreissue(verified, plan, site.ID, semantic.PreissueContext{
-					StreamEpoch: "effectgraph-stream", WorkflowEpoch: "effectgraph-workflow",
-					FreshnessEpoch: "effectgraph-plan-epoch", ExpiryEpoch: "effectgraph-expiry-epoch",
-					PrivacyPartition: "effectgraph-public", ParentLineageSHA256: digest([]byte("effectgraph-lineage")),
-					BudgetReservationSHA256: digest([]byte("effectgraph-budget-reservation")), RemainingPhysicalReads: 1,
-				})
-				if decision.Allowed() {
-					result.PreissueLegal++
-				} else {
-					result.PreissueRejected++
-				}
-				for _, reason := range decision.Rejections() {
-					rejections[reason]++
-				}
-			}
-			for reason, count := range rejections {
-				result.Rejections = append(result.Rejections, effectgraph.LegalityRejectionCount{Reason: reason, Count: count})
-			}
-			sort.Slice(result.Rejections, func(i, j int) bool { return result.Rejections[i].Reason < result.Rejections[j].Reason })
-			return result, nil
 		},
 	)
 	if err != nil {

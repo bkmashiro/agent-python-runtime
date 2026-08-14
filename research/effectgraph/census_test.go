@@ -65,67 +65,11 @@ func TestRunCensusSeparatesStructuralCandidatesFromCurrentProof(t *testing.T) {
 	if report.PlacementCounts != (effectgraph.PlacementCounts{WASM: 1}) {
 		t.Fatalf("placement=%+v", report.PlacementCounts)
 	}
-}
-
-func TestRunCensusAppliesSharedLegalityAndKeepsCallLevelBaselineSeparate(t *testing.T) {
-	root := t.TempDir()
-	source := []byte("result = sources.read('x')\n")
-	if err := os.WriteFile(filepath.Join(root, "read.py"), source, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	corpus := testCorpus(effectgraph.Program{
-		ID: "read", Provenance: effectgraph.ProvenancePublicSynthetic, SourcePath: "read.py", SourceSHA256: sha(source),
-		OracleClass:          effectgraph.OracleLiveRead,
-		StructuralCandidates: []effectgraph.Candidate{{Kind: effectgraph.CandidatePreDispatch, Occurrences: 2}},
-		InputsCanonical:      true, OutputsCanonical: true,
-	})
-	analyzer := func(context.Context, []byte) (semantic.Analysis, error) {
-		analysis := validAnalysis(semantic.EffectSummary{MayObserveLive: true, MaySuspend: true}, nil)
-		analysis.SourceSHA256 = sha(source)
-		analysis.CallSites = []semantic.CallSite{{
-			ID: sha([]byte("call")), Span: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 10},
-			Capability: "sources.read", ControlRegionID: sha([]byte("region")), NecessarilyReached: true,
-			ArgumentsCanonical: true, CanonicalArguments: []byte(`{"key":"x"}`), DynamicOccurrence: 1,
-		}}
-		return analysis, nil
-	}
-	if _, err := effectgraph.RunCensus(context.Background(), corpus, root, analyzer,
-		func([]byte) (string, error) { return effectgraph.PlacementWASM, nil },
-		func(analysis semantic.Analysis) (effectgraph.ProgramLegality, error) {
-			return effectgraph.ProgramLegality{
-				CallLevelQualified: 1, PreissueLegal: 1, PreissueRejected: 1,
-				Rejections: []effectgraph.LegalityRejectionCount{{Reason: semantic.RejectCallNotNecessarilyReached, Count: 1}},
-			}, nil
-		},
-	); err == nil {
-		t.Fatal("inconsistent legality aggregate accepted")
-	}
-	report, err := effectgraph.RunCensus(context.Background(), corpus, root, analyzer,
-		func([]byte) (string, error) { return effectgraph.PlacementWASM, nil },
-		func(analysis semantic.Analysis) (effectgraph.ProgramLegality, error) {
-			return effectgraph.ProgramLegality{
-				CallLevelQualified: 1, PreissueLegal: 1,
-				Rejections: []effectgraph.LegalityRejectionCount{},
-			}, nil
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.CallLevelQualified != 1 || report.PreissueLegal != 1 || report.PreissueRejected != 0 ||
-		report.Programs[0].PreissueLegal != 1 || len(report.LegalityRejections) != 0 {
-		t.Fatalf("report=%+v", report)
-	}
-	for _, opportunity := range report.Opportunities {
-		if opportunity.Kind == effectgraph.CandidatePreDispatch &&
-			(opportunity.Structural != 2 || opportunity.ProvedLegal != 1 || opportunity.Legality != effectgraph.Evaluated) {
-			t.Fatalf("opportunity=%+v", opportunity)
-		}
-	}
 	forged := report
-	forged.PreissueLegal++
+	forged.Programs[0].Placement = effectgraph.PlacementNative
+	forged.PlacementCounts = effectgraph.PlacementCounts{Native: 1}
 	if _, err := effectgraph.EncodeReport(forged); err == nil {
-		t.Fatal("forged census aggregate encoded")
+		t.Fatal("mutated sealed census report encoded")
 	}
 }
 

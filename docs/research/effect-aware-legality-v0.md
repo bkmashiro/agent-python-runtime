@@ -84,9 +84,11 @@ The ARM64 oracle binary independently reproduced the exact report SHA-256 above.
 The v3 machine census joins each real-Guest `VerifiedAnalysis` to the shared
 `CanPreissue` predicate. A deliberately weaker call-level baseline asks only whether
 an exact overlay call names a capability with an eligible resource contract; it does
-not use control reachability. Census v3 and the oracle report validate sorted rows,
-per-row/aggregate counters, rejection accounting and case-result consistency before
-encoding evidence.
+not use control reachability. Census v3 legality rows can only be emitted by
+`RunVerifiedCensus`, which invokes the shared predicate over opaque verified reports and
+derives a distinct budget-reservation identity per call. Both census v3 and the oracle
+report validate sorted rows, per-row/aggregate counters, rejection/case consistency and
+an unexported run-produced seal before encoding evidence.
 
 | Stage | Accepted calls |
 |---|---:|

@@ -293,20 +293,20 @@ work, not from the supplied handoff's unchecked assumptions.
 
 **Gate:** document links, source pins, claim review, `git diff --check`.
 
-### Track A — Generated-program opportunity corpus
+### Track A — Generated-program opportunity corpus — **Complete**
 
 **Promise:** Decide from data whether program-level semantic optimization has enough
 coverage and opportunity to justify a bounded semantic overlay.
 
-- [ ] Define a body-safe versioned corpus schema binding source digest, target
+- [x] Define a body-safe versioned corpus schema binding source digest, target
   artifact/profile, tool contract set, provenance class and expected oracle class.
-- [ ] Add public synthetic adversarial fixtures for independent calls, conflicts,
+- [x] Add public synthetic adversarial fixtures for independent calls, conflicts,
   conditionals, exceptions, freshness, random/time, aliases, loops and dynamic calls.
-- [ ] Derive private real-workload seeds from existing Harness/session evidence where
+- [x] Derive private real-workload seeds from existing Harness/session evidence where
   permitted; checked-in projections remain body-free.
-- [ ] Run the existing analyzer over the corpus and report accepted/opaque constructs,
+- [x] Run the existing analyzer over the corpus and report accepted/opaque constructs,
   direct capability sites, whole-Run reuse eligibility and placement classes.
-- [ ] Produce an opportunity census for exact pre-dispatchable call sites, overlap
+- [x] Produce an opportunity census for exact pre-dispatchable call sites, overlap
   windows, exact repeated regions and capability-driven placement, labeling
   structural candidates separately from proved legality.
 
@@ -316,6 +316,13 @@ coverage and opportunity to justify a bounded semantic overlay.
 - `research/evaluationworkloads/`
 - `docs/evidence/effect-aware-opportunity-census.json`
 - `docs/research/effect-aware-opportunity-census.md`
+
+**Decision:** proceed to a minimal Track B/C slice. The exact 18-program census found
+10 structural pre-dispatch call sites and five overlap windows, but proved no
+legality. Ten programs were opaque; all three public runtime workloads hit barriers.
+See the [Track A report](../research/effect-aware-opportunity-census.md) and
+[machine evidence](../evidence/effect-aware-opportunity-census.json). This supports a
+falsifiable overlay experiment, not a population-level opportunity claim.
 
 **Do not:** expose private source/bodies; treat structural candidates as legal; call a
 small fixture set representative.
@@ -545,10 +552,11 @@ not permission to manufacture a broader optimizer.
 
 ## Current execution pointer
 
-**Track A:** build the body-safe generated-program corpus and opportunity census.
-Track 0 is closed with source-pinned related-work claims and a frozen observable-
-semantics/divergence contract; do not implement the semantic overlay or pre-dispatch
-before the census.
+**Track B:** define only the canonical Host-owned contract metadata required to
+answer exact request pre-issue/claim legality for the measured corpus. Track A is
+closed with 18 exact analyzed programs, three body-free prospective seeds, zero
+unclassifiable reports, ten structural pre-dispatch sites and no legality claim.
+Do not implement pre-dispatch or broaden the Python subset in Track B.
 
 ## Short prompt to start/resume this Mega-Goal
 

@@ -1,0 +1,238 @@
+{
+  "schema_version": "pysolate.effectgraph-manifest.v0",
+  "programs": [
+    {
+      "id": "alias-call",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/alias_call.py",
+      "oracle_class": "opaque",
+      "structural_candidates": [
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "bounded-planning-v1",
+      "provenance": "public_runtime_workload",
+      "source_path": "testdata/programs/bounded_planning_v1.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "overlap_window", "occurrences": 1},
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "clock-random",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/clock_random.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "conditional-read",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/conditional_read.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "conflicting-writes",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/conflicting_writes.py",
+      "oracle_class": "write_effect",
+      "structural_candidates": [
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "dynamic-eval",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/dynamic_eval.py",
+      "oracle_class": "opaque",
+      "structural_candidates": [
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "dynamic-import",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/dynamic_import.py",
+      "oracle_class": "opaque",
+      "structural_candidates": [
+        {"kind": "native_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "exception-order",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/exception_order.py",
+      "oracle_class": "exception",
+      "structural_candidates": [
+        {"kind": "overlap_window", "occurrences": 1},
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": false
+    },
+    {
+      "id": "hoist-read-compute",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/hoist_read_compute.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "overlap_window", "occurrences": 1},
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "independent-reads",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/independent_reads.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "overlap_window", "occurrences": 1},
+        {"kind": "pre_dispatch", "occurrences": 2},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "loop-reads",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/loop_reads.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "native-subprocess",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/native_subprocess.py",
+      "oracle_class": "opaque",
+      "structural_candidates": [
+        {"kind": "native_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "pure-compute",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/pure_compute.py",
+      "oracle_class": "pure_result",
+      "structural_candidates": [
+        {"kind": "exact_region_reuse", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "read-after-write",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/read_after_write.py",
+      "oracle_class": "write_effect",
+      "structural_candidates": [
+        {"kind": "pre_dispatch", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "repeated-pure-region",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/repeated_pure_region.py",
+      "oracle_class": "pure_result",
+      "structural_candidates": [
+        {"kind": "exact_region_reuse", "occurrences": 1},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "stateful-local-v1",
+      "provenance": "public_runtime_workload",
+      "source_path": "testdata/programs/stateful_local_v1.py",
+      "oracle_class": "write_effect",
+      "structural_candidates": [
+        {"kind": "native_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "structured-source-v1",
+      "provenance": "public_runtime_workload",
+      "source_path": "testdata/programs/structured_source_v1.py",
+      "oracle_class": "write_effect",
+      "structural_candidates": [
+        {"kind": "overlap_window", "occurrences": 1},
+        {"kind": "pre_dispatch", "occurrences": 2},
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    },
+    {
+      "id": "wasi-file-read",
+      "provenance": "public_synthetic",
+      "source_path": "testdata/programs/wasi_file_read.py",
+      "oracle_class": "live_read",
+      "structural_candidates": [
+        {"kind": "wasm_placement", "occurrences": 1}
+      ],
+      "inputs_canonical": true,
+      "outputs_canonical": true
+    }
+  ],
+  "historical_seeds": [
+    {
+      "identity_sha256": "sha256:347939e1563f1bf30dbd2023ded32d0eb4135da64667d0024e8be0041fdd0b3c",
+      "task_shape": "runtime_research",
+      "source_status": "not_generated",
+      "prospective_replay_required": true
+    },
+    {
+      "identity_sha256": "sha256:64af124076686bf272889523b6a64c957057d27ade61fac2d85146f74f09159b",
+      "task_shape": "benchmark_evaluation",
+      "source_status": "not_generated",
+      "prospective_replay_required": true
+    },
+    {
+      "identity_sha256": "sha256:d40f3d79d2bb0583289be88d5e0b7c443376628215009a375718a84326a337b0",
+      "task_shape": "authority_design",
+      "source_status": "not_generated",
+      "prospective_replay_required": true
+    }
+  ]
+}

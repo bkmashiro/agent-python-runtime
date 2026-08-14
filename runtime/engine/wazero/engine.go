@@ -60,19 +60,11 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if config.DeterministicVerification != nil && fields != 0 {
 		return nil, runtimeconfig.ErrDeterministicVerificationAdmission
 	}
-	var lease *workspace.Lease
+	var binding *workspaceBinding
 	if factory.WorkspaceManager != nil {
-		var err error
-		lease, err = factory.WorkspaceManager.Acquire(factory.WorkspaceRef, factory.WorkspaceOwner)
-		if err != nil {
-			return nil, err
-		}
+		binding = &workspaceBinding{manager: factory.WorkspaceManager, ref: factory.WorkspaceRef, owner: factory.WorkspaceOwner}
 	}
-	engine, err := newEngine(ctx, wasm, config, factory.BrokerFactory, lease)
-	if err != nil && lease != nil {
-		_ = lease.Release()
-	}
-	return engine, err
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -106,18 +98,29 @@ type COWProbe struct {
 	Blockers            []string `json:"blockers"`
 }
 
+type workspaceBinding struct {
+	manager *workspace.Manager
+	ref     workspace.Ref
+	owner   string
+}
+
 type Engine struct {
-	runtime        wazerort.Runtime
-	compiled       wazerort.CompiledModule
-	config         runtimeconfig.RunConfig
-	brokerFactory  BrokerFactory
-	workspaceLease *workspace.Lease
-	workspaceRun   chan struct{}
-	artifactSHA256 string
-	preparedMu     sync.Mutex
-	prepared       *preparedInstance
-	preparedState  PreparedState
-	cowRuntime     cowPreparedRuntime
+	runtime             wazerort.Runtime
+	compiled            wazerort.CompiledModule
+	config              runtimeconfig.RunConfig
+	brokerFactory       BrokerFactory
+	workspaceBinding    *workspaceBinding
+	workspaceBindMu     sync.Mutex
+	workspaceLease      *workspace.Lease
+	workspaceRun        chan struct{}
+	artifactSHA256      string
+	preparedMu          sync.Mutex
+	preparedInitMu      sync.Mutex
+	preparedInitialized bool
+	preparedInitErr     error
+	prepared            *preparedInstance
+	preparedState       PreparedState
+	cowRuntime          cowPreparedRuntime
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -128,7 +131,7 @@ func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig
 	return newEngine(ctx, wasm, config, factory, nil)
 }
 
-func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, lease *workspace.Lease) (*Engine, error) {
+func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
@@ -141,7 +144,7 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		return nil, runtimeconfig.ErrExecutionProfileArtifactMismatch
 	}
 	if config.DeterministicVerification != nil {
-		if artifactSHA256 != config.DeterministicVerification.ArtifactSHA256() || lease != nil {
+		if artifactSHA256 != config.DeterministicVerification.ArtifactSHA256() || binding != nil {
 			return nil, runtimeconfig.ErrDeterministicVerificationAdmission
 		}
 	}
@@ -161,32 +164,18 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
 	engine := &Engine{
-		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceLease: lease,
+		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceBinding: binding,
 		artifactSHA256: artifactSHA256,
 	}
-	if lease != nil {
+	if binding != nil {
 		engine.workspaceRun = make(chan struct{}, 1)
 	}
 	engine.preparedState = PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1", Selected: config.Mechanisms.PreparedRuntime}
-	if config.Mechanisms.MemoryCOW {
-		started := time.Now()
-		cowRuntime, cowErr := newCOWPreparedRuntime(ctx, engine)
-		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
-		if cowErr != nil {
+	if binding == nil {
+		if err := engine.ensurePrepared(ctx); err != nil {
 			_ = wasmRuntime.Close(ctx)
-			return nil, fmt.Errorf("prepare COW baseline: %w: %w", cowErr, runtimeconfig.ErrMechanismDisabled)
+			return nil, err
 		}
-		engine.cowRuntime = cowRuntime
-	} else if config.Mechanisms.PreparedRuntime {
-		started := time.Now()
-		prepared, prepareErr := engine.newPrepared(ctx)
-		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
-		if prepareErr != nil {
-			_ = wasmRuntime.Close(ctx)
-			return nil, fmt.Errorf("prepare single-use guest: %w", prepareErr)
-		}
-		engine.prepared = prepared
-		engine.preparedState.Ready = true
 	}
 	return engine, nil
 }
@@ -194,7 +183,7 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 func (engine *Engine) Properties() enginecontract.Properties {
 	properties := enginecontract.Properties{
 		Backend:                   "wazero",
-		WorkspaceMounted:          engine.workspaceLease != nil,
+		WorkspaceMounted:          engine.workspaceBinding != nil,
 		CapabilityBrokerAvailable: engine.brokerFactory != nil,
 	}
 	properties.ExecutionProfileBindingSHA256, _ = runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
@@ -211,6 +200,53 @@ func (engine *Engine) Properties() enginecontract.Properties {
 		properties.ManifestSHA256 = profile.ManifestSHA256()
 	}
 	return properties
+}
+
+func (engine *Engine) ensureWorkspace() error {
+	if engine.workspaceBinding == nil {
+		return nil
+	}
+	engine.workspaceBindMu.Lock()
+	defer engine.workspaceBindMu.Unlock()
+	if engine.workspaceLease != nil {
+		return nil
+	}
+	lease, err := engine.workspaceBinding.manager.Acquire(engine.workspaceBinding.ref, engine.workspaceBinding.owner)
+	if err != nil {
+		return err
+	}
+	engine.workspaceLease = lease
+	return nil
+}
+
+func (engine *Engine) ensurePrepared(ctx context.Context) error {
+	engine.preparedInitMu.Lock()
+	defer engine.preparedInitMu.Unlock()
+	if engine.preparedInitialized {
+		return engine.preparedInitErr
+	}
+	engine.preparedInitialized = true
+	if engine.config.Mechanisms.MemoryCOW {
+		started := time.Now()
+		cowRuntime, err := newCOWPreparedRuntime(ctx, engine)
+		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
+		if err != nil {
+			engine.preparedInitErr = fmt.Errorf("prepare COW baseline: %w: %w", err, runtimeconfig.ErrMechanismDisabled)
+			return engine.preparedInitErr
+		}
+		engine.cowRuntime = cowRuntime
+	} else if engine.config.Mechanisms.PreparedRuntime {
+		started := time.Now()
+		prepared, err := engine.newPrepared(ctx)
+		engine.preparedState.PrepareMS = float64(time.Since(started)) / float64(time.Millisecond)
+		if err != nil {
+			engine.preparedInitErr = fmt.Errorf("prepare single-use guest: %w", err)
+			return engine.preparedInitErr
+		}
+		engine.prepared = prepared
+		engine.preparedState.Ready = true
+	}
+	return nil
 }
 
 func (engine *Engine) Close(ctx context.Context) error {
@@ -440,6 +476,12 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			return nil, runContext.Err()
 		}
 		defer func() { <-engine.workspaceRun }()
+	}
+	if err := engine.ensureWorkspace(); err != nil {
+		return nil, err
+	}
+	if err := engine.ensurePrepared(runContext); err != nil {
+		return nil, err
 	}
 	var workspaceInitial *workspace.Snapshot
 	if hasObservation && observationSession.Mode() != observe.Off && engine.workspaceLease != nil {

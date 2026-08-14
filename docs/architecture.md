@@ -5,9 +5,9 @@
 Pysolate proves that a programming Agent can submit normal Python while the Host retains all authority. It is one execution component, not an Agent planner, package platform, scheduler, transaction service, or general Linux sandbox. Its Current implementation and longer-term Python-native capability-computer direction are separated in [product-direction.md](product-direction.md).
 
 Unless a paragraph says otherwise, the core Run path below is **Current**.
-Counterfactual branching, deterministic verification, and the local research
-store/operator are marked **Experimental**. A complete Lab/Harness and UI are
-**Proposed**. See [research/lab-boundary.md](research/lab-boundary.md).
+Counterfactual branching, deterministic verification, prepared/COW execution,
+and unified execution profiles are marked **Experimental**. A complete Lab/Harness
+and UI are **Proposed**. See [research/lab-boundary.md](research/lab-boundary.md).
 
 ## Run path
 
@@ -154,6 +154,18 @@ and sealed override/recorded suffix tapes. Live suffix results are not sealed,
 and DAG validation is not proof that a result was produced by executing a
 manifest; the Host-owned outcome relation remains the execution evidence.
 
+## Unified execution profiles
+
+**Experimental.** `runtime/placement` can select a positively qualified
+`pysolate_wasm` invocation or a separately governed `native_sandbox` invocation
+before either backend starts. `runtime/capabilityrpc` projects the same sealed
+Plan/Broker through a private invocation-bound Unix-socket protocol for native
+CPython. This does not make the profiles equivalent: native execution has a
+wider local compatibility surface and separate artifact/lifecycle evidence.
+Only Host-authored `not_started/not_started` rejection permits an implicit
+linked native execution; post-start failures never do. See
+[unified-execution-profiles.md](unified-execution-profiles.md).
+
 ## WASI filesystem
 
 The CLI can alternatively bind a Host-selected `runtime/workspace` lease as `/workspace` plus a fresh `/tmp`. The request cannot select the backing Host path, Capsule path, workspace limits or final disposition. Mounted workspaces and the typed in-memory workspace tools are mutually exclusive. The Host may restore or snapshot a complete Capsule and must explicitly choose `export_on_success`, `export_on_response` or `discard`; see [workspace-capsules.md](workspace-capsules.md).
@@ -164,6 +176,8 @@ The CLI can alternatively bind a Host-selected `runtime/workspace` lease as `/wo
 runtime/engine             runtime-neutral Runner contract
 runtime/engine/wazero      fresh Guest implementation
 runtime/capability         generic bounded Host calls
+runtime/capabilityrpc      Experimental private native transport
+runtime/placement          Experimental Host placement and L1/L2 orchestration
 runtime/workspace          optional rooted WASI workspace
 runtime/receipt            compact Host call receipts
 runtime/observe            bounded optional Host observation contract
@@ -178,7 +192,7 @@ cmd/pysolate-research      partial local research CLI
 ## Explicit non-goals
 
 - served-instance reset or reuse;
-- prepared/COW execution;
+- production scheduling of prepared/COW execution (the bounded Wazero mechanism remains Experimental);
 - durable effect transactions and compensation;
 - generic network tools, Guest-controlled URLs or credentials;
 - MCP/daemon/plugin lifecycle;

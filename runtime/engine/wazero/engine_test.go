@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 func TestFactoryRejectsInvalidMechanismsBeforeArtifactParsing(t *testing.T) {
@@ -50,6 +52,47 @@ func TestFactoryIsFreshOnly(t *testing.T) {
 	defer runner.Close(context.Background())
 	if properties := runner.Properties(); properties.Backend != "wazero" || properties.ExecutionProfileID != "" {
 		t.Fatalf("unexpected properties: %#v", properties)
+	}
+}
+
+func TestFactoryDoesNotAcquireWorkspaceBeforeRequestAdmission(t *testing.T) {
+	base := t.TempDir()
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	ref, err := manager.Create(nil, workspace.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wasm := []byte{0, 97, 115, 109, 1, 0, 0, 0}
+	runner, err := (wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "runner"}).New(context.Background(), wasm, runtimeconfig.DefaultRunConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	probe, err := manager.Acquire(ref, "preflight-probe")
+	if err != nil {
+		t.Fatalf("workspace acquired before request admission: %v", err)
+	}
+	if err := probe.Release(); err != nil {
+		t.Fatal(err)
+	}
+	_, runErr := runner.Run(context.Background(), []byte(`{"run_id":"native","code":"result=1","inputs":{},"requirements":["shell"]}`), "")
+	var unsupported *runtimeconfig.UnsupportedRunError
+	if !errors.As(runErr, &unsupported) {
+		t.Fatalf("run error=%v", runErr)
+	}
+	probe, err = manager.Acquire(ref, "post-rejection-probe")
+	if err != nil {
+		t.Fatalf("rejected request acquired workspace: %v", err)
+	}
+	if err := probe.Release(); err != nil {
+		t.Fatal(err)
 	}
 }
 

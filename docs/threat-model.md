@@ -72,6 +72,23 @@ fresh Guest re-executing the original request and initial workspace; no Python
 heap, open descriptor or WASM-memory state is restored. Branch lineage is a
 Host research relation, not proof that the child's semantics are correct.
 
+### Unified native capability transport
+
+**Experimental.** Native CPython receives no Broker handler or Host credential.
+Its generated `_agent_runtime_host.call` bridge reaches a private Unix socket
+whose channel is bound to invocation, execution, sealed Plan, expiry and a
+transport-only credential. Completed exact retries are replayed from the Host
+channel record without redispatch. Changed duplicate IDs, in-flight ambiguity,
+identity mismatch, expiry, revocation and oversized frames fail closed. The
+socket itself grants no capability.
+
+Native compatibility is not a security or determinism superset. Its image,
+workspace, mount mode and lifecycle have separate Host-owned evidence. A dirty
+served instance cannot cross sessions. Only preflight selection or a
+Host-authored `runtime_unsupported` with both workspace and effects
+`not_started` may create a linked native execution. Exceptions, timeout, OOM,
+capability denial and ambiguous completion cannot trigger implicit replay.
+
 ### Host-authored evidence
 
 The Host replaces Guest receipt, capability-plan and capability-call metric claims. Receipts bind the Host run identity, capability-plan identity, capability, operation index, request digest, response digest and outcome. The top-level response carries the plan identity even for a zero-call Run. The curated-source slice now supports protected capture and bounded offline playback verification; the PoC still does not claim a durable audit service, general deterministic replay across uncontrolled nondeterminism, or transaction/effect evidence.

@@ -91,6 +91,8 @@ Current gates pass:
   `e7c73de57f358de4f6f523944d978f6da97bbd186d965d3c858c5f7b185d1e92`,
   `a890cd69ce53877936890e2ac65e9ccfee1bef90086af5ca51c75e3aa3f717a2`,
   `4a17a63d876a8d7443ce80a95472e35b61a98c0c172adba600ad04a88a2b673c`;
+- report validation rejects aggregate/observation mutation and resealed reports missing
+  artifact, source or capability-plan provenance identities;
 - `git diff --check`.
 
 G2 remains closed until an independent post-fix review reports no blocking finding.

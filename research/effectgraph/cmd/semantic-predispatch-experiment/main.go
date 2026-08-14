@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -292,6 +293,7 @@ func sealReport(value report) string {
 func validateReport(value report) error {
 	if value.SchemaVersion != reportSchema || value.TrialsPerCondition < 3 ||
 		len(value.Trials) != value.TrialsPerCondition*2 || value.PhysicalDelayMicros <= 0 ||
+		!validSHA256(value.ArtifactSHA256) || !validSHA256(value.SourceSHA256) || !validSHA256(value.CapabilityPlanSHA256) ||
 		!value.EquivalentResults || !value.NoDuplicatePhysicalCall ||
 		value.ContentSHA256 == "" || value.ContentSHA256 != sealReport(value) {
 		return errors.New("invalid semantic pre-dispatch report envelope")
@@ -320,6 +322,18 @@ func validateReport(value report) error {
 		return errors.New("invalid latency aggregates")
 	}
 	return nil
+}
+
+func validSHA256(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, character := range value[len("sha256:"):] {
+		if character < '0' || (character > '9' && character < 'a') || character > 'f' {
+			return false
+		}
+	}
+	return true
 }
 
 func digest(value []byte) string {

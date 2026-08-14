@@ -1,9 +1,9 @@
 {
   "schema_version": "pysolate.effectgraph-opportunity-census.v1",
-  "corpus_sha256": "sha256:ee773aa9cc6e2d06c5e11372c8b7dcdb3d82b2603848fcdefb1a8c3e1d5be241",
+  "corpus_sha256": "sha256:2b4a8308d398a68f3847de4c16828f83bd9714086f5c642ce0fa6da9ac003693",
   "analyzer_sha256": "sha256:99b45fb47682547354048af86e701cb7ed929f446219de58292a59b863dfa6e2",
   "target": {
-    "artifact_source_commit": "76a4efeabcb3344f354845dd3c7700b46e42a539",
+    "artifact_source_commit": "76a4efe97e80c4ab007aac7eb58f0a776b82d08b",
     "artifact_sha256": "sha256:ff6d2e3dfa424e9d1f064711b6845b6cd13383f337fb9c153e206c4b7c6f7c5e",
     "execution_profile_sha256": "sha256:4e90b3811abf0b6c76383f6009fb025fe5b2b7ced57906b621c56db8f8d31154",
     "import_closure_sha256": "sha256:6bf7414ef5fe446ed320118d1c29d006a850ffc9d0c80c449edc1d6cd5443e9e",

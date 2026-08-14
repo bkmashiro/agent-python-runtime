@@ -492,9 +492,18 @@ current exact whole-Run contract.
 
 - [ ] Refactor current whole-Run qualification to consume shared legality outputs
   without behavior change.
-- [ ] Measure natural same-agent/cross-agent exact overlap in the corpus.
-- [ ] Define one region form only if canonical live-ins/live-outs and exact source
-  boundaries are materializable without Python heap capture.
+- [ ] Define one analysis-only candidate region graph with exact source spans,
+  control/effect barriers, canonical live-ins/live-outs, capability occurrences and
+  stable rejection reasons. It carries no execution authority and must not require
+  Python heap capture.
+- [ ] Project the candidate graph into Lab through a versioned, bounded, privacy-safe
+  read model. Lab Web must highlight the selected region in the recorded Python source,
+  render control/data edges, effect classes and opaque barriers, and explain per-consumer
+  eligibility/rejection without gaining any Runtime control or authority.
+- [ ] Measure natural same-agent/cross-agent exact overlap and region materializability
+  in the corpus using that candidate region contract.
+- [ ] Admit one executable region form only if the measured graph has canonical
+  live-ins/live-outs and exact source boundaries without Python heap capture.
 - [ ] Bind contract/resource snapshot/freshness identity, project/privacy/policy and
   runtime versions.
 - [ ] Preserve zero-effect runtime publication probe, failure nonpublication,
@@ -508,6 +517,8 @@ current exact whole-Run contract.
 - `runtime/semanticreuse/reuse.go`
 - `runtime/semantic/`
 - `integration/e2e/semantic_reuse_test.go`
+- `research/labview/`
+- `apps/lab-web/`
 
 ### Track G — Semantic pre-execution placement
 
@@ -591,9 +602,12 @@ not permission to manufacture a broader optimizer.
 
 ## Current execution pointer
 
-**Track C:** implement only the target-Guest source-indexed semantic overlay required
-to instantiate and conservatively reject/qualify the v0 pre-dispatch contract. Tracks
-A and B are closed; no runtime request may be started by the overlay.
+**Track F:** first script the repeated gate/evidence workflow and refactor existing
+whole-Run reuse to consume shared legality without behavior change. Then implement an
+analysis-only candidate region graph and its read-only Lab visualization before any
+region-level runtime consumer. Use the graph to measure materializability and natural
+overlap; do not admit region execution/reuse if it requires Python heap capture or
+weakens exact identity.
 
 ## Short prompt to start/resume this Mega-Goal
 

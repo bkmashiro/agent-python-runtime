@@ -14,15 +14,14 @@
 **Architecture recommendation:** [`../research/unified-effect-aware-runtime-architecture.md`](../research/unified-effect-aware-runtime-architecture.md)
 
 **Goal:** Determine, then implement only where justified, whether Pysolate can use
-one Host-qualified semantic representation of a constrained agent-generated Python
-program to safely drive execution scheduling, exact reuse, and pre-execution
-placement.
+one Host-qualified semantic overlay of a constrained agent-generated Python program
+to safely drive semantic pre-dispatch, exact reuse, and pre-execution placement.
 
 **Architecture:** The exact target Guest CPython parses and analyzes source into a
 bounded canonical report. The Host strictly decodes it, binds Host-owned capability
 contracts and runtime identities, and mints opaque verified provenance. A thin
-Semantic Execution Graph records only facts needed by reusable conservative legality
-predicates. Unknown semantics preserve original execution and ordering.
+source-indexed semantic overlay records only facts needed by reusable conservative
+legality predicates. Unknown semantics preserve original execution and ordering.
 
 **Tech stack:** CPython 3.14 `ast` in the existing WASI Guest; Go contracts,
 validators, placement, Agent Function and capability packages; existing typed Host
@@ -51,7 +50,7 @@ Candidate thesis:
 > Agent-generated code can be a semantic interface to an execution runtime rather
 > than an opaque payload. For a qualified subset of generated Python, Pysolate can
 > propagate Host-owned effect contracts through program structure and conservatively
-> qualify execution reuse, scheduling, and placement without expanding authority.
+> qualify pre-dispatch, execution reuse, and placement without expanding authority.
 
 “Whole-program” always means the accepted analyzable subset of one exact source and
 runtime profile. It is not a claim of complete semantics for unrestricted Python.
@@ -80,7 +79,8 @@ Prefer, in order:
    heuristics;
 3. real generated-program opportunity measurements over constructed happy paths;
 4. exact source/inputs/contracts/snapshot identity over semantic similarity;
-5. one narrow scheduling transformation over a general Python compiler;
+5. one narrow semantic pre-dispatch consumer over Python rewriting or a general
+   compiler;
 6. pre-execution placement over runtime replay or migration;
 7. target-Guest semantics and Host-owned authority over duplicated Host parsing or
    Guest-authored policy;
@@ -122,8 +122,8 @@ Prefer, in order:
     effect/dependency identity and runtime publication gates are proved.
 12. **No cross-tenant cache.** Initial sharing remains project/private and
     worker-local. Cross-tenant existence and freshness leakage is out of scope.
-13. **Experimental and independently default-off.** Graph analysis, scheduling,
-    hoisting, region reuse and semantic placement each have an explicit off-state.
+13. **Experimental and independently default-off.** Overlay analysis, semantic
+    pre-dispatch, region reuse and semantic placement each have an explicit off-state.
 14. **No general SSA/compiler stack.** Do not add LLVM, MLIR, a broad optimizer
     framework, arbitrary heap materialization or distributed scheduling. A minimal
     CFG/def-use form must earn its complexity through measured opportunity.
@@ -158,7 +158,7 @@ Live inspection at `3bd022f` established:
   worker-local singleflight/retention, compatibility admission and runtime zero-
   Host-call publication gating;
 - current real-workload descriptors are mechanism fixtures, not a corpus of natural
-  generated programs or evidence of scheduling opportunity;
+  generated programs or evidence of semantic pre-dispatch opportunity;
 - the predecessor roadmap is complete and its optimizer families were deliberately
   deferred. This file is a successor, not a reinterpretation of unfinished work.
 
@@ -172,19 +172,21 @@ falsified rather than silently omitted:
    Cloudflare material without novelty overclaim.
 2. A private/body-safe corpus of real or faithfully replayed generated Python plus
    adversarial fixtures measures analyzable coverage, node/call classes, unknown
-   reasons and candidate scheduling/reuse/placement opportunities.
-3. One versioned bounded Semantic Execution Graph is emitted by the exact target
-   Guest and strictly validated/bound by the Host. It represents only the facts
-   justified by the accepted subset.
+   reasons and candidate pre-dispatch/reuse/placement opportunities.
+3. One versioned bounded semantic overlay is emitted by the exact target Guest and
+   strictly validated/bound by the Host. It represents only the facts justified by
+   the accepted subset.
 4. Host-owned capability contracts provide the minimum resource/freshness/
    determinism/exception/cancellation metadata required by the chosen legality
    questions. Missing metadata fails closed.
-5. Shared Host legality predicates answer at least `CanParallelize`, `CanCoalesce`,
-   `CanCache` and `RequiredBackend`; `CanHoist` remains absent or conservative until
-   exception/control legality is demonstrated.
-6. One default-off sibling-call scheduling pass, if the decision gate admits it,
-   proves unchanged observable results/effects on positive and adversarial fixtures
-   and demonstrates a real latency/critical-path benefit on a bounded workload.
+5. Shared Host legality predicates answer at least `CanPreissue`,
+   `CanClaimStagedObservation`, `CanCoalesce`, `CanCache` and `RequiredBackend`;
+   `CanHoist` remains absent or conservative until exception/control legality is
+   demonstrated.
+6. One default-off semantic pre-dispatch consumer, if the decision gate admits it,
+   uses existing staged observations without rewriting Python, proves unchanged
+   logical results/effects on positive and adversarial fixtures, and demonstrates a
+   real latency/critical-path benefit on a bounded workload.
 7. Existing exact whole-Run reuse consumes the shared semantic facts without
    weakening its identity or publication gates. Region-level reuse is implemented
    only if exact live-in/live-out materialization is demonstrated.
@@ -201,24 +203,24 @@ rewrite.
 
 ### Gate G1 — opportunity and representation gate
 
-After Tracks 0–B, stop for Yuzhe discussion before runtime transformation if any is
-true:
+After Tracks 0–B, stop for Yuzhe discussion before adding a runtime consumer if any
+is true:
 
 - the candidate corpus is too synthetic to support a research claim;
 - useful call/dependency coverage is rare or requires broad Python semantics;
 - resource/freshness contracts cannot be expressed without destabilizing the
   canonical capability model;
-- a call-level scheduler baseline captures essentially all measured opportunity;
-- the proposed graph duplicates current `Analysis`/`Plan` without enabling a new
+- a call-level pre-dispatch baseline captures essentially all measured opportunity;
+- the proposed overlay duplicates current `Analysis`/`Plan` without enabling a new
   falsifiable legality question.
 
-If G1 passes, record the exact accepted subset and first transformation. Do not widen
-it opportunistically during implementation.
+If G1 passes, record the exact accepted subset and first runtime consumer. Do not
+widen it opportunistically during implementation.
 
-### Gate G2 — scheduling semantics gate
+### Gate G2 — semantic pre-dispatch gate
 
-After the first scheduler prototype and differential/adversarial evidence, stop for
-Yuzhe discussion if results would change the representation or execution model.
+After the first pre-dispatch prototype and differential/adversarial evidence, stop for
+Yuzhe discussion if results would change the overlay or execution model.
 Proceed to region reuse/placement integration only if:
 
 - zero known observable divergences remain;
@@ -228,12 +230,12 @@ Proceed to region reuse/placement integration only if:
 
 ### Gate G3 — paper-scope gate
 
-Before combining scheduling, reuse and placement into a paper claim, decide whether
+Before combining pre-dispatch, reuse and placement into a paper claim, decide whether
 the strongest honest contribution is:
 
-- shared semantic representation + one transformation;
-- shared representation + scheduling and exact reuse;
-- shared representation + scheduling/reuse/placement;
+- shared semantic overlay + one runtime consumer;
+- shared overlay + pre-dispatch and exact reuse;
+- shared overlay + pre-dispatch/reuse/placement;
 - or a negative result about the cost of conservatism.
 
 Do not implement breadth merely to fill a three-item contribution list.
@@ -263,7 +265,7 @@ Additional requirements:
   structured machine-readable output;
 - docs-only research slices use readback, link checking and `git diff --check` unless
   generated contracts require more;
-- independent read-only review is required at G1, after the first transformation,
+- independent read-only review is required at G1, after the first runtime consumer,
   and before final closeout. Any edit makes an earlier review stale.
 
 ## Autonomous execution queue
@@ -294,7 +296,7 @@ work, not from the supplied handoff's unchecked assumptions.
 ### Track A — Generated-program opportunity corpus
 
 **Promise:** Decide from data whether program-level semantic optimization has enough
-coverage and opportunity to justify a new representation.
+coverage and opportunity to justify a bounded semantic overlay.
 
 - [ ] Define a body-safe versioned corpus schema binding source digest, target
   artifact/profile, tool contract set, provenance class and expected oracle class.
@@ -304,9 +306,9 @@ coverage and opportunity to justify a new representation.
   permitted; checked-in projections remain body-free.
 - [ ] Run the existing analyzer over the corpus and report accepted/opaque constructs,
   direct capability sites, whole-Run reuse eligibility and placement classes.
-- [ ] Produce an opportunity census for sibling concurrency, hoisting candidates,
-  exact repeated regions and capability-driven placement, labeling structural
-  candidates separately from proved legality.
+- [ ] Produce an opportunity census for exact pre-dispatchable call sites, overlap
+  windows, exact repeated regions and capability-driven placement, labeling
+  structural candidates separately from proved legality.
 
 **Likely files:**
 
@@ -351,10 +353,11 @@ Candidate fields, to be accepted or reduced after Track A:
 **Do not:** infer purity from HTTP method, capability name, `ReadOnly`, or
 `Idempotent`; create a second effect registry.
 
-### Track C — Target-Guest Semantic Execution Graph v0
+### Track C — Target-Guest Verified Semantic Overlay v0
 
-**Promise:** Produce a bounded verified representation sufficient for one real
-legality question without building a general compiler IR.
+**Promise:** Attach bounded source-indexed facts to the target-Guest CPython AST and
+emit only the canonical verified overlay needed for one real legality question. The
+overlay is not a general compiler IR or an executor.
 
 Minimum candidate content:
 
@@ -371,10 +374,10 @@ Minimum candidate content:
 - [ ] Add Guest RED tests for straight-line independent calls and adversarial
   constructs.
 - [ ] Implement target-Guest extraction for only the accepted subset.
-- [ ] Add strict Host decoder/validator with graph consistency and effect-coverage
+- [ ] Add strict Host decoder/validator with overlay consistency and effect-coverage
   checks.
-- [ ] Bind graph provenance through `VerifiedAnalysis` or a replacement with equal or
-  stronger opacity and Runner-property validation.
+- [ ] Bind overlay provenance through `VerifiedAnalysis` or a replacement with equal
+  or stronger opacity and Runner-property validation.
 - [ ] Run real-Guest parity/negative E2E and corpus census.
 
 **Primary files:**
@@ -398,10 +401,11 @@ optimization passes do not invent their own semantics.
   workspace disposition, capability calls, freshness/snapshot identity,
   cancellation and terminal ambiguity.
 - [ ] Implement pure predicates with typed rejection reasons:
-  `CanParallelize`, `CanCoalesce`, `CanCache`, `RequiredBackend`.
+  `CanPreissue`, `CanClaimStagedObservation`, `CanCoalesce`, `CanCache`,
+  `RequiredBackend`.
 - [ ] Keep `CanHoist` disabled until branch/exception reachability is represented.
 - [ ] Build baseline-vs-candidate trace comparator and adversarial matrix.
-- [ ] Compare graph predicates with a call-level resource-annotation baseline.
+- [ ] Compare overlay predicates with a call-level resource-annotation baseline.
 - [ ] Run G1 review and decision gate.
 
 **Likely files:**
@@ -411,24 +415,29 @@ optimization passes do not invent their own semantics.
 - `research/effectgraph/`
 - `integration/e2e/semantic_legality_test.go`
 
-### Track E — Experimental sibling-call scheduling
+### Track E — Experimental semantic pre-dispatch
 
-**Promise:** If G1 passes, independently issued, necessarily executed sibling calls
-may overlap only when shared legality proves observational safety.
+**Promise:** If G1 passes, exact Host-qualified reads may start before unchanged
+Python reaches their call boundary; the dynamic call claims the matching run-scoped
+staged observation instead of issuing a duplicate physical request. The overlay is
+analysis-only and the original source remains executable authority.
 
-- [ ] Spike the smallest execution mechanism using the existing Host-call and
-  streaming/eager-read substrate before adding a new ABI.
+- [ ] Spike by connecting verified semantic call facts to the existing
+  `runtime/streaming.StagedObservation`; add no second cache or execution ABI.
 - [ ] RED-test data/control/effect conflicts, exception ordering, cancellation,
   freshness, aliases and unknown contracts.
-- [ ] Implement default-off scheduling for one accepted straight-line shape.
+- [ ] Implement default-off pre-dispatch for one exact call shape; leave original
+  Python and its dynamic Host-call boundary unchanged.
 - [ ] Preserve deterministic result placement and baseline exception/effect order.
 - [ ] Add runtime observations distinguishing logical calls, issue/start/finish,
   physical operations and rejected opportunities.
 - [ ] Run exact Guest differential E2E and bounded latency/critical-path experiment.
 - [ ] Independent post-fix review; run G2.
 
-**Do not:** speculative future-call prediction, conditional hoisting, write
-parallelism, broad async Python transformation or cancellation-by-abandonment.
+**Do not:** rewrite Python, execute the overlay, pre-dispatch writes or unknown calls,
+turn one-shot observations into durable cache records, merge repeated logical calls
+without an explicit coalescing contract, or abandon cancellation/late/orphaned
+physical requests without a typed terminal disposition.
 
 ### Track F — Shared identity and exact region reuse
 
@@ -459,7 +468,7 @@ current exact whole-Run contract.
 **Promise:** Verified capability requirements may improve the existing placement
 decision before execution, never authorize replay.
 
-- [ ] Compare current import/requirements routing with graph-derived capability
+- [ ] Compare current import/requirements routing with overlay-derived capability
   requirements.
 - [ ] Extend decision identity and reasons only if semantic analysis adds measurable
   precision.
@@ -514,7 +523,7 @@ For every implementation slice:
   evidence separate.
 - Record source/artifact/profile/contract identities for real Guest observations.
 - A signed commit is a checkpoint, not proof of the next track.
-- If results change the graph, effect model or paper thesis, stop at G1/G2/G3 and
+- If results change the overlay, effect model or paper thesis, stop at G1/G2/G3 and
   discuss rather than silently rewriting later tracks.
 - Do not append implementation history to the completed predecessor roadmap.
 
@@ -538,8 +547,8 @@ not permission to manufacture a broader optimizer.
 
 **Track A:** build the body-safe generated-program corpus and opportunity census.
 Track 0 is closed with source-pinned related-work claims and a frozen observable-
-semantics/divergence contract; do not implement Semantic Execution Graph or
-scheduling before the census.
+semantics/divergence contract; do not implement the semantic overlay or pre-dispatch
+before the census.
 
 ## Short prompt to start/resume this Mega-Goal
 

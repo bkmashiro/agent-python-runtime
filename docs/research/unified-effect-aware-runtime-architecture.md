@@ -23,7 +23,7 @@ Evolve Pysolate toward:
 The runtime should treat generated Python as a bounded semantic interface rather than
 only an opaque sandbox payload. The exact target Guest derives program-structure
 facts; the Host combines those facts with frozen capability/WASI contracts and uses
-one verified representation to answer conservative scheduling, exact reuse and
+one verified overlay to answer conservative pre-dispatch, exact reuse and
 pre-execution placement questions.
 
 This direction complements rather than replaces the authority-lifecycle runtime.
@@ -74,10 +74,11 @@ layer without turning Pysolate into a general Python compiler.
 ### Proposed
 
 - A body-safe opportunity corpus and census.
-- A minimal versioned Semantic Execution Graph for an accepted Python subset.
+- A minimal versioned source-indexed semantic overlay for an accepted Python subset.
 - Minimal Host-owned resource/freshness/exception/cancellation contract extensions.
 - Shared fail-closed legality predicates.
-- One default-off straight-line sibling-call scheduler if the opportunity gate passes.
+- One default-off semantic pre-dispatch consumer backed by existing staged
+  observations if the opportunity gate passes.
 - Later exact region identity and semantic placement integration only after explicit
   decision gates.
 
@@ -172,12 +173,25 @@ Rules:
 - ordinary Python/WASI filesystem operations remain ordinary stdlib calls and are
   modeled separately without tool wrappers.
 
+## Representation boundary
+
+The target Guest analyzes the ordinary CPython AST directly. Guest-local facts may
+live in side tables keyed by exact source-located AST occurrences. Only a bounded,
+canonical source-indexed semantic overlay crosses the Guest/Host boundary so the Host
+can validate references, bind capability contracts and mint opaque provenance.
+
+The overlay is an intermediate representation only in the broad sense of being an
+analysis report. It is not SSA, bytecode, a rewritten Python program or an executable
+IR. Its digest is qualification/provenance input, not a semantic-equivalence or cache
+key by itself. Original Python remains the executable authority.
+
 ## Shared legality API
 
 Optimization passes should consume pure Host predicates with typed rejection reasons:
 
 ```text
-CanParallelize(left, right, context)
+CanPreissue(call, context)
+CanClaimStagedObservation(call, observation, context)
 CanCoalesce(region, context)
 CanCache(region, context)
 RequiredBackend(program, context)
@@ -185,11 +199,36 @@ RequiredBackend(program, context)
 
 `CanHoist` should not be implemented initially. Moving a call across control flow can
 change whether it executes, exception order, cancellation, freshness and resource
-lifetime. The first scheduler should handle only necessarily executed sibling calls
-whose arguments are independently available and whose effects/resources do not
-conflict.
+lifetime. The first runtime consumer does not rewrite Python or execute a graph. It
+may pre-dispatch only exact calls whose canonical arguments and Host-owned
+`read_only + idempotent + speculative_safe` qualification all admit. The result
+enters the existing one-shot, run-scoped staged-observation path and unchanged
+Python claims it at the original call boundary.
 
 Unknown input to any predicate returns rejection, never a weaker assumption.
+
+## Execution model: pre-dispatch, then claim
+
+The semantic overlay is analysis-only and ordinary execution remains the exact
+original Python source. After verified analysis and before Guest execution, the Host
+may issue a bounded set of exact qualified reads. Each result enters the existing
+`runtime/streaming.StagedObservation` mechanism. When original Python reaches the
+corresponding Host-call boundary, it claims that one-shot result instead of issuing a
+duplicate physical request.
+
+This is not durable result caching. The existing observation identity already binds:
+
+- source and suite range;
+- dynamic occurrence and canonical arguments;
+- capability spec, handler, Plan and grant policy;
+- freshness/expiry and privacy partition;
+- stream/workflow lineage.
+
+Full-source semantic pre-dispatch should reuse and, only where required, generalize
+that identity rather than create a second cache. Equal repeated calls remain distinct
+occurrences by default. Cancellation, timeout, late completion and a call that is
+never dynamically reached terminate as explicit physical dispositions; they do not
+become logical calls or retained records.
 
 ## Observable-equivalence boundary
 
@@ -243,8 +282,10 @@ Forbidden:
    can answer that candidate's legality question.
 4. **Legality and oracle:** compare shared predicates against baseline traces and a
    call-level annotation baseline.
-5. **First transformation:** if admitted, schedule only straight-line necessarily
-   executed sibling calls; no conditional hoisting.
+5. **First runtime consumer:** if admitted, pre-dispatch exact qualified reads into
+   the existing run-scoped staged-observation path; unchanged Python claims the
+   result at the original call boundary. No source rewrite or graph execution is
+   involved.
 6. **Decision:** inspect correctness, opportunity and benefit before extending exact
    region reuse or placement.
 
@@ -274,12 +315,13 @@ Do not claim:
 
 ## Rejected immediate approaches
 
-- Implement scheduling, hoisting, region caching and placement simultaneously.
+- Implement pre-dispatch, hoisting, region caching and placement simultaneously.
 - Build a broad CFG/SSA/alias framework before measuring opportunity.
 - Duplicate capability effects in an optimizer registry.
 - Parse target Python on the Host with a different parser.
 - Treat current whole-Run reuse economics as evidence of natural overlap.
-- Use speculative future-call prediction as the first scheduler.
+- Use unqualified future-call prediction or rewrite Python source for the first
+  pre-dispatch experiment.
 - Wrap all WASI/stdlib filesystem operations as typed Pysolate tools.
 - Add transparent VM replay after a dynamic capability failure.
 - Use semantic similarity or cross-tenant caching.
@@ -288,11 +330,12 @@ Do not claim:
 
 1. How much natural generated-program coverage survives conservative analysis?
 2. Which missing contract field blocks the most valuable safe opportunity?
-3. Does a graph materially outperform call-level resource annotations?
-4. Can exception/cancellation order be preserved by a useful sibling-call subset?
+3. Does an overlay materially outperform call-level resource annotations?
+4. Can qualified pre-dispatch preserve exception/cancellation boundaries while
+   producing useful overlap?
 5. Does one shared representation actually reduce duplicated policy across reuse and
    placement?
-6. Is the strongest paper result scheduling, exact reuse, placement, their shared
+6. Is the strongest paper result pre-dispatch, exact reuse, placement, their shared
    representation, or the measured cost of conservatism?
 
 These questions are decision gates, not assumptions to code around.

@@ -1,10 +1,12 @@
 # Effect-aware execution observable-semantics contract
 
-Status: **Frozen research contract for pre-SEG experiments**
+Status: **Frozen research contract for pre-overlay experiments**
 
 Date: 2026-08-14
 
-This document defines what an effect-aware optimization must preserve before any Semantic Execution Graph or execution transformation is admitted. It is intentionally stronger than “same returned JSON” and weaker than byte-identical physical scheduling.
+This document defines what an effect-aware runtime consumer must preserve before any
+semantic overlay or pre-dispatch mechanism is admitted. It is intentionally stronger
+than “same returned JSON” and weaker than byte-identical physical scheduling.
 
 ## Research questions
 
@@ -22,7 +24,9 @@ The baseline must receive the same effect contracts. The comparison isolates val
 
 ### RQ3 — shared representation
 
-Can the same verified facts drive at least two independently useful decisions—initially scheduling qualification and exact execution identity or pre-execution placement—without consumer-specific semantic heuristics?
+Can the same verified facts drive at least two independently useful decisions—initially
+semantic pre-dispatch and exact execution identity or pre-execution placement—without
+consumer-specific semantic heuristics?
 
 A consumer may add policy and cost thresholds, but it may not reinterpret unknown facts as safe.
 
@@ -126,15 +130,26 @@ They are equivalent only if all of the following hold:
 
 1. **same terminal class:** both return, both raise the same typed accepted exception class, or both reach the same cancellation/timeout/trap class;
 2. **same canonical program-visible value:** returned values, accepted exception payload and visible workspace state match;
-3. **same logical effect multiset:** there is a one-to-one mapping between all Host effect/observation events, including attempts and ambiguous terminals;
+3. **same logical effect multiset:** there is a one-to-one mapping between all
+   dynamically reached Host effect/observation events, including attempts and
+   ambiguous terminals; explicitly qualified speculative physical reads are accounted
+   separately with physical dispositions and do not count as logical calls until
+   claimed at the original dynamic boundary;
 4. **same mandatory partial order:** the mapping preserves every data, control, conflict, exception and contract-observable order edge;
 5. **same observation context:** live reads use an equivalent declared snapshot/freshness context; equal arguments alone are insufficient;
 6. **same authority:** no event is admitted under a broader principal, grant, capability Plan, privacy scope or policy epoch;
-7. **same failure boundary:** optimization does not introduce an event on a path where baseline terminates, raises, cancels, or skips it;
+7. **same failure boundary:** optimization does not introduce a logical event on a
+   path where baseline terminates, raises, cancels, or skips it; an extra physical read
+   is allowed only under explicit speculative authority and must end as a bounded,
+   typed cancelled, late, or orphaned disposition if the logical call is never reached;
 8. **same terminal dispositions:** workspace, effect and reconciliation dispositions match;
 9. **no forbidden replay:** a second physical execution is never substituted after an effect may have started or completion is ambiguous.
 
-Independent events may occur in a different physical order only when the Host-owned contracts explicitly permit overlap/reordering and no required order edge connects them. Until such contract facts exist, differing Host effect order is a divergence.
+Independent events may occur in a different physical order only when the Host-owned
+contracts explicitly permit overlap/reordering and no required order edge connects
+them. A pre-dispatched read does not become a logical call until unchanged Python
+reaches the same call boundary and claims the exact staged-observation identity.
+Unqualified or unmatched physical work is a divergence.
 
 ## Divergence classes
 
@@ -169,19 +184,27 @@ The static legality engine and dynamic oracle have different roles:
 
 No optimizer may consult baseline results at runtime to retroactively authorize an effect.
 
-## Initial scheduling restriction
+## Initial semantic pre-dispatch restriction
 
-Before an effect-contract extension proves more, the first scheduling experiment is limited to necessarily executed straight-line sibling capability calls. It excludes:
+Before an effect-contract extension proves more, the first runtime experiment may
+pre-dispatch only an exact call that satisfies all of the following:
 
-- conditional or loop-contained calls;
-- calls before/after a potentially raising operation when exception order is unresolved;
-- writes or unknown resource footprints;
-- live reads without compatible freshness/snapshot semantics;
-- unknown cancellation behavior;
-- dynamic calls/imports/reflection;
-- any call whose authority or privacy scope differs.
+- the target-Guest overlay identifies an exact source occurrence;
+- capability name and canonical arguments are available before Guest execution;
+- the Host capability binding is `read_only + idempotent + speculative_safe`;
+- spec, handler, Plan, grant/policy, freshness, expiry and privacy identities are
+  frozen;
+- an independent per-Run speculation budget admits the physical request;
+- the result is stored only as a one-shot `StagedObservation`, never durable cache;
+- unchanged Python must claim the exact source occurrence and dynamic occurrence;
+- duplicate equal calls retain distinct physical records unless a separate
+  coalescing contract explicitly permits sharing;
+- cancellation, timeout, late completion and non-reach produce typed terminal or
+  orphaned dispositions and never publish a logical result.
 
-This restriction is part of the research contract, not an implementation suggestion.
+Writes, unknown calls, dynamic arguments, unresolved freshness and authority
+mismatches are rejected. This restriction is part of the research contract, not an
+implementation suggestion.
 
 ## Initial placement restriction
 
@@ -203,7 +226,8 @@ A machine-readable experiment record must contain:
 - legality decision and rejection/acceptance reasons;
 - body-free baseline and optimized event traces;
 - equivalence result or divergence class;
-- logical versus physical execution counts;
+- logical versus physical execution counts, including consumed, cancelled, late and
+  orphaned staged observations;
 - latency/resource measurements separately from correctness;
 - skipped/unsupported disposition rather than fabricated success.
 

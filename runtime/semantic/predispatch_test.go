@@ -148,6 +148,34 @@ func assertSemanticPreDispatchErrorEquivalent(t *testing.T, handler capability.H
 	}
 }
 
+func TestBrokerFailureFinalizeCancelsPhysicalReadBeforeWrapperReturns(t *testing.T) {
+	physicalStarted := make(chan struct{})
+	plan := legalityTestPlanWithHandler(t, true, capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		close(physicalStarted)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}))
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	budget, _ := NewPreDispatchBudget(1)
+	controller, _ := NewSemanticPreDispatch(call, plan, budget)
+	if err := controller.Start(context.Background(), goroutineTestLauncher{}); err != nil {
+		t.Fatal(err)
+	}
+	<-physicalStarted
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "failed-engine", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := broker.Finalize(false); err != nil {
+		t.Fatalf("finalize error=%v", err)
+	}
+	if snapshot := controller.Snapshot(); snapshot.Disposition != streaming.ObservationCancelled || snapshot.PhysicalFinishes != 1 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func TestExecuteSemanticPreDispatchFinalizesUnclaimedFailures(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, plan, true)

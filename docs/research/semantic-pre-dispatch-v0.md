@@ -33,9 +33,11 @@ coalescing, caching, hoisting, replay or backend inference.
    is an error; it never issues a duplicate live request.
    Handler and invalid-result outcomes are staged as typed logical outcomes, preserving
    the same baseline Broker error code/message and exception placement.
-7. `ExecuteSemanticPreDispatch` owns start-to-terminal lifecycle. Failed Runs cancel
-   running physical reads; successful Runs that never claim a result mark it orphaned.
-   The Wazero Broker path also finalizes staged work on both success and failure.
+7. `ExecuteSemanticPreDispatch` owns start-to-terminal lifecycle. The controller owns a
+   child physical context, so either Broker failure finalization or wrapper failure cancels
+   a running read before waiting for its terminal disposition; successful Runs that never
+   claim a completed result mark it orphaned. The Wazero Broker path finalizes staged work
+   on both success and failure.
 
 The original Python source and dynamic call remain execution authority. The semantic
 overlay starts no work by itself.

@@ -79,6 +79,7 @@ type SemanticPreDispatch struct {
 	prepared    *capability.PreparedPreDispatch
 	budget      *PreDispatchBudget
 	done        chan struct{}
+	cancel      context.CancelFunc
 	started     bool
 	closed      bool
 	record      *streaming.StagedObservation
@@ -134,11 +135,13 @@ func (controller *SemanticPreDispatch) Start(ctx context.Context, launcher PreDi
 		controller.mu.Unlock()
 		return err
 	}
+	operationContext, cancel := context.WithCancel(ctx)
 	controller.started = true
+	controller.cancel = cancel
 	controller.issues++
 	controller.mu.Unlock()
 
-	launcher.Launch(func() { controller.execute(ctx) })
+	launcher.Launch(func() { controller.execute(operationContext) })
 	return nil
 }
 
@@ -253,11 +256,18 @@ func (controller *SemanticPreDispatch) TerminateUnclaimed(disposition streaming.
 		return ErrPreDispatchNotStarted
 	}
 	done := controller.done
+	cancel := controller.cancel
 	controller.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	<-done
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
 	if controller.record == nil {
+		if controller.disposition == streaming.ObservationCancelled {
+			return nil
+		}
 		return controller.runErr
 	}
 	if err := controller.record.Terminate(disposition); err != nil {
@@ -280,7 +290,11 @@ func (controller *SemanticPreDispatch) Finalize(success bool) error {
 		return ErrPreDispatchNotStarted
 	}
 	done := controller.done
+	cancel := controller.cancel
 	controller.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	<-done
 	controller.mu.Lock()
 	if controller.disposition != streaming.ObservationReady {

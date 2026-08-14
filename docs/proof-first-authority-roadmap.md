@@ -1,15 +1,17 @@
 # Pysolate composable mechanism roadmap
 
-Status: **Long-term mechanism inventory; active execution is governed by the approved Full Composable Runtime Megagoal.**
-Date: 2026-08-13
+Status: **Long-term mechanism inventory; active execution is governed by the approved Semantic Execution Experimental Megagoal.**
+Date: 2026-08-14
 
 This roadmap replaces the earlier linear effect-first ordering and remains the
 long-term mechanism inventory. The active executable subset, exploration/deferral
 rules, gates, and stop conditions now live in
-[the approved Full Composable Runtime Megagoal](megagoal-full-composable-agent-runtime.md).
-It preserves the authority-lifecycle correctness direction while making streaming
-authority-staged execution the primary Agent-specific research hypothesis.
-Content-addressed Agent Functions remain an independent optional reuse track.
+[the approved Semantic Execution Experimental Megagoal](plans/2026-08-14-semantic-execution-autonomous-megagoal.md).
+The completed Full Composable Runtime Megagoal remains historical implementation
+evidence. This inventory preserves the authority-lifecycle correctness direction
+while adding bounded AST semantic planning, whole-function reuse, and
+continuation-preserving cold-I/O experiments as explicitly Experimental successor
+work.
 
 Related decisions:
 
@@ -17,7 +19,8 @@ Related decisions:
 - [authority-lifecycle positioning](authority-lifecycle-positioning.md)
 - [content-addressed Agent Functions](content-addressed-agent-functions.md)
 - [streaming authority-staged execution](streaming-authority-staged-execution.md)
-- [approved Full Composable Runtime successor megagoal](megagoal-full-composable-agent-runtime.md)
+- [active Semantic Execution Experimental Megagoal](plans/2026-08-14-semantic-execution-autonomous-megagoal.md)
+- [completed Full Composable Runtime megagoal](megagoal-full-composable-agent-runtime.md)
 - [completed streaming execution megagoal](megagoal-streaming-authority-staged-execution.md)
 - [Cloudflare comparison](research/cloudflare-code-mode-comparison.md)
 

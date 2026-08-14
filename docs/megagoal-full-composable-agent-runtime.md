@@ -1,9 +1,10 @@
 # Megagoal: build the Full Composable Agent Runtime
 
-Status: **Deterministic Megagoal complete; post-completion Linux COW qualification amendment active.**
+Status: **Historical/complete; superseded for active execution by the Semantic Execution Experimental Megagoal.**
 Date: 2026-08-13
 Owner: Yuzhe
 Execution repository: `~/projects/agent-python-runtime`
+Active successor: [`plans/2026-08-14-semantic-execution-autonomous-megagoal.md`](plans/2026-08-14-semantic-execution-autonomous-megagoal.md)
 Predecessor proof: [`megagoal-streaming-authority-staged-execution.md`](megagoal-streaming-authority-staged-execution.md)
 Supporting roadmap: [`proof-first-authority-roadmap.md`](proof-first-authority-roadmap.md)
 Final decision matrix: [`full-composable-runtime-mechanism-matrix.md`](full-composable-runtime-mechanism-matrix.md)

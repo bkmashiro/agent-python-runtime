@@ -35,7 +35,11 @@ external-effect, and evidence dispositions. CPython/WASI is the current
 substrate, not the intended differentiator. See the
 [authority-lifecycle positioning decision](docs/authority-lifecycle-positioning.md),
 the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.md),
-and the [proof-first roadmap](docs/proof-first-authority-roadmap.md).
+and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active
+Experimental successor is the
+[semantic execution Megagoal](docs/plans/2026-08-14-semantic-execution-autonomous-megagoal.md),
+which keeps AST planning/reuse and continuation-preserving cold-I/O work proposed
+and off by default until implemented and qualified.
 Current, Experimental and Proposed claims remain separated in
 [docs/product-direction.md](docs/product-direction.md).
 

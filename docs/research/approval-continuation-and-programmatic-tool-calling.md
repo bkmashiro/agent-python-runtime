@@ -158,7 +158,18 @@ and protects them.
 ## DeepSeek Harness PTC: source-backed comparison
 
 The following observations are against `deepseek-ai/deepseek-harness` commit
-[`47f943859bef60e4160492346772ded9b24f765a`](https://github.com/deepseek-ai/deepseek-harness/tree/47f943859bef60e4160492346772ded9b24f765a).
+[`47f943859bef60e4160492346772ded9b24f765a`](https://github.com/deepseek-ai/deepseek-harness/tree/47f943859bef60e4160492346772ded9b24f765a),
+inspected on 2026-08-15. This pinned source is the provenance for the factual
+claim that DeepSeek exposes three tool-presentation modes: `native`, `code`, and
+`both` (`packages/core/tools/src/index.ts`). Its shipped `code` preset provides
+the concrete per-agent Code Mode composition
+(`apps/cli/config/agent-presets/code/agent.cordis.yml`).
+
+This is external corroboration, not provenance for Pysolate's authority-bound
+Host tool plane, fresh execution or continuation design. In later paper text,
+attribute the three-mode presentation comparison and DeepSeek implementation
+facts to this pinned source; describe Pysolate's stronger WASM/authority and
+zero-replay proposal separately.
 
 DeepSeek’s PTC/Code Mode is principally a **tool-presentation and orchestration
 layer**, not continuation durability:
@@ -218,11 +229,14 @@ Primary source locations:
 
 ## Independent mechanism controls
 
-Use typed modes rather than an undifferentiated cluster of booleans:
+Use typed modes rather than an undifferentiated cluster of booleans. DeepSeek
+names its three presentation values `native | code | both`; Pysolate should not
+reuse `native` for this axis because it already has a native-sandbox execution
+backend. Use presentation-specific names instead:
 
 ```text
 ProgramSurface
-  mode = native | programmatic | both
+  mode = direct | programmatic | both
 
 Approval
   mode = off | lease

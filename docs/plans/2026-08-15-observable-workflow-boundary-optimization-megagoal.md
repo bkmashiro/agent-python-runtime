@@ -5,7 +5,7 @@
 > live repository and predecessor evidence before execution. Continue through coherent
 > independently reviewed slices; stop only at the decision gates below.
 
-**Status:** Active — Track 0 complete; Track A next
+**Status:** Active — Tracks 0–G implemented; Track H verification/review in progress
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`

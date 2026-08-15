@@ -141,6 +141,16 @@ WASI trace, unchanged-file reads, Python bytecode/locals, heap/stack, or
 WebAssembly-memory visibility. See
 [research/runtime-observation.md](research/runtime-observation.md).
 
+The separate workflow-boundary observation report is also Host-authored and has no
+execution authority. It uses opaque identifiers and SHA-256 bindings rather than prompt,
+model-output, Python-source, tool-result, workspace-path or credential bodies. Every
+logical request maps to one physical execution; every physical execution has exactly one
+matching measured Host span; and every non-producer consumer requires exactly one
+admitted coalescing or retained-reuse decision. Cross-authority, freshness, privacy,
+artifact, profile or Plan sharing fails closed. The sealed Lab projection validates those
+relations and `consumer_admitted=false`; it cannot schedule, retry, preissue or invoke a
+capability.
+
 ### Experimental deterministic verification
 
 The Experimental/Partial deterministic profile is Host-selected and bound to
@@ -174,6 +184,15 @@ See [research/lab-boundary.md](research/lab-boundary.md).
 ### Artifact binding
 
 When an execution profile is configured, the CLI requires the adjacent distribution manifest and import inventory/qualification files. Artifact, manifest, profile and qualified import roots must agree before execution.
+
+The private workstation build cache is not artifact authority. Its expensive layer key
+binds locked upstream sources, patches, target, Host and exact recipe/validator sources;
+its final key additionally binds exact Git commit/tree, source epoch, artifact/profile
+parameters and the measured probe-runner binary. Cache archives and evidence files must be
+real regular files with complete unique checksums and safe member topology. Invalid,
+corrupt or mixed-generation entries become misses. `refresh` cannot read either cache.
+The cache is bounded private same-UID state; the final artifact, manifest and Guest gates
+remain mandatory after a hit.
 
 ## Accepted PoC limitations
 

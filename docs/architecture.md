@@ -6,8 +6,9 @@ Pysolate proves that a programming Agent can submit normal Python while the Host
 
 Unless a paragraph says otherwise, the core Run path below is **Current**.
 Counterfactual branching, deterministic verification, prepared/COW execution,
-and unified execution profiles are marked **Experimental**. A complete Lab/Harness
-and UI are **Proposed**. See [research/lab-boundary.md](research/lab-boundary.md).
+and unified execution profiles are marked **Experimental**. The seeded workflow Harness
+and its sealed read-only Lab timeline are **Research-only**; a general Lab service remains
+**Proposed**. See [research/lab-boundary.md](research/lab-boundary.md).
 
 ## Run path
 
@@ -105,6 +106,22 @@ WASM-memory, or complete filesystem-operation visibility. The measurement and
 upgrade policy are in
 [research/runtime-observation.md](research/runtime-observation.md).
 
+### Workflow-boundary provenance
+
+**Experimental.** `pysolate.workflow-boundary-observation.v0` is a separate sealed,
+body-free relation over explicit workflow nodes and typed Host tool/WASI boundaries. It
+records model fixture, WASM and measured Host intervals; maps each logical request to one
+physical execution and producer; retains every coalesced/reused logical consumer; and
+records admitted or rejected preissue, declared-parallel, coalescing and retained-reuse
+decisions. It neither executes a decision nor grants authority. The Runtime mechanisms
+remain independently disableable and the all-off path performs ordinary fresh work.
+
+The prepared benchmark Harness may issue an exact necessarily-reached read early or run
+explicitly declared-independent nodes concurrently. It does not infer sibling independence
+from Python AST structure, spawn implicit tasks, migrate started work, or replay an
+ambiguous effect. See
+[research/workflow-boundary-observation-v0.md](research/workflow-boundary-observation-v0.md).
+
 ## Counterfactual branches
 
 **Experimental.** `pysolate.playback-branch.v1` identifies a protected parent
@@ -149,7 +166,8 @@ builds one coarse whole-Run region. Dynamic dispatch, unsupported control flow,
 unknown imports/calls, live observation, publication, and suspension are opaque
 barriers rather than optimization opportunities.
 
-A separate `ReusePass` may convert exactly one reusable region into the existing
+A separate default-off `ReusePass` may convert only the exact module-entry whole-Run
+plan into the existing
 Agent Function identity. Analyzer, analysis, Plan and region identities augment
 rather than replace source/artifact/profile/import/input/root/deterministic/output/
 project/privacy/policy plus the exact compatibility declaration all enter or
@@ -162,6 +180,15 @@ explicitly selected. A hit returns immutable result bytes and reports no physica
 execution; it does not replay or suppress an effect. See
 [content-addressed-agent-functions.md](content-addressed-agent-functions.md) and
 [evidence/semantic-reuse-observation.json](evidence/semantic-reuse-observation.json).
+
+Executable AST-region reuse is rejected: the verified 19-program census found 69
+candidates but zero statically materializable regions and zero materializable
+cross-program overlaps. The original Python program remains the sole execution authority;
+the overlay supplies occurrence, legality, rejection explanation and pre-execution
+placement facts only. Semantic placement replacement is also `no_go` for this corpus:
+zero safe precision gains and 19 regressions versus the current imports/requirements
+router. See [research/python-region-census-v0.md](research/python-region-census-v0.md)
+and [research/semantic-placement-census-v0.md](research/semantic-placement-census-v0.md).
 
 ## Research substrate
 

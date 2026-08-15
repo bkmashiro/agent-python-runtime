@@ -1,7 +1,7 @@
 # Observable workflow-boundary implementation map
 
-Status: **Track 0 live baseline; executable region reuse rejected**  
-Date: 2026-08-15  
+Status: **Implemented and evaluated; executable region reuse and semantic placement rejected**
+Date: 2026-08-15
 Baseline: `906016685ad75e1da261d094be52daa827f53829`
 
 ## Frozen vocabulary
@@ -87,3 +87,19 @@ broad Harness protocol change.
 Proceed to Track A, then define one new bounded canonical observation contract in Track B.
 Do not implement a new optimizer until the contract can represent existing mechanisms and
 the seeded workload exposes a measured gap.
+
+## Closeout mapping
+
+| Initial gap | Resolution |
+|---|---|
+| Canonical logical→physical record | `pysolate.workflow-boundary-observation.v0`; every physical-sharing consumer requires an admitted coalesced/reused decision |
+| Producer/consumer timeline | Sealed reports bind measured Host spans, producer and complete consumer reverse indexes |
+| Workflow identity bridge | Existing explicit `WorkflowID`/node/occurrence identity is used directly; no AST-derived identity or protocol widening |
+| Tool optimization gap | Prepared Harness admits only exact preissue, explicit independence, exact in-flight coalescing and exact retained reads; external writes remain denied |
+| Semantic placement unknown | Measured `no_go`: zero safe gains and 19 baseline regressions; current router retained |
+| Workstation build cache | Identity-bound layer plus exact-source final cache; bounded 2+2 keys and verified cold/warm evidence |
+| Seeded workload | 14 fixed-seed shuffled tasks, 25→23 physical reads, zero observable divergence |
+| Lab projection | Existing Lab extended with a sealed read-only paired timeline and no execution controls |
+
+The final quantitative and claim boundary is
+[`observable-workflow-boundary-evaluation-v0.md`](observable-workflow-boundary-evaluation-v0.md).

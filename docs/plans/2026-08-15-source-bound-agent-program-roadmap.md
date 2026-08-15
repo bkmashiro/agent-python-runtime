@@ -330,6 +330,8 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 1 — Source-Bound Compiler Pass and Provenance Foundation
 
+**Extracted execution plan:** [2026-08-15-source-bound-compiler-pass-provenance-megagoal.md](2026-08-15-source-bound-compiler-pass-provenance-megagoal.md)
+
 **Purpose:** Make the existing semantic infrastructure explicitly pass-oriented and bind static source occurrences to dynamic boundary occurrences without creating an executable IR.
 
 **Primary areas:**

@@ -2,6 +2,9 @@ package workflowbench_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -84,6 +87,28 @@ func TestCampaignEvidenceRejectsMissingAndForgedPhysicalEvents(t *testing.T) {
 	if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
 		t.Fatalf("forged event error=%v", err)
 	}
+	corrupt := evidence.Clone()
+	corrupt.Rows[0].Result = json.RawMessage(`{"normalized":[9]}`)
+	resealCampaignEvidence(&corrupt)
+	if err := workflowbench.ValidateCampaignEvidence(manifest, corrupt); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+		t.Fatalf("corrupt result error=%v", err)
+	}
+	mismatched := evidence.Clone()
+	mismatched.Rows[0].PhysicalExecutionID = "physical-forged"
+	resealCampaignEvidence(&mismatched)
+	if err := workflowbench.ValidateCampaignEvidence(manifest, mismatched); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+		t.Fatalf("mismatched physical identity error=%v", err)
+	}
+}
+
+func resealCampaignEvidence(evidence *workflowbench.CampaignEvidence) {
+	evidence.SealSHA256 = ""
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		panic(err)
+	}
+	digest := sha256.Sum256(encoded)
+	evidence.SealSHA256 = "sha256:" + hex.EncodeToString(digest[:])
 }
 
 type campaignAdapter struct {

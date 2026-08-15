@@ -96,16 +96,17 @@ func (recorder *campaignRecorder) emit(programID, eventType, reason, physicalID 
 }
 
 type physicalGate struct {
-	mu      sync.Mutex
-	cond    *sync.Cond
-	limit   uint32
-	active  uint32
-	next    uint64
-	serving uint64
+	mu        sync.Mutex
+	cond      *sync.Cond
+	limit     uint32
+	active    uint32
+	next      uint64
+	serving   uint64
+	cancelled map[uint64]struct{}
 }
 
 func newPhysicalGate(limit uint32) *physicalGate {
-	gate := &physicalGate{limit: limit}
+	gate := &physicalGate{limit: limit, cancelled: make(map[uint64]struct{})}
 	gate.cond = sync.NewCond(&gate.mu)
 	return gate
 }
@@ -114,10 +115,17 @@ func (gate *physicalGate) acquire(ctx context.Context) (func(), error) {
 	gate.mu.Lock()
 	ticket := gate.next
 	gate.next++
-	for ticket != gate.serving || gate.active >= gate.limit {
+	for {
 		if err := ctx.Err(); err != nil {
+			gate.cancelled[ticket] = struct{}{}
+			gate.advanceServing()
+			gate.cond.Broadcast()
 			gate.mu.Unlock()
 			return nil, err
+		}
+		gate.advanceServing()
+		if ticket == gate.serving && gate.active < gate.limit {
+			break
 		}
 		gate.cond.Wait()
 	}
@@ -128,9 +136,20 @@ func (gate *physicalGate) acquire(ctx context.Context) (func(), error) {
 	return func() {
 		gate.mu.Lock()
 		gate.active--
+		gate.advanceServing()
 		gate.cond.Broadcast()
 		gate.mu.Unlock()
 	}, nil
+}
+
+func (gate *physicalGate) advanceServing() {
+	for {
+		if _, cancelled := gate.cancelled[gate.serving]; !cancelled {
+			return
+		}
+		delete(gate.cancelled, gate.serving)
+		gate.serving++
+	}
 }
 
 type CampaignRuntime struct {
@@ -267,6 +286,7 @@ func ValidateCampaignEvidence(manifest CampaignManifest, evidence CampaignEviden
 		return ErrInvalidCampaignEvidence
 	}
 	physicalStarts := uint32(0)
+	physicalIdentities := make(map[string]struct{})
 	terminal := make(map[string]bool, len(manifest.Programs))
 	var lastNS int64
 	for index, event := range evidence.Events {
@@ -279,6 +299,7 @@ func ValidateCampaignEvidence(manifest CampaignManifest, evidence CampaignEviden
 				return ErrInvalidCampaignEvidence
 			}
 			physicalStarts++
+			physicalIdentities[event.PhysicalExecutionID] = struct{}{}
 		}
 		if event.Type == "logical.terminal" {
 			terminal[event.ProgramID] = true
@@ -293,7 +314,8 @@ func ValidateCampaignEvidence(manifest CampaignManifest, evidence CampaignEviden
 			return ErrInvalidCampaignEvidence
 		}
 		if program.Expected.Admission == "admit" {
-			if row.PhysicalExecutionID == "" || !bytes.Equal(row.Result, program.Expected.Oracle) {
+			_, physicalExists := physicalIdentities[row.PhysicalExecutionID]
+			if row.PhysicalExecutionID == "" || !physicalExists || !bytes.Equal(row.Result, program.Expected.Oracle) {
 				return ErrInvalidCampaignEvidence
 			}
 		} else if row.PhysicalExecutionID != "" || len(row.Result) != 0 || row.Sharing != "no_execution" {

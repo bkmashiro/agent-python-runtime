@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Active — Tracks A/B verified; Track C exact sharing next
+**Status:** Active — Tracks A–D verified; Track E bounded campaign driver next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -378,17 +378,17 @@ or implicit continuation restore, record no-go and stop before Track C.
 
 ### Track C — Authority bifurcation and exact verifier sharing
 
-- [ ] Build the smallest composition test in which one admitted physical producer serves
+- [x] Build the smallest composition test in which one admitted physical producer serves
   multiple logical consumers with different child Plan and workspace identities.
-- [ ] Prove consumers get fresh Runs, independent grants and independent private branches.
-- [ ] Demonstrate cancellation/failure of one consumer cannot cancel, publish for or
+- [x] Prove consumers get fresh Runs, independent grants and independent private branches.
+- [x] Demonstrate cancellation/failure of one consumer cannot cancel, publish for or
   widen siblings.
-- [ ] Bind exact verification reuse to immutable workspace root plus verifier source,
+- [x] Bind exact verification reuse to immutable workspace root plus verifier source,
   artifact/toolchain, profile, environment contract, privacy and policy identities.
-- [ ] Share verification only for exact root identity; byte-distinct roots run separate
+- [x] Share verification only for exact root identity; byte-distinct roots run separate
   physical verifiers.
-- [ ] Route all logical-to-physical relations through existing observation contracts.
-- [ ] Measure physical producer/verifier counts and overhead without claiming a speedup.
+- [x] Route all logical-to-physical relations through existing observation contracts.
+- [x] Measure physical producer/verifier counts and overhead without claiming a speedup.
 
 **Gate:** a shared physical producer never carries consumer authority; every consumer and
 workspace remains separately attributable.
@@ -399,16 +399,16 @@ and continue to the campaign with only independently qualified mechanisms.
 
 ### Track D — Versioned 20-program campaign contract
 
-- [ ] Extend `research/workflowbench` models rather than creating another benchmark
+- [x] Extend `research/workflowbench` models rather than creating another benchmark
   framework.
-- [ ] Materialize exactly 20 Python sources matching Families A–E.
-- [ ] Define canonical manifest validation for release offset, source/input/profile,
+- [x] Materialize exactly 20 Python sources matching Families A–E.
+- [x] Define canonical manifest validation for release offset, source/input/profile,
   Plan/grant/privacy/workspace identity, dependencies, oracle, expected admission and
   expected sharing/rejection class.
-- [ ] Reject duplicate IDs, non-monotonic or out-of-range releases, cycles, unknown
+- [x] Reject duplicate IDs, non-monotonic or out-of-range releases, cycles, unknown
   dependencies, body/identity mismatch and missing oracle/prohibited-claim fields.
-- [ ] Generate fixtures deterministically and verify two generations byte-for-byte.
-- [ ] Add a readable corpus table documenting what each program tests and what it cannot
+- [x] Generate fixtures deterministically and verify two generations byte-for-byte.
+- [x] Add a readable corpus table documenting what each program tests and what it cannot
   prove.
 
 **Gate:** exactly 20 comprehensible programs; every row has a deterministic semantic
@@ -629,9 +629,9 @@ claims remain valid.
 
 ## Current execution pointer
 
-**Track C:** compose the existing authority-aware subagent, `agentfunction`, immutable
-workspace roots and observation identities into one bounded authority-bifurcation and
-exact-verifier-sharing test. Do not add a sharing package or semantic root matching.
+**Track E:** add an experiment-only FIFO release driver and sealed evidence validator to
+the existing `research/workflowbench` package. It must schedule the fixed Track D manifest,
+not become a Runtime scheduler or infer events from a future UI.
 
 ## Completion log
 
@@ -653,6 +653,16 @@ exact-verifier-sharing test. Do not add a sharing package or semantic root match
   cross-privacy authority before Guest creation; valid authority changes invalidate only
   observations and descendants, retain independent compute, and mint a fresh physical
   execution identity. Real-Guest integration covers both accepted and revoked resume.
+- 2026-08-15: Track C composed existing single-flight, authority-aware subagent and
+  immutable-workspace mechanisms without a new sharing subsystem. A real-Guest run from
+  clean source `342fd06fc31c1dd4d977ff2c68b60960a48cee33` passed: two logical producer
+  requests mapped to one physical producer; two independently planned child Guests used
+  private branches; exact verifier requests shared one physical verifier; a byte-distinct
+  root ran another. This is correctness/attribution evidence, not a speedup claim.
+- 2026-08-15: Track D added the canonical, byte-deterministic 20-program manifest inside
+  `research/workflowbench`, actual Python sources, canonical Plan/grant identities,
+  release/dependency/oracle/admission controls, exact and near-match pairs, per-family
+  prohibited claims, syntax checks and the readable v1 corpus protocol.
 
 ## Short prompt to start this Mega-Goal
 

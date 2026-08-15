@@ -16,6 +16,48 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
+func TestBothSurfaceAdmitsDirectAndProgrammaticCallsThroughOneRealGuestBroker(t *testing.T) {
+	wasm, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Uint32
+	plan := programmaticPlan(t, nil, &calls, 2)
+	presentation, err := plan.Present(capability.ProgramSurfaceBoth, "both-parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "both-run", Plan: plan, ProgrammaticParentCallID: "both-parent", AllowDirectCalls: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct, err := broker.Call(context.Background(), []byte(`{"call_id":"direct-1","capability":"tools.increment","arguments":{"value":5}}`))
+	if err != nil || !strings.Contains(string(direct), `"status":"ok"`) {
+		t.Fatalf("direct=%s err=%v", direct, err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ProgramSurface = runtimeconfig.ProgramSurfaceBoth
+	config.Mechanisms.ProgrammaticToolCalling = true
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) { return broker, nil }}).New(context.Background(), wasm, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request := []byte(`{"run_id":"both","code":"result = tools.increment(8)","inputs":{}}`)
+	payload, err := runner.Run(context.Background(), request, presentation.PythonPrelude)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := decodeRealGuestResponse(t, request, payload)
+	if string(response.Result) != `9` {
+		t.Fatalf("response=%+v payload=%s", response, payload)
+	}
+	receipts := broker.SnapshotReceipts()
+	if len(receipts) != 2 || receipts[0].ParentCallID != "" || receipts[1].ParentCallID != "both-parent" || receipts[1].CallID != "both-parent:program:1" {
+		t.Fatalf("receipts=%#v", receipts)
+	}
+}
+
 func TestProgrammaticSurfaceUsesSameBrokerForOrderedRealGuestCalls(t *testing.T) {
 	wasm, err := os.ReadFile(guestArtifact(t))
 	if err != nil {

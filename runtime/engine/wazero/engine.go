@@ -720,7 +720,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		expectsProgrammaticParent := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceProgrammatic || engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
 		if broker.ProgrammaticParentBound() != expectsProgrammaticParent {
-			return nil, errors.New("capability Broker programmatic parent mode does not match Run configuration")
+			return nil, errors.New("capability Broker programmatic parent binding does not match Run configuration")
+		}
+		expectsDirectAlongsideProgrammatic := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
+		if broker.DirectCallsAllowedWithProgrammaticParent() != expectsDirectAlongsideProgrammatic {
+			return nil, errors.New("capability Broker direct/programmatic admission does not match Run configuration")
 		}
 		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
 			return nil, ErrExecutionIdentityMismatch

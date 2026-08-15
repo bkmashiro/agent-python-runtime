@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -29,8 +30,11 @@ type Config struct {
 	// ProgrammaticParentCallID binds every admitted call to one program
 	// execution. Empty selects the ordinary direct-call path.
 	ProgrammaticParentCallID string
-	ApprovalSuspension       bool
-	ApprovalController       *approval.Controller
+	// AllowDirectCalls selects the `both` presentation. The `:program:`
+	// namespace remains reserved for exact parent-bound children.
+	AllowDirectCalls   bool
+	ApprovalSuspension bool
+	ApprovalController *approval.Controller
 }
 
 type StagedObservationClaimer interface {
@@ -39,16 +43,17 @@ type StagedObservationClaimer interface {
 }
 
 type Broker struct {
-	config           Config
-	mu               sync.Mutex
-	calls            uint32
-	seen             map[string]struct{}
-	receipts         []receipt.Receipt
-	transcript       []TranscriptEntry
-	playbackEntries  map[uint32]TranscriptEntry
-	playbackConsumed map[uint32]bool
-	playbackFailed   bool
-	branch           *branchState
+	config            Config
+	mu                sync.Mutex
+	calls             uint32
+	programmaticCalls uint32
+	seen              map[string]struct{}
+	receipts          []receipt.Receipt
+	transcript        []TranscriptEntry
+	playbackEntries   map[uint32]TranscriptEntry
+	playbackConsumed  map[uint32]bool
+	playbackFailed    bool
+	branch            *branchState
 }
 
 type request struct {
@@ -56,6 +61,7 @@ type request struct {
 	Capability        string          `json:"capability"`
 	Arguments         json.RawMessage `json:"arguments"`
 	ApprovalRequestID string          `json:"-"`
+	ParentCallID      string          `json:"-"`
 }
 
 type response struct {
@@ -75,6 +81,7 @@ func NewBroker(config Config) (*Broker, error) {
 		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) ||
 		(config.StagedClaimer != nil) != config.SemanticPreDispatch ||
 		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) ||
+		(config.AllowDirectCalls && config.ProgrammaticParentCallID == "") ||
 		(config.ApprovalController != nil) != config.ApprovalSuspension || (config.Plan.RequiresApproval() && !config.ApprovalSuspension) {
 		return nil, ErrInvalidBroker
 	}
@@ -135,9 +142,14 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	}
 
 	broker.mu.Lock()
+	programmaticCall := false
 	if broker.config.ProgrammaticParentCallID != "" {
-		expected := fmt.Sprintf("%s:program:%d", broker.config.ProgrammaticParentCallID, broker.calls+1)
-		if call.CallID != expected {
+		expected := fmt.Sprintf("%s:program:%d", broker.config.ProgrammaticParentCallID, broker.programmaticCalls+1)
+		reservedProgrammaticID := strings.Contains(call.CallID, ":program:")
+		switch {
+		case call.CallID == expected:
+			programmaticCall = true
+		case !broker.config.AllowDirectCalls || reservedProgrammaticID:
 			broker.mu.Unlock()
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "programmatic_call_identity_mismatch", Message: "programmatic child call identity does not match its parent and sequence"}})
 		}
@@ -153,6 +165,10 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "duplicate_call_id", Message: "call_id must be unique"}})
 	}
 	broker.seen[call.CallID] = struct{}{}
+	if programmaticCall {
+		broker.programmaticCalls++
+		call.ParentCallID = broker.config.ProgrammaticParentCallID
+	}
 	operation := broker.calls
 	broker.calls++
 	broker.mu.Unlock()
@@ -269,7 +285,7 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	if registered.spec.Approval != nil {
 		permit, approvalErr := broker.config.ApprovalController.Authorize(ctx, approval.Proposal{
 			RunID: broker.config.RunIdentity, PlanSHA256: broker.config.Plan.Identity(), CallID: call.CallID,
-			ParentCallID: broker.config.ProgrammaticParentCallID, Capability: call.Capability,
+			ParentCallID: call.ParentCallID, Capability: call.Capability,
 			Arguments: append([]byte(nil), arguments...), Lease: time.Duration(registered.spec.Approval.LeaseMilliseconds) * time.Millisecond,
 		})
 		call.ApprovalRequestID = permit.RequestID
@@ -341,7 +357,7 @@ func (broker *Broker) completeApproval(requestID, outcome string) bool {
 }
 
 func (broker *Broker) record(call request, operation uint32, outcome string, result []byte) {
-	created := receipt.NewAuthorized(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, broker.config.ProgrammaticParentCallID, call.ApprovalRequestID, call.Capability, operation, string(call.Arguments), outcome, result)
+	created := receipt.NewAuthorized(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, call.ParentCallID, call.ApprovalRequestID, call.Capability, operation, string(call.Arguments), outcome, result)
 	broker.mu.Lock()
 	broker.receipts = append(broker.receipts, created)
 	broker.mu.Unlock()
@@ -404,6 +420,10 @@ func (broker *Broker) ApprovalSuspensionEnabled() bool {
 
 func (broker *Broker) ProgrammaticParentBound() bool {
 	return broker != nil && broker.config.ProgrammaticParentCallID != ""
+}
+
+func (broker *Broker) DirectCallsAllowedWithProgrammaticParent() bool {
+	return broker != nil && broker.config.AllowDirectCalls
 }
 
 func (broker *Broker) CapabilityPlanSHA256() string {

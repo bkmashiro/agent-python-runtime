@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strings"
 	"unicode/utf8"
 
 	capabilityreceipt "github.com/bkmashiro/agent-python-runtime/runtime/receipt"
@@ -347,6 +348,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 		"operation_index": {}, "request_sha256": {}, "response_sha256": {}, "outcome": {},
 	}
 	required := []string{"receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "request_sha256", "outcome"}
+	programmaticSequences := make(map[string]uint64)
 	for _, item := range items {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
@@ -372,6 +374,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 		if err := decoder.Decode(&callReceipt); err != nil {
 			return errors.New("run response receipt has invalid field types")
 		}
+		expectedProgrammaticSequence := programmaticSequences[callReceipt.ParentCallID] + 1
 		if !boundedString(callReceipt.ReceiptID, 1, 160) || !boundedString(callReceipt.RunID, 1, 128) ||
 			!boundedString(callReceipt.Capability, 1, 128) || !validPrefixedSHA256(callReceipt.CapabilityPlanSHA256) ||
 			(present(fields, "call_id") && !validReceiptCallIdentity(callReceipt.CallID, 128)) ||
@@ -379,7 +382,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 			(present(fields, "approval_request_id") && !validApprovalRequestID(callReceipt.ApprovalRequestID)) ||
 			(present(fields, "request_sha256") && !validBareSHA256(callReceipt.RequestSHA256)) ||
 			(present(fields, "response_sha256") && !validBareSHA256(callReceipt.ResponseSHA256)) ||
-			!validProgrammaticReceiptRelation(fields, callReceipt) ||
+			!validProgrammaticReceiptRelation(fields, callReceipt, expectedProgrammaticSequence) ||
 			!validOperationIndex(callReceipt.OperationIndex) || !validReceiptOutcome(callReceipt.Outcome) {
 			return errors.New("run response receipt has invalid field values")
 		}
@@ -394,6 +397,9 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 			ResponseSHA256: callReceipt.ResponseSHA256, Outcome: callReceipt.Outcome,
 		}) {
 			return errors.New("run response receipt identity does not match its bound operation")
+		}
+		if present(fields, "parent_call_id") {
+			programmaticSequences[callReceipt.ParentCallID] = expectedProgrammaticSequence
 		}
 	}
 	return nil
@@ -423,20 +429,16 @@ func boundedString(value string, minimum, maximum int) bool {
 	return length >= minimum && length <= maximum
 }
 
-func validProgrammaticReceiptRelation(fields map[string]json.RawMessage, receipt capabilityReceiptDocument) bool {
+func validProgrammaticReceiptRelation(fields map[string]json.RawMessage, receipt capabilityReceiptDocument, expectedSequence uint64) bool {
 	_, hasParent := fields["parent_call_id"]
 	_, hasCall := fields["call_id"]
 	if !hasParent {
-		return true
+		return !hasCall || !strings.Contains(receipt.CallID, ":program:")
 	}
-	if !hasCall || !validOperationIndex(receipt.OperationIndex) {
+	if !hasCall {
 		return false
 	}
-	index, ok := new(big.Int).SetString(receipt.OperationIndex.String(), 10)
-	if !ok || !index.IsUint64() {
-		return false
-	}
-	return receipt.CallID == fmt.Sprintf("%s:program:%d", receipt.ParentCallID, index.Uint64()+1)
+	return receipt.CallID == fmt.Sprintf("%s:program:%d", receipt.ParentCallID, expectedSequence)
 }
 
 func validReceiptCallIdentity(value string, limit int) bool {

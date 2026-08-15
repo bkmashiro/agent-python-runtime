@@ -248,7 +248,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			return 2
 		}
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
-			brokerConfig := capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan, ProgrammaticParentCallID: programmaticParentCallID}
+			brokerConfig := capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan, ProgrammaticParentCallID: programmaticParentCallID, AllowDirectCalls: runConfig.ProgramSurface == runtimeconfig.ProgramSurfaceBoth}
 			if branchManifest != nil {
 				prefix := append([]capability.TranscriptEntry(nil), playbackBundle.Entries[:branchManifest.ForkOperation]...)
 				brokerConfig.Branch = &capability.BranchConfig{

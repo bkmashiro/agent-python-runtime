@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -131,6 +132,41 @@ func TestBrokerFailsClosedWhenConfiguredStageRejectsDynamicClaim(t *testing.T) {
 	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"workspace.read_text","arguments":{"path":"other.txt"}}`))
 	if err != nil || liveCalls.Load() != 0 || !containsCode(response, "staged_observation_mismatch") {
 		t.Fatalf("response=%s live=%d err=%v", response, liveCalls.Load(), err)
+	}
+}
+
+func TestBothPresentationSeparatesDirectAndProgrammaticSequences(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"ok"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent", AllowDirectCalls: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, callID := range []string{"direct-1", "parent:program:1"} {
+		response, err := broker.Call(context.Background(), []byte(`{"call_id":"`+callID+`","capability":"workspace.read_text","arguments":{"path":"x"}}`))
+		if err != nil || !strings.Contains(string(response), `"status":"ok"`) {
+			t.Fatalf("call=%s response=%s err=%v", callID, response, err)
+		}
+	}
+	nearMatch, err := broker.Call(context.Background(), []byte(`{"call_id":"other:program:1","capability":"workspace.read_text","arguments":{"path":"x"}}`))
+	if err != nil || !strings.Contains(string(nearMatch), "programmatic_call_identity_mismatch") {
+		t.Fatalf("near-match response=%s err=%v", nearMatch, err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"parent:program:2","capability":"workspace.read_text","arguments":{"path":"x"}}`))
+	if err != nil || !strings.Contains(string(response), `"status":"ok"`) {
+		t.Fatalf("second child response=%s err=%v", response, err)
+	}
+	receipts := broker.SnapshotReceipts()
+	if len(receipts) != 3 || receipts[0].ParentCallID != "" || receipts[1].ParentCallID != "parent" || receipts[2].ParentCallID != "parent" {
+		t.Fatalf("receipts=%#v", receipts)
 	}
 }
 

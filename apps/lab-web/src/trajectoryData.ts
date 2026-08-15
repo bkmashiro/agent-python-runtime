@@ -2,7 +2,7 @@ export const TRAJECTORY_SCHEMA = 'pysolate.agent-trajectory.v0' as const;
 
 export type EventType =
   | 'session.start' | 'session.end' | 'turn.start' | 'turn.end' | 'context.inject' | 'user.message'
-  | 'model.request' | 'assistant.reasoning' | 'assistant.output' | 'tool.call' | 'tool.result'
+  | 'request.header' | 'model.request' | 'assistant.chunk' | 'assistant.reasoning' | 'assistant.output' | 'tool.call' | 'tool.result'
   | 'subagent.dispatch' | 'subagent.result' | 'runtime.event' | 'workspace.change';
 
 export type EventSource =
@@ -26,6 +26,7 @@ export interface TrajectoryEvent {
   step_id?: string;
   model_visible: boolean;
   context_event_ids?: string[];
+  source_event_ids?: string[];
   body?: ContentRef;
   body_text?: string;
   content_type?: string;
@@ -80,14 +81,14 @@ const digestRE = /^sha256:[0-9a-f]{64}$/;
 const eventIDRE = /^event-[0-9a-f]{16}$/;
 const commitRE = /^[0-9a-f]{40}$/;
 const sources = new Set<EventSource>(['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace']);
-const types = new Set<EventType>(['session.start', 'session.end', 'turn.start', 'turn.end', 'context.inject', 'user.message', 'model.request', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'subagent.dispatch', 'subagent.result', 'runtime.event', 'workspace.change']);
-const bodyRequired = new Set<EventType>(['context.inject', 'user.message', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'runtime.event', 'workspace.change']);
+const types = new Set<EventType>(['session.start', 'session.end', 'turn.start', 'turn.end', 'context.inject', 'user.message', 'request.header', 'model.request', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'subagent.dispatch', 'subagent.result', 'runtime.event', 'workspace.change']);
+const bodyRequired = new Set<EventType>(['context.inject', 'user.message', 'request.header', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'runtime.event', 'workspace.change']);
 
 const topKeys = ['schema_version', 'privacy', 'session', 'events', 'seal_sha256'] as const;
 const sessionKeys = ['schema_version', 'session_id', 'source_commit', 'header_sha256'] as const;
 const eventKeys = [
   'sequence', 'event_id', 'previous_sha256', 'sha256', 'occurred_millis', 'type', 'source', 'actor_id',
-  'parent_event_id', 'turn_id', 'step_id', 'model_visible', 'context_event_ids', 'body', 'body_text', 'content_type',
+  'parent_event_id', 'turn_id', 'step_id', 'model_visible', 'context_event_ids', 'source_event_ids', 'body', 'body_text', 'content_type',
   'provider', 'model', 'finish_reason', 'tool_call_id', 'tool_name', 'child_session_id', 'run_id',
   'logical_request_id', 'physical_execution_id', 'span_id', 'status', 'duration_nanos', 'usage',
 ] as const;
@@ -132,6 +133,14 @@ export async function validateTrajectory(raw: TrajectoryExport): Promise<Traject
     assert(uint(event.occurred_millis) && (index === 0 || event.occurred_millis >= raw.events[index - 1].occurred_millis), 'invalid trajectory time');
     assert(types.has(event.type) && sources.has(event.source) && typeof event.model_visible === 'boolean', 'invalid trajectory classification');
     if (event.parent_event_id) assert(prior.has(event.parent_event_id), 'trajectory parent is not prior');
+    if (event.source_event_ids !== undefined) {
+      assert(Array.isArray(event.source_event_ids) && event.source_event_ids.length > 0, 'invalid source-event citations');
+      const seen = new Set<string>();
+      for (const id of event.source_event_ids) {
+        assert(prior.has(id) && !seen.has(id), 'source-event citation is not unique and prior');
+        seen.add(id);
+      }
+    }
     if (event.body !== undefined) {
       exactKeys(event.body, bodyKeys, `event[${index}].body`);
       assert(typeof event.body.kind === 'string' && event.body.kind.length > 0 && digestRE.test(event.body.sha256), 'invalid trajectory body reference');
@@ -156,9 +165,13 @@ export async function validateTrajectory(raw: TrajectoryExport): Promise<Traject
       assert(typeof event.tool_call_id === 'string' && /^call-[0-9a-z-]{8,128}$/.test(event.tool_call_id) && typeof event.tool_name === 'string' && event.tool_name.length > 0 && !calls.has(event.tool_call_id), 'invalid or duplicate tool call');
       calls.set(event.tool_call_id, event);
     }
+    if (event.type === 'assistant.reasoning' || event.type === 'assistant.output' || event.type === 'tool.call') {
+      assert(event.source_event_ids !== undefined && event.source_event_ids.length > 0 && event.source_event_ids.every((id) => prior.get(id)?.type === 'assistant.chunk'), 'assembled model event has invalid raw chunk citations');
+    }
     if (event.type === 'tool.result' || event.type === 'runtime.event' || event.type === 'workspace.change') {
       const call = event.tool_call_id ? calls.get(event.tool_call_id) : undefined;
       assert(call !== undefined && (!event.tool_name || event.tool_name === call.tool_name), 'tool-linked trajectory event is orphaned');
+      if (event.type === 'tool.result') assert(event.source_event_ids?.includes(call.event_id), 'tool result does not cite its call');
     }
     if (event.type === 'runtime.event') assert(Boolean(event.tool_call_id && event.run_id) && Boolean(event.logical_request_id) === Boolean(event.physical_execution_id), 'runtime trajectory identity is incomplete');
     prior.set(event.event_id, event);

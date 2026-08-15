@@ -17,7 +17,9 @@ const sourceLabel: Record<EventSource, string> = {
 };
 
 function eventTitle(event: TrajectoryEvent): string {
+  if (event.type === 'request.header') return 'Request header';
   if (event.type === 'model.request') return `Model request · ${event.step_id?.replace('step-', '') ?? event.sequence}`;
+  if (event.type === 'assistant.chunk') return 'Raw assistant chunk';
   if (event.type === 'tool.call') return `${event.tool_name ?? 'Tool'} tool call`;
   if (event.type === 'tool.result') return `${event.tool_name ?? 'Tool'} result`;
   if (event.type === 'assistant.reasoning') return 'Assistant reasoning';
@@ -123,6 +125,7 @@ function Inspector({ trajectory, event, onSelect }: { trajectory: TrajectoryExpo
             <DetailField label="Tool call" value={event.tool_call_id} />
             <DetailField label="Tool" value={event.tool_name} />
             <DetailField label="Child session" value={event.child_session_id} />
+            <DetailField label="Source events" value={event.source_event_ids?.join(', ')} />
             <DetailField label="Body identity" value={shortDigest(event.body?.sha256)} />
             <DetailField label="Event seal" value={shortDigest(event.sha256)} />
           </dl>

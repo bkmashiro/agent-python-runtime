@@ -12,6 +12,7 @@ scripted full-source fixture exercises memory, skill and subagent records. The i
 exposes:
 
 - system, developer, user, memory and skill context;
+- effective request headers plus every raw provider chunk and its assembled-event citations;
 - each exact ordered model-request context;
 - provider-visible reasoning and assistant output chunks;
 - tool calls and complete arguments/results;

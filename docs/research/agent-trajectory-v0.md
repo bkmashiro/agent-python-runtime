@@ -11,7 +11,10 @@ Trajectory surface:
 
 The reference was inspected at immutable upstream commit
 `47f943859bef60e4160492346772ded9b24f765a`. Pysolate adopts the append-only session and
-exact model-history idea, not DeepSeek's plugin kernel or wire compatibility.
+exact model-history idea, request headers, raw assistant chunks and source-event citations;
+not DeepSeek's plugin kernel, `surfaceOp` reducer or wire compatibility. DeepSeek's upstream
+session file is sequence-validated but is not a cryptographic hash chain; Pysolate's private
+development log deliberately adds hash chaining and a sealed materialized export.
 
 A trajectory is the authoritative development record, not a projection reconstructed from
 Runtime metrics. Model requests, future resume/fork/replay and the UI must consume one
@@ -32,6 +35,7 @@ Every event contains:
 - source, type, actor, turn, step and parent identity;
 - optional complete private body reference;
 - exact model-context event IDs for `model.request`;
+- exact raw-source event IDs for assembled reasoning/output/tool calls and tool results;
 - tool call, child session, Run, logical request, physical execution and span links;
 - provider/model/status/finish/token/timing metadata when observed.
 
@@ -43,8 +47,8 @@ can detect every possible secret in arbitrary bytes.
 ## Event vocabulary
 
 - lifecycle: `session.start`, `session.end`, `turn.start`, `turn.end`;
-- model input: `context.inject`, `user.message`, `model.request`;
-- model output: `assistant.reasoning`, `assistant.output`;
+- model input: `context.inject`, `user.message`, `request.header`, `model.request`;
+- model output: raw `assistant.chunk`, assembled `assistant.reasoning`, `assistant.output`;
 - tools: `tool.call`, `tool.result`;
 - agents: `subagent.dispatch`, `subagent.result`;
 - execution: `runtime.event`, `workspace.change`.
@@ -65,6 +69,12 @@ Validation requires every referenced event to:
 The Lab shows these bodies under **Exact model context**. It does not infer context by taking
 all preceding events. This permits truthful context compaction and injection while retaining
 what was omitted and why elsewhere in the trajectory.
+
+`request.header` records the effective request-level system/tool-catalog/configuration body.
+Every raw provider stream item is appended as `assistant.chunk` before the assembled
+reasoning/output/tool event. `source_event_ids` must cite only earlier chunks, and every tool
+result must cite its matching tool-call event. The inspector therefore exposes both raw
+provider order and the exact assembled object used by later history.
 
 Provider-visible reasoning or reasoning summaries are recorded as
 `assistant.reasoning`. Provider-internal chain-of-thought that was never returned remains

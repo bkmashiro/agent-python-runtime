@@ -3,9 +3,12 @@ import { expect, test } from '@playwright/test';
 test('opens the reset balanced-order real-Guest experiment by default', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('REAL GUEST EXPERIMENT')).toBeVisible();
-  await expect(page.getByTestId('event-count')).toHaveText('198 events');
+  await expect(page.getByTestId('event-count')).toHaveText('243 events');
   await expect(page.getByLabel('Trajectory session')).toHaveValue('workflow-experiment-v1');
+  await page.getByRole('button', { name: 'Raw assistant chunk' }).first().click();
+  await expect(page.getByRole('complementary', { name: 'Event inspector' })).toContainText('reasoning-delta');
   await page.getByRole('button', { name: /workflowbench.execute_pair tool call/i }).first().click();
+  await expect(page.getByRole('complementary', { name: 'Event inspector' })).toContainText('Source events');
   await expect(page.getByRole('region', { name: 'Linked execution' })).toContainText('runtime.event');
   await page.getByRole('button', { name: 'runtime', exact: true }).click();
   await expect(page.getByTestId('filtered-count')).toHaveText('76 shown');
@@ -16,7 +19,7 @@ test('inspects exact model context and every trajectory source', async ({ page }
   await page.getByLabel('Trajectory session').selectOption('scripted-development');
   await expect(page.getByRole('heading', { name: 'Trajectory', exact: true })).toBeVisible();
   await expect(page.getByText('SCRIPTED DEVELOPMENT FIXTURE')).toBeVisible();
-  await expect(page.getByTestId('event-count')).toHaveText(/22 events/);
+  await expect(page.getByTestId('event-count')).toHaveText(/28 events/);
 
   await page.getByRole('button', { name: /model request.*0002/i }).click();
   const context = page.getByRole('region', { name: 'Exact model context' });

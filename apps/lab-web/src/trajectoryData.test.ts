@@ -18,7 +18,7 @@ describe('private development trajectory', () => {
   it('loads one append-only session containing every inspectable source', async () => {
     const value = await validateTrajectory(await fixture());
     expect(value.privacy).toBe('private');
-    expect(value.events.length).toBeGreaterThanOrEqual(18);
+    expect(value.events).toHaveLength(28);
     expect(new Set(value.events.map((event) => event.source))).toEqual(expect.objectContaining(new Set(['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace'])));
     expect(value.events.at(-1)?.type).toBe('session.end');
   });
@@ -26,9 +26,10 @@ describe('private development trajectory', () => {
   it('validates the reset real-Guest experiment trajectory with CPU accounting', async () => {
     const raw = JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/experiment.json'), 'utf8')) as TrajectoryExport;
     const value = await validateTrajectory(raw);
-    expect(value.events).toHaveLength(198);
+    expect(value.events).toHaveLength(243);
     expect(value.events.filter((event) => event.type === 'tool.call')).toHaveLength(14);
     expect(value.events.filter((event) => event.type === 'runtime.event')).toHaveLength(76);
+    expect(value.events.filter((event) => event.type === 'assistant.chunk')).toHaveLength(44);
     expect(value.events.at(-3)?.body_text).toContain('Process CPU: 30782849000 ns baseline, 30802806000 ns optimized');
   });
 
@@ -36,9 +37,9 @@ describe('private development trajectory', () => {
     const value = await validateTrajectory(await fixture());
     const requests = value.events.filter((event) => event.type === 'model.request');
     expect(requests).toHaveLength(2);
-    expect(modelContext(value, requests[0].event_id).map((event) => event.source)).toEqual(['system', 'developer', 'memory', 'skill', 'user']);
+    expect(modelContext(value, requests[0].event_id).map((event) => event.source)).toEqual(['harness', 'system', 'developer', 'memory', 'skill', 'user']);
     expect(modelContext(value, requests[1].event_id).map((event) => event.type)).toEqual([
-      'context.inject', 'context.inject', 'context.inject', 'context.inject', 'user.message',
+      'request.header', 'context.inject', 'context.inject', 'context.inject', 'context.inject', 'user.message',
       'assistant.output', 'tool.call', 'tool.result', 'subagent.result',
     ]);
   });
@@ -65,6 +66,11 @@ describe('private development trajectory', () => {
     const body = await fixture();
     delete body.events.find((event) => event.type === 'tool.result')!.body_text;
     await expect(validateTrajectory(body)).rejects.toThrow(/materialized body|export seal/);
+
+    const citations = await fixture();
+    const header = citations.events.find((event) => event.type === 'request.header')!;
+    citations.events.find((event) => event.type === 'assistant.output')!.source_event_ids = [header.event_id];
+    await expect(validateTrajectory(citations)).rejects.toThrow(/chunk citations|export seal/);
 
     const unknown = await fixture() as TrajectoryExport & { secret?: string };
     unknown.secret = 'not accepted';

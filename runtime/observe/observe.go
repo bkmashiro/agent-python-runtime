@@ -272,12 +272,29 @@ type ExecutionFailedPayload struct {
 }
 
 type CapabilityCallPayload struct {
-	ArgumentsSHA256      string `json:"arguments_sha256"`
-	Capability           string `json:"capability"`
-	CapabilityPlanSHA256 string `json:"capability_plan_sha256,omitempty"`
-	OperationIndex       uint32 `json:"operation_index"`
-	Outcome              string `json:"outcome"`
-	ResultSHA256         string `json:"result_sha256,omitempty"`
+	ArgumentsSHA256      string                `json:"arguments_sha256"`
+	Capability           string                `json:"capability"`
+	CapabilityPlanSHA256 string                `json:"capability_plan_sha256,omitempty"`
+	OperationIndex       uint32                `json:"operation_index"`
+	Outcome              string                `json:"outcome"`
+	ReceiptID            string                `json:"receipt_id,omitempty"`
+	ResultSHA256         string                `json:"result_sha256,omitempty"`
+	Source               *SourceBindingPayload `json:"source,omitempty"`
+}
+
+// SourceBindingPayload is field-ordered for canonical nested JSON encoding.
+type SourceBindingPayload struct {
+	Capability        string `json:"capability"`
+	ClaimLevel        string `json:"claim_level"`
+	DocumentID        string `json:"document_id"`
+	DynamicOccurrence uint32 `json:"dynamic_occurrence"`
+	EndColumn         uint32 `json:"end_column"`
+	EndLine           uint32 `json:"end_line"`
+	OccurrenceID      string `json:"occurrence_id"`
+	SchemaVersion     string `json:"schema_version"`
+	SourceSHA256      string `json:"source_sha256"`
+	StartColumn       uint32 `json:"start_column"`
+	StartLine         uint32 `json:"start_line"`
 }
 
 type CapabilityPlanBoundPayload struct {
@@ -347,14 +364,15 @@ func validatePayload(kind string, raw []byte) (json.RawMessage, error) {
 		}
 	case EventCapabilityCall:
 		if !hasRequiredAndOnlyExactKeys(fields,
-			[]string{"arguments_sha256", "capability", "operation_index", "outcome"}, "capability_plan_sha256", "result_sha256") {
+			[]string{"arguments_sha256", "capability", "operation_index", "outcome"}, "capability_plan_sha256", "receipt_id", "result_sha256", "source") {
 			return nil, ErrInvalidEvent
 		}
 		var payload CapabilityCallPayload
 		if json.Unmarshal(raw, &payload) != nil || !digest.MatchString(payload.ArgumentsSHA256) || !optionalDigestField(fields, "capability_plan_sha256", payload.CapabilityPlanSHA256) ||
-			!validCapabilityName(payload.Capability) || !validOutcome(payload.Outcome) ||
+			!validCapabilityName(payload.Capability) || !validOutcome(payload.Outcome) || !optionalIdentifierField(fields, "receipt_id", payload.ReceiptID) ||
 			!optionalDigestField(fields, "result_sha256", payload.ResultSHA256) ||
-			(payload.ResultSHA256 != "" && payload.Outcome != "ok") {
+			(payload.ResultSHA256 != "" && payload.Outcome != "ok") || !optionalSourceField(fields, payload.Source) ||
+			(payload.Source != nil && payload.ReceiptID == "") {
 			return nil, ErrInvalidEvent
 		}
 	case EventCapabilityPlan:
@@ -426,7 +444,7 @@ func validKind(kind string) bool {
 }
 
 func validOutcome(outcome string) bool {
-	return outcome == "ok" || outcome == "denied" || outcome == "error" || outcome == "timeout"
+	return outcome == "ok" || outcome == "denied" || outcome == "error" || outcome == "timeout" || outcome == "ambiguous"
 }
 
 func terminalClaimsComplete(kind string, raw []byte) bool {
@@ -452,6 +470,25 @@ func optionalDigestField(fields map[string]json.RawMessage, name, value string) 
 		return value == ""
 	}
 	return digest.MatchString(value)
+}
+
+func optionalIdentifierField(fields map[string]json.RawMessage, name, value string) bool {
+	_, present := fields[name]
+	if !present {
+		return value == ""
+	}
+	return identifier.MatchString(value)
+}
+
+func optionalSourceField(fields map[string]json.RawMessage, source *SourceBindingPayload) bool {
+	_, present := fields["source"]
+	if !present {
+		return source == nil
+	}
+	return source != nil && source.SchemaVersion == "pysolate.source-binding.v0" && source.ClaimLevel == "source_bound" &&
+		digest.MatchString(source.DocumentID) && digest.MatchString(source.SourceSHA256) && digest.MatchString(source.OccurrenceID) &&
+		validCapabilityName(source.Capability) && source.DynamicOccurrence > 0 && source.StartLine > 0 && source.EndLine >= source.StartLine &&
+		(source.EndLine != source.StartLine || source.EndColumn >= source.StartColumn)
 }
 
 func canonicalJSONObject(raw []byte) (json.RawMessage, map[string]json.RawMessage, error) {

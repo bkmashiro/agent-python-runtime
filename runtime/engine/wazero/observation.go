@@ -47,9 +47,18 @@ func (lifecycle *observationLifecycle) capabilityCalls(ctx context.Context, rece
 		payload := observe.CapabilityCallPayload{
 			ArgumentsSHA256: prefixedReceiptDigest(call.RequestSHA256), Capability: call.Capability,
 			CapabilityPlanSHA256: call.CapabilityPlanSHA256, OperationIndex: call.OperationIndex, Outcome: call.Outcome,
+			ReceiptID: call.ReceiptID,
 		}
 		if call.ResponseSHA256 != "" {
 			payload.ResultSHA256 = prefixedReceiptDigest(call.ResponseSHA256)
+		}
+		if call.Source != nil {
+			payload.Source = &observe.SourceBindingPayload{
+				ClaimLevel: call.Source.ClaimLevel, Capability: call.Source.Capability, DocumentID: call.Source.DocumentID,
+				DynamicOccurrence: call.Source.DynamicOccurrence, EndColumn: call.Source.EndColumn, EndLine: call.Source.EndLine,
+				OccurrenceID: call.Source.OccurrenceID, SchemaVersion: call.Source.SchemaVersion, SourceSHA256: call.Source.SourceSHA256,
+				StartColumn: call.Source.StartColumn, StartLine: call.Source.StartLine,
+			}
 		}
 		event, err := appendObservation(ctx, lifecycle.session, observe.EventCapabilityCall, lifecycle.parent, payload)
 		if err != nil {

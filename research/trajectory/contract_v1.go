@@ -48,29 +48,32 @@ func (availability Availability) valid() bool {
 type EvidenceType string
 
 const (
-	EventTraceStarted      EvidenceType = "trace.started"
-	EventTraceEnded        EvidenceType = "trace.ended"
-	EventAuthoritySnapshot EvidenceType = "authority.snapshot"
-	EventEffectTransition  EvidenceType = "effect.transition"
-	EventWorkspaceTerminal EvidenceType = "workspace.terminal"
-	EventExecutionAttempt  EvidenceType = "execution.attempt"
-	EventModelContext      EvidenceType = "model.context"
-	EventSourceDocument    EvidenceType = "source.document"
-	EventSourceOccurrence  EvidenceType = "source.occurrence"
-	EventSourceDecision    EvidenceType = "source.decision"
-	EventExecutedLine      EvidenceType = "source.executed_line"
-	EventSubagentContext   EvidenceType = "subagent.context"
-	EventSubagentRuntime   EvidenceType = "subagent.runtime"
-	EventSubagentWorkspace EvidenceType = "subagent.workspace"
-	EventEvidenceTruncated EvidenceType = "evidence.truncated"
+	EventTraceStarted       EvidenceType = "trace.started"
+	EventTraceEnded         EvidenceType = "trace.ended"
+	EventAuthoritySnapshot  EvidenceType = "authority.snapshot"
+	EventEffectTransition   EvidenceType = "effect.transition"
+	EventWorkspaceTerminal  EvidenceType = "workspace.terminal"
+	EventExecutionAttempt   EvidenceType = "execution.attempt"
+	EventModelContext       EvidenceType = "model.context"
+	EventModelBody          EvidenceType = "model.body"
+	EventSourceDocument     EvidenceType = "source.document"
+	EventSourceOccurrence   EvidenceType = "source.occurrence"
+	EventSourceDecision     EvidenceType = "source.decision"
+	EventExecutedLine       EvidenceType = "source.executed_line"
+	EventSubagentContext    EvidenceType = "subagent.context"
+	EventSubagentRuntime    EvidenceType = "subagent.runtime"
+	EventSubagentWorkspace  EvidenceType = "subagent.workspace"
+	EventEvidenceTruncated  EvidenceType = "evidence.truncated"
+	EventRuntimeObservation EvidenceType = "runtime.observation"
 )
 
 func (eventType EvidenceType) valid() bool {
 	switch eventType {
 	case EventTraceStarted, EventTraceEnded, EventAuthoritySnapshot, EventEffectTransition,
-		EventWorkspaceTerminal, EventExecutionAttempt, EventModelContext,
+		EventWorkspaceTerminal, EventExecutionAttempt, EventModelContext, EventModelBody,
 		EventSourceDocument, EventSourceOccurrence, EventSourceDecision, EventExecutedLine,
-		EventSubagentContext, EventSubagentRuntime, EventSubagentWorkspace, EventEvidenceTruncated:
+		EventSubagentContext, EventSubagentRuntime, EventSubagentWorkspace, EventEvidenceTruncated,
+		EventRuntimeObservation:
 		return true
 	default:
 		return false
@@ -97,6 +100,9 @@ const (
 	EffectCleanupOnly            EffectState = "cleanup_only"
 	EffectAmbiguous              EffectState = "ambiguous"
 	EffectReconciliationRequired EffectState = "reconciliation_required"
+	EffectDenied                 EffectState = "denied"
+	EffectFailed                 EffectState = "failed"
+	EffectTimedOut               EffectState = "timed_out"
 )
 
 type TraceHeader struct {
@@ -225,6 +231,13 @@ type TruncationPayload struct {
 	DroppedEvents uint64 `json:"dropped_events"`
 }
 
+type RuntimeObservationPayload struct {
+	ObservationType   string  `json:"observation_type"`
+	Sequence          uint32  `json:"sequence"`
+	ParentSequence    *uint32 `json:"parent_sequence,omitempty"`
+	ObservationSHA256 string  `json:"observation_sha256"`
+}
+
 type EvidenceLimits struct {
 	MaxEvents       uint32
 	MaxParents      uint32
@@ -343,8 +356,11 @@ func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
 	if err := validateEvidenceRelations(input.Type, input.Payload, parents, prior); err != nil {
 		return EvidenceEvent{}, err
 	}
+	if input.Type == EventModelBody && input.Body == nil {
+		return EvidenceEvent{}, errors.New("model body evidence requires a body reference")
+	}
 	if input.Body != nil {
-		if input.Type.productionEligible() || builder.store == nil || input.Body.Kind == "" || input.Body.SHA256 == "" {
+		if input.Type.productionEligible() || (input.Type != EventModelBody && input.Type != EventRuntimeObservation) || builder.store == nil || input.Body.Kind == "" || input.Body.SHA256 == "" {
 			return EvidenceEvent{}, errors.New("invalid causal evidence body")
 		}
 		if _, err := builder.store.Get(*input.Body); err != nil {
@@ -533,7 +549,7 @@ func decodeEvidencePayload(kind EvidenceType, raw json.RawMessage) (any, error) 
 		target = &WorkspaceTerminalPayload{}
 	case EventExecutionAttempt:
 		target = &ExecutionAttemptPayload{}
-	case EventModelContext:
+	case EventModelContext, EventModelBody:
 		target = &ModelContextPayload{}
 	case EventSourceDocument:
 		target = &SourceDocumentPayload{}
@@ -551,6 +567,8 @@ func decodeEvidencePayload(kind EvidenceType, raw json.RawMessage) (any, error) 
 		target = &SubagentWorkspacePayload{}
 	case EventEvidenceTruncated:
 		target = &TruncationPayload{}
+	case EventRuntimeObservation:
+		target = &RuntimeObservationPayload{}
 	default:
 		return nil, errors.New("invalid causal evidence payload")
 	}
@@ -598,6 +616,8 @@ func dereferenceEvidencePayload(value any) any {
 		return *typed
 	case *TruncationPayload:
 		return *typed
+	case *RuntimeObservationPayload:
+		return *typed
 	default:
 		return nil
 	}
@@ -626,7 +646,7 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 	case WorkspaceTerminalPayload:
 		if kind != EventWorkspaceTerminal || !validDigest(value.BaseWorkspaceSHA256) ||
 			(value.ResultWorkspaceSHA256 != "" && !validDigest(value.ResultWorkspaceSHA256)) ||
-			(value.Disposition != "published" && value.Disposition != "discarded" && value.Disposition != "unchanged" && value.Disposition != "conflict") {
+			(value.Disposition != "published" && value.Disposition != "discarded" && value.Disposition != "unchanged" && value.Disposition != "conflict" && value.Disposition != "finalized") {
 			return errors.New("invalid workspace terminal payload")
 		}
 	case ExecutionAttemptPayload:
@@ -636,7 +656,7 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 			return errors.New("invalid execution attempt payload")
 		}
 	case ModelContextPayload:
-		if kind != EventModelContext || !validDigest(value.ContextSHA256) || !validDigest(value.BriefSHA256) || !value.Availability.valid() {
+		if (kind != EventModelContext && kind != EventModelBody) || !validDigest(value.ContextSHA256) || !validDigest(value.BriefSHA256) || !value.Availability.valid() {
 			return errors.New("invalid model context payload")
 		}
 	case SourceDocumentPayload:
@@ -680,6 +700,11 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 	case TruncationPayload:
 		if kind != EventEvidenceTruncated || !evidenceIdentifier.MatchString(value.Scope) || !evidenceIdentifier.MatchString(value.Reason) || value.DroppedEvents == 0 {
 			return errors.New("invalid evidence truncation payload")
+		}
+	case RuntimeObservationPayload:
+		if kind != EventRuntimeObservation || !evidenceIdentifier.MatchString(value.ObservationType) || value.Sequence == 0 ||
+			(value.ParentSequence != nil && (*value.ParentSequence == 0 || *value.ParentSequence >= value.Sequence)) || !validDigest(value.ObservationSHA256) {
+			return errors.New("invalid runtime observation payload")
 		}
 	default:
 		return errors.New("invalid causal evidence payload type")
@@ -772,7 +797,7 @@ func validEffectTransition(value EffectTransitionPayload) bool {
 	switch value.State {
 	case EffectIntent, EffectStarted, EffectCleanupOnly:
 		return value.Compensator == "" && value.ReconciliationReason == ""
-	case EffectCommitted:
+	case EffectCommitted, EffectDenied, EffectFailed, EffectTimedOut:
 		return value.ReceiptID != "" && value.Compensator == "" && value.ReconciliationReason == ""
 	case EffectCompensated:
 		return evidenceIdentifier.MatchString(value.Compensator) && value.ReconciliationReason == ""

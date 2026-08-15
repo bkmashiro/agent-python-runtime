@@ -5,15 +5,22 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/research/labstore"
+	"github.com/bkmashiro/agent-python-runtime/research/trajectory"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
+	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) {
@@ -95,11 +102,159 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	}
 	defer executionRunner.Close(context.Background())
 
+	evidenceRoot := t.TempDir()
+	if output := os.Getenv("PYSOLATE_EVIDENCE_OUTPUT_DIR"); output != "" {
+		evidenceRoot = output
+		if err := os.MkdirAll(evidenceRoot, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(evidenceRoot, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sourceCommit := os.Getenv("PYSOLATE_EVIDENCE_SOURCE_COMMIT")
+	if sourceCommit == "" {
+		sourceCommit = "0123456789abcdef0123456789abcdef01234567"
+	}
+	evidenceStore, err := labstore.Open(filepath.Join(evidenceRoot, "store"), labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer evidenceStore.Close()
+	evidenceLog, err := trajectory.CreateEvidenceLog(filepath.Join(evidenceRoot, "trace.jsonl"), evidenceStore, trajectory.TraceHeader{
+		TraceID: "trace-real-source-bound-0001", RootExecutionID: "source-bound-run", SourceCommit: sourceCommit,
+	}, trajectory.EvidenceLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer evidenceLog.Close()
+
+	workspaceRoot := filepath.Join(evidenceRoot, "workspaces")
+	if err := os.Mkdir(workspaceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspaceManager, err := workspace.NewManager(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workspaceManager.Close()
+	baseWorkspace, err := workspaceManager.Create([]workspace.InitialFile{{Path: "seed.txt", Data: []byte("seed")}}, workspace.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseInfo, err := workspaceManager.Inspect(baseWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentLineage, _, err := workspaceManager.PortableIdentity(baseWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSHA256 := artifactSHA
+	childID := "child-real-0001"
+	contextSHA256, briefSHA256 := semanticTestDigest('7'), semanticTestDigest('8')
+	contextBody, _, err := evidenceStore.PutJSON(labstore.KindMetadataEvent, []byte(`{"brief":"inspect one private branch","context":"selected parent context"}`), labstore.PutOptions{
+		Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelContext, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventModelContext, ActorID: "actor-real-source-bound-0001",
+		Payload: trajectory.ModelContextPayload{ContextSHA256: contextSHA256, BriefSHA256: briefSHA256, Availability: trajectory.Available},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventModelBody, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{modelContext.EventID}, Body: &contextBody,
+		Payload: trajectory.ModelContextPayload{ContextSHA256: contextSHA256, BriefSHA256: briefSHA256, Availability: trajectory.Available},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	childContext, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventSubagentContext, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{modelContext.EventID},
+		Payload: trajectory.SubagentContextPayload{ChildID: childID, ContextSHA256: contextSHA256, BriefSHA256: briefSHA256, Availability: trajectory.Available},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	childPlanSHA256 := semanticTestDigest('9')
+	descriptor := subagent.Descriptor{
+		SchemaVersion: subagent.DescriptorSchemaVersion, ChildID: childID, ParentStreamEpoch: "parent-stream-real-0001",
+		ParentLineageSHA256: parentLineage, SourceOccurrence: "semantic_source_binding_test:child-real-0001",
+		SourceSHA256: analysis.SourceSHA256, InputsSHA256: semanticTestDigest('a'), ArtifactSHA256: artifactSHA256,
+		ExecutionProfileSHA256: semanticTestDigest('b'), ChildPlanSHA256: childPlanSHA256, PrivacyPartition: "fixture-private", Depth: 1,
+	}
+	childExecutor := subagent.FreshRunnerExecutor{
+		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (enginecontract.Runner, error) {
+			return (wazeroengine.Factory{WorkspaceManager: workspaceManager, WorkspaceRef: ref, WorkspaceOwner: "evidence-child-owner"}).New(ctx, wasm, runtimeconfig.DefaultRunConfig())
+		}),
+		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
+			request, marshalErr := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+				RunID: "child-real-run-0001", Code: "from pathlib import Path\nPath('/workspace/child.txt').write_text('child')\nresult = {'child': 'ok'}", Inputs: []byte(`{}`),
+			})
+			return subagent.ChildProgram{Request: request}, marshalErr
+		}),
+	}
+	orchestrator, err := subagent.New(subagent.Config{
+		Manager: workspaceManager, ParentRef: baseWorkspace, ParentWorkspaceSHA256: baseInfo.WorkspaceSHA256,
+		ParentLineage: parentLineage, MaxFanout: 1, MaxDepth: 1, Executor: childExecutor,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
+		t.Fatal(err)
+	}
+	joined, err := orchestrator.Seal(context.Background(), childID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	childRuntime, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventSubagentRuntime, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childContext.EventID},
+		Payload: trajectory.SubagentRuntimePayload{ChildID: childID, FreshRunID: "child-real-run-0001", PreparedImageSHA256: artifactSHA256, ChildPlanSHA256: childPlanSHA256, ParentLiveStateInherited: false},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventSubagentWorkspace, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childRuntime.EventID},
+		Payload: trajectory.SubagentWorkspacePayload{
+			ChildID: childID, BaseRootSHA256: parentLineage, ResultRootSHA256: joined.SelectedRoot.IdentitySHA256,
+			ChangedEntries: joined.SelectedRoot.ChangedEntries, ChangedBytes: joined.SelectedRoot.ChangedBytes, Disposition: "selected",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	evidenceRecorder, err := trajectory.NewObservationRecorder(evidenceLog, trajectory.ObservationRecorderConfig{
+		ActorID: "actor-real-source-bound-0001", RunID: "source-bound-run", AttemptID: "attempt-real-source-bound-0001",
+		PolicySHA256: semanticTestDigest('4'), FreshnessSHA256: semanticTestDigest('5'), GrantsSHA256: semanticTestDigest('6'),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observationSession, err := observe.NewSession(observe.Required, evidenceRecorder, "source-bound-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runContext, err := enginecontract.WithInvocationRef(context.Background(), runtimeconfig.InvocationRef{
+		AgentRunID: "agent-source-bound-run", InvocationID: "invocation-source-bound-run", InvocationAttempt: 1, ExecutionID: "source-bound-run",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runContext, err = enginecontract.WithObservationSession(runContext, observationSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	runRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "source-bound-run", Code: source, Inputs: []byte(`{}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, err := executionRunner.Run(context.Background(), runRequest, presentation.PythonPrelude)
+	payload, err := executionRunner.Run(runContext, runRequest, presentation.PythonPrelude)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +273,57 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		bound.EndLine != site.Span.EndLine || bound.EndColumn != site.Span.EndColumn {
 		t.Fatalf("binding=%+v site=%+v", bound, site)
 	}
+	privateFull, err := evidenceLog.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPrivate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	production, err := evidenceLog.Export(trajectory.ProfileProductionRollback, labstore.PrivacyPortable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicFull, err := evidenceLog.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPortable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e2eEvidenceCount(privateFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventRuntimeObservation) == 0 ||
+		e2eEvidenceCount(production.Events, trajectory.EventSourceDecision) != 0 || e2eEvidenceCount(production.Events, trajectory.EventEffectTransition) != 1 ||
+		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventRuntimeObservation) != 0 {
+		t.Fatalf("private=%d production=%d public=%d", len(privateFull.Events), len(production.Events), len(publicFull.Events))
+	}
+	for _, event := range production.Events {
+		if event.Body != nil {
+			t.Fatalf("production leaked body: %+v", event)
+		}
+	}
+	if os.Getenv("PYSOLATE_EVIDENCE_OUTPUT_DIR") != "" {
+		artifacts := map[string]trajectory.Export{
+			"experiment-full-private.json": privateFull,
+			"production-rollback.json": production,
+			"experiment-full-public.json": publicFull,
+		}
+		for name, artifact := range artifacts {
+			encoded, encodeErr := trajectory.EncodeEvidenceExport(artifact)
+			if encodeErr != nil {
+				t.Fatal(encodeErr)
+			}
+			encoded = append(encoded, '\n')
+			if writeErr := os.WriteFile(filepath.Join(evidenceRoot, name), encoded, 0o600); writeErr != nil {
+				t.Fatal(writeErr)
+			}
+		}
+	}
+	t.Logf("dual-profile evidence: trace=%s header=%s private=%d production=%d public=%d", privateFull.TraceID, privateFull.HeaderSHA256, len(privateFull.Events), len(production.Events), len(publicFull.Events))
 	t.Logf("source-bound receipt: plan=%s document=%s source=%s occurrence=%s dynamic=%d span=%d:%d-%d:%d receipt=%s",
 		capabilityPlan.Identity(), bound.DocumentID, bound.SourceSHA256, bound.OccurrenceID, bound.DynamicOccurrence,
 		bound.StartLine, bound.StartColumn, bound.EndLine, bound.EndColumn, receipts[0].ReceiptID)
+}
+
+func e2eEvidenceCount(events []trajectory.EvidenceEvent, kind trajectory.EvidenceType) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == kind {
+			count++
+		}
+	}
+	return count
 }

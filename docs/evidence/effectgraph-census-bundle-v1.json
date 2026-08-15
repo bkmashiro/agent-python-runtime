@@ -1,0 +1,10 @@
+{
+  "schema_version": "pysolate.effectgraph-census-bundle.v1",
+  "corpus_file_sha256": "sha256:749326359b5836bee9f31352697a185fa69e5faffc1e0027d333db6417e62e1f",
+  "effect_report_file_sha256": "sha256:5d6ebaa3d9ccc8e815e4ae678eda9c458523bb834b89b06d932d4adaf29cc713",
+  "region_report_file_sha256": "sha256:27e55f255fd4c4c1afa2b0a446c4eda0667dea58bc4e6b6734123c985f494c62",
+  "placement_report_file_sha256": "sha256:5132cac21e994aab4ab152e6fbb9de74ba771f7f966fad36b297ebf36a74f909",
+  "corpus_identity_sha256": "sha256:24548baa92dc144bb017df300888e59321a6f294fd2ae0b3410cca51ddc9a336",
+  "artifact_sha256": "sha256:4019fd9061c9bab7bab6ff7cb6ade5e15a457724d6e943e83423b07de8819c12",
+  "artifact_source_commit": "eb08ae94d576b1aaeceddb68c352e4dec78e6e84"
+}

@@ -1,9 +1,9 @@
 {
   "schema_version": "pysolate.python-region-census.v0",
-  "corpus_sha256": "sha256:0764f91c47d7eedb5f133fc8e6ca7cc6ec3620c15058bc3160840e422e707541",
+  "corpus_sha256": "sha256:24548baa92dc144bb017df300888e59321a6f294fd2ae0b3410cca51ddc9a336",
   "analyzer_sha256": "sha256:3cb9a1884dff7a442769674410c13fed2a616550ed936942c417adf444bdb19c",
-  "artifact_sha256": "sha256:3a3ec626c1a6823fc28c2499c5798475a098003c96dfec295377a5d4ddee2f7f",
-  "execution_profile_sha256": "sha256:ca3dd7159d081c599870b438f920ef6365c204aea27aa6829358635018361b91",
+  "artifact_sha256": "sha256:4019fd9061c9bab7bab6ff7cb6ade5e15a457724d6e943e83423b07de8819c12",
+  "execution_profile_sha256": "sha256:75a4f185641b7f41cd2d70db02c2e2d1aa07bbf15ffea3c5ad0ef548488f191a",
   "import_closure_sha256": "sha256:6bf7414ef5fe446ed320118d1c29d006a850ffc9d0c80c449edc1d6cd5443e9e",
   "capability_plan_sha256": "sha256:231868d44c4e2d0bbda114199852e422242464bd0bdb1d150995a09127b02cf7",
   "programs_analyzed": 19,

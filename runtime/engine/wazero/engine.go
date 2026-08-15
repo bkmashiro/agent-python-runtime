@@ -50,6 +50,9 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if config.Mechanisms.SemanticPreDispatch && factory.BrokerFactory == nil {
 		return nil, errors.New("semantic pre-dispatch requires a capability Broker factory")
 	}
+	if (config.Mechanisms.ProgrammaticToolCalling || config.Mechanisms.ApprovalSuspension) && factory.BrokerFactory == nil {
+		return nil, errors.New("programmatic tool calling and approval suspension require a capability Broker factory")
+	}
 	fields := 0
 	if factory.WorkspaceManager != nil {
 		fields++
@@ -714,6 +717,10 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		if broker.ApprovalSuspensionEnabled() != engine.config.Mechanisms.ApprovalSuspension {
 			return nil, errors.New("capability Broker approval suspension mode does not match Run configuration")
+		}
+		expectsProgrammaticParent := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceProgrammatic || engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
+		if broker.ProgrammaticParentBound() != expectsProgrammaticParent {
+			return nil, errors.New("capability Broker programmatic parent mode does not match Run configuration")
 		}
 		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
 			return nil, ErrExecutionIdentityMismatch

@@ -44,6 +44,32 @@ func TestControllerApprovesExactlyOnceAndKeepsBodySafeAudit(t *testing.T) {
 	}
 }
 
+func TestApprovedPermitCanBeAbortedBeforeDispatchWithoutExecution(t *testing.T) {
+	controller := approval.NewController()
+	result := make(chan error, 1)
+	go func() {
+		_, err := controller.Authorize(context.Background(), approval.Proposal{RunID: "execution-1", PlanSHA256: "sha256:" + strings.Repeat("a", 64), CallID: "call-1", Capability: "danger.delete", Arguments: []byte(`{}`), Lease: 200 * time.Millisecond})
+		result <- err
+	}()
+	request := waitForRequest(t, controller)
+	if err := controller.Approve(request.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.AbortApproved(request.RequestID, "cancelled_before_dispatch"); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Complete(request.RequestID, "ok"); !errors.Is(err, approval.ErrNotApproved) {
+		t.Fatalf("aborted permit completed: %v", err)
+	}
+	record := controller.Snapshot()[0]
+	if record.Executed || record.DispatchOutcome != "cancelled_before_dispatch" || record.CompletedAt == nil {
+		t.Fatalf("record=%+v", record)
+	}
+}
+
 func TestControllerRejectsExpiresAndCancelsWithoutPermit(t *testing.T) {
 	for _, test := range []struct {
 		name string

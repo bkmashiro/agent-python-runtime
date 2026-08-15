@@ -181,11 +181,29 @@ func (controller *Controller) Complete(requestID, outcome string) error {
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
 	state, ok := controller.pending[requestID]
-	if !ok || state.record.Status != StatusApproved || state.record.Executed {
+	if !ok || state.record.Status != StatusApproved || state.record.Executed || state.record.CompletedAt != nil {
 		return ErrNotApproved
 	}
 	now := time.Now().UTC()
 	state.record.Executed = true
+	state.record.DispatchOutcome = outcome
+	state.record.CompletedAt = &now
+	return nil
+}
+
+// AbortApproved records that a permit became unusable before handler dispatch.
+// It never marks the operation executed and prevents later completion/revival.
+func (controller *Controller) AbortApproved(requestID, outcome string) error {
+	if controller == nil || outcome != "cancelled_before_dispatch" {
+		return ErrNotApproved
+	}
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	state, ok := controller.pending[requestID]
+	if !ok || state.record.Status != StatusApproved || state.record.Executed || state.record.CompletedAt != nil {
+		return ErrNotApproved
+	}
+	now := time.Now().UTC()
 	state.record.DispatchOutcome = outcome
 	state.record.CompletedAt = &now
 	return nil
@@ -210,7 +228,7 @@ func requestIdentity(proposal Proposal, created time.Time, sequence uint64, argu
 		hash.Write([]byte(value))
 		hash.Write([]byte{0})
 	}
-	return "approval_" + hex.EncodeToString(hash.Sum(nil))
+	return "apr_" + hex.EncodeToString(hash.Sum(nil))
 }
 
 func validProposal(proposal Proposal) bool {

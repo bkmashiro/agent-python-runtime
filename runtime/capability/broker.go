@@ -285,6 +285,11 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
 		}
 		approvalRequestID = permit.RequestID
+		if ctx.Err() != nil {
+			_ = broker.config.ApprovalController.AbortApproved(approvalRequestID, "cancelled_before_dispatch")
+			broker.record(call, operation, "denied", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "approval_cancelled", Message: "approval was cancelled before Host tool dispatch"}})
+		}
 	}
 	var result json.RawMessage
 	var evidence TransportEvidence
@@ -390,6 +395,10 @@ func (broker *Broker) SemanticPreDispatchEnabled() bool {
 
 func (broker *Broker) ApprovalSuspensionEnabled() bool {
 	return broker != nil && broker.config.ApprovalSuspension
+}
+
+func (broker *Broker) ProgrammaticParentBound() bool {
+	return broker != nil && broker.config.ProgrammaticParentCallID != ""
 }
 
 func (broker *Broker) CapabilityPlanSHA256() string {

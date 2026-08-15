@@ -16,6 +16,23 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
+func TestFactoryRequiresBrokerForProgrammaticToolsAndApproval(t *testing.T) {
+	for _, configure := range []func(*runtimeconfig.RunConfig){
+		func(config *runtimeconfig.RunConfig) {
+			config.ProgramSurface = runtimeconfig.ProgramSurfaceProgrammatic
+			config.Mechanisms.ProgrammaticToolCalling = true
+		},
+		func(config *runtimeconfig.RunConfig) { config.Mechanisms.ApprovalSuspension = true },
+	} {
+		config := runtimeconfig.DefaultRunConfig()
+		configure(&config)
+		_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
+		if err == nil || !strings.Contains(err.Error(), "require a capability Broker factory") {
+			t.Fatalf("factory error = %v", err)
+		}
+	}
+}
+
 func TestFactoryRequiresBrokerForSemanticPreDispatch(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true}

@@ -81,6 +81,20 @@ func TestProgramSurfaceAndMechanismMustMatch(t *testing.T) {
 	}
 }
 
+func TestProgrammaticToolsAndApprovalAreIndependent(t *testing.T) {
+	approvalOnly := runtime.DefaultRunConfig()
+	approvalOnly.Mechanisms.ApprovalSuspension = true
+	if err := approvalOnly.Validate(); err != nil {
+		t.Fatalf("approval-only config rejected: %v", err)
+	}
+	programmaticOnly := runtime.DefaultRunConfig()
+	programmaticOnly.ProgramSurface = runtime.ProgramSurfaceProgrammatic
+	programmaticOnly.Mechanisms.ProgrammaticToolCalling = true
+	if err := programmaticOnly.Validate(); err != nil {
+		t.Fatalf("programmatic-only config rejected: %v", err)
+	}
+}
+
 func TestSingleFlightDoesNotRequireDurableCache(t *testing.T) {
 	set := runtime.MechanismSet{SingleFlight: true}
 	if err := set.Validate(); err != nil {

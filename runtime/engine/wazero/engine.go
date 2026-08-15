@@ -712,6 +712,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		if broker.SemanticPreDispatchEnabled() != engine.config.Mechanisms.SemanticPreDispatch {
 			return nil, errors.New("capability Broker semantic pre-dispatch mode does not match Run configuration")
 		}
+		if broker.ApprovalSuspensionEnabled() != engine.config.Mechanisms.ApprovalSuspension {
+			return nil, errors.New("capability Broker approval suspension mode does not match Run configuration")
+		}
 		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
 			return nil, ErrExecutionIdentityMismatch
 		}

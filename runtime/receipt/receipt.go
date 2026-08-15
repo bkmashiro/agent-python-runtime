@@ -13,6 +13,7 @@ type Receipt struct {
 	CapabilityPlanSHA256 string `json:"capability_plan_sha256"`
 	CallID               string `json:"call_id,omitempty"`
 	ParentCallID         string `json:"parent_call_id,omitempty"`
+	ApprovalRequestID    string `json:"approval_request_id,omitempty"`
 	Capability           string `json:"capability"`
 	OperationIndex       uint32 `json:"operation_index"`
 	RequestSHA256        string `json:"request_sha256"`
@@ -25,15 +26,23 @@ func New(runIdentity, capabilityPlanSHA256, callID, capability string, operation
 }
 
 func NewBound(runIdentity, capabilityPlanSHA256, callID, parentCallID, capability string, operationIndex uint32, requestIdentity, outcome string, response []byte) Receipt {
+	return NewAuthorized(runIdentity, capabilityPlanSHA256, callID, parentCallID, "", capability, operationIndex, requestIdentity, outcome, response)
+}
+
+func NewAuthorized(runIdentity, capabilityPlanSHA256, callID, parentCallID, approvalRequestID, capability string, operationIndex uint32, requestIdentity, outcome string, response []byte) Receipt {
 	requestDigest := digest([]byte(requestIdentity))
 	identity := sha256.New()
-	for _, field := range []string{"pysolate-receipt-v1", runIdentity, capabilityPlanSHA256, callID, capability, strconv.FormatUint(uint64(operationIndex), 10), requestDigest} {
+	fields := []string{"pysolate-receipt-v1", runIdentity, capabilityPlanSHA256, callID, capability, strconv.FormatUint(uint64(operationIndex), 10), requestDigest}
+	if approvalRequestID != "" {
+		fields = []string{"pysolate-receipt-v1", runIdentity, capabilityPlanSHA256, callID, approvalRequestID, capability, strconv.FormatUint(uint64(operationIndex), 10), requestDigest}
+	}
+	for _, field := range fields {
 		identity.Write([]byte(field))
 		identity.Write([]byte{0})
 	}
 	receipt := Receipt{
 		ReceiptID: "rcpt_" + hex.EncodeToString(identity.Sum(nil)), RunID: runIdentity, CapabilityPlanSHA256: capabilityPlanSHA256,
-		Capability: capability, CallID: callID, ParentCallID: parentCallID, OperationIndex: operationIndex, RequestSHA256: requestDigest, Outcome: outcome,
+		Capability: capability, CallID: callID, ParentCallID: parentCallID, ApprovalRequestID: approvalRequestID, OperationIndex: operationIndex, RequestSHA256: requestDigest, Outcome: outcome,
 	}
 	if response != nil {
 		receipt.ResponseSHA256 = digest(response)

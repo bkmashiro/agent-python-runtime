@@ -36,6 +36,15 @@ func TestProgrammaticReceiptProjectsParentAndChildIdentity(t *testing.T) {
 	}
 }
 
+func TestApprovalRequestChangesReceiptIdentityAndIsProjected(t *testing.T) {
+	plan := "sha256:" + strings.Repeat("a", 64)
+	first := receipt.NewAuthorized("host-run", plan, "call-1", "", "apr_"+strings.Repeat("1", 64), "fetch_many", 0, `{}`, "ok", nil)
+	second := receipt.NewAuthorized("host-run", plan, "call-1", "", "apr_"+strings.Repeat("2", 64), "fetch_many", 0, `{}`, "ok", nil)
+	if first.ReceiptID == second.ReceiptID || first.ApprovalRequestID == "" {
+		t.Fatalf("approval binding missing: first=%#v second=%#v", first, second)
+	}
+}
+
 func TestReceiptStoresDigestsNotRawTargetOrResponse(t *testing.T) {
 	target := "https://api.example.test/data?token=secret"
 	response := []byte("secret response")

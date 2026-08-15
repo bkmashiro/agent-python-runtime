@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 	"unicode/utf8"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/approval"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
@@ -27,6 +29,8 @@ type Config struct {
 	// ProgrammaticParentCallID binds every admitted call to one program
 	// execution. Empty selects the ordinary direct-call path.
 	ProgrammaticParentCallID string
+	ApprovalSuspension       bool
+	ApprovalController       *approval.Controller
 }
 
 type StagedObservationClaimer interface {
@@ -48,9 +52,10 @@ type Broker struct {
 }
 
 type request struct {
-	CallID     string          `json:"call_id"`
-	Capability string          `json:"capability"`
-	Arguments  json.RawMessage `json:"arguments"`
+	CallID            string          `json:"call_id"`
+	Capability        string          `json:"capability"`
+	Arguments         json.RawMessage `json:"arguments"`
+	ApprovalRequestID string          `json:"-"`
 }
 
 type response struct {
@@ -69,7 +74,8 @@ func NewBroker(config Config) (*Broker, error) {
 	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 ||
 		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) ||
 		(config.StagedClaimer != nil) != config.SemanticPreDispatch ||
-		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) {
+		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) ||
+		(config.ApprovalController != nil) != config.ApprovalSuspension || (config.Plan.RequiresApproval() && !config.ApprovalSuspension) {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -259,6 +265,27 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		broker.record(call, operation, "ok", canonicalResult)
 		return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
 	}
+	approvalRequestID := ""
+	if registered.spec.Approval != nil {
+		permit, approvalErr := broker.config.ApprovalController.Authorize(ctx, approval.Proposal{
+			RunID: broker.config.RunIdentity, PlanSHA256: broker.config.Plan.Identity(), CallID: call.CallID,
+			ParentCallID: broker.config.ProgrammaticParentCallID, Capability: call.Capability,
+			Arguments: append([]byte(nil), arguments...), Lease: time.Duration(registered.spec.Approval.LeaseMilliseconds) * time.Millisecond,
+		})
+		call.ApprovalRequestID = permit.RequestID
+		if approvalErr != nil {
+			broker.record(call, operation, "denied", nil)
+			code, message := "approval_cancelled", "approval wait was cancelled"
+			switch {
+			case errors.Is(approvalErr, approval.ErrRejected):
+				code, message = "approval_rejected", "Host tool approval was rejected"
+			case errors.Is(approvalErr, approval.ErrExpired):
+				code, message = "approval_expired", "Host tool approval lease expired"
+			}
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
+		}
+		approvalRequestID = permit.RequestID
+	}
 	var result json.RawMessage
 	var evidence TransportEvidence
 	if evidenced, ok := registered.handler.(EvidenceHandler); ok {
@@ -267,6 +294,10 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		result, err = registered.handler.Call(ctx, append(json.RawMessage(nil), arguments...))
 	}
 	if err != nil {
+		if !broker.completeApproval(approvalRequestID, "error") {
+			broker.record(call, operation, "ambiguous", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}})
+		}
 		broker.failBranch()
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
@@ -276,9 +307,17 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		err = validateSpecResultSemantics(registered.spec, canonicalResult)
 	}
 	if err != nil || len(canonicalResult) > maxCallBytes || (registered.spec.Playback == PlaybackCaptured && !validLiveTransportEvidence(evidence)) {
+		if !broker.completeApproval(approvalRequestID, "error") {
+			broker.record(call, operation, "ambiguous", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}})
+		}
 		broker.failBranch()
 		broker.record(call, operation, "error", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
+	}
+	if !broker.completeApproval(approvalRequestID, "ok") {
+		broker.record(call, operation, "ambiguous", nil)
+		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}})
 	}
 	broker.record(call, operation, "ok", canonicalResult)
 	if registered.spec.Playback == PlaybackCaptured {
@@ -287,8 +326,12 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
 }
 
+func (broker *Broker) completeApproval(requestID, outcome string) bool {
+	return requestID == "" || broker.config.ApprovalController.Complete(requestID, outcome) == nil
+}
+
 func (broker *Broker) record(call request, operation uint32, outcome string, result []byte) {
-	created := receipt.NewBound(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, broker.config.ProgrammaticParentCallID, call.Capability, operation, string(call.Arguments), outcome, result)
+	created := receipt.NewAuthorized(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, broker.config.ProgrammaticParentCallID, call.ApprovalRequestID, call.Capability, operation, string(call.Arguments), outcome, result)
 	broker.mu.Lock()
 	broker.receipts = append(broker.receipts, created)
 	broker.mu.Unlock()
@@ -343,6 +386,10 @@ func (broker *Broker) RunIdentity() string {
 
 func (broker *Broker) SemanticPreDispatchEnabled() bool {
 	return broker != nil && broker.config.SemanticPreDispatch
+}
+
+func (broker *Broker) ApprovalSuspensionEnabled() bool {
+	return broker != nil && broker.config.ApprovalSuspension
 }
 
 func (broker *Broker) CapabilityPlanSHA256() string {

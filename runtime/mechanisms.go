@@ -12,6 +12,7 @@ type MechanismDisposition string
 type MechanismReason string
 
 const (
+	MechanismApprovalSuspension  MechanismName = "approval_suspension"
 	MechanismColdIOContinuation  MechanismName = "cold_io_continuation"
 	MechanismStreaming           MechanismName = "streaming"
 	MechanismStagedObservation   MechanismName = "staged_observation"
@@ -42,6 +43,7 @@ var (
 )
 
 var mechanismNames = []MechanismName{
+	MechanismApprovalSuspension,
 	MechanismChildFanout,
 	MechanismColdIOContinuation,
 	MechanismFreshReevaluation,
@@ -62,6 +64,7 @@ var mechanismNames = []MechanismName{
 // MechanismSet is an internal Host-owned feature set. Zero value means ordinary
 // fresh execution with every optional mechanism disabled.
 type MechanismSet struct {
+	ApprovalSuspension      bool
 	Streaming               bool
 	StagedObservation       bool
 	PrivateWorkspace        bool
@@ -122,6 +125,8 @@ func (set MechanismSet) Enabled() []MechanismName {
 
 func (set MechanismSet) enabled(name MechanismName) bool {
 	switch name {
+	case MechanismApprovalSuspension:
+		return set.ApprovalSuspension
 	case MechanismColdIOContinuation:
 		return set.ColdIOContinuation
 	case MechanismStreaming:
@@ -159,6 +164,8 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 
 func (set *MechanismSet) set(name MechanismName, enabled bool) {
 	switch name {
+	case MechanismApprovalSuspension:
+		set.ApprovalSuspension = enabled
 	case MechanismColdIOContinuation:
 		set.ColdIOContinuation = enabled
 	case MechanismStreaming:

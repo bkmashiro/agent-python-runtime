@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -24,7 +25,7 @@ var (
 )
 
 const (
-	capabilityPlanSchemaVersion = "pysolate.capability-plan.v5"
+	capabilityPlanSchemaVersion = "pysolate.capability-plan.v6"
 	maxCapabilitySchemaBytes    = 64 << 10
 	maxCapabilityJSONNodes      = 16384
 
@@ -38,6 +39,7 @@ const (
 
 	FreshnessPlanEpoch              = "plan_epoch"
 	UnclaimedDiscardWithDisposition = "discard_with_disposition"
+	ApprovalLease                   = "lease"
 )
 
 // Handler is the entire Host-tool execution contract. Authority and schema
@@ -78,6 +80,13 @@ type PreDispatchContract struct {
 	Unclaimed string            `json:"unclaimed"`
 }
 
+// ApprovalRequirement is Plan-bound policy for one live capability. Waiting is
+// implemented by the Host Broker; it grants no new capability authority.
+type ApprovalRequirement struct {
+	Mode              string `json:"mode"`
+	LeaseMilliseconds uint64 `json:"lease_milliseconds"`
+}
+
 // Spec is the canonical Host-owned definition shared by registration, plan
 // identity, Broker validation and Python projection.
 type Spec struct {
@@ -93,6 +102,7 @@ type Spec struct {
 	ReadOnly        bool                 `json:"read_only,omitempty"`
 	Idempotent      bool                 `json:"idempotent,omitempty"`
 	PreDispatch     *PreDispatchContract `json:"pre_dispatch,omitempty"`
+	Approval        *ApprovalRequirement `json:"approval,omitempty"`
 }
 
 // PreDispatchQualification is Host-authored adapter policy, never inferred
@@ -419,6 +429,18 @@ func (plan *Plan) StreamingPythonPrelude() string {
 	return generatePythonPrelude(allowed)
 }
 
+func (plan *Plan) RequiresApproval() bool {
+	if plan == nil {
+		return false
+	}
+	for _, spec := range plan.specs {
+		if spec.Approval != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (plan *Plan) lookup(name string) (registration, bool) {
 	if plan == nil {
 		return registration{}, false
@@ -433,7 +455,7 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 		!validEffectClass(spec.EffectClass) || !validPlaybackTreatment(spec.Playback) ||
 		len(spec.InputSchema) == 0 || len(spec.InputSchema) > maxCapabilitySchemaBytes ||
 		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > maxCapabilitySchemaBytes || !validPythonProjection(spec.Python) ||
-		!validPreDispatchQualification(spec) {
+		!validPreDispatchQualification(spec) || !validApprovalRequirement(spec) {
 		return Spec{}, nil, nil, ErrInvalidTool
 	}
 	inputDocument, inputCanonical, err := canonicalJSON(spec.InputSchema)
@@ -456,6 +478,15 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 	canonical.InputSchema = inputCanonical
 	canonical.OutputSchema = outputCanonical
 	return canonical, inputSchema, outputSchema, nil
+}
+
+func validApprovalRequirement(spec Spec) bool {
+	if spec.Approval == nil {
+		return true
+	}
+	return spec.Approval.Mode == ApprovalLease && spec.Approval.LeaseMilliseconds > 0 &&
+		spec.Approval.LeaseMilliseconds <= uint64((24*time.Hour)/time.Millisecond) &&
+		spec.Playback == PlaybackLiveOnly && spec.PreDispatch == nil
 }
 
 func validPreDispatchQualification(spec Spec) bool {
@@ -751,6 +782,10 @@ func cloneSpec(spec Spec) Spec {
 	if spec.PreDispatch != nil {
 		contract := *spec.PreDispatch
 		cloned.PreDispatch = &contract
+	}
+	if spec.Approval != nil {
+		requirement := *spec.Approval
+		cloned.Approval = &requirement
 	}
 	return cloned
 }

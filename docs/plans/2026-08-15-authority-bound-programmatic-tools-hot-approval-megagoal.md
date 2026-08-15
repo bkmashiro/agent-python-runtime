@@ -14,7 +14,7 @@
 
 - [x] Phase 0 — source archaeology and frozen implementation map
 - [x] Phase 1 — presentation contract and parent/child evidence
-- [ ] Phase 2 — approval suspension, lease and audit
+- [x] Phase 2 — approval suspension, lease and audit
 - [ ] Phase 3 — real-Guest parity, cancellation and zero-replay evidence
 - [ ] Phase 4 — full verification, independent review and closeout
 

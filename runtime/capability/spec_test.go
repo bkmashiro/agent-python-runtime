@@ -77,6 +77,25 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	}
 }
 
+func TestCapabilityPlanIdentityBindsApprovalLease(t *testing.T) {
+	identity := func(lease uint64) string {
+		registry := capability.NewRegistry()
+		spec := testSpec()
+		spec.Approval = &capability.ApprovalRequirement{Mode: capability.ApprovalLease, LeaseMilliseconds: lease}
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+			t.Fatal(err)
+		}
+		plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return plan.Identity()
+	}
+	if identity(1000) == identity(2000) {
+		t.Fatal("approval lease did not change Plan identity")
+	}
+}
+
 func TestCapabilityPlanIdentityBindsPreDispatchContract(t *testing.T) {
 	identity := func(namespace string) string {
 		registry := capability.NewRegistry()

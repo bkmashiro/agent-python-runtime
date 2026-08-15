@@ -21,6 +21,9 @@ func TestControllerApprovesExactlyOnceAndKeepsBodySafeAudit(t *testing.T) {
 	go func() {
 		permit, err := controller.Authorize(context.Background(), proposal)
 		if err == nil {
+			err = controller.BeginDispatch(context.Background(), permit.RequestID)
+		}
+		if err == nil {
 			err = controller.Complete(permit.RequestID, "ok")
 		}
 		result <- err
@@ -46,6 +49,29 @@ func TestControllerApprovesExactlyOnceAndKeepsBodySafeAudit(t *testing.T) {
 	}
 	if strings.Contains(records[0].ArgumentsSHA256, "do-not-store") {
 		t.Fatalf("audit leaked arguments: %#v", records[0])
+	}
+}
+
+func TestCancelledContextCannotCrossDispatchCommit(t *testing.T) {
+	controller := approval.NewController()
+	result := make(chan approval.Permit, 1)
+	go func() {
+		permit, _ := controller.Authorize(context.Background(), approval.Proposal{RunID: "execution-1", PlanSHA256: "sha256:" + strings.Repeat("a", 64), CallID: "call-1", Capability: "danger.delete", Arguments: []byte(`{}`), Lease: time.Second})
+		result <- permit
+	}()
+	request := waitForRequest(t, controller)
+	if err := controller.Approve(request.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	permit := <-result
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := controller.BeginDispatch(ctx, permit.RequestID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("dispatch error=%v", err)
+	}
+	record := controller.Snapshot()[0]
+	if record.Executed || record.DispatchCommittedAt != nil || record.DispatchOutcome != "cancelled_before_dispatch" {
+		t.Fatalf("record=%+v", record)
 	}
 }
 

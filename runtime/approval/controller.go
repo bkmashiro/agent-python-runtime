@@ -61,11 +61,12 @@ type Permit struct {
 
 type Record struct {
 	Request
-	Status          Status     `json:"status"`
-	DecisionAt      *time.Time `json:"decision_at,omitempty"`
-	CompletedAt     *time.Time `json:"completed_at,omitempty"`
-	Executed        bool       `json:"executed"`
-	DispatchOutcome string     `json:"dispatch_outcome,omitempty"`
+	Status              Status     `json:"status"`
+	DecisionAt          *time.Time `json:"decision_at,omitempty"`
+	DispatchCommittedAt *time.Time `json:"dispatch_committed_at,omitempty"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	Executed            bool       `json:"executed"`
+	DispatchOutcome     string     `json:"dispatch_outcome,omitempty"`
 }
 
 type pending struct {
@@ -195,13 +196,37 @@ func (controller *Controller) Complete(requestID, outcome string) error {
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
 	state, ok := controller.pending[requestID]
-	if !ok || state.record.Status != StatusApproved || state.record.Executed || state.record.CompletedAt != nil {
+	if !ok || state.record.Status != StatusApproved || state.record.Executed || state.record.CompletedAt != nil || state.record.DispatchCommittedAt == nil {
 		return ErrNotApproved
 	}
 	now := time.Now().UTC()
 	state.record.Executed = true
 	state.record.DispatchOutcome = outcome
 	state.record.CompletedAt = &now
+	return nil
+}
+
+// BeginDispatch is the cancellation/dispatch linearization point. Cancellation
+// observed while holding this lock wins and no handler may start. Cancellation
+// after success is post-dispatch-commit and never authorizes replay.
+func (controller *Controller) BeginDispatch(ctx context.Context, requestID string) error {
+	if controller == nil || ctx == nil {
+		return ErrNotApproved
+	}
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	state, ok := controller.pending[requestID]
+	if !ok || state.record.Status != StatusApproved || state.record.CompletedAt != nil || state.record.DispatchCommittedAt != nil {
+		return ErrNotApproved
+	}
+	if err := ctx.Err(); err != nil {
+		now := time.Now().UTC()
+		state.record.DispatchOutcome = "cancelled_before_dispatch"
+		state.record.CompletedAt = &now
+		return err
+	}
+	now := time.Now().UTC()
+	state.record.DispatchCommittedAt = &now
 	return nil
 }
 
@@ -214,7 +239,7 @@ func (controller *Controller) AbortApproved(requestID, outcome string) error {
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
 	state, ok := controller.pending[requestID]
-	if !ok || state.record.Status != StatusApproved || state.record.Executed || state.record.CompletedAt != nil {
+	if !ok || state.record.Status != StatusApproved || state.record.Executed || state.record.CompletedAt != nil || state.record.DispatchCommittedAt != nil {
 		return ErrNotApproved
 	}
 	now := time.Now().UTC()
@@ -241,6 +266,10 @@ func cloneRecord(record Record) Record {
 	if record.DecisionAt != nil {
 		value := *record.DecisionAt
 		cloned.DecisionAt = &value
+	}
+	if record.DispatchCommittedAt != nil {
+		value := *record.DispatchCommittedAt
+		cloned.DispatchCommittedAt = &value
 	}
 	if record.CompletedAt != nil {
 		value := *record.CompletedAt

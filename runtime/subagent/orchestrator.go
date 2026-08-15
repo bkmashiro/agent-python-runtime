@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
@@ -24,6 +25,8 @@ var (
 	ErrFanoutBudget         = errors.New("subagent fanout budget exceeded")
 	ErrOrchestratorTerminal = errors.New("subagent orchestrator is terminal")
 	ErrChildExecution       = errors.New("subagent child execution failed")
+	ErrAuthorityWidening    = errors.New("subagent authority widening rejected")
+	ErrDelegationBudget     = errors.New("subagent delegation call budget exceeded")
 )
 
 var descriptorName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
@@ -97,6 +100,9 @@ type Config struct {
 	ParentLineage         string
 	MaxFanout             uint32
 	MaxDepth              uint32
+	ParentPlan            *capability.Plan
+	ChildPlans            map[string]*capability.Plan
+	MaxDelegatedCalls     uint32
 	Executor              Executor
 }
 
@@ -109,15 +115,17 @@ type child struct {
 	err           error
 	startedMS     float64
 	endedMS       float64
+	reservedCalls uint32
 }
 
 type Orchestrator struct {
-	config      Config
-	parentDepth uint32
-	started     time.Time
-	mu          sync.Mutex
-	children    map[string]*child
-	terminal    bool
+	config        Config
+	parentDepth   uint32
+	started       time.Time
+	mu            sync.Mutex
+	children      map[string]*child
+	terminal      bool
+	reservedCalls uint32
 }
 
 func New(config Config) (*Orchestrator, error) {
@@ -125,6 +133,16 @@ func New(config Config) (*Orchestrator, error) {
 		!descriptorDigest.MatchString(config.ParentWorkspaceSHA256) ||
 		!descriptorDigest.MatchString(config.ParentLineage) || config.MaxFanout == 0 || config.MaxDepth == 0 {
 		return nil, ErrInvalidOrchestrator
+	}
+	if config.ParentPlan != nil || config.ChildPlans != nil || config.MaxDelegatedCalls != 0 {
+		if config.ParentPlan == nil || len(config.ChildPlans) == 0 || config.MaxDelegatedCalls == 0 || config.MaxDelegatedCalls > config.ParentPlan.MaxCalls() {
+			return nil, ErrInvalidOrchestrator
+		}
+		for identity, plan := range config.ChildPlans {
+			if plan == nil || identity != plan.Identity() {
+				return nil, ErrInvalidOrchestrator
+			}
+		}
 	}
 	info, err := config.Manager.Inspect(config.ParentRef)
 	if err != nil || info.WorkspaceSHA256 != config.ParentWorkspaceSHA256 {
@@ -153,6 +171,18 @@ func (orchestrator *Orchestrator) Stage(ctx context.Context, descriptor Descript
 	if _, duplicate := orchestrator.children[descriptor.ChildID]; duplicate {
 		return ErrInvalidDescriptor
 	}
+	var reservedCalls uint32
+	if orchestrator.config.ParentPlan != nil {
+		childPlan := orchestrator.config.ChildPlans[descriptor.ChildPlanSHA256]
+		decision := capability.CompareDelegation(orchestrator.config.ParentPlan, childPlan)
+		if !decision.Allowed {
+			return errors.Join(ErrAuthorityWidening, errors.New(string(decision.Reason)))
+		}
+		reservedCalls = decision.ReservedCalls
+		if reservedCalls > orchestrator.config.MaxDelegatedCalls-orchestrator.reservedCalls {
+			return ErrDelegationBudget
+		}
+	}
 	descriptorSHA, _, err := descriptor.Identity()
 	if err != nil {
 		return ErrInvalidDescriptor
@@ -164,9 +194,10 @@ func (orchestrator *Orchestrator) Stage(ctx context.Context, descriptor Descript
 	childContext, cancel := context.WithCancel(ctx)
 	work := &child{
 		descriptor: descriptor, descriptorSHA: descriptorSHA, branch: branch, cancel: cancel,
-		done: make(chan struct{}), startedMS: elapsedMS(orchestrator.started),
+		done: make(chan struct{}), startedMS: elapsedMS(orchestrator.started), reservedCalls: reservedCalls,
 	}
 	orchestrator.children[descriptor.ChildID] = work
+	orchestrator.reservedCalls += reservedCalls
 	go func() {
 		defer func() {
 			work.endedMS = elapsedMS(orchestrator.started)
@@ -199,6 +230,7 @@ type JoinResult struct {
 	MaxBranchDepth    uint32
 	ReachableRoots    uint32
 	DiscardedRoots    uint32
+	ReservedCalls     uint32
 }
 
 func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID string) (JoinResult, error) {
@@ -232,7 +264,7 @@ func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID stri
 	result := JoinResult{
 		SelectedChildID: selectedChildID, SelectedRoot: selected,
 		ChildCount: uint32(len(children)), Completed: uint32(len(children)), Timeline: timeline(children),
-		ReachableRoots: 1, DiscardedRoots: uint32(len(children) - 1),
+		ReachableRoots: 1, DiscardedRoots: uint32(len(children) - 1), ReservedCalls: orchestrator.reservedCalls,
 	}
 	for _, root := range roots {
 		result.ChangedBytes += root.ChangedBytes

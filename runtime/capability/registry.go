@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -160,6 +161,57 @@ type Plan struct {
 	grants        []GrantBinding
 	registrations map[string]registration
 	pythonPrelude string
+}
+
+type DelegationReason string
+
+const (
+	DelegationAllowed           DelegationReason = "allowed"
+	DelegationInvalid           DelegationReason = "invalid_plan"
+	DelegationCallsWidened      DelegationReason = "calls_widened"
+	DelegationCapabilityWidened DelegationReason = "capability_widened"
+	DelegationSpecMismatch      DelegationReason = "spec_mismatch"
+	DelegationGrantMismatch     DelegationReason = "grant_mismatch"
+)
+
+type DelegationDecision struct {
+	Allowed       bool
+	Reason        DelegationReason
+	ReservedCalls uint32
+}
+
+// CompareDelegation proves only exact attenuation. It does not infer schema
+// subsumption, grant semantics or an effect-class ordering.
+func CompareDelegation(parent, child *Plan) DelegationDecision {
+	if parent == nil || child == nil || parent.identity == "" || child.identity == "" {
+		return DelegationDecision{Reason: DelegationInvalid}
+	}
+	if child.maxCalls > parent.maxCalls {
+		return DelegationDecision{Reason: DelegationCallsWidened}
+	}
+	parentSpecs := make(map[string]Spec, len(parent.specs))
+	parentGrants := make(map[string]string, len(parent.grants))
+	for _, spec := range parent.specs {
+		parentSpecs[spec.Name] = spec
+	}
+	for _, grant := range parent.grants {
+		parentGrants[grant.Capability] = grant.PolicySHA256
+	}
+	for _, spec := range child.specs {
+		parentSpec, ok := parentSpecs[spec.Name]
+		if !ok {
+			return DelegationDecision{Reason: DelegationCapabilityWidened}
+		}
+		if !reflect.DeepEqual(parentSpec, spec) {
+			return DelegationDecision{Reason: DelegationSpecMismatch}
+		}
+	}
+	for _, grant := range child.grants {
+		if parentGrants[grant.Capability] != grant.PolicySHA256 {
+			return DelegationDecision{Reason: DelegationGrantMismatch}
+		}
+	}
+	return DelegationDecision{Allowed: true, Reason: DelegationAllowed, ReservedCalls: child.maxCalls}
 }
 
 func NewRegistry() *Registry {

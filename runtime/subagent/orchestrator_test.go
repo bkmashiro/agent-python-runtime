@@ -2,6 +2,7 @@ package subagent_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
@@ -254,6 +256,127 @@ func TestDescriptorIdentityAndBudgetsFailClosed(t *testing.T) {
 	}
 }
 
+func TestAuthorityAdmissionRejectsWideningAndAggregateOvercommitBeforeExecution(t *testing.T) {
+	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
+	parentPlan := subagentPlan(t, 4, "workspace.read")
+	childPlan := subagentPlan(t, 2, "workspace.read")
+	widenedPlan := subagentPlan(t, 1, "workspace.read", "network.read")
+	var executions atomic.Uint32
+	orchestrator, err := subagent.New(subagent.Config{
+		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: parentWorkspaceSHA,
+		ParentLineage: parentLineage, MaxFanout: 3, MaxDepth: 1,
+		ParentPlan: parentPlan, ChildPlans: map[string]*capability.Plan{
+			childPlan.Identity(): childPlan, widenedPlan.Identity(): widenedPlan,
+		},
+		MaxDelegatedCalls: 3,
+		Executor: subagent.ExecutorFunc(func(context.Context, subagent.Invocation) error {
+			executions.Add(1)
+			return nil
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := childDescriptor("valid", parentLineage)
+	valid.ChildPlanSHA256 = childPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), valid); err != nil {
+		t.Fatal(err)
+	}
+	if err := orchestrator.Stage(context.Background(), valid); !errors.Is(err, subagent.ErrInvalidDescriptor) {
+		t.Fatalf("duplicate error=%v", err)
+	}
+	overcommit := childDescriptor("overcommit", parentLineage)
+	overcommit.ChildPlanSHA256 = childPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), overcommit); !errors.Is(err, subagent.ErrDelegationBudget) {
+		t.Fatalf("overcommit error=%v", err)
+	}
+	widened := childDescriptor("widened", parentLineage)
+	widened.ChildPlanSHA256 = widenedPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), widened); !errors.Is(err, subagent.ErrAuthorityWidening) {
+		t.Fatalf("widening error=%v", err)
+	}
+	joined, err := orchestrator.Seal(context.Background(), "valid")
+	if err != nil || executions.Load() != 1 || joined.ReservedCalls != 2 {
+		t.Fatalf("joined=%+v executions=%d err=%v", joined, executions.Load(), err)
+	}
+}
+
+func TestAuthorityChildFailureDiscardsReservedPrivateBranch(t *testing.T) {
+	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
+	parentPlan := subagentPlan(t, 1, "workspace.read")
+	childPlan := subagentPlan(t, 1, "workspace.read")
+	orchestrator, err := subagent.New(subagent.Config{
+		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: parentWorkspaceSHA,
+		ParentLineage: parentLineage, MaxFanout: 1, MaxDepth: 1,
+		ParentPlan: parentPlan, ChildPlans: map[string]*capability.Plan{childPlan.Identity(): childPlan}, MaxDelegatedCalls: 1,
+		Executor: subagent.ExecutorFunc(func(context.Context, subagent.Invocation) error {
+			return errors.New("fixture child failure")
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := childDescriptor("failing-authority", parentLineage)
+	descriptor.ChildPlanSHA256 = childPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
+		t.Fatal(err)
+	}
+	refs := orchestrator.PrivateRefs()
+	if _, err := orchestrator.Seal(context.Background(), descriptor.ChildID); !errors.Is(err, subagent.ErrChildExecution) {
+		t.Fatalf("seal error=%v", err)
+	}
+	for _, ref := range refs {
+		if _, err := manager.Inspect(ref); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
+			t.Fatalf("failed child private ref %q remained: %v", ref, err)
+		}
+	}
+}
+
+func TestAuthorityReservationDoesNotEnableLateChildAfterAbort(t *testing.T) {
+	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
+	parentPlan := subagentPlan(t, 2, "workspace.read")
+	childPlan := subagentPlan(t, 2, "workspace.read")
+	entered := make(chan struct{})
+	var executions atomic.Uint32
+	orchestrator, err := subagent.New(subagent.Config{
+		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: parentWorkspaceSHA,
+		ParentLineage: parentLineage, MaxFanout: 2, MaxDepth: 1,
+		ParentPlan: parentPlan, ChildPlans: map[string]*capability.Plan{childPlan.Identity(): childPlan}, MaxDelegatedCalls: 2,
+		Executor: subagent.ExecutorFunc(func(ctx context.Context, _ subagent.Invocation) error {
+			executions.Add(1)
+			close(entered)
+			<-ctx.Done()
+			return ctx.Err()
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := childDescriptor("cancelled-authority", parentLineage)
+	descriptor.ChildPlanSHA256 = childPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	refs := orchestrator.PrivateRefs()
+	if err := orchestrator.Abort(context.Background(), subagent.ParentCancelled); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range refs {
+		if _, err := manager.Inspect(ref); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
+			t.Fatalf("cancelled private ref %q remained: %v", ref, err)
+		}
+	}
+	late := childDescriptor("late-authority", parentLineage)
+	late.ChildPlanSHA256 = childPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), late); !errors.Is(err, subagent.ErrOrchestratorTerminal) {
+		t.Fatalf("late stage error=%v", err)
+	}
+	if executions.Load() != 1 {
+		t.Fatalf("executions=%d", executions.Load())
+	}
+}
+
 func TestAbortConcurrentWithCompletionIsRaceSafe(t *testing.T) {
 	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
 	var entered sync.WaitGroup
@@ -283,6 +406,34 @@ func childDescriptor(id, parentLineage string) subagent.Descriptor {
 		ArtifactSHA256: digest('4'), ExecutionProfileSHA256: digest('5'), ChildPlanSHA256: digest('6'),
 		PrivacyPartition: "private-a", Depth: 1,
 	}
+}
+
+func subagentPlan(t *testing.T, maxCalls uint32, names ...string) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"root":"fixture"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		spec := capability.Spec{
+			Name: name, Version: "pysolate." + name + ".v1", Description: "Fixture capability " + name,
+			EffectClass: capability.EffectWorkspaceRead, Playback: capability.PlaybackLiveOnly,
+			HandlerIdentity: "pysolate." + name + ".handler.v1",
+			InputSchema:     json.RawMessage(`{"type":"object","additionalProperties":false}`),
+			OutputSchema:    json.RawMessage(`{"type":"object","additionalProperties":false}`),
+		}
+		if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{}`), nil
+		})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: maxCalls})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
 
 func subagentWorkspace(t *testing.T) (*workspace.Manager, workspace.Ref, string, string) {

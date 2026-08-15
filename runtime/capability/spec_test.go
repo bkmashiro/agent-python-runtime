@@ -97,6 +97,45 @@ func TestCapabilityPlanIdentityBindsPreDispatchContract(t *testing.T) {
 	}
 }
 
+func TestCompareDelegationRequiresExactSubsetAndBoundedCalls(t *testing.T) {
+	parent := sealedPlan(t, 4, testSpec(), basicGrant(t))
+	child := sealedPlan(t, 2, testSpec(), basicGrant(t))
+	decision := capability.CompareDelegation(parent, child)
+	if !decision.Allowed || decision.Reason != capability.DelegationAllowed || decision.ReservedCalls != 2 {
+		t.Fatalf("valid subset decision=%+v", decision)
+	}
+
+	widerCalls := sealedPlan(t, 5, testSpec(), basicGrant(t))
+	if decision := capability.CompareDelegation(parent, widerCalls); decision.Allowed || decision.Reason != capability.DelegationCallsWidened {
+		t.Fatalf("wider calls decision=%+v", decision)
+	}
+
+	extra := testSpec()
+	extra.Name = "workspace.read_other"
+	extra.Version = "pysolate.workspace.read-other.v1"
+	extra.HandlerIdentity = "pysolate.workspace-other.v1"
+	extra.Python.Method = "read_other"
+	extra.Python.GlobalAlias = "read_other"
+	additionalCapability := sealedPlanWithSpecs(t, 2, []capability.Spec{testSpec(), extra}, []capability.Grant{basicGrant(t), basicGrant(t)})
+	if decision := capability.CompareDelegation(parent, additionalCapability); decision.Allowed || decision.Reason != capability.DelegationCapabilityWidened {
+		t.Fatalf("additional capability decision=%+v", decision)
+	}
+
+	changedSpec := testSpec()
+	changedSpec.Description = "A different Host-owned contract."
+	if decision := capability.CompareDelegation(parent, sealedPlan(t, 2, changedSpec, basicGrant(t))); decision.Allowed || decision.Reason != capability.DelegationSpecMismatch {
+		t.Fatalf("changed spec decision=%+v", decision)
+	}
+
+	changedGrant, err := capability.NewGrant(json.RawMessage(`{"root":"other"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision := capability.CompareDelegation(parent, sealedPlan(t, 2, testSpec(), changedGrant)); decision.Allowed || decision.Reason != capability.DelegationGrantMismatch {
+		t.Fatalf("changed grant decision=%+v", decision)
+	}
+}
+
 func TestCapabilitySpecRequiresHostQualifiedPreDispatchConjunction(t *testing.T) {
 	valid := testSpec()
 	valid.EffectClass = capability.EffectExternalRead
@@ -341,6 +380,26 @@ func TestSealedPlanGeneratesPythonProjectionAndDefensiveSpecs(t *testing.T) {
 	if fresh.Python.Arguments[0] != "path" || !json.Valid(fresh.InputSchema) || fresh.PreDispatch.Resource.Namespace != "workspace" {
 		t.Fatalf("Plan.Specs leaked mutable state: %#v", fresh)
 	}
+}
+
+func sealedPlan(t *testing.T, maxCalls uint32, spec capability.Spec, grant capability.Grant) *capability.Plan {
+	t.Helper()
+	return sealedPlanWithSpecs(t, maxCalls, []capability.Spec{spec}, []capability.Grant{grant})
+}
+
+func sealedPlanWithSpecs(t *testing.T, maxCalls uint32, specs []capability.Spec, grants []capability.Grant) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	for index, spec := range specs {
+		if err := registry.Register(spec, grants[index], noopHandler); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: maxCalls})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
 
 func preDispatchArgument(argument string) *capability.PreDispatchContract {

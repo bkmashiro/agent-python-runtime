@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Active — Track 0 frozen; Track A delegation attenuation next
+**Status:** Active — Track A verified; Track B authority-bound resume next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -337,16 +337,18 @@ new effect plane or broad capability rewrite, stop for Yuzhe.
 
 ### Track A — Delegation attenuation and authority-budget conservation
 
-- [ ] Add RED tests showing child capability/effect widening and aggregate budget
+- [x] Add RED tests showing child capability/effect widening and aggregate budget
   overcommit are currently not proven at the `subagent` orchestration seam.
-- [ ] Reuse the canonical decoded `capability.Plan` and grant identities; do not create a
+- [x] Reuse the canonical decoded `capability.Plan` and grant identities; do not create a
   subagent-only capability model.
-- [ ] Make child admission prove equal-or-narrower capability/effect scope and atomically
+- [x] Make child admission prove equal-or-narrower capability/effect scope and atomically
   reserve bounded calls/resources from the parent.
-- [ ] Return only explicitly unconsumed reservations after terminal child cleanup.
-- [ ] Prove parent abort, child failure, duplicate child and cancellation cannot leak a
+- [x] Return only explicitly unconsumed reservations after terminal child cleanup. The
+  conservative v0 report has no trusted unused count, so it returns zero.
+- [x] Prove parent abort, child failure, duplicate child and cancellation cannot leak a
   reservation, branch or grant.
-- [ ] Integrate one real Guest valid and adversarial child case.
+- [ ] Integrate one real Guest valid and adversarial child case in the canonical campaign;
+  the current unit slice proves executor non-start before the later real-Guest fixture.
 
 **Gate:** every widening/overcommit fails before child Guest startup; valid attenuation
 preserves current fresh-child and private-workspace behavior.
@@ -627,9 +629,9 @@ claims remain valid.
 
 ## Current execution pointer
 
-**Track A:** add RED tests for exact child Plan attenuation and bounded aggregate
-reservation before changing the `subagent` admission seam. Keep the comparison in the
-canonical `capability` package and the reservation inside the existing Orchestrator.
+**Track B:** add RED tests for unchanged-authority resume, Plan/grant/freshness changes,
+expiry/revocation and selective invalidation. Reuse `workflow.State` and existing graph
+invalidation; do not preserve Guest or Broker state.
 
 ## Completion log
 
@@ -640,6 +642,12 @@ canonical `capability` package and the reservation inside the existing Orchestra
   froze the reuse/refactor/remove/add map, exact-comparison and conservative-reservation
   semantics, candidate claims, invalid inferences, metrics, corpus roles and balanced
   walkthrough selection. The KISS gate passed without a forbidden subsystem.
+- 2026-08-15: Track A added exact canonical child Plan/grant attenuation and an optional
+  authority-aware `subagent.Orchestrator` admission path. It reserves the full child call
+  ceiling conservatively, rejects unknown/widened Plans and sibling overcommit before
+  workspace fork or executor start, and proves cancellation discards private refs and
+  blocks late children. Historical digest-only fixtures remain available but cannot be
+  cited as authority proof; the campaign must use the authority-aware path.
 
 ## Short prompt to start this Mega-Goal
 

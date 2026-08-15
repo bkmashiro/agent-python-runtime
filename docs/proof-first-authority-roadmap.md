@@ -212,6 +212,22 @@ Stop/reframe if useful calls rarely close early, generation/read overlap is
 small, invalid-source waste is excessive, provider policy excludes most reads,
 or supported Python semantics become unnaturally narrow.
 
+## Track M — authority-bound multi-Agent delegation
+
+The bounded authority-aware subagent path compares a child Plan with the
+Host-held parent Plan before workspace fork or executor start. Only exact
+canonical Spec and grant identities may be retained, the child call ceiling may
+not exceed the parent's, and sibling reservations may not exceed an explicit
+delegation ceiling. Unknown Plans, widened Specs or grants, and aggregate
+overcommit fail closed. Because no trusted child-consumption report exists, the
+first slice conservatively consumes the full admitted reservation; it does not
+pretend to return unused calls.
+
+This extends `capability.Plan` and `subagent`, not a second policy registry. The
+existing digest-only mode remains for historical fixtures; new authority claims
+and the transparent campaign must use the authority-aware configuration and may
+not cite digest-only admission as proof.
+
 ## Recommended product profiles
 
 Profiles are test fixtures and examples, not mandatory bundles.

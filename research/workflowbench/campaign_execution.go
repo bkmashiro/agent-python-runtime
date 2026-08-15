@@ -23,8 +23,9 @@ const (
 )
 
 type CampaignAdmission struct {
-	Allowed bool
-	Reason  string
+	Allowed     bool
+	Reason      string
+	Disposition string
 }
 
 type CampaignOutcome struct {
@@ -35,9 +36,24 @@ type CampaignOutcome struct {
 	Err                 error
 }
 
+// CampaignRequest deliberately excludes program ID, family and Expected. Adapters can
+// invoke typed mechanisms, but cannot dispatch on paper labels or validation oracles.
+type CampaignRequest struct {
+	Source                 string
+	SourceSHA256           string
+	Inputs                 json.RawMessage
+	InputsSHA256           string
+	PlanSHA256             string
+	GrantSetSHA256         string
+	PrivacyPartition       string
+	WorkspaceFixtureSHA256 string
+	Execution              CampaignExecutionContract
+	DependencyResults      map[string]json.RawMessage
+}
+
 type CampaignAdapter interface {
-	Admit(context.Context, CampaignProgram, CampaignTreatment) CampaignAdmission
-	Execute(context.Context, CampaignProgram, CampaignTreatment, *CampaignRuntime) CampaignOutcome
+	Admit(context.Context, CampaignRequest, CampaignTreatment) CampaignAdmission
+	Execute(context.Context, CampaignRequest, CampaignTreatment, *CampaignRuntime) CampaignOutcome
 }
 
 type CampaignEvent struct {
@@ -190,6 +206,37 @@ func CampaignTreatmentOrder(repetition int) []CampaignTreatment {
 	return []CampaignTreatment{CampaignQualified, CampaignBaseline}
 }
 
+func newCampaignRequest(program CampaignProgram, rows []CampaignRow, indices map[string]int) CampaignRequest {
+	request := CampaignRequest{
+		Source: program.Source, SourceSHA256: program.SourceSHA256,
+		Inputs: append(json.RawMessage(nil), program.Inputs...), InputsSHA256: program.InputsSHA256,
+		PlanSHA256: program.PlanSHA256, GrantSetSHA256: program.GrantSetSHA256,
+		PrivacyPartition: program.PrivacyPartition, WorkspaceFixtureSHA256: program.WorkspaceFixtureSHA256,
+		Execution: cloneCampaignExecution(program.Execution), DependencyResults: make(map[string]json.RawMessage, len(program.Dependencies)),
+	}
+	for _, dependency := range program.Dependencies {
+		request.DependencyResults[dependency] = append(json.RawMessage(nil), rows[indices[dependency]].Result...)
+	}
+	return request
+}
+
+func cloneCampaignExecution(execution CampaignExecutionContract) CampaignExecutionContract {
+	clone := execution
+	if execution.Verifier != nil {
+		value := *execution.Verifier
+		clone.Verifier = &value
+	}
+	if execution.Resume != nil {
+		value := *execution.Resume
+		clone.Resume = &value
+	}
+	if execution.Delegation != nil {
+		value := *execution.Delegation
+		clone.Delegation = &value
+	}
+	return clone
+}
+
 func RunTransparentCampaign(ctx context.Context, manifest CampaignManifest, treatment CampaignTreatment, adapter CampaignAdapter) (CampaignEvidence, error) {
 	if manifest.Validate() != nil || adapter == nil || (treatment != CampaignBaseline && treatment != CampaignQualified) {
 		return CampaignEvidence{}, ErrInvalidCampaignEvidence
@@ -233,7 +280,8 @@ func RunTransparentCampaign(ctx context.Context, manifest CampaignManifest, trea
 				case <-done[indices[dependency]]:
 				}
 			}
-			admission := adapter.Admit(ctx, program, treatment)
+			request := newCampaignRequest(program, rows, indices)
+			admission := adapter.Admit(ctx, request, treatment)
 			admissionNS := time.Since(started).Nanoseconds()
 			if admission.Reason == "" {
 				admission.Reason = "unspecified"
@@ -241,13 +289,13 @@ func RunTransparentCampaign(ctx context.Context, manifest CampaignManifest, trea
 			if !admission.Allowed {
 				recorder.emit(program.ID, "admission.rejected", admission.Reason, "")
 				endNS := time.Since(started).Nanoseconds()
-				rows[index] = CampaignRow{ProgramID: program.ID, ReleaseNS: releaseNS, AdmissionNS: admissionNS, EndNS: endNS, AdmissionReason: admission.Reason, Disposition: program.Expected.Disposition, Sharing: "no_execution"}
-				recorder.emit(program.ID, "logical.terminal", program.Expected.Disposition, "")
+				rows[index] = CampaignRow{ProgramID: program.ID, ReleaseNS: releaseNS, AdmissionNS: admissionNS, EndNS: endNS, AdmissionReason: admission.Reason, Disposition: admission.Disposition, Sharing: "no_execution"}
+				recorder.emit(program.ID, "logical.terminal", admission.Disposition, "")
 				return
 			}
 			recorder.emit(program.ID, "admission.accepted", admission.Reason, "")
 			recorder.emit(program.ID, "logical.started", "", "")
-			outcome := adapter.Execute(ctx, program, treatment, &CampaignRuntime{programID: program.ID, recorder: recorder, gate: gate})
+			outcome := adapter.Execute(ctx, request, treatment, &CampaignRuntime{programID: program.ID, recorder: recorder, gate: gate})
 			endNS := time.Since(started).Nanoseconds()
 			rows[index] = CampaignRow{
 				ProgramID: program.ID, ReleaseNS: releaseNS, AdmissionNS: admissionNS, EndNS: endNS,

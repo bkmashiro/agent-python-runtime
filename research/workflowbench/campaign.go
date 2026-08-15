@@ -73,6 +73,7 @@ type CampaignResumeContract struct {
 type CampaignDelegationContract struct {
 	GroupID            string `json:"group_id"`
 	ParentPlanRole     string `json:"parent_plan_role"`
+	ParentPlanSHA256   string `json:"parent_plan_sha256"`
 	MaxDelegatedCalls  uint32 `json:"max_delegated_calls"`
 	ChildReservedCalls uint32 `json:"child_reserved_calls"`
 }
@@ -146,7 +147,10 @@ func CanonicalTransparentCampaign() (CampaignManifest, error) {
 		SchemaVersion: CampaignManifestSchemaVersion, CampaignID: "authority-transparent-20-v2", PhysicalSlots: 3,
 		Programs: make([]CampaignProgram, 0, len(fixtures)), WalkthroughProgramIDs: []string{"P02", "P06", "P11", "P15", "P18"},
 	}
-	executions := campaignExecutionContracts()
+	executions, err := campaignExecutionContracts()
+	if err != nil {
+		return CampaignManifest{}, err
+	}
 	if len(executions) != len(fixtures) {
 		return CampaignManifest{}, ErrInvalidCampaignManifest
 	}
@@ -179,7 +183,7 @@ func CanonicalTransparentCampaign() (CampaignManifest, error) {
 	return manifest, nil
 }
 
-func campaignExecutionContracts() []CampaignExecutionContract {
+func campaignExecutionContracts() ([]CampaignExecutionContract, error) {
 	verifier := func() *CampaignVerifierContract {
 		return &CampaignVerifierContract{
 			SourceSHA256:      campaignDigest([]byte("campaign-verifier-source-v1")),
@@ -192,8 +196,12 @@ func campaignExecutionContracts() []CampaignExecutionContract {
 	resume := func(from string, transition CampaignResumeTransition) *CampaignResumeContract {
 		return &CampaignResumeContract{FromProgramID: from, Transition: transition}
 	}
+	parentPlan, _, err := campaignPlan("consumer-left")
+	if err != nil {
+		return nil, err
+	}
 	delegation := func(group string) *CampaignDelegationContract {
-		return &CampaignDelegationContract{GroupID: group, ParentPlanRole: "consumer-left", MaxDelegatedCalls: 1, ChildReservedCalls: 1}
+		return &CampaignDelegationContract{GroupID: group, ParentPlanRole: "consumer-left", ParentPlanSHA256: parentPlan, MaxDelegatedCalls: 1, ChildReservedCalls: 1}
 	}
 	return []CampaignExecutionContract{
 		{Kind: CampaignExecutePython, CancelPoint: CampaignCancelNone},
@@ -216,7 +224,7 @@ func campaignExecutionContracts() []CampaignExecutionContract {
 		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-widening"), CancelPoint: CampaignCancelNone},
 		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-main"), CancelPoint: CampaignCancelNone},
 		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-main"), CancelPoint: CampaignCancelAfterParentTerminal},
-	}
+	}, nil
 }
 
 func (manifest CampaignManifest) Validate() error {
@@ -301,7 +309,7 @@ func (contract CampaignExecutionContract) validate(seen map[string]struct{}) err
 			return ErrInvalidCampaignManifest
 		}
 	case CampaignDelegateChild:
-		if contract.SourceProgramID != "" || contract.Verifier != nil || contract.Resume != nil || contract.Delegation == nil || contract.Delegation.GroupID == "" || contract.Delegation.ParentPlanRole == "" || contract.Delegation.MaxDelegatedCalls == 0 || contract.Delegation.ChildReservedCalls == 0 {
+		if contract.SourceProgramID != "" || contract.Verifier != nil || contract.Resume != nil || contract.Delegation == nil || contract.Delegation.GroupID == "" || contract.Delegation.ParentPlanRole == "" || !campaignDigestPattern.MatchString(contract.Delegation.ParentPlanSHA256) || contract.Delegation.MaxDelegatedCalls == 0 || contract.Delegation.ChildReservedCalls == 0 {
 			return ErrInvalidCampaignManifest
 		}
 	default:

@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,7 +20,7 @@ func TestTransparentCampaignDriverRecordsActualFIFOPhysicalFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseline, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignBaseline, &campaignAdapter{})
+	baseline, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignBaseline, newCampaignAdapter(manifest, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +38,7 @@ func TestTransparentCampaignDriverRecordsActualFIFOPhysicalFlow(t *testing.T) {
 		last = event.AtNS
 	}
 
-	qualified, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignQualified, &campaignAdapter{shareExact: true})
+	qualified, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignQualified, newCampaignAdapter(manifest, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +70,7 @@ func TestCampaignEvidenceRejectsMissingAndForgedPhysicalEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evidence, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignBaseline, &campaignAdapter{})
+	evidence, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignBaseline, newCampaignAdapter(manifest, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,32 +115,94 @@ func resealCampaignEvidence(evidence *workflowbench.CampaignEvidence) {
 
 type campaignAdapter struct {
 	shareExact bool
-	once       sync.Once
-	shared     workflowbench.CampaignOutcome
+	counter    atomic.Uint64
+	mu         sync.Mutex
+	oracles    map[string]json.RawMessage
+	keyCounts  map[string]int
+	shared     map[string]*campaignShared
+	reserved   map[string]uint32
 }
 
-func (adapter *campaignAdapter) Admit(_ context.Context, program workflowbench.CampaignProgram, _ workflowbench.CampaignTreatment) workflowbench.CampaignAdmission {
-	if program.Expected.Admission != "admit" {
-		return workflowbench.CampaignAdmission{Allowed: false, Reason: program.Expected.Admission}
+type campaignShared struct {
+	once    sync.Once
+	outcome workflowbench.CampaignOutcome
+}
+
+func newCampaignAdapter(manifest workflowbench.CampaignManifest, shareExact bool) *campaignAdapter {
+	adapter := &campaignAdapter{
+		shareExact: shareExact, oracles: make(map[string]json.RawMessage), keyCounts: make(map[string]int),
+		shared: make(map[string]*campaignShared), reserved: make(map[string]uint32),
+	}
+	for _, program := range manifest.Programs {
+		key := campaignProgramKey(program.SourceSHA256, program.InputsSHA256, program.PlanSHA256, program.GrantSetSHA256, program.WorkspaceFixtureSHA256, program.PrivacyPartition)
+		adapter.oracles[key] = append(json.RawMessage(nil), program.Expected.Oracle...)
+		adapter.keyCounts[key]++
+	}
+	return adapter
+}
+
+func (adapter *campaignAdapter) Admit(_ context.Context, request workflowbench.CampaignRequest, _ workflowbench.CampaignTreatment) workflowbench.CampaignAdmission {
+	switch request.Execution.Kind {
+	case workflowbench.CampaignResumeWorkflow:
+		if request.Execution.Resume.Transition == workflowbench.CampaignResumeExpired {
+			return workflowbench.CampaignAdmission{Reason: "authority_expired", Disposition: "rejected"}
+		}
+	case workflowbench.CampaignDelegateChild:
+		contract := request.Execution.Delegation
+		if request.Execution.CancelPoint == workflowbench.CampaignCancelAfterParentTerminal {
+			return workflowbench.CampaignAdmission{Reason: "parent_terminal", Disposition: "cancelled"}
+		}
+		if request.PlanSHA256 != contract.ParentPlanSHA256 {
+			return workflowbench.CampaignAdmission{Reason: "authority_widening", Disposition: "rejected"}
+		}
+		adapter.mu.Lock()
+		defer adapter.mu.Unlock()
+		if adapter.reserved[contract.GroupID]+contract.ChildReservedCalls > contract.MaxDelegatedCalls {
+			return workflowbench.CampaignAdmission{Reason: "delegation_budget", Disposition: "rejected"}
+		}
+		adapter.reserved[contract.GroupID] += contract.ChildReservedCalls
 	}
 	return workflowbench.CampaignAdmission{Allowed: true, Reason: "admitted"}
 }
 
-func (adapter *campaignAdapter) Execute(ctx context.Context, program workflowbench.CampaignProgram, treatment workflowbench.CampaignTreatment, runtime *workflowbench.CampaignRuntime) workflowbench.CampaignOutcome {
-	if treatment == workflowbench.CampaignQualified && adapter.shareExact && (program.ID == "P05" || program.ID == "P06") {
-		adapter.once.Do(func() {
-			value, err := runtime.Physical(ctx, "physical-exact-P05-P06", func(context.Context) ([]byte, error) {
-				time.Sleep(time.Millisecond)
-				return append([]byte(nil), program.Expected.Oracle...), nil
-			})
-			adapter.shared = workflowbench.CampaignOutcome{Disposition: program.Expected.Disposition, Result: value, PhysicalExecutionID: "physical-exact-P05-P06", Sharing: "exact_shared", Err: err}
-		})
-		return adapter.shared
+func (adapter *campaignAdapter) Execute(ctx context.Context, request workflowbench.CampaignRequest, treatment workflowbench.CampaignTreatment, runtime *workflowbench.CampaignRuntime) workflowbench.CampaignOutcome {
+	key := campaignProgramKey(request.SourceSHA256, request.InputsSHA256, request.PlanSHA256, request.GrantSetSHA256, request.WorkspaceFixtureSHA256, request.PrivacyPartition)
+	if request.Execution.Kind == workflowbench.CampaignConsumeResult {
+		if len(request.DependencyResults[request.Execution.SourceProgramID]) == 0 {
+			return workflowbench.CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: errors.New("producer result missing")}
+		}
 	}
-	physicalID := "physical-" + program.ID
+	if treatment == workflowbench.CampaignQualified && adapter.shareExact && request.Execution.Kind == workflowbench.CampaignExactRequest {
+		adapter.mu.Lock()
+		entry := adapter.shared[key]
+		if entry == nil {
+			entry = &campaignShared{}
+			adapter.shared[key] = entry
+		}
+		adapter.mu.Unlock()
+		entry.once.Do(func() { entry.outcome = adapter.executePhysical(ctx, request, runtime, key) })
+		outcome := entry.outcome
+		if adapter.keyCounts[key] > 1 {
+			outcome.Sharing = "exact_shared"
+		}
+		return outcome
+	}
+	return adapter.executePhysical(ctx, request, runtime, key)
+}
+
+func (adapter *campaignAdapter) executePhysical(ctx context.Context, request workflowbench.CampaignRequest, runtime *workflowbench.CampaignRuntime, key string) workflowbench.CampaignOutcome {
+	physicalID := fmt.Sprintf("physical-%d", adapter.counter.Add(1))
 	value, err := runtime.Physical(ctx, physicalID, func(context.Context) ([]byte, error) {
 		time.Sleep(time.Millisecond)
-		return append([]byte(nil), program.Expected.Oracle...), nil
+		return append([]byte(nil), adapter.oracles[key]...), nil
 	})
-	return workflowbench.CampaignOutcome{Disposition: program.Expected.Disposition, Result: value, PhysicalExecutionID: physicalID, Sharing: "independent", Err: err}
+	disposition := "complete"
+	if request.Execution.CancelPoint == workflowbench.CampaignCancelAfterWorkspaceFork {
+		disposition = "cancelled"
+	}
+	return workflowbench.CampaignOutcome{Disposition: disposition, Result: value, PhysicalExecutionID: physicalID, Sharing: "independent", Err: err}
+}
+
+func campaignProgramKey(source, inputs, plan, grants, workspace, privacy string) string {
+	return source + "\x00" + inputs + "\x00" + plan + "\x00" + grants + "\x00" + workspace + "\x00" + privacy
 }

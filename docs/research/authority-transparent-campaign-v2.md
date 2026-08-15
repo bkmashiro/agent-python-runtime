@@ -16,7 +16,9 @@ The v2 machine contract separates two concerns:
 `execution` is not a Runtime API or production scheduling policy. No package under
 `runtime/` knows `P01`–`P20`, campaign families, paper labels or expected outcomes. The
 adapter may dispatch on typed execution kind and transition, but must never dispatch on a
-program ID, family or `expected` field.
+program ID, family or `expected` field. The driver enforces this boundary structurally:
+`CampaignAdapter` receives `CampaignRequest`, which does not contain those fields; rejected
+dispositions also come from Runtime admission rather than being copied from `Expected`.
 
 ## Fixed execution policy
 

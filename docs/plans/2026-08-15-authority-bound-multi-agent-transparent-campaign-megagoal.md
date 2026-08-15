@@ -684,6 +684,10 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
   contract; no `runtime/` package, production scheduler or case-specific Runtime behavior
   was added. Validation rejects unknown operations and incomplete producer, verifier,
   resume and delegation contracts.
+- 2026-08-15: Hardened the adapter boundary: `CampaignRequest` deliberately omits program
+  ID, family and `Expected`; dependency results and typed execution contracts are copied
+  into the request. Rejected dispositions now come from adapter/Runtime admission, not
+  from the oracle. Delegation contracts bind the canonical parent Plan identity.
 
 ## Short prompt to start this Mega-Goal
 

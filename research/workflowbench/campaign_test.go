@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -120,6 +121,15 @@ func TestTransparentCampaignUsesTypedResearchContractsNotExpectedLabels(t *testi
 	}
 }
 
+func TestCampaignAdapterRequestExcludesPaperLabelsAndExpectedOracle(t *testing.T) {
+	typeOf := reflect.TypeOf(workflowbench.CampaignRequest{})
+	for _, forbidden := range []string{"ID", "ProgramID", "Family", "Expected"} {
+		if _, ok := typeOf.FieldByName(forbidden); ok {
+			t.Fatalf("adapter request exposes forbidden field %s", forbidden)
+		}
+	}
+}
+
 func TestTransparentCampaignManifestRejectsIdentityAndRoleTampering(t *testing.T) {
 	manifest, err := workflowbench.CanonicalTransparentCampaign()
 	if err != nil {
@@ -143,6 +153,9 @@ func TestTransparentCampaignManifestRejectsIdentityAndRoleTampering(t *testing.T
 		{"verifier missing identity", func(value *workflowbench.CampaignManifest) { value.Programs[9].Execution.Verifier.PolicySHA256 = "" }},
 		{"delegation missing parent", func(value *workflowbench.CampaignManifest) {
 			value.Programs[16].Execution.Delegation.ParentPlanRole = ""
+		}},
+		{"delegation missing parent identity", func(value *workflowbench.CampaignManifest) {
+			value.Programs[16].Execution.Delegation.ParentPlanSHA256 = ""
 		}},
 		{"walkthrough", func(value *workflowbench.CampaignManifest) { value.WalkthroughProgramIDs[0] = "P99" }},
 	}

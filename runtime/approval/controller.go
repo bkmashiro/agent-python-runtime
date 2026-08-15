@@ -20,6 +20,7 @@ var (
 	ErrRejected        = errors.New("approval rejected")
 	ErrExpired         = errors.New("approval expired")
 	ErrNotApproved     = errors.New("approval was not granted")
+	ErrAuditCapacity   = errors.New("approval audit capacity exhausted")
 )
 
 type Status string
@@ -73,14 +74,23 @@ type pending struct {
 }
 
 type Controller struct {
-	mu       sync.Mutex
-	sequence uint64
-	order    []string
-	pending  map[string]*pending
+	mu         sync.Mutex
+	sequence   uint64
+	order      []string
+	pending    map[string]*pending
+	maxRecords int
 }
 
 func NewController() *Controller {
-	return &Controller{pending: make(map[string]*pending)}
+	controller, _ := NewControllerWithCapacity(1024)
+	return controller
+}
+
+func NewControllerWithCapacity(maxRecords int) (*Controller, error) {
+	if maxRecords < 1 || maxRecords > 1<<20 {
+		return nil, ErrInvalidProposal
+	}
+	return &Controller{pending: make(map[string]*pending), maxRecords: maxRecords}, nil
 }
 
 func (controller *Controller) Authorize(ctx context.Context, proposal Proposal) (Permit, error) {
@@ -91,6 +101,10 @@ func (controller *Controller) Authorize(ctx context.Context, proposal Proposal) 
 	argumentsDigest := sha256.Sum256(proposal.Arguments)
 
 	controller.mu.Lock()
+	if len(controller.order) >= controller.maxRecords {
+		controller.mu.Unlock()
+		return Permit{}, ErrAuditCapacity
+	}
 	controller.sequence++
 	requestID := requestIdentity(proposal, now, controller.sequence, argumentsDigest)
 	request := Request{

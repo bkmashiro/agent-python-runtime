@@ -281,6 +281,8 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 				code, message = "approval_rejected", "Host tool approval was rejected"
 			case errors.Is(approvalErr, approval.ErrExpired):
 				code, message = "approval_expired", "Host tool approval lease expired"
+			case errors.Is(approvalErr, approval.ErrAuditCapacity):
+				code, message = "approval_unavailable", "Host approval audit capacity is exhausted"
 			}
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
 		}

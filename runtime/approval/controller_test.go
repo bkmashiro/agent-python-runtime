@@ -75,6 +75,21 @@ func TestApprovedPermitCanBeAbortedBeforeDispatchWithoutExecution(t *testing.T) 
 	}
 }
 
+func TestControllerFailsClosedAtBoundedAuditCapacity(t *testing.T) {
+	controller, err := approval.NewControllerWithCapacity(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := approval.Proposal{RunID: "execution-1", PlanSHA256: "sha256:" + strings.Repeat("a", 64), CallID: "call-1", Capability: "danger.delete", Arguments: []byte(`{}`), Lease: time.Millisecond}
+	if _, err := controller.Authorize(context.Background(), first); !errors.Is(err, approval.ErrExpired) {
+		t.Fatalf("first error=%v", err)
+	}
+	first.CallID = "call-2"
+	if _, err := controller.Authorize(context.Background(), first); !errors.Is(err, approval.ErrAuditCapacity) {
+		t.Fatalf("capacity error=%v", err)
+	}
+}
+
 func TestControllerRejectsExpiresAndCancelsWithoutPermit(t *testing.T) {
 	for _, test := range []struct {
 		name string

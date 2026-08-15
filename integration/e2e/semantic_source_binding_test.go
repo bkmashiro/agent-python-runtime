@@ -170,6 +170,12 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		t.Fatal(err)
 	}
 	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventModelOutput, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{modelContext.EventID},
+		Payload: trajectory.ModelOutputPayload{Availability: trajectory.NotRecorded},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventModelBody, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{modelContext.EventID}, Body: &contextBody,
 		Payload: trajectory.ModelContextPayload{ContextSHA256: contextSHA256, BriefSHA256: briefSHA256, Availability: trajectory.Available},
 	}); err != nil {
@@ -335,8 +341,10 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	}
 	if e2eEvidenceCount(privateFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventRuntimeObservation) == 0 ||
 		e2eEvidenceCount(privateFull.Events, trajectory.EventSourceBody) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventWorkspaceFile) != 1 ||
+		e2eEvidenceCount(privateFull.Events, trajectory.EventToolDecision) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventModelOutput) != 1 ||
 		e2eEvidenceCount(production.Events, trajectory.EventSourceDecision) != 0 || e2eEvidenceCount(production.Events, trajectory.EventEffectTransition) != 1 ||
 		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventRuntimeObservation) != 0 ||
+		e2eEvidenceCount(publicFull.Events, trajectory.EventToolDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventModelOutput) != 1 ||
 		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceBody) != 0 || e2eEvidenceCount(publicFull.Events, trajectory.EventWorkspaceFile) != 0 {
 		t.Fatalf("private=%d production=%d public=%d", len(privateFull.Events), len(production.Events), len(publicFull.Events))
 	}

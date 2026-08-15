@@ -73,8 +73,8 @@ const digestRE = /^sha256:[0-9a-f]{64}$/;
 const commitRE = /^[0-9a-f]{40}$/;
 const idRE = /^[a-z][a-z0-9_.:-]{7,127}$/;
 const eventTypes = new Set<EvidenceType>([
-  'trace.started', 'trace.ended', 'authority.snapshot', 'effect.transition', 'workspace.terminal', 'execution.attempt',
-  'model.context', 'model.body', 'source.document', 'source.body', 'source.occurrence', 'source.decision', 'source.executed_line',
+  'trace.started', 'trace.ended', 'authority.snapshot', 'effect.transition', 'tool.decision', 'workspace.terminal', 'execution.attempt',
+  'model.context', 'model.body', 'model.output', 'source.document', 'source.body', 'source.occurrence', 'source.decision', 'source.executed_line',
   'subagent.context', 'subagent.runtime', 'subagent.workspace', 'workspace.file', 'evidence.truncated', 'runtime.observation', 'resource.sample',
 ]);
 const productionTypes = new Set<EvidenceType>([
@@ -116,9 +116,11 @@ function validatePayload(event: RawEvidenceEvent) {
     case 'trace.ended': exactKeys(payload, ['status', 'evidence_complete']); assert(payload.status === 'completed' || payload.status === 'failed', 'invalid trace end'); assert(typeof payload.evidence_complete === 'boolean', 'invalid evidence completeness'); break;
     case 'authority.snapshot': exactKeys(payload, ['run_id', 'capability_plan_sha256', 'policy_sha256', 'freshness_sha256', 'grants_sha256']); digest('capability_plan_sha256'); digest('policy_sha256'); digest('freshness_sha256'); digest('grants_sha256'); break;
     case 'effect.transition': exactKeys(payload, ['call_id', 'state'], ['receipt_id', 'compensator', 'reconciliation_reason']); break;
+    case 'tool.decision': exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'receipt_id'], ['result_sha256']); digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256'); break;
     case 'workspace.terminal': exactKeys(payload, ['base_workspace_sha256', 'disposition'], ['result_workspace_sha256']); digest('base_workspace_sha256'); if (payload.result_workspace_sha256 !== undefined) digest('result_workspace_sha256'); break;
     case 'execution.attempt': exactKeys(payload, ['run_id', 'attempt_id', 'status'], ['prepared_image_sha256']); if (payload.prepared_image_sha256 !== undefined) digest('prepared_image_sha256'); break;
     case 'model.context': case 'model.body': exactKeys(payload, ['context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
+    case 'model.output': exactKeys(payload, ['availability'], ['output_sha256']); if (payload.output_sha256 !== undefined) digest('output_sha256'); break;
     case 'source.document': exactKeys(payload, ['document_id', 'source_sha256', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.body': exactKeys(payload, ['document_id', 'source_sha256', 'display_path', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.occurrence': exactKeys(payload, ['document_id', 'source_sha256', 'occurrence_id', 'start_line', 'start_column', 'end_line', 'end_column', 'capability', 'dynamic_occurrence']); digest('document_id'); digest('source_sha256'); digest('occurrence_id'); break;
@@ -136,6 +138,10 @@ function validatePayload(event: RawEvidenceEvent) {
 
 function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEvidenceEvent>) {
   const parents = (event.parent_event_ids ?? []).map((id) => prior.get(id)!);
+  if (event.type === 'tool.decision') {
+    assert(parents.length === 1 && parents[0].type === 'effect.transition', 'tool decision parent mismatch');
+    assert(parents[0].payload.call_id === event.payload.call_id && parents[0].payload.receipt_id === event.payload.receipt_id, 'tool decision effect identity mismatch');
+  }
   if (event.type === 'source.body') {
     assert(parents.length === 1 && parents[0].type === 'source.document', 'source body parent mismatch');
     assert(parents[0].payload.document_id === event.payload.document_id && parents[0].payload.source_sha256 === event.payload.source_sha256, 'source body identity mismatch');

@@ -272,11 +272,13 @@ type ExecutionFailedPayload struct {
 }
 
 type CapabilityCallPayload struct {
+	ApprovalRequestID    string                `json:"approval_request_id,omitempty"`
 	ArgumentsSHA256      string                `json:"arguments_sha256"`
 	Capability           string                `json:"capability"`
 	CapabilityPlanSHA256 string                `json:"capability_plan_sha256,omitempty"`
 	OperationIndex       uint32                `json:"operation_index"`
 	Outcome              string                `json:"outcome"`
+	ParentCallID         string                `json:"parent_call_id,omitempty"`
 	ReceiptID            string                `json:"receipt_id,omitempty"`
 	ResultSHA256         string                `json:"result_sha256,omitempty"`
 	Source               *SourceBindingPayload `json:"source,omitempty"`
@@ -364,12 +366,13 @@ func validatePayload(kind string, raw []byte) (json.RawMessage, error) {
 		}
 	case EventCapabilityCall:
 		if !hasRequiredAndOnlyExactKeys(fields,
-			[]string{"arguments_sha256", "capability", "operation_index", "outcome"}, "capability_plan_sha256", "receipt_id", "result_sha256", "source") {
+			[]string{"arguments_sha256", "capability", "operation_index", "outcome"}, "approval_request_id", "capability_plan_sha256", "parent_call_id", "receipt_id", "result_sha256", "source") {
 			return nil, ErrInvalidEvent
 		}
 		var payload CapabilityCallPayload
 		if json.Unmarshal(raw, &payload) != nil || !digest.MatchString(payload.ArgumentsSHA256) || !optionalDigestField(fields, "capability_plan_sha256", payload.CapabilityPlanSHA256) ||
-			!validCapabilityName(payload.Capability) || !validOutcome(payload.Outcome) || !optionalIdentifierField(fields, "receipt_id", payload.ReceiptID) ||
+			!validCapabilityName(payload.Capability) || !validOutcome(payload.Outcome) || !optionalIdentifierField(fields, "approval_request_id", payload.ApprovalRequestID) ||
+			!optionalIdentifierField(fields, "parent_call_id", payload.ParentCallID) || !optionalIdentifierField(fields, "receipt_id", payload.ReceiptID) ||
 			!optionalDigestField(fields, "result_sha256", payload.ResultSHA256) ||
 			(payload.ResultSHA256 != "" && payload.Outcome != "ok") || !optionalSourceField(fields, payload.Source) ||
 			(payload.Source != nil && payload.ReceiptID == "") {

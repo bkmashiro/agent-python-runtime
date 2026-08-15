@@ -58,10 +58,12 @@ const (
 	EventTraceEnded         EvidenceType = "trace.ended"
 	EventAuthoritySnapshot  EvidenceType = "authority.snapshot"
 	EventEffectTransition   EvidenceType = "effect.transition"
+	EventToolDecision       EvidenceType = "tool.decision"
 	EventWorkspaceTerminal  EvidenceType = "workspace.terminal"
 	EventExecutionAttempt   EvidenceType = "execution.attempt"
 	EventModelContext       EvidenceType = "model.context"
 	EventModelBody          EvidenceType = "model.body"
+	EventModelOutput        EvidenceType = "model.output"
 	EventSourceDocument     EvidenceType = "source.document"
 	EventSourceBody         EvidenceType = "source.body"
 	EventSourceOccurrence   EvidenceType = "source.occurrence"
@@ -78,8 +80,8 @@ const (
 
 func (eventType EvidenceType) valid() bool {
 	switch eventType {
-	case EventTraceStarted, EventTraceEnded, EventAuthoritySnapshot, EventEffectTransition,
-		EventWorkspaceTerminal, EventExecutionAttempt, EventModelContext, EventModelBody,
+	case EventTraceStarted, EventTraceEnded, EventAuthoritySnapshot, EventEffectTransition, EventToolDecision,
+		EventWorkspaceTerminal, EventExecutionAttempt, EventModelContext, EventModelBody, EventModelOutput,
 		EventSourceDocument, EventSourceBody, EventSourceOccurrence, EventSourceDecision, EventExecutedLine,
 		EventSubagentContext, EventSubagentRuntime, EventSubagentWorkspace, EventWorkspaceFile, EventEvidenceTruncated,
 		EventRuntimeObservation, EventResourceSample:
@@ -147,6 +149,18 @@ type EffectTransitionPayload struct {
 	ReconciliationReason string      `json:"reconciliation_reason,omitempty"`
 }
 
+type ToolDecisionPayload struct {
+	ApprovalDisposition  string `json:"approval_disposition"`
+	ArgumentsSHA256      string `json:"arguments_sha256"`
+	BrokerOutcome        string `json:"broker_outcome"`
+	CallID               string `json:"call_id"`
+	Capability           string `json:"capability"`
+	CapabilityPlanSHA256 string `json:"capability_plan_sha256"`
+	Mechanism            string `json:"mechanism"`
+	ReceiptID            string `json:"receipt_id"`
+	ResultSHA256         string `json:"result_sha256,omitempty"`
+}
+
 type WorkspaceTerminalPayload struct {
 	BaseWorkspaceSHA256   string `json:"base_workspace_sha256"`
 	ResultWorkspaceSHA256 string `json:"result_workspace_sha256,omitempty"`
@@ -164,6 +178,11 @@ type ModelContextPayload struct {
 	ContextSHA256 string       `json:"context_sha256"`
 	BriefSHA256   string       `json:"brief_sha256"`
 	Availability  Availability `json:"availability"`
+}
+
+type ModelOutputPayload struct {
+	Availability Availability `json:"availability"`
+	OutputSHA256 string       `json:"output_sha256,omitempty"`
 }
 
 type ClaimLevel string
@@ -593,12 +612,16 @@ func decodeEvidencePayload(kind EvidenceType, raw json.RawMessage) (any, error) 
 		target = &AuthoritySnapshotPayload{}
 	case EventEffectTransition:
 		target = &EffectTransitionPayload{}
+	case EventToolDecision:
+		target = &ToolDecisionPayload{}
 	case EventWorkspaceTerminal:
 		target = &WorkspaceTerminalPayload{}
 	case EventExecutionAttempt:
 		target = &ExecutionAttemptPayload{}
 	case EventModelContext, EventModelBody:
 		target = &ModelContextPayload{}
+	case EventModelOutput:
+		target = &ModelOutputPayload{}
 	case EventSourceDocument:
 		target = &SourceDocumentPayload{}
 	case EventSourceBody:
@@ -648,11 +671,15 @@ func dereferenceEvidencePayload(value any) any {
 		return *typed
 	case *EffectTransitionPayload:
 		return *typed
+	case *ToolDecisionPayload:
+		return *typed
 	case *WorkspaceTerminalPayload:
 		return *typed
 	case *ExecutionAttemptPayload:
 		return *typed
 	case *ModelContextPayload:
+		return *typed
+	case *ModelOutputPayload:
 		return *typed
 	case *SourceDocumentPayload:
 		return *typed
@@ -703,6 +730,15 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		if kind != EventEffectTransition || !evidenceIdentifier.MatchString(value.CallID) || !validEffectTransition(value) {
 			return errors.New("invalid effect transition payload")
 		}
+	case ToolDecisionPayload:
+		if kind != EventToolDecision || !evidenceIdentifier.MatchString(value.CallID) || !validDigest(value.ArgumentsSHA256) ||
+			!evidenceIdentifier.MatchString(value.Capability) || !validDigest(value.CapabilityPlanSHA256) || !evidenceIdentifier.MatchString(value.ReceiptID) ||
+			(value.Mechanism != "direct" && value.Mechanism != "programmatic") ||
+			(value.BrokerOutcome != "ok" && value.BrokerOutcome != "denied" && value.BrokerOutcome != "error" && value.BrokerOutcome != "timeout" && value.BrokerOutcome != "ambiguous") ||
+			(value.ApprovalDisposition != "not_required" && value.ApprovalDisposition != "approved" && value.ApprovalDisposition != "denied" && value.ApprovalDisposition != "not_recorded") ||
+			(value.BrokerOutcome == "ok" && !validDigest(value.ResultSHA256)) || (value.BrokerOutcome != "ok" && value.ResultSHA256 != "") {
+			return errors.New("invalid tool decision payload")
+		}
 	case WorkspaceTerminalPayload:
 		if kind != EventWorkspaceTerminal || !validDigest(value.BaseWorkspaceSHA256) ||
 			(value.ResultWorkspaceSHA256 != "" && !validDigest(value.ResultWorkspaceSHA256)) ||
@@ -718,6 +754,11 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 	case ModelContextPayload:
 		if (kind != EventModelContext && kind != EventModelBody) || !validDigest(value.ContextSHA256) || !validDigest(value.BriefSHA256) || !value.Availability.valid() {
 			return errors.New("invalid model context payload")
+		}
+	case ModelOutputPayload:
+		if kind != EventModelOutput || !value.Availability.valid() ||
+			(value.Availability == Available && !validDigest(value.OutputSHA256)) || (value.Availability != Available && value.OutputSHA256 != "") {
+			return errors.New("invalid model output payload")
 		}
 	case SourceDocumentPayload:
 		if kind != EventSourceDocument || !validDigest(value.DocumentID) || !validDigest(value.SourceSHA256) || !value.Availability.valid() {
@@ -801,6 +842,12 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		return decodeEvidencePayload(parent.Type, parent.Payload)
 	}
 	switch value := payload.(type) {
+	case ToolDecisionPayload:
+		parent, err := parentPayload(EventEffectTransition)
+		effect, ok := parent.(*EffectTransitionPayload)
+		if err != nil || !ok || effect.CallID != value.CallID || effect.ReceiptID != value.ReceiptID {
+			return errors.New("tool decision effect identity mismatch")
+		}
 	case SourceBodyPayload:
 		parent, err := parentPayload(EventSourceDocument)
 		document, ok := parent.(*SourceDocumentPayload)

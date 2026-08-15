@@ -189,6 +189,27 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			return err
 		}
 		recorder.lastProduction = effect.EventID
+		approvalDisposition := "not_required"
+		if payload.ApprovalRequestID != "" {
+			approvalDisposition = "approved"
+			if payload.Outcome == "denied" {
+				approvalDisposition = "denied"
+			}
+		}
+		mechanism := "direct"
+		if payload.ParentCallID != "" {
+			mechanism = "programmatic"
+		}
+		if _, err := recorder.log.Append(EvidenceInput{
+			Type: EventToolDecision, ActorID: recorder.config.ActorID, ParentEventIDs: []string{effect.EventID},
+			Payload: ToolDecisionPayload{
+				ApprovalDisposition: approvalDisposition, ArgumentsSHA256: payload.ArgumentsSHA256, BrokerOutcome: payload.Outcome,
+				CallID: capabilityCallIdentity(payload), Capability: payload.Capability, CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
+				Mechanism: mechanism, ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256,
+			},
+		}); err != nil {
+			return err
+		}
 		if payload.Source != nil {
 			document, err := recorder.log.Append(EvidenceInput{
 				Type: EventSourceDocument, ActorID: recorder.config.ActorID,

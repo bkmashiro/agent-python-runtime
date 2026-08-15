@@ -46,7 +46,7 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	parent = 2
 	appendObservationEvent(t, session, observe.EventCapabilityCall, &parent, observe.CapabilityCallPayload{
 		ArgumentsSHA256: evidenceDigest('8'), Capability: "workspace.read_text", CapabilityPlanSHA256: evidenceDigest('5'),
-		OperationIndex: 0, Outcome: "ok", ReceiptID: "rcpt_observe_adapter_0001", ResultSHA256: evidenceDigest('9'),
+		OperationIndex: 0, Outcome: "ok", ParentCallID: "parent-call-observe-0001", ReceiptID: "rcpt_observe_adapter_0001", ResultSHA256: evidenceDigest('9'),
 		Source: &observe.SourceBindingPayload{
 			SchemaVersion: "pysolate.source-binding.v0", ClaimLevel: "source_bound",
 			DocumentID: evidenceDigest('e'), SourceSHA256: evidenceDigest('f'), OccurrenceID: evidenceDigest('0'),
@@ -74,6 +74,7 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 5 ||
 		countEvidenceType(production.Events, trajectory.EventAuthoritySnapshot) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventSourceDecision) != 1 ||
+		countEvidenceType(full.Events, trajectory.EventToolDecision) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventExecutedLine) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventResourceSample) != 1 {
 		t.Fatalf("full runtime=%d source=%d line=%d resource=%d",

@@ -47,7 +47,7 @@ func (lifecycle *observationLifecycle) capabilityCalls(ctx context.Context, rece
 		payload := observe.CapabilityCallPayload{
 			ArgumentsSHA256: prefixedReceiptDigest(call.RequestSHA256), Capability: call.Capability,
 			CapabilityPlanSHA256: call.CapabilityPlanSHA256, OperationIndex: call.OperationIndex, Outcome: call.Outcome,
-			ReceiptID: call.ReceiptID,
+			ApprovalRequestID: call.ApprovalRequestID, ParentCallID: call.ParentCallID, ReceiptID: call.ReceiptID,
 		}
 		if call.ResponseSHA256 != "" {
 			payload.ResultSHA256 = prefixedReceiptDigest(call.ResponseSHA256)

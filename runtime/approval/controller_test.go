@@ -52,6 +52,26 @@ func TestControllerApprovesExactlyOnceAndKeepsBodySafeAudit(t *testing.T) {
 	}
 }
 
+func TestApprovalLeaseCannotDispatchAfterTimelyDecisionExpires(t *testing.T) {
+	controller := approval.NewController()
+	result := make(chan approval.Permit, 1)
+	proposal := approval.Proposal{RunID: "execution-1", PlanSHA256: "sha256:" + strings.Repeat("a", 64), CallID: "call-1", Capability: "danger.delete", Arguments: []byte(`{}`), Lease: 20 * time.Millisecond}
+	go func() { permit, _ := controller.Authorize(context.Background(), proposal); result <- permit }()
+	request := waitForRequest(t, controller)
+	if err := controller.Approve(request.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	permit := <-result
+	time.Sleep(30 * time.Millisecond)
+	if err := controller.BeginDispatch(context.Background(), permit.RequestID); !errors.Is(err, approval.ErrExpired) {
+		t.Fatalf("dispatch error=%v", err)
+	}
+	record := controller.Snapshot()[0]
+	if record.Executed || record.DispatchCommittedAt != nil || record.DispatchOutcome != "approval_expired_before_dispatch" {
+		t.Fatalf("record=%+v", record)
+	}
+}
+
 func TestCancelledContextCannotCrossDispatchCommit(t *testing.T) {
 	controller := approval.NewController()
 	result := make(chan approval.Permit, 1)

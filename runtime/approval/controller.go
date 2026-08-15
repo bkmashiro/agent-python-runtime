@@ -219,13 +219,18 @@ func (controller *Controller) BeginDispatch(ctx context.Context, requestID strin
 	if !ok || state.record.Status != StatusApproved || state.record.CompletedAt != nil || state.record.DispatchCommittedAt != nil {
 		return ErrNotApproved
 	}
+	now := time.Now().UTC()
+	if !now.Before(state.record.ExpiresAt) {
+		state.record.Status = StatusExpired
+		state.record.DispatchOutcome = "approval_expired_before_dispatch"
+		state.record.CompletedAt = &now
+		return ErrExpired
+	}
 	if err := ctx.Err(); err != nil {
-		now := time.Now().UTC()
 		state.record.DispatchOutcome = "cancelled_before_dispatch"
 		state.record.CompletedAt = &now
 		return err
 	}
-	now := time.Now().UTC()
 	state.record.DispatchCommittedAt = &now
 	return nil
 }

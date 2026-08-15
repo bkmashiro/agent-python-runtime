@@ -289,7 +289,11 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		approvalRequestID = permit.RequestID
 		if dispatchErr := broker.config.ApprovalController.BeginDispatch(ctx, approvalRequestID); dispatchErr != nil {
 			broker.record(call, operation, "denied", nil)
-			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "approval_cancelled", Message: "approval was cancelled before Host tool dispatch"}})
+			code, message := "approval_cancelled", "approval was cancelled before Host tool dispatch"
+			if errors.Is(dispatchErr, approval.ErrExpired) {
+				code, message = "approval_expired", "Host tool approval lease expired before dispatch"
+			}
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
 		}
 	}
 	var result json.RawMessage

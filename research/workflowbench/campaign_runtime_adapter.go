@@ -313,7 +313,11 @@ func (adapter *RuntimeCampaignAdapter) verifyRoot(ctx context.Context, request C
 		sharing = "root_exact_shared"
 	}
 	if err == nil {
-		err = runtime.Event("verification.completed", root.WorkspaceSHA256+":"+sharing, result.PhysicalExecutionID)
+		verifierJSON, marshalErr := json.Marshal(request.Execution.Verifier)
+		if marshalErr != nil {
+			return sharing, marshalErr
+		}
+		err = runtime.Event("verification.completed", root.WorkspaceSHA256+":"+campaignDigest(verifierJSON)+":"+sharing, result.PhysicalExecutionID)
 	}
 	return sharing, err
 }

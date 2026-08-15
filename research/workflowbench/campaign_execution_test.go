@@ -93,6 +93,10 @@ func TestCampaignEvidenceRejectsMechanismEventTamperingAfterReseal(t *testing.T)
 		{"wrong authority identity", "P15", "authority.refreshed", func(event *workflowbench.CampaignEvent) { event.Reason = testCampaignDigest('f') }},
 		{"duplicate core event", "P01", "logical.terminal", func(event *workflowbench.CampaignEvent) { event.Type = "logical.released" }},
 		{"cross-program physical identity", "P01", "physical.ended", func(event *workflowbench.CampaignEvent) { event.ProgramID = "P02" }},
+		{"body-bearing core reason", "P01", "physical.started", func(event *workflowbench.CampaignEvent) { event.Reason = "private body" }},
+		{"verifier root mismatch", "P10", "verification.completed", func(event *workflowbench.CampaignEvent) {
+			event.Reason = testCampaignDigest('e') + ":" + testCampaignDigest('d')
+		}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -114,6 +118,49 @@ func TestCampaignEvidenceRejectsMechanismEventTamperingAfterReseal(t *testing.T)
 			}
 		})
 	}
+	t.Run("foreign owner without typed share", func(t *testing.T) {
+		forged := evidence.Clone()
+		forged.Rows[1].PhysicalExecutionID = forged.Rows[0].PhysicalExecutionID
+		for index := range forged.Events {
+			if forged.Events[index].ProgramID == "P02" && forged.Events[index].Type == "logical.terminal" {
+				forged.Events[index].PhysicalExecutionID = forged.Rows[0].PhysicalExecutionID
+			}
+		}
+		resealCampaignEvidence(&forged)
+		if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+			t.Fatalf("foreign owner accepted: %v", err)
+		}
+	})
+	t.Run("rejected program physical lifecycle", func(t *testing.T) {
+		forged := evidence.Clone()
+		last := forged.Events[len(forged.Events)-1]
+		forged.Events = append(forged.Events,
+			workflowbench.CampaignEvent{Sequence: last.Sequence + 1, AtNS: last.AtNS, ProgramID: "P16", Type: "physical.queued", Reason: "fifo", PhysicalExecutionID: "physical-rejected"},
+			workflowbench.CampaignEvent{Sequence: last.Sequence + 2, AtNS: last.AtNS, ProgramID: "P16", Type: "physical.cancelled", Reason: context.Canceled.Error(), PhysicalExecutionID: "physical-rejected"},
+		)
+		resealCampaignEvidence(&forged)
+		if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+			t.Fatalf("rejected lifecycle accepted: %v", err)
+		}
+	})
+	t.Run("physical lifecycle order inverted", func(t *testing.T) {
+		forged := evidence.Clone()
+		for index := range forged.Events {
+			if forged.Events[index].ProgramID != "P01" {
+				continue
+			}
+			switch forged.Events[index].Type {
+			case "physical.started":
+				forged.Events[index].Type = "physical.ended"
+			case "physical.ended":
+				forged.Events[index].Type = "physical.started"
+			}
+		}
+		resealCampaignEvidence(&forged)
+		if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+			t.Fatalf("inverted lifecycle accepted: %v", err)
+		}
+	})
 }
 
 func TestCampaignTreatmentOrderIsBalanced(t *testing.T) {
@@ -233,7 +280,6 @@ func (adapter *campaignAdapter) Execute(ctx context.Context, request workflowben
 	if request.Execution.Kind == workflowbench.CampaignVerifyWorkspace {
 		_ = runtime.Event("workspace.forked", "private_attempt", "")
 		_ = runtime.Event("workspace.sealed", request.WorkspaceFixtureSHA256, "")
-		_ = runtime.Event("verification.completed", request.WorkspaceFixtureSHA256+":fixture-verifier", "")
 	}
 	if request.Execution.Kind == workflowbench.CampaignStartWorkflow {
 		_ = runtime.Event("workflow.waiting", request.Execution.WorkflowStateKey, "")
@@ -271,6 +317,15 @@ func (adapter *campaignAdapter) Execute(ctx context.Context, request workflowben
 	outcome := adapter.executePhysical(ctx, request, runtime, key)
 	if request.Execution.Kind == workflowbench.CampaignExactRequest {
 		_ = runtime.Event("sharing.decided", outcome.Sharing, outcome.PhysicalExecutionID)
+	}
+	if request.Execution.Kind == workflowbench.CampaignVerifyWorkspace {
+		verifierJSON, err := json.Marshal(request.Execution.Verifier)
+		if err != nil {
+			return workflowbench.CampaignOutcome{Disposition: "failed", Sharing: outcome.Sharing, Err: err}
+		}
+		verifierDigest := sha256.Sum256(verifierJSON)
+		verifierSHA256 := "sha256:" + hex.EncodeToString(verifierDigest[:])
+		_ = runtime.Event("verification.completed", request.WorkspaceFixtureSHA256+":"+verifierSHA256+":"+outcome.Sharing, outcome.PhysicalExecutionID)
 	}
 	return outcome
 }

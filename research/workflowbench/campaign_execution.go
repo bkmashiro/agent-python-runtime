@@ -421,6 +421,7 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 	}
 	byProgram := make(map[string]map[string][]CampaignEvent, len(manifest.Programs))
 	physicalCore := make(map[string]map[string]int)
+	physicalEvents := make(map[string]map[string]CampaignEvent)
 	physicalOwner := make(map[string]string)
 	for _, event := range evidence.Events {
 		if _, ok := programs[event.ProgramID]; !ok {
@@ -428,6 +429,10 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 		}
 		if _, ok := core[event.Type]; !ok {
 			if _, ok := mechanism[event.Type]; !ok {
+				return ErrInvalidCampaignEvidence
+			}
+			requiresPhysical := event.Type == "sharing.decided" || event.Type == "verification.completed"
+			if requiresPhysical != (event.PhysicalExecutionID != "") {
 				return ErrInvalidCampaignEvidence
 			}
 			if event.PhysicalExecutionID != "" {
@@ -447,32 +452,59 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 			physicalOwner[event.PhysicalExecutionID] = event.ProgramID
 			if physicalCore[event.PhysicalExecutionID] == nil {
 				physicalCore[event.PhysicalExecutionID] = make(map[string]int)
+				physicalEvents[event.PhysicalExecutionID] = make(map[string]CampaignEvent)
 			}
 			physicalCore[event.PhysicalExecutionID][event.Type]++
+			physicalEvents[event.PhysicalExecutionID][event.Type] = event
 		}
 	}
 	for identity, counts := range physicalCore {
 		_, started := physicalIdentities[identity]
+		events := physicalEvents[identity]
 		if started {
-			if counts["physical.queued"] != 1 || counts["physical.started"] != 1 || counts["physical.ended"] != 1 || counts["physical.cancelled"] != 0 {
+			if counts["physical.queued"] != 1 || counts["physical.started"] != 1 || counts["physical.ended"] != 1 || counts["physical.cancelled"] != 0 || events["physical.queued"].Sequence >= events["physical.started"].Sequence || events["physical.started"].Sequence >= events["physical.ended"].Sequence {
 				return ErrInvalidCampaignEvidence
 			}
-		} else if counts["physical.queued"] != 1 || counts["physical.cancelled"] != 1 || counts["physical.started"] != 0 || counts["physical.ended"] != 0 {
+		} else if counts["physical.queued"] != 1 || counts["physical.cancelled"] != 1 || counts["physical.started"] != 0 || counts["physical.ended"] != 0 || events["physical.queued"].Sequence >= events["physical.cancelled"].Sequence {
 			return ErrInvalidCampaignEvidence
 		}
 	}
 	for _, program := range manifest.Programs {
 		events := byProgram[program.ID]
 		row := rows[program.ID]
-		if len(events["logical.released"]) != 1 || len(events["logical.terminal"]) != 1 || events["logical.terminal"][0].Reason != row.Disposition || events["logical.terminal"][0].PhysicalExecutionID != row.PhysicalExecutionID {
+		if len(events["logical.released"]) != 1 || events["logical.released"][0].Reason != "manifest_offset" || len(events["logical.terminal"]) != 1 || events["logical.terminal"][0].Reason != row.Disposition || events["logical.terminal"][0].PhysicalExecutionID != row.PhysicalExecutionID {
 			return ErrInvalidCampaignEvidence
 		}
 		if program.Expected.Admission == "admit" {
-			if len(events["admission.accepted"]) != 1 || len(events["admission.rejected"]) != 0 || len(events["logical.started"]) != 1 || events["admission.accepted"][0].Reason != row.AdmissionReason {
+			if len(events["admission.accepted"]) != 1 || len(events["admission.rejected"]) != 0 || len(events["logical.started"]) != 1 || events["logical.started"][0].Reason != "" || events["admission.accepted"][0].Reason != row.AdmissionReason {
 				return ErrInvalidCampaignEvidence
 			}
-		} else if len(events["admission.accepted"]) != 0 || len(events["admission.rejected"]) != 1 || len(events["logical.started"]) != 0 || events["admission.rejected"][0].Reason != row.AdmissionReason {
+			owner := physicalOwner[row.PhysicalExecutionID]
+			if owner == "" || (owner != program.ID && program.Execution.Kind != CampaignExactRequest) {
+				return ErrInvalidCampaignEvidence
+			}
+		} else if len(events["admission.accepted"]) != 0 || len(events["admission.rejected"]) != 1 || len(events["logical.started"]) != 0 || events["admission.rejected"][0].Reason != row.AdmissionReason || len(events["physical.queued"])+len(events["physical.started"])+len(events["physical.ended"])+len(events["physical.cancelled"]) != 0 {
 			return ErrInvalidCampaignEvidence
+		}
+		for _, event := range events["physical.queued"] {
+			if event.Reason != "fifo" {
+				return ErrInvalidCampaignEvidence
+			}
+		}
+		for _, event := range events["physical.started"] {
+			if event.Reason != "" {
+				return ErrInvalidCampaignEvidence
+			}
+		}
+		for _, event := range events["physical.ended"] {
+			if event.Reason != "" {
+				return ErrInvalidCampaignEvidence
+			}
+		}
+		for _, event := range events["physical.cancelled"] {
+			if event.Reason != context.Canceled.Error() && event.Reason != context.DeadlineExceeded.Error() {
+				return ErrInvalidCampaignEvidence
+			}
 		}
 		expected := make(map[string]bool)
 		if program.Execution.CancelPoint == CampaignCancelAfterWorkspaceFork {
@@ -508,11 +540,24 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 		if values := events["sharing.decided"]; len(values) == 1 && (values[0].Reason != row.Sharing || values[0].PhysicalExecutionID != row.PhysicalExecutionID) {
 			return ErrInvalidCampaignEvidence
 		}
-		if values := events["workspace.sealed"]; len(values) == 1 && !campaignDigestPattern.MatchString(values[0].Reason) {
+		if values := events["workspace.forked"]; len(values) == 1 && values[0].Reason != "private_attempt" {
 			return ErrInvalidCampaignEvidence
 		}
-		if values := events["verification.completed"]; len(values) == 1 && (len(values[0].Reason) < 72 || !campaignDigestPattern.MatchString(values[0].Reason[:71]) || values[0].Reason[71] != ':') {
+		if values := events["workspace.discarded"]; len(values) == 1 && values[0].Reason != string(program.Execution.CancelPoint) {
 			return ErrInvalidCampaignEvidence
+		}
+		sealedRoot := ""
+		if values := events["workspace.sealed"]; len(values) == 1 {
+			sealedRoot = values[0].Reason
+			if !campaignDigestPattern.MatchString(sealedRoot) {
+				return ErrInvalidCampaignEvidence
+			}
+		}
+		if values := events["verification.completed"]; len(values) == 1 {
+			verifierJSON, err := json.Marshal(program.Execution.Verifier)
+			if err != nil || values[0].Reason != sealedRoot+":"+digestCampaignEvidence(verifierJSON)+":"+row.Sharing {
+				return ErrInvalidCampaignEvidence
+			}
 		}
 		if values := events["workflow.waiting"]; len(values) == 1 && values[0].Reason != program.Execution.WorkflowStateKey {
 			return ErrInvalidCampaignEvidence

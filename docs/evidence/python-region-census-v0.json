@@ -1,0 +1,1371 @@
+{
+  "schema_version": "pysolate.python-region-census.v0",
+  "corpus_sha256": "sha256:0764f91c47d7eedb5f133fc8e6ca7cc6ec3620c15058bc3160840e422e707541",
+  "analyzer_sha256": "sha256:3cb9a1884dff7a442769674410c13fed2a616550ed936942c417adf444bdb19c",
+  "artifact_sha256": "sha256:3a3ec626c1a6823fc28c2499c5798475a098003c96dfec295377a5d4ddee2f7f",
+  "execution_profile_sha256": "sha256:ca3dd7159d081c599870b438f920ef6365c204aea27aa6829358635018361b91",
+  "import_closure_sha256": "sha256:6bf7414ef5fe446ed320118d1c29d006a850ffc9d0c80c449edc1d6cd5443e9e",
+  "capability_plan_sha256": "sha256:231868d44c4e2d0bbda114199852e422242464bd0bdb1d150995a09127b02cf7",
+  "programs_analyzed": 19,
+  "regions_analyzed": 69,
+  "kind_counts": {
+    "straight_line": 44,
+    "declaration": 17,
+    "opaque_control": 8
+  },
+  "effect_counts": {
+    "pure": 17,
+    "may_publish": 3,
+    "may_observe_live": 10,
+    "may_suspend": 12,
+    "may_be_unknown": 46
+  },
+  "statically_materializable_regions": 0,
+  "rejection_counts": [
+    {
+      "reason": "declaration",
+      "count": 17
+    },
+    {
+      "reason": "live_in_not_canonical",
+      "count": 28
+    },
+    {
+      "reason": "live_out_not_canonical",
+      "count": 45
+    },
+    {
+      "reason": "may_raise",
+      "count": 54
+    },
+    {
+      "reason": "opaque_control",
+      "count": 8
+    },
+    {
+      "reason": "unknown_effect",
+      "count": 46
+    }
+  ],
+  "exact_overlap": {
+    "unique_fingerprints": 67,
+    "repeated_fingerprints": 2,
+    "repeated_occurrences": 4,
+    "same_program_fingerprints": 0,
+    "same_program_excess_occurrences": 0,
+    "cross_program_fingerprints": 2,
+    "cross_program_covered_occurrences": 4
+  },
+  "statically_materializable_exact_overlap": {
+    "unique_fingerprints": 0,
+    "repeated_fingerprints": 0,
+    "repeated_occurrences": 0,
+    "same_program_fingerprints": 0,
+    "same_program_excess_occurrences": 0,
+    "cross_program_fingerprints": 0,
+    "cross_program_covered_occurrences": 0
+  },
+  "consumer_spike_decision": {
+    "status": "no_go",
+    "reason_codes": [
+      "no_cross_program_exact_materializable_overlap",
+      "no_statically_materializable_regions"
+    ],
+    "consumer_admitted": false
+  },
+  "programs": [
+    {
+      "id": "alias-call",
+      "source_sha256": "sha256:c204222cf1f3b85e35ad75c18d78b47532d32897ce999e2810a23793ebf2b278",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:6f000cc7438b48424f8c2939393031c3b468762af8844d2e99f1d5bdf194068d",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:21e3a4a328813b73e90d4d8b7aa04f549b0f59edebbc267a2b19f0f3959f135d",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "bounded-planning-v1",
+      "source_sha256": "sha256:2c311564779b3bdcf6d8b2d1889347e904688f977fc64b3f37a73da6b5bf955b",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:8bc319d1e6759aedf9698a2da582027b66d3a1c59e3f4d481b59977acab1e34d",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:34a59f318db7d5961d22c41348f4256c1e6a58049b309243ffd45e4c127194fe",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:f4f043180c3f61bd423c1e15053b917995ca5b61c0c39c797fb16e30eeed6302",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": []
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:92e1e365927c6118622961ea858fc1dfbd352a553e7e5b138800dceada1fa957",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "fingerprint": "sha256:cf95bb757a73d4ccd2bd6e19b3c253ea704247cd4061f33331d5b4fb7668b1de",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 5,
+          "fingerprint": "sha256:81623777ed9c35f3134bbf84b25daf20822f4eb120c44f1b895111804ed0fa28",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "clock-random",
+      "source_sha256": "sha256:75cbabb671e67f17a5d9ca9ec396bbbfebe8213be7572afb606d65452d535276",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:1fdc27bb38d9bc1ca9c7b94c4c1915a61c87f0b8c0a39eb8016492813f420bd8",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "live_out_not_canonical"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:82368b9b1c923e85afb49be134dff919959c54ee3729a061647c1cad4b164380",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "live_out_not_canonical"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:308c3c7a440f0518153721d9869427378b36424032b17c4ba7e4ae2b70232f82",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "conditional-read",
+      "source_sha256": "sha256:3f66780a3b99bb2af8fceb3c2024f31c47e4fffd5270c9c3c829efa565c68d90",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:beb887e8c941528588877dbc48c4ee66c6fcabf2702fb2b86ec57e5ac0cb39e4",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "conflicting-writes",
+      "source_sha256": "sha256:4f1c02989e4f9c765228503eee4c12bd95fb42da42dbd0de98f6cd7fcbc08baf",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:2de504e6f5c89dfc093a2149c8973a1cca142a28815b096ca5210fee04a58046",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:60112f319fbc0452b3e1c300412e935b9648642855420c07ddcd17c615a773c2",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:2588631812f66b0d4d9d684b98e509aa304c64455ac1078619042c06fdef7670",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:68f06faec0923cfc8ac3f0001a2dde64de9cea45fe0b9684f09d73a9a9066305",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "fingerprint": "sha256:a8321bb9b26f16876c0284c669d7d1b12481473ebdae1538ad30194344736f02",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": []
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "dynamic-eval",
+      "source_sha256": "sha256:554e3df9dd41ed37dbc1bab80b813a6bedb996ccc6ee3b18db1ee07a3d0fa13f",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:46adf3ceeed12d0ba16553ff350a40b25ebbee1162063a8d8cd41936ea5c1394",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "may_raise"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:193ce4979613d0cb93ece156ad13fe1484ecfbfa0c82bd7c68a2c5580cb2a467",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "dynamic-import",
+      "source_sha256": "sha256:9fc7355103ca690c8effea429d2697874610badbf71c454f72fdfe289e5d1dd8",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:4ac9ddb5b2983e45aa9fa48611bb51d3e54588fd20db546bde90578ffafb21ac",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "may_raise"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:17f5cf47f3b420e8a8c219c206df772d1a7b2622242ad6cb642595cf41c7730f",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:d61a39ebcd36b0dadc0d912b7af390d3854bdea79151329e8b1e09484dcaa31e",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "exception-order",
+      "source_sha256": "sha256:4802739bfccacc4f81c2983a78d9600c8ecb1e0b66edb04a2e41b854bcd51318",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:e4396f9c7795ad8633aa25cb728cfd23e3be3ca3543a966d9caa81d68004a577",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:d94dc9311e0b53e0b2ecb75ccbf836333cba2b110918343444165c2175fba77c",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:5d70acd995886c602a38b224e108129e0abfd6d07fe16be531ca909bdbe7b8c5",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "hoist-read-compute",
+      "source_sha256": "sha256:736c477da694cdf9c41eb3c0592fca757572a8fdb592440de228285442bc199e",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:3b912defc9852906915e28b67aa03e993886685360f7f706efe91382c3b979b3",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:e286619af3cd5f0990508c70457bb62776d2dd2108fd3746a4a5eb79a38357cc",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:ccafc39c4bc87f97f42169cca45636d4c15d5c52bb97cbac48975c7101d4b3e9",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:7959d682756b5fc6aa10af3fbcb8167305662b18484dfcb6e3491f37dfb1c563",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "fingerprint": "sha256:447b44a98024a18201b90b29f593ad8c223e359eef8d1fc487afa0f6c2ee535f",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "independent-reads",
+      "source_sha256": "sha256:0f5d6686884c493fd52cbe78a0d2b09da8394858e0dd3ff047bfa0f9399627e4",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:2adad7839a86b70e83807aa6b50f1d67aaa8b530b8561ecbc8cf1702ba433986",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:d4b32d790694efb9f922fc3d490266c323c770142a5b4d4f1523518f5c82e674",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:4b16ae7005d184daee074a9f08d74549d761915c1a4e512bfc383d2b40f3d1fb",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:7c055c83046894f273f2835aa1eddda8e6f6b3c4b3ce727d02ba269fa0e013bf",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "fingerprint": "sha256:2b8ae1c1cb4885a089a43b966f23e3005b03498eb9fef1f21d920692ebf8a021",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "loop-reads",
+      "source_sha256": "sha256:6fede655fbabeb039cb178d76febe89e9f9c5f6e3edd4618e5cf3d922a5c5133",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:da8c2f7fe194e7dc2c2d5ac53476772056d7926bc22ee7015b44d21773d29476",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": []
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:4052550bfab37534038d0c94a97b730b429659dd98cc1cafd1a64d3f71e5e192",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:2d3de7c0ff7080215c01178830809f49a18a34b30c93380993097e801da123cb",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": []
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "module-entry-read",
+      "source_sha256": "sha256:ac8374c2988c50d7377959f3056d633b3ad3083ec2dad31973ae4e9935e3ab39",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:f736b5d078f9c46c1d77d3cd83e67e3e32e4b16e950427ae87d1f4c37f46a350",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "native-subprocess",
+      "source_sha256": "sha256:980212784b122eb2383a99e38c4354aee7dea1b9a5e0ee7bec94b0becc85a820",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:3c0506aa0d922ba44b6a850fe75aefd259d95b89b5c0fddd4a6d24fea353f61c",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "live_out_not_canonical",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:fe5a32965c3b777887c20b02222e06f0e62825c1266f32a01ff8449c4b2ae89b",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "pure-compute",
+      "source_sha256": "sha256:7eca0fbab03733ca9743656d1bba1c554eb563585f3f2f1014c1a2f6fe707250",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:b44db02dd6585ec7892ff18d2970e2a18447eb35bb52c2179eedd9440a6bc0ed",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:e87865bca843fa8228d1ad6f54b24a9c61a9ac5904fdc8ed2310381fe0386df6",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "read-after-write",
+      "source_sha256": "sha256:d37f109bc0446ee72d1d753d3a34d859bd645847306eb9fc0765be43a13031f1",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:c3b462c0bd00a163e64df8f51795b5dc15cec48cafb999ac5d0c40162fb1e5e6",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:29a92b6ee84df9a808673d19ef5da6fe8dcbfcf36e5e6eba0a705365d3e754e0",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:9db2757899417453a031d6b33176b7fa5108c77beb22515c9dcf6fdc99fdb190",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:4294a9cd80ff555690f19bcaa4f7e13dc6fbe6442b38b2092c12a753e105a7b5",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "repeated-pure-region",
+      "source_sha256": "sha256:796acd574d8b0947d550d8ae58c12a3a8e8ba002b2b70bbb581b354d73301ea0",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:b44db02dd6585ec7892ff18d2970e2a18447eb35bb52c2179eedd9440a6bc0ed",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:304b5ef5bd69ed64a008dd13c965ca4240bda6fbdc963216835cd55cf95361d7",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:00444728be67199a76cc21a0b0b135b5f6938f227c0eaa33f97c8f2ad973e919",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:2b8ae1c1cb4885a089a43b966f23e3005b03498eb9fef1f21d920692ebf8a021",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "stateful-local-v1",
+      "source_sha256": "sha256:08300d5a5466ba69fa9b5dfe76d7eabff4b5f17678f9cc63acb605d2986be465",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:42b83e5a6f2b9cd9423e695fff966e170a35ac621f243a43412bba515cf85247",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "live_out_not_canonical",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:d7fc488df1c6364b56114308db40c0b2d5400674e5f90be90a33a5c4cb2861f9",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:5590e9b3bfa49b4913034afd78a27845e92d1afcf512c42db9a7ab3159ed13b1",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:baabb5961988f9978c0212c4391aa924c43a37abee8efcdaa8f56eae246e8167",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "fingerprint": "sha256:68538901edeb8fa2987188dad0551df76b665fa69be24253cda2c2f9024e74e6",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 5,
+          "fingerprint": "sha256:f6af53373789ecc0a3e8a153f26d14223291ead613c06008a4e76a97cb971f66",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": true,
+            "may_observe_live": false,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 6,
+          "fingerprint": "sha256:a557a1d41dfa92baa405921b61136a6dae457fe051200bead8105aec4fc3aff6",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 7,
+          "fingerprint": "sha256:fbfd4884b566d2af84eceb4c1ed0d26ad2b8948020c0c2ebdc5d9b62ce5dd5cb",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": true,
+            "may_observe_live": false,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 8,
+          "fingerprint": "sha256:f8e913c917e0831d6d75a904cd3f4951256bedea2fcd4cdc8f83c5984f61600c",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "structured-source-v1",
+      "source_sha256": "sha256:95d73da13f0ad367b352127cee602e3da61c4e35ec0601b730f3be6957d01a85",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:d646f4fb1ac7dd3a9f06e53ef0ac351f979ff6b11766ed10e3fe89ae7f3e0200",
+          "kind": "declaration",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "declaration",
+            "live_out_not_canonical",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 1,
+          "fingerprint": "sha256:fa94233b9f5b7b517edc087eecbfe5b679f27f766856f5c4a01a09f58f634b65",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "fingerprint": "sha256:e8c9ae7b29b78e5eadecd565f18c172f5f2d5bc08162a2bd7582167f0d033f82",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "fingerprint": "sha256:8cf315572a97c6609b9fbf43b5e27445897f60b468c945d7c61631cf61deb44a",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "fingerprint": "sha256:03524fc64e0dfebd19d3dc1f90e9bdc11c7bac062c04836643b7757c97b0aa54",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 5,
+          "fingerprint": "sha256:f94acc20b1207b5543d2a434c1d3b98bce3c1f6452794675f318ff333ea77dbe",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical"
+          ]
+        },
+        {
+          "ordinal": 6,
+          "fingerprint": "sha256:255838be0726aa4773d3939c4bd78a1eceff0701a4dc48136baf5640b289b086",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": true,
+            "may_observe_live": false,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        },
+        {
+          "ordinal": 7,
+          "fingerprint": "sha256:fac463b1131b0971cdb669609c0ca807678ab11070a172fd72fc4741c212f344",
+          "kind": "straight_line",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": false,
+            "may_suspend": false,
+            "may_be_unknown": false
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    },
+    {
+      "id": "wasi-file-read",
+      "source_sha256": "sha256:59fab81f745cb511d3aa8fefab8cd427165624366db211b28d484fad5eac2474",
+      "regions": [
+        {
+          "ordinal": 0,
+          "fingerprint": "sha256:77924f3eb568cb777446255cf761640ee85ec6235f23329bf929aa8f83843485",
+          "kind": "opaque_control",
+          "effects": {
+            "may_publish": false,
+            "may_observe_live": true,
+            "may_suspend": true,
+            "may_be_unknown": true
+          },
+          "statically_materializable": false,
+          "rejection_reasons": [
+            "live_in_not_canonical",
+            "live_out_not_canonical",
+            "may_raise",
+            "opaque_control",
+            "unknown_effect"
+          ]
+        }
+      ],
+      "statically_materializable_regions": 0
+    }
+  ]
+}

@@ -252,7 +252,6 @@ func (analysis Analysis) Validate() error {
 	}
 	seenRegions := make(map[string]struct{}, len(analysis.CandidateRegions))
 	occurrenceCounts := make(map[string]int, len(analysis.CallSites))
-	var regionEffects EffectSummary
 	for index, region := range analysis.CandidateRegions {
 		if !digestPattern.MatchString(region.ID) || !digestPattern.MatchString(region.ControlRegionID) ||
 			!analysis.ModuleSpan.contains(region.Span) || region.ControlPredecessors == nil || region.DataDependencies == nil ||
@@ -293,10 +292,6 @@ func (analysis Analysis) Validate() error {
 			}
 			occurrenceCounts[occurrence]++
 		}
-		regionEffects.MayPublish = regionEffects.MayPublish || region.Effects.MayPublish
-		regionEffects.MayObserveLive = regionEffects.MayObserveLive || region.Effects.MayObserveLive
-		regionEffects.MaySuspend = regionEffects.MaySuspend || region.Effects.MaySuspend
-		regionEffects.MayBeUnknown = regionEffects.MayBeUnknown || region.Effects.MayBeUnknown
 		if !validCandidateRegionShape(region) {
 			return ErrInvalidAnalysis
 		}
@@ -305,9 +300,6 @@ func (analysis Analysis) Validate() error {
 		if occurrenceCounts[id] != 1 {
 			return ErrInvalidAnalysis
 		}
-	}
-	if !effectCovers(regionEffects, analysis.ModuleEffects) {
-		return ErrInvalidAnalysis
 	}
 	return nil
 }

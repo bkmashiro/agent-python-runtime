@@ -213,7 +213,7 @@ func runCensus(ctx context.Context, corpus Corpus, root string, analyze AnalyzeF
 		if err := ctx.Err(); err != nil {
 			return Report{}, err
 		}
-		source, err := loadSource(root, program)
+		source, err := LoadProgramSource(root, program)
 		if err != nil {
 			return Report{}, fmt.Errorf("%w: source %s", err, program.ID)
 		}
@@ -498,7 +498,9 @@ func (report Report) validateShape() error {
 	return nil
 }
 
-func loadSource(root string, program Program) ([]byte, error) {
+// LoadProgramSource reads one corpus-bound source through the safe manifest root and
+// verifies its recorded digest before returning it.
+func LoadProgramSource(root string, program Program) ([]byte, error) {
 	source, err := readCorpusSource(root, program.SourcePath)
 	if err != nil {
 		return nil, err

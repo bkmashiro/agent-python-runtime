@@ -46,11 +46,16 @@ The Host rejects the complete analysis unless all of these hold:
 - the first candidate has no predecessor and every later candidate names exactly the
   previous source-ordered candidate;
 - every data edge names a canonical live-in and an already-seen producer;
-- every capability occurrence names a verified positive call site contained by the
-  candidate, every positive call site appears exactly once, and the candidate effect
-  summary covers its typed capability effect;
-- `candidate_region_count` exactly seals the list, the union of candidate effects
-  covers module effects, and every reported span fits the exact UTF-8 request source;
+- every capability occurrence names a verified positive module-entry call site contained
+  by the candidate, every such positive call site appears exactly once, and the
+  candidate effect summary covers its typed capability effect;
+- `candidate_region_count` exactly seals the list and every reported span fits the exact
+  UTF-8 request source;
+- candidate effects cover evaluation of each top-level statement only. `module_effects`
+  additionally summarizes deferred function/class bodies, so their union is deliberately
+  not required to equal or cover the whole-module summary. Because the Host does not
+  parse Python to prove top-level effect completeness independently, v0 consumers must
+  fail closed on candidate purity whenever the whole-module summary is effectful;
 - opaque/non-canonical/unknown candidates carry the corresponding rejection reason.
 
 This is validation of a versioned Guest analysis contract, not a second Python

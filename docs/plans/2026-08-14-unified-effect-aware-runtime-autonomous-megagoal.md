@@ -503,16 +503,17 @@ current exact whole-Run contract.
   read model. Lab Web must highlight the selected region in the recorded Python source,
   render control/data edges, effect classes and opaque barriers, and explain per-consumer
   eligibility/rejection without gaining any Runtime control or authority.
-- [ ] Measure natural same-agent/cross-agent exact overlap and region materializability
-  in the corpus using that candidate region contract.
-- [ ] Admit one executable region form only if the measured graph has canonical
-  live-ins/live-outs and exact source boundaries without Python heap capture.
-- [ ] Bind contract/resource snapshot/freshness identity, project/privacy/policy and
-  runtime versions.
-- [ ] Preserve zero-effect runtime publication probe, failure nonpublication,
-  cancellation, corruption/eviction and size gates.
-- [ ] If region identity cannot be made exact, record the negative result and retain
-  whole-Run-only reuse.
+- [x] Measure natural same-agent/cross-agent exact overlap and region materializability
+  in the corpus using that candidate region contract. The sealed v0 census covers 19
+  programs and 69 regions. None passes the conservative static-materializability
+  screen, and none has exact cross-program materializable overlap.
+- [x] Apply the pre-registered consumer checkpoint: do not admit an executable region
+  form because the measured graph has zero cross-program exact materializable overlap.
+  `consumer_admitted` remains false; contract/resource/freshness/publication work is not
+  entered on this evidence.
+- [x] Record the negative result and retain whole-Run-only reuse. Any later region
+  execution proposal requires a new representative corpus and a fresh explicit gate;
+  this census is not execution authority.
 
 **Primary files:**
 

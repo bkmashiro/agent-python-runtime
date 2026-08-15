@@ -8,10 +8,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 
 	effectgraph "github.com/bkmashiro/agent-python-runtime/research/effectgraph"
+	"github.com/bkmashiro/agent-python-runtime/research/regioncensus"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -27,16 +29,29 @@ func main() {
 	manifestPath := flag.String("manifest", "research/effectgraph/manifest.json", "source manifest")
 	corpusPath := flag.String("corpus-output", "research/effectgraph/corpus.json", "bound corpus output")
 	reportPath := flag.String("report-output", "docs/evidence/effect-aware-opportunity-census.json", "census output")
+	regionReportPath := flag.String("region-report-output", "docs/evidence/python-region-census-v0.json", "analysis-only region census output")
+	bundlePath := flag.String("bundle-output", "docs/evidence/effectgraph-census-bundle-v0.json", "generation marker binding every census output")
+	verifyBundle := flag.Bool("verify-bundle", false, "verify the existing bound evidence generation without running a Guest")
 	flag.Parse()
+	if *verifyBundle {
+		if err := verifyEvidenceBundleFiles(*bundlePath, *corpusPath, *reportPath, *regionReportPath); err != nil {
+			fatal(err)
+		}
+		return
+	}
 	if *artifactPath == "" || *artifactSourceCommit == "" {
 		fatal(errors.New("-artifact and -artifact-source-commit are required"))
 	}
-	if err := run(context.Background(), *artifactPath, *artifactSourceCommit, *root, *manifestPath, *corpusPath, *reportPath); err != nil {
+	if err := run(context.Background(), *artifactPath, *artifactSourceCommit, *root, *manifestPath, *bundlePath, *corpusPath, *reportPath, *regionReportPath); err != nil {
 		fatal(err)
 	}
 }
 
-func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifestPath, corpusPath, reportPath string) error {
+func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifestPath, bundlePath, corpusPath, reportPath, regionReportPath string) error {
+	if len(artifactSourceCommit) != 40 || !isLowerHex(artifactSourceCommit) ||
+		exec.CommandContext(ctx, "git", "cat-file", "-e", artifactSourceCommit+"^{commit}").Run() != nil {
+		return errors.New("artifact source commit is not a local Git commit")
+	}
 	artifact, err := os.ReadFile(artifactPath)
 	if err != nil || len(artifact) == 0 {
 		return errors.New("read Guest artifact")
@@ -102,10 +117,6 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 	if err != nil {
 		return err
 	}
-	if err := writeAtomic(corpusPath, corpusJSON); err != nil {
-		return err
-	}
-
 	shard, err := runtimeconfig.NewShardProfile(runtimeconfig.ShardProfileConfig{
 		ID: "plain", ExecutionProfileID: "base",
 		QualifiedImports: []string{"agent_runtime", "json", "math", "random", "sys", "time"},
@@ -119,6 +130,7 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 		AnalyzerVersion: placement.AnalyzerStaticV1, PysolateAvailable: true,
 		NativeAvailable: true, PlainShard: shard,
 	}
+	verifiedBySource := make(map[string]semantic.VerifiedAnalysis, len(corpus.Programs))
 	report, err := effectgraph.RunVerifiedCensus(
 		ctx, corpus, root, plan,
 		semantic.PreissueContext{
@@ -132,7 +144,16 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 			if err != nil {
 				return semantic.VerifiedAnalysis{}, err
 			}
-			return semantic.AnalyzeVerified(ctx, trustedRunner, request)
+			verified, err := semantic.AnalyzeVerified(ctx, trustedRunner, request)
+			if err != nil {
+				return semantic.VerifiedAnalysis{}, err
+			}
+			analysis, err := verified.Analysis()
+			if err != nil {
+				return semantic.VerifiedAnalysis{}, err
+			}
+			verifiedBySource[analysis.SourceSHA256] = verified
+			return verified, nil
 		},
 		func(source []byte) (string, error) {
 			decision, err := placement.Analyze(runtimeconfig.RunRequest{
@@ -158,12 +179,36 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 	if err != nil {
 		return err
 	}
-	if err := writeAtomic(reportPath, reportJSON); err != nil {
+	observations := make([]regioncensus.VerifiedObservation, 0, len(corpus.Programs))
+	for _, program := range corpus.Programs {
+		source, err := effectgraph.LoadProgramSource(root, program)
+		if err != nil {
+			return err
+		}
+		verified, ok := verifiedBySource[program.SourceSHA256]
+		if !ok {
+			return fmt.Errorf("missing verified region analysis for %s (%s; verified_sources=%d)", program.ID, program.SourceSHA256, len(verifiedBySource))
+		}
+		observations = append(observations, regioncensus.VerifiedObservation{
+			ProgramID: program.ID, Source: source, Verified: verified,
+		})
+	}
+	regionReport, err := regioncensus.BuildVerified(report.CorpusSHA256, observations)
+	if err != nil {
+		return err
+	}
+	regionJSON, err := regioncensus.Encode(regionReport)
+	if err != nil {
+		return err
+	}
+	if err := writeEvidenceBundle(bundlePath, corpusPath, reportPath, regionReportPath, corpusJSON, reportJSON, regionJSON,
+		report.CorpusSHA256, artifactSHA, artifactSourceCommit); err != nil {
 		return err
 	}
 	fmt.Printf("corpus_sha256=%s programs=%d unclassifiable=%d opaque=%d overlay_calls=%d necessarily_reached=%d\n",
 		report.CorpusSHA256, report.ProgramsAnalyzed, report.ProgramsUnclassifiable, report.ProgramsOpaque,
 		report.OverlayCallSites, report.NecessarilyReachedCallSites)
+	fmt.Printf("region_census %s\n", regionReport.String())
 	return nil
 }
 
@@ -237,11 +282,28 @@ func writeAtomic(path string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, content, 0o644); err != nil {
+	temporary, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(temporary, path)
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 func digest(value []byte) string {

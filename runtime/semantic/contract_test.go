@@ -191,13 +191,15 @@ func TestCandidateRegionGraphIsBoundedCanonicalAndFailClosed(t *testing.T) {
 	if err := analysis.Validate(); err != nil {
 		t.Fatalf("valid candidate graph: %v", err)
 	}
+	deferredEffects := analysis
+	deferredEffects.ModuleEffects.MayObserveLive = true
+	if err := deferredEffects.Validate(); err != nil {
+		t.Fatalf("module effects may include deferred function-body effects outside top-level candidate evaluation: %v", err)
+	}
 	for name, mutate := range map[string]func(*semantic.Analysis){
 		"missing coverage": func(value *semantic.Analysis) { value.CandidateRegionCoverage = "" },
 		"count mismatch":   func(value *semantic.Analysis) { value.CandidateRegionCount = 0 },
-		"effect under-approximation": func(value *semantic.Analysis) {
-			value.ModuleEffects.MayObserveLive = true
-		},
-		"nil graph": func(value *semantic.Analysis) { value.CandidateRegions = nil },
+		"nil graph":        func(value *semantic.Analysis) { value.CandidateRegions = nil },
 		"first control predecessor": func(value *semantic.Analysis) {
 			value.CandidateRegions[0].ControlPredecessors = []string{digest('f')}
 		},

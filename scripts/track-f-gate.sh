@@ -31,6 +31,9 @@ case "$mode" in
       ./runtime/semantic \
       ./runtime/semanticreuse \
       ./runtime/agentfunction \
+      ./research/effectgraph \
+      ./research/effectgraph/cmd/effectgraph-census \
+      ./research/regioncensus \
       ./research/labview
     ;;
   full)
@@ -40,6 +43,9 @@ case "$mode" in
       ./runtime/semantic \
       ./runtime/semanticreuse \
       ./runtime/agentfunction \
+      ./research/effectgraph \
+      ./research/effectgraph/cmd/effectgraph-census \
+      ./research/regioncensus \
       ./research/labview \
       ./integration/e2e
     go vet ./...
@@ -64,6 +70,7 @@ case "$mode" in
   release-check)
     git diff --check
     git diff --cached --check
+    go run ./research/effectgraph/cmd/effectgraph-census -verify-bundle
     if [[ -n "$(git status --porcelain)" ]]; then
       echo "worktree is not clean" >&2
       exit 3

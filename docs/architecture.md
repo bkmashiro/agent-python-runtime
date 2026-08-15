@@ -6,9 +6,11 @@ Pysolate proves that a programming Agent can submit normal Python while the Host
 
 Unless a paragraph says otherwise, the core Run path below is **Current**.
 Counterfactual branching, deterministic verification, prepared/COW execution,
-and unified execution profiles are marked **Experimental**. The seeded workflow Harness
-and its sealed read-only Lab timeline are **Research-only**; a general Lab service remains
-**Proposed**. See [research/lab-boundary.md](research/lab-boundary.md).
+and unified execution profiles are marked **Experimental**. The seeded workflow Harness is
+**Research-only**; its balanced-order real-Guest v1 result is inspectable through a private
+trajectory and makes no CPU/latency improvement claim. The private append-only Agent
+trajectory recorder and static inspector are **Experimental**; live Harness attachment,
+resume, fork and replay remain **Proposed**. See [research/agent-trajectory-v0.md](research/agent-trajectory-v0.md).
 
 ## Run path
 
@@ -121,6 +123,21 @@ explicitly declared-independent nodes concurrently. It does not infer sibling in
 from Python AST structure, spawn implicit tasks, migrate started work, or replay an
 ambiguous effect. See
 [research/workflow-boundary-observation-v0.md](research/workflow-boundary-observation-v0.md).
+
+### Agent development trajectory
+
+**Experimental.** `pysolate.agent-trajectory.v0` is a private Harness-owned append-only
+session log. It records exact ordered model context, provider-exposed reasoning/output,
+tool calls/results, subagent links and Pysolate logical/physical/workspace identities. Full
+bodies live in the private content-addressed Labstore; the metadata JSONL is hash chained
+from a sealed session header. A materialized browser export receives a second seal covering
+the complete bodies.
+
+The trajectory is not Runtime authority and is not a portable evidence replacement. The
+checked-in browser document is an explicitly scripted credential-free fixture. A live
+Harness adapter must still record the actual provider, tool and subagent boundaries before
+the Lab may claim complete capture of a real Agent run. See
+[research/agent-trajectory-v0.md](research/agent-trajectory-v0.md).
 
 ## Counterfactual branches
 

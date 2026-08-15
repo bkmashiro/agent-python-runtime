@@ -3,6 +3,10 @@
 Date: 2026-08-15
 Status: **Closed — no known unresolved Medium+ finding**
 
+> Historical review: the paired evidence and body-free Lab surface reviewed here were later
+> deliberately reset. Current Lab development data uses the private Agent trajectory
+> contract documented in `docs/research/agent-trajectory-v0.md`.
+
 ## Independent review rounds
 
 The bounded read-only review rounds did not produce a blanket pass before their time limit, but they did produce concrete adversarial findings. Each finding was reproduced, fixed and retained as a regression gate:

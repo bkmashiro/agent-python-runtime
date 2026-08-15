@@ -32,19 +32,16 @@ Source commit `62538a0a61056056ef0e0aaaa1276f3b2a776b1c` ran all three scenarios
 
 The canonical report is [`evidence/spark-composable-direct-report.json`](evidence/spark-composable-direct-report.json). Binary, Guest artifact, corpus, report, debugger dataset, log, exit, and identity checksums are bound in [`evidence/spark-composable-linux-run.json`](evidence/spark-composable-linux-run.json).
 
-## Lab projection contract
+## Current Lab boundary
 
-`cmd/composable-acceptance-report` validates corpus/report identity and projects each row as one `pysolate.lab-web-debugger.v4` run keyed by `run_id`.
+The former `pysolate.lab-web-debugger.v4` projection was deliberately removed when Lab reset
+to the private append-only `pysolate.agent-trajectory.v0` contract. The canonical acceptance
+report and Linux evidence above remain historical public evidence; the report command no
+longer writes a browser dataset or maintains a compatibility projection.
 
-The primary projection is now:
-
-```text
-recorded pipeline → agent swimlanes → Python source span → workspace path diff → raw event
-```
-
-Graph, timeline, source, filesystem, and raw-event views use the same recorded span/event IDs. Layout nodes do not claim additional runtime events. Selecting a child span opens that child's executed Python and highlights the recorded line range; the filesystem panel shows the same span's workspace changes.
-
-The Host Go acceptance recorder is not exposed as a product tab. Host/runtime events remain visible as recorded evidence in the runtime lane and raw-event Inspector.
+The scripted full-source trajectory fixture now demonstrates system/model/tool/subagent,
+Runtime and workspace correlation through stable IDs. It does not retroactively convert this
+older acceptance run into a model-visible Agent session.
 
 ## Evidence boundary
 

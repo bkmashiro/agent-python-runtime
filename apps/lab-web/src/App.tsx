@@ -1,590 +1,218 @@
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  AppShell, Alert, Badge, Button, Divider, Group, Tabs, Text,
-} from '@mantine/core';
-import CodeMirror from '@uiw/react-codemirror';
-import { json } from '@codemirror/lang-json';
-import { python } from '@codemirror/lang-python';
-import { vscodeDark } from '@uiw/codemirror-theme-vscode';
-import { Decoration, EditorView } from '@codemirror/view';
-import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
-import { type TraceAdapterEvent, type TraceNode, buildTraceNodes, buildExecutionStageTree, describeEvent } from './trace';
-import { type LabDataset, type LabRun, type LabSemanticRegionGraph, validateDataset } from './debuggerData';
-import { WorkflowExperiment } from './WorkflowExperiment';
-import { type WorkflowEvidence, validateWorkflowEvidence } from './workflowData';
+  Activity, Bot, Braces, ChevronRight, CircleDot, GitBranch, Search,
+  ShieldCheck, TerminalSquare, Wrench,
+} from 'lucide-react';
+import {
+  filterTrajectory, loadTrajectory, loadTrajectoryIndex, modelContext,
+  type EventSource, type TrajectoryEvent, type TrajectoryExport, type TrajectoryIndex,
+} from './trajectoryData';
+import './styles.css';
 
-type RunSource = 'recorded';
+const sourceOrder: EventSource[] = ['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace'];
 
-type RunOption = {
-  key: string;
-  source: RunSource;
-  label: string;
-  run: LabRun;
-  trace: TraceNode[];
+const sourceLabel: Record<EventSource, string> = {
+  system: 'system', developer: 'developer', user: 'user', memory: 'memory', skill: 'skill',
+  harness: 'harness', model: 'model', tool: 'tool', subagent: 'subagent', runtime: 'runtime', workspace: 'workspace',
 };
 
-function runLabel(run: LabRun): string {
-  return `${run.workload_id} · ${run.treatment}`;
+function eventTitle(event: TrajectoryEvent): string {
+  if (event.type === 'model.request') return `Model request · ${event.step_id?.replace('step-', '') ?? event.sequence}`;
+  if (event.type === 'tool.call') return `${event.tool_name ?? 'Tool'} tool call`;
+  if (event.type === 'tool.result') return `${event.tool_name ?? 'Tool'} result`;
+  if (event.type === 'assistant.reasoning') return 'Assistant reasoning';
+  if (event.type === 'assistant.output') return 'Assistant output';
+  if (event.type === 'subagent.dispatch') return 'Subagent dispatch';
+  if (event.type === 'subagent.result') return 'Subagent result';
+  if (event.type === 'runtime.event') return event.span_id?.includes('host-tool') ? 'Host tool execution' : 'Pysolate Run';
+  if (event.type === 'workspace.change') return 'Workspace change';
+  return event.type.replace('.', ' ');
 }
 
-function buildRunOption(run: LabRun, source: RunSource): RunOption {
-  const trace = buildTraceNodes(run.trace as ReadonlyArray<TraceAdapterEvent>, 'observed');
-  return {
-    key: `${source}:${run.run_id}`,
-    source,
-    label: runLabel(run),
-    run,
-    trace,
-  };
+function eventIcon(event: TrajectoryEvent) {
+  if (event.type.startsWith('assistant') || event.type === 'model.request') return <Bot size={15} />;
+  if (event.type.startsWith('tool')) return <Wrench size={15} />;
+  if (event.type === 'runtime.event') return <Activity size={15} />;
+  if (event.type === 'workspace.change') return <TerminalSquare size={15} />;
+  if (event.type.startsWith('subagent')) return <GitBranch size={15} />;
+  return <CircleDot size={13} />;
 }
 
-function toInputValue(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}`;
+function shortDigest(value?: string) {
+  return value ? `${value.slice(0, 14)}…${value.slice(-7)}` : '—';
 }
 
-function JsonViewer({ value, label }: { value: unknown; label: string }) {
-  const text = toInputValue(value);
+function DetailField({ label, value }: { label: string; value?: string | number }) {
+  if (value === undefined || value === '') return null;
+  return <div className="detail-field"><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+function ContextRegion({ trajectory, event }: { trajectory: TrajectoryExport; event: TrajectoryEvent }) {
+  if (event.type !== 'model.request') return null;
+  const context = modelContext(trajectory, event.event_id);
   return (
-    <div className="json-view">
-      <div className="code-label">
-        <span>{label}</span>
-        <span>{new Blob([text]).size} bytes</span>
+    <section className="context-region" aria-label="Exact model context">
+      <div className="section-title"><span>Exact model context</span><small>{context.length} ordered items</small></div>
+      <p className="section-note">This is the exact ordered context declared for this request. No reconstructed or inferred items.</p>
+      <div className="context-stack">
+        {context.map((item, index) => (
+          <article className="context-item" key={item.event_id}>
+            <header><span>{index + 1}</span><b className={`source-${item.source}`}>{item.source}</b><code>{item.type}</code>{item.tool_name && <strong>{item.tool_name}</strong>}</header>
+            <pre>{item.body_text}</pre>
+          </article>
+        ))}
       </div>
-      <CodeMirror
-        value={text}
-        height="100%"
-        theme={vscodeDark}
-        extensions={[json(), EditorView.lineWrapping]}
-        editable={false}
-        basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
-      />
-    </div>
-  );
-}
-
-function ExecutionPanel({ run, activeId, onSelect }: { run: LabRun; activeId: string; onSelect: (id: string) => void }) {
-  const [view, setView] = useState<'timeline' | 'tree'>('timeline');
-  const maxEnd = Math.max(1, ...run.trace.map((event) => event.ended_millis));
-  const agentOrder = ['orchestrator', ...run.scenario.child_programs.map((child) => child.id), ...run.trace.map((event) => event.agent_id).filter((id) => id !== 'orchestrator' && !run.scenario.child_programs.some((child) => child.id === id))].filter((id, index, all) => all.indexOf(id) === index);
-  const fanoutStart = run.trace.find((event) => event.action === 'fanout.select' && event.outcome === 'started')?.started_millis;
-  const joinTime = run.trace.find((event) => event.action === 'fanout.select' && event.outcome === 'selected')?.started_millis;
-  const phaseMarkers = [['Parent', run.trace.find((event) => event.action === 'stream.begin')?.started_millis], ['Fan-out', fanoutStart], ['Join + Host checks', joinTime], ['Resume', run.trace.find((event) => event.action === 'resume.fresh')?.started_millis]] as Array<[string, number | undefined]>;
-  const tree = useMemo(() => buildExecutionStageTree(run.trace as ReadonlyArray<TraceAdapterEvent>, 'observed'), [run.trace]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    setExpanded(new Set(['stage:run', 'stage:parallel', 'stage:branch:researcher', 'stage:branch:reviewer']));
-  }, [run.run_id]);
-  const byID = useMemo(() => new Map(tree.map((node) => [node.id, node])), [tree]);
-  const childCount = useMemo(() => tree.reduce((counts, node) => {
-    if (node.parent) counts.set(node.parent, (counts.get(node.parent) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>()), [tree]);
-  const visibleTree = tree.filter((node) => {
-    let parent = node.parent;
-    while (parent) {
-      if (!expanded.has(parent)) return false;
-      parent = byID.get(parent)?.parent;
-    }
-    return true;
-  });
-
-  return (
-    <section className="panel trace-panel agent-timeline" aria-label="Execution trace">
-      <div className="panel-heading execution-heading">
-        <Group gap={8}><Workflow size={16} /><Text fw={700} size="sm">Execution</Text></Group>
-        <div className="view-switch" role="tablist" aria-label="Execution view">
-          <button className={view === 'timeline' ? 'active' : ''} role="tab" aria-selected={view === 'timeline'} onClick={() => setView('timeline')}>Timeline</button>
-          <button className={view === 'tree' ? 'active' : ''} role="tab" aria-selected={view === 'tree'} onClick={() => setView('tree')}>Trace tree</button>
-        </div>
-      </div>
-      {view === 'timeline' ? <>
-        <div className="timeline-axis"><span>0 ms</span><span>Recorded time →</span><span>{maxEnd.toFixed(0)} ms</span></div>
-        <div className="timeline-phase-rail" aria-label="Execution phases">{phaseMarkers.map(([label, at]) => at === undefined ? null : <span key={label} style={{ left: `${(at / maxEnd) * 100}%` }}>{label}</span>)}</div>
-        <div className="timeline-scroll">
-          {agentOrder.map((agentID) => {
-            const events = run.trace.filter((event) => event.agent_id === agentID);
-            const role = events[0]?.agent_role ?? agentID;
-            const lifeStart = Math.min(...events.map((event) => event.started_millis));
-            const lifeEnd = Math.max(...events.map((event) => event.ended_millis));
-            const runtimeClusters = agentID === 'runtime' ? [...events].sort((a, b) => a.started_millis - b.started_millis).reduce((groups, event) => {
-              const current = groups.at(-1);
-              if (current && event.started_millis - current[0].started_millis <= 100) current.push(event);
-              else groups.push([event]);
-              return groups;
-            }, [] as TraceAdapterEvent[][]) : [];
-            return <div className={`timeline-lane ${agentID === 'runtime' ? 'runtime-lane' : ''}`} key={agentID} data-agent-id={agentID}>
-              <div className="lane-label"><strong>{agentID}</strong><span>{role}</span><small>{lifeStart.toFixed(0)}–{lifeEnd.toFixed(0)} ms</small></div>
-              <div className="lane-track">
-                <div className={`lane-lifecycle ${agentID === 'runtime' ? 'runtime-life' : ''}`} style={{ left: `${(lifeStart / maxEnd) * 100}%`, width: `${Math.max(0.7, ((lifeEnd - lifeStart) / maxEnd) * 100)}%` }} />
-                {fanoutStart !== undefined && <i className="causal-marker fanout-marker" style={{ left: `${(fanoutStart / maxEnd) * 100}%` }} title="Fan-out: child branches started" />}
-                {joinTime !== undefined && <i className="causal-marker join-marker" style={{ left: `${(joinTime / maxEnd) * 100}%` }} title="Join: child branches completed" />}
-                {agentID === 'runtime' ? runtimeClusters.map((cluster) => {
-                  const first = cluster[0];
-                  const phase = describeEvent(first).phase;
-                  const actions = new Set(cluster.map((event) => event.action));
-                  const label = actions.has('run.terminal') ? 'Resume + finish'
-                    : actions.has('fanout.select') && cluster.some((event) => event.outcome === 'selected') ? 'Join + Host checks'
-                      : actions.has('fanout.select') ? 'Parent done + fan-out'
-                        : cluster.length === 1 ? describeEvent(first).label : `${phase} · ${cluster.length} events`;
-                  const description = cluster.map((event) => describeEvent(event).label).join(', ');
-                  const clusterLeft = (first.started_millis / maxEnd) * 100;
-                  return <button key={`${first.started_millis}-${first.sequence}`} className={`runtime-cluster ${clusterLeft < 8 ? 'edge-start' : clusterLeft > 92 ? 'edge-end' : ''} ${cluster.some((event) => activeId === `event:${event.sequence}`) ? 'active' : ''}`} style={{ left: `${clusterLeft}%` }} title={`${label}: ${description}`} onClick={() => onSelect(`event:${first.sequence}`)} aria-label={`runtime cluster ${label}`}><span>{label}</span></button>;
-                }) : events.map((event) => {
-                  const left = (event.started_millis / maxEnd) * 100;
-                  const width = Math.max(0.5, ((event.ended_millis - event.started_millis) / maxEnd) * 100);
-                  const presentation = describeEvent(event);
-                  return <button key={event.sequence} className={`timeline-span source-linked ${activeId === `event:${event.sequence}` ? 'active' : ''}`} style={{ left: `${left}%`, width: `${width}%` }} title={`${presentation.label}: ${presentation.description} (${event.started_millis.toFixed(1)}–${event.ended_millis.toFixed(1)} ms)`} onClick={() => onSelect(`event:${event.sequence}`)} aria-label={`${agentID} ${event.action}`}><span>{presentation.label.replace(' Python', '')}</span></button>;
-                })}
-              </div>
-            </div>;
-          })}
-        </div>
-        <div className="timeline-legend"><span><i className="legend-source" />Python lifetime</span><span><i className="legend-runtime" />Host event</span><span><i className="legend-fanout" />Fan-out</span><span><i className="legend-join" />Join</span></div>
-      </> : <div className="trace-tree" role="tree" aria-label="Causal trace tree">
-        <div className="tree-note">Recorded sequence stays inside expandable execution stages; child agents are explicit parallel branches.</div>
-        {visibleTree.map((node) => {
-          const event = node.rawEvent;
-          const presentation = event ? describeEvent(event) : null;
-          const hasChildren = (childCount.get(node.id) ?? 0) > 0;
-          return <div role="treeitem" aria-level={node.depth + 1} aria-expanded={hasChildren ? expanded.has(node.id) : undefined} aria-selected={activeId === node.id} className={`trace-tree-row ${node.synthetic ? 'synthetic-tree-row' : ''} ${activeId === node.id ? 'active' : ''}`} style={{ paddingLeft: `${12 + node.depth * 22}px` }} key={node.id}>
-            {hasChildren ? <button className="tree-toggle" aria-label={`${expanded.has(node.id) ? 'Collapse' : 'Expand'} ${node.title}`} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })}>{expanded.has(node.id) ? '▾' : '▸'}</button> : <span className="tree-branch">{node.depth ? '└' : '●'}</span>}
-            {event && <span className="tree-sequence">{event.sequence}</span>}
-            <button className="tree-select" disabled={!event} onClick={() => event && onSelect(node.id)}><span className="tree-copy"><strong>{presentation?.label ?? node.title}</strong><small>{event ? `${presentation?.phase} · ${event.agent_id} · ${event.outcome}` : node.summary}</small></span>{event && <code>{event.action}</code>}</button>
-          </div>;
-        })}
-      </div>}
     </section>
   );
 }
 
-function SemanticRegionsPanel({ graph }: { graph: LabSemanticRegionGraph }) {
-  const [selectedID, setSelectedID] = useState(graph.regions[0]?.id ?? '');
-  useEffect(() => setSelectedID(graph.regions[0]?.id ?? ''), [graph]);
-  const selected = graph.regions.find((region) => region.id === selectedID) ?? graph.regions[0];
-  const source = graph.source_available ? graph.source ?? '' : '';
-  const regionHighlight = useMemo(() => EditorView.decorations.compute(['doc'], (state) => {
-    if (!selected) return Decoration.none;
-    const ranges = [];
-    for (let line = selected.span.start_line; line <= Math.min(selected.span.end_line, state.doc.lines); line += 1) {
-      ranges.push(Decoration.line({ class: `semantic-region-line region-${selected.kind}` }).range(state.doc.line(line).from));
-    }
-    return Decoration.set(ranges);
-  }), [selected]);
-  const effectLabel = (region: LabSemanticRegionGraph['regions'][number]) => {
-    if (region.effects.may_be_unknown) return 'unknown';
-    if (region.effects.may_publish) return 'write';
-    if (region.effects.may_observe_live) return 'read';
-    return 'pure';
-  };
-
-  if (!selected) return <div className="absence-panel"><Text size="sm">No candidate regions were emitted.</Text></div>;
-  return <div className="semantic-region-layout">
-    <div className="semantic-region-list" aria-label="Semantic candidate region graph">
-      <div className="region-graph-meta"><strong>{graph.regions.length} candidate regions</strong><small>Host-verified analysis · no execution authority</small></div>
-      {graph.regions.map((region, index) => <button type="button" key={region.id} onClick={() => setSelectedID(region.id)} className={`semantic-region-card ${selected.id === region.id ? 'active' : ''}`}>
-        {index > 0 && <i className="region-control-edge" aria-hidden="true" />}
-        <span className="region-index">R{index + 1}</span>
-        <span className="region-card-copy"><strong>lines {region.span.start_line}–{region.span.end_line}</strong><small>{region.kind.replace('_', ' ')} · {region.data_dependencies.length} data edges</small></span>
-        <Badge size="xs" color={effectLabel(region) === 'pure' ? 'green' : effectLabel(region) === 'read' ? 'blue' : effectLabel(region) === 'write' ? 'orange' : 'red'}>{effectLabel(region)}</Badge>
-      </button>)}
-    </div>
-    <div className="semantic-region-source">
-      <div className="source-context"><div><Text size="xs" c="dimmed">Python candidate R{graph.regions.indexOf(selected) + 1} · lines {selected.span.start_line}–{selected.span.end_line}</Text><small className="recording-limit">Analysis overlay only — original Python remains the sole execution authority.</small></div><Badge className="region-state-badge" variant="light" color={selected.rejection_reasons.length ? 'red' : 'teal'}>{selected.rejection_reasons.length ? 'BLOCKED' : 'OPEN'}</Badge></div>
-      <div className="semantic-region-code">{source ? <CodeMirror value={source} height="100%" theme={vscodeDark} extensions={[python(), EditorView.lineWrapping, regionHighlight]} editable={false} basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }} /> : <div className="semantic-source-omitted"><FileJson2 size={18} /><span>Source omitted by portable projection</span></div>}</div>
-      <div className="region-detail-grid">
-        <div><small>Live in</small><code>{selected.live_ins.join(', ') || '—'}</code></div>
-        <div><small>Live out</small><code>{selected.live_outs.join(', ') || '—'}</code></div>
-        <div><small>Data edges</small><code>{selected.data_dependencies.map((edge) => `${edge.name} ← ${edge.producer_region_id.slice(7, 15)}`).join(', ') || '—'}</code></div>
-        <div><small>Capability occurrences</small><code>{selected.capability_occurrences.length || '—'}</code></div>
-        <div className="region-rejections"><small>Barriers / rejection reasons</small><code>{[...selected.barriers, ...selected.rejection_reasons].join(', ') || 'none'}</code></div>
-        <div className="region-consumers"><small>Region consumer decisions</small><span><b>reuse</b> not admitted · <b>pre-dispatch</b> not admitted · <b>placement</b> not admitted</span></div>
-      </div>
-    </div>
-  </div>;
-}
-
-function Inspector({
-  node,
-  run,
-}: {
-  node: TraceNode;
-  run: LabRun;
-}) {
-  const [tab, setTab] = useState<string | null>('source');
-  const sourceRange = node.rawEvent?.source;
-  const eventPresentation = node.rawEvent ? describeEvent(node.rawEvent) : null;
-  const childProgram = sourceRange ? run.scenario.child_programs.find((child) => child.id === sourceRange.source_id) : undefined;
-  const sourceText = childProgram?.source ?? run.scenario.guest_source;
-  const sourceFile = sourceRange?.file ?? 'orchestrator.py';
-  const sourceHighlight = useMemo(() => EditorView.decorations.compute(['doc'], (state) => {
-    if (!sourceRange) return Decoration.none;
-    const ranges = [];
-    for (let line = sourceRange.start_line; line <= Math.min(sourceRange.end_line, state.doc.lines); line += 1) {
-      ranges.push(Decoration.line({ class: 'source-line-linked' }).range(state.doc.line(line).from));
-    }
-    return Decoration.set(ranges);
-  }), [sourceRange]);
-
+function LinkedExecution({ trajectory, event, onSelect }: { trajectory: TrajectoryExport; event: TrajectoryEvent; onSelect: (event: TrajectoryEvent) => void }) {
+  if (!event.tool_call_id) return null;
+  const linked = filterTrajectory(trajectory, { toolCallID: event.tool_call_id });
+  if (linked.length < 2) return null;
   return (
-    <section className="panel inspector-panel" aria-label="Selected operation inspector">
-      <div className="operation-header">
-        <Group gap={10}>
-          <div className="theme-icon" style={{ width: 28, height: 28 }}><Bot size={16} /></div>
-          <div>
-            <Text fw={700} size="sm">{node.title}</Text>
-            <Text size="xs" c="dimmed">{eventPresentation?.phase} · {node.rawEvent?.agent_id} · seq {node.rawEvent?.sequence}</Text>
-          </div>
-        </Group>
-        <Group gap={6}>
-          <Badge color="blue" variant="light">{run.recorded_status}</Badge>
-          <Badge variant="outline" color="gray">{node.id}</Badge>
-        </Group>
-      </div>
-      <div className="operation-summary event-explanation">
-        <div><Text size="xs" c="dimmed">What happened</Text><Text size="sm">{eventPresentation?.description}</Text></div>
-        <div className="event-timing"><span>{node.rawEvent ? `${node.rawEvent.started_millis.toFixed(1)}–${node.rawEvent.ended_millis.toFixed(1)} ms` : node.duration}</span><small>{node.rawEvent?.parent_span_id ? `caused by ${node.rawEvent.parent_span_id}` : 'run root'}</small></div>
-      </div>
-      <Tabs value={tab} onChange={setTab} className="inspector-tabs">
-        <Tabs.List>
-          <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Python</Tabs.Tab>
-          {run.semantic_regions && <Tabs.Tab value="regions" leftSection={<Workflow size={14} />}>Regions</Tabs.Tab>}
-          <Tabs.Tab value="context" leftSection={<Database size={14} />}>Scenario</Tabs.Tab>
-          <Tabs.Tab value="conversation" leftSection={<Bot size={14} />}>LLM conversation</Tabs.Tab>
-          <Tabs.Tab value="io" leftSection={<Database size={14} />}>Input / output</Tabs.Tab>
-          <Tabs.Tab value="details" leftSection={<Folder size={14} />}>Recorded event</Tabs.Tab>
-          <Tabs.Tab value="checkpoint" leftSection={<Workflow size={14} />}>Checkpoint</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="source" className="tab-body source-tab">
-          <div className="source-context">
-            <div><Text size="xs" c="dimmed">{sourceRange ? `${sourceFile} · lines ${sourceRange.start_line}–${sourceRange.end_line} · ${node.rawEvent?.agent_id}` : 'No Python source range recorded for this Runtime event'}</Text>{sourceRange && <small className="recording-limit">Program execution range only — AST node / statement execution was not recorded.</small>}</div>
-            <Badge color={sourceRange ? 'green' : 'gray'} variant="light">
-              {sourceRange ? 'RECORDED PROGRAM RANGE' : 'NO SOURCE SPAN'}
-            </Badge>
-          </div>
-          <CodeMirror
-            value={sourceText}
-            height="100%"
-            theme={vscodeDark}
-            extensions={[python(), EditorView.lineWrapping, sourceHighlight]}
-            editable={false}
-            basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
-          />
-        </Tabs.Panel>
-        {run.semantic_regions && <Tabs.Panel value="regions" className="tab-body semantic-region-tab"><SemanticRegionsPanel graph={run.semantic_regions} /></Tabs.Panel>}
-        <Tabs.Panel value="context" className="tab-body source-tab">
-          <JsonViewer
-            label="Recorded scenario metadata"
-            value={{
-              id: run.scenario.id,
-              file_count: run.scenario.file_count,
-              child_analysis_count: run.scenario.child_analysis_count,
-              selected_child: run.scenario.selected_child,
-              has_repeated_transformation: run.scenario.has_repeated_transformation,
-              has_wait_boundary: run.scenario.has_wait_boundary,
-              has_observation: run.scenario.has_observation,
-            }}
-          />
-        </Tabs.Panel>
-        <Tabs.Panel value="conversation" className="tab-body absence-panel">
-          <Bot size={22} />
-          <Text fw={700} size="sm">LLM conversation not recorded in this dataset</Text>
-          <Text size="sm" c="dimmed">This public acceptance recording contains Guest Python, Host/runtime events, digests, and child workspace deltas. It does not contain provider turns, message roles, prompt bodies, model responses, tool-call bodies, or final answer text.</Text>
-          <Text size="xs" c="dimmed">A future Harness-owned conversation trace must correlate turns to these Runtime spans without putting provider semantics inside Pysolate.</Text>
-        </Tabs.Panel>
-        <Tabs.Panel value="io" className="tab-body io-grid">
-          <JsonViewer label="Input digest" value={node.input} />
-          <JsonViewer label="Output digest" value={node.output} />
-        </Tabs.Panel>
-        <Tabs.Panel value="details" className="tab-body details-tab">
-          <div className="detail-block">
-            <Text fw={700} size="sm">Event</Text>
-            <Divider my="sm" />
-            <div className="detail-row"><Text size="xs" c="dimmed">Recorded action</Text><Text size="sm"><code>{node.rawEvent?.action}</code></Text></div>
-            <div className="detail-row"><Text size="xs" c="dimmed">Outcome</Text><Text size="sm">{node.rawEvent?.outcome}</Text></div>
-            <div className="detail-row"><Text size="xs" c="dimmed">Agent</Text><Text size="sm">{node.rawEvent?.agent_id} ({node.rawEvent?.agent_role})</Text></div>
-            <div className="detail-row"><Text size="xs" c="dimmed">Causal parent</Text><Text size="sm">{node.rawEvent?.parent_span_id ?? 'none'}</Text></div>
-          </div>
-          <div className="detail-block">
-            <Text fw={700} size="sm">Trace params</Text>
-            <Divider my="sm" />
-            <JsonViewer label="Params" value={node.params} />
-          </div>
-        </Tabs.Panel>
-        <Tabs.Panel value="checkpoint" className="tab-body">
-          <JsonViewer label="Checkpoint metadata" value={{
-            identity: node.checkpoint,
-            sequence: node.parent ? `child of ${node.parent}` : 'root',
-          }} />
-        </Tabs.Panel>
-      </Tabs>
-    </section>
-  );
-}
-
-function FilesystemPanel({
-  run,
-  node,
-}: {
-  run: LabRun;
-  node: TraceNode;
-}) {
-  return (
-    <section className="panel fs-panel" aria-label="Filesystem changes">
-      <div className="panel-heading">
-        <Group gap={8}><Folder size={16} /><Text fw={700} size="sm">Filesystem changes</Text></Group>
-        <Badge color={node.rawEvent?.workspace_changes?.length ? 'teal' : 'gray'} variant="light">{node.rawEvent?.workspace_changes?.length ?? 0} paths</Badge>
-      </div>
-      <div className="checkpoint-bar">
-        <div>
-          <Text size="xs" c="dimmed">Workspace evidence</Text>
-          <Text fw={700} size="sm">{node.rawEvent?.workspace_id ?? 'No workspace linked'}</Text>
-          <small className="recording-limit">{node.rawEvent?.workspace_changes?.length ? 'Base snapshot → child final snapshot delta. No intermediate filesystem checkpoints were recorded.' : 'No path-level delta or complete filesystem checkpoint is attached to this event.'}</small>
-        </div>
-        <code>{node.rawEvent?.agent_id ?? '-'}</code>
-      </div>
-      <div className="fs-tree">
-        {(node.rawEvent?.workspace_changes ?? []).length ? (node.rawEvent?.workspace_changes ?? []).map((change) => (
-          <button className="fs-change" key={change.path} type="button">
-            <Badge size="xs" color={change.kind === 'added' ? 'green' : change.kind === 'deleted' ? 'red' : 'yellow'}>{change.kind}</Badge>
-            <span>{change.path}</span>
-            <code>{change.size ?? 0} B</code>
+    <section className="linked-region" aria-label="Linked execution">
+      <div className="section-title"><span>Linked execution</span><small>{event.tool_call_id}</small></div>
+      <div className="linked-flow">
+        {linked.map((item, index) => (
+          <button key={item.event_id} onClick={() => onSelect(item)}>
+            <span>{index + 1}</span><b>{item.type}</b><small>{item.span_id ?? item.status ?? item.source}</small>
           </button>
-        )) : <Text size="sm" c="dimmed">No path-level change recorded for this span.</Text>}
+        ))}
       </div>
-      <Divider />
-      <div className="file-preview ref-summary">
-        <Text size="xs" c="dimmed">Run evidence identities</Text>
-        {run.refs.map((ref) => <div className="ref-row" key={ref.kind}><span>{ref.kind}</span><code>{ref.sha256.slice(0, 18)}…</code></div>)}
-      </div>
+      {linked.filter((item) => item.type === 'runtime.event').map((item) => (
+        <dl className="runtime-identities" key={item.event_id}>
+          <DetailField label="Run" value={item.run_id} />
+          <DetailField label="Logical request" value={item.logical_request_id} />
+          <DetailField label="Physical execution" value={item.physical_execution_id} />
+          <DetailField label="Span" value={item.span_id} />
+        </dl>
+      ))}
     </section>
   );
 }
 
-function mapDatasetRuns(dataset: LabDataset): RunOption[] {
-  return dataset.runs
-    .filter((run) => run.treatment === 'all')
-    .map((run) => buildRunOption(run, 'recorded'));
+function Inspector({ trajectory, event, onSelect }: { trajectory: TrajectoryExport; event: TrajectoryEvent; onSelect: (event: TrajectoryEvent) => void }) {
+  const [tab, setTab] = useState<'inspect' | 'raw'>('inspect');
+  useEffect(() => setTab('inspect'), [event.event_id]);
+  return (
+    <aside className="inspector" aria-label="Event inspector">
+      <header className="inspector-head">
+        <div className={`event-icon source-${event.source}`}>{eventIcon(event)}</div>
+        <div><p>{event.source} · #{event.sequence}</p><h2>{eventTitle(event)}</h2></div>
+        <span className="integrity"><ShieldCheck size={14} /> sealed</span>
+      </header>
+      <div className="tabs" role="tablist" aria-label="Inspector view">
+        <button role="tab" aria-selected={tab === 'inspect'} onClick={() => setTab('inspect')}>Inspect</button>
+        <button role="tab" aria-selected={tab === 'raw'} onClick={() => setTab('raw')}>Raw event</button>
+      </div>
+      {tab === 'raw' ? (
+        <pre className="raw-event">{JSON.stringify(event, null, 2)}</pre>
+      ) : (
+        <div className="inspect-body">
+          {event.body_text !== undefined && <section className="body-card"><div className="section-title"><span>Body</span><small>{event.content_type ?? 'opaque'}</small></div><pre>{event.body_text}</pre></section>}
+          <dl className="detail-grid">
+            <DetailField label="Event" value={event.event_id} />
+            <DetailField label="Parent" value={event.parent_event_id} />
+            <DetailField label="Turn" value={event.turn_id} />
+            <DetailField label="Step" value={event.step_id} />
+            <DetailField label="Actor" value={event.actor_id} />
+            <DetailField label="Status" value={event.status} />
+            <DetailField label="Provider" value={event.provider} />
+            <DetailField label="Model" value={event.model} />
+            <DetailField label="Tool call" value={event.tool_call_id} />
+            <DetailField label="Tool" value={event.tool_name} />
+            <DetailField label="Child session" value={event.child_session_id} />
+            <DetailField label="Body identity" value={shortDigest(event.body?.sha256)} />
+            <DetailField label="Event seal" value={shortDigest(event.sha256)} />
+          </dl>
+          {event.usage && <section className="usage"><span>input {event.usage.input ?? 0}</span><span>output {event.usage.output ?? 0}</span><span>reasoning {event.usage.reasoning ?? 0}</span><span>cache read {event.usage.cache_read ?? 0}</span></section>}
+          <ContextRegion trajectory={trajectory} event={event} />
+          <LinkedExecution trajectory={trajectory} event={event} onSelect={onSelect} />
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function TrajectoryApp({ trajectory, index, sessionID, onSessionChange }: { trajectory: TrajectoryExport; index: TrajectoryIndex; sessionID: string; onSessionChange: (value: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [source, setSource] = useState<EventSource | undefined>();
+  const [selectedID, setSelectedID] = useState(() => trajectory.events.find((event) => event.type === 'model.request')?.event_id ?? trajectory.events[0].event_id);
+  useEffect(() => {
+    setQuery(''); setSource(undefined);
+    setSelectedID(trajectory.events.find((event) => event.type === 'model.request')?.event_id ?? trajectory.events[0].event_id);
+  }, [trajectory]);
+  const filtered = useMemo(() => filterTrajectory(trajectory, { query, sources: source ? [source] : undefined }), [trajectory, query, source]);
+  useEffect(() => {
+    if (!filtered.some((event) => event.event_id === selectedID) && filtered[0]) setSelectedID(filtered[0].event_id);
+  }, [filtered, selectedID]);
+  const selected = trajectory.events.find((event) => event.event_id === selectedID) ?? trajectory.events[0];
+  const requestCount = trajectory.events.filter((event) => event.type === 'model.request').length;
+  const toolCount = trajectory.events.filter((event) => event.type === 'tool.call').length;
+  const session = index.sessions.find((item) => item.session_id === sessionID)!;
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand"><Braces size={19} /><div><span>Pysolate Lab</span><small>private development trace</small></div></div>
+        <div className="session-strip">
+          <span className={`fixture-badge ${session.kind}`}>{session.kind === 'experiment' ? 'REAL GUEST EXPERIMENT' : 'SCRIPTED DEVELOPMENT FIXTURE'}</span>
+          <select aria-label="Trajectory session" value={sessionID} onChange={(event) => onSessionChange(event.target.value)}>
+            {index.sessions.map((item) => <option key={item.session_id} value={item.session_id}>{item.label}</option>)}
+          </select>
+          <code>{trajectory.session.session_id}</code><span>{trajectory.session.source_commit.slice(0, 8)}</span>
+        </div>
+      </header>
+      <main>
+        <section className="hero">
+          <div><p className="eyebrow">MODEL-VISIBLE MEANS LOGGED</p><h1>Trajectory</h1><p>Inspect every context injection, model emission, tool boundary, subagent handoff and Pysolate execution from one append-only session.</p></div>
+          <div className="hero-metrics"><article><b data-testid="event-count">{trajectory.events.length} events</b><span>hash chained</span></article><article><b>{requestCount}</b><span>model requests</span></article><article><b>{toolCount}</b><span>tool calls</span></article></div>
+        </section>
+        <section className="toolbar" aria-label="Trajectory filters">
+          <label><Search size={15} /><input aria-label="Search trajectory" placeholder="Search bodies, IDs, tools…" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+          <div className="source-filters">
+            {sourceOrder.map((item) => <button key={item} className={source === item ? 'active' : ''} onClick={() => setSource(source === item ? undefined : item)}>{sourceLabel[item]}</button>)}
+          </div>
+          <span data-testid="filtered-count">{filtered.length} shown</span>
+        </section>
+        <section className="workspace">
+          <nav className="event-list" aria-label="Session trajectory">
+            {filtered.map((event) => (
+              <button key={event.event_id} aria-label={eventTitle(event)} className={selected.event_id === event.event_id ? 'selected' : ''} onClick={() => setSelectedID(event.event_id)}>
+                <span className="event-sequence">{String(event.sequence).padStart(2, '0')}</span>
+                <span className={`event-icon source-${event.source}`}>{eventIcon(event)}</span>
+                <span className="event-copy"><b>{eventTitle(event)}</b><small><em>{event.source}</em>{event.tool_name ?? event.status ?? event.actor_id}</small><span>{event.body_text?.replace(/\s+/g, ' ').slice(0, 96) ?? event.event_id}</span></span>
+                <time>+{event.occurred_millis}ms</time><ChevronRight size={14} />
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="empty">No events match this filter.</p>}
+          </nav>
+          <Inspector trajectory={trajectory} event={selected} onSelect={(event) => setSelectedID(event.event_id)} />
+        </section>
+      </main>
+    </div>
+  );
 }
 
 export default function App() {
-  const [surface, setSurface] = useState<'experiment' | 'debugger'>('experiment');
-  const [workflowEvidence, setWorkflowEvidence] = useState<WorkflowEvidence | null>(null);
-  const [workflowError, setWorkflowError] = useState('');
-  const [runOptions, setRunOptions] = useState<RunOption[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState('');
-  const [activeNodeId, setActiveNodeId] = useState('');
-  const [searchText, setSearchText] = useState('');
-  const [datasetError, setDatasetError] = useState('');
-  const [datasetSummary, setDatasetSummary] = useState('Loading public dataset...');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
+  const [index, setIndex] = useState<TrajectoryIndex | null>(null);
+  const [sessionID, setSessionID] = useState('');
+  const [trajectory, setTrajectory] = useState<TrajectoryExport | null>(null);
+  const [error, setError] = useState('');
   useEffect(() => {
-    async function loadWorkflowEvidence() {
-      try {
-        const response = await fetch('/lab-data/workflow-benchmark-evidence-v0.json');
-        if (!response.ok) throw new Error(`workflow evidence load failed: ${response.status}`);
-        const parsed = await validateWorkflowEvidence(JSON.parse(await response.text()) as WorkflowEvidence);
-        setWorkflowEvidence(parsed);
-        setWorkflowError('');
-      } catch (error) {
-        setWorkflowEvidence(null);
-        setWorkflowError(error instanceof Error ? error.message : 'workflow evidence rejected');
-        setSurface('debugger');
-      }
-    }
-    void loadWorkflowEvidence();
+    loadTrajectoryIndex().then((value) => { setIndex(value); setSessionID(value.default_session_id); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'trajectory index load failed'));
   }, []);
-
   useEffect(() => {
-    async function loadDefault() {
-      try {
-        const response = await fetch('/lab-data/debugger.json');
-        if (!response.ok) {
-          throw new Error(`dataset load failed: ${response.status}`);
-        }
-        const body = await response.text();
-        const parsed = validateDataset(JSON.parse(body) as LabDataset);
-        const recorded = mapDatasetRuns(parsed);
-
-        setRunOptions(recorded);
-        if (recorded[0]) {
-          setSelectedRunId(recorded[0].key);
-        }
-        setDatasetSummary(`Showing ${recorded.length} public development runs`);
-        setDatasetError('');
-      } catch (error) {
-        setRunOptions([]);
-        setSelectedRunId('');
-        setDatasetError(error instanceof Error ? error.message : 'could not load dataset');
-        setDatasetSummary('Recorded dataset unavailable');
-      }
-    }
-    void loadDefault();
-  }, []);
-
-  const recordedRuns = useMemo(() => runOptions.filter((run) => run.source === 'recorded'), [runOptions]);
-  const filteredRecorded = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
-    if (!query) {
-      return recordedRuns;
-    }
-    return recordedRuns.filter((run) => `${run.run.run_id} ${run.run.workload_id} ${run.run.treatment}`.toLowerCase().includes(query));
-  }, [searchText, recordedRuns]);
-
-  const selectableRuns = useMemo(() => {
-    if (!searchText.trim()) {
-      return runOptions;
-    }
-    return filteredRecorded;
-  }, [filteredRecorded, searchText]);
-
-  useEffect(() => {
-    if (!runOptions.find((run) => run.key === selectedRunId)) {
-      setSelectedRunId(runOptions[0]?.key ?? '');
-    }
-  }, [runOptions, selectedRunId]);
-
-  const selectedRun = runOptions.find((run) => run.key === selectedRunId) ?? null;
-
-  useEffect(() => {
-    const defaultNode = selectedRun?.trace.find((node) => (node.rawEvent?.workspace_changes?.length ?? 0) > 0)
-      ?? selectedRun?.trace.find((node) => node.rawEvent?.agent_id === 'orchestrator' && node.rawEvent.source)
-      ?? selectedRun?.trace[0];
-    setActiveNodeId(defaultNode?.id ?? '');
-  }, [selectedRun]);
-
-  const selectedNode = useMemo(() => {
-    return selectedRun?.trace.find((node) => node.id === activeNodeId) ?? selectedRun?.trace[0];
-  }, [activeNodeId, selectedRun]);
-
-  const onUpload = async () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleLoad = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const raw = await file.text();
-      const parsed = validateDataset(JSON.parse(raw) as LabDataset);
-      const recorded = mapDatasetRuns(parsed);
-      setRunOptions(recorded);
-      if (recorded[0]) {
-        setSelectedRunId(recorded[0].key);
-      }
-      setDatasetSummary(`Showing ${recorded.length} public development runs`);
-      setDatasetError('');
-    } catch (error) {
-      setDatasetError(error instanceof Error ? error.message : 'Invalid dataset');
-      throw error;
-    } finally {
-      event.target.value = '';
-    }
-  };
-
-  if (surface === 'experiment') {
-    return (
-      <AppShell header={{ height: 72 }} padding={0}>
-        <AppShell.Header className="app-header workflow-header">
-          <Group h="100%" px="sm" justify="space-between" wrap="nowrap">
-            <Group gap="sm"><div className="theme-icon" style={{ width: 28, height: 28 }}><Workflow size={16} /></div><div><Text fw={800} size="sm">Pysolate Lab</Text><Text size="xs" c="dimmed">Observable workflow boundaries</Text></div></Group>
-            <div className="surface-switch" role="tablist" aria-label="Lab surface"><button className="active" role="tab" aria-selected="true">Paired experiment</button><button role="tab" aria-selected="false" onClick={() => setSurface('debugger')}>Development debugger</button></div>
-          </Group>
-        </AppShell.Header>
-        <AppShell.Main className="workflow-main">
-          {workflowEvidence ? <WorkflowExperiment evidence={workflowEvidence} /> : <Alert color={workflowError ? 'red' : 'blue'} title={workflowError ? 'Workflow evidence rejected' : 'Loading sealed workflow evidence'}>{workflowError || 'Validating manifest, provenance links and evidence seal…'}</Alert>}
-        </AppShell.Main>
-      </AppShell>
-    );
-  }
-
-  if (!selectedRun || !selectedNode) {
-    return (
-      <AppShell header={{ height: 72 }} padding={0}>
-        <AppShell.Header className="app-header">
-          <Group h="100%" px="sm" justify="space-between" wrap="nowrap">
-            <div>
-              <Text fw={800} size="sm">Pysolate Lab Debugger</Text>
-              <Text size="xs" c="dimmed">{datasetSummary}</Text>
-            </div>
-            <>{workflowEvidence && <Button size="compact-xs" variant="light" onClick={() => setSurface('experiment')}>Paired experiment</Button>}<Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button></>
-            <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={handleLoad} />
-          </Group>
-        </AppShell.Header>
-        <AppShell.Main className="app-main">
-          <Alert color={datasetError ? 'red' : 'blue'} title={datasetError ? 'Recorded dataset rejected' : 'Loading recorded dataset'}>
-            {datasetError || 'Validating per-run traces…'}
-          </Alert>
-        </AppShell.Main>
-      </AppShell>
-    );
-  }
-
-  return (
-    <AppShell header={{ height: 72 }} padding={0}>
-      <AppShell.Header className="app-header">
-        <Group h="100%" px="sm" justify="space-between" wrap="nowrap">
-          <Group gap="sm">
-            <div className="theme-icon" style={{ width: 28, height: 28 }}><Workflow size={16} /></div>
-            <div>
-              <Text fw={800} size="sm">Pysolate Lab Debugger</Text>
-              <Text size="xs" c="dimmed">Agent causality, Python source spans, and workspace diffs</Text>
-            </div>
-          </Group>
-
-          <Group gap="xs" wrap="nowrap">
-            <input
-              data-testid="run-search"
-              value={searchText}
-              onChange={(event) => setSearchText(event.currentTarget.value)}
-              placeholder="Search run ID, workload, treatment"
-              style={{ minWidth: 240 }}
-            />
-            <select
-              data-testid="run-select"
-              value={selectedRun.key}
-              onChange={(event) => {
-                setSelectedRunId(event.currentTarget.value);
-              }}
-            >
-              {selectableRuns.map((run) => (
-                <option
-                  key={run.key}
-                  value={run.key}
-                  data-testid="run-option"
-                  data-run-kind={run.source}
-                  data-node-count={run.trace.length}
-                >
-                  {run.label}
-                </option>
-              ))}
-            </select>
-            <>{workflowEvidence && <Button size="compact-xs" variant="light" onClick={() => setSurface('experiment')}>Paired experiment</Button>}<Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button></>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              style={{ display: 'none' }}
-              onChange={handleLoad}
-            />
-            <div style={{ width: 190 }}>
-              <Text size="xs" c="dimmed">{recordedRuns.length} development runs</Text>
-              <Text size="xs" c="dimmed">{datasetSummary}</Text>
-              {datasetError && <Text size="xs" c="red">{datasetError}</Text>}
-            </div>
-          </Group>
-        </Group>
-      </AppShell.Header>
-      <AppShell.Main className="app-main">
-        <ExecutionPanel run={selectedRun.run} activeId={activeNodeId} onSelect={setActiveNodeId} />
-        <Divider orientation="vertical" />
-        <Inspector node={selectedNode ?? selectedRun.trace[0]} run={selectedRun.run} />
-        <Divider orientation="vertical" />
-        <FilesystemPanel key={selectedRun.key} run={selectedRun.run} node={selectedNode ?? selectedRun.trace[0]} />
-      </AppShell.Main>
-    </AppShell>
-  );
+    if (!index || !sessionID) return;
+    const session = index.sessions.find((item) => item.session_id === sessionID);
+    if (!session) { setError('trajectory session is missing'); return; }
+    let cancelled = false;
+    setTrajectory(null); setError('');
+    loadTrajectory(`/lab-data/${session.file}`).then((value) => { if (!cancelled) setTrajectory(value); }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'trajectory load failed'); });
+    return () => { cancelled = true; };
+  }, [index, sessionID]);
+  if (error) return <main className="state-page"><h1>Trajectory unavailable</h1><pre>{error}</pre></main>;
+  if (!trajectory || !index) return <main className="state-page"><h1>Loading trajectory…</h1></main>;
+  return <TrajectoryApp trajectory={trajectory} index={index} sessionID={sessionID} onSessionChange={setSessionID} />;
 }

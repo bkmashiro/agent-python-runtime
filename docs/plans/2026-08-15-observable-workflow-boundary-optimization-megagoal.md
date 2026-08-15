@@ -6,6 +6,10 @@
 > independently reviewed slices; stop only at the decision gates below.
 
 **Status:** Complete — Tracks 0–H implemented, measured, reviewed and released
+**Superseded evidence note:** the checked-in paired result and old body-free Lab UI were
+deliberately removed after completion. A balanced-order CPU-aware v1 real-Guest rerun now
+exists as `pysolate.agent-trajectory.v0`; see `workflow-boundary-evaluation-v1.md`. This
+document is historical, not the current Lab contract.
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`

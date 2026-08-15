@@ -119,6 +119,27 @@ func TestRuntimeAndToolResultsRequireKnownToolCall(t *testing.T) {
 	}
 }
 
+func TestAppendRejectsEventsAfterSessionEnd(t *testing.T) {
+	root := t.TempDir()
+	store, err := labstore.Open(filepath.Join(root, "objects"), labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	log, err := trajectory.Create(filepath.Join(root, "trajectory.jsonl"), store, trajectory.SessionHeader{
+		SessionID: "session-0000000000000004", SourceCommit: "0123456789abcdef0123456789abcdef01234567",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventSessionStart, Source: trajectory.SourceHarness, ActorID: "agent-main-0001"})
+	appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventSessionEnd, Source: trajectory.SourceHarness, ActorID: "agent-main-0001", Status: "completed"})
+	if _, err := log.Append(trajectory.EventInput{Type: trajectory.EventAssistantOutput, Source: trajectory.SourceModel, ActorID: "agent-main-0001", Body: []byte("too late"), BodyKind: labstore.KindProviderBody}); err == nil {
+		t.Fatal("append after session.end succeeded")
+	}
+}
+
 func appendEvent(t *testing.T, log *trajectory.Log, input trajectory.EventInput) trajectory.Event {
 	t.Helper()
 	event, err := log.Append(input)

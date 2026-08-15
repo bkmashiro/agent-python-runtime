@@ -98,8 +98,8 @@ the seeded workload exposes a measured gap.
 | Tool optimization gap | Prepared Harness admits only exact preissue, explicit independence, exact in-flight coalescing and exact retained reads; external writes remain denied |
 | Semantic placement unknown | Measured `no_go`: zero safe gains and 19 baseline regressions; current router retained |
 | Workstation build cache | Identity-bound layer plus exact-source final cache; bounded 2+2 keys and verified cold/warm evidence |
-| Seeded workload | 14 fixed-seed shuffled tasks, 25→23 physical reads, zero observable divergence |
-| Lab projection | Existing Lab extended with a sealed read-only paired timeline and no execution controls |
+| Seeded workload | Balanced 7/7 AB/BA real-Guest v1 rerun: zero divergence, physical executions 25→23, no measured CPU/wall improvement |
+| Lab projection | Replaced by private append-only Agent Trajectory; Lab defaults to the measured real-Guest experiment and also includes an explicitly scripted credential-free full-source fixture |
 
-The final quantitative and claim boundary is
-[`observable-workflow-boundary-evaluation-v0.md`](observable-workflow-boundary-evaluation-v0.md).
+The reset quantitative boundary is recorded in
+[`workflow-boundary-evaluation-v1.md`](workflow-boundary-evaluation-v1.md).

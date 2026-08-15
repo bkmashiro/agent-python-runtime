@@ -148,8 +148,8 @@ logical request maps to one physical execution; every physical execution has exa
 matching measured Host span; and every non-producer consumer requires exactly one
 admitted coalescing or retained-reuse decision. Cross-authority, freshness, privacy,
 artifact, profile or Plan sharing fails closed. The sealed Lab projection validates those
-relations and `consumer_admitted=false`; it cannot schedule, retry, preissue or invoke a
-capability.
+relations in the retired v0 fixture only. The report remains a portable body-free format;
+the new private Agent trajectory does not weaken or replace this boundary.
 
 ### Experimental deterministic verification
 
@@ -180,6 +180,20 @@ count, governs retention. Callers must explicitly declare credentials absent,
 and structured content rejects common credential field names. That check is
 defense in depth, not reliable secret discovery or an authentication boundary.
 See [research/lab-boundary.md](research/lab-boundary.md).
+
+### Private Agent trajectory
+
+`research/trajectory` intentionally stores prompt, provider-visible reasoning/output, tool
+payload and workspace bodies that portable evidence forbids. The JSONL metadata is
+append-only, `0600` and hash chained; bodies are private typed Labstore objects. A sealed
+materialized export is for a same-UID local browser only and must never be published as a
+portable evidence artifact.
+
+Callers remain responsible for removing credentials before append. The explicit
+`CredentialsAbsent` declaration and structured-key checks are defense in depth, not secret
+discovery. Provider-hidden chain-of-thought is unavailable and must not be fabricated.
+Session-log or body corruption fails validation; the log grants no capability, scheduling,
+retry, replay or Runtime authority.
 
 ### Artifact binding
 

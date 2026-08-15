@@ -1,6 +1,6 @@
 # Seeded workflow-boundary paired experiment v1
 
-Status: **Implemented driver; prior v0 evidence reset; new real-Guest evidence pending**
+Status: **Implemented and rerun against a real Guest; one balanced 14-task measurement only**
 Date: 2026-08-15
 
 ## Boundary

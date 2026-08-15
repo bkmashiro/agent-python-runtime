@@ -165,13 +165,14 @@ type record struct {
 }
 
 type Log struct {
-	mu     sync.Mutex
-	path   string
-	file   *os.File
-	store  *labstore.Store
-	header SessionHeader
-	events []Event
-	closed bool
+	mu       sync.Mutex
+	path     string
+	file     *os.File
+	store    *labstore.Store
+	header   SessionHeader
+	events   []Event
+	closed   bool
+	terminal bool
 }
 
 func Create(path string, store *labstore.Store, header SessionHeader) (*Log, error) {
@@ -240,7 +241,8 @@ func Open(path string, store *labstore.Store) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	log := &Log{path: path, file: file, store: store, header: header, events: events}
+	terminal := len(events) > 0 && events[len(events)-1].Type == EventSessionEnd
+	log := &Log{path: path, file: file, store: store, header: header, events: events, terminal: terminal}
 	if err := log.Validate(); err != nil {
 		_ = file.Close()
 		return nil, err
@@ -253,6 +255,9 @@ func (log *Log) Append(input EventInput) (Event, error) {
 	defer log.mu.Unlock()
 	if log.closed {
 		return Event{}, errors.New("trajectory log is closed")
+	}
+	if log.terminal {
+		return Event{}, errors.New("trajectory session is terminal")
 	}
 	event := Event{
 		Sequence: uint64(len(log.events) + 1), EventID: fmt.Sprintf("event-%016x", len(log.events)+1),
@@ -291,6 +296,7 @@ func (log *Log) Append(input EventInput) (Event, error) {
 		return Event{}, err
 	}
 	log.events = append(log.events, event)
+	log.terminal = event.Type == EventSessionEnd
 	return event, nil
 }
 

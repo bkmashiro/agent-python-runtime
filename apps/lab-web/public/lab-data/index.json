@@ -1,0 +1,18 @@
+{
+  "schema_version": "pysolate.trajectory-index.v0",
+  "default_session_id": "workflow-experiment-v1",
+  "sessions": [
+    {
+      "session_id": "workflow-experiment-v1",
+      "label": "Workflow experiment v1 · real Guest",
+      "kind": "experiment",
+      "file": "experiment.json"
+    },
+    {
+      "session_id": "scripted-development",
+      "label": "Scripted full-source fixture",
+      "kind": "scripted",
+      "file": "trajectory.json"
+    }
+  ]
+}

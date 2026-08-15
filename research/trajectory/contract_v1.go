@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
 )
@@ -61,12 +63,14 @@ const (
 	EventModelContext       EvidenceType = "model.context"
 	EventModelBody          EvidenceType = "model.body"
 	EventSourceDocument     EvidenceType = "source.document"
+	EventSourceBody         EvidenceType = "source.body"
 	EventSourceOccurrence   EvidenceType = "source.occurrence"
 	EventSourceDecision     EvidenceType = "source.decision"
 	EventExecutedLine       EvidenceType = "source.executed_line"
 	EventSubagentContext    EvidenceType = "subagent.context"
 	EventSubagentRuntime    EvidenceType = "subagent.runtime"
 	EventSubagentWorkspace  EvidenceType = "subagent.workspace"
+	EventWorkspaceFile      EvidenceType = "workspace.file"
 	EventEvidenceTruncated  EvidenceType = "evidence.truncated"
 	EventRuntimeObservation EvidenceType = "runtime.observation"
 	EventResourceSample     EvidenceType = "resource.sample"
@@ -76,8 +80,8 @@ func (eventType EvidenceType) valid() bool {
 	switch eventType {
 	case EventTraceStarted, EventTraceEnded, EventAuthoritySnapshot, EventEffectTransition,
 		EventWorkspaceTerminal, EventExecutionAttempt, EventModelContext, EventModelBody,
-		EventSourceDocument, EventSourceOccurrence, EventSourceDecision, EventExecutedLine,
-		EventSubagentContext, EventSubagentRuntime, EventSubagentWorkspace, EventEvidenceTruncated,
+		EventSourceDocument, EventSourceBody, EventSourceOccurrence, EventSourceDecision, EventExecutedLine,
+		EventSubagentContext, EventSubagentRuntime, EventSubagentWorkspace, EventWorkspaceFile, EventEvidenceTruncated,
 		EventRuntimeObservation, EventResourceSample:
 		return true
 	default:
@@ -172,6 +176,13 @@ type SourceDocumentPayload struct {
 	Availability Availability `json:"availability"`
 }
 
+type SourceBodyPayload struct {
+	DocumentID   string       `json:"document_id"`
+	SourceSHA256 string       `json:"source_sha256"`
+	DisplayPath  string       `json:"display_path"`
+	Availability Availability `json:"availability"`
+}
+
 type SourceOccurrencePayload struct {
 	DocumentID        string `json:"document_id"`
 	SourceSHA256      string `json:"source_sha256"`
@@ -228,6 +239,13 @@ type SubagentWorkspacePayload struct {
 	ChangedEntries   uint32 `json:"changed_entries"`
 	ChangedBytes     uint64 `json:"changed_bytes"`
 	Disposition      string `json:"disposition"`
+}
+
+type WorkspaceFilePayload struct {
+	WorkspaceSHA256 string       `json:"workspace_sha256"`
+	Path            string       `json:"path"`
+	ContentSHA256   string       `json:"content_sha256"`
+	Availability    Availability `json:"availability"`
 }
 
 type TruncationPayload struct {
@@ -371,11 +389,12 @@ func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
 	if err := validateEvidenceRelations(input.Type, input.Payload, parents, prior); err != nil {
 		return EvidenceEvent{}, err
 	}
-	if input.Type == EventModelBody && input.Body == nil {
-		return EvidenceEvent{}, errors.New("model body evidence requires a body reference")
+	if (input.Type == EventModelBody || input.Type == EventSourceBody || input.Type == EventWorkspaceFile) && input.Body == nil {
+		return EvidenceEvent{}, errors.New("private body evidence requires a body reference")
 	}
 	if input.Body != nil {
-		if input.Type.productionEligible() || (input.Type != EventModelBody && input.Type != EventRuntimeObservation) || builder.store == nil || input.Body.Kind == "" || input.Body.SHA256 == "" {
+		bodyAllowed := input.Type == EventModelBody || input.Type == EventSourceBody || input.Type == EventWorkspaceFile || input.Type == EventRuntimeObservation
+		if input.Type.productionEligible() || !bodyAllowed || builder.store == nil || input.Body.Kind == "" || input.Body.SHA256 == "" {
 			return EvidenceEvent{}, errors.New("invalid causal evidence body")
 		}
 		if _, err := builder.store.Get(*input.Body); err != nil {
@@ -582,6 +601,8 @@ func decodeEvidencePayload(kind EvidenceType, raw json.RawMessage) (any, error) 
 		target = &ModelContextPayload{}
 	case EventSourceDocument:
 		target = &SourceDocumentPayload{}
+	case EventSourceBody:
+		target = &SourceBodyPayload{}
 	case EventSourceOccurrence:
 		target = &SourceOccurrencePayload{}
 	case EventSourceDecision:
@@ -594,6 +615,8 @@ func decodeEvidencePayload(kind EvidenceType, raw json.RawMessage) (any, error) 
 		target = &SubagentRuntimePayload{}
 	case EventSubagentWorkspace:
 		target = &SubagentWorkspacePayload{}
+	case EventWorkspaceFile:
+		target = &WorkspaceFilePayload{}
 	case EventEvidenceTruncated:
 		target = &TruncationPayload{}
 	case EventRuntimeObservation:
@@ -633,6 +656,8 @@ func dereferenceEvidencePayload(value any) any {
 		return *typed
 	case *SourceDocumentPayload:
 		return *typed
+	case *SourceBodyPayload:
+		return *typed
 	case *SourceOccurrencePayload:
 		return *typed
 	case *SourceDecisionPayload:
@@ -644,6 +669,8 @@ func dereferenceEvidencePayload(value any) any {
 	case *SubagentRuntimePayload:
 		return *typed
 	case *SubagentWorkspacePayload:
+		return *typed
+	case *WorkspaceFilePayload:
 		return *typed
 	case *TruncationPayload:
 		return *typed
@@ -696,6 +723,10 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		if kind != EventSourceDocument || !validDigest(value.DocumentID) || !validDigest(value.SourceSHA256) || !value.Availability.valid() {
 			return errors.New("invalid source document payload")
 		}
+	case SourceBodyPayload:
+		if kind != EventSourceBody || !validDigest(value.DocumentID) || !validDigest(value.SourceSHA256) || value.Availability != Available || !validPrivateEvidencePath(value.DisplayPath) {
+			return errors.New("invalid source body payload")
+		}
 	case SourceOccurrencePayload:
 		if kind != EventSourceOccurrence || !validDigest(value.DocumentID) || !validDigest(value.SourceSHA256) || !validDigest(value.OccurrenceID) ||
 			value.StartLine == 0 || value.EndLine < value.StartLine || (value.EndLine == value.StartLine && value.EndColumn < value.StartColumn) ||
@@ -729,6 +760,10 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		if kind != EventSubagentWorkspace || !evidenceIdentifier.MatchString(value.ChildID) || !validDigest(value.BaseRootSHA256) || !validDigest(value.ResultRootSHA256) ||
 			(value.Disposition != "selected" && value.Disposition != "discarded") {
 			return errors.New("invalid subagent workspace payload")
+		}
+	case WorkspaceFilePayload:
+		if kind != EventWorkspaceFile || !validDigest(value.WorkspaceSHA256) || !validDigest(value.ContentSHA256) || value.Availability != Available || !validPrivateEvidencePath(value.Path) {
+			return errors.New("invalid workspace file payload")
 		}
 	case TruncationPayload:
 		if kind != EventEvidenceTruncated || !evidenceIdentifier.MatchString(value.Scope) || !evidenceIdentifier.MatchString(value.Reason) || value.DroppedEvents == 0 {
@@ -766,6 +801,12 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		return decodeEvidencePayload(parent.Type, parent.Payload)
 	}
 	switch value := payload.(type) {
+	case SourceBodyPayload:
+		parent, err := parentPayload(EventSourceDocument)
+		document, ok := parent.(*SourceDocumentPayload)
+		if err != nil || !ok || document.DocumentID != value.DocumentID || document.SourceSHA256 != value.SourceSHA256 {
+			return errors.New("source body is not bound to its document")
+		}
 	case SourceOccurrencePayload:
 		parent, err := parentPayload(EventSourceDocument)
 		document, ok := parent.(*SourceDocumentPayload)
@@ -818,9 +859,19 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		if err != nil || !ok || runtime.ChildID != value.ChildID {
 			return errors.New("subagent workspace is not bound to child runtime")
 		}
+	case WorkspaceFilePayload:
+		parent, err := parentPayload(EventSubagentWorkspace)
+		workspace, ok := parent.(*SubagentWorkspacePayload)
+		if err != nil || !ok || workspace.ResultRootSHA256 != value.WorkspaceSHA256 || workspace.Disposition != "selected" {
+			return errors.New("workspace file is not bound to selected child root")
+		}
 	}
 	_ = kind
 	return nil
+}
+
+func validPrivateEvidencePath(value string) bool {
+	return value != "" && len(value) <= 4096 && !strings.Contains(value, "\\") && !path.IsAbs(value) && path.Clean(value) == value && value != "." && value != ".." && !strings.HasPrefix(value, "../")
 }
 
 func stableReasons(reasons []string) bool {

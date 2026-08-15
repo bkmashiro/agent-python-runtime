@@ -74,13 +74,14 @@ const commitRE = /^[0-9a-f]{40}$/;
 const idRE = /^[a-z][a-z0-9_.:-]{7,127}$/;
 const eventTypes = new Set<EvidenceType>([
   'trace.started', 'trace.ended', 'authority.snapshot', 'effect.transition', 'workspace.terminal', 'execution.attempt',
-  'model.context', 'model.body', 'source.document', 'source.occurrence', 'source.decision', 'source.executed_line',
-  'subagent.context', 'subagent.runtime', 'subagent.workspace', 'evidence.truncated', 'runtime.observation', 'resource.sample',
+  'model.context', 'model.body', 'source.document', 'source.body', 'source.occurrence', 'source.decision', 'source.executed_line',
+  'subagent.context', 'subagent.runtime', 'subagent.workspace', 'workspace.file', 'evidence.truncated', 'runtime.observation', 'resource.sample',
 ]);
 const productionTypes = new Set<EvidenceType>([
   'trace.started', 'trace.ended', 'authority.snapshot', 'effect.transition', 'workspace.terminal', 'execution.attempt', 'evidence.truncated',
 ]);
-const bodyTypes = new Set<EvidenceType>(['model.body', 'runtime.observation']);
+const bodyTypes = new Set<EvidenceType>(['model.body', 'source.body', 'workspace.file', 'runtime.observation']);
+const requiredBodyTypes = new Set<EvidenceType>(['model.body', 'source.body', 'workspace.file']);
 const topKeys = ['schema_version', 'profile', 'privacy', 'trace_id', 'header_sha256', 'header', 'events', 'seal_sha256'];
 const headerKeys = ['schema_version', 'trace_id', 'source_commit', 'root_execution_id', 'header_sha256'];
 const eventKeys = ['schema_version', 'ordinal', 'event_id', 'occurred_nanos', 'type', 'actor_id', 'parent_event_ids', 'payload', 'body'];
@@ -119,12 +120,14 @@ function validatePayload(event: RawEvidenceEvent) {
     case 'execution.attempt': exactKeys(payload, ['run_id', 'attempt_id', 'status'], ['prepared_image_sha256']); if (payload.prepared_image_sha256 !== undefined) digest('prepared_image_sha256'); break;
     case 'model.context': case 'model.body': exactKeys(payload, ['context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
     case 'source.document': exactKeys(payload, ['document_id', 'source_sha256', 'availability']); digest('document_id'); digest('source_sha256'); break;
+    case 'source.body': exactKeys(payload, ['document_id', 'source_sha256', 'display_path', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.occurrence': exactKeys(payload, ['document_id', 'source_sha256', 'occurrence_id', 'start_line', 'start_column', 'end_line', 'end_column', 'capability', 'dynamic_occurrence']); digest('document_id'); digest('source_sha256'); digest('occurrence_id'); break;
     case 'source.decision': exactKeys(payload, ['decision_id', 'capability_plan_sha256', 'occurrence_id', 'dynamic_occurrence', 'claim_level', 'admitted'], ['reasons', 'receipt_id']); digest('decision_id'); digest('capability_plan_sha256'); digest('occurrence_id'); break;
     case 'source.executed_line': exactKeys(payload, ['source_sha256', 'availability'], ['instrumentation', 'instruction_offset', 'start_line', 'start_column', 'end_line', 'end_column']); digest('source_sha256'); break;
     case 'subagent.context': exactKeys(payload, ['child_id', 'context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
     case 'subagent.runtime': exactKeys(payload, ['child_id', 'fresh_run_id', 'prepared_image_sha256', 'child_plan_sha256', 'parent_live_state_inherited']); digest('prepared_image_sha256'); digest('child_plan_sha256'); assert(payload.parent_live_state_inherited === false, 'parent live state inheritance forbidden'); break;
     case 'subagent.workspace': exactKeys(payload, ['child_id', 'base_root_sha256', 'result_root_sha256', 'changed_entries', 'changed_bytes', 'disposition']); digest('base_root_sha256'); digest('result_root_sha256'); break;
+    case 'workspace.file': exactKeys(payload, ['workspace_sha256', 'path', 'content_sha256', 'availability']); digest('workspace_sha256'); digest('content_sha256'); break;
     case 'evidence.truncated': exactKeys(payload, ['scope', 'reason', 'dropped_events']); assert(uint(payload.dropped_events) && payload.dropped_events > 0, 'invalid truncation'); break;
     case 'runtime.observation': exactKeys(payload, ['observation_type', 'sequence', 'observation_sha256'], ['parent_sequence']); digest('observation_sha256'); break;
     case 'resource.sample': exactKeys(payload, ['scope', 'wall_nanos', 'process_cpu_nanos', 'process_cpu_availability', 'peak_rss_bytes', 'peak_rss_availability']); assert(uint(payload.wall_nanos) && payload.wall_nanos > 0, 'invalid wall sample'); break;
@@ -133,6 +136,10 @@ function validatePayload(event: RawEvidenceEvent) {
 
 function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEvidenceEvent>) {
   const parents = (event.parent_event_ids ?? []).map((id) => prior.get(id)!);
+  if (event.type === 'source.body') {
+    assert(parents.length === 1 && parents[0].type === 'source.document', 'source body parent mismatch');
+    assert(parents[0].payload.document_id === event.payload.document_id && parents[0].payload.source_sha256 === event.payload.source_sha256, 'source body identity mismatch');
+  }
   if (event.type === 'source.occurrence') {
     assert(parents.length === 1 && parents[0].type === 'source.document', 'source occurrence parent mismatch');
     assert(parents[0].payload.document_id === event.payload.document_id && parents[0].payload.source_sha256 === event.payload.source_sha256, 'source identity mismatch');
@@ -150,6 +157,9 @@ function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEviden
   }
   if (event.type === 'subagent.workspace') {
     assert(parents.length === 1 && parents[0].type === 'subagent.runtime' && parents[0].payload.child_id === event.payload.child_id, 'subagent workspace parent mismatch');
+  }
+  if (event.type === 'workspace.file') {
+    assert(parents.length === 1 && parents[0].type === 'subagent.workspace' && parents[0].payload.result_root_sha256 === event.payload.workspace_sha256 && parents[0].payload.disposition === 'selected', 'workspace file parent mismatch');
   }
 }
 
@@ -185,7 +195,7 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
       assert(bodyTypes.has(event.type) && digestRE.test(event.body.sha256), 'invalid body reference');
     }
     assert(event.body === undefined, 'portable evidence contains private body reference');
-    assert(event.type !== 'model.body' && event.type !== 'runtime.observation', 'portable projection retained body-only event');
+    assert(!requiredBodyTypes.has(event.type) && event.type !== 'runtime.observation', 'portable projection retained body-only event');
     if (raw.profile === 'production_rollback') assert(productionTypes.has(event.type), 'production profile leaked experiment telemetry');
     validatePayload(event);
     validateRelations(event, prior);

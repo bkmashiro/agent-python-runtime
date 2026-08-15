@@ -183,6 +183,28 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		t.Fatal(err)
 	}
 	childPlanSHA256 := semanticTestDigest('9')
+	childCode := "from pathlib import Path\nPath('/workspace/child.txt').write_text('child')\nresult = {'child': 'ok'}"
+	childSourceSum := sha256.Sum256([]byte(childCode))
+	childSourceSHA256 := fmt.Sprintf("sha256:%x", childSourceSum)
+	childDocumentSum := sha256.Sum256([]byte("child-program\x00" + childCode))
+	childDocumentID := fmt.Sprintf("sha256:%x", childDocumentSum)
+	childCodeBody, _, err := evidenceStore.Put(labstore.KindCode, []byte(childCode), labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	childSourceDocument, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventSourceDocument, ActorID: "actor-real-source-bound-0001",
+		Payload: trajectory.SourceDocumentPayload{DocumentID: childDocumentID, SourceSHA256: childSourceSHA256, Availability: trajectory.Available},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventSourceBody, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childSourceDocument.EventID}, Body: &childCodeBody,
+		Payload: trajectory.SourceBodyPayload{DocumentID: childDocumentID, SourceSHA256: childSourceSHA256, DisplayPath: "child_program.py", Availability: trajectory.Available},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	descriptor := subagent.Descriptor{
 		SchemaVersion: subagent.DescriptorSchemaVersion, ChildID: childID, ParentStreamEpoch: "parent-stream-real-0001",
 		ParentLineageSHA256: parentLineage, SourceOccurrence: "semantic_source_binding_test:child-real-0001",
@@ -195,7 +217,7 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
 			request, marshalErr := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
-				RunID: "child-real-run-0001", Code: "from pathlib import Path\nPath('/workspace/child.txt').write_text('child')\nresult = {'child': 'ok'}", Inputs: []byte(`{}`),
+				RunID: "child-real-run-0001", Code: childCode, Inputs: []byte(`{}`),
 			})
 			return subagent.ChildProgram{Request: request}, marshalErr
 		}),
@@ -221,12 +243,29 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
+	childWorkspace, err := evidenceLog.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentWorkspace, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childRuntime.EventID},
 		Payload: trajectory.SubagentWorkspacePayload{
 			ChildID: childID, BaseRootSHA256: parentLineage, ResultRootSHA256: joined.SelectedRoot.IdentitySHA256,
 			ChangedEntries: joined.SelectedRoot.ChangedEntries, ChangedBytes: joined.SelectedRoot.ChangedBytes, Disposition: "selected",
 		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturedOutput, err := workspaceManager.CaptureFile(joined.SelectedRoot.Ref(), "child.txt", 1024)
+	if err != nil || string(capturedOutput) != "child" {
+		t.Fatalf("captured child output=%q err=%v", capturedOutput, err)
+	}
+	outputSum := sha256.Sum256(capturedOutput)
+	outputSHA256 := fmt.Sprintf("sha256:%x", outputSum)
+	outputBody, _, err := evidenceStore.Put(labstore.KindFile, capturedOutput, labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidenceLog.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventWorkspaceFile, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childWorkspace.EventID}, Body: &outputBody,
+		Payload: trajectory.WorkspaceFilePayload{WorkspaceSHA256: joined.SelectedRoot.IdentitySHA256, Path: "child.txt", ContentSHA256: outputSHA256, Availability: trajectory.Available},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -276,6 +315,12 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		bound.EndLine != site.Span.EndLine || bound.EndColumn != site.Span.EndColumn {
 		t.Fatalf("binding=%+v site=%+v", bound, site)
 	}
+	if codeObject, getErr := evidenceStore.Get(childCodeBody); getErr != nil || string(codeObject.Body) != childCode {
+		t.Fatalf("captured child code body unavailable: err=%v", getErr)
+	}
+	if fileObject, getErr := evidenceStore.Get(outputBody); getErr != nil || string(fileObject.Body) != "child" {
+		t.Fatalf("captured output body unavailable: err=%v", getErr)
+	}
 	privateFull, err := evidenceLog.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPrivate)
 	if err != nil {
 		t.Fatal(err)
@@ -289,8 +334,10 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		t.Fatal(err)
 	}
 	if e2eEvidenceCount(privateFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventRuntimeObservation) == 0 ||
+		e2eEvidenceCount(privateFull.Events, trajectory.EventSourceBody) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventWorkspaceFile) != 1 ||
 		e2eEvidenceCount(production.Events, trajectory.EventSourceDecision) != 0 || e2eEvidenceCount(production.Events, trajectory.EventEffectTransition) != 1 ||
-		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventRuntimeObservation) != 0 {
+		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventRuntimeObservation) != 0 ||
+		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceBody) != 0 || e2eEvidenceCount(publicFull.Events, trajectory.EventWorkspaceFile) != 0 {
 		t.Fatalf("private=%d production=%d public=%d", len(privateFull.Events), len(production.Events), len(publicFull.Events))
 	}
 	for _, event := range production.Events {

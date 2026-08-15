@@ -949,8 +949,19 @@ func validateEvidenceBodyBinding(kind EvidenceType, raw json.RawMessage, object 
 	bodySHA256 := fmt.Sprintf("sha256:%x", sha256.Sum256(object.Body))
 	switch value := payload.(type) {
 	case ModelContextPayload:
-		if kind != EventModelBody || (object.Kind != labstore.KindPrompt && object.Kind != labstore.KindMetadataEvent) {
+		if kind != EventModelBody || object.Kind != labstore.KindMetadataEvent {
 			return errors.New("model body kind mismatch")
+		}
+		var modelBody struct {
+			Brief   string `json:"brief"`
+			Context string `json:"context"`
+		}
+		decoder := json.NewDecoder(bytes.NewReader(object.Body))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&modelBody) != nil || decoder.Decode(&struct{}{}) == nil || modelBody.Brief == "" || modelBody.Context == "" ||
+			fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(modelBody.Brief))) != value.BriefSHA256 ||
+			fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(modelBody.Context))) != value.ContextSHA256 {
+			return errors.New("model body digest mismatch")
 		}
 	case SourceBodyPayload:
 		if object.Kind != labstore.KindCode || bodySHA256 != value.SourceSHA256 {

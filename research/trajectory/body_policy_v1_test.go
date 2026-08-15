@@ -16,7 +16,10 @@ func TestPrivateBodyStaysInExperimentStoreAndPortableProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	private, _, err := store.Put(labstore.KindPrompt, []byte("private model context"), labstore.PutOptions{
+	contextText, briefText := "private model context", "private model brief"
+	contextDigest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(contextText)))
+	briefDigest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(briefText)))
+	private, _, err := store.PutJSON(labstore.KindMetadataEvent, []byte(`{"brief":"private model brief","context":"private model context"}`), labstore.PutOptions{
 		Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent,
 	})
 	if err != nil {
@@ -33,11 +36,11 @@ func TestPrivateBodyStaysInExperimentStoreAndPortableProjection(t *testing.T) {
 	})
 	context := appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventModelContext, ActorID: "actor-harness-0001",
-		Payload: trajectory.ModelContextPayload{ContextSHA256: testDigest('a'), BriefSHA256: testDigest('b'), Availability: trajectory.Available},
+		Payload: trajectory.ModelContextPayload{ContextSHA256: contextDigest, BriefSHA256: briefDigest, Availability: trajectory.Available},
 	})
 	appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventModelBody, ActorID: "actor-harness-0001", ParentEventIDs: []string{context.EventID}, Body: &private,
-		Payload: trajectory.ModelContextPayload{ContextSHA256: testDigest('a'), BriefSHA256: testDigest('b'), Availability: trajectory.Available},
+		Payload: trajectory.ModelContextPayload{ContextSHA256: contextDigest, BriefSHA256: briefDigest, Availability: trajectory.Available},
 	})
 	appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventTraceEnded, ActorID: "actor-host-0001", Payload: trajectory.TraceEndedPayload{Status: "completed", EvidenceComplete: true},

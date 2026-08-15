@@ -156,7 +156,9 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 
 	artifactSHA256 := artifactSHA
 	childID := "child-real-0001"
-	contextSHA256, briefSHA256 := semanticTestDigest('7'), semanticTestDigest('8')
+	contextText, briefText := "selected parent context", "inspect one private branch"
+	contextSum, briefSum := sha256.Sum256([]byte(contextText)), sha256.Sum256([]byte(briefText))
+	contextSHA256, briefSHA256 := fmt.Sprintf("sha256:%x", contextSum), fmt.Sprintf("sha256:%x", briefSum)
 	contextBody, _, err := evidenceStore.PutJSON(labstore.KindMetadataEvent, []byte(`{"brief":"inspect one private branch","context":"selected parent context"}`), labstore.PutOptions{
 		Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent,
 	})

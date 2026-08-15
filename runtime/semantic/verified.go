@@ -12,8 +12,10 @@ import (
 
 var ErrUnverifiedAnalysis = errors.New("semantic analysis provenance is unverified")
 
-// VerifiedAnalysis is an opaque Host-owned result minted only after the exact
-// analyzer Runner and its bound artifact/profile have passed Analyze.
+// VerifiedAnalysis is an opaque Host-qualified result minted only after the exact
+// analyzer Runner and its bound artifact/profile have passed Analyze. "Verified"
+// is not a signature or trust anchor against the Host application itself: the Host
+// selects the artifact and remains in the TCB.
 type VerifiedAnalysis struct {
 	analysisJSON []byte
 	properties   enginecontract.Properties
@@ -21,7 +23,9 @@ type VerifiedAnalysis struct {
 
 // AnalyzeVerified accepts only the concrete target-Guest Wazero engine. Arbitrary
 // engine.Runner implementations may be used with Analyze for untrusted reports, but
-// cannot mint VerifiedAnalysis.
+// cannot mint VerifiedAnalysis. This is an implementation/provenance boundary inside
+// the Host TCB, not sandboxing for hostile in-process Host plugins; analysis never
+// enlarges the sealed capability Plan.
 func AnalyzeVerified(ctx context.Context, runner *wazeroengine.Engine, request Request) (VerifiedAnalysis, error) {
 	return analyzeVerified(ctx, runner, request)
 }

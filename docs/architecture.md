@@ -178,9 +178,13 @@ Python-AST analysis bound to source, artifact, execution profile, admitted impor
 closure, and capability Plan. `semantic.AnalyzeVerified` accepts only stable valid
 Runner properties with the exact artifact/profile binding and no workspace/Broker
 authority, then mints detached opaque provenance. The Host decodes only a strict
-versioned report,
-propagates conservative function summaries through recursive components, and
-builds one coarse whole-Run region. Dynamic dispatch, unsupported control flow,
+versioned report. This qualification rejects arbitrary `engine.Runner` implementations,
+but it does not defend against a hostile in-process Host application: the Host selects
+the concrete Guest artifact, and its digest/profile bindings are identities rather than
+a publisher signature or external trust anchor. Such Host code is already inside the
+TCB and can dispatch capabilities directly; semantic qualification never enlarges the
+sealed Plan. The Host then propagates conservative function summaries through
+recursive components and builds one coarse whole-Run region. Dynamic dispatch, unsupported control flow,
 unknown imports/calls, live observation, publication, and suspension are opaque
 barriers rather than optimization opportunities.
 

@@ -72,7 +72,7 @@
           "operation_index": {"type": "integer", "minimum": 0, "maximum": 4294967295},
           "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "response_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "outcome": {"enum": ["ok", "denied", "error", "timeout"]},
+          "outcome": {"enum": ["ok", "denied", "error", "timeout", "ambiguous"]},
           "source": {
             "type": "object",
             "additionalProperties": false,

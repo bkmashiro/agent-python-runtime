@@ -1,0 +1,40 @@
+{
+  "status": "error",
+  "result": null,
+  "receipts": [
+    {
+      "receipt_id": "rcpt_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "run_id": "run-1",
+      "capability_plan_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "call_id": "parent:program:1",
+      "parent_call_id": "parent",
+      "approval_request_id": "apr_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "capability": "workspace.read_text",
+      "operation_index": 0,
+      "request_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "outcome": "ambiguous",
+      "source": {
+        "schema_version": "pysolate.source-binding.v0",
+        "claim_level": "source_bound",
+        "document_id": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "occurrence_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "dynamic_occurrence": 1,
+        "capability": "workspace.read_text",
+        "start_line": 1,
+        "start_column": 9,
+        "end_line": 1,
+        "end_column": 27
+      }
+    }
+  ],
+  "metrics": {
+    "capability_calls": 1,
+    "result_bytes": 0
+  },
+  "error": {
+    "code": "approval_audit_failed",
+    "message": "approved Host tool executed but audit completion failed"
+  },
+  "capability_plan_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

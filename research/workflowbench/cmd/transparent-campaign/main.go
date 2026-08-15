@@ -189,7 +189,7 @@ func evidenceFilename(repetition int, treatment workflowbench.CampaignTreatment)
 }
 
 func writeJSON(path string, value any) error {
-	encoded, err := json.MarshalIndent(value, "", "  ")
+	encoded, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}

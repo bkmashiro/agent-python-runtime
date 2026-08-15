@@ -711,6 +711,12 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
   `child_reserved_calls` to the child Plan's actual reservation before staging. The private
   run summary was upgraded to v2 with manifest/evidence hashes and host/kernel/Go
   provenance; the earlier three-pair v1 run is exploratory and is not publication evidence.
+- 2026-08-15: The publication gate caught a second research-layer issue before any public
+  projection: pretty-printing JSON rewrote `json.RawMessage` whitespace, so reloaded
+  manifests/evidence failed canonical-byte validation. The private writer now emits compact
+  canonical JSON, strict duplicate-key/unknown-field decoders are tested, and the affected
+  five-pair v2 run was discarded. The deterministic projector validates every private file
+  and its bound SHA before deriving the Lab fixture, report or SVG.
 
 ## Short prompt to start this Mega-Goal
 

@@ -31,4 +31,19 @@ func TestEvidenceFilenameAndPrivateWrite(t *testing.T) {
 	if !strings.HasPrefix(digest, "sha256:") || len(digest) != 71 {
 		t.Fatalf("digest=%q", digest)
 	}
+	manifest, err := workflowbench.CanonicalTransparentCampaign()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "manifest.json")
+	if err := writeJSON(manifestPath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := workflowbench.DecodeCampaignManifest(encoded); err != nil {
+		t.Fatalf("written manifest is not reloadable: %v", err)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"sync"
 	"time"
 )
@@ -14,6 +15,36 @@ import (
 const CampaignEvidenceSchemaVersion = "pysolate.transparent-campaign-evidence.v1"
 
 var ErrInvalidCampaignEvidence = errors.New("invalid transparent campaign evidence")
+
+func ValidateUniqueJSONKeys(raw []byte) error {
+	return rejectDuplicateJSON(raw)
+}
+
+func DecodeCampaignManifest(raw []byte) (CampaignManifest, error) {
+	var manifest CampaignManifest
+	if rejectDuplicateJSON(raw) != nil {
+		return manifest, ErrInvalidCampaignManifest
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&manifest) != nil || decoder.Decode(&struct{}{}) != io.EOF || manifest.Validate() != nil {
+		return CampaignManifest{}, ErrInvalidCampaignManifest
+	}
+	return manifest, nil
+}
+
+func DecodeCampaignEvidence(raw []byte, manifest CampaignManifest) (CampaignEvidence, error) {
+	var evidence CampaignEvidence
+	if rejectDuplicateJSON(raw) != nil {
+		return evidence, ErrInvalidCampaignEvidence
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&evidence) != nil || decoder.Decode(&struct{}{}) != io.EOF || ValidateCampaignEvidence(manifest, evidence) != nil {
+		return CampaignEvidence{}, ErrInvalidCampaignEvidence
+	}
+	return evidence, nil
+}
 
 type CampaignTreatment string
 

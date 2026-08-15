@@ -57,6 +57,21 @@ func TestTransparentCampaignDriverRecordsActualFIFOPhysicalFlow(t *testing.T) {
 	}
 }
 
+func TestCampaignEvidenceStrictDecodeRejectsDuplicateKeys(t *testing.T) {
+	manifest, err := workflowbench.CanonicalTransparentCampaign()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate := append([]byte(`{"schema_version":"duplicate",`), encoded[1:]...)
+	if _, err := workflowbench.DecodeCampaignManifest(duplicate); err == nil {
+		t.Fatal("duplicate manifest key accepted")
+	}
+}
+
 func TestCampaignTreatmentOrderIsBalanced(t *testing.T) {
 	even := workflowbench.CampaignTreatmentOrder(0)
 	odd := workflowbench.CampaignTreatmentOrder(1)

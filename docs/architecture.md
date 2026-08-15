@@ -184,6 +184,24 @@ builds one coarse whole-Run region. Dynamic dispatch, unsupported control flow,
 unknown imports/calls, live observation, publication, and suspension are opaque
 barriers rather than optimization opportunities.
 
+A thin source-bound planner consumes only `VerifiedAnalysis`, the sealed capability
+Plan and frozen per-Run legality context. Passes are individually default-off,
+versioned and deterministic; they emit canonical admitted/rejected decisions while
+opaque `QualifiedCall` values remain Host-private. Passes have no handler/provider
+handles and cannot dispatch. Unknown names or versions and duplicate selections
+fail closed; any future multi-pass conflict requires an explicit deterministic policy
+before admission. The current semantic pre-dispatch path is the first pass and
+still executes through the existing staged-observation/Broker boundary.
+
+The same plan projects one digest-bound Python source document and exact static
+capability occurrences. A Host-TCB-only resolver may attach `source_bound` evidence
+to a real programmatic call only when capability and canonical arguments select one
+unique verified occurrence. Ordinary direct calls, mismatches and ambiguous
+occurrences remain explicitly unbound. The receipt identity binds document/source,
+static occurrence, dynamic occurrence and line/column span together with the
+existing call/parent/approval/Plan/request identity. This provenance does not grant
+or change capability authority and is not an executed-line claim.
+
 A separate default-off `ReusePass` may convert only the exact module-entry whole-Run
 plan into the existing
 Agent Function identity. Analyzer, analysis, Plan and region identities augment

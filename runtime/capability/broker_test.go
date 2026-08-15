@@ -1,6 +1,7 @@
 package capability_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -198,18 +199,40 @@ func TestBrokerBindsSourceOnlyToExactProgrammaticCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var sourceBoundResponse []byte
 	for _, callID := range []string{"direct-1", "parent:program:1"} {
 		response, err := broker.Call(context.Background(), []byte(`{"call_id":"`+callID+`","capability":"workspace.read_text","arguments":{"path":"x"}}`))
 		if err != nil || !strings.Contains(string(response), `"status":"ok"`) {
 			t.Fatalf("call=%s response=%s err=%v", callID, response, err)
+		}
+		if callID == "parent:program:1" {
+			sourceBoundResponse = append([]byte(nil), response...)
 		}
 	}
 	receipts := broker.SnapshotReceipts()
 	if handlerCalls.Load() != 2 || len(receipts) != 2 || receipts[0].Source != nil || receipts[1].Source == nil || !receipt.ValidIdentity(receipts[1]) {
 		t.Fatalf("calls=%d receipts=%#v", handlerCalls.Load(), receipts)
 	}
+	receipts[1].Source.StartLine = 999
+	freshReceipts := broker.SnapshotReceipts()
+	if freshReceipts[1].Source == nil || freshReceipts[1].Source.StartLine != binding.StartLine || !receipt.ValidIdentity(freshReceipts[1]) {
+		t.Fatalf("source receipt snapshot was not defensive: %#v", freshReceipts)
+	}
+	receipts = freshReceipts
 	if len(recording.requests) != 1 || !recording.requests[0].Programmatic || string(recording.requests[0].Arguments) != `{"path":"x"}` {
 		t.Fatalf("resolver requests=%#v", recording.requests)
+	}
+	baseline, err := capability.NewBroker(capability.Config{RunIdentity: "baseline-run", Plan: plan, ProgrammaticParentCallID: "parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineResponse, err := baseline.Call(context.Background(), []byte(`{"call_id":"parent:program:1","capability":"workspace.read_text","arguments":{"path":"x"}}`))
+	if err != nil || !bytes.Equal(sourceBoundResponse, baselineResponse) || handlerCalls.Load() != 3 {
+		t.Fatalf("source-bound response drift: bound=%s baseline=%s calls=%d err=%v", sourceBoundResponse, baselineResponse, handlerCalls.Load(), err)
+	}
+	baselineReceipts := baseline.SnapshotReceipts()
+	if len(baselineReceipts) != 1 || baselineReceipts[0].Source != nil || baselineReceipts[0].Outcome != receipts[1].Outcome {
+		t.Fatalf("baseline receipts=%#v source-bound=%#v", baselineReceipts, receipts)
 	}
 }
 

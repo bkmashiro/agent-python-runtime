@@ -75,6 +75,11 @@ func TestSourceBindingChangesReceiptIdentityAndRejectsTampering(t *testing.T) {
 	if _, err := receipt.BindSource(base, receipt.SourceBinding{}); err == nil {
 		t.Fatal("invalid source binding accepted")
 	}
+	mismatched := binding
+	mismatched.Capability = "other.read"
+	if _, err := receipt.BindSource(base, mismatched); err == nil {
+		t.Fatal("source capability mismatch accepted")
+	}
 }
 
 func TestReceiptStoresDigestsNotRawTargetOrResponse(t *testing.T) {

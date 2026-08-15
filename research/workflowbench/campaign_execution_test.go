@@ -72,6 +72,48 @@ func TestCampaignEvidenceStrictDecodeRejectsDuplicateKeys(t *testing.T) {
 	}
 }
 
+func TestCampaignEvidenceRejectsMechanismEventTamperingAfterReseal(t *testing.T) {
+	manifest, err := workflowbench.CanonicalTransparentCampaign()
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignQualified, newCampaignAdapter(manifest, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name      string
+		programID string
+		eventType string
+		mutate    func(*workflowbench.CampaignEvent)
+	}{
+		{"unknown type", "P04", "workspace.discarded", func(event *workflowbench.CampaignEvent) { event.Type = "workspace.untrusted" }},
+		{"missing and duplicate", "P04", "workspace.discarded", func(event *workflowbench.CampaignEvent) { event.Type = "workspace.forked" }},
+		{"forged physical identity", "P05", "sharing.decided", func(event *workflowbench.CampaignEvent) { event.PhysicalExecutionID = "physical-forged" }},
+		{"wrong authority identity", "P15", "authority.refreshed", func(event *workflowbench.CampaignEvent) { event.Reason = testCampaignDigest('f') }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			forged := evidence.Clone()
+			found := false
+			for index := range forged.Events {
+				if forged.Events[index].ProgramID == test.programID && forged.Events[index].Type == test.eventType {
+					test.mutate(&forged.Events[index])
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("missing fixture event %s/%s", test.programID, test.eventType)
+			}
+			resealCampaignEvidence(&forged)
+			if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+				t.Fatalf("tampered mechanism evidence accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestCampaignTreatmentOrderIsBalanced(t *testing.T) {
 	even := workflowbench.CampaignTreatmentOrder(0)
 	odd := workflowbench.CampaignTreatmentOrder(1)
@@ -182,6 +224,27 @@ func (adapter *campaignAdapter) Admit(_ context.Context, request workflowbench.C
 
 func (adapter *campaignAdapter) Execute(ctx context.Context, request workflowbench.CampaignRequest, treatment workflowbench.CampaignTreatment, runtime *workflowbench.CampaignRuntime) workflowbench.CampaignOutcome {
 	key := campaignProgramKey(request.SourceSHA256, request.InputsSHA256, request.PlanSHA256, request.GrantSetSHA256, request.WorkspaceFixtureSHA256, request.PrivacyPartition)
+	if request.Execution.CancelPoint == workflowbench.CampaignCancelAfterWorkspaceFork {
+		_ = runtime.Event("workspace.forked", "private_attempt", "")
+		_ = runtime.Event("workspace.discarded", string(request.Execution.CancelPoint), "")
+	}
+	if request.Execution.Kind == workflowbench.CampaignVerifyWorkspace {
+		_ = runtime.Event("workspace.forked", "private_attempt", "")
+		_ = runtime.Event("workspace.sealed", request.WorkspaceFixtureSHA256, "")
+		_ = runtime.Event("verification.completed", request.WorkspaceFixtureSHA256+":fixture-verifier", "")
+	}
+	if request.Execution.Kind == workflowbench.CampaignStartWorkflow {
+		_ = runtime.Event("workflow.waiting", request.Execution.WorkflowStateKey, "")
+	}
+	if request.Execution.Kind == workflowbench.CampaignResumeWorkflow {
+		_ = runtime.Event("workflow.resumed", string(request.Execution.Resume.Transition), "")
+		if request.Execution.Resume.Transition == workflowbench.CampaignResumePlanGrantChanged {
+			_ = runtime.Event("authority.refreshed", request.PlanSHA256, "")
+		}
+	}
+	if request.Execution.Kind == workflowbench.CampaignDelegateChild {
+		_ = runtime.Event("delegation.child_started", request.Execution.Delegation.GroupID, "")
+	}
 	if request.Execution.Kind == workflowbench.CampaignConsumeResult {
 		if len(request.DependencyResults[request.Execution.SourceProgramID]) == 0 {
 			return workflowbench.CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: errors.New("producer result missing")}
@@ -200,9 +263,14 @@ func (adapter *campaignAdapter) Execute(ctx context.Context, request workflowben
 		if adapter.keyCounts[key] > 1 {
 			outcome.Sharing = "exact_shared"
 		}
+		_ = runtime.Event("sharing.decided", outcome.Sharing, outcome.PhysicalExecutionID)
 		return outcome
 	}
-	return adapter.executePhysical(ctx, request, runtime, key)
+	outcome := adapter.executePhysical(ctx, request, runtime, key)
+	if request.Execution.Kind == workflowbench.CampaignExactRequest {
+		_ = runtime.Event("sharing.decided", outcome.Sharing, outcome.PhysicalExecutionID)
+	}
+	return outcome
 }
 
 func (adapter *campaignAdapter) executePhysical(ctx context.Context, request workflowbench.CampaignRequest, runtime *workflowbench.CampaignRuntime, key string) workflowbench.CampaignOutcome {

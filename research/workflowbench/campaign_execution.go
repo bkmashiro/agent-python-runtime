@@ -8,11 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 )
 
-const CampaignEvidenceSchemaVersion = "pysolate.transparent-campaign-evidence.v1"
+const CampaignEvidenceSchemaVersion = "pysolate.transparent-campaign-evidence.v2"
 
 var ErrInvalidCampaignEvidence = errors.New("invalid transparent campaign evidence")
 
@@ -398,6 +399,116 @@ func ValidateCampaignEvidence(manifest CampaignManifest, evidence CampaignEviden
 				return ErrInvalidCampaignEvidence
 			}
 		} else if row.PhysicalExecutionID != "" || len(row.Result) != 0 || row.Sharing != "no_execution" {
+			return ErrInvalidCampaignEvidence
+		}
+	}
+	if err := validateCampaignMechanismEvents(manifest, evidence, physicalIdentities); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCampaignMechanismEvents(manifest CampaignManifest, evidence CampaignEvidence, physicalIdentities map[string]struct{}) error {
+	core := map[string]struct{}{"logical.released": {}, "admission.accepted": {}, "admission.rejected": {}, "logical.started": {}, "physical.queued": {}, "physical.started": {}, "physical.ended": {}, "physical.cancelled": {}, "logical.terminal": {}}
+	mechanism := map[string]struct{}{"workspace.forked": {}, "workspace.sealed": {}, "workspace.discarded": {}, "verification.completed": {}, "sharing.decided": {}, "workflow.waiting": {}, "workflow.resumed": {}, "authority.refreshed": {}, "delegation.child_started": {}}
+	programs := make(map[string]CampaignProgram, len(manifest.Programs))
+	rows := make(map[string]CampaignRow, len(evidence.Rows))
+	for _, program := range manifest.Programs {
+		programs[program.ID] = program
+	}
+	for _, row := range evidence.Rows {
+		rows[row.ProgramID] = row
+	}
+	byProgram := make(map[string]map[string][]CampaignEvent, len(manifest.Programs))
+	physicalCore := make(map[string]map[string]int)
+	for _, event := range evidence.Events {
+		if _, ok := programs[event.ProgramID]; !ok {
+			return ErrInvalidCampaignEvidence
+		}
+		if _, ok := core[event.Type]; !ok {
+			if _, ok := mechanism[event.Type]; !ok {
+				return ErrInvalidCampaignEvidence
+			}
+			if event.PhysicalExecutionID != "" {
+				if _, ok := physicalIdentities[event.PhysicalExecutionID]; !ok {
+					return ErrInvalidCampaignEvidence
+				}
+			}
+		}
+		if byProgram[event.ProgramID] == nil {
+			byProgram[event.ProgramID] = make(map[string][]CampaignEvent)
+		}
+		byProgram[event.ProgramID][event.Type] = append(byProgram[event.ProgramID][event.Type], event)
+		if strings.HasPrefix(event.Type, "physical.") && event.PhysicalExecutionID != "" {
+			if physicalCore[event.PhysicalExecutionID] == nil {
+				physicalCore[event.PhysicalExecutionID] = make(map[string]int)
+			}
+			physicalCore[event.PhysicalExecutionID][event.Type]++
+		}
+	}
+	for identity, counts := range physicalCore {
+		_, started := physicalIdentities[identity]
+		if started {
+			if counts["physical.queued"] != 1 || counts["physical.started"] != 1 || counts["physical.ended"] != 1 || counts["physical.cancelled"] != 0 {
+				return ErrInvalidCampaignEvidence
+			}
+		} else if counts["physical.queued"] != 1 || counts["physical.cancelled"] != 1 || counts["physical.started"] != 0 || counts["physical.ended"] != 0 {
+			return ErrInvalidCampaignEvidence
+		}
+	}
+	for _, program := range manifest.Programs {
+		events := byProgram[program.ID]
+		row := rows[program.ID]
+		expected := make(map[string]bool)
+		if program.Execution.CancelPoint == CampaignCancelAfterWorkspaceFork {
+			expected["workspace.forked"], expected["workspace.discarded"] = true, true
+		}
+		if program.Execution.Kind == CampaignVerifyWorkspace {
+			expected["workspace.forked"], expected["workspace.sealed"], expected["verification.completed"] = true, true, true
+		}
+		if program.Execution.Kind == CampaignExactRequest {
+			expected["sharing.decided"] = true
+		}
+		if program.Execution.Kind == CampaignStartWorkflow {
+			expected["workflow.waiting"] = true
+		}
+		if program.Execution.Kind == CampaignResumeWorkflow && program.Expected.Admission == "admit" {
+			expected["workflow.resumed"] = true
+			if program.Execution.Resume != nil && program.Execution.Resume.Transition == CampaignResumePlanGrantChanged {
+				expected["authority.refreshed"] = true
+			}
+		}
+		if program.Execution.Kind == CampaignDelegateChild && program.Expected.Admission == "admit" {
+			expected["delegation.child_started"] = true
+		}
+		for eventType := range mechanism {
+			count := len(events[eventType])
+			if expected[eventType] && count != 1 {
+				return ErrInvalidCampaignEvidence
+			}
+			if !expected[eventType] && count != 0 {
+				return ErrInvalidCampaignEvidence
+			}
+		}
+		if values := events["sharing.decided"]; len(values) == 1 && (values[0].Reason != row.Sharing || values[0].PhysicalExecutionID != row.PhysicalExecutionID) {
+			return ErrInvalidCampaignEvidence
+		}
+		if values := events["workspace.sealed"]; len(values) == 1 && !campaignDigestPattern.MatchString(values[0].Reason) {
+			return ErrInvalidCampaignEvidence
+		}
+		if values := events["verification.completed"]; len(values) == 1 && (len(values[0].Reason) < 72 || !campaignDigestPattern.MatchString(values[0].Reason[:71]) || values[0].Reason[71] != ':') {
+			return ErrInvalidCampaignEvidence
+		}
+		if values := events["workflow.waiting"]; len(values) == 1 && values[0].Reason != program.Execution.WorkflowStateKey {
+			return ErrInvalidCampaignEvidence
+		}
+		if values := events["workflow.resumed"]; len(values) == 1 && (program.Execution.Resume == nil || values[0].Reason != string(program.Execution.Resume.Transition)) {
+			return ErrInvalidCampaignEvidence
+		}
+		if values := events["authority.refreshed"]; len(values) == 1 && values[0].Reason != program.PlanSHA256 {
+			return ErrInvalidCampaignEvidence
+		}
+		if values := events["delegation.child_started"]; len(values) == 1 && (program.Execution.Delegation == nil || values[0].Reason != program.Execution.Delegation.GroupID) {
 			return ErrInvalidCampaignEvidence
 		}
 	}

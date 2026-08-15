@@ -345,7 +345,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 	allowed := map[string]struct{}{
 		"receipt_id": {}, "run_id": {}, "capability_plan_sha256": {}, "capability": {},
 		"call_id": {}, "parent_call_id": {}, "approval_request_id": {},
-		"operation_index": {}, "request_sha256": {}, "response_sha256": {}, "outcome": {},
+		"operation_index": {}, "request_sha256": {}, "response_sha256": {}, "outcome": {}, "source": {},
 	}
 	required := []string{"receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "request_sha256", "outcome"}
 	programmaticSequences := make(map[string]uint64)
@@ -383,6 +383,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 			(present(fields, "request_sha256") && !validBareSHA256(callReceipt.RequestSHA256)) ||
 			(present(fields, "response_sha256") && !validBareSHA256(callReceipt.ResponseSHA256)) ||
 			!validProgrammaticReceiptRelation(fields, callReceipt, expectedProgrammaticSequence) ||
+			!validSourceReceiptRelation(fields, callReceipt) ||
 			!validOperationIndex(callReceipt.OperationIndex) || !validReceiptOutcome(callReceipt.Outcome) {
 			return errors.New("run response receipt has invalid field values")
 		}
@@ -394,7 +395,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 			ReceiptID: callReceipt.ReceiptID, RunID: callReceipt.RunID, CapabilityPlanSHA256: callReceipt.CapabilityPlanSHA256,
 			CallID: callReceipt.CallID, ParentCallID: callReceipt.ParentCallID, ApprovalRequestID: callReceipt.ApprovalRequestID,
 			Capability: callReceipt.Capability, OperationIndex: operationIndex, RequestSHA256: callReceipt.RequestSHA256,
-			ResponseSHA256: callReceipt.ResponseSHA256, Outcome: callReceipt.Outcome,
+			ResponseSHA256: callReceipt.ResponseSHA256, Outcome: callReceipt.Outcome, Source: callReceipt.Source,
 		}) {
 			return errors.New("run response receipt identity does not match its bound operation")
 		}
@@ -406,17 +407,18 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 }
 
 type capabilityReceiptDocument struct {
-	ReceiptID            string      `json:"receipt_id"`
-	RunID                string      `json:"run_id"`
-	CapabilityPlanSHA256 string      `json:"capability_plan_sha256"`
-	CallID               string      `json:"call_id,omitempty"`
-	ParentCallID         string      `json:"parent_call_id,omitempty"`
-	ApprovalRequestID    string      `json:"approval_request_id,omitempty"`
-	Capability           string      `json:"capability"`
-	OperationIndex       json.Number `json:"operation_index"`
-	RequestSHA256        string      `json:"request_sha256,omitempty"`
-	ResponseSHA256       string      `json:"response_sha256,omitempty"`
-	Outcome              string      `json:"outcome"`
+	ReceiptID            string                           `json:"receipt_id"`
+	RunID                string                           `json:"run_id"`
+	CapabilityPlanSHA256 string                           `json:"capability_plan_sha256"`
+	CallID               string                           `json:"call_id,omitempty"`
+	ParentCallID         string                           `json:"parent_call_id,omitempty"`
+	ApprovalRequestID    string                           `json:"approval_request_id,omitempty"`
+	Capability           string                           `json:"capability"`
+	OperationIndex       json.Number                      `json:"operation_index"`
+	RequestSHA256        string                           `json:"request_sha256,omitempty"`
+	ResponseSHA256       string                           `json:"response_sha256,omitempty"`
+	Outcome              string                           `json:"outcome"`
+	Source               *capabilityreceipt.SourceBinding `json:"source,omitempty"`
 }
 
 func present(fields map[string]json.RawMessage, name string) bool {
@@ -439,6 +441,15 @@ func validProgrammaticReceiptRelation(fields map[string]json.RawMessage, receipt
 		return false
 	}
 	return receipt.CallID == fmt.Sprintf("%s:program:%d", receipt.ParentCallID, expectedSequence)
+}
+
+func validSourceReceiptRelation(fields map[string]json.RawMessage, document capabilityReceiptDocument) bool {
+	_, hasSource := fields["source"]
+	if !hasSource {
+		return document.Source == nil
+	}
+	return document.Source != nil && present(fields, "parent_call_id") && present(fields, "call_id") &&
+		document.Source.Capability == document.Capability && capabilityreceipt.ValidSourceBinding(*document.Source)
 }
 
 func validReceiptCallIdentity(value string, limit int) bool {

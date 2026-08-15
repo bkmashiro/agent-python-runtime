@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 const (
@@ -82,6 +83,17 @@ type SourceBoundPlan struct {
 	projection SourceBoundPlanProjection
 	identity   string
 	qualified  map[string]QualifiedCall
+	candidates []sourceBindingCandidate
+}
+
+type sourceBindingCandidate struct {
+	documentID   string
+	sourceSHA256 string
+	site         CallSite
+}
+
+type SourceBindingResolver struct {
+	byRequest map[string][]receipt.SourceBinding
 }
 
 func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.Plan, config PlannerConfig) (SourceBoundPlan, error) {
@@ -102,11 +114,13 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 		SHA256: analysis.SourceSHA256, Span: analysis.ModuleSpan,
 	}
 	occurrences := make([]SourceOccurrence, 0, len(analysis.CallSites))
+	candidates := make([]sourceBindingCandidate, 0, len(analysis.CallSites))
 	for _, site := range analysis.CallSites {
 		occurrences = append(occurrences, SourceOccurrence{
 			ID: site.ID, DocumentID: document.ID, Span: site.Span,
 			Capability: site.Capability, DynamicOccurrence: site.DynamicOccurrence,
 		})
+		candidates = append(candidates, sourceBindingCandidate{documentID: document.ID, sourceSHA256: analysis.SourceSHA256, site: site})
 	}
 	sort.Slice(occurrences, func(i, j int) bool { return occurrences[i].ID < occurrences[j].ID })
 
@@ -146,7 +160,47 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 	if err != nil {
 		return SourceBoundPlan{}, ErrInvalidPlannerInput
 	}
-	return SourceBoundPlan{projection: projection, identity: identityValue, qualified: qualified}, nil
+	return SourceBoundPlan{projection: projection, identity: identityValue, qualified: qualified, candidates: candidates}, nil
+}
+
+func NewSourceBindingResolver(plan SourceBoundPlan) (*SourceBindingResolver, error) {
+	if plan.identity == "" || len(plan.projection.Documents) != 1 {
+		return nil, ErrInvalidPlannerInput
+	}
+	resolver := &SourceBindingResolver{byRequest: make(map[string][]receipt.SourceBinding)}
+	for _, candidate := range plan.candidates {
+		site := candidate.site
+		if !site.ArgumentsCanonical || len(site.CanonicalArguments) == 0 {
+			continue
+		}
+		binding := receipt.SourceBinding{
+			SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound,
+			DocumentID: candidate.documentID, SourceSHA256: candidate.sourceSHA256,
+			OccurrenceID: site.ID, Capability: site.Capability, DynamicOccurrence: site.DynamicOccurrence,
+			StartLine: site.Span.StartLine, StartColumn: site.Span.StartColumn, EndLine: site.Span.EndLine, EndColumn: site.Span.EndColumn,
+		}
+		if !receipt.ValidSourceBinding(binding) {
+			return nil, ErrInvalidPlannerInput
+		}
+		key := sourceRequestKey(site.Capability, site.CanonicalArguments)
+		resolver.byRequest[key] = append(resolver.byRequest[key], binding)
+	}
+	return resolver, nil
+}
+
+func (resolver *SourceBindingResolver) ResolveSource(request capability.SourceBindingRequest) (receipt.SourceBinding, bool) {
+	if resolver == nil || !request.Programmatic || request.ParentCallID == "" || request.CallID == "" {
+		return receipt.SourceBinding{}, false
+	}
+	matches := resolver.byRequest[sourceRequestKey(request.Capability, request.Arguments)]
+	if len(matches) != 1 {
+		return receipt.SourceBinding{}, false
+	}
+	return matches[0], true
+}
+
+func sourceRequestKey(capabilityName string, arguments []byte) string {
+	return capabilityName + "\x00" + string(arguments)
 }
 
 func (plan SourceBoundPlan) Identity() string { return plan.identity }

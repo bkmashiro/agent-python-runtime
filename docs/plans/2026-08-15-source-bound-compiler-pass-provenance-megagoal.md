@@ -187,6 +187,8 @@ Gate: focused semantic tests and `git diff --check`; signed commit and push.
 
 ## Phase 2 — RED: source occurrence and Broker evidence binding
 
+**Status:** Complete. A Host-created resolver matches only unique canonical programmatic occurrences from a verified source-bound plan; direct calls remain unbound, ambiguous/mismatched calls produce no source claim, invalid resolver output is denied before dispatch, and receipt v3 binds the exact source span into operation identity. The real CPython/WASM E2E validates the source digest, static occurrence and line/column range.
+
 Write failing tests for:
 
 - verified analysis projects one canonical source document and exact occurrences;

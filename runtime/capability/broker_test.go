@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
@@ -168,6 +169,82 @@ func TestBothPresentationSeparatesDirectAndProgrammaticSequences(t *testing.T) {
 	if len(receipts) != 3 || receipts[0].ParentCallID != "" || receipts[1].ParentCallID != "parent" || receipts[2].ParentCallID != "parent" {
 		t.Fatalf("receipts=%#v", receipts)
 	}
+}
+
+func TestBrokerBindsSourceOnlyToExactProgrammaticCalls(t *testing.T) {
+	registry := capability.NewRegistry()
+	var handlerCalls atomic.Uint32
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		handlerCalls.Add(1)
+		return json.RawMessage(`{"text":"ok"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := receipt.SourceBinding{
+		SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound,
+		DocumentID: "sha256:" + strings.Repeat("1", 64), SourceSHA256: "sha256:" + strings.Repeat("2", 64),
+		OccurrenceID: "sha256:" + strings.Repeat("3", 64), Capability: "workspace.read_text", DynamicOccurrence: 1,
+		StartLine: 2, StartColumn: 9, EndLine: 2, EndColumn: 38,
+	}
+	resolver := &recordingSourceResolver{binding: binding}
+	broker, err := capability.NewBroker(capability.Config{
+		RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent", AllowDirectCalls: true, SourceResolver: resolver,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, callID := range []string{"direct-1", "parent:program:1"} {
+		response, err := broker.Call(context.Background(), []byte(`{"call_id":"`+callID+`","capability":"workspace.read_text","arguments":{"path":"x"}}`))
+		if err != nil || !strings.Contains(string(response), `"status":"ok"`) {
+			t.Fatalf("call=%s response=%s err=%v", callID, response, err)
+		}
+	}
+	receipts := broker.SnapshotReceipts()
+	if handlerCalls.Load() != 2 || len(receipts) != 2 || receipts[0].Source != nil || receipts[1].Source == nil || !receipt.ValidIdentity(receipts[1]) {
+		t.Fatalf("calls=%d receipts=%#v", handlerCalls.Load(), receipts)
+	}
+	if len(resolver.requests) != 1 || !resolver.requests[0].Programmatic || string(resolver.requests[0].Arguments) != `{"path":"x"}` {
+		t.Fatalf("resolver requests=%#v", resolver.requests)
+	}
+}
+
+func TestBrokerRejectsInvalidResolvedSourceBeforeDispatch(t *testing.T) {
+	registry := capability.NewRegistry()
+	var handlerCalls atomic.Uint32
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		handlerCalls.Add(1)
+		return json.RawMessage(`{"text":"unexpected"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{
+		RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent", SourceResolver: &recordingSourceResolver{binding: receipt.SourceBinding{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"parent:program:1","capability":"workspace.read_text","arguments":{"path":"x"}}`))
+	if err != nil || !containsCode(response, "source_binding_invalid") || handlerCalls.Load() != 0 {
+		t.Fatalf("response=%s calls=%d err=%v", response, handlerCalls.Load(), err)
+	}
+}
+
+type recordingSourceResolver struct {
+	binding  receipt.SourceBinding
+	requests []capability.SourceBindingRequest
+}
+
+func (resolver *recordingSourceResolver) ResolveSource(request capability.SourceBindingRequest) (receipt.SourceBinding, bool) {
+	resolver.requests = append(resolver.requests, request)
+	return resolver.binding, true
 }
 
 func TestProgrammaticBrokerRequiresExactParentBoundChildSequence(t *testing.T) {

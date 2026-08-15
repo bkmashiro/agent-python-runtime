@@ -109,7 +109,23 @@ func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
 	if _, err := DecodeAndValidateRunResponse(request, programmaticPayload); err != nil {
 		t.Fatalf("valid programmatic receipt rejected: %v", err)
 	}
+	sourceBound, err := capabilityreceipt.BindSource(programmatic, capabilityreceipt.SourceBinding{
+		SchemaVersion: capabilityreceipt.SourceBindingSchemaVersion, ClaimLevel: capabilityreceipt.SourceClaimBound,
+		DocumentID: "sha256:" + strings.Repeat("1", 64), SourceSHA256: "sha256:" + strings.Repeat("2", 64),
+		OccurrenceID: "sha256:" + strings.Repeat("3", 64), Capability: "workspace.read_text", DynamicOccurrence: 1,
+		StartLine: 2, StartColumn: 9, EndLine: 2, EndColumn: 38,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceBoundBytes, _ := json.Marshal(sourceBound)
+	sourceBoundReceipt := string(sourceBoundBytes)
+	sourceBoundPayload := []byte(`{"status":"ok","result":1,"receipts":[` + sourceBoundReceipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+	if _, err := DecodeAndValidateRunResponse(request, sourceBoundPayload); err != nil {
+		t.Fatalf("valid source-bound receipt rejected: %v", err)
+	}
 	invalidReceipts := map[string]string{
+		"tampered source span":      `[` + strings.Replace(sourceBoundReceipt, `"start_column":9`, `"start_column":10`, 1) + `]`,
 		"near-match program parent": `[` + strings.Replace(programmaticReceipt, `"call_id":"parent:program:1"`, `"call_id":"other:program:1"`, 1) + `]`,
 		"receipt identity mismatch": `[` + strings.Replace(validReceipt, valid.ReceiptID, "rcpt_"+strings.Repeat("f", 64), 1) + `]`,
 		"null array":                "null",

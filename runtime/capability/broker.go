@@ -35,11 +35,28 @@ type Config struct {
 	AllowDirectCalls   bool
 	ApprovalSuspension bool
 	ApprovalController *approval.Controller
+	SourceResolver     SourceBindingResolver
 }
 
 type StagedObservationClaimer interface {
 	Claim(context.Context, string, json.RawMessage) (StagedCapabilityOutcome, error)
 	Finalize(bool) error
+}
+
+type SourceBindingRequest struct {
+	CallID         string
+	ParentCallID   string
+	Capability     string
+	OperationIndex uint32
+	Arguments      json.RawMessage
+	Programmatic   bool
+}
+
+// SourceBindingResolver is Host-owned, observation-only provenance. It may bind
+// an admitted programmatic call to one verified source occurrence, but cannot
+// grant a capability or dispatch a handler.
+type SourceBindingResolver interface {
+	ResolveSource(SourceBindingRequest) (receipt.SourceBinding, bool)
 }
 
 type Broker struct {
@@ -57,11 +74,12 @@ type Broker struct {
 }
 
 type request struct {
-	CallID            string          `json:"call_id"`
-	Capability        string          `json:"capability"`
-	Arguments         json.RawMessage `json:"arguments"`
-	ApprovalRequestID string          `json:"-"`
-	ParentCallID      string          `json:"-"`
+	CallID            string                 `json:"call_id"`
+	Capability        string                 `json:"capability"`
+	Arguments         json.RawMessage        `json:"arguments"`
+	ApprovalRequestID string                 `json:"-"`
+	ParentCallID      string                 `json:"-"`
+	Source            *receipt.SourceBinding `json:"-"`
 }
 
 type response struct {
@@ -82,6 +100,7 @@ func NewBroker(config Config) (*Broker, error) {
 		(config.StagedClaimer != nil) != config.SemanticPreDispatch ||
 		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) ||
 		(config.AllowDirectCalls && config.ProgrammaticParentCallID == "") ||
+		(config.SourceResolver != nil && config.ProgrammaticParentCallID == "") ||
 		(config.ApprovalController != nil) != config.ApprovalSuspension || (config.Plan.RequiresApproval() && !config.ApprovalSuspension) {
 		return nil, ErrInvalidBroker
 	}
@@ -191,6 +210,20 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
 	}
 	call.Arguments = arguments
+	if programmaticCall && broker.config.SourceResolver != nil {
+		bound, found := broker.config.SourceResolver.ResolveSource(SourceBindingRequest{
+			CallID: call.CallID, ParentCallID: call.ParentCallID, Capability: call.Capability,
+			OperationIndex: operation, Arguments: append(json.RawMessage(nil), arguments...), Programmatic: true,
+		})
+		if found {
+			if !receipt.ValidSourceBinding(bound) || bound.Capability != call.Capability {
+				broker.record(call, operation, "denied", nil)
+				return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "source_binding_invalid", Message: "Host source binding is invalid"}})
+			}
+			copy := bound
+			call.Source = &copy
+		}
+	}
 	if broker.config.StagedClaimer != nil {
 		qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
 		if !qualified || !qualification.Eligible() || registered.spec.Playback != PlaybackLiveOnly || (registered.spec.EffectClass != EffectPure && registered.spec.EffectClass != EffectWorkspaceRead && registered.spec.EffectClass != EffectExternalRead) {
@@ -358,6 +391,14 @@ func (broker *Broker) completeApproval(requestID, outcome string) bool {
 
 func (broker *Broker) record(call request, operation uint32, outcome string, result []byte) {
 	created := receipt.NewAuthorized(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, call.ParentCallID, call.ApprovalRequestID, call.Capability, operation, string(call.Arguments), outcome, result)
+	if call.Source != nil {
+		bound, err := receipt.BindSource(created, *call.Source)
+		if err != nil {
+			created.ReceiptID = ""
+		} else {
+			created = bound
+		}
+	}
 	broker.mu.Lock()
 	broker.receipts = append(broker.receipts, created)
 	broker.mu.Unlock()
@@ -391,7 +432,14 @@ func (broker *Broker) SnapshotReceipts() []receipt.Receipt {
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	return append([]receipt.Receipt(nil), broker.receipts...)
+	cloned := append([]receipt.Receipt(nil), broker.receipts...)
+	for index := range cloned {
+		if cloned[index].Source != nil {
+			copy := *cloned[index].Source
+			cloned[index].Source = &copy
+		}
+	}
+	return cloned
 }
 
 func (broker *Broker) Calls() uint32 {

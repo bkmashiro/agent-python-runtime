@@ -72,7 +72,25 @@
           "operation_index": {"type": "integer", "minimum": 0, "maximum": 4294967295},
           "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "response_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "outcome": {"enum": ["ok", "denied", "error", "timeout"]}
+          "outcome": {"enum": ["ok", "denied", "error", "timeout"]},
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "claim_level", "document_id", "source_sha256", "occurrence_id", "capability", "dynamic_occurrence", "start_line", "start_column", "end_line", "end_column"],
+            "properties": {
+              "schema_version": {"const": "pysolate.source-binding.v0"},
+              "claim_level": {"const": "source_bound"},
+              "document_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "occurrence_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "capability": {"type": "string", "minLength": 1, "maxLength": 128},
+              "dynamic_occurrence": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+              "start_line": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+              "start_column": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+              "end_line": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+              "end_column": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+            }
+          }
         }
       }
     },

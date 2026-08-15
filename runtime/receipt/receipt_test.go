@@ -55,6 +55,28 @@ func TestApprovalRequestChangesReceiptIdentityAndIsProjected(t *testing.T) {
 	}
 }
 
+func TestSourceBindingChangesReceiptIdentityAndRejectsTampering(t *testing.T) {
+	plan := "sha256:" + strings.Repeat("a", 64)
+	base := receipt.NewBound("host-run", plan, "parent-call:program:1", "parent-call", "fetch_many", 0, `{}`, "ok", nil)
+	binding := receipt.SourceBinding{
+		SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound,
+		DocumentID: "sha256:" + strings.Repeat("b", 64), SourceSHA256: "sha256:" + strings.Repeat("c", 64),
+		OccurrenceID: "sha256:" + strings.Repeat("d", 64), Capability: "fetch_many", DynamicOccurrence: 1,
+		StartLine: 3, StartColumn: 4, EndLine: 3, EndColumn: 19,
+	}
+	bound, err := receipt.BindSource(base, binding)
+	if err != nil || bound.Source == nil || bound.ReceiptID == base.ReceiptID || !receipt.ValidIdentity(bound) {
+		t.Fatalf("bound=%#v base=%#v err=%v", bound, base, err)
+	}
+	bound.Source.StartColumn++
+	if receipt.ValidIdentity(bound) {
+		t.Fatal("tampered source span retained valid receipt identity")
+	}
+	if _, err := receipt.BindSource(base, receipt.SourceBinding{}); err == nil {
+		t.Fatal("invalid source binding accepted")
+	}
+}
+
 func TestReceiptStoresDigestsNotRawTargetOrResponse(t *testing.T) {
 	target := "https://api.example.test/data?token=secret"
 	response := []byte("secret response")

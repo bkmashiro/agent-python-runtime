@@ -1,9 +1,13 @@
 package semantic
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
+	"sort"
 	"testing"
+
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
 func TestSourceBoundPlannerDefaultsOffAndProjectsVerifiedSource(t *testing.T) {
@@ -125,7 +129,78 @@ func TestSourceBoundPlannerFailsClosedForUnknownDuplicateAndVersionMismatch(t *t
 	}
 }
 
-func TestSourceBoundPlanProjectionIsDefensivelyCopied(t *testing.T) {
+func TestSourceBindingResolverMatchesOnlyExactProgrammaticOccurrence(t *testing.T) {
+	capabilityPlan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, capabilityPlan, true)
+	planned, err := BuildSourceBoundPlan(verified, capabilityPlan, PlannerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := NewSourceBindingResolver(planned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := capability.SourceBindingRequest{
+		CallID: "parent:program:1", ParentCallID: "parent", Programmatic: true,
+		Capability: site.Capability, OperationIndex: 0, Arguments: json.RawMessage(`{"key":"profile"}`),
+	}
+	bound, ok := resolver.ResolveSource(request)
+	if !ok || bound.OccurrenceID != site.ID || bound.SourceSHA256 == "" || bound.StartLine != site.Span.StartLine || bound.EndColumn != site.Span.EndColumn || bound.DynamicOccurrence != 1 {
+		t.Fatalf("binding=%+v ok=%v", bound, ok)
+	}
+	for _, candidate := range []capability.SourceBindingRequest{
+		func() capability.SourceBindingRequest { value := request; value.Programmatic = false; return value }(),
+		func() capability.SourceBindingRequest {
+			value := request
+			value.Capability = "other.read"
+			return value
+		}(),
+		func() capability.SourceBindingRequest {
+			value := request
+			value.Arguments = json.RawMessage(`{"key":"other"}`)
+			return value
+		}(),
+	} {
+		if got, ok := resolver.ResolveSource(candidate); ok {
+			t.Fatalf("mismatched request resolved: request=%+v binding=%+v", candidate, got)
+		}
+	}
+}
+
+func TestSourceBindingResolverRejectsAmbiguousStaticOccurrences(t *testing.T) {
+	capabilityPlan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, capabilityPlan, true)
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate := site
+	duplicate.ID = legalityDigest("duplicate-site")
+	analysis.CallSites = append(analysis.CallSites, duplicate)
+	sort.Slice(analysis.CallSites, func(i, j int) bool { return analysis.CallSites[i].ID < analysis.CallSites[j].ID })
+	analysis.CandidateRegions[0].CapabilityOccurrences = append(analysis.CandidateRegions[0].CapabilityOccurrences, duplicate.ID)
+	sort.Strings(analysis.CandidateRegions[0].CapabilityOccurrences)
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	planned, err := BuildSourceBoundPlan(VerifiedAnalysis{analysisJSON: encoded}, capabilityPlan, PlannerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := NewSourceBindingResolver(planned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding, ok := resolver.ResolveSource(capability.SourceBindingRequest{
+		CallID: "parent:program:1", ParentCallID: "parent", Programmatic: true,
+		Capability: site.Capability, Arguments: json.RawMessage(`{"key":"profile"}`),
+	}); ok {
+		t.Fatalf("ambiguous occurrence resolved as %+v", binding)
+	}
+}
+
+func TestSourceBoundProjectionIsDefensive(t *testing.T) {
 	capabilityPlan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, capabilityPlan, true)
 	planned, err := BuildSourceBoundPlan(verified, capabilityPlan, PlannerConfig{

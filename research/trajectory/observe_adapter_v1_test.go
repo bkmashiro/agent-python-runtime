@@ -37,9 +37,13 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 		t.Fatal(err)
 	}
 	appendObservationEvent(t, session, observe.EventExecutionStarted, nil, observe.ExecutionStartedPayload{
-		ArtifactSHA256: evidenceDigest('4'), CapabilityPlanSHA256: evidenceDigest('5'), ExecutedCodeSHA256: evidenceDigest('6'), ExecutionProfileSHA256: evidenceDigest('7'),
+		ArtifactSHA256: evidenceDigest('4'), ExecutedCodeSHA256: evidenceDigest('6'), ExecutionProfileSHA256: evidenceDigest('7'),
 	})
 	parent := uint32(1)
+	appendObservationEvent(t, session, observe.EventCapabilityPlan, &parent, observe.CapabilityPlanBoundPayload{
+		CapabilityPlanSHA256: evidenceDigest('5'),
+	})
+	parent = 2
 	appendObservationEvent(t, session, observe.EventCapabilityCall, &parent, observe.CapabilityCallPayload{
 		ArgumentsSHA256: evidenceDigest('8'), Capability: "workspace.read_text", CapabilityPlanSHA256: evidenceDigest('5'),
 		OperationIndex: 0, Outcome: "ok", ReceiptID: "rcpt_observe_adapter_0001", ResultSHA256: evidenceDigest('9'),
@@ -49,12 +53,12 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 			Capability: "workspace.read_text", DynamicOccurrence: 1, StartLine: 1, StartColumn: 2, EndLine: 1, EndColumn: 20,
 		},
 	})
-	parent = 2
+	parent = 3
 	appendObservationEvent(t, session, observe.EventWorkspaceFinalized, &parent, observe.WorkspaceFinalizedPayload{
 		Changes: []observe.WorkspaceChange{}, EntryCount: 1, FinalTreeSHA256: evidenceDigest('a'), FinalWorkspaceSHA256: evidenceDigest('b'),
 		InitialWorkspaceSHA256: evidenceDigest('c'), TotalBytes: 1,
 	})
-	parent = 3
+	parent = 4
 	appendObservationEvent(t, session, observe.EventExecutionCompleted, &parent, observe.ExecutionCompletedPayload{
 		EvidenceComplete: true, ResultSHA256: evidenceDigest('d'), Status: "ok",
 	})
@@ -67,7 +71,8 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 4 ||
+	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 5 ||
+		countEvidenceType(production.Events, trajectory.EventAuthoritySnapshot) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventSourceDecision) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventExecutedLine) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventResourceSample) != 1 {

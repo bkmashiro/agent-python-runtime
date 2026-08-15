@@ -24,15 +24,16 @@ type ObservationRecorderConfig struct {
 }
 
 type ObservationRecorder struct {
-	mu             sync.Mutex
-	log            *EvidenceLog
-	config         ObservationRecorderConfig
-	observationIDs map[uint32]string
-	lastProduction string
-	started        bool
-	terminal       bool
-	startedAt      time.Time
-	startCPUNanos  uint64
+	mu               sync.Mutex
+	log              *EvidenceLog
+	config           ObservationRecorderConfig
+	observationIDs   map[uint32]string
+	lastProduction   string
+	authorityPlanSHA string
+	started          bool
+	terminal         bool
+	startedAt        time.Time
+	startCPUNanos    uint64
 }
 
 func NewObservationRecorder(log *EvidenceLog, config ObservationRecorderConfig) (*ObservationRecorder, error) {
@@ -121,18 +122,47 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 				return err
 			}
 			recorder.lastProduction = authority.EventID
+			recorder.authorityPlanSHA = payload.CapabilityPlanSHA256
 		}
 		recorder.started = true
 		return nil
 	case observe.EventCapabilityPlan:
+		if !recorder.started {
+			return errors.New("capability Plan observation before execution start")
+		}
+		var payload observe.CapabilityPlanBoundPayload
+		if json.Unmarshal(observed.Payload, &payload) != nil {
+			return errors.New("decode capability Plan observation")
+		}
+		if recorder.authorityPlanSHA != "" {
+			if recorder.authorityPlanSHA != payload.CapabilityPlanSHA256 {
+				return errors.New("capability Plan observation changed authority")
+			}
+			return nil
+		}
+		authority, err := recorder.log.Append(EvidenceInput{
+			Type: EventAuthoritySnapshot, ActorID: recorder.config.ActorID,
+			ParentEventIDs: productionParent(recorder.lastProduction),
+			Payload: AuthoritySnapshotPayload{
+				RunID: recorder.config.RunID, CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
+				PolicySHA256: recorder.config.PolicySHA256, FreshnessSHA256: recorder.config.FreshnessSHA256,
+				GrantsSHA256: recorder.config.GrantsSHA256,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		recorder.authorityPlanSHA = payload.CapabilityPlanSHA256
+		recorder.lastProduction = authority.EventID
 		return nil
 	case observe.EventCapabilityCall:
 		if !recorder.started {
 			return errors.New("capability observation before execution start")
 		}
 		var payload observe.CapabilityCallPayload
-		if json.Unmarshal(observed.Payload, &payload) != nil || payload.ReceiptID == "" {
-			return errors.New("capability observation has no Host receipt")
+		if json.Unmarshal(observed.Payload, &payload) != nil || payload.ReceiptID == "" ||
+			recorder.authorityPlanSHA == "" || payload.CapabilityPlanSHA256 != recorder.authorityPlanSHA {
+			return errors.New("capability observation has no bound Host authority/receipt")
 		}
 		state := EffectState("")
 		reason := ""

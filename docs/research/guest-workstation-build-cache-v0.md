@@ -1,6 +1,6 @@
 # Guest workstation build cache v0
 
-Status: **Experimental build acceleration; artifact verification remains mandatory**  
+Status: **Experimental build acceleration; artifact verification remains mandatory**
 Date: 2026-08-15
 
 ## Purpose
@@ -24,6 +24,13 @@ the layer key but still rebuilds embedding, link, manifest, SBOM, checksums and 
 Changing a locked source, toolchain, patch, recipe, identity implementation or Host
 platform produces a different key.
 
+Because `wasi-vfs pack` v0.6.3 does not produce byte-identical output across independent
+packing processes, a second final-artifact cache is keyed by the layer key plus exact Git
+tree, source epoch, artifact/profile/extension identity and memory parameters. It never
+reuses across a source-tree change. A bootstrap-only edit therefore hits the expensive
+CPython layer but misses and reruns final embedding; an exact-source warm build may reuse
+the already verified final distribution byte-for-byte.
+
 ## Storage and corruption boundary
 
 The optional cache root must be an absolute, non-symlink directory and is forced to mode
@@ -42,7 +49,8 @@ A hit requires:
 Invalid cache state becomes a miss and is replaced while holding the publish lock. The
 maintenance step retains only the protected current key plus the newest other valid
 64-hex key; unrelated or symlink entries are never removed. Every build records
-`build-cache.json` as `off`, `miss`, or `hit` plus exact key and layer digest.
+layer and final-cache `off`, `miss`, or `hit` dispositions plus both exact identities.
+Layer and final caches each retain at most two valid keys.
 
 ## Workstation workflow
 
@@ -63,6 +71,10 @@ runs on `gpu31` in a private `/tmp` workspace. The remote worker emits:
 - `SHA256SUMS` over ready marker, log and every distribution file;
 - `build.log`.
 
+The checksum manifest must cover that exact regular file set except itself. Verification
+rejects omissions, duplicates, symlinked descendants, source commit/tree drift,
+cache-evidence drift and artifact/manifest mismatch.
+
 The driver retrieves and independently verifies the bundle locally, then removes only
 that run's exact shared stage/output directories. The keyed cache remains. `refresh`
 removes only the exact current cache-key entry under the publication lock; `off` bypasses
@@ -73,10 +85,11 @@ cache reads/writes.
 Before v0 is accepted:
 
 - one `refresh` build must report `miss`;
-- a second exact-source `auto` build must report `hit`;
+- a second exact-source `auto` build must report a layer and final-artifact `hit`;
 - both complete artifacts must have identical SHA-256;
 - both evidence bundles must verify independently;
-- the warm duration and speedup are reported as observed, not guaranteed;
+- `python3 scripts/verify-guest-cache-pair.py COLD WARM` proves the exact pair and requires
+  the warm build to be at least 25% faster;
 - the warm artifact must pass the real Guest semantic E2E gate;
 - mutation, key-drift, archive-safety and evidence-drift tests must pass.
 

@@ -52,6 +52,22 @@ class CacheLayerValidatorTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate(archive)
 
+    def test_rejects_duplicate_and_file_then_child_members(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = pathlib.Path(directory) / "layer.tar"
+            self.write_archive(
+                archive,
+                [("downloads/a", b"a"), ("tools/a", b"b"), ("tools/a", b"c"), ("cpython/a", b"d")],
+            )
+            with self.assertRaises(ValueError):
+                validator.validate(archive)
+            self.write_archive(
+                archive,
+                [("downloads/a", b"a"), ("tools", b"file"), ("tools/child", b"b"), ("cpython/a", b"c")],
+            )
+            with self.assertRaises(ValueError):
+                validator.validate(archive)
+
 
 if __name__ == "__main__":
     unittest.main()

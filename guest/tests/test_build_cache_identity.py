@@ -62,6 +62,25 @@ class BuildCacheIdentityTests(unittest.TestCase):
             self.make_repository(root)
             self.assertNotEqual(baseline, cache_identity.build_identity(root, "Linux", "aarch64"))
 
+    def test_final_identity_binds_exact_source_and_artifact_parameters(self) -> None:
+        values = {
+            "layer_key": "sha256:" + "a" * 64,
+            "source_tree": "b" * 40,
+            "source_epoch": 123,
+            "artifact_profile": "base",
+            "artifact_filename": "agent-python-runtime.wasm",
+            "extensions_lock_sha256": "",
+            "initial_memory_bytes": 1,
+            "max_memory_bytes": 2,
+            "host_system": "Linux",
+            "host_arch": "x86_64",
+        }
+        first = cache_identity.final_identity(**values)
+        for field, changed in (("source_tree", "c" * 40), ("source_epoch", 124), ("artifact_profile", "scientific"), ("max_memory_bytes", 3)):
+            mutated = dict(values)
+            mutated[field] = changed
+            self.assertNotEqual(first, cache_identity.final_identity(**mutated), field)
+
     def test_missing_or_duplicate_recipe_markers_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

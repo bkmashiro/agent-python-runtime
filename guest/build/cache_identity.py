@@ -11,6 +11,7 @@ import platform
 from typing import Any
 
 SCHEMA_VERSION = "pysolate.guest-build-cache-key.v0"
+FINAL_SCHEMA_VERSION = "pysolate.guest-final-artifact-cache-key.v0"
 BEGIN_MARKER = b"# BEGIN CPYTHON CACHE RECIPE\n"
 END_MARKER = b"# END CPYTHON CACHE RECIPE\n"
 IDENTITY_INPUTS = (
@@ -25,6 +26,14 @@ IDENTITY_INPUTS = (
 
 def digest_bytes(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def valid_digest(value: str) -> bool:
+    return (
+        len(value) == 71
+        and value.startswith("sha256:")
+        and all(character in "0123456789abcdef" for character in value[7:])
+    )
 
 
 def recipe_bytes(script: bytes) -> bytes:
@@ -66,14 +75,84 @@ def build_identity(repository: pathlib.Path, host_system: str, host_arch: str) -
     return digest_bytes(encoded)
 
 
+def final_document(
+    layer_key: str,
+    source_tree: str,
+    source_epoch: int,
+    artifact_profile: str,
+    artifact_filename: str,
+    extensions_lock_sha256: str,
+    initial_memory_bytes: int,
+    max_memory_bytes: int,
+    host_system: str,
+    host_arch: str,
+) -> dict[str, Any]:
+    if not valid_digest(layer_key):
+        raise ValueError("invalid layer key")
+    if len(source_tree) != 40 or any(value not in "0123456789abcdef" for value in source_tree):
+        raise ValueError("invalid source tree")
+    if source_epoch <= 0 or initial_memory_bytes <= 0 or max_memory_bytes < initial_memory_bytes:
+        raise ValueError("invalid final build parameters")
+    if extensions_lock_sha256 and not valid_digest(extensions_lock_sha256):
+        raise ValueError("invalid extension lock digest")
+    return {
+        "schema_version": FINAL_SCHEMA_VERSION,
+        "target": "wasm32-wasip1",
+        "host_system": host_system,
+        "host_arch": host_arch,
+        "layer_key": layer_key,
+        "source_tree": source_tree,
+        "source_epoch": source_epoch,
+        "artifact_profile": artifact_profile,
+        "artifact_filename": artifact_filename,
+        "extensions_lock_sha256": extensions_lock_sha256,
+        "initial_memory_bytes": initial_memory_bytes,
+        "max_memory_bytes": max_memory_bytes,
+    }
+
+
+def final_identity(**values: Any) -> str:
+    encoded = json.dumps(final_document(**values), sort_keys=True, separators=(",", ":")).encode()
+    return digest_bytes(encoded)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", type=pathlib.Path, required=True)
     parser.add_argument("--host-system", default=platform.system())
     parser.add_argument("--host-arch", default=platform.machine())
     parser.add_argument("--document", action="store_true")
+    parser.add_argument("--final", action="store_true")
+    parser.add_argument("--layer-key")
+    parser.add_argument("--source-tree")
+    parser.add_argument("--source-epoch", type=int)
+    parser.add_argument("--artifact-profile")
+    parser.add_argument("--artifact-filename")
+    parser.add_argument("--extensions-lock-sha256", default="")
+    parser.add_argument("--initial-memory-bytes", type=int)
+    parser.add_argument("--max-memory-bytes", type=int)
     args = parser.parse_args()
-    if args.document:
+    if args.final:
+        required = (args.layer_key, args.source_tree, args.source_epoch, args.artifact_profile, args.artifact_filename, args.initial_memory_bytes, args.max_memory_bytes)
+        if any(value is None for value in required):
+            parser.error("--final requires exact layer/source/artifact/memory identity")
+        values = {
+            "layer_key": args.layer_key,
+            "source_tree": args.source_tree,
+            "source_epoch": args.source_epoch,
+            "artifact_profile": args.artifact_profile,
+            "artifact_filename": args.artifact_filename,
+            "extensions_lock_sha256": args.extensions_lock_sha256,
+            "initial_memory_bytes": args.initial_memory_bytes,
+            "max_memory_bytes": args.max_memory_bytes,
+            "host_system": args.host_system,
+            "host_arch": args.host_arch,
+        }
+        if args.document:
+            print(json.dumps(final_document(**values), sort_keys=True))
+        else:
+            print(final_identity(**values))
+    elif args.document:
         print(json.dumps(build_document(args.repository, args.host_system, args.host_arch), sort_keys=True))
     else:
         print(build_identity(args.repository, args.host_system, args.host_arch))

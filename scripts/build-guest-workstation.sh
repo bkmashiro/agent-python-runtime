@@ -65,7 +65,7 @@ if [[ $worker_status -ne 0 ]]; then
   echo "workstation Guest build failed; evidence retained at $output" >&2
   exit "$worker_status"
 fi
-python3 scripts/verify-workstation-build.py "$output" --source-commit "$source_commit"
+python3 scripts/verify-workstation-build.py "$output" --source-commit "$source_commit" --source-tree "$source_tree"
 cleanup_remote
 trap - EXIT
 printf 'evidence_root=%s\n' "$output"

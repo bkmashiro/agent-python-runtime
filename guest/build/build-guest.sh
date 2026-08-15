@@ -10,6 +10,7 @@ CPYTHON_DIR="${WORK_DIR}/cpython"
 SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
 BUILD_CACHE_ROOT=${AGENT_RUNTIME_BUILD_CACHE_ROOT:-}
 BUILD_CACHE_MODE=${AGENT_RUNTIME_BUILD_CACHE_MODE:-off}
+SOURCE_TREE_ID=${AGENT_RUNTIME_SOURCE_TREE:-}
 ARTIFACT_PROFILE=base
 ARTIFACT_FILENAME="agent-python-runtime.wasm"
 INITIAL_MEMORY_BYTES=134217728
@@ -197,6 +198,110 @@ if [[ ${BUILD_CACHE_MODE} != off ]]; then
 fi
 # END CPYTHON CACHE RECIPE
 
+write_build_cache_evidence() {
+  python3 - "${DIST_DIR}/build-cache.json" "${BUILD_CACHE_KEY}" "${BUILD_CACHE_STATUS}" "${BUILD_CACHE_LAYER_SHA256}" "${FINAL_CACHE_KEY:-}" "${FINAL_CACHE_STATUS:-off}" <<'PY'
+import json
+import pathlib
+import sys
+
+output, key, disposition, layer_sha256, final_key, final_disposition = sys.argv[1:]
+if disposition not in {"off", "hit", "miss"} or final_disposition not in {"off", "hit", "miss"}:
+    raise SystemExit("invalid build cache disposition")
+if disposition != "off" and not layer_sha256.startswith("sha256:"):
+    raise SystemExit("cached build must bind its layer digest")
+if final_disposition != "off" and not final_key.startswith("sha256:"):
+    raise SystemExit("final cache must bind its exact identity")
+payload = {
+    "schema_version": "pysolate.guest-build-cache-evidence.v1",
+    "cache_key": key,
+    "disposition": disposition,
+    "layer_sha256": layer_sha256 or None,
+    "final_cache_key": final_key or None,
+    "final_cache_disposition": final_disposition,
+}
+pathlib.Path(output).write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+PY
+}
+
+write_dist_checksums() {
+  (
+    cd "${DIST_DIR}"
+    local sum_files=(
+      "${ARTIFACT_FILENAME}"
+      manifest.json
+      import-inventory.json
+      import-qualification.json
+      build-cache.json
+      sbom.spdx.json
+      THIRD_PARTY_NOTICES.md
+    )
+    sha256sum "${sum_files[@]}" > SHA256SUMS
+  )
+}
+
+FINAL_CACHE_STATUS=off
+FINAL_CACHE_KEY=""
+FINAL_CACHE_ENTRY=""
+FINAL_CACHE_TMP=""
+FINAL_CACHE_LOCKED=0
+EXTENSIONS_LOCK_SHA256=""
+if [[ -n ${EXTENSIONS_LOCK} ]]; then
+  EXTENSIONS_LOCK_SHA256="sha256:$(sha256sum "${EXTENSIONS_LOCK}" | cut -d' ' -f1)"
+fi
+if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${SOURCE_TREE_ID} =~ ^[0-9a-f]{40}$ ]]; then
+  FINAL_CACHE_KEY=$(python3 "${ROOT_DIR}/guest/build/cache_identity.py" --repository "${ROOT_DIR}" --final \
+    --layer-key "${BUILD_CACHE_KEY}" --source-tree "${SOURCE_TREE_ID}" --source-epoch "${SOURCE_DATE_EPOCH}" \
+    --artifact-profile "${ARTIFACT_PROFILE}" --artifact-filename "${ARTIFACT_FILENAME}" \
+    --extensions-lock-sha256 "${EXTENSIONS_LOCK_SHA256}" --initial-memory-bytes "${INITIAL_MEMORY_BYTES}" \
+    --max-memory-bytes "${MAX_MEMORY_BYTES}")
+  FINAL_CACHE_ROOT="${BUILD_CACHE_ROOT}/final"
+  FINAL_CACHE_ENTRY="${FINAL_CACHE_ROOT}/${FINAL_CACHE_KEY#sha256:}"
+  mkdir -p "${FINAL_CACHE_ROOT}"
+  chmod 0700 "${FINAL_CACHE_ROOT}"
+  if [[ -L ${FINAL_CACHE_ROOT} || ! -d ${FINAL_CACHE_ROOT} ]]; then
+    echo "final cache root must be a real directory" >&2
+    exit 18
+  fi
+  exec 8>"${FINAL_CACHE_ROOT}/.lock"
+  flock 8
+  FINAL_CACHE_LOCKED=1
+  cleanup_final_cache() {
+    [[ -z ${FINAL_CACHE_TMP:-} ]] || rm -rf "${FINAL_CACHE_TMP}"
+    if [[ ${FINAL_CACHE_LOCKED:-0} -eq 1 ]]; then
+      flock -u 8 || true
+      exec 8>&- || true
+    fi
+  }
+  trap cleanup_final_cache EXIT
+  if [[ ${BUILD_CACHE_MODE} == refresh ]]; then
+    rm -rf "${FINAL_CACHE_ENTRY}"
+  fi
+  if [[ -f ${FINAL_CACHE_ENTRY}/RESULT.READY && -f ${FINAL_CACHE_ENTRY}/dist.tar && -f ${FINAL_CACHE_ENTRY}/SHA256SUMS ]] &&
+    grep -Fxq "final_cache_key=${FINAL_CACHE_KEY}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
+    grep -Fxq "source_tree=${SOURCE_TREE_ID}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
+    (cd "${FINAL_CACHE_ENTRY}" && sha256sum -c SHA256SUMS >/dev/null) &&
+    python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_ENTRY}/dist.tar" --root dist; then
+    rm -rf "${DIST_DIR}"
+    tar -xf "${FINAL_CACHE_ENTRY}/dist.tar" -C "${WORK_DIR}"
+    restored_artifact_sha256="sha256:$(sha256sum "${DIST_DIR}/${ARTIFACT_FILENAME}" | cut -d' ' -f1)"
+    if grep -Fxq "artifact_sha256=${restored_artifact_sha256}" "${FINAL_CACHE_ENTRY}/RESULT.READY"; then
+      FINAL_CACHE_STATUS=hit
+      write_build_cache_evidence
+      write_dist_checksums
+      python3 "${ROOT_DIR}/guest/build/cache_maintenance.py" "${FINAL_CACHE_ROOT}" --protect "${FINAL_CACHE_KEY#sha256:}" --keep 2
+      flock -u 8
+      exec 8>&-
+      FINAL_CACHE_LOCKED=0
+      trap - EXIT
+      printf 'guest artifact: %s\n' "${DIST_DIR}/${ARTIFACT_FILENAME}"
+      printf 'artifact sha256: %s\n' "${restored_artifact_sha256#sha256:}"
+      exit 0
+    fi
+    rm -rf "${DIST_DIR}" "${FINAL_CACHE_ENTRY}"
+  fi
+  FINAL_CACHE_STATUS=miss
+fi
+
 CLANG="${WASI_SDK_PATH}/bin/clang"
 LLVM_AR="${WASI_SDK_PATH}/bin/llvm-ar"
 LLVM_NM="${WASI_SDK_PATH}/bin/llvm-nm"
@@ -373,37 +478,31 @@ python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \
   --verify
 rm "${DIST_DIR}/agent-python-runtime.wat"
-python3 - "${DIST_DIR}/build-cache.json" "${BUILD_CACHE_KEY}" "${BUILD_CACHE_STATUS}" "${BUILD_CACHE_LAYER_SHA256}" <<'PY'
-import json
-import pathlib
-import sys
+write_build_cache_evidence
+write_dist_checksums
 
-output, key, disposition, layer_sha256 = sys.argv[1:]
-if disposition not in {"off", "hit", "miss"}:
-    raise SystemExit("invalid build cache disposition")
-if disposition != "off" and not layer_sha256.startswith("sha256:"):
-    raise SystemExit("cached build must bind its layer digest")
-payload = {
-    "schema_version": "pysolate.guest-build-cache-evidence.v0",
-    "cache_key": key,
-    "disposition": disposition,
-    "layer_sha256": layer_sha256 or None,
-}
-pathlib.Path(output).write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
-PY
-(
-  cd "${DIST_DIR}"
-  SUM_FILES=(
-    "${ARTIFACT_FILENAME}"
-    manifest.json
-    import-inventory.json
-    import-qualification.json
-    build-cache.json
-    sbom.spdx.json
-    THIRD_PARTY_NOTICES.md
+if [[ ${FINAL_CACHE_STATUS} == miss ]]; then
+  FINAL_CACHE_TMP=$(mktemp -d "${FINAL_CACHE_ROOT}/.tmp.${FINAL_CACHE_KEY#sha256:}.XXXXXXXX")
+  tar -cf "${FINAL_CACHE_TMP}/dist.tar" -C "${WORK_DIR}" dist
+  python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_TMP}/dist.tar" --root dist
+  (
+    cd "${FINAL_CACHE_TMP}"
+    sha256sum dist.tar > SHA256SUMS
   )
-  sha256sum "${SUM_FILES[@]}" > SHA256SUMS
-)
+  {
+    printf 'final_cache_key=%s\n' "${FINAL_CACHE_KEY}"
+    printf 'source_tree=%s\n' "${SOURCE_TREE_ID}"
+    printf 'artifact_sha256=sha256:%s\n' "$(sha256sum "${FINAL_GUEST}" | cut -d' ' -f1)"
+  } > "${FINAL_CACHE_TMP}/RESULT.READY"
+  rm -rf "${FINAL_CACHE_ENTRY}"
+  mv "${FINAL_CACHE_TMP}" "${FINAL_CACHE_ENTRY}"
+  FINAL_CACHE_TMP=""
+  python3 "${ROOT_DIR}/guest/build/cache_maintenance.py" "${FINAL_CACHE_ROOT}" --protect "${FINAL_CACHE_KEY#sha256:}" --keep 2
+  flock -u 8
+  exec 8>&-
+  FINAL_CACHE_LOCKED=0
+  trap - EXIT
+fi
 
 printf 'guest artifact: %s\n' "${FINAL_GUEST}"
 printf 'artifact sha256: '

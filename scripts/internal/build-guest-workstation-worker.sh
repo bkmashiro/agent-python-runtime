@@ -51,6 +51,7 @@ set +e
 AGENT_RUNTIME_BUILD_CACHE_ROOT="$cache_root" \
 AGENT_RUNTIME_BUILD_CACHE_MODE="$cache_mode" \
 GITHUB_SHA="$source_commit" \
+AGENT_RUNTIME_SOURCE_TREE="$source_tree" \
 SOURCE_DATE_EPOCH="$source_epoch" \
 GOPATH="$shared_root/go" \
 GOMODCACHE="$shared_root/go/pkg/mod" \
@@ -87,6 +88,8 @@ payload = {
     "cache_key": cache["cache_key"],
     "cache_disposition": cache["disposition"],
     "cache_layer_sha256": cache["layer_sha256"],
+    "final_cache_key": cache["final_cache_key"],
+    "final_cache_disposition": cache["final_cache_disposition"],
     "build_millis": int(build_millis),
 }
 pathlib.Path(output).write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")

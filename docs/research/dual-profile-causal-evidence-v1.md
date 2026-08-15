@@ -41,7 +41,7 @@ Host ceilings cover event count, parent count, payload bytes and Labstore object
 
 ## Real evidence and Lab
 
-The named real-Guest run at capture commit `a7c9f94ddaeed8411ffcac28d5868cb8fdca7f65`
+The named real-Guest run at capture commit `5c8bd54fe95f27e22b1905010221b86ce3f95bd9`
 uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257` and executes:
 
 - a fresh child CPython/WASI Guest over a private workspace branch;
@@ -49,22 +49,24 @@ uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08
 - the actual Runtime observation attachment carrying the Host receipt/source binding.
 
 It produces three views from header
-`sha256:b6859981dcebccae4844eab16e8fbab0d3c6b11f5bd73faa0fe9c6821ad2fd45`
+`sha256:bacb315c39477a7a3cc3e05cfb8ce44133d94c4c9676914305b7da12fbf2e588`
 and shared retained event identities:
 
 - local private `experiment_full`: 31 events plus Labstore objects at
-  `~/.hermes/evidence/pysolate/dual-profile-mg2-a7c9f94/`, export file SHA-256
-  `3cd11184f51f16bc1749d4757641a5861c820a0ddf4509e3c60a045eb140bf6e`;
+  `~/.hermes/evidence/pysolate/dual-profile-mg2-5c8bd54/`, export file SHA-256
+  `7071cad6a0ee03fb334e70bb94b96e403a7a41139a467f135c0a98806b4addb1`;
 - checked-in 9-event production projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-production-v1.json`, file SHA-256
-  `165e7aab2224810fb15b5f8aaf5e66762507e92c9fe3aa505651812b3573e843`;
+  `16ff8891e7118351380ab9af9277388e6c8c3c313a5c7e8dfe9147358ecf4ba5`;
 - checked-in 21-event body-safe experiment projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-public-v1.json`, file SHA-256
-  `393b15c2ea58cf4b4ad075e935b92118c75494bf4fc647a224ea07d1a19ae97b`.
+  `f52202283e68da94f257b666a99b366da35cc33ab11f784583afcc558b3142fa`.
 
 The private trace contains resolvable `blob.code` and `blob.file` references for the exact child
-program and the captured `child.txt` output; both body-only events are physically absent from
-portable exports. The production projection now carries true live Broker markers in the causal
+program and the captured `child.txt` output; contract validation resolves each private object and
+checks its typed kind plus declared content digest before accepting the event. Both body-only
+events are physically absent from portable exports. The production projection now carries true
+live Broker markers in the causal
 order `intent → started → committed`; the observer is body-free and non-authoritative. A typed
 `tool.decision` joins programmatic mechanism, Broker outcome, approval disposition,
 argument/result digests, Plan and receipt; `model.output:not_recorded`

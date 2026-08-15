@@ -9,6 +9,16 @@ const fixture = JSON.parse(readFileSync(join(process.cwd(), 'public/lab-data/aut
 describe('CampaignApp', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('does not render unknown projection fields', async () => {
+    const body = structuredClone(fixture);
+    body.programs[0].untrusted_body = 'private body';
+    body.programs[0].execution.untrusted_body = 'nested private body';
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body })));
+    const { container } = render(<CampaignApp />);
+    expect(await screen.findByRole('heading', { name: 'P01 causal flow' })).toBeInTheDocument();
+    expect(container.textContent).not.toContain('private body');
+  });
+
   it('switches the causal flow to the selected program', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => fixture })));
     render(<CampaignApp />);

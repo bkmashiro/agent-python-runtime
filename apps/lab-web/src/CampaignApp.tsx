@@ -2,6 +2,42 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { loadCampaignProjection, type CampaignProgram, type CampaignProjection } from './campaignData';
 
+function projectedContract(program: CampaignProgram) {
+  return {
+    id: program.id,
+    family: program.family,
+    release_offset_ms: program.release_offset_ms,
+    plan_sha256: program.plan_sha256,
+    grant_set_sha256: program.grant_set_sha256,
+    privacy_partition: program.privacy_partition,
+    workspace_fixture_sha256: program.workspace_fixture_sha256,
+    execution: {
+      kind: program.execution.kind,
+      cancel_point: program.execution.cancel_point,
+      ...(program.execution.source_program_id ? { source_program_id: program.execution.source_program_id } : {}),
+      ...(program.execution.workflow_state_key ? { workflow_state_key: program.execution.workflow_state_key } : {}),
+      ...(program.execution.verifier ? { verifier: {
+        source_sha256: program.execution.verifier.source_sha256,
+        artifact_sha256: program.execution.verifier.artifact_sha256,
+        profile_sha256: program.execution.verifier.profile_sha256,
+        environment_sha256: program.execution.verifier.environment_sha256,
+        policy_sha256: program.execution.verifier.policy_sha256,
+      } } : {}),
+      ...(program.execution.resume ? { resume: { from_program_id: program.execution.resume.from_program_id, state_key: program.execution.resume.state_key, transition: program.execution.resume.transition } } : {}),
+      ...(program.execution.delegation ? { delegation: {
+        group_id: program.execution.delegation.group_id,
+        parent_plan_role: program.execution.delegation.parent_plan_role,
+        parent_plan_sha256: program.execution.delegation.parent_plan_sha256,
+        max_delegated_calls: program.execution.delegation.max_delegated_calls,
+        child_reserved_calls: program.execution.delegation.child_reserved_calls,
+      } } : {}),
+    },
+    admission: program.admission,
+    sharing: program.sharing,
+    disposition: program.disposition,
+  };
+}
+
 function short(value: string) {
   return value.length > 18 ? `${value.slice(0, 11)}…${value.slice(-6)}` : value;
 }
@@ -102,7 +138,7 @@ export default function CampaignApp() {
               {events.map((event) => <div key={`${event.sequence}-${event.type}`}><time>+{(event.at_ns / 1e6).toFixed(2)} ms</time><b>{event.type.replaceAll('.', ' ')}</b><small title={event.reason || event.physical_execution_id}>{event.reason || short(event.physical_execution_id ?? '')}</small></div>)}
             </div>
             <div className="campaign-identities"><code>plan {short(selectedProgram.plan_sha256)}</code><code>grants {short(selectedProgram.grant_set_sha256)}</code><code>{selectedProgram.privacy_partition}</code><code>workspace {short(selectedProgram.workspace_fixture_sha256)}</code></div>
-            <details className="campaign-contract"><summary>Projected typed contract</summary><pre>{JSON.stringify(selectedProgram, null, 2)}</pre></details>
+            <details className="campaign-contract"><summary>Projected typed contract</summary><pre>{JSON.stringify(projectedContract(selectedProgram), null, 2)}</pre></details>
           </article>
         </section>
         <CampaignLanes data={data} onSelect={setSelectedID} />

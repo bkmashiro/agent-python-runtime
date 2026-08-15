@@ -41,6 +41,7 @@ describe('campaign projection', () => {
       (value: ReturnType<typeof projection>) => { value.programs[0].family = 'private body'; },
       (value: ReturnType<typeof projection>) => { value.programs[0].privacy_partition = 'private body'; },
       (value: ReturnType<typeof projection>) => { value.programs[0].execution.cancel_point = 'private body'; },
+      (value: ReturnType<typeof projection>) => { (value.programs[0].execution as { workflow_state_key?: string }).workflow_state_key = 'private body'; },
       (value: ReturnType<typeof projection>) => { value.valid_claim = 'private body'; },
     ];
     for (const mutate of fields) {

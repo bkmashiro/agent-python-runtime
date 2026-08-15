@@ -34,9 +34,11 @@ export interface CampaignProgram {
   execution: {
     kind: string;
     cancel_point: string;
+    source_program_id?: string;
     workflow_state_key?: string;
-    resume?: { state_key?: string; transition?: string };
-    delegation?: { group_id?: string };
+    verifier?: { source_sha256?: string; artifact_sha256?: string; profile_sha256?: string; environment_sha256?: string; policy_sha256?: string };
+    resume?: { from_program_id?: string; state_key?: string; transition?: string };
+    delegation?: { group_id?: string; parent_plan_role?: string; parent_plan_sha256?: string; max_delegated_calls?: number; child_reserved_calls?: number };
   };
   admission: string;
   sharing: string;
@@ -144,7 +146,20 @@ export function validateCampaignProjection(value: unknown): CampaignProjection {
   }
   const programs = new Map(candidate.programs.map((program) => [program.id, program]));
   const ids = new Set(programs.keys());
-  if (ids.size !== 20 || candidate.programs.some((program) => !programID.test(program.id) || !Number.isInteger(program.release_offset_ms) || program.release_offset_ms < 0 || !families.has(program.family) || !executionKinds.has(program.execution?.kind) || !cancelPoints.has(program.execution?.cancel_point) || !digest.test(program.plan_sha256) || !digest.test(program.grant_set_sha256) || !digest.test(program.workspace_fixture_sha256) || !privacyPartitions.has(program.privacy_partition) || !admissions.has(program.admission) || !sharingStates.has(program.sharing) || !dispositions.has(program.disposition))) {
+  if (ids.size !== 20 || candidate.programs.some((program) => {
+    const execution = program.execution;
+    const verifier = execution?.verifier;
+    const resume = execution?.resume;
+    const delegation = execution?.delegation;
+    return !programID.test(program.id) || !Number.isInteger(program.release_offset_ms) || program.release_offset_ms < 0 || !families.has(program.family) ||
+      !executionKinds.has(execution?.kind) || !cancelPoints.has(execution?.cancel_point) ||
+      (execution.source_program_id !== undefined && !programID.test(execution.source_program_id)) ||
+      (execution.workflow_state_key !== undefined && execution.workflow_state_key !== 'workflow-main') ||
+      (verifier !== undefined && ![verifier.source_sha256, verifier.artifact_sha256, verifier.profile_sha256, verifier.environment_sha256, verifier.policy_sha256].every((value) => digest.test(value ?? ''))) ||
+      (resume !== undefined && (resume.from_program_id !== 'P13' || resume.state_key !== 'workflow-main' || !['freshness_changed', 'plan_grant_changed', 'expired'].includes(resume.transition ?? ''))) ||
+      (delegation !== undefined && (!['delegation-main', 'delegation-widening'].includes(delegation.group_id ?? '') || delegation.parent_plan_role !== 'consumer-left' || !digest.test(delegation.parent_plan_sha256 ?? '') || delegation.max_delegated_calls !== 1 || delegation.child_reserved_calls !== 1)) ||
+      !digest.test(program.plan_sha256) || !digest.test(program.grant_set_sha256) || !digest.test(program.workspace_fixture_sha256) || !privacyPartitions.has(program.privacy_partition) || !admissions.has(program.admission) || !sharingStates.has(program.sharing) || !dispositions.has(program.disposition);
+  })) {
     throw new Error('campaign program projection is invalid');
   }
   let lastNS = -1;

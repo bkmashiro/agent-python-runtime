@@ -60,6 +60,19 @@ func TestRuntimeCampaignAdapterComposesTypedMechanismsWithoutPaperLabels(t *test
 			t.Errorf("close adapter: %v", err)
 		}
 	}()
+	forged := manifest.Programs[17]
+	forgedRequest := workflowbench.CampaignRequest{
+		Source: forged.Source, SourceSHA256: forged.SourceSHA256, Inputs: forged.Inputs, InputsSHA256: forged.InputsSHA256,
+		PlanSHA256: forged.PlanSHA256, GrantSetSHA256: forged.GrantSetSHA256, PrivacyPartition: forged.PrivacyPartition,
+		WorkspaceFixtureSHA256: forged.WorkspaceFixtureSHA256, Execution: forged.Execution,
+	}
+	forgedRequest.Execution.Delegation = &workflowbench.CampaignDelegationContract{
+		GroupID: forged.Execution.Delegation.GroupID, ParentPlanRole: forged.Execution.Delegation.ParentPlanRole,
+		ParentPlanSHA256: forged.PlanSHA256, MaxDelegatedCalls: forged.Execution.Delegation.MaxDelegatedCalls, ChildReservedCalls: forged.Execution.Delegation.ChildReservedCalls,
+	}
+	if admission := adapter.Admit(context.Background(), forgedRequest, workflowbench.CampaignQualified); admission.Allowed || admission.Reason != "invalid_delegation_contract" {
+		t.Fatalf("forged parent authority admitted: %+v", admission)
+	}
 	evidence, err := workflowbench.RunTransparentCampaign(context.Background(), manifest, workflowbench.CampaignQualified, adapter)
 	if err != nil {
 		t.Fatal(err)

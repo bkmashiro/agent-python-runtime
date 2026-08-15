@@ -234,6 +234,10 @@ func (manifest CampaignManifest) Validate() error {
 	if manifest.SchemaVersion != CampaignManifestSchemaVersion || manifest.CampaignID == "" || manifest.PhysicalSlots == 0 || len(manifest.Programs) != 20 || len(manifest.WalkthroughProgramIDs) == 0 {
 		return ErrInvalidCampaignManifest
 	}
+	plans, err := CanonicalCampaignPlans()
+	if err != nil {
+		return ErrInvalidCampaignManifest
+	}
 	seen := make(map[string]struct{}, len(manifest.Programs))
 	families := map[string]int{}
 	var lastRelease int64
@@ -244,6 +248,21 @@ func (manifest CampaignManifest) Validate() error {
 			!campaignDigestPattern.MatchString(program.PlanSHA256) || !campaignDigestPattern.MatchString(program.GrantSetSHA256) || !campaignDigestPattern.MatchString(program.WorkspaceFixtureSHA256) ||
 			program.PrivacyPartition == "" || program.Family == "" || len(program.CannotProve) == 0 || program.Execution.validate(seen) != nil || program.Expected.Admission == "" || program.Expected.Sharing == "" || program.Expected.Disposition == "" {
 			return ErrInvalidCampaignManifest
+		}
+		plan := plans[program.PlanSHA256]
+		if plan == nil {
+			return ErrInvalidCampaignManifest
+		}
+		grants, err := json.Marshal(plan.Grants())
+		if err != nil || campaignDigest(grants) != program.GrantSetSHA256 {
+			return ErrInvalidCampaignManifest
+		}
+		if delegation := program.Execution.Delegation; delegation != nil {
+			expectedParent, _, err := campaignPlan(delegation.ParentPlanRole)
+			decision := capability.CompareDelegation(plan, plan)
+			if err != nil || expectedParent != delegation.ParentPlanSHA256 || !decision.Allowed || decision.ReservedCalls != delegation.ChildReservedCalls {
+				return ErrInvalidCampaignManifest
+			}
 		}
 		for _, dependency := range program.Dependencies {
 			if _, ok := seen[dependency]; !ok {

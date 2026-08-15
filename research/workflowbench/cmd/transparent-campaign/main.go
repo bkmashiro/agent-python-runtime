@@ -2,26 +2,39 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
-const summarySchemaVersion = "pysolate.transparent-campaign-run-summary.v1"
+const summarySchemaVersion = "pysolate.transparent-campaign-run-summary.v2"
+
+type hostSummary struct {
+	GOOS      string `json:"goos"`
+	GOARCH    string `json:"goarch"`
+	GoVersion string `json:"go_version"`
+	Kernel    string `json:"kernel"`
+}
 
 type runSummary struct {
 	SchemaVersion        string            `json:"schema_version"`
 	ArtifactSHA256       string            `json:"artifact_sha256"`
 	ArtifactSourceCommit string            `json:"artifact_source_commit"`
 	CampaignSourceCommit string            `json:"campaign_source_commit"`
+	ManifestSHA256       string            `json:"manifest_sha256"`
+	Host                 hostSummary       `json:"host"`
 	Repetitions          int               `json:"repetitions"`
 	Runs                 []runSummaryEntry `json:"runs"`
 }
@@ -30,6 +43,7 @@ type runSummaryEntry struct {
 	Repetition          int                             `json:"repetition"`
 	Treatment           workflowbench.CampaignTreatment `json:"treatment"`
 	EvidenceFile        string                          `json:"evidence_file"`
+	EvidenceSHA256      string                          `json:"evidence_sha256"`
 	PhysicalExecutions  uint32                          `json:"physical_executions"`
 	WallNS              int64                           `json:"wall_ns"`
 	ProcessCPUNS        uint64                          `json:"process_cpu_ns,omitempty"`
@@ -71,12 +85,22 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, campaignSource
 	if err := os.Mkdir(output, 0o700); err != nil {
 		return fmt.Errorf("create private evidence directory: %w", err)
 	}
-	if err := writeJSON(filepath.Join(output, "manifest.json"), manifest); err != nil {
+	manifestPath := filepath.Join(output, "manifest.json")
+	if err := writeJSON(manifestPath, manifest); err != nil {
+		return err
+	}
+	manifestSHA256, err := fileSHA256(manifestPath)
+	if err != nil {
+		return err
+	}
+	host, err := currentHostSummary(ctx)
+	if err != nil {
 		return err
 	}
 	summary := runSummary{
 		SchemaVersion: summarySchemaVersion, ArtifactSHA256: executor.ArtifactSHA256(),
-		ArtifactSourceCommit: artifactSourceCommit, CampaignSourceCommit: campaignSourceCommit, Repetitions: repetitions,
+		ArtifactSourceCommit: artifactSourceCommit, CampaignSourceCommit: campaignSourceCommit,
+		ManifestSHA256: manifestSHA256, Host: host, Repetitions: repetitions,
 	}
 	for repetition := 0; repetition < repetitions; repetition++ {
 		for _, treatment := range workflowbench.CampaignTreatmentOrder(repetition) {
@@ -85,11 +109,16 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, campaignSource
 				return fmt.Errorf("repetition %d treatment %s: %w", repetition, treatment, err)
 			}
 			filename := evidenceFilename(repetition, treatment)
-			if err := writeJSON(filepath.Join(output, filename), evidence); err != nil {
+			evidencePath := filepath.Join(output, filename)
+			if err := writeJSON(evidencePath, evidence); err != nil {
+				return err
+			}
+			evidenceSHA256, err := fileSHA256(evidencePath)
+			if err != nil {
 				return err
 			}
 			summary.Runs = append(summary.Runs, runSummaryEntry{
-				Repetition: repetition, Treatment: treatment, EvidenceFile: filename,
+				Repetition: repetition, Treatment: treatment, EvidenceFile: filename, EvidenceSHA256: evidenceSHA256,
 				PhysicalExecutions: evidence.PhysicalExecutions, WallNS: evidence.WallNS,
 				ProcessCPUNS: evidence.ProcessCPUNS, ProcessCPUAvailable: evidence.ProcessCPUAvailable,
 			})
@@ -131,6 +160,28 @@ func executeTreatment(ctx context.Context, output string, executor *workflowbenc
 	evidence, runErr := workflowbench.RunTransparentCampaign(ctx, manifest, treatment, adapter)
 	closeErr := adapter.Close(context.Background())
 	return evidence, errors.Join(runErr, closeErr)
+}
+
+func currentHostSummary(ctx context.Context) (hostSummary, error) {
+	command := exec.CommandContext(ctx, "uname", "-srv")
+	output, err := command.Output()
+	if err != nil {
+		return hostSummary{}, fmt.Errorf("record host kernel: %w", err)
+	}
+	kernel := strings.TrimSpace(string(output))
+	if kernel == "" {
+		return hostSummary{}, errors.New("host kernel identity is empty")
+	}
+	return hostSummary{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, GoVersion: runtime.Version(), Kernel: kernel}, nil
+}
+
+func fileSHA256(path string) (string, error) {
+	value, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(value)
+	return fmt.Sprintf("sha256:%x", digest[:]), nil
 }
 
 func evidenceFilename(repetition int, treatment workflowbench.CampaignTreatment) string {

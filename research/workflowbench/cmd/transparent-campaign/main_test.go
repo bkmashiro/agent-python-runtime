@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
@@ -21,6 +22,13 @@ func TestEvidenceFilenameAndPrivateWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode=%o", info.Mode().Perm())
+		t.Fatalf("mode=%#o", info.Mode().Perm())
+	}
+	digest, err := fileSHA256(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(digest, "sha256:") || len(digest) != 71 {
+		t.Fatalf("digest=%q", digest)
 	}
 }

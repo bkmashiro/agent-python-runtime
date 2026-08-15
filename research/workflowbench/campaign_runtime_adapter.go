@@ -402,6 +402,12 @@ func (adapter *RuntimeCampaignAdapter) admitDelegation(ctx context.Context, requ
 	if contract == nil {
 		return CampaignAdmission{Reason: "invalid_delegation", Disposition: "rejected"}
 	}
+	expectedParent, _, planErr := campaignPlan(contract.ParentPlanRole)
+	child := adapter.plans[request.PlanSHA256]
+	childDecision := capability.CompareDelegation(child, child)
+	if planErr != nil || expectedParent != contract.ParentPlanSHA256 || !childDecision.Allowed || childDecision.ReservedCalls != contract.ChildReservedCalls {
+		return CampaignAdmission{Reason: "invalid_delegation_contract", Disposition: "rejected"}
+	}
 	adapter.mu.Lock()
 	group := adapter.delegations[contract.GroupID]
 	if group == nil {

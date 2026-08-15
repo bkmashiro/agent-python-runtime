@@ -184,6 +184,12 @@ func TestTransparentCampaignManifestRejectsIdentityAndRoleTampering(t *testing.T
 		{"delegation missing parent identity", func(value *workflowbench.CampaignManifest) {
 			value.Programs[16].Execution.Delegation.ParentPlanSHA256 = ""
 		}},
+		{"delegation role identity mismatch", func(value *workflowbench.CampaignManifest) {
+			value.Programs[17].Execution.Delegation.ParentPlanSHA256 = value.Programs[17].PlanSHA256
+		}},
+		{"delegation reservation mismatch", func(value *workflowbench.CampaignManifest) {
+			value.Programs[16].Execution.Delegation.ChildReservedCalls = 2
+		}},
 		{"walkthrough", func(value *workflowbench.CampaignManifest) { value.WalkthroughProgramIDs[0] = "P99" }},
 	}
 	for _, test := range cases {

@@ -705,6 +705,12 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
   produced no physical execution. This is correctness evidence only; balanced repetitions
   are still required before any performance claim. A private evidence CLI records each
   baseline/qualified run with artifact and campaign source attribution.
+- 2026-08-15: Independent adversarial review found that a forged delegation parent digest
+  could remain well-formed while no longer matching its typed parent role. The research
+  manifest and adapter now both bind role → canonical parent Plan and bind
+  `child_reserved_calls` to the child Plan's actual reservation before staging. The private
+  run summary was upgraded to v2 with manifest/evidence hashes and host/kernel/Go
+  provenance; the earlier three-pair v1 run is exploratory and is not publication evidence.
 
 ## Short prompt to start this Mega-Goal
 

@@ -161,6 +161,58 @@ func TestCampaignEvidenceRejectsMechanismEventTamperingAfterReseal(t *testing.T)
 			t.Fatalf("inverted lifecycle accepted: %v", err)
 		}
 	})
+	t.Run("body-bearing admission reason", func(t *testing.T) {
+		forged := evidence.Clone()
+		forged.Rows[0].AdmissionReason = "private body"
+		for index := range forged.Events {
+			if forged.Events[index].ProgramID == "P01" && forged.Events[index].Type == "admission.accepted" {
+				forged.Events[index].Reason = "private body"
+			}
+		}
+		resealCampaignEvidence(&forged)
+		if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+			t.Fatalf("body-bearing admission accepted: %v", err)
+		}
+	})
+	t.Run("near-match exact identity", func(t *testing.T) {
+		forged := evidence.Clone()
+		foreign := forged.Rows[6].PhysicalExecutionID
+		forged.Rows[4].PhysicalExecutionID = foreign
+		for index := range forged.Events {
+			if forged.Events[index].ProgramID == "P05" && (forged.Events[index].Type == "sharing.decided" || forged.Events[index].Type == "logical.terminal") {
+				forged.Events[index].PhysicalExecutionID = foreign
+			}
+		}
+		resealCampaignEvidence(&forged)
+		if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+			t.Fatalf("near-match sharing accepted: %v", err)
+		}
+	})
+	t.Run("physical before admission", func(t *testing.T) {
+		forged := evidence.Clone()
+		accepted, queued := -1, -1
+		for index, event := range forged.Events {
+			if event.ProgramID != "P01" {
+				continue
+			}
+			if event.Type == "admission.accepted" {
+				accepted = index
+			}
+			if event.Type == "physical.queued" {
+				queued = index
+			}
+		}
+		if accepted < 0 || queued < 0 {
+			t.Fatal("missing temporal fixtures")
+		}
+		forged.Events[accepted].Type, forged.Events[queued].Type = forged.Events[queued].Type, forged.Events[accepted].Type
+		forged.Events[accepted].Reason, forged.Events[queued].Reason = forged.Events[queued].Reason, forged.Events[accepted].Reason
+		forged.Events[accepted].PhysicalExecutionID, forged.Events[queued].PhysicalExecutionID = forged.Events[queued].PhysicalExecutionID, forged.Events[accepted].PhysicalExecutionID
+		resealCampaignEvidence(&forged)
+		if err := workflowbench.ValidateCampaignEvidence(manifest, forged); !errors.Is(err, workflowbench.ErrInvalidCampaignEvidence) {
+			t.Fatalf("pre-admission physical event accepted: %v", err)
+		}
+	})
 }
 
 func TestCampaignTreatmentOrderIsBalanced(t *testing.T) {

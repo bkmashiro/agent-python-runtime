@@ -10,6 +10,7 @@ import (
 	"html"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -86,12 +87,16 @@ type projectionRun struct {
 }
 
 type projectionProgram struct {
-	ID              string                                  `json:"id"`
-	Family          string                                  `json:"family"`
-	ReleaseOffsetMS int64                                   `json:"release_offset_ms"`
-	Execution       workflowbench.CampaignExecutionContract `json:"execution"`
-	Admission       string                                  `json:"admission"`
-	Disposition     string                                  `json:"disposition"`
+	ID                     string                                  `json:"id"`
+	Family                 string                                  `json:"family"`
+	ReleaseOffsetMS        int64                                   `json:"release_offset_ms"`
+	PlanSHA256             string                                  `json:"plan_sha256"`
+	GrantSetSHA256         string                                  `json:"grant_set_sha256"`
+	PrivacyPartition       string                                  `json:"privacy_partition"`
+	WorkspaceFixtureSHA256 string                                  `json:"workspace_fixture_sha256"`
+	Execution              workflowbench.CampaignExecutionContract `json:"execution"`
+	Admission              string                                  `json:"admission"`
+	Disposition            string                                  `json:"disposition"`
 }
 
 type projectionEvent struct {
@@ -121,16 +126,17 @@ func main() {
 	expectedArtifact := flag.String("expected-artifact", "", "required Guest artifact SHA-256")
 	expectedCampaign := flag.String("expected-campaign-commit", "", "required campaign source commit")
 	jsonOutput := flag.String("json-output", "", "public projection JSON path")
-	svgOutput := flag.String("svg-output", "", "paper SVG path")
+	svgOutput := flag.String("svg-output", "", "paired-result SVG path")
+	flowSVGOutput := flag.String("flow-svg-output", "", "arrival-to-terminal SVG path")
 	markdownOutput := flag.String("markdown-output", "", "canonical Markdown report path")
 	flag.Parse()
-	if err := run(*evidenceRoot, *expectedArtifact, *expectedCampaign, *jsonOutput, *svgOutput, *markdownOutput); err != nil {
+	if err := run(*evidenceRoot, *expectedArtifact, *expectedCampaign, *jsonOutput, *svgOutput, *flowSVGOutput, *markdownOutput); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, markdownOutput string) error {
-	if root == "" || expectedArtifact == "" || expectedCampaign == "" || jsonOutput == "" || svgOutput == "" || markdownOutput == "" {
+func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, flowSVGOutput, markdownOutput string) error {
+	if root == "" || expectedArtifact == "" || expectedCampaign == "" || jsonOutput == "" || svgOutput == "" || flowSVGOutput == "" || markdownOutput == "" {
 		return errors.New("all projection inputs and outputs are required")
 	}
 	summary, err := loadSummary(filepath.Join(root, "summary.json"))
@@ -152,6 +158,15 @@ func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, markdo
 	if err != nil {
 		return err
 	}
+	canonicalManifest, err := workflowbench.CanonicalTransparentCampaign()
+	if err != nil {
+		return err
+	}
+	canonicalJSON, err := json.Marshal(canonicalManifest)
+	canonicalDigest := sha256.Sum256(append(canonicalJSON, '\n'))
+	if err != nil || fmt.Sprintf("sha256:%x", canonicalDigest) != summary.ManifestSHA256 {
+		return errors.New("private manifest is not the canonical frozen campaign")
+	}
 	projection := publicProjection{
 		SchemaVersion:    projectionSchema,
 		Source:           projectionSource{ArtifactSHA256: summary.ArtifactSHA256, ArtifactSourceCommit: summary.ArtifactSourceCommit, CampaignSourceCommit: summary.CampaignSourceCommit, ManifestSHA256: summary.ManifestSHA256, Host: summary.Host, Repetitions: summary.Repetitions},
@@ -160,6 +175,7 @@ func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, markdo
 	}
 	byRepetition := make(map[int]map[workflowbench.CampaignTreatment]projectionRun)
 	var walkthroughSet bool
+	representativeRows := make(map[string]workflowbench.CampaignRow)
 	seenFiles := make(map[string]struct{}, len(summary.Runs))
 	for _, run := range summary.Runs {
 		if run.Repetition < 0 || run.Repetition >= summary.Repetitions || (run.Treatment != workflowbench.CampaignBaseline && run.Treatment != workflowbench.CampaignQualified) || filepath.Base(run.EvidenceFile) != run.EvidenceFile {
@@ -190,15 +206,22 @@ func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, markdo
 			return errors.New("duplicate repetition treatment")
 		}
 		byRepetition[run.Repetition][run.Treatment] = projected
-		if !walkthroughSet && run.Treatment == workflowbench.CampaignQualified {
+		if !walkthroughSet && run.Repetition == 0 && run.Treatment == workflowbench.CampaignQualified {
 			for _, event := range evidence.Events {
 				projection.WalkthroughEvents = append(projection.WalkthroughEvents, projectionEvent(event))
+			}
+			for _, row := range evidence.Rows {
+				representativeRows[row.ProgramID] = row
 			}
 			walkthroughSet = true
 		}
 	}
 	for _, program := range manifest.Programs {
-		projection.Programs = append(projection.Programs, projectionProgram{ID: program.ID, Family: program.Family, ReleaseOffsetMS: program.ReleaseOffsetMS, Execution: program.Execution, Admission: program.Expected.Admission, Disposition: program.Expected.Disposition})
+		row, ok := representativeRows[program.ID]
+		if !ok {
+			return errors.New("representative qualified evidence is missing a program row")
+		}
+		projection.Programs = append(projection.Programs, projectionProgram{ID: program.ID, Family: program.Family, ReleaseOffsetMS: program.ReleaseOffsetMS, PlanSHA256: program.PlanSHA256, GrantSetSHA256: program.GrantSetSHA256, PrivacyPartition: program.PrivacyPartition, WorkspaceFixtureSHA256: program.WorkspaceFixtureSHA256, Execution: program.Execution, Admission: row.AdmissionReason, Disposition: row.Disposition})
 	}
 	if err := computeMetrics(&projection, byRepetition, summary.Repetitions); err != nil {
 		return err
@@ -207,6 +230,9 @@ func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, markdo
 		return err
 	}
 	if err := writeFile(svgOutput, []byte(renderSVG(projection))); err != nil {
+		return err
+	}
+	if err := writeFile(flowSVGOutput, []byte(renderFlowSVG(projection))); err != nil {
 		return err
 	}
 	return writeFile(markdownOutput, []byte(renderMarkdown(projection)))
@@ -243,7 +269,7 @@ func computeMetrics(projection *publicProjection, paired map[int]map[workflowben
 		qualifiedPhysical = append(qualifiedPhysical, float64(qualified.PhysicalExecutions))
 		baseWall, qualifiedWall = append(baseWall, base.WallMS), append(qualifiedWall, qualified.WallMS)
 		baseCPU, qualifiedCPU = append(baseCPU, base.ProcessCPUMS), append(qualifiedCPU, qualified.ProcessCPUMS)
-		physicalReduction = append(physicalReduction, float64(base.PhysicalExecutions-qualified.PhysicalExecutions))
+		physicalReduction = append(physicalReduction, float64(base.PhysicalExecutions)-float64(qualified.PhysicalExecutions))
 		wallReduction = append(wallReduction, base.WallMS-qualified.WallMS)
 		wallPct = append(wallPct, (base.WallMS-qualified.WallMS)/base.WallMS*100)
 		cpuReduction = append(cpuReduction, base.ProcessCPUMS-qualified.ProcessCPUMS)
@@ -296,8 +322,66 @@ func renderSVG(projection publicProjection) string {
 	return strings.ReplaceAll(body.String(), `\"`, `"`) + "\n"
 }
 
+func renderFlowSVG(projection publicProjection) string {
+	const width = 900
+	const left = 72.0
+	const right = 24.0
+	const top = 72.0
+	const rowHeight = 22.0
+	height := int(top + float64(len(projection.Programs))*rowHeight + 48)
+	maxNS := int64(1)
+	for _, event := range projection.WalkthroughEvents {
+		if event.AtNS > maxNS {
+			maxNS = event.AtNS
+		}
+	}
+	x := func(at int64) float64 { return left + float64(at)/float64(maxNS)*(float64(width)-left-right) }
+	var body strings.Builder
+	body.WriteString(fmt.Sprintf("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"0 0 %d %d\" role=\"img\" aria-label=\"Qualified campaign arrival-to-terminal flow\"><rect width=\"100%%\" height=\"100%%\" fill=\"white\"/><g font-family=\"Inter,Arial,sans-serif\" fill=\"#17202a\"><text x=\"24\" y=\"28\" font-size=\"17\" font-weight=\"700\">Qualified campaign arrival-to-terminal flow</text><text x=\"24\" y=\"48\" font-size=\"10\" fill=\"#667085\">repetition 0 · linear measured wall time · 20 logical lanes · physical intervals only</text>", width, height, width, height))
+	for _, tick := range []float64{0, .5, 1} {
+		tickX := left + tick*(float64(width)-left-right)
+		body.WriteString(fmt.Sprintf("<line x1=\"%.1f\" y1=\"58\" x2=\"%.1f\" y2=\"%d\" stroke=\"#e4e7ec\"/><text x=\"%.1f\" y=\"66\" text-anchor=\"middle\" font-size=\"8\" fill=\"#667085\">%.1f s</text>", tickX, tickX, height-28, tickX, tick*float64(maxNS)/1e9))
+	}
+	for index, program := range projection.Programs {
+		y := top + float64(index)*rowHeight
+		body.WriteString(fmt.Sprintf("<text x=\"24\" y=\"%.1f\" font-size=\"9\" font-weight=\"700\">%s</text><line x1=\"%.1f\" y1=\"%.1f\" x2=\"%.1f\" y2=\"%.1f\" stroke=\"#f2f4f7\"/>", y+3, html.EscapeString(program.ID), left, y, float64(width)-right, y))
+		events := make([]projectionEvent, 0)
+		for _, event := range projection.WalkthroughEvents {
+			if event.ProgramID == program.ID {
+				events = append(events, event)
+			}
+		}
+		ends := make(map[string]projectionEvent)
+		for _, event := range events {
+			if event.Type == "physical.ended" {
+				ends[event.PhysicalExecutionID] = event
+			}
+		}
+		body.WriteString(fmt.Sprintf("<circle cx=\"%.1f\" cy=\"%.1f\" r=\"2\" fill=\"#d9a514\"/>", x(program.ReleaseOffsetMS*1e6), y))
+		for _, event := range events {
+			switch {
+			case event.Type == "physical.started":
+				end, ok := ends[event.PhysicalExecutionID]
+				if ok {
+					body.WriteString(fmt.Sprintf("<rect x=\"%.1f\" y=\"%.1f\" width=\"%.1f\" height=\"7\" rx=\"2\" fill=\"#287d8e\"/>", x(event.AtNS), y-3.5, math.Max(1, x(end.AtNS)-x(event.AtNS))))
+				}
+			case strings.HasPrefix(event.Type, "workspace.") || strings.HasPrefix(event.Type, "workflow.") || strings.HasPrefix(event.Type, "verification.") || strings.HasPrefix(event.Type, "sharing.") || strings.HasPrefix(event.Type, "authority.") || strings.HasPrefix(event.Type, "delegation."):
+				body.WriteString(fmt.Sprintf("<rect x=\"%.1f\" y=\"%.1f\" width=\"2\" height=\"9\" fill=\"#667eea\"/>", x(event.AtNS)-1, y-4.5))
+			case event.Type == "logical.terminal":
+				stroke := "#168b5b"
+				if program.Disposition == "rejected" || program.Disposition == "cancelled" {
+					stroke = "#c98900"
+				}
+				body.WriteString(fmt.Sprintf("<circle cx=\"%.1f\" cy=\"%.1f\" r=\"3\" fill=\"white\" stroke=\"%s\" stroke-width=\"1.5\"/>", x(event.AtNS), y, stroke))
+			}
+		}
+	}
+	body.WriteString(fmt.Sprintf("<g transform=\"translate(24 %d)\" font-size=\"8\" fill=\"#667085\"><rect width=\"12\" height=\"6\" rx=\"2\" fill=\"#287d8e\"/><text x=\"18\" y=\"6\">physical Guest/verifier</text><rect x=\"144\" width=\"3\" height=\"8\" fill=\"#667eea\"/><text x=\"154\" y=\"6\">mechanism</text><circle cx=\"238\" cy=\"3\" r=\"3\" fill=\"white\" stroke=\"#168b5b\"/><text x=\"246\" y=\"6\">terminal</text></g></g></svg>", height-18))
+	return body.String() + "\n"
+}
+
 func renderMarkdown(projection publicProjection) string {
-	return fmt.Sprintf(`# Authority-transparent campaign results
+	report := fmt.Sprintf(`# Authority-transparent campaign results
 
 ## Conclusion
 
@@ -331,6 +415,24 @@ Across %d paired repetitions of the fixed 20-program campaign, qualified executi
 		projection.Qualified.PhysicalExecutions.Median, projection.Qualified.PhysicalExecutions.Min, projection.Qualified.PhysicalExecutions.Max, projection.Qualified.WallMS.Median/1000, projection.Qualified.WallMS.Min/1000, projection.Qualified.WallMS.Max/1000, projection.Qualified.ProcessCPUMS.Median/1000, projection.Qualified.ProcessCPUMS.Min/1000, projection.Qualified.ProcessCPUMS.Max/1000,
 		projection.Source.CampaignSourceCommit, projection.Source.ArtifactSHA256, projection.Source.ArtifactSourceCommit, projection.Source.ManifestSHA256,
 		html.EscapeString(projection.Source.Host.GOOS), html.EscapeString(projection.Source.Host.GOARCH), html.EscapeString(projection.Source.Host.GoVersion), html.EscapeString(projection.Source.Host.Kernel), projection.ValidClaim, projection.InvalidInference)
+	var appendix strings.Builder
+	appendix.WriteString("\n## Qualified arrival-to-terminal flow\n\n![Qualified repetition 0 arrival-to-terminal flow](../figures/authority-transparent-campaign-flow.svg)\n\n## Fixed 20-case contract\n\n| ID | Family | Release | Typed operation | Actual admission | Actual terminal |\n|---|---|---:|---|---|---|\n")
+	for _, program := range projection.Programs {
+		appendix.WriteString(fmt.Sprintf("| %s | %s | +%d ms | %s | %s | %s |\n", program.ID, strings.ReplaceAll(program.Family, "_", " "), program.ReleaseOffsetMS, strings.ReplaceAll(string(program.Execution.Kind), "_", " "), program.Admission, program.Disposition))
+	}
+	physical := func(programID, eventType string) string {
+		for _, event := range projection.WalkthroughEvents {
+			if event.ProgramID == programID && event.Type == eventType {
+				return event.PhysicalExecutionID
+			}
+		}
+		return "none"
+	}
+	appendix.WriteString("\n## Observed logical-to-physical identity\n\n| Logical cases | Qualified physical identity | Observed boundary |\n|---|---|---|\n")
+	appendix.WriteString(fmt.Sprintf("| P05 / P06 | %s / %s | exact request identity reused one physical Guest result |\n", physical("P05", "sharing.decided"), physical("P06", "sharing.decided")))
+	appendix.WriteString(fmt.Sprintf("| P10 / P11 | %s / %s | exact sealed-root verifier identity reused one verifier execution |\n", physical("P10", "verification.completed"), physical("P11", "verification.completed")))
+	appendix.WriteString("| P18 / P19 / P20 | none | rejected or cancelled before physical execution |\n")
+	return report + appendix.String()
 }
 
 func mustJSON(value any) []byte {

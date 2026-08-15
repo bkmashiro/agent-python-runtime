@@ -469,22 +469,39 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 			return ErrInvalidCampaignEvidence
 		}
 	}
+	expectedAdmissions := campaignExpectedAdmissionReasons(manifest)
 	for _, program := range manifest.Programs {
 		events := byProgram[program.ID]
 		row := rows[program.ID]
-		if len(events["logical.released"]) != 1 || events["logical.released"][0].Reason != "manifest_offset" || len(events["logical.terminal"]) != 1 || events["logical.terminal"][0].Reason != row.Disposition || events["logical.terminal"][0].PhysicalExecutionID != row.PhysicalExecutionID {
+		released := events["logical.released"]
+		terminalEvents := events["logical.terminal"]
+		if len(released) != 1 || released[0].Reason != "manifest_offset" || len(terminalEvents) != 1 || terminalEvents[0].Reason != row.Disposition || terminalEvents[0].PhysicalExecutionID != row.PhysicalExecutionID || row.AdmissionReason != expectedAdmissions[program.ID] {
 			return ErrInvalidCampaignEvidence
 		}
+		terminal := terminalEvents[0]
 		if program.Expected.Admission == "admit" {
-			if len(events["admission.accepted"]) != 1 || len(events["admission.rejected"]) != 0 || len(events["logical.started"]) != 1 || events["logical.started"][0].Reason != "" || events["admission.accepted"][0].Reason != row.AdmissionReason {
+			accepted, startedEvents := events["admission.accepted"], events["logical.started"]
+			if len(accepted) != 1 || len(events["admission.rejected"]) != 0 || len(startedEvents) != 1 || startedEvents[0].Reason != "" || accepted[0].Reason != row.AdmissionReason || !(released[0].Sequence < accepted[0].Sequence && accepted[0].Sequence < startedEvents[0].Sequence && startedEvents[0].Sequence < terminal.Sequence) {
 				return ErrInvalidCampaignEvidence
 			}
 			owner := physicalOwner[row.PhysicalExecutionID]
-			if owner == "" || (owner != program.ID && program.Execution.Kind != CampaignExactRequest) {
+			if owner == "" || (owner != program.ID && (program.Execution.Kind != CampaignExactRequest || !campaignExactIdentityEqual(program, programs[owner]))) {
 				return ErrInvalidCampaignEvidence
 			}
-		} else if len(events["admission.accepted"]) != 0 || len(events["admission.rejected"]) != 1 || len(events["logical.started"]) != 0 || events["admission.rejected"][0].Reason != row.AdmissionReason || len(events["physical.queued"])+len(events["physical.started"])+len(events["physical.ended"])+len(events["physical.cancelled"]) != 0 {
-			return ErrInvalidCampaignEvidence
+			for eventType, values := range events {
+				if strings.HasPrefix(eventType, "physical.") || (eventType != "logical.released" && eventType != "admission.accepted" && eventType != "logical.started" && eventType != "logical.terminal") {
+					for _, event := range values {
+						if event.Sequence <= startedEvents[0].Sequence || event.Sequence >= terminal.Sequence {
+							return ErrInvalidCampaignEvidence
+						}
+					}
+				}
+			}
+		} else {
+			rejected := events["admission.rejected"]
+			if len(events["admission.accepted"]) != 0 || len(rejected) != 1 || len(events["logical.started"]) != 0 || rejected[0].Reason != row.AdmissionReason || !(released[0].Sequence < rejected[0].Sequence && rejected[0].Sequence < terminal.Sequence) || len(events["physical.queued"])+len(events["physical.started"])+len(events["physical.ended"])+len(events["physical.cancelled"]) != 0 {
+				return ErrInvalidCampaignEvidence
+			}
 		}
 		for _, event := range events["physical.queued"] {
 			if event.Reason != "fifo" {
@@ -573,6 +590,41 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 		}
 	}
 	return nil
+}
+
+func campaignExpectedAdmissionReasons(manifest CampaignManifest) map[string]string {
+	reasons := make(map[string]string, len(manifest.Programs))
+	reserved := make(map[string]uint64)
+	for _, program := range manifest.Programs {
+		reason := "admitted"
+		switch program.Execution.Kind {
+		case CampaignResumeWorkflow:
+			if program.Execution.Resume != nil && program.Execution.Resume.Transition == CampaignResumeExpired {
+				reason = "authority_expired"
+			}
+		case CampaignDelegateChild:
+			contract := program.Execution.Delegation
+			switch {
+			case program.Execution.CancelPoint == CampaignCancelAfterParentTerminal:
+				reason = "parent_terminal"
+			case contract == nil || program.PlanSHA256 != contract.ParentPlanSHA256:
+				reason = "authority_widening"
+			case reserved[contract.GroupID]+uint64(contract.ChildReservedCalls) > uint64(contract.MaxDelegatedCalls):
+				reason = "delegation_budget"
+			default:
+				reserved[contract.GroupID] += uint64(contract.ChildReservedCalls)
+			}
+		}
+		reasons[program.ID] = reason
+	}
+	return reasons
+}
+
+func campaignExactIdentityEqual(left, right CampaignProgram) bool {
+	return left.Execution.Kind == CampaignExactRequest && right.Execution.Kind == CampaignExactRequest &&
+		left.SourceSHA256 == right.SourceSHA256 && left.InputsSHA256 == right.InputsSHA256 &&
+		left.PlanSHA256 == right.PlanSHA256 && left.GrantSetSHA256 == right.GrantSetSHA256 &&
+		left.WorkspaceFixtureSHA256 == right.WorkspaceFixtureSHA256 && left.PrivacyPartition == right.PrivacyPartition
 }
 
 func (evidence CampaignEvidence) Clone() CampaignEvidence {

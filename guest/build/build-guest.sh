@@ -245,7 +245,7 @@ FINAL_CACHE_ENTRY=""
 FINAL_CACHE_TMP=""
 FINAL_CACHE_LOCKED=0
 EXTENSIONS_LOCK_SHA256=""
-if [[ -n ${EXTENSIONS_LOCK} ]]; then
+if [[ -n ${EXTENSIONS_LOCK:-} ]]; then
   EXTENSIONS_LOCK_SHA256="sha256:$(sha256sum "${EXTENSIONS_LOCK}" | cut -d' ' -f1)"
 fi
 if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${SOURCE_TREE_ID} =~ ^[0-9a-f]{40}$ ]]; then

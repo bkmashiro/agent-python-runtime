@@ -29,6 +29,13 @@ func TestReceiptIdentityIsDeterministicAndBindsOperation(t *testing.T) {
 	}
 }
 
+func TestProgrammaticReceiptProjectsParentAndChildIdentity(t *testing.T) {
+	got := receipt.NewBound("host-run", "sha256:"+strings.Repeat("a", 64), "parent-call:program:1", "parent-call", "fetch_many", 0, `{}`, "ok", nil)
+	if got.CallID != "parent-call:program:1" || got.ParentCallID != "parent-call" {
+		t.Fatalf("receipt identity projection = %#v", got)
+	}
+}
+
 func TestReceiptStoresDigestsNotRawTargetOrResponse(t *testing.T) {
 	target := "https://api.example.test/data?token=secret"
 	response := []byte("secret response")

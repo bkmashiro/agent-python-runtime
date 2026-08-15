@@ -10,6 +10,14 @@
 **Repository:** `~/projects/agent-python-runtime`
 **Prepared baseline:** `0fa95dc922110bd653d338563a9b5aab8c8fecf8`
 
+## Progress
+
+- [x] Phase 0 — source archaeology and frozen implementation map
+- [x] Phase 1 — presentation contract and parent/child evidence
+- [ ] Phase 2 — approval suspension, lease and audit
+- [ ] Phase 3 — real-Guest parity, cancellation and zero-replay evidence
+- [ ] Phase 4 — full verification, independent review and closeout
+
 ## Mission
 
 Add an optional programmatic tool presentation and bounded hot approval waiting

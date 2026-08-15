@@ -106,3 +106,37 @@ func TestNamespacedProjectionRejectsCollisionsAndInjection(t *testing.T) {
 		t.Fatalf("duplicate module method error=%v", err)
 	}
 }
+
+func TestPlanPresentsDirectProgrammaticAndBothWithoutChangingRegistry(t *testing.T) {
+	registry := capability.NewRegistry()
+	spec := testSpec()
+	spec.Python = &capability.PythonProjection{Module: "workspace", Method: "read_text", Arguments: []string{"path"}, ResultField: "content"}
+	if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	direct, err := plan.Present(capability.ProgramSurfaceDirect, "")
+	if err != nil || len(direct.Tools) != 1 || direct.PythonPrelude != "" || direct.ParentCallID != "" {
+		t.Fatalf("direct=%+v err=%v", direct, err)
+	}
+	programmatic, err := plan.Present(capability.ProgramSurfaceProgrammatic, "parent-call")
+	if err != nil || len(programmatic.Tools) != 0 || programmatic.PythonPrelude == "" || programmatic.ParentCallID != "parent-call" {
+		t.Fatalf("programmatic=%+v err=%v", programmatic, err)
+	}
+	for _, fragment := range []string{`_program_parent_call_id = "parent-call"`, `+ ":program:" + str(_capability_call_sequence)`} {
+		if !strings.Contains(programmatic.PythonPrelude, fragment) {
+			t.Fatalf("programmatic prelude missing %q:\n%s", fragment, programmatic.PythonPrelude)
+		}
+	}
+	both, err := plan.Present(capability.ProgramSurfaceBoth, "parent-call")
+	if err != nil || len(both.Tools) != 1 || both.PythonPrelude == "" {
+		t.Fatalf("both=%+v err=%v", both, err)
+	}
+	if _, err := plan.Present(capability.ProgramSurfaceProgrammatic, "bad parent"); err == nil {
+		t.Fatal("invalid parent identity accepted")
+	}
+}

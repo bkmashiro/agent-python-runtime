@@ -134,6 +134,40 @@ func TestBrokerFailsClosedWhenConfiguredStageRejectsDynamicClaim(t *testing.T) {
 	}
 }
 
+func TestProgrammaticBrokerRequiresExactParentBoundChildSequence(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"hello"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent-call"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{
+		`{"call_id":"parent-call:program:2","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`,
+		`{"call_id":"near-parent:program:1","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`,
+	} {
+		response, err := broker.Call(context.Background(), []byte(raw))
+		if err != nil || !containsCode(response, "programmatic_call_identity_mismatch") {
+			t.Fatalf("response=%s err=%v", response, err)
+		}
+	}
+	valid, err := broker.Call(context.Background(), []byte(`{"call_id":"parent-call:program:1","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`))
+	if err != nil || !containsResult(valid, "hello") {
+		t.Fatalf("response=%s err=%v", valid, err)
+	}
+	receipts := broker.SnapshotReceipts()
+	if len(receipts) != 1 || receipts[0].CallID != "parent-call:program:1" || receipts[0].ParentCallID != "parent-call" {
+		t.Fatalf("receipts=%#v", receipts)
+	}
+}
+
 type stagedClaimer struct {
 	capability string
 	arguments  json.RawMessage

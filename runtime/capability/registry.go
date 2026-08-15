@@ -604,6 +604,14 @@ func validateAgainst(schema *jsonschema.Schema, raw []byte) error {
 }
 
 func generatePythonPrelude(specs []Spec) string {
+	return generatePythonPreludeForParent(specs, "")
+}
+
+func generateProgrammaticPythonPrelude(specs []Spec, parentCallID string) string {
+	return generatePythonPreludeForParent(specs, parentCallID)
+}
+
+func generatePythonPreludeForParent(specs []Spec, parentCallID string) string {
 	projected := make([]Spec, 0, len(specs))
 	modules := make(map[string]struct{})
 	for _, spec := range specs {
@@ -621,7 +629,11 @@ func generatePythonPrelude(specs []Spec) string {
 	}
 	sortStrings(moduleNames)
 	var builder strings.Builder
-	builder.WriteString("\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_capability_call_sequence = 0\n_stream_eager_calls = {}\n\nclass _CapabilityModule:\n    pass\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": \"capability-\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n")
+	if parentCallID == "" {
+		builder.WriteString("\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_capability_call_sequence = 0\n_stream_eager_calls = {}\n\nclass _CapabilityModule:\n    pass\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": \"capability-\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n")
+	} else {
+		fmt.Fprintf(&builder, "\nimport json as _host_json\nimport _agent_runtime_host as _host_bridge\n_program_parent_call_id = %s\n_capability_call_sequence = 0\n_stream_eager_calls = {}\n\nclass _CapabilityModule:\n    pass\n\ndef _capability_call(capability, arguments):\n    global _capability_call_sequence\n    _capability_call_sequence += 1\n    request = {\n        \"call_id\": _program_parent_call_id + \":program:\" + str(_capability_call_sequence),\n        \"capability\": capability,\n        \"arguments\": arguments,\n    }\n    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(\",\", \":\"))))\n    if response[\"status\"] != \"ok\":\n        raise RuntimeError(response[\"error\"][\"message\"])\n    return response[\"result\"]\n", pythonString(parentCallID))
+	}
 	for _, module := range moduleNames {
 		fmt.Fprintf(&builder, "\n%s = _CapabilityModule()\n", module)
 	}

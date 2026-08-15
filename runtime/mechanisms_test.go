@@ -11,6 +11,9 @@ import (
 
 func TestDefaultMechanismsAreAllOff(t *testing.T) {
 	config := runtime.DefaultRunConfig()
+	if config.ProgramSurface != runtime.ProgramSurfaceDirect {
+		t.Fatalf("default program surface = %q", config.ProgramSurface)
+	}
 	if err := config.Mechanisms.Validate(); err != nil {
 		t.Fatalf("default mechanisms: %v", err)
 	}
@@ -43,6 +46,38 @@ func TestMechanismDependenciesFailClosed(t *testing.T) {
 				t.Fatalf("Validate() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestProgramSurfaceAndMechanismMustMatch(t *testing.T) {
+	for _, candidate := range []runtime.RunConfig{
+		func() runtime.RunConfig {
+			value := runtime.DefaultRunConfig()
+			value.ProgramSurface = runtime.ProgramSurfaceProgrammatic
+			return value
+		}(),
+		func() runtime.RunConfig {
+			value := runtime.DefaultRunConfig()
+			value.ProgramSurface = runtime.ProgramSurfaceBoth
+			return value
+		}(),
+		func() runtime.RunConfig {
+			value := runtime.DefaultRunConfig()
+			value.Mechanisms.ProgrammaticToolCalling = true
+			return value
+		}(),
+	} {
+		if err := candidate.Validate(); err == nil {
+			t.Fatalf("invalid surface/mechanism pair accepted: %#v", candidate)
+		}
+	}
+	for _, mode := range []runtime.ProgramSurfaceMode{runtime.ProgramSurfaceProgrammatic, runtime.ProgramSurfaceBoth} {
+		candidate := runtime.DefaultRunConfig()
+		candidate.ProgramSurface = mode
+		candidate.Mechanisms.ProgrammaticToolCalling = true
+		if err := candidate.Validate(); err != nil {
+			t.Fatalf("valid mode %q rejected: %v", mode, err)
+		}
 	}
 }
 

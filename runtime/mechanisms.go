@@ -16,6 +16,7 @@ const (
 	MechanismStreaming           MechanismName = "streaming"
 	MechanismStagedObservation   MechanismName = "staged_observation"
 	MechanismPrivateWorkspace    MechanismName = "private_workspace"
+	MechanismProgrammaticTools   MechanismName = "programmatic_tool_calling"
 	MechanismImmutableBranches   MechanismName = "immutable_branches"
 	MechanismChildFanout         MechanismName = "child_fanout"
 	MechanismFunctionCache       MechanismName = "function_cache"
@@ -49,6 +50,7 @@ var mechanismNames = []MechanismName{
 	MechanismMemoryCOW,
 	MechanismPreparedRuntime,
 	MechanismPrivateWorkspace,
+	MechanismProgrammaticTools,
 	MechanismSemanticAnalysis,
 	MechanismSemanticPreDispatch,
 	MechanismSemanticReuse,
@@ -60,20 +62,21 @@ var mechanismNames = []MechanismName{
 // MechanismSet is an internal Host-owned feature set. Zero value means ordinary
 // fresh execution with every optional mechanism disabled.
 type MechanismSet struct {
-	Streaming           bool
-	StagedObservation   bool
-	PrivateWorkspace    bool
-	ImmutableBranches   bool
-	ChildFanout         bool
-	FunctionCache       bool
-	SingleFlight        bool
-	FreshReevaluation   bool
-	PreparedRuntime     bool
-	MemoryCOW           bool
-	ColdIOContinuation  bool
-	SemanticAnalysis    bool
-	SemanticPreDispatch bool
-	SemanticReuse       bool
+	Streaming               bool
+	StagedObservation       bool
+	PrivateWorkspace        bool
+	ProgrammaticToolCalling bool
+	ImmutableBranches       bool
+	ChildFanout             bool
+	FunctionCache           bool
+	SingleFlight            bool
+	FreshReevaluation       bool
+	PreparedRuntime         bool
+	MemoryCOW               bool
+	ColdIOContinuation      bool
+	SemanticAnalysis        bool
+	SemanticPreDispatch     bool
+	SemanticReuse           bool
 }
 
 func (set MechanismSet) Validate() error {
@@ -127,6 +130,8 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.StagedObservation
 	case MechanismPrivateWorkspace:
 		return set.PrivateWorkspace
+	case MechanismProgrammaticTools:
+		return set.ProgrammaticToolCalling
 	case MechanismImmutableBranches:
 		return set.ImmutableBranches
 	case MechanismChildFanout:
@@ -162,6 +167,8 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.StagedObservation = enabled
 	case MechanismPrivateWorkspace:
 		set.PrivateWorkspace = enabled
+	case MechanismProgrammaticTools:
+		set.ProgrammaticToolCalling = enabled
 	case MechanismImmutableBranches:
 		set.ImmutableBranches = enabled
 	case MechanismChildFanout:

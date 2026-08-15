@@ -11,6 +11,8 @@ type Receipt struct {
 	ReceiptID            string `json:"receipt_id"`
 	RunID                string `json:"run_id"`
 	CapabilityPlanSHA256 string `json:"capability_plan_sha256"`
+	CallID               string `json:"call_id,omitempty"`
+	ParentCallID         string `json:"parent_call_id,omitempty"`
 	Capability           string `json:"capability"`
 	OperationIndex       uint32 `json:"operation_index"`
 	RequestSHA256        string `json:"request_sha256"`
@@ -19,6 +21,10 @@ type Receipt struct {
 }
 
 func New(runIdentity, capabilityPlanSHA256, callID, capability string, operationIndex uint32, requestIdentity, outcome string, response []byte) Receipt {
+	return NewBound(runIdentity, capabilityPlanSHA256, callID, "", capability, operationIndex, requestIdentity, outcome, response)
+}
+
+func NewBound(runIdentity, capabilityPlanSHA256, callID, parentCallID, capability string, operationIndex uint32, requestIdentity, outcome string, response []byte) Receipt {
 	requestDigest := digest([]byte(requestIdentity))
 	identity := sha256.New()
 	for _, field := range []string{"pysolate-receipt-v1", runIdentity, capabilityPlanSHA256, callID, capability, strconv.FormatUint(uint64(operationIndex), 10), requestDigest} {
@@ -27,7 +33,7 @@ func New(runIdentity, capabilityPlanSHA256, callID, capability string, operation
 	}
 	receipt := Receipt{
 		ReceiptID: "rcpt_" + hex.EncodeToString(identity.Sum(nil)), RunID: runIdentity, CapabilityPlanSHA256: capabilityPlanSHA256,
-		Capability: capability, OperationIndex: operationIndex, RequestSHA256: requestDigest, Outcome: outcome,
+		Capability: capability, CallID: callID, ParentCallID: parentCallID, OperationIndex: operationIndex, RequestSHA256: requestDigest, Outcome: outcome,
 	}
 	if response != nil {
 		receipt.ResponseSHA256 = digest(response)

@@ -24,6 +24,9 @@ type Config struct {
 	Branch              *BranchConfig
 	StagedClaimer       StagedObservationClaimer
 	SemanticPreDispatch bool
+	// ProgrammaticParentCallID binds every admitted call to one program
+	// execution. Empty selects the ordinary direct-call path.
+	ProgrammaticParentCallID string
 }
 
 type StagedObservationClaimer interface {
@@ -65,7 +68,8 @@ type callError struct {
 func NewBroker(config Config) (*Broker, error) {
 	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 ||
 		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) ||
-		(config.StagedClaimer != nil) != config.SemanticPreDispatch {
+		(config.StagedClaimer != nil) != config.SemanticPreDispatch ||
+		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -125,6 +129,13 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	}
 
 	broker.mu.Lock()
+	if broker.config.ProgrammaticParentCallID != "" {
+		expected := fmt.Sprintf("%s:program:%d", broker.config.ProgrammaticParentCallID, broker.calls+1)
+		if call.CallID != expected {
+			broker.mu.Unlock()
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "programmatic_call_identity_mismatch", Message: "programmatic child call identity does not match its parent and sequence"}})
+		}
+	}
 	if broker.calls >= broker.config.Plan.MaxCalls() {
 		broker.mu.Unlock()
 		broker.failPlayback()
@@ -277,7 +288,7 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 }
 
 func (broker *Broker) record(call request, operation uint32, outcome string, result []byte) {
-	created := receipt.New(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, call.Capability, operation, string(call.Arguments), outcome, result)
+	created := receipt.NewBound(broker.config.RunIdentity, broker.config.Plan.Identity(), call.CallID, broker.config.ProgrammaticParentCallID, call.Capability, operation, string(call.Arguments), outcome, result)
 	broker.mu.Lock()
 	broker.receipts = append(broker.receipts, created)
 	broker.mu.Unlock()

@@ -26,6 +26,9 @@ type RunConfig struct {
 	MaxRequestBytes  uint32
 	MaxResponseBytes uint32
 	MemoryLimitPages uint32
+	// ProgramSurface controls direct/programmatic presentation independently of
+	// execution placement. Programmatic and both require the explicit mechanism.
+	ProgramSurface ProgramSurfaceMode
 	// ExecutionProfile is Host-owned artifact/import admission policy. A nil
 	// profile preserves legacy requests but rejects any explicit compatibility
 	// declaration.
@@ -55,6 +58,7 @@ func DefaultRunConfig() RunConfig {
 		MaxRequestBytes:  1024 * 1024,
 		MaxResponseBytes: 1024 * 1024,
 		MemoryLimitPages: 8192,
+		ProgramSurface:   ProgramSurfaceDirect,
 		CapabilityGrants: map[string]CapabilityGrant{},
 	}
 }
@@ -75,6 +79,18 @@ func validateColdIOPolicy(policy ColdIOPolicy, timeout time.Duration) error {
 func (config RunConfig) Validate() error {
 	if err := config.Mechanisms.Validate(); err != nil {
 		return err
+	}
+	switch config.ProgramSurface {
+	case ProgramSurfaceDirect:
+		if config.Mechanisms.ProgrammaticToolCalling {
+			return errors.New("direct program surface cannot select programmatic tool calling")
+		}
+	case ProgramSurfaceProgrammatic, ProgramSurfaceBoth:
+		if !config.Mechanisms.ProgrammaticToolCalling {
+			return errors.New("programmatic surface requires programmatic tool calling")
+		}
+	default:
+		return errors.New("invalid program surface")
 	}
 	if config.Mechanisms.ColdIOContinuation {
 		if config.ColdIO == nil {

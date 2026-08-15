@@ -234,7 +234,7 @@ func TestExecuteQualifiedGuestCollapsesAndRetainsExactResult(t *testing.T) {
 		t.Fatalf("dispositions=%v created=%d", seen, created.Load())
 	}
 	retained, err := functionEngine.ExecuteQualifiedGuest(context.Background(), qualified, compute)
-	if err != nil || retained.Disposition != agentfunction.Retained || retained.PhysicalExecutionID != "" || created.Load() != 1 {
+	if err != nil || retained.Disposition != agentfunction.Retained || retained.PhysicalExecutionID != "physical-qualified" || created.Load() != 1 {
 		t.Fatalf("retained=%+v err=%v created=%d", retained, err, created.Load())
 	}
 	small := compute

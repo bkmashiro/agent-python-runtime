@@ -20,7 +20,7 @@ import (
 
 const (
 	InvocationSchemaVersion  = "pysolate.agent-function.v1"
-	cacheRecordSchemaVersion = "pysolate.agent-function-cache.v2"
+	cacheRecordSchemaVersion = "pysolate.agent-function-cache.v3"
 )
 
 type Admission string
@@ -173,10 +173,13 @@ const (
 )
 
 type Result struct {
-	Key                 string
-	Value               []byte
-	CacheHit            bool
-	Shared              bool
+	Key      string
+	Value    []byte
+	CacheHit bool
+	Shared   bool
+	// PhysicalExecutionID is the original producer identity. Waiters and retained hits
+	// preserve it so Host evidence can map multiple logical requests to one physical
+	// execution; it carries no execution authority.
 	PhysicalExecutionID string
 	Disposition         Disposition
 }
@@ -211,11 +214,11 @@ func (engine Engine) execute(ctx context.Context, invocation Invocation, compute
 	}
 	execute := func() (Result, error) {
 		if useCache {
-			if value, hit := engine.Store.get(cacheDomain, key); hit {
+			if value, physicalExecutionID, hit := engine.Store.get(cacheDomain, key); hit {
 				if ctx.Err() != nil {
 					return Result{}, ctx.Err()
 				}
-				return Result{Key: key, Value: value, CacheHit: true, Disposition: Retained}, nil
+				return Result{Key: key, Value: value, CacheHit: true, PhysicalExecutionID: physicalExecutionID, Disposition: Retained}, nil
 			}
 		}
 		guard := &Guard{enforce: invocation.Admission == Cacheable}
@@ -231,7 +234,7 @@ func (engine Engine) execute(ctx context.Context, invocation Invocation, compute
 		}
 		value = append([]byte(nil), value...)
 		if useCache {
-			if err := engine.Store.put(cacheDomain, key, value); err != nil {
+			if err := engine.Store.put(cacheDomain, key, value, guard.physicalExecutionID); err != nil {
 				return Result{}, err
 			}
 		}
@@ -266,11 +269,12 @@ type Store struct {
 }
 
 type cacheRecord struct {
-	SchemaVersion string `json:"schema_version"`
-	Domain        string `json:"domain"`
-	Key           string `json:"key"`
-	Result        []byte `json:"result"`
-	ResultSHA256  string `json:"result_sha256"`
+	SchemaVersion       string `json:"schema_version"`
+	Domain              string `json:"domain"`
+	Key                 string `json:"key"`
+	PhysicalExecutionID string `json:"physical_execution_id"`
+	Result              []byte `json:"result"`
+	ResultSHA256        string `json:"result_sha256"`
 }
 
 func NewStore(directory, projectSHA256 string, maxResultBytes uint64) (*Store, error) {
@@ -332,44 +336,45 @@ func (store *Store) Stats() Stats {
 	return store.stats
 }
 
-func (store *Store) get(domain, key string) ([]byte, bool) {
+func (store *Store) get(domain, key string) ([]byte, string, bool) {
 	storageKey := cacheStorageKey(domain, key)
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	path, ok := store.path(storageKey)
 	if !ok {
 		store.stats.Misses++
-		return nil, false
+		return nil, "", false
 	}
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		store.stats.Misses++
-		return nil, false
+		return nil, "", false
 	}
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 		store.corruptLocked(path)
-		return nil, false
+		return nil, "", false
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		store.corruptLocked(path)
-		return nil, false
+		return nil, "", false
 	}
 	var record cacheRecord
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&record) != nil || decoder.Decode(&struct{}{}) != io.EOF ||
-		record.SchemaVersion != cacheRecordSchemaVersion || record.Domain != domain || record.Key != key || uint64(len(record.Result)) > store.maxResultBytes {
+		record.SchemaVersion != cacheRecordSchemaVersion || record.Domain != domain || record.Key != key ||
+		(record.PhysicalExecutionID != "" && !partitionPattern.MatchString(record.PhysicalExecutionID)) || uint64(len(record.Result)) > store.maxResultBytes {
 		store.corruptLocked(path)
-		return nil, false
+		return nil, "", false
 	}
 	digest := sha256.Sum256(record.Result)
 	if record.ResultSHA256 != "sha256:"+hex.EncodeToString(digest[:]) {
 		store.corruptLocked(path)
-		return nil, false
+		return nil, "", false
 	}
 	store.stats.Hits++
-	return append([]byte(nil), record.Result...), true
+	return append([]byte(nil), record.Result...), record.PhysicalExecutionID, true
 }
 
 func (store *Store) corruptLocked(path string) {
@@ -381,10 +386,13 @@ func (store *Store) corruptLocked(path string) {
 	store.stats.Misses++
 }
 
-func (store *Store) put(domain, key string, result []byte) error {
+func (store *Store) put(domain, key string, result []byte, physicalExecutionID string) error {
 	storageKey := cacheStorageKey(domain, key)
 	if uint64(len(result)) > store.maxResultBytes {
 		return ErrResultTooLarge
+	}
+	if physicalExecutionID != "" && !partitionPattern.MatchString(physicalExecutionID) {
+		return ErrPhysicalExecution
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -394,7 +402,8 @@ func (store *Store) put(domain, key string, result []byte) error {
 	}
 	digest := sha256.Sum256(result)
 	record := cacheRecord{
-		SchemaVersion: cacheRecordSchemaVersion, Domain: domain, Key: key, Result: append(json.RawMessage(nil), result...),
+		SchemaVersion: cacheRecordSchemaVersion, Domain: domain, Key: key, PhysicalExecutionID: physicalExecutionID,
+		Result:       append(json.RawMessage(nil), result...),
 		ResultSHA256: "sha256:" + hex.EncodeToString(digest[:]),
 	}
 	raw, err := json.Marshal(record)

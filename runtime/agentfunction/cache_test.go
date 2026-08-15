@@ -1,6 +1,7 @@
 package agentfunction_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -163,6 +164,19 @@ func TestEvictionAndCorruptionSafelyRecompute(t *testing.T) {
 	third, err := engine.Execute(context.Background(), invocation, compute)
 	if err != nil || third.CacheHit || calls.Load() != 3 || store.Stats().Corruptions != 1 {
 		t.Fatalf("corruption result=%+v calls=%d stats=%+v err=%v", third, calls.Load(), store.Stats(), err)
+	}
+	path := filepath.Join(store.Directory(), cacheStorageFilename("callback", third.Key))
+	record, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record = bytes.Replace(record, []byte(`"physical_execution_id":""`), []byte(`"physical_execution_id":"bad id"`), 1)
+	if err := os.WriteFile(path, record, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fourth, err := engine.Execute(context.Background(), invocation, compute)
+	if err != nil || fourth.CacheHit || calls.Load() != 4 || store.Stats().Corruptions != 2 {
+		t.Fatalf("provenance corruption result=%+v calls=%d stats=%+v err=%v", fourth, calls.Load(), store.Stats(), err)
 	}
 }
 

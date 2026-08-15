@@ -7,10 +7,12 @@ The existing `apps/lab-web` now opens on a paired-experiment surface backed by
 `pysolate.workflow-benchmark-evidence.v0`; the prior development debugger remains available
 as a separate read-only tab.
 
-The page validates the outer evidence seal, exact task/report correspondence, logical to
-physical links, producer and consumer references, aggregate physical-call counts, zero
-observable divergence, body-free keys and `consumer_admitted=false` before rendering. A
-failure leaves an explicit rejected/unavailable state and never falls back to inferred data.
+The page validates the closed JSON shape, manifest seal, every nested observation seal,
+the outer evidence seal, exact task/report correspondence, reverse logical/physical
+indexes, producer/consumer and sharing-decision coverage, same-workflow parallel scope,
+aggregate physical-call counts, zero observable divergence, body-free keys and
+`consumer_admitted=false` before rendering. A failure leaves an explicit
+rejected/unavailable state and never falls back to inferred data.
 
 The surface shows:
 

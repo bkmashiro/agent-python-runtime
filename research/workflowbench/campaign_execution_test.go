@@ -91,6 +91,8 @@ func TestCampaignEvidenceRejectsMechanismEventTamperingAfterReseal(t *testing.T)
 		{"missing and duplicate", "P04", "workspace.discarded", func(event *workflowbench.CampaignEvent) { event.Type = "workspace.forked" }},
 		{"forged physical identity", "P05", "sharing.decided", func(event *workflowbench.CampaignEvent) { event.PhysicalExecutionID = "physical-forged" }},
 		{"wrong authority identity", "P15", "authority.refreshed", func(event *workflowbench.CampaignEvent) { event.Reason = testCampaignDigest('f') }},
+		{"duplicate core event", "P01", "logical.terminal", func(event *workflowbench.CampaignEvent) { event.Type = "logical.released" }},
+		{"cross-program physical identity", "P01", "physical.ended", func(event *workflowbench.CampaignEvent) { event.ProgramID = "P02" }},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

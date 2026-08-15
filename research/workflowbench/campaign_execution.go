@@ -421,6 +421,7 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 	}
 	byProgram := make(map[string]map[string][]CampaignEvent, len(manifest.Programs))
 	physicalCore := make(map[string]map[string]int)
+	physicalOwner := make(map[string]string)
 	for _, event := range evidence.Events {
 		if _, ok := programs[event.ProgramID]; !ok {
 			return ErrInvalidCampaignEvidence
@@ -440,6 +441,10 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 		}
 		byProgram[event.ProgramID][event.Type] = append(byProgram[event.ProgramID][event.Type], event)
 		if strings.HasPrefix(event.Type, "physical.") && event.PhysicalExecutionID != "" {
+			if owner := physicalOwner[event.PhysicalExecutionID]; owner != "" && owner != event.ProgramID {
+				return ErrInvalidCampaignEvidence
+			}
+			physicalOwner[event.PhysicalExecutionID] = event.ProgramID
 			if physicalCore[event.PhysicalExecutionID] == nil {
 				physicalCore[event.PhysicalExecutionID] = make(map[string]int)
 			}
@@ -459,6 +464,16 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 	for _, program := range manifest.Programs {
 		events := byProgram[program.ID]
 		row := rows[program.ID]
+		if len(events["logical.released"]) != 1 || len(events["logical.terminal"]) != 1 || events["logical.terminal"][0].Reason != row.Disposition || events["logical.terminal"][0].PhysicalExecutionID != row.PhysicalExecutionID {
+			return ErrInvalidCampaignEvidence
+		}
+		if program.Expected.Admission == "admit" {
+			if len(events["admission.accepted"]) != 1 || len(events["admission.rejected"]) != 0 || len(events["logical.started"]) != 1 || events["admission.accepted"][0].Reason != row.AdmissionReason {
+				return ErrInvalidCampaignEvidence
+			}
+		} else if len(events["admission.accepted"]) != 0 || len(events["admission.rejected"]) != 1 || len(events["logical.started"]) != 0 || events["admission.rejected"][0].Reason != row.AdmissionReason {
+			return ErrInvalidCampaignEvidence
+		}
 		expected := make(map[string]bool)
 		if program.Execution.CancelPoint == CampaignCancelAfterWorkspaceFork {
 			expected["workspace.forked"], expected["workspace.discarded"] = true, true

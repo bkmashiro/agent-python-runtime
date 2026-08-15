@@ -201,7 +201,12 @@ unique verified occurrence. Ordinary direct calls, mismatches and ambiguous
 occurrences remain explicitly unbound. The receipt identity binds document/source,
 static occurrence, dynamic occurrence and line/column span together with the
 existing call/parent/approval/Plan/request identity. This provenance does not grant
-or change capability authority and is not an executed-line claim.
+or change capability authority and is not an executed-line claim. Receipt IDs are
+canonical integrity identities, not signatures or attestations against the Host itself:
+`runtime/receipt` is Host-side library code, and an application acting as the Host can
+construct Host evidence. The enforced boundary is that Guest output and capability
+handler result bytes cannot inject receipts; only the Host Broker enriches the final
+response, while the source resolver constructor remains inside the Runtime TCB.
 
 A separate default-off `ReusePass` may convert only the exact module-entry whole-Run
 plan into the existing

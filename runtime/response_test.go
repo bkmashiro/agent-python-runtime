@@ -124,6 +124,20 @@ func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
 	if _, err := DecodeAndValidateRunResponse(request, sourceBoundPayload); err != nil {
 		t.Fatalf("valid source-bound receipt rejected: %v", err)
 	}
+	guestForgedSourcePayload := []byte(`{"status":"ok","result":1,"receipts":[` + sourceBoundReceipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null}`)
+	if _, err := DecodeAndValidateGuestRunResponse(request, guestForgedSourcePayload); err == nil {
+		t.Fatal("Guest-authored source-bound receipt was accepted")
+	}
+	ambiguousProgrammatic := capabilityreceipt.NewAuthorized("host-run", planA, "parent:program:1", "parent", "apr_"+strings.Repeat("e", 64), "workspace.read_text", 0, `{"path":"a"}`, "ambiguous", nil)
+	ambiguousSourceBound, err := capabilityreceipt.BindSource(ambiguousProgrammatic, *sourceBound.Source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ambiguousBytes, _ := json.Marshal(ambiguousSourceBound)
+	ambiguousPayload := []byte(`{"status":"error","result":null,"receipts":[` + string(ambiguousBytes) + `],"metrics":{"capability_calls":1,"result_bytes":0},"error":{"code":"approval_audit_failed","message":"failed"},"capability_plan_sha256":"` + planA + `"}`)
+	if _, err := DecodeAndValidateRunResponse(request, ambiguousPayload); err != nil {
+		t.Fatalf("valid source-bound ambiguous receipt rejected: %v", err)
+	}
 	invalidReceipts := map[string]string{
 		"tampered source span":      `[` + strings.Replace(sourceBoundReceipt, `"start_column":9`, `"start_column":10`, 1) + `]`,
 		"near-match program parent": `[` + strings.Replace(programmaticReceipt, `"call_id":"parent:program:1"`, `"call_id":"other:program:1"`, 1) + `]`,

@@ -68,7 +68,7 @@ describe('dual-profile causal evidence ingestion', () => {
     const relation = await rawFixture();
     const runtime = relation.events.find((event) => event.type === 'subagent.runtime')!;
     runtime.payload.child_id = 'child-mismatch-0001';
-    await expect(validateTrajectory(relation)).rejects.toThrow(/subagent runtime parent mismatch|event identity/);
+    await expect(validateTrajectory(relation)).rejects.toThrow(/subagent runtime (parent|context\/source) mismatch|event identity/);
 
     const leakage = await rawFixture();
     leakage.profile = 'production_rollback';

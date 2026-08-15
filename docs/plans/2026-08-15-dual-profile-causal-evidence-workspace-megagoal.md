@@ -110,7 +110,7 @@ race; signed commit and push.
 
 ## Phase 3 — one real path and three products
 
-**Status:** Complete. The named non-skipping CPython/WASI path records an actual source-bound Broker receipt, a fresh child Guest, private workspace branch/root, raw private Runtime observations, explicit executed-line absence and bounded CPU/wall resource truth. Header `sha256:bacb…e588` yields 31-event private full, 9-event production and 21-event public experiment products from shared retained identities; checked-in and private artifact hashes are documented in `docs/research/dual-profile-causal-evidence-v1.md`.
+**Status:** Complete. The named non-skipping CPython/WASI path records an actual source-bound Broker receipt, a fresh child Guest, private workspace branch/root, raw private Runtime observations, explicit executed-line absence and bounded CPU/wall resource truth. Header `sha256:4b75…b40c` yields 31-event private full, 9-event production and 21-event public experiment products from shared retained identities; checked-in and private artifact hashes are documented in `docs/research/dual-profile-causal-evidence-v1.md`.
 
 Implement one adapter from `runtime/observe.Recorder` into the new evidence log.
 Drive a named real CPython/WASM execution through the existing observation

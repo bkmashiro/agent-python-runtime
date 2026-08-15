@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Prepared — implementation not started
+**Status:** Active — Track 0 frozen; Track A delegation attenuation next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -198,6 +198,49 @@ At the prepared baseline:
   boundaries. The Lab may retain its developer UI theme; paper SVGs remain plain,
   publication-oriented artifacts generated from canonical evidence.
 
+## Track 0 frozen implementation map and preregistration
+
+Live inspection at `df2d9e13b844d0fa39d9c0a7149d030ef758a8d0` confirms that the goal
+can be expressed through existing packages. No forbidden virtual Git, live Harness,
+effect plane, general workflow engine or production scheduler is required.
+
+| Seam | Reuse | Refactor | Remove | Add |
+|---|---|---|---|---|
+| delegation attenuation | canonical `capability.Plan.Specs`, `Grants`, `MaxCalls`, `subagent.Config/Stage`, terminal cleanup | expose a Host-side exact equal-or-narrower Plan relation and bind decoded parent/child Plans at admission | no package; retire digest-only authority admission in updated call sites | typed rejection/reason and one bounded reservation ledger inside `subagent.Orchestrator` |
+| authority-bound resume | `workflow.State`, graph identity, observation policy/freshness and transitive invalidation | bind a compact Host-authored authority envelope to `State` and node identity where authority is consumed | no continuation/checkpoint path | envelope validation, changed-authority invalidation and fresh-Run evidence |
+| authority bifurcation | `agentfunction` single-flight/retention, `workspace.Root`, `subagent`, `observe` logical/physical identities | compose producer and consumers through immutable values/roots rather than add another executor | any duplicate fixture-only composition superseded by the campaign | focused composition/evidence tests only; no top-level Runtime package |
+| 20-program campaign | replace/extend `research/workflowbench` v1 manifest, execution, evidence, trajectory projection and existing Lab | evolve the current 14-task fixture into the versioned 20-program contract and transparent release driver | delete superseded 14-task-only fixture/generator branches after equivalent evidence is regenerated | fixture sources, typed campaign decisions, bounded release/slot fields and paper projection |
+
+The authority comparison remains exact and conservative: a child capability is accepted
+only when its canonical `Spec` and grant-policy identity equal the parent's binding, the
+child set is a subset, and its call reservation fits the Host-owned delegation budget.
+There is no effect-class partial order, schema subsumption or grant interpretation.
+
+The initial orchestration budget is deliberately separate from Broker call accounting:
+the parent supplies one finite delegation ceiling, each admitted child atomically reserves
+its sealed Plan `MaxCalls`, and terminal cleanup returns only the unused reservation that
+the Host can prove. If real execution cannot report consumed calls without a second ledger,
+the first bounded implementation conservatively consumes the full reservation. It must not
+pretend that child Broker calls decrement an unrelated parent Broker counter.
+
+Preregistered candidate claims:
+
+1. exact child Plan subset plus bounded reservation can be enforced before child Guest
+   startup without changing valid private-branch behavior;
+2. fresh workflow resume can retain authority-free compute while rejecting or
+   revalidating authority-dependent state after envelope change;
+3. one exact authority-free physical producer or verifier may serve multiple logical
+   consumers while grants, fresh Runs and workspaces remain disjoint;
+4. one exact 20-program campaign can make every release, decision, physical execution and
+   terminal state reconstructable from sealed evidence.
+
+Preregistered invalid inferences remain those in [Metrics and claim discipline](#metrics-and-claim-discipline).
+Primary measured outcomes are pre-start authority rejections, reservation conservation,
+fresh Run/Guest identity, logical-to-physical counts, exact-root verifier counts, queue and
+execution intervals, CPU/wall accounting, cleanup and semantic/workspace divergences. The
+campaign treatment order is balanced from the frozen seed; the paper walkthrough is the
+first fully valid balanced campaign, never a post-hoc fastest or prettiest run.
+
 ## Corpus contract: exactly 20 Python programs
 
 The initial corpus is fixed by role, not by invented performance values. Each row is an
@@ -278,15 +321,15 @@ logical/physical/Run/workspace/authority joins where relevant.
 
 ### Track 0 — Live reset, KISS implementation map and claim preregistration
 
-- [ ] Inspect live Git state, recent commits, mechanism matrix, threat model, completed
+- [x] Inspect live Git state, recent commits, mechanism matrix, threat model, completed
   predecessor roadmap, current tests and evidence; trust live files over this baseline.
-- [ ] Write a concise implementation map for the four governing seams: delegation
+- [x] Write a concise implementation map for the four governing seams: delegation
   attenuation, authority-bound resume, authority bifurcation and 20-program campaign.
-- [ ] Identify code to reuse/refactor/remove/add. Reject duplicate registries, schedulers,
+- [x] Identify code to reuse/refactor/remove/add. Reject duplicate registries, schedulers,
   evidence stores and viewers before implementation.
-- [ ] Freeze candidate claims, invalid inferences, metrics, corpus role allocation and
+- [x] Freeze candidate claims, invalid inferences, metrics, corpus role allocation and
   treatment order before measurements.
-- [ ] Correct stale Current/Proposed/Deferred documentation as needed.
+- [x] Correct stale Current/Proposed/Deferred documentation as needed.
 
 **Gate:** no implementation starts until the map proves the goal can be expressed mainly
 through existing packages. If it requires a virtual Git, general scheduler, live Harness,
@@ -584,15 +627,19 @@ claims remain valid.
 
 ## Current execution pointer
 
-**Not started.** On explicit `/goal`, begin at Track 0. Do not implement Track A before
-landing the live implementation map, KISS delta budget and preregistered claim/corpus
-contract.
+**Track A:** add RED tests for exact child Plan attenuation and bounded aggregate
+reservation before changing the `subagent` admission seam. Keep the comparison in the
+canonical `capability` package and the reservation inside the existing Orchestrator.
 
 ## Completion log
 
 - 2026-08-15: Goal formed from the completed trajectory/Lab reset, workflow-boundary v1
   evidence, workspace/subagent/workflow archaeology and Yuzhe's KISS/paper-story
   direction. No implementation was started in the authoring session.
+- 2026-08-15: Track 0 inspected the live capability/subagent/workflow/workflowbench seams,
+  froze the reuse/refactor/remove/add map, exact-comparison and conservative-reservation
+  semantics, candidate claims, invalid inferences, metrics, corpus roles and balanced
+  walkthrough selection. The KISS gate passed without a forbidden subsystem.
 
 ## Short prompt to start this Mega-Goal
 

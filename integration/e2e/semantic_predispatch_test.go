@@ -102,14 +102,22 @@ func TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall(t *testing.T) {
 	if err != nil || len(analysis.CallSites) != 1 {
 		t.Fatalf("analysis=%+v err=%v", analysis, err)
 	}
-	decision := semantic.CanPreissue(verified, plan, analysis.CallSites[0].ID, semantic.PreissueContext{
-		StreamEpoch: "stream-e2e", WorkflowEpoch: "workflow-e2e", FreshnessEpoch: "plan-e2e", ExpiryEpoch: "expiry-e2e",
-		PrivacyPartition: "private-e2e", ParentLineageSHA256: semanticTestDigest('6'),
-		BudgetReservationSHA256: semanticTestDigest('5'), RemainingPhysicalReads: 1,
+	planned, err := semantic.BuildSourceBoundPlan(verified, plan, semantic.PlannerConfig{
+		Passes: []semantic.PassConfig{{
+			Name: semantic.PassSemanticPreDispatch, Version: semantic.SemanticPreDispatchPassVersion, Enabled: true,
+		}},
+		PreissueContext: semantic.PreissueContext{
+			StreamEpoch: "stream-e2e", WorkflowEpoch: "workflow-e2e", FreshnessEpoch: "plan-e2e", ExpiryEpoch: "expiry-e2e",
+			PrivacyPartition: "private-e2e", ParentLineageSHA256: semanticTestDigest('6'),
+			BudgetReservationSHA256: semanticTestDigest('5'), RemainingPhysicalReads: 1,
+		},
 	})
-	qualified, ok := decision.QualifiedCall()
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualified, ok := planned.QualifiedCall(semantic.PassSemanticPreDispatch, analysis.CallSites[0].ID)
 	if !ok {
-		t.Fatalf("decision=%+v", decision)
+		t.Fatalf("planned=%+v", planned.Projection())
 	}
 	budget, err := semantic.NewPreDispatchBudget(1)
 	if err != nil {

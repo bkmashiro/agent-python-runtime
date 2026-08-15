@@ -157,11 +157,13 @@ Rules:
 - [x] Freeze master roadmap and branch baseline.
 - [x] Trace semantic analyzer, VerifiedAnalysis, legality, pre-dispatch, Broker and receipt seams.
 - [x] Run disposable CPython/WASM monitoring availability, exact CALL-position and rough overhead probes.
-- [ ] Commit this extracted plan before code changes.
+- [x] Commit this extracted plan before code changes.
 
 Gate: documentation passes `git diff --check`; signed commit is pushed.
 
 ## Phase 1 — RED: pass/planner contract
+
+**Status:** Complete at the source-bound planner slice. The default-off plan projects source facts without decisions; the explicit semantic pre-dispatch pass reuses `CanPreissue`, retains only opaque qualified calls, rejects unknown/duplicate/version-mismatched pass configuration, and produces a deterministic defensive projection.
 
 Write failing tests for:
 

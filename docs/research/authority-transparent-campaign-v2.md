@@ -19,6 +19,10 @@ adapter may dispatch on typed execution kind and transition, but must never disp
 program ID, family or `expected` field. The driver enforces this boundary structurally:
 `CampaignAdapter` receives `CampaignRequest`, which does not contain those fields; rejected
 dispositions also come from Runtime admission rather than being copied from `Expected`.
+Canonical capability Plans are materialized by identity in this research package and passed
+as ordinary Host inputs to the existing capability/subagent APIs. Workflow start/resume
+contracts use an opaque fixture state key; the adapter does not need to recognize `P13` or
+any other case number.
 
 ## Fixed execution policy
 

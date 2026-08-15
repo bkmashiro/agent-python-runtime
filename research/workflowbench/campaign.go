@@ -18,6 +18,7 @@ const CampaignManifestSchemaVersion = "pysolate.transparent-campaign-manifest.v2
 const maxCampaignReleaseOffsetMS int64 = 60_000
 
 var campaignDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+var campaignNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 var ErrInvalidCampaignManifest = errors.New("invalid transparent campaign manifest")
 
@@ -67,6 +68,7 @@ type CampaignVerifierContract struct {
 
 type CampaignResumeContract struct {
 	FromProgramID string                   `json:"from_program_id"`
+	StateKey      string                   `json:"state_key"`
 	Transition    CampaignResumeTransition `json:"transition"`
 }
 
@@ -81,12 +83,13 @@ type CampaignDelegationContract struct {
 // CampaignExecutionContract belongs to the research fixture. Runtime packages remain
 // unaware of campaign IDs, families, expected labels, and paper outcomes.
 type CampaignExecutionContract struct {
-	Kind            CampaignExecutionKind       `json:"kind"`
-	SourceProgramID string                      `json:"source_program_id,omitempty"`
-	Verifier        *CampaignVerifierContract   `json:"verifier,omitempty"`
-	Resume          *CampaignResumeContract     `json:"resume,omitempty"`
-	Delegation      *CampaignDelegationContract `json:"delegation,omitempty"`
-	CancelPoint     CampaignCancelPoint         `json:"cancel_point"`
+	Kind             CampaignExecutionKind       `json:"kind"`
+	SourceProgramID  string                      `json:"source_program_id,omitempty"`
+	WorkflowStateKey string                      `json:"workflow_state_key,omitempty"`
+	Verifier         *CampaignVerifierContract   `json:"verifier,omitempty"`
+	Resume           *CampaignResumeContract     `json:"resume,omitempty"`
+	Delegation       *CampaignDelegationContract `json:"delegation,omitempty"`
+	CancelPoint      CampaignCancelPoint         `json:"cancel_point"`
 }
 
 type CampaignProgram struct {
@@ -194,7 +197,7 @@ func campaignExecutionContracts() ([]CampaignExecutionContract, error) {
 		}
 	}
 	resume := func(from string, transition CampaignResumeTransition) *CampaignResumeContract {
-		return &CampaignResumeContract{FromProgramID: from, Transition: transition}
+		return &CampaignResumeContract{FromProgramID: from, StateKey: "workflow-main", Transition: transition}
 	}
 	parentPlan, _, err := campaignPlan("consumer-left")
 	if err != nil {
@@ -216,7 +219,7 @@ func campaignExecutionContracts() ([]CampaignExecutionContract, error) {
 		{Kind: CampaignVerifyWorkspace, Verifier: verifier(), CancelPoint: CampaignCancelNone},
 		{Kind: CampaignVerifyWorkspace, Verifier: verifier(), CancelPoint: CampaignCancelNone},
 		{Kind: CampaignVerifyWorkspace, Verifier: verifier(), CancelPoint: CampaignCancelNone},
-		{Kind: CampaignStartWorkflow, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignStartWorkflow, WorkflowStateKey: "workflow-main", CancelPoint: CampaignCancelNone},
 		{Kind: CampaignResumeWorkflow, Resume: resume("P13", CampaignResumeFreshnessChanged), CancelPoint: CampaignCancelNone},
 		{Kind: CampaignResumeWorkflow, Resume: resume("P13", CampaignResumePlanGrantChanged), CancelPoint: CampaignCancelNone},
 		{Kind: CampaignResumeWorkflow, Resume: resume("P13", CampaignResumeExpired), CancelPoint: CampaignCancelNone},
@@ -279,25 +282,29 @@ func (contract CampaignExecutionContract) validate(seen map[string]struct{}) err
 		return ErrInvalidCampaignManifest
 	}
 	withoutSpecific := func() bool {
-		return contract.SourceProgramID == "" && contract.Verifier == nil && contract.Resume == nil && contract.Delegation == nil
+		return contract.SourceProgramID == "" && contract.WorkflowStateKey == "" && contract.Verifier == nil && contract.Resume == nil && contract.Delegation == nil
 	}
 	switch contract.Kind {
-	case CampaignExecutePython, CampaignExactRequest, CampaignStartWorkflow:
+	case CampaignExecutePython, CampaignExactRequest:
 		if !withoutSpecific() {
 			return ErrInvalidCampaignManifest
 		}
+	case CampaignStartWorkflow:
+		if contract.SourceProgramID != "" || !campaignNamePattern.MatchString(contract.WorkflowStateKey) || contract.Verifier != nil || contract.Resume != nil || contract.Delegation != nil {
+			return ErrInvalidCampaignManifest
+		}
 	case CampaignConsumeResult:
-		if _, ok := seen[contract.SourceProgramID]; !ok || contract.Verifier != nil || contract.Resume != nil || contract.Delegation != nil {
+		if _, ok := seen[contract.SourceProgramID]; !ok || contract.WorkflowStateKey != "" || contract.Verifier != nil || contract.Resume != nil || contract.Delegation != nil {
 			return ErrInvalidCampaignManifest
 		}
 	case CampaignVerifyWorkspace:
-		if contract.SourceProgramID != "" || contract.Verifier == nil || contract.Resume != nil || contract.Delegation != nil ||
+		if contract.SourceProgramID != "" || contract.WorkflowStateKey != "" || contract.Verifier == nil || contract.Resume != nil || contract.Delegation != nil ||
 			!campaignDigestPattern.MatchString(contract.Verifier.SourceSHA256) || !campaignDigestPattern.MatchString(contract.Verifier.ArtifactSHA256) ||
 			!campaignDigestPattern.MatchString(contract.Verifier.ProfileSHA256) || !campaignDigestPattern.MatchString(contract.Verifier.EnvironmentSHA256) || !campaignDigestPattern.MatchString(contract.Verifier.PolicySHA256) {
 			return ErrInvalidCampaignManifest
 		}
 	case CampaignResumeWorkflow:
-		if contract.SourceProgramID != "" || contract.Verifier != nil || contract.Resume == nil || contract.Delegation != nil {
+		if contract.SourceProgramID != "" || contract.WorkflowStateKey != "" || contract.Verifier != nil || contract.Resume == nil || contract.Delegation != nil || !campaignNamePattern.MatchString(contract.Resume.StateKey) {
 			return ErrInvalidCampaignManifest
 		}
 		if _, ok := seen[contract.Resume.FromProgramID]; !ok {
@@ -309,7 +316,7 @@ func (contract CampaignExecutionContract) validate(seen map[string]struct{}) err
 			return ErrInvalidCampaignManifest
 		}
 	case CampaignDelegateChild:
-		if contract.SourceProgramID != "" || contract.Verifier != nil || contract.Resume != nil || contract.Delegation == nil || contract.Delegation.GroupID == "" || contract.Delegation.ParentPlanRole == "" || !campaignDigestPattern.MatchString(contract.Delegation.ParentPlanSHA256) || contract.Delegation.MaxDelegatedCalls == 0 || contract.Delegation.ChildReservedCalls == 0 {
+		if contract.SourceProgramID != "" || contract.WorkflowStateKey != "" || contract.Verifier != nil || contract.Resume != nil || contract.Delegation == nil || contract.Delegation.GroupID == "" || contract.Delegation.ParentPlanRole == "" || !campaignDigestPattern.MatchString(contract.Delegation.ParentPlanSHA256) || contract.Delegation.MaxDelegatedCalls == 0 || contract.Delegation.ChildReservedCalls == 0 {
 			return ErrInvalidCampaignManifest
 		}
 	default:
@@ -361,7 +368,27 @@ func campaignCannotProve(family string) []string {
 	}
 }
 
+func CanonicalCampaignPlans() (map[string]*capability.Plan, error) {
+	plans := make(map[string]*capability.Plan)
+	for _, role := range []string{"pure", "consumer-left", "consumer-right", "consumer-widened", "observer", "observer-alt"} {
+		plan, _, err := buildCampaignPlan(role)
+		if err != nil {
+			return nil, err
+		}
+		plans[plan.Identity()] = plan
+	}
+	return plans, nil
+}
+
 func campaignPlan(role string) (string, string, error) {
+	plan, grants, err := buildCampaignPlan(role)
+	if err != nil {
+		return "", "", err
+	}
+	return plan.Identity(), grants, nil
+}
+
+func buildCampaignPlan(role string) (*capability.Plan, string, error) {
 	registry := capability.NewRegistry()
 	capabilities := []string{}
 	switch role {
@@ -377,12 +404,12 @@ func campaignPlan(role string) (string, string, error) {
 	case "observer-alt":
 		capabilities = []string{"observation.read.alt"}
 	default:
-		return "", "", ErrInvalidCampaignManifest
+		return nil, "", ErrInvalidCampaignManifest
 	}
 	for _, name := range capabilities {
 		grant, err := capability.NewGrant(json.RawMessage(`{"campaign_role":"` + role + `","capability":"` + name + `"}`))
 		if err != nil {
-			return "", "", err
+			return nil, "", err
 		}
 		spec := capability.Spec{
 			Name: name, Version: "pysolate.campaign." + name + ".v1", Description: "Campaign capability " + name,
@@ -390,18 +417,18 @@ func campaignPlan(role string) (string, string, error) {
 			InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`), OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
 		}
 		if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })); err != nil {
-			return "", "", err
+			return nil, "", err
 		}
 	}
 	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
 	grants, err := json.Marshal(plan.Grants())
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
-	return plan.Identity(), campaignDigest(grants), nil
+	return plan, campaignDigest(grants), nil
 }
 
 func canonicalCampaignJSON(value []byte) bool {

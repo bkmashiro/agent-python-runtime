@@ -688,6 +688,14 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
   ID, family and `Expected`; dependency results and typed execution contracts are copied
   into the request. Rejected dispositions now come from adapter/Runtime admission, not
   from the oracle. Delegation contracts bind the canonical parent Plan identity.
+- 2026-08-15: Added the first real-Guest adapter substrate without changing `runtime/`:
+  the research fixture can materialize canonical Plans by identity, `CampaignGuestExecutor`
+  validates source/input/Plan/grant bindings before creating a fresh Wazero Guest, and typed
+  workflow operations carry an opaque state key rather than requiring adapter dispatch on
+  `P13`. The real workstation Guest executed the first canonical program successfully using
+  artifact `sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795`
+  built from source commit `ae922641cd9c539b68a0ea7110b5dc205e5c9a8a`. This is a
+  correctness checkpoint, not a campaign or performance result.
 
 ## Short prompt to start this Mega-Goal
 

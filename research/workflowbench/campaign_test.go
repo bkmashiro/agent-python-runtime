@@ -110,14 +110,40 @@ func TestTransparentCampaignUsesTypedResearchContractsNotExpectedLabels(t *testi
 	if programs["P10"].Execution.Kind != workflowbench.CampaignVerifyWorkspace || programs["P10"].Execution.Verifier == nil {
 		t.Fatal("workspace verification is not typed")
 	}
-	if programs["P13"].Execution.Kind != workflowbench.CampaignStartWorkflow || programs["P15"].Execution.Resume == nil || programs["P15"].Execution.Resume.Transition != workflowbench.CampaignResumePlanGrantChanged {
+	if programs["P13"].Execution.Kind != workflowbench.CampaignStartWorkflow || programs["P14"].Execution.Resume == nil || programs["P14"].Execution.Resume.Transition != workflowbench.CampaignResumeFreshnessChanged || programs["P15"].Execution.Resume == nil || programs["P15"].Execution.Resume.Transition != workflowbench.CampaignResumePlanGrantChanged {
 		t.Fatal("workflow operations are not typed")
+	}
+	if programs["P13"].Execution.WorkflowStateKey == "" || programs["P14"].Execution.Resume.StateKey != programs["P13"].Execution.WorkflowStateKey {
+		t.Fatal("workflow state handle is not explicit")
 	}
 	if programs["P17"].Execution.Kind != workflowbench.CampaignDelegateChild || programs["P18"].Execution.Delegation == nil || programs["P18"].Execution.Delegation.ParentPlanRole != "consumer-left" {
 		t.Fatal("delegation operations are not typed")
 	}
 	if programs["P04"].Execution.CancelPoint != workflowbench.CampaignCancelAfterWorkspaceFork || programs["P20"].Execution.CancelPoint != workflowbench.CampaignCancelAfterParentTerminal {
 		t.Fatal("cancellation points are not typed")
+	}
+}
+
+func TestCanonicalCampaignPlanCatalogMaterializesEveryAuthorityIdentity(t *testing.T) {
+	manifest, err := workflowbench.CanonicalTransparentCampaign()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plans, err := workflowbench.CanonicalCampaignPlans()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, program := range manifest.Programs {
+		plan := plans[program.PlanSHA256]
+		if plan == nil || plan.Identity() != program.PlanSHA256 {
+			t.Fatalf("plan %s was not materialized", program.PlanSHA256)
+		}
+		if program.Execution.Delegation != nil {
+			parentID := program.Execution.Delegation.ParentPlanSHA256
+			if plans[parentID] == nil || plans[parentID].Identity() != parentID {
+				t.Fatalf("parent plan %s was not materialized", parentID)
+			}
+		}
 	}
 }
 
@@ -150,6 +176,7 @@ func TestTransparentCampaignManifestRejectsIdentityAndRoleTampering(t *testing.T
 		{"unknown execution kind", func(value *workflowbench.CampaignManifest) { value.Programs[0].Execution.Kind = "paper_label" }},
 		{"consumer without source", func(value *workflowbench.CampaignManifest) { value.Programs[1].Execution.SourceProgramID = "" }},
 		{"resume from future", func(value *workflowbench.CampaignManifest) { value.Programs[13].Execution.Resume.FromProgramID = "P20" }},
+		{"workflow state handle", func(value *workflowbench.CampaignManifest) { value.Programs[12].Execution.WorkflowStateKey = "" }},
 		{"verifier missing identity", func(value *workflowbench.CampaignManifest) { value.Programs[9].Execution.Verifier.PolicySHA256 = "" }},
 		{"delegation missing parent", func(value *workflowbench.CampaignManifest) {
 			value.Programs[16].Execution.Delegation.ParentPlanRole = ""

@@ -261,6 +261,20 @@ research/operator          Experimental semantic research APIs
 cmd/pysolate-research      partial local research CLI
 ```
 
+## Approval continuation and programmatic tool calling
+
+**Proposed and default-off.** Approval suspension, continuation memory tiering,
+approval leases, durable audit records and programmatic tool calling are separate
+mechanisms with explicit dependency validation. Programmatic calls re-enter the
+same Host-owned capability plane; they do not receive ambient authority or imply
+approval, caching, replay or cold memory. Approval may preserve a real pending ABI
+call for a bounded lease, but Pysolate does not yet claim complete arbitrary
+CPython/Wazero snapshot and restore.
+
+The source-backed DeepSeek Harness PTC comparison, lifecycle, package boundaries,
+independent controls and falsifiable slice order are recorded in
+[approval-continuation-and-programmatic-tool-calling.md](research/approval-continuation-and-programmatic-tool-calling.md).
+
 ## Authority-transparent campaign status
 
 **Current:** the Runtime packages remain campaign-agnostic. Authority attenuation,

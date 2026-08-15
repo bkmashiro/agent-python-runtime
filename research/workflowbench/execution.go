@@ -56,6 +56,7 @@ type treatmentResult struct {
 	decisions []observe.OptimizationDecision
 	duration  uint64
 	output    string
+	effects   string
 }
 
 type measuredTool struct {
@@ -120,8 +121,8 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 			TaskID: task.TaskID, WorkloadID: task.WorkloadID, Class: task.Class, NegativeDimension: task.NegativeDimension,
 			BaselineDurationNanos: baseline.duration, OptimizedDurationNanos: optimized.duration,
 			BaselinePhysicalExecutions: uint32(len(baseline.physical)), OptimizedPhysicalExecutions: uint32(len(optimized.physical)),
-			OutputEquivalent:  baseline.output == optimized.output && baseline.output == task.ExpectedOutputSHA256,
-			EffectsEquivalent: true, EvidenceComplete: true, ObservationSealSHA256: sealed.SealSHA256,
+			OutputEquivalent:  baseline.output == optimized.output,
+			EffectsEquivalent: baseline.effects == optimized.effects, EvidenceComplete: true, ObservationSealSHA256: sealed.SealSHA256,
 		}
 		for _, decision := range optimized.decisions {
 			if decision.Outcome == "admitted" {
@@ -130,7 +131,7 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 				metrics.RejectedDecisions++
 			}
 		}
-		if !metrics.OutputEquivalent {
+		if !metrics.OutputEquivalent || !metrics.EffectsEquivalent {
 			evidence.Divergences++
 		}
 		evidence.BaselinePhysicalExecutions += metrics.BaselinePhysicalExecutions
@@ -182,15 +183,16 @@ func executeTreatment(ctx context.Context, manifest Manifest, task Task, treatme
 	}
 	appendOutputSpan(ctx, &result, origin, runID, task)
 	wasmStarted := elapsed(origin)
-	if _, err := wasm(ctx, task); err != nil {
-		return treatmentResult{}, fmt.Errorf("%w: WASM fixture: %v", ErrExperiment, err)
+	wasmOutput, err := wasm(ctx, task)
+	if err != nil || !digestPattern.MatchString(wasmOutput) {
+		return treatmentResult{}, fmt.Errorf("%w: WASM fixture output", ErrExperiment)
 	}
 	wasmEnded := elapsed(origin)
 	result.spans = append(result.spans, observe.ObservedSpan{
 		SpanID: opaqueObservation("span", treatment+":"+task.TaskID+":wasm"), RunID: runID,
 		Kind: "guest.wasm", Label: "WASM execution", EvidenceClass: "measured",
 		StartedNanos: wasmStarted, EndedNanos: wasmEnded,
-		InputSHA256: manifest.Identity.ArtifactSHA256, OutputSHA256: task.ExpectedOutputSHA256,
+		InputSHA256: manifest.Identity.ArtifactSHA256, OutputSHA256: wasmOutput,
 	})
 	runEnded := elapsed(origin)
 	result.run = observe.ObservedRun{
@@ -201,7 +203,32 @@ func executeTreatment(ctx context.Context, manifest Manifest, task Task, treatme
 		CapabilityPlanSHA256:   manifest.Identity.CapabilityPlanSHA256,
 	}
 	result.duration = runEnded - runStarted
-	result.output = task.ExpectedOutputSHA256
+	physicalByID := make(map[string]observe.PhysicalExecution, len(result.physical))
+	for _, execution := range result.physical {
+		physicalByID[execution.PhysicalExecutionID] = execution
+	}
+	logicalByNode := make(map[string]observe.LogicalRequest, len(result.logical))
+	for _, request := range result.logical {
+		logicalByNode[request.WorkflowNodeID] = request
+	}
+	parts := []byte(task.TaskID)
+	for _, node := range task.Nodes {
+		if node.Kind != "tool.read" {
+			continue
+		}
+		request, ok := logicalByNode[node.NodeID]
+		execution, physicalOK := physicalByID[request.PhysicalExecutionID]
+		if !ok || !physicalOK || execution.ResultSHA256 != node.ResultSHA256 {
+			return treatmentResult{}, fmt.Errorf("%w: tool result oracle", ErrExperiment)
+		}
+		parts = append(parts, execution.ResultSHA256...)
+	}
+	toolOutput := digest(string(parts))
+	if toolOutput != task.ExpectedOutputSHA256 {
+		return treatmentResult{}, fmt.Errorf("%w: manifest output oracle", ErrExperiment)
+	}
+	result.output = digest(toolOutput + "\x00" + wasmOutput + "\x00" + digest("model-fixture:"+task.TaskID))
+	result.effects = digest("read-only-no-external-effects:" + task.TaskID)
 	return result, nil
 }
 

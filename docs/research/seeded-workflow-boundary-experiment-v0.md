@@ -33,6 +33,14 @@ Every task emits its own bounded `pysolate.workflow-boundary-observation.v0` rep
 keeps Build/Decode limits meaningful while the experiment evidence binds all reports, the
 full manifest, seed, task metrics, terminal equivalence and a final seal.
 
+The driver recomputes the ordered tool-result oracle from measured physical executions,
+checks it against the manifest, and folds that value together with the actual WASM
+response digest and the fixed model-output fixture digest. Baseline and optimized outputs
+must then match exactly. A WASM response drift, missing physical result, or manifest
+oracle drift fails the experiment closed. The workload contains only read-only tool
+fixtures, so the effects oracle is the validated no-external-write ledger rather than an
+inferred Python effect.
+
 ## Measurement labels
 
 Typed Host read and Guest WASM intervals use actual monotonic timings. Model

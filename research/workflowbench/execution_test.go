@@ -3,6 +3,7 @@ package workflowbench
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,6 +74,20 @@ func TestExecutePairedTreatmentsPreservesOutputsAndReducesQualifiedWork(t *testi
 	decoded, err := DecodeEvidence(encoded)
 	if err != nil || decoded.Validate() != nil {
 		t.Fatalf("decode err=%v", err)
+	}
+}
+
+func TestExecutePairFailsClosedOnObservableWASMOutputDivergence(t *testing.T) {
+	manifest, _ := GenerateManifest(20260815, testIdentity())
+	var calls atomic.Uint32
+	_, err := ExecutePair(context.Background(), manifest, func(context.Context, Task) (string, error) {
+		if calls.Add(1)%2 == 0 {
+			return testDigest("optimized"), nil
+		}
+		return testDigest("baseline-longer"), nil
+	})
+	if err == nil {
+		t.Fatal("WASM output divergence admitted")
 	}
 }
 

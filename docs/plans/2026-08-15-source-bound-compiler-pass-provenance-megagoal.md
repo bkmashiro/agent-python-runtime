@@ -229,7 +229,7 @@ Implement an explicitly experimental test/probe, not production tracing:
 
 Do not integrate monitoring into authority, receipts or default execution in this megagoal. Do not label static AST spans as executed lines.
 
-Gate: reproducible private/raw output plus body-safe checked-in evidence; signed commit and push.
+Gate: reproducible private/raw output plus body-safe checked-in evidence at [`docs/evidence/source-bound-compiler-provenance-real-guest-v0.json`](../evidence/source-bound-compiler-provenance-real-guest-v0.json); signed commit and push.
 
 ## Phase 4 — real Guest evidence and closeout
 

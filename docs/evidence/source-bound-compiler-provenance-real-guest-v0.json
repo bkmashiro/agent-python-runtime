@@ -1,0 +1,123 @@
+{
+  "schema_version": "pysolate.source-bound-compiler-provenance-evidence.v0",
+  "status": "complete_at_megagoal_1_stop_gate",
+  "host_implementation": {
+    "commit": "234f20293ba314bd8de1e8e8e844408c8af1aa5f",
+    "tree": "4ce12276980fbfde6e444a5f57bf29806cd9307d"
+  },
+  "real_guest": {
+    "source_commit": "e79e821c7af3590618b75845527087151e0b0179",
+    "source_tree": "e86448004a438c1bbe343ee07b910468333c5aee",
+    "artifact_sha256": "sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257",
+    "target": "cp314-wasi",
+    "build_cache_disposition": "hit",
+    "final_artifact_cache_disposition": "miss",
+    "build_millis": 174180
+  },
+  "pass_planner": {
+    "schema_version": "pysolate.source-bound-plan.v0",
+    "pass": {
+      "name": "semantic_pre_dispatch",
+      "version": "v0",
+      "default_enabled": false
+    },
+    "properties_verified": [
+      "deterministic canonical projection and identity",
+      "frozen pass context bound by digest without raw context projection",
+      "unknown names, unknown versions, and duplicate selections fail closed",
+      "admitted QualifiedCall remains opaque and Host-private",
+      "rejected decisions expose stable sorted reasons but no QualifiedCall",
+      "existing semantic pre-dispatch consumer behavior remains unchanged"
+    ]
+  },
+  "source_binding": {
+    "claim_level": "source_bound",
+    "capability_plan_sha256": "sha256:afd8860090b94be19dd9b077e2f65917d00730088766287c16b0b99c2734605e",
+    "document_id": "sha256:8176b8f3764479e307a1e8c6dc60f3a317fdf77e27e52be721dd60480b924b98",
+    "source_sha256": "sha256:23744690275c78a2d9775104021d1ec79e7cf760126d9252ee2b9a5171474879",
+    "occurrence_id": "sha256:a7addcde2a8f32ec84546c976cfcb005aad45726afb8274ce83786362cfe6496",
+    "dynamic_occurrence": 1,
+    "span": {
+      "start_line": 1,
+      "start_column": 9,
+      "end_line": 1,
+      "end_column": 27
+    },
+    "receipt_id": "rcpt_ef0ed8e340af2c53bd0245f442ee3e742a0d5493a34c8a38c0f7ea196815de5d",
+    "admission_boundary": "one necessarily reached exclusive static call whose capability and canonical arguments identify one unique verified occurrence",
+    "unbound_cases_verified": [
+      "ordinary direct call",
+      "non-programmatic request",
+      "capability mismatch",
+      "canonical argument mismatch",
+      "non-necessarily-reached occurrence",
+      "ambiguous or non-exclusive occurrence"
+    ],
+    "cross_bindings_verified": [
+      "Run",
+      "sealed capability Plan",
+      "call ID",
+      "programmatic parent",
+      "approval request when present",
+      "capability",
+      "operation index",
+      "request digest",
+      "source document and digest",
+      "static occurrence and dynamic occurrence",
+      "line and column span"
+    ]
+  },
+  "monitoring_spike": {
+    "verdict": "accepted_for_future_debug_profile",
+    "integrated": false,
+    "python": "3.14.0",
+    "call_position": {
+      "instruction_offset": 14,
+      "start_line": 8,
+      "start_column": 13,
+      "end_line": 8,
+      "end_column": 23,
+      "result_parity": true
+    },
+    "bounded_call_heavy_microbenchmark": {
+      "samples": 9,
+      "iterations_per_sample": 10000,
+      "baseline_ns_median": 3797125,
+      "call_ns_median": 10423333,
+      "call_ratio": 2.745,
+      "line_ns_median": 14721167,
+      "line_ratio": 3.877,
+      "call_events": 90009,
+      "line_events": 180027
+    },
+    "claim_boundary": "CALL and LINE data prove feasibility in this bounded CPython/WASI probe only; they are not default runtime instrumentation, authority evidence, or application-level overhead measurements"
+  },
+  "focused_real_guest_gate": {
+    "command_scope": [
+      "source-bound programmatic receipt",
+      "unchanged semantic pre-dispatch",
+      "sys.monitoring CALL position and overhead",
+      "direct/programmatic both surface",
+      "ordered programmatic calls",
+      "hot approval without replay"
+    ],
+    "tests": 7,
+    "result": "pass",
+    "elapsed_seconds": 32.910
+  },
+  "privacy": {
+    "classification": "public_body_safe",
+    "contains_source_body": false,
+    "contains_arguments_or_results": false,
+    "contains_private_paths": false,
+    "contains_credentials": false
+  },
+  "scope_exclusions": [
+    "recorder or evidence vNext migration",
+    "Lab UI",
+    "new cache, coalescing, batching, or hoisting pass",
+    "executed-line production claim",
+    "cold continuation or snapshot",
+    "branch merge"
+  ]
+}

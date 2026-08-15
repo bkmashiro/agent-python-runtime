@@ -65,6 +65,7 @@ class BuildCacheIdentityTests(unittest.TestCase):
     def test_final_identity_binds_exact_source_and_artifact_parameters(self) -> None:
         values = {
             "layer_key": "sha256:" + "a" * 64,
+            "source_commit": "c" * 40,
             "source_tree": "b" * 40,
             "source_epoch": 123,
             "artifact_profile": "base",
@@ -72,11 +73,19 @@ class BuildCacheIdentityTests(unittest.TestCase):
             "extensions_lock_sha256": "",
             "initial_memory_bytes": 1,
             "max_memory_bytes": 2,
+            "probe_runner_sha256": "sha256:" + "d" * 64,
             "host_system": "Linux",
             "host_arch": "x86_64",
         }
         first = cache_identity.final_identity(**values)
-        for field, changed in (("source_tree", "c" * 40), ("source_epoch", 124), ("artifact_profile", "scientific"), ("max_memory_bytes", 3)):
+        for field, changed in (
+            ("source_commit", "e" * 40),
+            ("source_tree", "f" * 40),
+            ("source_epoch", 124),
+            ("artifact_profile", "scientific"),
+            ("max_memory_bytes", 3),
+            ("probe_runner_sha256", "sha256:" + "9" * 64),
+        ):
             mutated = dict(values)
             mutated[field] = changed
             self.assertNotEqual(first, cache_identity.final_identity(**mutated), field)

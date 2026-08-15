@@ -26,10 +26,12 @@ platform produces a different key.
 
 Because `wasi-vfs pack` v0.6.3 does not produce byte-identical output across independent
 packing processes, a second final-artifact cache is keyed by the layer key plus exact Git
-tree, source epoch, artifact/profile/extension identity and memory parameters. It never
+commit/tree, source epoch, artifact/profile/extension identity, memory parameters and the
+SHA-256 of the deterministic default probe-runner binary. It never
 reuses across a source-tree change. A bootstrap-only edit therefore hits the expensive
 CPython layer but misses and reruns final embedding; an exact-source warm build may reuse
-the already verified final distribution byte-for-byte.
+the already verified final distribution byte-for-byte. Supplying a custom probe runner
+disables final-artifact reuse rather than trusting an incomplete external identity.
 
 ## Storage and corruption boundary
 
@@ -38,7 +40,8 @@ The optional cache root must be an absolute, non-symlink directory and is forced
 workspace and publishes a complete temporary directory by rename. `RESULT.READY` is
 written only after `layer.tar` and `SHA256SUMS` exist.
 
-A hit requires:
+A hit requires a real non-symlink key directory and real regular marker/archive/checksum
+files, then:
 
 1. an exact key marker;
 2. a valid layer checksum;
@@ -50,7 +53,9 @@ Invalid cache state becomes a miss and is replaced while holding the publish loc
 maintenance step retains only the protected current key plus the newest other valid
 64-hex key; unrelated or symlink entries are never removed. Every build records
 layer and final-cache `off`, `miss`, or `hit` dispositions plus both exact identities.
-Layer and final caches each retain at most two valid keys.
+Layer and final caches each retain at most two valid keys. Maintenance runs under the
+same publication lock and also removes only strictly named `.publish.<key>.*` or
+`.tmp.<key>.*` crash residue; unrelated and symlink entries remain untouched.
 
 ## Workstation workflow
 
@@ -62,7 +67,8 @@ scripts/build-guest-workstation.sh \
   --output /private/tmp/pysolate-workstation-result
 ```
 
-The repository-owned driver archives exact clean `HEAD`, stages it through `shell2`, and
+The repository-owned driver archives exact clean `HEAD` into fresh, atomically allocated
+0700 stage/output directories through `shell2`, and
 runs on `gpu31` in a private `/tmp` workspace. The remote worker emits:
 
 - `dist/agent-python-runtime.wasm` and the complete verified distribution;

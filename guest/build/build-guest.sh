@@ -70,24 +70,38 @@ fetch() {
 }
 
 # BEGIN CPYTHON CACHE RECIPE
+cache_entry_is_regular() {
+  local entry=$1
+  shift
+  [[ -d ${entry} && ! -L ${entry} ]] || return 1
+  local name
+  for name in "$@"; do
+    [[ -f ${entry}/${name} && ! -L ${entry}/${name} ]] || return 1
+  done
+}
+
 BUILD_CACHE_KEY=$(python3 "${ROOT_DIR}/guest/build/cache_identity.py" --repository "${ROOT_DIR}")
 BUILD_CACHE_STATUS=off
 BUILD_CACHE_LAYER_SHA256=""
 BUILD_CACHE_ENTRY=""
 if [[ ${BUILD_CACHE_MODE} != off ]]; then
-  mkdir -p "${BUILD_CACHE_ROOT}"
-  chmod 0700 "${BUILD_CACHE_ROOT}"
-  if [[ ! -d ${BUILD_CACHE_ROOT} || -L ${BUILD_CACHE_ROOT} ]]; then
+  if [[ -L ${BUILD_CACHE_ROOT} ]]; then
     echo "Guest build cache root must be a real directory" >&2
     exit 21
   fi
+  mkdir -p "${BUILD_CACHE_ROOT}"
+  if [[ ! -d ${BUILD_CACHE_ROOT} ]]; then
+    echo "Guest build cache root must be a real directory" >&2
+    exit 21
+  fi
+  chmod 0700 "${BUILD_CACHE_ROOT}"
   BUILD_CACHE_ENTRY="${BUILD_CACHE_ROOT}/${BUILD_CACHE_KEY#sha256:}"
   exec 9>"${BUILD_CACHE_ROOT}/.publish.lock"
   flock 9
   if [[ ${BUILD_CACHE_MODE} == refresh ]]; then
     rm -rf "${BUILD_CACHE_ENTRY}"
   fi
-  if [[ -f "${BUILD_CACHE_ENTRY}/RESULT.READY" && -f "${BUILD_CACHE_ENTRY}/layer.tar" && -f "${BUILD_CACHE_ENTRY}/SHA256SUMS" ]] &&
+  if cache_entry_is_regular "${BUILD_CACHE_ENTRY}" RESULT.READY layer.tar SHA256SUMS &&
     grep -Fxq "cache_key=${BUILD_CACHE_KEY}" "${BUILD_CACHE_ENTRY}/RESULT.READY" &&
     (cd "${BUILD_CACHE_ENTRY}" && sha256sum -c SHA256SUMS >/dev/null) &&
     python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${BUILD_CACHE_ENTRY}/layer.tar"; then
@@ -239,6 +253,22 @@ write_dist_checksums() {
   )
 }
 
+PROBE_RUNNER=${AGENT_RUNTIME_PROBE_RUNNER:-"${WORK_DIR}/apyrun-probe"}
+FINAL_CACHE_ELIGIBLE=1
+if [[ -n ${AGENT_RUNTIME_PROBE_RUNNER:-} ]]; then
+  FINAL_CACHE_ELIGIBLE=0
+else
+  (
+    cd "${ROOT_DIR}"
+    go build -trimpath -buildvcs=false -o "${PROBE_RUNNER}" ./cmd/apyrun
+  )
+fi
+if [[ ! -x ${PROBE_RUNNER} ]]; then
+  echo "probe runner is not executable: ${PROBE_RUNNER}" >&2
+  exit 10
+fi
+PROBE_RUNNER_SHA256="sha256:$(sha256sum "${PROBE_RUNNER}" | cut -d' ' -f1)"
+
 FINAL_CACHE_STATUS=off
 FINAL_CACHE_KEY=""
 FINAL_CACHE_ENTRY=""
@@ -248,20 +278,26 @@ EXTENSIONS_LOCK_SHA256=""
 if [[ -n ${EXTENSIONS_LOCK:-} ]]; then
   EXTENSIONS_LOCK_SHA256="sha256:$(sha256sum "${EXTENSIONS_LOCK}" | cut -d' ' -f1)"
 fi
-if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${SOURCE_TREE_ID} =~ ^[0-9a-f]{40}$ ]]; then
+if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${FINAL_CACHE_ELIGIBLE} -eq 1 &&
+  ${SOURCE_TREE_ID} =~ ^[0-9a-f]{40}$ && ${GITHUB_SHA} =~ ^[0-9a-f]{40}$ ]]; then
   FINAL_CACHE_KEY=$(python3 "${ROOT_DIR}/guest/build/cache_identity.py" --repository "${ROOT_DIR}" --final \
-    --layer-key "${BUILD_CACHE_KEY}" --source-tree "${SOURCE_TREE_ID}" --source-epoch "${SOURCE_DATE_EPOCH}" \
+    --layer-key "${BUILD_CACHE_KEY}" --source-commit "${GITHUB_SHA}" --source-tree "${SOURCE_TREE_ID}" \
+    --source-epoch "${SOURCE_DATE_EPOCH}" --probe-runner-sha256 "${PROBE_RUNNER_SHA256}" \
     --artifact-profile "${ARTIFACT_PROFILE}" --artifact-filename "${ARTIFACT_FILENAME}" \
     --extensions-lock-sha256 "${EXTENSIONS_LOCK_SHA256}" --initial-memory-bytes "${INITIAL_MEMORY_BYTES}" \
     --max-memory-bytes "${MAX_MEMORY_BYTES}")
   FINAL_CACHE_ROOT="${BUILD_CACHE_ROOT}/final"
   FINAL_CACHE_ENTRY="${FINAL_CACHE_ROOT}/${FINAL_CACHE_KEY#sha256:}"
-  mkdir -p "${FINAL_CACHE_ROOT}"
-  chmod 0700 "${FINAL_CACHE_ROOT}"
-  if [[ -L ${FINAL_CACHE_ROOT} || ! -d ${FINAL_CACHE_ROOT} ]]; then
+  if [[ -L ${FINAL_CACHE_ROOT} ]]; then
     echo "final cache root must be a real directory" >&2
     exit 18
   fi
+  mkdir -p "${FINAL_CACHE_ROOT}"
+  if [[ ! -d ${FINAL_CACHE_ROOT} ]]; then
+    echo "final cache root must be a real directory" >&2
+    exit 18
+  fi
+  chmod 0700 "${FINAL_CACHE_ROOT}"
   exec 8>"${FINAL_CACHE_ROOT}/.lock"
   flock 8
   FINAL_CACHE_LOCKED=1
@@ -276,9 +312,11 @@ if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${SOURCE_TREE_ID} 
   if [[ ${BUILD_CACHE_MODE} == refresh ]]; then
     rm -rf "${FINAL_CACHE_ENTRY}"
   fi
-  if [[ -f ${FINAL_CACHE_ENTRY}/RESULT.READY && -f ${FINAL_CACHE_ENTRY}/dist.tar && -f ${FINAL_CACHE_ENTRY}/SHA256SUMS ]] &&
+  if cache_entry_is_regular "${FINAL_CACHE_ENTRY}" RESULT.READY dist.tar SHA256SUMS &&
     grep -Fxq "final_cache_key=${FINAL_CACHE_KEY}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
     grep -Fxq "source_tree=${SOURCE_TREE_ID}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
+    grep -Fxq "source_commit=${GITHUB_SHA}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
+    grep -Fxq "probe_runner_sha256=${PROBE_RUNNER_SHA256}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
     (cd "${FINAL_CACHE_ENTRY}" && sha256sum -c SHA256SUMS >/dev/null) &&
     python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_ENTRY}/dist.tar" --root dist --regular-only; then
     rm -rf "${DIST_DIR}"
@@ -391,17 +429,6 @@ pack_guest "${FINAL_GUEST}"
 
 "${WASM_TOOLS}" validate "${FINAL_GUEST}"
 "${WASM_TOOLS}" print "${FINAL_GUEST}" > "${DIST_DIR}/agent-python-runtime.wat"
-PROBE_RUNNER=${AGENT_RUNTIME_PROBE_RUNNER:-"${WORK_DIR}/apyrun-probe"}
-if [[ -z ${AGENT_RUNTIME_PROBE_RUNNER:-} ]]; then
-  (
-    cd "${ROOT_DIR}"
-    go build -o "${PROBE_RUNNER}" ./cmd/apyrun
-  )
-fi
-if [[ ! -x ${PROBE_RUNNER} ]]; then
-  echo "probe runner is not executable: ${PROBE_RUNNER}" >&2
-  exit 10
-fi
 IMPORT_INVENTORY_REQUEST="${WORK_DIR}/import-inventory-request.json"
 IMPORT_INVENTORY_RESPONSE="${WORK_DIR}/import-inventory-response.json"
 IMPORT_INVENTORY="${DIST_DIR}/import-inventory.json"
@@ -492,6 +519,8 @@ if [[ ${FINAL_CACHE_STATUS} == miss ]]; then
   {
     printf 'final_cache_key=%s\n' "${FINAL_CACHE_KEY}"
     printf 'source_tree=%s\n' "${SOURCE_TREE_ID}"
+    printf 'source_commit=%s\n' "${GITHUB_SHA}"
+    printf 'probe_runner_sha256=%s\n' "${PROBE_RUNNER_SHA256}"
     printf 'artifact_sha256=sha256:%s\n' "$(sha256sum "${FINAL_GUEST}" | cut -d' ' -f1)"
   } > "${FINAL_CACHE_TMP}/RESULT.READY"
   rm -rf "${FINAL_CACHE_ENTRY}"

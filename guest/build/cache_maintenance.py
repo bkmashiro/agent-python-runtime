@@ -9,6 +9,7 @@ import re
 import shutil
 
 KEY = re.compile(r"^[0-9a-f]{64}$")
+TEMPORARY = re.compile(r"^\.(?:publish|tmp)\.[0-9a-f]{64}\.[A-Za-z0-9]{8}$")
 
 
 def prune(root: pathlib.Path, protect: str, keep: int = 2) -> list[str]:
@@ -29,6 +30,11 @@ def prune(root: pathlib.Path, protect: str, keep: int = 2) -> list[str]:
         for entry in root.iterdir()
         if KEY.fullmatch(entry.name) and entry.is_dir() and not entry.is_symlink()
     ]
+    temporary = [
+        entry
+        for entry in root.iterdir()
+        if TEMPORARY.fullmatch(entry.name) and entry.is_dir() and not entry.is_symlink()
+    ]
     candidates.sort(key=lambda entry: (entry.stat().st_mtime_ns, entry.name), reverse=True)
     retained = {protect}
     for entry in candidates:
@@ -37,6 +43,9 @@ def prune(root: pathlib.Path, protect: str, keep: int = 2) -> list[str]:
         if len(retained) < keep:
             retained.add(entry.name)
     removed = []
+    for entry in temporary:
+        shutil.rmtree(entry)
+        removed.append(entry.name)
     for entry in candidates:
         if entry.name not in retained:
             shutil.rmtree(entry)

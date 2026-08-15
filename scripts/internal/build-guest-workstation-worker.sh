@@ -17,21 +17,27 @@ if [[ $(hostname) != gpu31.doc.ic.ac.uk || $(uname -s) != Linux || $(uname -m) !
   echo "worker requires gpu31 Linux x86_64" >&2
   exit 3
 fi
-for value in "$stage" "$output" "$cache_root"; do
-  if [[ $value != /vol/bitbucket/ys25/pysolate/* ]]; then
-    echo "worker path escaped the approved shared root" >&2
-    exit 4
-  fi
-done
-shared_root=${cache_root%/cache/guest-layers}
-if [[ $shared_root == "$cache_root" || $cache_root != "$shared_root/cache/guest-layers" ]]; then
-  echo "cache root does not identify the bounded Pysolate shared root" >&2
-  exit 8
-fi
 if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || ! $source_epoch =~ ^[1-9][0-9]*$ ]]; then
   echo "invalid source identity" >&2
   exit 5
 fi
+approved_root=$(realpath -e /vol/bitbucket/ys25/pysolate)
+stage_real=$(realpath -e "$stage")
+output_real=$(realpath -e "$output")
+cache_parent=$(dirname "$cache_root")
+cache_parent_real=$(realpath -e "$cache_parent")
+stage_name=$(basename "$stage_real")
+output_name=$(basename "$output_real")
+if [[ $approved_root != /vol/bitbucket/ys25/pysolate || $stage_real != "$stage" || $output_real != "$output" ||
+  $cache_parent_real != "$approved_root/cache" || $cache_root != "$approved_root/cache/guest-layers" ||
+  $(dirname "$stage_real") != "$approved_root/stage" || $(dirname "$output_real") != "$approved_root/artifacts" ||
+  ! $stage_name =~ ^workstation-${source_commit:0:12}\.[A-Za-z0-9]{8}$ ||
+  ! $output_name =~ ^workstation-${source_commit:0:12}\.[A-Za-z0-9]{8}$ ||
+  -L $stage || -L $output ]]; then
+  echo "worker path escaped the approved shared root" >&2
+  exit 4
+fi
+shared_root=$approved_root
 case "$cache_mode" in off|auto|refresh) ;; *) exit 6 ;; esac
 
 temporary=$(mktemp -d /tmp/ys25-pysolate-workstation-build.XXXXXXXX)

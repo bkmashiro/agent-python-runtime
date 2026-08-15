@@ -40,17 +40,19 @@ fi
 source_commit=$(git rev-parse HEAD)
 source_tree=$(git rev-parse 'HEAD^{tree}')
 source_epoch=$(git show -s --format=%ct HEAD)
-run_id="workstation-${source_commit:0:12}-$$"
 shared=/vol/bitbucket/ys25/pysolate
-stage="$shared/stage/$run_id"
-remote_output="$shared/artifacts/$run_id"
+stage=""
+remote_output=""
 cache_root="$shared/cache/guest-layers"
 
 cleanup_remote() {
-  ssh shell2 rm -rf -- "$stage" "$remote_output" >/dev/null 2>&1 || true
+  [[ -z ${stage:-} ]] || ssh shell2 rm -rf -- "$stage" >/dev/null 2>&1 || true
+  [[ -z ${remote_output:-} ]] || ssh shell2 rm -rf -- "$remote_output" >/dev/null 2>&1 || true
 }
 trap cleanup_remote EXIT
-ssh shell2 mkdir -p "$stage" "$remote_output"
+ssh shell2 mkdir -p "$shared/stage" "$shared/artifacts" "$shared/cache"
+stage=$(ssh shell2 mktemp -d "$shared/stage/workstation-${source_commit:0:12}.XXXXXXXX")
+remote_output=$(ssh shell2 mktemp -d "$shared/artifacts/workstation-${source_commit:0:12}.XXXXXXXX")
 git archive --format=tar HEAD | ssh shell2 tar xf - -C "$stage"
 set +e
 # All remote arguments are generated from fixed prefixes, Git hex identities, and an enum.

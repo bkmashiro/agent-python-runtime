@@ -31,6 +31,24 @@ class CacheMaintenanceTests(unittest.TestCase):
             self.assertTrue(unrelated.is_dir())
             self.assertTrue(link.is_symlink())
 
+    def test_removes_only_bounded_crash_residue(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            protected = root / ("a" * 64)
+            protected.mkdir()
+            publish = root / (".publish." + "b" * 64 + ".Ab12Cd34")
+            final = root / (".tmp." + "c" * 64 + ".Ef56Gh78")
+            publish.mkdir()
+            final.mkdir()
+            unrelated = root / ".tmp.not-a-cache-key.Ab12Cd34"
+            unrelated.mkdir()
+            linked = root / (".publish." + "d" * 64 + ".Ij90Kl12")
+            linked.symlink_to(unrelated, target_is_directory=True)
+            removed = maintenance.prune(root, protected.name, keep=2)
+            self.assertEqual(sorted([publish.name, final.name]), removed)
+            self.assertTrue(unrelated.is_dir())
+            self.assertTrue(linked.is_symlink())
+
     def test_rejects_missing_protected_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):

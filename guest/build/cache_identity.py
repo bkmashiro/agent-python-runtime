@@ -77,6 +77,7 @@ def build_identity(repository: pathlib.Path, host_system: str, host_arch: str) -
 
 def final_document(
     layer_key: str,
+    source_commit: str,
     source_tree: str,
     source_epoch: int,
     artifact_profile: str,
@@ -84,23 +85,29 @@ def final_document(
     extensions_lock_sha256: str,
     initial_memory_bytes: int,
     max_memory_bytes: int,
+    probe_runner_sha256: str,
     host_system: str,
     host_arch: str,
 ) -> dict[str, Any]:
     if not valid_digest(layer_key):
         raise ValueError("invalid layer key")
+    if len(source_commit) != 40 or any(value not in "0123456789abcdef" for value in source_commit):
+        raise ValueError("invalid source commit")
     if len(source_tree) != 40 or any(value not in "0123456789abcdef" for value in source_tree):
         raise ValueError("invalid source tree")
     if source_epoch <= 0 or initial_memory_bytes <= 0 or max_memory_bytes < initial_memory_bytes:
         raise ValueError("invalid final build parameters")
     if extensions_lock_sha256 and not valid_digest(extensions_lock_sha256):
         raise ValueError("invalid extension lock digest")
+    if not valid_digest(probe_runner_sha256):
+        raise ValueError("invalid probe runner digest")
     return {
         "schema_version": FINAL_SCHEMA_VERSION,
         "target": "wasm32-wasip1",
         "host_system": host_system,
         "host_arch": host_arch,
         "layer_key": layer_key,
+        "source_commit": source_commit,
         "source_tree": source_tree,
         "source_epoch": source_epoch,
         "artifact_profile": artifact_profile,
@@ -108,6 +115,7 @@ def final_document(
         "extensions_lock_sha256": extensions_lock_sha256,
         "initial_memory_bytes": initial_memory_bytes,
         "max_memory_bytes": max_memory_bytes,
+        "probe_runner_sha256": probe_runner_sha256,
     }
 
 
@@ -124,6 +132,7 @@ def main() -> int:
     parser.add_argument("--document", action="store_true")
     parser.add_argument("--final", action="store_true")
     parser.add_argument("--layer-key")
+    parser.add_argument("--source-commit")
     parser.add_argument("--source-tree")
     parser.add_argument("--source-epoch", type=int)
     parser.add_argument("--artifact-profile")
@@ -131,13 +140,15 @@ def main() -> int:
     parser.add_argument("--extensions-lock-sha256", default="")
     parser.add_argument("--initial-memory-bytes", type=int)
     parser.add_argument("--max-memory-bytes", type=int)
+    parser.add_argument("--probe-runner-sha256")
     args = parser.parse_args()
     if args.final:
-        required = (args.layer_key, args.source_tree, args.source_epoch, args.artifact_profile, args.artifact_filename, args.initial_memory_bytes, args.max_memory_bytes)
+        required = (args.layer_key, args.source_commit, args.source_tree, args.source_epoch, args.artifact_profile, args.artifact_filename, args.initial_memory_bytes, args.max_memory_bytes, args.probe_runner_sha256)
         if any(value is None for value in required):
             parser.error("--final requires exact layer/source/artifact/memory identity")
         values = {
             "layer_key": args.layer_key,
+            "source_commit": args.source_commit,
             "source_tree": args.source_tree,
             "source_epoch": args.source_epoch,
             "artifact_profile": args.artifact_profile,
@@ -145,6 +156,7 @@ def main() -> int:
             "extensions_lock_sha256": args.extensions_lock_sha256,
             "initial_memory_bytes": args.initial_memory_bytes,
             "max_memory_bytes": args.max_memory_bytes,
+            "probe_runner_sha256": args.probe_runner_sha256,
             "host_system": args.host_system,
             "host_arch": args.host_arch,
         }

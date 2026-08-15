@@ -76,7 +76,11 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, harnessSourceC
 		if err != nil {
 			return "", err
 		}
-		return sha(response), nil
+		result, err := stableGuestResult(response)
+		if err != nil {
+			return "", err
+		}
+		return sha(result), nil
 	})
 	if err != nil {
 		return err
@@ -91,6 +95,26 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, harnessSourceC
 	fmt.Printf("seed=%d tasks=%d divergences=%d baseline_physical=%d optimized_physical=%d evidence_sha256=%s\n",
 		seed, len(evidence.Tasks), evidence.Divergences, evidence.BaselinePhysicalExecutions, evidence.OptimizedPhysicalExecutions, sha(encoded))
 	return nil
+}
+
+func stableGuestResult(payload []byte) ([]byte, error) {
+	var response struct {
+		Status string          `json:"status"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &response); err != nil || response.Status != "ok" || len(response.Result) == 0 || (len(response.Error) != 0 && string(response.Error) != "null") {
+		return nil, fmt.Errorf("Guest result is not publishable")
+	}
+	var value any
+	if err := json.Unmarshal(response.Result, &value); err != nil {
+		return nil, fmt.Errorf("Guest result is not canonical JSON")
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("Guest result is not canonical JSON")
+	}
+	return canonical, nil
 }
 
 func verifyArtifactManifest(artifactPath, sourceCommit string, artifact []byte) error {

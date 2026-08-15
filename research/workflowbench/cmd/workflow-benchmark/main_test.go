@@ -54,3 +54,17 @@ func TestAtomicWriteReplacesCompleteFile(t *testing.T) {
 		t.Fatalf("content=%q err=%v", content, err)
 	}
 }
+
+func TestStableGuestResultExcludesInvocationMetadata(t *testing.T) {
+	first, err := stableGuestResult([]byte(`{"status":"ok","result":{"value":2},"error":null,"receipt":"one"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := stableGuestResult([]byte(`{"receipt":"two","error":null,"result":{"value":2},"status":"ok"}`))
+	if err != nil || string(first) != string(second) || string(first) != `{"value":2}` {
+		t.Fatalf("first=%s second=%s err=%v", first, second, err)
+	}
+	if _, err := stableGuestResult([]byte(`{"status":"error","result":null,"error":{"class":"failure"}}`)); err == nil {
+		t.Fatal("failed Guest response admitted")
+	}
+}

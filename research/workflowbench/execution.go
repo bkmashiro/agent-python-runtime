@@ -132,7 +132,7 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 			}
 		}
 		if !metrics.OutputEquivalent || !metrics.EffectsEquivalent {
-			evidence.Divergences++
+			return Evidence{}, fmt.Errorf("%w: observable divergence %s", ErrExperiment, task.TaskID)
 		}
 		evidence.BaselinePhysicalExecutions += metrics.BaselinePhysicalExecutions
 		evidence.OptimizedPhysicalExecutions += metrics.OptimizedPhysicalExecutions

@@ -67,6 +67,8 @@ a capability, replay, rollback or scheduling mechanism.
 
 ## Phase 1 — RED: contract, identity and profiles
 
+**Status:** Complete. `pysolate.causal-evidence.v1` provides exact canonical decode, profile-independent event identities, prior-only causal links, strict production allowlisting, private body references through Labstore, body-free portable projection, configured event/parent/payload ceilings, explicit truncation evidence and a `0600` append/readback log. The old v0 API remains temporarily only for Phase 4 consumer migration and is not accepted by the v1 decoder.
+
 Write failing tests for:
 
 - exact-key canonical trace/header/event/export documents;
@@ -86,6 +88,8 @@ Gate: focused trajectory/labstore tests, race, `git diff --check`; update this
 plan; signed commit and push.
 
 ## Phase 2 — typed source, execution, subagent and workspace joins
+
+**Status:** Complete. Typed payloads cover production authority/effect/workspace/attempt evidence, M1 source document/occurrence/decision/receipt joins, instrumentation-only executed-line claims and independent subagent context/runtime/workspace planes. Cross-plane identifiers and admitted receipt parents are validated; parent live-state inheritance and dishonest rollback states fail closed.
 
 Add failing tests and minimal typed payloads for:
 

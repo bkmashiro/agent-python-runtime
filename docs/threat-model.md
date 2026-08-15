@@ -73,10 +73,19 @@ This is compatibility policy, not the primary sandbox. WASI and Host capabilitie
 
 ### Host-owned tools
 
-Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v5` binds sorted canonical specs, their opaque Host policy grants and the total call budget; late registration is rejected. Each current spec binds capability/version and handler identities, documentation, effect/playback declarations, strict input/output schemas, generated Python projection metadata and any optional bounded pre-dispatch qualification. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access. Capability metadata
+Guest code can only call tools present in the Host Registry sealed before Guest startup. `pysolate.capability-plan.v6` binds sorted canonical specs, their opaque Host policy grants, any optional exact approval lease and the total call budget; late registration is rejected. Each current spec binds capability/version and handler identities, documentation, effect/playback declarations, strict input/output schemas, generated Python projection metadata and any optional bounded pre-dispatch qualification. The Host rejects ambiguous JSON, schema-invalid arguments and schema-invalid handler results, then applies canonical workspace path, per-file size and frozen call-budget checks. The active workspace tool has no Host path or network access. Capability metadata
 alone never starts pre-dispatch or populates the legacy streaming eager-call map; a
 future consumer additionally requires verified program facts and exact observation
 authority.
+
+Programmatic presentation is not a new authority surface: generated child IDs
+must match their parent and operation sequence before budget consumption, and
+all calls re-enter the same Broker. For a Plan-bound approval lease, the Broker
+publishes only a digest-bound request and blocks before the live handler. Reject,
+expiry and cancellation execute no handler; an approved call executes at most
+once and cannot be replayed by the approval controller. Audit records retain no
+raw arguments or results. The implemented claim is same-process hot waiting,
+not crash-safe or indefinite durability.
 
 The credential-free `sources.demo_catalog()` and
 `sources.benchmark_manifest()` adapters are the two Current external-read

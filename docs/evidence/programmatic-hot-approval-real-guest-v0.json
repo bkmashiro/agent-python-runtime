@@ -1,0 +1,39 @@
+{
+  "command": "AGENT_RUNTIME_GUEST=<verified-artifact> go test -json ./integration/e2e -run '<three focused tests>' -count=1",
+  "guest_artifact": {
+    "builder": "gpu31.doc.ic.ac.uk",
+    "sha256": "sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af",
+    "source_commit": "db756fd7b40d465072b5fb1b6f3867d29c5d8114",
+    "source_tree": "ca2e1bd7f55223a1aeb5ebb5f8fa859e23e59c51",
+    "target": "wasm32-wasip1"
+  },
+  "host": {
+    "goarch": "arm64",
+    "goos": "darwin"
+  },
+  "non_claims": [
+    "no crash-safe snapshot or restore",
+    "no cold pageout or mmap allocator",
+    "no native-sandbox parity",
+    "no production scheduler or indefinite durable workflow",
+    "no performance or arbitrary-workload conclusion"
+  ],
+  "observations": [
+    "direct and programmatic presentations reached the same sealed Plan and Host Broker implementation",
+    "one real CPython/WASM program emitted two ordered parent-bound child calls with Host receipts",
+    "one approval-required ABI call remained pending, dispatched exactly once after approval, and returned into the same Python invocation without replay",
+    "approval rejection, lease expiry, and context cancellation dispatched zero handler calls",
+    "Host receipts cross-bound Plan, child call, parent call, and approval request identities"
+  ],
+  "passed_tests": [
+    "TestProgrammaticSurfaceUsesSameBrokerForOrderedRealGuestCalls",
+    "TestHotApprovalResumesSameRealGuestWithoutReplay",
+    "TestRealGuestApprovalRejectExpireAndCancelDoNotDispatch",
+    "TestRealGuestApprovalRejectExpireAndCancelDoNotDispatch/reject",
+    "TestRealGuestApprovalRejectExpireAndCancelDoNotDispatch/expire",
+    "TestRealGuestApprovalRejectExpireAndCancelDoNotDispatch/cancel"
+  ],
+  "schema_version": "pysolate.programmatic-hot-approval-evidence.v0",
+  "source_commit": "cdfb29a147a7c69739ea37dcad9e3574ff7b1bca",
+  "source_tree": "025dd55869f056a59d53e27b7e3d21dab79a1c73"
+}

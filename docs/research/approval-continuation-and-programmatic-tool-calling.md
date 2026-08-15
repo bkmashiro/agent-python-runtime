@@ -1,8 +1,31 @@
 # Approval continuation, memory tiering, and programmatic tool calling
 
-Status: **Proposed architecture; no full-continuation durability claim yet**
+Status: **Programmatic surface and hot approval v0 implemented; cold continuation remains proposed**
 
 Date: 2026-08-15
+
+## Implemented v0 boundary
+
+The first bounded slice is implemented and evidenced by
+[`programmatic-hot-approval-real-guest-v0.json`](../evidence/programmatic-hot-approval-real-guest-v0.json):
+
+- `ProgramSurface.mode = direct | programmatic | both` is Host-owned and
+  programmatic exposure is independently default-off;
+- direct schemas and parent-bound Python projection are generated from the same
+  sealed `pysolate.capability-plan.v6`;
+- programmatic child IDs are exactly `parent:program:<n>` and near-match IDs are
+  denied before call-budget consumption;
+- one optional Plan-bound approval lease blocks synchronously inside the existing
+  Broker call before the live handler;
+- approve dispatches once; reject, expiry and cancellation dispatch zero times;
+- body-safe approval audit state remains in the independent controller after the
+  Broker/Guest is closed;
+- receipts bind child, parent, approval request and Plan identities.
+
+The real CPython/WASM test retained a Python local across the pending Host ABI
+call and consumed it after approval. This is evidence for same-process hot
+zero-replay continuation only. It is not evidence for crash-safe restore,
+pageout, migration or arbitrary-Harness durability.
 
 ## Decision
 

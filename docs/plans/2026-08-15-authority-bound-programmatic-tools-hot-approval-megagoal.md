@@ -15,7 +15,7 @@
 - [x] Phase 0 — source archaeology and frozen implementation map
 - [x] Phase 1 — presentation contract and parent/child evidence
 - [x] Phase 2 — approval suspension, lease and audit
-- [ ] Phase 3 — real-Guest parity, cancellation and zero-replay evidence
+- [x] Phase 3 — real-Guest parity, cancellation and zero-replay evidence
 - [ ] Phase 4 — full verification, independent review and closeout
 
 ## Mission
@@ -185,6 +185,27 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
 Run the real-Guest E2E against a freshly built or identity-verified artifact.
 Preserve artifact/profile/source identities and exact commands in evidence docs.
+
+## Real-Guest evidence record
+
+The bounded campaign in
+`docs/evidence/programmatic-hot-approval-real-guest-v0.json` passed against:
+
+```text
+Host source commit: cdfb29a147a7c69739ea37dcad9e3574ff7b1bca
+Guest source commit: db756fd7b40d465072b5fb1b6f3867d29c5d8114
+Guest artifact SHA-256: sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af
+Guest target: wasm32-wasip1
+```
+
+Observed tests cover two ordered programmatic calls, direct/programmatic Broker
+parity, one approved same-invocation continuation, and reject/expire/cancel with
+zero handler dispatch. The Guest source predates only later Host-side receipt
+validation and cancellation-race hardening; no Guest source changed between those
+commits.
+
+No performance, cold-residency, crash-recovery, native-sandbox or arbitrary
+Harness claim follows.
 
 ## Decision and stop gates
 

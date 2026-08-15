@@ -67,7 +67,7 @@ The Host scanner intentionally accepts only a small import preamble. It is not a
 
 ## Host tools
 
-The active tool surface uses one generic Guest-to-Host JSON call envelope and a small Host Registry. Each registration binds a canonical `CapabilitySpec`—capability/version identity, documentation, effect/playback declarations, handler identity, strict input/output schemas, Python projection and any optional bounded pre-dispatch qualification—to a Host handler, plus an opaque `CapabilityGrant` identity derived from the exact Host-owned per-Run policy. Before Guest startup, the Host seals the sorted specs, grants and total call budget into an immutable `pysolate.capability-plan.v5`; late registration is rejected. Handler identity remains stable implementation compatibility while changing target policy changes the grant and plan identities. The Broker accepts only that sealed plan, validates arguments before the handler, and validates results before returning them. The CLI generates module objects and compatibility aliases from those same sealed specs:
+The active tool surface uses one generic Guest-to-Host JSON call envelope and a small Host Registry. Each registration binds a canonical `CapabilitySpec`—capability/version identity, documentation, effect/playback declarations, handler identity, strict input/output schemas, Python projection and any optional bounded pre-dispatch qualification—to a Host handler, plus an opaque `CapabilityGrant` identity derived from the exact Host-owned per-Run policy. Before Guest startup, the Host seals the sorted specs, grants and total call budget into an immutable `pysolate.capability-plan.v6`; late registration is rejected. Handler identity remains stable implementation compatibility while changing target policy changes the grant and plan identities. The Broker accepts only that sealed plan, validates arguments before the handler, and validates results before returning them. The CLI generates module objects and compatibility aliases from those same sealed specs:
 
 ```python
 workspace.read_text(path)      # alias: read_text(path)
@@ -263,12 +263,14 @@ cmd/pysolate-research      partial local research CLI
 
 ## Approval continuation and programmatic tool calling
 
-**Proposed and default-off.** Approval suspension, continuation memory tiering,
-approval leases, durable audit records and programmatic tool calling are separate
-mechanisms with explicit dependency validation. Programmatic calls re-enter the
-same Host-owned capability plane; they do not receive ambient authority or imply
-approval, caching, replay or cold memory. Approval may preserve a real pending ABI
-call for a bounded lease, but Pysolate does not yet claim complete arbitrary
+**Implemented hot v0; cold tiers remain Proposed and default-off.** Programmatic
+tool calling, approval suspension, approval leases, audit records and future
+continuation memory tiering are separate mechanisms with explicit dependency
+validation. Programmatic calls re-enter the same Host-owned capability plane;
+they do not receive ambient authority or imply approval, caching, replay or cold
+memory. A bounded Plan-bound approval lease can preserve one real pending ABI
+call in the same Wazero/CPython execution; rejection, expiry and cancellation do
+not dispatch the handler. Pysolate does not claim complete arbitrary
 CPython/Wazero snapshot and restore.
 
 The source-backed DeepSeek Harness PTC comparison, lifecycle, package boundaries,

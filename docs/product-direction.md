@@ -102,7 +102,7 @@ The current implementation provides:
 - a generic Guest-to-Host JSON call ABI, Host Registry and bounded Broker;
 - canonical Host-owned `CapabilitySpec` definitions for capability/version identity, documentation, effect class, playback treatment, handler identity, strict input/output schemas, Python wrapper projection and optional bounded pre-dispatch qualification;
 - opaque per-Run `CapabilityGrant` identities derived from canonical Host policy documents;
-- a sealed `pysolate.capability-plan.v5` identity binding sorted canonical specs, their per-Run grants and the total call budget;
+- a sealed `pysolate.capability-plan.v6` identity binding sorted canonical specs, their per-Run grants and the total call budget;
 - generated Python module/method objects and direct Agent tool schemas from the sealed specs, with compatibility aliases for the three current workspace functions;
 - two credential-free, dedicated external-read sources backed by Host-private exact-endpoint GET adapters with redirect, status, media-type, timeout and byte controls: `sources.demo_catalog()` and the nested versioned `sources.benchmark_manifest()` research manifest;
 - canonical minimal Playback Bundle v1 capture and strict offline consumption for curated external reads, with validated capability payloads, bounded transport evidence and plan/grant/request/artifact/profile/status/result/workspace identities; publication is staged `0600`, synced and atomic, trusted Host config anchors the capture-issued bundle identity, playback constructs no HTTP adapter and verifies final identities;
@@ -190,7 +190,7 @@ Current `CapabilitySpec` defines:
 - Host handler identity;
 - declared effect class and playback treatment.
 
-Registration canonicalizes and compiles both schemas. It also requires an opaque `CapabilityGrant` identity derived from a canonical Host-owned policy document. Sealing binds every sorted spec, its grant identity and the global budget into `pysolate.capability-plan.v5`; changing a per-Run target policy changes the plan without overloading the stable handler identity. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates trusted module objects and optional aliases from the same sealed specs, and the plan exposes defensive direct Agent tool schemas from those definitions rather than maintaining handwritten second surfaces.
+Registration canonicalizes and compiles both schemas. It also requires an opaque `CapabilityGrant` identity derived from a canonical Host-owned policy document. Sealing binds every sorted spec, its grant identity and the global budget into `pysolate.capability-plan.v6`; changing a per-Run target policy changes the plan without overloading the stable handler identity. The Broker validates arguments before handler invocation and validates results before returning them to the Guest. The CLI generates trusted module objects and optional aliases from the same sealed specs, and the plan exposes defensive direct Agent tool schemas from those definitions rather than maintaining handwritten second surfaces.
 
 The following remain Proposed extensions:
 

@@ -36,7 +36,7 @@ class CacheMaintenanceTests(unittest.TestCase):
             root = pathlib.Path(directory)
             protected = root / ("a" * 64)
             protected.mkdir()
-            publish = root / (".publish." + "b" * 64 + ".Ab12Cd34")
+            publish = root / ".publish.Ab12Cd34"
             final = root / (".tmp." + "c" * 64 + ".Ef56Gh78")
             publish.mkdir()
             final.mkdir()

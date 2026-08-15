@@ -9,7 +9,9 @@ import re
 import shutil
 
 KEY = re.compile(r"^[0-9a-f]{64}$")
-TEMPORARY = re.compile(r"^\.(?:publish|tmp)\.[0-9a-f]{64}\.[A-Za-z0-9]{8}$")
+TEMPORARY = re.compile(
+    r"^(?:\.publish\.[A-Za-z0-9]{8}|\.(?:publish|tmp)\.[0-9a-f]{64}\.[A-Za-z0-9]{8})$"
+)
 
 
 def prune(root: pathlib.Path, protect: str, keep: int = 2) -> list[str]:

@@ -95,6 +95,18 @@ func TestRuntimeCampaignAdapterComposesTypedMechanismsWithoutPaperLabels(t *test
 			t.Fatalf("rejected %s has physical execution: %+v", rejected, rows[rejected])
 		}
 	}
+	for programID, eventType := range map[string]string{"P04": "workspace.discarded", "P11": "verification.completed", "P13": "workflow.waiting", "P14": "workflow.resumed", "P17": "delegation.child_started"} {
+		found := false
+		for _, event := range evidence.Events {
+			if event.ProgramID == programID && event.Type == eventType {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing %s for %s", eventType, programID)
+		}
+	}
 }
 
 func campaignRuntimeRequestKey(request workflowbench.CampaignRequest) string {

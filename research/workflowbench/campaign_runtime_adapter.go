@@ -233,12 +233,21 @@ func (adapter *RuntimeCampaignAdapter) executeExact(ctx context.Context, request
 	if result.Shared || result.CacheHit || result.Disposition == agentfunction.Waiter || result.Disposition == agentfunction.Retained {
 		sharing = "exact_shared"
 	}
+	if err == nil {
+		if eventErr := runtime.Event("sharing.decided", sharing, result.PhysicalExecutionID); eventErr != nil {
+			err = eventErr
+		}
+	}
 	return CampaignOutcome{Disposition: "complete", Result: result.Value, PhysicalExecutionID: result.PhysicalExecutionID, Sharing: sharing, Err: err}
 }
 
 func (adapter *RuntimeCampaignAdapter) executeWorkspace(ctx context.Context, request CampaignRequest, treatment CampaignTreatment, runtime *CampaignRuntime, verify bool) CampaignOutcome {
 	branch, err := adapter.manager.ForkBranch(adapter.baseRef, adapter.baseSHA256)
 	if err != nil {
+		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
+	}
+	if err := runtime.Event("workspace.forked", "private_attempt", ""); err != nil {
+		_ = branch.Discard()
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
 	}
 	physicalID := adapter.nextPhysicalID("workspace")
@@ -250,6 +259,7 @@ func (adapter *RuntimeCampaignAdapter) executeWorkspace(ctx context.Context, req
 	})
 	if runErr != nil || request.Execution.CancelPoint == CampaignCancelAfterWorkspaceFork {
 		_ = branch.Discard()
+		_ = runtime.Event("workspace.discarded", string(request.Execution.CancelPoint), "")
 		disposition := "failed"
 		if request.Execution.CancelPoint == CampaignCancelAfterWorkspaceFork && runErr == nil {
 			disposition = "cancelled"
@@ -259,6 +269,10 @@ func (adapter *RuntimeCampaignAdapter) executeWorkspace(ctx context.Context, req
 	root, err := branch.Seal(adapter.baseSHA256)
 	if err != nil {
 		_ = branch.Discard()
+		return CampaignOutcome{Disposition: "failed", Result: value, PhysicalExecutionID: physicalID, Sharing: "independent", Err: err}
+	}
+	if err := runtime.Event("workspace.sealed", root.WorkspaceSHA256, ""); err != nil {
+		_ = adapter.manager.Destroy(root.Ref())
 		return CampaignOutcome{Disposition: "failed", Result: value, PhysicalExecutionID: physicalID, Sharing: "independent", Err: err}
 	}
 	sharing := "independent"
@@ -294,10 +308,14 @@ func (adapter *RuntimeCampaignAdapter) verifyRoot(ctx context.Context, request C
 			return json.Marshal(map[string]any{"verified": true, "workspace_sha256": info.WorkspaceSHA256})
 		})
 	})
+	sharing := "independent"
 	if result.Shared || result.CacheHit || result.Disposition == agentfunction.Waiter || result.Disposition == agentfunction.Retained {
-		return "root_exact_shared", err
+		sharing = "root_exact_shared"
 	}
-	return "independent", err
+	if err == nil {
+		err = runtime.Event("verification.completed", root.WorkspaceSHA256+":"+sharing, result.PhysicalExecutionID)
+	}
+	return sharing, err
 }
 
 func (adapter *RuntimeCampaignAdapter) workflowAuthority(request CampaignRequest, transition CampaignResumeTransition, previous workflow.AuthorityEnvelope) workflow.AuthorityEnvelope {
@@ -353,6 +371,9 @@ func (adapter *RuntimeCampaignAdapter) executeWorkflowStart(ctx context.Context,
 	if err != nil || result.Disposition != workflow.Suspended {
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: errors.Join(err, ErrInvalidRuntimeCampaignAdapter)}
 	}
+	if err := runtime.Event("workflow.waiting", request.Execution.WorkflowStateKey, ""); err != nil {
+		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
+	}
 	adapter.mu.Lock()
 	adapter.workflows[request.Execution.WorkflowStateKey] = campaignWorkflowState{state: result.State, authority: authority}
 	adapter.mu.Unlock()
@@ -389,6 +410,14 @@ func (adapter *RuntimeCampaignAdapter) executeWorkflowResume(ctx context.Context
 	evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, runtime), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: true, Authority: authority})
 	if err != nil {
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
+	}
+	if err := runtime.Event("workflow.resumed", string(request.Execution.Resume.Transition), ""); err != nil {
+		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
+	}
+	if request.Execution.Resume.Transition == CampaignResumePlanGrantChanged {
+		if err := runtime.Event("authority.refreshed", authority.PlanSHA256, ""); err != nil {
+			return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
+		}
 	}
 	result, err := evaluator.Resume(ctx, stored.state)
 	if err != nil || result.Disposition != workflow.Completed {
@@ -499,6 +528,9 @@ func (adapter *RuntimeCampaignAdapter) executeDelegation(ctx context.Context, re
 	adapter.mu.Unlock()
 	if staged == nil {
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: ErrInvalidRuntimeCampaignAdapter}
+	}
+	if err := runtime.Event("delegation.child_started", request.Execution.Delegation.GroupID, ""); err != nil {
+		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
 	}
 	select {
 	case <-ctx.Done():

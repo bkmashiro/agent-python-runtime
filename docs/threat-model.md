@@ -208,6 +208,25 @@ corrupt or mixed-generation entries become misses. `refresh` cannot read either 
 The cache is bounded private same-UID state; the final artifact, manifest and Guest gates
 remain mandatory after a hit.
 
+### Campaign evidence boundary
+
+**Current:** canonical campaign evidence is a local `0700` directory of `0600`, hash-bound
+manifest, run and summary files. Reload uses strict duplicate-key/unknown-field validation
+and recomputes each evidence seal. The public Lab/paper artifact is a generated,
+credential-scanned projection with no Python source, inputs, oracle bodies or errors. Its
+browser loader rejects malformed, body-bearing and inconsistent local display fields, but
+is intentionally not a second authority/lifecycle registry; all cross-execution identity
+proof is completed by the Go validator/projector before generation, and the Lab has no
+execution authority.
+
+**Observed:** malformed delegation-parent bindings and non-reloadable pretty-printed raw JSON
+were both rejected before publication. The final five-pair cohort is independently bound to
+the Guest artifact, campaign commit, manifest, host and each run digest.
+
+**Deferred / outside the threat model:** same-UID Host replacement of private evidence,
+host compromise, semantic equivalence beyond registered oracles, and general workload
+representativeness are not prevented or claimed.
+
 ## Accepted PoC limitations
 
 - The Host import scanner is intentionally not a complete Python parser and can reject valid programs.

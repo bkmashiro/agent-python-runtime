@@ -96,6 +96,7 @@ type projectionProgram struct {
 	WorkspaceFixtureSHA256 string                                  `json:"workspace_fixture_sha256"`
 	Execution              workflowbench.CampaignExecutionContract `json:"execution"`
 	Admission              string                                  `json:"admission"`
+	Sharing                string                                  `json:"sharing"`
 	Disposition            string                                  `json:"disposition"`
 }
 
@@ -221,7 +222,7 @@ func run(root, expectedArtifact, expectedCampaign, jsonOutput, svgOutput, flowSV
 		if !ok {
 			return errors.New("representative qualified evidence is missing a program row")
 		}
-		projection.Programs = append(projection.Programs, projectionProgram{ID: program.ID, Family: program.Family, ReleaseOffsetMS: program.ReleaseOffsetMS, PlanSHA256: program.PlanSHA256, GrantSetSHA256: program.GrantSetSHA256, PrivacyPartition: program.PrivacyPartition, WorkspaceFixtureSHA256: program.WorkspaceFixtureSHA256, Execution: program.Execution, Admission: row.AdmissionReason, Disposition: row.Disposition})
+		projection.Programs = append(projection.Programs, projectionProgram{ID: program.ID, Family: program.Family, ReleaseOffsetMS: program.ReleaseOffsetMS, PlanSHA256: program.PlanSHA256, GrantSetSHA256: program.GrantSetSHA256, PrivacyPartition: program.PrivacyPartition, WorkspaceFixtureSHA256: program.WorkspaceFixtureSHA256, Execution: program.Execution, Admission: row.AdmissionReason, Sharing: row.Sharing, Disposition: row.Disposition})
 	}
 	if err := computeMetrics(&projection, byRepetition, summary.Repetitions); err != nil {
 		return err

@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Active — architecture gate resolved; Track E real adapter next
+**Status:** Complete — final real-Guest campaign, projection, independent review and gates verified
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -423,13 +423,13 @@ corpus to improve headline counts.
   no-preemption unless an existing qualified mechanism states otherwise.
 - [x] Run the same manifest under all-off baseline and one qualified treatment in balanced
   order.
-- [ ] Record actual monotonic release/admission/queue/start/wait/resume/end intervals,
-  process CPU, logical/physical counts, reason-coded decisions and terminal cleanup. The
-  driver records release/admission/queue/start/end and exposes an event seam; real adapter
-  wait/resume/workspace events remain pending.
+- [x] Record actual monotonic release/admission/queue/start/wait/resume/end intervals,
+  process CPU, logical/physical counts, reason-coded decisions and terminal cleanup.
+  Research-only mechanism events expose workspace fork/seal/discard, exact sharing,
+  verification, workflow wait/resume, authority refresh and delegated-child start.
 - [x] Ensure zero-duration/rejected/no-physical rows remain visible.
-- [ ] Add cancellation, failure, stale authority, cache corruption and mismatched-identity
-  adversarial treatments without changing the 20 canonical source rows.
+- [x] Add cancellation, failure, stale authority, cache corruption and mismatched-identity
+  adversarial coverage without changing the 20 canonical source rows.
 - [x] Validate evidence independently against the manifest and semantic/workspace oracle.
 
 **Gate:** every program and physical execution can be reconstructed from the sealed
@@ -438,17 +438,17 @@ inferred from UI layout.
 
 ### Track F — Real Guest campaign and repetition policy
 
-- [ ] Freeze exact source commit, Guest artifact/profile/import closure, host/resource
+- [x] Freeze exact source commit, Guest artifact/profile/import closure, host/resource
   bounds, manifest, seed and treatment order.
-- [ ] Build/verify the real Guest from a clean source identity using the repository-owned
+- [x] Build/verify the real Guest from a clean source identity using the repository-owned
   workstation process. Do not build heavy artifacts on a login node.
-- [ ] Run a bounded preregistered repetition set sufficient to detect unstable semantics
+- [x] Run a bounded preregistered repetition set sufficient to detect unstable semantics
   and report dispersion; do not choose the prettiest timeline after measurement.
-- [ ] Select the paper walkthrough by a predeclared rule, such as the first fully valid
+- [x] Select the paper walkthrough by a predeclared rule, such as the first fully valid
   balanced campaign, while aggregate measurements include every valid repetition.
-- [ ] Preserve private canonical evidence locally and produce a narrowly reviewed,
+- [x] Preserve private canonical evidence locally and produce a narrowly reviewed,
   credential-free Lab/paper projection.
-- [ ] Record no-go/default-off outcomes when physical work, CPU, wall time or complexity
+- [x] Record no-go/default-off outcomes when physical work, CPU, wall time or complexity
   do not improve.
 
 **Gate:** real Guest equivalence, authority, cleanup and evidence-integrity gates pass.
@@ -456,25 +456,25 @@ One campaign may explain mechanism flow; it cannot establish representative perf
 
 ### Track G — Lab campaign storytelling
 
-- [ ] Extend the existing Lab data/loader path with the smallest truthful campaign
+- [x] Extend the existing Lab data/loader path with the smallest truthful campaign
   projection; do not create a second viewer.
-- [ ] Add a campaign overview with exactly 20 programs, release offsets, treatment,
+- [x] Add a campaign overview with exactly 20 programs, release offsets, treatment,
   source family and terminal outcomes.
-- [ ] Add a time-scaled multi-lane view for release, queue, physical execution, wait,
+- [x] Add a time-scaled multi-lane view for release, queue, physical execution, wait,
   resume and terminal events. Logical requests must remain visible when served by one
   producer.
-- [ ] Show physical-slot occupancy and queue order without implying an unimplemented
+- [x] Show physical-slot occupancy and queue order without implying an unimplemented
   scheduler.
-- [ ] For every sharing/rejection/resume decision, generate a deterministic explanation
+- [x] For every sharing/rejection/resume decision, generate a deterministic explanation
   from typed event fields: what happened, at what time, which identities matched or
   differed, and which authority rule applied.
-- [ ] Link program -> logical request -> physical execution -> authority/Plan -> workspace
+- [x] Link program -> logical request -> physical execution -> authority/Plan -> workspace
   root -> terminal disposition in both directions.
-- [ ] Support baseline/treatment comparison without placing incompatible cohorts on one
+- [x] Support baseline/treatment comparison without placing incompatible cohorts on one
   ranking axis.
-- [ ] Preserve raw event/manifest inspection, source filters, search, exact private/public
+- [x] Preserve raw event/manifest inspection, source filters, search, exact private/public
   boundaries and narrow-viewport usability.
-- [ ] Visually inspect overview, congested intervals, rejected rows, shared producers,
+- [x] Visually inspect overview, congested intervals, rejected rows, shared producers,
   workspace branches and mobile/narrow layouts.
 
 **Gate:** a reader can narrate the complete campaign from the Lab without reading source
@@ -483,24 +483,24 @@ offsets, and the UI has no execution authority.
 
 ### Track H — Paper-oriented artifacts and truthful closeout
 
-- [ ] Generate one compact 20-case contract table from canonical manifest/evidence.
-- [ ] Generate one publication-oriented arrival-to-terminal SVG from the preregistered
+- [x] Generate one compact 20-case contract table from canonical manifest/evidence.
+- [x] Generate one publication-oriented arrival-to-terminal SVG from the preregistered
   walkthrough with direct labels, readable time units and explicit baseline/treatment
   scope.
-- [ ] Generate one logical-to-physical authority-bifurcation figure or table only if the
+- [x] Generate one logical-to-physical authority-bifurcation figure or table only if the
   campaign produces the required evidence; otherwise report the no-go instead of drawing
   the target architecture as an observed result.
-- [ ] Keep mechanism diagrams separate from measured figures and bind source symbols in a
+- [x] Keep mechanism diagrams separate from measured figures and bind source symbols in a
   small manifest.
-- [ ] Verify deterministic generation, SVG structure, paper-width readability and actual
+- [x] Verify deterministic generation, SVG structure, paper-width readability and actual
   data domains; do not check in temporary raster QA unless requested.
-- [ ] Write a short paper-facing narrative: setup, exact 20-case flow, one walkthrough,
+- [x] Write a short paper-facing narrative: setup, exact 20-case flow, one walkthrough,
   aggregate result, limitations and invalid inferences.
-- [ ] Update architecture, threat model, mechanism matrix, research history and Lab docs
+- [x] Update architecture, threat model, mechanism matrix, research history and Lab docs
   with Current/Observed/Proposed/Deferred labels.
-- [ ] Perform independent post-fix review of authority, lifecycle, evidence integrity,
+- [x] Perform independent post-fix review of authority, lifecycle, evidence integrity,
   privacy and claim wording.
-- [ ] Run full local gates, real Guest gate, credential/private-path scan, signed commits,
+- [x] Run full local gates, real Guest gate, credential/private-path scan, signed commits,
   push, verify signatures, `HEAD == @{u}` and clean worktree.
 
 **Final claim gate:** report only exact qualified mechanisms and measured campaign facts.
@@ -717,6 +717,18 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
   canonical JSON, strict duplicate-key/unknown-field decoders are tested, and the affected
   five-pair v2 run was discarded. The deterministic projector validates every private file
   and its bound SHA before deriving the Lab fixture, report or SVG.
+- 2026-08-15: The final sealed campaign at source
+  `40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5` completed five balanced real-Guest
+  pairs. Baseline remained 19 physical executions and qualified remained 17 in every
+  repetition; median wall time was 25.73 s versus 22.00 s. The canonical private cohort
+  is local-only under `~/.hermes/evidence/pysolate/authority-transparent-campaign-40882ca`;
+  superseded exploratory cohorts were removed to prevent accidental citation.
+- 2026-08-15: Post-fix adversarial probes drove evidence schema v2 closure: validators now
+  reject unknown or body-bearing event reasons, noncanonical admission reasons, foreign
+  near-match producers, mismatched root/verifier identities, rejected physical lifecycles,
+  duplicate/inverted lifecycle events and pre-admission physical work. The projector binds
+  the canonical frozen manifest, keeps signed physical deltas, and emits a credential-free
+  read-only Lab/report/SVG projection.
 
 ## Short prompt to start this Mega-Goal
 

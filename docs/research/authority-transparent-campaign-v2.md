@@ -1,6 +1,6 @@
 # Authority-transparent 20-program campaign v2
 
-**Status:** preregistered corpus contract; execution evidence pending
+**Status:** observed real-Guest campaign; fixture-bounded result
 
 This campaign is a Pysolate-only research fixture. It is not an Agent Harness, production
 scheduler, virtual Git implementation or external-effect benchmark. The canonical machine
@@ -81,3 +81,17 @@ If validated real-Guest evidence supports them, the campaign may claim:
 
 It must not claim generalized speedup, semantic equivalence, arbitrary-Python purity,
 provider-level Agent behavior, virtual Git, or external-effect safety.
+
+## Observed campaign result
+
+The frozen real-Guest campaign at campaign source
+`40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5` completed five balanced paired
+repetitions on the recorded darwin/arm64 host. Every registered oracle and authority
+rejection validated. Baseline used 19 physical executions in every repetition; the
+qualified treatment used 17. Median wall time was 25.73 s versus 22.00 s. These are
+fixed-campaign observations, not a general throughput claim.
+
+The credential-free public projection, compact case table, identity table and measured
+figures are generated in
+[`authority-transparent-campaign-results.md`](authority-transparent-campaign-results.md).
+The canonical hash-bound evidence remains local and private.

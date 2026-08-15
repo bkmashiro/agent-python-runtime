@@ -7,6 +7,7 @@ import {
   filterTrajectory, loadTrajectory, loadTrajectoryIndex, modelContext,
   type EventSource, type TrajectoryEvent, type TrajectoryExport, type TrajectoryIndex,
 } from './trajectoryData';
+import CampaignApp from './CampaignApp';
 import './styles.css';
 
 const sourceOrder: EventSource[] = ['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace'];
@@ -163,6 +164,7 @@ function TrajectoryApp({ trajectory, index, sessionID, onSessionChange }: { traj
         <div className="brand"><Braces size={19} /><div><span>Pysolate Lab</span><small>private development trace</small></div></div>
         <div className="session-strip">
           <span className={`fixture-badge ${session.kind}`}>{session.kind === 'experiment' ? 'REAL GUEST EXPERIMENT' : 'SCRIPTED DEVELOPMENT FIXTURE'}</span>
+          <a className="lab-link" href="/?view=campaign">Campaign</a>
           <select aria-label="Trajectory session" value={sessionID} onChange={(event) => onSessionChange(event.target.value)}>
             {index.sessions.map((item) => <option key={item.session_id} value={item.session_id}>{item.label}</option>)}
           </select>
@@ -200,7 +202,7 @@ function TrajectoryApp({ trajectory, index, sessionID, onSessionChange }: { traj
   );
 }
 
-export default function App() {
+function TrajectoryRoot() {
   const [index, setIndex] = useState<TrajectoryIndex | null>(null);
   const [sessionID, setSessionID] = useState('');
   const [trajectory, setTrajectory] = useState<TrajectoryExport | null>(null);
@@ -220,4 +222,8 @@ export default function App() {
   if (error) return <main className="state-page"><h1>Trajectory unavailable</h1><pre>{error}</pre></main>;
   if (!trajectory || !index) return <main className="state-page"><h1>Loading trajectory…</h1></main>;
   return <TrajectoryApp trajectory={trajectory} index={index} sessionID={sessionID} onSessionChange={setSessionID} />;
+}
+
+export default function App() {
+  return new URLSearchParams(window.location.search).get('view') === 'campaign' ? <CampaignApp /> : <TrajectoryRoot />;
 }

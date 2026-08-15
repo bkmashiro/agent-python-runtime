@@ -261,6 +261,21 @@ research/operator          Experimental semantic research APIs
 cmd/pysolate-research      partial local research CLI
 ```
 
+## Authority-transparent campaign status
+
+**Current:** the Runtime packages remain campaign-agnostic. Authority attenuation,
+private workspace branches, exact invocation sharing, sealed roots and fresh workflow
+resume are generic primitives.
+
+**Observed:** `research/workflowbench` composed those primitives for a fixed 20-program
+real-Guest campaign. Five balanced pairs preserved all registered oracles and authority
+rejections while qualified execution reduced physical work from 19 to 17 executions.
+The measured scope and source identities are recorded in
+[authority-transparent-campaign-results.md](research/authority-transparent-campaign-results.md).
+
+**Deferred:** no production scheduler, semantic workspace merge, arbitrary-Python reuse,
+live Harness attachment or general performance conclusion follows from this campaign.
+
 ## Explicit non-goals
 
 - served-instance reset or reuse;

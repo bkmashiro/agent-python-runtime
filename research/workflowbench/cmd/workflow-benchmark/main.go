@@ -92,8 +92,9 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, harnessSourceC
 	if err := atomicWrite(output, encoded); err != nil {
 		return err
 	}
-	fmt.Printf("seed=%d tasks=%d divergences=%d baseline_physical=%d optimized_physical=%d evidence_sha256=%s\n",
-		seed, len(evidence.Tasks), evidence.Divergences, evidence.BaselinePhysicalExecutions, evidence.OptimizedPhysicalExecutions, sha(encoded))
+	fmt.Printf("seed=%d tasks=%d divergences=%d baseline_physical=%d optimized_physical=%d baseline_cpu_ns=%d optimized_cpu_ns=%d cpu_accounting=%s evidence_sha256=%s\n",
+		seed, len(evidence.Tasks), evidence.Divergences, evidence.BaselinePhysicalExecutions, evidence.OptimizedPhysicalExecutions,
+		evidence.BaselineCPUTimeNanos, evidence.OptimizedCPUTimeNanos, evidence.CPUAccounting, sha(encoded))
 	return nil
 }
 

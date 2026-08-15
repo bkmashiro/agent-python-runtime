@@ -31,7 +31,9 @@ func TestExecutePairedTreatmentsPreservesOutputsAndReducesQualifiedWork(t *testi
 	}
 	byClass := map[string]TaskMetrics{}
 	negativeCount := 0
+	orders := map[string]int{}
 	for _, metrics := range evidence.Tasks {
+		orders[metrics.TreatmentOrder]++
 		if metrics.OutputEquivalent != true || metrics.EffectsEquivalent != true || metrics.EvidenceComplete != true {
 			t.Fatalf("incomplete task metrics=%+v", metrics)
 		}
@@ -43,6 +45,9 @@ func TestExecutePairedTreatmentsPreservesOutputsAndReducesQualifiedWork(t *testi
 		} else {
 			byClass[metrics.Class] = metrics
 		}
+	}
+	if orders["baseline_optimized"] != 7 || orders["optimized_baseline"] != 7 || evidence.CPUAccounting != "process_user_plus_system_delta" {
+		t.Fatalf("unbalanced order or missing CPU accounting: orders=%v accounting=%q", orders, evidence.CPUAccounting)
 	}
 	if negativeCount != 8 {
 		t.Fatalf("negative count=%d", negativeCount)

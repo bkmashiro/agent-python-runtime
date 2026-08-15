@@ -14,7 +14,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
 )
 
-const EvidenceSchemaVersion = "pysolate.workflow-benchmark-evidence.v0"
+const EvidenceSchemaVersion = "pysolate.workflow-benchmark-evidence.v1"
 
 var ErrExperiment = errors.New("workflow benchmark failed")
 
@@ -25,8 +25,11 @@ type TaskMetrics struct {
 	WorkloadID                  string `json:"workload_id"`
 	Class                       string `json:"class"`
 	NegativeDimension           string `json:"negative_dimension,omitempty"`
+	TreatmentOrder              string `json:"treatment_order"`
 	BaselineDurationNanos       uint64 `json:"baseline_duration_nanos"`
 	OptimizedDurationNanos      uint64 `json:"optimized_duration_nanos"`
+	BaselineCPUTimeNanos        uint64 `json:"baseline_cpu_time_nanos"`
+	OptimizedCPUTimeNanos       uint64 `json:"optimized_cpu_time_nanos"`
 	BaselinePhysicalExecutions  uint32 `json:"baseline_physical_executions"`
 	OptimizedPhysicalExecutions uint32 `json:"optimized_physical_executions"`
 	AdmittedDecisions           uint32 `json:"admitted_decisions"`
@@ -39,10 +42,13 @@ type TaskMetrics struct {
 
 type Evidence struct {
 	SchemaVersion               string            `json:"schema_version"`
+	CPUAccounting               string            `json:"cpu_accounting"`
 	Manifest                    json.RawMessage   `json:"manifest"`
 	Reports                     []json.RawMessage `json:"reports"`
 	Tasks                       []TaskMetrics     `json:"tasks"`
 	Divergences                 uint32            `json:"divergences"`
+	BaselineCPUTimeNanos        uint64            `json:"baseline_cpu_time_nanos"`
+	OptimizedCPUTimeNanos       uint64            `json:"optimized_cpu_time_nanos"`
 	BaselinePhysicalExecutions  uint32            `json:"baseline_physical_executions"`
 	OptimizedPhysicalExecutions uint32            `json:"optimized_physical_executions"`
 	SealSHA256                  string            `json:"seal_sha256"`
@@ -55,6 +61,7 @@ type treatmentResult struct {
 	physical  []observe.PhysicalExecution
 	decisions []observe.OptimizationDecision
 	duration  uint64
+	cpuTime   uint64
 	output    string
 	effects   string
 }
@@ -73,28 +80,44 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 		return Evidence{}, ErrExperiment
 	}
 	manifestSHA := digest(string(manifestJSON))
+	cpuAccounting := "unavailable"
+	if _, available := processCPUTimeNanos(); available {
+		cpuAccounting = "process_user_plus_system_delta"
+	}
 	evidence := Evidence{
-		SchemaVersion: EvidenceSchemaVersion, Manifest: append(json.RawMessage(nil), manifestJSON...),
+		SchemaVersion: EvidenceSchemaVersion, CPUAccounting: cpuAccounting, Manifest: append(json.RawMessage(nil), manifestJSON...),
 		Reports: []json.RawMessage{}, Tasks: []TaskMetrics{},
 	}
-	for _, task := range manifest.Tasks {
+	for index, task := range manifest.Tasks {
 		origin := time.Now()
-		baseline, err := executeTreatment(ctx, manifest, task, "baseline", 1, origin, wasm)
+		firstTreatment := "baseline"
+		if (manifest.Seed+uint64(index))%2 == 1 {
+			firstTreatment = "optimized"
+		}
+		secondTreatment := "optimized"
+		if firstTreatment == "optimized" {
+			secondTreatment = "baseline"
+		}
+		first, err := executeMeasuredTreatment(ctx, manifest, task, firstTreatment, 1, origin, wasm)
 		if err != nil {
 			return Evidence{}, err
 		}
-		optimized, err := executeTreatment(ctx, manifest, task, "optimized", 2, origin, wasm)
+		second, err := executeMeasuredTreatment(ctx, manifest, task, secondTreatment, 2, origin, wasm)
 		if err != nil {
 			return Evidence{}, err
+		}
+		baseline, optimized := first, second
+		if firstTreatment == "optimized" {
+			optimized, baseline = first, second
 		}
 		report := observe.OptimizationReport{
 			SchemaVersion: observe.OptimizationSchemaVersion,
 			StudyID:       opaqueObservation("study", task.TaskID), WorkloadManifestSHA256: manifestSHA,
 			ShuffleSeed: manifest.Seed, ClockPolicy: "study_relative_monotonic_nanos",
-			Runs:               []observe.ObservedRun{baseline.run, optimized.run},
-			Spans:              append(append([]observe.ObservedSpan{}, baseline.spans...), optimized.spans...),
-			LogicalRequests:    append(append([]observe.LogicalRequest{}, baseline.logical...), optimized.logical...),
-			PhysicalExecutions: append(append([]observe.PhysicalExecution{}, baseline.physical...), optimized.physical...),
+			Runs:               []observe.ObservedRun{first.run, second.run},
+			Spans:              append(append([]observe.ObservedSpan{}, first.spans...), second.spans...),
+			LogicalRequests:    append(append([]observe.LogicalRequest{}, first.logical...), second.logical...),
+			PhysicalExecutions: append(append([]observe.PhysicalExecution{}, first.physical...), second.physical...),
 			Decisions:          append([]observe.OptimizationDecision{}, optimized.decisions...), ConsumerAdmitted: false,
 		}
 		sort.Slice(report.Spans, func(i, j int) bool {
@@ -119,7 +142,9 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 		sealed, _ := verified.Report()
 		metrics := TaskMetrics{
 			TaskID: task.TaskID, WorkloadID: task.WorkloadID, Class: task.Class, NegativeDimension: task.NegativeDimension,
+			TreatmentOrder:        firstTreatment + "_" + secondTreatment,
 			BaselineDurationNanos: baseline.duration, OptimizedDurationNanos: optimized.duration,
+			BaselineCPUTimeNanos: baseline.cpuTime, OptimizedCPUTimeNanos: optimized.cpuTime,
 			BaselinePhysicalExecutions: uint32(len(baseline.physical)), OptimizedPhysicalExecutions: uint32(len(optimized.physical)),
 			OutputEquivalent:  baseline.output == optimized.output,
 			EffectsEquivalent: baseline.effects == optimized.effects, EvidenceComplete: true, ObservationSealSHA256: sealed.SealSHA256,
@@ -136,6 +161,8 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 		}
 		evidence.BaselinePhysicalExecutions += metrics.BaselinePhysicalExecutions
 		evidence.OptimizedPhysicalExecutions += metrics.OptimizedPhysicalExecutions
+		evidence.BaselineCPUTimeNanos += metrics.BaselineCPUTimeNanos
+		evidence.OptimizedCPUTimeNanos += metrics.OptimizedCPUTimeNanos
 		evidence.Reports = append(evidence.Reports, append(json.RawMessage(nil), raw...))
 		evidence.Tasks = append(evidence.Tasks, metrics)
 	}
@@ -144,6 +171,19 @@ func ExecutePair(ctx context.Context, manifest Manifest, wasm WASMFunc) (Evidenc
 		return Evidence{}, ErrExperiment
 	}
 	return evidence, nil
+}
+
+func executeMeasuredTreatment(ctx context.Context, manifest Manifest, task Task, treatment string, order uint32, origin time.Time, wasm WASMFunc) (treatmentResult, error) {
+	before, available := processCPUTimeNanos()
+	result, err := executeTreatment(ctx, manifest, task, treatment, order, origin, wasm)
+	after, stillAvailable := processCPUTimeNanos()
+	if err != nil {
+		return treatmentResult{}, err
+	}
+	if available && stillAvailable && after >= before {
+		result.cpuTime = after - before
+	}
+	return result, nil
 }
 
 func executeTreatment(ctx context.Context, manifest Manifest, task Task, treatment string, order uint32, origin time.Time, wasm WASMFunc) (treatmentResult, error) {
@@ -486,6 +526,7 @@ func sleepContext(ctx context.Context, duration time.Duration) error {
 
 func (evidence Evidence) Validate() error {
 	if evidence.SchemaVersion != EvidenceSchemaVersion || evidence.Manifest == nil || evidence.Reports == nil || evidence.Tasks == nil ||
+		(evidence.CPUAccounting != "process_user_plus_system_delta" && evidence.CPUAccounting != "unavailable") ||
 		len(evidence.Reports) != len(evidence.Tasks) || len(evidence.Tasks) != 14 || evidence.Divergences != 0 ||
 		!digestPattern.MatchString(evidence.SealSHA256) || evidence.SealSHA256 != evidenceSeal(evidence) {
 		return ErrExperiment
@@ -495,9 +536,19 @@ func (evidence Evidence) Validate() error {
 		return ErrExperiment
 	}
 	var baseline, optimized uint32
+	var baselineCPU, optimizedCPU uint64
 	for index, metrics := range evidence.Tasks {
+		expectedFirst := "baseline"
+		if (manifest.Seed+uint64(index))%2 == 1 {
+			expectedFirst = "optimized"
+		}
+		expectedSecond := "optimized"
+		if expectedFirst == "optimized" {
+			expectedSecond = "baseline"
+		}
 		if metrics.TaskID != manifest.Tasks[index].TaskID || metrics.WorkloadID != manifest.Tasks[index].WorkloadID ||
 			metrics.Class != manifest.Tasks[index].Class || metrics.NegativeDimension != manifest.Tasks[index].NegativeDimension ||
+			metrics.TreatmentOrder != expectedFirst+"_"+expectedSecond ||
 			!metrics.OutputEquivalent || !metrics.EffectsEquivalent || !metrics.EvidenceComplete ||
 			metrics.BaselineDurationNanos == 0 || metrics.OptimizedDurationNanos == 0 || !digestPattern.MatchString(metrics.ObservationSealSHA256) {
 			return ErrExperiment
@@ -508,7 +559,7 @@ func (evidence Evidence) Validate() error {
 		}
 		report, err := verified.Report()
 		if err != nil || report.SealSHA256 != metrics.ObservationSealSHA256 || report.ShuffleSeed != manifest.Seed ||
-			len(report.Runs) != 2 || report.Runs[0].Treatment != "baseline" || report.Runs[1].Treatment != "optimized" {
+			len(report.Runs) != 2 || report.Runs[0].Treatment != expectedFirst || report.Runs[1].Treatment != expectedSecond {
 			return ErrExperiment
 		}
 		admitted, rejected := uint32(0), uint32(0)
@@ -526,8 +577,13 @@ func (evidence Evidence) Validate() error {
 		}
 		baseline += metrics.BaselinePhysicalExecutions
 		optimized += metrics.OptimizedPhysicalExecutions
+		baselineCPU += metrics.BaselineCPUTimeNanos
+		optimizedCPU += metrics.OptimizedCPUTimeNanos
 	}
 	if baseline != evidence.BaselinePhysicalExecutions || optimized != evidence.OptimizedPhysicalExecutions || optimized > baseline {
+		return ErrExperiment
+	}
+	if baselineCPU != evidence.BaselineCPUTimeNanos || optimizedCPU != evidence.OptimizedCPUTimeNanos {
 		return ErrExperiment
 	}
 	return nil

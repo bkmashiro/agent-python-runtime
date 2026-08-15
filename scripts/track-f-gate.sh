@@ -35,6 +35,7 @@ case "$mode" in
       ./research/effectgraph/cmd/effectgraph-census \
       ./research/placementcensus \
       ./research/regioncensus \
+      ./research/workflowbench/... \
       ./research/labview
     ;;
   full)
@@ -48,6 +49,7 @@ case "$mode" in
       ./research/effectgraph/cmd/effectgraph-census \
       ./research/placementcensus \
       ./research/regioncensus \
+      ./research/workflowbench/... \
       ./research/labview \
       ./integration/e2e
     go vet ./...

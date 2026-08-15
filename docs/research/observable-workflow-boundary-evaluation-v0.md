@@ -6,9 +6,9 @@ Date: 2026-08-15
 ## Frozen subjects
 
 - Paired workload seed: `20260815`
-- Harness source: `0f876d9ff9dac9ff3fa055c361b14b723e630b82`
-- Guest source: `eb08ae94d576b1aaeceddb68c352e4dec78e6e84`
-- Guest artifact: `sha256:4019fd9061c9bab7bab6ff7cb6ade5e15a457724d6e943e83423b07de8819c12`
+- Harness source: `1eebbb95a75f1ae6d29277ab54e97062b0932fb4`
+- Guest source: `955b780db5aee60e6cec3f869509857600471e01`
+- Guest artifact: `sha256:80d69d364d0c5d58b5fd4972d04b2b8c9d6f395a3543fd80d9dd074923384c51`
 - Workloads: 14 prepared explicit workflows; 4 positive classes, 8 one-dimension
   near-match negatives and 2 ordinary controls.
 - Evidence: `docs/evidence/workflow-benchmark-evidence-v0.json` (191,081 bytes).
@@ -21,33 +21,39 @@ Guest WASM intervals are measured. There was no paid or live model provider.
 
 | Workload class | Tasks | Baseline physical | Optimized physical | Admitted | Rejected | Baseline elapsed | Optimized elapsed |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| preissue | 1 | 1 | 1 | 1 | 0 | 2,197.63 ms | 2,186.88 ms |
-| declared parallel | 1 | 2 | 2 | 1 | 0 | 2,200.18 ms | 2,198.52 ms |
-| coalesced | 1 | 2 | 1 | 1 | 0 | 2,233.88 ms | 2,225.71 ms |
-| retained reuse | 1 | 2 | 1 | 1 | 0 | 2,233.44 ms | 2,208.99 ms |
-| near match | 8 | 16 | 16 | 0 | 8 | 17,687.79 ms | 17,678.41 ms |
-| ordinary | 2 | 2 | 2 | 0 | 0 | 4,418.43 ms | 4,408.40 ms |
-| **Total** | **14** | **25** | **23** | **4** | **8** | **30,971.35 ms** | **30,906.91 ms** |
+| preissue | 1 | 1 | 1 | 1 | 0 | 2,190.35 ms | 2,199.69 ms |
+| declared parallel | 1 | 2 | 2 | 1 | 0 | 2,206.21 ms | 2,199.32 ms |
+| coalesced | 1 | 2 | 1 | 1 | 0 | 2,336.16 ms | 2,336.05 ms |
+| retained reuse | 1 | 2 | 1 | 1 | 0 | 2,208.67 ms | 2,212.62 ms |
+| near match | 8 | 16 | 16 | 0 | 8 | 17,774.39 ms | 17,733.45 ms |
+| ordinary | 2 | 2 | 2 | 0 | 0 | 4,387.09 ms | 4,438.67 ms |
+| **Total** | **14** | **25** | **23** | **4** | **8** | **31,102.87 ms** | **31,119.80 ms** |
 
 The 14 sealed task reports contain 132 spans, 50 logical requests, 48 physical
 executions and 12 optimization decisions. Every paired terminal output/effect oracle
 matched; unclassifiable divergence was zero. The median task elapsed interval was
-2,209.44 ms baseline and 2,204.63 ms optimized.
+2,205.90 ms baseline and 2,206.28 ms optimized.
 
 These elapsed values are actual measurements of this local prepared fixture, but Guest
-startup dominates them and the sample is one fixed run per task. The 64.42 ms aggregate
-difference is **not** a representative latency or throughput claim. The defensible
+startup dominates them and the sample is one fixed run per task. Optimized elapsed was
+16.92 ms higher in aggregate; that difference is **not** a representative latency or
+throughput claim. The defensible
 mechanism result is the exact 25→23 physical-read reduction plus observed overlap/preissue
 relations under the qualified contracts.
 
 ## Build-cache result
 
-On `gpu31`, exact source `eb08ae9` produced:
+On `gpu31`, exact source `eb08ae9` established the full cold/warm pair:
 
 - cold `refresh`: 342.800 s, layer miss, final miss;
 - exact `auto`: 56.832 s, layer hit, final hit;
 - same 52,638,669-byte Guest artifact and artifact SHA-256;
 - 6.03× build-time ratio (83.4% elapsed reduction).
+
+The final evaluated source `955b780` then reused that identity-bound layer but missed the
+new exact-source final key in 152.224 s. Its next exact final hit took 44.254 s (3.44×),
+with identical artifact bytes and
+`sha256:80d69d364d0c5d58b5fd4972d04b2b8c9d6f395a3543fd80d9dd074923384c51`.
 
 The private cache currently occupies 1.8 GiB and contains the configured maximum of two
 layer keys and two final keys. This is build acceleration, not execution-result reuse.

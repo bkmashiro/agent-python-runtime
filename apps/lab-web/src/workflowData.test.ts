@@ -53,4 +53,21 @@ describe('workflow evidence boundary', () => {
     await reseal(authority, 0);
     await expect(validateWorkflowEvidence(authority)).rejects.toThrow(/Lab report acquired authority/);
   });
+
+  it('rejects the independent-review mutation probes after attacker-controlled resealing', async () => {
+    const crossTreatment = await fixture();
+    crossTreatment.reports[0].logical_requests[0].run_id = crossTreatment.reports[0].runs[1].run_id;
+    await reseal(crossTreatment, 0);
+    await expect(validateWorkflowEvidence(crossTreatment)).rejects.toThrow(/cross-treatment logical mapping/);
+
+    const unknown = await fixture() as WorkflowEvidence & { reports: Array<Record<string, unknown>> };
+    unknown.reports[0].private_body = 'not allowed';
+    await reseal(unknown as unknown as WorkflowEvidence, 0);
+    await expect(validateWorkflowEvidence(unknown as unknown as WorkflowEvidence)).rejects.toThrow(/unknown report field|private evidence key/);
+
+    const identity = await fixture();
+    identity.manifest.runtime_identity.artifact_sha256 = `sha256:${'0'.repeat(64)}`;
+    await reseal(identity);
+    await expect(validateWorkflowEvidence(identity)).rejects.toThrow(/manifest seal mismatch/);
+  });
 });

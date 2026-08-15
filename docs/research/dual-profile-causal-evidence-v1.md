@@ -41,7 +41,7 @@ Host ceilings cover event count, parent count, payload bytes and Labstore object
 
 ## Real evidence and Lab
 
-The named real-Guest run at capture commit `d87fc907aa9fc5c9a8a3eb11f39a149c67ee66df`
+The named real-Guest run at capture commit `532f74b9ab0f9685035a6556d0c11fa294372456`
 uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257` and executes:
 
 - a fresh child CPython/WASI Guest over a private workspace branch;
@@ -49,22 +49,25 @@ uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08
 - the actual Runtime observation attachment carrying the Host receipt/source binding.
 
 It produces three views from header
-`sha256:4f2623bc7bf8d6488e2ff55b1d3b1e0b28954e7d9aa298f8b2a2d00b1107ee46`
+`sha256:cb45fb6918ee6d38c9293c1a52d198d83600301076c071d6a245d4e1b0fd9b8f`
 and shared retained event identities:
 
-- local private `experiment_full`: 25 events plus Labstore objects at
-  `~/.hermes/evidence/pysolate/dual-profile-mg2-d87fc90/`, export file SHA-256
-  `fd63d80cf38becf4986674eb2f87189d960a5a76030b5aafd4c2c1512f167d7c`;
+- local private `experiment_full`: 27 events plus Labstore objects at
+  `~/.hermes/evidence/pysolate/dual-profile-mg2-532f74b/`, export file SHA-256
+  `a83de1593ce397b52a85f176fd0a003681d13586c3d129968ea2e959130e1295`;
 - checked-in 7-event production projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-production-v1.json`, file SHA-256
-  `2f42390946d8c27e0ef22086f4403376f17bf51fb050b042cea83d940cf917bf`;
-- checked-in 17-event body-safe experiment projection
+  `edc98b1cdfaae5829eab49d1810b469fda5e3f00d50be0fbe0831f1de77184dd`;
+- checked-in 19-event body-safe experiment projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-public-v1.json`, file SHA-256
-  `5fa0a5e85bc3030d298f973c04faed1eddd7ccbc161f2d6700da35a38249d679`.
+  `e6f96c5632378eaa7d166c881326e180a1c2249ef975ae48f8758fbbf6e92192`.
 
 The private trace contains resolvable `blob.code` and `blob.file` references for the exact child
 program and the captured `child.txt` output; both body-only events are physically absent from
-portable exports. The full experiment trace records a bounded process-CPU/wall sample and an explicit
+portable exports. A typed `tool.decision` joins programmatic mechanism, Broker outcome,
+approval disposition, argument/result digests, Plan and receipt; `model.output:not_recorded`
+explicitly avoids claiming a provider output for this deterministic Harness run. The full
+experiment trace records a bounded process-CPU/wall sample and an explicit
 `source.executed_line` availability of `not_recorded`; it does not upgrade the static source-bound
 receipt into a dynamic line claim.
 

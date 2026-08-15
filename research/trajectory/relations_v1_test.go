@@ -22,12 +22,16 @@ func TestSourceEvidenceCrossBindsVerifiedOccurrenceDynamicCallAndReceipt(t *test
 			Capability: "workspace.read_text", DynamicOccurrence: 1,
 		},
 	})
+	authority := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventAuthoritySnapshot, ActorID: "actor-host-0001", Payload: trajectory.AuthoritySnapshotPayload{RunID: "run-source-decision-0001", CapabilityPlanSHA256: testDigest('e'), PolicySHA256: testDigest('1'), FreshnessSHA256: testDigest('2'), GrantsSHA256: testDigest('3')}})
+	intent := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", State: trajectory.EffectIntent}})
+	started := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{intent.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", State: trajectory.EffectStarted}})
 	effect := appendEvidence(t, builder, trajectory.EvidenceInput{
-		Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001",
+		Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{started.EventID},
 		Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", ReceiptID: "rcpt_source_decision_0001", State: trajectory.EffectCommitted},
 	})
+	tool := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventToolDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID, effect.EventID}, Payload: trajectory.ToolDecisionPayload{ApprovalDisposition: "not_required", ArgumentsSHA256: testDigest('4'), BrokerOutcome: "ok", CallID: "call-source-decision-0001", Capability: "workspace.read_text", CapabilityPlanSHA256: testDigest('e'), Mechanism: "direct", ReceiptID: "rcpt_source_decision_0001", ResultSHA256: testDigest('5')}})
 	decision := appendEvidence(t, builder, trajectory.EvidenceInput{
-		Type: trajectory.EventSourceDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{occurrence.EventID, effect.EventID},
+		Type: trajectory.EventSourceDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{occurrence.EventID, effect.EventID, tool.EventID},
 		Payload: trajectory.SourceDecisionPayload{
 			DecisionID: testDigest('d'), CapabilityPlanSHA256: testDigest('e'), OccurrenceID: testDigest('c'),
 			DynamicOccurrence: 1, ClaimLevel: trajectory.ClaimSourceBound, Admitted: true,
@@ -91,9 +95,10 @@ func TestCrossPlanePayloadIdentityMismatchFailsClosed(t *testing.T) {
 		Payload: trajectory.SubagentContextPayload{ChildID: "child-cross-plane-0001", ContextSHA256: testDigest('e'), BriefSHA256: testDigest('f'), Availability: trajectory.Available},
 	})
 	if _, err := builder.Append(trajectory.EvidenceInput{
-		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001", ParentEventIDs: []string{context.EventID},
+		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001", ParentEventIDs: []string{context.EventID, document.EventID},
 		Payload: trajectory.SubagentRuntimePayload{
-			ChildID: "child-cross-plane-0002", FreshRunID: "run-cross-plane-0002", PreparedImageSHA256: testDigest('1'), ChildPlanSHA256: testDigest('2'),
+			BriefSHA256: testDigest('f'), ChildID: "child-cross-plane-0002", ChildPlanSHA256: testDigest('2'), ContextSHA256: testDigest('e'), DescriptorSHA256: testDigest('3'),
+			ExecutionProfileSHA256: testDigest('4'), FreshRunID: "run-cross-plane-0002", ParentWorkspaceRootSHA256: testDigest('5'), PreparedImageSHA256: testDigest('1'), SourceSHA256: testDigest('b'),
 		},
 	}); err == nil {
 		t.Fatal("subagent runtime with mismatched child context accepted")
@@ -108,11 +113,12 @@ func TestSubagentContextRuntimeAndWorkspacePlanesRemainIndependent(t *testing.T)
 			ChildID: "child-research-0001", ContextSHA256: testDigest('a'), BriefSHA256: testDigest('b'), Availability: trajectory.Available,
 		},
 	})
+	source := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceDocument, ActorID: "actor-harness-0001", Payload: trajectory.SourceDocumentPayload{DocumentID: testDigest('1'), SourceSHA256: testDigest('2'), Availability: trajectory.Available}})
 	runtimeEvent := appendEvidence(t, builder, trajectory.EvidenceInput{
-		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001", ParentEventIDs: []string{context.EventID},
+		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001", ParentEventIDs: []string{context.EventID, source.EventID},
 		Payload: trajectory.SubagentRuntimePayload{
-			ChildID: "child-research-0001", FreshRunID: "run-child-research-0001",
-			PreparedImageSHA256: testDigest('c'), ChildPlanSHA256: testDigest('d'), ParentLiveStateInherited: false,
+			BriefSHA256: testDigest('b'), ChildID: "child-research-0001", ChildPlanSHA256: testDigest('d'), ContextSHA256: testDigest('a'), DescriptorSHA256: testDigest('3'),
+			ExecutionProfileSHA256: testDigest('4'), FreshRunID: "run-child-research-0001", ParentWorkspaceRootSHA256: testDigest('e'), PreparedImageSHA256: testDigest('c'), SourceSHA256: testDigest('2'), ParentLiveStateInherited: false,
 		},
 	})
 	appendEvidence(t, builder, trajectory.EvidenceInput{
@@ -125,8 +131,8 @@ func TestSubagentContextRuntimeAndWorkspacePlanesRemainIndependent(t *testing.T)
 	if _, err := builder.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001",
 		Payload: trajectory.SubagentRuntimePayload{
-			ChildID: "child-research-0002", FreshRunID: "run-child-research-0002",
-			PreparedImageSHA256: testDigest('c'), ChildPlanSHA256: testDigest('d'), ParentLiveStateInherited: true,
+			BriefSHA256: testDigest('b'), ChildID: "child-research-0002", ChildPlanSHA256: testDigest('d'), ContextSHA256: testDigest('a'), DescriptorSHA256: testDigest('3'),
+			ExecutionProfileSHA256: testDigest('4'), FreshRunID: "run-child-research-0002", ParentWorkspaceRootSHA256: testDigest('e'), PreparedImageSHA256: testDigest('c'), SourceSHA256: testDigest('2'), ParentLiveStateInherited: true,
 		},
 	}); err == nil {
 		t.Fatal("parent live runtime inheritance accepted")

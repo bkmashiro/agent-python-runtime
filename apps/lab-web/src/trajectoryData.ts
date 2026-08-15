@@ -116,40 +116,43 @@ function validatePayload(event: RawEvidenceEvent) {
     case 'trace.ended': exactKeys(payload, ['status', 'evidence_complete']); assert(payload.status === 'completed' || payload.status === 'failed', 'invalid trace end'); assert(typeof payload.evidence_complete === 'boolean', 'invalid evidence completeness'); break;
     case 'authority.snapshot': exactKeys(payload, ['run_id', 'capability_plan_sha256', 'policy_sha256', 'freshness_sha256', 'grants_sha256']); digest('capability_plan_sha256'); digest('policy_sha256'); digest('freshness_sha256'); digest('grants_sha256'); break;
     case 'effect.transition': exactKeys(payload, ['call_id', 'state'], ['receipt_id', 'compensator', 'reconciliation_reason']); break;
-    case 'tool.decision': exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'receipt_id'], ['result_sha256']); digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256'); break;
+    case 'tool.decision': exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'operation_index', 'receipt_id'], ['approval_request_id', 'parent_call_id', 'result_sha256']); digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256'); break;
     case 'workspace.terminal': exactKeys(payload, ['base_workspace_sha256', 'disposition'], ['result_workspace_sha256']); digest('base_workspace_sha256'); if (payload.result_workspace_sha256 !== undefined) digest('result_workspace_sha256'); break;
     case 'execution.attempt': exactKeys(payload, ['run_id', 'attempt_id', 'status'], ['prepared_image_sha256']); if (payload.prepared_image_sha256 !== undefined) digest('prepared_image_sha256'); break;
     case 'model.context': case 'model.body': exactKeys(payload, ['context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
-    case 'model.output': exactKeys(payload, ['availability'], ['output_sha256']); if (payload.output_sha256 !== undefined) digest('output_sha256'); break;
+    case 'model.output': exactKeys(payload, ['availability'], ['output_sha256']); if (payload.output_sha256 !== undefined) digest('output_sha256'); assert((payload.availability === 'available') === (payload.output_sha256 !== undefined), 'model output availability mismatch'); break;
     case 'source.document': exactKeys(payload, ['document_id', 'source_sha256', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.body': exactKeys(payload, ['document_id', 'source_sha256', 'display_path', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.occurrence': exactKeys(payload, ['document_id', 'source_sha256', 'occurrence_id', 'start_line', 'start_column', 'end_line', 'end_column', 'capability', 'dynamic_occurrence']); digest('document_id'); digest('source_sha256'); digest('occurrence_id'); break;
     case 'source.decision': exactKeys(payload, ['decision_id', 'capability_plan_sha256', 'occurrence_id', 'dynamic_occurrence', 'claim_level', 'admitted'], ['reasons', 'receipt_id']); digest('decision_id'); digest('capability_plan_sha256'); digest('occurrence_id'); break;
-    case 'source.executed_line': exactKeys(payload, ['source_sha256', 'availability'], ['instrumentation', 'instruction_offset', 'start_line', 'start_column', 'end_line', 'end_column']); digest('source_sha256'); break;
+    case 'source.executed_line': { exactKeys(payload, ['source_sha256', 'availability'], ['instrumentation', 'instruction_offset', 'start_line', 'start_column', 'end_line', 'end_column']); digest('source_sha256'); const details = ['instrumentation','instruction_offset','start_line','start_column','end_line','end_column'].every((key) => payload[key] !== undefined); assert(payload.availability === 'available' ? details : !details, 'executed-line availability mismatch'); break; }
     case 'subagent.context': exactKeys(payload, ['child_id', 'context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
-    case 'subagent.runtime': exactKeys(payload, ['child_id', 'fresh_run_id', 'prepared_image_sha256', 'child_plan_sha256', 'parent_live_state_inherited']); digest('prepared_image_sha256'); digest('child_plan_sha256'); assert(payload.parent_live_state_inherited === false, 'parent live state inheritance forbidden'); break;
+    case 'subagent.runtime': exactKeys(payload, ['brief_sha256', 'child_id', 'child_plan_sha256', 'context_sha256', 'descriptor_sha256', 'execution_profile_sha256', 'fresh_run_id', 'parent_live_state_inherited', 'parent_workspace_root_sha256', 'prepared_image_sha256', 'source_sha256']); for (const key of ['brief_sha256', 'child_plan_sha256', 'context_sha256', 'descriptor_sha256', 'execution_profile_sha256', 'parent_workspace_root_sha256', 'prepared_image_sha256', 'source_sha256']) digest(key); assert(payload.parent_live_state_inherited === false, 'parent live state inheritance forbidden'); break;
     case 'subagent.workspace': exactKeys(payload, ['child_id', 'base_root_sha256', 'result_root_sha256', 'changed_entries', 'changed_bytes', 'disposition']); digest('base_root_sha256'); digest('result_root_sha256'); break;
     case 'workspace.file': exactKeys(payload, ['workspace_sha256', 'path', 'content_sha256', 'availability']); digest('workspace_sha256'); digest('content_sha256'); break;
     case 'evidence.truncated': exactKeys(payload, ['scope', 'reason', 'dropped_events']); assert(uint(payload.dropped_events) && payload.dropped_events > 0, 'invalid truncation'); break;
     case 'runtime.observation': exactKeys(payload, ['observation_type', 'sequence', 'observation_sha256'], ['parent_sequence']); digest('observation_sha256'); break;
-    case 'resource.sample': exactKeys(payload, ['scope', 'wall_nanos', 'process_cpu_nanos', 'process_cpu_availability', 'peak_rss_bytes', 'peak_rss_availability']); assert(uint(payload.wall_nanos) && payload.wall_nanos > 0, 'invalid wall sample'); break;
+    case 'resource.sample': exactKeys(payload, ['scope', 'wall_nanos', 'process_cpu_nanos', 'process_cpu_availability', 'peak_rss_bytes', 'peak_rss_availability']); assert(uint(payload.wall_nanos) && payload.wall_nanos > 0 && uint(payload.process_cpu_nanos) && uint(payload.peak_rss_bytes), 'invalid resource sample'); assert((payload.process_cpu_availability === 'available') === (Number(payload.process_cpu_nanos) > 0), 'CPU availability mismatch'); assert((payload.peak_rss_availability === 'available') === (Number(payload.peak_rss_bytes) > 0), 'RSS availability mismatch'); break;
   }
 }
 
 function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEvidenceEvent>) {
   const parents = (event.parent_event_ids ?? []).map((id) => prior.get(id)!);
   if (event.type === 'effect.transition') {
-    if (event.payload.state === 'started') {
-      assert(parents.length === 1 && parents[0].type === 'effect.transition' && parents[0].payload.call_id === event.payload.call_id && parents[0].payload.state === 'intent', 'effect start parent mismatch');
-    }
-    const terminalStates = new Set(['committed', 'denied', 'failed', 'timed_out', 'ambiguous', 'reconciliation_required']);
-    if (terminalStates.has(String(event.payload.state)) && parents.length === 1 && parents[0].type === 'effect.transition') {
-      assert(parents[0].payload.call_id === event.payload.call_id && (parents[0].payload.state === 'intent' || parents[0].payload.state === 'started'), 'effect terminal parent mismatch');
+    assert(parents.length === 1, 'effect transition requires one predecessor');
+    const parent = parents[0]; const state = String(event.payload.state); const priorState = String(parent.payload.state);
+    if (state === 'intent') assert(parent.type === 'authority.snapshot', 'effect intent authority mismatch');
+    else if (state === 'denied' && parent.type === 'authority.snapshot') { /* pre-dispatch denial */ }
+    else {
+      assert(parent.type === 'effect.transition' && parent.payload.call_id === event.payload.call_id, 'effect call chain mismatch');
+      const allowed: Record<string, string[]> = { started:['intent'], committed:['started'], failed:['started'], timed_out:['started'], ambiguous:['started'], denied:['intent'], reconciliation_required:['intent','started','failed','timed_out','ambiguous'], compensated:['committed'], cleanup_only:['started','failed','timed_out'] };
+      assert((allowed[state] ?? []).includes(priorState), 'invalid effect lifecycle transition');
     }
   }
   if (event.type === 'tool.decision') {
-    assert(parents.length === 1 && parents[0].type === 'effect.transition', 'tool decision parent mismatch');
-    assert(parents[0].payload.call_id === event.payload.call_id && parents[0].payload.receipt_id === event.payload.receipt_id, 'tool decision effect identity mismatch');
+    const effect = parents.find((item) => item.type === 'effect.transition'); const authority = parents.find((item) => item.type === 'authority.snapshot');
+    assert(parents.length === 2 && effect && authority, 'tool decision parents mismatch');
+    assert(effect.payload.call_id === event.payload.call_id && effect.payload.receipt_id === event.payload.receipt_id && authority.payload.capability_plan_sha256 === event.payload.capability_plan_sha256, 'tool decision authority/effect identity mismatch');
   }
   if (event.type === 'source.body') {
     assert(parents.length === 1 && parents[0].type === 'source.document', 'source body parent mismatch');
@@ -160,18 +163,19 @@ function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEviden
     assert(parents[0].payload.document_id === event.payload.document_id && parents[0].payload.source_sha256 === event.payload.source_sha256, 'source identity mismatch');
   }
   if (event.type === 'source.decision') {
-    const occurrence = parents.find((item) => item.type === 'source.occurrence');
-    assert(occurrence?.payload.occurrence_id === event.payload.occurrence_id, 'source decision occurrence mismatch');
-    if (event.payload.admitted === true) {
-      const effect = parents.find((item) => item.type === 'effect.transition');
-      assert(effect?.payload.receipt_id === event.payload.receipt_id, 'source receipt mismatch');
-    }
+    const occurrence = parents.find((item) => item.type === 'source.occurrence'); const effect = parents.find((item) => item.type === 'effect.transition'); const tool = parents.find((item) => item.type === 'tool.decision');
+    assert(parents.length === 3 && occurrence && effect && tool, 'source decision parents mismatch');
+    assert(occurrence.payload.occurrence_id === event.payload.occurrence_id && occurrence.payload.dynamic_occurrence === event.payload.dynamic_occurrence && occurrence.payload.capability === tool.payload.capability, 'source decision occurrence/tool mismatch');
+    assert(event.payload.receipt_id === effect.payload.receipt_id && event.payload.receipt_id === tool.payload.receipt_id && event.payload.capability_plan_sha256 === tool.payload.capability_plan_sha256, 'source decision receipt/Plan mismatch');
+    assert(event.payload.admitted === true ? (effect.payload.state === 'committed' && tool.payload.broker_outcome === 'ok') : (effect.payload.state === 'denied' && tool.payload.broker_outcome === 'denied'), 'source decision disposition mismatch');
   }
   if (event.type === 'subagent.runtime') {
-    assert(parents.length === 1 && parents[0].type === 'subagent.context' && parents[0].payload.child_id === event.payload.child_id, 'subagent runtime parent mismatch');
+    const context = parents.find((parent) => parent.type === 'subagent.context');
+    const source = parents.find((parent) => parent.type === 'source.document');
+    assert(parents.length === 2 && context && source && context.payload.child_id === event.payload.child_id && context.payload.context_sha256 === event.payload.context_sha256 && context.payload.brief_sha256 === event.payload.brief_sha256 && context.payload.availability === 'available' && source.payload.source_sha256 === event.payload.source_sha256 && source.payload.availability === 'available', 'subagent runtime context/source mismatch');
   }
   if (event.type === 'subagent.workspace') {
-    assert(parents.length === 1 && parents[0].type === 'subagent.runtime' && parents[0].payload.child_id === event.payload.child_id, 'subagent workspace parent mismatch');
+    assert(parents.length === 1 && parents[0].type === 'subagent.runtime' && parents[0].payload.child_id === event.payload.child_id && parents[0].payload.parent_workspace_root_sha256 === event.payload.base_root_sha256, 'subagent workspace parent/base mismatch');
   }
   if (event.type === 'workspace.file') {
     assert(parents.length === 1 && parents[0].type === 'subagent.workspace' && parents[0].payload.result_root_sha256 === event.payload.workspace_sha256 && parents[0].payload.disposition === 'selected', 'workspace file parent mismatch');
@@ -190,7 +194,7 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
   assert(commitRE.test(raw.header.source_commit) && idRE.test(raw.header.root_execution_id), 'invalid header source identity');
   const unsignedHeader = { ...raw.header, header_sha256: '' };
   assert(await evidenceHash('header', unsignedHeader) === raw.header_sha256, 'header seal mismatch');
-  assert(Array.isArray(raw.events) && raw.events.length > 0 && raw.events.length <= 100_000, 'invalid event count');
+  assert(Array.isArray(raw.events) && raw.events.length > 0 && raw.events.length < 100_000, 'invalid event count');
 
   const prior = new Map<string, RawEvidenceEvent>();
   let previousOrdinal = 0;
@@ -198,7 +202,7 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
   let terminalComplete = false;
   let traceStarted = 0;
   let traceEnded = 0;
-  for (const eventValue of raw.events) {
+	for (const [eventIndex, eventValue] of raw.events.entries()) {
     const event = object(eventValue, 'event') as unknown as RawEvidenceEvent;
     exactKeys(event as unknown as Record<string, unknown>, eventKeys.filter((key) => key !== 'parent_event_ids' && key !== 'body'), ['parent_event_ids', 'body'], `event[${event.ordinal}]`);
     assert(event.schema_version === TRAJECTORY_SCHEMA && uint(event.ordinal) && event.ordinal > previousOrdinal && eventTypes.has(event.type), 'invalid causal event envelope');
@@ -212,11 +216,12 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
     assert(event.body === undefined, 'portable evidence contains private body reference');
     assert(!requiredBodyTypes.has(event.type) && event.type !== 'runtime.observation', 'portable projection retained body-only event');
     if (raw.profile === 'production_rollback') assert(productionTypes.has(event.type), 'production profile leaked experiment telemetry');
+    assert(!truncated || event.type === 'trace.ended', 'events follow truncation marker');
     validatePayload(event);
     validateRelations(event, prior);
     const unsignedEvent = { ...event, event_id: '' };
     assert(await evidenceHash(`event\0${raw.header_sha256}`, unsignedEvent) === event.event_id, 'event identity mismatch');
-    if (event.type === 'evidence.truncated') truncated = true;
+    if (event.type === 'evidence.truncated') { assert(eventIndex === raw.events.length - 2, 'truncation marker is not terminal'); truncated = true; }
     if (event.type === 'trace.started') traceStarted += 1;
     if (event.type === 'trace.ended') {
       traceEnded += 1;

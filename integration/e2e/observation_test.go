@@ -126,9 +126,9 @@ func TestRealGuestObservationCorrelatesCapabilityCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	events := recorder.snapshot()
-	if len(events) != 4 || events[1].Type != observe.EventCapabilityPlan || events[2].Type != observe.EventCapabilityCall ||
+	if len(events) != 5 || events[1].Type != observe.EventCapabilityPlan || events[2].Type != observe.EventCapabilityIntent || events[3].Type != observe.EventCapabilityCall ||
 		events[1].ParentSequence == nil || *events[1].ParentSequence != 1 || events[2].ParentSequence == nil || *events[2].ParentSequence != 2 ||
-		events[3].ParentSequence == nil || *events[3].ParentSequence != 3 {
+		events[3].ParentSequence == nil || *events[3].ParentSequence != 3 || events[4].ParentSequence == nil || *events[4].ParentSequence != 4 {
 		t.Fatalf("events=%+v", events)
 	}
 	var bound observe.CapabilityPlanBoundPayload
@@ -136,8 +136,8 @@ func TestRealGuestObservationCorrelatesCapabilityCall(t *testing.T) {
 		t.Fatalf("bound=%+v err=%v payload=%s", bound, err, events[1].Payload)
 	}
 	var call observe.CapabilityCallPayload
-	if err := json.Unmarshal(events[2].Payload, &call); err != nil || call.CapabilityPlanSHA256 != plan.Identity() || call.ResultSHA256 != entry.ResultSHA256 {
-		t.Fatalf("call=%+v err=%v payload=%s", call, err, events[2].Payload)
+	if err := json.Unmarshal(events[3].Payload, &call); err != nil || call.CapabilityPlanSHA256 != plan.Identity() || call.ResultSHA256 != entry.ResultSHA256 {
+		t.Fatalf("call=%+v err=%v payload=%s", call, err, events[3].Payload)
 	}
 }
 

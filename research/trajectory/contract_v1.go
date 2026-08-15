@@ -151,12 +151,15 @@ type EffectTransitionPayload struct {
 
 type ToolDecisionPayload struct {
 	ApprovalDisposition  string `json:"approval_disposition"`
+	ApprovalRequestID    string `json:"approval_request_id,omitempty"`
 	ArgumentsSHA256      string `json:"arguments_sha256"`
 	BrokerOutcome        string `json:"broker_outcome"`
 	CallID               string `json:"call_id"`
 	Capability           string `json:"capability"`
 	CapabilityPlanSHA256 string `json:"capability_plan_sha256"`
 	Mechanism            string `json:"mechanism"`
+	OperationIndex       uint32 `json:"operation_index"`
+	ParentCallID         string `json:"parent_call_id,omitempty"`
 	ReceiptID            string `json:"receipt_id"`
 	ResultSHA256         string `json:"result_sha256,omitempty"`
 }
@@ -244,11 +247,17 @@ type SubagentContextPayload struct {
 }
 
 type SubagentRuntimePayload struct {
-	ChildID                  string `json:"child_id"`
-	FreshRunID               string `json:"fresh_run_id"`
-	PreparedImageSHA256      string `json:"prepared_image_sha256"`
-	ChildPlanSHA256          string `json:"child_plan_sha256"`
-	ParentLiveStateInherited bool   `json:"parent_live_state_inherited"`
+	BriefSHA256               string `json:"brief_sha256"`
+	ChildID                   string `json:"child_id"`
+	ChildPlanSHA256           string `json:"child_plan_sha256"`
+	ContextSHA256             string `json:"context_sha256"`
+	DescriptorSHA256          string `json:"descriptor_sha256"`
+	ExecutionProfileSHA256    string `json:"execution_profile_sha256"`
+	FreshRunID                string `json:"fresh_run_id"`
+	ParentWorkspaceRootSHA256 string `json:"parent_workspace_root_sha256"`
+	PreparedImageSHA256       string `json:"prepared_image_sha256"`
+	SourceSHA256              string `json:"source_sha256"`
+	ParentLiveStateInherited  bool   `json:"parent_live_state_inherited"`
 }
 
 type SubagentWorkspacePayload struct {
@@ -474,24 +483,44 @@ func (builder *Builder) Export(profile Profile, privacy labstore.Privacy) (Expor
 		exported.Events = append(exported.Events, cloneEvidenceEvent(event))
 	}
 	exported.SealSHA256 = evidenceExportSeal(exported)
-	if err := ValidateEvidenceExport(exported); err != nil {
+	if privacy == labstore.PrivacyPrivate {
+		if err := ValidateEvidenceExportWithStore(exported, builder.store); err != nil {
+			return Export{}, err
+		}
+	} else if err := ValidateEvidenceExport(exported); err != nil {
 		return Export{}, err
 	}
 	return exported, nil
 }
 
 func EncodeEvidenceExport(exported Export) ([]byte, error) {
-	if err := ValidateEvidenceExport(exported); err != nil {
+	return encodeEvidenceExport(exported, nil)
+}
+
+func EncodeEvidenceExportWithStore(exported Export, store *labstore.Store) ([]byte, error) {
+	return encodeEvidenceExport(exported, store)
+}
+
+func encodeEvidenceExport(exported Export, store *labstore.Store) ([]byte, error) {
+	if err := validateEvidenceExport(exported, store); err != nil {
 		return nil, err
 	}
 	encoded, err := json.Marshal(exported)
-	if err != nil {
+	if err != nil || len(encoded) > 16<<20 {
 		return nil, errors.New("encode causal evidence export")
 	}
 	return encoded, nil
 }
 
 func DecodeEvidenceExport(raw []byte) (Export, error) {
+	return decodeEvidenceExport(raw, nil)
+}
+
+func DecodeEvidenceExportWithStore(raw []byte, store *labstore.Store) (Export, error) {
+	return decodeEvidenceExport(raw, store)
+}
+
+func decodeEvidenceExport(raw []byte, store *labstore.Store) (Export, error) {
 	if len(raw) == 0 || len(raw) > 16<<20 {
 		return Export{}, errors.New("invalid causal evidence export")
 	}
@@ -501,7 +530,7 @@ func DecodeEvidenceExport(raw []byte) (Export, error) {
 	if decoder.Decode(&exported) != nil || decoder.Decode(&struct{}{}) == nil {
 		return Export{}, errors.New("invalid causal evidence export")
 	}
-	if err := ValidateEvidenceExport(exported); err != nil {
+	if err := validateEvidenceExport(exported, store); err != nil {
 		return Export{}, err
 	}
 	canonical, err := json.Marshal(exported)
@@ -512,12 +541,20 @@ func DecodeEvidenceExport(raw []byte) (Export, error) {
 }
 
 func ValidateEvidenceExport(exported Export) error {
+	return validateEvidenceExport(exported, nil)
+}
+
+func ValidateEvidenceExportWithStore(exported Export, store *labstore.Store) error {
+	return validateEvidenceExport(exported, store)
+}
+
+func validateEvidenceExport(exported Export, store *labstore.Store) error {
 	if exported.SchemaVersion != EvidenceSchemaVersion || !exported.Profile.valid() ||
 		exported.TraceID != exported.Header.TraceID || exported.HeaderSHA256 != exported.Header.HeaderSHA256 ||
 		!validEvidenceHeaderWithSeal(exported.Header) || exported.Header.HeaderSHA256 != evidenceHeaderIdentity(exported.Header) ||
 		(exported.Privacy != labstore.PrivacyPrivate && exported.Privacy != labstore.PrivacyPortable) ||
 		(exported.Profile == ProfileProductionRollback && exported.Privacy != labstore.PrivacyPortable) ||
-		len(exported.Events) > MaxEvidenceEvents || exported.SealSHA256 != evidenceExportSeal(exported) {
+		len(exported.Events) == 0 || len(exported.Events) >= MaxEvidenceEvents || exported.SealSHA256 != evidenceExportSeal(exported) {
 		return errors.New("invalid causal evidence export")
 	}
 	prior := make(map[string]EvidenceEvent, len(exported.Events))
@@ -526,14 +563,25 @@ func ValidateEvidenceExport(exported Export) error {
 	var terminalComplete bool
 	var traceStarted uint32
 	var traceEnded uint32
-	for _, event := range exported.Events {
+	for eventIndex, event := range exported.Events {
 		if event.SchemaVersion != EvidenceSchemaVersion || event.Ordinal <= lastOrdinal || !event.Type.valid() ||
+			len(event.ParentEventIDs) > 256 || len(event.Payload) == 0 || len(event.Payload) > 1<<20 ||
+			(truncated && event.Type != EventTraceEnded) ||
 			!evidenceIdentifier.MatchString(event.ActorID) || event.EventID != evidenceEventID(exported.HeaderSHA256, event) {
 			return errors.New("invalid causal evidence event")
 		}
 		if (exported.Profile == ProfileProductionRollback && (!event.Type.productionEligible() || event.Body != nil)) ||
 			(exported.Privacy == labstore.PrivacyPortable && event.Body != nil) {
 			return errors.New("portable evidence leaked private telemetry")
+		}
+		if event.Body != nil {
+			if store == nil {
+				return errors.New("private causal evidence body is unresolved")
+			}
+			object, err := store.Get(*event.Body)
+			if err != nil || validateEvidenceBodyBinding(event.Type, event.Payload, object) != nil {
+				return errors.New("private causal evidence body binding is invalid")
+			}
 		}
 		parents := append([]string(nil), event.ParentEventIDs...)
 		if !sort.StringsAreSorted(parents) {
@@ -555,6 +603,9 @@ func ValidateEvidenceExport(exported Export) error {
 			traceEnded++
 		}
 		if event.Type == EventEvidenceTruncated {
+			if eventIndex != len(exported.Events)-2 {
+				return errors.New("truncation evidence is not terminal")
+			}
 			truncated = true
 		}
 		if value, ok := decoded.(*TraceEndedPayload); ok {
@@ -737,6 +788,7 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 	case ToolDecisionPayload:
 		if kind != EventToolDecision || !evidenceIdentifier.MatchString(value.CallID) || !validDigest(value.ArgumentsSHA256) ||
 			!evidenceIdentifier.MatchString(value.Capability) || !validDigest(value.CapabilityPlanSHA256) || !evidenceIdentifier.MatchString(value.ReceiptID) ||
+			(value.ApprovalRequestID != "" && !evidenceIdentifier.MatchString(value.ApprovalRequestID)) || (value.ParentCallID != "" && !evidenceIdentifier.MatchString(value.ParentCallID)) ||
 			(value.Mechanism != "direct" && value.Mechanism != "programmatic") ||
 			(value.BrokerOutcome != "ok" && value.BrokerOutcome != "denied" && value.BrokerOutcome != "error" && value.BrokerOutcome != "timeout" && value.BrokerOutcome != "ambiguous") ||
 			(value.ApprovalDisposition != "not_required" && value.ApprovalDisposition != "approved" && value.ApprovalDisposition != "denied" && value.ApprovalDisposition != "not_recorded") ||
@@ -798,7 +850,9 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		}
 	case SubagentRuntimePayload:
 		if kind != EventSubagentRuntime || !evidenceIdentifier.MatchString(value.ChildID) || !evidenceIdentifier.MatchString(value.FreshRunID) ||
-			!validDigest(value.PreparedImageSHA256) || !validDigest(value.ChildPlanSHA256) || value.ParentLiveStateInherited {
+			!validDigest(value.BriefSHA256) || !validDigest(value.ChildPlanSHA256) || !validDigest(value.ContextSHA256) ||
+			!validDigest(value.DescriptorSHA256) || !validDigest(value.ExecutionProfileSHA256) || !validDigest(value.ParentWorkspaceRootSHA256) ||
+			!validDigest(value.PreparedImageSHA256) || !validDigest(value.SourceSHA256) || value.ParentLiveStateInherited {
 			return errors.New("invalid subagent runtime payload")
 		}
 	case SubagentWorkspacePayload:
@@ -847,29 +901,68 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 	}
 	switch value := payload.(type) {
 	case EffectTransitionPayload:
-		if value.State == EffectStarted {
-			parent, err := parentPayload(EventEffectTransition)
-			priorEffect, ok := parent.(*EffectTransitionPayload)
-			if err != nil || !ok || priorEffect.CallID != value.CallID || priorEffect.State != EffectIntent {
-				return errors.New("effect start is not bound to its intent")
-			}
+		if len(parents) != 1 {
+			return errors.New("effect transition requires one causal predecessor")
 		}
-		if value.State == EffectCommitted || value.State == EffectDenied || value.State == EffectFailed || value.State == EffectTimedOut || value.State == EffectAmbiguous || value.State == EffectReconciliationRequired {
-			if len(parents) == 1 {
-				if parentEvent, ok := prior[parents[0]]; ok && parentEvent.Type == EventEffectTransition {
-					decoded, err := decodeEvidencePayload(parentEvent.Type, parentEvent.Payload)
-					priorEffect, ok := decoded.(*EffectTransitionPayload)
-					if err != nil || !ok || priorEffect.CallID != value.CallID || (priorEffect.State != EffectIntent && priorEffect.State != EffectStarted) {
-						return errors.New("effect terminal is not bound to its live lifecycle")
-					}
-				}
+		parentEvent, ok := prior[parents[0]]
+		if !ok {
+			return errors.New("effect transition predecessor unavailable")
+		}
+		if value.State == EffectIntent {
+			if parentEvent.Type != EventAuthoritySnapshot {
+				return errors.New("effect intent is not bound to Host authority")
 			}
+			break
+		}
+		if value.State == EffectDenied && parentEvent.Type == EventAuthoritySnapshot {
+			break
+		}
+		if parentEvent.Type != EventEffectTransition {
+			return errors.New("effect transition is not bound to its lifecycle")
+		}
+		decoded, err := decodeEvidencePayload(parentEvent.Type, parentEvent.Payload)
+		priorEffect, ok := decoded.(*EffectTransitionPayload)
+		if err != nil || !ok || priorEffect.CallID != value.CallID {
+			return errors.New("effect transition call identity mismatch")
+		}
+		validPrior := false
+		switch value.State {
+		case EffectStarted:
+			validPrior = priorEffect.State == EffectIntent
+		case EffectCommitted, EffectFailed, EffectTimedOut, EffectAmbiguous:
+			validPrior = priorEffect.State == EffectStarted
+		case EffectDenied:
+			validPrior = priorEffect.State == EffectIntent
+		case EffectReconciliationRequired:
+			validPrior = priorEffect.State == EffectIntent || priorEffect.State == EffectStarted || priorEffect.State == EffectFailed || priorEffect.State == EffectTimedOut || priorEffect.State == EffectAmbiguous
+		case EffectCompensated:
+			validPrior = priorEffect.State == EffectCommitted
+		case EffectCleanupOnly:
+			validPrior = priorEffect.State == EffectStarted || priorEffect.State == EffectFailed || priorEffect.State == EffectTimedOut
+		}
+		if !validPrior {
+			return errors.New("invalid effect lifecycle transition")
 		}
 	case ToolDecisionPayload:
-		parent, err := parentPayload(EventEffectTransition)
-		effect, ok := parent.(*EffectTransitionPayload)
-		if err != nil || !ok || effect.CallID != value.CallID || effect.ReceiptID != value.ReceiptID {
-			return errors.New("tool decision effect identity mismatch")
+		var effect *EffectTransitionPayload
+		var authority *AuthoritySnapshotPayload
+		for _, parentID := range parents {
+			parent := prior[parentID]
+			decoded, err := decodeEvidencePayload(parent.Type, parent.Payload)
+			if err != nil {
+				return errors.New("invalid tool decision parent")
+			}
+			switch typed := decoded.(type) {
+			case *EffectTransitionPayload:
+				effect = typed
+			case *AuthoritySnapshotPayload:
+				authority = typed
+			default:
+				return errors.New("invalid tool decision parent")
+			}
+		}
+		if len(parents) != 2 || effect == nil || authority == nil || effect.CallID != value.CallID || effect.ReceiptID != value.ReceiptID || authority.CapabilityPlanSHA256 != value.CapabilityPlanSHA256 {
+			return errors.New("tool decision authority/effect identity mismatch")
 		}
 	case SourceBodyPayload:
 		parent, err := parentPayload(EventSourceDocument)
@@ -886,6 +979,7 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 	case SourceDecisionPayload:
 		var occurrence *SourceOccurrencePayload
 		var effect *EffectTransitionPayload
+		var tool *ToolDecisionPayload
 		for _, parentID := range parents {
 			parent := prior[parentID]
 			decoded, err := decodeEvidencePayload(parent.Type, parent.Payload)
@@ -903,31 +997,51 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 					return errors.New("duplicate effect receipt parent")
 				}
 				effect = typed
+			case *ToolDecisionPayload:
+				if tool != nil {
+					return errors.New("duplicate tool decision parent")
+				}
+				tool = typed
 			default:
 				return errors.New("invalid source decision parent")
 			}
 		}
-		if occurrence == nil || occurrence.OccurrenceID != value.OccurrenceID || occurrence.DynamicOccurrence != value.DynamicOccurrence {
-			return errors.New("source decision is not bound to its occurrence")
+		if len(parents) != 3 || occurrence == nil || effect == nil || tool == nil || occurrence.OccurrenceID != value.OccurrenceID || occurrence.DynamicOccurrence != value.DynamicOccurrence || occurrence.Capability != tool.Capability || value.CapabilityPlanSHA256 != tool.CapabilityPlanSHA256 || value.ReceiptID != effect.ReceiptID || value.ReceiptID != tool.ReceiptID {
+			return errors.New("source decision authority/tool/occurrence identity mismatch")
 		}
 		if value.Admitted {
-			if effect == nil || effect.State != EffectCommitted || effect.ReceiptID != value.ReceiptID {
-				return errors.New("admitted source decision is not bound to its receipt")
+			if effect.State != EffectCommitted || tool.BrokerOutcome != "ok" {
+				return errors.New("admitted source decision is not bound to committed tool receipt")
 			}
-		} else if effect != nil {
-			return errors.New("rejected source decision cannot bind an effect")
+		} else if effect.State != EffectDenied || tool.BrokerOutcome != "denied" {
+			return errors.New("rejected source decision is not bound to denied tool receipt")
 		}
 	case SubagentRuntimePayload:
-		parent, err := parentPayload(EventSubagentContext)
-		context, ok := parent.(*SubagentContextPayload)
-		if err != nil || !ok || context.ChildID != value.ChildID {
-			return errors.New("subagent runtime is not bound to child context")
+		var childContext *SubagentContextPayload
+		var source *SourceDocumentPayload
+		for _, parentID := range parents {
+			parent := prior[parentID]
+			decoded, err := decodeEvidencePayload(parent.Type, parent.Payload)
+			if err != nil {
+				return errors.New("invalid subagent runtime parent")
+			}
+			switch typed := decoded.(type) {
+			case *SubagentContextPayload:
+				childContext = typed
+			case *SourceDocumentPayload:
+				source = typed
+			default:
+				return errors.New("invalid subagent runtime parent")
+			}
+		}
+		if len(parents) != 2 || childContext == nil || source == nil || childContext.ChildID != value.ChildID || childContext.ContextSHA256 != value.ContextSHA256 || childContext.BriefSHA256 != value.BriefSHA256 || childContext.Availability != Available || source.SourceSHA256 != value.SourceSHA256 || source.Availability != Available {
+			return errors.New("subagent runtime context/source identity mismatch")
 		}
 	case SubagentWorkspacePayload:
 		parent, err := parentPayload(EventSubagentRuntime)
 		runtime, ok := parent.(*SubagentRuntimePayload)
-		if err != nil || !ok || runtime.ChildID != value.ChildID {
-			return errors.New("subagent workspace is not bound to child runtime")
+		if err != nil || !ok || runtime.ChildID != value.ChildID || runtime.ParentWorkspaceRootSHA256 != value.BaseRootSHA256 {
+			return errors.New("subagent workspace is not bound to child runtime/base root")
 		}
 	case WorkspaceFilePayload:
 		parent, err := parentPayload(EventSubagentWorkspace)

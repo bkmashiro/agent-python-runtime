@@ -153,7 +153,7 @@ func (lifecycle *observationLifecycle) fail(ctx context.Context, class string) e
 		return nil
 	}
 	payload := observe.ExecutionFailedPayload{
-		ErrorClass: class, EvidenceComplete: !lifecycle.evidenceLost && !lifecycle.session.Incomplete(), Status: "error",
+		ErrorClass: class, EvidenceComplete: false, Status: "error",
 	}
 	_, err := appendObservation(ctx, lifecycle.session, observe.EventExecutionFailed, lifecycle.parent, payload)
 	lifecycle.terminal = err == nil

@@ -32,8 +32,12 @@ func TestDualProfileProjectionPreservesCanonicalEventIdentityAndRemovesExperimen
 		Type: trajectory.EventModelContext, ActorID: "actor-harness-0001", ParentEventIDs: []string{started.EventID},
 		Payload: trajectory.ModelContextPayload{ContextSHA256: testDigest('e'), BriefSHA256: testDigest('f'), Availability: trajectory.Available},
 	})
-	effect := appendEvidence(t, builder, trajectory.EvidenceInput{
+	intent := appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID},
+		Payload: trajectory.EffectTransitionPayload{CallID: "call-effect-0001", State: trajectory.EffectIntent},
+	})
+	effect := appendEvidence(t, builder, trajectory.EvidenceInput{
+		Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{intent.EventID},
 		Payload: trajectory.EffectTransitionPayload{
 			CallID: "call-effect-0001", State: trajectory.EffectReconciliationRequired,
 			ReconciliationReason: "provider_outcome_ambiguous",
@@ -55,7 +59,7 @@ func TestDualProfileProjectionPreservesCanonicalEventIdentityAndRemovesExperimen
 	if full.TraceID != production.TraceID || full.HeaderSHA256 != production.HeaderSHA256 {
 		t.Fatalf("profile identity drift full=%+v production=%+v", full, production)
 	}
-	if len(full.Events) != 5 || len(production.Events) != 4 {
+	if len(full.Events) != 6 || len(production.Events) != 5 {
 		t.Fatalf("full=%d production=%d", len(full.Events), len(production.Events))
 	}
 	fullIDs := map[string]bool{}
@@ -89,7 +93,11 @@ func TestEffectRollbackRequiresTypedCompensatorAndAmbiguityRequiresReconciliatio
 		})
 	}
 	builder := newEvidenceBuilder(t)
-	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", Payload: trajectory.EffectTransitionPayload{
+	authority := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventAuthoritySnapshot, ActorID: "actor-host-0001", Payload: trajectory.AuthoritySnapshotPayload{RunID: "run-effect-0001", CapabilityPlanSHA256: testDigest('1'), PolicySHA256: testDigest('2'), FreshnessSHA256: testDigest('3'), GrantsSHA256: testDigest('4')}})
+	intent := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-effect-0001", State: trajectory.EffectIntent}})
+	started := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{intent.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-effect-0001", State: trajectory.EffectStarted}})
+	committed := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{started.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-effect-0001", ReceiptID: "rcpt_effect_0001", State: trajectory.EffectCommitted}})
+	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{committed.EventID}, Payload: trajectory.EffectTransitionPayload{
 		CallID: "call-effect-0001", State: trajectory.EffectCompensated, Compensator: "provider.rollback",
 	}}); err != nil {
 		t.Fatalf("typed compensation rejected: %v", err)

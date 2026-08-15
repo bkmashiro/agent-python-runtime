@@ -49,6 +49,22 @@ func TestPrivateBodyStaysInExperimentStoreAndPortableProjection(t *testing.T) {
 	if err != nil || len(full.Events) != 4 || full.Events[2].Body == nil {
 		t.Fatalf("full=%+v err=%v", full, err)
 	}
+	if err := trajectory.ValidateEvidenceExport(full); err == nil {
+		t.Fatal("private body export validated without Labstore")
+	}
+	if err := trajectory.ValidateEvidenceExportWithStore(full, store); err != nil {
+		t.Fatalf("store-bound private export rejected: %v", err)
+	}
+	encoded, err := trajectory.EncodeEvidenceExportWithStore(full, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trajectory.DecodeEvidenceExport(encoded); err == nil {
+		t.Fatal("private body export decoded without Labstore")
+	}
+	if _, err := trajectory.DecodeEvidenceExportWithStore(encoded, store); err != nil {
+		t.Fatalf("store-bound private decode rejected: %v", err)
+	}
 	portable, err := builder.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPortable)
 	if err != nil || len(portable.Events) != 3 {
 		t.Fatalf("portable=%+v err=%v", portable, err)

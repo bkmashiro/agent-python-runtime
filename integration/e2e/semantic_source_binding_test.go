@@ -217,8 +217,12 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	descriptor := subagent.Descriptor{
 		SchemaVersion: subagent.DescriptorSchemaVersion, ChildID: childID, ParentStreamEpoch: "parent-stream-real-0001",
 		ParentLineageSHA256: parentLineage, SourceOccurrence: "semantic_source_binding_test:child-real-0001",
-		SourceSHA256: analysis.SourceSHA256, InputsSHA256: semanticTestDigest('a'), ArtifactSHA256: artifactSHA256,
+		SourceSHA256: childSourceSHA256, InputsSHA256: semanticTestDigest('a'), ArtifactSHA256: artifactSHA256,
 		ExecutionProfileSHA256: semanticTestDigest('b'), ChildPlanSHA256: childPlanSHA256, PrivacyPartition: "fixture-private", Depth: 1,
+	}
+	descriptorSHA256, _, err := descriptor.Identity()
+	if err != nil {
+		t.Fatal(err)
 	}
 	childExecutor := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (enginecontract.Runner, error) {
@@ -245,9 +249,17 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if joined.SelectedRoot.ParentIdentitySHA256 != parentLineage {
+		t.Fatalf("child base root=%s parent root=%s", joined.SelectedRoot.ParentIdentitySHA256, parentLineage)
+	}
 	childRuntime, err := evidenceLog.Append(trajectory.EvidenceInput{
-		Type: trajectory.EventSubagentRuntime, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childContext.EventID},
-		Payload: trajectory.SubagentRuntimePayload{ChildID: childID, FreshRunID: "child-real-run-0001", PreparedImageSHA256: artifactSHA256, ChildPlanSHA256: childPlanSHA256, ParentLiveStateInherited: false},
+		Type: trajectory.EventSubagentRuntime, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childContext.EventID, childSourceDocument.EventID},
+		Payload: trajectory.SubagentRuntimePayload{
+			BriefSHA256: briefSHA256, ChildID: childID, ChildPlanSHA256: descriptor.ChildPlanSHA256,
+			ContextSHA256: contextSHA256, DescriptorSHA256: descriptorSHA256, ExecutionProfileSHA256: descriptor.ExecutionProfileSHA256,
+			FreshRunID: "child-real-run-0001", ParentWorkspaceRootSHA256: joined.SelectedRoot.ParentIdentitySHA256,
+			PreparedImageSHA256: descriptor.ArtifactSHA256, SourceSHA256: childSourceSHA256, ParentLiveStateInherited: false,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +267,7 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	childWorkspace, err := evidenceLog.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentWorkspace, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childRuntime.EventID},
 		Payload: trajectory.SubagentWorkspacePayload{
-			ChildID: childID, BaseRootSHA256: parentLineage, ResultRootSHA256: joined.SelectedRoot.IdentitySHA256,
+			ChildID: childID, BaseRootSHA256: joined.SelectedRoot.ParentIdentitySHA256, ResultRootSHA256: joined.SelectedRoot.IdentitySHA256,
 			ChangedEntries: joined.SelectedRoot.ChangedEntries, ChangedBytes: joined.SelectedRoot.ChangedBytes, Disposition: "selected",
 		},
 	})
@@ -280,7 +292,7 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	}
 
 	evidenceRecorder, err := trajectory.NewObservationRecorder(evidenceLog, trajectory.ObservationRecorderConfig{
-		ActorID: "actor-real-source-bound-0001", RunID: "source-bound-run", AttemptID: "attempt-real-source-bound-0001",
+		Profile: trajectory.ProfileExperimentFull, ActorID: "actor-real-source-bound-0001", RunID: "source-bound-run", AttemptID: "attempt-real-source-bound-0001",
 		PolicySHA256: semanticTestDigest('4'), FreshnessSHA256: semanticTestDigest('5'), GrantsSHA256: semanticTestDigest('6'),
 	})
 	if err != nil {
@@ -377,11 +389,16 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 			"experiment-full-public.json":  publicFull,
 		}
 		for name, artifact := range artifacts {
-			encoded, encodeErr := trajectory.EncodeEvidenceExport(artifact)
+			var encoded []byte
+			var encodeErr error
+			if artifact.Privacy == labstore.PrivacyPrivate {
+				encoded, encodeErr = trajectory.EncodeEvidenceExportWithStore(artifact, evidenceStore)
+			} else {
+				encoded, encodeErr = trajectory.EncodeEvidenceExport(artifact)
+			}
 			if encodeErr != nil {
 				t.Fatal(encodeErr)
 			}
-			encoded = append(encoded, '\n')
 			if writeErr := os.WriteFile(filepath.Join(evidenceRoot, name), encoded, 0o600); writeErr != nil {
 				t.Fatal(writeErr)
 			}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"runtime/metrics"
+	"sort"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 )
 
 type ObservationRecorderConfig struct {
+	Profile         Profile
 	ActorID         string
 	RunID           string
 	AttemptID       string
@@ -30,6 +32,9 @@ type ObservationRecorder struct {
 	observationIDs   map[uint32]string
 	lastProduction   string
 	authorityPlanSHA string
+	authorityEventID string
+	effectEvents     map[string]string
+	effectStates     map[string]EffectState
 	started          bool
 	terminal         bool
 	startedAt        time.Time
@@ -37,12 +42,18 @@ type ObservationRecorder struct {
 }
 
 func NewObservationRecorder(log *EvidenceLog, config ObservationRecorderConfig) (*ObservationRecorder, error) {
-	if log == nil || log.builder.store == nil || !evidenceIdentifier.MatchString(config.ActorID) ||
+	if config.Profile == "" {
+		config.Profile = ProfileProductionRollback
+	}
+	if log == nil || !config.Profile.valid() || (config.Profile == ProfileExperimentFull && log.builder.store == nil) || !evidenceIdentifier.MatchString(config.ActorID) ||
 		!evidenceIdentifier.MatchString(config.RunID) || !evidenceIdentifier.MatchString(config.AttemptID) ||
 		!digestPattern.MatchString(config.PolicySHA256) || !digestPattern.MatchString(config.FreshnessSHA256) || !digestPattern.MatchString(config.GrantsSHA256) {
 		return nil, errors.New("invalid observation recorder configuration")
 	}
-	return &ObservationRecorder{log: log, config: config, observationIDs: make(map[uint32]string)}, nil
+	return &ObservationRecorder{
+		log: log, config: config, observationIDs: make(map[uint32]string),
+		effectEvents: make(map[string]string), effectStates: make(map[string]EffectState),
+	}, nil
 }
 
 func (recorder *ObservationRecorder) Append(ctx context.Context, observed observe.Event) error {
@@ -54,39 +65,41 @@ func (recorder *ObservationRecorder) Append(ctx context.Context, observed observ
 	if recorder.terminal {
 		return errors.New("runtime observation after terminal event")
 	}
-	encoded, err := observe.Encode(observed)
-	if err != nil {
-		return err
-	}
-	body, _, err := recorder.log.builder.store.PutJSON(labstore.KindMetadataEvent, encoded, labstore.PutOptions{
-		Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent,
-	})
-	if err != nil {
-		return err
-	}
-	storedObservation, err := recorder.log.builder.store.Get(body)
-	if err != nil {
-		return err
-	}
-	var rawParents []string
-	if observed.ParentSequence != nil {
-		parent, ok := recorder.observationIDs[*observed.ParentSequence]
-		if !ok {
-			return errors.New("runtime observation parent is unavailable")
+	if recorder.config.Profile == ProfileExperimentFull {
+		encoded, err := observe.Encode(observed)
+		if err != nil {
+			return err
 		}
-		rawParents = []string{parent}
+		body, _, err := recorder.log.builder.store.PutJSON(labstore.KindMetadataEvent, encoded, labstore.PutOptions{
+			Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent,
+		})
+		if err != nil {
+			return err
+		}
+		storedObservation, err := recorder.log.builder.store.Get(body)
+		if err != nil {
+			return err
+		}
+		var rawParents []string
+		if observed.ParentSequence != nil {
+			parent, ok := recorder.observationIDs[*observed.ParentSequence]
+			if !ok {
+				return errors.New("runtime observation parent is unavailable")
+			}
+			rawParents = []string{parent}
+		}
+		rawEvent, err := recorder.log.Append(EvidenceInput{
+			Type: EventRuntimeObservation, ActorID: recorder.config.ActorID, ParentEventIDs: rawParents, Body: &body,
+			Payload: RuntimeObservationPayload{
+				ObservationType: observed.Type, Sequence: observed.Sequence, ParentSequence: cloneObservationSequence(observed.ParentSequence),
+				ObservationSHA256: observationDigest(storedObservation.Body),
+			},
+		})
+		if err != nil {
+			return err
+		}
+		recorder.observationIDs[observed.Sequence] = rawEvent.EventID
 	}
-	rawEvent, err := recorder.log.Append(EvidenceInput{
-		Type: EventRuntimeObservation, ActorID: recorder.config.ActorID, ParentEventIDs: rawParents, Body: &body,
-		Payload: RuntimeObservationPayload{
-			ObservationType: observed.Type, Sequence: observed.Sequence, ParentSequence: cloneObservationSequence(observed.ParentSequence),
-			ObservationSHA256: observationDigest(storedObservation.Body),
-		},
-	})
-	if err != nil {
-		return err
-	}
-	recorder.observationIDs[observed.Sequence] = rawEvent.EventID
 	return recorder.appendProjection(observed)
 }
 
@@ -126,6 +139,7 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 				return err
 			}
 			recorder.lastProduction = authority.EventID
+			recorder.authorityEventID = authority.EventID
 			recorder.authorityPlanSHA = payload.CapabilityPlanSHA256
 		}
 		recorder.started = true
@@ -157,6 +171,7 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			return err
 		}
 		recorder.authorityPlanSHA = payload.CapabilityPlanSHA256
+		recorder.authorityEventID = authority.EventID
 		recorder.lastProduction = authority.EventID
 		return nil
 	case observe.EventCapabilityIntent, observe.EventCapabilityStarted:
@@ -167,17 +182,27 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 		if json.Unmarshal(observed.Payload, &payload) != nil || payload.CapabilityPlanSHA256 != recorder.authorityPlanSHA {
 			return errors.New("capability lifecycle observation has no bound Host authority")
 		}
+		callID := capabilityRawCallIdentity(payload.CallID)
 		state := EffectIntent
+		parentID := recorder.authorityEventID
 		if observed.Type == observe.EventCapabilityStarted {
 			state = EffectStarted
+			parentID = recorder.effectEvents[callID]
+			if recorder.effectStates[callID] != EffectIntent || parentID == "" {
+				return errors.New("capability start without matching intent")
+			}
+		} else if _, exists := recorder.effectEvents[callID]; exists {
+			return errors.New("duplicate capability intent")
 		}
 		effect, err := recorder.log.Append(EvidenceInput{
-			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
-			Payload: EffectTransitionPayload{CallID: capabilityRawCallIdentity(payload.CallID), State: state},
+			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(parentID),
+			Payload: EffectTransitionPayload{CallID: callID, State: state},
 		})
 		if err != nil {
 			return err
 		}
+		recorder.effectEvents[callID] = effect.EventID
+		recorder.effectStates[callID] = state
 		recorder.lastProduction = effect.EventID
 		return nil
 	case observe.EventCapabilityCall:
@@ -206,14 +231,27 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 		default:
 			return errors.New("unknown capability outcome")
 		}
+		callID := capabilityCallIdentity(payload)
+		parentID := recorder.effectEvents[callID]
+		if parentID == "" {
+			if state != EffectDenied {
+				return errors.New("capability terminal without matching intent/start")
+			}
+			parentID = recorder.authorityEventID
+		}
 		effect, err := recorder.log.Append(EvidenceInput{
-			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
-			Payload: EffectTransitionPayload{CallID: capabilityCallIdentity(payload), ReceiptID: payload.ReceiptID, State: state, ReconciliationReason: reason},
+			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(parentID),
+			Payload: EffectTransitionPayload{CallID: callID, ReceiptID: payload.ReceiptID, State: state, ReconciliationReason: reason},
 		})
 		if err != nil {
 			return err
 		}
+		recorder.effectEvents[callID] = effect.EventID
+		recorder.effectStates[callID] = state
 		recorder.lastProduction = effect.EventID
+		if recorder.config.Profile == ProfileProductionRollback {
+			return nil
+		}
 		approvalDisposition := "not_required"
 		if payload.ApprovalRequestID != "" {
 			approvalDisposition = "approved"
@@ -222,17 +260,22 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			}
 		}
 		mechanism := "direct"
+		parentCallID := ""
 		if payload.ParentCallID != "" {
 			mechanism = "programmatic"
+			parentCallID = capabilityRawCallIdentity(payload.ParentCallID)
 		}
-		if _, err := recorder.log.Append(EvidenceInput{
-			Type: EventToolDecision, ActorID: recorder.config.ActorID, ParentEventIDs: []string{effect.EventID},
+		tool, err := recorder.log.Append(EvidenceInput{
+			Type: EventToolDecision, ActorID: recorder.config.ActorID, ParentEventIDs: []string{effect.EventID, recorder.authorityEventID},
 			Payload: ToolDecisionPayload{
-				ApprovalDisposition: approvalDisposition, ArgumentsSHA256: payload.ArgumentsSHA256, BrokerOutcome: payload.Outcome,
+				ApprovalDisposition: approvalDisposition, ApprovalRequestID: payload.ApprovalRequestID,
+				ArgumentsSHA256: payload.ArgumentsSHA256, BrokerOutcome: payload.Outcome,
 				CallID: capabilityCallIdentity(payload), Capability: payload.Capability, CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
-				Mechanism: mechanism, ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256,
+				Mechanism: mechanism, OperationIndex: payload.OperationIndex, ParentCallID: parentCallID,
+				ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256,
 			},
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 		if payload.Source != nil {
@@ -255,11 +298,11 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 				return err
 			}
 			if _, err := recorder.log.Append(EvidenceInput{
-				Type: EventSourceDecision, ActorID: recorder.config.ActorID, ParentEventIDs: []string{occurrence.EventID, effect.EventID},
+				Type: EventSourceDecision, ActorID: recorder.config.ActorID, ParentEventIDs: []string{occurrence.EventID, effect.EventID, tool.EventID},
 				Payload: SourceDecisionPayload{
 					DecisionID: sourceDecisionIdentity(payload), CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
 					OccurrenceID: payload.Source.OccurrenceID, DynamicOccurrence: payload.Source.DynamicOccurrence,
-					ClaimLevel: ClaimSourceBound, Admitted: true, ReceiptID: payload.ReceiptID,
+					ClaimLevel: ClaimSourceBound, Admitted: payload.Outcome != "denied", ReceiptID: payload.ReceiptID,
 				},
 			}); err != nil {
 				return err
@@ -309,6 +352,14 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			}
 			evidenceComplete = payload.EvidenceComplete
 		}
+		if status == "failed" {
+			evidenceComplete = false
+			if err := recorder.reconcileOutstandingEffects("execution_failed_before_terminal_receipt"); err != nil {
+				return err
+			}
+		} else if recorder.hasOutstandingEffects() {
+			return errors.New("completed execution has unterminated capability effects")
+		}
 		wallNanos := uint64(time.Since(recorder.startedAt).Nanoseconds())
 		if wallNanos == 0 {
 			wallNanos = 1
@@ -320,14 +371,16 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			cpuNanos = endCPU - recorder.startCPUNanos
 			cpuAvailability = Available
 		}
-		if _, err := recorder.log.Append(EvidenceInput{
-			Type: EventResourceSample, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
-			Payload: ResourceSamplePayload{
-				Scope: "root_execution", WallNanos: wallNanos, ProcessCPUNanos: cpuNanos,
-				ProcessCPUAvailability: cpuAvailability, PeakRSSAvailability: Unavailable,
-			},
-		}); err != nil {
-			return err
+		if recorder.config.Profile == ProfileExperimentFull {
+			if _, err := recorder.log.Append(EvidenceInput{
+				Type: EventResourceSample, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
+				Payload: ResourceSamplePayload{
+					Scope: "root_execution", WallNanos: wallNanos, ProcessCPUNanos: cpuNanos,
+					ProcessCPUAvailability: cpuAvailability, PeakRSSAvailability: Unavailable,
+				},
+			}); err != nil {
+				return err
+			}
 		}
 		attempt, err := recorder.log.Append(EvidenceInput{
 			Type: EventExecutionAttempt, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
@@ -347,6 +400,39 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 	default:
 		return errors.New("unknown runtime observation type")
 	}
+}
+
+func (recorder *ObservationRecorder) hasOutstandingEffects() bool {
+	for callID, state := range recorder.effectStates {
+		if callID != "" && (state == EffectIntent || state == EffectStarted) {
+			return true
+		}
+	}
+	return false
+}
+
+func (recorder *ObservationRecorder) reconcileOutstandingEffects(reason string) error {
+	callIDs := make([]string, 0, len(recorder.effectStates))
+	for callID, state := range recorder.effectStates {
+		if state == EffectIntent || state == EffectStarted {
+			callIDs = append(callIDs, callID)
+		}
+	}
+	sort.Strings(callIDs)
+	for _, callID := range callIDs {
+		parentID := recorder.effectEvents[callID]
+		effect, err := recorder.log.Append(EvidenceInput{
+			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(parentID),
+			Payload: EffectTransitionPayload{CallID: callID, State: EffectReconciliationRequired, ReconciliationReason: reason},
+		})
+		if err != nil {
+			return err
+		}
+		recorder.effectEvents[callID] = effect.EventID
+		recorder.effectStates[callID] = EffectReconciliationRequired
+		recorder.lastProduction = effect.EventID
+	}
+	return nil
 }
 
 func processCPUNanos() uint64 {

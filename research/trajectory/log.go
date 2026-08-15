@@ -36,6 +36,8 @@ const (
 	EventSessionEnd         EventType = "session.end"
 	EventTurnStart          EventType = "turn.start"
 	EventTurnEnd            EventType = "turn.end"
+	EventStepStart          EventType = "step.start"
+	EventStepEnd            EventType = "step.end"
 	EventContext            EventType = "context.inject"
 	EventUserMessage        EventType = "user.message"
 	EventRequestHeader      EventType = "request.header"
@@ -473,6 +475,11 @@ func validateNext(header SessionHeader, prior []Event, event Event, store *labst
 	} else if len(event.ContextEventIDs) != 0 {
 		return errors.New("only model requests may carry context IDs")
 	}
+	if event.Type == EventStepStart || event.Type == EventStepEnd {
+		if event.TurnID == "" || event.StepID == "" {
+			return errors.New("step lifecycle identity is incomplete")
+		}
+	}
 	if event.Type == EventToolCall {
 		if event.ToolCallID == "" || event.ToolName == "" || !strings.HasPrefix(event.ToolCallID, "call-") {
 			return errors.New("tool call is incomplete")
@@ -514,7 +521,7 @@ func requiresBody(kind EventType) bool {
 
 func validEventType(value EventType) bool {
 	switch value {
-	case EventSessionStart, EventSessionEnd, EventTurnStart, EventTurnEnd, EventContext, EventUserMessage, EventRequestHeader, EventModelRequest, EventAssistantChunk, EventAssistantReasoning, EventAssistantOutput, EventToolCall, EventToolResult, EventSubagentDispatch, EventSubagentResult, EventRuntime, EventWorkspace:
+	case EventSessionStart, EventSessionEnd, EventTurnStart, EventTurnEnd, EventStepStart, EventStepEnd, EventContext, EventUserMessage, EventRequestHeader, EventModelRequest, EventAssistantChunk, EventAssistantReasoning, EventAssistantOutput, EventToolCall, EventToolResult, EventSubagentDispatch, EventSubagentResult, EventRuntime, EventWorkspace:
 		return true
 	default:
 		return false

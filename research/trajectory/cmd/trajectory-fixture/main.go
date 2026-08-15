@@ -87,7 +87,11 @@ func generate(output, storePath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	request1, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: header.EventID, TurnID: turn, StepID: step1, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 4_000_000, Usage: &trajectory.TokenUsage{Input: 108, Output: 46, Reasoning: 21}})
+	step1Start, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepStart, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: header.EventID, TurnID: turn, StepID: step1, Status: "running"})
+	if err != nil {
+		return err
+	}
+	request1, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: step1Start.EventID, TurnID: turn, StepID: step1, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 4_000_000, Usage: &trajectory.TokenUsage{Input: 108, Output: 46, Reasoning: 21}})
 	if err != nil {
 		return err
 	}
@@ -143,7 +147,15 @@ func generate(output, storePath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	request2, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: subagent.EventID, TurnID: turn, StepID: step2, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID, lead.EventID, call.EventID, result.EventID, subagent.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 3_000_000, Usage: &trajectory.TokenUsage{Input: 241, Output: 38, Reasoning: 14, CacheRead: 96}})
+	step1End, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: subagent.EventID, TurnID: turn, StepID: step1, Status: "completed"})
+	if err != nil {
+		return err
+	}
+	step2Start, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepStart, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: step1End.EventID, TurnID: turn, StepID: step2, Status: "running"})
+	if err != nil {
+		return err
+	}
+	request2, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: step2Start.EventID, TurnID: turn, StepID: step2, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID, lead.EventID, call.EventID, result.EventID, subagent.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 3_000_000, Usage: &trajectory.TokenUsage{Input: 241, Output: 38, Reasoning: 14, CacheRead: 96}})
 	if err != nil {
 		return err
 	}
@@ -167,7 +179,11 @@ func generate(output, storePath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	turnEnd, err := appendOne(trajectory.EventInput{Type: trajectory.EventTurnEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: final.EventID, TurnID: turn, Status: "completed"})
+	step2End, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: final.EventID, TurnID: turn, StepID: step2, Status: "completed"})
+	if err != nil {
+		return err
+	}
+	turnEnd, err := appendOne(trajectory.EventInput{Type: trajectory.EventTurnEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: step2End.EventID, TurnID: turn, Status: "completed"})
 	if err != nil {
 		return err
 	}

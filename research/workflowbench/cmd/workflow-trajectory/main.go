@@ -103,7 +103,11 @@ func generate(evidencePath, storePath, outputPath, sourceCommit string) error {
 		if err != nil {
 			return err
 		}
-		request, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: turn.EventID, TurnID: turnID, StepID: stepID, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, user.EventID}, Provider: "scripted", Model: "workflowbench-fixture", Status: "completed"})
+		step, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepStart, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: turn.EventID, TurnID: turnID, StepID: stepID, Status: "running"})
+		if err != nil {
+			return err
+		}
+		request, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: step.EventID, TurnID: turnID, StepID: stepID, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, user.EventID}, Provider: "scripted", Model: "workflowbench-fixture", Status: "completed"})
 		if err != nil {
 			return err
 		}
@@ -202,7 +206,11 @@ func generate(evidencePath, storePath, outputPath, sourceCommit string) error {
 			return err
 		}
 		resultIDs = append(resultIDs, result.EventID)
-		if _, err = appendOne(trajectory.EventInput{Type: trajectory.EventTurnEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: result.EventID, TurnID: turnID, Status: "completed"}); err != nil {
+		stepEnd, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: result.EventID, TurnID: turnID, StepID: stepID, Status: "completed"})
+		if err != nil {
+			return err
+		}
+		if _, err = appendOne(trajectory.EventInput{Type: trajectory.EventTurnEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: stepEnd.EventID, TurnID: turnID, Status: "completed"}); err != nil {
 			return err
 		}
 	}
@@ -212,8 +220,12 @@ func generate(evidencePath, storePath, outputPath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
+	finalStep, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepStart, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: finalTurn.EventID, TurnID: finalTurnID, StepID: finalStepID, Status: "running"})
+	if err != nil {
+		return err
+	}
 	contextIDs := append([]string{header.EventID, system.EventID, developer.EventID, user.EventID}, resultIDs...)
-	finalRequest, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: finalTurn.EventID, TurnID: finalTurnID, StepID: finalStepID, ContextEventIDs: contextIDs, Provider: "scripted", Model: "workflowbench-fixture", Status: "completed"})
+	finalRequest, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: finalStep.EventID, TurnID: finalTurnID, StepID: finalStepID, ContextEventIDs: contextIDs, Provider: "scripted", Model: "workflowbench-fixture", Status: "completed"})
 	if err != nil {
 		return err
 	}
@@ -247,7 +259,11 @@ func generate(evidencePath, storePath, outputPath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	finalTurnEnd, err := appendOne(trajectory.EventInput{Type: trajectory.EventTurnEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: finalOutput.EventID, TurnID: finalTurnID, Status: "completed"})
+	finalStepEnd, err := appendOne(trajectory.EventInput{Type: trajectory.EventStepEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: finalOutput.EventID, TurnID: finalTurnID, StepID: finalStepID, Status: "completed"})
+	if err != nil {
+		return err
+	}
+	finalTurnEnd, err := appendOne(trajectory.EventInput{Type: trajectory.EventTurnEnd, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: finalStepEnd.EventID, TurnID: finalTurnID, Status: "completed"})
 	if err != nil {
 		return err
 	}

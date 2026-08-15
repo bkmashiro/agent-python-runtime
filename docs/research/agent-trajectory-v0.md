@@ -46,7 +46,7 @@ can detect every possible secret in arbitrary bytes.
 
 ## Event vocabulary
 
-- lifecycle: `session.start`, `session.end`, `turn.start`, `turn.end`;
+- lifecycle: `session.start`, `session.end`, `turn.start`, `turn.end`, `step.start`, `step.end`;
 - model input: `context.inject`, `user.message`, `request.header`, `model.request`;
 - model output: raw `assistant.chunk`, assembled `assistant.reasoning`, `assistant.output`;
 - tools: `tool.call`, `tool.result`;

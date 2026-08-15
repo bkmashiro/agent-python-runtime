@@ -144,6 +144,26 @@ func TestAppendRejectsEventsAfterSessionEnd(t *testing.T) {
 	}
 }
 
+func TestStepLifecycleRequiresTurnAndStepIdentity(t *testing.T) {
+	root := t.TempDir()
+	store, err := labstore.Open(filepath.Join(root, "objects"), labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	log, err := trajectory.Create(filepath.Join(root, "trajectory.jsonl"), store, trajectory.SessionHeader{
+		SessionID: "session-0000000000000005", SourceCommit: "0123456789abcdef0123456789abcdef01234567",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	if _, err := log.Append(trajectory.EventInput{Type: trajectory.EventStepStart, Source: trajectory.SourceHarness, TurnID: "turn-0000000000000001"}); err == nil {
+		t.Fatal("step without step identity accepted")
+	}
+	appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventStepStart, Source: trajectory.SourceHarness, TurnID: "turn-0000000000000001", StepID: "step-0000000000000001", Status: "running"})
+}
+
 func appendEvent(t *testing.T, log *trajectory.Log, input trajectory.EventInput) trajectory.Event {
 	t.Helper()
 	event, err := log.Append(input)

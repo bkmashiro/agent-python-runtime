@@ -133,7 +133,7 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 	retainedStarted := time.Now()
 	retained, err := pass.ExecuteGuest(context.Background(), invocation, verifiedPlan, compute)
 	retainedMicros := time.Since(retainedStarted).Microseconds()
-	if err != nil || retained.Disposition != agentfunction.Retained || retained.PhysicalExecutionID != "" || physical.Load() != 1 {
+	if err != nil || retained.Disposition != agentfunction.Retained || retained.PhysicalExecutionID != "semantic-physical-1" || physical.Load() != 1 {
 		t.Fatalf("retained=%+v physical=%d err=%v", retained, physical.Load(), err)
 	}
 	stats := pass.Stats()

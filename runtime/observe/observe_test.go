@@ -194,11 +194,17 @@ func TestTypedPayloadContracts(t *testing.T) {
 		{"execution.failed", mustJSON(t, map[string]any{"error_class": "guest.error", "evidence_complete": true, "status": "error"})},
 		{"execution.failed", mustJSON(t, map[string]any{"error_class": "guest.error", "evidence_complete": true, "result_sha256": sha('a'), "status": "error"})},
 		{"capability.plan_bound", mustJSON(t, map[string]any{"capability_plan_sha256": sha('a')})},
-		{"capability.call", mustJSON(t, map[string]any{
-			"arguments_sha256": sha('a'), "capability": "sources.demo_catalog", "operation_index": uint32(0), "outcome": "ok", "result_sha256": sha('b'),
+		{"capability.call.intent", mustJSON(t, map[string]any{
+			"arguments_sha256": sha('a'), "call_id": "call-one", "capability": "sources.demo_catalog", "capability_plan_sha256": sha('b'), "operation_index": uint32(0), "phase": "intent",
+		})},
+		{"capability.call.started", mustJSON(t, map[string]any{
+			"arguments_sha256": sha('a'), "call_id": "call-one", "capability": "sources.demo_catalog", "capability_plan_sha256": sha('b'), "operation_index": uint32(0), "phase": "started",
 		})},
 		{"capability.call", mustJSON(t, map[string]any{
-			"arguments_sha256": sha('a'), "capability": "sources.demo_catalog", "operation_index": uint32(1), "outcome": "denied",
+			"arguments_sha256": sha('a'), "call_id": "call-one", "capability": "sources.demo_catalog", "operation_index": uint32(0), "outcome": "ok", "result_sha256": sha('b'),
+		})},
+		{"capability.call", mustJSON(t, map[string]any{
+			"arguments_sha256": sha('a'), "call_id": "call-two", "capability": "sources.demo_catalog", "operation_index": uint32(1), "outcome": "denied",
 		})},
 		{"workspace.finalized", mustJSON(t, map[string]any{
 			"changes": []any{}, "changes_truncated": false,

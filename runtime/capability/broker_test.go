@@ -42,6 +42,46 @@ func TestBrokerUsesHostRegistryAndBoundedCalls(t *testing.T) {
 	}
 }
 
+func TestBrokerEmitsBodyFreeIntentAndStartedAroundLiveHandler(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"hello"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := &callLifecycleRecorder{}
+	if err := broker.AttachCallLifecycleObserver(recorder); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := broker.Call(context.Background(), []byte(`{"call_id":"one","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.observations) != 2 || recorder.observations[0].Phase != capability.CallLifecycleIntent ||
+		recorder.observations[1].Phase != capability.CallLifecycleStarted || recorder.observations[0].CallID != "one" ||
+		recorder.observations[0].ArgumentsSHA256 == "" || recorder.observations[0].CapabilityPlanSHA256 != plan.Identity() {
+		t.Fatalf("lifecycle observations=%+v", recorder.observations)
+	}
+	if err := broker.AttachCallLifecycleObserver(&callLifecycleRecorder{}); !errors.Is(err, capability.ErrInvalidBroker) {
+		t.Fatalf("late observer attach err=%v", err)
+	}
+}
+
+type callLifecycleRecorder struct {
+	observations []capability.CallLifecycleObservation
+}
+
+func (recorder *callLifecycleRecorder) ObserveCallLifecycle(_ context.Context, observed capability.CallLifecycleObservation) {
+	recorder.observations = append(recorder.observations, observed)
+}
+
 func TestBrokerDeniesUnregisteredTool(t *testing.T) {
 	plan, err := capability.NewRegistry().Seal(capability.PlanConfig{MaxCalls: 1})
 	if err != nil {

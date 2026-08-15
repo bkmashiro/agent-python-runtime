@@ -155,6 +155,27 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 		recorder.authorityPlanSHA = payload.CapabilityPlanSHA256
 		recorder.lastProduction = authority.EventID
 		return nil
+	case observe.EventCapabilityIntent, observe.EventCapabilityStarted:
+		if !recorder.started || recorder.authorityPlanSHA == "" {
+			return errors.New("capability lifecycle observation before bound authority")
+		}
+		var payload observe.CapabilityCallLifecyclePayload
+		if json.Unmarshal(observed.Payload, &payload) != nil || payload.CapabilityPlanSHA256 != recorder.authorityPlanSHA {
+			return errors.New("capability lifecycle observation has no bound Host authority")
+		}
+		state := EffectIntent
+		if observed.Type == observe.EventCapabilityStarted {
+			state = EffectStarted
+		}
+		effect, err := recorder.log.Append(EvidenceInput{
+			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
+			Payload: EffectTransitionPayload{CallID: capabilityRawCallIdentity(payload.CallID), State: state},
+		})
+		if err != nil {
+			return err
+		}
+		recorder.lastProduction = effect.EventID
+		return nil
 	case observe.EventCapabilityCall:
 		if !recorder.started {
 			return errors.New("capability observation before execution start")
@@ -343,12 +364,11 @@ func observationDigest(encoded []byte) string {
 }
 
 func capabilityCallIdentity(payload observe.CapabilityCallPayload) string {
-	encoded, _ := json.Marshal(struct {
-		Capability     string `json:"capability"`
-		OperationIndex uint32 `json:"operation_index"`
-		ReceiptID      string `json:"receipt_id"`
-	}{payload.Capability, payload.OperationIndex, payload.ReceiptID})
-	digest := sha256.Sum256(encoded)
+	return capabilityRawCallIdentity(payload.CallID)
+}
+
+func capabilityRawCallIdentity(callID string) string {
+	digest := sha256.Sum256([]byte("pysolate.causal-evidence.call-id.v1\x00" + callID))
 	return "call_" + hex.EncodeToString(digest[:])
 }
 

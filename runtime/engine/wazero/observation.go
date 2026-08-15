@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sort"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -39,13 +40,34 @@ func (lifecycle *observationLifecycle) start(ctx context.Context, payload observ
 	return nil
 }
 
+func (lifecycle *observationLifecycle) ObserveCallLifecycle(ctx context.Context, observed capability.CallLifecycleObservation) {
+	if !lifecycle.started {
+		return
+	}
+	kind := observe.EventCapabilityIntent
+	if observed.Phase == capability.CallLifecycleStarted {
+		kind = observe.EventCapabilityStarted
+	}
+	event, err := appendObservation(ctx, lifecycle.session, kind, lifecycle.parent, observe.CapabilityCallLifecyclePayload{
+		ArgumentsSHA256: observed.ArgumentsSHA256, CallID: observed.CallID, Capability: observed.Capability,
+		CapabilityPlanSHA256: observed.CapabilityPlanSHA256, OperationIndex: observed.OperationIndex, Phase: string(observed.Phase),
+	})
+	if err != nil {
+		lifecycle.evidenceLost = true
+		return
+	}
+	if event.Sequence != 0 {
+		lifecycle.parent = sequencePointer(event.Sequence)
+	}
+}
+
 func (lifecycle *observationLifecycle) capabilityCalls(ctx context.Context, receipts []receipt.Receipt) error {
 	if !lifecycle.started {
 		return nil
 	}
 	for _, call := range receipts {
 		payload := observe.CapabilityCallPayload{
-			ArgumentsSHA256: prefixedReceiptDigest(call.RequestSHA256), Capability: call.Capability,
+			ArgumentsSHA256: prefixedReceiptDigest(call.RequestSHA256), CallID: call.CallID, Capability: call.Capability,
 			CapabilityPlanSHA256: call.CapabilityPlanSHA256, OperationIndex: call.OperationIndex, Outcome: call.Outcome,
 			ApprovalRequestID: call.ApprovalRequestID, ParentCallID: call.ParentCallID, ReceiptID: call.ReceiptID,
 		}

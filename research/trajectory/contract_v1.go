@@ -842,6 +842,25 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		return decodeEvidencePayload(parent.Type, parent.Payload)
 	}
 	switch value := payload.(type) {
+	case EffectTransitionPayload:
+		if value.State == EffectStarted {
+			parent, err := parentPayload(EventEffectTransition)
+			priorEffect, ok := parent.(*EffectTransitionPayload)
+			if err != nil || !ok || priorEffect.CallID != value.CallID || priorEffect.State != EffectIntent {
+				return errors.New("effect start is not bound to its intent")
+			}
+		}
+		if value.State == EffectCommitted || value.State == EffectDenied || value.State == EffectFailed || value.State == EffectTimedOut || value.State == EffectAmbiguous || value.State == EffectReconciliationRequired {
+			if len(parents) == 1 {
+				if parentEvent, ok := prior[parents[0]]; ok && parentEvent.Type == EventEffectTransition {
+					decoded, err := decodeEvidencePayload(parentEvent.Type, parentEvent.Payload)
+					priorEffect, ok := decoded.(*EffectTransitionPayload)
+					if err != nil || !ok || priorEffect.CallID != value.CallID || (priorEffect.State != EffectIntent && priorEffect.State != EffectStarted) {
+						return errors.New("effect terminal is not bound to its live lifecycle")
+					}
+				}
+			}
+		}
 	case ToolDecisionPayload:
 		parent, err := parentPayload(EventEffectTransition)
 		effect, ok := parent.(*EffectTransitionPayload)

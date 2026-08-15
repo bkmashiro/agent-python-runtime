@@ -138,6 +138,15 @@ function validatePayload(event: RawEvidenceEvent) {
 
 function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEvidenceEvent>) {
   const parents = (event.parent_event_ids ?? []).map((id) => prior.get(id)!);
+  if (event.type === 'effect.transition') {
+    if (event.payload.state === 'started') {
+      assert(parents.length === 1 && parents[0].type === 'effect.transition' && parents[0].payload.call_id === event.payload.call_id && parents[0].payload.state === 'intent', 'effect start parent mismatch');
+    }
+    const terminalStates = new Set(['committed', 'denied', 'failed', 'timed_out', 'ambiguous', 'reconciliation_required']);
+    if (terminalStates.has(String(event.payload.state)) && parents.length === 1 && parents[0].type === 'effect.transition') {
+      assert(parents[0].payload.call_id === event.payload.call_id && (parents[0].payload.state === 'intent' || parents[0].payload.state === 'started'), 'effect terminal parent mismatch');
+    }
+  }
   if (event.type === 'tool.decision') {
     assert(parents.length === 1 && parents[0].type === 'effect.transition', 'tool decision parent mismatch');
     assert(parents[0].payload.call_id === event.payload.call_id && parents[0].payload.receipt_id === event.payload.receipt_id, 'tool decision effect identity mismatch');

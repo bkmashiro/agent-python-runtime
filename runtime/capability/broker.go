@@ -21,6 +21,28 @@ const maxCallBytes = 1 << 20
 
 var ErrInvalidBroker = errors.New("invalid Host tool broker")
 
+type CallLifecyclePhase string
+
+const (
+	CallLifecycleIntent  CallLifecyclePhase = "intent"
+	CallLifecycleStarted CallLifecyclePhase = "started"
+)
+
+type CallLifecycleObservation struct {
+	ArgumentsSHA256      string
+	CallID               string
+	Capability           string
+	CapabilityPlanSHA256 string
+	OperationIndex       uint32
+	Phase                CallLifecyclePhase
+}
+
+// CallLifecycleObserver receives body-free, non-authoritative live-call markers.
+// Observation failure must not decide whether a capability executes.
+type CallLifecycleObserver interface {
+	ObserveCallLifecycle(context.Context, CallLifecycleObservation)
+}
+
 type Config struct {
 	RunIdentity         string
 	Plan                *Plan
@@ -79,6 +101,7 @@ type Broker struct {
 	playbackConsumed  map[uint32]bool
 	playbackFailed    bool
 	branch            *branchState
+	lifecycleObserver CallLifecycleObserver
 }
 
 type request struct {
@@ -136,6 +159,33 @@ func NewBroker(config Config) (*Broker, error) {
 		broker.branch = branch
 	}
 	return broker, nil
+}
+
+func (broker *Broker) AttachCallLifecycleObserver(observer CallLifecycleObserver) error {
+	if broker == nil || observer == nil {
+		return ErrInvalidBroker
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if broker.calls != 0 || broker.lifecycleObserver != nil {
+		return ErrInvalidBroker
+	}
+	broker.lifecycleObserver = observer
+	return nil
+}
+
+func (broker *Broker) observeCallLifecycle(ctx context.Context, call request, operation uint32, phase CallLifecyclePhase) {
+	broker.mu.Lock()
+	observer := broker.lifecycleObserver
+	broker.mu.Unlock()
+	if observer == nil {
+		return
+	}
+	digest := sha256.Sum256(call.Arguments)
+	observer.ObserveCallLifecycle(ctx, CallLifecycleObservation{
+		ArgumentsSHA256: fmt.Sprintf("sha256:%x", digest[:]), CallID: call.CallID, Capability: call.Capability,
+		CapabilityPlanSHA256: broker.config.Plan.Identity(), OperationIndex: operation, Phase: phase,
+	})
 }
 
 func (broker *Broker) Call(ctx context.Context, raw []byte) ([]byte, error) {
@@ -232,6 +282,7 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			call.Source = &copy
 		}
 	}
+	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleIntent)
 	if broker.config.StagedClaimer != nil {
 		qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
 		if !qualified || !qualification.Eligible() || registered.spec.Playback != PlaybackLiveOnly || (registered.spec.EffectClass != EffectPure && registered.spec.EffectClass != EffectWorkspaceRead && registered.spec.EffectClass != EffectExternalRead) {
@@ -353,6 +404,7 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
 		}
 	}
+	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleStarted)
 	var result json.RawMessage
 	var evidence TransportEvidence
 	if evidenced, ok := registered.handler.(EvidenceHandler); ok {

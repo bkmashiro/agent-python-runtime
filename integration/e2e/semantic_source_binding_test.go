@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -342,11 +343,25 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	if e2eEvidenceCount(privateFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventRuntimeObservation) == 0 ||
 		e2eEvidenceCount(privateFull.Events, trajectory.EventSourceBody) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventWorkspaceFile) != 1 ||
 		e2eEvidenceCount(privateFull.Events, trajectory.EventToolDecision) != 1 || e2eEvidenceCount(privateFull.Events, trajectory.EventModelOutput) != 1 ||
-		e2eEvidenceCount(production.Events, trajectory.EventSourceDecision) != 0 || e2eEvidenceCount(production.Events, trajectory.EventEffectTransition) != 1 ||
+		e2eEvidenceCount(production.Events, trajectory.EventSourceDecision) != 0 || e2eEvidenceCount(production.Events, trajectory.EventEffectTransition) != 3 ||
 		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventRuntimeObservation) != 0 ||
 		e2eEvidenceCount(publicFull.Events, trajectory.EventToolDecision) != 1 || e2eEvidenceCount(publicFull.Events, trajectory.EventModelOutput) != 1 ||
 		e2eEvidenceCount(publicFull.Events, trajectory.EventSourceBody) != 0 || e2eEvidenceCount(publicFull.Events, trajectory.EventWorkspaceFile) != 0 {
 		t.Fatalf("private=%d production=%d public=%d", len(privateFull.Events), len(production.Events), len(publicFull.Events))
+	}
+	var effectStates []trajectory.EffectState
+	for _, event := range production.Events {
+		if event.Type != trajectory.EventEffectTransition {
+			continue
+		}
+		var effect trajectory.EffectTransitionPayload
+		if err := json.Unmarshal(event.Payload, &effect); err != nil {
+			t.Fatal(err)
+		}
+		effectStates = append(effectStates, effect.State)
+	}
+	if len(effectStates) != 3 || effectStates[0] != trajectory.EffectIntent || effectStates[1] != trajectory.EffectStarted || effectStates[2] != trajectory.EffectCommitted {
+		t.Fatalf("effect lifecycle=%v", effectStates)
 	}
 	for _, event := range production.Events {
 		if event.Body != nil {

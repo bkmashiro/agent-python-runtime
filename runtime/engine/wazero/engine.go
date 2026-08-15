@@ -733,6 +733,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			if err := observation.capabilityPlan(runContext, broker.CapabilityPlanSHA256()); err != nil {
 				return nil, err
 			}
+			if err := broker.AttachCallLifecycleObserver(&observation); err != nil {
+				return nil, fmt.Errorf("attach capability lifecycle observer: %w", err)
+			}
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}

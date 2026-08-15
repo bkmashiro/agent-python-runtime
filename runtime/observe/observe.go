@@ -22,6 +22,8 @@ const (
 	EventExecutionCompleted = "execution.completed"
 	EventExecutionFailed    = "execution.failed"
 	EventCapabilityPlan     = "capability.plan_bound"
+	EventCapabilityIntent   = "capability.call.intent"
+	EventCapabilityStarted  = "capability.call.started"
 	EventCapabilityCall     = "capability.call"
 	EventWorkspaceFinalized = "workspace.finalized"
 
@@ -271,9 +273,19 @@ type ExecutionFailedPayload struct {
 	Status           string `json:"status"`
 }
 
+type CapabilityCallLifecyclePayload struct {
+	ArgumentsSHA256      string `json:"arguments_sha256"`
+	CallID               string `json:"call_id"`
+	Capability           string `json:"capability"`
+	CapabilityPlanSHA256 string `json:"capability_plan_sha256"`
+	OperationIndex       uint32 `json:"operation_index"`
+	Phase                string `json:"phase"`
+}
+
 type CapabilityCallPayload struct {
 	ApprovalRequestID    string                `json:"approval_request_id,omitempty"`
 	ArgumentsSHA256      string                `json:"arguments_sha256"`
+	CallID               string                `json:"call_id"`
 	Capability           string                `json:"capability"`
 	CapabilityPlanSHA256 string                `json:"capability_plan_sha256,omitempty"`
 	OperationIndex       uint32                `json:"operation_index"`
@@ -364,13 +376,26 @@ func validatePayload(kind string, raw []byte) (json.RawMessage, error) {
 			!optionalDigestField(fields, "result_sha256", payload.ResultSHA256) {
 			return nil, ErrInvalidEvent
 		}
+	case EventCapabilityIntent, EventCapabilityStarted:
+		if !hasRequiredAndOnlyExactKeys(fields, []string{"arguments_sha256", "call_id", "capability", "capability_plan_sha256", "operation_index", "phase"}) {
+			return nil, ErrInvalidEvent
+		}
+		var payload CapabilityCallLifecyclePayload
+		expectedPhase := "intent"
+		if kind == EventCapabilityStarted {
+			expectedPhase = "started"
+		}
+		if json.Unmarshal(raw, &payload) != nil || !digest.MatchString(payload.ArgumentsSHA256) || !identifier.MatchString(payload.CallID) ||
+			!validCapabilityName(payload.Capability) || !digest.MatchString(payload.CapabilityPlanSHA256) || payload.Phase != expectedPhase {
+			return nil, ErrInvalidEvent
+		}
 	case EventCapabilityCall:
 		if !hasRequiredAndOnlyExactKeys(fields,
-			[]string{"arguments_sha256", "capability", "operation_index", "outcome"}, "approval_request_id", "capability_plan_sha256", "parent_call_id", "receipt_id", "result_sha256", "source") {
+			[]string{"arguments_sha256", "call_id", "capability", "operation_index", "outcome"}, "approval_request_id", "capability_plan_sha256", "parent_call_id", "receipt_id", "result_sha256", "source") {
 			return nil, ErrInvalidEvent
 		}
 		var payload CapabilityCallPayload
-		if json.Unmarshal(raw, &payload) != nil || !digest.MatchString(payload.ArgumentsSHA256) || !optionalDigestField(fields, "capability_plan_sha256", payload.CapabilityPlanSHA256) ||
+		if json.Unmarshal(raw, &payload) != nil || !digest.MatchString(payload.ArgumentsSHA256) || !identifier.MatchString(payload.CallID) || !optionalDigestField(fields, "capability_plan_sha256", payload.CapabilityPlanSHA256) ||
 			!validCapabilityName(payload.Capability) || !validOutcome(payload.Outcome) || !optionalIdentifierField(fields, "approval_request_id", payload.ApprovalRequestID) ||
 			!optionalIdentifierField(fields, "parent_call_id", payload.ParentCallID) || !optionalIdentifierField(fields, "receipt_id", payload.ReceiptID) ||
 			!optionalDigestField(fields, "result_sha256", payload.ResultSHA256) ||
@@ -443,7 +468,7 @@ func validWorkspaceChanges(raw json.RawMessage, changes []WorkspaceChange) bool 
 
 func validKind(kind string) bool {
 	return kind == EventExecutionStarted || kind == EventExecutionCompleted || kind == EventExecutionFailed ||
-		kind == EventCapabilityPlan || kind == EventCapabilityCall || kind == EventWorkspaceFinalized
+		kind == EventCapabilityPlan || kind == EventCapabilityIntent || kind == EventCapabilityStarted || kind == EventCapabilityCall || kind == EventWorkspaceFinalized
 }
 
 func validOutcome(outcome string) bool {

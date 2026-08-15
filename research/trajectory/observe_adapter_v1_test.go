@@ -44,8 +44,17 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 		CapabilityPlanSHA256: evidenceDigest('5'),
 	})
 	parent = 2
+	lifecycle := observe.CapabilityCallLifecyclePayload{
+		ArgumentsSHA256: evidenceDigest('8'), CallID: "call-observe-adapter-0001", Capability: "workspace.read_text",
+		CapabilityPlanSHA256: evidenceDigest('5'), OperationIndex: 0, Phase: "intent",
+	}
+	appendObservationEvent(t, session, observe.EventCapabilityIntent, &parent, lifecycle)
+	parent = 3
+	lifecycle.Phase = "started"
+	appendObservationEvent(t, session, observe.EventCapabilityStarted, &parent, lifecycle)
+	parent = 4
 	appendObservationEvent(t, session, observe.EventCapabilityCall, &parent, observe.CapabilityCallPayload{
-		ArgumentsSHA256: evidenceDigest('8'), Capability: "workspace.read_text", CapabilityPlanSHA256: evidenceDigest('5'),
+		ArgumentsSHA256: evidenceDigest('8'), CallID: "call-observe-adapter-0001", Capability: "workspace.read_text", CapabilityPlanSHA256: evidenceDigest('5'),
 		OperationIndex: 0, Outcome: "ok", ParentCallID: "parent-call-observe-0001", ReceiptID: "rcpt_observe_adapter_0001", ResultSHA256: evidenceDigest('9'),
 		Source: &observe.SourceBindingPayload{
 			SchemaVersion: "pysolate.source-binding.v0", ClaimLevel: "source_bound",
@@ -53,12 +62,12 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 			Capability: "workspace.read_text", DynamicOccurrence: 1, StartLine: 1, StartColumn: 2, EndLine: 1, EndColumn: 20,
 		},
 	})
-	parent = 3
+	parent = 5
 	appendObservationEvent(t, session, observe.EventWorkspaceFinalized, &parent, observe.WorkspaceFinalizedPayload{
 		Changes: []observe.WorkspaceChange{}, EntryCount: 1, FinalTreeSHA256: evidenceDigest('a'), FinalWorkspaceSHA256: evidenceDigest('b'),
 		InitialWorkspaceSHA256: evidenceDigest('c'), TotalBytes: 1,
 	})
-	parent = 4
+	parent = 6
 	appendObservationEvent(t, session, observe.EventExecutionCompleted, &parent, observe.ExecutionCompletedPayload{
 		EvidenceComplete: true, ResultSHA256: evidenceDigest('d'), Status: "ok",
 	})
@@ -71,7 +80,7 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 5 ||
+	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 7 ||
 		countEvidenceType(production.Events, trajectory.EventAuthoritySnapshot) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventSourceDecision) != 1 ||
 		countEvidenceType(full.Events, trajectory.EventToolDecision) != 1 ||
@@ -86,7 +95,7 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 			t.Fatal("private runtime observation has no raw body ref")
 		}
 	}
-	if countEvidenceType(production.Events, trajectory.EventRuntimeObservation) != 0 || countEvidenceType(production.Events, trajectory.EventEffectTransition) != 1 ||
+	if countEvidenceType(production.Events, trajectory.EventRuntimeObservation) != 0 || countEvidenceType(production.Events, trajectory.EventEffectTransition) != 3 ||
 		countEvidenceType(production.Events, trajectory.EventWorkspaceTerminal) != 1 || countEvidenceType(production.Events, trajectory.EventTraceEnded) != 1 {
 		t.Fatalf("production events=%+v", production.Events)
 	}

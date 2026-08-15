@@ -325,12 +325,28 @@ func validateOptimizationReport(report OptimizationReport, sealed bool) error {
 		}
 	}
 	decisionKeys := map[string]bool{}
+	sharingEvidence := map[string]uint8{}
 	for index, decision := range report.Decisions {
 		key := decision.Kind + "\x00" + decision.Outcome + "\x00" + fmt.Sprint(decision.LogicalRequestIDs)
 		if decisionKeys[key] || !validDecision(decision, requests, physical) || (index > 0 && report.Decisions[index-1].DecisionID >= decision.DecisionID) {
 			return ErrInvalidOptimizationReport
 		}
 		decisionKeys[key] = true
+		if decision.Outcome == "admitted" && (decision.Kind == "coalesced" || decision.Kind == "reused") {
+			execution := physical[requests[decision.LogicalRequestIDs[0]].PhysicalExecutionID]
+			for _, logicalID := range decision.LogicalRequestIDs {
+				if logicalID != execution.ProducerLogicalRequestID {
+					sharingEvidence[logicalID]++
+				}
+			}
+		}
+	}
+	for _, execution := range report.PhysicalExecutions {
+		for _, logicalID := range execution.Consumers {
+			if logicalID != execution.ProducerLogicalRequestID && sharingEvidence[logicalID] != 1 {
+				return ErrInvalidOptimizationReport
+			}
+		}
 	}
 	return nil
 }

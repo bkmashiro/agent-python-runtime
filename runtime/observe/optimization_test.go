@@ -89,6 +89,14 @@ func TestOptimizationReportRejectsBrokenProvenanceAndTiming(t *testing.T) {
 		"rejected decision claims physical authority": func(report *observe.OptimizationReport) {
 			report.Decisions[4].PhysicalExecutionID = "physical-0000000000000004"
 		},
+		"unlinked physical consumer": func(report *observe.OptimizationReport) {
+			for index, decision := range report.Decisions {
+				if decision.Kind == "reused" && decision.Outcome == "admitted" {
+					report.Decisions = append(report.Decisions[:index], report.Decisions[index+1:]...)
+					return
+				}
+			}
+		},
 		"raw body in metadata": func(report *observe.OptimizationReport) {
 			report.Spans[0].Label = "prompt: secret body"
 		},

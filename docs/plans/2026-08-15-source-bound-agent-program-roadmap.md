@@ -404,6 +404,8 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 2 — Clean-Slate Recorder, Evidence and Workspace Contract
 
+**Extracted execution plan:** [2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md](2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md)
+
 **Purpose:** Replace v0 flat events and scripted fixture assumptions with one typed causal contract and two explicit capture profiles: a minimal production rollback/reconciliation ledger and a bounded full experiment trace suitable for live Harness/Pysolate capture and human inspection.
 
 **Primary areas:**

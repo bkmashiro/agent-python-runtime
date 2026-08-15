@@ -4,7 +4,7 @@ test('opens the body-safe real-Guest experiment projection by default', async ({
   await page.goto('/');
   await expect(page.getByText('REAL GUEST · PUBLIC EXPERIMENT')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Causal evidence' })).toBeVisible();
-  await expect(page.getByTestId('event-count')).toHaveText('14 events');
+  await expect(page.getByTestId('event-count')).toHaveText('15 events');
   await expect(page.getByLabel('Trajectory session')).toHaveValue('experiment-full-public');
   await page.getByRole('button', { name: 'source decision' }).click();
   await page.getByRole('tab', { name: 'Raw event' }).click();
@@ -15,7 +15,7 @@ test('switches to the strict production projection without experiment records', 
   await page.goto('/');
   await page.getByLabel('Trajectory session').selectOption('production-rollback');
   await expect(page.getByText('PRODUCTION ROLLBACK PROJECTION', { exact: true })).toBeVisible();
-  await expect(page.getByTestId('event-count')).toHaveText('5 events');
+  await expect(page.getByTestId('event-count')).toHaveText('6 events');
   await expect(page.getByRole('button', { name: 'subagent runtime' })).toHaveCount(0);
   await page.getByRole('button', { name: 'effect transition' }).click();
   await page.getByRole('tab', { name: 'Raw event' }).click();

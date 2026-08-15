@@ -50,6 +50,45 @@ func TestApprovalRequiredCapabilityDispatchesOnlyAfterSameBrokerApproval(t *test
 	}
 }
 
+func TestBothSurfaceApprovalBindsParentOnlyToProgrammaticCalls(t *testing.T) {
+	for _, test := range []struct {
+		name, callID, wantParent string
+	}{
+		{"direct", "direct-1", ""},
+		{"programmatic", "parent:program:1", "parent"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Uint32
+			plan := approvalPlan(t, &calls)
+			controller := approval.NewController()
+			broker, err := capability.NewBroker(capability.Config{
+				RunIdentity: "execution-1", Plan: plan, ProgrammaticParentCallID: "parent", AllowDirectCalls: true,
+				ApprovalSuspension: true, ApprovalController: controller,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := make(chan []byte, 1)
+			go func() {
+				response, _ := broker.Call(context.Background(), []byte(`{"call_id":"`+test.callID+`","capability":"danger.delete","arguments":{"resource":"db"}}`))
+				result <- response
+			}()
+			request := waitForBrokerApproval(t, controller)
+			if request.ParentCallID != test.wantParent {
+				t.Fatalf("request parent=%q want=%q", request.ParentCallID, test.wantParent)
+			}
+			if err := controller.Approve(request.RequestID); err != nil {
+				t.Fatal(err)
+			}
+			response := <-result
+			receipts := broker.SnapshotReceipts()
+			if !strings.Contains(string(response), `"status":"ok"`) || len(receipts) != 1 || receipts[0].ParentCallID != test.wantParent {
+				t.Fatalf("response=%s receipts=%#v", response, receipts)
+			}
+		})
+	}
+}
+
 func TestApprovalRejectionExpiryAndCancellationNeverDispatch(t *testing.T) {
 	for _, test := range []struct {
 		name string

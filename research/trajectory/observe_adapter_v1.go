@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"runtime/metrics"
 	"sync"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
@@ -29,6 +31,8 @@ type ObservationRecorder struct {
 	lastProduction string
 	started        bool
 	terminal       bool
+	startedAt      time.Time
+	startCPUNanos  uint64
 }
 
 func NewObservationRecorder(log *EvidenceLog, config ObservationRecorderConfig) (*ObservationRecorder, error) {
@@ -91,6 +95,8 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 		if json.Unmarshal(observed.Payload, &payload) != nil {
 			return errors.New("decode runtime execution start")
 		}
+		recorder.startedAt = time.Now()
+		recorder.startCPUNanos = processCPUNanos()
 		started, err := recorder.log.Append(EvidenceInput{Type: EventTraceStarted, ActorID: recorder.config.ActorID, Payload: TraceStartedPayload{Status: "running"}})
 		if err != nil {
 			return err
@@ -182,6 +188,12 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			}); err != nil {
 				return err
 			}
+			if _, err := recorder.log.Append(EvidenceInput{
+				Type: EventExecutedLine, ActorID: recorder.config.ActorID, ParentEventIDs: []string{occurrence.EventID},
+				Payload: ExecutedLinePayload{SourceSHA256: payload.Source.SourceSHA256, Availability: NotRecorded},
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	case observe.EventWorkspaceFinalized:
@@ -221,6 +233,26 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			}
 			evidenceComplete = payload.EvidenceComplete
 		}
+		wallNanos := uint64(time.Since(recorder.startedAt).Nanoseconds())
+		if wallNanos == 0 {
+			wallNanos = 1
+		}
+		endCPU := processCPUNanos()
+		cpuNanos := uint64(0)
+		cpuAvailability := Unavailable
+		if endCPU > recorder.startCPUNanos {
+			cpuNanos = endCPU - recorder.startCPUNanos
+			cpuAvailability = Available
+		}
+		if _, err := recorder.log.Append(EvidenceInput{
+			Type: EventResourceSample, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
+			Payload: ResourceSamplePayload{
+				Scope: "root_execution", WallNanos: wallNanos, ProcessCPUNanos: cpuNanos,
+				ProcessCPUAvailability: cpuAvailability, PeakRSSAvailability: Unavailable,
+			},
+		}); err != nil {
+			return err
+		}
 		attempt, err := recorder.log.Append(EvidenceInput{
 			Type: EventExecutionAttempt, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(recorder.lastProduction),
 			Payload: ExecutionAttemptPayload{RunID: recorder.config.RunID, AttemptID: recorder.config.AttemptID, Status: status},
@@ -239,6 +271,19 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 	default:
 		return errors.New("unknown runtime observation type")
 	}
+}
+
+func processCPUNanos() uint64 {
+	samples := []metrics.Sample{{Name: "/cpu/classes/total:cpu-seconds"}}
+	metrics.Read(samples)
+	if samples[0].Value.Kind() != metrics.KindFloat64 {
+		return 0
+	}
+	seconds := samples[0].Value.Float64()
+	if seconds <= 0 || seconds > float64(^uint64(0))/1e9 {
+		return 0
+	}
+	return uint64(seconds * 1e9)
 }
 
 func observationDigest(encoded []byte) string {

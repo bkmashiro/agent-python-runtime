@@ -19,7 +19,11 @@ const evidenceHashDomain = "pysolate.causal-evidence.v1\x00"
 
 const MaxEvidenceEvents = 100_000
 
-var evidenceIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_.:-]{7,127}$`)
+var (
+	evidenceIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_.:-]{7,127}$`)
+	commitPattern      = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	digestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+)
 
 type Profile string
 
@@ -65,6 +69,7 @@ const (
 	EventSubagentWorkspace  EvidenceType = "subagent.workspace"
 	EventEvidenceTruncated  EvidenceType = "evidence.truncated"
 	EventRuntimeObservation EvidenceType = "runtime.observation"
+	EventResourceSample     EvidenceType = "resource.sample"
 )
 
 func (eventType EvidenceType) valid() bool {
@@ -73,7 +78,7 @@ func (eventType EvidenceType) valid() bool {
 		EventWorkspaceTerminal, EventExecutionAttempt, EventModelContext, EventModelBody,
 		EventSourceDocument, EventSourceOccurrence, EventSourceDecision, EventExecutedLine,
 		EventSubagentContext, EventSubagentRuntime, EventSubagentWorkspace, EventEvidenceTruncated,
-		EventRuntimeObservation:
+		EventRuntimeObservation, EventResourceSample:
 		return true
 	default:
 		return false
@@ -236,6 +241,15 @@ type RuntimeObservationPayload struct {
 	Sequence          uint32  `json:"sequence"`
 	ParentSequence    *uint32 `json:"parent_sequence,omitempty"`
 	ObservationSHA256 string  `json:"observation_sha256"`
+}
+
+type ResourceSamplePayload struct {
+	Scope                  string       `json:"scope"`
+	WallNanos              uint64       `json:"wall_nanos"`
+	ProcessCPUNanos        uint64       `json:"process_cpu_nanos"`
+	ProcessCPUAvailability Availability `json:"process_cpu_availability"`
+	PeakRSSBytes           uint64       `json:"peak_rss_bytes"`
+	PeakRSSAvailability    Availability `json:"peak_rss_availability"`
 }
 
 type EvidenceLimits struct {
@@ -569,6 +583,8 @@ func decodeEvidencePayload(kind EvidenceType, raw json.RawMessage) (any, error) 
 		target = &TruncationPayload{}
 	case EventRuntimeObservation:
 		target = &RuntimeObservationPayload{}
+	case EventResourceSample:
+		target = &ResourceSamplePayload{}
 	default:
 		return nil, errors.New("invalid causal evidence payload")
 	}
@@ -617,6 +633,8 @@ func dereferenceEvidencePayload(value any) any {
 	case *TruncationPayload:
 		return *typed
 	case *RuntimeObservationPayload:
+		return *typed
+	case *ResourceSamplePayload:
 		return *typed
 	default:
 		return nil
@@ -705,6 +723,15 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		if kind != EventRuntimeObservation || !evidenceIdentifier.MatchString(value.ObservationType) || value.Sequence == 0 ||
 			(value.ParentSequence != nil && (*value.ParentSequence == 0 || *value.ParentSequence >= value.Sequence)) || !validDigest(value.ObservationSHA256) {
 			return errors.New("invalid runtime observation payload")
+		}
+	case ResourceSamplePayload:
+		if kind != EventResourceSample || !evidenceIdentifier.MatchString(value.Scope) || value.WallNanos == 0 ||
+			!value.ProcessCPUAvailability.valid() || !value.PeakRSSAvailability.valid() ||
+			(value.ProcessCPUAvailability == Available && value.ProcessCPUNanos == 0) ||
+			(value.ProcessCPUAvailability != Available && value.ProcessCPUNanos != 0) ||
+			(value.PeakRSSAvailability == Available && value.PeakRSSBytes == 0) ||
+			(value.PeakRSSAvailability != Available && value.PeakRSSBytes != 0) {
+			return errors.New("invalid resource sample payload")
 		}
 	default:
 		return errors.New("invalid causal evidence payload type")

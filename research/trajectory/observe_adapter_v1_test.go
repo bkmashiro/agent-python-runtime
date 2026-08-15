@@ -67,8 +67,13 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 4 || countEvidenceType(full.Events, trajectory.EventSourceDecision) != 1 {
-		t.Fatalf("full runtime observations=%d source decisions=%d", countEvidenceType(full.Events, trajectory.EventRuntimeObservation), countEvidenceType(full.Events, trajectory.EventSourceDecision))
+	if countEvidenceType(full.Events, trajectory.EventRuntimeObservation) != 4 ||
+		countEvidenceType(full.Events, trajectory.EventSourceDecision) != 1 ||
+		countEvidenceType(full.Events, trajectory.EventExecutedLine) != 1 ||
+		countEvidenceType(full.Events, trajectory.EventResourceSample) != 1 {
+		t.Fatalf("full runtime=%d source=%d line=%d resource=%d",
+			countEvidenceType(full.Events, trajectory.EventRuntimeObservation), countEvidenceType(full.Events, trajectory.EventSourceDecision),
+			countEvidenceType(full.Events, trajectory.EventExecutedLine), countEvidenceType(full.Events, trajectory.EventResourceSample))
 	}
 	for _, event := range full.Events {
 		if event.Type == trajectory.EventRuntimeObservation && event.Body == nil {

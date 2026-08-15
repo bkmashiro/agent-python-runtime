@@ -453,8 +453,8 @@ func validateNext(header SessionHeader, prior []Event, event Event, store *labst
 			return errors.New("tool-linked event has no matching call")
 		}
 	}
-	if event.Type == EventRuntime && (event.RunID == "" || event.LogicalRequestID == "" || event.PhysicalExecutionID == "" || event.SpanID == "") {
-		return errors.New("runtime event is missing execution identity")
+	if event.Type == EventRuntime && (event.ToolCallID == "" || event.RunID == "" || (event.LogicalRequestID == "") != (event.PhysicalExecutionID == "")) {
+		return errors.New("runtime event has incomplete execution identity")
 	}
 	return nil
 }

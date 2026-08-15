@@ -171,6 +171,8 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
   let previousOrdinal = 0;
   let truncated = false;
   let terminalComplete = false;
+  let traceStarted = 0;
+  let traceEnded = 0;
   for (const eventValue of raw.events) {
     const event = object(eventValue, 'event') as unknown as RawEvidenceEvent;
     exactKeys(event as unknown as Record<string, unknown>, eventKeys.filter((key) => key !== 'parent_event_ids' && key !== 'body'), ['parent_event_ids', 'body'], `event[${event.ordinal}]`);
@@ -190,10 +192,15 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
     const unsignedEvent = { ...event, event_id: '' };
     assert(await evidenceHash(`event\0${raw.header_sha256}`, unsignedEvent) === event.event_id, 'event identity mismatch');
     if (event.type === 'evidence.truncated') truncated = true;
-    if (event.type === 'trace.ended') terminalComplete = event.payload.evidence_complete === true;
+    if (event.type === 'trace.started') traceStarted += 1;
+    if (event.type === 'trace.ended') {
+      traceEnded += 1;
+      terminalComplete = event.payload.evidence_complete === true;
+    }
     prior.set(event.event_id, event);
     previousOrdinal = event.ordinal;
   }
+  assert(traceStarted === 1 && traceEnded === 1 && raw.events.at(-1)?.type === 'trace.ended', 'invalid causal evidence lifecycle');
   assert(!(truncated && terminalComplete), 'truncated evidence claimed complete');
   const unsignedExport = { ...raw, seal_sha256: '' };
   assert(await evidenceHash('export', unsignedExport) === raw.seal_sha256, 'export seal mismatch');

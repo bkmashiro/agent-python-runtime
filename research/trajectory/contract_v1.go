@@ -313,6 +313,7 @@ type Builder struct {
 	limits    EvidenceLimits
 	overflow  bool
 	truncated bool
+	ended     bool
 }
 
 func NewBuilder(header TraceHeader) (*Builder, error) {
@@ -338,7 +339,7 @@ func NewBoundedBuilder(header TraceHeader, store *labstore.Store, limits Evidenc
 }
 
 func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
-	if builder == nil || len(builder.events) >= MaxEvidenceEvents || !input.Type.valid() || !evidenceIdentifier.MatchString(input.ActorID) {
+	if builder == nil || builder.ended || len(builder.events) >= MaxEvidenceEvents || !input.Type.valid() || !evidenceIdentifier.MatchString(input.ActorID) {
 		return EvidenceEvent{}, errors.New("invalid causal evidence event")
 	}
 	terminalException := input.Type == EventEvidenceTruncated || input.Type == EventTraceEnded
@@ -388,6 +389,9 @@ func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
 	}
 	event.EventID = evidenceEventID(builder.header.HeaderSHA256, event)
 	builder.events = append(builder.events, cloneEvidenceEvent(event))
+	if input.Type == EventTraceEnded {
+		builder.ended = true
+	}
 	return cloneEvidenceEvent(event), nil
 }
 
@@ -405,7 +409,7 @@ func (builder *Builder) MarkTruncated(actorID string, payload TruncationPayload)
 }
 
 func (builder *Builder) Export(profile Profile, privacy labstore.Privacy) (Export, error) {
-	if builder == nil || (builder.overflow && !builder.truncated) || !profile.valid() ||
+	if builder == nil || !builder.ended || (builder.overflow && !builder.truncated) || !profile.valid() ||
 		(privacy != labstore.PrivacyPrivate && privacy != labstore.PrivacyPortable) ||
 		(profile == ProfileProductionRollback && privacy != labstore.PrivacyPortable) {
 		return Export{}, errors.New("invalid causal evidence export profile")
@@ -478,6 +482,8 @@ func ValidateEvidenceExport(exported Export) error {
 	var lastOrdinal uint64
 	var truncated bool
 	var terminalComplete bool
+	var traceStarted uint32
+	var traceEnded uint32
 	for _, event := range exported.Events {
 		if event.SchemaVersion != EvidenceSchemaVersion || event.Ordinal <= lastOrdinal || !event.Type.valid() ||
 			!evidenceIdentifier.MatchString(event.ActorID) || event.EventID != evidenceEventID(exported.HeaderSHA256, event) {
@@ -500,6 +506,12 @@ func ValidateEvidenceExport(exported Export) error {
 		if err != nil {
 			return err
 		}
+		if event.Type == EventTraceStarted {
+			traceStarted++
+		}
+		if event.Type == EventTraceEnded {
+			traceEnded++
+		}
 		if event.Type == EventEvidenceTruncated {
 			truncated = true
 		}
@@ -511,6 +523,9 @@ func ValidateEvidenceExport(exported Export) error {
 		}
 		prior[event.EventID] = event
 		lastOrdinal = event.Ordinal
+	}
+	if traceStarted != 1 || traceEnded != 1 || exported.Events[len(exported.Events)-1].Type != EventTraceEnded {
+		return errors.New("invalid causal evidence lifecycle")
 	}
 	if truncated && terminalComplete {
 		return errors.New("truncated evidence claimed complete")

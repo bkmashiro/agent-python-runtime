@@ -174,6 +174,25 @@ func TestEvidenceExportDecodeRequiresCanonicalExactDocument(t *testing.T) {
 	}
 }
 
+func TestEvidenceLifecycleIsSingleAndTerminal(t *testing.T) {
+	builder := newEvidenceBuilder(t)
+	appendEvidence(t, builder, trajectory.EvidenceInput{
+		Type: trajectory.EventTraceStarted, ActorID: "actor-host-0001",
+		Payload: trajectory.TraceStartedPayload{Status: "running"},
+	})
+	appendEvidence(t, builder, trajectory.EvidenceInput{
+		Type: trajectory.EventTraceEnded, ActorID: "actor-host-0001",
+		Payload: trajectory.TraceEndedPayload{Status: "completed", EvidenceComplete: true},
+	})
+	_, err := builder.Append(trajectory.EvidenceInput{
+		Type: trajectory.EventModelContext, ActorID: "actor-host-0001",
+		Payload: trajectory.ModelContextPayload{ContextSHA256: testDigest('a'), BriefSHA256: testDigest('b'), Availability: trajectory.Available},
+	})
+	if err == nil {
+		t.Fatal("post-terminal evidence accepted")
+	}
+}
+
 func appendEvidence(t *testing.T, builder *trajectory.Builder, input trajectory.EvidenceInput) trajectory.EvidenceEvent {
 	t.Helper()
 	event, err := builder.Append(input)

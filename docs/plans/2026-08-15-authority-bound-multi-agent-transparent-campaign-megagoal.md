@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Active — Tracks A–D verified; Track E bounded campaign driver next
+**Status:** Active — Track E driver core verified; real/adversarial adapters next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -417,18 +417,20 @@ corpus to improve headline counts.
 
 ### Track E — Transparent bounded campaign execution
 
-- [ ] Implement or refactor an experiment-only release driver inside
+- [x] Implement or refactor an experiment-only release driver inside
   `research/workflowbench`; do not add a production Runtime scheduler.
-- [ ] Use fixed release offsets, fixed physical-slot limit, FIFO tie-breaking and explicit
+- [x] Use fixed release offsets, fixed physical-slot limit, FIFO tie-breaking and explicit
   no-preemption unless an existing qualified mechanism states otherwise.
-- [ ] Run the same manifest under all-off baseline and one qualified treatment in balanced
+- [x] Run the same manifest under all-off baseline and one qualified treatment in balanced
   order.
 - [ ] Record actual monotonic release/admission/queue/start/wait/resume/end intervals,
-  process CPU, logical/physical counts, reason-coded decisions and terminal cleanup.
-- [ ] Ensure zero-duration/rejected/no-physical rows remain visible.
+  process CPU, logical/physical counts, reason-coded decisions and terminal cleanup. The
+  driver records release/admission/queue/start/end and exposes an event seam; real adapter
+  wait/resume/workspace events remain pending.
+- [x] Ensure zero-duration/rejected/no-physical rows remain visible.
 - [ ] Add cancellation, failure, stale authority, cache corruption and mismatched-identity
   adversarial treatments without changing the 20 canonical source rows.
-- [ ] Validate evidence independently against the manifest and semantic/workspace oracle.
+- [x] Validate evidence independently against the manifest and semantic/workspace oracle.
 
 **Gate:** every program and physical execution can be reconstructed from the sealed
 record; baseline/treatment outputs and allowed effects are equivalent; no event is
@@ -630,8 +632,8 @@ claims remain valid.
 ## Current execution pointer
 
 **Track E:** add an experiment-only FIFO release driver and sealed evidence validator to
-the existing `research/workflowbench` package. It must schedule the fixed Track D manifest,
-not become a Runtime scheduler or infer events from a future UI.
+the existing `research/workflowbench` package. The core is complete; next add real-Guest
+and adversarial adapters without moving policy into the driver.
 
 ## Completion log
 
@@ -663,6 +665,12 @@ not become a Runtime scheduler or infer events from a future UI.
   `research/workflowbench`, actual Python sources, canonical Plan/grant identities,
   release/dependency/oracle/admission controls, exact and near-match pairs, per-family
   prohibited claims, syntax checks and the readable v1 corpus protocol.
+- 2026-08-15: Track E core added an experiment-only release driver, a FIFO three-slot
+  physical gate used only when adapters report actual physical starts, monotonic logical
+  and physical events, process CPU/wall accounting, visible rejected rows, balanced
+  treatment order, a sealed evidence schema and an independent validator. Fixture runs
+  reconstruct 20 rows and show the qualified exact pair reducing physical starts `16 →
+  15`; this is driver validation only, not real-Guest campaign evidence.
 
 ## Short prompt to start this Mega-Goal
 

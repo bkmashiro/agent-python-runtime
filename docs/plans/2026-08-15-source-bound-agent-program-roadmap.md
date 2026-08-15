@@ -4,7 +4,19 @@
 
 **Goal:** Turn Pysolate's existing target-Guest semantic overlay, authority-bound execution mechanisms and Lab prototype into a source-bound agent-program system: Host-qualified compiler passes produce auditable boundary plans; recorder/evidence captures the resulting causal execution; Lab lets a human inspect code, inputs, outputs, physical reuse and workspace state; a final natural-workload campaign determines the paper claims.
 
-**Architecture:** Keep exact target CPython as parser and executor. The Guest emits a bounded canonical semantic overlay; pure Host planner passes consume only verified overlay facts plus sealed Host contracts and frozen Run context; runtime consumers execute opaque qualified decisions through existing authority-bearing boundaries. A clean-break trajectory/evidence contract records source ranges, causal spans, physical/logical lineage and workspace checkpoints for a read-only human debugger. No pass receives authority, rewrites arbitrary Python, or becomes a second executor.
+**Architecture:** Keep exact target CPython as parser and executor. The Guest emits a bounded canonical semantic overlay; pure Host planner passes consume only verified overlay facts plus sealed Host contracts and frozen Run context; runtime consumers execute opaque qualified decisions through existing authority-bearing boundaries. A clean-break trajectory/evidence contract records source ranges, causal spans,
+physical/logical lineage and workspace checkpoints for a read-only human debugger.
+Production keeps only rollback-, cleanup- and reconciliation-critical Host evidence;
+full causal telemetry belongs to an explicitly enabled experiment profile. No pass
+receives authority, rewrites arbitrary Python, or becomes a second executor.
+
+For delegated execution, keep three inheritance planes distinct. The Harness explicitly
+materializes the child model context and parent-authored brief; it is not inherited from
+Guest memory. Each child receives a fresh Run over a shared authority-free prepared
+Guest baseline rather than a COW image of the parent's live interpreter or authority.
+The child workspace branches from the parent's immutable root and produces a private
+result/root delta that only the Host may select. Model-context reuse, Wasm-memory COW
+and filesystem branching have separate identities and must never imply one another.
 
 **Tech Stack:** Python `ast` in the target WASM Guest; Go semantic verification, legality, planning, runtime and content-addressed Lab storage; React/TypeScript Lab Web; optional bounded CPython `sys.monitoring` feasibility spike; Go/Python/TypeScript tests and real WASM Guest evidence.
 
@@ -12,7 +24,7 @@
 
 ## Status and claim vocabulary
 
-**Roadmap status:** Proposed; architecture and megagoal decomposition accepted for initial planning, implementation not started.
+**Roadmap status:** Megagoal 1 complete at `b85d657bb0fc719f5539a1e1b049d15c0f277f4a`; Megagoal 2 is next and has not started.
 
 **Pinned implementation baseline:** `911b33a314fcd66fda84fb7f28de4a40d60d102a` on `feat/programmatic-hot-approval` when this roadmap was authored.
 
@@ -83,6 +95,25 @@ Required:
 - bound body size, recursive decoding, tree depth, span count, workspace files and timeline events;
 - distinguish unavailable/not-recorded data from empty values;
 - preserve raw captured values behind the human projection; deterministic presenters may reorganize but must not invent interpretations.
+
+The one typed contract has two explicit capture profiles:
+
+- **Production rollback profile:** record only Host-owned facts needed to prevent unsafe
+  replay and support cleanup, rollback where a typed compensator exists, or reconciliation
+  otherwise: Run/attempt identity, frozen Plan/grant/policy/freshness identity, effect
+  intent and start/commit/ambiguity/receipt state, workspace base/result/publication and
+  terminal disposition. It must not enable model bodies, generic source tracing,
+  `sys.monitoring`, arbitrary tool payloads or full timelines by default. An ambiguous or
+  non-compensable external effect is never described as rolled back.
+- **Experiment full profile:** explicitly enabled, private-by-default capture of bounded
+  model context/chunks, generated source, source-bound and optional executed-line events,
+  pass decisions, logical/physical lineage, tool/Broker/approval timing, workspace deltas
+  and resource metrics. This is the canonical profile for experiments, Lab development
+  and paper evidence; public exports remain body-safe.
+
+Both profiles use the same typed identities and absence vocabulary. The production
+profile is a strict projection, not a second schema, and experiment-only fields must not
+become production dependencies.
 
 There will be one current trajectory contract after Megagoal 2. Old fixture compatibility is not a deliverable.
 
@@ -373,7 +404,7 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 2 — Clean-Slate Recorder, Evidence and Workspace Contract
 
-**Purpose:** Replace v0 flat events and scripted fixture assumptions with one typed causal trajectory contract suitable for live Harness/Pysolate capture and human inspection.
+**Purpose:** Replace v0 flat events and scripted fixture assumptions with one typed causal contract and two explicit capture profiles: a minimal production rollback/reconciliation ledger and a bounded full experiment trace suitable for live Harness/Pysolate capture and human inspection.
 
 **Primary areas:**
 
@@ -387,21 +418,24 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 **Tracks:**
 
-- [ ] Delete v0 compatibility requirements and freeze one new schema.
-- [ ] Implement causal spans, actors, relation kinds, typed start/end semantics and bounded ordering.
-- [ ] Add source documents/ranges/dynamic occurrence records from Megagoal 1.
-- [ ] Add typed model/tool/PTC/Broker/approval/runtime records rather than relying on opaque body text.
-- [ ] Add logical/physical producer-consumer lineage and deterministic links.
-- [ ] Add content-addressed workspace checkpoints, manifests and optional private bodies.
-- [ ] Add bounded raw-body storage plus recursive JSON presentation metadata.
-- [ ] Attach the recorder to one real execution path; scripted fixtures alone do not satisfy completion.
-- [ ] Generate one private full fixture and one public body-safe projection from the same typed trace.
+- [ ] Delete v0 compatibility requirements and freeze one new schema with explicit `production_rollback` and `experiment_full` capture profiles.
+- [ ] Define the minimal production ledger for replay prevention, cleanup, typed rollback and reconciliation; prove experiment-only records are absent when it is selected.
+- [ ] Implement causal spans, actors, relation kinds, typed start/end semantics and bounded ordering for the full experiment profile.
+- [ ] Add source documents/ranges/dynamic occurrence records from Megagoal 1 to the experiment profile; keep them out of production unless required by a named rollback/reconciliation decision.
+- [ ] Add typed model/tool/PTC/Broker/approval/runtime records rather than relying on opaque body text; production retains only the Host-owned decision subset.
+- [ ] Add explicit child context/brief identity, shared prepared-image identity, fresh Run identity, logical/physical producer-consumer lineage and deterministic links without implying parent live-state inheritance.
+- [ ] Add content-addressed workspace base/checkpoint/result identities, manifests and optional private bodies; record private child branch delta and explicit Host selection.
+- [ ] Add bounded raw-body storage plus recursive JSON presentation metadata only to the experiment profile.
+- [ ] Attach both profiles to one real execution path and prove the production capture is a strict body-free projection of the same typed core; scripted fixtures alone do not satisfy completion.
+- [ ] Generate one private full fixture, one minimal production fixture and one public body-safe projection from named real execution.
 - [ ] Delete stale checked-in v0 trajectory/experiment fixtures and parsers.
 
 **Definition of Done:**
 
 - one current trajectory schema exists with no dual-read adapter;
-- one real run records model/tool/runtime/source/workspace relationships end to end;
+- one named real run yields both a minimal production rollback/reconciliation ledger and a bounded full experiment trace from the same typed identities;
+- the production profile contains no model/tool bodies, generic source trace, `sys.monitoring` events or unrelated timeline telemetry, and still proves replay/cleanup/effect/workspace terminal decisions;
+- the experiment profile records model/tool/runtime/source/workspace and delegated child context/runtime/root relationships end to end;
 - public projection contains no private bodies, paths or credentials;
 - private local fixture can inspect captured generated code and output files;
 - every interval, link and derived metric has explicit source semantics;

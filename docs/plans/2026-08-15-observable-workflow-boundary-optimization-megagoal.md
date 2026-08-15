@@ -5,7 +5,7 @@
 > live repository and predecessor evidence before execution. Continue through coherent
 > independently reviewed slices; stop only at the decision gates below.
 
-**Status:** Active — Tracks 0–G implemented; Track H verification/review in progress
+**Status:** Complete — Tracks 0–H implemented, measured, reviewed and released
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -245,3 +245,26 @@ Stop for joint discussion rather than widening the design if any result requires
 
 A failed mechanism or placement gate is a valid result. Continue with independent
 instrumentation, workload, Lab and evaluation work while preserving the no-go evidence.
+
+## Completion record
+
+- Track A: identity-bound `gpu31` layer/final Guest cache, safe archives, bounded cleanup,
+  exact evidence and real cold/warm/final-hit verification complete.
+- Track B: sealed body-free canonical logical-request → physical-execution provenance,
+  strict timing/identity/sharing/parallel scope and retained producer identity complete.
+- Tracks C–D: existing exact reuse/single-flight/pre-dispatch primitives are represented
+  without a second scheduler; explicit Harness-only preissue, declared overlap,
+  coalescing and retained reuse are measured with independent off-state.
+- Track E: semantic placement replacement is `no_go` (zero safe gains, 19 regressions);
+  consumer remains absent.
+- Track F: seed `20260815`, 14 shuffled paired tasks, zero observable divergence,
+  25 → 23 physical reads and all eight near-match dimensions rejected.
+- Track G: sealed read-only Lab paired timeline visually and responsively verified; prior
+  development debugger retained.
+- Track H: architecture/threat/matrix/claim documents converged; full race/vet/Guest/Lab
+  gates pass. Independent findings and honest timeout handling are recorded in
+  `docs/reviews/2026-08-15-observable-workflow-boundary-post-fix-review.md`.
+
+The final claim remains the boundary at lines 228–231 above. The experiment does not
+establish representative latency, CPU or memory improvement, executable AST-region reuse,
+semantic placement replacement or generalized Runtime scheduling authority.

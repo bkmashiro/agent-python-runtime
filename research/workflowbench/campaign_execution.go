@@ -554,8 +554,17 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 				return ErrInvalidCampaignEvidence
 			}
 		}
-		if values := events["sharing.decided"]; len(values) == 1 && (values[0].Reason != row.Sharing || values[0].PhysicalExecutionID != row.PhysicalExecutionID) {
-			return ErrInvalidCampaignEvidence
+		if values := events["sharing.decided"]; len(values) == 1 {
+			if values[0].Reason != row.Sharing || values[0].PhysicalExecutionID != row.PhysicalExecutionID {
+				return ErrInvalidCampaignEvidence
+			}
+			owner := physicalOwner[values[0].PhysicalExecutionID]
+			if owner != program.ID {
+				ownerShares := byProgram[owner]["sharing.decided"]
+				if len(ownerShares) != 1 || ownerShares[0].PhysicalExecutionID != values[0].PhysicalExecutionID {
+					return ErrInvalidCampaignEvidence
+				}
+			}
 		}
 		if values := events["workspace.forked"]; len(values) == 1 && values[0].Reason != "private_attempt" {
 			return ErrInvalidCampaignEvidence
@@ -572,7 +581,14 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 		}
 		if values := events["verification.completed"]; len(values) == 1 {
 			verifierJSON, err := json.Marshal(program.Execution.Verifier)
-			if err != nil || values[0].Reason != sealedRoot+":"+digestCampaignEvidence(verifierJSON)+":"+row.Sharing {
+			verifierPrefix := sealedRoot + ":" + digestCampaignEvidence(verifierJSON) + ":"
+			if err != nil || values[0].Reason != verifierPrefix+row.Sharing {
+				return ErrInvalidCampaignEvidence
+			}
+			owner := physicalOwner[values[0].PhysicalExecutionID]
+			ownerProgram, ok := programs[owner]
+			ownerValues := byProgram[owner]["verification.completed"]
+			if !ok || ownerProgram.Execution.Kind != CampaignVerifyWorkspace || len(ownerValues) != 1 || ownerValues[0].PhysicalExecutionID != values[0].PhysicalExecutionID || !strings.HasPrefix(ownerValues[0].Reason, verifierPrefix) {
 				return ErrInvalidCampaignEvidence
 			}
 		}

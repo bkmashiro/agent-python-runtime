@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/research/labview"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -44,8 +45,9 @@ func TestRealGuestSemanticAnalysisBuildsReusableWholeRunPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
+	source := "def double(value):\n    return value * 2\nresult = double(inputs['value'])\n"
 	request, err := semantic.NewRequest(
-		"def double(value):\n    return value * 2\nresult = double(inputs['value'])\n",
+		source,
 		semantic.Bindings{
 			ArtifactSHA256:         artifactSHA,
 			ExecutionProfileSHA256: runner.Properties().ExecutionProfileBindingSHA256,
@@ -56,12 +58,25 @@ func TestRealGuestSemanticAnalysisBuildsReusableWholeRunPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	analysis, err := semantic.Analyze(context.Background(), runner, request)
+	verified, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, runner), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(analysis.Functions) != 1 || analysis.ModuleEffects != (semantic.EffectSummary{}) || len(analysis.Barriers) != 0 {
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(analysis.Functions) != 1 || analysis.ModuleEffects != (semantic.EffectSummary{}) || len(analysis.Barriers) != 0 || len(analysis.CandidateRegions) != 2 {
 		t.Fatalf("analysis=%+v", analysis)
+	}
+	projection, err := labview.ProjectSemanticRegionGraph(verified, source, true)
+	if err != nil {
+		t.Logf("verified analysis=%+v", analysis)
+		t.Logf("invalid projection=%+v", projection)
+		t.Fatalf("project semantic region graph: %v", err)
+	}
+	if len(projection.Regions) != 2 || !projection.SourceAvailable || projection.Source != source {
+		t.Fatalf("projection=%+v", projection)
 	}
 	plan, census, err := semantic.BuildWholeRunPlan(analysis, semantic.WholeRunConfig{InputsCanonical: true, OutputsCanonical: true})
 	if err != nil || !plan.Regions[0].Reusable() || census.ReusableRegions != 1 {

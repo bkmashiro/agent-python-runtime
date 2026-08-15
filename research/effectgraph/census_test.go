@@ -33,9 +33,10 @@ func TestRunCensusSeparatesStructuralCandidatesFromCurrentProof(t *testing.T) {
 		analysis.SourceSHA256 = sha(source)
 		analysis.CallSites = []semantic.CallSite{{
 			ID: sha([]byte("call")), Span: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 10},
-			Capability: "sources.read", ControlRegionID: sha([]byte("region")), NecessarilyReached: true,
+			Capability: "sources.read", ControlRegionID: sha([]byte("control")), NecessarilyReached: true,
 			ArgumentsCanonical: true, CanonicalArguments: []byte(`{}`), DynamicOccurrence: 1,
 		}}
+		analysis.CandidateRegions[0].CapabilityOccurrences = []string{sha([]byte("call"))}
 		return analysis, nil
 	}
 	report, err := effectgraph.RunCensus(context.Background(), corpus, root, analyzer, func([]byte) (string, error) {
@@ -141,6 +142,10 @@ func testCorpus(programs ...effectgraph.Program) effectgraph.Corpus {
 }
 
 func validAnalysis(effects semantic.EffectSummary, barriers []semantic.Barrier) semantic.Analysis {
+	rejections := []semantic.CandidateRejection{}
+	if effects.MayBeUnknown {
+		rejections = append(rejections, semantic.CandidateRejectUnknownEffect)
+	}
 	return semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
 		SourceSHA256:  sha([]byte("source")), ASTSHA256: sha([]byte("ast")), AnalyzerSHA256: sha([]byte("analyzer")),
@@ -148,7 +153,13 @@ func validAnalysis(effects semantic.EffectSummary, barriers []semantic.Barrier) 
 		ImportClosureSHA256: sha([]byte("imports")), CapabilityPlanSHA256: sha([]byte("plan")),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 30}, ModuleEffects: effects,
 		Functions: []semantic.FunctionSummary{}, Barriers: barriers,
-		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
+		CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete", CallSites: []semantic.CallSite{}, CandidateRegionCount: 1,
+		CandidateRegions: []semantic.CandidateRegion{{
+			ID: sha([]byte("region")), Kind: semantic.CandidateRegionStraightLine, Span: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 30},
+			ControlRegionID: sha([]byte("control")), ControlPredecessors: []string{}, DataDependencies: []semantic.RegionDataDependency{},
+			LiveIns: []string{}, LiveOuts: []string{}, LiveInsCanonical: true, LiveOutsCanonical: true,
+			Effects: effects, CapabilityOccurrences: []string{}, Barriers: []semantic.BarrierCode{}, RejectionReasons: rejections,
+		}},
 	}
 }
 

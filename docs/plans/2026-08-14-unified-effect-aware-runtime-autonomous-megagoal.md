@@ -495,11 +495,11 @@ current exact whole-Run contract.
 - [x] Refactor current whole-Run qualification to consume shared legality outputs
   without behavior change; full/race/Guest gates preserve one physical compute across
   leader/waiter/retained outcomes.
-- [ ] Define one analysis-only candidate region graph with exact source spans,
+- [x] Define one analysis-only candidate region graph with exact source spans,
   control/effect barriers, canonical live-ins/live-outs, capability occurrences and
   stable rejection reasons. It carries no execution authority and must not require
   Python heap capture.
-- [ ] Project the candidate graph into Lab through a versioned, bounded, privacy-safe
+- [x] Project the candidate graph into Lab through a versioned, bounded, privacy-safe
   read model. Lab Web must highlight the selected region in the recorded Python source,
   render control/data edges, effect classes and opaque barriers, and explain per-consumer
   eligibility/rejection without gaining any Runtime control or authority.

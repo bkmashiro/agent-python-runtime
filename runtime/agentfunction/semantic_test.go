@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -154,6 +155,19 @@ func (runner *verifiedFixtureRunner) AnalyzeSemantic(_ context.Context, payload 
 	analysis.ExecutionProfileSHA256 = request.Bindings.ExecutionProfileSHA256
 	analysis.ImportClosureSHA256 = request.Bindings.ImportClosureSHA256
 	analysis.CapabilityPlanSHA256 = request.Bindings.CapabilityPlanSHA256
+	if request.Source != "" {
+		span := semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: uint32(len([]byte(strings.TrimSuffix(request.Source, "\n"))))}
+		regionDigest := sha256.Sum256([]byte(fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x000\x00%d:%d:%d:%d", analysis.SourceSHA256, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn)))
+		controlDigest := sha256.Sum256([]byte("pysolate.semantic-control-region.v0\x00" + analysis.SourceSHA256 + "\x00module-entry"))
+		analysis.ModuleSpan = span
+		analysis.CandidateRegionCount = 1
+		analysis.CandidateRegions = []semantic.CandidateRegion{{
+			ID: fmt.Sprintf("sha256:%x", regionDigest[:]), Kind: semantic.CandidateRegionStraightLine, Span: span,
+			ControlRegionID: fmt.Sprintf("sha256:%x", controlDigest[:]), ControlPredecessors: []string{}, DataDependencies: []semantic.RegionDataDependency{},
+			LiveIns: []string{}, LiveOuts: []string{}, LiveInsCanonical: true, LiveOutsCanonical: true, Effects: analysis.ModuleEffects,
+			CapabilityOccurrences: []string{}, Barriers: []semantic.BarrierCode{}, RejectionReasons: []semantic.CandidateRejection{},
+		}}
+	}
 	return json.Marshal(analysis)
 }
 func (runner *verifiedFixtureRunner) Run(context.Context, []byte, string) ([]byte, error) {
@@ -170,7 +184,7 @@ func (runner *verifiedFixtureRunner) Properties() enginecontract.Properties {
 }
 
 func semanticAnalyzerIdentity() string {
-	digest := sha256.Sum256([]byte("pysolate.semantic-analyzer.v5"))
+	digest := sha256.Sum256([]byte("pysolate.semantic-analyzer.v6"))
 	return fmt.Sprintf("sha256:%x", digest[:])
 }
 
@@ -182,7 +196,7 @@ func semanticAnalysisFor(invocation agentfunction.Invocation) semantic.Analysis 
 		ImportClosureSHA256: invocation.ImportClosureSHA256, CapabilityPlanSHA256: digest('c'),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1},
 		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
-		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
+		CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete", CallSites: []semantic.CallSite{}, CandidateRegions: []semantic.CandidateRegion{},
 	}
 }
 

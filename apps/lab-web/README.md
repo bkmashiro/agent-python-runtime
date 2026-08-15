@@ -18,6 +18,8 @@ The checked-in `public/lab-data/debugger.json` uses `pysolate.lab-web-debugger.v
 - sequential raw event identity from `run.start` to `run.terminal`;
 - input/output, checkpoint, artifact, invocation, execution, result, and workspace identities.
 
+A run may additionally carry a Host-minted `pysolate.lab-semantic-regions.v0` projection. When present, the `Regions` tab shows exact source spans, supplied control/data edges, effect classes, capability occurrences, barriers, and rejection reasons. The browser never derives semantic facts or execution decisions from Python source; all region consumers remain explicitly not admitted.
+
 The UI offers two deterministic projections of those recorded fields:
 
 1. **Timeline** shows each agent's recorded lifetime, child overlap, fan-out/join boundaries, and Host events as points on recorded time;

@@ -1,0 +1,41 @@
+{
+  "schema_version": "pysolate.track-f1-evidence.v0",
+  "recorded_at": "2026-08-15T00:24:41Z",
+  "base_commit": "fafaf2114d604ecfaf07a3e15766ce6d5d985e56",
+  "analysis_schema": "pysolate.semantic-analysis.v3",
+  "analyzer_schema": "pysolate.semantic-analyzer.v6",
+  "lab_projection_schema": "pysolate.lab-semantic-regions.v0",
+  "guest_build": {
+    "environment": "Imperial gpucluster2 Slurm t4",
+    "job_id": "274357",
+    "source_tree_sha256": "4b285c37a4949bf63dc4ad910144d394839d4bad8d41fab1f232f69ce63b1f90",
+    "artifact_sha256": "ae82fbb26356768d8ae9e16e5883660adcb093337d4c2e146f5020f446c7b724",
+    "artifact_format": "WebAssembly MVP",
+    "result_ready": true
+  },
+  "verified_gates": {
+    "guest_python_tests": 83,
+    "real_guest_e2e": [
+      "TestRealGuestSharedLegalityQualifiesOnlyExactMustReachCall",
+      "TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall",
+      "TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun",
+      "TestRealGuestSemanticAnalysisBuildsReusableWholeRunPlan",
+      "TestRealGuestSemanticOverlayBindsExactModuleEntryCall"
+    ],
+    "full_go": "pass",
+    "focused_race": "pass",
+    "go_vet": "pass",
+    "lab_go": "pass",
+    "lab_web_tests": 10,
+    "lab_web_production_build": "pass",
+    "browser_private_projection": "pass",
+    "browser_portable_source_omission": "pass"
+  },
+  "authority_boundary": {
+    "region_graph": "analysis_only",
+    "python_execution_authority": "unchanged",
+    "region_consumer": "not_admitted",
+    "whole_run_consumer": "default_off",
+    "lab_runtime_authority": false
+  }
+}

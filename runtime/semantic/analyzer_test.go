@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,7 +110,7 @@ func TestAnalyzeRejectsMissingWriteEffectCoverage(t *testing.T) {
 			Playback: capability.PlaybackLiveOnly, Module: "workspace", Method: "write_text", Arguments: []string{},
 		}},
 	}
-	runner := &fakeSemanticRunner{bindings: bindings, emitCall: true}
+	runner := &fakeSemanticRunner{bindings: bindings, emitCall: true, emitRegion: true}
 	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
 		t.Fatalf("missing write coverage error=%v", err)
 	}
@@ -141,11 +142,26 @@ func TestAnalyzeBindsCallSitesToSourceCapabilityAndCanonicalArguments(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeSemanticRunner{bindings: bindings, emitCall: true}
+	runner := &fakeSemanticRunner{bindings: bindings, emitCall: true, emitRegion: true}
 	analysis, err := semantic.Analyze(context.Background(), runner, request)
-	if err != nil || len(analysis.CallSites) != 1 || !analysis.CallSites[0].NecessarilyReached {
+	if err != nil || len(analysis.CallSites) != 1 || len(analysis.CandidateRegions) != 1 || !analysis.CallSites[0].NecessarilyReached {
 		t.Fatalf("analysis=%+v err=%v", analysis, err)
 	}
+	runner.tamperRegion = true
+	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
+		t.Fatalf("tampered candidate-region error=%v", err)
+	}
+	runner.tamperRegion = false
+	runner.regionOutsideSource = true
+	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
+		t.Fatalf("out-of-source candidate-region error=%v", err)
+	}
+	runner.regionOutsideSource = false
+	runner.omitRegions = true
+	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrInvalidAnalysis) {
+		t.Fatalf("missing candidate-regions error=%v", err)
+	}
+	runner.omitRegions = false
 	runner.tamperCall = true
 	if _, err := semantic.Analyze(context.Background(), runner, request); !errors.Is(err, semantic.ErrAnalysisBinding) {
 		t.Fatalf("tampered call-site error=%v", err)
@@ -184,15 +200,19 @@ func TestNewRequestProjectsTypedCapabilityMetadataAndRejectsAmbiguity(t *testing
 }
 
 type fakeSemanticRunner struct {
-	calls        int
-	badAnalyzer  bool
-	mismatch     bool
-	writeEffects bool
-	workspace    bool
-	broker       bool
-	emitCall     bool
-	tamperCall   bool
-	bindings     semantic.Bindings
+	calls               int
+	badAnalyzer         bool
+	mismatch            bool
+	writeEffects        bool
+	workspace           bool
+	broker              bool
+	emitCall            bool
+	tamperCall          bool
+	emitRegion          bool
+	tamperRegion        bool
+	omitRegions         bool
+	regionOutsideSource bool
+	bindings            semantic.Bindings
 }
 
 func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []byte) ([]byte, error) {
@@ -209,13 +229,13 @@ func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []b
 	analysis := semantic.Analysis{
 		SchemaVersion: semantic.AnalysisSchemaVersion,
 		SourceSHA256:  fmt.Sprintf("sha256:%x", sourceDigest[:]),
-		ASTSHA256:     digestFor('5'), AnalyzerSHA256: testSemanticDigest("pysolate.semantic-analyzer.v5"),
+		ASTSHA256:     digestFor('5'), AnalyzerSHA256: testSemanticDigest("pysolate.semantic-analyzer.v6"),
 		ArtifactSHA256: artifact, ExecutionProfileSHA256: request.Bindings.ExecutionProfileSHA256,
 		ImportClosureSHA256:  request.Bindings.ImportClosureSHA256,
 		CapabilityPlanSHA256: request.Bindings.CapabilityPlanSHA256,
 		ModuleSpan:           semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 128},
 		Functions:            []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
-		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
+		CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete", CallSites: []semantic.CallSite{}, CandidateRegions: []semantic.CandidateRegion{},
 	}
 	if runner.badAnalyzer {
 		analysis.AnalyzerSHA256 = digestFor('6')
@@ -237,6 +257,30 @@ func (runner *fakeSemanticRunner) AnalyzeSemantic(_ context.Context, payload []b
 			ID: callID, Span: span, Capability: request.Capabilities[0].Name,
 			ControlRegionID:    testSemanticDigest("pysolate.semantic-control-region.v0\x00" + sourceSHA + "\x00module-entry"),
 			NecessarilyReached: true, ArgumentsCanonical: true, CanonicalArguments: json.RawMessage(`{}`), DynamicOccurrence: 1,
+		}}
+	}
+	if request.Source != "" && !runner.omitRegions {
+		span := semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: uint32(len([]byte(strings.TrimSuffix(request.Source, "\n"))))}
+		if runner.regionOutsideSource {
+			span.EndColumn++
+		}
+		regionID := testSemanticDigest(fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x000\x00%d:%d:%d:%d",
+			analysis.SourceSHA256, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn))
+		if runner.tamperRegion {
+			regionID = digestFor('e')
+		}
+		occurrences := []string{}
+		if len(analysis.CallSites) == 1 {
+			occurrences = []string{analysis.CallSites[0].ID}
+		}
+		analysis.CandidateRegionCount = 1
+		analysis.CandidateRegions = []semantic.CandidateRegion{{
+			ID: regionID, Kind: semantic.CandidateRegionStraightLine, Span: span,
+			ControlRegionID:     testSemanticDigest("pysolate.semantic-control-region.v0\x00" + analysis.SourceSHA256 + "\x00module-entry"),
+			ControlPredecessors: []string{}, DataDependencies: []semantic.RegionDataDependency{},
+			LiveIns: []string{}, LiveOuts: []string{}, LiveInsCanonical: true, LiveOutsCanonical: true,
+			Effects: analysis.ModuleEffects, CapabilityOccurrences: occurrences,
+			Barriers: []semantic.BarrierCode{}, RejectionReasons: []semantic.CandidateRejection{},
 		}}
 	}
 	return json.Marshal(analysis)

@@ -116,12 +116,18 @@ consistency or mismatch frozen runtime identities.
 
 ## Semantic representation recommendation
 
-Track C keeps the existing `Analysis` and adds the smallest measured overlay rather
-than a general graph. `pysolate.semantic-analysis.v2` contains bounded source-indexed
+Track C kept the existing `Analysis` and added the smallest measured overlay rather
+than a general graph. `pysolate.semantic-analysis.v2` contained bounded source-indexed
 call records for exact top-level projected calls with scalar literal arguments. Only a
 first executable module call may assert `necessarily_reached`; later straight-line
 calls remain structural but not necessarily reached, while calls under control flow,
 aliases and dynamic arguments are omitted as unknown.
+
+Track F advances the envelope to `pysolate.semantic-analysis.v3`: the exact call
+overlay is retained and a bounded analysis-only module candidate graph adds source
+spans, control/data edges, liveness, typed capability occurrences, effect summaries,
+barriers, and explicit rejection reasons. The candidate graph is not an execution IR
+and currently has no runtime consumer.
 
 Each record binds exact source occurrence, capability, module-entry control region,
 canonical arguments and one dynamic occurrence. The Host recomputes its source and

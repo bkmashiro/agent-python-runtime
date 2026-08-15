@@ -6,13 +6,14 @@ import json
 import re
 
 
-ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v2"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v5").hexdigest()
+ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v3"
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v6").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
 MAX_BARRIERS = 256
 MAX_CALL_SITES = 256
+MAX_CANDIDATE_REGIONS = 256
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _BINDING_KEYS = (
     "artifact_sha256",
@@ -445,6 +446,241 @@ def _parameters(node):
     return names
 
 
+class _RegionNames(ast.NodeVisitor):
+    def __init__(self):
+        self.loads = set()
+        self.stores = set()
+        self.deletes = set()
+        self.heap_mutation = False
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            self.loads.add(node.id)
+        elif isinstance(node.ctx, ast.Store):
+            self.stores.add(node.id)
+        elif isinstance(node.ctx, ast.Del):
+            self.loads.add(node.id)
+            self.deletes.add(node.id)
+
+    def visit_AugAssign(self, node):
+        if isinstance(node.target, ast.Name):
+            self.loads.add(node.target.id)
+            self.stores.add(node.target.id)
+        else:
+            self.visit(node.target)
+        self.visit(node.value)
+
+    def visit_Attribute(self, node):
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.heap_mutation = True
+        self.generic_visit(node)
+
+    def visit_Subscript(self, node):
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.heap_mutation = True
+        self.generic_visit(node)
+
+    def _visit_definition(self, node):
+        self.stores.add(node.name)
+        for expression in list(getattr(node, "decorator_list", ())) + list(node.args.defaults) + [
+                value for value in node.args.kw_defaults if value is not None]:
+            self.visit(expression)
+
+    visit_FunctionDef = _visit_definition
+    visit_AsyncFunctionDef = _visit_definition
+
+    def visit_ClassDef(self, node):
+        self.stores.add(node.name)
+        for expression in list(node.decorator_list) + list(node.bases) + [keyword.value for keyword in node.keywords]:
+            self.visit(expression)
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            self.stores.add(alias.asname or alias.name.split(".", 1)[0])
+
+    def visit_ImportFrom(self, node):
+        for alias in node.names:
+            if alias.name != "*":
+                self.stores.add(alias.asname or alias.name)
+
+
+def _may_raise(statement):
+    risky = (
+        ast.Assert, ast.Raise, ast.Call, ast.Await, ast.Yield, ast.YieldFrom,
+        ast.Attribute, ast.Subscript, ast.BinOp, ast.UnaryOp, ast.BoolOp,
+        ast.Compare, ast.NamedExpr, ast.ListComp, ast.SetComp, ast.DictComp,
+        ast.GeneratorExp, ast.JoinedStr, ast.AugAssign, ast.Delete,
+    )
+    if any(isinstance(node, risky) for node in ast.walk(statement)):
+        return True
+    if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        return any(isinstance(target, (ast.Tuple, ast.List)) for target in targets)
+    return False
+
+
+def _candidate_kind(statement):
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)):
+        return "declaration"
+    opaque_types = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith)
+    for optional_name in ("Match", "TryStar"):
+        optional_type = getattr(ast, optional_name, None)
+        if optional_type is not None:
+            opaque_types += (optional_type,)
+    if isinstance(statement, opaque_types):
+        return "opaque_control"
+    return "straight_line"
+
+
+def _canonical_expression(node, canonical_names):
+    if node is None:
+        return False
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (type(None), bool, int, float, str))
+    if isinstance(node, ast.Name):
+        return node.id in canonical_names
+    if isinstance(node, ast.Subscript):
+        return (isinstance(node.value, ast.Name) and node.value.id == "inputs" and
+                isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str))
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return all(_canonical_expression(value, canonical_names) for value in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(key is not None and _canonical_expression(key, canonical_names) and
+                   _canonical_expression(value, canonical_names)
+                   for key, value in zip(node.keys, node.values))
+    if isinstance(node, ast.UnaryOp):
+        return _canonical_expression(node.operand, canonical_names)
+    if isinstance(node, ast.BinOp):
+        return (_canonical_expression(node.left, canonical_names) and
+                _canonical_expression(node.right, canonical_names))
+    if isinstance(node, ast.BoolOp):
+        return all(_canonical_expression(value, canonical_names) for value in node.values)
+    if isinstance(node, ast.Compare):
+        return (_canonical_expression(node.left, canonical_names) and
+                all(_canonical_expression(value, canonical_names) for value in node.comparators))
+    if isinstance(node, ast.IfExp):
+        return all(_canonical_expression(value, canonical_names) for value in (node.test, node.body, node.orelse))
+    return False
+
+
+def _canonical_statement_outputs(statement, canonical_names):
+    outputs = set()
+    if isinstance(statement, ast.Assign) and _canonical_expression(statement.value, canonical_names):
+        for target in statement.targets:
+            if isinstance(target, ast.Name):
+                outputs.add(target.id)
+    elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name) and _canonical_expression(statement.value, canonical_names):
+        outputs.add(statement.target.id)
+    return outputs
+
+
+def _span_contains(parent, child):
+    starts_before = (parent["start_line"], parent["start_column"]) <= (child["start_line"], child["start_column"])
+    ends_after = (parent["end_line"], parent["end_column"]) >= (child["end_line"], child["end_column"])
+    return starts_before and ends_after
+
+
+def _candidate_regions(tree, source_sha256, function_ids, capability_index, call_sites, function_rows):
+    if len(tree.body) > MAX_CANDIDATE_REGIONS:
+        raise ValueError("semantic candidate region bound exceeded")
+    ignored_names = set(_KNOWN_BUILTINS) | set(function_ids) | set(capability_index["tool_roots"])
+    names = []
+    for statement in tree.body:
+        visitor = _RegionNames()
+        visitor.visit(statement)
+        names.append((visitor, sorted(visitor.loads - ignored_names), sorted(visitor.stores), sorted(visitor.deletes)))
+    future_loads = set()
+    live_outs = [set() for _ in tree.body]
+    for index in range(len(tree.body) - 1, -1, -1):
+        visitor, loads, stores, deletes = names[index]
+        live_outs[index] = (set(stores) - set(deletes)) & future_loads
+        if "result" in stores:
+            live_outs[index].add("result")
+        future_loads.difference_update(set(stores) | set(deletes))
+        future_loads.update(loads)
+
+    module_state = _ScopeAnalyzer("", function_ids, capability_index)
+    canonical_names = {"inputs"}
+    spans = [_span(statement) for statement in tree.body]
+    region_ids = [
+        _digest(("pysolate.semantic-candidate-region.v0\x00%s\x00%d\x00%d:%d:%d:%d" % (
+            source_sha256, index, span["start_line"], span["start_column"],
+            span["end_line"], span["end_column"],
+        )).encode("utf-8"))
+        for index, span in enumerate(spans)
+    ]
+    producers = {}
+    regions = []
+    control_region = _digest(("pysolate.semantic-control-region.v0\x00" + source_sha256 + "\x00module-entry").encode("ascii"))
+    for index, statement in enumerate(tree.body):
+        kind = _candidate_kind(statement)
+        region_state = _ScopeAnalyzer("", function_ids, capability_index)
+        region_state.shadowed = set(module_state.shadowed)
+        region_state.local_containers = set(module_state.local_containers)
+        region_state.visit(statement)
+        for target in region_state.calls:
+            _merge(region_state.effects, function_rows[target]["effects"])
+        barriers = {row["code"] for row in region_state.barriers}
+        if kind == "opaque_control":
+            barriers.add("unsupported_control_flow")
+            region_state.effects["may_be_unknown"] = True
+        visitor, loads, stores, deletes = names[index]
+        external_bindings = set(_KNOWN_BUILTINS) | set(capability_index["tool_roots"])
+        region_live_ins = sorted(set(loads) - external_bindings)
+        region_live_outs = sorted(live_outs[index])
+        canonical_outputs = _canonical_statement_outputs(statement, canonical_names)
+        live_ins_canonical = all(name in canonical_names for name in region_live_ins)
+        live_outs_canonical = all(name in canonical_outputs for name in region_live_outs)
+        rejections = set()
+        if kind == "opaque_control":
+            rejections.add("opaque_control")
+        if kind == "declaration":
+            rejections.add("declaration")
+        if visitor.heap_mutation:
+            rejections.add("heap_mutation")
+        if _may_raise(statement):
+            rejections.add("may_raise")
+        if region_state.effects["may_be_unknown"]:
+            rejections.add("unknown_effect")
+        if not live_ins_canonical:
+            rejections.add("live_in_not_canonical")
+        if not live_outs_canonical:
+            rejections.add("live_out_not_canonical")
+        span = spans[index]
+        occurrences = sorted(site["id"] for site in call_sites if _span_contains(span, site["span"]))
+        dependencies = sorted(
+            ({"name": name, "producer_region_id": producers[name]} for name in region_live_ins if name in producers),
+            key=lambda row: (row["name"], row["producer_region_id"]),
+        )
+        regions.append({
+            "id": region_ids[index],
+            "kind": kind,
+            "span": span,
+            "control_region_id": control_region,
+            "control_predecessors": [] if index == 0 else [region_ids[index - 1]],
+            "data_dependencies": dependencies,
+            "live_ins": region_live_ins,
+            "live_outs": region_live_outs,
+            "live_ins_canonical": live_ins_canonical,
+            "live_outs_canonical": live_outs_canonical,
+            "effects": region_state.effects,
+            "capability_occurrences": occurrences,
+            "barriers": sorted(barriers),
+            "rejection_reasons": sorted(rejections),
+        })
+        module_state.visit(statement)
+        for output in stores:
+            producers[output] = region_ids[index]
+            if output in canonical_outputs:
+                canonical_names.add(output)
+            else:
+                canonical_names.discard(output)
+        for deleted in deletes:
+            producers.pop(deleted, None)
+            canonical_names.discard(deleted)
+    return regions
+
+
 def _strong_components(edges):
     index = 0
     stack = []
@@ -567,6 +803,7 @@ def analyze_source(source, bindings, capabilities):
     )
     if len(all_barriers) > MAX_BARRIERS:
         raise ValueError("semantic barrier bound exceeded")
+    candidate_regions = _candidate_regions(tree, source_sha256, function_ids, capability_index, call_sites, rows)
     return {
         "schema_version": ANALYSIS_SCHEMA_VERSION,
         "source_sha256": source_sha256,
@@ -582,6 +819,9 @@ def analyze_source(source, bindings, capabilities):
         "barriers": all_barriers,
         "call_site_coverage": "positive_only",
         "call_sites": call_sites,
+        "candidate_region_coverage": "module_top_level_complete",
+        "candidate_region_count": len(candidate_regions),
+        "candidate_regions": candidate_regions,
     }
 
 

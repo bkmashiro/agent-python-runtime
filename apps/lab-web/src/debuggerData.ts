@@ -43,6 +43,33 @@ export type LabMetrics = {
 
 export type LabChildProgram = { id: string; role: string; source: string; expected_result: string; output_path: string };
 
+export type LabSemanticRegion = {
+  id: string;
+  kind: 'straight_line' | 'opaque_control' | 'declaration';
+  span: { start_line: number; start_column: number; end_line: number; end_column: number };
+  control_predecessors: string[];
+  data_dependencies: Array<{ name: string; producer_region_id: string }>;
+  live_ins: string[];
+  live_outs: string[];
+  live_ins_canonical: boolean;
+  live_outs_canonical: boolean;
+  effects: { may_publish: boolean; may_observe_live: boolean; may_suspend: boolean; may_be_unknown: boolean };
+  capability_occurrences: string[];
+  barriers: string[];
+  rejection_reasons: string[];
+};
+
+export type LabSemanticRegionGraph = {
+  schema_version: 'pysolate.lab-semantic-regions.v0';
+  analysis_sha256: string;
+  source_sha256: string;
+  analyzer_sha256: string;
+  source_privacy: 'private' | 'portable';
+  source_available: boolean;
+  source?: string;
+  regions: LabSemanticRegion[];
+};
+
 export type LabScenario = {
   id: string;
   guest_source: string;
@@ -65,6 +92,7 @@ export type LabRun = {
   metrics: LabMetrics;
   scenario: LabScenario;
   trace: LabTraceEvent[];
+  semantic_regions?: LabSemanticRegionGraph;
 };
 
 export type LabDataset = {
@@ -172,6 +200,93 @@ function isValidTrace(trace: LabTraceEvent[]): { kind: 'ok' | 'skip' } {
   return last.outcome === 'ok' || last.outcome === 'rejected' || last.outcome === 'skipped' ? { kind: 'ok' } : { kind: 'skip' };
 }
 
+function sha256(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  const padded = new Uint8Array(Math.ceil((bytes.length + 9) / 64) * 64);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  const bitLength = bytes.length * 8;
+  view.setUint32(padded.length - 8, Math.floor(bitLength / 0x100000000));
+  view.setUint32(padded.length - 4, bitLength >>> 0);
+  const k = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
+  ]);
+  const h = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+  const w = new Uint32Array(64);
+  const ror = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let i = 0; i < 16; i += 1) w[i] = view.getUint32(offset + i * 4);
+    for (let i = 16; i < 64; i += 1) {
+      const s0 = ror(w[i - 15], 7) ^ ror(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = ror(w[i - 2], 17) ^ ror(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let [a,b,c,d,e,f,g,hh] = h;
+    for (let i = 0; i < 64; i += 1) {
+      const s1 = ror(e, 6) ^ ror(e, 11) ^ ror(e, 25);
+      const t1 = (hh + s1 + ((e & f) ^ (~e & g)) + k[i] + w[i]) >>> 0;
+      const s0 = ror(a, 2) ^ ror(a, 13) ^ ror(a, 22);
+      const t2 = (s0 + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      hh=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;
+    }
+    h[0]=(h[0]+a)>>>0; h[1]=(h[1]+b)>>>0; h[2]=(h[2]+c)>>>0; h[3]=(h[3]+d)>>>0;
+    h[4]=(h[4]+e)>>>0; h[5]=(h[5]+f)>>>0; h[6]=(h[6]+g)>>>0; h[7]=(h[7]+hh)>>>0;
+  }
+  return `sha256:${Array.from(h, (word) => word.toString(16).padStart(8, '0')).join('')}`;
+}
+
+function validateSemanticRegions(value: LabSemanticRegionGraph, scenarioSource: string): LabSemanticRegionGraph {
+  assert(value?.schema_version === 'pysolate.lab-semantic-regions.v0', 'invalid semantic region schema');
+  assertSha256(value.analysis_sha256, 'invalid semantic analysis digest');
+  assertSha256(value.source_sha256, 'invalid semantic source digest');
+  assertSha256(value.analyzer_sha256, 'invalid semantic analyzer digest');
+  assert(value.source_privacy === 'private' || value.source_privacy === 'portable', 'invalid semantic source privacy');
+  assert(typeof value.source_available === 'boolean' && Array.isArray(value.regions) && value.regions.length <= 256, 'invalid semantic region envelope');
+  if (value.source_available) {
+    assert(value.source_privacy === 'private' && typeof value.source === 'string' && value.source.length > 0 && value.source === scenarioSource, 'invalid private semantic source');
+    assert(sha256(value.source!) === value.source_sha256, 'semantic source digest mismatch');
+  } else {
+    assert(value.source_privacy === 'portable' && !value.source, 'portable semantic projection leaked source');
+  }
+  const seen = new Set<string>();
+  const barrierValues = new Set(['dynamic_call','dynamic_import','eval_exec','tool_rebinding','unsupported_decorator','unknown_wasi','unsupported_control_flow']);
+  const rejectionValues = new Set(['opaque_control','declaration','heap_mutation','may_raise','unknown_effect','live_in_not_canonical','live_out_not_canonical']);
+  const sortedUnique = (values: string[]) => values.every((item, index) => typeof item === 'string' && item.length > 0 && (index === 0 || values[index - 1] < item));
+  value.regions.forEach((region, index) => {
+    assert(digestRE.test(region.id), 'invalid semantic region id');
+    assert(!seen.has(region.id), 'duplicate semantic region id');
+    assert(['straight_line', 'opaque_control', 'declaration'].includes(region.kind), 'invalid semantic region kind');
+    assert(Number.isInteger(region.span.start_line) && Number.isInteger(region.span.end_line) && Number.isInteger(region.span.start_column) && Number.isInteger(region.span.end_column) && region.span.start_line >= 1 && region.span.start_column >= 0 && region.span.end_column >= 0 && region.span.end_line >= region.span.start_line && (region.span.end_line > region.span.start_line || region.span.end_column >= region.span.start_column), 'invalid semantic region span');
+    assert(Array.isArray(region.control_predecessors) && (index === 0 ? region.control_predecessors.length === 0 : region.control_predecessors.length === 1 && region.control_predecessors[0] === value.regions[index - 1].id), 'invalid semantic control edge');
+    for (const field of [region.live_ins, region.live_outs, region.capability_occurrences, region.barriers, region.rejection_reasons]) {
+      assert(Array.isArray(field) && field.length <= 256 && sortedUnique(field), 'invalid semantic region list');
+    }
+    assert(region.capability_occurrences.every((id) => digestRE.test(id)), 'invalid semantic capability occurrence');
+    assert(region.barriers.every((value) => barrierValues.has(value)), 'invalid semantic barrier');
+    assert(region.rejection_reasons.every((value) => rejectionValues.has(value)), 'invalid semantic rejection');
+    assert(typeof region.live_ins_canonical === 'boolean' && typeof region.live_outs_canonical === 'boolean', 'invalid semantic canonicality');
+    assert(typeof region.effects?.may_publish === 'boolean' && typeof region.effects.may_observe_live === 'boolean' && typeof region.effects.may_suspend === 'boolean' && typeof region.effects.may_be_unknown === 'boolean', 'invalid semantic effects');
+    assert(Array.isArray(region.data_dependencies) && region.data_dependencies.length <= 256, 'invalid semantic data edges');
+    region.data_dependencies.forEach((edge, edgeIndex) => {
+      assert(typeof edge.name === 'string' && region.live_ins.includes(edge.name) && digestRE.test(edge.producer_region_id) && seen.has(edge.producer_region_id), 'invalid semantic data edge');
+      if (edgeIndex > 0) {
+        const previous = region.data_dependencies[edgeIndex - 1];
+        assert(previous.name < edge.name || previous.name === edge.name && previous.producer_region_id < edge.producer_region_id, 'non-canonical semantic data edges');
+      }
+    });
+    seen.add(region.id);
+  });
+  return value;
+}
+
 export function validateDataset(value: unknown): LabDataset {
   const raw = value as Partial<LabDataset>;
   const schemaValid = raw.schema_version === 'pysolate.lab-web-debugger.v4';
@@ -262,6 +377,7 @@ export function validateDataset(value: unknown): LabDataset {
       metrics,
       scenario,
       trace: normalizedTrace,
+      semantic_regions: run.semantic_regions ? validateSemanticRegions(run.semantic_regions, scenario.guest_source) : undefined,
     });
   }
 

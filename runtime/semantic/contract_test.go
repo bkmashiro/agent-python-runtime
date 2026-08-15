@@ -129,6 +129,13 @@ func TestAnalysisRejectsMalformedSemanticCallSites(t *testing.T) {
 		Capability: "sources.read", ControlRegionID: digest('b'), NecessarilyReached: true,
 		ArgumentsCanonical: true, CanonicalArguments: json.RawMessage(`{"key":"x"}`), DynamicOccurrence: 1,
 	}}
+	valid.CandidateRegionCount = 1
+	valid.CandidateRegions = []semantic.CandidateRegion{{
+		ID: digest('c'), Kind: semantic.CandidateRegionStraightLine, Span: semantic.SourceSpan{StartLine: 1, EndLine: 2},
+		ControlRegionID: digest('b'), ControlPredecessors: []string{}, DataDependencies: []semantic.RegionDataDependency{},
+		LiveIns: []string{}, LiveOuts: []string{}, LiveInsCanonical: true, LiveOutsCanonical: true,
+		CapabilityOccurrences: []string{digest('a')}, Barriers: []semantic.BarrierCode{}, RejectionReasons: []semantic.CandidateRejection{},
+	}}
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +154,9 @@ func TestAnalysisRejectsMalformedSemanticCallSites(t *testing.T) {
 		"structured argument":  func(value *semantic.Analysis) { value.CallSites[0].CanonicalArguments = json.RawMessage(`{"key":[]}`) },
 		"coverage":             func(value *semantic.Analysis) { value.CallSiteCoverage = "complete" },
 		"dynamic occurrence":   func(value *semantic.Analysis) { value.CallSites[0].DynamicOccurrence = 2 },
+		"missing region occurrence": func(value *semantic.Analysis) {
+			value.CandidateRegions[0].CapabilityOccurrences = []string{}
+		},
 		"outside module": func(value *semantic.Analysis) {
 			value.CallSites[0].Span.StartLine = 3
 			value.CallSites[0].Span.EndLine = 3
@@ -156,9 +166,65 @@ func TestAnalysisRejectsMalformedSemanticCallSites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			candidate := valid
 			candidate.CallSites = append([]semantic.CallSite(nil), valid.CallSites...)
+			candidate.CandidateRegions = append([]semantic.CandidateRegion(nil), valid.CandidateRegions...)
+			candidate.CandidateRegions[0].CapabilityOccurrences = append([]string(nil), valid.CandidateRegions[0].CapabilityOccurrences...)
 			mutate(&candidate)
 			if err := candidate.Validate(); !errors.Is(err, semantic.ErrInvalidAnalysis) {
 				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
+func TestCandidateRegionGraphIsBoundedCanonicalAndFailClosed(t *testing.T) {
+	analysis := validAnalysis()
+	analysis.CandidateRegionCount = 1
+	analysis.CandidateRegions = []semantic.CandidateRegion{{
+		ID: digest('a'), Kind: semantic.CandidateRegionStraightLine,
+		Span:                semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 8},
+		ControlRegionID:     digest('b'),
+		ControlPredecessors: []string{},
+		DataDependencies:    []semantic.RegionDataDependency{},
+		LiveIns:             []string{"inputs"}, LiveOuts: []string{"result"}, LiveInsCanonical: true, LiveOutsCanonical: true,
+		CapabilityOccurrences: []string{}, Barriers: []semantic.BarrierCode{}, RejectionReasons: []semantic.CandidateRejection{},
+	}}
+	if err := analysis.Validate(); err != nil {
+		t.Fatalf("valid candidate graph: %v", err)
+	}
+	for name, mutate := range map[string]func(*semantic.Analysis){
+		"missing coverage": func(value *semantic.Analysis) { value.CandidateRegionCoverage = "" },
+		"count mismatch":   func(value *semantic.Analysis) { value.CandidateRegionCount = 0 },
+		"effect under-approximation": func(value *semantic.Analysis) {
+			value.ModuleEffects.MayObserveLive = true
+		},
+		"nil graph": func(value *semantic.Analysis) { value.CandidateRegions = nil },
+		"first control predecessor": func(value *semantic.Analysis) {
+			value.CandidateRegions[0].ControlPredecessors = []string{digest('f')}
+		},
+		"unknown data producer": func(value *semantic.Analysis) {
+			value.CandidateRegions[0].DataDependencies = []semantic.RegionDataDependency{{Name: "inputs", ProducerRegionID: digest('f')}}
+		},
+		"unsorted liveness":        func(value *semantic.Analysis) { value.CandidateRegions[0].LiveIns = []string{"z", "a"} },
+		"unexplained noncanonical": func(value *semantic.Analysis) { value.CandidateRegions[0].LiveInsCanonical = false },
+		"unknown occurrence": func(value *semantic.Analysis) {
+			value.CandidateRegions[0].CapabilityOccurrences = []string{digest('c')}
+		},
+		"opaque without barrier": func(value *semantic.Analysis) {
+			value.CandidateRegions[0].Kind = semantic.CandidateRegionOpaqueControl
+			value.CandidateRegions[0].RejectionReasons = []semantic.CandidateRejection{semantic.CandidateRejectOpaqueControl}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := analysis
+			candidate.CandidateRegions = append([]semantic.CandidateRegion(nil), analysis.CandidateRegions...)
+			candidate.CandidateRegions[0].LiveIns = append([]string(nil), analysis.CandidateRegions[0].LiveIns...)
+			candidate.CandidateRegions[0].ControlPredecessors = append([]string(nil), analysis.CandidateRegions[0].ControlPredecessors...)
+			candidate.CandidateRegions[0].DataDependencies = append([]semantic.RegionDataDependency(nil), analysis.CandidateRegions[0].DataDependencies...)
+			candidate.CandidateRegions[0].CapabilityOccurrences = append([]string(nil), analysis.CandidateRegions[0].CapabilityOccurrences...)
+			candidate.CandidateRegions[0].RejectionReasons = append([]semantic.CandidateRejection(nil), analysis.CandidateRegions[0].RejectionReasons...)
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, semantic.ErrInvalidAnalysis) {
+				t.Fatalf("error=%v candidate=%+v", err, candidate.CandidateRegions)
 			}
 		})
 	}
@@ -175,7 +241,7 @@ func validAnalysis() semantic.Analysis {
 			ID: digest('8'), Name: "compute", SCCID: digest('8'),
 			Span: semantic.SourceSpan{StartLine: 1, EndLine: 2},
 		}},
-		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
+		CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete", CallSites: []semantic.CallSite{}, CandidateRegions: []semantic.CandidateRegion{},
 	}
 }
 

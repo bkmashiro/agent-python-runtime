@@ -73,6 +73,12 @@ branch. `research/operator.RunBranch` remains the fresh-Guest API and returns an
 in-memory outcome for a Host caller. The independent `labstore-bench` command
 is also a measurement probe, not a service.
 
+Track F adds a separate read-only `pysolate.lab-semantic-regions.v0` projection.
+`research/labview` can mint it only from an opaque verified semantic analysis;
+portable rows omit source text and private local rows require an exact source digest.
+The Lab Web renderer displays supplied source spans, control/data edges, effects,
+and rejection reasons but cannot infer new semantic facts or request execution.
+
 The current DAG export renders one validated parent and caller-supplied
 manifest/child pairs. It validates child admission identities and Grants, the
 exact parent prefix, and the complete child tape for override and

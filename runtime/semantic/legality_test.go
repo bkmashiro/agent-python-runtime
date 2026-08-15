@@ -125,6 +125,8 @@ func TestCanReuseWholeRunMintsOnlyExactEffectFreeCanonicalPlan(t *testing.T) {
 	}
 	analysis.ModuleEffects = EffectSummary{}
 	analysis.CallSites = []CallSite{}
+	analysis.CandidateRegions[0].Effects = EffectSummary{}
+	analysis.CandidateRegions[0].CapabilityOccurrences = []string{}
 	_, encoded, err := analysis.Identity()
 	if err != nil {
 		t.Fatal(err)
@@ -156,6 +158,7 @@ func TestCanReuseWholeRunMintsOnlyExactEffectFreeCanonicalPlan(t *testing.T) {
 	}
 	unsafe := analysis
 	unsafe.ModuleEffects.MayObserveLive = true
+	unsafe.CandidateRegions[0].Effects.MayObserveLive = true
 	_, unsafeEncoded, err := unsafe.Identity()
 	if err != nil {
 		t.Fatal(err)
@@ -224,8 +227,15 @@ func legalityVerifiedAnalysis(t *testing.T, plan *capability.Plan, necessarilyRe
 		ImportClosureSHA256: legalityDigest("imports"), CapabilityPlanSHA256: plan.Identity(),
 		ModuleSpan:    SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 32},
 		ModuleEffects: EffectSummary{MayObserveLive: true, MaySuspend: true},
-		Functions:     []FunctionSummary{}, Barriers: []Barrier{}, CallSiteCoverage: "positive_only",
-		CallSites: []CallSite{site},
+		Functions:     []FunctionSummary{}, Barriers: []Barrier{}, CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete",
+		CallSites: []CallSite{site}, CandidateRegionCount: 1,
+		CandidateRegions: []CandidateRegion{{
+			ID: legalityDigest("region"), Kind: CandidateRegionStraightLine,
+			Span: SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 32}, ControlRegionID: site.ControlRegionID,
+			ControlPredecessors: []string{}, DataDependencies: []RegionDataDependency{}, LiveIns: []string{}, LiveOuts: []string{},
+			LiveInsCanonical: true, LiveOutsCanonical: true, Effects: EffectSummary{MayObserveLive: true, MaySuspend: true},
+			CapabilityOccurrences: []string{site.ID}, Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{},
+		}},
 	}
 	_, encoded, err := analysis.Identity()
 	if err != nil {

@@ -2,9 +2,14 @@
 
 Status: **Track C complete; runtime consumer remains disabled**
 
-The v0 overlay extends `pysolate.semantic-analysis.v2` with a bounded `call_sites`
+The v0 overlay introduced `pysolate.semantic-analysis.v2` with a bounded `call_sites`
 array and required `call_site_coverage="positive_only"` marker. It is analysis-only
 metadata; an empty array never proves that the source contains no capability call.
+
+Track F subsequently advances the envelope to `pysolate.semantic-analysis.v3` and
+`semantic-analyzer.v6` by adding the analysis-only candidate region graph described
+in [Python candidate region graph v0](python-candidate-region-graph-v0.md). The
+positive call-site semantics below remain unchanged.
 Original Python remains the sole executable authority.
 
 ## Accepted call shape
@@ -39,8 +44,9 @@ dynamic_occurrence = 1
 The overlay is capped at 256 records. Arguments are scalar JSON literals capped at
 4 KiB each; the Host caps the complete canonical argument object at 64 KiB. Values
 whose Python and Host encoders do not agree byte-for-byte are rejected by the Host.
-Schema and analyzer identities advance to `semantic-analysis.v2` and
-`semantic-analyzer.v5`.
+This revision originally advanced schema and analyzer identities to
+`semantic-analysis.v2` and `semantic-analyzer.v5`; the current superset identities
+are v3/v6 as noted above.
 
 ## Host validation and provenance
 

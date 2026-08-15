@@ -89,6 +89,88 @@ class SemanticAnalysisTests(unittest.TestCase):
         self.assertEqual(["sources.read"], by_name["load"]["direct_capabilities"])
         self.assertEqual(["mail.send"], by_name["publish"]["direct_capabilities"])
 
+    def test_candidate_regions_expose_source_liveness_effects_and_barriers(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}, copy.deepcopy(CAPABILITIES[1])]
+        report = self.analyze(
+            "base = inputs['value']\n"
+            "value = base + 1\n"
+            "remote = sources.read('profile')\n"
+            "if inputs['flag']:\n"
+            "    value = value + 1\n"
+            "result = value\n",
+            capabilities=capabilities,
+        )
+        self.assertEqual("pysolate.semantic-analysis.v3", report["schema_version"])
+        regions = sorted(report["candidate_regions"], key=lambda row: row["span"]["start_line"])
+        self.assertEqual(5, len(regions))
+        self.assertEqual(["inputs"], regions[0]["live_ins"])
+        self.assertEqual(["base"], regions[0]["live_outs"])
+        self.assertTrue(regions[0]["live_ins_canonical"])
+        self.assertTrue(regions[0]["live_outs_canonical"])
+        self.assertEqual(["base"], regions[1]["live_ins"])
+        self.assertEqual(["value"], regions[1]["live_outs"])
+        self.assertEqual([regions[0]["id"]], regions[1]["control_predecessors"])
+        self.assertEqual(
+            [{"name": "base", "producer_region_id": regions[0]["id"]}],
+            regions[1]["data_dependencies"],
+        )
+        self.assertEqual([], regions[2]["live_ins"])
+        self.assertEqual([report["call_sites"][0]["id"]], regions[2]["capability_occurrences"])
+        self.assertTrue(regions[2]["effects"]["may_observe_live"])
+        self.assertEqual("opaque_control", regions[3]["kind"])
+        self.assertIn("opaque_control", regions[3]["rejection_reasons"])
+        self.assertEqual(["value"], regions[4]["live_ins"])
+        self.assertEqual(["result"], regions[4]["live_outs"])
+        self.assertEqual(
+            canonical_analysis_json(report),
+            canonical_analysis_json(self.analyze(
+                "base = inputs['value']\nvalue = base + 1\nremote = sources.read('profile')\nif inputs['flag']:\n    value = value + 1\nresult = value\n",
+                capabilities=capabilities,
+            )),
+        )
+
+    def test_candidate_graph_does_not_treat_declaration_bodies_as_live_state(self):
+        report = self.analyze(
+            "def double(value):\n"
+            "    hidden = value + 1\n"
+            "    return hidden * 2\n"
+            "result = double(inputs['value'])\n"
+        )
+        declaration, call = report["candidate_regions"]
+        self.assertEqual([], declaration["live_outs"])
+        self.assertNotIn("hidden", declaration["live_ins"])
+        self.assertNotIn("hidden", declaration["live_outs"])
+        self.assertEqual(["inputs"], call["live_ins"])
+        self.assertEqual([], call["data_dependencies"])
+        self.assertIn("unknown_effect", call["rejection_reasons"])
+
+    def test_candidate_regions_reject_explicit_and_expression_exception_paths(self):
+        for source in (
+            "assert inputs['ok']\n",
+            "raise RuntimeError('stop')\n",
+            "result = 1 / 0\n",
+        ):
+            with self.subTest(source=source):
+                region = self.analyze(source)["candidate_regions"][0]
+                self.assertIn("may_raise", region["rejection_reasons"])
+
+    def test_augassign_and_delete_preserve_liveness_without_forging_deleted_producers(self):
+        report = self.analyze("x = 1\nx += 1\ndel x\nresult = 2\n")
+        regions = report["candidate_regions"]
+        self.assertEqual(["x"], regions[1]["live_ins"])
+        self.assertEqual(["x"], regions[1]["live_outs"])
+        self.assertEqual([{"name": "x", "producer_region_id": regions[0]["id"]}], regions[1]["data_dependencies"])
+        self.assertIn("may_raise", regions[1]["rejection_reasons"])
+        self.assertEqual(["x"], regions[2]["live_ins"])
+        self.assertEqual([], regions[2]["live_outs"])
+        self.assertEqual([{"name": "x", "producer_region_id": regions[1]["id"]}], regions[2]["data_dependencies"])
+        self.assertIn("may_raise", regions[2]["rejection_reasons"])
+        self.assertEqual([], regions[3]["data_dependencies"])
+
+    def test_destructuring_assignment_is_rejected_as_may_raise(self):
+        report = self.analyze("left, right = inputs['pair']\nresult = left\n")
+        self.assertIn("may_raise", report["candidate_regions"][0]["rejection_reasons"])
+
     def test_overlay_emits_only_exact_module_entry_call_facts(self):
         capabilities = [
             {**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]},
@@ -102,7 +184,7 @@ class SemanticAnalysisTests(unittest.TestCase):
             "result = first\n",
             capabilities=capabilities,
         )
-        self.assertEqual("pysolate.semantic-analysis.v2", report["schema_version"])
+        self.assertEqual("pysolate.semantic-analysis.v3", report["schema_version"])
         self.assertEqual("positive_only", report["call_site_coverage"])
         self.assertEqual(2, len(report["call_sites"]))
         first, second = sorted(report["call_sites"], key=lambda row: row["span"]["start_line"])

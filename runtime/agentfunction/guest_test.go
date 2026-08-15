@@ -380,7 +380,7 @@ func qualifiedGuestInvocation(t *testing.T, invocation agentfunction.Invocation,
 		ImportClosureSHA256: invocation.ImportClosureSHA256, CapabilityPlanSHA256: digest('c'),
 		ModuleSpan: semantic.SourceSpan{StartLine: 1, EndLine: 1},
 		Functions:  []semantic.FunctionSummary{}, Barriers: []semantic.Barrier{},
-		CallSiteCoverage: "positive_only", CallSites: []semantic.CallSite{},
+		CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete", CallSites: []semantic.CallSite{}, CandidateRegions: []semantic.CandidateRegion{},
 	}
 	verified := verifiedSemanticPlanFor(t, invocation, analysis)
 	qualified, err := agentfunction.NewQualifiedGuestInvocation(invocation, verified, request)

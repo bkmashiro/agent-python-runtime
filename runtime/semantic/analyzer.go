@@ -148,7 +148,7 @@ func Analyze(ctx context.Context, runner enginecontract.Runner, request Request)
 func analysisMatchesRequest(analysis Analysis, request Request) bool {
 	sourceDigest := sha256.Sum256([]byte(request.Source))
 	sourceSHA := fmt.Sprintf("sha256:%x", sourceDigest[:])
-	if analysis.AnalyzerSHA256 != semanticDigest("pysolate.semantic-analyzer.v5") ||
+	if analysis.AnalyzerSHA256 != semanticDigest("pysolate.semantic-analyzer.v6") ||
 		analysis.SourceSHA256 != sourceSHA ||
 		analysis.ArtifactSHA256 != request.Bindings.ArtifactSHA256 ||
 		analysis.ExecutionProfileSHA256 != request.Bindings.ExecutionProfileSHA256 ||
@@ -160,10 +160,14 @@ func analysisMatchesRequest(analysis Analysis, request Request) bool {
 	for _, projection := range request.Capabilities {
 		projections[projection.Name] = projection
 	}
+	if strings.TrimSpace(request.Source) != "" && analysis.CandidateRegionCount == 0 {
+		return false
+	}
 	controlRegion := semanticDigest("pysolate.semantic-control-region.v0\x00" + sourceSHA + "\x00module-entry")
+	callSites := make(map[string]CallSite, len(analysis.CallSites))
 	for _, site := range analysis.CallSites {
 		projection, ok := projections[site.Capability]
-		if !ok || site.ControlRegionID != controlRegion || site.ID != semanticCallSiteID(sourceSHA, site) ||
+		if !ok || !sourceContainsSpan(request.Source, site.Span) || site.ControlRegionID != controlRegion || site.ID != semanticCallSiteID(sourceSHA, site) ||
 			!argumentsMatchProjection(site.CanonicalArguments, projection.Arguments) {
 			return false
 		}
@@ -175,6 +179,29 @@ func analysisMatchesRequest(analysis Analysis, request Request) bool {
 		case capability.EffectWorkspaceWrite:
 			if !analysis.ModuleEffects.MayPublish || !analysis.ModuleEffects.MaySuspend {
 				return false
+			}
+		}
+		callSites[site.ID] = site
+	}
+	for index, region := range analysis.CandidateRegions {
+		if !sourceContainsSpan(request.Source, region.Span) || region.ID != semanticCandidateRegionID(sourceSHA, index, region.Span) || region.ControlRegionID != controlRegion {
+			return false
+		}
+		for _, occurrence := range region.CapabilityOccurrences {
+			site, ok := callSites[occurrence]
+			if !ok {
+				return false
+			}
+			projection := projections[site.Capability]
+			switch projection.EffectClass {
+			case capability.EffectWorkspaceRead, capability.EffectExternalRead:
+				if !region.Effects.MayObserveLive || !region.Effects.MaySuspend {
+					return false
+				}
+			case capability.EffectWorkspaceWrite:
+				if !region.Effects.MayPublish || !region.Effects.MaySuspend {
+					return false
+				}
 			}
 		}
 	}
@@ -203,6 +230,22 @@ func semanticDigest(value string) string {
 func semanticCallSiteID(sourceSHA string, site CallSite) string {
 	return semanticDigest(fmt.Sprintf("pysolate.semantic-call-site.v0\x00%s\x00%s\x00%d:%d:%d:%d",
 		sourceSHA, site.Capability, site.Span.StartLine, site.Span.StartColumn, site.Span.EndLine, site.Span.EndColumn))
+}
+
+func sourceContainsSpan(source string, span SourceSpan) bool {
+	lines := strings.Split(source, "\n")
+	if span.StartLine < 1 || span.EndLine < span.StartLine || int(span.StartLine) > len(lines) || int(span.EndLine) > len(lines) {
+		return false
+	}
+	startWidth := len([]byte(lines[span.StartLine-1]))
+	endWidth := len([]byte(lines[span.EndLine-1]))
+	return int(span.StartColumn) <= startWidth && int(span.EndColumn) <= endWidth &&
+		(span.EndLine > span.StartLine || span.EndColumn >= span.StartColumn)
+}
+
+func semanticCandidateRegionID(sourceSHA string, index int, span SourceSpan) string {
+	return semanticDigest(fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x00%d\x00%d:%d:%d:%d",
+		sourceSHA, index, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn))
 }
 
 func argumentsMatchProjection(raw json.RawMessage, expected []string) bool {

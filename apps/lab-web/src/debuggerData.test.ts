@@ -112,6 +112,56 @@ describe('debugger dataset validation', () => {
     expect(dataset.runs[0].trace).toHaveLength(3);
   });
 
+  it('accepts a Host-projected semantic region graph and rejects forged graph edges', () => {
+    const withRegions = JSON.parse(JSON.stringify(baseDataset));
+    withRegions.runs[0].semantic_regions = {
+      schema_version: 'pysolate.lab-semantic-regions.v0',
+      analysis_sha256: digest,
+      source_sha256: 'sha256:a98e4a70c088db8e63c375d93a2cd8e7f44cd9040faeb149699ae1eabfbc185d',
+      analyzer_sha256: digest,
+      source_privacy: 'private',
+      source_available: true,
+      source: scenario.guest_source,
+      regions: [
+        {
+          id: digest,
+          kind: 'straight_line',
+          span: { start_line: 1, start_column: 0, end_line: 1, end_column: 18 },
+          control_predecessors: [], data_dependencies: [], live_ins: [], live_outs: ['values'],
+          live_ins_canonical: true, live_outs_canonical: true,
+          effects: { may_publish: false, may_observe_live: false, may_suspend: false, may_be_unknown: false },
+          capability_occurrences: [], barriers: [], rejection_reasons: [],
+        },
+        {
+          id: `sha256:${'c'.repeat(64)}`,
+          kind: 'straight_line',
+          span: { start_line: 2, start_column: 0, end_line: 2, end_column: 23 },
+          control_predecessors: [digest], data_dependencies: [{ name: 'values', producer_region_id: digest }],
+          live_ins: ['values'], live_outs: ['result'], live_ins_canonical: true, live_outs_canonical: true,
+          effects: { may_publish: false, may_observe_live: false, may_suspend: false, may_be_unknown: false },
+          capability_occurrences: [], barriers: [], rejection_reasons: [],
+        },
+      ],
+    };
+    expect(validateDataset(withRegions).runs[0].semantic_regions?.regions).toHaveLength(2);
+    const digestMismatch = JSON.parse(JSON.stringify(withRegions));
+    digestMismatch.runs[0].semantic_regions.source_sha256 = digest;
+    expect(() => validateDataset(digestMismatch)).toThrow(/source digest/i);
+    const portable = JSON.parse(JSON.stringify(withRegions));
+    portable.runs[0].semantic_regions.source_available = false;
+    portable.runs[0].semantic_regions.source_privacy = 'portable';
+    delete portable.runs[0].semantic_regions.source;
+    expect(validateDataset(portable).runs[0].semantic_regions?.source_available).toBe(false);
+    const oversized = JSON.parse(JSON.stringify(withRegions));
+    oversized.runs[0].semantic_regions.regions[0].live_ins = Array.from({ length: 257 }, (_, index) => `name_${String(index).padStart(3, '0')}`);
+    expect(() => validateDataset(oversized)).toThrow(/invalid semantic region list/);
+    const emptyName = JSON.parse(JSON.stringify(withRegions));
+    emptyName.runs[0].semantic_regions.regions[0].live_ins = [''];
+    expect(() => validateDataset(emptyName)).toThrow(/invalid semantic region list/);
+    withRegions.runs[0].semantic_regions.regions[1].control_predecessors = [`sha256:${'d'.repeat(64)}`];
+    expect(() => validateDataset(withRegions)).toThrow(/control edge/i);
+  });
+
   it('rejects v1 fixture layout', () => {
     const legacy = {
       schema_version: 'pysolate.lab-web-experiments.v1',

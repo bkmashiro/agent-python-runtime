@@ -9,7 +9,7 @@ import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { Decoration, EditorView } from '@codemirror/view';
 import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
 import { type TraceAdapterEvent, type TraceNode, buildTraceNodes, buildExecutionStageTree, describeEvent } from './trace';
-import { type LabDataset, type LabRun, validateDataset } from './debuggerData';
+import { type LabDataset, type LabRun, type LabSemanticRegionGraph, validateDataset } from './debuggerData';
 
 type RunSource = 'recorded';
 
@@ -155,6 +155,52 @@ function ExecutionPanel({ run, activeId, onSelect }: { run: LabRun; activeId: st
   );
 }
 
+function SemanticRegionsPanel({ graph }: { graph: LabSemanticRegionGraph }) {
+  const [selectedID, setSelectedID] = useState(graph.regions[0]?.id ?? '');
+  useEffect(() => setSelectedID(graph.regions[0]?.id ?? ''), [graph]);
+  const selected = graph.regions.find((region) => region.id === selectedID) ?? graph.regions[0];
+  const source = graph.source_available ? graph.source ?? '' : '';
+  const regionHighlight = useMemo(() => EditorView.decorations.compute(['doc'], (state) => {
+    if (!selected) return Decoration.none;
+    const ranges = [];
+    for (let line = selected.span.start_line; line <= Math.min(selected.span.end_line, state.doc.lines); line += 1) {
+      ranges.push(Decoration.line({ class: `semantic-region-line region-${selected.kind}` }).range(state.doc.line(line).from));
+    }
+    return Decoration.set(ranges);
+  }), [selected]);
+  const effectLabel = (region: LabSemanticRegionGraph['regions'][number]) => {
+    if (region.effects.may_be_unknown) return 'unknown';
+    if (region.effects.may_publish) return 'write';
+    if (region.effects.may_observe_live) return 'read';
+    return 'pure';
+  };
+
+  if (!selected) return <div className="absence-panel"><Text size="sm">No candidate regions were emitted.</Text></div>;
+  return <div className="semantic-region-layout">
+    <div className="semantic-region-list" aria-label="Semantic candidate region graph">
+      <div className="region-graph-meta"><strong>{graph.regions.length} candidate regions</strong><small>Host-verified analysis · no execution authority</small></div>
+      {graph.regions.map((region, index) => <button type="button" key={region.id} onClick={() => setSelectedID(region.id)} className={`semantic-region-card ${selected.id === region.id ? 'active' : ''}`}>
+        {index > 0 && <i className="region-control-edge" aria-hidden="true" />}
+        <span className="region-index">R{index + 1}</span>
+        <span className="region-card-copy"><strong>lines {region.span.start_line}–{region.span.end_line}</strong><small>{region.kind.replace('_', ' ')} · {region.data_dependencies.length} data edges</small></span>
+        <Badge size="xs" color={effectLabel(region) === 'pure' ? 'green' : effectLabel(region) === 'read' ? 'blue' : effectLabel(region) === 'write' ? 'orange' : 'red'}>{effectLabel(region)}</Badge>
+      </button>)}
+    </div>
+    <div className="semantic-region-source">
+      <div className="source-context"><div><Text size="xs" c="dimmed">Python candidate R{graph.regions.indexOf(selected) + 1} · lines {selected.span.start_line}–{selected.span.end_line}</Text><small className="recording-limit">Analysis overlay only — original Python remains the sole execution authority.</small></div><Badge className="region-state-badge" variant="light" color={selected.rejection_reasons.length ? 'red' : 'teal'}>{selected.rejection_reasons.length ? 'BLOCKED' : 'OPEN'}</Badge></div>
+      <div className="semantic-region-code">{source ? <CodeMirror value={source} height="100%" theme={vscodeDark} extensions={[python(), EditorView.lineWrapping, regionHighlight]} editable={false} basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }} /> : <div className="semantic-source-omitted"><FileJson2 size={18} /><span>Source omitted by portable projection</span></div>}</div>
+      <div className="region-detail-grid">
+        <div><small>Live in</small><code>{selected.live_ins.join(', ') || '—'}</code></div>
+        <div><small>Live out</small><code>{selected.live_outs.join(', ') || '—'}</code></div>
+        <div><small>Data edges</small><code>{selected.data_dependencies.map((edge) => `${edge.name} ← ${edge.producer_region_id.slice(7, 15)}`).join(', ') || '—'}</code></div>
+        <div><small>Capability occurrences</small><code>{selected.capability_occurrences.length || '—'}</code></div>
+        <div className="region-rejections"><small>Barriers / rejection reasons</small><code>{[...selected.barriers, ...selected.rejection_reasons].join(', ') || 'none'}</code></div>
+        <div className="region-consumers"><small>Region consumer decisions</small><span><b>reuse</b> not admitted · <b>pre-dispatch</b> not admitted · <b>placement</b> not admitted</span></div>
+      </div>
+    </div>
+  </div>;
+}
+
 function Inspector({
   node,
   run,
@@ -199,6 +245,7 @@ function Inspector({
       <Tabs value={tab} onChange={setTab} className="inspector-tabs">
         <Tabs.List>
           <Tabs.Tab value="source" leftSection={<FileJson2 size={14} />}>Python</Tabs.Tab>
+          {run.semantic_regions && <Tabs.Tab value="regions" leftSection={<Workflow size={14} />}>Regions</Tabs.Tab>}
           <Tabs.Tab value="context" leftSection={<Database size={14} />}>Scenario</Tabs.Tab>
           <Tabs.Tab value="conversation" leftSection={<Bot size={14} />}>LLM conversation</Tabs.Tab>
           <Tabs.Tab value="io" leftSection={<Database size={14} />}>Input / output</Tabs.Tab>
@@ -221,6 +268,7 @@ function Inspector({
             basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
           />
         </Tabs.Panel>
+        {run.semantic_regions && <Tabs.Panel value="regions" className="tab-body semantic-region-tab"><SemanticRegionsPanel graph={run.semantic_regions} /></Tabs.Panel>}
         <Tabs.Panel value="context" className="tab-body source-tab">
           <JsonViewer
             label="Recorded scenario metadata"

@@ -214,6 +214,7 @@ WASI_VFS_STORAGE_OBJECT_DIR="${WORK_DIR}/wasi-vfs-object"
 mkdir -p "${WASI_VFS_STORAGE_OBJECT_DIR}"
 WASI_VFS_STORAGE_OBJECT="${WASI_VFS_STORAGE_OBJECT_DIR}/${WASI_VFS_STORAGE_MEMBER}"
 "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 -DNDEBUG \
+  -ffile-prefix-map="${ROOT_DIR}"=. -fdebug-prefix-map="${ROOT_DIR}"=. \
   -c "${PATCHED_WASI_VFS_SOURCE}" -o "${WASI_VFS_STORAGE_OBJECT}"
 "${LLVM_AR}" d "${WASI_VFS_LIB}" "${WASI_VFS_STORAGE_MEMBER}"
 (
@@ -230,6 +231,7 @@ RAW_GUEST="${WORK_DIR}/agent-python-runtime.raw.wasm"
 FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
 
 "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
+  -ffile-prefix-map="${ROOT_DIR}"=. -fdebug-prefix-map="${ROOT_DIR}"=. \
   -I"${ROOT_DIR}/guest/include" \
   -I"${CPYTHON_DIR}/Include" \
   -I"${WASI_BUILD_DIR}" \

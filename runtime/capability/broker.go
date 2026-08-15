@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/approval"
+	sourcebindingtrusted "github.com/bkmashiro/agent-python-runtime/runtime/internal/sourcebinding"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
@@ -35,7 +36,7 @@ type Config struct {
 	AllowDirectCalls   bool
 	ApprovalSuspension bool
 	ApprovalController *approval.Controller
-	SourceResolver     SourceBindingResolver
+	SourceResolver     *SourceBindingResolver
 }
 
 type StagedObservationClaimer interface {
@@ -43,20 +44,27 @@ type StagedObservationClaimer interface {
 	Finalize(bool) error
 }
 
-type SourceBindingRequest struct {
-	CallID         string
-	ParentCallID   string
-	Capability     string
-	OperationIndex uint32
-	Arguments      json.RawMessage
-	Programmatic   bool
+type SourceBindingRequest = sourcebindingtrusted.Request
+
+// SourceBindingResolver is an opaque Host-TCB resolver. Its constructor accepts
+// an internal authority token, so external plugins can consume but cannot mint
+// source-bound receipt evidence.
+type SourceBindingResolver struct {
+	authority sourcebindingtrusted.Authority
 }
 
-// SourceBindingResolver is Host-owned, observation-only provenance. It may bind
-// an admitted programmatic call to one verified source occurrence, but cannot
-// grant a capability or dispatch a handler.
-type SourceBindingResolver interface {
-	ResolveSource(SourceBindingRequest) (receipt.SourceBinding, bool)
+func NewSourceBindingResolver(authority sourcebindingtrusted.Authority) (*SourceBindingResolver, error) {
+	if !authority.Valid() {
+		return nil, ErrInvalidBroker
+	}
+	return &SourceBindingResolver{authority: authority}, nil
+}
+
+func (resolver *SourceBindingResolver) ResolveSource(request SourceBindingRequest) (receipt.SourceBinding, bool) {
+	if resolver == nil {
+		return receipt.SourceBinding{}, false
+	}
+	return resolver.authority.Resolve(request)
 }
 
 type Broker struct {

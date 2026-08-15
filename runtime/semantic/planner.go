@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	sourcebindingtrusted "github.com/bkmashiro/agent-python-runtime/runtime/internal/sourcebinding"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
@@ -92,10 +93,6 @@ type sourceBindingCandidate struct {
 	site         CallSite
 }
 
-type SourceBindingResolver struct {
-	byRequest map[string][]receipt.SourceBinding
-}
-
 func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.Plan, config PlannerConfig) (SourceBoundPlan, error) {
 	passes, err := validatePassConfig(config.Passes)
 	if err != nil {
@@ -163,11 +160,11 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 	return SourceBoundPlan{projection: projection, identity: identityValue, qualified: qualified, candidates: candidates}, nil
 }
 
-func NewSourceBindingResolver(plan SourceBoundPlan) (*SourceBindingResolver, error) {
+func NewSourceBindingResolver(plan SourceBoundPlan) (*capability.SourceBindingResolver, error) {
 	if plan.identity == "" || len(plan.projection.Documents) != 1 {
 		return nil, ErrInvalidPlannerInput
 	}
-	resolver := &SourceBindingResolver{byRequest: make(map[string][]receipt.SourceBinding)}
+	byRequest := make(map[string][]receipt.SourceBinding)
 	for _, candidate := range plan.candidates {
 		site := candidate.site
 		if !site.ArgumentsCanonical || len(site.CanonicalArguments) == 0 {
@@ -183,20 +180,23 @@ func NewSourceBindingResolver(plan SourceBoundPlan) (*SourceBindingResolver, err
 			return nil, ErrInvalidPlannerInput
 		}
 		key := sourceRequestKey(site.Capability, site.CanonicalArguments)
-		resolver.byRequest[key] = append(resolver.byRequest[key], binding)
+		byRequest[key] = append(byRequest[key], binding)
+	}
+	authority := sourcebindingtrusted.New(func(request sourcebindingtrusted.Request) (receipt.SourceBinding, bool) {
+		if !request.Programmatic || request.ParentCallID == "" || request.CallID == "" {
+			return receipt.SourceBinding{}, false
+		}
+		matches := byRequest[sourceRequestKey(request.Capability, request.Arguments)]
+		if len(matches) != 1 {
+			return receipt.SourceBinding{}, false
+		}
+		return matches[0], true
+	})
+	resolver, err := capability.NewSourceBindingResolver(authority)
+	if err != nil {
+		return nil, ErrInvalidPlannerInput
 	}
 	return resolver, nil
-}
-
-func (resolver *SourceBindingResolver) ResolveSource(request capability.SourceBindingRequest) (receipt.SourceBinding, bool) {
-	if resolver == nil || !request.Programmatic || request.ParentCallID == "" || request.CallID == "" {
-		return receipt.SourceBinding{}, false
-	}
-	matches := resolver.byRequest[sourceRequestKey(request.Capability, request.Arguments)]
-	if len(matches) != 1 {
-		return receipt.SourceBinding{}, false
-	}
-	return matches[0], true
 }
 
 func sourceRequestKey(capabilityName string, arguments []byte) string {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	sourcebindingtrusted "github.com/bkmashiro/agent-python-runtime/runtime/internal/sourcebinding"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
@@ -190,7 +191,7 @@ func TestBrokerBindsSourceOnlyToExactProgrammaticCalls(t *testing.T) {
 		OccurrenceID: "sha256:" + strings.Repeat("3", 64), Capability: "workspace.read_text", DynamicOccurrence: 1,
 		StartLine: 2, StartColumn: 9, EndLine: 2, EndColumn: 38,
 	}
-	resolver := &recordingSourceResolver{binding: binding}
+	resolver, recording := newRecordingSourceResolver(t, binding)
 	broker, err := capability.NewBroker(capability.Config{
 		RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent", AllowDirectCalls: true, SourceResolver: resolver,
 	})
@@ -207,8 +208,8 @@ func TestBrokerBindsSourceOnlyToExactProgrammaticCalls(t *testing.T) {
 	if handlerCalls.Load() != 2 || len(receipts) != 2 || receipts[0].Source != nil || receipts[1].Source == nil || !receipt.ValidIdentity(receipts[1]) {
 		t.Fatalf("calls=%d receipts=%#v", handlerCalls.Load(), receipts)
 	}
-	if len(resolver.requests) != 1 || !resolver.requests[0].Programmatic || string(resolver.requests[0].Arguments) != `{"path":"x"}` {
-		t.Fatalf("resolver requests=%#v", resolver.requests)
+	if len(recording.requests) != 1 || !recording.requests[0].Programmatic || string(recording.requests[0].Arguments) != `{"path":"x"}` {
+		t.Fatalf("resolver requests=%#v", recording.requests)
 	}
 }
 
@@ -225,8 +226,9 @@ func TestBrokerRejectsInvalidResolvedSourceBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	resolver, _ := newRecordingSourceResolver(t, receipt.SourceBinding{})
 	broker, err := capability.NewBroker(capability.Config{
-		RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent", SourceResolver: &recordingSourceResolver{binding: receipt.SourceBinding{}},
+		RunIdentity: "host-run", Plan: plan, ProgrammaticParentCallID: "parent", SourceResolver: resolver,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -242,9 +244,18 @@ type recordingSourceResolver struct {
 	requests []capability.SourceBindingRequest
 }
 
-func (resolver *recordingSourceResolver) ResolveSource(request capability.SourceBindingRequest) (receipt.SourceBinding, bool) {
-	resolver.requests = append(resolver.requests, request)
-	return resolver.binding, true
+func newRecordingSourceResolver(t *testing.T, binding receipt.SourceBinding) (*capability.SourceBindingResolver, *recordingSourceResolver) {
+	t.Helper()
+	recording := &recordingSourceResolver{binding: binding}
+	authority := sourcebindingtrusted.New(func(request sourcebindingtrusted.Request) (receipt.SourceBinding, bool) {
+		recording.requests = append(recording.requests, request)
+		return recording.binding, true
+	})
+	resolver, err := capability.NewSourceBindingResolver(authority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolver, recording
 }
 
 func TestProgrammaticBrokerRequiresExactParentBoundChildSequence(t *testing.T) {

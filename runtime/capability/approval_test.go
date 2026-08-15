@@ -11,6 +11,7 @@ import (
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/approval"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 func TestApprovalRequiredCapabilityDispatchesOnlyAfterSameBrokerApproval(t *testing.T) {
@@ -61,9 +62,15 @@ func TestBothSurfaceApprovalBindsParentOnlyToProgrammaticCalls(t *testing.T) {
 			var calls atomic.Uint32
 			plan := approvalPlan(t, &calls)
 			controller := approval.NewController()
+			resolver, _ := newRecordingSourceResolver(t, receipt.SourceBinding{
+				SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound,
+				DocumentID: "sha256:" + strings.Repeat("1", 64), SourceSHA256: "sha256:" + strings.Repeat("2", 64),
+				OccurrenceID: "sha256:" + strings.Repeat("3", 64), Capability: "danger.delete", DynamicOccurrence: 1,
+				StartLine: 1, StartColumn: 9, EndLine: 1, EndColumn: 28,
+			})
 			broker, err := capability.NewBroker(capability.Config{
 				RunIdentity: "execution-1", Plan: plan, ProgrammaticParentCallID: "parent", AllowDirectCalls: true,
-				ApprovalSuspension: true, ApprovalController: controller,
+				ApprovalSuspension: true, ApprovalController: controller, SourceResolver: resolver,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -82,7 +89,8 @@ func TestBothSurfaceApprovalBindsParentOnlyToProgrammaticCalls(t *testing.T) {
 			}
 			response := <-result
 			receipts := broker.SnapshotReceipts()
-			if !strings.Contains(string(response), `"status":"ok"`) || len(receipts) != 1 || receipts[0].ParentCallID != test.wantParent {
+			wantSource := test.wantParent != ""
+			if !strings.Contains(string(response), `"status":"ok"`) || len(receipts) != 1 || receipts[0].ParentCallID != test.wantParent || (receipts[0].Source != nil) != wantSource || !receipt.ValidIdentity(receipts[0]) {
 				t.Fatalf("response=%s receipts=%#v", response, receipts)
 			}
 		})

@@ -23,6 +23,11 @@ for value in "$stage" "$output" "$cache_root"; do
     exit 4
   fi
 done
+shared_root=${cache_root%/cache/guest-layers}
+if [[ $shared_root == "$cache_root" || $cache_root != "$shared_root/cache/guest-layers" ]]; then
+  echo "cache root does not identify the bounded Pysolate shared root" >&2
+  exit 8
+fi
 if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || ! $source_epoch =~ ^[1-9][0-9]*$ ]]; then
   echo "invalid source identity" >&2
   exit 5
@@ -41,11 +46,17 @@ cp -a "$stage"/. "$repository"/
 cd "$repository"
 
 started_ns=$(date +%s%N)
+mkdir -p "$shared_root/go/pkg/mod" "$shared_root/go-build-cache" "$shared_root/config"
 set +e
 AGENT_RUNTIME_BUILD_CACHE_ROOT="$cache_root" \
 AGENT_RUNTIME_BUILD_CACHE_MODE="$cache_mode" \
 GITHUB_SHA="$source_commit" \
 SOURCE_DATE_EPOCH="$source_epoch" \
+GOPATH="$shared_root/go" \
+GOMODCACHE="$shared_root/go/pkg/mod" \
+GOCACHE="$shared_root/go-build-cache" \
+XDG_CONFIG_HOME="$shared_root/config" \
+GOTELEMETRY=off \
 ./guest/build/build-guest.sh >"$output/build.log" 2>&1
 build_status=$?
 set -e

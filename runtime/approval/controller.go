@@ -217,9 +217,22 @@ func (controller *Controller) Snapshot() []Record {
 	defer controller.mu.Unlock()
 	records := make([]Record, 0, len(controller.order))
 	for _, id := range controller.order {
-		records = append(records, controller.pending[id].record)
+		records = append(records, cloneRecord(controller.pending[id].record))
 	}
 	return records
+}
+
+func cloneRecord(record Record) Record {
+	cloned := record
+	if record.DecisionAt != nil {
+		value := *record.DecisionAt
+		cloned.DecisionAt = &value
+	}
+	if record.CompletedAt != nil {
+		value := *record.CompletedAt
+		cloned.CompletedAt = &value
+	}
+	return cloned
 }
 
 func requestIdentity(proposal Proposal, created time.Time, sequence uint64, arguments [sha256.Size]byte) string {

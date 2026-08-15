@@ -39,6 +39,11 @@ func TestControllerApprovesExactlyOnceAndKeepsBodySafeAudit(t *testing.T) {
 	if len(records) != 1 || records[0].Status != approval.StatusApproved || !records[0].Executed || records[0].DispatchOutcome != "ok" || records[0].ParentCallID != "parent" {
 		t.Fatalf("records=%#v", records)
 	}
+	*records[0].DecisionAt = time.Unix(1, 0)
+	fresh := controller.Snapshot()
+	if fresh[0].DecisionAt == nil || fresh[0].DecisionAt.Equal(time.Unix(1, 0)) {
+		t.Fatal("audit snapshot leaked mutable timestamp state")
+	}
 	if strings.Contains(records[0].ArgumentsSHA256, "do-not-store") {
 		t.Fatalf("audit leaked arguments: %#v", records[0])
 	}

@@ -194,7 +194,7 @@ The bounded campaign in
 `docs/evidence/programmatic-hot-approval-real-guest-v0.json` passed against:
 
 ```text
-Host source commit: cdfb29a147a7c69739ea37dcad9e3574ff7b1bca
+Host source commit: a89843b29769f7a6149c0329853c92a63e84e8df
 Guest source commit: db756fd7b40d465072b5fb1b6f3867d29c5d8114
 Guest artifact SHA-256: sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af
 Guest target: wasm32-wasip1

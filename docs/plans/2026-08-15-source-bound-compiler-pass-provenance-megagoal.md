@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute only this plan. Use `docs/plans/2026-08-15-source-bound-agent-program-roadmap.md` as the master architecture. Stop after closeout; do not enter recorder/Lab work.
 
-**Status:** Active
+**Status:** Complete — stopped at the Megagoal 1 gate on 2026-08-15. No Megagoal 2 work was started.
 
 **Baseline:** `a5bd564c2dc5bf675952ec4eafa3519c6958ff31` on `feat/programmatic-hot-approval`.
 
@@ -233,6 +233,8 @@ Gate: reproducible private/raw output plus body-safe checked-in evidence at [`do
 
 ## Phase 4 — real Guest evidence and closeout
 
+**Status:** Complete. Full race/vet gates, 95 Guest Python tests, 7 script tests, ABI fixtures, and non-skipping real CPython/WASM source-binding/pre-dispatch/monitoring E2E passed. The final independent bounded review at exact commit `4a7f74b5a78ab3a68fbeebcd13ad20ff445fcde2` returned **PASS** with no blocker under the documented Host-TCB model.
+
 Required verification:
 
 ```text
@@ -261,6 +263,9 @@ Independent review scope:
 Closeout only after blocker fixes, broad gates, signed commits, push and clean upstream state.
 
 ## Stop gate
+
+**Status:** Reached. Checked-in body-safe evidence is
+[`docs/evidence/source-bound-compiler-provenance-real-guest-v0.json`](../evidence/source-bound-compiler-provenance-real-guest-v0.json); private raw evidence and the named rebuilt artifact remain outside the repository. Remaining risks are bounded to the accepted trust/measurement limits: Host-authored receipt IDs are integrity identities rather than signatures against the Host TCB; source-bound spans are not executed-line claims; and monitoring ratios are call-heavy microbenchmark results, not application overhead.
 
 Stop and report after all of the following are available:
 

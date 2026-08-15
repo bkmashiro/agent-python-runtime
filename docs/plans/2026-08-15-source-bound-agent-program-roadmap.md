@@ -330,6 +330,8 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 1 — Source-Bound Compiler Pass and Provenance Foundation
 
+**Status:** Complete at the Megagoal 1 stop gate on 2026-08-15. Final independent review: PASS at `4a7f74b5a78ab3a68fbeebcd13ad20ff445fcde2`. Megagoal 2 has not started.
+
 **Extracted execution plan:** [2026-08-15-source-bound-compiler-pass-provenance-megagoal.md](2026-08-15-source-bound-compiler-pass-provenance-megagoal.md)
 
 **Purpose:** Make the existing semantic infrastructure explicitly pass-oriented and bind static source occurrences to dynamic boundary occurrences without creating an executable IR.
@@ -347,14 +349,14 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 **Tracks:**
 
-- [ ] Freeze vNext source document, static occurrence, dynamic occurrence and claim-level vocabulary.
-- [ ] Refactor extraction into bounded fact producers where this reduces coupling; preserve exact target AST and canonical output.
-- [ ] Add deterministic pass descriptor/config/result contract and pure planner orchestration.
-- [ ] Wrap the current semantic pre-dispatch qualification as the first pass without changing runtime behavior.
-- [ ] Emit admitted and rejected source-bound decisions with stable reasons.
-- [ ] Bind PTC/direct Broker calls to exact dynamic occurrences where supported.
-- [ ] Spike `sys.monitoring` or equivalent exact target-Guest instruction/line positions; measure overhead and portability, and keep it optional or reject it.
-- [ ] Add differential real Guest tests proving disabled parity, source-span accuracy and fail-closed unknown/conflict handling.
+- [x] Freeze vNext source document, static occurrence, dynamic occurrence and claim-level vocabulary.
+- [x] Refactor extraction into bounded fact producers where this reduces coupling; preserve exact target AST and canonical output.
+- [x] Add deterministic pass descriptor/config/result contract and pure planner orchestration.
+- [x] Wrap the current semantic pre-dispatch qualification as the first pass without changing runtime behavior.
+- [x] Emit admitted and rejected source-bound decisions with stable reasons.
+- [x] Bind PTC/direct Broker calls to exact dynamic occurrences where supported.
+- [x] Spike `sys.monitoring` or equivalent exact target-Guest instruction/line positions; measure overhead and portability, and keep it optional or reject it.
+- [x] Add differential real Guest tests proving disabled parity, source-span accuracy and fail-closed unknown/conflict handling.
 
 **Definition of Done:**
 

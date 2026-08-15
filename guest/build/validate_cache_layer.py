@@ -19,7 +19,11 @@ def safe_name(name: str, allowed_roots: set[str] = ALLOWED_ROOTS) -> bool:
     return normalized != ".." and not normalized.startswith("../") and bool(parts) and parts[0] in allowed_roots
 
 
-def validate(path: pathlib.Path, allowed_roots: set[str] = ALLOWED_ROOTS) -> None:
+def validate(
+    path: pathlib.Path,
+    allowed_roots: set[str] = ALLOWED_ROOTS,
+    regular_only: bool = False,
+) -> None:
     seen_roots: set[str] = set()
     seen_members: dict[str, str] = {}
     with tarfile.open(path, "r:") as archive:
@@ -44,6 +48,8 @@ def validate(path: pathlib.Path, allowed_roots: set[str] = ALLOWED_ROOTS) -> Non
                 kind = "symlink"
             else:
                 kind = "hardlink"
+            if regular_only and kind not in {"directory", "file"}:
+                raise ValueError(f"non-regular final cache member: {member.name}")
             if kind != "directory" and any(name.startswith(normalized + "/") for name in seen_members):
                 raise ValueError(f"non-directory cache member replaces a parent: {member.name}")
             seen_roots.add(member_path.parts[0])
@@ -66,11 +72,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("archive", type=pathlib.Path)
     parser.add_argument("--root", action="append", dest="roots")
+    parser.add_argument("--regular-only", action="store_true")
     args = parser.parse_args()
     roots = set(args.roots) if args.roots else ALLOWED_ROOTS
     if not roots or any("/" in root or root in {".", ".."} for root in roots):
         parser.error("cache roots must be simple names")
-    validate(args.archive, roots)
+    validate(args.archive, roots, regular_only=args.regular_only)
     return 0
 
 

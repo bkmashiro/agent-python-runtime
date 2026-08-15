@@ -80,6 +80,9 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertNotIn('cp -R "${CPYTHON_DIR}/Lib', text)
         self.assertIn("site-packages/agent_runtime", text)
         self.assertIn("AGENT_RUNTIME_PROBE_RUNNER", text)
+        self.assertIn('tar -cf "${FINAL_CACHE_TMP}/dist.tar" -C "${ROOT_DIR}" dist', text)
+        self.assertIn('tar -xf "${FINAL_CACHE_ENTRY}/dist.tar" -C "${ROOT_DIR}"', text)
+        self.assertIn("--root dist --regular-only", text)
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())
 

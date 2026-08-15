@@ -52,6 +52,21 @@ class CacheLayerValidatorTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate(archive)
 
+    def test_regular_only_rejects_internal_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = pathlib.Path(directory) / "final.tar"
+            with tarfile.open(archive, "w") as handle:
+                root = tarfile.TarInfo("dist")
+                root.type = tarfile.DIRTYPE
+                handle.addfile(root)
+                link = tarfile.TarInfo("dist/link")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "artifact.wasm"
+                handle.addfile(link)
+            validator.validate(archive, {"dist"})
+            with self.assertRaises(ValueError):
+                validator.validate(archive, {"dist"}, regular_only=True)
+
     def test_rejects_duplicate_and_file_then_child_members(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             archive = pathlib.Path(directory) / "layer.tar"

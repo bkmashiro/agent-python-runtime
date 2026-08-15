@@ -280,9 +280,9 @@ if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${SOURCE_TREE_ID} 
     grep -Fxq "final_cache_key=${FINAL_CACHE_KEY}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
     grep -Fxq "source_tree=${SOURCE_TREE_ID}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
     (cd "${FINAL_CACHE_ENTRY}" && sha256sum -c SHA256SUMS >/dev/null) &&
-    python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_ENTRY}/dist.tar" --root dist; then
+    python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_ENTRY}/dist.tar" --root dist --regular-only; then
     rm -rf "${DIST_DIR}"
-    tar -xf "${FINAL_CACHE_ENTRY}/dist.tar" -C "${WORK_DIR}"
+    tar -xf "${FINAL_CACHE_ENTRY}/dist.tar" -C "${ROOT_DIR}"
     restored_artifact_sha256="sha256:$(sha256sum "${DIST_DIR}/${ARTIFACT_FILENAME}" | cut -d' ' -f1)"
     if grep -Fxq "artifact_sha256=${restored_artifact_sha256}" "${FINAL_CACHE_ENTRY}/RESULT.READY"; then
       FINAL_CACHE_STATUS=hit
@@ -483,8 +483,8 @@ write_dist_checksums
 
 if [[ ${FINAL_CACHE_STATUS} == miss ]]; then
   FINAL_CACHE_TMP=$(mktemp -d "${FINAL_CACHE_ROOT}/.tmp.${FINAL_CACHE_KEY#sha256:}.XXXXXXXX")
-  tar -cf "${FINAL_CACHE_TMP}/dist.tar" -C "${WORK_DIR}" dist
-  python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_TMP}/dist.tar" --root dist
+  tar -cf "${FINAL_CACHE_TMP}/dist.tar" -C "${ROOT_DIR}" dist
+  python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${FINAL_CACHE_TMP}/dist.tar" --root dist --regular-only
   (
     cd "${FINAL_CACHE_TMP}"
     sha256sum dist.tar > SHA256SUMS

@@ -1,10 +1,26 @@
 # Pysolate Lab Web
 
-A static multi-agent debugger for recorded Pysolate development runs.
+A static sealed workflow experiment viewer and multi-agent debugger for recorded Pysolate
+evidence.
 
 ```text
 recorded run → pipeline + agent swimlanes → Python source span → workspace diff → raw evidence
 ```
+
+## Workflow-boundary paired experiment
+
+The default surface validates and renders
+`public/lab-data/workflow-benchmark-evidence-v0.json`, the exact public copy of the sealed
+repository evidence. It shows the fixed-seed shuffled arrivals, measured baseline and
+optimized treatment intervals, model invocation/output replay fixtures, Guest WASM, Host
+tool execution, logical requests, physical producers and complete consumers. Preissue,
+declared overlap, coalescing, retained reuse and rejected near matches remain visible.
+
+The browser recomputes the top-level SHA-256 seal, rejects duplicate/dangling provenance,
+rejects `consumer_admitted=true`, and scans for prohibited prompt/source/result-body,
+credential, hidden-reasoning and Host-path fields. It presents no execute, retry, schedule,
+cache or capability controls. “Model” lanes describe invocation/generation intervals, not
+private chain-of-thought.
 
 ## Recorded development runs
 

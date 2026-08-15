@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('loads the multi-agent debugger without Host-recorder or legacy views', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('tab', { name: 'Development debugger' }).click();
   await expect(page.getByText('Load v4 JSON')).toBeVisible();
   await expect(page.getByText('3 development runs', { exact: true })).toBeVisible();
   await expect(page.getByText('Showing 3 public development runs', { exact: true })).toBeVisible();

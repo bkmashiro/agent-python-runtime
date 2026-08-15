@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('switches runs and renders recorded multi-agent lanes', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('tab', { name: 'Development debugger' }).click();
   const runSelector = page.getByTestId('run-select');
   const options = page.locator('[data-testid="run-option"][data-run-kind="recorded"]');
   await expect(options).toHaveCount(3);
@@ -30,6 +31,7 @@ test('switches runs and renders recorded multi-agent lanes', async ({ page }) =>
 
 test('links an agent span to Python and its workspace diff', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('tab', { name: 'Development debugger' }).click();
   const researcher = page.getByRole('button', { name: 'researcher agent.execute' });
   await researcher.click();
   await expect(page.getByText('What happened')).toBeVisible();

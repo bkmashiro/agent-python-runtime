@@ -10,6 +10,8 @@ import { Decoration, EditorView } from '@codemirror/view';
 import { Folder, Workflow, FileJson2, Bot, Database } from 'lucide-react';
 import { type TraceAdapterEvent, type TraceNode, buildTraceNodes, buildExecutionStageTree, describeEvent } from './trace';
 import { type LabDataset, type LabRun, type LabSemanticRegionGraph, validateDataset } from './debuggerData';
+import { WorkflowExperiment } from './WorkflowExperiment';
+import { type WorkflowEvidence, validateWorkflowEvidence } from './workflowData';
 
 type RunSource = 'recorded';
 
@@ -365,6 +367,9 @@ function mapDatasetRuns(dataset: LabDataset): RunOption[] {
 }
 
 export default function App() {
+  const [surface, setSurface] = useState<'experiment' | 'debugger'>('experiment');
+  const [workflowEvidence, setWorkflowEvidence] = useState<WorkflowEvidence | null>(null);
+  const [workflowError, setWorkflowError] = useState('');
   const [runOptions, setRunOptions] = useState<RunOption[]>([]);
   const [selectedRunId, setSelectedRunId] = useState('');
   const [activeNodeId, setActiveNodeId] = useState('');
@@ -372,6 +377,23 @@ export default function App() {
   const [datasetError, setDatasetError] = useState('');
   const [datasetSummary, setDatasetSummary] = useState('Loading public dataset...');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    async function loadWorkflowEvidence() {
+      try {
+        const response = await fetch('/lab-data/workflow-benchmark-evidence-v0.json');
+        if (!response.ok) throw new Error(`workflow evidence load failed: ${response.status}`);
+        const parsed = await validateWorkflowEvidence(JSON.parse(await response.text()) as WorkflowEvidence);
+        setWorkflowEvidence(parsed);
+        setWorkflowError('');
+      } catch (error) {
+        setWorkflowEvidence(null);
+        setWorkflowError(error instanceof Error ? error.message : 'workflow evidence rejected');
+        setSurface('debugger');
+      }
+    }
+    void loadWorkflowEvidence();
+  }, []);
 
   useEffect(() => {
     async function loadDefault() {
@@ -463,6 +485,22 @@ export default function App() {
     }
   };
 
+  if (surface === 'experiment') {
+    return (
+      <AppShell header={{ height: 72 }} padding={0}>
+        <AppShell.Header className="app-header workflow-header">
+          <Group h="100%" px="sm" justify="space-between" wrap="nowrap">
+            <Group gap="sm"><div className="theme-icon" style={{ width: 28, height: 28 }}><Workflow size={16} /></div><div><Text fw={800} size="sm">Pysolate Lab</Text><Text size="xs" c="dimmed">Observable workflow boundaries</Text></div></Group>
+            <div className="surface-switch" role="tablist" aria-label="Lab surface"><button className="active" role="tab" aria-selected="true">Paired experiment</button><button role="tab" aria-selected="false" onClick={() => setSurface('debugger')}>Development debugger</button></div>
+          </Group>
+        </AppShell.Header>
+        <AppShell.Main className="workflow-main">
+          {workflowEvidence ? <WorkflowExperiment evidence={workflowEvidence} /> : <Alert color={workflowError ? 'red' : 'blue'} title={workflowError ? 'Workflow evidence rejected' : 'Loading sealed workflow evidence'}>{workflowError || 'Validating manifest, provenance links and evidence seal…'}</Alert>}
+        </AppShell.Main>
+      </AppShell>
+    );
+  }
+
   if (!selectedRun || !selectedNode) {
     return (
       <AppShell header={{ height: 72 }} padding={0}>
@@ -472,7 +510,7 @@ export default function App() {
               <Text fw={800} size="sm">Pysolate Lab Debugger</Text>
               <Text size="xs" c="dimmed">{datasetSummary}</Text>
             </div>
-            <Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button>
+            <>{workflowEvidence && <Button size="compact-xs" variant="light" onClick={() => setSurface('experiment')}>Paired experiment</Button>}<Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button></>
             <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={handleLoad} />
           </Group>
         </AppShell.Header>
@@ -524,7 +562,7 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button>
+            <>{workflowEvidence && <Button size="compact-xs" variant="light" onClick={() => setSurface('experiment')}>Paired experiment</Button>}<Button size="compact-xs" onClick={onUpload}>Load v4 JSON</Button></>
             <input
               ref={fileInputRef}
               type="file"

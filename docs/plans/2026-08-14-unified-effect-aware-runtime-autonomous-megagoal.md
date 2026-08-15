@@ -1,11 +1,11 @@
 # Unified Effect-Aware Runtime Autonomous Mega-Goal
 
-> **For Hermes:** This is the active successor roadmap. Read it fully, inspect live
-> repository state, and execute coherent verified slices without widening the
-> authority model. A green slice or signed checkpoint is not a stopping condition;
-> the decision gates below are.
+> **Historical roadmap:** Do not resume this file. Its executable AST-region reuse and
+> semantic-placement questions were evaluated by the completed observable-workflow
+> successor; both produced bounded no-go evidence. The surviving authority-lifecycle
+> direction is reorganized in the 2026-08-15 authority-bound multi-agent campaign goal.
 
-**Status:** Active — Track 0 research contract closed; Track A opportunity census next
+**Status:** Historical/superseded — preserve as research and decision history
 **Date:** 2026-08-14
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`

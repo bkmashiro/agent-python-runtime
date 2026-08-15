@@ -1,6 +1,6 @@
 # Agent development trajectory v0
 
-Status: **Implemented private recorder and static inspector; live Harness attachment pending**
+Status: **Implemented private recorder and static inspector; concrete host attachment out of current Pysolate scope**
 
 ## Goal
 
@@ -115,11 +115,11 @@ fixture bodies only.
 The former `pysolate.lab-web-debugger.v4` and paired-workflow Lab schemas were deleted. There
 is no compatibility reader, fallback or dual surface.
 
-## Remaining integration boundary
+## Host integration seam (outside the current Pysolate goal)
 
-The recorder and inspector are real; the current checked-in trajectory is scripted. A live
-Harness adapter must append events at the actual boundaries before the Lab can claim complete
-capture of a real agent run:
+The recorder and inspector are real; the current checked-in trajectory is scripted. If a
+concrete Agent host later adopts this recorder, that host must append events at the actual
+boundaries before it can claim complete capture of one of its real agent runs:
 
 1. after final prompt/context assembly and before provider send;
 2. for every provider-returned reasoning/output/tool-call chunk;
@@ -127,5 +127,6 @@ capture of a real agent run:
 4. at subagent dispatch/result and context injection;
 5. at Pysolate logical/physical/workspace lifecycle boundaries.
 
-Resume, fork, replay and live tailing remain future Harness operations. They must use this
-same event stream, not introduce a second transcript database.
+Those hooks belong to the adopting host rather than Pysolate Runtime. Resume, fork, replay
+and live tailing likewise remain possible host operations; if implemented, they should use
+this event stream rather than introduce a second transcript database.

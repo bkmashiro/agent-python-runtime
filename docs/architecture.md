@@ -9,8 +9,9 @@ Counterfactual branching, deterministic verification, prepared/COW execution,
 and unified execution profiles are marked **Experimental**. The seeded workflow Harness is
 **Research-only**; its balanced-order real-Guest v1 result is inspectable through a private
 trajectory and makes no CPU/latency improvement claim. The private append-only Agent
-trajectory recorder and static inspector are **Experimental**; live Harness attachment,
-resume, fork and replay remain **Proposed**. See [research/agent-trajectory-v0.md](research/agent-trajectory-v0.md).
+trajectory recorder and static inspector are **Experimental**. A concrete live-Harness
+attachment, resume, fork and replay are host-owned integration concerns, not the current
+Pysolate Runtime roadmap. See [research/agent-trajectory-v0.md](research/agent-trajectory-v0.md).
 
 ## Run path
 

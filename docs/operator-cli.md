@@ -23,6 +23,7 @@ stdout.
   "max_request_bytes": 1048576,
   "max_response_bytes": 1048576,
   "memory_limit_pages": 8192,
+  "program_surface": "programmatic",
   "execution_profile": {
     "id": "base",
     "allowed_imports": ["csv", "json"]
@@ -64,7 +65,25 @@ does not make arbitrary Python, live external reads, floating-point behavior
 across platforms, or a complete Agent deterministic. See
 [research/deterministic-verification.md](research/deterministic-verification.md).
 
-When `workspace_files` is present, the CLI prebinds:
+When `workspace_files` is present, the Host seals the workspace capabilities but
+does **not** expose Python wrappers by default. Programmatic tool calling is an
+independent, Host-owned opt-in:
+
+```json
+{
+  "program_surface": "programmatic",
+  "workspace_files": {"README.md": "example"}
+}
+```
+
+`program_surface` accepts `direct | programmatic | both` and defaults to
+`direct`. `direct` projects only Agent-facing tool schemas; `programmatic`
+projects only parent-bound Python wrappers into the WASM Guest; `both` projects
+both from the same sealed Plan. `programmatic` and `both` are rejected unless
+Host tools are configured. They enable neither approval, playback, caching nor
+cold continuation.
+
+The programmatic workspace projection provides:
 
 ```python
 read_text(path)
@@ -130,6 +149,7 @@ credential-free structured sources:
 
 ```json
 {
+  "program_surface": "programmatic",
   "information_sources": {
     "demo_catalog": {
       "endpoint": "http://127.0.0.1:8081/catalog",
@@ -166,6 +186,7 @@ child Bundle:
 
 ```json
 {
+  "program_surface": "programmatic",
   "information_sources": {
     "demo_catalog": {
       "endpoint": "http://127.0.0.1:8081/catalog",

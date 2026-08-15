@@ -8,8 +8,37 @@ import (
 	"testing"
 	"time"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	git "github.com/go-git/go-git/v5"
 )
+
+func TestOperatorProgramSurfaceIsExplicitAndDefaultOff(t *testing.T) {
+	defaultConfig, err := decodeOperatorConfig([]byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := defaultConfig.resolve()
+	if err != nil || resolved.ProgramSurface != runtimeconfig.ProgramSurfaceDirect || resolved.Mechanisms.ProgrammaticToolCalling {
+		t.Fatalf("default=%+v err=%v", resolved, err)
+	}
+	programmatic, err := decodeOperatorConfig([]byte(`{"program_surface":"programmatic","workspace_files":{"a.txt":"a"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err = programmatic.resolve()
+	if err != nil || resolved.ProgramSurface != runtimeconfig.ProgramSurfaceProgrammatic || !resolved.Mechanisms.ProgrammaticToolCalling {
+		t.Fatalf("programmatic=%+v err=%v", resolved, err)
+	}
+	for _, raw := range []string{`{"program_surface":"programmatic"}`, `{"program_surface":"unknown","workspace_files":{"a.txt":"a"}}`} {
+		candidate, decodeErr := decodeOperatorConfig([]byte(raw))
+		if decodeErr == nil {
+			_, decodeErr = candidate.resolve()
+		}
+		if decodeErr == nil {
+			t.Fatalf("invalid surface accepted: %s", raw)
+		}
+	}
+}
 
 func TestOperatorConfigOnlyAcceptsPoCResourcePolicy(t *testing.T) {
 	config, err := decodeOperatorConfig([]byte(`{"timeout_ms":50,"max_request_bytes":2048}`))

@@ -96,6 +96,7 @@ The Agent does not submit import metadata. Configure the Host profile and worksp
 
 ```json
 {
+  "program_surface": "programmatic",
   "execution_profile": {
     "id": "base",
     "allowed_imports": ["csv"]
@@ -150,6 +151,7 @@ the flat `sources.demo_catalog()` demonstration and the nested versioned
 
 ```json
 {
+  "program_surface": "programmatic",
   "information_sources": {
     "demo_catalog": {
       "endpoint": "https://host-selected.example/catalog.json",

@@ -20,6 +20,7 @@ type operatorConfig struct {
 	MaxRequestBytes    uint32                    `json:"max_request_bytes,omitempty"`
 	MaxResponseBytes   uint32                    `json:"max_response_bytes,omitempty"`
 	MemoryLimitPages   uint32                    `json:"memory_limit_pages,omitempty"`
+	ProgramSurface     string                    `json:"program_surface,omitempty"`
 	ExecutionProfile   *executionProfileConfig   `json:"execution_profile,omitempty"`
 	Deterministic      *deterministicConfig      `json:"deterministic_verification,omitempty"`
 	WorkspaceFiles     map[string]string         `json:"workspace_files,omitempty"`
@@ -201,6 +202,20 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 	if config.MemoryLimitPages != 0 {
 		runConfig.MemoryLimitPages = config.MemoryLimitPages
 	}
+	if config.ProgramSurface != "" {
+		switch runtimeconfig.ProgramSurfaceMode(config.ProgramSurface) {
+		case runtimeconfig.ProgramSurfaceDirect:
+			runConfig.ProgramSurface = runtimeconfig.ProgramSurfaceDirect
+		case runtimeconfig.ProgramSurfaceProgrammatic:
+			runConfig.ProgramSurface = runtimeconfig.ProgramSurfaceProgrammatic
+			runConfig.Mechanisms.ProgrammaticToolCalling = true
+		case runtimeconfig.ProgramSurfaceBoth:
+			runConfig.ProgramSurface = runtimeconfig.ProgramSurfaceBoth
+			runConfig.Mechanisms.ProgrammaticToolCalling = true
+		default:
+			return runtimeconfig.RunConfig{}, errors.New("invalid program_surface")
+		}
+	}
 	if config.ExecutionProfile != nil {
 		profile, err := runtimeconfig.NewExecutionProfile(config.ExecutionProfile.ID, config.ExecutionProfile.AllowedImports)
 		if err != nil {
@@ -248,6 +263,9 @@ func (config operatorConfig) resolve() (runtimeconfig.RunConfig, error) {
 		}
 	}
 	hasTools := config.WorkspaceFiles != nil || config.InformationSources != nil || config.GitRead != nil
+	if runConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect && !hasTools {
+		return runtimeconfig.RunConfig{}, errors.New("program_surface requires configured Host tools")
+	}
 	if config.MaxToolCalls != 0 && !hasTools {
 		return runtimeconfig.RunConfig{}, errors.New("max_tool_calls requires configured Host tools")
 	}

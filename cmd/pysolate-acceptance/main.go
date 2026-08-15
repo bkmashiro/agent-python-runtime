@@ -136,6 +136,7 @@ func runAcceptance(value config) (acceptanceReport, error) {
 		return acceptanceReport{}, err
 	}
 	liveConfig := map[string]any{
+		"program_surface":     "programmatic",
 		"workspace":           map[string]any{"source_directory": liveRoot, "disposition": "discard"},
 		"information_sources": map[string]any{"demo_catalog": map[string]any{"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192}},
 		"max_tool_calls":      2,
@@ -169,6 +170,7 @@ func runAcceptance(value config) (acceptanceReport, error) {
 		return acceptanceReport{}, err
 	}
 	playbackConfig := map[string]any{
+		"program_surface":     "programmatic",
 		"workspace":           map[string]any{"source_directory": playbackRoot, "disposition": "discard"},
 		"information_sources": map[string]any{"demo_catalog": map[string]any{"endpoint": serverURL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192}},
 		"max_tool_calls":      2,

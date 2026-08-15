@@ -22,7 +22,7 @@ func TestAgentSourceGetsProfileAndWorkspaceToolsFromHost(t *testing.T) {
 	}
 	binary := apyrunBinary(t)
 	config := filepath.Join(t.TempDir(), "host.json")
-	configData := []byte(`{"execution_profile":{"id":"base","allowed_imports":["csv"]},"workspace_files":{"metrics.csv":"name,value\na,2\nb,3\n"},"max_tool_calls":4}`)
+	configData := []byte(`{"program_surface":"programmatic","execution_profile":{"id":"base","allowed_imports":["csv"]},"workspace_files":{"metrics.csv":"name,value\na,2\nb,3\n"},"max_tool_calls":4}`)
 	if err := os.WriteFile(config, configData, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +64,22 @@ func TestAgentSourceGetsProfileAndWorkspaceToolsFromHost(t *testing.T) {
 	if zeroCallResponse.Status != "ok" || len(zeroCallResponse.Receipts) != 0 || zeroCallResponse.CapabilityPlanSHA256 != response.CapabilityPlanSHA256 {
 		t.Fatalf("zero-call capability plan evidence=%+v want_plan=%s", zeroCallResponse, response.CapabilityPlanSHA256)
 	}
+
+	directConfig := filepath.Join(t.TempDir(), "host-direct.json")
+	if err := os.WriteFile(directConfig, []byte(`{"execution_profile":{"id":"base","allowed_imports":["csv"]},"workspace_files":{"metrics.csv":"name,value\na,2\n"},"max_tool_calls":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	directRequest := []byte(`{"run_id":"agent-poc-direct","code":"result=read_text('metrics.csv')","inputs":{}}`)
+	directCommand := exec.Command(binary, "-artifact", artifact, "-manifest", manifest, "-config", directConfig)
+	directCommand.Stdin = bytes.NewReader(directRequest)
+	directOutput, _ := directCommand.CombinedOutput()
+	var directResponse guestResponse
+	if err := json.Unmarshal(directOutput, &directResponse); err != nil {
+		t.Fatalf("decode direct response: %v\n%s", err, directOutput)
+	}
+	if directResponse.Status != "error" || len(directResponse.Receipts) != 0 {
+		t.Fatalf("direct surface exposed Guest wrappers: %+v", directResponse)
+	}
 }
 
 func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
@@ -87,7 +103,8 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 	bundlePath := filepath.Join(t.TempDir(), "source.playback.json")
 	configPath := filepath.Join(t.TempDir(), "host.json")
 	config, err := json.Marshal(map[string]any{
-		"workspace": map[string]any{"source_directory": root, "disposition": "discard"},
+		"program_surface": "programmatic",
+		"workspace":       map[string]any{"source_directory": root, "disposition": "discard"},
 		"information_sources": map[string]any{"demo_catalog": map[string]any{
 			"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
 		}},
@@ -140,7 +157,8 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 	playbackRoot := t.TempDir()
 	playbackConfigPath := filepath.Join(t.TempDir(), "host-playback.json")
 	playbackConfig, err := json.Marshal(map[string]any{
-		"workspace": map[string]any{"source_directory": playbackRoot, "disposition": "discard"},
+		"program_surface": "programmatic",
+		"workspace":       map[string]any{"source_directory": playbackRoot, "disposition": "discard"},
 		"information_sources": map[string]any{"demo_catalog": map[string]any{
 			"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
 		}},
@@ -236,7 +254,8 @@ func TestCuratedSourceCoexistsWithMountedWorkspace(t *testing.T) {
 				expectedIdentity = testCase.expected
 			}
 			tamperedConfig, _ := json.Marshal(map[string]any{
-				"workspace": map[string]any{"source_directory": t.TempDir(), "disposition": "discard"},
+				"program_surface": "programmatic",
+				"workspace":       map[string]any{"source_directory": t.TempDir(), "disposition": "discard"},
 				"information_sources": map[string]any{"demo_catalog": map[string]any{
 					"endpoint": server.URL + "/catalog", "timeout_ms": 1000, "max_response_bytes": 8192,
 				}},

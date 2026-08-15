@@ -88,6 +88,7 @@ def main() -> int:
 
             for name, expected_calls, expected_result in EXAMPLES:
                 config = {
+                    "program_surface": "programmatic",
                     "information_sources": {
                         "demo_catalog": {
                             "endpoint": f"http://127.0.0.1:{server.server_port}/catalog.json",

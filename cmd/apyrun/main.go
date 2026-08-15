@@ -238,8 +238,17 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			writeDiagnostic(stderr, "seal capability plan")
 			return 1
 		}
+		programmaticParentCallID := ""
+		if runConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
+			programmaticParentCallID = runIdentity + ":program"
+		}
+		presentation, err := capabilityPlan.Present(runConfig.ProgramSurface, programmaticParentCallID)
+		if err != nil {
+			writeDiagnostic(stderr, "present capability plan")
+			return 2
+		}
 		factory.BrokerFactory = func(context.Context) (*capability.Broker, error) {
-			brokerConfig := capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan}
+			brokerConfig := capability.Config{RunIdentity: runIdentity, Plan: capabilityPlan, ProgrammaticParentCallID: programmaticParentCallID}
 			if branchManifest != nil {
 				prefix := append([]capability.TranscriptEntry(nil), playbackBundle.Entries[:branchManifest.ForkOperation]...)
 				brokerConfig.Branch = &capability.BranchConfig{
@@ -255,7 +264,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer, deps depe
 			}
 			return broker, err
 		}
-		trustedPrepare = capabilityPlan.PythonPrelude()
+		trustedPrepare = presentation.PythonPrelude
 	}
 	workspaceBinding, err := prepareMountedWorkspace(operator.Workspace)
 	if err != nil {

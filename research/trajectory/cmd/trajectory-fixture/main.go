@@ -83,19 +83,39 @@ func generate(output, storePath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	request1, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: user.EventID, TurnID: turn, StepID: step1, ContextEventIDs: []string{system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 4_000_000, Usage: &trajectory.TokenUsage{Input: 108, Output: 46, Reasoning: 21}})
+	header, err := appendOne(trajectory.EventInput{Type: trajectory.EventRequestHeader, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: user.EventID, TurnID: turn, ModelVisible: true, Body: []byte(`{"reason":"turn","system":"development fixture","tools":["workspace.status"]}`), BodyKind: labstore.KindMetadataEvent, ContentType: "application/json"})
 	if err != nil {
 		return err
 	}
-	reasoning, err := appendOne(bodyEvent(trajectory.EventAssistantReasoning, trajectory.SourceModel, turn, step1, request1.EventID, false, labstore.KindProviderBody, "I need the repository status and the trajectory files before I can answer."))
+	request1, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: header.EventID, TurnID: turn, StepID: step1, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 4_000_000, Usage: &trajectory.TokenUsage{Input: 108, Output: 46, Reasoning: 21}})
 	if err != nil {
 		return err
 	}
-	lead, err := appendOne(bodyEvent(trajectory.EventAssistantOutput, trajectory.SourceModel, turn, step1, reasoning.EventID, true, labstore.KindProviderBody, "I’ll inspect the repository state first."))
+	reasoningChunk, err := appendOne(bodyEvent(trajectory.EventAssistantChunk, trajectory.SourceModel, turn, step1, request1.EventID, false, labstore.KindMetadataEvent, `{"text":"I need the repository status and the trajectory files before I can answer.","type":"reasoning-delta"}`))
 	if err != nil {
 		return err
 	}
-	call, err := appendOne(trajectory.EventInput{Type: trajectory.EventToolCall, Source: trajectory.SourceModel, ActorID: actor, ParentEventID: lead.EventID, TurnID: turn, StepID: step1, ModelVisible: true, ToolCallID: "call-workspace-status-0001", ToolName: "workspace.status", Body: []byte(`{"include_diff":true,"path":"."}`), BodyKind: labstore.KindToolPayload, ContentType: "application/json"})
+	reasoningInput := bodyEvent(trajectory.EventAssistantReasoning, trajectory.SourceModel, turn, step1, request1.EventID, false, labstore.KindProviderBody, "I need the repository status and the trajectory files before I can answer.")
+	reasoningInput.SourceEventIDs = []string{reasoningChunk.EventID}
+	reasoning, err := appendOne(reasoningInput)
+	if err != nil {
+		return err
+	}
+	leadChunk, err := appendOne(bodyEvent(trajectory.EventAssistantChunk, trajectory.SourceModel, turn, step1, reasoning.EventID, false, labstore.KindMetadataEvent, `{"text":"I’ll inspect the repository state first.","type":"text-delta"}`))
+	if err != nil {
+		return err
+	}
+	leadInput := bodyEvent(trajectory.EventAssistantOutput, trajectory.SourceModel, turn, step1, reasoning.EventID, true, labstore.KindProviderBody, "I’ll inspect the repository state first.")
+	leadInput.SourceEventIDs = []string{leadChunk.EventID}
+	lead, err := appendOne(leadInput)
+	if err != nil {
+		return err
+	}
+	callChunk, err := appendOne(bodyEvent(trajectory.EventAssistantChunk, trajectory.SourceModel, turn, step1, lead.EventID, false, labstore.KindMetadataEvent, `{"arguments":"{\"include_diff\":true,\"path\":\".\"}","call_id":"call-workspace-status-0001","name":"workspace.status","type":"tool-call-delta"}`))
+	if err != nil {
+		return err
+	}
+	call, err := appendOne(trajectory.EventInput{Type: trajectory.EventToolCall, Source: trajectory.SourceModel, ActorID: actor, ParentEventID: lead.EventID, TurnID: turn, StepID: step1, ModelVisible: true, SourceEventIDs: []string{callChunk.EventID}, ToolCallID: "call-workspace-status-0001", ToolName: "workspace.status", Body: []byte(`{"include_diff":true,"path":"."}`), BodyKind: labstore.KindToolPayload, ContentType: "application/json"})
 	if err != nil {
 		return err
 	}
@@ -111,7 +131,7 @@ func generate(output, storePath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	result, err := appendOne(trajectory.EventInput{Type: trajectory.EventToolResult, Source: trajectory.SourceTool, ActorID: actor, ParentEventID: call.EventID, TurnID: turn, StepID: step1, ModelVisible: true, ToolCallID: call.ToolCallID, ToolName: call.ToolName, Status: "completed", DurationNanos: 3_400_000, Body: []byte(`{"branch":"feat/unified-execution-profiles","clean":false,"trajectory_files":2}`), BodyKind: labstore.KindToolPayload, ContentType: "application/json"})
+	result, err := appendOne(trajectory.EventInput{Type: trajectory.EventToolResult, Source: trajectory.SourceTool, ActorID: actor, ParentEventID: call.EventID, TurnID: turn, StepID: step1, ModelVisible: true, SourceEventIDs: []string{call.EventID}, ToolCallID: call.ToolCallID, ToolName: call.ToolName, Status: "completed", DurationNanos: 3_400_000, Body: []byte(`{"branch":"feat/unified-execution-profiles","clean":false,"trajectory_files":2}`), BodyKind: labstore.KindToolPayload, ContentType: "application/json"})
 	if err != nil {
 		return err
 	}
@@ -123,15 +143,27 @@ func generate(output, storePath, sourceCommit string) error {
 	if err != nil {
 		return err
 	}
-	request2, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: subagent.EventID, TurnID: turn, StepID: step2, ContextEventIDs: []string{system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID, lead.EventID, call.EventID, result.EventID, subagent.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 3_000_000, Usage: &trajectory.TokenUsage{Input: 241, Output: 38, Reasoning: 14, CacheRead: 96}})
+	request2, err := appendOne(trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, ActorID: actor, ParentEventID: subagent.EventID, TurnID: turn, StepID: step2, ContextEventIDs: []string{header.EventID, system.EventID, developer.EventID, memory.EventID, skill.EventID, user.EventID, lead.EventID, call.EventID, result.EventID, subagent.EventID}, Provider: "scripted", Model: "development-fixture", Status: "completed", DurationNanos: 3_000_000, Usage: &trajectory.TokenUsage{Input: 241, Output: 38, Reasoning: 14, CacheRead: 96}})
 	if err != nil {
 		return err
 	}
-	finalReasoning, err := appendOne(bodyEvent(trajectory.EventAssistantReasoning, trajectory.SourceModel, turn, step2, request2.EventID, false, labstore.KindProviderBody, "The status result and reviewer output are sufficient to answer with the exact boundary."))
+	finalReasoningChunk, err := appendOne(bodyEvent(trajectory.EventAssistantChunk, trajectory.SourceModel, turn, step2, request2.EventID, false, labstore.KindMetadataEvent, `{"text":"The status result and reviewer output are sufficient to answer with the exact boundary.","type":"reasoning-delta"}`))
 	if err != nil {
 		return err
 	}
-	final, err := appendOne(bodyEvent(trajectory.EventAssistantOutput, trajectory.SourceModel, turn, step2, finalReasoning.EventID, false, labstore.KindProviderBody, "The append-only trajectory contract is wired, while this checked-in dataset remains a scripted development fixture rather than a live provider run."))
+	finalReasoningInput := bodyEvent(trajectory.EventAssistantReasoning, trajectory.SourceModel, turn, step2, request2.EventID, false, labstore.KindProviderBody, "The status result and reviewer output are sufficient to answer with the exact boundary.")
+	finalReasoningInput.SourceEventIDs = []string{finalReasoningChunk.EventID}
+	finalReasoning, err := appendOne(finalReasoningInput)
+	if err != nil {
+		return err
+	}
+	finalChunk, err := appendOne(bodyEvent(trajectory.EventAssistantChunk, trajectory.SourceModel, turn, step2, finalReasoning.EventID, false, labstore.KindMetadataEvent, `{"text":"The append-only trajectory contract is wired, while this checked-in dataset remains a scripted development fixture rather than a live provider run.","type":"text-delta"}`))
+	if err != nil {
+		return err
+	}
+	finalInput := bodyEvent(trajectory.EventAssistantOutput, trajectory.SourceModel, turn, step2, finalReasoning.EventID, false, labstore.KindProviderBody, "The append-only trajectory contract is wired, while this checked-in dataset remains a scripted development fixture rather than a live provider run.")
+	finalInput.SourceEventIDs = []string{finalChunk.EventID}
+	final, err := appendOne(finalInput)
 	if err != nil {
 		return err
 	}

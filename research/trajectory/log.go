@@ -38,7 +38,9 @@ const (
 	EventTurnEnd            EventType = "turn.end"
 	EventContext            EventType = "context.inject"
 	EventUserMessage        EventType = "user.message"
+	EventRequestHeader      EventType = "request.header"
 	EventModelRequest       EventType = "model.request"
+	EventAssistantChunk     EventType = "assistant.chunk"
 	EventAssistantReasoning EventType = "assistant.reasoning"
 	EventAssistantOutput    EventType = "assistant.output"
 	EventToolCall           EventType = "tool.call"
@@ -94,6 +96,7 @@ type Event struct {
 	StepID              string        `json:"step_id,omitempty"`
 	ModelVisible        bool          `json:"model_visible"`
 	ContextEventIDs     []string      `json:"context_event_ids,omitempty"`
+	SourceEventIDs      []string      `json:"source_event_ids,omitempty"`
 	Body                *labstore.Ref `json:"body,omitempty"`
 	ContentType         string        `json:"content_type,omitempty"`
 	Provider            string        `json:"provider,omitempty"`
@@ -121,6 +124,7 @@ type EventInput struct {
 	StepID              string
 	ModelVisible        bool
 	ContextEventIDs     []string
+	SourceEventIDs      []string
 	Body                []byte
 	BodyKind            labstore.Kind
 	ContentType         string
@@ -263,7 +267,7 @@ func (log *Log) Append(input EventInput) (Event, error) {
 		Sequence: uint64(len(log.events) + 1), EventID: fmt.Sprintf("event-%016x", len(log.events)+1),
 		OccurredMillis: input.OccurredMillis, Type: input.Type, Source: input.Source, ActorID: input.ActorID,
 		ParentEventID: input.ParentEventID, TurnID: input.TurnID, StepID: input.StepID, ModelVisible: input.ModelVisible,
-		ContextEventIDs: append([]string(nil), input.ContextEventIDs...), ContentType: input.ContentType,
+		ContextEventIDs: append([]string(nil), input.ContextEventIDs...), SourceEventIDs: append([]string(nil), input.SourceEventIDs...), ContentType: input.ContentType,
 		Provider: input.Provider, Model: input.Model, FinishReason: input.FinishReason, ToolCallID: input.ToolCallID,
 		ToolName: input.ToolName, ChildSessionID: input.ChildSessionID, RunID: input.RunID,
 		LogicalRequestID: input.LogicalRequestID, PhysicalExecutionID: input.PhysicalExecutionID, SpanID: input.SpanID,
@@ -396,10 +400,24 @@ func (log *Log) writeRecord(value record) error {
 		return err
 	}
 	encoded = append(encoded, '\n')
-	if _, err := log.file.Write(encoded); err != nil {
+	offset, err := log.file.Seek(0, io.SeekEnd)
+	if err != nil {
 		return err
 	}
-	return log.file.Sync()
+	if _, err := log.file.Write(encoded); err != nil {
+		return log.rollbackRecord(offset, err)
+	}
+	if err := log.file.Sync(); err != nil {
+		return log.rollbackRecord(offset, err)
+	}
+	return nil
+}
+
+func (log *Log) rollbackRecord(offset int64, cause error) error {
+	truncateErr := log.file.Truncate(offset)
+	_, seekErr := log.file.Seek(0, io.SeekEnd)
+	syncErr := log.file.Sync()
+	return errors.Join(cause, truncateErr, seekErr, syncErr)
 }
 
 func validateNext(header SessionHeader, prior []Event, event Event, store *labstore.Store) error {
@@ -418,6 +436,13 @@ func validateNext(header SessionHeader, prior []Event, event Event, store *labst
 		if _, ok := byID[event.ParentEventID]; !ok {
 			return errors.New("trajectory parent event is unavailable")
 		}
+	}
+	seenSource := map[string]bool{}
+	for _, id := range event.SourceEventIDs {
+		if _, ok := byID[id]; !ok || seenSource[id] {
+			return errors.New("trajectory source event is unavailable or duplicated")
+		}
+		seenSource[id] = true
 	}
 	if event.TurnID != "" && (!identifierPattern.MatchString(event.TurnID) || !strings.HasPrefix(event.TurnID, "turn-")) {
 		return errors.New("invalid trajectory turn")
@@ -453,10 +478,23 @@ func validateNext(header SessionHeader, prior []Event, event Event, store *labst
 			return errors.New("tool call is incomplete")
 		}
 	}
+	if event.Type == EventAssistantReasoning || event.Type == EventAssistantOutput || event.Type == EventToolCall {
+		if len(event.SourceEventIDs) == 0 {
+			return errors.New("assembled model event has no raw chunk citations")
+		}
+		for _, id := range event.SourceEventIDs {
+			if byID[id].Type != EventAssistantChunk {
+				return errors.New("assembled model event cites a non-chunk source")
+			}
+		}
+	}
 	if event.Type == EventToolResult || event.Type == EventRuntime || event.Type == EventWorkspace {
 		call, ok := findToolCall(prior, event.ToolCallID)
 		if !ok || (event.ToolName != "" && event.ToolName != call.ToolName) {
 			return errors.New("tool-linked event has no matching call")
+		}
+		if event.Type == EventToolResult && !seenSource[call.EventID] {
+			return errors.New("tool result does not cite its call event")
 		}
 	}
 	if event.Type == EventRuntime && (event.ToolCallID == "" || event.RunID == "" || (event.LogicalRequestID == "") != (event.PhysicalExecutionID == "")) {
@@ -467,7 +505,7 @@ func validateNext(header SessionHeader, prior []Event, event Event, store *labst
 
 func requiresBody(kind EventType) bool {
 	switch kind {
-	case EventContext, EventUserMessage, EventAssistantReasoning, EventAssistantOutput, EventToolCall, EventToolResult, EventRuntime, EventWorkspace:
+	case EventContext, EventUserMessage, EventRequestHeader, EventAssistantChunk, EventAssistantReasoning, EventAssistantOutput, EventToolCall, EventToolResult, EventRuntime, EventWorkspace:
 		return true
 	default:
 		return false
@@ -476,7 +514,7 @@ func requiresBody(kind EventType) bool {
 
 func validEventType(value EventType) bool {
 	switch value {
-	case EventSessionStart, EventSessionEnd, EventTurnStart, EventTurnEnd, EventContext, EventUserMessage, EventModelRequest, EventAssistantReasoning, EventAssistantOutput, EventToolCall, EventToolResult, EventSubagentDispatch, EventSubagentResult, EventRuntime, EventWorkspace:
+	case EventSessionStart, EventSessionEnd, EventTurnStart, EventTurnEnd, EventContext, EventUserMessage, EventRequestHeader, EventModelRequest, EventAssistantChunk, EventAssistantReasoning, EventAssistantOutput, EventToolCall, EventToolResult, EventSubagentDispatch, EventSubagentResult, EventRuntime, EventWorkspace:
 		return true
 	default:
 		return false

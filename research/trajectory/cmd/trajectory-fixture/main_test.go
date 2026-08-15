@@ -30,7 +30,7 @@ func TestGenerateCreatesInspectableCompleteDevelopmentTrajectory(t *testing.T) {
 	for _, event := range exported.Events {
 		seen[event.Type] = true
 	}
-	for _, required := range []trajectory.EventType{trajectory.EventContext, trajectory.EventModelRequest, trajectory.EventAssistantReasoning, trajectory.EventAssistantOutput, trajectory.EventToolCall, trajectory.EventToolResult, trajectory.EventSubagentDispatch, trajectory.EventRuntime, trajectory.EventWorkspace, trajectory.EventSessionEnd} {
+	for _, required := range []trajectory.EventType{trajectory.EventContext, trajectory.EventRequestHeader, trajectory.EventModelRequest, trajectory.EventAssistantChunk, trajectory.EventAssistantReasoning, trajectory.EventAssistantOutput, trajectory.EventToolCall, trajectory.EventToolResult, trajectory.EventSubagentDispatch, trajectory.EventRuntime, trajectory.EventWorkspace, trajectory.EventSessionEnd} {
 		if !seen[required] {
 			t.Fatalf("missing event type %s", required)
 		}

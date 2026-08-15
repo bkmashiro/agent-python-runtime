@@ -28,13 +28,17 @@ func TestAppendOnlyLogReconstructsExactlyWhatModelSaw(t *testing.T) {
 
 	system := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventContext, Source: trajectory.SourceSystem, TurnID: "turn-0000000000000001", ModelVisible: true, Body: []byte("You are a careful coding agent."), BodyKind: labstore.KindPrompt})
 	user := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventUserMessage, Source: trajectory.SourceUser, TurnID: "turn-0000000000000001", ModelVisible: true, Body: []byte("Inspect the workspace."), BodyKind: labstore.KindPrompt})
-	request := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, TurnID: "turn-0000000000000001", StepID: "step-0000000000000001", ContextEventIDs: []string{system.EventID, user.EventID}, Provider: "fixture", Model: "scripted-model"})
-	reasoning := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantReasoning, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: request.EventID, Body: []byte("I should list the workspace first."), BodyKind: labstore.KindProviderBody})
-	call := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventToolCall, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: reasoning.EventID, ToolCallID: "call-0000000000000001", ToolName: "workspace.list", Body: []byte(`{"path":"."}`), BodyKind: labstore.KindToolPayload})
+	header := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventRequestHeader, Source: trajectory.SourceHarness, TurnID: "turn-0000000000000001", ModelVisible: true, Body: []byte(`{"system":"careful","tools":["workspace.list"]}`), BodyKind: labstore.KindMetadataEvent})
+	request := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, TurnID: "turn-0000000000000001", StepID: "step-0000000000000001", ContextEventIDs: []string{header.EventID, system.EventID, user.EventID}, Provider: "fixture", Model: "scripted-model"})
+	reasoningChunk := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantChunk, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: request.EventID, Body: []byte(`{"text":"I should list the workspace first.","type":"reasoning-delta"}`), BodyKind: labstore.KindMetadataEvent})
+	reasoning := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantReasoning, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: request.EventID, SourceEventIDs: []string{reasoningChunk.EventID}, Body: []byte("I should list the workspace first."), BodyKind: labstore.KindProviderBody})
+	callChunk := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantChunk, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: request.EventID, Body: []byte(`{"arguments":"{\"path\":\".\"}","call_id":"call-0000000000000001","name":"workspace.list","type":"tool-call-delta"}`), BodyKind: labstore.KindMetadataEvent})
+	call := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventToolCall, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: reasoning.EventID, SourceEventIDs: []string{callChunk.EventID}, ToolCallID: "call-0000000000000001", ToolName: "workspace.list", Body: []byte(`{"path":"."}`), BodyKind: labstore.KindToolPayload})
 	appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventRuntime, Source: trajectory.SourceRuntime, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: call.EventID, ToolCallID: call.ToolCallID, RunID: "run-0000000000000001", LogicalRequestID: "logical-0000000000000001", PhysicalExecutionID: "physical-0000000000000001", SpanID: "span-0000000000000001", Body: []byte(`{"status":"closed"}`), BodyKind: labstore.KindMetadataEvent})
-	result := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventToolResult, Source: trajectory.SourceTool, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: call.EventID, ToolCallID: call.ToolCallID, ToolName: call.ToolName, ModelVisible: true, Body: []byte(`{"files":["README.md"]}`), BodyKind: labstore.KindToolPayload})
-	request2 := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, TurnID: request.TurnID, StepID: "step-0000000000000002", ContextEventIDs: []string{system.EventID, user.EventID, call.EventID, result.EventID}, Provider: "fixture", Model: "scripted-model"})
-	appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantOutput, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request2.StepID, ParentEventID: request2.EventID, Body: []byte("README.md is present."), BodyKind: labstore.KindProviderBody})
+	result := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventToolResult, Source: trajectory.SourceTool, TurnID: request.TurnID, StepID: request.StepID, ParentEventID: call.EventID, SourceEventIDs: []string{call.EventID}, ToolCallID: call.ToolCallID, ToolName: call.ToolName, ModelVisible: true, Body: []byte(`{"files":["README.md"]}`), BodyKind: labstore.KindToolPayload})
+	request2 := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventModelRequest, Source: trajectory.SourceHarness, TurnID: request.TurnID, StepID: "step-0000000000000002", ContextEventIDs: []string{header.EventID, system.EventID, user.EventID, call.EventID, result.EventID}, Provider: "fixture", Model: "scripted-model"})
+	outputChunk := appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantChunk, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request2.StepID, ParentEventID: request2.EventID, Body: []byte(`{"text":"README.md is present.","type":"text-delta"}`), BodyKind: labstore.KindMetadataEvent})
+	appendEvent(t, log, trajectory.EventInput{Type: trajectory.EventAssistantOutput, Source: trajectory.SourceModel, TurnID: request.TurnID, StepID: request2.StepID, ParentEventID: request2.EventID, SourceEventIDs: []string{outputChunk.EventID}, Body: []byte("README.md is present."), BodyKind: labstore.KindProviderBody})
 
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
@@ -51,7 +55,7 @@ func TestAppendOnlyLogReconstructsExactlyWhatModelSaw(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []trajectory.ContextItem{{EventID: system.EventID, Source: trajectory.SourceSystem, Body: "You are a careful coding agent."}, {EventID: user.EventID, Source: trajectory.SourceUser, Body: "Inspect the workspace."}, {EventID: call.EventID, Source: trajectory.SourceModel, Body: `{"path":"."}`}, {EventID: result.EventID, Source: trajectory.SourceTool, Body: `{"files":["README.md"]}`}}
+	want := []trajectory.ContextItem{{EventID: header.EventID, Source: trajectory.SourceHarness, Body: `{"system":"careful","tools":["workspace.list"]}`}, {EventID: system.EventID, Source: trajectory.SourceSystem, Body: "You are a careful coding agent."}, {EventID: user.EventID, Source: trajectory.SourceUser, Body: "Inspect the workspace."}, {EventID: call.EventID, Source: trajectory.SourceModel, Body: `{"path":"."}`}, {EventID: result.EventID, Source: trajectory.SourceTool, Body: `{"files":["README.md"]}`}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("context\n got=%#v\nwant=%#v", got, want)
 	}
@@ -59,7 +63,7 @@ func TestAppendOnlyLogReconstructsExactlyWhatModelSaw(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(export.Events) != 9 || export.Events[3].BodyText != "I should list the workspace first." || export.Events[5].PhysicalExecutionID == "" {
+	if len(export.Events) != 13 || export.Events[5].BodyText != "I should list the workspace first." || export.Events[8].PhysicalExecutionID == "" {
 		t.Fatalf("incomplete export: %+v", export.Events)
 	}
 	if export.SealSHA256 == "" {
@@ -67,7 +71,7 @@ func TestAppendOnlyLogReconstructsExactlyWhatModelSaw(t *testing.T) {
 	}
 	tampered := export
 	tampered.Events = append([]trajectory.ExportEvent(nil), export.Events...)
-	tampered.Events[3].BodyText = "tampered"
+	tampered.Events[5].BodyText = "tampered"
 	if err := trajectory.ValidateExport(tampered); err == nil {
 		t.Fatal("tampered materialized body accepted")
 	}

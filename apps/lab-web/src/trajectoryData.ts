@@ -1,7 +1,7 @@
 export const TRAJECTORY_SCHEMA = 'pysolate.agent-trajectory.v0' as const;
 
 export type EventType =
-  | 'session.start' | 'session.end' | 'turn.start' | 'turn.end' | 'context.inject' | 'user.message'
+  | 'session.start' | 'session.end' | 'turn.start' | 'turn.end' | 'step.start' | 'step.end' | 'context.inject' | 'user.message'
   | 'request.header' | 'model.request' | 'assistant.chunk' | 'assistant.reasoning' | 'assistant.output' | 'tool.call' | 'tool.result'
   | 'subagent.dispatch' | 'subagent.result' | 'runtime.event' | 'workspace.change';
 
@@ -81,7 +81,7 @@ const digestRE = /^sha256:[0-9a-f]{64}$/;
 const eventIDRE = /^event-[0-9a-f]{16}$/;
 const commitRE = /^[0-9a-f]{40}$/;
 const sources = new Set<EventSource>(['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace']);
-const types = new Set<EventType>(['session.start', 'session.end', 'turn.start', 'turn.end', 'context.inject', 'user.message', 'request.header', 'model.request', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'subagent.dispatch', 'subagent.result', 'runtime.event', 'workspace.change']);
+const types = new Set<EventType>(['session.start', 'session.end', 'turn.start', 'turn.end', 'step.start', 'step.end', 'context.inject', 'user.message', 'request.header', 'model.request', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'subagent.dispatch', 'subagent.result', 'runtime.event', 'workspace.change']);
 const bodyRequired = new Set<EventType>(['context.inject', 'user.message', 'request.header', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'runtime.event', 'workspace.change']);
 
 const topKeys = ['schema_version', 'privacy', 'session', 'events', 'seal_sha256'] as const;
@@ -161,6 +161,7 @@ export async function validateTrajectory(raw: TrajectoryExport): Promise<Traject
         seen.add(id);
       }
     } else assert(event.context_event_ids === undefined, 'context IDs outside model request');
+    if (event.type === 'step.start' || event.type === 'step.end') assert(Boolean(event.turn_id && event.step_id), 'step lifecycle identity is incomplete');
     if (event.type === 'tool.call') {
       assert(typeof event.tool_call_id === 'string' && /^call-[0-9a-z-]{8,128}$/.test(event.tool_call_id) && typeof event.tool_name === 'string' && event.tool_name.length > 0 && !calls.has(event.tool_call_id), 'invalid or duplicate tool call');
       calls.set(event.tool_call_id, event);

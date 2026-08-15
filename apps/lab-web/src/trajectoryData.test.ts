@@ -18,7 +18,7 @@ describe('private development trajectory', () => {
   it('loads one append-only session containing every inspectable source', async () => {
     const value = await validateTrajectory(await fixture());
     expect(value.privacy).toBe('private');
-    expect(value.events).toHaveLength(28);
+    expect(value.events).toHaveLength(32);
     expect(new Set(value.events.map((event) => event.source))).toEqual(expect.objectContaining(new Set(['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace'])));
     expect(value.events.at(-1)?.type).toBe('session.end');
   });
@@ -26,11 +26,13 @@ describe('private development trajectory', () => {
   it('validates the reset real-Guest experiment trajectory with CPU accounting', async () => {
     const raw = JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/experiment.json'), 'utf8')) as TrajectoryExport;
     const value = await validateTrajectory(raw);
-    expect(value.events).toHaveLength(243);
+    expect(value.events).toHaveLength(273);
     expect(value.events.filter((event) => event.type === 'tool.call')).toHaveLength(14);
     expect(value.events.filter((event) => event.type === 'runtime.event')).toHaveLength(76);
     expect(value.events.filter((event) => event.type === 'assistant.chunk')).toHaveLength(44);
-    expect(value.events.at(-3)?.body_text).toContain('Process CPU: 30782849000 ns baseline, 30802806000 ns optimized');
+    expect(value.events.filter((event) => event.type === 'step.start')).toHaveLength(15);
+    expect(value.events.filter((event) => event.type === 'step.end')).toHaveLength(15);
+    expect(value.events.filter((event) => event.type === 'assistant.output').at(-1)?.body_text).toContain('Process CPU: 30782849000 ns baseline, 30802806000 ns optimized');
   });
 
   it('reconstructs the exact ordered context of each model request', async () => {

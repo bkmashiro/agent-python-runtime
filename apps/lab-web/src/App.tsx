@@ -17,6 +17,8 @@ const sourceLabel: Record<EventSource, string> = {
 };
 
 function eventTitle(event: TrajectoryEvent): string {
+  if (event.type === 'step.start') return `Step ${event.step_id?.replace('step-', '') ?? event.sequence} started`;
+  if (event.type === 'step.end') return `Step ${event.step_id?.replace('step-', '') ?? event.sequence} ended`;
   if (event.type === 'request.header') return 'Request header';
   if (event.type === 'model.request') return `Model request · ${event.step_id?.replace('step-', '') ?? event.sequence}`;
   if (event.type === 'assistant.chunk') return 'Raw assistant chunk';

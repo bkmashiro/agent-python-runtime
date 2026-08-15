@@ -86,6 +86,9 @@ func TestOptimizationReportRejectsBrokenProvenanceAndTiming(t *testing.T) {
 		"parallel without declaration": func(report *observe.OptimizationReport) {
 			report.Decisions[2].DeclarationSHA256 = ""
 		},
+		"parallel declaration crosses workflow": func(report *observe.OptimizationReport) {
+			report.LogicalRequests[3].WorkflowID = "workflow-0000000000000002"
+		},
 		"rejected decision claims physical authority": func(report *observe.OptimizationReport) {
 			report.Decisions[4].PhysicalExecutionID = "physical-0000000000000004"
 		},

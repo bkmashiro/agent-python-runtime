@@ -29,10 +29,9 @@ registry.
 A logical request always points to the physical execution that satisfied it. A reused or
 coalesced request additionally points through the decision to the producer logical
 request; every non-producer physical consumer must be covered exactly once by such an
-admitted decision. A declared-parallel relation carries an independent Harness
-declaration digest
-and must correspond to distinct physical intervals that truly overlap. A rejected
-relation carries no physical or producer authority.
+admitted decision. Declared-parallel requests carry an independent Harness declaration
+digest, share one Run and workflow identity, and map to distinct physical intervals that
+strictly overlap. A rejected relation carries no physical or producer authority.
 
 ## Identity and time
 

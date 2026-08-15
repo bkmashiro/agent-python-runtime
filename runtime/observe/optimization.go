@@ -488,8 +488,15 @@ func validDecision(decision OptimizationDecision, requests map[string]LogicalReq
 		var latestStart uint64
 		earliestEnd := ^uint64(0)
 		seenPhysical := map[string]bool{}
+		var declarationRun, declarationWorkflow string
 		for _, id := range decision.LogicalRequestIDs {
-			execution := physical[requests[id].PhysicalExecutionID]
+			request := requests[id]
+			if declarationRun == "" {
+				declarationRun, declarationWorkflow = request.RunID, request.WorkflowID
+			} else if request.RunID != declarationRun || request.WorkflowID != declarationWorkflow {
+				return false
+			}
+			execution := physical[request.PhysicalExecutionID]
 			if seenPhysical[execution.PhysicalExecutionID] {
 				return false
 			}

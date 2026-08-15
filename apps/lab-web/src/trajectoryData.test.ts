@@ -23,7 +23,7 @@ describe('dual-profile causal evidence ingestion', () => {
     const value = await validateTrajectory(await rawFixture());
     expect(value.profile).toBe('experiment_full');
     expect(value.privacy).toBe('portable');
-    expect(value.events).toHaveLength(16);
+    expect(value.events).toHaveLength(17);
     expect(value.events.filter((event) => event.type === 'source.decision')).toHaveLength(1);
     expect(value.events.filter((event) => event.type === 'source.executed_line')[0].payload.availability).toBe('not_recorded');
     expect(value.events.filter((event) => event.type === 'resource.sample')).toHaveLength(1);

@@ -41,7 +41,7 @@ Host ceilings cover event count, parent count, payload bytes and Labstore object
 
 ## Real evidence and Lab
 
-The named real-Guest run at capture commit `7e7c53ba625a89792d4bbd4e9e6b9b133d482a0d`
+The named real-Guest run at capture commit `d87fc907aa9fc5c9a8a3eb11f39a149c67ee66df`
 uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257` and executes:
 
 - a fresh child CPython/WASI Guest over a private workspace branch;
@@ -49,20 +49,22 @@ uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08
 - the actual Runtime observation attachment carrying the Host receipt/source binding.
 
 It produces three views from header
-`sha256:caa1f6e88066148ac7f752a2c461f9dc5674c2c5450c1ebe762da46c0d3c12d9`
+`sha256:4f2623bc7bf8d6488e2ff55b1d3b1e0b28954e7d9aa298f8b2a2d00b1107ee46`
 and shared retained event identities:
 
-- local private `experiment_full`: 22 events plus Labstore objects at
-  `~/.hermes/evidence/pysolate/dual-profile-mg2-7e7c53b/`, export file SHA-256
-  `7b6c8dcd925baa9896402729c2f41760c785b7d158856a01ce4060573349a2ed`;
+- local private `experiment_full`: 25 events plus Labstore objects at
+  `~/.hermes/evidence/pysolate/dual-profile-mg2-d87fc90/`, export file SHA-256
+  `fd63d80cf38becf4986674eb2f87189d960a5a76030b5aafd4c2c1512f167d7c`;
 - checked-in 7-event production projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-production-v1.json`, file SHA-256
-  `91dcc892b41d69bfd413add2d32ebcc504ac5ca12adfcd43a1c1dffb950c0141`;
-- checked-in 16-event body-safe experiment projection
+  `2f42390946d8c27e0ef22086f4403376f17bf51fb050b042cea83d940cf917bf`;
+- checked-in 17-event body-safe experiment projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-public-v1.json`, file SHA-256
-  `c3b30a5c83a808aa05e2b9793497596040ead23684d79d4bae23e374d54d04e3`.
+  `5fa0a5e85bc3030d298f973c04faed1eddd7ccbc161f2d6700da35a38249d679`.
 
-The full experiment trace records a bounded process-CPU/wall sample and an explicit
+The private trace contains resolvable `blob.code` and `blob.file` references for the exact child
+program and the captured `child.txt` output; both body-only events are physically absent from
+portable exports. The full experiment trace records a bounded process-CPU/wall sample and an explicit
 `source.executed_line` availability of `not_recorded`; it does not upgrade the static source-bound
 receipt into a dynamic line claim.
 

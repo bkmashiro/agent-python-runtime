@@ -15,6 +15,9 @@ The first bounded slice is implemented and evidenced by
   sealed `pysolate.capability-plan.v6`;
 - programmatic child IDs are exactly `parent:program:<n>` and near-match IDs are
   denied before call-budget consumption;
+- `both` keeps ordinary direct IDs and parent-bound programmatic IDs on separate
+  admission sequences through the same Broker; only programmatic approvals and
+  receipts carry the program parent;
 - one optional Plan-bound approval lease blocks synchronously inside the existing
   Broker call before the live handler;
 - approve reaches an explicit dispatch-commit linearization point and dispatches

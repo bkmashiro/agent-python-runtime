@@ -4,7 +4,7 @@
 > implementation and real-Guest evidence gates. Do not enter cold continuation,
 > pageout, or snapshot/restore without a new discussion.
 
-**Status:** Active
+**Status:** Complete — hot v0 shipped on the feature branch; stopped before cold continuation
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -16,7 +16,7 @@
 - [x] Phase 1 — presentation contract and parent/child evidence
 - [x] Phase 2 — approval suspension, lease and audit
 - [x] Phase 3 — real-Guest parity, cancellation and zero-replay evidence
-- [ ] Phase 4 — full verification, independent review and closeout
+- [x] Phase 4 — full verification, independent review and closeout
 
 ## Mission
 
@@ -32,7 +32,8 @@ model-authored Python
 
 An approval-required call may wait inside the existing synchronous Host ABI and
 return to the same live Python execution after approval. Rejection, expiry, and
-cancellation terminate that call without invoking its handler. No program replay
+cancellation that wins the Host dispatch-commit gate terminates that call without
+invoking its handler. No program replay
 or continuation reconstruction is permitted.
 
 ## Claim boundary
@@ -194,20 +195,39 @@ The bounded campaign in
 `docs/evidence/programmatic-hot-approval-real-guest-v0.json` passed against:
 
 ```text
-Host source commit: cea536308794ce9188bcd8b7109db32c0a6ff3fd
+Host source commit: 4d13fdf14f9d8e1ec910d048f6cf7bf0ff70b5cb
 Guest source commit: db756fd7b40d465072b5fb1b6f3867d29c5d8114
 Guest artifact SHA-256: sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af
 Guest target: wasm32-wasip1
 ```
 
-Observed tests cover two ordered programmatic calls, direct/programmatic Broker
-parity, one approved same-invocation continuation, and reject/expire/cancel with
-zero handler dispatch. The Guest source predates only later Host-side receipt
-validation and cancellation-race hardening; no Guest source changed between those
-commits.
+Observed tests cover default-off CLI presentation, direct/programmatic Broker
+parity, working `both` admission through one Broker, two ordered programmatic
+calls, one approved same-invocation continuation, and reject/expire/cancel with
+zero handler dispatch before commitment. The Guest source predates only later
+Host-side receipt validation and cancellation-race hardening; no Guest source
+changed between those commits.
 
 No performance, cold-residency, crash-recovery, native-sandbox or arbitrary
 Harness claim follows.
+
+## Independent review closure
+
+Three bounded read-only review rounds found and drove fixes for:
+
+1. cancellation between an approval check and handler dispatch — closed by the
+   locked `BeginDispatch` linearization point;
+2. approval accepted just before expiry but dispatched after lease expiry — closed
+   by rechecking the Host clock under the same dispatch lock;
+3. `both` exposing direct schemas while a parent-bound Broker rejected every
+   ordinary direct ID — closed by separate direct/programmatic admission sequences,
+   a reserved `:program:` namespace, and per-call parent metadata in approval and
+   receipt evidence.
+
+The final combined-mode fix was re-exercised through the real CPython/WASM Guest,
+and focused race tests bind direct approvals to no parent and programmatic
+approvals to the exact program parent. No review finding was deferred into cold
+continuation work.
 
 ## Decision and stop gates
 

@@ -1,5 +1,5 @@
 {
-  "command": "AGENT_RUNTIME_GUEST=<verified-artifact> go test -json ./integration/e2e -run '<three focused tests>' -count=1",
+  "command": "AGENT_RUNTIME_GUEST=<verified-artifact> go test -json ./integration/e2e -run '<five focused tests>' -count=1",
   "guest_artifact": {
     "builder": "gpu31.doc.ic.ac.uk",
     "sha256": "sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af",
@@ -19,13 +19,17 @@
     "no performance or arbitrary-workload conclusion"
   ],
   "observations": [
+    "the apyrun Host config defaulted to direct and exposed no Guest Python tool wrappers; programmatic was an explicit opt-in",
     "direct and programmatic presentations reached the same sealed Plan and Host Broker implementation",
+    "both presentation admitted ordinary direct IDs and independently sequenced parent-bound programmatic IDs through that same Broker",
     "one real CPython/WASM program emitted two ordered parent-bound child calls with Host receipts",
     "one approval-required ABI call remained pending, dispatched exactly once after approval, and returned into the same Python invocation without replay",
     "approval rejection, lease expiry, and context cancellation dispatched zero handler calls",
     "Host receipts cross-bound Plan, child call, parent call, and approval request identities"
   ],
   "passed_tests": [
+    "TestAgentSourceGetsProfileAndWorkspaceToolsFromHost",
+    "TestBothSurfaceAdmitsDirectAndProgrammaticCallsThroughOneRealGuestBroker",
     "TestProgrammaticSurfaceUsesSameBrokerForOrderedRealGuestCalls",
     "TestHotApprovalResumesSameRealGuestWithoutReplay",
     "TestRealGuestApprovalRejectExpireAndCancelDoNotDispatch",
@@ -34,6 +38,6 @@
     "TestRealGuestApprovalRejectExpireAndCancelDoNotDispatch/cancel"
   ],
   "schema_version": "pysolate.programmatic-hot-approval-evidence.v0",
-  "source_commit": "cea536308794ce9188bcd8b7109db32c0a6ff3fd",
-  "source_tree": "c2ab6f73f79b69ad8fd0580aff645e996e1ff7b4"
+  "source_commit": "4d13fdf14f9d8e1ec910d048f6cf7bf0ff70b5cb",
+  "source_tree": "29adf4e1e61fb6bc9fea6ce19e97f75a36ae989e"
 }

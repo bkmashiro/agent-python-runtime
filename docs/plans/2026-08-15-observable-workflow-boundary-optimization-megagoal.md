@@ -5,7 +5,7 @@
 > live repository and predecessor evidence before execution. Continue through coherent
 > independently reviewed slices; stop only at the decision gates below.
 
-**Status:** Prepared; not started
+**Status:** Active — Track 0 complete; Track A next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -50,13 +50,18 @@ observable behavior.
 
 ### Track 0 — Live baseline and claim reset
 
-- Read predecessor plans, mechanism matrix, live code, tests, and checked-in evidence.
-- Mark executable AST-region reuse as rejected by the frozen F2 `no_go` result.
-- Inventory existing whole-Run reuse, Agent Function retention/single-flight, staged
+- [x] Read predecessor plans, mechanism matrix, live code, tests, and checked-in evidence.
+- [x] Mark executable AST-region reuse as rejected by the frozen F2 `no_go` result.
+- [x] Inventory existing whole-Run reuse, Agent Function retention/single-flight, staged
   observations, pre-dispatch, workflow evaluation, placement, Lab timeline, and trace
   schemas before adding any mechanism.
-- Freeze the logical-request versus physical-execution vocabulary and prohibit duplicate
+- [x] Freeze the logical-request versus physical-execution vocabulary and prohibit duplicate
   optimizer-specific identity registries.
+
+**Result:** [`observable-workflow-boundary-implementation-map.md`](../research/observable-workflow-boundary-implementation-map.md)
+records the live mechanism/identity seams, the F2 region no-go, and eight genuine gaps.
+Explicit workflow graph/node identity plus exact Agent Function invocation identity are
+sufficient for the successor; no broad Harness protocol addition is required.
 
 **Gate:** a short implementation map showing which mechanisms already exist, which need
 only instrumentation/integration, and which genuine gaps remain. Do not reimplement an

@@ -85,18 +85,42 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	workspaceRoot := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(workspaceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspaceManager, err := workspace.NewManager(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workspaceManager.Close()
+	baseWorkspace, err := workspaceManager.Create([]workspace.InitialFile{{Path: "seed.txt", Data: []byte("seed")}}, workspace.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseInfo, err := workspaceManager.Inspect(baseWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentLineage, _, err := workspaceManager.PortableIdentity(baseWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var broker *capability.Broker
 	executionConfig := runtimeconfig.DefaultRunConfig()
 	executionConfig.ExecutionProfile = &profile
 	executionConfig.ProgramSurface = runtimeconfig.ProgramSurfaceProgrammatic
 	executionConfig.Mechanisms.ProgrammaticToolCalling = true
-	executionRunner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		created, createErr := capability.NewBroker(capability.Config{
-			RunIdentity: "source-bound-run", Plan: capabilityPlan, ProgrammaticParentCallID: parent, SourceResolver: resolver,
-		})
-		broker = created
-		return created, createErr
-	}}).New(context.Background(), wasm, executionConfig)
+	executionRunner, err := (wazeroengine.Factory{
+		WorkspaceManager: workspaceManager, WorkspaceRef: baseWorkspace, WorkspaceOwner: "source-bound-run",
+		BrokerFactory: func(context.Context) (*capability.Broker, error) {
+			created, createErr := capability.NewBroker(capability.Config{
+				RunIdentity: "source-bound-run", Plan: capabilityPlan, ProgrammaticParentCallID: parent, SourceResolver: resolver,
+			})
+			broker = created
+			return created, createErr
+		}}).New(context.Background(), wasm, executionConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,27 +153,6 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	}
 	defer evidenceLog.Close()
 
-	workspaceRoot := filepath.Join(evidenceRoot, "workspaces")
-	if err := os.Mkdir(workspaceRoot, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	workspaceManager, err := workspace.NewManager(workspaceRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer workspaceManager.Close()
-	baseWorkspace, err := workspaceManager.Create([]workspace.InitialFile{{Path: "seed.txt", Data: []byte("seed")}}, workspace.DefaultLimits())
-	if err != nil {
-		t.Fatal(err)
-	}
-	baseInfo, err := workspaceManager.Inspect(baseWorkspace)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parentLineage, _, err := workspaceManager.PortableIdentity(baseWorkspace)
-	if err != nil {
-		t.Fatal(err)
-	}
 	artifactSHA256 := artifactSHA
 	childID := "child-real-0001"
 	contextSHA256, briefSHA256 := semanticTestDigest('7'), semanticTestDigest('8')
@@ -298,8 +301,8 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	if os.Getenv("PYSOLATE_EVIDENCE_OUTPUT_DIR") != "" {
 		artifacts := map[string]trajectory.Export{
 			"experiment-full-private.json": privateFull,
-			"production-rollback.json": production,
-			"experiment-full-public.json": publicFull,
+			"production-rollback.json":     production,
+			"experiment-full-public.json":  publicFull,
 		}
 		for name, artifact := range artifacts {
 			encoded, encodeErr := trajectory.EncodeEvidenceExport(artifact)

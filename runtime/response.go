@@ -342,6 +342,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 	}
 	allowed := map[string]struct{}{
 		"receipt_id": {}, "run_id": {}, "capability_plan_sha256": {}, "capability": {},
+		"call_id": {}, "parent_call_id": {}, "approval_request_id": {},
 		"operation_index": {}, "request_sha256": {}, "response_sha256": {}, "outcome": {},
 	}
 	required := []string{"receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "outcome"}
@@ -372,8 +373,12 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 		}
 		if !boundedString(callReceipt.ReceiptID, 1, 160) || !boundedString(callReceipt.RunID, 1, 128) ||
 			!boundedString(callReceipt.Capability, 1, 128) || !validPrefixedSHA256(callReceipt.CapabilityPlanSHA256) ||
+			(present(fields, "call_id") && !validReceiptCallIdentity(callReceipt.CallID, 128)) ||
+			(present(fields, "parent_call_id") && !validReceiptCallIdentity(callReceipt.ParentCallID, 96)) ||
+			(present(fields, "approval_request_id") && !validApprovalRequestID(callReceipt.ApprovalRequestID)) ||
 			(present(fields, "request_sha256") && !validBareSHA256(callReceipt.RequestSHA256)) ||
 			(present(fields, "response_sha256") && !validBareSHA256(callReceipt.ResponseSHA256)) ||
+			!validProgrammaticReceiptRelation(fields, callReceipt) ||
 			!validOperationIndex(callReceipt.OperationIndex) || !validReceiptOutcome(callReceipt.Outcome) {
 			return errors.New("run response receipt has invalid field values")
 		}
@@ -388,6 +393,9 @@ type capabilityReceiptDocument struct {
 	ReceiptID            string      `json:"receipt_id"`
 	RunID                string      `json:"run_id"`
 	CapabilityPlanSHA256 string      `json:"capability_plan_sha256"`
+	CallID               string      `json:"call_id,omitempty"`
+	ParentCallID         string      `json:"parent_call_id,omitempty"`
+	ApprovalRequestID    string      `json:"approval_request_id,omitempty"`
 	Capability           string      `json:"capability"`
 	OperationIndex       json.Number `json:"operation_index"`
 	RequestSHA256        string      `json:"request_sha256,omitempty"`
@@ -403,6 +411,38 @@ func present(fields map[string]json.RawMessage, name string) bool {
 func boundedString(value string, minimum, maximum int) bool {
 	length := utf8.RuneCountInString(value)
 	return length >= minimum && length <= maximum
+}
+
+func validProgrammaticReceiptRelation(fields map[string]json.RawMessage, receipt capabilityReceiptDocument) bool {
+	_, hasParent := fields["parent_call_id"]
+	_, hasCall := fields["call_id"]
+	if !hasParent {
+		return true
+	}
+	if !hasCall || !validOperationIndex(receipt.OperationIndex) {
+		return false
+	}
+	index, ok := new(big.Int).SetString(receipt.OperationIndex.String(), 10)
+	if !ok || !index.IsUint64() {
+		return false
+	}
+	return receipt.CallID == fmt.Sprintf("%s:program:%d", receipt.ParentCallID, index.Uint64()+1)
+}
+
+func validReceiptCallIdentity(value string, limit int) bool {
+	if !boundedString(value, 1, limit) {
+		return false
+	}
+	for _, character := range value {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '-' && character != '_' && character != '.' && character != ':' {
+			return false
+		}
+	}
+	return true
+}
+
+func validApprovalRequestID(value string) bool {
+	return len(value) == len("apr_")+64 && value[:len("apr_")] == "apr_" && validBareSHA256(value[len("apr_"):])
 }
 
 func validBareSHA256(value string) bool {

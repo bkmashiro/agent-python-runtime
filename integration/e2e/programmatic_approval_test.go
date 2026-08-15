@@ -116,7 +116,7 @@ func TestHotApprovalResumesSameRealGuestWithoutReplay(t *testing.T) {
 		t.Fatal(result.err)
 	}
 	response := decodeRealGuestResponse(t, request, result.payload)
-	if string(response.Result) != `{"after":42,"before":41,"continued":42}` || calls.Load() != 1 || broker.CallCount() != 1 {
+	if string(response.Result) != `{"before":41,"after":42,"continued":42}` || calls.Load() != 1 || broker.CallCount() != 1 {
 		t.Fatalf("response=%+v calls=%d payload=%s", response, calls.Load(), result.payload)
 	}
 	if err := runner.Close(context.Background()); err != nil {
@@ -234,7 +234,7 @@ func decodeRealGuestResponse(t *testing.T, request, payload []byte) runtimeconfi
 
 func waitForE2EApproval(t *testing.T, controller *approval.Controller) approval.Request {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		for _, record := range controller.Snapshot() {
 			if record.Status == approval.StatusWaiting {

@@ -92,16 +92,22 @@ func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
 	}
 
 	validReceipt := strings.Replace(receipt, planB, planA, 1)
+	programmaticReceipt := strings.Replace(validReceipt, `"capability":"workspace.read_text"`, `"call_id":"parent:program:1","parent_call_id":"parent","approval_request_id":"apr_`+strings.Repeat("e", 64)+`","capability":"workspace.read_text"`, 1)
+	programmaticPayload := []byte(`{"status":"ok","result":1,"receipts":[` + programmaticReceipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
+	if _, err := DecodeAndValidateRunResponse(request, programmaticPayload); err != nil {
+		t.Fatalf("valid programmatic receipt rejected: %v", err)
+	}
 	invalidReceipts := map[string]string{
-		"null array":             "null",
-		"sparse receipt":         `[{"capability_plan_sha256":"` + planA + `"}]`,
-		"unknown receipt field":  `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"ok","extra":true`, 1) + `]`,
-		"null required field":    `[` + strings.Replace(validReceipt, `"receipt_id":"rcpt_test"`, `"receipt_id":null`, 1) + `]`,
-		"invalid request digest": `[` + strings.Replace(validReceipt, strings.Repeat("c", 64), "xyz", 1) + `]`,
-		"empty response digest":  `[` + strings.Replace(validReceipt, strings.Repeat("d", 64), "", 1) + `]`,
-		"invalid outcome":        `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"unknown"`, 1) + `]`,
-		"fractional operation":   `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":1.5`, 1) + `]`,
-		"operation overflow":     `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":4294967296`, 1) + `]`,
+		"near-match program parent": `[` + strings.Replace(programmaticReceipt, `"call_id":"parent:program:1"`, `"call_id":"other:program:1"`, 1) + `]`,
+		"null array":                "null",
+		"sparse receipt":            `[{"capability_plan_sha256":"` + planA + `"}]`,
+		"unknown receipt field":     `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"ok","extra":true`, 1) + `]`,
+		"null required field":       `[` + strings.Replace(validReceipt, `"receipt_id":"rcpt_test"`, `"receipt_id":null`, 1) + `]`,
+		"invalid request digest":    `[` + strings.Replace(validReceipt, strings.Repeat("c", 64), "xyz", 1) + `]`,
+		"empty response digest":     `[` + strings.Replace(validReceipt, strings.Repeat("d", 64), "", 1) + `]`,
+		"invalid outcome":           `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"unknown"`, 1) + `]`,
+		"fractional operation":      `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":1.5`, 1) + `]`,
+		"operation overflow":        `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":4294967296`, 1) + `]`,
 	}
 	for name, receipts := range invalidReceipts {
 		payload := []byte(`{"status":"ok","result":1,"receipts":` + receipts + `,"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)

@@ -37,6 +37,7 @@ describe('campaign projection', () => {
     allowedButWrong.walkthrough_events[1].reason = 'cancelled';
     expect(() => validateCampaignProjection(allowedButWrong)).toThrow();
     const fields = [
+      (value: ReturnType<typeof projection>) => { value.programs[0].release_offset_ms = 'private body' as never; },
       (value: ReturnType<typeof projection>) => { value.programs[0].family = 'private body'; },
       (value: ReturnType<typeof projection>) => { value.programs[0].privacy_partition = 'private body'; },
       (value: ReturnType<typeof projection>) => { value.programs[0].execution.cancel_point = 'private body'; },

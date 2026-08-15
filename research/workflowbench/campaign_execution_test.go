@@ -93,6 +93,7 @@ func TestCampaignEvidenceRejectsMechanismEventTamperingAfterReseal(t *testing.T)
 		{"wrong authority identity", "P15", "authority.refreshed", func(event *workflowbench.CampaignEvent) { event.Reason = testCampaignDigest('f') }},
 		{"duplicate core event", "P01", "logical.terminal", func(event *workflowbench.CampaignEvent) { event.Type = "logical.released" }},
 		{"cross-program physical identity", "P01", "physical.ended", func(event *workflowbench.CampaignEvent) { event.ProgramID = "P02" }},
+		{"missing physical identity", "P01", "physical.queued", func(event *workflowbench.CampaignEvent) { event.PhysicalExecutionID = "" }},
 		{"body-bearing core reason", "P01", "physical.started", func(event *workflowbench.CampaignEvent) { event.Reason = "private body" }},
 		{"verifier root mismatch", "P10", "verification.completed", func(event *workflowbench.CampaignEvent) {
 			event.Reason = testCampaignDigest('e') + ":" + testCampaignDigest('d')

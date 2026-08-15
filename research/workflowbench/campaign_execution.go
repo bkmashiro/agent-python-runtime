@@ -445,7 +445,10 @@ func validateCampaignMechanismEvents(manifest CampaignManifest, evidence Campaig
 			byProgram[event.ProgramID] = make(map[string][]CampaignEvent)
 		}
 		byProgram[event.ProgramID][event.Type] = append(byProgram[event.ProgramID][event.Type], event)
-		if strings.HasPrefix(event.Type, "physical.") && event.PhysicalExecutionID != "" {
+		if strings.HasPrefix(event.Type, "physical.") && event.PhysicalExecutionID == "" {
+			return ErrInvalidCampaignEvidence
+		}
+		if strings.HasPrefix(event.Type, "physical.") {
 			if owner := physicalOwner[event.PhysicalExecutionID]; owner != "" && owner != event.ProgramID {
 				return ErrInvalidCampaignEvidence
 			}

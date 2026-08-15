@@ -726,9 +726,10 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
 - 2026-08-15: Post-fix adversarial probes drove evidence schema v2 closure: validators now
   reject unknown or body-bearing event reasons, noncanonical admission reasons, foreign
   near-match producers, mismatched root/verifier identities, rejected physical lifecycles,
-  duplicate/inverted lifecycle events and pre-admission physical work. The projector binds
-  the canonical frozen manifest, keeps signed physical deltas, and emits a credential-free
-  read-only Lab/report/SVG projection.
+  ID-less physical lifecycle events, duplicate/inverted lifecycle events and pre-admission
+  physical work. The projector binds the canonical frozen manifest, keeps signed physical
+  deltas, and its read-only browser gate rejects nonnumeric release offsets and arbitrary
+  rendered bodies before displaying the credential-free Lab/report/SVG projection.
 
 ## Short prompt to start this Mega-Goal
 

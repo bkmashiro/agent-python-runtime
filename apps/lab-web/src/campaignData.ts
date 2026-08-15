@@ -144,7 +144,7 @@ export function validateCampaignProjection(value: unknown): CampaignProjection {
   }
   const programs = new Map(candidate.programs.map((program) => [program.id, program]));
   const ids = new Set(programs.keys());
-  if (ids.size !== 20 || candidate.programs.some((program) => !programID.test(program.id) || !families.has(program.family) || !executionKinds.has(program.execution?.kind) || !cancelPoints.has(program.execution?.cancel_point) || !digest.test(program.plan_sha256) || !digest.test(program.grant_set_sha256) || !digest.test(program.workspace_fixture_sha256) || !privacyPartitions.has(program.privacy_partition) || !admissions.has(program.admission) || !sharingStates.has(program.sharing) || !dispositions.has(program.disposition))) {
+  if (ids.size !== 20 || candidate.programs.some((program) => !programID.test(program.id) || !Number.isInteger(program.release_offset_ms) || program.release_offset_ms < 0 || !families.has(program.family) || !executionKinds.has(program.execution?.kind) || !cancelPoints.has(program.execution?.cancel_point) || !digest.test(program.plan_sha256) || !digest.test(program.grant_set_sha256) || !digest.test(program.workspace_fixture_sha256) || !privacyPartitions.has(program.privacy_partition) || !admissions.has(program.admission) || !sharingStates.has(program.sharing) || !dispositions.has(program.disposition))) {
     throw new Error('campaign program projection is invalid');
   }
   let lastNS = -1;

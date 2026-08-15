@@ -91,6 +91,35 @@ func TestTransparentCampaignGenerationIsByteDeterministic(t *testing.T) {
 	}
 }
 
+func TestTransparentCampaignUsesTypedResearchContractsNotExpectedLabels(t *testing.T) {
+	manifest, err := workflowbench.CanonicalTransparentCampaign()
+	if err != nil {
+		t.Fatal(err)
+	}
+	programs := map[string]workflowbench.CampaignProgram{}
+	for _, program := range manifest.Programs {
+		programs[program.ID] = program
+	}
+	if programs["P01"].Execution.Kind != workflowbench.CampaignExecutePython || programs["P02"].Execution.Kind != workflowbench.CampaignConsumeResult || programs["P02"].Execution.SourceProgramID != "P01" {
+		t.Fatal("producer/consumer operations are not typed")
+	}
+	if programs["P05"].Execution.Kind != workflowbench.CampaignExactRequest || programs["P06"].Execution.Kind != workflowbench.CampaignExactRequest {
+		t.Fatal("exact-request operations are not typed")
+	}
+	if programs["P10"].Execution.Kind != workflowbench.CampaignVerifyWorkspace || programs["P10"].Execution.Verifier == nil {
+		t.Fatal("workspace verification is not typed")
+	}
+	if programs["P13"].Execution.Kind != workflowbench.CampaignStartWorkflow || programs["P15"].Execution.Resume == nil || programs["P15"].Execution.Resume.Transition != workflowbench.CampaignResumePlanGrantChanged {
+		t.Fatal("workflow operations are not typed")
+	}
+	if programs["P17"].Execution.Kind != workflowbench.CampaignDelegateChild || programs["P18"].Execution.Delegation == nil || programs["P18"].Execution.Delegation.ParentPlanRole != "consumer-left" {
+		t.Fatal("delegation operations are not typed")
+	}
+	if programs["P04"].Execution.CancelPoint != workflowbench.CampaignCancelAfterWorkspaceFork || programs["P20"].Execution.CancelPoint != workflowbench.CampaignCancelAfterParentTerminal {
+		t.Fatal("cancellation points are not typed")
+	}
+}
+
 func TestTransparentCampaignManifestRejectsIdentityAndRoleTampering(t *testing.T) {
 	manifest, err := workflowbench.CanonicalTransparentCampaign()
 	if err != nil {
@@ -108,6 +137,13 @@ func TestTransparentCampaignManifestRejectsIdentityAndRoleTampering(t *testing.T
 		{"release range", func(value *workflowbench.CampaignManifest) { value.Programs[19].ReleaseOffsetMS = 60_001 }},
 		{"dependency", func(value *workflowbench.CampaignManifest) { value.Programs[3].Dependencies = []string{"P20"} }},
 		{"cannot prove", func(value *workflowbench.CampaignManifest) { value.Programs[0].CannotProve = nil }},
+		{"unknown execution kind", func(value *workflowbench.CampaignManifest) { value.Programs[0].Execution.Kind = "paper_label" }},
+		{"consumer without source", func(value *workflowbench.CampaignManifest) { value.Programs[1].Execution.SourceProgramID = "" }},
+		{"resume from future", func(value *workflowbench.CampaignManifest) { value.Programs[13].Execution.Resume.FromProgramID = "P20" }},
+		{"verifier missing identity", func(value *workflowbench.CampaignManifest) { value.Programs[9].Execution.Verifier.PolicySHA256 = "" }},
+		{"delegation missing parent", func(value *workflowbench.CampaignManifest) {
+			value.Programs[16].Execution.Delegation.ParentPlanRole = ""
+		}},
 		{"walkthrough", func(value *workflowbench.CampaignManifest) { value.WalkthroughProgramIDs[0] = "P99" }},
 	}
 	for _, test := range cases {

@@ -13,7 +13,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
-const CampaignManifestSchemaVersion = "pysolate.transparent-campaign-manifest.v1"
+const CampaignManifestSchemaVersion = "pysolate.transparent-campaign-manifest.v2"
 
 const maxCampaignReleaseOffsetMS int64 = 60_000
 
@@ -28,21 +28,82 @@ type CampaignExpectation struct {
 	Oracle      json.RawMessage `json:"oracle"`
 }
 
+type CampaignExecutionKind string
+
+const (
+	CampaignExecutePython   CampaignExecutionKind = "execute_python"
+	CampaignConsumeResult   CampaignExecutionKind = "consume_result"
+	CampaignExactRequest    CampaignExecutionKind = "exact_request"
+	CampaignVerifyWorkspace CampaignExecutionKind = "verify_workspace"
+	CampaignStartWorkflow   CampaignExecutionKind = "start_workflow"
+	CampaignResumeWorkflow  CampaignExecutionKind = "resume_workflow"
+	CampaignDelegateChild   CampaignExecutionKind = "delegate_child"
+)
+
+type CampaignCancelPoint string
+
+const (
+	CampaignCancelNone                CampaignCancelPoint = "none"
+	CampaignCancelAfterWorkspaceFork  CampaignCancelPoint = "after_workspace_fork"
+	CampaignCancelAfterParentTerminal CampaignCancelPoint = "after_parent_terminal"
+)
+
+type CampaignResumeTransition string
+
+const (
+	CampaignResumeSameAuthority    CampaignResumeTransition = "same_authority"
+	CampaignResumeFreshnessChanged CampaignResumeTransition = "freshness_changed"
+	CampaignResumePlanGrantChanged CampaignResumeTransition = "plan_grant_changed"
+	CampaignResumeExpired          CampaignResumeTransition = "expired"
+)
+
+type CampaignVerifierContract struct {
+	SourceSHA256      string `json:"source_sha256"`
+	ArtifactSHA256    string `json:"artifact_sha256"`
+	ProfileSHA256     string `json:"profile_sha256"`
+	EnvironmentSHA256 string `json:"environment_sha256"`
+	PolicySHA256      string `json:"policy_sha256"`
+}
+
+type CampaignResumeContract struct {
+	FromProgramID string                   `json:"from_program_id"`
+	Transition    CampaignResumeTransition `json:"transition"`
+}
+
+type CampaignDelegationContract struct {
+	GroupID            string `json:"group_id"`
+	ParentPlanRole     string `json:"parent_plan_role"`
+	MaxDelegatedCalls  uint32 `json:"max_delegated_calls"`
+	ChildReservedCalls uint32 `json:"child_reserved_calls"`
+}
+
+// CampaignExecutionContract belongs to the research fixture. Runtime packages remain
+// unaware of campaign IDs, families, expected labels, and paper outcomes.
+type CampaignExecutionContract struct {
+	Kind            CampaignExecutionKind       `json:"kind"`
+	SourceProgramID string                      `json:"source_program_id,omitempty"`
+	Verifier        *CampaignVerifierContract   `json:"verifier,omitempty"`
+	Resume          *CampaignResumeContract     `json:"resume,omitempty"`
+	Delegation      *CampaignDelegationContract `json:"delegation,omitempty"`
+	CancelPoint     CampaignCancelPoint         `json:"cancel_point"`
+}
+
 type CampaignProgram struct {
-	ID                     string              `json:"id"`
-	Family                 string              `json:"family"`
-	ReleaseOffsetMS        int64               `json:"release_offset_ms"`
-	Source                 string              `json:"source"`
-	SourceSHA256           string              `json:"source_sha256"`
-	Inputs                 json.RawMessage     `json:"inputs"`
-	InputsSHA256           string              `json:"inputs_sha256"`
-	PlanSHA256             string              `json:"plan_sha256"`
-	GrantSetSHA256         string              `json:"grant_set_sha256"`
-	PrivacyPartition       string              `json:"privacy_partition"`
-	WorkspaceFixtureSHA256 string              `json:"workspace_fixture_sha256"`
-	Dependencies           []string            `json:"dependencies,omitempty"`
-	CannotProve            []string            `json:"cannot_prove"`
-	Expected               CampaignExpectation `json:"expected"`
+	ID                     string                    `json:"id"`
+	Family                 string                    `json:"family"`
+	ReleaseOffsetMS        int64                     `json:"release_offset_ms"`
+	Source                 string                    `json:"source"`
+	SourceSHA256           string                    `json:"source_sha256"`
+	Inputs                 json.RawMessage           `json:"inputs"`
+	InputsSHA256           string                    `json:"inputs_sha256"`
+	PlanSHA256             string                    `json:"plan_sha256"`
+	GrantSetSHA256         string                    `json:"grant_set_sha256"`
+	PrivacyPartition       string                    `json:"privacy_partition"`
+	WorkspaceFixtureSHA256 string                    `json:"workspace_fixture_sha256"`
+	Dependencies           []string                  `json:"dependencies,omitempty"`
+	CannotProve            []string                  `json:"cannot_prove"`
+	Execution              CampaignExecutionContract `json:"execution"`
+	Expected               CampaignExpectation       `json:"expected"`
 }
 
 type CampaignManifest struct {
@@ -82,11 +143,15 @@ func CanonicalTransparentCampaign() (CampaignManifest, error) {
 		{"P20", "delegation_attenuation", "result = {'child': 'late'}\n", `{}`, "consumer-left", "private-a", "root-base", "reject_terminal", "no_execution", "cancelled", `{"child":"late"}`, 35, []string{"P17"}},
 	}
 	manifest := CampaignManifest{
-		SchemaVersion: CampaignManifestSchemaVersion, CampaignID: "authority-transparent-20-v1", PhysicalSlots: 3,
+		SchemaVersion: CampaignManifestSchemaVersion, CampaignID: "authority-transparent-20-v2", PhysicalSlots: 3,
 		Programs: make([]CampaignProgram, 0, len(fixtures)), WalkthroughProgramIDs: []string{"P02", "P06", "P11", "P15", "P18"},
 	}
+	executions := campaignExecutionContracts()
+	if len(executions) != len(fixtures) {
+		return CampaignManifest{}, ErrInvalidCampaignManifest
+	}
 	planCache := map[string][2]string{}
-	for _, fixture := range fixtures {
+	for index, fixture := range fixtures {
 		identities, ok := planCache[fixture.plan]
 		if !ok {
 			plan, grantSet, err := campaignPlan(fixture.plan)
@@ -104,13 +169,54 @@ func CanonicalTransparentCampaign() (CampaignManifest, error) {
 			Inputs: inputs, InputsSHA256: campaignDigest(inputs), PlanSHA256: identities[0], GrantSetSHA256: identities[1],
 			PrivacyPartition: fixture.privacy, WorkspaceFixtureSHA256: campaignDigest([]byte("workspace-fixture:" + fixture.workspace)),
 			Dependencies: append([]string(nil), fixture.dependencies...), CannotProve: campaignCannotProve(fixture.family),
-			Expected: CampaignExpectation{Admission: fixture.admission, Sharing: fixture.sharing, Disposition: fixture.disposition, Oracle: oracle},
+			Execution: executions[index],
+			Expected:  CampaignExpectation{Admission: fixture.admission, Sharing: fixture.sharing, Disposition: fixture.disposition, Oracle: oracle},
 		})
 	}
 	if err := manifest.Validate(); err != nil {
 		return CampaignManifest{}, err
 	}
 	return manifest, nil
+}
+
+func campaignExecutionContracts() []CampaignExecutionContract {
+	verifier := func() *CampaignVerifierContract {
+		return &CampaignVerifierContract{
+			SourceSHA256:      campaignDigest([]byte("campaign-verifier-source-v1")),
+			ArtifactSHA256:    campaignDigest([]byte("campaign-verifier-artifact-v1")),
+			ProfileSHA256:     campaignDigest([]byte("campaign-verifier-profile-v1")),
+			EnvironmentSHA256: campaignDigest([]byte("campaign-verifier-environment-v1")),
+			PolicySHA256:      campaignDigest([]byte("campaign-verifier-policy-v1")),
+		}
+	}
+	resume := func(from string, transition CampaignResumeTransition) *CampaignResumeContract {
+		return &CampaignResumeContract{FromProgramID: from, Transition: transition}
+	}
+	delegation := func(group string) *CampaignDelegationContract {
+		return &CampaignDelegationContract{GroupID: group, ParentPlanRole: "consumer-left", MaxDelegatedCalls: 1, ChildReservedCalls: 1}
+	}
+	return []CampaignExecutionContract{
+		{Kind: CampaignExecutePython, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignConsumeResult, SourceProgramID: "P01", CancelPoint: CampaignCancelNone},
+		{Kind: CampaignConsumeResult, SourceProgramID: "P01", CancelPoint: CampaignCancelNone},
+		{Kind: CampaignConsumeResult, SourceProgramID: "P01", CancelPoint: CampaignCancelAfterWorkspaceFork},
+		{Kind: CampaignExactRequest, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignExactRequest, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignExactRequest, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignExactRequest, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignExactRequest, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignVerifyWorkspace, Verifier: verifier(), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignVerifyWorkspace, Verifier: verifier(), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignVerifyWorkspace, Verifier: verifier(), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignStartWorkflow, CancelPoint: CampaignCancelNone},
+		{Kind: CampaignResumeWorkflow, Resume: resume("P13", CampaignResumeFreshnessChanged), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignResumeWorkflow, Resume: resume("P13", CampaignResumePlanGrantChanged), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignResumeWorkflow, Resume: resume("P13", CampaignResumeExpired), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-main"), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-widening"), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-main"), CancelPoint: CampaignCancelNone},
+		{Kind: CampaignDelegateChild, Delegation: delegation("delegation-main"), CancelPoint: CampaignCancelAfterParentTerminal},
+	}
 }
 
 func (manifest CampaignManifest) Validate() error {
@@ -125,7 +231,7 @@ func (manifest CampaignManifest) Validate() error {
 		if program.ID != expectedID || program.ReleaseOffsetMS < 0 || program.ReleaseOffsetMS > maxCampaignReleaseOffsetMS || (index > 0 && program.ReleaseOffsetMS < lastRelease) || program.Source == "" || campaignDigest([]byte(program.Source)) != program.SourceSHA256 ||
 			!canonicalCampaignJSON(program.Inputs) || campaignDigest(program.Inputs) != program.InputsSHA256 || !canonicalCampaignJSON(program.Expected.Oracle) ||
 			!campaignDigestPattern.MatchString(program.PlanSHA256) || !campaignDigestPattern.MatchString(program.GrantSetSHA256) || !campaignDigestPattern.MatchString(program.WorkspaceFixtureSHA256) ||
-			program.PrivacyPartition == "" || program.Family == "" || len(program.CannotProve) == 0 || program.Expected.Admission == "" || program.Expected.Sharing == "" || program.Expected.Disposition == "" {
+			program.PrivacyPartition == "" || program.Family == "" || len(program.CannotProve) == 0 || program.Execution.validate(seen) != nil || program.Expected.Admission == "" || program.Expected.Sharing == "" || program.Expected.Disposition == "" {
 			return ErrInvalidCampaignManifest
 		}
 		for _, dependency := range program.Dependencies {
@@ -160,6 +266,50 @@ func (manifest CampaignManifest) Validate() error {
 	return nil
 }
 
+func (contract CampaignExecutionContract) validate(seen map[string]struct{}) error {
+	if contract.CancelPoint != CampaignCancelNone && contract.CancelPoint != CampaignCancelAfterWorkspaceFork && contract.CancelPoint != CampaignCancelAfterParentTerminal {
+		return ErrInvalidCampaignManifest
+	}
+	withoutSpecific := func() bool {
+		return contract.SourceProgramID == "" && contract.Verifier == nil && contract.Resume == nil && contract.Delegation == nil
+	}
+	switch contract.Kind {
+	case CampaignExecutePython, CampaignExactRequest, CampaignStartWorkflow:
+		if !withoutSpecific() {
+			return ErrInvalidCampaignManifest
+		}
+	case CampaignConsumeResult:
+		if _, ok := seen[contract.SourceProgramID]; !ok || contract.Verifier != nil || contract.Resume != nil || contract.Delegation != nil {
+			return ErrInvalidCampaignManifest
+		}
+	case CampaignVerifyWorkspace:
+		if contract.SourceProgramID != "" || contract.Verifier == nil || contract.Resume != nil || contract.Delegation != nil ||
+			!campaignDigestPattern.MatchString(contract.Verifier.SourceSHA256) || !campaignDigestPattern.MatchString(contract.Verifier.ArtifactSHA256) ||
+			!campaignDigestPattern.MatchString(contract.Verifier.ProfileSHA256) || !campaignDigestPattern.MatchString(contract.Verifier.EnvironmentSHA256) || !campaignDigestPattern.MatchString(contract.Verifier.PolicySHA256) {
+			return ErrInvalidCampaignManifest
+		}
+	case CampaignResumeWorkflow:
+		if contract.SourceProgramID != "" || contract.Verifier != nil || contract.Resume == nil || contract.Delegation != nil {
+			return ErrInvalidCampaignManifest
+		}
+		if _, ok := seen[contract.Resume.FromProgramID]; !ok {
+			return ErrInvalidCampaignManifest
+		}
+		switch contract.Resume.Transition {
+		case CampaignResumeSameAuthority, CampaignResumeFreshnessChanged, CampaignResumePlanGrantChanged, CampaignResumeExpired:
+		default:
+			return ErrInvalidCampaignManifest
+		}
+	case CampaignDelegateChild:
+		if contract.SourceProgramID != "" || contract.Verifier != nil || contract.Resume != nil || contract.Delegation == nil || contract.Delegation.GroupID == "" || contract.Delegation.ParentPlanRole == "" || contract.Delegation.MaxDelegatedCalls == 0 || contract.Delegation.ChildReservedCalls == 0 {
+			return ErrInvalidCampaignManifest
+		}
+	default:
+		return ErrInvalidCampaignManifest
+	}
+	return nil
+}
+
 func (manifest CampaignManifest) Clone() CampaignManifest {
 	clone := manifest
 	clone.Programs = make([]CampaignProgram, len(manifest.Programs))
@@ -168,6 +318,18 @@ func (manifest CampaignManifest) Clone() CampaignManifest {
 		clone.Programs[index].Inputs = append(json.RawMessage(nil), program.Inputs...)
 		clone.Programs[index].Dependencies = append([]string(nil), program.Dependencies...)
 		clone.Programs[index].CannotProve = append([]string(nil), program.CannotProve...)
+		if program.Execution.Verifier != nil {
+			value := *program.Execution.Verifier
+			clone.Programs[index].Execution.Verifier = &value
+		}
+		if program.Execution.Resume != nil {
+			value := *program.Execution.Resume
+			clone.Programs[index].Execution.Resume = &value
+		}
+		if program.Execution.Delegation != nil {
+			value := *program.Execution.Delegation
+			clone.Programs[index].Execution.Delegation = &value
+		}
 		clone.Programs[index].Expected.Oracle = append(json.RawMessage(nil), program.Expected.Oracle...)
 	}
 	clone.WalkthroughProgramIDs = append([]string(nil), manifest.WalkthroughProgramIDs...)

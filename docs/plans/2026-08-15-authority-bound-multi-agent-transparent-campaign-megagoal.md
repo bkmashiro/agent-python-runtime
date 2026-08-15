@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Paused at architecture gate — choose typed campaign v2 or narrower claims
+**Status:** Active — architecture gate resolved; Track E real adapter next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -631,27 +631,12 @@ claims remain valid.
 
 ## Current execution pointer
 
-**Architecture decision gate after Track E core:** the v1 manifest binds source, inputs,
-identities, expected admission and expected sharing labels, but does not encode the typed
-mechanism operations needed to execute those labels. In particular it has no producer →
-consumer edge, verifier contract/group, workflow graph + old/current authority envelopes,
-or parent/child delegation reservation contract. A real adapter would therefore have to
-switch on `Pxx` IDs or treat `Expected` labels as authority, which would make events
-scripted/inferred rather than Runtime-derived.
-
-Choose before continuing:
-
-1. **Recommended — manifest v2:** add a small typed `Mechanism` union to each existing
-   `CampaignProgram` for producer/consumer, exact verifier, fresh resume and delegation
-   operations. Keep exactly 20 Python sources, the same driver, and no new package. Runtime
-   mechanisms execute the typed contract; `Expected` remains an oracle only.
-2. **Narrow v1:** keep the manifest unchanged and limit real campaign claims to fresh
-   source execution plus exact request sharing/near-match rejection. Authority
-   bifurcation, resume, verifier and delegation remain separate integration evidence and
-   are not presented as one 20-program campaign.
-
-Do not implement a per-ID adapter: it would produce the desired picture without proving
-the desired mechanism.
+**Track E real adapter:** the architecture gate is resolved in favor of a strict boundary:
+Pysolate Runtime remains general, while the 20 programs are a declarative research fixture.
+Manifest v2 now carries a small typed `execution` union for producer/consumer, exact
+request, exact verifier, fresh workflow resume, delegation and cancellation operations.
+The adapter must compose existing Runtime APIs from those typed fields. It must contain no
+dispatch on `Pxx`, family or `Expected`; expected values remain independent oracles only.
 
 ## Completion log
 
@@ -694,6 +679,11 @@ the desired mechanism.
   contracts. Continuing would require hidden per-ID behavior and fabricated causal events.
   No such adapter was added; choose typed manifest v2 (recommended) or narrow the unified
   campaign claims before Track E/F resumes.
+- 2026-08-15: Yuzhe resolved the gate: Pysolate itself stays general and the 20 programs
+  remain demonstration fixtures. Manifest v2 adds only a research-local tagged execution
+  contract; no `runtime/` package, production scheduler or case-specific Runtime behavior
+  was added. Validation rejects unknown operations and incomplete producer, verifier,
+  resume and delegation contracts.
 
 ## Short prompt to start this Mega-Goal
 

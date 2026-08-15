@@ -1,10 +1,22 @@
-# Authority-transparent 20-program campaign v1
+# Authority-transparent 20-program campaign v2
 
 **Status:** preregistered corpus contract; execution evidence pending
 
 This campaign is a Pysolate-only research fixture. It is not an Agent Harness, production
 scheduler, virtual Git implementation or external-effect benchmark. The canonical machine
 contract is `workflowbench.CanonicalTransparentCampaign`.
+
+The v2 machine contract separates two concerns:
+
+- stimulus and validation fields describe source, inputs, release, identities, semantic
+  oracle and prohibited claims;
+- `execution` is a small tagged research-fixture contract describing which existing,
+  general Pysolate mechanism the adapter must invoke.
+
+`execution` is not a Runtime API or production scheduling policy. No package under
+`runtime/` knows `P01`–`P20`, campaign families, paper labels or expected outcomes. The
+adapter may dispatch on typed execution kind and transition, but must never dispatch on a
+program ID, family or `expected` field.
 
 ## Fixed execution policy
 

@@ -6,7 +6,7 @@
 > slices. A green test, signed commit, or completed track is a checkpoint—not a stopping
 > condition. Stop only at the decision and safety gates below.
 
-**Status:** Active — Track A verified; Track B authority-bound resume next
+**Status:** Active — Tracks A/B verified; Track C exact sharing next
 **Date:** 2026-08-15
 **Owner:** Yuzhe
 **Repository:** `~/projects/agent-python-runtime`
@@ -359,16 +359,16 @@ census/design evidence and stop before Track B.
 
 ### Track B — Authority-bound fresh workflow resume
 
-- [ ] Add RED tests proving suspended state must be bound to Plan/grant/privacy/authority
+- [x] Add RED tests proving suspended state must be bound to Plan/grant/privacy/authority
   epoch and cannot resume under stale or widened authority.
-- [ ] Add the smallest Host-authored authority envelope or digest to existing workflow
+- [x] Add the smallest Host-authored authority envelope or digest to existing workflow
   state; do not retain Broker/Guest handles.
-- [ ] Reuse current dependency invalidation so authority-free compute remains reusable
+- [x] Reuse current dependency invalidation so authority-free compute remains reusable
   while authority-dependent observation and descendants revalidate.
-- [ ] Cover same epoch, freshness change, Plan/grant change, revocation/expiry, tamper,
+- [x] Cover same epoch, freshness change, Plan/grant change, revocation/expiry, tamper,
   eviction and all-off resume behavior.
-- [ ] Prove every resume creates fresh Run and physical execution identity.
-- [ ] Integrate real Guest evidence for one valid and one rejected resume.
+- [x] Prove every resume creates fresh Run and physical execution identity.
+- [x] Integrate real Guest evidence for one valid and one rejected resume.
 
 **Gate:** stale authority is never consumed; unrelated authority-free nodes are not
 needlessly invalidated; no continuation state crosses the wait.
@@ -629,9 +629,9 @@ claims remain valid.
 
 ## Current execution pointer
 
-**Track B:** add RED tests for unchanged-authority resume, Plan/grant/freshness changes,
-expiry/revocation and selective invalidation. Reuse `workflow.State` and existing graph
-invalidation; do not preserve Guest or Broker state.
+**Track C:** compose the existing authority-aware subagent, `agentfunction`, immutable
+workspace roots and observation identities into one bounded authority-bifurcation and
+exact-verifier-sharing test. Do not add a sharing package or semantic root matching.
 
 ## Completion log
 
@@ -648,6 +648,11 @@ invalidation; do not preserve Guest or Broker state.
   workspace fork or executor start, and proves cancellation discards private refs and
   blocks late children. Historical digest-only fixtures remain available but cannot be
   cited as authority proof; the campaign must use the authority-aware path.
+- 2026-08-15: Track B bumped explicit workflow state to v2 and bound it to a Host-authored
+  Plan/grant/privacy/epoch/expiry envelope. Resume rejects expired, revoked and
+  cross-privacy authority before Guest creation; valid authority changes invalidate only
+  observations and descendants, retain independent compute, and mint a fresh physical
+  execution identity. Real-Guest integration covers both accepted and revoked resume.
 
 ## Short prompt to start this Mega-Goal
 

@@ -5,6 +5,7 @@ package workflow
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,14 +17,17 @@ import (
 )
 
 const (
-	GraphSchemaVersion = "pysolate.workflow-graph.v1"
-	StateSchemaVersion = "pysolate.workflow-state.v1"
+	GraphSchemaVersion             = "pysolate.workflow-graph.v1"
+	StateSchemaVersion             = "pysolate.workflow-state.v2"
+	AuthorityEnvelopeSchemaVersion = "pysolate.workflow-authority.v1"
 )
 
 var (
-	ErrInvalidGraph   = errors.New("invalid explicit workflow graph")
-	ErrInvalidState   = errors.New("invalid explicit workflow state")
-	ErrResumeDisabled = errors.New("workflow fresh re-evaluation is disabled")
+	ErrInvalidGraph         = errors.New("invalid explicit workflow graph")
+	ErrInvalidState         = errors.New("invalid explicit workflow state")
+	ErrResumeDisabled       = errors.New("workflow fresh re-evaluation is disabled")
+	ErrAuthorityUnavailable = errors.New("workflow authority is expired or revoked")
+	ErrAuthorityMismatch    = errors.New("workflow authority privacy partition mismatch")
 )
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
@@ -54,6 +58,29 @@ type ObservedValue struct {
 	Value           []byte
 	FreshnessSHA256 string
 	PolicySHA256    string
+}
+
+type AuthorityEnvelope struct {
+	SchemaVersion    string `json:"schema_version"`
+	PlanSHA256       string `json:"plan_sha256"`
+	GrantSetSHA256   string `json:"grant_set_sha256"`
+	PrivacyPartition string `json:"privacy_partition"`
+	EpochSHA256      string `json:"epoch_sha256"`
+	NotAfterUnixMS   int64  `json:"not_after_unix_ms"`
+	Revoked          bool   `json:"revoked,omitempty"`
+}
+
+func (envelope AuthorityEnvelope) Validate() error {
+	if envelope.SchemaVersion != AuthorityEnvelopeSchemaVersion ||
+		!digestPattern.MatchString(envelope.PlanSHA256) || !digestPattern.MatchString(envelope.GrantSetSHA256) ||
+		!namePattern.MatchString(envelope.PrivacyPartition) || !digestPattern.MatchString(envelope.EpochSHA256) || envelope.NotAfterUnixMS <= 0 {
+		return ErrInvalidState
+	}
+	return nil
+}
+
+func (envelope AuthorityEnvelope) available(now time.Time) bool {
+	return !envelope.Revoked && now.UnixMilli() < envelope.NotAfterUnixMS
 }
 
 type Node struct {
@@ -177,6 +204,7 @@ type State struct {
 	ContinuationInput   json.RawMessage   `json:"continuation_input,omitempty"`
 	Records             map[string]Record `json:"records"`
 	WaitNodeID          string            `json:"wait_node_id,omitempty"`
+	Authority           AuthorityEnvelope `json:"authority"`
 }
 
 func (state State) CanonicalJSON() ([]byte, error) {
@@ -187,7 +215,7 @@ func (state State) CanonicalJSON() ([]byte, error) {
 }
 
 func (state State) Validate() error {
-	if state.SchemaVersion != StateSchemaVersion || !namePattern.MatchString(state.WorkflowID) || !digestPattern.MatchString(state.GraphSHA256) ||
+	if state.SchemaVersion != StateSchemaVersion || state.Authority.Validate() != nil || !namePattern.MatchString(state.WorkflowID) || !digestPattern.MatchString(state.GraphSHA256) ||
 		(state.Disposition != Suspended && state.Disposition != Completed) || state.Records == nil || !sort.StringsAreSorted(state.ImmutableRootSHA256) {
 		return ErrInvalidState
 	}
@@ -228,6 +256,7 @@ type Config struct {
 	Guests              GuestFactory
 	ResumeEnabled       bool
 	ImmutableRootSHA256 []string
+	Authority           AuthorityEnvelope
 }
 
 type Evaluator struct {
@@ -236,7 +265,7 @@ type Evaluator struct {
 }
 
 func New(config Config) (*Evaluator, error) {
-	if config.Guests == nil || config.Graph.Validate() != nil || !sort.StringsAreSorted(config.ImmutableRootSHA256) {
+	if config.Guests == nil || config.Graph.Validate() != nil || config.Authority.Validate() != nil || !sort.StringsAreSorted(config.ImmutableRootSHA256) {
 		return nil, ErrInvalidGraph
 	}
 	for index, root := range config.ImmutableRootSHA256 {
@@ -269,17 +298,21 @@ type Metrics struct {
 }
 
 type Result struct {
-	Disposition Disposition
-	State       State
-	Output      []byte
-	Metrics     Metrics
+	Disposition     Disposition
+	State           State
+	Output          []byte
+	Metrics         Metrics
+	ExecutionSHA256 string
 }
 
 func (evaluator *Evaluator) Start(ctx context.Context, continuationInput []byte) (Result, error) {
+	if evaluator == nil || !evaluator.config.Authority.available(time.Now()) {
+		return Result{}, ErrAuthorityUnavailable
+	}
 	state := State{
 		SchemaVersion: StateSchemaVersion, WorkflowID: evaluator.config.Graph.WorkflowID, GraphSHA256: evaluator.graphSHA,
 		Disposition: Suspended, ImmutableRootSHA256: append([]string(nil), evaluator.config.ImmutableRootSHA256...),
-		Records: make(map[string]Record),
+		Records: make(map[string]Record), Authority: evaluator.config.Authority,
 	}
 	if len(continuationInput) > 0 {
 		if !canonicalJSON(continuationInput) {
@@ -287,7 +320,7 @@ func (evaluator *Evaluator) Start(ctx context.Context, continuationInput []byte)
 		}
 		state.ContinuationInput = append(json.RawMessage(nil), continuationInput...)
 	}
-	return evaluator.evaluate(ctx, state, false)
+	return evaluator.evaluate(ctx, state, false, false)
 }
 
 func (evaluator *Evaluator) Resume(ctx context.Context, state State) (Result, error) {
@@ -298,11 +331,21 @@ func (evaluator *Evaluator) Resume(ctx context.Context, state State) (Result, er
 		state.Disposition != Suspended || !equalStrings(state.ImmutableRootSHA256, evaluator.config.ImmutableRootSHA256) || state.WaitNodeID == "" {
 		return Result{}, ErrInvalidState
 	}
-	return evaluator.evaluate(ctx, cloneState(state), true)
+	if !evaluator.config.Authority.available(time.Now()) {
+		return Result{}, ErrAuthorityUnavailable
+	}
+	if state.Authority.PrivacyPartition != evaluator.config.Authority.PrivacyPartition {
+		return Result{}, ErrAuthorityMismatch
+	}
+	return evaluator.evaluate(ctx, cloneState(state), true, state.Authority != evaluator.config.Authority)
 }
 
-func (evaluator *Evaluator) evaluate(ctx context.Context, state State, resuming bool) (result Result, returnErr error) {
+func (evaluator *Evaluator) evaluate(ctx context.Context, state State, resuming, authorityChanged bool) (result Result, returnErr error) {
 	started := time.Now()
+	executionSHA256, err := newExecutionIdentity()
+	if err != nil {
+		return Result{}, err
+	}
 	guest, err := evaluator.config.Guests.NewGuest(ctx)
 	if err != nil {
 		return Result{}, err
@@ -316,6 +359,10 @@ func (evaluator *Evaluator) evaluate(ctx context.Context, state State, resuming 
 			returnErr = closeErr
 		}
 	}()
+	if authorityChanged {
+		metrics.Invalidated += evaluator.invalidateAuthorityDependent(&state)
+		state.Authority = evaluator.config.Authority
+	}
 	if resuming {
 		invalidated, err := evaluator.refreshObservations(ctx, guest, &state, &metrics)
 		if err != nil {
@@ -337,10 +384,10 @@ func (evaluator *Evaluator) evaluate(ctx context.Context, state State, resuming 
 			}
 			if !passedWait || !resuming {
 				state.WaitNodeID = node.ID
-				return finalize(Result{Disposition: Suspended, State: state, Metrics: metrics}, started)
+				return finalize(Result{Disposition: Suspended, State: state, Metrics: metrics, ExecutionSHA256: executionSHA256}, started)
 			}
 			state.WaitNodeID = node.ID
-			return finalize(Result{Disposition: Suspended, State: state, Metrics: metrics}, started)
+			return finalize(Result{Disposition: Suspended, State: state, Metrics: metrics, ExecutionSHA256: executionSHA256}, started)
 		}
 		identity := nodeIdentity(node, state.Records)
 		if record, ok := state.Records[node.ID]; ok && record.NodeIdentitySHA256 == identity {
@@ -349,7 +396,7 @@ func (evaluator *Evaluator) evaluate(ctx context.Context, state State, resuming 
 			if node.Kind == Terminal {
 				state.Disposition = Completed
 				state.WaitNodeID = ""
-				return finalize(Result{Disposition: Completed, State: state, Output: terminalOutput(node, values), Metrics: metrics}, started)
+				return finalize(Result{Disposition: Completed, State: state, Output: terminalOutput(node, values), Metrics: metrics, ExecutionSHA256: executionSHA256}, started)
 			}
 			continue
 		}
@@ -378,10 +425,31 @@ func (evaluator *Evaluator) evaluate(ctx context.Context, state State, resuming 
 			state.Records[node.ID] = makeRecord(identity, terminalOutput(node, values), "", "")
 			state.Disposition = Completed
 			state.WaitNodeID = ""
-			return finalize(Result{Disposition: Completed, State: state, Output: terminalOutput(node, values), Metrics: metrics}, started)
+			return finalize(Result{Disposition: Completed, State: state, Output: terminalOutput(node, values), Metrics: metrics, ExecutionSHA256: executionSHA256}, started)
 		}
 	}
 	return Result{}, ErrInvalidGraph
+}
+
+func (evaluator *Evaluator) invalidateAuthorityDependent(state *State) uint32 {
+	invalid := make(map[string]struct{})
+	for _, node := range evaluator.config.Graph.Nodes {
+		if node.Kind != Observation {
+			continue
+		}
+		invalid[node.ID] = struct{}{}
+		for _, descendant := range evaluator.descendants(node.ID) {
+			invalid[descendant] = struct{}{}
+		}
+	}
+	var count uint32
+	for nodeID := range invalid {
+		if _, exists := state.Records[nodeID]; exists {
+			delete(state.Records, nodeID)
+			count++
+		}
+	}
+	return count
 }
 
 func (evaluator *Evaluator) refreshObservations(ctx context.Context, guest Guest, state *State, metrics *Metrics) (uint32, error) {
@@ -531,6 +599,14 @@ func equalStrings(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+func newExecutionIdentity() (string, error) {
+	value := make([]byte, sha256.Size)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return digest(value), nil
 }
 
 func digest(value []byte) string {

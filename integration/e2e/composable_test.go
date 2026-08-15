@@ -198,7 +198,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: hashCharacter('6'), Dependencies: []string{"after"}},
 	}}
 	evaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: guestFactory, ResumeEnabled: true,
+		Graph: graph, Guests: guestFactory, ResumeEnabled: true, Authority: workflowAuthority(),
 		ImmutableRootSHA256: []string{joined.SelectedRoot.IdentitySHA256},
 	})
 	if err != nil {
@@ -207,6 +207,18 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 	suspended, err := evaluator.Start(context.Background(), []byte(`{"resume":"fixture"}`))
 	if err != nil || suspended.Disposition != workflow.Suspended || guestFactory.created != 1 || guestFactory.closed != 1 {
 		t.Fatalf("suspended=%+v guest=%+v err=%v", suspended, guestFactory, err)
+	}
+	revokedAuthority := workflowAuthority()
+	revokedAuthority.Revoked = true
+	revokedEvaluator, err := workflow.New(workflow.Config{
+		Graph: graph, Guests: guestFactory, ResumeEnabled: true, Authority: revokedAuthority,
+		ImmutableRootSHA256: []string{joined.SelectedRoot.IdentitySHA256},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := revokedEvaluator.Resume(context.Background(), suspended.State); !errors.Is(err, workflow.ErrAuthorityUnavailable) || guestFactory.created != 1 {
+		t.Fatalf("revoked resume created Guest: created=%d err=%v", guestFactory.created, err)
 	}
 	resumed, err := evaluator.Resume(context.Background(), suspended.State)
 	if err != nil || resumed.Disposition != workflow.Completed || guestFactory.created != 2 || guestFactory.closed != 2 || resumed.Metrics.Lookups == 0 {
@@ -459,6 +471,14 @@ func TestComposableParentInvalidDiscardsRealChildBranches(t *testing.T) {
 	final, _ := manager.Inspect(base)
 	if final.WorkspaceSHA256 != baseInfo.WorkspaceSHA256 {
 		t.Fatal("invalid parent changed base")
+	}
+}
+
+func workflowAuthority() workflow.AuthorityEnvelope {
+	return workflow.AuthorityEnvelope{
+		SchemaVersion: workflow.AuthorityEnvelopeSchemaVersion,
+		PlanSHA256:    hashCharacter('a'), GrantSetSHA256: hashCharacter('b'),
+		PrivacyPartition: "fixture-private", EpochSHA256: hashCharacter('c'), NotAfterUnixMS: 1 << 62,
 	}
 }
 

@@ -228,6 +228,14 @@ existing digest-only mode remains for historical fixtures; new authority claims
 and the transparent campaign must use the authority-aware configuration and may
 not cite digest-only admission as proof.
 
+Fresh workflow state v2 also binds Plan, grant set, privacy partition, authority
+epoch and expiry. Resume never restores Guest/Broker state: it creates a fresh
+physical execution identity. Expired or revoked current authority and
+cross-privacy resume fail before Guest creation. A valid Plan, grant, epoch or
+expiry change conservatively invalidates every observation and its descendants
+while retaining independent compute; unchanged authority still follows the
+existing per-observation freshness policy.
+
 ## Recommended product profiles
 
 Profiles are test fixtures and examples, not mandatory bundles.

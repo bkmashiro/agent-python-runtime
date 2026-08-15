@@ -905,7 +905,7 @@ func runScenarioReevaluationExecution(t *testing.T, artifact []byte, scenario co
 		},
 	}
 	evaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: factory, ResumeEnabled: resumeEnabled,
+		Graph: graph, Guests: factory, ResumeEnabled: resumeEnabled, Authority: workflowAuthority(),
 		ImmutableRootSHA256: nil,
 	})
 	if err != nil {
@@ -1330,7 +1330,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		},
 	}
 	workflowEvaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: workflowFactory, ResumeEnabled: true,
+		Graph: graph, Guests: workflowFactory, ResumeEnabled: true, Authority: workflowAuthority(),
 		ImmutableRootSHA256: []string{joined.SelectedRoot.WorkspaceSHA256},
 	})
 	if err != nil {
@@ -1589,7 +1589,7 @@ func runScenarioChangedObservationExecution(t *testing.T, artifact []byte, scena
 		},
 	}
 	evaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: factory, ResumeEnabled: true,
+		Graph: graph, Guests: factory, ResumeEnabled: true, Authority: workflowAuthority(),
 	})
 	if err != nil {
 		t.Fatal(err)

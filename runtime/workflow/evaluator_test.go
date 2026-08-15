@@ -35,7 +35,7 @@ func TestWaitDestroysGuestAndResumeUsesFreshGuestWithLocalLookup(t *testing.T) {
 			{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: digest('6'), Dependencies: []string{"after"}},
 		},
 	}
-	evaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true})
+	evaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: authority('a', "private-a")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +61,9 @@ func TestWaitDestroysGuestAndResumeUsesFreshGuestWithLocalLookup(t *testing.T) {
 	}
 	if string(second.Output) != "after:seedv1" {
 		t.Fatalf("output=%q", second.Output)
+	}
+	if first.ExecutionSHA256 == second.ExecutionSHA256 || first.ExecutionSHA256 == "" || second.ExecutionSHA256 == "" {
+		t.Fatalf("execution identities first=%q second=%q", first.ExecutionSHA256, second.ExecutionSHA256)
 	}
 	assertNoHiddenState(t, second.State)
 }
@@ -88,7 +91,7 @@ func TestChangedObservationInvalidatesOnlyTransitiveDescendants(t *testing.T) {
 		{ID: "wait", Kind: workflow.Wait, VersionSHA256: digest('4'), Dependencies: []string{"dependent"}},
 		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: digest('5'), Dependencies: []string{"independent", "dependent"}},
 	}}
-	evaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true})
+	evaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: authority('a', "private-a")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +123,7 @@ func TestEvictedComputeRecordSafelyRecomputes(t *testing.T) {
 		{ID: "wait", Kind: workflow.Wait, VersionSHA256: digest('2'), Dependencies: []string{"compute"}},
 		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: digest('3'), Dependencies: []string{"compute"}},
 	}}
-	evaluator, _ := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true})
+	evaluator, _ := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: authority('a', "private-a")})
 	first, _ := evaluator.Start(context.Background(), nil)
 	if err := first.State.Evict("compute"); err != nil {
 		t.Fatal(err)
@@ -137,7 +140,7 @@ func TestResumeDisabledFallsBackToOrdinaryFreshStart(t *testing.T) {
 		{ID: "wait", Kind: workflow.Wait, VersionSHA256: digest('1')},
 		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: digest('2')},
 	}}
-	evaluator, _ := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: false})
+	evaluator, _ := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: false, Authority: authority('a', "private-a")})
 	first, err := evaluator.Start(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +151,118 @@ func TestResumeDisabledFallsBackToOrdinaryFreshStart(t *testing.T) {
 	second, err := evaluator.Start(context.Background(), nil)
 	if err != nil || len(factory.guests) != 2 || !factory.guests[0].closed || !factory.guests[1].closed || second.Disposition != workflow.Suspended {
 		t.Fatalf("fallback second=%+v guests=%+v err=%v", second, factory.guests, err)
+	}
+}
+
+func TestAuthorityChangeRevalidatesOnlyObservationsAndDescendants(t *testing.T) {
+	factory := &guestFactory{}
+	calls := map[string]int{}
+	graph := workflow.Graph{SchemaVersion: workflow.GraphSchemaVersion, WorkflowID: "authority-revalidation", Nodes: []workflow.Node{
+		{ID: "independent", Kind: workflow.Compute, VersionSHA256: digest('1'), Compute: func(context.Context, workflow.Guest, map[string][]byte) ([]byte, error) {
+			calls["independent"]++
+			return []byte("stable"), nil
+		}},
+		{ID: "live", Kind: workflow.Observation, VersionSHA256: digest('2'), Observe: func(context.Context, workflow.Guest, map[string][]byte) (workflow.ObservedValue, error) {
+			calls["live"]++
+			return workflow.ObservedValue{Value: []byte("observed"), FreshnessSHA256: digest('f'), PolicySHA256: digest('e')}, nil
+		}},
+		{ID: "dependent", Kind: workflow.Compute, VersionSHA256: digest('3'), Dependencies: []string{"live"}, Compute: func(_ context.Context, _ workflow.Guest, values map[string][]byte) ([]byte, error) {
+			calls["dependent"]++
+			return append([]byte(nil), values["live"]...), nil
+		}},
+		{ID: "wait", Kind: workflow.Wait, VersionSHA256: digest('4'), Dependencies: []string{"dependent"}},
+		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: digest('5'), Dependencies: []string{"independent", "dependent"}},
+	}}
+	firstEvaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: authority('a', "private-a")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := firstEvaluator.Start(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	variants := []struct {
+		name   string
+		mutate func(*workflow.AuthorityEnvelope)
+	}{
+		{"plan", func(value *workflow.AuthorityEnvelope) { value.PlanSHA256 = digest('b') }},
+		{"grant", func(value *workflow.AuthorityEnvelope) { value.GrantSetSHA256 = digest('c') }},
+		{"epoch", func(value *workflow.AuthorityEnvelope) { value.EpochSHA256 = digest('d') }},
+		{"expiry", func(value *workflow.AuthorityEnvelope) { value.NotAfterUnixMS-- }},
+	}
+	for _, variant := range variants {
+		t.Run(variant.name, func(t *testing.T) {
+			secondAuthority := authority('a', "private-a")
+			variant.mutate(&secondAuthority)
+			secondEvaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: secondAuthority})
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := secondEvaluator.Resume(context.Background(), first.State)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if second.Metrics.Invalidated != 2 || second.State.Authority != secondAuthority || first.ExecutionSHA256 == second.ExecutionSHA256 {
+				t.Fatalf("state=%+v metrics=%+v first_execution=%q second_execution=%q", second.State.Authority, second.Metrics, first.ExecutionSHA256, second.ExecutionSHA256)
+			}
+		})
+	}
+	if calls["independent"] != 1 || calls["live"] != 1+len(variants) || calls["dependent"] != 1+len(variants) {
+		t.Fatalf("calls=%v", calls)
+	}
+}
+
+func TestExpiredRevokedAndCrossPrivacyAuthorityFailBeforeFreshGuest(t *testing.T) {
+	graph := workflow.Graph{SchemaVersion: workflow.GraphSchemaVersion, WorkflowID: "authority-rejection", Nodes: []workflow.Node{
+		{ID: "wait", Kind: workflow.Wait, VersionSHA256: digest('1')},
+		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: digest('2')},
+	}}
+	factory := &guestFactory{}
+	valid := authority('a', "private-a")
+	evaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: valid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := evaluator.Start(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expired := valid
+	expired.NotAfterUnixMS = 1
+	expiredEvaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: expired})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(factory.guests)
+	if _, err := expiredEvaluator.Resume(context.Background(), first.State); !errors.Is(err, workflow.ErrAuthorityUnavailable) {
+		t.Fatalf("expired resume error=%v", err)
+	}
+	revoked := valid
+	revoked.Revoked = true
+	revokedEvaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: revoked})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := revokedEvaluator.Resume(context.Background(), first.State); !errors.Is(err, workflow.ErrAuthorityUnavailable) {
+		t.Fatalf("revoked resume error=%v", err)
+	}
+	crossPrivacy := valid
+	crossPrivacy.PrivacyPartition = "private-b"
+	crossPrivacyEvaluator, err := workflow.New(workflow.Config{Graph: graph, Guests: factory, ResumeEnabled: true, Authority: crossPrivacy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := crossPrivacyEvaluator.Resume(context.Background(), first.State); !errors.Is(err, workflow.ErrAuthorityMismatch) {
+		t.Fatalf("cross-privacy resume error=%v", err)
+	}
+	if len(factory.guests) != before {
+		t.Fatalf("rejected resumes created guests: before=%d after=%d", before, len(factory.guests))
+	}
+	tampered := first.State
+	tampered.Authority.PlanSHA256 = "tampered"
+	if _, err := evaluator.Resume(context.Background(), tampered); !errors.Is(err, workflow.ErrInvalidState) {
+		t.Fatalf("tampered resume error=%v", err)
 	}
 }
 
@@ -191,6 +306,14 @@ func contains(value, substring string) bool {
 		}
 	}
 	return false
+}
+
+func authority(character byte, privacy string) workflow.AuthorityEnvelope {
+	return workflow.AuthorityEnvelope{
+		SchemaVersion: workflow.AuthorityEnvelopeSchemaVersion,
+		PlanSHA256:    digest(character), GrantSetSHA256: digest(character + 1),
+		PrivacyPartition: privacy, EpochSHA256: digest(character + 2), NotAfterUnixMS: 1 << 62,
+	}
 }
 
 func digest(character byte) string {

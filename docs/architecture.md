@@ -269,8 +269,9 @@ continuation memory tiering are separate mechanisms with explicit dependency
 validation. Programmatic calls re-enter the same Host-owned capability plane;
 they do not receive ambient authority or imply approval, caching, replay or cold
 memory. A bounded Plan-bound approval lease can preserve one real pending ABI
-call in the same Wazero/CPython execution; rejection, expiry and cancellation do
-not dispatch the handler. Pysolate does not claim complete arbitrary
+call in the same Wazero/CPython execution. Rejection and expiry do not dispatch
+the handler; cancellation that wins the explicit dispatch-commit gate also stays
+pre-dispatch. Pysolate does not claim complete arbitrary
 CPython/Wazero snapshot and restore.
 
 The source-backed DeepSeek Harness PTC comparison, lifecycle, package boundaries,

@@ -81,11 +81,13 @@ authority.
 Programmatic presentation is not a new authority surface: generated child IDs
 must match their parent and operation sequence before budget consumption, and
 all calls re-enter the same Broker. For a Plan-bound approval lease, the Broker
-publishes only a digest-bound request and blocks before the live handler. Reject,
-expiry and cancellation execute no handler; an approved call executes at most
-once and cannot be replayed by the approval controller. Audit records retain no
-raw arguments or results. The implemented claim is same-process hot waiting,
-not crash-safe or indefinite durability.
+publishes only a digest-bound request and blocks before the live handler. Reject
+and expiry execute no handler. Cancellation and dispatch are linearized under one
+Host-owned gate: cancellation that wins it remains pre-dispatch; cancellation
+after commit is post-dispatch and cannot authorize replay. An approved call
+executes at most once and cannot be replayed by the approval controller. Audit
+records retain no raw arguments or results. The implemented claim is
+same-process hot waiting, not crash-safe or indefinite durability.
 
 The credential-free `sources.demo_catalog()` and
 `sources.benchmark_manifest()` adapters are the two Current external-read

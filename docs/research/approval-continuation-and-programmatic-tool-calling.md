@@ -17,7 +17,9 @@ The first bounded slice is implemented and evidenced by
   denied before call-budget consumption;
 - one optional Plan-bound approval lease blocks synchronously inside the existing
   Broker call before the live handler;
-- approve dispatches once; reject, expiry and cancellation dispatch zero times;
+- approve reaches an explicit dispatch-commit linearization point and dispatches
+  once; reject and expiry dispatch zero times, while cancellation dispatches zero
+  when it wins that gate;
 - body-safe approval audit state remains in the independent controller after the
   Broker/Guest is closed;
 - receipts bind child, parent, approval request and Plan identities.

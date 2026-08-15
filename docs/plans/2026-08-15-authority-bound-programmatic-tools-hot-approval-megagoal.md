@@ -134,8 +134,9 @@ GREEN must not add another registry, scheduler, handler, or transport.
 RED tests must first prove:
 
 - approval-required Spec cannot dispatch without enabled approval/controller;
-- approve dispatches exactly once;
-- reject, expire, and context cancellation dispatch zero times;
+- approve crosses one explicit dispatch-commit gate and dispatches exactly once;
+- reject and expire dispatch zero times; cancellation dispatches zero when it wins
+  that gate;
 - late approval after expiry cannot revive a request;
 - cancellation unblocks a pending call;
 - duplicate decision is rejected;
@@ -158,7 +159,8 @@ Build or reuse the exact WASM artifact and run bounded E2E cases:
    approval, proving continuation at the same Python invocation;
 4. the handler call count is one, source execution count is one, and no replay
    path is called;
-5. reject, expiry, and cancellation execute no handler and terminate cleanly;
+5. reject and expiry execute no handler; cancellation that wins the explicit
+   dispatch-commit gate also executes no handler and terminates cleanly;
 6. parent/child IDs, receipt IDs, execution ID, Plan digest, approval request, and
    audit status cross-bind.
 

@@ -42,6 +42,17 @@ type PlannerConfig struct {
 	PreissueContext PreissueContext
 }
 
+type preissuePassIdentity struct {
+	StreamEpoch             string `json:"stream_epoch"`
+	WorkflowEpoch           string `json:"workflow_epoch"`
+	FreshnessEpoch          string `json:"freshness_epoch"`
+	ExpiryEpoch             string `json:"expiry_epoch"`
+	PrivacyPartition        string `json:"privacy_partition"`
+	ParentLineageSHA256     string `json:"parent_lineage_sha256"`
+	BudgetReservationSHA256 string `json:"budget_reservation_sha256"`
+	RemainingPhysicalReads  uint32 `json:"remaining_physical_reads"`
+}
+
 type SourceDocument struct {
 	ID       string     `json:"id"`
 	Language string     `json:"language"`
@@ -58,8 +69,9 @@ type SourceOccurrence struct {
 }
 
 type PassSelection struct {
-	Name    PassName `json:"name"`
-	Version string   `json:"version"`
+	Name         PassName `json:"name"`
+	Version      string   `json:"version"`
+	ConfigSHA256 string   `json:"config_sha256"`
 }
 
 type PassDecision struct {
@@ -91,6 +103,7 @@ type sourceBindingCandidate struct {
 	documentID   string
 	sourceSHA256 string
 	site         CallSite
+	exclusive    bool
 }
 
 func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.Plan, config PlannerConfig) (SourceBoundPlan, error) {
@@ -106,6 +119,22 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 	if err != nil {
 		return SourceBoundPlan{}, ErrInvalidPlannerInput
 	}
+	for index := range passes {
+		switch passes[index].Name {
+		case PassSemanticPreDispatch:
+			passes[index].ConfigSHA256, _, err = identity(preissuePassIdentity{
+				StreamEpoch: config.PreissueContext.StreamEpoch, WorkflowEpoch: config.PreissueContext.WorkflowEpoch,
+				FreshnessEpoch: config.PreissueContext.FreshnessEpoch, ExpiryEpoch: config.PreissueContext.ExpiryEpoch,
+				PrivacyPartition: config.PreissueContext.PrivacyPartition, ParentLineageSHA256: config.PreissueContext.ParentLineageSHA256,
+				BudgetReservationSHA256: config.PreissueContext.BudgetReservationSHA256, RemainingPhysicalReads: config.PreissueContext.RemainingPhysicalReads,
+			})
+		default:
+			return SourceBoundPlan{}, ErrInvalidPlannerConfig
+		}
+		if err != nil {
+			return SourceBoundPlan{}, ErrInvalidPlannerInput
+		}
+	}
 	document := SourceDocument{
 		ID: sourceDocumentIdentity(analysis.SourceSHA256), Language: "python",
 		SHA256: analysis.SourceSHA256, Span: analysis.ModuleSpan,
@@ -117,7 +146,10 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 			ID: site.ID, DocumentID: document.ID, Span: site.Span,
 			Capability: site.Capability, DynamicOccurrence: site.DynamicOccurrence,
 		})
-		candidates = append(candidates, sourceBindingCandidate{documentID: document.ID, sourceSHA256: analysis.SourceSHA256, site: site})
+		candidates = append(candidates, sourceBindingCandidate{
+			documentID: document.ID, sourceSHA256: analysis.SourceSHA256, site: site,
+			exclusive: exclusiveDynamicCallAnalysis(analysis),
+		})
 	}
 	sort.Slice(occurrences, func(i, j int) bool { return occurrences[i].ID < occurrences[j].ID })
 
@@ -167,7 +199,7 @@ func NewSourceBindingResolver(plan SourceBoundPlan) (*capability.SourceBindingRe
 	byRequest := make(map[string][]receipt.SourceBinding)
 	for _, candidate := range plan.candidates {
 		site := candidate.site
-		if !site.ArgumentsCanonical || len(site.CanonicalArguments) == 0 {
+		if !candidate.exclusive || !site.NecessarilyReached || !site.ArgumentsCanonical || len(site.CanonicalArguments) == 0 {
 			continue
 		}
 		binding := receipt.SourceBinding{

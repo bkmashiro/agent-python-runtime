@@ -72,8 +72,9 @@ func TestRealGuestSysMonitoringCallPositionAndResultParity(t *testing.T) {
 	}
 	position := result.Captured[0]
 	if position.Offset != 14 || position.Line != 8 || position.EndLine != 8 || position.Column != 13 || position.EndColumn != 23 {
-		t.Fatalf("unexpected exact CALL position: %+v", position)
+		t.Fatalf("unexpected CALL position: %+v", position)
 	}
+	t.Logf("monitoring CALL position: python=%q offset=%d span=%d:%d-%d:%d", result.Python, position.Offset, position.Line, position.Column, position.EndLine, position.EndColumn)
 }
 
 func TestRealGuestSysMonitoringBoundedOverheadProbe(t *testing.T) {

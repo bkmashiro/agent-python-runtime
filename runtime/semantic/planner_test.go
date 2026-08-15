@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -76,6 +77,19 @@ func TestSemanticPreDispatchPassReusesExistingLegalityDecision(t *testing.T) {
 	again, err := BuildSourceBoundPlan(verified, capabilityPlan, config)
 	if err != nil || planned.Identity() != again.Identity() || !reflect.DeepEqual(planned.Projection(), again.Projection()) {
 		t.Fatalf("non-deterministic plans: first=%+v second=%+v err=%v", planned.Projection(), again.Projection(), err)
+	}
+	if len(projection.Passes) != 1 || !digestPattern.MatchString(projection.Passes[0].ConfigSHA256) {
+		t.Fatalf("missing pass config identity: %+v", projection.Passes)
+	}
+	encoded, err := json.Marshal(projection)
+	if err != nil || strings.Contains(string(encoded), config.PreissueContext.StreamEpoch) || strings.Contains(string(encoded), config.PreissueContext.PrivacyPartition) {
+		t.Fatalf("pass projection leaked raw frozen context: %s err=%v", encoded, err)
+	}
+	changedConfig := config
+	changedConfig.PreissueContext.StreamEpoch = "other-stream"
+	changed, err := BuildSourceBoundPlan(verified, capabilityPlan, changedConfig)
+	if err != nil || changed.Identity() == planned.Identity() || changed.Projection().Passes[0].ConfigSHA256 == projection.Passes[0].ConfigSHA256 {
+		t.Fatalf("frozen context did not change plan identity: changed=%+v err=%v", changed.Projection(), err)
 	}
 }
 
@@ -167,8 +181,24 @@ func TestSourceBindingResolverMatchesOnlyExactProgrammaticOccurrence(t *testing.
 	}
 }
 
-func TestSourceBindingResolverRejectsAmbiguousStaticOccurrences(t *testing.T) {
+func TestSourceBindingResolverRejectsNonProvenAndAmbiguousOccurrences(t *testing.T) {
 	capabilityPlan := legalityTestPlan(t, true)
+	nonProven, nonProvenSite := legalityVerifiedAnalysis(t, capabilityPlan, false)
+	nonProvenPlan, err := BuildSourceBoundPlan(nonProven, capabilityPlan, PlannerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonProvenResolver, err := NewSourceBindingResolver(nonProvenPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding, ok := nonProvenResolver.ResolveSource(capability.SourceBindingRequest{
+		CallID: "parent:program:1", ParentCallID: "parent", Programmatic: true,
+		Capability: nonProvenSite.Capability, Arguments: json.RawMessage(`{"key":"profile"}`),
+	}); ok {
+		t.Fatalf("non-necessarily-reached occurrence resolved as %+v", binding)
+	}
+
 	verified, site := legalityVerifiedAnalysis(t, capabilityPlan, true)
 	analysis, err := verified.Analysis()
 	if err != nil {

@@ -118,4 +118,7 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		bound.EndLine != site.Span.EndLine || bound.EndColumn != site.Span.EndColumn {
 		t.Fatalf("binding=%+v site=%+v", bound, site)
 	}
+	t.Logf("source-bound receipt: plan=%s document=%s source=%s occurrence=%s dynamic=%d span=%d:%d-%d:%d receipt=%s",
+		capabilityPlan.Identity(), bound.DocumentID, bound.SourceSHA256, bound.OccurrenceID, bound.DynamicOccurrence,
+		bound.StartLine, bound.StartColumn, bound.EndLine, bound.EndColumn, receipts[0].ReceiptID)
 }

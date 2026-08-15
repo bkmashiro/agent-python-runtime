@@ -213,6 +213,8 @@ Gate: focused semantic/capability/receipt/response/race tests; signed commit and
 
 ## Phase 3 — bounded monitoring spike
 
+**Status:** Complete — `accepted_for_future_debug_profile`, not integrated. The rebuilt CPython 3.14.0/WASI Guest exposed `sys.monitoring`; local `CALL` monitoring reported instruction offset 14 and exact span `8:13-8:23` with result parity. In the bounded 9-sample/10,000-iteration call-heavy probe, disabled median was 3,797,125 ns, local `CALL` median 10,423,333 ns (2.745×), and `LINE` median 14,721,167 ns (3.877×). These are microbenchmark costs, not end-to-end application overhead. Monitoring remains debug-only, default-off, body-bounded and outside authority/receipt decisions; static source-bound evidence remains distinct from executed-line evidence.
+
 Implement an explicitly experimental test/probe, not production tracing:
 
 - confirm exact CPython version and `sys.monitoring` availability in the final artifact;

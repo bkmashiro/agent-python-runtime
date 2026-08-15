@@ -60,7 +60,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "outcome"],
+        "required": ["receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "request_sha256", "outcome"],
         "properties": {
           "receipt_id": {"type": "string", "minLength": 1, "maxLength": 160},
           "run_id": {"type": "string", "minLength": 1, "maxLength": 128},

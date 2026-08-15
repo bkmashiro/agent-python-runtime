@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"unicode/utf8"
 
+	capabilityreceipt "github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -345,7 +346,7 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 		"call_id": {}, "parent_call_id": {}, "approval_request_id": {},
 		"operation_index": {}, "request_sha256": {}, "response_sha256": {}, "outcome": {},
 	}
-	required := []string{"receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "outcome"}
+	required := []string{"receipt_id", "run_id", "capability_plan_sha256", "capability", "operation_index", "request_sha256", "outcome"}
 	for _, item := range items {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
@@ -384,6 +385,15 @@ func validateCapabilityReceipts(raw json.RawMessage, capabilityPlanSHA256 *strin
 		}
 		if capabilityPlanSHA256 == nil || callReceipt.CapabilityPlanSHA256 != *capabilityPlanSHA256 {
 			return errors.New("run response receipt capability plan does not match Host evidence")
+		}
+		operationIndex, _ := receiptOperationIndex(callReceipt.OperationIndex)
+		if !capabilityreceipt.ValidIdentity(capabilityreceipt.Receipt{
+			ReceiptID: callReceipt.ReceiptID, RunID: callReceipt.RunID, CapabilityPlanSHA256: callReceipt.CapabilityPlanSHA256,
+			CallID: callReceipt.CallID, ParentCallID: callReceipt.ParentCallID, ApprovalRequestID: callReceipt.ApprovalRequestID,
+			Capability: callReceipt.Capability, OperationIndex: operationIndex, RequestSHA256: callReceipt.RequestSHA256,
+			ResponseSHA256: callReceipt.ResponseSHA256, Outcome: callReceipt.Outcome,
+		}) {
+			return errors.New("run response receipt identity does not match its bound operation")
 		}
 	}
 	return nil
@@ -458,16 +468,24 @@ func validBareSHA256(value string) bool {
 }
 
 func validOperationIndex(value json.Number) bool {
+	_, ok := receiptOperationIndex(value)
+	return ok
+}
+
+func receiptOperationIndex(value json.Number) (uint32, bool) {
 	rational, ok := new(big.Rat).SetString(value.String())
 	if !ok || rational.Sign() < 0 || !rational.IsInt() {
-		return false
+		return 0, false
 	}
 	maximum := new(big.Int).SetUint64(uint64(^uint32(0)))
-	return rational.Num().Cmp(maximum) <= 0
+	if rational.Num().Cmp(maximum) > 0 {
+		return 0, false
+	}
+	return uint32(rational.Num().Uint64()), true
 }
 
 func validReceiptOutcome(outcome string) bool {
-	return outcome == "ok" || outcome == "denied" || outcome == "error" || outcome == "timeout"
+	return outcome == "ok" || outcome == "denied" || outcome == "error" || outcome == "timeout" || outcome == "ambiguous"
 }
 
 type denySchemaURLLoader struct{}

@@ -30,24 +30,36 @@ func NewBound(runIdentity, capabilityPlanSHA256, callID, parentCallID, capabilit
 }
 
 func NewAuthorized(runIdentity, capabilityPlanSHA256, callID, parentCallID, approvalRequestID, capability string, operationIndex uint32, requestIdentity, outcome string, response []byte) Receipt {
-	requestDigest := digest([]byte(requestIdentity))
+	receipt := Receipt{
+		RunID: runIdentity, CapabilityPlanSHA256: capabilityPlanSHA256,
+		Capability: capability, CallID: callID, ParentCallID: parentCallID, ApprovalRequestID: approvalRequestID,
+		OperationIndex: operationIndex, RequestSHA256: digest([]byte(requestIdentity)), Outcome: outcome,
+	}
+	if response != nil {
+		receipt.ResponseSHA256 = digest(response)
+	}
+	receipt.ReceiptID = operationIdentity(receipt)
+	return receipt
+}
+
+// ValidIdentity verifies the operation identity projected with a receipt. The
+// identity intentionally remains stable across outcome/response changes, while
+// v2 binds the programmatic parent and approval request when either is present.
+func ValidIdentity(receipt Receipt) bool {
+	return receipt.ReceiptID != "" && receipt.ReceiptID == operationIdentity(receipt)
+}
+
+func operationIdentity(receipt Receipt) string {
 	identity := sha256.New()
-	fields := []string{"pysolate-receipt-v1", runIdentity, capabilityPlanSHA256, callID, capability, strconv.FormatUint(uint64(operationIndex), 10), requestDigest}
-	if approvalRequestID != "" {
-		fields = []string{"pysolate-receipt-v1", runIdentity, capabilityPlanSHA256, callID, approvalRequestID, capability, strconv.FormatUint(uint64(operationIndex), 10), requestDigest}
+	fields := []string{"pysolate-receipt-v1", receipt.RunID, receipt.CapabilityPlanSHA256, receipt.CallID, receipt.Capability, strconv.FormatUint(uint64(receipt.OperationIndex), 10), receipt.RequestSHA256}
+	if receipt.ParentCallID != "" || receipt.ApprovalRequestID != "" {
+		fields = []string{"pysolate-receipt-v2", receipt.RunID, receipt.CapabilityPlanSHA256, receipt.CallID, receipt.ParentCallID, receipt.ApprovalRequestID, receipt.Capability, strconv.FormatUint(uint64(receipt.OperationIndex), 10), receipt.RequestSHA256}
 	}
 	for _, field := range fields {
 		identity.Write([]byte(field))
 		identity.Write([]byte{0})
 	}
-	receipt := Receipt{
-		ReceiptID: "rcpt_" + hex.EncodeToString(identity.Sum(nil)), RunID: runIdentity, CapabilityPlanSHA256: capabilityPlanSHA256,
-		Capability: capability, CallID: callID, ParentCallID: parentCallID, ApprovalRequestID: approvalRequestID, OperationIndex: operationIndex, RequestSHA256: requestDigest, Outcome: outcome,
-	}
-	if response != nil {
-		receipt.ResponseSHA256 = digest(response)
-	}
-	return receipt
+	return "rcpt_" + hex.EncodeToString(identity.Sum(nil))
 }
 
 func digest(value []byte) string {

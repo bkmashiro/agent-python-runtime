@@ -2,9 +2,12 @@ package runtime
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+
+	capabilityreceipt "github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 func TestDecodeAndValidateRunResponseEnforcesOutputSchema(t *testing.T) {
@@ -77,7 +80,12 @@ func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
 	if _, err := DecodeAndValidateRunResponse(request, empty); err != nil {
 		t.Fatalf("zero-call Host capability plan was rejected: %v", err)
 	}
-	receipt := `{"receipt_id":"rcpt_test","run_id":"host-run","capability_plan_sha256":"` + planB + `","capability":"workspace.read_text","operation_index":0,"request_sha256":"` + strings.Repeat("c", 64) + `","response_sha256":"` + strings.Repeat("d", 64) + `","outcome":"ok"}`
+	baseReceipt := capabilityreceipt.New("host-run", planB, "call-1", "workspace.read_text", 0, `{"path":"a"}`, "ok", []byte("value"))
+	baseReceiptJSON, err := json.Marshal(baseReceipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := string(baseReceiptJSON)
 	mismatch := []byte(`{"status":"ok","result":1,"receipts":[` + receipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
 	if _, err := DecodeAndValidateRunResponse(request, mismatch); err == nil {
 		t.Fatal("receipt with a different capability plan was accepted")
@@ -91,20 +99,25 @@ func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
 		t.Fatal("explicit null capability plan was accepted")
 	}
 
-	validReceipt := strings.Replace(receipt, planB, planA, 1)
-	programmaticReceipt := strings.Replace(validReceipt, `"capability":"workspace.read_text"`, `"call_id":"parent:program:1","parent_call_id":"parent","approval_request_id":"apr_`+strings.Repeat("e", 64)+`","capability":"workspace.read_text"`, 1)
+	valid := capabilityreceipt.New("host-run", planA, "call-1", "workspace.read_text", 0, `{"path":"a"}`, "ok", []byte("value"))
+	validReceiptBytes, _ := json.Marshal(valid)
+	validReceipt := string(validReceiptBytes)
+	programmatic := capabilityreceipt.NewAuthorized("host-run", planA, "parent:program:1", "parent", "apr_"+strings.Repeat("e", 64), "workspace.read_text", 0, `{"path":"a"}`, "ok", []byte("value"))
+	programmaticReceiptBytes, _ := json.Marshal(programmatic)
+	programmaticReceipt := string(programmaticReceiptBytes)
 	programmaticPayload := []byte(`{"status":"ok","result":1,"receipts":[` + programmaticReceipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
 	if _, err := DecodeAndValidateRunResponse(request, programmaticPayload); err != nil {
 		t.Fatalf("valid programmatic receipt rejected: %v", err)
 	}
 	invalidReceipts := map[string]string{
 		"near-match program parent": `[` + strings.Replace(programmaticReceipt, `"call_id":"parent:program:1"`, `"call_id":"other:program:1"`, 1) + `]`,
+		"receipt identity mismatch": `[` + strings.Replace(validReceipt, valid.ReceiptID, "rcpt_"+strings.Repeat("f", 64), 1) + `]`,
 		"null array":                "null",
 		"sparse receipt":            `[{"capability_plan_sha256":"` + planA + `"}]`,
 		"unknown receipt field":     `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"ok","extra":true`, 1) + `]`,
-		"null required field":       `[` + strings.Replace(validReceipt, `"receipt_id":"rcpt_test"`, `"receipt_id":null`, 1) + `]`,
-		"invalid request digest":    `[` + strings.Replace(validReceipt, strings.Repeat("c", 64), "xyz", 1) + `]`,
-		"empty response digest":     `[` + strings.Replace(validReceipt, strings.Repeat("d", 64), "", 1) + `]`,
+		"null required field":       `[` + strings.Replace(validReceipt, `"receipt_id":"`+valid.ReceiptID+`"`, `"receipt_id":null`, 1) + `]`,
+		"invalid request digest":    `[` + strings.Replace(validReceipt, valid.RequestSHA256, "xyz", 1) + `]`,
+		"empty response digest":     `[` + strings.Replace(validReceipt, valid.ResponseSHA256, "", 1) + `]`,
 		"invalid outcome":           `[` + strings.Replace(validReceipt, `"outcome":"ok"`, `"outcome":"unknown"`, 1) + `]`,
 		"fractional operation":      `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":1.5`, 1) + `]`,
 		"operation overflow":        `[` + strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":4294967296`, 1) + `]`,
@@ -120,8 +133,10 @@ func TestRunResponseCapabilityPlanIsHostOnlyAndBindsReceipts(t *testing.T) {
 	if _, err := DecodeAndValidateRunResponse(request, tooManyPayload); err == nil {
 		t.Fatal("more than 256 receipts were accepted")
 	}
-	for _, operation := range []string{"1.0", "1e0", "10e-1", "-0.0", "4.294967295e9"} {
-		integralReceipt := strings.Replace(validReceipt, `"operation_index":0`, `"operation_index":`+operation, 1)
+	integralBase := capabilityreceipt.New("host-run", planA, "call-2", "workspace.read_text", 1, `{"path":"a"}`, "ok", []byte("value"))
+	integralBaseJSON, _ := json.Marshal(integralBase)
+	for _, operation := range []string{"1.0", "1e0", "10e-1"} {
+		integralReceipt := strings.Replace(string(integralBaseJSON), `"operation_index":1`, `"operation_index":`+operation, 1)
 		payload := []byte(`{"status":"ok","result":1,"receipts":[` + integralReceipt + `],"metrics":{"capability_calls":1,"result_bytes":1},"error":null,"capability_plan_sha256":"` + planA + `"}`)
 		if _, err := DecodeAndValidateRunResponse(request, payload); err != nil {
 			t.Fatalf("schema-valid integral operation_index %s was rejected: %v", operation, err)

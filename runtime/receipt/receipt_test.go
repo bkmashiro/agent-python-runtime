@@ -29,10 +29,16 @@ func TestReceiptIdentityIsDeterministicAndBindsOperation(t *testing.T) {
 	}
 }
 
-func TestProgrammaticReceiptProjectsParentAndChildIdentity(t *testing.T) {
-	got := receipt.NewBound("host-run", "sha256:"+strings.Repeat("a", 64), "parent-call:program:1", "parent-call", "fetch_many", 0, `{}`, "ok", nil)
-	if got.CallID != "parent-call:program:1" || got.ParentCallID != "parent-call" {
-		t.Fatalf("receipt identity projection = %#v", got)
+func TestProgrammaticReceiptProjectsAndBindsParentAndChildIdentity(t *testing.T) {
+	plan := "sha256:" + strings.Repeat("a", 64)
+	got := receipt.NewBound("host-run", plan, "parent-call:program:1", "parent-call", "fetch_many", 0, `{}`, "ok", nil)
+	changed := receipt.NewBound("host-run", plan, "other-parent:program:1", "other-parent", "fetch_many", 0, `{}`, "ok", nil)
+	if got.CallID != "parent-call:program:1" || got.ParentCallID != "parent-call" || got.ReceiptID == changed.ReceiptID || !receipt.ValidIdentity(got) {
+		t.Fatalf("receipt identity projection = %#v changed=%#v", got, changed)
+	}
+	got.ParentCallID = "other-parent"
+	if receipt.ValidIdentity(got) {
+		t.Fatal("tampered parent retained valid receipt identity")
 	}
 }
 
@@ -40,8 +46,12 @@ func TestApprovalRequestChangesReceiptIdentityAndIsProjected(t *testing.T) {
 	plan := "sha256:" + strings.Repeat("a", 64)
 	first := receipt.NewAuthorized("host-run", plan, "call-1", "", "apr_"+strings.Repeat("1", 64), "fetch_many", 0, `{}`, "ok", nil)
 	second := receipt.NewAuthorized("host-run", plan, "call-1", "", "apr_"+strings.Repeat("2", 64), "fetch_many", 0, `{}`, "ok", nil)
-	if first.ReceiptID == second.ReceiptID || first.ApprovalRequestID == "" {
+	if first.ReceiptID == second.ReceiptID || first.ApprovalRequestID == "" || !receipt.ValidIdentity(first) {
 		t.Fatalf("approval binding missing: first=%#v second=%#v", first, second)
+	}
+	first.ApprovalRequestID = second.ApprovalRequestID
+	if receipt.ValidIdentity(first) {
+		t.Fatal("tampered approval request retained valid receipt identity")
 	}
 }
 

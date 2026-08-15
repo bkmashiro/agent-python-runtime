@@ -696,6 +696,15 @@ dispatch on `Pxx`, family or `Expected`; expected values remain independent orac
   artifact `sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795`
   built from source commit `ae922641cd9c539b68a0ea7110b5dc205e5c9a8a`. This is a
   correctness checkpoint, not a campaign or performance result.
+- 2026-08-15: Added the research-only `RuntimeCampaignAdapter`, composed entirely from
+  existing generic APIs: `agentfunction` exact sharing, private `workspace` branches and
+  sealed-root verification, authority-bound `workflow` resume, and bounded `subagent`
+  staging. A full qualified P01-P20 run against the real workstation Guest passed with 20
+  logical rows and 17 recorded physical executions. P05/P06 shared one physical Guest,
+  P10/P11 shared exact-root verification, and expired/widened/over-budget/late requests
+  produced no physical execution. This is correctness evidence only; balanced repetitions
+  are still required before any performance claim. A private evidence CLI records each
+  baseline/qualified run with artifact and campaign source attribution.
 
 ## Short prompt to start this Mega-Goal
 

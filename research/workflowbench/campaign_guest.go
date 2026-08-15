@@ -33,6 +33,10 @@ type CampaignGuestExecution struct {
 	Workspace   *CampaignWorkspaceBinding
 }
 
+type CampaignGuestRunner interface {
+	Execute(context.Context, CampaignGuestExecution) (json.RawMessage, error)
+}
+
 type CampaignGuestExecutor struct {
 	artifact  []byte
 	plans     map[string]*capability.Plan
@@ -58,6 +62,24 @@ func NewCampaignGuestExecutor(config CampaignGuestExecutorConfig) (*CampaignGues
 		return nil, errors.Join(ErrInvalidCampaignGuestExecution, err)
 	}
 	return &CampaignGuestExecutor{artifact: append([]byte(nil), config.Artifact...), plans: plans, runConfig: runConfig}, nil
+}
+
+func (executor *CampaignGuestExecutor) ArtifactSHA256() string {
+	if executor == nil {
+		return ""
+	}
+	return campaignDigest(executor.artifact)
+}
+
+func (executor *CampaignGuestExecutor) ExecutionProfileSHA256() string {
+	if executor == nil {
+		return ""
+	}
+	identity, err := runtimeconfig.ExecutionProfileBindingSHA256(executor.runConfig)
+	if err != nil {
+		return ""
+	}
+	return identity
 }
 
 func (executor *CampaignGuestExecutor) Execute(ctx context.Context, execution CampaignGuestExecution) (json.RawMessage, error) {

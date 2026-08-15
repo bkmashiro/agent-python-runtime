@@ -8,6 +8,8 @@ DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
+BUILD_CACHE_ROOT=${AGENT_RUNTIME_BUILD_CACHE_ROOT:-}
+BUILD_CACHE_MODE=${AGENT_RUNTIME_BUILD_CACHE_MODE:-off}
 ARTIFACT_PROFILE=base
 ARTIFACT_FILENAME="agent-python-runtime.wasm"
 INITIAL_MEMORY_BYTES=134217728
@@ -33,37 +35,93 @@ if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
   exit 2
 fi
+case "${BUILD_CACHE_MODE}" in
+  off|auto|refresh) ;;
+  *)
+    echo "AGENT_RUNTIME_BUILD_CACHE_MODE must be off, auto, or refresh" >&2
+    exit 19
+    ;;
+esac
+if [[ ${BUILD_CACHE_MODE} != off && ( -z ${BUILD_CACHE_ROOT} || ${BUILD_CACHE_ROOT} != /* ) ]]; then
+  echo "AGENT_RUNTIME_BUILD_CACHE_ROOT must be an absolute path when cache is enabled" >&2
+  exit 20
+fi
 
 rm -rf "${WORK_DIR}" "${DIST_DIR}"
 mkdir -p "${DOWNLOAD_DIR}" "${TOOLS_DIR}" "${DIST_DIR}"
+
+if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
+  SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" --repository "${ROOT_DIR}" HEAD)
+fi
+if [[ -z ${GITHUB_SHA:-} ]]; then
+  GITHUB_SHA=$(git -C "${ROOT_DIR}" rev-parse HEAD)
+fi
+export GITHUB_SHA
+if [[ ! ${SOURCE_DATE_EPOCH} =~ ^[1-9][0-9]*$ ]]; then
+  echo "SOURCE_DATE_EPOCH must be a positive integer" >&2
+  exit 6
+fi
+export SOURCE_DATE_EPOCH
 
 fetch() {
   python3 "${ROOT_DIR}/tools/fetch_locked_source.py" "$1" "${DOWNLOAD_DIR}/$2" \
     --lock "${SOURCE_LOCK}"
 }
 
-fetch cpython-source cpython.tgz
-fetch wasi-sdk-linux-x86_64 wasi-sdk.tar.gz
-fetch wasm-tools-linux-x86_64 wasm-tools.tar.gz
-fetch wasmtime-linux-x86_64 wasmtime.tar.xz
-fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
-fetch wasi-vfs-static-library wasi-vfs-lib.zip
-fetch wasi-vfs-linked-storage-source wasi-vfs-linked-storage.c
+# BEGIN CPYTHON CACHE RECIPE
+BUILD_CACHE_KEY=$(python3 "${ROOT_DIR}/guest/build/cache_identity.py" --repository "${ROOT_DIR}")
+BUILD_CACHE_STATUS=off
+BUILD_CACHE_LAYER_SHA256=""
+BUILD_CACHE_ENTRY=""
+if [[ ${BUILD_CACHE_MODE} != off ]]; then
+  mkdir -p "${BUILD_CACHE_ROOT}"
+  chmod 0700 "${BUILD_CACHE_ROOT}"
+  if [[ ! -d ${BUILD_CACHE_ROOT} || -L ${BUILD_CACHE_ROOT} ]]; then
+    echo "Guest build cache root must be a real directory" >&2
+    exit 21
+  fi
+  BUILD_CACHE_ENTRY="${BUILD_CACHE_ROOT}/${BUILD_CACHE_KEY#sha256:}"
+  exec 9>"${BUILD_CACHE_ROOT}/.publish.lock"
+  flock 9
+  if [[ ${BUILD_CACHE_MODE} == refresh ]]; then
+    rm -rf "${BUILD_CACHE_ENTRY}"
+  fi
+  if [[ -f "${BUILD_CACHE_ENTRY}/RESULT.READY" && -f "${BUILD_CACHE_ENTRY}/layer.tar" && -f "${BUILD_CACHE_ENTRY}/SHA256SUMS" ]] &&
+    grep -Fxq "cache_key=${BUILD_CACHE_KEY}" "${BUILD_CACHE_ENTRY}/RESULT.READY" &&
+    (cd "${BUILD_CACHE_ENTRY}" && sha256sum -c SHA256SUMS >/dev/null) &&
+    python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${BUILD_CACHE_ENTRY}/layer.tar"; then
+    tar xf "${BUILD_CACHE_ENTRY}/layer.tar" -C "${WORK_DIR}"
+    BUILD_CACHE_LAYER_SHA256="sha256:$(sha256sum "${BUILD_CACHE_ENTRY}/layer.tar" | cut -d' ' -f1)"
+    BUILD_CACHE_STATUS=hit
+  else
+    BUILD_CACHE_STATUS=miss
+  fi
+fi
 
-mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
-  "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"
-tar xzf "${DOWNLOAD_DIR}/cpython.tgz" -C "${CPYTHON_DIR}" --strip-components=1
-CPYTHON_WASI_CONFIG_SITE="${CPYTHON_DIR}/Tools/wasm/wasi/config.site-wasm32-wasi"
-python3 "${ROOT_DIR}/tools/patch_cpython_wasi_timer_config.py" \
-  "${CPYTHON_WASI_CONFIG_SITE}" "${CPYTHON_WASI_CONFIG_SITE}.patched"
-mv "${CPYTHON_WASI_CONFIG_SITE}.patched" "${CPYTHON_WASI_CONFIG_SITE}"
-python3 "${ROOT_DIR}/tools/patch_cpython_import_gate.py" \
-  "${CPYTHON_DIR}/Python/import.c"
-tar xzf "${DOWNLOAD_DIR}/wasi-sdk.tar.gz" -C "${TOOLS_DIR}/wasi-sdk" --strip-components=1
-tar xzf "${DOWNLOAD_DIR}/wasm-tools.tar.gz" -C "${TOOLS_DIR}/wasm-tools" --strip-components=1
-tar xJf "${DOWNLOAD_DIR}/wasmtime.tar.xz" -C "${TOOLS_DIR}/wasmtime" --strip-components=1
-unzip -q "${DOWNLOAD_DIR}/wasi-vfs-cli.zip" -d "${TOOLS_DIR}/wasi-vfs-cli"
-unzip -q "${DOWNLOAD_DIR}/wasi-vfs-lib.zip" -d "${TOOLS_DIR}/wasi-vfs-lib"
+if [[ ${BUILD_CACHE_STATUS} != hit ]]; then
+  fetch cpython-source cpython.tgz
+  fetch wasi-sdk-linux-x86_64 wasi-sdk.tar.gz
+  fetch wasm-tools-linux-x86_64 wasm-tools.tar.gz
+  fetch wasmtime-linux-x86_64 wasmtime.tar.xz
+  fetch wasi-vfs-cli-linux-x86_64 wasi-vfs-cli.zip
+  fetch wasi-vfs-static-library wasi-vfs-lib.zip
+  fetch wasi-vfs-linked-storage-source wasi-vfs-linked-storage.c
+
+  mkdir -p "${CPYTHON_DIR}" "${TOOLS_DIR}/wasi-sdk" "${TOOLS_DIR}/wasm-tools" \
+    "${TOOLS_DIR}/wasmtime" "${TOOLS_DIR}/wasi-vfs-cli" "${TOOLS_DIR}/wasi-vfs-lib"
+  tar xzf "${DOWNLOAD_DIR}/cpython.tgz" -C "${CPYTHON_DIR}" --strip-components=1
+  CPYTHON_WASI_CONFIG_SITE="${CPYTHON_DIR}/Tools/wasm/wasi/config.site-wasm32-wasi"
+  python3 "${ROOT_DIR}/tools/patch_cpython_wasi_timer_config.py" \
+    "${CPYTHON_WASI_CONFIG_SITE}" "${CPYTHON_WASI_CONFIG_SITE}.patched"
+  mv "${CPYTHON_WASI_CONFIG_SITE}.patched" "${CPYTHON_WASI_CONFIG_SITE}"
+  python3 "${ROOT_DIR}/tools/patch_cpython_import_gate.py" \
+    "${CPYTHON_DIR}/Python/import.c"
+  tar xzf "${DOWNLOAD_DIR}/wasi-sdk.tar.gz" -C "${TOOLS_DIR}/wasi-sdk" --strip-components=1
+  tar xzf "${DOWNLOAD_DIR}/wasm-tools.tar.gz" -C "${TOOLS_DIR}/wasm-tools" --strip-components=1
+  tar xJf "${DOWNLOAD_DIR}/wasmtime.tar.xz" -C "${TOOLS_DIR}/wasmtime" --strip-components=1
+  unzip -q "${DOWNLOAD_DIR}/wasi-vfs-cli.zip" -d "${TOOLS_DIR}/wasi-vfs-cli"
+  unzip -q "${DOWNLOAD_DIR}/wasi-vfs-lib.zip" -d "${TOOLS_DIR}/wasi-vfs-lib"
+fi
 
 WASI_SDK_PATH="${TOOLS_DIR}/wasi-sdk"
 WASMTIME="${TOOLS_DIR}/wasmtime/wasmtime"
@@ -80,25 +138,15 @@ for required in "${WASI_SDK_PATH}/bin/clang" "${WASMTIME}" "${WASM_TOOLS}" \
 done
 chmod +x "${WASMTIME}" "${WASM_TOOLS}" "${WASI_VFS}"
 export WASI_SDK_PATH WASMTIME
-export PATH="$(dirname "${WASMTIME}"):${PATH}"
+WASMTIME_DIR=$(dirname "${WASMTIME}")
+export PATH="${WASMTIME_DIR}:${PATH}"
 
-if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
-  SOURCE_DATE_EPOCH=$(python3 "${ROOT_DIR}/tools/source_date_epoch.py" --repository "${ROOT_DIR}" HEAD)
+if [[ ${BUILD_CACHE_STATUS} != hit ]]; then
+  (
+    cd "${CPYTHON_DIR}"
+    python3 Tools/wasm/wasi build --wasi-sdk "${WASI_SDK_PATH}"
+  )
 fi
-if [[ -z ${GITHUB_SHA:-} ]]; then
-  GITHUB_SHA=$(git -C "${ROOT_DIR}" rev-parse HEAD)
-fi
-export GITHUB_SHA
-if [[ ! ${SOURCE_DATE_EPOCH} =~ ^[1-9][0-9]*$ ]]; then
-  echo "SOURCE_DATE_EPOCH must be a positive integer" >&2
-  exit 6
-fi
-export SOURCE_DATE_EPOCH
-
-(
-  cd "${CPYTHON_DIR}"
-  python3 Tools/wasm/wasi build --wasi-sdk "${WASI_SDK_PATH}"
-)
 
 WASI_BUILD_DIR="${CPYTHON_DIR}/cross-build/wasm32-wasip1"
 WASI_PYCONFIG="${WASI_BUILD_DIR}/pyconfig.h"
@@ -124,6 +172,30 @@ for required in "${MPDEC_LIB}" "${EXPAT_LIB}" "${HACL_LIBS[@]}"; do
     exit 5
   fi
 done
+
+if [[ ${BUILD_CACHE_MODE} != off && ${BUILD_CACHE_STATUS} == miss ]]; then
+  BUILD_CACHE_TEMP=$(mktemp -d "${BUILD_CACHE_ROOT}/.publish.XXXXXXXX")
+  trap 'rm -rf "${BUILD_CACHE_TEMP:-}"' EXIT
+  tar cf "${BUILD_CACHE_TEMP}/layer.tar" -C "${WORK_DIR}" downloads tools cpython
+  python3 "${ROOT_DIR}/guest/build/validate_cache_layer.py" "${BUILD_CACHE_TEMP}/layer.tar"
+  (
+    cd "${BUILD_CACHE_TEMP}"
+    sha256sum layer.tar > SHA256SUMS
+  )
+  BUILD_CACHE_LAYER_SHA256="sha256:$(sha256sum "${BUILD_CACHE_TEMP}/layer.tar" | cut -d' ' -f1)"
+  printf 'cache_key=%s\nlayer_sha256=%s\n' "${BUILD_CACHE_KEY}" "${BUILD_CACHE_LAYER_SHA256}" > "${BUILD_CACHE_TEMP}/RESULT.READY"
+  rm -rf "${BUILD_CACHE_ENTRY}"
+  mv "${BUILD_CACHE_TEMP}" "${BUILD_CACHE_ENTRY}"
+  BUILD_CACHE_TEMP=""
+  trap - EXIT
+fi
+if [[ ${BUILD_CACHE_MODE} != off ]]; then
+  python3 "${ROOT_DIR}/guest/build/cache_maintenance.py" "${BUILD_CACHE_ROOT}" \
+    --protect "${BUILD_CACHE_KEY#sha256:}" --keep 2
+  flock -u 9
+  exec 9>&-
+fi
+# END CPYTHON CACHE RECIPE
 
 CLANG="${WASI_SDK_PATH}/bin/clang"
 LLVM_AR="${WASI_SDK_PATH}/bin/llvm-ar"
@@ -299,6 +371,24 @@ python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \
   --verify
 rm "${DIST_DIR}/agent-python-runtime.wat"
+python3 - "${DIST_DIR}/build-cache.json" "${BUILD_CACHE_KEY}" "${BUILD_CACHE_STATUS}" "${BUILD_CACHE_LAYER_SHA256}" <<'PY'
+import json
+import pathlib
+import sys
+
+output, key, disposition, layer_sha256 = sys.argv[1:]
+if disposition not in {"off", "hit", "miss"}:
+    raise SystemExit("invalid build cache disposition")
+if disposition != "off" and not layer_sha256.startswith("sha256:"):
+    raise SystemExit("cached build must bind its layer digest")
+payload = {
+    "schema_version": "pysolate.guest-build-cache-evidence.v0",
+    "cache_key": key,
+    "disposition": disposition,
+    "layer_sha256": layer_sha256 or None,
+}
+pathlib.Path(output).write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+PY
 (
   cd "${DIST_DIR}"
   SUM_FILES=(
@@ -306,6 +396,7 @@ rm "${DIST_DIR}/agent-python-runtime.wat"
     manifest.json
     import-inventory.json
     import-qualification.json
+    build-cache.json
     sbom.spdx.json
     THIRD_PARTY_NOTICES.md
   )

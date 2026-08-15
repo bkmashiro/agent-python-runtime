@@ -23,7 +23,7 @@ describe('dual-profile causal evidence ingestion', () => {
     const value = await validateTrajectory(await rawFixture());
     expect(value.profile).toBe('experiment_full');
     expect(value.privacy).toBe('portable');
-    expect(value.events).toHaveLength(15);
+    expect(value.events).toHaveLength(16);
     expect(value.events.filter((event) => event.type === 'source.decision')).toHaveLength(1);
     expect(value.events.filter((event) => event.type === 'source.executed_line')[0].payload.availability).toBe('not_recorded');
     expect(value.events.filter((event) => event.type === 'resource.sample')).toHaveLength(1);
@@ -39,9 +39,9 @@ describe('dual-profile causal evidence ingestion', () => {
     const full = await validateTrajectory(await rawFixture());
     const production = await validateTrajectory(await rawFixture('production-rollback.json'));
     expect(production.profile).toBe('production_rollback');
-    expect(production.events).toHaveLength(6);
+    expect(production.events).toHaveLength(7);
     expect(production.events.map((event) => event.type)).toEqual([
-      'trace.started', 'execution.attempt', 'authority.snapshot', 'effect.transition', 'execution.attempt', 'trace.ended',
+      'trace.started', 'execution.attempt', 'authority.snapshot', 'effect.transition', 'workspace.terminal', 'execution.attempt', 'trace.ended',
     ]);
     const fullIDs = new Set(full.events.map((event) => event.event_id));
     expect(production.events.every((event) => fullIDs.has(event.event_id))).toBe(true);

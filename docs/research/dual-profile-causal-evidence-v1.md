@@ -41,7 +41,7 @@ Host ceilings cover event count, parent count, payload bytes and Labstore object
 
 ## Real evidence and Lab
 
-The named real-Guest run at capture commit `82000d88132105047c9d097db142689d7c1edbc8`
+The named real-Guest run at capture commit `7e7c53ba625a89792d4bbd4e9e6b9b133d482a0d`
 uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257` and executes:
 
 - a fresh child CPython/WASI Guest over a private workspace branch;
@@ -49,18 +49,18 @@ uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08
 - the actual Runtime observation attachment carrying the Host receipt/source binding.
 
 It produces three views from header
-`sha256:39c6c1023548fac4dc79fd0265f92bb1d872161ffdd796bcc5d41394e00d921f`
+`sha256:caa1f6e88066148ac7f752a2c461f9dc5674c2c5450c1ebe762da46c0d3c12d9`
 and shared retained event identities:
 
-- local private `experiment_full`: 20 events plus Labstore objects at
-  `~/.hermes/evidence/pysolate/dual-profile-mg2-82000d8/`, export file SHA-256
-  `c7f96ec431f226166096f9540ba3c18ddce5540043083e95b94d59961048fd48`;
-- checked-in 6-event production projection
+- local private `experiment_full`: 22 events plus Labstore objects at
+  `~/.hermes/evidence/pysolate/dual-profile-mg2-7e7c53b/`, export file SHA-256
+  `7b6c8dcd925baa9896402729c2f41760c785b7d158856a01ce4060573349a2ed`;
+- checked-in 7-event production projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-production-v1.json`, file SHA-256
-  `1c2195b4f3001eee7c1870cdd72ec8ce82ddaf6fa8aaf47925229ebe17c660b4`;
-- checked-in 15-event body-safe experiment projection
+  `91dcc892b41d69bfd413add2d32ebcc504ac5ca12adfcd43a1c1dffb950c0141`;
+- checked-in 16-event body-safe experiment projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-public-v1.json`, file SHA-256
-  `913fa0724a4a214e109d7f65128a66ef550154eb38751d39a2422b800a8e388b`.
+  `c3b30a5c83a808aa05e2b9793497596040ead23684d79d4bae23e374d54d04e3`.
 
 The full experiment trace records a bounded process-CPU/wall sample and an explicit
 `source.executed_line` availability of `not_recorded`; it does not upgrade the static source-bound

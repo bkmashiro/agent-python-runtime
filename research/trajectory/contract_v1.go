@@ -416,8 +416,12 @@ func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
 		if input.Type.productionEligible() || !bodyAllowed || builder.store == nil || input.Body.Kind == "" || input.Body.SHA256 == "" {
 			return EvidenceEvent{}, errors.New("invalid causal evidence body")
 		}
-		if _, err := builder.store.Get(*input.Body); err != nil {
+		object, err := builder.store.Get(*input.Body)
+		if err != nil {
 			return EvidenceEvent{}, errors.New("unresolved causal evidence body")
+		}
+		if err := validateEvidenceBodyBinding(input.Type, payload, object); err != nil {
+			return EvidenceEvent{}, err
 		}
 	}
 	event := EvidenceEvent{
@@ -933,6 +937,36 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		}
 	}
 	_ = kind
+	return nil
+}
+
+func validateEvidenceBodyBinding(kind EvidenceType, raw json.RawMessage, object labstore.Object) error {
+	payload, err := decodeEvidencePayload(kind, raw)
+	if err != nil {
+		return errors.New("invalid causal evidence body payload")
+	}
+	payload = dereferenceEvidencePayload(payload)
+	bodySHA256 := fmt.Sprintf("sha256:%x", sha256.Sum256(object.Body))
+	switch value := payload.(type) {
+	case ModelContextPayload:
+		if kind != EventModelBody || (object.Kind != labstore.KindPrompt && object.Kind != labstore.KindMetadataEvent) {
+			return errors.New("model body kind mismatch")
+		}
+	case SourceBodyPayload:
+		if object.Kind != labstore.KindCode || bodySHA256 != value.SourceSHA256 {
+			return errors.New("source body digest mismatch")
+		}
+	case WorkspaceFilePayload:
+		if object.Kind != labstore.KindFile || bodySHA256 != value.ContentSHA256 {
+			return errors.New("workspace body digest mismatch")
+		}
+	case RuntimeObservationPayload:
+		if object.Kind != labstore.KindMetadataEvent || bodySHA256 != value.ObservationSHA256 {
+			return errors.New("runtime observation body digest mismatch")
+		}
+	default:
+		return errors.New("invalid causal evidence body payload")
+	}
 	return nil
 }
 

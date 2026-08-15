@@ -64,6 +64,10 @@ func (recorder *ObservationRecorder) Append(ctx context.Context, observed observ
 	if err != nil {
 		return err
 	}
+	storedObservation, err := recorder.log.builder.store.Get(body)
+	if err != nil {
+		return err
+	}
 	var rawParents []string
 	if observed.ParentSequence != nil {
 		parent, ok := recorder.observationIDs[*observed.ParentSequence]
@@ -76,7 +80,7 @@ func (recorder *ObservationRecorder) Append(ctx context.Context, observed observ
 		Type: EventRuntimeObservation, ActorID: recorder.config.ActorID, ParentEventIDs: rawParents, Body: &body,
 		Payload: RuntimeObservationPayload{
 			ObservationType: observed.Type, Sequence: observed.Sequence, ParentSequence: cloneObservationSequence(observed.ParentSequence),
-			ObservationSHA256: observationDigest(encoded),
+			ObservationSHA256: observationDigest(storedObservation.Body),
 		},
 	})
 	if err != nil {

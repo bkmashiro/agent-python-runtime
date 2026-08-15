@@ -1,6 +1,8 @@
 package trajectory_test
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -65,7 +67,9 @@ func TestSourceBodyIsPrivateBoundAndBodySafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	body, _, err := store.Put(labstore.KindCode, []byte("print('captured')\n"), labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
+	source := []byte("print('captured')\n")
+	sourceDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(source))
+	body, _, err := store.Put(labstore.KindCode, source, labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,11 +78,18 @@ func TestSourceBodyIsPrivateBoundAndBodySafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventTraceStarted, ActorID: "actor-host-0001", Payload: trajectory.TraceStartedPayload{Status: "running"}})
-	document := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceDocument, ActorID: "actor-harness-0001", Payload: trajectory.SourceDocumentPayload{DocumentID: testDigest('d'), SourceSHA256: testDigest('e'), Availability: trajectory.Available}})
-	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventSourceBody, ActorID: "actor-harness-0001", ParentEventIDs: []string{document.EventID}, Body: &body, Payload: trajectory.SourceBodyPayload{DocumentID: testDigest('d'), SourceSHA256: testDigest('e'), DisplayPath: "../secret", Availability: trajectory.Available}}); err == nil {
+	document := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceDocument, ActorID: "actor-harness-0001", Payload: trajectory.SourceDocumentPayload{DocumentID: testDigest('d'), SourceSHA256: sourceDigest, Availability: trajectory.Available}})
+	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventSourceBody, ActorID: "actor-harness-0001", ParentEventIDs: []string{document.EventID}, Body: &body, Payload: trajectory.SourceBodyPayload{DocumentID: testDigest('d'), SourceSHA256: sourceDigest, DisplayPath: "../secret", Availability: trajectory.Available}}); err == nil {
 		t.Fatal("unsafe source body path accepted")
 	}
-	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceBody, ActorID: "actor-harness-0001", ParentEventIDs: []string{document.EventID}, Body: &body, Payload: trajectory.SourceBodyPayload{DocumentID: testDigest('d'), SourceSHA256: testDigest('e'), DisplayPath: "child_program.py", Availability: trajectory.Available}})
+	wrongBody, _, err := store.Put(labstore.KindCode, []byte("print('wrong')\n"), labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventSourceBody, ActorID: "actor-harness-0001", ParentEventIDs: []string{document.EventID}, Body: &wrongBody, Payload: trajectory.SourceBodyPayload{DocumentID: testDigest('d'), SourceSHA256: sourceDigest, DisplayPath: "child_program.py", Availability: trajectory.Available}}); err == nil {
+		t.Fatal("source body digest mismatch accepted")
+	}
+	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceBody, ActorID: "actor-harness-0001", ParentEventIDs: []string{document.EventID}, Body: &body, Payload: trajectory.SourceBodyPayload{DocumentID: testDigest('d'), SourceSHA256: sourceDigest, DisplayPath: "child_program.py", Availability: trajectory.Available}})
 	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventTraceEnded, ActorID: "actor-host-0001", Payload: trajectory.TraceEndedPayload{Status: "completed", EvidenceComplete: true}})
 	private, err := builder.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPrivate)
 	if err != nil || len(private.Events) != 4 || private.Events[2].Body == nil {

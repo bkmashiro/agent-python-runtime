@@ -33,6 +33,7 @@ case "$mode" in
       ./runtime/agentfunction \
       ./research/effectgraph \
       ./research/effectgraph/cmd/effectgraph-census \
+      ./research/placementcensus \
       ./research/regioncensus \
       ./research/labview
     ;;
@@ -45,6 +46,7 @@ case "$mode" in
       ./runtime/agentfunction \
       ./research/effectgraph \
       ./research/effectgraph/cmd/effectgraph-census \
+      ./research/placementcensus \
       ./research/regioncensus \
       ./research/labview \
       ./integration/e2e

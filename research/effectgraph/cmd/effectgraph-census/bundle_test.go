@@ -10,16 +10,17 @@ func TestEvidenceBundleBindsEveryOutput(t *testing.T) {
 	corpus := []byte("corpus\n")
 	effectReport := []byte("effect\n")
 	regionReport := []byte("region\n")
-	bundle, err := encodeEvidenceBundle(corpus, effectReport, regionReport, digest([]byte("identity")), digest([]byte("artifact")), "0123456789abcdef0123456789abcdef01234567")
+	placementReport := []byte("placement\n")
+	bundle, err := encodeEvidenceBundle(corpus, effectReport, regionReport, placementReport, digest([]byte("identity")), digest([]byte("artifact")), "0123456789abcdef0123456789abcdef01234567")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyEvidenceBundle(bundle, corpus, effectReport, regionReport); err != nil {
+	if err := verifyEvidenceBundle(bundle, corpus, effectReport, regionReport, placementReport); err != nil {
 		t.Fatal(err)
 	}
-	mutated := append([]byte{}, regionReport...)
-	mutated[0] = 'R'
-	if err := verifyEvidenceBundle(bundle, corpus, effectReport, mutated); err == nil {
+	mutated := append([]byte{}, placementReport...)
+	mutated[0] = 'P'
+	if err := verifyEvidenceBundle(bundle, corpus, effectReport, regionReport, mutated); err == nil {
 		t.Fatal("mixed evidence generation was accepted")
 	}
 }
@@ -39,8 +40,9 @@ func TestEvidenceBundleMarkerIsWrittenLastAndFailsClosed(t *testing.T) {
 		bundlePath,
 		filepath.Join(root, "corpus.json"),
 		filepath.Join(root, "effect.json"),
-		filepath.Join(blockingFile, "region.json"),
-		[]byte("corpus"), []byte("effect"), []byte("region"),
+		filepath.Join(root, "region.json"),
+		filepath.Join(blockingFile, "placement.json"),
+		[]byte("corpus"), []byte("effect"), []byte("region"), []byte("placement"),
 		digest([]byte("identity")), digest([]byte("artifact")), "0123456789abcdef0123456789abcdef01234567",
 	)
 	if err == nil {

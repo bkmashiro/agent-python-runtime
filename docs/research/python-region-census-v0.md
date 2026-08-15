@@ -84,7 +84,8 @@ The command fails closed on a source-commit claim that is not a local Git commit
 missing verified analyses, source-digest drift, analyzer identity drift, malformed spans,
 output validation, or atomic-file write failure. Artifact bytes are independently hashed
 and bound through every verified analysis and the generation marker. It
-replaces the corpus and both reports individually, then replaces
-`effectgraph-census-bundle-v0.json` last. The generation marker binds the SHA-256 of all
-three files; an interrupted mixed generation therefore fails `-verify-bundle` and the
+replaces the corpus and three reports individually, then replaces
+`effectgraph-census-bundle-v1.json` last. The generation marker binds the SHA-256 of the
+corpus plus effect, region, and placement reports; an interrupted mixed generation
+therefore fails `-verify-bundle` and the
 Track F release check rather than appearing current.

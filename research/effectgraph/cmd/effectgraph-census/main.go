@@ -13,6 +13,7 @@ import (
 	"sort"
 
 	effectgraph "github.com/bkmashiro/agent-python-runtime/research/effectgraph"
+	"github.com/bkmashiro/agent-python-runtime/research/placementcensus"
 	"github.com/bkmashiro/agent-python-runtime/research/regioncensus"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
@@ -30,11 +31,12 @@ func main() {
 	corpusPath := flag.String("corpus-output", "research/effectgraph/corpus.json", "bound corpus output")
 	reportPath := flag.String("report-output", "docs/evidence/effect-aware-opportunity-census.json", "census output")
 	regionReportPath := flag.String("region-report-output", "docs/evidence/python-region-census-v0.json", "analysis-only region census output")
-	bundlePath := flag.String("bundle-output", "docs/evidence/effectgraph-census-bundle-v0.json", "generation marker binding every census output")
+	placementReportPath := flag.String("placement-report-output", "docs/evidence/semantic-placement-census-v0.json", "semantic placement comparison output")
+	bundlePath := flag.String("bundle-output", "docs/evidence/effectgraph-census-bundle-v1.json", "generation marker binding every census output")
 	verifyBundle := flag.Bool("verify-bundle", false, "verify the existing bound evidence generation without running a Guest")
 	flag.Parse()
 	if *verifyBundle {
-		if err := verifyEvidenceBundleFiles(*bundlePath, *corpusPath, *reportPath, *regionReportPath); err != nil {
+		if err := verifyEvidenceBundleFiles(*bundlePath, *corpusPath, *reportPath, *regionReportPath, *placementReportPath); err != nil {
 			fatal(err)
 		}
 		return
@@ -42,12 +44,12 @@ func main() {
 	if *artifactPath == "" || *artifactSourceCommit == "" {
 		fatal(errors.New("-artifact and -artifact-source-commit are required"))
 	}
-	if err := run(context.Background(), *artifactPath, *artifactSourceCommit, *root, *manifestPath, *bundlePath, *corpusPath, *reportPath, *regionReportPath); err != nil {
+	if err := run(context.Background(), *artifactPath, *artifactSourceCommit, *root, *manifestPath, *bundlePath, *corpusPath, *reportPath, *regionReportPath, *placementReportPath); err != nil {
 		fatal(err)
 	}
 }
 
-func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifestPath, bundlePath, corpusPath, reportPath, regionReportPath string) error {
+func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifestPath, bundlePath, corpusPath, reportPath, regionReportPath, placementReportPath string) error {
 	if len(artifactSourceCommit) != 40 || !isLowerHex(artifactSourceCommit) ||
 		exec.CommandContext(ctx, "git", "cat-file", "-e", artifactSourceCommit+"^{commit}").Run() != nil {
 		return errors.New("artifact source commit is not a local Git commit")
@@ -201,7 +203,37 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 	if err != nil {
 		return err
 	}
-	if err := writeEvidenceBundle(bundlePath, corpusPath, reportPath, regionReportPath, corpusJSON, reportJSON, regionJSON,
+	baselinePlacement := make(map[string]string, len(report.Programs))
+	for _, program := range report.Programs {
+		baselinePlacement[program.ID] = program.Placement
+	}
+	placementObservations := make([]placementcensus.VerifiedObservation, 0, len(corpus.Programs))
+	for _, program := range corpus.Programs {
+		verified, ok := verifiedBySource[program.SourceSHA256]
+		baseline, baselineOK := baselinePlacement[program.ID]
+		if !ok || !baselineOK {
+			return fmt.Errorf("missing placement evidence for %s", program.ID)
+		}
+		placementObservations = append(placementObservations, placementcensus.VerifiedObservation{
+			ProgramID: program.ID, BaselinePlacement: baseline, Verified: verified,
+		})
+	}
+	placementReport, err := placementcensus.BuildVerified(placementcensus.Target{
+		ArtifactSourceCommit: artifactSourceCommit,
+		ArtifactSHA256:       artifactSHA, AnalyzerSHA256: report.AnalyzerSHA256,
+		ExecutionProfileSHA256: bindings.ExecutionProfileSHA256,
+		ImportClosureSHA256:    bindings.ImportClosureSHA256,
+		CapabilityPlanSHA256:   bindings.CapabilityPlanSHA256,
+		CorpusSHA256:           report.CorpusSHA256,
+	}, placementObservations)
+	if err != nil {
+		return err
+	}
+	placementJSON, err := placementcensus.Encode(placementReport)
+	if err != nil {
+		return err
+	}
+	if err := writeEvidenceBundle(bundlePath, corpusPath, reportPath, regionReportPath, placementReportPath, corpusJSON, reportJSON, regionJSON, placementJSON,
 		report.CorpusSHA256, artifactSHA, artifactSourceCommit); err != nil {
 		return err
 	}
@@ -209,6 +241,9 @@ func run(ctx context.Context, artifactPath, artifactSourceCommit, root, manifest
 		report.CorpusSHA256, report.ProgramsAnalyzed, report.ProgramsUnclassifiable, report.ProgramsOpaque,
 		report.OverlayCallSites, report.NecessarilyReachedCallSites)
 	fmt.Printf("region_census %s\n", regionReport.String())
+	fmt.Printf("placement_census decision=%s safe_gains=%d disagreements=%d regressions=%d\n",
+		placementReport.Decision.Status, placementReport.SafePrecisionGains,
+		placementReport.Disagreements, placementReport.ReplacementRegressions)
 	return nil
 }
 

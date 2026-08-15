@@ -1,18 +1,20 @@
 {
-  "schema_version": "pysolate.trajectory-index.v0",
-  "default_session_id": "workflow-experiment-v1",
-  "sessions": [
+  "schema_version": "pysolate.causal-evidence-index.v1",
+  "default_view_id": "experiment-full-public",
+  "views": [
     {
-      "session_id": "workflow-experiment-v1",
-      "label": "Workflow experiment v1 · real Guest",
+      "view_id": "experiment-full-public",
+      "trace_id": "trace-real-source-bound-0001",
+      "label": "Real Guest · body-safe experiment projection",
       "kind": "experiment",
-      "file": "experiment.json"
+      "file": "experiment-full-public.json"
     },
     {
-      "session_id": "scripted-development",
-      "label": "Scripted full-source fixture",
-      "kind": "scripted",
-      "file": "trajectory.json"
+      "view_id": "production-rollback",
+      "trace_id": "trace-real-source-bound-0001",
+      "label": "Same run · production rollback projection",
+      "kind": "production",
+      "file": "production-rollback.json"
     }
   ]
 }

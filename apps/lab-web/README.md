@@ -1,61 +1,19 @@
 # Pysolate Lab Web
 
-A private development trajectory inspector for Pysolate agent sessions.
+A static, read-only inspector for portable `pysolate.causal-evidence.v1` exports.
 
-The primary invariant is:
+The Lab currently exposes two projections of the same named real-Guest trace:
 
-> **Model-visible means logged.**
+- `experiment-full-public.json`: body-safe experiment metadata including M1 source binding and the three independent subagent context/runtime/workspace planes;
+- `production-rollback.json`: the strict body-free production subset containing only execution/effect/terminal facts needed for rollback or reconciliation decisions.
 
-The Lab reads a closed local session index and validated append-only session exports. The
-default session is the reset balanced-order real-Guest workflow experiment; a second
-scripted full-source fixture exercises memory, skill and subagent records. The inspector
-exposes:
-
-- system, developer, user, memory and skill context;
-- effective request headers plus every raw provider chunk and its assembled-event citations;
-- each exact ordered model-request context;
-- provider-visible reasoning and assistant output chunks;
-- tool calls and complete arguments/results;
-- subagent dispatch and child-session results;
-- Pysolate logical requests, Runs, physical executions and Host spans;
-- workspace changes and terminal state;
-- the raw hash-chained event.
-
-The model-request context is never inferred from nearby UI events. Every `model.request`
-contains the ordered prior event IDs actually supplied to that request, and validation
-rejects forward, duplicate, missing-body or missing-reference entries.
+Both projections share the same trace/header and retained event identities. The browser recomputes header, event and export SHA-256 identities, validates prior-only causal parents and typed source/subagent relations, and rejects unknown fields, body references, profile leakage and malformed payloads. It does not execute, retry, replay, schedule, grant capabilities or publish workspaces.
 
 ## Data boundary
 
-`public/lab-data/trajectory.json` is a synthetic, credential-free development fixture
-exported from the real private recorder. It is explicitly labelled as a fixture and must
-not be presented as a live model/provider run.
+Complete experiment bodies and the append-only private JSONL log stay in the local `0700`/`0600` evidence directory and typed `research/labstore` objects. Portable Lab exports contain no body references. Body-bearing `model.body` and `runtime.observation` events are removed from the portable projection; body-free metadata remains separately identifiable so public causal links never depend on hidden nodes.
 
-The source recorder stores complete bodies privately in `research/labstore` and keeps the
-append-only metadata stream in a hash-chained JSONL file. The browser export materializes
-those bodies for local inspection. Credentials are rejected at the recorder admission
-boundary; callers must classify them as absent before storage.
-
-A provider's hidden chain-of-thought cannot be recorded if the provider does not expose it.
-Provider-visible reasoning/reasoning summaries are ordinary logged model events. The UI
-must not invent hidden reasoning.
-
-The former paired-experiment and Runtime-only debugger schemas were deliberately removed.
-There is no compatibility reader or fallback fixture.
-
-## Fixture generation
-
-```sh
-mkdir -p .hermes/trajectory-fixture
-
-go run ./research/trajectory/cmd/trajectory-fixture \
-  -store .hermes/trajectory-fixture/store \
-  -output apps/lab-web/public/lab-data/trajectory.json \
-  -source-commit "$(git rev-parse HEAD)"
-```
-
-The private `.jsonl` source log remains under `.hermes/trajectory-fixture/`; only the
-credential-free browser fixture is checked in.
+The checked-in fixtures come from the real CPython/WASI Guest gate in `integration/e2e/semantic_source_binding_test.go`, not a scripted trajectory generator. Capture identity and checksums are documented in `docs/research/dual-profile-causal-evidence-v1.md` and the Megagoal 2 plan.
 
 ## Development
 
@@ -67,6 +25,4 @@ npm run test:e2e
 npm run dev
 ```
 
-The current deployment is static and read-only. Live append, resume, fork and replay require
-a future local Harness service; the session contract is designed so those operations use
-the same append-only event stream rather than a separate debug projection.
+The current deployment is static and read-only. Live tailing, resume, fork, replay and rollback machinery are outside this Lab surface.

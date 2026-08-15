@@ -1,243 +1,273 @@
-export const TRAJECTORY_SCHEMA = 'pysolate.agent-trajectory.v0' as const;
+export const TRAJECTORY_SCHEMA = 'pysolate.causal-evidence.v1' as const;
+export const TRAJECTORY_INDEX_SCHEMA = 'pysolate.causal-evidence-index.v1' as const;
 
-export type EventType =
-  | 'session.start' | 'session.end' | 'turn.start' | 'turn.end' | 'step.start' | 'step.end' | 'context.inject' | 'user.message'
-  | 'request.header' | 'model.request' | 'assistant.chunk' | 'assistant.reasoning' | 'assistant.output' | 'tool.call' | 'tool.result'
-  | 'subagent.dispatch' | 'subagent.result' | 'runtime.event' | 'workspace.change';
+export type EvidenceProfile = 'production_rollback' | 'experiment_full';
+export type EventSource = 'system' | 'developer' | 'user' | 'memory' | 'skill' | 'harness' | 'model' | 'tool' | 'subagent' | 'runtime' | 'workspace';
+export type EvidenceType = string;
 
-export type EventSource =
-  | 'system' | 'developer' | 'user' | 'memory' | 'skill' | 'harness'
-  | 'model' | 'tool' | 'subagent' | 'runtime' | 'workspace';
-
-export interface ContentRef { kind: string; sha256: string }
-export interface TokenUsage { input?: number; output?: number; reasoning?: number; cache_read?: number; cache_write?: number }
-
-export interface TrajectoryEvent {
-  sequence: number;
-  event_id: string;
-  previous_sha256: string;
-  sha256: string;
-  occurred_millis: number;
-  type: EventType;
-  source: EventSource;
-  actor_id?: string;
-  parent_event_id?: string;
-  turn_id?: string;
-  step_id?: string;
-  model_visible: boolean;
-  context_event_ids?: string[];
-  source_event_ids?: string[];
-  body?: ContentRef;
-  body_text?: string;
-  content_type?: string;
-  provider?: string;
-  model?: string;
-  finish_reason?: string;
-  tool_call_id?: string;
-  tool_name?: string;
-  child_session_id?: string;
-  run_id?: string;
-  logical_request_id?: string;
-  physical_execution_id?: string;
-  span_id?: string;
-  status?: string;
-  duration_nanos?: number;
-  usage?: TokenUsage;
-}
-
-export interface TrajectoryExport {
+export interface BodyRef { kind: string; sha256: string }
+export interface RawEvidenceEvent {
   schema_version: typeof TRAJECTORY_SCHEMA;
-  privacy: 'private';
-  session: {
+  ordinal: number;
+  event_id: string;
+  occurred_nanos: number;
+  type: EvidenceType;
+  actor_id: string;
+  parent_event_ids?: string[];
+  payload: Record<string, unknown>;
+  body?: BodyRef;
+}
+export interface RawEvidenceExport {
+  schema_version: typeof TRAJECTORY_SCHEMA;
+  profile: EvidenceProfile;
+  privacy: 'private' | 'portable';
+  trace_id: string;
+  header_sha256: string;
+  header: {
     schema_version: typeof TRAJECTORY_SCHEMA;
-    session_id: string;
+    trace_id: string;
     source_commit: string;
+    root_execution_id: string;
     header_sha256: string;
   };
-  events: TrajectoryEvent[];
+  events: RawEvidenceEvent[];
   seal_sha256: string;
 }
 
-export interface TrajectoryFilter {
-  query?: string;
-  sources?: EventSource[];
-  types?: EventType[];
-  toolCallID?: string;
-  actorID?: string;
+// TrajectoryEvent is a deterministic read-only presentation over the current
+// causal-evidence contract. It is not a compatibility decoder for v0.
+export interface TrajectoryEvent extends RawEvidenceEvent {
+  sequence: number;
+  source: EventSource;
+  occurred_millis: number;
+  parent_event_id?: string;
+  source_event_ids?: string[];
+  status?: string;
+  tool_call_id?: string;
+  tool_name?: string;
+  run_id?: string;
+  span_id?: string;
+  logical_request_id?: string;
+  physical_execution_id?: string;
+  child_session_id?: string;
+  sha256: string;
+  body_text?: string;
+  content_type?: string;
+  turn_id?: string;
+  step_id?: string;
+  provider?: string;
+  model?: string;
+  usage?: { input?: number; output?: number; reasoning?: number; cache_read?: number };
 }
-
+export interface TrajectoryExport extends Omit<RawEvidenceExport, 'events'> {
+  events: TrajectoryEvent[];
+  session: { session_id: string; source_commit: string };
+}
 export interface TrajectoryIndex {
-  schema_version: 'pysolate.trajectory-index.v0';
-  default_session_id: string;
-  sessions: Array<{
-    session_id: string;
-    label: string;
-    kind: 'scripted' | 'experiment';
-    file: string;
-  }>;
+  schema_version: typeof TRAJECTORY_INDEX_SCHEMA;
+  default_view_id: string;
+  views: Array<{ view_id: string; trace_id: string; label: string; kind: 'experiment' | 'production'; file: string }>;
 }
 
 const digestRE = /^sha256:[0-9a-f]{64}$/;
-const eventIDRE = /^event-[0-9a-f]{16}$/;
 const commitRE = /^[0-9a-f]{40}$/;
-const sources = new Set<EventSource>(['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace']);
-const types = new Set<EventType>(['session.start', 'session.end', 'turn.start', 'turn.end', 'step.start', 'step.end', 'context.inject', 'user.message', 'request.header', 'model.request', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'subagent.dispatch', 'subagent.result', 'runtime.event', 'workspace.change']);
-const bodyRequired = new Set<EventType>(['context.inject', 'user.message', 'request.header', 'assistant.chunk', 'assistant.reasoning', 'assistant.output', 'tool.call', 'tool.result', 'runtime.event', 'workspace.change']);
-
-const topKeys = ['schema_version', 'privacy', 'session', 'events', 'seal_sha256'] as const;
-const sessionKeys = ['schema_version', 'session_id', 'source_commit', 'header_sha256'] as const;
-const eventKeys = [
-  'sequence', 'event_id', 'previous_sha256', 'sha256', 'occurred_millis', 'type', 'source', 'actor_id',
-  'parent_event_id', 'turn_id', 'step_id', 'model_visible', 'context_event_ids', 'source_event_ids', 'body', 'body_text', 'content_type',
-  'provider', 'model', 'finish_reason', 'tool_call_id', 'tool_name', 'child_session_id', 'run_id',
-  'logical_request_id', 'physical_execution_id', 'span_id', 'status', 'duration_nanos', 'usage',
-] as const;
-const bodyKeys = ['kind', 'sha256'] as const;
-const usageKeys = ['input', 'output', 'reasoning', 'cache_read', 'cache_write'] as const;
+const idRE = /^[a-z][a-z0-9_.:-]{7,127}$/;
+const eventTypes = new Set<EvidenceType>([
+  'trace.started', 'trace.ended', 'authority.snapshot', 'effect.transition', 'workspace.terminal', 'execution.attempt',
+  'model.context', 'model.body', 'source.document', 'source.occurrence', 'source.decision', 'source.executed_line',
+  'subagent.context', 'subagent.runtime', 'subagent.workspace', 'evidence.truncated', 'runtime.observation', 'resource.sample',
+]);
+const productionTypes = new Set<EvidenceType>([
+  'trace.started', 'trace.ended', 'authority.snapshot', 'effect.transition', 'workspace.terminal', 'execution.attempt', 'evidence.truncated',
+]);
+const bodyTypes = new Set<EvidenceType>(['model.body', 'runtime.observation']);
+const topKeys = ['schema_version', 'profile', 'privacy', 'trace_id', 'header_sha256', 'header', 'events', 'seal_sha256'];
+const headerKeys = ['schema_version', 'trace_id', 'source_commit', 'root_execution_id', 'header_sha256'];
+const eventKeys = ['schema_version', 'ordinal', 'event_id', 'occurred_nanos', 'type', 'actor_id', 'parent_event_ids', 'payload', 'body'];
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
-
-function exactKeys(value: unknown, allowed: readonly string[], label: string): asserts value is Record<string, unknown> {
+function object(value: unknown, label: string): Record<string, unknown> {
   assert(value !== null && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`);
-  const allowedSet = new Set(allowed);
-  for (const key of Object.keys(value)) assert(allowedSet.has(key), `unknown trajectory field ${label}.${key}`);
+  return value as Record<string, unknown>;
 }
-
-function uint(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+function exactKeys(value: Record<string, unknown>, required: string[], optional: string[] = [], label = 'value') {
+  const allowed = new Set([...required, ...optional]);
+  for (const key of Object.keys(value)) assert(allowed.has(key), `unknown causal evidence field ${label}.${key}`);
+  for (const key of required) assert(Object.hasOwn(value, key), `missing causal evidence field ${label}.${key}`);
 }
-
-async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+function uint(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) >= 0; }
+async function sha256(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
+async function evidenceHash(label: string, value: unknown) {
+  return sha256(`pysolate.causal-evidence.v1\0${label}\0${JSON.stringify(value)}`);
+}
 
-export async function validateTrajectory(raw: TrajectoryExport): Promise<TrajectoryExport> {
-  exactKeys(raw, topKeys, 'root');
-  assert(raw.schema_version === TRAJECTORY_SCHEMA && raw.privacy === 'private', 'unsupported or non-private trajectory');
-  exactKeys(raw.session, sessionKeys, 'session');
-  assert(raw.session.schema_version === TRAJECTORY_SCHEMA && /^session-[0-9a-z-]{8,128}$/.test(raw.session.session_id), 'invalid trajectory session');
-  assert(commitRE.test(raw.session.source_commit) && digestRE.test(raw.session.header_sha256), 'invalid trajectory identity');
-  assert(digestRE.test(raw.seal_sha256), 'invalid private export seal');
-  assert(Array.isArray(raw.events) && raw.events.length >= 2 && raw.events.length <= 100_000, 'invalid trajectory event count');
+function validatePayload(event: RawEvidenceEvent) {
+  const payload = object(event.payload, `event[${event.ordinal}].payload`);
+  const digest = (key: string) => assert(typeof payload[key] === 'string' && digestRE.test(payload[key] as string), `invalid ${event.type}.${key}`);
+  switch (event.type) {
+    case 'trace.started': exactKeys(payload, ['status']); assert(payload.status === 'running', 'invalid trace start'); break;
+    case 'trace.ended': exactKeys(payload, ['status', 'evidence_complete']); assert(payload.status === 'completed' || payload.status === 'failed', 'invalid trace end'); assert(typeof payload.evidence_complete === 'boolean', 'invalid evidence completeness'); break;
+    case 'authority.snapshot': exactKeys(payload, ['run_id', 'plan_sha256', 'policy_sha256', 'freshness_sha256', 'grants_sha256']); digest('plan_sha256'); digest('policy_sha256'); digest('freshness_sha256'); digest('grants_sha256'); break;
+    case 'effect.transition': exactKeys(payload, ['call_id', 'state'], ['receipt_id', 'compensator', 'reconciliation_reason']); break;
+    case 'workspace.terminal': exactKeys(payload, ['base_root_sha256', 'result_root_sha256', 'disposition']); digest('base_root_sha256'); digest('result_root_sha256'); break;
+    case 'execution.attempt': exactKeys(payload, ['run_id', 'attempt_id', 'status'], ['prepared_image_sha256']); if (payload.prepared_image_sha256 !== undefined) digest('prepared_image_sha256'); break;
+    case 'model.context': case 'model.body': exactKeys(payload, ['context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
+    case 'source.document': exactKeys(payload, ['document_id', 'source_sha256', 'availability']); digest('document_id'); digest('source_sha256'); break;
+    case 'source.occurrence': exactKeys(payload, ['document_id', 'source_sha256', 'occurrence_id', 'start_line', 'start_column', 'end_line', 'end_column', 'capability', 'dynamic_occurrence']); digest('document_id'); digest('source_sha256'); digest('occurrence_id'); break;
+    case 'source.decision': exactKeys(payload, ['decision_id', 'capability_plan_sha256', 'occurrence_id', 'dynamic_occurrence', 'claim_level', 'admitted'], ['reasons', 'receipt_id']); digest('decision_id'); digest('capability_plan_sha256'); digest('occurrence_id'); break;
+    case 'source.executed_line': exactKeys(payload, ['source_sha256', 'availability'], ['instrumentation', 'instruction_offset', 'start_line', 'start_column', 'end_line', 'end_column']); digest('source_sha256'); break;
+    case 'subagent.context': exactKeys(payload, ['child_id', 'context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
+    case 'subagent.runtime': exactKeys(payload, ['child_id', 'fresh_run_id', 'prepared_image_sha256', 'child_plan_sha256', 'parent_live_state_inherited']); digest('prepared_image_sha256'); digest('child_plan_sha256'); assert(payload.parent_live_state_inherited === false, 'parent live state inheritance forbidden'); break;
+    case 'subagent.workspace': exactKeys(payload, ['child_id', 'base_root_sha256', 'result_root_sha256', 'changed_entries', 'changed_bytes', 'disposition']); digest('base_root_sha256'); digest('result_root_sha256'); break;
+    case 'evidence.truncated': exactKeys(payload, ['scope', 'reason', 'dropped_events']); assert(uint(payload.dropped_events) && payload.dropped_events > 0, 'invalid truncation'); break;
+    case 'runtime.observation': exactKeys(payload, ['observation_type', 'sequence', 'observation_sha256'], ['parent_sequence']); digest('observation_sha256'); break;
+    case 'resource.sample': exactKeys(payload, ['scope', 'wall_nanos', 'process_cpu_nanos', 'process_cpu_availability', 'peak_rss_bytes', 'peak_rss_availability']); assert(uint(payload.wall_nanos) && payload.wall_nanos > 0, 'invalid wall sample'); break;
+  }
+}
 
-  const prior = new Map<string, TrajectoryEvent>();
-  const calls = new Map<string, TrajectoryEvent>();
-  let previous = raw.session.header_sha256;
-  for (const [index, event] of raw.events.entries()) {
-    exactKeys(event, eventKeys, `event[${index}]`);
-    assert(event.sequence === index + 1 && event.event_id === `event-${(index + 1).toString(16).padStart(16, '0')}` && eventIDRE.test(event.event_id), 'invalid trajectory sequence');
-    assert(event.previous_sha256 === previous && digestRE.test(event.sha256), 'trajectory hash chain mismatch');
-    assert(uint(event.occurred_millis) && (index === 0 || event.occurred_millis >= raw.events[index - 1].occurred_millis), 'invalid trajectory time');
-    assert(types.has(event.type) && sources.has(event.source) && typeof event.model_visible === 'boolean', 'invalid trajectory classification');
-    if (event.parent_event_id) assert(prior.has(event.parent_event_id), 'trajectory parent is not prior');
-    if (event.source_event_ids !== undefined) {
-      assert(Array.isArray(event.source_event_ids) && event.source_event_ids.length > 0, 'invalid source-event citations');
-      const seen = new Set<string>();
-      for (const id of event.source_event_ids) {
-        assert(prior.has(id) && !seen.has(id), 'source-event citation is not unique and prior');
-        seen.add(id);
-      }
+function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEvidenceEvent>) {
+  const parents = (event.parent_event_ids ?? []).map((id) => prior.get(id)!);
+  if (event.type === 'source.occurrence') {
+    assert(parents.length === 1 && parents[0].type === 'source.document', 'source occurrence parent mismatch');
+    assert(parents[0].payload.document_id === event.payload.document_id && parents[0].payload.source_sha256 === event.payload.source_sha256, 'source identity mismatch');
+  }
+  if (event.type === 'source.decision') {
+    const occurrence = parents.find((item) => item.type === 'source.occurrence');
+    assert(occurrence?.payload.occurrence_id === event.payload.occurrence_id, 'source decision occurrence mismatch');
+    if (event.payload.admitted === true) {
+      const effect = parents.find((item) => item.type === 'effect.transition');
+      assert(effect?.payload.receipt_id === event.payload.receipt_id, 'source receipt mismatch');
     }
+  }
+  if (event.type === 'subagent.runtime') {
+    assert(parents.length === 1 && parents[0].type === 'subagent.context' && parents[0].payload.child_id === event.payload.child_id, 'subagent runtime parent mismatch');
+  }
+  if (event.type === 'subagent.workspace') {
+    assert(parents.length === 1 && parents[0].type === 'subagent.runtime' && parents[0].payload.child_id === event.payload.child_id, 'subagent workspace parent mismatch');
+  }
+}
+
+export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryExport> {
+  const root = object(rawValue, 'root');
+  exactKeys(root, topKeys, [], 'root');
+  const raw = root as unknown as RawEvidenceExport;
+  assert(raw.schema_version === TRAJECTORY_SCHEMA && (raw.profile === 'experiment_full' || raw.profile === 'production_rollback'), 'unsupported causal evidence profile');
+  assert(raw.privacy === 'portable', 'Lab accepts body-safe portable evidence only');
+  assert(idRE.test(raw.trace_id) && digestRE.test(raw.header_sha256), 'invalid trace identity');
+  exactKeys(object(raw.header, 'header'), headerKeys, [], 'header');
+  assert(raw.header.schema_version === TRAJECTORY_SCHEMA && raw.header.trace_id === raw.trace_id && raw.header.header_sha256 === raw.header_sha256, 'header cross-binding mismatch');
+  assert(commitRE.test(raw.header.source_commit) && idRE.test(raw.header.root_execution_id), 'invalid header source identity');
+  const unsignedHeader = { ...raw.header, header_sha256: '' };
+  assert(await evidenceHash('header', unsignedHeader) === raw.header_sha256, 'header seal mismatch');
+  assert(Array.isArray(raw.events) && raw.events.length > 0 && raw.events.length <= 100_000, 'invalid event count');
+
+  const prior = new Map<string, RawEvidenceEvent>();
+  let previousOrdinal = 0;
+  let truncated = false;
+  let terminalComplete = false;
+  for (const eventValue of raw.events) {
+    const event = object(eventValue, 'event') as unknown as RawEvidenceEvent;
+    exactKeys(event as unknown as Record<string, unknown>, eventKeys.filter((key) => key !== 'parent_event_ids' && key !== 'body'), ['parent_event_ids', 'body'], `event[${event.ordinal}]`);
+    assert(event.schema_version === TRAJECTORY_SCHEMA && uint(event.ordinal) && event.ordinal > previousOrdinal && eventTypes.has(event.type), 'invalid causal event envelope');
+    assert(digestRE.test(event.event_id) && uint(event.occurred_nanos) && idRE.test(event.actor_id), 'invalid causal event identity');
+    assert(Array.isArray(event.parent_event_ids ?? []) && (event.parent_event_ids ?? []).length <= 256, 'invalid event parents');
+    for (const parent of event.parent_event_ids ?? []) assert(prior.has(parent), 'causal parent is not prior');
     if (event.body !== undefined) {
-      exactKeys(event.body, bodyKeys, `event[${index}].body`);
-      assert(typeof event.body.kind === 'string' && event.body.kind.length > 0 && digestRE.test(event.body.sha256), 'invalid trajectory body reference');
-      assert(typeof event.body_text === 'string', 'trajectory materialized body is missing');
-    } else {
-      assert(event.body_text === undefined && !bodyRequired.has(event.type) && !event.model_visible, 'trajectory materialized body is missing');
+      exactKeys(object(event.body, 'body'), ['kind', 'sha256'], [], 'body');
+      assert(bodyTypes.has(event.type) && digestRE.test(event.body.sha256), 'invalid body reference');
     }
-    if (event.usage !== undefined) {
-      exactKeys(event.usage, usageKeys, `event[${index}].usage`);
-      for (const value of Object.values(event.usage)) assert(uint(value), 'invalid token usage');
-    }
-    if (event.type === 'model.request') {
-      assert(Array.isArray(event.context_event_ids) && event.context_event_ids.length > 0 && typeof event.provider === 'string' && event.provider.length > 0 && typeof event.model === 'string' && event.model.length > 0, 'incomplete model request');
-      const seen = new Set<string>();
-      for (const id of event.context_event_ids) {
-        const context = prior.get(id);
-        assert(context !== undefined && context.body !== undefined && !seen.has(id), 'model request references non-prior context');
-        seen.add(id);
-      }
-    } else assert(event.context_event_ids === undefined, 'context IDs outside model request');
-    if (event.type === 'step.start' || event.type === 'step.end') assert(Boolean(event.turn_id && event.step_id), 'step lifecycle identity is incomplete');
-    if (event.type === 'tool.call') {
-      assert(typeof event.tool_call_id === 'string' && /^call-[0-9a-z-]{8,128}$/.test(event.tool_call_id) && typeof event.tool_name === 'string' && event.tool_name.length > 0 && !calls.has(event.tool_call_id), 'invalid or duplicate tool call');
-      calls.set(event.tool_call_id, event);
-    }
-    if (event.type === 'assistant.reasoning' || event.type === 'assistant.output' || event.type === 'tool.call') {
-      assert(event.source_event_ids !== undefined && event.source_event_ids.length > 0 && event.source_event_ids.every((id) => prior.get(id)?.type === 'assistant.chunk'), 'assembled model event has invalid raw chunk citations');
-    }
-    if (event.type === 'tool.result' || event.type === 'runtime.event' || event.type === 'workspace.change') {
-      const call = event.tool_call_id ? calls.get(event.tool_call_id) : undefined;
-      assert(call !== undefined && (!event.tool_name || event.tool_name === call.tool_name), 'tool-linked trajectory event is orphaned');
-      if (event.type === 'tool.result') assert(event.source_event_ids?.includes(call.event_id), 'tool result does not cite its call');
-    }
-    if (event.type === 'runtime.event') assert(Boolean(event.tool_call_id && event.run_id) && Boolean(event.logical_request_id) === Boolean(event.physical_execution_id), 'runtime trajectory identity is incomplete');
+    assert(event.body === undefined, 'portable evidence contains private body reference');
+    assert(event.type !== 'model.body' && event.type !== 'runtime.observation', 'portable projection retained body-only event');
+    if (raw.profile === 'production_rollback') assert(productionTypes.has(event.type), 'production profile leaked experiment telemetry');
+    validatePayload(event);
+    validateRelations(event, prior);
+    const unsignedEvent = { ...event, event_id: '' };
+    assert(await evidenceHash(`event\0${raw.header_sha256}`, unsignedEvent) === event.event_id, 'event identity mismatch');
+    if (event.type === 'evidence.truncated') truncated = true;
+    if (event.type === 'trace.ended') terminalComplete = event.payload.evidence_complete === true;
     prior.set(event.event_id, event);
-    previous = event.sha256;
+    previousOrdinal = event.ordinal;
   }
-  assert(raw.events[0].type === 'session.start' && raw.events.at(-1)?.type === 'session.end', 'trajectory session is not terminal');
-  const { seal_sha256: _seal, ...unsigned } = raw;
-  const actualSeal = await sha256(`pysolate.agent-trajectory.event.v0\0private-export\0${JSON.stringify(unsigned)}`);
-  assert(actualSeal === raw.seal_sha256, 'private export seal mismatch');
-  return raw;
+  assert(!(truncated && terminalComplete), 'truncated evidence claimed complete');
+  const unsignedExport = { ...raw, seal_sha256: '' };
+  assert(await evidenceHash('export', unsignedExport) === raw.seal_sha256, 'export seal mismatch');
+
+  const events = raw.events.map(presentEvent);
+  return { ...raw, events, session: { session_id: raw.trace_id, source_commit: raw.header.source_commit } };
 }
 
-export function modelContext(value: TrajectoryExport, requestEventID: string): TrajectoryEvent[] {
-  const request = value.events.find((event) => event.event_id === requestEventID && event.type === 'model.request');
-  if (!request?.context_event_ids) throw new Error('model request not found');
-  const byID = new Map(value.events.map((event) => [event.event_id, event]));
-  return request.context_event_ids.map((id) => {
-    const event = byID.get(id);
-    if (!event) throw new Error('model context event not found');
-    return event;
+function presentEvent(event: RawEvidenceEvent): TrajectoryEvent {
+  const payload = event.payload;
+  const statusValue = payload.status ?? payload.state ?? payload.disposition ?? payload.availability;
+  const source = inferSource(event.type);
+  return {
+    ...event,
+    sequence: event.ordinal,
+    source,
+    occurred_millis: event.occurred_nanos / 1_000_000,
+    parent_event_id: event.parent_event_ids?.[0],
+    source_event_ids: event.parent_event_ids,
+    status: typeof statusValue === 'string' ? statusValue : undefined,
+    tool_call_id: typeof payload.call_id === 'string' ? payload.call_id : undefined,
+    tool_name: typeof payload.capability === 'string' ? payload.capability : undefined,
+    run_id: typeof payload.run_id === 'string' ? payload.run_id : typeof payload.fresh_run_id === 'string' ? payload.fresh_run_id : undefined,
+    child_session_id: typeof payload.child_id === 'string' ? payload.child_id : undefined,
+    span_id: typeof payload.occurrence_id === 'string' ? payload.occurrence_id : undefined,
+    sha256: event.event_id,
+  };
+}
+function inferSource(type: EvidenceType): EventSource {
+  if (type.startsWith('model')) return 'model';
+  if (type.startsWith('subagent')) return 'subagent';
+  if (type.startsWith('workspace')) return 'workspace';
+  if (type.startsWith('runtime') || type.startsWith('execution') || type.startsWith('trace') || type.startsWith('evidence')) return 'runtime';
+  if (type.startsWith('effect')) return 'tool';
+  return 'harness';
+}
+
+export function filterTrajectory(trajectory: TrajectoryExport, filters: { query?: string; sources?: EventSource[]; toolCallID?: string } = {}) {
+  const query = filters.query?.trim().toLowerCase();
+  return trajectory.events.filter((event) => {
+    if (filters.sources && !filters.sources.includes(event.source)) return false;
+    if (filters.toolCallID && event.tool_call_id !== filters.toolCallID && !event.parent_event_ids?.some((id) => trajectory.events.find((candidate) => candidate.event_id === id)?.tool_call_id === filters.toolCallID)) return false;
+    if (!query) return true;
+    return JSON.stringify(event).toLowerCase().includes(query);
   });
 }
-
-export function filterTrajectory(value: TrajectoryExport, filter: TrajectoryFilter): TrajectoryEvent[] {
-  const query = filter.query?.trim().toLowerCase();
-  const sourceSet = filter.sources?.length ? new Set(filter.sources) : undefined;
-  const typeSet = filter.types?.length ? new Set(filter.types) : undefined;
-  return value.events.filter((event) => {
-    if (sourceSet && !sourceSet.has(event.source)) return false;
-    if (typeSet && !typeSet.has(event.type)) return false;
-    if (filter.toolCallID && event.tool_call_id !== filter.toolCallID) return false;
-    if (filter.actorID && event.actor_id !== filter.actorID) return false;
-    if (query) {
-      const haystack = [event.type, event.source, event.actor_id, event.tool_name, event.status, event.body_text, event.run_id, event.logical_request_id, event.physical_execution_id].filter(Boolean).join('\n').toLowerCase();
-      if (!haystack.includes(query)) return false;
-    }
-    return true;
-  });
+export function modelContext(trajectory: TrajectoryExport, _eventID: string) {
+  return trajectory.events.filter((event) => event.type === 'model.context');
 }
 
-export function validateTrajectoryIndex(raw: TrajectoryIndex): TrajectoryIndex {
-  exactKeys(raw, ['schema_version', 'default_session_id', 'sessions'], 'trajectory index');
-  assert(raw.schema_version === 'pysolate.trajectory-index.v0' && /^[-a-z0-9]{8,80}$/.test(raw.default_session_id), 'invalid trajectory index');
-  assert(Array.isArray(raw.sessions) && raw.sessions.length > 0 && raw.sessions.length <= 32, 'invalid trajectory session count');
+export function validateTrajectoryIndex(rawValue: unknown): TrajectoryIndex {
+  const raw = object(rawValue, 'trajectory index') as unknown as TrajectoryIndex;
+  exactKeys(raw as unknown as Record<string, unknown>, ['schema_version', 'default_view_id', 'views'], [], 'trajectory index');
+  assert(raw.schema_version === TRAJECTORY_INDEX_SCHEMA && idRE.test(raw.default_view_id), 'invalid trajectory index');
+  assert(Array.isArray(raw.views) && raw.views.length > 0 && raw.views.length <= 8, 'invalid trajectory index views');
   const seen = new Set<string>();
-  for (const session of raw.sessions) {
-    exactKeys(session, ['session_id', 'label', 'kind', 'file'], 'trajectory index session');
-    assert(/^[-a-z0-9]{8,80}$/.test(session.session_id) && !seen.has(session.session_id), 'invalid trajectory session identity');
-    assert(typeof session.label === 'string' && session.label.length > 0 && session.label.length <= 120, 'invalid trajectory session label');
-    assert((session.kind === 'scripted' || session.kind === 'experiment') && /^[a-z0-9-]+\.json$/.test(session.file), 'invalid trajectory session file');
-    seen.add(session.session_id);
+  for (const view of raw.views) {
+    exactKeys(object(view, 'trajectory index view'), ['view_id', 'trace_id', 'label', 'kind', 'file'], [], 'trajectory index view');
+    assert(idRE.test(view.view_id) && !seen.has(view.view_id) && idRE.test(view.trace_id), 'invalid indexed trace identity');
+    assert(typeof view.label === 'string' && view.label.length > 0 && view.label.length <= 120, 'invalid trace label');
+    assert((view.kind === 'experiment' || view.kind === 'production') && /^[a-z0-9-]+\.json$/.test(view.file), 'invalid trace file');
+    seen.add(view.view_id);
   }
-  assert(seen.has(raw.default_session_id), 'trajectory default session is missing');
+  assert(seen.has(raw.default_view_id), 'default trace view missing');
   return raw;
 }
-
 export async function loadTrajectoryIndex(): Promise<TrajectoryIndex> {
   const response = await fetch('/lab-data/index.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`trajectory index fetch failed: ${response.status}`);
-  return validateTrajectoryIndex(await response.json() as TrajectoryIndex);
+  return validateTrajectoryIndex(await response.json());
 }
-
-export async function loadTrajectory(url = '/lab-data/trajectory.json'): Promise<TrajectoryExport> {
+export async function loadTrajectory(url = '/lab-data/experiment-full-public.json'): Promise<TrajectoryExport> {
   if (!/^\/lab-data\/[a-z0-9-]+\.json$/.test(url)) throw new Error('invalid trajectory URL');
   const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) throw new Error(`trajectory fetch failed: ${response.status}`);
-  return validateTrajectory(await response.json() as TrajectoryExport);
+  return validateTrajectory(await response.json());
 }

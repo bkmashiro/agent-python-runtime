@@ -34,14 +34,11 @@ The canonical report is [`evidence/spark-composable-direct-report.json`](evidenc
 
 ## Current Lab boundary
 
-The former `pysolate.lab-web-debugger.v4` projection was deliberately removed when Lab reset
-to the private append-only `pysolate.agent-trajectory.v0` contract. The canonical acceptance
-report and Linux evidence above remain historical public evidence; the report command no
-longer writes a browser dataset or maintains a compatibility projection.
-
-The scripted full-source trajectory fixture now demonstrates system/model/tool/subagent,
-Runtime and workspace correlation through stable IDs. It does not retroactively convert this
-older acceptance run into a model-visible Agent session.
+The former `pysolate.lab-web-debugger.v4` and `pysolate.agent-trajectory.v0` projections are
+retired. Current Lab ingestion accepts only portable `pysolate.causal-evidence.v1` views: a
+body-safe experiment projection and a strict production rollback/reconciliation subset from
+one named real Guest trace. The historical acceptance report above remains valid for its
+original bounded run but is not converted into current causal evidence.
 
 ## Evidence boundary
 

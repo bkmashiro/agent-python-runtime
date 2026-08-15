@@ -144,37 +144,37 @@ function Inspector({ trajectory, event, onSelect }: { trajectory: TrajectoryExpo
 function TrajectoryApp({ trajectory, index, sessionID, onSessionChange }: { trajectory: TrajectoryExport; index: TrajectoryIndex; sessionID: string; onSessionChange: (value: string) => void }) {
   const [query, setQuery] = useState('');
   const [source, setSource] = useState<EventSource | undefined>();
-  const [selectedID, setSelectedID] = useState(() => trajectory.events.find((event) => event.type === 'model.request')?.event_id ?? trajectory.events[0].event_id);
+  const [selectedID, setSelectedID] = useState(() => trajectory.events.find((event) => event.type === 'source.decision')?.event_id ?? trajectory.events[0].event_id);
   useEffect(() => {
     setQuery(''); setSource(undefined);
-    setSelectedID(trajectory.events.find((event) => event.type === 'model.request')?.event_id ?? trajectory.events[0].event_id);
+    setSelectedID(trajectory.events.find((event) => event.type === 'source.decision')?.event_id ?? trajectory.events[0].event_id);
   }, [trajectory]);
   const filtered = useMemo(() => filterTrajectory(trajectory, { query, sources: source ? [source] : undefined }), [trajectory, query, source]);
   useEffect(() => {
     if (!filtered.some((event) => event.event_id === selectedID) && filtered[0]) setSelectedID(filtered[0].event_id);
   }, [filtered, selectedID]);
   const selected = trajectory.events.find((event) => event.event_id === selectedID) ?? trajectory.events[0];
-  const requestCount = trajectory.events.filter((event) => event.type === 'model.request').length;
-  const toolCount = trajectory.events.filter((event) => event.type === 'tool.call').length;
-  const session = index.sessions.find((item) => item.session_id === sessionID)!;
+  const sourceDecisionCount = trajectory.events.filter((event) => event.type === 'source.decision').length;
+  const effectCount = trajectory.events.filter((event) => event.type === 'effect.transition').length;
+  const session = index.views.find((item) => item.view_id === sessionID)!;
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand"><Braces size={19} /><div><span>Pysolate Lab</span><small>private development trace</small></div></div>
+        <div className="brand"><Braces size={19} /><div><span>Pysolate Lab</span><small>read-only causal evidence</small></div></div>
         <div className="session-strip">
-          <span className={`fixture-badge ${session.kind}`}>{session.kind === 'experiment' ? 'REAL GUEST EXPERIMENT' : 'SCRIPTED DEVELOPMENT FIXTURE'}</span>
+          <span className={`fixture-badge ${session.kind}`}>{session.kind === 'experiment' ? 'REAL GUEST · PUBLIC EXPERIMENT' : 'PRODUCTION ROLLBACK PROJECTION'}</span>
           <a className="lab-link" href="/?view=campaign">Campaign</a>
           <select aria-label="Trajectory session" value={sessionID} onChange={(event) => onSessionChange(event.target.value)}>
-            {index.sessions.map((item) => <option key={item.session_id} value={item.session_id}>{item.label}</option>)}
+            {index.views.map((item) => <option key={item.view_id} value={item.view_id}>{item.label}</option>)}
           </select>
           <code>{trajectory.session.session_id}</code><span>{trajectory.session.source_commit.slice(0, 8)}</span>
         </div>
       </header>
       <main>
         <section className="hero">
-          <div><p className="eyebrow">MODEL-VISIBLE MEANS LOGGED</p><h1>Trajectory</h1><p>Inspect every context injection, model emission, tool boundary, subagent handoff and Pysolate execution from one append-only session.</p></div>
-          <div className="hero-metrics"><article><b data-testid="event-count">{trajectory.events.length} events</b><span>hash chained</span></article><article><b>{requestCount}</b><span>model requests</span></article><article><b>{toolCount}</b><span>tool calls</span></article></div>
+          <div><p className="eyebrow">HOST-AUTHORED · BODY-SAFE</p><h1>Causal evidence</h1><p>Inspect source-bound decisions, capability effects, fresh child runs and workspace lineage from one typed dual-profile trace.</p></div>
+          <div className="hero-metrics"><article><b data-testid="event-count">{trajectory.events.length} events</b><span>identity sealed</span></article><article><b>{sourceDecisionCount}</b><span>source decisions</span></article><article><b>{effectCount}</b><span>effect transitions</span></article></div>
         </section>
         <section className="toolbar" aria-label="Trajectory filters">
           <label><Search size={15} /><input aria-label="Search trajectory" placeholder="Search bodies, IDs, tools…" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -208,11 +208,11 @@ function TrajectoryRoot() {
   const [trajectory, setTrajectory] = useState<TrajectoryExport | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    loadTrajectoryIndex().then((value) => { setIndex(value); setSessionID(value.default_session_id); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'trajectory index load failed'));
+    loadTrajectoryIndex().then((value) => { setIndex(value); setSessionID(value.default_view_id); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'trajectory index load failed'));
   }, []);
   useEffect(() => {
     if (!index || !sessionID) return;
-    const session = index.sessions.find((item) => item.session_id === sessionID);
+    const session = index.views.find((item) => item.view_id === sessionID);
     if (!session) { setError('trajectory session is missing'); return; }
     let cancelled = false;
     setTrajectory(null); setError('');

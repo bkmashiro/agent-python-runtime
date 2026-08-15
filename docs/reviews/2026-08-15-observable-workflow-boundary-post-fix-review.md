@@ -4,8 +4,9 @@ Date: 2026-08-15
 Status: **Closed — no known unresolved Medium+ finding**
 
 > Historical review: the paired evidence and body-free Lab surface reviewed here were later
-> deliberately reset. Current Lab development data uses the private Agent trajectory
-> contract documented in `docs/research/agent-trajectory-v0.md`.
+> deliberately reset. The intermediate private Agent trajectory v0 was itself retired by the
+> clean-break `pysolate.causal-evidence.v1` contract documented in
+> `docs/research/dual-profile-causal-evidence-v1.md`.
 
 ## Independent review rounds
 

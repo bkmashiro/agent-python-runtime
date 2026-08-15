@@ -12,12 +12,11 @@ Date: 2026-08-15
 - Portable evidence schema: `pysolate.workflow-benchmark-evidence.v1`
 - Portable evidence file SHA-256: `sha256:8a30e3e0dd65ca47e43aa51819262a0b2d65e3cf3acfa0ceb436b7956f04dbac`
 - Portable evidence internal seal: `sha256:8ba99c58c976194d9076a0bba4b12779c8d7ae9644593e8abeb1540d08935ba4`
-- Checked-in private trajectory: `apps/lab-web/public/lab-data/experiment.json`
+- Historical private trajectory: retired during the causal-evidence v1 clean break; the sealed
+  workflow benchmark evidence and this evaluation remain the result authority.
 
-The portable evidence was retained as a private local input to the trajectory converter rather
-than restored as a second checked-in Lab schema. The sealed trajectory materializes the
-complete task metrics, model fixture records, tool calls/results and Runtime physical
-executions from that evidence.
+The portable evidence was retained as a private local historical input. It is not converted
+into current Lab causal evidence and no compatibility parser remains.
 
 ## Balanced paired result
 

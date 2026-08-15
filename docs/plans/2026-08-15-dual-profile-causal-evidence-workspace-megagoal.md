@@ -110,6 +110,8 @@ race; signed commit and push.
 
 ## Phase 3 — one real path and three products
 
+**Status:** Complete. The named non-skipping CPython/WASI path records an actual source-bound Broker receipt, a fresh child Guest, private workspace branch/root, raw private Runtime observations, explicit executed-line absence and bounded CPU/wall resource truth. Header `sha256:b94c…6beb` yields 19-event private full, 5-event production and 14-event public experiment products from shared retained identities; checked-in and private artifact hashes are documented in `docs/research/dual-profile-causal-evidence-v1.md`.
+
 Implement one adapter from `runtime/observe.Recorder` into the new evidence log.
 Drive a named real CPython/WASM execution through the existing observation
 session and enrich it with Host-owned M1, subagent and workspace projections.
@@ -131,6 +133,8 @@ Gate: non-skipping real-Guest E2E plus deterministic export/readback tests;
 signed commit and push.
 
 ## Phase 4 — clean break and ingestion migration
+
+**Status:** Complete. v0 log/tests, both scripted generators, workflow converter and checked-in v0 fixtures are removed. Active docs point to v1; Lab accepts only exact causal-evidence v1 plus its new view index, recomputes header/event/export identities, and passes unit/build/desktop+narrow ingestion gates. Historical result documents remain explicitly labelled and have no compatibility parser.
 
 After Phase 3 is green:
 

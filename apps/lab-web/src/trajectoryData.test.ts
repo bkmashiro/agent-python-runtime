@@ -1,85 +1,78 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { filterTrajectory, modelContext, validateTrajectory, validateTrajectoryIndex, type TrajectoryExport, type TrajectoryIndex } from './trajectoryData';
+import {
+  filterTrajectory, modelContext, validateTrajectory, validateTrajectoryIndex,
+  type RawEvidenceExport, type TrajectoryIndex,
+} from './trajectoryData';
 
-async function fixture(): Promise<TrajectoryExport> {
-  return JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/trajectory.json'), 'utf8')) as TrajectoryExport;
+async function rawFixture(name = 'experiment-full-public.json'): Promise<RawEvidenceExport> {
+  return JSON.parse(await readFile(join(process.cwd(), 'public/lab-data', name), 'utf8')) as RawEvidenceExport;
 }
 
-describe('private development trajectory', () => {
-  it('loads a closed local session index', async () => {
+describe('dual-profile causal evidence ingestion', () => {
+  it('loads only the two views of one real Guest trace', async () => {
     const raw = JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/index.json'), 'utf8')) as TrajectoryIndex;
     const index = validateTrajectoryIndex(raw);
-    expect(index.default_session_id).toBe('workflow-experiment-v1');
-    expect(index.sessions.map((session) => session.file)).toEqual(['experiment.json', 'trajectory.json']);
+    expect(index.default_view_id).toBe('experiment-full-public');
+    expect(index.views.map((view) => view.file)).toEqual(['experiment-full-public.json', 'production-rollback.json']);
+    expect(new Set(index.views.map((view) => view.trace_id))).toEqual(new Set(['trace-real-source-bound-0001']));
   });
 
-  it('loads one append-only session containing every inspectable source', async () => {
-    const value = await validateTrajectory(await fixture());
-    expect(value.privacy).toBe('private');
-    expect(value.events).toHaveLength(32);
-    expect(new Set(value.events.map((event) => event.source))).toEqual(expect.objectContaining(new Set(['system', 'developer', 'user', 'memory', 'skill', 'harness', 'model', 'tool', 'subagent', 'runtime', 'workspace'])));
-    expect(value.events.at(-1)?.type).toBe('session.end');
+  it('validates the body-safe real Guest experiment projection', async () => {
+    const value = await validateTrajectory(await rawFixture());
+    expect(value.profile).toBe('experiment_full');
+    expect(value.privacy).toBe('portable');
+    expect(value.events).toHaveLength(14);
+    expect(value.events.filter((event) => event.type === 'source.decision')).toHaveLength(1);
+    expect(value.events.filter((event) => event.type === 'source.executed_line')[0].payload.availability).toBe('not_recorded');
+    expect(value.events.filter((event) => event.type === 'resource.sample')).toHaveLength(1);
+    expect(value.events.filter((event) => event.type === 'subagent.context')).toHaveLength(1);
+    expect(value.events.filter((event) => event.type === 'subagent.runtime')).toHaveLength(1);
+    expect(value.events.filter((event) => event.type === 'subagent.workspace')).toHaveLength(1);
+    expect(value.events.some((event) => event.body !== undefined)).toBe(false);
+    expect(value.events.some((event) => event.type === 'runtime.observation' || event.type === 'model.body')).toBe(false);
+    expect(modelContext(value, 'unused')).toHaveLength(1);
   });
 
-  it('validates the reset real-Guest experiment trajectory with CPU accounting', async () => {
-    const raw = JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/experiment.json'), 'utf8')) as TrajectoryExport;
-    const value = await validateTrajectory(raw);
-    expect(value.events).toHaveLength(273);
-    expect(value.events.filter((event) => event.type === 'tool.call')).toHaveLength(14);
-    expect(value.events.filter((event) => event.type === 'runtime.event')).toHaveLength(76);
-    expect(value.events.filter((event) => event.type === 'assistant.chunk')).toHaveLength(44);
-    expect(value.events.filter((event) => event.type === 'step.start')).toHaveLength(15);
-    expect(value.events.filter((event) => event.type === 'step.end')).toHaveLength(15);
-    expect(value.events.filter((event) => event.type === 'assistant.output').at(-1)?.body_text).toContain('Process CPU: 30782849000 ns baseline, 30802806000 ns optimized');
-  });
-
-  it('reconstructs the exact ordered context of each model request', async () => {
-    const value = await validateTrajectory(await fixture());
-    const requests = value.events.filter((event) => event.type === 'model.request');
-    expect(requests).toHaveLength(2);
-    expect(modelContext(value, requests[0].event_id).map((event) => event.source)).toEqual(['harness', 'system', 'developer', 'memory', 'skill', 'user']);
-    expect(modelContext(value, requests[1].event_id).map((event) => event.type)).toEqual([
-      'request.header', 'context.inject', 'context.inject', 'context.inject', 'context.inject', 'user.message',
-      'assistant.output', 'tool.call', 'tool.result', 'subagent.result',
+  it('validates a strict production subset with shared event identities', async () => {
+    const full = await validateTrajectory(await rawFixture());
+    const production = await validateTrajectory(await rawFixture('production-rollback.json'));
+    expect(production.profile).toBe('production_rollback');
+    expect(production.events).toHaveLength(5);
+    expect(production.events.map((event) => event.type)).toEqual([
+      'trace.started', 'execution.attempt', 'effect.transition', 'execution.attempt', 'trace.ended',
     ]);
+    const fullIDs = new Set(full.events.map((event) => event.event_id));
+    expect(production.events.every((event) => fullIDs.has(event.event_id))).toBe(true);
+    expect(production.header_sha256).toBe(full.header_sha256);
+    expect(production.trace_id).toBe(full.trace_id);
   });
 
-  it('links a tool call to Runtime, workspace and result records', async () => {
-    const value = await validateTrajectory(await fixture());
-    const call = value.events.find((event) => event.type === 'tool.call');
-    expect(call).toBeDefined();
-    const linked = filterTrajectory(value, { toolCallID: call!.tool_call_id });
-    expect(linked.map((event) => event.type)).toEqual(['tool.call', 'runtime.event', 'runtime.event', 'workspace.change', 'tool.result']);
-    expect(linked.find((event) => event.type === 'runtime.event')?.physical_execution_id).toBeTruthy();
+  it('filters source and receipt-linked effect evidence deterministically', async () => {
+    const value = await validateTrajectory(await rawFixture());
+    expect(filterTrajectory(value, { sources: ['subagent'] })).toHaveLength(3);
+    const effect = value.events.find((event) => event.type === 'effect.transition')!;
+    expect(filterTrajectory(value, { toolCallID: effect.tool_call_id }).some((event) => event.type === 'effect.transition')).toBe(true);
+    expect(filterTrajectory(value, { query: 'source_bound' }).map((event) => event.type)).toEqual(['source.decision']);
   });
 
-  it('fails closed on chain, context, body and unknown-field mutation', async () => {
-    const chain = await fixture();
-    chain.events[4].previous_sha256 = chain.session.header_sha256;
-    await expect(validateTrajectory(chain)).rejects.toThrow(/hash chain|export seal/);
+  it('fails closed on identity, relation, profile leakage and unknown fields', async () => {
+    const identity = await rawFixture();
+    identity.events[0].payload.availability = 'not_recorded';
+    await expect(validateTrajectory(identity)).rejects.toThrow(/event identity|export seal/);
 
-    const future = await fixture();
-    const request = future.events.find((event) => event.type === 'model.request')!;
-    request.context_event_ids = [future.events.at(-1)!.event_id];
-    await expect(validateTrajectory(future)).rejects.toThrow(/prior context|export seal/);
+    const relation = await rawFixture();
+    const runtime = relation.events.find((event) => event.type === 'subagent.runtime')!;
+    runtime.payload.child_id = 'child-mismatch-0001';
+    await expect(validateTrajectory(relation)).rejects.toThrow(/subagent runtime parent mismatch|event identity/);
 
-    const body = await fixture();
-    delete body.events.find((event) => event.type === 'tool.result')!.body_text;
-    await expect(validateTrajectory(body)).rejects.toThrow(/materialized body|export seal/);
+    const leakage = await rawFixture();
+    leakage.profile = 'production_rollback';
+    await expect(validateTrajectory(leakage)).rejects.toThrow(/production profile leaked/);
 
-    const citations = await fixture();
-    const header = citations.events.find((event) => event.type === 'request.header')!;
-    citations.events.find((event) => event.type === 'assistant.output')!.source_event_ids = [header.event_id];
-    await expect(validateTrajectory(citations)).rejects.toThrow(/chunk citations|export seal/);
-
-    const unknown = await fixture() as TrajectoryExport & { secret?: string };
+    const unknown = await rawFixture() as RawEvidenceExport & { secret?: string };
     unknown.secret = 'not accepted';
-    await expect(validateTrajectory(unknown)).rejects.toThrow(/unknown trajectory field|export seal/);
-
-    const materialized = await fixture();
-    materialized.events.find((event) => event.type === 'assistant.output')!.body_text = 'tampered after export';
-    await expect(validateTrajectory(materialized)).rejects.toThrow(/export seal/);
+    await expect(validateTrajectory(unknown)).rejects.toThrow(/unknown causal evidence field/);
   });
 });

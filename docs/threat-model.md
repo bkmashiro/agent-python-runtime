@@ -158,9 +158,9 @@ model-output, Python-source, tool-result, workspace-path or credential bodies. E
 logical request maps to one physical execution; every physical execution has exactly one
 matching measured Host span; and every non-producer consumer requires exactly one
 admitted coalescing or retained-reuse decision. Cross-authority, freshness, privacy,
-artifact, profile or Plan sharing fails closed. The sealed Lab projection validates those
-relations in the retired v0 fixture only. The report remains a portable body-free format;
-the new private Agent trajectory does not weaken or replace this boundary.
+artifact, profile or Plan sharing fails closed. The historical workflow report remains its
+own portable body-free contract; current causal-evidence capture does not reinterpret or
+weaken that earlier evidence boundary.
 
 ### Experimental deterministic verification
 
@@ -192,19 +192,26 @@ and structured content rejects common credential field names. That check is
 defense in depth, not reliable secret discovery or an authentication boundary.
 See [research/lab-boundary.md](research/lab-boundary.md).
 
-### Private Agent trajectory
+### Dual-profile causal evidence
 
-`research/trajectory` intentionally stores prompt, provider-visible reasoning/output, tool
-payload and workspace bodies that portable evidence forbids. The JSONL metadata is
-append-only, `0600` and hash chained; bodies are private typed Labstore objects. A sealed
-materialized export is for a same-UID local browser only and must never be published as a
-portable evidence artifact.
+`research/trajectory` stores a canonical `0600` append log while optional full experiment
+bodies remain private typed Labstore objects. `production_rollback` is body-free and admits
+only Host facts required for replay prevention, cleanup, rollback/reconciliation, workspace
+disposition and terminal truth. `experiment_full` may capture broader research telemetry but
+remains opt-in, bounded and private-by-default.
 
-Callers remain responsible for removing credentials before append. The explicit
-`CredentialsAbsent` declaration and structured-key checks are defense in depth, not secret
-discovery. Provider-hidden chain-of-thought is unavailable and must not be fabricated.
-Session-log or body corruption fails validation; the log grants no capability, scheduling,
-retry, replay or Runtime authority.
+Portable projection removes all body-bearing events. Source-bound decisions cross-bind a
+verified occurrence, dynamic call, Plan and Host receipt but never imply executed-line
+coverage; only actual instrumentation may mint `executed.line`. Model context, fresh child
+Runtime and filesystem branch identities are independent, and the contract explicitly rejects
+parent live-state inheritance.
+
+Callers remain responsible for removing credentials before private append. Explicit
+`CredentialsAbsent` declarations and structured-key checks are defense in depth, not secret
+discovery. Corruption, unknown fields, forward parents, profile leakage, relation mismatch or
+silent overflow fail validation; overflow requires an explicit truncation record. The recorder
+and static Lab grant no capability, scheduling, retry, replay, rollback or publication
+authority.
 
 ### Artifact binding
 

@@ -1,0 +1,401 @@
+# Source-Bound Agent Program Night-Run Autonomous Mega-Goal
+
+> **For Hermes:** This is the long-running unattended `/goal` handoff. Read this file fully, inspect live Git state, finish the current dirty M2 closeout first, then implement Megagoal 3's Human-First Lab in roadmap order. Stop at its owner visual/product review gate; the later corpus/experiment tracks remain queued behind that gate.
+
+**Goal:** Close Megagoal 2 truthfully from the live dirty worktree, then rebuild Lab around causal developer tasks using the real M2 evidence, verify the actual browser surface proportionally, and leave the later natural-workload/multi-agent experiments queued behind owner acceptance.
+
+**Architecture:** Keep `pysolate.causal-evidence.v1` non-authoritative and Host-projected. Preserve the strict physical `production_rollback` profile and bounded/private `experiment_full` profile. M3 is a read-only deterministic projection: Session → Turn → Step → Tool/Run causal tree, source/workspace/evidence inspectors and honest absence states. It never reconstructs missing truth or gains authority. M4 corpus and physical-sharing experiments remain specified but blocked until M3 owner review.
+
+**Tech stack:** Go, CPython/WASI real Guest, Labstore, TypeScript/Vite/Vitest/Playwright, Git signed commits.
+
+---
+
+## User Intent
+
+Yuzhe is going to sleep and does not want to keep sending “continue.” The night run should:
+
+1. finish the current M2 closeout rather than leaving a dirty evidence/schema checkpoint;
+2. stop wasting large token budgets on Codex CLI whole-repository reviews;
+3. implement Megagoal 3 Web/Lab redesign after M2 in the roadmap's intended order;
+4. stop at owner visual/product review before beginning M4 corpus or multi-agent experiments;
+5. keep making verified progress until the executable queue is exhausted or a real product/resource/risk decision is required.
+
+## Unattended Authority Envelope
+
+This is unattended work.
+
+- Work only in `/Users/yuzhe/projects/agent-python-runtime` on `feat/programmatic-hot-approval`.
+- Never merge the branch.
+- Never deploy, publish packages, mutate production, use production accounts/data, or activate remote infrastructure.
+- Make signed local commits for coherent verified slices. Do **not push during the unattended run unless Yuzhe's next goal explicitly grants unattended push authority**.
+- Never expose or commit private artifacts under `~/.hermes/evidence/`.
+- Do not use Codex CLI for review or exploration.
+- Do not launch multiple writers against this worktree.
+- At most one independent `delegate_task` reviewer may be used for a sharply bounded exact-diff question. Give it an explicit finding checklist and no broad gates. If it times out, do not recursively respawn reviewers; perform controller-owned source inspection and targeted adversarial tests instead.
+- Local Docker, paid cloud, production access and external account mutations remain permission-gated.
+
+## Value Filter and Explicit Non-Goals
+
+### Prefer
+
+- closing known correctness gaps with small adversarial tests;
+- truthful artifact regeneration from exact signed behavior commits;
+- controller-owned focused review of identity, authority, body and lifecycle boundaries;
+- deterministic local gates and canonical checked-in public artifacts;
+- concise roadmap/evidence updates that eliminate stale state;
+- a coherent browser-visible causal debugging loop over real M2 fixtures.
+
+### Do not do overnight
+
+- repeated pixel-polish loops, exhaustive browser matrices or screenshot churn after one representative desktop and one narrow-viewport QA pass;
+- rollback/replay/compensator execution;
+- COW/snapshot/restore/cold continuation/region execution;
+- production scheduling or durable workflows;
+- a new optimizer pass;
+- arbitrary source rewriting or new execution authority;
+- broad speculative refactors prompted only by an unbounded reviewer;
+- repeated whole-repository reviews whose output is not decision-bounded;
+- merge, deploy, release or publish.
+
+## Repository and Sources of Truth
+
+Read first:
+
+1. `docs/plans/2026-08-15-source-bound-agent-program-roadmap.md`
+2. `docs/plans/2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md`
+3. `docs/research/dual-profile-causal-evidence-v1.md`
+4. this file
+5. live `git status --short --branch`, `git diff --stat`, `git diff --check`, `git log -5 --show-signature --oneline`
+
+M2 implementation anchors:
+
+- `research/trajectory/contract_v1.go`
+- `research/trajectory/observe_adapter_v1.go`
+- `research/trajectory/*_v1_test.go`
+- `runtime/observe/observe.go`
+- `runtime/engine/wazero/{engine.go,observation.go}`
+- `runtime/capability/broker.go`
+- `runtime/workspace/`
+- `integration/e2e/{observation_test.go,semantic_source_binding_test.go}`
+- `apps/lab-web/src/trajectoryData.ts`
+- `docs/evidence/dual-profile-causal-evidence-real-guest-*-v1.json`
+- `apps/lab-web/public/lab-data/*.json`
+
+Exact real Guest artifact:
+
+```text
+~/.hermes/evidence/pysolate/source-bound-mg1-e79e821/dist/agent-python-runtime.wasm
+```
+
+## Current Live State at Handoff
+
+Trust live Git over this snapshot. At roadmap creation time:
+
+- baseline for M2 remains `28d46c8ab116b091382334d192747c22a8d83736`;
+- latest signed/pushed behavior commit is `c4b510051528d1469a4d40b2034a72974ec98632`;
+- that commit adds non-source receipt identity reconstruction, honest source-bound error/timeout/ambiguous terminal representation, post-call receipt capture on runtime failure, strict mechanism/approval semantics, canonical/depth-bounded Lab ingestion and Go/Lab parity hardening;
+- a real Guest capture was generated from `c4b5100` under `~/.hermes/evidence/pysolate/dual-profile-mg2-c4b5100/`;
+- capture identity is `sha256:5560ede54e5a3f59c1c5864441a54397b3d6386d9c21cf2b05f62211e72b3cfb`;
+- event counts remain private 31, public 21, production 9;
+- public/production body leakage check returned 0 and effect order remains `intent → started → committed`;
+- captured file hashes are:
+  - private `c004053ff30e3359eb8e961c2ac6b211d65a15f67b4fabc719d84cc9894f711b`;
+  - public `7833cd7ce414be3b7c5768a33aa0276b0976974bf85621bd3421c351ea4a982a`;
+  - production `81605cef42d275cc9238d1d50b11ad932dd2687bd0e5e91578f8a3770a00608a`;
+- checked-in evidence/Lab files and `docs/research/dual-profile-causal-evidence-v1.md` were updated in the worktree but were not yet committed at handoff;
+- full Go race, focused real Guest race, `go vet`, 95 Guest Python tests and 7 scripts tests passed after `c4b5100`;
+- Lab gate currently has one expected test assertion drift: query `source_bound` now returns both `tool.decision` and `source.decision` because `ToolDecisionPayload.source_bound` became explicit. This is not an implementation failure; update the deterministic expectation, rerun Lab unit/build/E2E, and keep the new field because it is required to distinguish receipt v1/v2 from source-bound receipt v3 validation;
+- earlier exact-target reviewer findings about missing body requirements and Lab byte bounds were fixed after their stale target;
+- a later Codex CLI review over-expanded into a whole-runtime audit. Do not use Codex CLI again. Its actionable findings were reduced to concrete tests/fixes in `c4b5100`; architectural demands that standalone evidence cryptographically prove Host truth exceed M2's explicit non-authoritative Host-projection boundary and must not trigger an authority redesign.
+
+## Desired M2 Closeout State
+
+M2 is complete only when all are true:
+
+- one current `pysolate.causal-evidence.v1` contract exists; no active v0 parser/fixture/dual-read path remains;
+- private body-only events require private Labstore objects with kind/privacy/content identity validation;
+- canonical export decode is bounded by bytes, payload, parents, events and JSON depth;
+- Go and Lab reject unknown fields, noncanonical parents/raw JSON, invalid enums/ranges and relation/identity mismatches;
+- source admission is independent of Broker terminal outcome and can represent pre-dispatch rejection plus committed/failed/timed-out/ambiguous receipt terminals;
+- source-bound receipt v3 and non-source receipt v1/v2 identities are recomputed from typed Host fields;
+- effect lifecycle is per-call, terminally reconciled, and a complete trace cannot leave intent/start/ambiguous outstanding;
+- runtime failures after a capability call emit minted receipts before terminal failure evidence;
+- subagent descriptor and workspace-root identities are recomputed from complete typed documents, and the named E2E derives them from actual Host descriptor/join/root objects;
+- default production recording physically avoids private raw observation/resource/tool/body capture;
+- named real Guest artifacts are canonical, exact-commit-bound, body-safe where checked in, and hash-documented;
+- Lab remains read-only/non-authoritative;
+- master and extracted M2 roadmaps contain no stale “M2 not started” or old capture identity;
+- final working tree is clean after signed local closeout commits;
+- no M3 code was started.
+
+## Stop Conditions
+
+Continue automatically after each verified slice. Stop only when:
+
+1. M2 is closed and M3 is implemented, built, browser-smoked and ready for owner review;
+2. M3 reaches its owner visual/product review gate;
+3. a required resource/permission is unavailable;
+4. a relevant gate repeatedly fails after bounded diagnosis and alternatives, and proceeding would require a risky broad rewrite;
+5. the only remaining work is M4 experimentation, merge, deployment, release or another explicitly gated transition.
+
+Do not bypass the M3 owner review gate merely to keep the run busy. Tracks E–H are the approved post-review queue, not executable during this unattended run unless Yuzhe explicitly accepts M3 first.
+
+## Global Gates
+
+Use focused checks while iterating. Run this full set once for M2 closeout and once for final M3 closeout; do not repeat the whole matrix after every small slice:
+
+```bash
+cd /Users/yuzhe/projects/agent-python-runtime
+
+env -u AGENT_RUNTIME_GUEST -u PYSOLATE_EVIDENCE_OUTPUT_DIR -u PYSOLATE_EVIDENCE_SOURCE_COMMIT \
+  go test -race ./... -count=1
+
+go vet ./...
+
+PYTHONPATH=guest/bootstrap python3 -m unittest discover -s guest/tests -p 'test_*.py'
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+env -u PYSOLATE_EVIDENCE_OUTPUT_DIR -u PYSOLATE_EVIDENCE_SOURCE_COMMIT \
+  AGENT_RUNTIME_GUEST="$HOME/.hermes/evidence/pysolate/source-bound-mg1-e79e821/dist/agent-python-runtime.wasm" \
+  go test -race ./integration/e2e \
+  -run '^(TestRealGuestObservationCorrelatesCapabilityCall|TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan)$' \
+  -count=1 -v
+
+cd apps/lab-web
+npm test -- --run
+npm run build
+npm run test:e2e
+
+cd ../..
+git diff --check
+```
+
+Do not claim a Guest-enabled `go test -race ./...` gate; the intended evidence is no-Guest full race plus focused real Guest race.
+
+## Autonomous Execution Queue
+
+### Track A — Finish the Dirty M2 Checkpoint
+
+**Product promise:** The current correctness hardening lands as one coherent, truthful evidence closeout rather than an uncommitted schema/artifact mismatch.
+
+- [ ] Inspect live status/diff and confirm no sibling writer owns the worktree.
+- [ ] Update `apps/lab-web/src/trajectoryData.test.ts` so the `source_bound` query deterministically expects both `tool.decision` and `source.decision`; do not remove `source_bound` from the typed tool payload.
+- [ ] Run Lab unit/build/E2E.
+- [ ] Run focused trajectory and Wazero gates if any code changed beyond the expectation.
+- [ ] Verify the four checked-in public/production files are byte-identical to the final capture projections.
+- [ ] Recompute public/production hashes and assert zero body/body-reference leakage.
+- [ ] Verify the private capture directory/files remain `0700`/`0600` and are not tracked.
+- [ ] Run `git diff --check`.
+- [ ] Create a signed local commit containing only the final artifacts, Lab expectation and evidence documentation.
+- [ ] Verify commit signature and retain the commit locally unless the newest owner goal explicitly authorizes unattended push.
+
+### Track B — Controller-Owned Final M2 Review
+
+**Product promise:** M2 closes against its actual authority/privacy/state contract, not against an unbounded request for a different system.
+
+Review exact final diff from M2 baseline and inspect:
+
+- [ ] production physical allowlist and absence of body/private telemetry;
+- [ ] private body required/store/privacy/kind/content validation;
+- [ ] source decision admission vs terminal receipt outcomes;
+- [ ] receipt v1/v2/v3 reconstruction and raw call/Plan/source joins;
+- [ ] effect ordering, outstanding reconciliation and failure-path receipt retention;
+- [ ] subagent descriptor/context/source/workspace-root joins derived by the named Host E2E;
+- [ ] export byte/event/parent/payload/depth/canonical limits;
+- [ ] Go/Lab strict parity for checked artifacts;
+- [ ] recorder/Lab non-authority;
+- [ ] v0 clean break.
+
+Rules:
+
+- Do not use Codex CLI.
+- Optional: one bounded read-only `delegate_task` with exact files and checklist. No broad gates, no full architecture archaeology, no stale target. If it times out, do not dispatch another.
+- Findings must name an observable malformed export/runtime path accepted by current code and include `file:symbol`. Reject requests that merely demand cryptographic proof from a non-authoritative local evidence projection or require M3/M4 behavior.
+- Fix blocker/high/medium findings with RED tests; low suggestions do not block closeout.
+
+### Track C — Reconcile M2 Roadmaps and Stop Gate
+
+**Product promise:** Future sessions see one accurate M2 status and cannot accidentally restart it or enter M3.
+
+- [ ] Update `docs/plans/2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md` Phase 1 text to remove the stale temporary-v0 statement.
+- [ ] Update its Phase 3 exact final capture commit/header/root/hashes.
+- [ ] Mark Phase 5 complete only after all final gates are green.
+- [ ] Update `docs/plans/2026-08-15-source-bound-agent-program-roadmap.md` status from “M2 not started” to M1+M2 complete.
+- [ ] Mark only evidence-backed M2 tracks complete; preserve any intentionally deferred conceptual item with a precise explanation rather than silently checking it.
+- [ ] Set the master execution pointer to “M2 complete; executing M3 Human-First Lab; M4 waits for owner visual/product review.”
+- [ ] Re-run document search for stale active v0/M2-not-started/final-capture claims.
+- [ ] Run final global gates and `git diff --check`.
+- [ ] Make a signed local roadmap closeout commit and verify signature/status.
+- [ ] Do not merge; enter M3 only after the M2 closeout commit is clean and verified.
+
+### Track D — Human-First Source-Bound Lab Debugger
+
+**Product promise:** A developer can start from one real trace, understand its task/turn/step structure, select generated Python, follow the exact source-bound decision into Host authority/tool/effect/runtime/workspace evidence, and return to raw canonical records without reading a flat ID wall.
+
+**Primary areas:**
+
+- `apps/lab-web/src/`
+- `apps/lab-web/public/lab-data/`
+- existing Vite/Vitest/Playwright setup
+
+**Slices:**
+
+- [ ] Inspect the existing component/data architecture and preserve the strict v1 parser; do not add a second transformed truth store.
+- [ ] Introduce deterministic selectors/view models for Session → Turn → Step → Tool/Run grouping, collapsed start/end atoms and explicit relation navigation.
+- [ ] Replace the flat primary presentation with a causal tree and a focused detail workspace. Keep raw evidence available as an inspector rather than the default reading surface.
+- [ ] Add Overview, Input/Output, Code, Timeline, Workspace, Evidence and Raw views only where the selected event/group has truthful data; unavailable/not-recorded/truncated states must remain visibly distinct.
+- [ ] Add a source viewer for program ranges and `source_bound`; show executed-line highlighting only if actual execution instrumentation exists.
+- [ ] Add workspace checkpoint/result inspection and recorded before/after information without reconstructing absent file bodies.
+- [ ] Add actor swimlanes with honest point/interval semantics and clickable producer/consumer, approval, effect and workspace relations.
+- [ ] Keep IDs/digests copyable in Evidence while reducing them in the primary summary.
+- [ ] Preserve body safety: production/public fixtures never fetch or imply private body objects; Lab remains read-only and non-authoritative.
+- [ ] Ensure keyboard navigation, useful empty/error states and a coherent narrow layout.
+
+**Testing discipline:**
+
+- Add focused selector/interaction tests for new deterministic behavior; do not snapshot every component or duplicate parser tests already covered by M2.
+- Run `npm test -- --run` and `npm run build` at coherent checkpoints, not after each CSS edit.
+- Run Playwright once after the full interaction loop is connected.
+- Start the built/local app and perform one real browser walkthrough against the real public and production fixtures. Check console errors and capture one representative desktop plus one narrow screenshot. Fix functional, overflow, hierarchy and accessibility blockers; do not spend the night on subjective micro-polish.
+- Run repository-wide Go/Python gates only once at final M3 closeout unless M3 unexpectedly changes non-Web code.
+
+**Required stop gate:** Leave a review-ready local surface, route, screenshots and concise review notes, then stop for Yuzhe's visual/product acceptance. Do not begin Track E before that acceptance.
+
+### Track E — Freeze the Natural-Program Corpus Contract
+
+**Product promise:** Subsequent measurements use bounded real agent-written programs with explicit provenance/privacy/oracle classes rather than a polished synthetic demo.
+
+**Primary areas:**
+
+- `research/trajectory/`
+- `research/evaluation/` and existing workload/census packages
+- `scripts/` for local-only collection entry points
+- `docs/research/`
+
+**Slices:**
+
+- [ ] Audit existing workload/corpus/evaluation schemas and reuse the smallest compatible package; do not create a parallel framework without evidence.
+- [ ] Define one versioned corpus manifest containing source digest, provenance class, collection adapter, oracle class, privacy class, authority requirements, expected Guest/backend and inclusion/rejection reason.
+- [ ] Require stable item identity, deterministic ordering, bounded source/event/body counts and explicit `included`, `rejected`, `unclassifiable`, `truncated` states.
+- [ ] Keep raw Hermes/Codex/agent conversations and generated programs private under `~/.hermes/evidence/`; checked-in fixtures must be scrubbed/body-safe and must not claim to be the private corpus.
+- [ ] Add adversarial tests for duplicate identity, digest mismatch, unbounded source, unknown class, private path/body leakage and denominator-dropping.
+- [ ] Write a short contract document with exact evidence limitations.
+
+**Gate:** focused package tests, manifest round-trip/canonicalization tests and privacy scan; then proportional global gates and signed local commit.
+
+### Track F — Capture Real Harness and Runtime Evidence
+
+**Product promise:** Every selected program can be joined from the agent/Harness trajectory to Guest-accurate source, frozen Run authority, real execution/effect receipts and workspace terminal result.
+
+**Slices:**
+
+- [ ] Inspect locally available Hermes session/agent artifacts and choose only bounded examples with reconstructable provenance; never fabricate missing model/Harness data.
+- [ ] Add a local-only importer/adapter that records source and external trajectory references by digest while keeping raw bodies outside Git.
+- [ ] Execute a bounded cohort through the exact named CPython/WASI Guest and current Host tool plane.
+- [ ] Record complete join coverage: corpus item → Harness/model step → source document/range → capability occurrence → Plan/receipt/effect → Run/attempt → workspace result.
+- [ ] Record `not_recorded`, `unavailable` and `truncated` distinctly; never convert source-bound ranges into executed-line claims.
+- [ ] Retain rejected and unclassifiable programs in denominators.
+- [ ] Generate a canonical private result bundle and a body-safe aggregate report with exact source commit, Guest hash, environment identity and skip/failure reasons.
+- [ ] Add replayable local commands/tests for the importer and aggregation logic; live external collection must remain explicit and bounded rather than a default test dependency.
+
+**Stop rather than fake:** If no real local program artifact has enough provenance to join, preserve the importer/tests, document the exact missing source, and continue to any independent synthetic-control work while labeling it control-only.
+
+### Track G — Falsifiable Logical-Agent/Physical-Guest Sharing Experiment
+
+**Research question:** Can two or more logical child-agent requests safely share a physical Guest computation when—and only when—the Host proves equivalent frozen authority, source, prepared image, immutable input and workspace base, while preserving independent logical identities and terminal evidence?
+
+**This is an experiment, not production enablement.** Do not change default scheduling, create a durable worker pool, inherit parent live state, or replay any call after an effect may have started.
+
+**Cohorts:**
+
+1. independent fresh Guest baseline;
+2. identical logical children eligible for existing prepared-image/single-flight physical sharing;
+3. near-miss authority mismatch;
+4. workspace-base mismatch;
+5. source/program mismatch;
+6. cancellation/follower detachment;
+7. started/ambiguous effect case that must not replay or coalesce unsafely.
+
+**Required measurements:**
+
+- logical child runs and physical Guest executions;
+- task/oracle success;
+- model turns/tokens when available from real Harness evidence;
+- physical execution count, single-flight producer/follower relation and critical path;
+- authority/freshness/workspace/source near-miss rejection reason;
+- effect terminal/reconciliation state;
+- private workspace result isolation;
+- explicit evidence availability and truncation.
+
+**Slices:**
+
+- [ ] Write a versioned experiment manifest and deterministic control oracle before changing runtime code.
+- [ ] Reuse existing source-bound pass/runner/single-flight seams; if no safe seam exists, run a read-only spike and stop before introducing a scheduler or new execution authority.
+- [ ] Add RED adversarial tests proving every near-miss cohort is rejected from sharing.
+- [ ] Implement only minimal experiment instrumentation/adapters needed to observe existing behavior; keep it behind explicit research configuration.
+- [ ] Run real Guest paired cohorts with repeated bounded trials and preserve raw private evidence.
+- [ ] Produce one aggregate JSON/Markdown report with denominators, confidence/variance where meaningful, negative results and exact artifacts.
+- [ ] Independently verify report calculations from raw manifests using a second deterministic script/test path.
+
+### Track H — Decision Record and Natural Stop
+
+**Product promise:** The night run ends with evidence that determines the next discussion, not with a speculative production feature.
+
+- [ ] Summarize natural corpus coverage and every provenance/oracle limitation.
+- [ ] State whether physical sharing was observed, safe only under narrower conditions, unsupported by current seams, or not beneficial.
+- [ ] Separate measured facts from proposed mechanisms.
+- [ ] Apply the master pass acceptance gate to observed opportunities, but do not implement a new pass overnight.
+- [ ] Recommend at most two next candidates; explicitly recommend “no new pass” if evidence is weak.
+- [ ] Update the master roadmap with Current/Observed/Rejected status and keep M3 Web deferred.
+- [ ] Run all relevant gates, sign the final local commit, verify status and stop at the owner decision gate.
+
+**Required stop gate:** Do not cross from evidence into a new optimizer, scheduler, VM sharing mechanism, production default, M3 UI or paper claim without Yuzhe reviewing the measured result.
+
+## Per-Slice Checklist
+
+For every executable code slice:
+
+1. inspect live state and relevant source;
+2. write a RED test, or record why a generated-artifact/docs-only change cannot have one;
+3. implement the minimum fix;
+4. run focused gates;
+5. update this roadmap immediately;
+6. run proportional global gates;
+7. create a signed local commit;
+8. verify signature and Git status;
+9. continue to the next executable slice.
+
+A clean checkpoint, successful commit, reviewer timeout or context compaction is not a stop condition.
+
+## Roadmap Tracking Rules
+
+- This file is the night-run execution source of truth.
+- After each slice, change only evidence-backed `[ ]` to `[x]`.
+- Add a completion-log line with date, commands/results and commit.
+- Trust live Git over historical handoff text.
+- Keep failures and stale reviewer targets visible until classified.
+- Never mark M2 complete while artifacts/docs correspond to a different behavior commit.
+- Never mark an experiment complete without real artifact identities, denominators and failure/skip accounting.
+
+## Completion Log
+
+- 2026-08-16 handoff: behavior hardening signed/pushed at `c4b5100`; final capture generated under `dual-profile-mg2-c4b5100`; Go/Python/real-Guest gates green; Lab has one deterministic expectation drift to update; final artifacts/docs are dirty and uncommitted. No M3 work started.
+
+## Reporting Format When Finally Stopping
+
+Report concisely:
+
+1. exact satisfied stop condition;
+2. signed local commits and whether any push was explicitly authorized/performed;
+3. final evidence root/header/counts/hashes;
+4. gates and real counts/results;
+5. independent review verdict or controller review evidence;
+6. clean/dirty Git status;
+7. M3 route/screenshots and exact owner review gate;
+8. confirmation that no merge/deploy/M4 experiment work occurred.
+
+## Short Prompt to Start This Mega-Goal
+
+```text
+Read docs/plans/2026-08-16-source-bound-program-night-run-autonomous-megagoal.md fully and execute it in /Users/yuzhe/projects/agent-python-runtime from live Git state. Finish M2, then implement Megagoal 3's Human-First Source-Bound Lab through its review-ready browser surface; do not stop after one clean checkpoint, but stop at the owner visual/product review gate before Tracks E–H. Use focused tests while iterating and run full gates only once per Megagoal closeout—avoid repetitive test and screenshot churn. This is unattended: no Codex CLI, merge, deploy, publish, production access or push; do not start M4 experiments, a new optimizer/scheduler, or any production-default change.
+```

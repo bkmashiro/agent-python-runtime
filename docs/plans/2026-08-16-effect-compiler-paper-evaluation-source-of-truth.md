@@ -382,15 +382,16 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Define an isolated task-local upstream environment as the protocol-real provider and preserve the official final-state evaluator as an independent oracle.
 - [x] Freeze mixed-denominator inclusion/rejection/placement schema, including `unsupported_effect_class`.
 
-**Gate status:** achieved by the authored `airline/3` canary in [the body-safe report](../evidence/tau2-airline-3-canary-v1.json). Source digest, Plan, real Guest execution, two Broker receipts and the independent official oracle are recorded; exact receipt-to-source occurrence remains explicitly `not_recorded`, so the result is `SUPPORTED_WITH_RECORDED_GAP`, not a complete natural-task causal join.
+**Gate status:** achieved by the authored fresh-turn `airline/3` canary in [the body-safe report](../evidence/tau2-airline-3-canary-v1.json). Two tool Runs and one authority-free aggregation Run used fresh real Guests; source digests, two distinct exact source occurrences, Plan, Broker receipts and the independent official oracle are recorded. The result is `SUPPORTED` for adapter/runtime/oracle wiring, but remains an authored lane rather than a natural-model score.
 
 ### Phase T1 — Deterministic canary
 
 - [x] Run the first authored `airline/3` read-only adapter/Guest/oracle wiring canary.
 - [ ] Run 2–3 tasks covering pure, multi-read and placement-control paths.
-- [ ] Verify task oracle independently from Runtime receipts.
-- [ ] Verify body-safe report determinism and private evidence permissions.
-- [ ] Prove direct/programmatic calls cross the same Broker.
+- [x] Verify task oracle independently from Runtime receipts.
+- [x] Verify body-safe report determinism and private evidence permissions.
+- [x] Prove direct/programmatic calls cross the same Broker.
+- [ ] Run the same model/task/seed through the direct baseline and programmatic-Python treatment.
 
 **Gate:** all canary rows have exact terminal status and complete causal joins or explicit `not_recorded` fields.
 

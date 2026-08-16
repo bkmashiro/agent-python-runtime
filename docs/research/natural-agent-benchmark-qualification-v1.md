@@ -214,9 +214,9 @@ Do not count this row as a positive canary success.
 
 1. **Done:** build a read-only adapter for only the two capabilities required by `airline/3`.
 2. **Done:** write fail-closed adapter tests and exercise the exact task-local upstream environment.
-3. **Done:** run an authored reference-program wiring check through a real WASM Guest; this proves adapter/oracle wiring, not Agent ability.
+3. **Done:** run an authored fresh-turn reference-program wiring check through real WASM Guests; this proves adapter/oracle wiring, not Agent ability.
 4. Run the same model/task/seed through the direct baseline and programmatic-Python treatment.
-5. **Partial:** capture source digest, Plan, Broker receipts, logical/physical counts and official oracle independently; exact receipt-to-source occurrence is `not_recorded` and must not be inferred.
+5. **Done for the authored lane:** capture source digest, two distinct source occurrences, Plan, Broker receipts, logical/physical counts and official oracle independently.
 6. **Done for the authored lane:** regenerate a body-safe aggregate from private evidence and verify byte stability.
 7. Audit the `airline/11` state boundary before registering any WRITE capability.
 8. Stop for a design decision only if the WRITE cannot honestly fit existing attempt-private workspace semantics.
@@ -228,15 +228,15 @@ The body-safe result is [tau2-airline-3-canary-v1.json](../evidence/tau2-airline
 At the named source revision and real Guest artifact:
 
 - two exact `external_read` capabilities were Host-authored, granted and sealed in one Plan;
-- the Guest used only generated programmatic wrappers and crossed the same Broker twice;
+- two authored ordinary-Python tool turns each ran in a fresh real WASM Guest, followed by one authority-free aggregation Run;
 - both receipts terminated `ok` and logical/physical counts were `2/2`;
-- the authored program produced answer `4`;
+- the authored Runs produced answer `4`;
 - the official upstream `EnvironmentEvaluator` and `CommunicateEvaluator` both returned `1.0`;
 - the oracle's two tool-result contents hash exactly to the two Broker receipt response identities;
 - public report regeneration was byte-stable;
-- exact source occurrence on the programmatic receipts is `not_recorded`.
+- both programmatic receipts carry distinct exact `source_bound` occurrences and spans.
 
-Conclusion: `SUPPORTED_WITH_RECORDED_GAP`. This validates the Host adapter, real-Guest programmatic path and independent official oracle. It is not a natural model result, does not test WRITE, and does not yet complete the source-occurrence causal join.
+Conclusion: `SUPPORTED`. This validates the Host adapter, fresh-Run programmatic path, exact source-to-receipt join and independent official oracle. It is still an authored reference lane—not a natural model result—and does not test WRITE.
 
 ## Row schema additions
 

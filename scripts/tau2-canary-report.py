@@ -45,6 +45,26 @@ def build_report(evidence: Dict[str, Any], oracle: Dict[str, Any], oracle_reques
     source_occurrence = evidence.get("source_occurrence_claim")
     if source_occurrence not in {"recorded", "not_recorded"}:
         raise ValueError("invalid source occurrence state")
+    fresh_runs = evidence.get("fresh_runs", 1)
+    tool_runs = evidence.get("tool_runs", 1)
+    if source_occurrence == "recorded":
+        if fresh_runs != 3 or tool_runs != 2:
+            raise ValueError("invalid fresh-turn evidence")
+        bindings = [receipt.get("source") for receipt in receipts]
+        if any(
+            not isinstance(binding, dict)
+            or binding.get("schema_version") != "pysolate.source-binding.v0"
+            or binding.get("claim_level") != "source_bound"
+            or not DIGEST.fullmatch(str(binding.get("source_sha256", "")))
+            or not DIGEST.fullmatch(str(binding.get("occurrence_id", "")))
+            or binding.get("dynamic_occurrence") != 1
+            or not isinstance(binding.get("start_line"), int)
+            or binding.get("start_line", 0) < 1
+            or not isinstance(binding.get("end_line"), int)
+            or binding.get("end_line", 0) < binding.get("start_line", 0)
+            for binding in bindings
+        ) or len({binding["occurrence_id"] for binding in bindings}) != 2:
+            raise ValueError("invalid source occurrence evidence")
 
     expected_oracle = {
         "schema_version": "pysolate.tau2-canary-oracle.v1",
@@ -72,7 +92,7 @@ def build_report(evidence: Dict[str, Any], oracle: Dict[str, Any], oracle_reques
     report = {
         "schema_version": REPORT_SCHEMA,
         "source": {"repository": REPOSITORY, "revision": REVISION, "domain": "airline", "task_id": "3"},
-        "lane": "authored_reference_program",
+        "lane": "authored_reference_fresh_turns" if source_occurrence == "recorded" else "authored_reference_program",
         "conclusion": "SUPPORTED_WITH_RECORDED_GAP" if source_occurrence == "not_recorded" else "SUPPORTED",
         "runtime": {
             "real_wasm_guest": True,
@@ -82,6 +102,8 @@ def build_report(evidence: Dict[str, Any], oracle: Dict[str, Any], oracle_reques
             "artifact_sha256": evidence["artifact_sha256"],
             "capability_plan_sha256": evidence["capability_plan_sha256"],
             "broker_calls": 2,
+            "fresh_runs": fresh_runs,
+            "tool_runs": tool_runs,
             "receipt_outcomes": ["ok", "ok"],
         },
         "oracle": {

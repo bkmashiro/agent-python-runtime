@@ -71,6 +71,31 @@ class Tau2CanaryReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             reporter.build_report(self.evidence(), self.oracle(), self.oracle_request())
 
+    def test_report_requires_two_distinct_bound_occurrences_for_recorded_lane(self):
+        evidence = self.evidence()
+        request = self.oracle_request()
+        evidence["receipts"][0]["response_sha256"] = reporter.response_digest("one")
+        evidence["receipts"][1]["response_sha256"] = reporter.response_digest("two")
+        evidence["fresh_runs"], evidence["tool_runs"] = 3, 2
+        evidence["source_occurrence_claim"] = "recorded"
+        for index, receipt in enumerate(evidence["receipts"]):
+            receipt["source"] = {
+                "schema_version": "pysolate.source-binding.v0",
+                "claim_level": "source_bound",
+                "source_sha256": digest("e"),
+                "occurrence_id": digest(str(index + 1)),
+                "dynamic_occurrence": 1,
+                "start_line": 1,
+                "end_line": 1,
+            }
+        report = reporter.build_report(evidence, self.oracle(), request)
+        self.assertEqual(report["conclusion"], "SUPPORTED")
+        self.assertEqual(report["lane"], "authored_reference_fresh_turns")
+        self.assertEqual(report["runtime"]["fresh_runs"], 3)
+        evidence["receipts"][1]["source"]["occurrence_id"] = evidence["receipts"][0]["source"]["occurrence_id"]
+        with self.assertRaises(ValueError):
+            reporter.build_report(evidence, self.oracle(), request)
+
 
 if __name__ == "__main__":
     unittest.main()

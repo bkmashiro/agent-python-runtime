@@ -1,6 +1,6 @@
 # M4 next experiment decision
 
-**Status:** research decision, 2026-08-16. This document selects one bounded feasibility spike; it does not authorize a package shard, scheduler, worker pool, or additional sharing mechanism.
+**Status:** decision executed on 2026-08-16. The bounded spike is PARTIAL: native and real-Guest RED/GREEN succeeded, while the current verified profile rejected `attr` before physical execution. See [`attrs-770-spike-v1.md`](attrs-770-spike-v1.md). This document does not authorize a package shard, scheduler, worker pool, or additional sharing mechanism.
 
 ## Decision
 

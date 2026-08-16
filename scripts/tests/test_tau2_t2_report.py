@@ -12,6 +12,44 @@ SPEC.loader.exec_module(reporter)
 
 
 class Tau2T2ReportTests(unittest.TestCase):
+    def test_plan_document_rebuilds_go_struct_field_order(self):
+        plan = {
+            "grants": [{"policy_sha256": "sha256:p", "capability": "cap"}],
+            "capabilities": [{"version": "v", "capability": "cap", "output_schema": {}, "input_schema": {}, "handler_identity": "h", "playback": "live_only", "effect_class": "read", "description": "d"}],
+            "max_calls": 1, "schema_version": "pysolate.capability-plan.v6",
+        }
+        expected = b'{"schema_version":"pysolate.capability-plan.v6","max_calls":1,"capabilities":[{"capability":"cap","version":"v","description":"d","effect_class":"read","playback":"live_only","handler_identity":"h","input_schema":{},"output_schema":{}}],"grants":[{"capability":"cap","policy_sha256":"sha256:p"}]}'
+        self.assertEqual(reporter.plan_document_bytes(plan), expected)
+
+    def test_not_recorded_requires_unknown_provider_calls_and_no_scores(self):
+        cell = {
+            "schema_version": reporter.CELL_SCHEMA, "source_revision": reporter.REVISION,
+            "task_id": "1", "lane": "direct", "model": reporter.MODEL,
+            "seed": 42, "temperature": 0.0, "status": "not_recorded",
+            "provider_calls": None, "simulation": None,
+            "official_action_diagnostic": None, "pysolate_events": None,
+            "failure": {"class": "orchestrator_timeout"},
+        }
+        protocol = {"seed": 42, "max_total_provider_invocations_per_trial": 20}
+        result = reporter.validate_cell(cell, "1", "direct", [], pathlib.Path("."), protocol)
+        self.assertEqual(result["status"], "not_recorded")
+        self.assertIsNone(result["provider_calls"])
+
+    def test_shared_raw_path_collision_never_counts_as_source_join(self):
+        cell = {
+            "schema_version": reporter.CELL_SCHEMA, "source_revision": reporter.REVISION,
+            "task_id": "1", "lane": "programmatic_python", "model": reporter.MODEL,
+            "seed": 42, "temperature": 0.0, "status": "completed", "provider_calls": 1,
+            "simulation": {"task_id": "1", "reward_info": {"reward": 1.0}, "messages": [], "termination_reason": "done"},
+            "official_action_diagnostic": {"reward": 1.0},
+            "pysolate_events": [{"kind": "program", "tool": "get_user_details", "arguments": {"user_id": "u1"}, "turn": {"raw_bodies": {"guest_request": "turn.json", "guest_response": "response.json"}}}],
+        }
+        actions = [{"name": "get_user_details", "arguments": {"user_id": "u1"}}]
+        protocol = {"seed": 42, "max_total_provider_invocations_per_trial": 20, "max_agent_model_invocations_per_trial": 16}
+        result = reporter.validate_cell(cell, "1", "programmatic_python", actions, pathlib.Path("."), protocol, {"turn.json", "response.json"})
+        self.assertEqual(result["source_joins"], 0)
+        self.assertEqual(result["causal_evidence_status"], "not_recorded_shared_raw_path")
+
     def prereg(self):
         protocol = {"model": reporter.MODEL, "seed": 42, "temperature": 0.0, "post_provider_reruns": 0, "max_total_provider_invocations_per_trial": 32, "max_agent_model_invocations_per_trial": 16}
         private_tasks = []
@@ -20,7 +58,7 @@ class Tau2T2ReportTests(unittest.TestCase):
             task_id = str(index + 1)
             body = {"id": task_id}
             actions = [{"name": "get_user_details", "arguments": {"user_id": f"u{index}"}}]
-            private_tasks.append({"task_id": task_id, "task_body": body, "reference_actions": actions})
+            private_tasks.append({"task_id": task_id, "task": body, "reference_actions": actions})
             public_tasks.append({"task_id": task_id, "task_sha256": reporter.sha(reporter.canonical(body)), "reference_actions_sha256": reporter.sha(reporter.canonical(actions)), "reference_action_count": 1})
         source = {"revision": reporter.REVISION}
         public = {"schema_version": reporter.PUBLIC_SCHEMA, "source": source, "protocol": protocol, "tasks": public_tasks}

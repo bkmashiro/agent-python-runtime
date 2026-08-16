@@ -7,7 +7,7 @@ import json
 import pathlib
 import re
 from collections import Counter
-from typing import Any
+from typing import Any, Optional
 
 REVISION = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 MODEL = "deepseek/deepseek-v4-pro"
@@ -56,6 +56,42 @@ def grant_identity(policy: dict[str, Any]) -> str:
     return sha(json.dumps(document, separators=(",", ":")).encode())
 
 
+def plan_document_bytes(plan: dict[str, Any]) -> bytes:
+    spec_order = (
+        "capability", "version", "description", "effect_class", "playback",
+        "handler_identity", "input_schema", "output_schema", "python",
+        "read_only", "idempotent", "pre_dispatch", "approval",
+    )
+    specs = []
+    for original in plan.get("capabilities", []):
+        spec = {}
+        for key in spec_order:
+            if key not in original:
+                continue
+            value = original[key]
+            if key == "python":
+                value = {name: value[name] for name in ("module", "method", "global_alias", "arguments", "result_field") if name in value}
+            elif key == "pre_dispatch":
+                resource = value["resource"]
+                value = {
+                    "resource": {name: resource[name] for name in ("namespace", "argument", "constant") if name in resource},
+                    "freshness": value["freshness"], "unclaimed": value["unclaimed"],
+                }
+            elif key == "approval":
+                value = {name: value[name] for name in ("mode", "lease_milliseconds") if name in value}
+            spec[key] = value
+        specs.append(spec)
+    document = {
+        "schema_version": plan.get("schema_version"), "max_calls": plan.get("max_calls"),
+        "capabilities": specs,
+        "grants": [
+            {"capability": item["capability"], "policy_sha256": item["policy_sha256"]}
+            for item in plan.get("grants", [])
+        ],
+    }
+    return json.dumps(document, separators=(",", ":")).encode()
+
+
 def validate_prereg(public: dict[str, Any], private: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     if public.get("schema_version") != PUBLIC_SCHEMA or private.get("schema_version") != PRIVATE_SCHEMA:
         raise ValueError("preregistration schema mismatch")
@@ -76,7 +112,7 @@ def validate_prereg(public: dict[str, Any], private: dict[str, Any]) -> dict[str
         raise ValueError("private preregistration is not bound to public identity")
     by_task = {}
     for public_task, private_task in zip(public["tasks"], private["tasks"]):
-        body = private_task.get("task_body")
+        body = private_task.get("task")
         actions = private_task.get("reference_actions")
         if sha(canonical(body)) != public_task.get("task_sha256") or sha(canonical(actions)) != public_task.get("reference_actions_sha256"):
             raise ValueError("private task body does not match frozen digest")
@@ -101,7 +137,7 @@ def validate_turn(event: dict[str, Any], root: pathlib.Path, task_id: str, allow
     if sha(request_body) != turn.get("request_sha256") or sha(response_body) != turn.get("response_sha256"):
         raise ValueError("Guest body digest mismatch")
     plan = turn.get("plan_document")
-    if not isinstance(plan, dict) or sha(json.dumps(plan, separators=(",", ":")).encode()) != turn.get("capability_plan_sha256"):
+    if not isinstance(plan, dict) or sha(plan_document_bytes(plan)) != turn.get("capability_plan_sha256"):
         raise ValueError("Plan identity mismatch")
     if plan.get("schema_version") != "pysolate.capability-plan.v6" or plan.get("max_calls") != 1 or len(plan.get("capabilities", [])) != 1 or len(plan.get("grants", [])) != 1:
         raise ValueError("Plan shape mismatch")
@@ -162,19 +198,28 @@ def direct_tool_calls(messages: list[Any]) -> int:
     return sum(len(message.get("tool_calls") or []) for message in messages if isinstance(message, dict))
 
 
-def validate_cell(cell: dict[str, Any], task_id: str, lane: str, actions: list[dict[str, Any]], root: pathlib.Path, protocol: dict[str, Any]) -> dict[str, Any]:
+def validate_cell(cell: dict[str, Any], task_id: str, lane: str, actions: list[dict[str, Any]], root: pathlib.Path, protocol: dict[str, Any], collided_raw_paths: Optional[set[str]] = None) -> dict[str, Any]:
+    collided_raw_paths = collided_raw_paths or set()
     base = {"schema_version", "source_revision", "task_id", "lane", "model", "seed", "temperature", "status", "provider_calls", "simulation", "official_action_diagnostic", "pysolate_events"}
-    if cell.get("status") == "unscorable":
+    if cell.get("status") in {"unscorable", "not_recorded"}:
         base.add("failure")
     require_exact(cell, base, "cell")
     if cell["schema_version"] != CELL_SCHEMA or cell["source_revision"] != REVISION or cell["task_id"] != task_id or cell["lane"] != lane or cell["model"] != MODEL or cell["seed"] != protocol["seed"] or cell["temperature"] != 0.0:
         raise ValueError("cell frozen identity mismatch")
-    if cell["status"] not in TERMINAL or not isinstance(cell["provider_calls"], int) or not 0 <= cell["provider_calls"] <= protocol["max_total_provider_invocations_per_trial"]:
+    provider_calls = cell["provider_calls"]
+    budget_valid = (
+        provider_calls is None and cell["status"] == "not_recorded"
+    ) or (
+        isinstance(provider_calls, int) and not isinstance(provider_calls, bool)
+        and 0 <= provider_calls <= protocol["max_total_provider_invocations_per_trial"]
+    )
+    if cell["status"] not in TERMINAL or not budget_valid:
         raise ValueError("cell terminal status/budget mismatch")
     if cell["status"] != "completed":
         if cell["simulation"] is not None or cell["official_action_diagnostic"] is not None:
             raise ValueError("unscorable cell contains fabricated score")
-        return {"status": cell["status"], "default_reward": None, "action_reward": None, "provider_calls": cell["provider_calls"], "messages": None, "termination_reason": None, "logical_calls": 0, "physical_calls": 0, "source_joins": 0}
+        failure = cell.get("failure") or {}
+        return {"status": cell["status"], "default_reward": None, "action_reward": None, "provider_calls": cell["provider_calls"], "messages": None, "termination_reason": None, "logical_calls": 0, "physical_calls": 0, "source_joins": 0, "causal_evidence_status": "not_applicable", "failure_class": failure.get("exception_type") or failure.get("class") or "unknown"}
     simulation = cell["simulation"]
     diagnostic = cell["official_action_diagnostic"]
     if not isinstance(simulation, dict) or simulation.get("task_id") != task_id or not isinstance(diagnostic, dict):
@@ -190,25 +235,44 @@ def validate_cell(cell: dict[str, Any], task_id: str, lane: str, actions: list[d
         logical = direct_tool_calls(simulation.get("messages", []))
         physical = logical
         joins = 0
+        causal_status = "not_applicable_direct"
     else:
         if not isinstance(events, list) or len(events) > protocol["max_agent_model_invocations_per_trial"]:
             raise ValueError("treatment event budget mismatch")
         program_events = [event for event in events if event.get("kind") == "program"]
         for event in program_events:
+            raw = event.get("turn", {}).get("raw_bodies", {})
+            paths = {raw.get("guest_request"), raw.get("guest_response")}
+            if paths & collided_raw_paths:
+                if event.get("tool") not in {item["name"] for item in actions} or not any(item["name"] == event["tool"] and item["arguments"] == event.get("arguments") for item in actions):
+                    raise ValueError("collided treatment event is outside frozen scope")
+                continue
             validate_turn(event, root, task_id, actions)
         logical = len(program_events)
         physical = len(program_events)
-        joins = len(program_events)
+        joins = sum(1 for event in program_events if not ({event.get("turn", {}).get("raw_bodies", {}).get("guest_request"), event.get("turn", {}).get("raw_bodies", {}).get("guest_response")} & collided_raw_paths))
+        causal_status = "reconstructed" if joins == len(program_events) else "not_recorded_shared_raw_path"
     return {
         "status": "completed", "default_reward": float(reward), "action_reward": float(action_reward),
         "provider_calls": cell["provider_calls"], "messages": len(simulation.get("messages", [])),
-        "termination_reason": simulation.get("termination_reason"), "logical_calls": logical, "physical_calls": physical, "source_joins": joins,
+        "termination_reason": simulation.get("termination_reason"), "logical_calls": logical, "physical_calls": physical, "source_joins": joins, "causal_evidence_status": causal_status,
     }
 
 
 def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.Path) -> dict[str, Any]:
     actions = validate_prereg(public, private)
     protocol = public["protocol"]
+    raw_references = Counter()
+    for task_id in actions:
+        path = cells_root / f"task-{task_id}-programmatic_python.json"
+        if not path.is_file():
+            continue
+        cell = json.loads(path.read_text())
+        for event in cell.get("pysolate_events") or []:
+            if event.get("kind") == "program":
+                raw = event.get("turn", {}).get("raw_bodies", {})
+                raw_references.update(path for path in (raw.get("guest_request"), raw.get("guest_response")) if isinstance(path, str))
+    collided_raw_paths = {path for path, count in raw_references.items() if count > 1}
     rows = []
     seen = set()
     for task_id in actions:
@@ -221,16 +285,28 @@ def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.P
             if key in seen:
                 raise ValueError("duplicate cell")
             seen.add(key)
-            result = validate_cell(cell, task_id, lane, actions[task_id], cells_root, protocol)
+            result = validate_cell(cell, task_id, lane, actions[task_id], cells_root, protocol, collided_raw_paths)
             rows.append({"task_id": task_id, "lane": lane, **result})
     statuses = Counter(row["status"] for row in rows)
+    status_by_lane = {
+        lane: dict(sorted(Counter(row["status"] for row in rows if row["lane"] == lane).items()))
+        for lane in ("direct", "programmatic_python")
+    }
     return {
-        "schema_version": REPORT_SCHEMA, "classification": "NATURAL_BOUNDED_COHORT_RECORDED",
+        "schema_version": REPORT_SCHEMA, "classification": "NATURAL_BOUNDED_COHORT_RECORDED_WITH_EVIDENCE_GAPS",
         "source": public["source"], "preregistration_identity": public["identity"],
         "denominator": {"tasks": 16, "planned_cells": 32, "recorded_cells": len(rows), "status_counts": dict(sorted(statuses.items())), "post_hoc_dropped": 0},
         "protocol": {"model": MODEL, "seed": protocol["seed"], "temperature": 0.0, "tool_surface_matched": False, "performance_comparison_supported": False, "leaderboard_comparable": False, "official_action_component_is_diagnostic": True},
         "rows": rows,
-        "claim_boundary": {"supports": "frozen natural READ cohort execution and source-bound treatment evidence", "does_not_support": ["leaderboard score", "performance advantage", "matched tool surfaces", "model WRITE ability", "production external effects"]},
+        "evidence_integrity": {"shared_raw_path_collisions": len(collided_raw_paths), "collided_turns_are_source_joins": False, "post_provider_reruns": 0},
+        "result_summary": {
+            "status_by_lane": status_by_lane,
+            "known_provider_calls": sum(row["provider_calls"] for row in rows if isinstance(row["provider_calls"], int)),
+            "unknown_provider_cells": sum(row["provider_calls"] is None for row in rows),
+            "reconstructed_treatment_rows": sum(row["lane"] == "programmatic_python" and row["causal_evidence_status"] == "reconstructed" for row in rows),
+            "treatment_rows_with_shared_raw_path": sum(row["causal_evidence_status"] == "not_recorded_shared_raw_path" for row in rows),
+        },
+        "claim_boundary": {"supports": "frozen natural READ cohort execution; only rows marked reconstructed support source-bound treatment evidence", "does_not_support": ["source-bound evidence for collided raw-body rows", "leaderboard score", "performance advantage", "matched tool surfaces", "model WRITE ability", "production external effects"]},
         "private_bodies_included": False,
     }
 

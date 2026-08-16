@@ -13,6 +13,14 @@ SPEC.loader.exec_module(runner)
 
 
 class Tau2T2RunTests(unittest.TestCase):
+    def test_chunking_preserves_frozen_order(self):
+        public = {"tasks": [{"task_id": str(index)} for index in range(1, 17)]}
+        cells = runner.planned_cells(public)
+        self.assertEqual(cells[:4], [
+            ("1", "direct", "direct"), ("1", "programmatic_python", "programmatic_python"),
+            ("2", "direct", "direct"), ("2", "programmatic_python", "programmatic_python"),
+        ])
+
     def fixture(self):
         protocol = {"model": runner.MODEL, "post_provider_reruns": 0, "max_total_provider_invocations_per_trial": 20, "seed": 42, "temperature": 0.0}
         public = {"schema_version": runner.PUBLIC_SCHEMA, "protocol": protocol, "tasks": [{"task_id": str(index)} for index in range(16)]}

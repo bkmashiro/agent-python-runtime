@@ -59,7 +59,8 @@ def write_not_recorded(path: pathlib.Path, task_id: str, lane: str, protocol: di
     body = {
         "schema_version": CELL_SCHEMA, "source_revision": REVISION, "task_id": task_id, "lane": lane,
         "model": protocol["model"], "seed": protocol["seed"], "temperature": protocol["temperature"],
-        "status": "not_recorded", "provider_calls": None, "simulation": None, "pysolate_events": None,
+        "status": "not_recorded", "provider_calls": None, "simulation": None,
+        "official_action_diagnostic": None, "pysolate_events": None,
         "failure": {"class": "harness_process", "returncode": returncode, "stderr_sha256": digest(stderr), "stderr_file": stderr_path.name},
     }
     path.write_bytes(canonical(body) + b"\n")
@@ -78,6 +79,7 @@ def main() -> int:
     parser.add_argument("--evidence-root", required=True)
     parser.add_argument("--aggregate-output", required=True)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--max-new-cells", type=int)
     args = parser.parse_args()
 
     public_path = pathlib.Path(args.public_preregistration).resolve()
@@ -114,7 +116,12 @@ def main() -> int:
         raise ValueError("DEEPSEEK_API_KEY is required for the paid cohort")
 
     cohort_script = repo_root / "scripts/tau2-t2-cohort.py"
-    for task_id, public_lane, harness_lane, path in pending:
+    batch = pending
+    if args.max_new_cells is not None:
+        if args.max_new_cells < 1:
+            raise ValueError("max-new-cells must be positive")
+        batch = pending[:args.max_new_cells]
+    for task_id, public_lane, harness_lane, path in batch:
         command = [
             tau2_python, str(cohort_script), "--lane", harness_lane, "--task-id", task_id,
             "--source-root", str(source_root),
@@ -128,6 +135,14 @@ def main() -> int:
                 produced.replace(path)
             continue
         write_not_recorded(path, task_id, public_lane, private["protocol"], completed.stderr + completed.stdout, completed.returncode)
+
+    remaining = [
+        (task_id, public_lane) for task_id, public_lane, _ in cells
+        if not (evidence_root / f"task-{task_id}-{public_lane}.json").exists()
+    ]
+    if remaining:
+        print(json.dumps({**summary, "execute": True, "completed_this_batch": len(batch), "remaining_cells": len(remaining)}, sort_keys=True))
+        return 0
 
     report_script = repo_root / "scripts/tau2-t2-report.py"
     subprocess.run([

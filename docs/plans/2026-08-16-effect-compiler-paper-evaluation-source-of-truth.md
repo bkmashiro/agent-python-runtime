@@ -408,15 +408,15 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Preserve default tau2 DB/COMMUNICATE evaluation while adding the official upstream `ActionEvaluator` as a separately labelled no-op-sensitive diagnostic; do not call it leaderboard overall.
 - [x] Run provider-free preflight for all 38 exact reference-action envelopes, all three READ tool shapes through real WASM Guest/Broker, and one out-of-scope negative. Bind raw Guest bodies, canonical Plan/Grant and source-bound receipt identities.
 - [x] Consume the single preregistered pre-provider repair budget on path canonicalization: data paths resolve absolutely while the venv Python executable remains an absolute path without symlink dereferencing.
-- [ ] Run 10–20 preregistered tasks with no post-hoc denominator dropping.
-- [ ] Preserve admitted, routed, rejected, unclassifiable and failed rows.
-- [ ] Record baseline and enabled traces for qualified pre-dispatch tasks.
-- [ ] Include one approval wait and optional real source-stream lane.
-- [ ] Keep `attrs-770` as a separately labelled case study.
+- [x] Run all 16 preregistered tasks with no post-hoc denominator dropping: 32/32 terminal rows retained.
+- [x] Preserve all completed, unscorable and not-recorded rows; never project missing or failed evaluations as reward `0`.
+- [x] Record direct and programmatic-Python traces. Direct completed 16/16; treatment completed 7/16, was unscorable 8/16 and not recorded 1/16.
+- [x] Keep the `airline/11` approval/WRITE wait as a separate authored mechanism row; do not mix it into the natural READ denominator. The optional source-stream lane was not run.
+- [x] Keep `attrs-770` as a separately labelled case study.
 
-**Gate:** independent rebuild reproduces all body-safe aggregates from private raw evidence.
+**Gate outcome:** `FAILED_FOR_TREATMENT_CAUSAL_EVIDENCE`. The body-safe aggregate is byte-stable and preserves all 32 rows, but treatment raw Guest files reused shared `turn-XX-*` paths across tasks. Later tasks overwrote earlier bodies. Six completed treatment rows are therefore labelled `not_recorded_shared_raw_path` with zero source joins; only one completed treatment row is independently reconstructed. Frozen `post_provider_reruns=0` forbids repair-and-rerun. This cohort supports the recorded model/task outcomes but cannot upgrade the Runtime mechanism claim beyond the earlier valid canaries.
 
-**Provider gate:** pending explicit paid-run authorization. The frozen hard ceiling is 32 trials, 20 provider invocations per trial and 640 invocations total; actual terminal rows remain valid even when the budget stops a trial. Preregistration: [tau2-t2-cohort-preregistration-v1.json](../evidence/tau2-t2-cohort-preregistration-v1.json), SHA-256 `41712992f38dd59863b7124c51424c07fd312521ca113b667d38eeba8b59cd38`. Provider-free preflight: [tau2-t2-preflight-v1.json](../evidence/tau2-t2-preflight-v1.json), SHA-256 `4838e5b41e6a3b5b66a9f1c28c09b9c544b92ebb76f264c1b90d0ed7d2a2093e`.
+**Recorded run:** known provider invocations `328`; one externally interrupted treatment cell has unknown invocation count. No post-provider reruns occurred. Direct official SimulationRuns completed 16/16. Of eight unscorable treatment cells, seven rejected an AssistantMessage carrying neither content nor tool calls and one exhausted the 20-call per-cell budget. The externally interrupted cell is `not_recorded`, not reward `0`. Aggregate: [tau2-t2-cohort-v1.json](../evidence/tau2-t2-cohort-v1.json), SHA-256 `1b39af87cffe8daffb13f422cca6af5e8162652abdd265433e7d0a9aba85d252`.
 
 ### Phase T3 — Adversarial identity and lifecycle matrix
 

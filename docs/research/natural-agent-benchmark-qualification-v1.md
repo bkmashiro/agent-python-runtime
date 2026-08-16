@@ -273,6 +273,24 @@ Separately, an authored literal-answer Python program ran through a fresh real W
 
 Conclusion: `NO_ELIGIBLE_PURE_NATURAL_TASK` under this exact selection contract. The negative row closes T1 honestly; it does not claim that tau2 has no pure task under every possible model-based or non-deterministic oracle contract.
 
+## Natural placement control
+
+The frozen natural-corpus source supplies one resolved Python Open-SWE trajectory as a placement control. Its body remains private; the public record is [natural-placement-open-swe-v1.json](../evidence/natural-placement-open-swe-v1.json), report SHA-256 `a6a757041694a5971941b37753f6cd9d33839543f69c2187bd2dfd54ce8fd49a`.
+
+The exact upstream trajectory contains 31 `execute_bash`, 15 workspace-editor and one terminal `finish` call. The Host request therefore declares `shell` and `subprocess` requirements. The real placement orchestrator selects `native_sandbox` with `required_native_feature` before any Pysolate backend, workspace or effect start. A native-unavailable control returns typed `unavailable` with zero Pysolate and native backend calls.
+
+Classification: `SUPPORTED_PLACEMENT_CONTROL`. This demonstrates conservative pre-Guest placement for one frozen natural coding trajectory. It does not execute or score the coding task, validate the native backend, establish model success, or prove general placement optimality.
+
+## T2 preregistration and provider-free preflight
+
+The bounded natural cohort is frozen in [tau2-t2-cohort-preregistration-v1.json](../evidence/tau2-t2-cohort-preregistration-v1.json), SHA-256 `41712992f38dd59863b7124c51424c07fd312521ca113b667d38eeba8b59cd38`. It retains all 16 deterministically selected airline READ tasks and 32 direct/programmatic cells. No post-provider rerun or denominator removal is permitted.
+
+Because the default DB component is insensitive to READ-only no-ops for most rows, the protocol retains the default tau2 DB/COMMUNICATE score and separately records the upstream official `ActionEvaluator` component. Gold/no-op controls are `1.0/0.0` for all 16 tasks. This diagnostic is not represented as the default task overall or as a leaderboard score.
+
+Provider-free preflight is recorded in [tau2-t2-preflight-v1.json](../evidence/tau2-t2-preflight-v1.json), SHA-256 `4838e5b41e6a3b5b66a9f1c28c09b9c544b92ebb76f264c1b90d0ed7d2a2093e`. All 38 exact reference-action envelopes executed against fresh task-local upstream READ environments. `get_reservation_details`, `get_user_details`, and `search_direct_flight` each crossed source admission, a fresh real WASM Guest, the Broker and the exact task-scoped adapter. An out-of-scope negative was rejected. Raw Guest bodies, canonical Plan/Grant identities and source-bound receipts were independently rebuilt. Provider calls were zero.
+
+One pre-provider repair was consumed to prevent a relative tau2 source path from being reinterpreted under the Go package working directory while preserving the venv Python symlink instead of resolving it to the system interpreter. The repair budget is now exhausted. The append-only driver dry-run resolves exactly 32 pending cells, skips existing cells without rerunning them, and records a process-level failure as `not_recorded` rather than reward `0`. The paid run remains blocked on explicit authorization for a hard maximum of 32 trials and 640 provider invocations.
+
 ## Observed authored canary
 
 The body-safe result is [tau2-airline-3-canary-v1.json](../evidence/tau2-airline-3-canary-v1.json).

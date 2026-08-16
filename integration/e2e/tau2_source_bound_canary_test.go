@@ -145,7 +145,12 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	response := decodeRealGuestResponse(t, request, payload)
 	var content string
 	if err := json.Unmarshal(response.Result, &content); err != nil || content == "" {
-		t.Fatalf("content unavailable err=%v", err)
+		receipts := broker.SnapshotReceipts()
+		outcomes := make([]string, 0, len(receipts))
+		for _, item := range receipts {
+			outcomes = append(outcomes, item.Outcome)
+		}
+		t.Fatalf("content unavailable err=%v status=%s result_bytes=%d broker_calls=%d receipt_outcomes=%v", err, response.Status, len(response.Result), broker.CallCount(), outcomes)
 	}
 	receipts := broker.SnapshotReceipts()
 	if len(receipts) != 1 || broker.CallCount() != 1 || receipts[0].Capability != capabilityName || receipts[0].Outcome != "ok" || receipts[0].Source == nil || !receipt.ValidIdentity(receipts[0]) {

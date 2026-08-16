@@ -387,7 +387,7 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 ### Phase T1 — Deterministic canary
 
 - [x] Run the first authored `airline/3` read-only adapter/Guest/oracle wiring canary.
-- [ ] Run 2–3 tasks covering pure, multi-read and placement-control paths.
+- [x] Close 2–3 bounded rows covering natural multi-read, authored pure/no-authority, and a frozen natural coding placement control; retain `NO_ELIGIBLE_PURE_NATURAL_TASK` rather than inventing a pure tau2 success.
 - [x] Verify task oracle independently from Runtime receipts.
 - [x] Verify body-safe report determinism and private evidence permissions.
 - [x] Prove direct/programmatic calls cross the same Broker.
@@ -398,11 +398,16 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Preserve that audit as the pre-implementation boundary, then close it with one exact benchmark-private `workspace_write` canary: accepted/rejected/expired/failure controls, real WASM Guest/Broker, atomic candidate install, disposition evidence and official DB/COMMUNICATE `1.0`.
 - [x] Rebuild the WRITE aggregate from private raw source, canonical Plan/Grant evidence, Guest bodies, receipt identities, workspace disposition events, final state and strict oracle artifacts; reject independent identity/body/oracle tampering rather than trusting manifest joins.
 - [x] Qualify the pure/no-authority row against a deterministic no-op-sensitive upstream component. Retain `NO_ELIGIBLE_PURE_NATURAL_TASK`: the sole candidate issued two READs in the direct probe, while a separate authored zero-capability Guest control recorded zero semantic call sites, Broker calls and receipts.
+- [x] Route one frozen resolved Python Open-SWE trajectory with 31 shell calls and 15 workspace-editor calls to `native_sandbox` before Guest/workspace/effect start; retain a native-unavailable control with zero backend calls.
 
-**Gate:** all canary rows have exact terminal status and complete causal joins or explicit `not_recorded` fields.
+**Gate status:** achieved. All canary rows have exact terminal status and complete causal joins or explicit `not_recorded` fields. The placement report is [natural-placement-open-swe-v1.json](../evidence/natural-placement-open-swe-v1.json), SHA-256 `a6a757041694a5971941b37753f6cd9d33839543f69c2187bd2dfd54ce8fd49a`; it proves pre-Guest routing only, not coding execution or native-backend correctness.
 
 ### Phase T2 — Natural bounded cohort
 
+- [x] Freeze an exact 16-task airline READ denominator (`1,2,3,4,5,6,9,27,36,38,41,43,45,47,48,49`) before provider execution; retain 32 paired cells and prohibit post-provider reruns or denominator dropping.
+- [x] Preserve default tau2 DB/COMMUNICATE evaluation while adding the official upstream `ActionEvaluator` as a separately labelled no-op-sensitive diagnostic; do not call it leaderboard overall.
+- [x] Run provider-free preflight for all 38 exact reference-action envelopes, all three READ tool shapes through real WASM Guest/Broker, and one out-of-scope negative. Bind raw Guest bodies, canonical Plan/Grant and source-bound receipt identities.
+- [x] Consume the single preregistered pre-provider repair budget on path canonicalization: data paths resolve absolutely while the venv Python executable remains an absolute path without symlink dereferencing.
 - [ ] Run 10–20 preregistered tasks with no post-hoc denominator dropping.
 - [ ] Preserve admitted, routed, rejected, unclassifiable and failed rows.
 - [ ] Record baseline and enabled traces for qualified pre-dispatch tasks.
@@ -410,6 +415,8 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [ ] Keep `attrs-770` as a separately labelled case study.
 
 **Gate:** independent rebuild reproduces all body-safe aggregates from private raw evidence.
+
+**Provider gate:** pending explicit paid-run authorization. The frozen hard ceiling is 32 trials, 20 provider invocations per trial and 640 invocations total; actual terminal rows remain valid even when the budget stops a trial. Preregistration: [tau2-t2-cohort-preregistration-v1.json](../evidence/tau2-t2-cohort-preregistration-v1.json), SHA-256 `41712992f38dd59863b7124c51424c07fd312521ca113b667d38eeba8b59cd38`. Provider-free preflight: [tau2-t2-preflight-v1.json](../evidence/tau2-t2-preflight-v1.json), SHA-256 `4838e5b41e6a3b5b66a9f1c28c09b9c544b92ebb76f264c1b90d0ed7d2a2093e`.
 
 ### Phase T3 — Adversarial identity and lifecycle matrix
 

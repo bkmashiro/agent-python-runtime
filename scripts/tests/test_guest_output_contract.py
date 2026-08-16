@@ -52,6 +52,11 @@ class GuestOutputContractTests(unittest.TestCase):
         request = json.dumps({"run_id": "reserved", "code": "_pysolate_agent_main = 1\nreturn 1", "inputs": {}})
         self.assertEqual(module._validate_request_source(request), module._SOURCE_CONTRACT_INVALID)
 
+    def test_wrapper_does_not_legalize_module_level_yield(self):
+        module = load_runtime()
+        request = json.dumps({"run_id": "yield", "code": "yield 1", "inputs": {}})
+        self.assertEqual(module._validate_request_source(request), module._SOURCE_CONTRACT_INVALID)
+
     def test_print_is_bounded(self):
         response = execute(load_runtime(), "print('x' * 70000)\nreturn 1")
         self.assertEqual(response["status"], "error")

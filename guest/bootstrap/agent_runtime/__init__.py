@@ -6,6 +6,7 @@ import ast
 import codeop
 import dis
 import hashlib
+import inspect
 import json
 import operator
 import sys
@@ -442,7 +443,11 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
     module = ast.fix_missing_locations(ast.Module(body=[*preamble, function], type_ignores=[]))
     effective = ast.dump(module, annotate_fields=True, include_attributes=False)
     digest = "sha256:" + hashlib.sha256(effective.encode("utf-8")).hexdigest()
-    return compile(module, "<agent-run>", "exec"), digest
+    code = compile(module, "<agent-run>", "exec")
+    wrapper = next((candidate for candidate in _code_objects(code) if candidate.co_name == _WRAPPER_MAIN), None)
+    if wrapper is None or wrapper.co_flags & (inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR):
+        raise SyntaxError("agent body cannot be a generator or coroutine")
+    return code, digest
 
 
 def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) -> tuple[int, types.CodeType | None, list[ast.stmt]]:

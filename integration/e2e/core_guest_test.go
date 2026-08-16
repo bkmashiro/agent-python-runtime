@@ -118,16 +118,23 @@ func TestCoreGuestExecutesPython(t *testing.T) {
 
 func TestCoreGuestSupportsReturnAndBoundedPrintOutput(t *testing.T) {
 	runner := newEngine(t)
-	returned := run(t, runner, "output-return", "print('first')\nprint('second')\nreturn {'value': inputs['value'] + 1}", map[string]any{"value": 41})
+	returned := run(t, runner, "output-return", "from __future__ import annotations\ncalls = []\ndef once():\n    calls.append('once')\n    return inputs['value'] + 1\nprint('first')\nprint('second')\nreturn {'value': once(), 'calls': calls}", map[string]any{"value": 41})
 	legacy := run(t, runner, "output-legacy", "result = {'value': 7}", map[string]any{})
 	missing := run(t, runner, "output-missing", "value = 7", map[string]any{})
 	returnedNone := run(t, runner, "output-none", "return None", map[string]any{})
 	if returned.Status != "ok" || returned.ResultSource != "return" || returned.ResultPresent == nil || !*returned.ResultPresent ||
-		len(returned.Logs) != 2 || returned.Logs[0] != "first" || returned.Result.(map[string]any)["value"] != float64(42) || len(returned.SourceContract) != 4 {
+		len(returned.Logs) != 2 || returned.Logs[0] != "first" || returned.Result.(map[string]any)["value"] != float64(42) || len(returned.Result.(map[string]any)["calls"].([]any)) != 1 || len(returned.SourceContract) != 4 {
 		t.Fatalf("return output contract=%#v", returned)
 	}
 	if legacy.ResultSource != "legacy_result" || legacy.ResultPresent == nil || !*legacy.ResultPresent || missing.ResultSource != "missing" || missing.ResultPresent == nil || *missing.ResultPresent || returnedNone.ResultSource != "return" || returnedNone.ResultPresent == nil || !*returnedNone.ResultPresent {
 		t.Fatalf("legacy=%#v missing=%#v none=%#v", legacy, missing, returnedNone)
+	}
+}
+
+func TestCoreGuestBoundsModelPrintOutput(t *testing.T) {
+	response := run(t, newEngine(t), "output-limit", "print('x' * 70000)\nreturn 1", map[string]any{})
+	if response.Status != "error" || response.Error["code"] != "output_limit_exceeded" {
+		t.Fatalf("output limit response=%#v", response)
 	}
 }
 

@@ -19,12 +19,12 @@ Pysolate's refined long-term direction is:
 > independently governing semantic legality, interpreter, workspace, scratch,
 > external-effect, evidence and placement dispositions.
 
-The active research execution contract is the
-[Unified Effect-Aware Runtime Megagoal](plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md),
-with its [architecture recommendation](research/unified-effect-aware-runtime-architecture.md).
-It treats scheduling, exact reuse and pre-execution placement as decision-gated
-consumers of one conservative semantic layer; it does not make arbitrary Python,
-automatic caching or post-effect replay Current.
+The active paper and evaluation contract is the
+[Effect-Compiler Paper and Evaluation Source of Truth](plans/2026-08-16-effect-compiler-paper-evaluation-source-of-truth.md).
+The earlier [Unified Effect-Aware Runtime Megagoal](plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md)
+and its [architecture recommendation](research/unified-effect-aware-runtime-architecture.md)
+remain implementation/research records. New feature work is frozen while the current
+authority-bound effect compiler is evaluated on a bounded natural-task cohort.
 
 A complementary **Experimental** feature layer is
 [content-addressed Agent Functions](content-addressed-agent-functions.md):
@@ -35,12 +35,14 @@ remain typed Host effects. This does not replace the authority-lifecycle
 direction; fresh execution prevents hidden interpreter state from becoming
 workflow continuation state.
 
-The primary Agent-specific direction is
+The primary Agent-specific execution history is
 [streaming authority-staged execution](streaming-authority-staged-execution.md).
 A minimal mechanism now incrementally validates and executes append-only Python
 inside one live target-Guest session, stages filesystem changes in a private
-workspace attempt, and supports Host-qualified eager reads with reach-gated
-fallback and a Broker-enforced pre-seal write denial. Bounded Experimental
+workspace attempt, dispatches reads only when unchanged Python reaches their Broker
+boundary, and enforces pre-seal write denial. The historical literal eager-read
+metadata path is disabled; the current successor is exact source-bound semantic
+pre-dispatch after verified legality. Bounded Experimental
 successors now add portable immutable roots, structured recursive child
 orchestration, exact AST-qualified whole-Run Agent Function reuse/single-flight,
 explicit single-wait fresh re-evaluation, one never-served single-use prepared
@@ -53,9 +55,9 @@ Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace
 branching, private attempts, playback, external-write lifecycle, prepared
 runtime, memory COW, verification, and Lab projection each require an explicit
-off-state and tested fallback. Their dependency and composition rules are the
-source of truth in the
-[composable mechanism roadmap](proof-first-authority-roadmap.md).
+off-state and tested fallback. Historical dependency and composition records remain
+in the [composable mechanism roadmap](proof-first-authority-roadmap.md); current
+status and future evaluation decisions come only from the active source of truth.
 
 Generic code execution is necessary infrastructure, not the differentiator.
 Sandboxed code, mediated connectors, ledgers, approval replay, and compensation

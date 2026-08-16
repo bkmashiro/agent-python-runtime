@@ -1,6 +1,8 @@
 # Source-Bound Agent Programs: Compiler, Evidence, Lab and Paper Roadmap
 
-> **For Hermes:** Use this document as the master roadmap. Split execution into the four linked megagoals below; do not attempt the entire roadmap as one autonomous run. Each megagoal must preserve the stop gates and update this roadmap with observed evidence before the next one starts.
+> **Status: historical implementation/evidence record.** Active paper claims, benchmark selection and future evaluation work moved on 2026-08-16 to the [Effect-Compiler Paper and Evaluation Source of Truth](2026-08-16-effect-compiler-paper-evaluation-source-of-truth.md). Do not add new work here or treat unchecked items below as active commitments.
+
+> **For Hermes:** Read this only for historical mechanism and evidence context. Do not execute its unchecked items or update it as an active roadmap.
 
 **Goal:** Turn Pysolate's existing target-Guest semantic overlay, authority-bound execution mechanisms and Lab prototype into a source-bound agent-program system: Host-qualified compiler passes produce auditable boundary plans; recorder/evidence captures the resulting causal execution; Lab lets a human inspect code, inputs, outputs, physical reuse and workspace state; a final natural-workload campaign determines the paper claims.
 
@@ -38,14 +40,14 @@ Use these labels throughout implementation and paper artifacts:
 
 Do not promote a proposal because it appears in this roadmap. Do not describe a skipped live Guest test as evidence.
 
-This is the source of truth for future compiler/evidence/Lab/paper work. It builds on, but does not reopen, the completed slices in:
+This was the source of truth for its completed compiler/evidence/Lab slices. It builds on, but does not reopen, the completed slices in:
 
 - [Unified effect-aware runtime megagoal](2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md)
 - [Authority-bound programmatic tools and hot approval](2026-08-15-authority-bound-programmatic-tools-hot-approval-megagoal.md)
 - [Authority-bound multi-Agent transparent campaign](2026-08-15-authority-bound-multi-agent-transparent-campaign-megagoal.md)
 - [Observable workflow boundary optimization](2026-08-15-observable-workflow-boundary-optimization-megagoal.md)
 
-Those documents remain implementation/evidence records. New future work should be added here or to one of this roadmap's four extracted megagoals rather than appended to a completed plan.
+Those documents and this roadmap remain implementation/evidence records. New work is governed only by the 2026-08-16 source of truth linked above.
 
 ## Product and paper thesis
 
@@ -541,7 +543,7 @@ Run real Guest tests with a named exact artifact and record skips honestly. Lab 
 
 After each coherent slice:
 
-1. update the active megagoal and this master roadmap;
+1. update the then-active megagoal and historical roadmap;
 2. record Current/Observed/Rejected status accurately;
 3. run targeted then megagoal gates;
 4. create a signed commit and push when the slice is verified;

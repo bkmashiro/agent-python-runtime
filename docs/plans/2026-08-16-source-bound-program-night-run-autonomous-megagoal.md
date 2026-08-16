@@ -1,5 +1,7 @@
 # Source-Bound Agent Program Night-Run Autonomous Mega-Goal
 
+> **Status: completed historical night-run handoff.** It is not an active worker prompt. Active paper claims, benchmark selection and evaluation closeout are governed by the [Effect-Compiler Paper and Evaluation Source of Truth](2026-08-16-effect-compiler-paper-evaluation-source-of-truth.md).
+
 > **For Hermes:** This is the long-running unattended `/goal` handoff. Read this file fully, inspect live Git state, finish the current dirty M2 closeout first, then implement Megagoal 3's Human-First Lab in roadmap order. Stop at its owner visual/product review gate; the later corpus/experiment tracks remain queued behind that gate.
 
 **Goal:** Close Megagoal 2 truthfully from the live dirty worktree, then rebuild Lab around causal developer tasks using the real M2 evidence, verify the actual browser surface proportionally, and leave the later natural-workload/multi-agent experiments queued behind owner acceptance.
@@ -373,7 +375,7 @@ A clean checkpoint, successful commit, reviewer timeout or context compaction is
 
 ## Roadmap Tracking Rules
 
-- This file is the night-run execution source of truth.
+- This file was the night-run execution source of truth and is now closed.
 - After each slice, change only evidence-backed `[ ]` to `[x]`.
 - Add a completion-log line with date, commands/results and commit.
 - Trust live Git over historical handoff text.

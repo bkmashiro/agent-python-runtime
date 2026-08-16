@@ -11,6 +11,12 @@ import re
 from typing import Any
 
 SCHEMA = "pysolate.attrs-770-profile.v1"
+EXPECTED_PRODUCER_COMMIT = "c538eebcf01d603d296fb523fa21d481f5c7aaff"
+EXPECTED_SOURCE_IDS = [
+    "cpython-source", "wasi-sdk-linux-x86_64", "wasm-tools-linux-x86_64", "wasmtime-linux-x86_64",
+    "wasi-vfs-cli-linux-x86_64", "wasi-vfs-source", "wasi-vfs-wasi-submodule-source",
+    "wasi-vfs-static-library", "wasi-vfs-linked-storage-source", "spdx-2.3-json-schema", "attrs-source",
+]
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 PRIVATE_MARKERS = ("/Users/", "~/.hermes", "file://", "traceback", "request-", "model.patch")
 EXPECTED_PACKAGE = {
@@ -98,6 +104,9 @@ def build_report(build_root: pathlib.Path, run_root: pathlib.Path) -> dict[str, 
     require(ready.get("builder") == "gpu31.doc.ic.ac.uk" and ready.get("target") == "wasm32-wasip1", "builder mismatch")
     require(manifest.get("schema_version") == 4 and manifest.get("artifact_profile") == "attrs-770", "manifest profile mismatch")
     require(manifest.get("build", {}).get("repository_commit") == ready.get("source_commit"), "source commit mismatch")
+    require(ready.get("source_commit") == EXPECTED_PRODUCER_COMMIT, "unexpected producer commit")
+    sources = manifest.get("sources")
+    require(isinstance(sources, list) and [row.get("id") for row in sources if isinstance(row, dict)] == EXPECTED_SOURCE_IDS, "canonical source set mismatch")
     artifact_record = manifest.get("artifact")
     require(isinstance(artifact_record, dict) and artifact_record.get("filename") == artifact.name, "artifact filename mismatch")
     artifact_digest = sha256(artifact)
@@ -196,8 +205,10 @@ def build_report(build_root: pathlib.Path, run_root: pathlib.Path) -> dict[str, 
             },
         },
         "verification": {
+            "canonical_source_set_bound": True,
             "final_cache_bundle_reverified": True,
             "http_service_loaded_verified_identity": True,
+            "post_copy_package_tree_reverified": True,
             "python_go_parser_fail_closed_parity": True,
         },
         "decision": {
@@ -224,8 +235,10 @@ def validate_report(report: Any) -> None:
     natural = report.get("runs", {}).get("natural_oracle", {})
     require(natural.get("runs") == 2 and natural.get("passed") == 2 and natural.get("distinct_request_identities") is True, "natural oracle summary mismatch")
     require(report.get("verification") == {
+        "canonical_source_set_bound": True,
         "final_cache_bundle_reverified": True,
         "http_service_loaded_verified_identity": True,
+        "post_copy_package_tree_reverified": True,
         "python_go_parser_fail_closed_parity": True,
     }, "verification evidence drift")
     encoded = json.dumps(report, sort_keys=True, separators=(",", ":"))

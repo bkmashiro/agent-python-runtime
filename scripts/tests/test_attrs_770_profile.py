@@ -19,8 +19,10 @@ class Attrs770ProfileReportTests(unittest.TestCase):
             "qualification": {"phase": "restricted_agent_body"},
             "runs": {"natural_oracle": {"runs": 2, "passed": 2, "distinct_request_identities": True}},
             "verification": {
+                "canonical_source_set_bound": True,
                 "final_cache_bundle_reverified": True,
                 "http_service_loaded_verified_identity": True,
+                "post_copy_package_tree_reverified": True,
                 "python_go_parser_fail_closed_parity": True,
             },
             "decision": {"profile_supported": True},

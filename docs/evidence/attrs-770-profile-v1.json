@@ -2,16 +2,16 @@
   "artifact": {
     "filename": "agent-python-runtime-attrs-770.wasm",
     "profile": "attrs-770",
-    "sha256": "520550ec77533983450085428eb30fe23f09050be9a334ebe89c1c17b4368351",
-    "size": 52804711
+    "sha256": "3076246daaff2d2a63a5e91d144c67e6ccfee8e57872beb74c6290efd9eab464",
+    "size": 52804727
   },
   "build": {
-    "build_millis": 40712,
+    "build_millis": 39054,
     "builder": "gpu31.doc.ic.ac.uk",
     "cache_disposition": "hit",
     "final_cache_disposition": "hit",
-    "source_commit": "a11f25a1463b8994c2f158746ff79713ee8eb846",
-    "source_tree": "ad221939932476f233e3d3eeaf2f5859e9e805e9",
+    "source_commit": "c538eebcf01d603d296fb523fa21d481f5c7aaff",
+    "source_tree": "d37852e5c431e3d42c1ae6289a7e019f12bc4067",
     "target": "wasm32-wasip1"
   },
   "decision": {
@@ -72,8 +72,10 @@
   "schema_version": "pysolate.attrs-770-profile.v1",
   "status": "supported",
   "verification": {
+    "canonical_source_set_bound": true,
     "final_cache_bundle_reverified": true,
     "http_service_loaded_verified_identity": true,
+    "post_copy_package_tree_reverified": true,
     "python_go_parser_fail_closed_parity": true
   }
 }

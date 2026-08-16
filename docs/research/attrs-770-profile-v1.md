@@ -8,14 +8,14 @@ Private source, patch body, build logs, artifacts, requests, responses and diagn
 
 ## Result
 
-The final artifact was built on `gpu31.doc.ic.ac.uk` from signed source commit `a11f25a1463b8994c2f158746ff79713ee8eb846`:
+The final artifact was built on `gpu31.doc.ic.ac.uk` from signed source commit `c538eebcf01d603d296fb523fa21d481f5c7aaff`:
 
 | Identity | Value |
 |---|---|
 | Artifact profile | `attrs-770` |
 | Artifact | `agent-python-runtime-attrs-770.wasm` |
-| Artifact SHA-256 | `520550ec77533983450085428eb30fe23f09050be9a334ebe89c1c17b4368351` |
-| Artifact size | 52,804,711 bytes |
+| Artifact SHA-256 | `3076246daaff2d2a63a5e91d144c67e6ccfee8e57872beb74c6290efd9eab464` |
+| Artifact size | 52,804,727 bytes |
 | Target | `wasm32-wasip1` |
 | CPython | 3.14.0 |
 | attrs base commit | `58d2adce57f2c4e447eb12b892ebbb09cccbdcc3` |
@@ -77,13 +77,17 @@ scripts/build-guest-workstation.sh \
 
 `--gateway` is an explicit `shell2|shell3` enum; default remains `shell2`. This was required because shell2 temporarily lost its `/vol/bitbucket` mount while shell3 and gpu31 retained it. The worker trust root and canonical path checks were not relaxed.
 
-An independent review of the initial implementation found three artifact-verification gaps. The final signed build closes all three:
+An independent review of the initial implementation found seven artifact-verification gaps. The final signed build closes all seven within the bounded producer/consumer contract:
 
 - `pysolate-httpd` now consumes only `runtime.VerifyDistributionArtifact` output rather than trusting reduced operator metadata;
+- the staged `site-packages/attr` tree is rehashed after deterministic copy and before packing;
+- Python selection validation accepts only the exact committed attrs lock rather than shape-valid operator identities;
+- fresh-build supply-chain generation requires exact equality between manifest sources and the effective source lock;
+- Python and Go consumers require the complete canonical eleven-row attrs source set, including CPython, toolchain, linked/build inputs and attrs;
 - the Python artifact verifier rejects duplicate JSON keys and unknown top-level fields, matching the Go parser's fail-closed behavior;
 - a restored final-cache bundle reruns the artifact verifier and bundle-level supply-chain verifier before being accepted.
 
-Two consecutive builds of `a11f25a` exercised both final-cache states. The first was a miss; the second was a real hit, completed in 40,712 ms, emitted the artifact verifier's exact SHA, passed bundle verification, and returned the same artifact identity.
+Two consecutive builds of `c538eeb` exercised both final-cache states. The first was a miss; the second was a real hit, completed in 39,054 ms, emitted the artifact verifier's exact SHA, passed bundle verification, and returned the same artifact identity.
 
 ## Reproduction
 
@@ -91,7 +95,7 @@ Regenerate the public report from retained private evidence:
 
 ```sh
 python3 scripts/attrs-770-profile.py \
-  --build-root ~/.hermes/evidence/pysolate/attrs-770-profile-build-v1/formal-build-hardened-2 \
+  --build-root ~/.hermes/evidence/pysolate/attrs-770-profile-build-v1/formal-build-final-v2-hit \
   --run-root ~/.hermes/evidence/pysolate/attrs-770-profile-build-v1 \
   --output docs/evidence/attrs-770-profile-v1.json
 ```

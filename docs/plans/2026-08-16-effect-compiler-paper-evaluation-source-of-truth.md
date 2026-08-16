@@ -395,6 +395,7 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Qualify `deepseek/deepseek-v4-pro` for upstream-valid direct tool calls and strict treatment JSON program actions.
 - [x] Run the qualified same-model/task/seed pair: both direct and treatment obtained official reward `1.0`; treatment recorded two source-bound Guest/Broker READs.
 - [x] Audit `airline/11` without executing WRITE; retain it as `unsupported_effect_class` because no current attempt-world binding, persistent WRITE adapter, matching effect contract, final-state disposition join or cancellation discard proof exists.
+- [x] Preserve that audit as the pre-implementation boundary, then close it with one exact benchmark-private `workspace_write` canary: accepted/rejected/expired/failure controls, real WASM Guest/Broker, atomic candidate install, disposition evidence and official DB/COMMUNICATE `1.0`.
 
 **Gate:** all canary rows have exact terminal status and complete causal joins or explicit `not_recorded` fields.
 

@@ -209,7 +209,26 @@ Blocking gaps in the current Pysolate treatment:
 - final task-world state is not joined to workspace/effect disposition evidence;
 - cancel or failed execution has no proved discard contract for an attempted task world.
 
-Decision: `unsupported_effect_class`. The row remains in the denominator, no model trial or WRITE dispatch was run, and no production capability or benchmark WRITE adapter is added.
+Decision at the audit boundary: `unsupported_effect_class`. That v1 artifact remains the honest pre-implementation result; no model trial or WRITE dispatch occurred during the audit.
+
+### Bounded private-WRITE closeout
+
+The later, task-specific implementation is recorded in [tau2-airline-11-private-write-canary-v1.json](../evidence/tau2-airline-11-private-write-canary-v1.json), report SHA-256 `b2d8b3c4512ed96492258692504dd2c1f6c3ca9886c98b8506ba1c93956eb732`.
+
+It does not add a production `external_write` effect or a generic tau2 adapter. Instead, one authored zero-argument capability freezes the exact task-11 reference operation in its Grant through `operation_sha256`. Each lane forks a real Pysolate private workspace attempt containing a fresh task-world snapshot. The Host adapter applies the real upstream mutation to a candidate state and installs it atomically only after a successful response.
+
+Four real WASM Guest/Broker controls passed:
+
+| lane | approval | handler calls | state change | receipt | workspace disposition |
+|---|---:|---:|---:|---|---|
+| accepted | approved/executed | `1` | yes | `ok` | published |
+| rejected | rejected/not executed | `0` | no | `denied` | discarded |
+| expired | expired/not executed | `0` | no | `denied` | discarded |
+| injected failure | approved/executed | `1` | no | `error` | discarded |
+
+For the accepted lane, the receipt response digest independently recomputes from the private tool content, frozen operation digest, and final task-world digest. The private workspace's actual final FlightDB is also supplied to the oracle and its upstream DB hash matches the independently built official gold environment. The official tau2 `EnvironmentEvaluator` and `CommunicateEvaluator` replay the same exact call and both return `1.0`.
+
+Classification: `SUPPORTED_BENCHMARK_PRIVATE_ONLY`. This supports one exact, authored, authority-gated mutation through the real Guest and Broker. It does not support model WRITE ability, a leaderboard result, generic rollback, or production external effects.
 
 ### Negative oracle control — no-op sensitivity
 
@@ -237,7 +256,7 @@ Do not count this row as a positive canary success.
 5. **Done for the authored lane:** capture source digest, two distinct source occurrences, Plan, Broker receipts, logical/physical counts and official oracle independently.
 6. **Done for the authored lane:** regenerate a body-safe aggregate from private evidence and verify byte stability.
 7. **Done:** audit the `airline/11` state boundary; classify it as `unsupported_effect_class` without registering or dispatching WRITE.
-8. Stop for a design decision only if the WRITE cannot honestly fit existing attempt-private workspace semantics.
+8. **Done:** close the gap only as a benchmark-private exact WRITE canary; retain the earlier audit and do not generalize it into external WRITE.
 
 ## Observed authored canary
 

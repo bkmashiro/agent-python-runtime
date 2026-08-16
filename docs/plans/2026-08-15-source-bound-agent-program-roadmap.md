@@ -488,6 +488,8 @@ A developer can select generated Python, see which exact source boundary produce
 
 ## Megagoal 4 — Natural Workload Census, Pass Selection and Paper Evidence
 
+**Status:** Bounded dataset-first internal pilot complete on 2026-08-16. Fifty CodeAct records and ten mixed-language Open-SWE trajectories produced a body-safe deterministic census; eight naturally occurring Python actions completed under local CPython and the exact Host-profile-bound real Guest. This is completion-only compatibility evidence, not task-oracle, performance, sharing or pass-selection evidence. No new pass has been selected.
+
 **Purpose:** Use real Agent-generated programs and the new debugger/evidence substrate to choose at most one or two additional boundary passes and freeze defensible paper claims.
 
 **Primary areas:**
@@ -500,10 +502,10 @@ A developer can select generated Python, see which exact source boundary produce
 
 **Tracks:**
 
-- [ ] Define a bounded real program corpus with provenance classes, oracle classes and privacy policy.
+- [x] Define and execute a bounded dataset-first internal pilot with stable source/action identities, explicit completion-only oracle class and private/body-safe separation; the fuller task-oracle corpus contract remains open.
 - [ ] Capture direct/programmatic/both usage, source-bound call sites, barriers, opportunities, rejection reasons and overlap windows.
 - [ ] Measure task success, model turns, tokens, logical calls, physical executions, critical path and authority/freshness near misses.
-- [ ] Keep rejected/unclassifiable programs in denominators.
+- [x] Keep all 137 CodeAct actions and all ten mixed-language Open-SWE trajectories in denominators, including static rejection reasons and non-Python rows.
 - [ ] Apply the pass acceptance gate to the optimization family map.
 - [ ] Promote at most one or two candidates; otherwise publish the negative result and stop.
 - [ ] Implement selected passes through the Megagoal 1 API with independent switches and real Guest differential tests.

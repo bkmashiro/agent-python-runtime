@@ -2,16 +2,16 @@
   "artifact": {
     "filename": "agent-python-runtime-attrs-770.wasm",
     "profile": "attrs-770",
-    "sha256": "3076246daaff2d2a63a5e91d144c67e6ccfee8e57872beb74c6290efd9eab464",
-    "size": 52804727
+    "sha256": "5f8793f8306379db7c1e679cabfb8c0c6958daa11a30dc4f6844cedfcf2ce143",
+    "size": 52804711
   },
   "build": {
-    "build_millis": 39054,
+    "build_millis": 38997,
     "builder": "gpu31.doc.ic.ac.uk",
     "cache_disposition": "hit",
     "final_cache_disposition": "hit",
-    "source_commit": "c538eebcf01d603d296fb523fa21d481f5c7aaff",
-    "source_tree": "d37852e5c431e3d42c1ae6289a7e019f12bc4067",
+    "source_commit": "26f2dd5df98c74d28b9ae066bf122fef4c1f2604",
+    "source_tree": "765904de439f7f41e2c3ee8687bab61028e293d4",
     "target": "wasm32-wasip1"
   },
   "decision": {
@@ -75,6 +75,7 @@
     "canonical_source_set_bound": true,
     "final_cache_bundle_reverified": true,
     "http_service_loaded_verified_identity": true,
+    "nested_manifest_fields_fail_closed": true,
     "post_copy_package_tree_reverified": true,
     "python_go_parser_fail_closed_parity": true
   }

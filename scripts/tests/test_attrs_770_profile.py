@@ -22,6 +22,7 @@ class Attrs770ProfileReportTests(unittest.TestCase):
                 "canonical_source_set_bound": True,
                 "final_cache_bundle_reverified": True,
                 "http_service_loaded_verified_identity": True,
+                "nested_manifest_fields_fail_closed": True,
                 "post_copy_package_tree_reverified": True,
                 "python_go_parser_fail_closed_parity": True,
             },

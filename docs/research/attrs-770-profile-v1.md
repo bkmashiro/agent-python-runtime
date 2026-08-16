@@ -8,14 +8,14 @@ Private source, patch body, build logs, artifacts, requests, responses and diagn
 
 ## Result
 
-The final artifact was built on `gpu31.doc.ic.ac.uk` from signed source commit `c538eebcf01d603d296fb523fa21d481f5c7aaff`:
+The final artifact was built on `gpu31.doc.ic.ac.uk` from signed source commit `26f2dd5df98c74d28b9ae066bf122fef4c1f2604`:
 
 | Identity | Value |
 |---|---|
 | Artifact profile | `attrs-770` |
 | Artifact | `agent-python-runtime-attrs-770.wasm` |
-| Artifact SHA-256 | `3076246daaff2d2a63a5e91d144c67e6ccfee8e57872beb74c6290efd9eab464` |
-| Artifact size | 52,804,727 bytes |
+| Artifact SHA-256 | `5f8793f8306379db7c1e679cabfb8c0c6958daa11a30dc4f6844cedfcf2ce143` |
+| Artifact size | 52,804,711 bytes |
 | Target | `wasm32-wasip1` |
 | CPython | 3.14.0 |
 | attrs base commit | `58d2adce57f2c4e447eb12b892ebbb09cccbdcc3` |
@@ -84,10 +84,10 @@ An independent review of the initial implementation found seven artifact-verific
 - Python selection validation accepts only the exact committed attrs lock rather than shape-valid operator identities;
 - fresh-build supply-chain generation requires exact equality between manifest sources and the effective source lock;
 - Python and Go consumers require the complete canonical eleven-row attrs source set, including CPython, toolchain, linked/build inputs and attrs;
-- the Python artifact verifier rejects duplicate JSON keys and unknown top-level fields, matching the Go parser's fail-closed behavior;
+- the Python artifact verifier rejects duplicate JSON keys, non-standard constants, unknown top-level fields and unknown fields in every Go-typed nested manifest object;
 - a restored final-cache bundle reruns the artifact verifier and bundle-level supply-chain verifier before being accepted.
 
-Two consecutive builds of `c538eeb` exercised both final-cache states. The first was a miss; the second was a real hit, completed in 39,054 ms, emitted the artifact verifier's exact SHA, passed bundle verification, and returned the same artifact identity.
+Two consecutive builds of `26f2dd5` exercised both final-cache states. The first was a miss; the second was a real hit, completed in 38,997 ms, emitted the artifact verifier's exact SHA, passed bundle verification, and returned the same artifact identity.
 
 ## Reproduction
 
@@ -95,7 +95,7 @@ Regenerate the public report from retained private evidence:
 
 ```sh
 python3 scripts/attrs-770-profile.py \
-  --build-root ~/.hermes/evidence/pysolate/attrs-770-profile-build-v1/formal-build-final-v2-hit \
+  --build-root ~/.hermes/evidence/pysolate/attrs-770-profile-build-v1/formal-build-final-v3-hit \
   --run-root ~/.hermes/evidence/pysolate/attrs-770-profile-build-v1 \
   --output docs/evidence/attrs-770-profile-v1.json
 ```

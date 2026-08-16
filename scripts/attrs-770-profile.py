@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 SCHEMA = "pysolate.attrs-770-profile.v1"
-EXPECTED_PRODUCER_COMMIT = "c538eebcf01d603d296fb523fa21d481f5c7aaff"
+EXPECTED_PRODUCER_COMMIT = "26f2dd5df98c74d28b9ae066bf122fef4c1f2604"
 EXPECTED_SOURCE_IDS = [
     "cpython-source", "wasi-sdk-linux-x86_64", "wasm-tools-linux-x86_64", "wasmtime-linux-x86_64",
     "wasi-vfs-cli-linux-x86_64", "wasi-vfs-source", "wasi-vfs-wasi-submodule-source",
@@ -208,6 +208,7 @@ def build_report(build_root: pathlib.Path, run_root: pathlib.Path) -> dict[str, 
             "canonical_source_set_bound": True,
             "final_cache_bundle_reverified": True,
             "http_service_loaded_verified_identity": True,
+            "nested_manifest_fields_fail_closed": True,
             "post_copy_package_tree_reverified": True,
             "python_go_parser_fail_closed_parity": True,
         },
@@ -238,6 +239,7 @@ def validate_report(report: Any) -> None:
         "canonical_source_set_bound": True,
         "final_cache_bundle_reverified": True,
         "http_service_loaded_verified_identity": True,
+        "nested_manifest_fields_fail_closed": True,
         "post_copy_package_tree_reverified": True,
         "python_go_parser_fail_closed_parity": True,
     }, "verification evidence drift")

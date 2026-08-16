@@ -391,7 +391,8 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Verify task oracle independently from Runtime receipts.
 - [x] Verify body-safe report determinism and private evidence permissions.
 - [x] Prove direct/programmatic calls cross the same Broker.
-- [ ] Run the same model/task/seed through the direct baseline and programmatic-Python treatment.
+- [x] Attempt the same model/task/seed pairing with `deepseek/deepseek-chat`; retain the `PAIR_NOT_COMPARABLE` interface-qualification failure without imputing a treatment score.
+- [ ] Qualify a model/interface pair that emits upstream-valid direct tool calls and strict treatment program actions before another paid paired trial.
 
 **Gate:** all canary rows have exact terminal status and complete causal joins or explicit `not_recorded` fields.
 

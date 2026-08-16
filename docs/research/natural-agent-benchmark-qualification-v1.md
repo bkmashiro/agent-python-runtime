@@ -238,6 +238,19 @@ At the named source revision and real Guest artifact:
 
 Conclusion: `SUPPORTED`. This validates the Host adapter, fresh-Run programmatic path, exact source-to-receipt join and independent official oracle. It is still an authored reference lane—not a natural model result—and does not test WRITE.
 
+## Observed DeepSeek paired interface canary
+
+The body-safe result is [tau2-airline-3-deepseek-paired-canary-v1.json](../evidence/tau2-airline-3-deepseek-paired-canary-v1.json).
+
+The preregistered configuration used `deepseek/deepseek-chat` for both Agent and user simulator, seed `42`, temperature `0`, task `airline/3` and one bounded trial per lane. The result is `PAIR_NOT_COMPARABLE`:
+
+- the direct lane produced an official `tau2` simulation with reward `0.0` and termination `agent_error` after the provider response contained both assistant content and a `get_user_details` tool call, violating the upstream half-duplex message contract;
+- the treatment model did not produce an admissible strict JSON program action; adapter setup exposed two exception-classification defects before the scoring attempt reached upstream protocol validation;
+- the scoring attempt remained unscorable because upstream validation raised rather than returning a `SimulationRun`;
+- no model-authored Python reached source admission, no Pysolate tool Run started and no physical effect was issued in the treatment lane.
+
+This is model/interface qualification evidence, not a Runtime comparison. Neither failure is attributed to Pysolate, and no direct-versus-treatment performance claim is supported. A future paired trial requires a prior format canary proving both pure function-call output in the direct lane and strict program-action output in the treatment lane.
+
 ## Row schema additions
 
 Each row must retain:

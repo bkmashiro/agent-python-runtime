@@ -92,6 +92,14 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertNotIn("artifact_profile:", workflow)
         self.assertNotIn("numpy-core", workflow)
 
+    def test_final_cache_hits_reverify_restored_bundle(self):
+        text = BUILD_SCRIPT.read_text()
+        restore = text.index('tar -xf "${FINAL_CACHE_ENTRY}/dist.tar"')
+        hit = text.index("FINAL_CACHE_STATUS=hit", restore)
+        self.assertLess(text.index("verify-artifact.py", restore), hit)
+        self.assertLess(text.index("write-supply-chain.py", restore), hit)
+        self.assertIn("effective-source-lock", text[:restore])
+
     def test_attrs_profile_requires_private_patch_before_cache_lookup(self):
         text = BUILD_SCRIPT.read_text()
         self.assertIn("AGENT_RUNTIME_ARTIFACT_PROFILE", text)

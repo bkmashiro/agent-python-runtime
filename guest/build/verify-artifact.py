@@ -33,6 +33,34 @@ ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
     "attrs-770": "agent-python-runtime-attrs-770.wasm",
 }
+MAX_JSON_BYTES = 1 << 20
+MANIFEST_FIELDS = {
+    "schema_version", "abi_version", "artifact_profile", "target", "artifact", "build", "sources", "wasm",
+    "packages", "extension_profile", "python_import_inventory", "python_import_qualification", "limitations",
+}
+INVENTORY_FIELDS = {"schema_version", "artifact_profile", "probe", "implementation", "python_version", "discoverable_roots", "failures"}
+QUALIFICATION_FIELDS = {"schema_version", "artifact_profile", "probe", "implementation", "python_version", "qualified_roots", "results"}
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def load_json_strict(path: pathlib.Path, allowed_fields: set[str] | None = None) -> dict[str, Any]:
+    encoded = path.read_bytes()
+    if not encoded or len(encoded) > MAX_JSON_BYTES:
+        raise ValueError("JSON evidence size is invalid")
+    value = json.loads(encoded, object_pairs_hook=_unique_object)
+    if not isinstance(value, dict):
+        raise ValueError("JSON evidence must be an object")
+    if allowed_fields is not None and not set(value).issubset(allowed_fields):
+        raise ValueError("JSON evidence contains unknown fields")
+    return value
 
 
 def load_import_inventory_module():
@@ -85,6 +113,8 @@ def verify(
     import_inventory: pathlib.Path | None = None,
     import_qualification: pathlib.Path | None = None,
 ) -> None:
+    if not isinstance(manifest, dict) or not set(manifest).issubset(MANIFEST_FIELDS):
+        raise ValueError("manifest fields are invalid")
     if artifact.read_bytes()[:4] != b"\x00asm":
         raise ValueError("artifact does not have the WASM magic")
     schema_version = manifest.get("schema_version")
@@ -118,7 +148,10 @@ def verify(
             raise ValueError("schema-v3 manifest requires import inventory")
         if inventory_record.get("filename") != import_inventory.name or inventory_record.get("sha256") != sha256(import_inventory):
             raise ValueError("import inventory sidecar identity mismatch")
+        strict_inventory = load_json_strict(import_inventory, INVENTORY_FIELDS)
         inventory = IMPORT_INVENTORY.load_inventory(import_inventory, profile)
+        if inventory != strict_inventory:
+            raise ValueError("import inventory parser mismatch")
         embedded = {key: value for key, value in inventory.items() if key != "artifact_profile"}
         embedded["filename"] = import_inventory.name
         embedded["sha256"] = sha256(import_inventory)
@@ -132,7 +165,10 @@ def verify(
                 raise ValueError("schema-v4 manifest requires import qualification")
             if qualification_record.get("filename") != import_qualification.name or qualification_record.get("sha256") != sha256(import_qualification):
                 raise ValueError("import qualification sidecar identity mismatch")
+            strict_qualification = load_json_strict(import_qualification, QUALIFICATION_FIELDS)
             qualification = IMPORT_QUALIFICATION.load_qualification(import_qualification, profile)
+            if qualification != strict_qualification:
+                raise ValueError("import qualification parser mismatch")
             if (
                 qualification["implementation"] != inventory["implementation"]
                 or qualification["python_version"] != inventory["python_version"]
@@ -217,7 +253,7 @@ def main() -> int:
     parser.add_argument("manifest", type=pathlib.Path)
     parser.add_argument("--extension-selection", type=pathlib.Path)
     args = parser.parse_args()
-    manifest = json.loads(args.manifest.read_text())
+    manifest = load_json_strict(args.manifest, MANIFEST_FIELDS)
 
     inventory_record = manifest.get("python_import_inventory")
     inventory = None

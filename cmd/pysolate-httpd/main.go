@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -64,6 +65,7 @@ type executor func(context.Context, executeRequest) (executeResponse, error)
 
 type serviceExecutor struct {
 	artifact       []byte
+	identity       runtimeconfig.VerifiedArtifactIdentity
 	artifactSHA    string
 	manifestSHA    string
 	profileID      string
@@ -74,23 +76,6 @@ type serviceExecutor struct {
 	projectSHA     string
 	policyEpochSHA string
 	flights        *agentfunction.FlightGroup
-}
-
-type artifactManifest struct {
-	ArtifactProfile string `json:"artifact_profile"`
-	Artifact        struct {
-		SHA256 string `json:"sha256"`
-	} `json:"artifact"`
-}
-
-type importInventory struct {
-	ArtifactProfile   string   `json:"artifact_profile"`
-	DiscoverableRoots []string `json:"discoverable_roots"`
-}
-
-type importQualification struct {
-	ArtifactProfile string   `json:"artifact_profile"`
-	QualifiedRoots  []string `json:"qualified_roots"`
 }
 
 func main() {
@@ -135,23 +120,17 @@ func loadServiceExecutor(artifactPath, manifestPath, inventoryPath, qualificatio
 	if err != nil {
 		return nil, fmt.Errorf("read import qualification: %w", err)
 	}
-	var manifest artifactManifest
-	var inventory importInventory
-	var qualification importQualification
-	if json.Unmarshal(manifestBytes, &manifest) != nil || json.Unmarshal(inventoryBytes, &inventory) != nil || json.Unmarshal(qualificationBytes, &qualification) != nil {
-		return nil, errors.New("invalid artifact evidence JSON")
+	identity, err := runtimeconfig.VerifyDistributionArtifact(filepath.Base(artifactPath), artifact, manifestBytes, inventoryBytes, qualificationBytes)
+	if err != nil {
+		return nil, fmt.Errorf("verify artifact evidence: %w", err)
 	}
-	artifactDigest := sha256.Sum256(artifact)
-	artifactSHA := "sha256:" + hex.EncodeToString(artifactDigest[:])
-	if manifest.ArtifactProfile == "" || manifest.ArtifactProfile != inventory.ArtifactProfile || manifest.ArtifactProfile != qualification.ArtifactProfile || "sha256:"+manifest.Artifact.SHA256 != artifactSHA {
-		return nil, errors.New("artifact evidence identity mismatch")
-	}
+	artifactSHA := identity.ArtifactSHA256
 	allowed = normalizeImports(allowed)
 	if len(allowed) == 0 {
 		return nil, errors.New("allowed imports are required")
 	}
-	qualifiedSet := make(map[string]bool, len(qualification.QualifiedRoots))
-	for _, name := range qualification.QualifiedRoots {
+	qualifiedSet := make(map[string]bool, len(identity.QualifiedImportRoots))
+	for _, name := range identity.QualifiedImportRoots {
 		qualifiedSet[name] = true
 	}
 	for _, name := range allowed {
@@ -159,12 +138,11 @@ func loadServiceExecutor(artifactPath, manifestPath, inventoryPath, qualificatio
 			return nil, fmt.Errorf("allowed import %q is not qualified", name)
 		}
 	}
-	manifestDigest := sha256.Sum256(manifestBytes)
 	projectDigest := sha256.Sum256([]byte("pysolate.remote-execution.project.v1\x00" + artifactSHA))
 	policyDigest := sha256.Sum256([]byte("pysolate.remote-execution.policy.v1\x00" + strings.Join(allowed, "\x00")))
 	return &serviceExecutor{
-		artifact: artifact, artifactSHA: artifactSHA, manifestSHA: "sha256:" + hex.EncodeToString(manifestDigest[:]),
-		profileID: manifest.ArtifactProfile, available: normalizeImports(inventory.DiscoverableRoots), qualified: normalizeImports(qualification.QualifiedRoots), allowed: allowed,
+		artifact: artifact, identity: identity, artifactSHA: artifactSHA, manifestSHA: identity.ManifestSHA256,
+		profileID: identity.ProfileID, available: append([]string(nil), identity.ImportRoots...), qualified: append([]string(nil), identity.QualifiedImportRoots...), allowed: allowed,
 		randomSeed: randomSeed, projectSHA: "sha256:" + hex.EncodeToString(projectDigest[:]), policyEpochSHA: "sha256:" + hex.EncodeToString(policyDigest[:]), flights: agentfunction.NewFlightGroup(),
 	}, nil
 }
@@ -218,7 +196,7 @@ func (service *serviceExecutor) execute(ctx context.Context, envelope executeReq
 	if err != nil {
 		return executeResponse{}, err
 	}
-	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{ProfileID: service.profileID, ArtifactSHA256: service.artifactSHA, ManifestSHA256: service.manifestSHA, ImportRoots: service.available, QualifiedImportRoots: service.qualified})
+	profile, err = profile.BindVerifiedArtifact(service.identity)
 	if err != nil {
 		return executeResponse{}, err
 	}

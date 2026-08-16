@@ -130,6 +130,17 @@ class ArtifactVerifierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.verifier.verify(self.artifact, manifest, None, inventory)
 
+    def test_rejects_unknown_manifest_fields_and_duplicate_json_keys(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["operator_note"] = "ignored by old verifier"
+        with self.assertRaisesRegex(ValueError, "manifest fields"):
+            self.verifier.verify(self.artifact, manifest)
+        with tempfile.TemporaryDirectory() as directory:
+            duplicate = pathlib.Path(directory) / "duplicate.json"
+            duplicate.write_text('{"schema_version":4,"schema_version":4}')
+            with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
+                self.verifier.load_json_strict(duplicate)
+
     def test_schema_v4_binds_guest_import_qualification(self):
         tool = self.verifier.IMPORT_QUALIFICATION
         probes = tool.probe_specs("base")

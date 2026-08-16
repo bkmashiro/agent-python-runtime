@@ -3,11 +3,41 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func TestLoadServiceExecutorRejectsReducedUnverifiedArtifactEvidence(t *testing.T) {
+	directory := t.TempDir()
+	artifact := []byte{0, 'a', 's', 'm', 1, 0, 0, 0}
+	digest := sha256.Sum256(artifact)
+	artifactPath := filepath.Join(directory, "agent-python-runtime.wasm")
+	manifestPath := filepath.Join(directory, "manifest.json")
+	inventoryPath := filepath.Join(directory, "import-inventory.json")
+	qualificationPath := filepath.Join(directory, "import-qualification.json")
+	if err := os.WriteFile(artifactPath, artifact, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := fmt.Sprintf(`{"artifact_profile":"base","artifact":{"sha256":"%x"}}`, digest)
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inventoryPath, []byte(`{"artifact_profile":"base","discoverable_roots":["sys"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(qualificationPath, []byte(`{"artifact_profile":"base","qualified_roots":["sys"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadServiceExecutor(artifactPath, manifestPath, inventoryPath, qualificationPath, []string{"sys"}, "seed"); err == nil {
+		t.Fatal("service accepted evidence that bypasses the distribution verifier")
+	}
+}
 
 func TestExecutionEndpointRequiresBearerAndReturnsEvidence(t *testing.T) {
 	server := newHTTPServer("secret", func(_ context.Context, request executeRequest) (executeResponse, error) {

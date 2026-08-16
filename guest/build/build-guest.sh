@@ -296,6 +296,13 @@ if [[ ! -x ${PROBE_RUNNER} ]]; then
   exit 10
 fi
 PROBE_RUNNER_SHA256="sha256:$(sha256sum "${PROBE_RUNNER}" | cut -d' ' -f1)"
+EFFECTIVE_SOURCE_LOCK="${WORK_DIR}/effective-sources.lock.json"
+if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+  python3 "${ROOT_DIR}/guest/build/extension_profile.py" effective-source-lock \
+    --lock "${ATTRS_PROFILE_LOCK}" --source-lock "${SOURCE_LOCK}" --output "${EFFECTIVE_SOURCE_LOCK}"
+else
+  cp "${SOURCE_LOCK}" "${EFFECTIVE_SOURCE_LOCK}"
+fi
 
 FINAL_CACHE_STATUS=off
 FINAL_CACHE_KEY=""
@@ -350,7 +357,13 @@ if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${FINAL_CACHE_ELIG
     rm -rf "${DIST_DIR}"
     tar -xf "${FINAL_CACHE_ENTRY}/dist.tar" -C "${ROOT_DIR}"
     restored_artifact_sha256="sha256:$(sha256sum "${DIST_DIR}/${ARTIFACT_FILENAME}" | cut -d' ' -f1)"
-    if grep -Fxq "artifact_sha256=${restored_artifact_sha256}" "${FINAL_CACHE_ENTRY}/RESULT.READY"; then
+    if grep -Fxq "artifact_sha256=${restored_artifact_sha256}" "${FINAL_CACHE_ENTRY}/RESULT.READY" &&
+      python3 "${ROOT_DIR}/guest/build/verify-artifact.py" \
+        "${DIST_DIR}/${ARTIFACT_FILENAME}" "${DIST_DIR}/manifest.json" &&
+      python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
+        --artifact "${DIST_DIR}/${ARTIFACT_FILENAME}" --manifest "${DIST_DIR}/manifest.json" \
+        --source-lock "${EFFECTIVE_SOURCE_LOCK}" --sbom "${DIST_DIR}/sbom.spdx.json" \
+        --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" --verify; then
       FINAL_CACHE_STATUS=hit
       write_build_cache_evidence
       write_dist_checksums
@@ -368,7 +381,6 @@ if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${FINAL_CACHE_ELIG
   FINAL_CACHE_STATUS=miss
 fi
 
-EFFECTIVE_SOURCE_LOCK="${WORK_DIR}/effective-sources.lock.json"
 EXTENSION_SELECTION="${WORK_DIR}/extension-profile.json"
 EXTENSION_SOURCE_LOCK="${WORK_DIR}/extension-sources.lock.json"
 ATTRS_SOURCE_DIR="${WORK_DIR}/attrs-source"
@@ -388,8 +400,6 @@ if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
     --lock "${ATTRS_PROFILE_LOCK}" --package-root "${ATTRS_SOURCE_DIR}/src/attr" \
     --source-lock "${SOURCE_LOCK}" --selection-output "${EXTENSION_SELECTION}" \
     --effective-source-lock-output "${EFFECTIVE_SOURCE_LOCK}"
-else
-  cp "${SOURCE_LOCK}" "${EFFECTIVE_SOURCE_LOCK}"
 fi
 
 CLANG="${WASI_SDK_PATH}/bin/clang"

@@ -241,6 +241,10 @@ def main() -> int:
     source_lock_parser = subparsers.add_parser("source-lock")
     source_lock_parser.add_argument("--lock", type=pathlib.Path, required=True)
     source_lock_parser.add_argument("--output", type=pathlib.Path, required=True)
+    effective_parser = subparsers.add_parser("effective-source-lock")
+    effective_parser.add_argument("--lock", type=pathlib.Path, required=True)
+    effective_parser.add_argument("--source-lock", type=pathlib.Path, required=True)
+    effective_parser.add_argument("--output", type=pathlib.Path, required=True)
     prepare_parser = subparsers.add_parser("prepare")
     prepare_parser.add_argument("--lock", type=pathlib.Path, required=True)
     prepare_parser.add_argument("--package-root", type=pathlib.Path, required=True)
@@ -254,6 +258,10 @@ def main() -> int:
         return 0
     if args.command == "source-lock":
         write_json(args.output, source_lock_projection(lock))
+        return 0
+    if args.command == "effective-source-lock":
+        base = strict_json_loads(args.source_lock.read_text())
+        write_json(args.output, merge_source_lock(base, lock))
         return 0
     selection = build_selection(lock, args.package_root)
     base = strict_json_loads(args.source_lock.read_text())

@@ -211,18 +211,19 @@ func TestRealGuestEvaluationStudy(t *testing.T) {
 	if err != nil || reportID2 != reportID || fmt.Sprint(refs) != fmt.Sprint(refs2) {
 		t.Fatal("independent report rebuild drift")
 	}
-	root := os.Getenv("PYSOLATE_EVALUATION_OUTPUT")
-	privateRoot := os.Getenv("PYSOLATE_PRIVATE_ROOT")
-	root, err = validatePrivateOutput(privateRoot, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := map[string][]byte{"corpus.json": corpusBytes, "plan.json": planBytes, "raw.json": rawBytes, "report.json": reportBytes, "measurements.json": summaryBytes, "identities.json": []byte(fmt.Sprintf("{\"measurements\":%q,\"raw\":%q,\"report\":%q}\n", summaryID, rawID, reportID))}
-	for name, body := range evidenceFiles {
-		files[name] = body
-	}
-	if err := writePrivateStudy(privateRoot, root, files); err != nil {
-		t.Fatal(err)
+	if output := os.Getenv("PYSOLATE_EVALUATION_OUTPUT"); output != "" {
+		privateRoot := os.Getenv("PYSOLATE_PRIVATE_ROOT")
+		root, validationErr := validatePrivateOutput(privateRoot, output)
+		if validationErr != nil {
+			t.Fatal(validationErr)
+		}
+		files := map[string][]byte{"corpus.json": corpusBytes, "plan.json": planBytes, "raw.json": rawBytes, "report.json": reportBytes, "measurements.json": summaryBytes, "identities.json": []byte(fmt.Sprintf("{\"measurements\":%q,\"raw\":%q,\"report\":%q}\n", summaryID, rawID, reportID))}
+		for name, body := range evidenceFiles {
+			files[name] = body
+		}
+		if err := writePrivateStudy(privateRoot, root, files); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

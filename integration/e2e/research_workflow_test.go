@@ -57,8 +57,20 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 	if demoHits != 1 || benchmarkHits != 1 || len(transcript) != 2 {
 		t.Fatalf("live hits demo=%d benchmark=%d transcript=%d", demoHits, benchmarkHits, len(transcript))
 	}
-	if len(liveEvents) != 6 || liveEvents[0].Type != observe.EventExecutionStarted || liveEvents[5].Type != observe.EventExecutionCompleted {
+	wantLiveEventTypes := []string{
+		observe.EventExecutionStarted, observe.EventCapabilityPlan,
+		observe.EventCapabilityIntent, observe.EventCapabilityStarted,
+		observe.EventCapabilityIntent, observe.EventCapabilityStarted,
+		observe.EventCapabilityCall, observe.EventCapabilityCall,
+		observe.EventWorkspaceFinalized, observe.EventExecutionCompleted,
+	}
+	if len(liveEvents) != len(wantLiveEventTypes) {
 		t.Fatalf("live observation events=%+v", liveEvents)
+	}
+	for index, want := range wantLiveEventTypes {
+		if liveEvents[index].Type != want {
+			t.Fatalf("live observation event %d=%s want=%s", index, liveEvents[index].Type, want)
+		}
 	}
 	demoServer.Close()
 	benchmarkServer.Close()
@@ -78,8 +90,19 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 		parent.FinalWorkspaceSHA256 != offlineBundle.FinalWorkspaceSHA256 || len(offlineTranscript) != len(transcript) {
 		t.Fatalf("offline evidence diverged parent=%+v offline=%+v", parent, offlineBundle)
 	}
-	if len(offlineEvents) != len(liveEvents) || offlineEvents[len(offlineEvents)-1].Type != observe.EventExecutionCompleted {
+	wantOfflineEventTypes := []string{
+		observe.EventExecutionStarted, observe.EventCapabilityPlan,
+		observe.EventCapabilityIntent, observe.EventCapabilityIntent,
+		observe.EventCapabilityCall, observe.EventCapabilityCall,
+		observe.EventWorkspaceFinalized, observe.EventExecutionCompleted,
+	}
+	if len(offlineEvents) != len(wantOfflineEventTypes) {
 		t.Fatalf("offline observation events=%+v", offlineEvents)
+	}
+	for index, want := range wantOfflineEventTypes {
+		if offlineEvents[index].Type != want {
+			t.Fatalf("offline observation event %d=%s want=%s", index, offlineEvents[index].Type, want)
+		}
 	}
 
 	type childEvidence struct {
@@ -169,7 +192,7 @@ func TestRealGuestCombinedResearchWorkflow(t *testing.T) {
 		}
 		eventRefs = append(eventRefs, eventRef)
 	}
-	workspaceEvent, _ := observe.Encode(liveEvents[4])
+	workspaceEvent, _ := observe.Encode(liveEvents[8])
 	if !bytes.Contains(workspaceEvent, []byte(`"path":"experiment-plan.txt"`)) ||
 		!bytes.Contains(workspaceEvent, []byte(`"after_sha256":"sha256:`)) ||
 		bytes.Contains(workspaceEvent, []byte("Alpha")) {

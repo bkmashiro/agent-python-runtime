@@ -26,6 +26,14 @@ CENSUS_SCHEMA = "pysolate.natural-corpus-census.v1"
 PRIVATE_SCHEMA = "pysolate.natural-corpus-private-selection.v1"
 PROBE_PRIVATE_SCHEMA = "pysolate.natural-corpus-private-probe.v1"
 PROBE_PUBLIC_SCHEMA = "pysolate.natural-corpus-probe.v1"
+SOURCE_SCHEMA = DOWNLOAD_SCHEMA
+MANIFEST_SCHEMA = "pysolate.natural-corpus-manifest.v1"
+OPPORTUNITY_SCHEMA = "pysolate.natural-corpus-opportunity.v1"
+ITEM_STATES = ("included", "rejected", "unclassifiable", "truncated")
+DATASET_CONTRACTS = {
+    "xingyaoww/code-act": ("default", "codeact", "python_action", "apache-2.0"),
+    "nvidia/Open-SWE-Traces": ("openhands", "minimax_m25", "tool_trajectory", "cc-by-4.0"),
+}
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_CODE_BYTES = 64 * 1024
 MAX_ACTIONS = 1000
@@ -227,6 +235,248 @@ def build_census(source_manifest: dict[str, Any], codeact: dict[str, Any], open_
     return report, selection
 
 
+def _manifest_identity(manifest: dict[str, Any]) -> str:
+    return digest(canonical_json({key: value for key, value in manifest.items() if key != "identity"}))
+
+
+def _public_sources(source_manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{key: source[key] for key in ("dataset", "config", "split", "offset", "length", "bytes", "sha256", "dataset_revision_observed", "license_id")}
+            for source in source_manifest["sources"]]
+
+
+def build_corpus_manifest(codeact_rows: list[dict[str, Any]], open_swe_rows: list[dict[str, Any]], source_manifest: dict[str, Any], completed_probe_ids: set[str]) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    truncated_records = {digest(str(outer["row"]["id"]).encode()) for outer in codeact_rows if outer.get("truncated_cells")}
+    for action in extract_codeact(codeact_rows):
+        public = action["public"]
+        state = "included" if action["status"] == "probe_candidate" else "rejected"
+        reason = "static_compatible" if state == "included" else action["reason"]
+        if public["record_sha256"] in truncated_records:
+            state, reason = "truncated", "dataset_cell_truncated"
+        items.append({
+            "item_id": public["item_id"], "dataset": "xingyaoww/code-act", "item_kind": "python_action",
+            "source_record_sha256": public["record_sha256"], "source_index": public["action_index"],
+            "source_sha256": public["code_sha256"], "source_bytes": public["code_bytes"],
+            "provenance_class": "public_dataset", "collection_adapter": "hf_rows_api_v1",
+            "oracle_class": "not_available", "privacy_class": "public_body_private_cache",
+            "authority_class": "not_recorded", "expected_backend": "cpython_wasi" if state == "included" else "not_eligible",
+            "state": state, "reason": reason, "imports": public["imports"],
+            "probe_state": "completed" if public["item_id"] in completed_probe_ids else "not_run",
+        })
+    for outer in open_swe_rows:
+        row = outer["row"]
+        language = str(row.get("language", "")).lower()
+        resolved = row.get("resolved")
+        trajectory_bytes = canonical_json(row.get("trajectory", []))
+        record_sha = digest(str(row.get("instance_id", "")).encode())
+        if outer.get("truncated_cells"):
+            state, reason = "truncated", "dataset_cell_truncated"
+        elif language == "python" and resolved in (0, 1):
+            state, reason = "included", "python_with_resolved_oracle"
+        elif language == "python":
+            state, reason = "unclassifiable", "python_oracle_unavailable"
+        else:
+            state, reason = "rejected", "language_not_python"
+        items.append({
+            "item_id": digest(("open_swe\x00" + record_sha).encode()), "dataset": "nvidia/Open-SWE-Traces", "item_kind": "tool_trajectory",
+            "source_record_sha256": record_sha, "source_index": int(outer.get("row_idx", 0)),
+            "source_sha256": digest(trajectory_bytes), "source_bytes": len(trajectory_bytes),
+            "provenance_class": "public_dataset", "collection_adapter": "hf_rows_api_v1",
+            "oracle_class": "swe_resolved" if resolved in (0, 1) else "not_available",
+            "privacy_class": "public_body_private_cache", "authority_class": "not_recorded",
+            "expected_backend": "host_tool_trajectory" if state == "included" else "not_eligible",
+            "state": state, "reason": reason, "imports": [], "probe_state": "not_run",
+        })
+    items.sort(key=lambda item: item["item_id"])
+    states = Counter(item["state"] for item in items)
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA,
+        "sources": _public_sources(source_manifest),
+        "denominator": {
+            "items": len(items), "codeact_actions": sum(item["dataset"] == "xingyaoww/code-act" for item in items),
+            "open_swe_trajectories": sum(item["dataset"] == "nvidia/Open-SWE-Traces" for item in items),
+            "states": {state: states.get(state, 0) for state in ITEM_STATES},
+        },
+        "items": items,
+    }
+    manifest["identity"] = _manifest_identity(manifest)
+    validate_corpus_manifest(manifest)
+    return manifest
+
+
+def validate_corpus_manifest(manifest: dict[str, Any]) -> None:
+    if set(manifest) != {"schema_version", "identity", "sources", "denominator", "items"} or manifest.get("schema_version") != MANIFEST_SCHEMA:
+        raise ValueError("invalid corpus manifest envelope")
+    if not DIGEST_RE.fullmatch(str(manifest.get("identity", ""))) or manifest["identity"] != _manifest_identity(manifest):
+        raise ValueError("corpus manifest identity mismatch")
+    items = manifest.get("items")
+    if not isinstance(items, list) or len(items) > MAX_ACTIONS:
+        raise ValueError("invalid corpus item count")
+    sources = manifest.get("sources")
+    source_keys = {"dataset", "config", "split", "offset", "length", "bytes", "sha256", "dataset_revision_observed", "license_id"}
+    if not isinstance(sources, list) or len(sources) != len(DATASET_CONTRACTS):
+        raise ValueError("invalid corpus sources")
+    seen_sources: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict) or set(source) != source_keys or source.get("dataset") not in DATASET_CONTRACTS:
+            raise ValueError("invalid corpus source descriptor")
+        config, split, _, license_id = DATASET_CONTRACTS[source["dataset"]]
+        if source["config"] != config or source["split"] != split or source["license_id"] != license_id or source["dataset"] in seen_sources or not DIGEST_RE.fullmatch(str(source["sha256"])) or not re.fullmatch(r"[0-9a-f]{40}", str(source["dataset_revision_observed"])):
+            raise ValueError("invalid corpus source identity")
+        if not all(isinstance(source[key], int) and source[key] >= 0 for key in ("offset", "length", "bytes")) or source["length"] > MAX_ACTIONS or source["bytes"] > MAX_SOURCE_BYTES:
+            raise ValueError("invalid corpus source bounds")
+        seen_sources.add(source["dataset"])
+    expected_keys = {"item_id", "dataset", "item_kind", "source_record_sha256", "source_index", "source_sha256", "source_bytes", "provenance_class", "collection_adapter", "oracle_class", "privacy_class", "authority_class", "expected_backend", "state", "reason", "imports", "probe_state"}
+    ids: list[str] = []
+    for item in items:
+        if not isinstance(item, dict) or set(item) != expected_keys:
+            raise ValueError("invalid corpus item fields")
+        if item["state"] not in ITEM_STATES or not all(DIGEST_RE.fullmatch(str(item[key])) for key in ("item_id", "source_record_sha256", "source_sha256")):
+            raise ValueError("invalid corpus item identity or state")
+        if not isinstance(item["source_index"], int) or item["source_index"] < 0 or not isinstance(item["source_bytes"], int) or not 0 <= item["source_bytes"] <= 4 * 1024 * 1024:
+            raise ValueError("invalid corpus source bounds")
+        if not isinstance(item["reason"], str) or not item["reason"] or len(item["reason"]) > 128:
+            raise ValueError("invalid corpus item reason")
+        if not isinstance(item["imports"], list) or item["imports"] != sorted(set(item["imports"])) or len(item["imports"]) > 128:
+            raise ValueError("invalid corpus imports")
+        if item["dataset"] not in DATASET_CONTRACTS or item["item_kind"] != DATASET_CONTRACTS[item["dataset"]][2]:
+            raise ValueError("invalid corpus dataset class")
+        if item["provenance_class"] != "public_dataset" or item["collection_adapter"] != "hf_rows_api_v1" or item["privacy_class"] != "public_body_private_cache" or item["authority_class"] != "not_recorded" or item["probe_state"] not in ("completed", "not_run"):
+            raise ValueError("invalid corpus policy class")
+        if item["dataset"] == "xingyaoww/code-act":
+            expected_id = digest((item["source_record_sha256"] + "\x00" + str(item["source_index"])).encode())
+            if item["oracle_class"] != "not_available" or item["expected_backend"] != ("cpython_wasi" if item["state"] == "included" else "not_eligible"):
+                raise ValueError("invalid CodeAct contract")
+        else:
+            expected_id = digest(("open_swe\x00" + item["source_record_sha256"]).encode())
+            if item["oracle_class"] not in ("swe_resolved", "not_available") or item["expected_backend"] != ("host_tool_trajectory" if item["state"] == "included" else "not_eligible") or item["imports"]:
+                raise ValueError("invalid Open-SWE contract")
+        if item["item_id"] != expected_id or item["probe_state"] == "completed" and (item["dataset"] != "xingyaoww/code-act" or item["state"] != "included"):
+            raise ValueError("corpus item binding mismatch")
+        ids.append(item["item_id"])
+    if ids != sorted(ids) or len(ids) != len(set(ids)):
+        raise ValueError("corpus item identities must be unique and sorted")
+    counts = Counter(item["state"] for item in items)
+    denominator = manifest.get("denominator", {})
+    if denominator.get("items") != len(items) or denominator.get("codeact_actions") != sum(item["dataset"] == "xingyaoww/code-act" for item in items) or denominator.get("open_swe_trajectories") != sum(item["dataset"] == "nvidia/Open-SWE-Traces" for item in items) or denominator.get("states") != {state: counts.get(state, 0) for state in ITEM_STATES}:
+        raise ValueError("corpus denominator mismatch")
+    source_lengths = {source["dataset"]: source["length"] for source in sources}
+    if source_lengths["nvidia/Open-SWE-Traces"] != denominator["open_swe_trajectories"]:
+        raise ValueError("Open-SWE source denominator mismatch")
+    encoded = canonical_json(manifest).decode()
+    if any(marker in encoded for marker in ('/Users/', '~/.hermes', 'file://', '"code":', '"body":', '"trajectory":', '"conversations":', '"patch":', '"path":', '"url":')):
+        raise ValueError("private path or body leaked into corpus manifest")
+
+
+def build_opportunity_report(manifest_identity: str, codeact_rows: list[dict[str, Any]], open_swe_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not DIGEST_RE.fullmatch(manifest_identity):
+        raise ValueError("invalid manifest identity")
+    code_actions: list[tuple[str, str]] = []
+    per_codeact: list[list[str]] = []
+    for outer in codeact_rows:
+        record_sha = digest(str(outer["row"]["id"]).encode())
+        hashes: list[str] = []
+        for message in outer["row"].get("conversations", []):
+            if message.get("role") != "assistant":
+                continue
+            for match in EXECUTE_RE.finditer(message.get("content", "")):
+                code_sha = digest(match.group(1).strip().encode())
+                hashes.append(code_sha)
+                code_actions.append((record_sha, code_sha))
+        per_codeact.append(hashes)
+    code_counts = Counter(value for _, value in code_actions)
+    cross_record_code = sum(1 for value, count in code_counts.items()
+                            if count > 1 and len({record for record, candidate in code_actions if candidate == value}) > 1)
+
+    bash_calls: list[tuple[str, str]] = []
+    per_trajectory: list[list[str]] = []
+    parallel_messages = 0
+    parallel_exact_duplicates = 0
+    for outer in open_swe_rows:
+        record_sha = digest(str(outer["row"].get("instance_id", "")).encode())
+        commands: list[str] = []
+        for message in outer["row"].get("trajectory", []):
+            message_commands: list[str] = []
+            for call in message.get("tool_calls") or []:
+                function = call.get("function") or {}
+                if function.get("name") != "execute_bash":
+                    continue
+                try:
+                    arguments = json.loads(function.get("arguments") or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                command = arguments.get("command")
+                if isinstance(command, str):
+                    normalized = re.sub(r"\s+", " ", command).strip()
+                    commands.append(normalized)
+                    message_commands.append(normalized)
+                    bash_calls.append((record_sha, normalized))
+            if len(message_commands) > 1:
+                parallel_messages += 1
+                parallel_exact_duplicates += len(message_commands) - len(set(message_commands))
+        per_trajectory.append(commands)
+    bash_counts = Counter(command for _, command in bash_calls)
+    cross_trajectory_commands = sum(1 for command, count in bash_counts.items()
+                                    if count > 1 and len({record for record, candidate in bash_calls if candidate == command}) > 1)
+    report = {
+        "schema_version": OPPORTUNITY_SCHEMA,
+        "manifest_identity": manifest_identity,
+        "codeact": {
+            "actions": len(code_actions), "exact_unique_actions": len(code_counts),
+            "exact_duplicate_instances": sum(count - 1 for count in code_counts.values()),
+            "cross_record_duplicate_groups": cross_record_code,
+            "records_with_sequential_duplicates": sum(len(values) != len(set(values)) for values in per_codeact),
+            "overlap_evidence": "not_recorded",
+        },
+        "open_swe": {
+            "bash_calls": len(bash_calls), "exact_unique_bash_calls": len(bash_counts),
+            "exact_duplicate_bash_instances": sum(count - 1 for count in bash_counts.values()),
+            "sequential_duplicate_bash_calls": sum(len(values) - len(set(values)) for values in per_trajectory),
+            "cross_trajectory_duplicate_groups": cross_trajectory_commands,
+            "parallel_bash_messages": parallel_messages, "parallel_exact_duplicate_calls": parallel_exact_duplicates,
+        },
+        "sharing_gate": {
+            "verdict": "insufficient_evidence", "recommendation": "do_not_implement_sharing_pass",
+            "source_equivalence": "partially_observed", "overlap": "not_observed",
+            "authority_equivalence": "not_recorded", "workspace_base_equivalence": "not_recorded",
+            "reason": "duplicates are sequential retries or isolated repeats without overlap and Host-owned equivalence evidence",
+        },
+    }
+    validate_opportunity_report(report)
+    return report
+
+
+def validate_opportunity_report(report: dict[str, Any]) -> None:
+    if set(report) != {"schema_version", "manifest_identity", "codeact", "open_swe", "sharing_gate"} or report.get("schema_version") != OPPORTUNITY_SCHEMA or not DIGEST_RE.fullmatch(str(report.get("manifest_identity", ""))):
+        raise ValueError("invalid opportunity report envelope")
+    codeact = report.get("codeact")
+    open_swe = report.get("open_swe")
+    gate = report.get("sharing_gate")
+    if not isinstance(codeact, dict) or set(codeact) != {"actions", "exact_unique_actions", "exact_duplicate_instances", "cross_record_duplicate_groups", "records_with_sequential_duplicates", "overlap_evidence"}:
+        raise ValueError("invalid CodeAct opportunity fields")
+    if not isinstance(open_swe, dict) or set(open_swe) != {"bash_calls", "exact_unique_bash_calls", "exact_duplicate_bash_instances", "sequential_duplicate_bash_calls", "cross_trajectory_duplicate_groups", "parallel_bash_messages", "parallel_exact_duplicate_calls"}:
+        raise ValueError("invalid Open-SWE opportunity fields")
+    if not all(isinstance(value, int) and value >= 0 for key, value in codeact.items() if key != "overlap_evidence") or codeact["overlap_evidence"] != "not_recorded":
+        raise ValueError("invalid CodeAct opportunity counts")
+    if not all(isinstance(value, int) and value >= 0 for value in open_swe.values()):
+        raise ValueError("invalid Open-SWE opportunity counts")
+    if codeact["actions"] - codeact["exact_unique_actions"] != codeact["exact_duplicate_instances"] or codeact["cross_record_duplicate_groups"] > codeact["exact_duplicate_instances"]:
+        raise ValueError("inconsistent CodeAct opportunity counts")
+    if open_swe["bash_calls"] - open_swe["exact_unique_bash_calls"] != open_swe["exact_duplicate_bash_instances"] or open_swe["sequential_duplicate_bash_calls"] > open_swe["exact_duplicate_bash_instances"] or open_swe["parallel_exact_duplicate_calls"] > open_swe["exact_duplicate_bash_instances"]:
+        raise ValueError("inconsistent Open-SWE opportunity counts")
+    expected_gate = {
+        "verdict": "insufficient_evidence", "recommendation": "do_not_implement_sharing_pass",
+        "source_equivalence": "partially_observed", "overlap": "not_observed",
+        "authority_equivalence": "not_recorded", "workspace_base_equivalence": "not_recorded",
+        "reason": "duplicates are sequential retries or isolated repeats without overlap and Host-owned equivalence evidence",
+    }
+    if gate != expected_gate:
+        raise ValueError("invalid sharing gate")
+    encoded = canonical_json(report).decode()
+    if any(marker in encoded for marker in ('/Users/', '~/.hermes', 'file://', '"code":', '"body":', '"command":', '"trajectory":')):
+        raise ValueError("private path or body leaked into opportunity report")
+
+
 def download(root: pathlib.Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     os.chmod(root, 0o700)
@@ -236,6 +486,13 @@ def download(root: pathlib.Path) -> None:
     ]
     sources = []
     for filename, dataset, config, split, length in specs:
+        metadata_url = "https://huggingface.co/api/datasets/" + dataset
+        metadata = json.loads(urllib.request.urlopen(metadata_url, timeout=30).read())
+        revision = metadata.get("sha")
+        license_id = (metadata.get("cardData") or {}).get("license")
+        expected_license = DATASET_CONTRACTS[dataset][3]
+        if not re.fullmatch(r"[0-9a-f]{40}", str(revision)) or license_id != expected_license:
+            raise ValueError("dataset revision or license metadata mismatch")
         query = urllib.parse.urlencode({"dataset": dataset, "config": config, "split": split, "offset": 0, "length": length})
         url = "https://datasets-server.huggingface.co/rows?" + query
         raw = urllib.request.urlopen(url, timeout=120).read()
@@ -245,7 +502,8 @@ def download(root: pathlib.Path) -> None:
         path.write_bytes(raw)
         os.chmod(path, 0o600)
         sources.append({"dataset": dataset, "config": config, "split": split, "offset": 0, "length": length, "url": url,
-                        "bytes": len(raw), "sha256": digest(raw), "file": filename})
+                        "bytes": len(raw), "sha256": digest(raw), "file": filename,
+                        "dataset_revision_observed": revision, "license_id": license_id})
     path = root / "download-manifest.json"
     path.write_bytes(canonical_json({"schema_version": DOWNLOAD_SCHEMA, "sources": sources}))
     os.chmod(path, 0o600)
@@ -385,6 +643,21 @@ def probe(selection_path: pathlib.Path, runner: pathlib.Path, artifact: pathlib.
     private_output.write_bytes(canonical_json(private)); os.chmod(private_output, 0o600)
 
 
+def generate_contract(root: pathlib.Path, probe_path: pathlib.Path, manifest_output: pathlib.Path, opportunity_output: pathlib.Path) -> None:
+    source_manifest, codeact, open_swe = load_source_bundle(root)
+    probe_report = json.loads(probe_path.read_text())
+    if probe_report.get("schema_version") != PROBE_PUBLIC_SCHEMA or not isinstance(probe_report.get("programs"), list):
+        raise ValueError("invalid public probe report")
+    completed = {program["item_id"] for program in probe_report["programs"]
+                 if isinstance(program, dict) and program.get("guest_status") == "ok" and DIGEST_RE.fullmatch(str(program.get("item_id", "")))}
+    manifest = build_corpus_manifest(codeact["rows"], open_swe["rows"], source_manifest, completed)
+    opportunity = build_opportunity_report(manifest["identity"], codeact["rows"], open_swe["rows"])
+    manifest_output.parent.mkdir(parents=True, exist_ok=True)
+    opportunity_output.parent.mkdir(parents=True, exist_ok=True)
+    manifest_output.write_bytes(canonical_json(manifest))
+    opportunity_output.write_bytes(canonical_json(opportunity))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -403,14 +676,21 @@ def main() -> None:
     probe_parser.add_argument("--source-commit", required=True)
     probe_parser.add_argument("--public-output", type=pathlib.Path, required=True)
     probe_parser.add_argument("--private-output", type=pathlib.Path, required=True)
+    contract_parser = subparsers.add_parser("contract")
+    contract_parser.add_argument("--root", type=pathlib.Path, required=True)
+    contract_parser.add_argument("--probe", type=pathlib.Path, required=True)
+    contract_parser.add_argument("--manifest-output", type=pathlib.Path, required=True)
+    contract_parser.add_argument("--opportunity-output", type=pathlib.Path, required=True)
     arguments = parser.parse_args()
     if arguments.command == "download":
         download(arguments.root)
     elif arguments.command == "analyze":
         analyze(arguments.root, arguments.public_output, arguments.private_output, arguments.limit)
-    else:
+    elif arguments.command == "probe":
         probe(arguments.selection, arguments.runner, arguments.artifact, arguments.manifest, arguments.source_commit,
               arguments.public_output, arguments.private_output)
+    else:
+        generate_contract(arguments.root, arguments.probe, arguments.manifest_output, arguments.opportunity_output)
 
 
 if __name__ == "__main__":

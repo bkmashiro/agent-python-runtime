@@ -279,10 +279,10 @@ Rules:
 - [x] Inspect dataset cards, licenses, schemas and small streamed samples before downloading; select CodeAct and Open-SWE for complementary executable-Python and task-oracle fields.
 - [x] Select and identity-lock a deterministic bounded subset before bulk download: 50 CodeAct rows and the first ten Open-SWE rows, retaining the latter's mixed-language denominator rather than post-hoc filtering.
 - [x] Audit existing local workload/corpus/evaluation schemas; reuse their body-safe/digest/oracle principles while keeping this internal pilot in one small script rather than expanding the fixed three-workload package.
-- [ ] Define one versioned corpus manifest containing source digest, provenance class, collection adapter, oracle class, privacy class, authority requirements, expected Guest/backend and inclusion/rejection reason.
-- [ ] Require stable item identity, deterministic ordering, bounded source/event/body counts and explicit `included`, `rejected`, `unclassifiable`, `truncated` states.
+- [x] Define `pysolate.natural-corpus-manifest.v1` with source digest, provenance class, collection adapter, oracle class, privacy class, authority requirements, expected Guest/backend and inclusion/rejection reason.
+- [x] Require recomputed stable item identity, deterministic ordering, bounded sources/items and explicit `included`, `rejected`, `unclassifiable`, `truncated` states.
 - [x] Keep raw dataset responses, selected code and probe stdout/stderr private under `~/.hermes/evidence/`; no local conversation was needed for this pilot.
-- [ ] Add adversarial tests for duplicate identity, digest mismatch, unbounded source, unknown class, private path/body leakage and denominator-dropping.
+- [x] Add adversarial tests for duplicate identity, digest mismatch, unbounded source, unknown class, private path/body leakage and denominator-dropping.
 - [x] Write `docs/research/natural-corpus-pilot-v1.md` with exact source hashes, denominators, probe identity and claim limitations.
 
 **Gate:** focused package tests, manifest round-trip/canonicalization tests and privacy scan; then proportional global gates and signed local commit.
@@ -387,6 +387,7 @@ A clean checkpoint, successful commit, reviewer timeout or context compaction is
 - 2026-08-16 M2 closeout: artifact/test checkpoint `104937b`; Lab 11/11 unit tests, build and 8/8 Playwright passed; public/production projections byte-match capture with zero body/private-event leakage; private root/files are `0700`/`0600`; controller review found no blocker/high/medium and removed only ignored local v0 runtime artifacts.
 - 2026-08-16 M3 review surface: deterministic causal tree and truthful task inspectors implemented over the real 21-event public and 9-event production views; one focused desktop and one 390px visual pass found no blocked interaction or overflow; final Lab gate passed 14/14 unit tests, production build and 8/8 Playwright cases. Private body resolution/diff remains open at the owner stop gate; M4 was not started.
 - 2026-08-16 M4 dataset-first pilot: downloaded 2.68 MiB privately (50 CodeAct + first ten Open-SWE rows), retained 137 CodeAct actions and ten mixed-language trajectories in denominators, selected eight top-level no-import programs deterministically, and observed 8/8 local plus 8/8 Host-profile-bound real Guest completion. No task-oracle, performance, sharing or optimizer claim was made.
+- 2026-08-16 M4 corpus/sharing gate: strict 147-item body-safe manifest records 22 included and 125 rejected items, with all four terminal states exercised by tests; opportunity census found zero cross-record CodeAct duplicate groups and zero parallel Open-SWE bash messages. Sharing verdict is `insufficient_evidence / do_not_implement_sharing_pass`; no scheduler, coalescer or continuation mechanism was implemented.
 
 ## Reporting Format When Finally Stopping
 

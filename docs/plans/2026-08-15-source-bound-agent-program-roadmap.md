@@ -502,10 +502,11 @@ A developer can select generated Python, see which exact source boundary produce
 
 **Tracks:**
 
-- [x] Define and execute a bounded dataset-first internal pilot with stable source/action identities, explicit completion-only oracle class and private/body-safe separation; the fuller task-oracle corpus contract remains open.
+- [x] Define and execute a bounded dataset-first corpus contract with stable source/action identities, closed provenance/oracle/privacy/authority/backend classes, explicit terminal states and private/body-safe separation; broader task-oracle replay remains open.
 - [ ] Capture direct/programmatic/both usage, source-bound call sites, barriers, opportunities, rejection reasons and overlap windows.
 - [ ] Measure task success, model turns, tokens, logical calls, physical executions, critical path and authority/freshness near misses.
 - [x] Keep all 137 CodeAct actions and all ten mixed-language Open-SWE trajectories in denominators, including static rejection reasons and non-Python rows.
+- [x] Apply the sharing-pass gate to exact duplicate and overlap evidence; record `insufficient_evidence / do_not_implement_sharing_pass` rather than treating sequential retries as coalescing opportunities.
 - [ ] Apply the pass acceptance gate to the optimization family map.
 - [ ] Promote at most one or two candidates; otherwise publish the negative result and stop.
 - [ ] Implement selected passes through the Megagoal 1 API with independent switches and real Guest differential tests.

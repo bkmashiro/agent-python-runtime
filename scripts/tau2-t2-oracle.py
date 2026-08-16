@@ -34,6 +34,25 @@ def require_clean_source(root: pathlib.Path) -> None:
         raise ValueError("tau2 source checkout mismatch")
 
 
+def terminal_event_contents(events: Any) -> list[str]:
+    if not isinstance(events, list):
+        raise ValueError("cell events missing")
+    contents = []
+    for event in events:
+        kind = event.get("kind")
+        raw = event.get("model_response")
+        if not isinstance(raw, str):
+            raise ValueError("event model response missing")
+        if kind == "answer":
+            action = json.loads(raw)
+            if set(action) != {"kind", "content"} or action.get("kind") != "answer" or not isinstance(action.get("content"), str) or not action["content"].strip():
+                raise ValueError("terminal answer event is malformed")
+            contents.append(action["content"])
+        elif kind == "invalid_model_action":
+            contents.append(raw if raw.strip() else "[empty or whitespace-only invalid model action]")
+    return contents
+
+
 def rebuild(source_root: pathlib.Path, private: dict[str, Any], cell: dict[str, Any]) -> dict[str, Any]:
     require_clean_source(source_root)
     if private.get("schema_version") != PRIVATE_SCHEMA:
@@ -50,6 +69,7 @@ def rebuild(source_root: pathlib.Path, private: dict[str, Any], cell: dict[str, 
     from tau2.data_model.simulation import SimulationRun
     from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
     from tau2.evaluator.evaluator_action import ActionEvaluator
+    from tau2.orchestrator.orchestrator import DEFAULT_FIRST_AGENT_MESSAGE
     from tau2.runner import get_tasks
 
     source_tasks = get_tasks("airline", task_ids=[task_id])
@@ -66,6 +86,23 @@ def rebuild(source_root: pathlib.Path, private: dict[str, Any], cell: dict[str, 
     if not isinstance(simulation_body, dict) or not simulation_body.get("messages"):
         raise ValueError("SimulationRun messages missing")
     simulation = SimulationRun.model_validate(simulation_body)
+    for message in simulation.messages:
+        message.validate()
+    roles = [message.role for message in simulation.messages]
+    expected_roles = ["assistant" if index % 2 == 0 else "user" for index in range(len(roles))]
+    if roles != expected_roles:
+        raise ValueError("simulation message roles do not follow the frozen half-duplex trajectory")
+    assistant_messages = [message for message in simulation.messages if message.role == "assistant"]
+    first = assistant_messages[0]
+    if first.content != DEFAULT_FIRST_AGENT_MESSAGE.content or first.tool_calls:
+        raise ValueError("simulation initial assistant message mismatch")
+    expected_terminal_contents = terminal_event_contents(cell.get("pysolate_events"))
+    outward = assistant_messages[1:]
+    if len(outward) != len(expected_terminal_contents):
+        raise ValueError("assistant trajectory is not bound to terminal events")
+    for message, expected in zip(outward, expected_terminal_contents):
+        if message.content != expected or message.tool_calls:
+            raise ValueError("assistant trajectory differs from terminal event evidence")
     default_info = evaluate_simulation(
         simulation=simulation,
         task=task,
@@ -101,6 +138,8 @@ def rebuild(source_root: pathlib.Path, private: dict[str, Any], cell: dict[str, 
         "default_reward": float(default_info["reward"]),
         "action_reward": float(action_info["reward"]),
         "message_count": len(simulation_body["messages"]),
+        "assistant_messages_bound": len(assistant_messages),
+        "assistant_event_binding_sha256": sha(canonical(expected_terminal_contents)),
         "action_call_count": len(calls),
     }
 

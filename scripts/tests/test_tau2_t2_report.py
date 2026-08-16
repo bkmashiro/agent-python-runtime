@@ -12,6 +12,20 @@ SPEC.loader.exec_module(reporter)
 
 
 class Tau2T2ReportTests(unittest.TestCase):
+    def test_duplicate_receipt_is_one_join_not_two_physical_calls(self):
+        identities = [("semantic-call-site", "receipt-1"), ("semantic-call-site", "receipt-1")]
+        self.assertEqual(reporter.unique_receipt_joins(identities), 1)
+
+    def test_raw_evidence_path_cannot_escape_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            inside = root / "task-1-turn-01.json"
+            inside.write_text("{}")
+            self.assertEqual(reporter.safe_raw_path(root, inside.name), inside.resolve())
+            for invalid in ("../outside.json", "/tmp/outside.json"):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    reporter.safe_raw_path(root, invalid)
+
     def test_plan_document_rebuilds_go_struct_field_order(self):
         plan = {
             "grants": [{"policy_sha256": "sha256:p", "capability": "cap"}],

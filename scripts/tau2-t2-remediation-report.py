@@ -64,14 +64,40 @@ def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.P
         for event in cell.get("pysolate_events") or []:
             if event.get("kind") == "program":
                 raw = event.get("turn", {}).get("raw_bodies", {})
-                raw_refs.update(value for value in (raw.get("guest_request"), raw.get("guest_response")) if isinstance(value, str))
+                for value in (raw.get("guest_request"), raw.get("guest_response")):
+                    if not isinstance(value, str) or pathlib.PurePosixPath(value).name != value or not value.startswith(f"task-{task_id}-turn-"):
+                        raise ValueError("remediation raw evidence path is not task-scoped")
+                    raw_refs[value] += 1
     collisions = sorted(path for path, count in raw_refs.items() if count > 1)
     if collisions:
         raise ValueError("remediation raw evidence paths collide")
     rows = []
+    seen_receipt_ids = set()
     for task_id, reference in actions.items():
         cell = cells[task_id]
         result = base.validate_cell(cell, task_id, "programmatic_python", reference, cells_root, public["protocol"], set())
+        unique_joins = 0
+        repeated_semantic_calls = 0
+        duplicate_receipts = 0
+        row_call_ids = set()
+        for event in cell.get("pysolate_events") or []:
+            if event.get("kind") != "program":
+                continue
+            receipt = event.get("turn", {}).get("receipt", {})
+            call_id, receipt_id = receipt.get("call_id"), receipt.get("receipt_id")
+            receipt_duplicate = receipt_id in seen_receipt_ids
+            repeated_semantic_calls += int(call_id in row_call_ids)
+            duplicate_receipts += int(receipt_duplicate)
+            if not receipt_duplicate:
+                unique_joins += 1
+            row_call_ids.add(call_id)
+            seen_receipt_ids.add(receipt_id)
+        result["physical_calls"] = unique_joins
+        result["source_joins"] = unique_joins
+        result["repeated_semantic_call_ids"] = repeated_semantic_calls
+        result["duplicate_receipt_identities"] = duplicate_receipts
+        if unique_joins != result["logical_calls"]:
+            result["causal_evidence_status"] = "partially_reconstructed_duplicate_identity"
         rebuilt = oracle.rebuild(source_root, private, cell)
         if result["default_reward"] != rebuilt["default_reward"] or result["action_reward"] != rebuilt["action_reward"]:
             raise ValueError("aggregate reward differs from independent oracle")
@@ -90,13 +116,17 @@ def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.P
             "unknown_provider_cells": sum(row["provider_calls"] is None for row in rows),
             "completed_rows": statuses.get("completed", 0),
             "reconstructed_rows": sum(row["causal_evidence_status"] == "reconstructed" for row in rows),
+            "partially_reconstructed_duplicate_identity_rows": sum(row["causal_evidence_status"] == "partially_reconstructed_duplicate_identity" for row in rows),
             "oracle_rebuilt_rows": sum(row.get("oracle_rebuilt") is True for row in rows),
             "source_joins": sum(row["source_joins"] for row in rows),
+            "unique_receipt_bound_physical_calls": sum(row["physical_calls"] for row in rows),
+            "repeated_semantic_call_ids": sum(row["repeated_semantic_call_ids"] for row in rows),
+            "duplicate_receipt_identities": sum(row["duplicate_receipt_identities"] for row in rows),
         },
-        "evidence_integrity": {"shared_raw_path_collisions": 0, "post_provider_reruns": 0, "task_scoped_raw_paths": True},
+        "evidence_integrity": {"shared_raw_path_collisions": 0, "post_provider_reruns": 0, "task_scoped_raw_paths": True, "receipt_identity_uniqueness_enforced": True},
         "rows": rows,
         "claim_boundary": {
-            "supports": "remediation treatment outcomes and source-bound causal evidence only for completed reconstructed rows",
+            "supports": "remediation treatment outcomes and 35 unique receipt-bound source joins; duplicate identities are explicitly downgraded",
             "does_not_support": ["replacement of T2-v1", "leaderboard score", "matched-surface performance comparison", "model WRITE ability", "production external effects"],
         },
         "private_bodies_included": False,

@@ -122,7 +122,20 @@ def validate_prereg(public: dict[str, Any], private: dict[str, Any]) -> dict[str
     return by_task
 
 
-def validate_turn(event: dict[str, Any], root: pathlib.Path, task_id: str, allowed: list[dict[str, Any]]) -> None:
+def safe_raw_path(root: pathlib.Path, reference: Any) -> pathlib.Path:
+    if not isinstance(reference, str) or not reference:
+        raise ValueError("raw evidence path missing")
+    relative = pathlib.PurePosixPath(reference)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("raw evidence path escapes evidence root")
+    resolved_root = root.resolve()
+    resolved = (resolved_root / pathlib.Path(*relative.parts)).resolve()
+    if resolved == resolved_root or resolved_root not in resolved.parents:
+        raise ValueError("raw evidence path escapes evidence root")
+    return resolved
+
+
+def validate_turn(event: dict[str, Any], root: pathlib.Path, task_id: str, allowed: list[dict[str, Any]]) -> tuple[str, str]:
     if event.get("kind") != "program" or event.get("tool") not in {item["name"] for item in allowed}:
         raise ValueError("treatment event is not a frozen READ")
     if not any(item["name"] == event["tool"] and item["arguments"] == event.get("arguments") for item in allowed):
@@ -132,8 +145,8 @@ def validate_turn(event: dict[str, Any], root: pathlib.Path, task_id: str, allow
     if not isinstance(source, str) or not isinstance(turn, dict) or turn.get("task_id") != task_id:
         raise ValueError("treatment source/turn identity missing")
     raw = require_exact(turn.get("raw_bodies"), {"guest_request", "guest_response"}, "raw body references")
-    request_body = (root / raw["guest_request"]).read_bytes()
-    response_body = (root / raw["guest_response"]).read_bytes()
+    request_body = safe_raw_path(root, raw["guest_request"]).read_bytes()
+    response_body = safe_raw_path(root, raw["guest_response"]).read_bytes()
     if sha(request_body) != turn.get("request_sha256") or sha(response_body) != turn.get("response_sha256"):
         raise ValueError("Guest body digest mismatch")
     plan = turn.get("plan_document")
@@ -192,10 +205,19 @@ def validate_turn(event: dict[str, Any], root: pathlib.Path, task_id: str, allow
     request = json.loads(request_body)
     if request.get("run_id") != receipt.get("run_id") or request.get("code", "").find(source) < 0:
         raise ValueError("Guest request/source receipt join mismatch")
+    call_id = receipt.get("call_id")
+    receipt_identity = receipt.get("receipt_id")
+    if not isinstance(call_id, str) or not call_id or not isinstance(receipt_identity, str) or not receipt_identity:
+        raise ValueError("receipt call/identity missing")
+    return call_id, receipt_identity
 
 
 def direct_tool_calls(messages: list[Any]) -> int:
     return sum(len(message.get("tool_calls") or []) for message in messages if isinstance(message, dict))
+
+
+def unique_receipt_joins(identities: list[tuple[str, str]]) -> int:
+    return len({receipt_identity for _, receipt_identity in identities})
 
 
 def validate_cell(cell: dict[str, Any], task_id: str, lane: str, actions: list[dict[str, Any]], root: pathlib.Path, protocol: dict[str, Any], collided_raw_paths: Optional[set[str]] = None) -> dict[str, Any]:
@@ -229,6 +251,7 @@ def validate_cell(cell: dict[str, Any], task_id: str, lane: str, actions: list[d
     if not isinstance(reward, (int, float)) or not isinstance(action_reward, (int, float)):
         raise ValueError("completed cell reward missing")
     events = cell["pysolate_events"]
+    identities = []
     if lane == "direct":
         if events is not None:
             raise ValueError("direct cell contains treatment events")
@@ -247,16 +270,26 @@ def validate_cell(cell: dict[str, Any], task_id: str, lane: str, actions: list[d
                 if event.get("tool") not in {item["name"] for item in actions} or not any(item["name"] == event["tool"] and item["arguments"] == event.get("arguments") for item in actions):
                     raise ValueError("collided treatment event is outside frozen scope")
                 continue
-            validate_turn(event, root, task_id, actions)
+            identities.append(validate_turn(event, root, task_id, actions))
         logical = len(program_events)
-        physical = len(program_events)
-        joins = sum(1 for event in program_events if not ({event.get("turn", {}).get("raw_bodies", {}).get("guest_request"), event.get("turn", {}).get("raw_bodies", {}).get("guest_response")} & collided_raw_paths))
-        causal_status = "reconstructed" if joins == len(program_events) else "not_recorded_shared_raw_path"
-    return {
+        remediation_protocol = protocol.get("lanes") == ["programmatic_python"]
+        joins = unique_receipt_joins(identities) if remediation_protocol else len(identities)
+        physical = joins if remediation_protocol else logical
+        if joins == logical:
+            causal_status = "reconstructed"
+        elif collided_raw_paths:
+            causal_status = "not_recorded_shared_raw_path"
+        else:
+            causal_status = "partially_reconstructed_duplicate_identity"
+    result = {
         "status": "completed", "default_reward": float(reward), "action_reward": float(action_reward),
         "provider_calls": cell["provider_calls"], "messages": len(simulation.get("messages", [])),
         "termination_reason": simulation.get("termination_reason"), "logical_calls": logical, "physical_calls": physical, "source_joins": joins, "causal_evidence_status": causal_status,
     }
+    if lane != "direct" and protocol.get("lanes") == ["programmatic_python"]:
+        result["repeated_semantic_call_ids"] = max(0, len(identities) - len({item[0] for item in identities}))
+        result["duplicate_receipt_identities"] = max(0, len(identities) - len({item[1] for item in identities}))
+    return result
 
 
 def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.Path) -> dict[str, Any]:

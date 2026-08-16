@@ -96,6 +96,9 @@ def load_extension_profile_module():
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
 EXTENSION_PROFILE = load_extension_profile_module()
+ATTRS_LOCK = EXTENSION_PROFILE.load_lock(EXTENSION_PROFILE.PROFILE_LOCK)
+BASE_SOURCE_LOCK = EXTENSION_PROFILE.strict_json_loads((pathlib.Path(__file__).with_name("sources.lock.json")).read_text())
+ATTRS_SOURCES = EXTENSION_PROFILE.merge_source_lock(BASE_SOURCE_LOCK, ATTRS_LOCK)["sources"]
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -195,7 +198,9 @@ def verify(
                 raise ValueError("extension selection does not match manifest")
         package = extension_profile["package"]
         sources = manifest.get("sources")
-        attrs_sources = [row for row in sources if isinstance(row, dict) and row.get("id") == "attrs-source"] if isinstance(sources, list) else []
+        if not isinstance(sources, list) or sources != ATTRS_SOURCES:
+            raise ValueError("attrs artifact source set is invalid")
+        attrs_sources = [row for row in sources if isinstance(row, dict) and row.get("id") == "attrs-source"]
         if len(attrs_sources) != 1:
             raise ValueError("attrs extension source is missing")
         source = attrs_sources[0]

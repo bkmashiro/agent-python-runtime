@@ -484,6 +484,8 @@ if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
     "${ATTRS_SOURCE_DIR}/src/attr" \
     "${VFS_PYTHON_DIR}/site-packages/attr" \
     --epoch "${SOURCE_DATE_EPOCH}"
+  python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-tree \
+    --lock "${ATTRS_PROFILE_LOCK}" --package-root "${VFS_PYTHON_DIR}/site-packages/attr"
 fi
 
 pack_guest() {

@@ -12,6 +12,7 @@ from typing import Any
 
 
 PROFILE = "attrs-770"
+PROFILE_LOCK = pathlib.Path(__file__).with_name("profiles") / "attrs-770.lock.json"
 ARTIFACT_FILENAME = "agent-python-runtime-attrs-770.wasm"
 SCHEMA_VERSION = 1
 TREE_DOMAIN = b"pysolate-package-tree-v1\0"
@@ -172,7 +173,19 @@ def build_selection(lock: dict[str, Any], package_root: pathlib.Path) -> dict[st
     }
 
 
-def validate_selection(value: Any) -> dict[str, Any]:
+def _expected_selection_package(lock: dict[str, Any]) -> dict[str, Any]:
+    source = lock["source"]
+    package = lock["package"]
+    return {
+        "name": package["name"], "version": source["version"], "status": package["status"],
+        "import_root": package["import_root"], "install_path": package["install_path"],
+        "repository_license_id": source["license"], "source_commit": source["source_commit"],
+        "source_archive_sha256": source["sha256"], "patch_sha256": source["patch_sha256"],
+        "tree_sha256": package["tree_sha256"], "file_count": package["file_count"], "total_bytes": package["total_bytes"],
+    }
+
+
+def validate_selection(value: Any, expected_lock: dict[str, Any] | None = None) -> dict[str, Any]:
     selection = _exact_fields(value, {"schema_version", "kind", "profile", "package"}, "extension selection")
     if selection["schema_version"] != SCHEMA_VERSION or selection["kind"] != "pure-python-package" or selection["profile"] != PROFILE:
         raise ValueError("invalid extension selection identity")
@@ -184,16 +197,9 @@ def validate_selection(value: Any) -> dict[str, Any]:
         },
         "extension selection package",
     )
-    if (
-        package["name"] != "attrs" or package["status"] != "selected-pure-python"
-        or package["import_root"] != "attr" or package["install_path"] != "site-packages/attr"
-        or package["repository_license_id"] != "MIT"
-        or not isinstance(package["version"], str) or not package["version"] or len(package["version"]) > 64
-        or not isinstance(package["source_commit"], str) or COMMIT.fullmatch(package["source_commit"]) is None
-        or any(not isinstance(package[key], str) or HEX.fullmatch(package[key]) is None for key in ("source_archive_sha256", "patch_sha256", "tree_sha256"))
-        or not isinstance(package["file_count"], int) or not 1 <= package["file_count"] <= MAX_FILES
-        or not isinstance(package["total_bytes"], int) or not 1 <= package["total_bytes"] <= MAX_TOTAL_BYTES
-    ):
+    lock = expected_lock if expected_lock is not None else load_lock(PROFILE_LOCK)
+    validate_lock(lock)
+    if package != _expected_selection_package(lock):
         raise ValueError("invalid extension selection package identity")
     return selection
 
@@ -238,6 +244,9 @@ def main() -> int:
     patch_parser = subparsers.add_parser("verify-patch")
     patch_parser.add_argument("--lock", type=pathlib.Path, required=True)
     patch_parser.add_argument("--patch", type=pathlib.Path, required=True)
+    tree_parser = subparsers.add_parser("verify-tree")
+    tree_parser.add_argument("--lock", type=pathlib.Path, required=True)
+    tree_parser.add_argument("--package-root", type=pathlib.Path, required=True)
     source_lock_parser = subparsers.add_parser("source-lock")
     source_lock_parser.add_argument("--lock", type=pathlib.Path, required=True)
     source_lock_parser.add_argument("--output", type=pathlib.Path, required=True)
@@ -255,6 +264,9 @@ def main() -> int:
     lock = load_lock(args.lock)
     if args.command == "verify-patch":
         verify_patch(lock, args.patch)
+        return 0
+    if args.command == "verify-tree":
+        build_selection(lock, args.package_root)
         return 0
     if args.command == "source-lock":
         write_json(args.output, source_lock_projection(lock))

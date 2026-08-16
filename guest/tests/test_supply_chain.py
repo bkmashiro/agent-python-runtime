@@ -120,6 +120,8 @@ class SupplyChainWriterTests(unittest.TestCase):
             manifest_data = json.loads(manifest.read_text())
             manifest_data["sources"][0]["sha256"] = "d" * 64
             manifest.write_text(json.dumps(manifest_data))
+            with self.assertRaisesRegex(ValueError, "manifest sources"):
+                self.writer.build_outputs(artifact=artifact, manifest_path=manifest, source_lock=lock, vfs_root=vfs)
             errors = self.writer.validate_bundle_outputs(
                 sbom, notices, artifact, manifest, lock
             )

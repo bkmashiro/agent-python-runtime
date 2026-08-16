@@ -111,6 +111,8 @@ def build_outputs(
         raise ValueError("manifest artifact size does not match artifact")
     if manifest.get("target") != lock.get("target"):
         raise ValueError("manifest and source-lock targets differ")
+    if manifest.get("sources") != lock.get("sources"):
+        raise ValueError("manifest sources do not match source lock")
     build = manifest.get("build", {})
     commit = build.get("repository_commit")
     epoch_text = build.get("source_date_epoch")

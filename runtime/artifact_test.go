@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -54,6 +55,15 @@ func TestVerifyDistributionArtifactBindsAttrsPackageProfile(t *testing.T) {
 	if identity.ProfileID != "attrs-770" || len(identity.Packages) != 2 || identity.Packages[1].Name != "attrs" || identity.Packages[1].Status != "selected-pure-python" ||
 		strings.Join(identity.QualifiedImportRoots, ",") != "agent_runtime,attr,json,sys,types,typing" {
 		t.Fatalf("identity=%+v", identity)
+	}
+	sourceDrift := cloneManifestFixture(t, manifest)
+	sourceDrift["sources"].([]any)[0].(map[string]any)["version"] = "attacker"
+	mutatedSources, err := json.Marshal(sourceDrift)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-attrs-770.wasm", artifact, mutatedSources, inventory, qualification); !errors.Is(err, ErrInvalidArtifactManifest) {
+		t.Fatalf("source set drift err=%v", err)
 	}
 	manifest["extension_profile"].(map[string]any)["package"].(map[string]any)["patch_sha256"] = strings.Repeat("0", 64)
 	mutated, err := json.Marshal(manifest)
@@ -343,12 +353,22 @@ func distributionSources(profile string) []any {
 	if profile != "attrs-770" {
 		return []any{}
 	}
-	return []any{map[string]any{
+	encoded, err := os.ReadFile("../guest/build/sources.lock.json")
+	if err != nil {
+		panic(err)
+	}
+	var lock struct {
+		Sources []any `json:"sources"`
+	}
+	if err := json.Unmarshal(encoded, &lock); err != nil {
+		panic(err)
+	}
+	return append(lock.Sources, map[string]any{
 		"id": "attrs-source", "version": "20.3.0-39-g58d2adc",
 		"url":     "https://codeload.github.com/python-attrs/attrs/tar.gz/58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
 		"sha256":  "62aacc4a0014118dfedcca0f59767e21ba85aff60d3ac2c7b67caf97bda22f2b",
 		"license": "MIT", "role": "python-package", "artifact_relation": "packaged",
-	}}
+	})
 }
 
 func cloneManifestFixture(t *testing.T, value map[string]any) map[string]any {

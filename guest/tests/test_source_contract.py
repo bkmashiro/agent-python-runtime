@@ -92,6 +92,14 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertNotIn("artifact_profile:", workflow)
         self.assertNotIn("numpy-core", workflow)
 
+    def test_attrs_staged_tree_is_reverified_before_packing(self):
+        text = BUILD_SCRIPT.read_text()
+        copy = text.index('"${VFS_PYTHON_DIR}/site-packages/attr"')
+        verify = text.index("verify-tree", copy)
+        pack = text.index('pack_guest "${FINAL_GUEST}"', verify)
+        self.assertLess(copy, verify)
+        self.assertLess(verify, pack)
+
     def test_final_cache_hits_reverify_restored_bundle(self):
         text = BUILD_SCRIPT.read_text()
         restore = text.index('tar -xf "${FINAL_CACHE_ENTRY}/dist.tar"')

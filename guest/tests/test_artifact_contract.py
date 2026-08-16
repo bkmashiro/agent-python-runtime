@@ -213,13 +213,7 @@ class ArtifactVerifierTests(unittest.TestCase):
         qualification.write_text(json.dumps(qualification_payload, sort_keys=True))
         extension = {
             "schema_version": 1, "kind": "pure-python-package", "profile": profile,
-            "package": {
-                "name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python",
-                "import_root": "attr", "install_path": "site-packages/attr", "repository_license_id": "MIT",
-                "source_commit": "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
-                "source_archive_sha256": "a" * 64, "patch_sha256": "b" * 64,
-                "tree_sha256": "c" * 64, "file_count": 20, "total_bytes": 162921,
-            },
+            "package": self.verifier.EXTENSION_PROFILE._expected_selection_package(self.verifier.ATTRS_LOCK),
         }
         manifest = copy.deepcopy(self.manifest)
         manifest.update({
@@ -228,10 +222,7 @@ class ArtifactVerifierTests(unittest.TestCase):
                 "filename": self.artifact.name, "size": 8,
                 "sha256": "93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476",
             },
-            "sources": [{
-                "id": "attrs-source", "version": "20.3.0-39-g58d2adc", "sha256": "a" * 64,
-                "license": "MIT", "role": "python-package", "artifact_relation": "packaged",
-            }],
+            "sources": copy.deepcopy(self.verifier.ATTRS_SOURCES),
             "packages": [
                 {"name": "cpython", "version": "3.14.test", "status": "core"},
                 {"name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python"},
@@ -265,7 +256,7 @@ class ArtifactVerifierTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         manifest["sources"][0]["sha256"] = "d" * 64
-        with self.assertRaisesRegex(ValueError, "source does not match"):
+        with self.assertRaisesRegex(ValueError, "source set"):
             self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
 
 

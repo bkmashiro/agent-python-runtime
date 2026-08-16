@@ -26,6 +26,8 @@ var (
 	artifactCommitPattern      = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
 
+const attrsSourcesSHA256 = "2d42c21d20614a7053b10d420ef8f2919bad8a078ab54932438dac99435717fd"
+
 type ArtifactPackage struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
@@ -344,6 +346,14 @@ func validateAttrsExtensionProfile(encoded, sourcesJSON []byte) error {
 	sourceDecoder.DisallowUnknownFields()
 	if err := sourceDecoder.Decode(&sources); err != nil || !errors.Is(sourceDecoder.Decode(&struct{}{}), io.EOF) {
 		return errors.New("artifact sources are invalid")
+	}
+	canonicalSources, err := json.Marshal(sources)
+	if err != nil {
+		return errors.New("artifact sources are invalid")
+	}
+	sourcesDigest := sha256.Sum256(canonicalSources)
+	if hex.EncodeToString(sourcesDigest[:]) != attrsSourcesSHA256 {
+		return errors.New("attrs artifact source set is invalid")
 	}
 	matches := 0
 	for _, source := range sources {

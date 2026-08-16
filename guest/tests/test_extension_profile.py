@@ -64,11 +64,16 @@ class ExtensionProfileTests(unittest.TestCase):
 
     def test_build_selection_binds_source_patch_and_tree(self):
         selection = self.tool.build_selection(self.lock, self.package)
+        self.assertEqual(selection, self.tool.validate_selection(selection, self.lock))
         self.assertEqual("attrs-770", selection["profile"])
         self.assertEqual("pure-python-package", selection["kind"])
         self.assertEqual(self.lock["package"]["tree_sha256"], selection["package"]["tree_sha256"])
         self.assertEqual("b" * 64, selection["package"]["patch_sha256"])
         self.assertEqual(2, selection["package"]["file_count"])
+        forged = json.loads(json.dumps(selection))
+        forged["package"]["version"] = "attacker"
+        with self.assertRaisesRegex(ValueError, "package identity"):
+            self.tool.validate_selection(forged, self.lock)
 
     def test_source_lock_projection_is_fetcher_compatible(self):
         projected = self.tool.source_lock_projection(self.lock)

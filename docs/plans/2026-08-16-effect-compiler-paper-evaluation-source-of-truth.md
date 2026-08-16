@@ -374,13 +374,15 @@ Missing joins remain `not_recorded`; they are never inferred from adjacent times
 
 ### Phase T0 — Truth and benchmark selection
 
-- [ ] Audit candidate lifestyle/workflow benchmarks against Section 7.3.
-- [ ] Select one primary benchmark/harness and freeze dataset/version/license/interface.
-- [ ] Define direct baseline and programmatic-Python treatment without changing tool semantics.
-- [ ] Define deterministic fake/protocol-real providers and independent final-state oracles.
-- [ ] Freeze mixed-denominator inclusion/rejection/placement schema.
+Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-agent-benchmark-qualification-v1.md)
 
-**Gate:** one benchmark row can travel through source capture, Plan binding, execution, oracle and private evidence without synthetic fields.
+- [x] Audit candidate lifestyle/workflow benchmarks against Section 7.3.
+- [x] Select `tau2-bench@c3398666e6559e3a063da3fc04b5acf7f941464e` as the primary source and freeze version/license/interface.
+- [x] Define paired direct baseline and programmatic-Python treatment without changing task, user, tool or oracle semantics.
+- [x] Define an isolated task-local upstream environment as the protocol-real provider and preserve the official final-state evaluator as an independent oracle.
+- [x] Freeze mixed-denominator inclusion/rejection/placement schema, including `unsupported_effect_class`.
+
+**Gate status:** pending T1 Canary A execution. One real `airline/3` row must travel through source capture, Plan binding, execution, oracle and private evidence without synthetic fields.
 
 ### Phase T1 — Deterministic canary
 

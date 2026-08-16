@@ -6,21 +6,39 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
 type tau2SourceBoundRun struct {
-	Name    string
-	Request []byte
-	Payload []byte
-	Content string
-	Receipt receipt.Receipt
+	Name                 string
+	Request              []byte
+	Payload              []byte
+	Content              string
+	Receipt              receipt.Receipt
+	Mechanisms           runtimeconfig.MechanismSet
+	PreparedState        wazeroengine.PreparedState
+	COWProbe             wazeroengine.COWProbe
+	ObservationTypes     []string
+	ObservationSHA256    []string
+	AnalysisEngineNewMS  float64
+	AnalysisMS           float64
+	ExecutionEngineNewMS float64
+	RunMS                float64
+	TotalMS              float64
+}
+
+type tau2SourceBoundOptions struct {
+	Mechanisms runtimeconfig.MechanismSet
+	Observe    bool
 }
 
 func TestTau2AirlineSourceBoundFreshTurnCanaryThroughRealGuest(t *testing.T) {
@@ -71,11 +89,20 @@ func tau2CanaryProfile(t *testing.T, wasm []byte) runtimeconfig.ExecutionProfile
 }
 
 func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, plan *capability.Plan, runIdentity, capabilityName, arguments, source string) tau2SourceBoundRun {
+	return runTau2SourceBoundTurnWithOptions(t, wasm, profile, plan, runIdentity, capabilityName, arguments, source, tau2SourceBoundOptions{
+		Mechanisms: runtimeconfig.MechanismSet{ProgrammaticToolCalling: true},
+	})
+}
+
+func runTau2SourceBoundTurnWithOptions(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, plan *capability.Plan, runIdentity, capabilityName, arguments, source string, options tau2SourceBoundOptions) tau2SourceBoundRun {
 	t.Helper()
+	totalStarted := time.Now()
 	analysisConfig := runtimeconfig.DefaultRunConfig()
 	analysisConfig.ExecutionProfile = &profile
 	analysisConfig.Mechanisms.SemanticAnalysis = true
+	analysisEngineStarted := time.Now()
 	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), wasm, analysisConfig)
+	analysisEngineNewMS := float64(time.Since(analysisEngineStarted).Nanoseconds()) / float64(time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +113,9 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	if err != nil {
 		t.Fatal(err)
 	}
+	analysisStarted := time.Now()
 	verified, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, analysisRunner), analysisRequest)
+	analysisMS := float64(time.Since(analysisStarted).Nanoseconds()) / float64(time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +149,11 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
 	config.ProgramSurface = runtimeconfig.ProgramSurfaceProgrammatic
-	config.Mechanisms.ProgrammaticToolCalling = true
+	config.Mechanisms = options.Mechanisms
+	if !config.Mechanisms.ProgrammaticToolCalling {
+		t.Fatal("source-bound replay requires programmatic tool calling")
+	}
+	executionEngineStarted := time.Now()
 	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{
 			RunIdentity: parent, Plan: plan, ProgrammaticParentCallID: parent, SourceResolver: resolver,
@@ -128,6 +161,7 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 		broker = created
 		return created, createErr
 	}}).New(context.Background(), wasm, config)
+	executionEngineNewMS := float64(time.Since(executionEngineStarted).Nanoseconds()) / float64(time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,10 +169,37 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, err := runner.Run(context.Background(), request, presentation.PythonPrelude)
+	runContext := context.Background()
+	var recorder *observationRecorder
+	if options.Observe {
+		recorder = &observationRecorder{}
+		session, sessionErr := observe.NewSession(observe.Required, recorder, runIdentity)
+		if sessionErr != nil {
+			t.Fatal(sessionErr)
+		}
+		runContext, sessionErr = enginecontract.WithInvocationRef(runContext, runtimeconfig.InvocationRef{
+			AgentRunID: runIdentity, InvocationID: runIdentity + ":invocation", InvocationAttempt: 1, ExecutionID: runIdentity,
+		})
+		if sessionErr != nil {
+			t.Fatal(sessionErr)
+		}
+		runContext, sessionErr = enginecontract.WithObservationSession(runContext, session)
+		if sessionErr != nil {
+			t.Fatal(sessionErr)
+		}
+	}
+	runStarted := time.Now()
+	payload, err := runner.Run(runContext, request, presentation.PythonPrelude)
+	runMS := float64(time.Since(runStarted).Nanoseconds()) / float64(time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
+	concrete, ok := runner.(*wazeroengine.Engine)
+	if !ok {
+		t.Fatal("unexpected non-wazero T2 runner")
+	}
+	preparedState := concrete.PreparedState()
+	cowProbe := concrete.COWProbe()
 	if err := runner.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +217,24 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	if len(receipts) != 1 || broker.CallCount() != 1 || receipts[0].Capability != capabilityName || receipts[0].Outcome != "ok" || receipts[0].Source == nil || !receipt.ValidIdentity(receipts[0]) {
 		t.Fatalf("receipts=%+v calls=%d", receipts, broker.CallCount())
 	}
-	return tau2SourceBoundRun{Name: runIdentity, Request: request, Payload: payload, Content: content, Receipt: receipts[0]}
+	var observationTypes, observationSHA256 []string
+	if recorder != nil {
+		for _, event := range recorder.snapshot() {
+			encoded, encodeErr := json.Marshal(event)
+			if encodeErr != nil {
+				t.Fatal(encodeErr)
+			}
+			observationTypes = append(observationTypes, event.Type)
+			observationSHA256 = append(observationSHA256, tau2Digest(encoded))
+		}
+	}
+	return tau2SourceBoundRun{
+		Name: runIdentity, Request: request, Payload: payload, Content: content, Receipt: receipts[0],
+		Mechanisms: options.Mechanisms, PreparedState: preparedState, COWProbe: cowProbe,
+		ObservationTypes: observationTypes, ObservationSHA256: observationSHA256,
+		AnalysisEngineNewMS: analysisEngineNewMS, AnalysisMS: analysisMS, ExecutionEngineNewMS: executionEngineNewMS,
+		RunMS: runMS, TotalMS: float64(time.Since(totalStarted).Nanoseconds()) / float64(time.Millisecond),
+	}
 }
 
 func runTau2PureAggregation(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, reservation, user string) ([]byte, []byte, struct {

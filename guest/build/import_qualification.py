@@ -40,8 +40,22 @@ _ATTRS_770_PROBES = (
     ("typing", "generic_alias"),
 )
 
-PROBE_CODE = r'''import importlib
+PROBE_CODE = r'''import builtins
+import importlib
 import sys
+from agent_runtime import _declared_sealed_importer
+
+
+def run_restricted(source, namespace, roots):
+    restricted_builtins = dict(vars(builtins))
+    for forbidden in ("eval", "exec"):
+        restricted_builtins.pop(forbidden, None)
+    restricted_builtins["__import__"] = _declared_sealed_importer(roots)
+    namespace = dict(namespace)
+    namespace["__builtins__"] = restricted_builtins
+    exec(compile(source, "<qualification-body>", "exec"), namespace, namespace)
+    return namespace
+
 
 probe_id = "guest-import-exec-v1"
 name = inputs["module"]
@@ -102,20 +116,36 @@ else:
         elif operation == "generic_dynamic_class":
             from types import new_class
             from typing import Generic, TypeVar
-            type_var = TypeVar("TypeVarForQualification")
-            parent = new_class("ParentForQualification", (Generic[type_var],), {})
-            candidate = module.make_class("QualifiedClass", {"id": module.ib(type=str)}, (parent[int],))
-            assert candidate.__name__ == "QualifiedClass"
-        elif operation == "new_class":
-            candidate = module.new_class(
-                "QualifiedType", (), {}, exec_body=lambda namespace: namespace.update(marker=1)
+            namespace = run_restricted(
+                """type_var = TypeVar("TypeVarForQualification")
+parent = new_class("ParentForQualification", (Generic[type_var],), {})
+candidate = module.make_class("QualifiedClass", {"id": module.ib(type=str)}, (parent[int],))
+""",
+                {"module": module, "new_class": new_class, "Generic": Generic, "TypeVar": TypeVar},
+                ["attr", "types", "typing"],
             )
-            assert candidate.marker == 1
+            assert namespace["candidate"].__name__ == "QualifiedClass"
+        elif operation == "new_class":
+            namespace = run_restricted(
+                """candidate = module.new_class(
+    "QualifiedType", (), {}, exec_body=lambda target: target.update(marker=1)
+)
+""",
+                {"module": module},
+                ["types"],
+            )
+            assert namespace["candidate"].marker == 1
         elif operation == "generic_alias":
             from types import new_class
-            type_var = module.TypeVar("TypeVarForQualification")
-            parent = new_class("ParentForQualification", (module.Generic[type_var],), {})
-            assert parent[int].__origin__ is parent
+            namespace = run_restricted(
+                """type_var = module.TypeVar("TypeVarForQualification")
+parent = new_class("ParentForQualification", (module.Generic[type_var],), {})
+candidate = parent[int]
+""",
+                {"module": module, "new_class": new_class},
+                ["types", "typing"],
+            )
+            assert namespace["candidate"].__origin__ is namespace["parent"]
         else:
             raise ValueError("unknown qualification operation")
     except Exception as exc:

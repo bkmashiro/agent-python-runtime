@@ -57,6 +57,8 @@ class ImportQualificationTests(unittest.TestCase):
         self.assertEqual("generic_dynamic_class", by_name["attr"])
         self.assertEqual("new_class", by_name["types"])
         self.assertEqual("generic_alias", by_name["typing"])
+        self.assertIn("_declared_sealed_importer", self.tool.PROBE_CODE)
+        self.assertIn("restricted_builtins", self.tool.PROBE_CODE)
         self.assertTrue({"attr", "types", "typing"}.issubset(self.tool.required_roots("attrs-770")))
         catalog = self.tool.extract_qualification(self.qualified_responses("attrs-770"), "attrs-770")
         self.assertTrue({"attr", "types", "typing"}.issubset(catalog["qualified_roots"]))

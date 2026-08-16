@@ -12,13 +12,22 @@ class WorkstationScriptContractTests(unittest.TestCase):
     def test_staging_is_fresh_and_worker_paths_are_canonical(self) -> None:
         wrapper = WRAPPER.read_text()
         worker = WORKER.read_text()
-        self.assertIn('stage=$(ssh shell2 mktemp -d', wrapper)
-        self.assertIn('remote_output=$(ssh shell2 mktemp -d', wrapper)
-        self.assertNotIn('ssh shell2 mkdir -p "$stage" "$remote_output"', wrapper)
+        self.assertIn('stage=$(ssh "$gateway" mktemp -d', wrapper)
+        self.assertIn('remote_output=$(ssh "$gateway" mktemp -d', wrapper)
+        self.assertNotIn('ssh "$gateway" mkdir -p "$stage" "$remote_output"', wrapper)
         self.assertIn('stage_real=$(realpath -e "$stage")', worker)
         self.assertIn('output_real=$(realpath -e "$output")', worker)
         self.assertIn('$stage_real != "$stage"', worker)
         self.assertIn('$output_real != "$output"', worker)
+
+    def test_gateway_and_private_extension_inputs_are_bounded(self) -> None:
+        wrapper = WRAPPER.read_text()
+        self.assertIn('case "$gateway" in shell2|shell3)', wrapper)
+        self.assertIn('case "$artifact_profile" in', wrapper)
+        self.assertIn('attrs-770)', wrapper)
+        self.assertIn('chmod 0600 "$stage/private/extension.patch"', wrapper)
+        self.assertIn('AGENT_RUNTIME_EXTENSION_PATCH="$remote_patch"', wrapper)
+        self.assertNotIn('scp -q "$extension_patch" "shell2:', wrapper)
 
     def test_final_cache_binds_commit_and_default_probe_binary(self) -> None:
         build = BUILD.read_text()

@@ -299,6 +299,16 @@ This run exposed a causal-evidence storage defect rather than a positive Runtime
 
 The public outcome is therefore `NATURAL_BOUNDED_COHORT_RECORDED_WITH_EVIDENCE_GAPS`. Official completed-task rewards remain factual model/task observations. They do not support a matched-surface performance comparison, leaderboard claim or cohort-level source-bound Runtime mechanism claim. The earlier `airline/3`, WRITE authority and authored pure-mechanism canaries remain the valid mechanism evidence.
 
+### T2 treatment remediation outcome
+
+A separately preregistered, treatment-only remediation preserved T2-v1 as immutable history while repairing the three observed harness defects. Raw Guest files are now prefixed by frozen task ID; whitespace-only invalid model actions receive a non-empty fallback before upstream message validation; and the per-cell provider guard is 64 rather than 20. The outer driver executes one append-only cell per foreground chunk, avoiding the earlier orchestration timeout without retrying a v2 cell.
+
+All 16 remediation cells completed. There were no unscorable or not-recorded rows, no raw-path collisions and no unknown provider counts. The run used 241 provider invocations. Strict reconstruction matched 36 logical READ calls to 36 physical Broker executions and 36 complete source/Plan/Grant/request-response/receipt joins. Duplicate-path and raw-body mutation controls were rejected. The body-safe aggregate is [tau2-t2-remediation-v1.json](../evidence/tau2-t2-remediation-v1.json), SHA-256 `1dff6f1242f7f032f29ed5e1a6a117c2af815d958d6f5c467e64e7417490efca`.
+
+Default tau2 reward is `1` on 9/16 remediation rows. The separately labelled official upstream ActionEvaluator diagnostic is `1` on 13/16. The difference is expected because the default airline DB/COMMUNICATE evaluator is not a no-op-sensitive READ oracle. Neither number is a leaderboard result or evidence of a direct-versus-treatment performance advantage: the tool surfaces remain unmatched and direct was not rerun in remediation v2.
+
+The repaired cohort now supports a bounded natural READ mechanism statement: all completed remediation rows independently reconstruct Agent-produced program source through the real WASM Guest and Broker to exact task-scoped READs. It does not support model WRITE ability, production external effects or general benchmark superiority.
+
 ## Observed authored canary
 
 The body-safe result is [tau2-airline-3-canary-v1.json](../evidence/tau2-airline-3-canary-v1.json).

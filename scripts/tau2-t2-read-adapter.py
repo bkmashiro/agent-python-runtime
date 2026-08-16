@@ -10,6 +10,7 @@ from typing import Any
 
 REVISION = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 PRIVATE_SCHEMA = "pysolate.tau2-t2-private-preregistration.v1"
+REMEDIATION_PRIVATE_SCHEMA = "pysolate.tau2.t2-remediation-preregistration-private.v1"
 REQUEST_SCHEMA = "pysolate.tau2-t2-read-request.v1"
 RESPONSE_SCHEMA = "pysolate.tau2-t2-read-response.v1"
 READ_TOOLS = {"get_reservation_details", "get_user_details", "search_direct_flight"}
@@ -41,7 +42,7 @@ def verify_checkout(root: pathlib.Path) -> None:
 
 def load_scope(path: pathlib.Path, task_id: str) -> list[dict[str, Any]]:
     value = json.loads(path.read_text(), object_pairs_hook=reject_duplicates)
-    if not isinstance(value, dict) or value.get("schema_version") != PRIVATE_SCHEMA:
+    if not isinstance(value, dict) or value.get("schema_version") not in {PRIVATE_SCHEMA, REMEDIATION_PRIVATE_SCHEMA}:
         raise ValueError("invalid private cohort manifest")
     source = value.get("source")
     if not isinstance(source, dict) or source.get("revision") != REVISION or source.get("domain") != "airline":

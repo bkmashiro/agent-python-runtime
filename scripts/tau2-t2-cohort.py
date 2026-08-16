@@ -15,6 +15,7 @@ from typing import Any, Optional
 REVISION = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 MODEL = "deepseek/deepseek-v4-pro"
 PRIVATE_SCHEMA = "pysolate.tau2-t2-private-preregistration.v1"
+REMEDIATION_PRIVATE_SCHEMA = "pysolate.tau2.t2-remediation-preregistration-private.v1"
 SIGNATURES = {
     "get_reservation_details": ["reservation_id"],
     "get_user_details": ["user_id"],
@@ -51,7 +52,7 @@ def canonical(value: Any) -> str:
 
 def load_task_contract(path: pathlib.Path, task_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     value = json.loads(path.read_text())
-    if value.get("schema_version") != PRIVATE_SCHEMA or value.get("source", {}).get("revision") != REVISION:
+    if value.get("schema_version") not in {PRIVATE_SCHEMA, REMEDIATION_PRIVATE_SCHEMA} or value.get("source", {}).get("revision") != REVISION:
         raise ValueError("private preregistration mismatch")
     matches = [item for item in value.get("tasks", []) if item.get("task_id") == task_id]
     if len(matches) != 1:
@@ -115,10 +116,20 @@ def parse_action(text: str, allowed_actions: list[dict[str, Any]]) -> dict[str, 
     return {"kind": "program", **inspect_program(action["source"], allowed_actions)}
 
 
+def invalid_action_content(raw: str) -> str:
+    return raw if raw.strip() else "[empty or whitespace-only invalid model action]"
+
+
+def private_turn_paths(root: pathlib.Path, task_id: str, index: int) -> tuple[pathlib.Path, pathlib.Path]:
+    if not re.fullmatch(r"[0-9]+", task_id):
+        raise ValueError("invalid task ID for private evidence path")
+    prefix = f"task-{task_id}-turn-{index:02d}"
+    return root / f"{prefix}.py", root / f"{prefix}.json"
+
+
 def bridge_turn(action: dict[str, Any], config: dict[str, str], index: int) -> dict[str, Any]:
     root = pathlib.Path(config["evidence_root"])
-    source_path = root / f"turn-{index:02d}.py"
-    output_path = root / f"turn-{index:02d}.json"
+    source_path, output_path = private_turn_paths(root, config["task_id"], index)
     source_path.write_text(action["source"])
     source_path.chmod(0o600)
     env = os.environ.copy()
@@ -192,7 +203,7 @@ def make_program_agent(config: dict[str, str], allowed_actions: list[dict[str, A
                 except (SyntaxError, ValueError, json.JSONDecodeError) as exc:
                     event.update({"kind": "invalid_model_action", "error_type": type(exc).__name__})
                     self.events.append(event)
-                    invalid = AssistantMessage(role="assistant", content=raw or "[empty invalid model action]")
+                    invalid = AssistantMessage(role="assistant", content=invalid_action_content(raw))
                     state.messages.append(invalid)
                     return invalid, state
                 event["kind"] = action["kind"]

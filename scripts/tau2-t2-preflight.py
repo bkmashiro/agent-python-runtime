@@ -11,6 +11,7 @@ from typing import Any
 
 REVISION = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 PRIVATE_SCHEMA = "pysolate.tau2-t2-private-preregistration.v1"
+REMEDIATION_PRIVATE_SCHEMA = "pysolate.tau2.t2-remediation-preregistration-private.v1"
 PREFLIGHT_SCHEMA = "pysolate.tau2-t2-preflight.v1"
 SIGNATURES = {
     "get_reservation_details": ["reservation_id"],
@@ -123,7 +124,7 @@ def main() -> int:
     parser.add_argument("--public-output", required=True)
     args = resolve_paths(parser.parse_args())
     private = json.loads(pathlib.Path(args.private_manifest).read_text())
-    if private.get("schema_version") != PRIVATE_SCHEMA or private.get("source", {}).get("revision") != REVISION:
+    if private.get("schema_version") not in {PRIVATE_SCHEMA, REMEDIATION_PRIVATE_SCHEMA} or private.get("source", {}).get("revision") != REVISION:
         raise ValueError("private preregistration mismatch")
     preregistration_identity = private.get("public_identity")
     if not isinstance(preregistration_identity, str) or not preregistration_identity.startswith("sha256:"):
@@ -160,14 +161,19 @@ def main() -> int:
     for index, tool in enumerate(sorted(shape_examples), 1):
         task_id, arguments = shape_examples[tool]
         shapes.append(guest_shape(args, evidence_root, task_id, tool, arguments, index))
+    remediation_protocol = private.get("schema_version") == REMEDIATION_PRIVATE_SCHEMA
+    repair_count = 0 if remediation_protocol else 1
+    repairs = [] if remediation_protocol else ["absolute_data_paths_preserving_venv_python_symlink"]
     private_result = {
         "schema_version": "pysolate.tau2-t2-private-preflight.v1", "source_revision": REVISION, "preregistration_identity": preregistration_identity,
         "adapter_calls": adapter_results, "guest_shapes": shapes, "negative_out_of_scope_rejected": True,
         "provider_calls": 0, "task_bodies_included": False, "tool_response_bodies_included": False,
         "raw_guest_bodies_verified": True, "canonical_plan_grant_verified": True,
-        "pre_provider_repair_budget_used": 1,
-        "pre_provider_repairs": ["absolute_data_paths_preserving_venv_python_symlink"],
+        "pre_provider_repair_budget_used": repair_count,
+        "pre_provider_repairs": repairs,
     }
+    if remediation_protocol:
+        private_result["remediation_protocol"] = True
     private_path = evidence_root / "preflight-private.json"
     private_path.write_bytes(canonical(private_result) + b"\n")
     private_path.chmod(0o600)
@@ -177,10 +183,12 @@ def main() -> int:
         "real_guest_shapes": [{"tool": item["tool"], "source_bound": item["source_bound"]} for item in shapes],
         "negative_out_of_scope_rejected": True, "provider_calls": 0,
         "raw_guest_bodies_verified": True, "canonical_plan_grant_verified": True,
-        "pre_provider_repair_budget_used": 1,
-        "pre_provider_repairs": ["absolute_data_paths_preserving_venv_python_symlink"],
+        "pre_provider_repair_budget_used": repair_count,
+        "pre_provider_repairs": repairs,
         "task_bodies_included": False, "arguments_included": False, "tool_response_bodies_included": False,
     }
+    if remediation_protocol:
+        public["remediation_protocol"] = True
     public_path = pathlib.Path(args.public_output)
     public_path.parent.mkdir(parents=True, exist_ok=True)
     public_path.write_bytes(canonical(public) + b"\n")

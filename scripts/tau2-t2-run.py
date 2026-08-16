@@ -13,6 +13,8 @@ from typing import Any
 REVISION = "c3398666e6559e3a063da3fc04b5acf7f941464e"
 PUBLIC_SCHEMA = "pysolate.tau2-t2-preregistration.v1"
 PRIVATE_SCHEMA = "pysolate.tau2-t2-private-preregistration.v1"
+REMEDIATION_PUBLIC_SCHEMA = "pysolate.tau2.t2-remediation-preregistration.v1"
+REMEDIATION_PRIVATE_SCHEMA = "pysolate.tau2.t2-remediation-preregistration-private.v1"
 PREFLIGHT_SCHEMA = "pysolate.tau2-t2-preflight.v1"
 CELL_SCHEMA = "pysolate.tau2-t2-cell-private.v1"
 MODEL = "deepseek/deepseek-v4-pro"
@@ -33,14 +35,17 @@ def load_protocol(public_path: pathlib.Path, private_path: pathlib.Path, preflig
     preflight = json.loads(preflight_path.read_text())
     public_copy = dict(public)
     identity = public_copy.pop("identity", None)
-    if public.get("schema_version") != PUBLIC_SCHEMA or identity != digest(canonical(public_copy)):
+    schema = public.get("schema_version")
+    expected_private_schema = PRIVATE_SCHEMA if schema == PUBLIC_SCHEMA else REMEDIATION_PRIVATE_SCHEMA
+    if schema not in {PUBLIC_SCHEMA, REMEDIATION_PUBLIC_SCHEMA} or identity != digest(canonical(public_copy)):
         raise ValueError("public preregistration identity mismatch")
-    if private.get("schema_version") != PRIVATE_SCHEMA or private.get("public_identity") != identity or private.get("protocol") != public.get("protocol"):
+    if private.get("schema_version") != expected_private_schema or private.get("public_identity") != identity or private.get("protocol") != public.get("protocol"):
         raise ValueError("private preregistration mismatch")
     if preflight.get("schema_version") != PREFLIGHT_SCHEMA or preflight.get("classification") != "PREFLIGHT_SUPPORTED" or preflight.get("preregistration_identity") != identity or preflight.get("provider_calls") != 0:
         raise ValueError("provider-free preflight mismatch")
     protocol = public["protocol"]
-    if protocol.get("model") != MODEL or protocol.get("post_provider_reruns") != 0 or protocol.get("max_total_provider_invocations_per_trial") != 20:
+    expected_limit = 20 if schema == PUBLIC_SCHEMA else 64
+    if protocol.get("model") != MODEL or protocol.get("post_provider_reruns") != 0 or protocol.get("max_total_provider_invocations_per_trial") != expected_limit:
         raise ValueError("paid protocol mismatch")
     return public, private, preflight
 
@@ -49,7 +54,11 @@ def planned_cells(public: dict[str, Any]) -> list[tuple[str, str, str]]:
     task_ids = [row["task_id"] for row in public["tasks"]]
     if len(task_ids) != 16 or len(set(task_ids)) != 16:
         raise ValueError("task denominator mismatch")
-    return [(task_id, public_lane, harness_lane) for task_id in task_ids for public_lane, harness_lane in LANES]
+    schema = public.get("schema_version")
+    if schema not in {PUBLIC_SCHEMA, REMEDIATION_PUBLIC_SCHEMA}:
+        raise ValueError("unsupported cohort schema")
+    lanes = LANES if schema == PUBLIC_SCHEMA else (("programmatic_python", "programmatic_python"),)
+    return [(task_id, public_lane, harness_lane) for task_id in task_ids for public_lane, harness_lane in lanes]
 
 
 def write_not_recorded(path: pathlib.Path, task_id: str, lane: str, protocol: dict[str, Any], stderr: bytes, returncode: int) -> None:
@@ -78,6 +87,7 @@ def main() -> int:
     parser.add_argument("--artifact", required=True)
     parser.add_argument("--evidence-root", required=True)
     parser.add_argument("--aggregate-output", required=True)
+    parser.add_argument("--report-script")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--max-new-cells", type=int)
     args = parser.parse_args()
@@ -144,7 +154,7 @@ def main() -> int:
         print(json.dumps({**summary, "execute": True, "completed_this_batch": len(batch), "remaining_cells": len(remaining)}, sort_keys=True))
         return 0
 
-    report_script = repo_root / "scripts/tau2-t2-report.py"
+    report_script = pathlib.Path(args.report_script).resolve() if args.report_script else repo_root / "scripts/tau2-t2-report.py"
     subprocess.run([
         tau2_python, str(report_script), "--public-preregistration", str(public_path),
         "--private-preregistration", str(private_path), "--cells-root", str(evidence_root),

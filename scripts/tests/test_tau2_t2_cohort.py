@@ -13,6 +13,17 @@ SPEC.loader.exec_module(cohort)
 
 
 class Tau2T2CohortTests(unittest.TestCase):
+    def test_whitespace_invalid_action_gets_nonempty_fallback(self):
+        self.assertEqual(cohort.invalid_action_content("  \n"), "[empty or whitespace-only invalid model action]")
+        self.assertEqual(cohort.invalid_action_content("{}"), "{}")
+
+    def test_private_turn_paths_are_task_scoped(self):
+        root = pathlib.Path("/private")
+        self.assertEqual(cohort.private_turn_paths(root, "3", 2), (root / "task-3-turn-02.py", root / "task-3-turn-02.json"))
+        self.assertNotEqual(cohort.private_turn_paths(root, "3", 2), cohort.private_turn_paths(root, "4", 2))
+        with self.assertRaises(ValueError):
+            cohort.private_turn_paths(root, "../3", 2)
+
     def test_path_repair_preserves_venv_symlink(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

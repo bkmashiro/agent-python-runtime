@@ -57,6 +57,10 @@ if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
   exit 2
 fi
+if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+  python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-patch \
+    --lock "${ATTRS_PROFILE_LOCK}" --patch "${EXTENSION_PATCH}"
+fi
 case "${BUILD_CACHE_MODE}" in
   off|auto|refresh) ;;
   *)
@@ -369,8 +373,6 @@ EXTENSION_SELECTION="${WORK_DIR}/extension-profile.json"
 ATTRS_SOURCE_DIR="${WORK_DIR}/attrs-source"
 if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
   fetch attrs-source attrs-source.tar.gz "${ATTRS_PROFILE_LOCK}"
-  python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-patch \
-    --lock "${ATTRS_PROFILE_LOCK}" --patch "${EXTENSION_PATCH}"
   rm -rf "${ATTRS_SOURCE_DIR}"
   mkdir -p "${ATTRS_SOURCE_DIR}"
   tar -xzf "${DOWNLOAD_DIR}/attrs-source.tar.gz" -C "${ATTRS_SOURCE_DIR}" --strip-components=1

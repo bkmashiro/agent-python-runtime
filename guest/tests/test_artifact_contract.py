@@ -40,6 +40,13 @@ class ArtifactVerifierTests(unittest.TestCase):
                 "size": 8,
                 "sha256": "93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476",
             },
+            "build": {
+                "repository_commit": "a" * 40,
+                "source_date_epoch": "1234567890",
+                "compiler_target": "wasm32-wasip1",
+                "execution_model": "reactor",
+            },
+            "sources": [{"id": "test-source"}],
             "wasm": {
                 "imports": [
                     {"module": "wasi_snapshot_preview1", "name": "fd_write"},
@@ -59,6 +66,9 @@ class ArtifactVerifierTests(unittest.TestCase):
                     "__wasi_vfs_rt_init",
                 ],
             },
+            "packages": [{"name": "cpython", "version": "3.14.test", "status": "core"}],
+            "extension_profile": None,
+            "limitations": [],
         }
 
     def test_accepts_bound_neutral_contract(self):
@@ -140,6 +150,23 @@ class ArtifactVerifierTests(unittest.TestCase):
             duplicate.write_text('{"schema_version":4,"schema_version":4}')
             with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
                 self.verifier.load_json_strict(duplicate)
+            nonstandard = pathlib.Path(directory) / "nonstandard.json"
+            nonstandard.write_text('{"value":NaN}')
+            with self.assertRaisesRegex(ValueError, "non-standard JSON constant"):
+                self.verifier.load_json_strict(nonstandard)
+
+    def test_rejects_unknown_fields_in_go_typed_nested_objects(self):
+        mutations = {
+            "artifact": lambda value: value["artifact"].update(operator_note="x"),
+            "build": lambda value: value["build"].update(operator_note="x"),
+            "package": lambda value: value["packages"][0].update(operator_note="x"),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                manifest = copy.deepcopy(self.manifest)
+                mutate(manifest)
+                with self.assertRaisesRegex(ValueError, "fields are invalid"):
+                    self.verifier.verify(self.artifact, manifest)
 
     def test_schema_v4_binds_guest_import_qualification(self):
         tool = self.verifier.IMPORT_QUALIFICATION
@@ -183,6 +210,18 @@ class ArtifactVerifierTests(unittest.TestCase):
             "sha256": self.verifier.sha256(qualification),
         }
         self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
+
+        result_extra = copy.deepcopy(manifest)
+        result_extra["python_import_qualification"]["results"][0]["operator_note"] = "x"
+        with self.assertRaisesRegex(ValueError, "result fields are invalid"):
+            self.verifier.verify(self.artifact, result_extra, None, inventory, qualification)
+
+        failure_extra = copy.deepcopy(manifest)
+        failure_extra["python_import_inventory"]["failures"] = [
+            {"name": "missing", "error": "not_found", "operator_note": "x"}
+        ]
+        with self.assertRaisesRegex(ValueError, "failure fields are invalid"):
+            self.verifier.verify(self.artifact, failure_extra, None, inventory, qualification)
 
         manifest["python_import_qualification"]["qualified_roots"] = ["agent_runtime", "json", "sys"]
         with self.assertRaisesRegex(ValueError, "does not match"):

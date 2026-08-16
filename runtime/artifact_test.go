@@ -95,6 +95,15 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 			value["python_import_qualification"].(map[string]any)["qualified_roots"] = []any{"agent_runtime", "numpy", "sys"}
 		},
 		"unknown top-level field": func(value map[string]any) { value["authority"] = "guest" },
+		"unknown artifact field": func(value map[string]any) {
+			value["artifact"].(map[string]any)["operator_note"] = "x"
+		},
+		"unknown build field": func(value map[string]any) {
+			value["build"].(map[string]any)["operator_note"] = "x"
+		},
+		"unknown package field": func(value map[string]any) {
+			value["packages"].([]any)[0].(map[string]any)["operator_note"] = "x"
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -40,6 +40,13 @@ MANIFEST_FIELDS = {
 }
 INVENTORY_FIELDS = {"schema_version", "artifact_profile", "probe", "implementation", "python_version", "discoverable_roots", "failures"}
 QUALIFICATION_FIELDS = {"schema_version", "artifact_profile", "probe", "implementation", "python_version", "qualified_roots", "results"}
+ARTIFACT_FIELDS = {"filename", "size", "sha256"}
+BUILD_FIELDS = {"repository_commit", "source_date_epoch", "compiler_target", "execution_model"}
+PACKAGE_FIELDS = {"name", "version", "status"}
+EMBEDDED_INVENTORY_FIELDS = (INVENTORY_FIELDS - {"artifact_profile"}) | {"filename", "sha256"}
+INVENTORY_FAILURE_FIELDS = {"name", "error"}
+EMBEDDED_QUALIFICATION_FIELDS = (QUALIFICATION_FIELDS - {"artifact_profile"}) | {"filename", "sha256"}
+QUALIFICATION_RESULT_FIELDS = {"name", "operation", "status", "error"}
 
 
 def _unique_object(pairs):
@@ -51,11 +58,27 @@ def _unique_object(pairs):
     return result
 
 
+def _reject_json_constant(value: str):
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
+def require_exact_object(value: Any, fields: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError(f"{label} fields are invalid")
+    return value
+
+
+def require_exact_rows(value: Any, fields: set[str], label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be a list")
+    return [require_exact_object(row, fields, label) for row in value]
+
+
 def load_json_strict(path: pathlib.Path, allowed_fields: set[str] | None = None) -> dict[str, Any]:
     encoded = path.read_bytes()
     if not encoded or len(encoded) > MAX_JSON_BYTES:
         raise ValueError("JSON evidence size is invalid")
-    value = json.loads(encoded, object_pairs_hook=_unique_object)
+    value = json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_reject_json_constant)
     if not isinstance(value, dict):
         raise ValueError("JSON evidence must be an object")
     if allowed_fields is not None and not set(value).issubset(allowed_fields):
@@ -132,7 +155,7 @@ def verify(
     if manifest.get("target") != "wasm32-wasip1":
         raise ValueError("unexpected artifact target")
 
-    artifact_record = manifest.get("artifact", {})
+    artifact_record = require_exact_object(manifest.get("artifact"), ARTIFACT_FIELDS, "manifest artifact")
     if artifact_record.get("filename") != expected_filename:
         raise ValueError("manifest artifact filename does not match artifact profile")
     if artifact_record.get("size") != artifact.stat().st_size:
@@ -140,6 +163,15 @@ def verify(
     actual_sha256 = sha256(artifact)
     if artifact_record.get("sha256") != actual_sha256:
         raise ValueError("artifact sha256 does not match manifest")
+    build_record = require_exact_object(manifest.get("build"), BUILD_FIELDS, "manifest build")
+    if (
+        not isinstance(build_record["repository_commit"], str)
+        or len(build_record["repository_commit"]) != 40
+        or not build_record["source_date_epoch"]
+        or build_record["compiler_target"] != "wasm32-wasip1"
+        or build_record["execution_model"] != "reactor"
+    ):
+        raise ValueError("manifest build identity is invalid")
 
     inventory_record = manifest.get("python_import_inventory")
     qualification_record = manifest.get("python_import_qualification")
@@ -149,6 +181,8 @@ def verify(
     else:
         if not isinstance(inventory_record, dict) or import_inventory is None or not import_inventory.is_file():
             raise ValueError("schema-v3 manifest requires import inventory")
+        require_exact_object(inventory_record, EMBEDDED_INVENTORY_FIELDS, "manifest import inventory")
+        require_exact_rows(inventory_record.get("failures"), INVENTORY_FAILURE_FIELDS, "manifest import inventory failure")
         if inventory_record.get("filename") != import_inventory.name or inventory_record.get("sha256") != sha256(import_inventory):
             raise ValueError("import inventory sidecar identity mismatch")
         strict_inventory = load_json_strict(import_inventory, INVENTORY_FIELDS)
@@ -166,6 +200,8 @@ def verify(
         else:
             if not isinstance(qualification_record, dict) or import_qualification is None or not import_qualification.is_file():
                 raise ValueError("schema-v4 manifest requires import qualification")
+            require_exact_object(qualification_record, EMBEDDED_QUALIFICATION_FIELDS, "manifest import qualification")
+            require_exact_rows(qualification_record.get("results"), QUALIFICATION_RESULT_FIELDS, "manifest import qualification result")
             if qualification_record.get("filename") != import_qualification.name or qualification_record.get("sha256") != sha256(import_qualification):
                 raise ValueError("import qualification sidecar identity mismatch")
             strict_qualification = load_json_strict(import_qualification, QUALIFICATION_FIELDS)
@@ -224,6 +260,11 @@ def verify(
             or packages[1] != {"name": "attrs", "version": package["version"], "status": "selected-pure-python"}
         ):
             raise ValueError("attrs artifact package set is invalid")
+    else:
+        packages = manifest.get("packages")
+        if not isinstance(packages, list) or not packages:
+            raise ValueError("artifact package set is invalid")
+    require_exact_rows(packages, PACKAGE_FIELDS, "manifest package")
 
     wasm = manifest.get("wasm", {})
     exports = set(wasm.get("exports", []))

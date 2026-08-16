@@ -13,6 +13,10 @@ import re
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
+ARTIFACT_FILES = {
+    "base": "agent-python-runtime.wasm",
+    "attrs-770": "agent-python-runtime-attrs-770.wasm",
+}
 
 
 def file_digest(path: pathlib.Path) -> str:
@@ -45,7 +49,10 @@ def verify(
     root: pathlib.Path,
     source_commit: str | None = None,
     source_tree: str | None = None,
+    artifact_profile: str = "base",
 ) -> dict[str, object]:
+    if artifact_profile not in ARTIFACT_FILES:
+        raise ValueError("unsupported artifact profile")
     if root.is_symlink():
         raise ValueError("evidence root must be a real directory")
     root = root.resolve()
@@ -53,7 +60,7 @@ def verify(
         raise ValueError("evidence root must be a real directory")
     ready_path = root / "RESULT.READY"
     sums_path = root / "SHA256SUMS"
-    artifact = root / "dist/agent-python-runtime.wasm"
+    artifact = root / "dist" / ARTIFACT_FILES[artifact_profile]
     cache_path = root / "dist/build-cache.json"
     for required in (ready_path, sums_path, artifact, cache_path, root / "build.log"):
         if not required.is_file() or required.is_symlink():
@@ -122,11 +129,14 @@ def verify(
         raise ValueError("final cache lacks exact identity")
     artifact_digest = file_digest(artifact)
     manifest = json.loads((root / "dist/manifest.json").read_text())
+    if manifest.get("artifact_profile") != artifact_profile or manifest.get("artifact", {}).get("filename") != ARTIFACT_FILES[artifact_profile]:
+        raise ValueError("artifact profile mismatch")
     if manifest.get("artifact", {}).get("sha256") != artifact_digest.removeprefix("sha256:"):
         raise ValueError("artifact manifest digest mismatch")
     return {
         "source_commit": ready["source_commit"],
         "source_tree": ready["source_tree"],
+        "artifact_profile": artifact_profile,
         "artifact_sha256": artifact_digest,
         "cache_key": ready["cache_key"],
         "requested_cache_mode": ready["requested_cache_mode"],
@@ -143,8 +153,9 @@ def main() -> int:
     parser.add_argument("root", type=pathlib.Path)
     parser.add_argument("--source-commit")
     parser.add_argument("--source-tree")
+    parser.add_argument("--artifact-profile", choices=sorted(ARTIFACT_FILES), default="base")
     args = parser.parse_args()
-    print(json.dumps(verify(args.root, args.source_commit, args.source_tree), sort_keys=True, separators=(",", ":")))
+    print(json.dumps(verify(args.root, args.source_commit, args.source_tree, args.artifact_profile), sort_keys=True, separators=(",", ":")))
     return 0
 
 

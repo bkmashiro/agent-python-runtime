@@ -202,6 +202,16 @@ def load_selection(path: pathlib.Path) -> dict[str, Any]:
     return validate_selection(strict_json_loads(path.read_text()))
 
 
+def source_lock_projection(extension: dict[str, Any]) -> dict[str, Any]:
+    validate_lock(extension)
+    source = extension["source"]
+    public_source = {
+        key: source[key]
+        for key in ("id", "version", "url", "sha256", "license", "role", "artifact_relation")
+    }
+    return {"schema_version": 1, "target": "wasm32-wasip1", "sources": [public_source]}
+
+
 def merge_source_lock(base: Any, extension: dict[str, Any]) -> dict[str, Any]:
     validate_lock(extension)
     base_lock = _exact_fields(base, {"schema_version", "target", "sources"}, "base source lock")
@@ -210,11 +220,11 @@ def merge_source_lock(base: Any, extension: dict[str, Any]) -> dict[str, Any]:
     source_ids = [row.get("id") for row in base_lock["sources"] if isinstance(row, dict)]
     if len(source_ids) != len(base_lock["sources"]) or len(set(source_ids)) != len(source_ids):
         raise ValueError("base source lock IDs are invalid")
-    source = extension["source"]
+    projection = source_lock_projection(extension)
+    source = projection["sources"][0]
     if source["id"] in source_ids:
         raise ValueError("extension source already exists in base source lock")
-    public_source = {key: source[key] for key in ("id", "version", "url", "sha256", "license", "role", "artifact_relation")}
-    return {"schema_version": 1, "target": "wasm32-wasip1", "sources": [*base_lock["sources"], public_source]}
+    return {"schema_version": 1, "target": "wasm32-wasip1", "sources": [*base_lock["sources"], source]}
 
 
 def write_json(path: pathlib.Path, value: Any) -> None:
@@ -228,6 +238,9 @@ def main() -> int:
     patch_parser = subparsers.add_parser("verify-patch")
     patch_parser.add_argument("--lock", type=pathlib.Path, required=True)
     patch_parser.add_argument("--patch", type=pathlib.Path, required=True)
+    source_lock_parser = subparsers.add_parser("source-lock")
+    source_lock_parser.add_argument("--lock", type=pathlib.Path, required=True)
+    source_lock_parser.add_argument("--output", type=pathlib.Path, required=True)
     prepare_parser = subparsers.add_parser("prepare")
     prepare_parser.add_argument("--lock", type=pathlib.Path, required=True)
     prepare_parser.add_argument("--package-root", type=pathlib.Path, required=True)
@@ -238,6 +251,9 @@ def main() -> int:
     lock = load_lock(args.lock)
     if args.command == "verify-patch":
         verify_patch(lock, args.patch)
+        return 0
+    if args.command == "source-lock":
+        write_json(args.output, source_lock_projection(lock))
         return 0
     selection = build_selection(lock, args.package_root)
     base = strict_json_loads(args.source_lock.read_text())

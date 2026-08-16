@@ -18,7 +18,11 @@ def digest(value: bytes) -> str:
 
 
 class WorkstationBuildVerifierTests(unittest.TestCase):
-    def make_evidence(self, root: pathlib.Path) -> None:
+    def make_evidence(self, root: pathlib.Path, profile: str = "base") -> None:
+        artifact_name = {
+            "base": "agent-python-runtime.wasm",
+            "attrs-770": "agent-python-runtime-attrs-770.wasm",
+        }[profile]
         (root / "dist").mkdir(parents=True, exist_ok=True)
         commit = "a" * 40
         key = "sha256:" + "b" * 64
@@ -46,11 +50,14 @@ class WorkstationBuildVerifierTests(unittest.TestCase):
             "final_cache_key": "sha256:" + "e" * 64,
             "final_cache_disposition": "hit",
         }
-        manifest = {"artifact": {"sha256": digest(artifact), "size": len(artifact)}}
+        manifest = {
+            "artifact_profile": profile,
+            "artifact": {"filename": artifact_name, "sha256": digest(artifact), "size": len(artifact)},
+        }
         files = {
             "RESULT.READY": json.dumps(ready, sort_keys=True, separators=(",", ":")).encode() + b"\n",
             "build.log": b"bounded build log\n",
-            "dist/agent-python-runtime.wasm": artifact,
+            f"dist/{artifact_name}": artifact,
             "dist/build-cache.json": json.dumps(cache, sort_keys=True, separators=(",", ":")).encode() + b"\n",
             "dist/manifest.json": json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n",
         }
@@ -68,6 +75,15 @@ class WorkstationBuildVerifierTests(unittest.TestCase):
             report = verifier.verify(root, "a" * 40, "d" * 40)
             self.assertEqual("hit", report["cache_disposition"])
             self.assertTrue(str(report["artifact_sha256"]).startswith("sha256:"))
+
+    def test_accepts_explicit_attrs_profile_and_rejects_profile_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.make_evidence(root, "attrs-770")
+            report = verifier.verify(root, "a" * 40, "d" * 40, "attrs-770")
+            self.assertEqual("attrs-770", report["artifact_profile"])
+            with self.assertRaises(ValueError):
+                verifier.verify(root, "a" * 40, "d" * 40, "base")
 
     def test_rejects_mutation_source_drift_and_cache_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

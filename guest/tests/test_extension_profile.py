@@ -70,6 +70,15 @@ class ExtensionProfileTests(unittest.TestCase):
         self.assertEqual("b" * 64, selection["package"]["patch_sha256"])
         self.assertEqual(2, selection["package"]["file_count"])
 
+    def test_source_lock_projection_is_fetcher_compatible(self):
+        projected = self.tool.source_lock_projection(self.lock)
+        self.assertEqual(1, projected["schema_version"])
+        self.assertEqual(["attrs-source"], [item["id"] for item in projected["sources"]])
+        self.assertEqual(
+            {"id", "version", "url", "sha256", "license", "role", "artifact_relation"},
+            set(projected["sources"][0]),
+        )
+
     def test_tree_tamper_and_symlink_fail_closed(self):
         (self.package / "core.py").write_text("value = 2\n")
         with self.assertRaisesRegex(ValueError, "tree identity"):

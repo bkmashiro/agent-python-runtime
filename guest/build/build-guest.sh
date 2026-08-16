@@ -370,9 +370,12 @@ fi
 
 EFFECTIVE_SOURCE_LOCK="${WORK_DIR}/effective-sources.lock.json"
 EXTENSION_SELECTION="${WORK_DIR}/extension-profile.json"
+EXTENSION_SOURCE_LOCK="${WORK_DIR}/extension-sources.lock.json"
 ATTRS_SOURCE_DIR="${WORK_DIR}/attrs-source"
 if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
-  fetch attrs-source attrs-source.tar.gz "${ATTRS_PROFILE_LOCK}"
+  python3 "${ROOT_DIR}/guest/build/extension_profile.py" source-lock \
+    --lock "${ATTRS_PROFILE_LOCK}" --output "${EXTENSION_SOURCE_LOCK}"
+  fetch attrs-source attrs-source.tar.gz "${EXTENSION_SOURCE_LOCK}"
   rm -rf "${ATTRS_SOURCE_DIR}"
   mkdir -p "${ATTRS_SOURCE_DIR}"
   tar -xzf "${DOWNLOAD_DIR}/attrs-source.tar.gz" -C "${ATTRS_SOURCE_DIR}" --strip-components=1

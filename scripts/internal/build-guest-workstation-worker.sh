@@ -105,6 +105,7 @@ PY
   mapfile -t files < <(find dist -type f -print | LC_ALL=C sort)
   sha256sum RESULT.READY build.log "${files[@]}" > SHA256SUMS
 )
-printf 'artifact_sha256=sha256:%s\n' "$(sha256sum "$output/dist/agent-python-runtime.wasm" | cut -d' ' -f1)"
+artifact_filename=$(python3 -c 'import json,pathlib,sys; name=json.load(open(sys.argv[1]))["artifact"]["filename"]; path=pathlib.PurePosixPath(name); (path.name == name and not path.is_absolute()) or sys.exit("invalid artifact filename"); print(name)' "$output/dist/manifest.json")
+printf 'artifact_sha256=sha256:%s\n' "$(sha256sum "$output/dist/$artifact_filename" | cut -d' ' -f1)"
 printf 'cache_disposition=%s\n' "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["disposition"])' "$output/dist/build-cache.json")"
 printf 'build_millis=%s\n' "$build_millis"

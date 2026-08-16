@@ -57,7 +57,7 @@ describe('dual-profile causal evidence ingestion', () => {
     expect(filterTrajectory(value, { sources: ['subagent'] })).toHaveLength(3);
     const effect = value.events.find((event) => event.type === 'effect.transition')!;
     expect(filterTrajectory(value, { toolCallID: effect.tool_call_id }).some((event) => event.type === 'effect.transition')).toBe(true);
-    expect(filterTrajectory(value, { query: 'source_bound' }).map((event) => event.type)).toEqual(['source.decision']);
+    expect(filterTrajectory(value, { query: 'source_bound' }).map((event) => event.type)).toEqual(['tool.decision', 'source.decision']);
   });
 
   it('fails closed on identity, relation, profile leakage and unknown fields', async () => {

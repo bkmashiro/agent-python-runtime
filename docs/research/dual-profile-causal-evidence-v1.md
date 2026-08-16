@@ -41,7 +41,7 @@ Host ceilings cover event count, parent count, payload bytes and Labstore object
 
 ## Real evidence and Lab
 
-The named real-Guest run at capture commit `049c1dba2bed993768b71a2f6ec4f388f346bf73`
+The named real-Guest run at capture commit `c4b510051528d1469a4d40b2034a72974ec98632`
 uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257` and executes:
 
 - a fresh child CPython/WASI Guest over a private workspace branch;
@@ -49,18 +49,18 @@ uses CPython/WASI artifact `sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08
 - the actual Runtime observation attachment carrying the Host receipt/source binding.
 
 It produces three views from header
-`sha256:3a6967bdf380f409988d1b4c7dfee399ec7562bb1973c0ab98d121ee55c329e8`
+`sha256:5560ede54e5a3f59c1c5864441a54397b3d6386d9c21cf2b05f62211e72b3cfb`
 and shared retained event identities:
 
 - local private `experiment_full`: 31 events plus Labstore objects at
-  `~/.hermes/evidence/pysolate/dual-profile-mg2-049c1db/`, export file SHA-256
-  `7d05e08b298f0f7b6117bd1024d38320ad2f04c1cfca7f41a53568c5bc5501bb`;
+  `~/.hermes/evidence/pysolate/dual-profile-mg2-c4b5100/`, export file SHA-256
+  `c004053ff30e3359eb8e961c2ac6b211d65a15f67b4fabc719d84cc9894f711b`;
 - checked-in 9-event production projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-production-v1.json`, file SHA-256
-  `a6b8680837e14238f454fa3c4170024d88e4356dab801e715f93067d743b6ccb`;
+  `81605cef42d275cc9238d1d50b11ad932dd2687bd0e5e91578f8a3770a00608a`;
 - checked-in 21-event body-safe experiment projection
   `docs/evidence/dual-profile-causal-evidence-real-guest-public-v1.json`, file SHA-256
-  `63808594309122f082015d34dcf740ef7d26c765ab6f463a9c71bfb0aac73af0`.
+  `7833cd7ce414be3b7c5768a33aa0276b0976974bf85621bd3421c351ea4a982a`.
 
 The private trace contains resolvable `blob.code` and `blob.file` references for the exact child
 program and the captured `child.txt` output; contract validation resolves each private object and

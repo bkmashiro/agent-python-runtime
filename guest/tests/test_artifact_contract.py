@@ -175,6 +175,69 @@ class ArtifactVerifierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
 
+    def test_attrs_profile_binds_embedded_package_source_and_qualification(self):
+        self.artifact = pathlib.Path(self.directory.name) / "agent-python-runtime-attrs-770.wasm"
+        self.artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
+        profile = "attrs-770"
+        probes = self.verifier.IMPORT_QUALIFICATION.probe_specs(profile)
+        roots = [probe["name"] for probe in probes]
+        inventory_payload = {
+            "schema_version": 1, "artifact_profile": profile, "probe": "guest-importlib-find-spec-v1",
+            "implementation": "cpython", "python_version": "3.14.test",
+            "discoverable_roots": roots, "failures": [],
+        }
+        inventory = pathlib.Path(self.directory.name) / "import-inventory.json"
+        inventory.write_text(json.dumps(inventory_payload, sort_keys=True))
+        qualification_payload = {
+            "schema_version": 1, "artifact_profile": profile, "probe": "guest-import-exec-v1",
+            "implementation": "cpython", "python_version": "3.14.test", "qualified_roots": roots,
+            "results": [
+                {"name": probe["name"], "operation": probe["operation"], "status": "qualified", "error": ""}
+                for probe in probes
+            ],
+        }
+        qualification = pathlib.Path(self.directory.name) / "import-qualification.json"
+        qualification.write_text(json.dumps(qualification_payload, sort_keys=True))
+        extension = {
+            "schema_version": 1, "kind": "pure-python-package", "profile": profile,
+            "package": {
+                "name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python",
+                "import_root": "attr", "install_path": "site-packages/attr", "repository_license_id": "MIT",
+                "source_commit": "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
+                "source_archive_sha256": "a" * 64, "patch_sha256": "b" * 64,
+                "tree_sha256": "c" * 64, "file_count": 20, "total_bytes": 162921,
+            },
+        }
+        manifest = copy.deepcopy(self.manifest)
+        manifest.update({
+            "schema_version": 4, "artifact_profile": profile,
+            "artifact": {
+                "filename": self.artifact.name, "size": 8,
+                "sha256": "93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476",
+            },
+            "sources": [{
+                "id": "attrs-source", "version": "20.3.0-39-g58d2adc", "sha256": "a" * 64,
+                "license": "MIT", "role": "python-package", "artifact_relation": "packaged",
+            }],
+            "packages": [
+                {"name": "cpython", "version": "3.14.test", "status": "core"},
+                {"name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python"},
+            ],
+            "extension_profile": extension,
+            "python_import_inventory": {
+                **{key: value for key, value in inventory_payload.items() if key != "artifact_profile"},
+                "filename": inventory.name, "sha256": self.verifier.sha256(inventory),
+            },
+            "python_import_qualification": {
+                **{key: value for key, value in qualification_payload.items() if key != "artifact_profile"},
+                "filename": qualification.name, "sha256": self.verifier.sha256(qualification),
+            },
+        })
+        self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
+        manifest["sources"][0]["sha256"] = "d" * 64
+        with self.assertRaisesRegex(ValueError, "source does not match"):
+            self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
+
 
 
 if __name__ == "__main__":

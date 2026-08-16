@@ -156,6 +156,54 @@ class ManifestWriterTests(unittest.TestCase):
                 manifest["packages"],
             )
 
+    def test_attrs_profile_binds_pinned_package_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact = root / "agent-python-runtime-attrs-770.wasm"
+            artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
+            wat = root / "guest.wat"
+            wat.write_text('(module\n  (export "memory" (memory 0))\n)\n')
+            lock = root / "sources.lock.json"
+            lock.write_text(json.dumps({
+                "schema_version": 1,
+                "target": "wasm32-wasip1",
+                "sources": [
+                    {"id": "cpython-source", "version": "3.14.test"},
+                    {"id": "attrs-source", "version": "20.3.0-39-g58d2adc"},
+                ],
+            }))
+            selection = root / "extension-profile.json"
+            selection.write_text(json.dumps({
+                "schema_version": 1,
+                "kind": "pure-python-package",
+                "profile": "attrs-770",
+                "package": {
+                    "name": "attrs", "version": "20.3.0-39-g58d2adc",
+                    "status": "selected-pure-python", "import_root": "attr",
+                    "install_path": "site-packages/attr", "repository_license_id": "MIT",
+                    "source_commit": "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
+                    "source_archive_sha256": "a" * 64, "patch_sha256": "b" * 64,
+                    "tree_sha256": "c" * 64, "file_count": 20, "total_bytes": 162921,
+                },
+            }))
+            manifest = self.writer.build_manifest(
+                artifact=artifact, wat=wat, source_lock=lock, commit="abc123",
+                source_date_epoch="1234567890", artifact_profile="attrs-770",
+                extension_selection=selection, import_inventory=write_inventory(root, "attrs-770"),
+                import_qualification=write_qualification(root, "attrs-770"),
+                memory_initial_pages=2048, memory_maximum_pages=2048,
+            )
+            self.assertEqual("attrs-770", manifest["artifact_profile"])
+            self.assertEqual(json.loads(selection.read_text()), manifest["extension_profile"])
+            self.assertEqual(
+                [
+                    {"name": "cpython", "version": "3.14.test", "status": "core"},
+                    {"name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python"},
+                ],
+                manifest["packages"],
+            )
+            self.assertIn("one pinned pure-Python package", "\n".join(manifest["limitations"]))
+
     def test_infers_memory_bounds_from_canonical_wat(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

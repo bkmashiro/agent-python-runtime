@@ -31,6 +31,7 @@ ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v1"}
 REQUIRED_CUSTOM_IMPORTS = {("agent_runtime_v1", "host_call")}
 ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
+    "attrs-770": "agent-python-runtime-attrs-770.wasm",
 }
 
 
@@ -54,8 +55,19 @@ def load_import_qualification_module():
     return module
 
 
+def load_extension_profile_module():
+    path = pathlib.Path(__file__).with_name("extension_profile.py")
+    spec = importlib.util.spec_from_file_location("artifact_extension_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load extension profile validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
+EXTENSION_PROFILE = load_extension_profile_module()
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -134,8 +146,43 @@ def verify(
                 raise ValueError("manifest import qualification does not match sidecar")
 
     extension_profile = manifest.get("extension_profile")
-    if extension_profile is not None or extension_selection is not None:
-        raise ValueError("base artifact profile forbids extension profile")
+    if profile == "base":
+        if extension_profile is not None or extension_selection is not None:
+            raise ValueError("base artifact profile forbids extension profile")
+    elif profile == "attrs-770":
+        if schema_version != 4:
+            raise ValueError("attrs-770 artifact profile requires schema v4")
+        extension_profile = EXTENSION_PROFILE.validate_selection(extension_profile)
+        if extension_selection is not None:
+            sidecar = EXTENSION_PROFILE.load_selection(extension_selection)
+            if sidecar != extension_profile:
+                raise ValueError("extension selection does not match manifest")
+        package = extension_profile["package"]
+        sources = manifest.get("sources")
+        attrs_sources = [row for row in sources if isinstance(row, dict) and row.get("id") == "attrs-source"] if isinstance(sources, list) else []
+        if len(attrs_sources) != 1:
+            raise ValueError("attrs extension source is missing")
+        source = attrs_sources[0]
+        if source.get("version") != package["version"] or source.get("sha256") != package["source_archive_sha256"] or source.get("license") != package["repository_license_id"] or source.get("role") != "python-package" or source.get("artifact_relation") != "packaged":
+            raise ValueError("attrs extension source does not match package profile")
+    else:
+        raise ValueError("unsupported artifact profile")
+
+    if profile == "attrs-770":
+        assert isinstance(extension_profile, dict)
+        packages = manifest.get("packages")
+        package = extension_profile["package"]
+        if (
+            not isinstance(packages, list)
+            or len(packages) != 2
+            or not isinstance(packages[0], dict)
+            or packages[0].get("name") != "cpython"
+            or packages[0].get("status") != "core"
+            or not isinstance(packages[0].get("version"), str)
+            or not packages[0]["version"]
+            or packages[1] != {"name": "attrs", "version": package["version"], "status": "selected-pure-python"}
+        ):
+            raise ValueError("attrs artifact package set is invalid")
 
     wasm = manifest.get("wasm", {})
     exports = set(wasm.get("exports", []))

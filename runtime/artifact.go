@@ -131,6 +131,38 @@ type numpyExtensionProfile struct {
 	LinkInputCount int      `json:"link_input_count"`
 }
 
+type attrsExtensionProfile struct {
+	SchemaVersion int                   `json:"schema_version"`
+	Kind          string                `json:"kind"`
+	Profile       string                `json:"profile"`
+	Package       attrsExtensionPackage `json:"package"`
+}
+
+type attrsExtensionPackage struct {
+	Name                string `json:"name"`
+	Version             string `json:"version"`
+	Status              string `json:"status"`
+	ImportRoot          string `json:"import_root"`
+	InstallPath         string `json:"install_path"`
+	RepositoryLicenseID string `json:"repository_license_id"`
+	SourceCommit        string `json:"source_commit"`
+	SourceArchiveSHA256 string `json:"source_archive_sha256"`
+	PatchSHA256         string `json:"patch_sha256"`
+	TreeSHA256          string `json:"tree_sha256"`
+	FileCount           int    `json:"file_count"`
+	TotalBytes          int    `json:"total_bytes"`
+}
+
+type distributionSource struct {
+	ID               string `json:"id"`
+	Version          string `json:"version"`
+	URL              string `json:"url"`
+	SHA256           string `json:"sha256"`
+	License          string `json:"license"`
+	Role             string `json:"role"`
+	ArtifactRelation string `json:"artifact_relation"`
+}
+
 func VerifyDistributionArtifact(artifactFilename string, artifact, manifestBytes, importInventoryBytes, importQualificationBytes []byte) (VerifiedArtifactIdentity, error) {
 	if len(artifact) == 0 || len(artifact) > maxVerifiedArtifactBytes || len(manifestBytes) == 0 || len(manifestBytes) > maxArtifactManifestBytes ||
 		filepath.Base(artifactFilename) != artifactFilename || rejectDuplicateBoundedJSON(manifestBytes) != nil {
@@ -222,6 +254,7 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 	expectedFilename := map[string]string{
 		"base":       "agent-python-runtime.wasm",
 		"numpy-core": "agent-python-runtime-numpy-core.wasm",
+		"attrs-770":  "agent-python-runtime-attrs-770.wasm",
 	}[manifest.ArtifactProfile]
 	if expectedFilename == "" || (manifest.SchemaVersion != 2 && manifest.SchemaVersion != 3 && manifest.SchemaVersion != 4) || manifest.ABIVersion != "v1" || manifest.Target != "wasm32-wasip1" ||
 		manifest.Artifact.Filename != expectedFilename || artifactFilename != expectedFilename || manifest.Artifact.Size != int64(len(artifact)) ||
@@ -229,6 +262,9 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 		manifest.Build.SourceDateEpoch == "" || manifest.Build.CompilerTarget != "wasm32-wasip1" || manifest.Build.ExecutionModel != "reactor" ||
 		len(manifest.Sources) == 0 || len(manifest.Wasm) == 0 || manifest.Packages == nil || manifest.ExtensionProfile == nil || manifest.Limitations == nil {
 		return errors.New("manifest identity is incomplete")
+	}
+	if manifest.ArtifactProfile == "attrs-770" && manifest.SchemaVersion != 4 {
+		return errors.New("attrs-770 profile requires schema v4")
 	}
 	artifactSum := sha256.Sum256(artifact)
 	if manifest.Artifact.SHA256 != hex.EncodeToString(artifactSum[:]) {
@@ -261,19 +297,68 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 			}
 		}
 	}
-	if manifest.ArtifactProfile == "base" {
+	switch manifest.ArtifactProfile {
+	case "base":
 		if !bytes.Equal(bytes.TrimSpace(manifest.ExtensionProfile), []byte("null")) {
 			return errors.New("base profile contains extension metadata")
 		}
-		return nil
+	case "numpy-core":
+		var extension numpyExtensionProfile
+		extensionDecoder := json.NewDecoder(bytes.NewReader(manifest.ExtensionProfile))
+		extensionDecoder.DisallowUnknownFields()
+		if err := extensionDecoder.Decode(&extension); err != nil || !errors.Is(extensionDecoder.Decode(&struct{}{}), io.EOF) ||
+			extension.Filename != "extension-selection.json" || !artifactHexDigestPattern.MatchString(extension.ManifestSHA256) || extension.Profile != "core" ||
+			len(extension.Modules) != 2 || extension.Modules[0] != "numpy._core._multiarray_umath" || extension.Modules[1] != "numpy.linalg._umath_linalg" || extension.LinkInputCount <= 0 {
+			return errors.New("numpy extension profile is invalid")
+		}
+	case "attrs-770":
+		if err := validateAttrsExtensionProfile(manifest.ExtensionProfile, manifest.Sources); err != nil {
+			return err
+		}
+	default:
+		return errors.New("artifact extension profile is unsupported")
 	}
-	var extension numpyExtensionProfile
-	extensionDecoder := json.NewDecoder(bytes.NewReader(manifest.ExtensionProfile))
-	extensionDecoder.DisallowUnknownFields()
-	if err := extensionDecoder.Decode(&extension); err != nil || !errors.Is(extensionDecoder.Decode(&struct{}{}), io.EOF) ||
-		extension.Filename != "extension-selection.json" || !artifactHexDigestPattern.MatchString(extension.ManifestSHA256) || extension.Profile != "core" ||
-		len(extension.Modules) != 2 || extension.Modules[0] != "numpy._core._multiarray_umath" || extension.Modules[1] != "numpy.linalg._umath_linalg" || extension.LinkInputCount <= 0 {
-		return errors.New("numpy extension profile is invalid")
+	return nil
+}
+
+func validateAttrsExtensionProfile(encoded, sourcesJSON []byte) error {
+	var extension attrsExtensionProfile
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&extension); err != nil || !errors.Is(decoder.Decode(&struct{}{}), io.EOF) {
+		return errors.New("attrs extension profile is invalid")
+	}
+	packageIdentity := extension.Package
+	if extension.SchemaVersion != 1 || extension.Kind != "pure-python-package" || extension.Profile != "attrs-770" ||
+		packageIdentity.Name != "attrs" || packageIdentity.Version != "20.3.0-39-g58d2adc" || packageIdentity.Status != "selected-pure-python" ||
+		packageIdentity.ImportRoot != "attr" || packageIdentity.InstallPath != "site-packages/attr" || packageIdentity.RepositoryLicenseID != "MIT" ||
+		packageIdentity.SourceCommit != "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3" ||
+		packageIdentity.SourceArchiveSHA256 != "62aacc4a0014118dfedcca0f59767e21ba85aff60d3ac2c7b67caf97bda22f2b" ||
+		packageIdentity.PatchSHA256 != "fdbfbdbb113809ae7982eb85e221ae5ddfdac9774a787114424e6ed2785f236e" ||
+		packageIdentity.TreeSHA256 != "f1e3b25ec86f639a4ce256f5c1216fd585527142a08a284cc5fd9c9de603229f" ||
+		packageIdentity.FileCount != 20 || packageIdentity.TotalBytes != 162921 {
+		return errors.New("attrs extension package identity is invalid")
+	}
+	var sources []distributionSource
+	sourceDecoder := json.NewDecoder(bytes.NewReader(sourcesJSON))
+	sourceDecoder.DisallowUnknownFields()
+	if err := sourceDecoder.Decode(&sources); err != nil || !errors.Is(sourceDecoder.Decode(&struct{}{}), io.EOF) {
+		return errors.New("artifact sources are invalid")
+	}
+	matches := 0
+	for _, source := range sources {
+		if source.ID != "attrs-source" {
+			continue
+		}
+		matches++
+		if source.Version != packageIdentity.Version || source.URL != "https://codeload.github.com/python-attrs/attrs/tar.gz/58d2adce57f2c4e447eb12b892ebbb09cccbdcc3" ||
+			source.SHA256 != packageIdentity.SourceArchiveSHA256 || source.License != packageIdentity.RepositoryLicenseID ||
+			source.Role != "python-package" || source.ArtifactRelation != "packaged" {
+			return errors.New("attrs extension source identity is invalid")
+		}
+	}
+	if matches != 1 {
+		return errors.New("attrs extension source is not unique")
 	}
 	return nil
 }
@@ -301,6 +386,8 @@ func validatePythonImportInventory(profile string, inventory *pythonImportInvent
 	required := []string{"agent_runtime", "json", "sys"}
 	if profile == "numpy-core" {
 		required = append(required, "numpy")
+	} else if profile == "attrs-770" {
+		required = append(required, "attr")
 	}
 	for _, root := range required {
 		if _, ok := roots[root]; !ok {
@@ -373,6 +460,8 @@ func validatePythonImportQualification(profile string, inventory *pythonImportIn
 	required := []string{"agent_runtime", "json", "sys"}
 	if profile == "numpy-core" {
 		required = append(required, "numpy")
+	} else if profile == "attrs-770" {
+		required = append(required, "attr", "types", "typing")
 	}
 	for _, root := range required {
 		if _, ok := qualified[root]; !ok {
@@ -381,11 +470,11 @@ func validatePythonImportQualification(profile string, inventory *pythonImportIn
 	}
 	derived := make([]string, 0, len(qualification.Results))
 	expectedOperations := map[string]string{
-		"agent_runtime": "import", "base64": "roundtrip", "collections": "counter", "csv": "roundtrip",
+		"agent_runtime": "import", "attr": "generic_dynamic_class", "base64": "roundtrip", "collections": "counter", "csv": "roundtrip",
 		"datetime": "date_isoformat", "decimal": "add", "fractions": "add", "functools": "reduce",
 		"hashlib": "sha256", "itertools": "islice", "json": "roundtrip", "math": "sqrt",
 		"pathlib": "pure_path", "re": "fullmatch", "statistics": "mean", "sys": "version_info",
-		"urllib": "parse", "xml": "etree_roundtrip",
+		"types": "new_class", "typing": "generic_alias", "urllib": "parse", "xml": "etree_roundtrip",
 	}
 	if profile == "numpy-core" {
 		expectedOperations["numpy"] = "array_sum"
@@ -449,6 +538,8 @@ func validateArtifactPackages(profile string, packages []ArtifactPackage) error 
 	expected := []struct{ name, status string }{{"cpython", "core"}}
 	if profile == "numpy-core" {
 		expected = append(expected, struct{ name, status string }{"numpy", "selected-core"})
+	} else if profile == "attrs-770" {
+		expected = append(expected, struct{ name, status string }{"attrs", "selected-pure-python"})
 	}
 	if len(packages) != len(expected) {
 		return errors.New("artifact package set does not match profile")

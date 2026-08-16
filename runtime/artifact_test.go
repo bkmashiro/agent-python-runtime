@@ -38,6 +38,33 @@ func TestVerifyDistributionArtifactBindsProfilePackagesAndDigests(t *testing.T) 
 	}
 }
 
+func TestVerifyDistributionArtifactBindsAttrsPackageProfile(t *testing.T) {
+	artifact := []byte("verified-wasm")
+	manifest := distributionManifestFixture(t, artifact, "attrs-770")
+	inventory := distributionImportInventoryFixture(t, "attrs-770")
+	qualification := distributionImportQualificationFixture(t, "attrs-770")
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := VerifyDistributionArtifact("agent-python-runtime-attrs-770.wasm", artifact, encoded, inventory, qualification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.ProfileID != "attrs-770" || len(identity.Packages) != 2 || identity.Packages[1].Name != "attrs" || identity.Packages[1].Status != "selected-pure-python" ||
+		strings.Join(identity.QualifiedImportRoots, ",") != "agent_runtime,attr,json,sys,types,typing" {
+		t.Fatalf("identity=%+v", identity)
+	}
+	manifest["extension_profile"].(map[string]any)["package"].(map[string]any)["patch_sha256"] = strings.Repeat("0", 64)
+	mutated, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyDistributionArtifact("agent-python-runtime-attrs-770.wasm", artifact, mutated, inventory, qualification); !errors.Is(err, ErrInvalidArtifactManifest) {
+		t.Fatalf("patch drift err=%v", err)
+	}
+}
+
 func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 	artifact := []byte("verified-wasm")
 	valid := distributionManifestFixture(t, artifact, "numpy-core")
@@ -217,10 +244,25 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 		filename = "agent-python-runtime-numpy-core.wasm"
 		packages = append(packages, map[string]any{"name": "numpy", "version": "2.3.0", "status": "selected-core"})
 		extension = map[string]any{"filename": "extension-selection.json", "manifest_sha256": strings.Repeat("3", 64), "profile": "core", "modules": []any{"numpy._core._multiarray_umath", "numpy.linalg._umath_linalg"}, "link_input_count": 2}
+	} else if profile == "attrs-770" {
+		filename = "agent-python-runtime-attrs-770.wasm"
+		packages = append(packages, map[string]any{"name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python"})
+		extension = map[string]any{
+			"schema_version": 1, "kind": "pure-python-package", "profile": "attrs-770",
+			"package": map[string]any{
+				"name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python",
+				"import_root": "attr", "install_path": "site-packages/attr", "repository_license_id": "MIT",
+				"source_commit":         "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
+				"source_archive_sha256": "62aacc4a0014118dfedcca0f59767e21ba85aff60d3ac2c7b67caf97bda22f2b", "patch_sha256": "fdbfbdbb113809ae7982eb85e221ae5ddfdac9774a787114424e6ed2785f236e",
+				"tree_sha256": "f1e3b25ec86f639a4ce256f5c1216fd585527142a08a284cc5fd9c9de603229f", "file_count": 20, "total_bytes": 162921,
+			},
+		}
 	}
 	imports := []any{"agent_runtime", "json", "math", "sys"}
 	if profile == "numpy-core" {
 		imports = []any{"agent_runtime", "json", "math", "numpy", "sys"}
+	} else if profile == "attrs-770" {
+		imports = []any{"agent_runtime", "attr", "json", "math", "sys", "types", "typing"}
 	}
 	return map[string]any{
 		"schema_version":    4,
@@ -229,7 +271,7 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 		"target":            "wasm32-wasip1",
 		"artifact":          map[string]any{"filename": filename, "size": len(artifact), "sha256": hex.EncodeToString(artifactSum[:])},
 		"build":             map[string]any{"repository_commit": strings.Repeat("a", 40), "source_date_epoch": "1", "compiler_target": "wasm32-wasip1", "execution_model": "reactor"},
-		"sources":           []any{},
+		"sources":           distributionSources(profile),
 		"wasm":              map[string]any{"imports": []any{}, "exports": []any{"_start"}},
 		"packages":          packages,
 		"extension_profile": extension,
@@ -251,12 +293,14 @@ func qualificationRoots(profile string) []string {
 	roots := []string{"agent_runtime", "json", "sys"}
 	if profile == "numpy-core" {
 		roots = []string{"agent_runtime", "json", "numpy", "sys"}
+	} else if profile == "attrs-770" {
+		roots = []string{"agent_runtime", "attr", "json", "sys", "types", "typing"}
 	}
 	return roots
 }
 
 func qualificationResults(profile string) []any {
-	operations := map[string]string{"agent_runtime": "import", "json": "roundtrip", "numpy": "array_sum", "sys": "version_info"}
+	operations := map[string]string{"agent_runtime": "import", "attr": "generic_dynamic_class", "json": "roundtrip", "numpy": "array_sum", "sys": "version_info", "types": "new_class", "typing": "generic_alias"}
 	results := make([]any, 0, len(qualificationRoots(profile)))
 	for _, root := range qualificationRoots(profile) {
 		results = append(results, map[string]any{"name": root, "operation": operations[root], "status": "qualified", "error": ""})
@@ -269,6 +313,8 @@ func distributionImportInventoryFixture(t *testing.T, profile string) []byte {
 	roots := []string{"agent_runtime", "json", "math", "sys"}
 	if profile == "numpy-core" {
 		roots = []string{"agent_runtime", "json", "math", "numpy", "sys"}
+	} else if profile == "attrs-770" {
+		roots = []string{"agent_runtime", "attr", "json", "math", "sys", "types", "typing"}
 	}
 	encoded, err := json.Marshal(map[string]any{
 		"schema_version": 1, "artifact_profile": profile, "probe": "guest-importlib-find-spec-v1",
@@ -291,6 +337,18 @@ func distributionImportQualificationFixture(t *testing.T, profile string) []byte
 		t.Fatal(err)
 	}
 	return encoded
+}
+
+func distributionSources(profile string) []any {
+	if profile != "attrs-770" {
+		return []any{}
+	}
+	return []any{map[string]any{
+		"id": "attrs-source", "version": "20.3.0-39-g58d2adc",
+		"url":     "https://codeload.github.com/python-attrs/attrs/tar.gz/58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
+		"sha256":  "62aacc4a0014118dfedcca0f59767e21ba85aff60d3ac2c7b67caf97bda22f2b",
+		"license": "MIT", "role": "python-package", "artifact_relation": "packaged",
+	}}
 }
 
 func cloneManifestFixture(t *testing.T, value map[string]any) map[string]any {

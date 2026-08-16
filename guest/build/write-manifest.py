@@ -18,6 +18,7 @@ EXPORT_RE = re.compile(r'\(export\s+"([^"]+)"')
 MEMORY_RE = re.compile(r'^\s*\(memory(?:\s+\(;\d+;\))?\s+(\d+)\s+(\d+)\s*\)', re.MULTILINE)
 ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
+    "attrs-770": "agent-python-runtime-attrs-770.wasm",
 }
 
 
@@ -41,8 +42,19 @@ def load_import_qualification_module():
     return module
 
 
+def load_extension_profile_module():
+    path = pathlib.Path(__file__).with_name("extension_profile.py")
+    spec = importlib.util.spec_from_file_location("artifact_extension_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load extension profile validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
+EXTENSION_PROFILE = load_extension_profile_module()
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -132,8 +144,16 @@ def build_manifest(
     qualification_record["filename"] = import_qualification.name
     qualification_record["sha256"] = sha256(import_qualification)
 
-    if extension_selection is not None:
-        raise ValueError("base artifact profile forbids extension selection")
+    extension_profile = None
+    if artifact_profile == "base":
+        if extension_selection is not None:
+            raise ValueError("base artifact profile forbids extension selection")
+    elif artifact_profile == "attrs-770":
+        if extension_selection is None:
+            raise ValueError("attrs-770 artifact profile requires extension selection")
+        extension_profile = EXTENSION_PROFILE.load_selection(extension_selection)
+    else:
+        raise ValueError("unsupported artifact profile")
 
     lock = json.loads(source_lock.read_text())
     wat_text = wat.read_text()
@@ -149,11 +169,23 @@ def build_manifest(
             "status": "core",
         },
     ]
+    if artifact_profile == "attrs-770":
+        assert extension_profile is not None
+        attrs_version = locked_source_version(lock, "attrs-source")
+        if extension_profile["package"]["version"] != attrs_version:
+            raise ValueError("extension package version does not match source lock")
+        packages.append({
+            "name": "attrs",
+            "version": attrs_version,
+            "status": "selected-pure-python",
+        })
     limitations = [
         "import qualification covers only the named guest-import-exec-v1 operations and is not transitive closure or arbitrary behavior proof",
         "Host tools are explicitly registered and call-bounded",
         "the proof of concept does not provide package installation or native extensions",
     ]
+    if artifact_profile == "attrs-770":
+        limitations[-1] = "the profile provides one pinned pure-Python package and no runtime package installation or native extensions"
 
     detected_memory = parse_memory_bounds(wat_text)
     if (memory_initial_pages is None) != (memory_maximum_pages is None):
@@ -197,7 +229,7 @@ def build_manifest(
         "sources": lock["sources"],
         "wasm": wasm,
         "packages": packages,
-        "extension_profile": None,
+        "extension_profile": extension_profile,
         "python_import_inventory": inventory_record,
         "python_import_qualification": qualification_record,
         "limitations": limitations,

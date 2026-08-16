@@ -29,6 +29,9 @@ class ImportInventoryTests(unittest.TestCase):
         self.assertNotIn("compatibility", request)
         self.assertIn("guest-importlib-find-spec-v1", request["code"])
 
+        attrs_request = self.tool.build_request("attrs-770")
+        self.assertEqual({"artifact_profile": "attrs-770"}, attrs_request["inputs"])
+
     def test_extract_validates_and_canonicalizes_guest_result(self):
         response = {
             "status": "ok",
@@ -66,6 +69,21 @@ class ImportInventoryTests(unittest.TestCase):
             path.write_text('{"schema_version":1,"schema_version":1}')
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 self.tool.load_inventory(path, "base")
+
+    def test_attrs_profile_requires_packaged_root(self):
+        value = {
+            "schema_version": 1,
+            "artifact_profile": "attrs-770",
+            "probe": "guest-importlib-find-spec-v1",
+            "implementation": "cpython",
+            "python_version": "3.14.0",
+            "discoverable_roots": ["agent_runtime", "attr", "json", "sys"],
+            "failures": [],
+        }
+        self.tool.validate_inventory(value, "attrs-770")
+        value["discoverable_roots"].remove("attr")
+        with self.assertRaisesRegex(ValueError, "required profile import root"):
+            self.tool.validate_inventory(value, "attrs-770")
 
 
 if __name__ == "__main__":

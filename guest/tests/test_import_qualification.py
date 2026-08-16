@@ -51,6 +51,16 @@ class ImportQualificationTests(unittest.TestCase):
             self.assertIn("guest-import-exec-v1", request["code"])
             compile(request["code"], "<qualification-probe>", "exec")
 
+    def test_attrs_profile_adds_exact_package_and_language_operations(self):
+        specs = self.tool.probe_specs("attrs-770")
+        by_name = {row["name"]: row["operation"] for row in specs}
+        self.assertEqual("generic_dynamic_class", by_name["attr"])
+        self.assertEqual("new_class", by_name["types"])
+        self.assertEqual("generic_alias", by_name["typing"])
+        self.assertTrue({"attr", "types", "typing"}.issubset(self.tool.required_roots("attrs-770")))
+        catalog = self.tool.extract_qualification(self.qualified_responses("attrs-770"), "attrs-770")
+        self.assertTrue({"attr", "types", "typing"}.issubset(catalog["qualified_roots"]))
+
     def test_extract_builds_sorted_qualified_catalog(self):
         catalog = self.tool.extract_qualification(self.qualified_responses(), "base")
         self.assertEqual(1, catalog["schema_version"])

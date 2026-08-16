@@ -8,11 +8,32 @@ DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
+ATTRS_PROFILE_LOCK="${ROOT_DIR}/guest/build/profiles/attrs-770.lock.json"
 BUILD_CACHE_ROOT=${AGENT_RUNTIME_BUILD_CACHE_ROOT:-}
 BUILD_CACHE_MODE=${AGENT_RUNTIME_BUILD_CACHE_MODE:-off}
 SOURCE_TREE_ID=${AGENT_RUNTIME_SOURCE_TREE:-}
-ARTIFACT_PROFILE=base
-ARTIFACT_FILENAME="agent-python-runtime.wasm"
+ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
+ARTIFACT_FILENAME=""
+EXTENSIONS_LOCK=""
+EXTENSION_PATCH=""
+case "${ARTIFACT_PROFILE}" in
+  base)
+    ARTIFACT_FILENAME="agent-python-runtime.wasm"
+    ;;
+  attrs-770)
+    ARTIFACT_FILENAME="agent-python-runtime-attrs-770.wasm"
+    EXTENSIONS_LOCK="${ATTRS_PROFILE_LOCK}"
+    EXTENSION_PATCH=${AGENT_RUNTIME_EXTENSION_PATCH:-}
+    if [[ -z ${EXTENSION_PATCH} || ! -f ${EXTENSION_PATCH} ]]; then
+      echo "attrs-770 profile requires AGENT_RUNTIME_EXTENSION_PATCH" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "unsupported artifact profile: ${ARTIFACT_PROFILE}" >&2
+    exit 1
+    ;;
+esac
 INITIAL_MEMORY_BYTES=134217728
 MAX_MEMORY_BYTES=536870912
 if [[ -z ${AGENT_RUNTIME_MEMORY_MODEL+x} ]]; then
@@ -65,8 +86,11 @@ fi
 export SOURCE_DATE_EPOCH
 
 fetch() {
-  python3 "${ROOT_DIR}/tools/fetch_locked_source.py" "$1" "${DOWNLOAD_DIR}/$2" \
-    --lock "${SOURCE_LOCK}"
+  local source_id=$1
+  local filename=$2
+  local lock=${3:-${SOURCE_LOCK}}
+  python3 "${ROOT_DIR}/tools/fetch_locked_source.py" "${source_id}" "${DOWNLOAD_DIR}/${filename}" \
+    --lock "${lock}"
 }
 
 # BEGIN CPYTHON CACHE RECIPE
@@ -340,6 +364,29 @@ if [[ -n ${BUILD_CACHE_ROOT} && ${BUILD_CACHE_MODE} != off && ${FINAL_CACHE_ELIG
   FINAL_CACHE_STATUS=miss
 fi
 
+EFFECTIVE_SOURCE_LOCK="${WORK_DIR}/effective-sources.lock.json"
+EXTENSION_SELECTION="${WORK_DIR}/extension-profile.json"
+ATTRS_SOURCE_DIR="${WORK_DIR}/attrs-source"
+if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+  fetch attrs-source attrs-source.tar.gz "${ATTRS_PROFILE_LOCK}"
+  python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-patch \
+    --lock "${ATTRS_PROFILE_LOCK}" --patch "${EXTENSION_PATCH}"
+  rm -rf "${ATTRS_SOURCE_DIR}"
+  mkdir -p "${ATTRS_SOURCE_DIR}"
+  tar -xzf "${DOWNLOAD_DIR}/attrs-source.tar.gz" -C "${ATTRS_SOURCE_DIR}" --strip-components=1
+  (
+    cd "${WORK_DIR}"
+    git apply --check --directory=attrs-source "${EXTENSION_PATCH}"
+    git apply --directory=attrs-source "${EXTENSION_PATCH}"
+  )
+  python3 "${ROOT_DIR}/guest/build/extension_profile.py" prepare \
+    --lock "${ATTRS_PROFILE_LOCK}" --package-root "${ATTRS_SOURCE_DIR}/src/attr" \
+    --source-lock "${SOURCE_LOCK}" --selection-output "${EXTENSION_SELECTION}" \
+    --effective-source-lock-output "${EFFECTIVE_SOURCE_LOCK}"
+else
+  cp "${SOURCE_LOCK}" "${EFFECTIVE_SOURCE_LOCK}"
+fi
+
 CLANG="${WASI_SDK_PATH}/bin/clang"
 LLVM_AR="${WASI_SDK_PATH}/bin/llvm-ar"
 LLVM_NM="${WASI_SDK_PATH}/bin/llvm-nm"
@@ -417,6 +464,12 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
   --epoch "${SOURCE_DATE_EPOCH}"
+if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+  python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+    "${ATTRS_SOURCE_DIR}/src/attr" \
+    "${VFS_PYTHON_DIR}/site-packages/attr" \
+    --epoch "${SOURCE_DATE_EPOCH}"
+fi
 
 pack_guest() {
   local output=$1
@@ -478,28 +531,36 @@ run_import_qualification \
   "${ARTIFACT_PROFILE}" \
   "${WORK_DIR}/import-qualification" \
   "${IMPORT_QUALIFICATION}"
+MANIFEST_EXTENSION_ARGS=()
+if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+  MANIFEST_EXTENSION_ARGS=(--extension-selection "${EXTENSION_SELECTION}")
+fi
 python3 "${ROOT_DIR}/guest/build/write-manifest.py" \
   --artifact "${FINAL_GUEST}" \
   --wat "${DIST_DIR}/agent-python-runtime.wat" \
-  --source-lock "${SOURCE_LOCK}" \
+  --source-lock "${EFFECTIVE_SOURCE_LOCK}" \
   --artifact-profile "${ARTIFACT_PROFILE}" \
+  "${MANIFEST_EXTENSION_ARGS[@]}" \
   --import-inventory "${IMPORT_INVENTORY}" \
   --import-qualification "${IMPORT_QUALIFICATION}" \
   --memory-initial-pages "${MEMORY_INITIAL_PAGES}" \
   --memory-maximum-pages "${MEMORY_MAXIMUM_PAGES}" \
   --output "${DIST_DIR}/manifest.json"
+python3 "${ROOT_DIR}/guest/build/verify-artifact.py" \
+  "${FINAL_GUEST}" "${DIST_DIR}/manifest.json" \
+  "${MANIFEST_EXTENSION_ARGS[@]}"
 
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --artifact "${FINAL_GUEST}" \
   --manifest "${DIST_DIR}/manifest.json" \
-  --source-lock "${SOURCE_LOCK}" \
+  --source-lock "${EFFECTIVE_SOURCE_LOCK}" \
   --vfs-root "${VFS_PYTHON_DIR}" \
   --sbom "${DIST_DIR}/sbom.spdx.json" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md"
 python3 "${ROOT_DIR}/guest/build/write-supply-chain.py" \
   --artifact "${FINAL_GUEST}" \
   --manifest "${DIST_DIR}/manifest.json" \
-  --source-lock "${SOURCE_LOCK}" \
+  --source-lock "${EFFECTIVE_SOURCE_LOCK}" \
   --vfs-root "${VFS_PYTHON_DIR}" \
   --sbom "${DIST_DIR}/sbom.spdx.json" \
   --notices "${DIST_DIR}/THIRD_PARTY_NOTICES.md" \

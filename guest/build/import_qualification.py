@@ -9,7 +9,7 @@ import pathlib
 from typing import Any
 
 PROBE_ID = "guest-import-exec-v1"
-PROFILES = {"base"}
+PROFILES = {"base", "attrs-770"}
 STATUSES = {"qualified", "import_failed", "operation_failed"}
 MAX_RESULTS = 64
 
@@ -32,6 +32,12 @@ _BASE_PROBES = (
     ("sys", "version_info"),
     ("urllib", "parse"),
     ("xml", "etree_roundtrip"),
+)
+
+_ATTRS_770_PROBES = (
+    ("attr", "generic_dynamic_class"),
+    ("types", "new_class"),
+    ("typing", "generic_alias"),
 )
 
 PROBE_CODE = r'''import importlib
@@ -93,6 +99,23 @@ else:
             assert module.urlparse("https://example.test/a").path == "/a"
         elif operation == "etree_roundtrip":
             assert module.fromstring("<root><item /></root>").tag == "root"
+        elif operation == "generic_dynamic_class":
+            from types import new_class
+            from typing import Generic, TypeVar
+            type_var = TypeVar("TypeVarForQualification")
+            parent = new_class("ParentForQualification", (Generic[type_var],), {})
+            candidate = module.make_class("QualifiedClass", {"id": module.ib(type=str)}, (parent[int],))
+            assert candidate.__name__ == "QualifiedClass"
+        elif operation == "new_class":
+            candidate = module.new_class(
+                "QualifiedType", (), {}, exec_body=lambda namespace: namespace.update(marker=1)
+            )
+            assert candidate.marker == 1
+        elif operation == "generic_alias":
+            from types import new_class
+            type_var = module.TypeVar("TypeVarForQualification")
+            parent = new_class("ParentForQualification", (module.Generic[type_var],), {})
+            assert parent[int].__origin__ is parent
         else:
             raise ValueError("unknown qualification operation")
     except Exception as exc:
@@ -131,13 +154,19 @@ def strict_json_loads(value: str) -> Any:
 def required_roots(profile: str) -> set[str]:
     if profile not in PROFILES:
         raise ValueError("unsupported artifact profile")
-    return {"agent_runtime", "json", "sys"}
+    roots = {"agent_runtime", "json", "sys"}
+    if profile == "attrs-770":
+        roots.update({"attr", "types", "typing"})
+    return roots
 
 
 def probe_specs(profile: str) -> list[dict[str, str]]:
     if profile not in PROFILES:
         raise ValueError("unsupported artifact profile")
-    return [{"name": name, "operation": operation} for name, operation in sorted(_BASE_PROBES)]
+    probes = _BASE_PROBES
+    if profile == "attrs-770":
+        probes += _ATTRS_770_PROBES
+    return [{"name": name, "operation": operation} for name, operation in sorted(probes)]
 
 
 def build_requests(profile: str) -> list[dict[str, Any]]:

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "artifact_profile": "attrs-770",
+  "artifact_filename": "agent-python-runtime-attrs-770.wasm",
+  "source": {
+    "id": "attrs-source",
+    "version": "20.3.0-39-g58d2adc",
+    "url": "https://codeload.github.com/python-attrs/attrs/tar.gz/58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
+    "sha256": "62aacc4a0014118dfedcca0f59767e21ba85aff60d3ac2c7b67caf97bda22f2b",
+    "license": "MIT",
+    "role": "python-package",
+    "artifact_relation": "packaged",
+    "source_commit": "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
+    "source_subdirectory": "src/attr",
+    "patch_sha256": "fdbfbdbb113809ae7982eb85e221ae5ddfdac9774a787114424e6ed2785f236e"
+  },
+  "package": {
+    "name": "attrs",
+    "status": "selected-pure-python",
+    "import_root": "attr",
+    "install_path": "site-packages/attr",
+    "tree_sha256": "f1e3b25ec86f639a4ce256f5c1216fd585527142a08a284cc5fd9c9de603229f",
+    "file_count": 20,
+    "total_bytes": 162921
+  },
+  "qualification": [
+    {
+      "name": "attr",
+      "operation": "generic_dynamic_class"
+    },
+    {
+      "name": "types",
+      "operation": "new_class"
+    },
+    {
+      "name": "typing",
+      "operation": "generic_alias"
+    }
+  ]
+}

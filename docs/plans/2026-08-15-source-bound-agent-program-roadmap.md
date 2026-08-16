@@ -488,7 +488,7 @@ A developer can select generated Python, see which exact source boundary produce
 
 ## Megagoal 4 — Natural Workload Census, Pass Selection and Paper Evidence
 
-**Status:** Bounded dataset-first internal pilot complete on 2026-08-16. Fifty CodeAct records and ten mixed-language Open-SWE trajectories produced a body-safe deterministic census; eight naturally occurring Python actions completed under local CPython and the exact Host-profile-bound real Guest. This is completion-only compatibility evidence, not task-oracle, performance, sharing or pass-selection evidence. No new pass has been selected.
+**Status:** Bounded dataset-first internal pilot complete on 2026-08-16. Fifty CodeAct records and ten mixed-language Open-SWE trajectories produced a body-safe deterministic census; eight naturally occurring Python actions completed under local CPython and the exact Host-profile-bound real Guest. This is completion-only compatibility evidence, not task-oracle, performance, sharing or pass-selection evidence. No new pass has been selected. Read-only follow-up selected one next experiment: a private `attrs-770` native RED/GREEN plus Guest import/profile feasibility spike; it must stop before any package-shard implementation decision.
 
 **Purpose:** Use real Agent-generated programs and the new debugger/evidence substrate to choose at most one or two additional boundary passes and freeze defensible paper claims.
 

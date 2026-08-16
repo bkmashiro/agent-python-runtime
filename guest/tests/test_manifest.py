@@ -177,14 +177,9 @@ class ManifestWriterTests(unittest.TestCase):
                 "schema_version": 1,
                 "kind": "pure-python-package",
                 "profile": "attrs-770",
-                "package": {
-                    "name": "attrs", "version": "20.3.0-39-g58d2adc",
-                    "status": "selected-pure-python", "import_root": "attr",
-                    "install_path": "site-packages/attr", "repository_license_id": "MIT",
-                    "source_commit": "58d2adce57f2c4e447eb12b892ebbb09cccbdcc3",
-                    "source_archive_sha256": "a" * 64, "patch_sha256": "b" * 64,
-                    "tree_sha256": "c" * 64, "file_count": 20, "total_bytes": 162921,
-                },
+                "package": self.writer.EXTENSION_PROFILE._expected_selection_package(
+                    self.writer.EXTENSION_PROFILE.load_lock(self.writer.EXTENSION_PROFILE.PROFILE_LOCK)
+                ),
             }))
             manifest = self.writer.build_manifest(
                 artifact=artifact, wat=wat, source_lock=lock, commit="abc123",

@@ -215,6 +215,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("artifact", type=pathlib.Path)
     parser.add_argument("manifest", type=pathlib.Path)
+    parser.add_argument("--extension-selection", type=pathlib.Path)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text())
 
@@ -232,7 +233,7 @@ def main() -> int:
         if not isinstance(filename, str) or pathlib.Path(filename).name != filename:
             raise ValueError("invalid import qualification filename")
         qualification = args.manifest.parent / filename
-    verify(args.artifact, manifest, None, inventory, qualification)
+    verify(args.artifact, manifest, args.extension_selection, inventory, qualification)
     print(json.dumps({"artifact": str(args.artifact), "sha256": sha256(args.artifact)}))
     return 0
 

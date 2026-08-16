@@ -2,6 +2,8 @@ import copy
 import importlib.util
 import json
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -234,6 +236,23 @@ class ArtifactVerifierTests(unittest.TestCase):
             },
         })
         self.verifier.verify(self.artifact, manifest, None, inventory, qualification)
+        manifest_path = pathlib.Path(self.directory.name) / "manifest.json"
+        extension_path = pathlib.Path(self.directory.name) / "extension-profile.json"
+        manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+        extension_path.write_text(json.dumps(extension, sort_keys=True))
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(pathlib.Path(__file__).parents[1] / "build" / "verify-artifact.py"),
+                str(self.artifact),
+                str(manifest_path),
+                "--extension-selection",
+                str(extension_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
         manifest["sources"][0]["sha256"] = "d" * 64
         with self.assertRaisesRegex(ValueError, "source does not match"):
             self.verifier.verify(self.artifact, manifest, None, inventory, qualification)

@@ -11,6 +11,12 @@ SPEC.loader.exec_module(paired)
 
 
 class Tau2PairedCanaryTests(unittest.TestCase):
+    def test_treatment_uses_provider_json_mode(self):
+        source = MODULE_PATH.read_text()
+        self.assertIn('response_format={"type": "json_object"}', source)
+        self.assertIn('AssistantMessage(role="assistant", content=raw)', source)
+        self.assertNotIn('AssistantMessage(role="assistant", content=None)', source)
+
     def test_accepts_only_exact_single_tool_programs(self):
         action = paired.parse_program_action(
             '{"kind":"program","source":"result = tools.get_reservation_details(\\"JMO1MG\\")"}'

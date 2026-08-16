@@ -9,6 +9,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import traceback
 from typing import Any, Optional
 
 REVISION = "c3398666e6559e3a063da3fc04b5acf7f941464e"
@@ -134,13 +135,21 @@ def make_program_agent(config: dict[str, str], model: str, llm_args: dict[str, A
         def generate_next_message(self, message: Any, state: ProgramState):
             state.messages.append(message)
             for _ in range(4):
-                response = generate(model=self.llm, messages=state.system_messages + state.messages, call_name="pysolate_agent_response", **self.llm_args)
+                response = generate(
+                    model=self.llm,
+                    messages=state.system_messages + state.messages,
+                    call_name="pysolate_agent_response",
+                    response_format={"type": "json_object"},
+                    **self.llm_args,
+                )
                 raw = response.content or ""
                 try:
                     action = parse_program_action(raw)
                 except (SyntaxError, ValueError, json.JSONDecodeError) as exc:
                     self.events.append({"model_response": raw, "kind": "invalid_model_action", "error_type": type(exc).__name__})
-                    invalid = AssistantMessage(role="assistant", content=None)
+                    if not raw.strip():
+                        raise RuntimeError("model returned an empty invalid action") from exc
+                    invalid = AssistantMessage(role="assistant", content=raw)
                     state.messages.append(invalid)
                     return invalid, state
                 event: dict[str, Any] = {"model_response": raw, "kind": action["kind"]}
@@ -186,11 +195,13 @@ def run_lane(lane: str, args) -> dict[str, Any]:
     try:
         result = run_simulation(orchestrator, evaluation_type=EvaluationType.ALL)
     except ValueError as exc:
+        frames = [{"function": frame.name, "line": frame.lineno} for frame in traceback.extract_tb(exc.__traceback__)]
         payload = {
             "schema_version": "pysolate.tau2-paired-private.v1", "source_revision": REVISION,
             "lane": lane, "model": args.model, "seed": args.seed, "temperature": 0.0,
-            "status": "unscorable", "failure_stage": "orchestrator_protocol_validation",
-            "exception_type": type(exc).__name__, "simulation": None, "pysolate_events": events,
+            "status": "unscorable", "failure_stage": frames[-1]["function"] if frames else "run_simulation",
+            "exception_type": type(exc).__name__, "exception_message": str(exc), "traceback_frames": frames,
+            "simulation": None, "pysolate_events": events,
         }
         path = pathlib.Path(args.evidence_root) / f"{lane}-result.json"
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")

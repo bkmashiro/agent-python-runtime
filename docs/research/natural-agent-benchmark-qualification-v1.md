@@ -251,6 +251,24 @@ The preregistered configuration used `deepseek/deepseek-chat` for both Agent and
 
 This is model/interface qualification evidence, not a Runtime comparison. Neither failure is attributed to Pysolate, and no direct-versus-treatment performance claim is supported. A future paired trial requires a prior format canary proving both pure function-call output in the direct lane and strict program-action output in the treatment lane.
 
+### DeepSeek V4 Pro resolution
+
+The follow-up body-safe result is [tau2-airline-3-deepseek-v4-pro-paired-canary-v1.json](../evidence/tau2-airline-3-deepseek-v4-pro-paired-canary-v1.json).
+
+Provider-format qualification showed that the legacy `deepseek-chat` alias consistently emitted non-empty assistant content with a tool call, while the current V4 models separated reasoning from the assistant content field. Treatment also required the provider's native JSON response mode rather than a prompt-only JSON request. The bounded paired rerun therefore used `deepseek/deepseek-v4-pro` for both Agent and user simulator with the same task, seed `42` and temperature `0`.
+
+Observed result:
+
+- direct official reward: `1.0` (`DB=1.0`, `COMMUNICATE=1.0`), terminating with `user_stop`;
+- treatment official reward: `1.0` (`DB=1.0`, `COMMUNICATE=1.0`), terminating with `user_stop`;
+- direct actions: `get_reservation_details`, `get_user_details`, then `transfer_to_human_agents`;
+- treatment: two model-authored single-tool Python programs, two logical calls, two physical calls and two terminal `ok` receipts;
+- both treatment receipts carry distinct `source_bound` occurrences, and both Broker response identities match the exact results returned to the model;
+- no direct benchmark tool call was leaked from the treatment Agent into the official environment trajectory.
+- the tool surfaces are intentionally not matched: direct retained the full upstream airline tool set and selected `transfer_to_human_agents`, while treatment remained limited to the two preregistered READ adapters.
+
+Conclusion: `PAIRED_CANARY_SUPPORTED`. This supports the N=1 read-only adapter correctness and causal-evidence wiring claim. It does not support a fair tool-surface comparison, a latency/performance claim, a WRITE claim, or official leaderboard comparability; the two interactive trajectories share model/configuration but need not be message-for-message identical.
+
 ## Row schema additions
 
 Each row must retain:

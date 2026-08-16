@@ -392,7 +392,8 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Verify body-safe report determinism and private evidence permissions.
 - [x] Prove direct/programmatic calls cross the same Broker.
 - [x] Attempt the same model/task/seed pairing with `deepseek/deepseek-chat`; retain the `PAIR_NOT_COMPARABLE` interface-qualification failure without imputing a treatment score.
-- [ ] Qualify a model/interface pair that emits upstream-valid direct tool calls and strict treatment program actions before another paid paired trial.
+- [x] Qualify `deepseek/deepseek-v4-pro` for upstream-valid direct tool calls and strict treatment JSON program actions.
+- [x] Run the qualified same-model/task/seed pair: both direct and treatment obtained official reward `1.0`; treatment recorded two source-bound Guest/Broker READs.
 
 **Gate:** all canary rows have exact terminal status and complete causal joins or explicit `not_recorded` fields.
 

@@ -66,6 +66,17 @@ func TestExecutionProfileAdmissionIsHostOwned(t *testing.T) {
 	}
 }
 
+func TestExecutionProfileAcceptsOnlyNamedArtifactProfiles(t *testing.T) {
+	for _, id := range []string{"base", "attrs-770"} {
+		if _, err := NewExecutionProfile(id, []string{"json"}); err != nil {
+			t.Fatalf("profile %q rejected: %v", id, err)
+		}
+	}
+	if _, err := NewExecutionProfile("custom", []string{"json"}); err == nil {
+		t.Fatal("unknown profile accepted")
+	}
+}
+
 func TestExecutionProfileRejectsInvalidPolicy(t *testing.T) {
 	for _, test := range []struct {
 		id      string

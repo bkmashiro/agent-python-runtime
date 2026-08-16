@@ -289,7 +289,7 @@ func AdmitRunCompatibility(request RunRequest, profile *ExecutionProfile) error 
 }
 
 func validProfileID(profileID string) bool {
-	return profileID == "base"
+	return profileID == "base" || profileID == "attrs-770"
 }
 
 func validImportName(module string) bool {

@@ -27,6 +27,32 @@ _SOURCE_CONTRACT_UNSUPPORTED = 1
 _SOURCE_CONTRACT_INVALID = 2
 _FORBIDDEN_DYNAMIC_NAMES = {"__import__", "eval", "exec", "import_module"}
 _FORBIDDEN_IMPORT_ROOTS = {"builtins", "importlib"}
+_ORIGINAL_IMPORT = __import__
+
+
+def _declared_sealed_importer(declared_roots: list[str]):
+    admitted = frozenset(declared_roots)
+
+    def sealed_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if not isinstance(name, str) or not name or not isinstance(level, int) or level < 0:
+            raise ImportError("invalid sealed import request")
+        resolved = name
+        if level:
+            package = globals.get("__package__") if isinstance(globals, dict) else None
+            if not isinstance(package, str) or not package:
+                raise ImportError("relative import has no package context")
+            parts = package.split(".")
+            if level > len(parts):
+                raise ImportError("relative import escapes package")
+            prefix = parts[: len(parts) - level + 1]
+            resolved = ".".join([*prefix, *([name] if name else [])])
+        root = resolved.partition(".")[0]
+        if root not in admitted:
+            raise ImportError(f"module root is outside the declared import set: {root}")
+        sys.audit("agent_runtime.import", resolved)
+        return _ORIGINAL_IMPORT(name, globals, locals, fromlist, level)
+
+    return sealed_import
 
 
 class _StreamingSession:
@@ -464,8 +490,9 @@ def _execute(request_json: str) -> str:
     if request.get("compatibility") is not None:
         builtins_source = vars(__builtins__) if isinstance(__builtins__, types.ModuleType) else __builtins__
         restricted_builtins = dict(builtins_source)
-        for forbidden in ("__import__", "eval", "exec"):
+        for forbidden in ("eval", "exec"):
             restricted_builtins.pop(forbidden, None)
+        restricted_builtins["__import__"] = _declared_sealed_importer(request["compatibility"]["imports"])
         namespace["__builtins__"] = restricted_builtins
     try:
         exec(code, namespace, namespace)

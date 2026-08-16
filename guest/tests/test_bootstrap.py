@@ -320,7 +320,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("error", response["status"])
         self.assertEqual("source_contract_unsupported", response["error"]["code"])
 
-    def test_restricted_execution_builtins_remove_dynamic_compilation_entrypoints(self):
+    def test_restricted_execution_builtins_bind_importer_to_declared_roots(self):
         request = {
             "run_id": "restricted-builtins",
             "code": "result = [name in __builtins__ for name in inputs['names']]",
@@ -329,12 +329,21 @@ class BootstrapTests(unittest.TestCase):
         }
         response = json.loads(self.runtime._execute(json.dumps(request)))
         self.assertEqual("ok", response["status"])
-        self.assertEqual([False, False, False], response["result"])
+        self.assertEqual([True, False, False], response["result"])
 
-        request["code"] = "result = __builtins__['__' + 'import__']('json')"
+        request.update(
+            code="import json\nresult = __builtins__['__' + 'import__'](inputs['module']).__name__",
+            inputs={"module": "json"},
+            compatibility={"profile": "base", "imports": ["json"]},
+        )
+        response = json.loads(self.runtime._execute(json.dumps(request)))
+        self.assertEqual("ok", response["status"])
+        self.assertEqual("json", response["result"])
+
+        request["inputs"] = {"module": "os"}
         response = json.loads(self.runtime._execute(json.dumps(request)))
         self.assertEqual("python_exception", response["error"]["code"])
-        self.assertEqual("KeyError", response["error"]["error_type"])
+        self.assertEqual("ImportError", response["error"]["error_type"])
 
     def test_rejects_import_declaration_drift_and_invalid_syntax(self):
         for imports in ([], ["json", "math"]):

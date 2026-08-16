@@ -3,7 +3,7 @@
 > **For Hermes:** Execute only this plan. The master architecture remains
 > `docs/plans/2026-08-15-source-bound-agent-program-roadmap.md`. Stop before Lab UI redesign.
 
-**Status:** Active
+**Status:** Complete at the M2 stop gate on 2026-08-16. Final behavior commit `c4b5100`; canonical real-Guest artifact closeout `104937b`.
 
 **Baseline:** `28d46c8ab116b091382334d192747c22a8d83736` on
 `feat/programmatic-hot-approval`.
@@ -67,7 +67,7 @@ a capability, replay, rollback or scheduling mechanism.
 
 ## Phase 1 — RED: contract, identity and profiles
 
-**Status:** Complete. `pysolate.causal-evidence.v1` provides exact canonical decode, profile-independent event identities, prior-only causal links, strict production allowlisting, private body references through Labstore, body-free portable projection, configured event/parent/payload ceilings, explicit truncation evidence and a `0600` append/readback log. The old v0 API remains temporarily only for Phase 4 consumer migration and is not accepted by the v1 decoder.
+**Status:** Complete. `pysolate.causal-evidence.v1` provides exact canonical decode, profile-independent event identities, prior-only causal links, strict production allowlisting, store-bound private bodies, body-free portable projection, configured byte/event/parent/payload/depth ceilings, explicit truncation evidence and a `0600` append/readback log. The v0 API, generators, fixtures and dual-read consumers are removed.
 
 Write failing tests for:
 
@@ -110,7 +110,7 @@ race; signed commit and push.
 
 ## Phase 3 — one real path and three products
 
-**Status:** Complete. The named non-skipping CPython/WASI path records an actual source-bound Broker receipt, a fresh child Guest, private workspace branch/root, raw private Runtime observations, explicit executed-line absence and bounded CPU/wall resource truth. Header `sha256:4b75…b40c` yields 31-event private full, 9-event production and 21-event public experiment products from shared retained identities; checked-in and private artifact hashes are documented in `docs/research/dual-profile-causal-evidence-v1.md`.
+**Status:** Complete. The named non-skipping CPython/WASI path at behavior commit `c4b510051528d1469a4d40b2034a72974ec98632` records an actual source-bound Broker receipt, a fresh child Guest, private workspace branch/root, raw private Runtime observations, explicit executed-line absence and bounded CPU/wall resource truth. Header `sha256:5560ede54e5a3f59c1c5864441a54397b3d6386d9c21cf2b05f62211e72b3cfb` yields 31-event private full, 9-event production and 21-event public experiment products from shared retained identities. The private root is `~/.hermes/evidence/pysolate/dual-profile-mg2-c4b5100/`; public SHA-256 is `7833cd7ce414be3b7c5768a33aa0276b0976974bf85621bd3421c351ea4a982a`, production SHA-256 is `81605cef42d275cc9238d1d50b11ad932dd2687bd0e5e91578f8a3770a00608a`, and private SHA-256 is `c004053ff30e3359eb8e961c2ac6b211d65a15f67b4fabc719d84cc9894f711b`.
 
 Implement one adapter from `runtime/observe.Recorder` into the new evidence log.
 Drive a named real CPython/WASM execution through the existing observation
@@ -150,6 +150,8 @@ Gate: no active `pysolate.agent-trajectory.v0` or trajectory-index-v0 parser;
 Lab unit/build/ingestion pass; signed commit and push.
 
 ## Phase 5 — verification, review and stop gate
+
+**Status:** Complete. Full no-Guest Go race, `go vet`, 95 Guest Python tests, 7 script tests, focused real-Guest race, Lab unit/build/E2E, canonical artifact comparison, body-leak scan and controller-owned contract review passed. Production remains physically minimal/body-free; private evidence is store-bound; Lab and recorder remain non-authoritative. M2 stops before M3 code.
 
 Required gates:
 

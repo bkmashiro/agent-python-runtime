@@ -178,16 +178,16 @@ Do not claim a Guest-enabled `go test -race ./...` gate; the intended evidence i
 
 **Product promise:** The current correctness hardening lands as one coherent, truthful evidence closeout rather than an uncommitted schema/artifact mismatch.
 
-- [ ] Inspect live status/diff and confirm no sibling writer owns the worktree.
-- [ ] Update `apps/lab-web/src/trajectoryData.test.ts` so the `source_bound` query deterministically expects both `tool.decision` and `source.decision`; do not remove `source_bound` from the typed tool payload.
-- [ ] Run Lab unit/build/E2E.
-- [ ] Run focused trajectory and Wazero gates if any code changed beyond the expectation.
-- [ ] Verify the four checked-in public/production files are byte-identical to the final capture projections.
-- [ ] Recompute public/production hashes and assert zero body/body-reference leakage.
-- [ ] Verify the private capture directory/files remain `0700`/`0600` and are not tracked.
-- [ ] Run `git diff --check`.
-- [ ] Create a signed local commit containing only the final artifacts, Lab expectation and evidence documentation.
-- [ ] Verify commit signature and retain the commit locally unless the newest owner goal explicitly authorizes unattended push.
+- [x] Inspect live status/diff and confirm no sibling writer owns the worktree.
+- [x] Update `apps/lab-web/src/trajectoryData.test.ts` so the `source_bound` query deterministically expects both `tool.decision` and `source.decision`; do not remove `source_bound` from the typed tool payload.
+- [x] Run Lab unit/build/E2E.
+- [x] Run focused trajectory and Wazero gates if any code changed beyond the expectation.
+- [x] Verify the four checked-in public/production files are byte-identical to the final capture projections.
+- [x] Recompute public/production hashes and assert zero body/body-reference leakage.
+- [x] Verify the private capture directory/files remain `0700`/`0600` and are not tracked.
+- [x] Run `git diff --check`.
+- [x] Create a signed local commit containing only the final artifacts, Lab expectation and evidence documentation.
+- [x] Verify commit signature and retain the commit locally unless the newest owner goal explicitly authorizes unattended push.
 
 ### Track B — Controller-Owned Final M2 Review
 
@@ -195,16 +195,16 @@ Do not claim a Guest-enabled `go test -race ./...` gate; the intended evidence i
 
 Review exact final diff from M2 baseline and inspect:
 
-- [ ] production physical allowlist and absence of body/private telemetry;
-- [ ] private body required/store/privacy/kind/content validation;
-- [ ] source decision admission vs terminal receipt outcomes;
-- [ ] receipt v1/v2/v3 reconstruction and raw call/Plan/source joins;
-- [ ] effect ordering, outstanding reconciliation and failure-path receipt retention;
-- [ ] subagent descriptor/context/source/workspace-root joins derived by the named Host E2E;
-- [ ] export byte/event/parent/payload/depth/canonical limits;
-- [ ] Go/Lab strict parity for checked artifacts;
-- [ ] recorder/Lab non-authority;
-- [ ] v0 clean break.
+- [x] production physical allowlist and absence of body/private telemetry;
+- [x] private body required/store/privacy/kind/content validation;
+- [x] source decision admission vs terminal receipt outcomes;
+- [x] receipt v1/v2/v3 reconstruction and raw call/Plan/source joins;
+- [x] effect ordering, outstanding reconciliation and failure-path receipt retention;
+- [x] subagent descriptor/context/source/workspace-root joins derived by the named Host E2E;
+- [x] export byte/event/parent/payload/depth/canonical limits;
+- [x] Go/Lab strict parity for checked artifacts;
+- [x] recorder/Lab non-authority;
+- [x] v0 clean break.
 
 Rules:
 
@@ -217,16 +217,16 @@ Rules:
 
 **Product promise:** Future sessions see one accurate M2 status and cannot accidentally restart it or enter M3.
 
-- [ ] Update `docs/plans/2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md` Phase 1 text to remove the stale temporary-v0 statement.
-- [ ] Update its Phase 3 exact final capture commit/header/root/hashes.
-- [ ] Mark Phase 5 complete only after all final gates are green.
-- [ ] Update `docs/plans/2026-08-15-source-bound-agent-program-roadmap.md` status from “M2 not started” to M1+M2 complete.
-- [ ] Mark only evidence-backed M2 tracks complete; preserve any intentionally deferred conceptual item with a precise explanation rather than silently checking it.
-- [ ] Set the master execution pointer to “M2 complete; executing M3 Human-First Lab; M4 waits for owner visual/product review.”
-- [ ] Re-run document search for stale active v0/M2-not-started/final-capture claims.
-- [ ] Run final global gates and `git diff --check`.
-- [ ] Make a signed local roadmap closeout commit and verify signature/status.
-- [ ] Do not merge; enter M3 only after the M2 closeout commit is clean and verified.
+- [x] Update `docs/plans/2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md` Phase 1 text to remove the stale temporary-v0 statement.
+- [x] Update its Phase 3 exact final capture commit/header/root/hashes.
+- [x] Mark Phase 5 complete only after all final gates are green.
+- [x] Update `docs/plans/2026-08-15-source-bound-agent-program-roadmap.md` status from “M2 not started” to M1+M2 complete.
+- [x] Mark only evidence-backed M2 tracks complete; preserve any intentionally deferred conceptual item with a precise explanation rather than silently checking it.
+- [x] Set the master execution pointer to “M2 complete; executing M3 Human-First Lab; M4 waits for owner visual/product review.”
+- [x] Re-run document search for stale active v0/M2-not-started/final-capture claims.
+- [x] Run final global gates and `git diff --check`.
+- [x] Make a signed local roadmap closeout commit and verify signature/status.
+- [x] Do not merge; enter M3 only after the M2 closeout commit is clean and verified.
 
 ### Track D — Human-First Source-Bound Lab Debugger
 
@@ -346,7 +346,7 @@ Rules:
 - [ ] Separate measured facts from proposed mechanisms.
 - [ ] Apply the master pass acceptance gate to observed opportunities, but do not implement a new pass overnight.
 - [ ] Recommend at most two next candidates; explicitly recommend “no new pass” if evidence is weak.
-- [ ] Update the master roadmap with Current/Observed/Rejected status and keep M3 Web deferred.
+- [ ] Update the master roadmap with Current/Observed/Rejected status while preserving the completed/accepted M3 state.
 - [ ] Run all relevant gates, sign the final local commit, verify status and stop at the owner decision gate.
 
 **Required stop gate:** Do not cross from evidence into a new optimizer, scheduler, VM sharing mechanism, production default, M3 UI or paper claim without Yuzhe reviewing the measured result.
@@ -380,6 +380,7 @@ A clean checkpoint, successful commit, reviewer timeout or context compaction is
 ## Completion Log
 
 - 2026-08-16 handoff: behavior hardening signed/pushed at `c4b5100`; final capture generated under `dual-profile-mg2-c4b5100`; Go/Python/real-Guest gates green; Lab has one deterministic expectation drift to update; final artifacts/docs are dirty and uncommitted. No M3 work started.
+- 2026-08-16 M2 closeout: artifact/test checkpoint `104937b`; Lab 11/11 unit tests, build and 8/8 Playwright passed; public/production projections byte-match capture with zero body/private-event leakage; private root/files are `0700`/`0600`; controller review found no blocker/high/medium and removed only ignored local v0 runtime artifacts.
 
 ## Reporting Format When Finally Stopping
 

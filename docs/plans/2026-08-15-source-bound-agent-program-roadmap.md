@@ -24,7 +24,7 @@ and filesystem branching have separate identities and must never imply one anoth
 
 ## Status and claim vocabulary
 
-**Roadmap status:** Megagoal 1 complete at `b85d657bb0fc719f5539a1e1b049d15c0f277f4a`; Megagoal 2 is next and has not started.
+**Roadmap status:** Megagoal 1 and Megagoal 2 are complete. M2 behavior is frozen at `c4b510051528d1469a4d40b2034a72974ec98632` with canonical real-Guest artifact closeout `104937b`; Megagoal 3 Human-First Lab is active. Megagoal 4 remains behind M3 owner visual/product review.
 
 **Pinned implementation baseline:** `911b33a314fcd66fda84fb7f28de4a40d60d102a` on `feat/programmatic-hot-approval` when this roadmap was authored.
 
@@ -361,7 +361,7 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 1 — Source-Bound Compiler Pass and Provenance Foundation
 
-**Status:** Complete at the Megagoal 1 stop gate on 2026-08-15. Final independent review: PASS at `4a7f74b5a78ab3a68fbeebcd13ad20ff445fcde2`. Megagoal 2 has not started.
+**Status:** Complete at the Megagoal 1 stop gate on 2026-08-15. Final independent review: PASS at `4a7f74b5a78ab3a68fbeebcd13ad20ff445fcde2`. Megagoal 2 subsequently completed on 2026-08-16.
 
 **Extracted execution plan:** [2026-08-15-source-bound-compiler-pass-provenance-megagoal.md](2026-08-15-source-bound-compiler-pass-provenance-megagoal.md)
 
@@ -404,6 +404,8 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 2 — Clean-Slate Recorder, Evidence and Workspace Contract
 
+**Status:** Complete at the M2 stop gate on 2026-08-16. One strict v1 contract produces a 31-event private trace, 21-event body-safe public projection and 9-event physically minimal production projection from the same named real Guest run.
+
 **Extracted execution plan:** [2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md](2026-08-15-dual-profile-causal-evidence-workspace-megagoal.md)
 
 **Purpose:** Replace v0 flat events and scripted fixture assumptions with one typed causal contract and two explicit capture profiles: a minimal production rollback/reconciliation ledger and a bounded full experiment trace suitable for live Harness/Pysolate capture and human inspection.
@@ -420,17 +422,17 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 **Tracks:**
 
-- [ ] Delete v0 compatibility requirements and freeze one new schema with explicit `production_rollback` and `experiment_full` capture profiles.
-- [ ] Define the minimal production ledger for replay prevention, cleanup, typed rollback and reconciliation; prove experiment-only records are absent when it is selected.
-- [ ] Implement causal spans, actors, relation kinds, typed start/end semantics and bounded ordering for the full experiment profile.
-- [ ] Add source documents/ranges/dynamic occurrence records from Megagoal 1 to the experiment profile; keep them out of production unless required by a named rollback/reconciliation decision.
-- [ ] Add typed model/tool/PTC/Broker/approval/runtime records rather than relying on opaque body text; production retains only the Host-owned decision subset.
-- [ ] Add explicit child context/brief identity, shared prepared-image identity, fresh Run identity, logical/physical producer-consumer lineage and deterministic links without implying parent live-state inheritance.
-- [ ] Add content-addressed workspace base/checkpoint/result identities, manifests and optional private bodies; record private child branch delta and explicit Host selection.
-- [ ] Add bounded raw-body storage plus recursive JSON presentation metadata only to the experiment profile.
-- [ ] Attach both profiles to one real execution path and prove the production capture is a strict body-free projection of the same typed core; scripted fixtures alone do not satisfy completion.
-- [ ] Generate one private full fixture, one minimal production fixture and one public body-safe projection from named real execution.
-- [ ] Delete stale checked-in v0 trajectory/experiment fixtures and parsers.
+- [x] Delete v0 compatibility requirements and freeze one new schema with explicit `production_rollback` and `experiment_full` capture profiles.
+- [x] Define the minimal production ledger for replay prevention, cleanup, typed rollback and reconciliation; prove experiment-only records are absent when it is selected.
+- [x] Implement causal spans, actors, relation kinds, typed start/end semantics and bounded ordering for the full experiment profile.
+- [x] Add source documents/ranges/dynamic occurrence records from Megagoal 1 to the experiment profile; keep them out of production unless required by a named rollback/reconciliation decision.
+- [x] Add typed model/tool/PTC/Broker/approval/runtime records rather than relying on opaque body text; production retains only the Host-owned decision subset.
+- [x] Add explicit child context/brief identity, shared prepared-image identity, fresh Run identity, logical/physical producer-consumer lineage and deterministic links without implying parent live-state inheritance.
+- [x] Add content-addressed workspace base/checkpoint/result identities, manifests and optional private bodies; record private child branch delta and explicit Host selection.
+- [x] Add bounded raw-body storage plus recursive JSON presentation metadata only to the experiment profile.
+- [x] Attach both profiles to one real execution path and prove the production capture is a strict body-free projection of the same typed core; scripted fixtures alone do not satisfy completion.
+- [x] Generate one private full fixture, one minimal production fixture and one public body-safe projection from named real execution.
+- [x] Delete stale checked-in v0 trajectory/experiment fixtures and parsers.
 
 **Definition of Done:**
 

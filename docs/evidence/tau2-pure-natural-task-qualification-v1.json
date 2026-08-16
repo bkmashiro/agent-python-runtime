@@ -1,0 +1,66 @@
+{
+  "census": {
+    "candidate": {
+      "domain": "retail",
+      "task_id": "24"
+    },
+    "natural_domain_tasks": 9,
+    "no_action_no_env_assertion_tasks": 10,
+    "no_op_sensitive_deterministic_component_candidates": 1
+  },
+  "claim_boundary": {
+    "does_not_support": [
+      "a successful natural pure-task treatment",
+      "official task overall reward for retail/24",
+      "leaderboard comparison",
+      "a claim that tau2 contains no pure tasks under other selection contracts"
+    ],
+    "supports": [
+      "one zero-capability authored Python program through the real Guest",
+      "fail-closed natural-task selection against a no-op-sensitive upstream evaluator component"
+    ]
+  },
+  "classification": "NO_ELIGIBLE_PURE_NATURAL_TASK",
+  "natural_direct_probe": {
+    "component_reward": 0.0,
+    "evaluation_type": "COMMUNICATE",
+    "model": "deepseek/deepseek-v4-pro",
+    "qualification": "disqualified_not_no_tool",
+    "seed": 42,
+    "temperature": 0.0,
+    "tool_calls": 2,
+    "treatment_run": false
+  },
+  "oracle_qualification": {
+    "correct_control": 1.0,
+    "empty_control": 0.0,
+    "implementation": "tau2 CommunicateEvaluator",
+    "official_task_overall": false,
+    "official_upstream_component": true,
+    "wrong_control": 0.0
+  },
+  "raw_guest_bodies_included": false,
+  "raw_model_bodies_included": false,
+  "raw_task_bodies_included": false,
+  "schema_version": "pysolate.tau2-pure-natural-qualification.v1",
+  "selection_contract": {
+    "environment_assertions": 0,
+    "reference_actions": 0,
+    "requires_natural_direct_tool_calls": 0,
+    "requires_no_op_sensitive_deterministic_official_component": true
+  },
+  "source": {
+    "repository": "sierra-research/tau2-bench",
+    "revision": "c3398666e6559e3a063da3fc04b5acf7f941464e",
+    "version": "1.0.1"
+  },
+  "zero_authority_runtime_control": {
+    "authored_source": true,
+    "broker_call_count": 0,
+    "classification": "SUPPORTED_MECHANISM_ONLY",
+    "empty_capability_plan": true,
+    "real_wasm_guest": true,
+    "receipt_count": 0,
+    "semantic_call_sites": 0
+  }
+}

@@ -257,6 +257,19 @@ Do not count this row as a positive canary success.
 6. **Done for the authored lane:** regenerate a body-safe aggregate from private evidence and verify byte stability.
 7. **Done:** audit the `airline/11` state boundary; classify it as `unsupported_effect_class` without registering or dispatching WRITE.
 8. **Done:** close the gap only as a benchmark-private exact WRITE canary; retain the earlier audit and do not generalize it into external WRITE.
+9. **Done:** census no-reference-action tasks under a deterministic no-op-sensitive oracle contract; retain `NO_ELIGIBLE_PURE_NATURAL_TASK` rather than running a disqualified treatment.
+
+## Pure/no-authority task closeout
+
+The body-safe result is [tau2-pure-natural-task-qualification-v1.json](../evidence/tau2-pure-natural-task-qualification-v1.json), report SHA-256 `b5fdc9797ec0eb076392b10ccd0f061728c6637af234a0adcec6df15bb2f1b78`.
+
+The frozen corpus contains ten tasks with no reference action and no environment assertion, nine outside the mock domain. Only `retail/24` has a deterministic upstream communication component that is sensitive to no-op: the official `CommunicateEvaluator` gives the authored correct control `1.0`, an empty trajectory `0.0`, and an unrelated answer `0.0`. This component is not the task's default overall reward basis, so the report does not call it an official task score.
+
+A bounded `deepseek/deepseek-v4-pro` direct probe used the same model for Agent and user simulator, seed `42`, temperature `0`, and `EvaluationType.COMMUNICATE`. The natural trajectory issued two READ tool calls and received component reward `0.0`. It therefore failed the preregistered no-tool criterion. No treatment was run and no missing treatment score was replaced with zero.
+
+Separately, an authored literal-answer Python program ran through a fresh real WASM Guest with an empty sealed Capability Plan. Semantic call sites, Broker calls and receipts were all zero. This is `SUPPORTED_MECHANISM_ONLY`: it proves the zero-authority runtime path, not a successful natural pure-task row.
+
+Conclusion: `NO_ELIGIBLE_PURE_NATURAL_TASK` under this exact selection contract. The negative row closes T1 honestly; it does not claim that tau2 has no pure task under every possible model-based or non-deterministic oracle contract.
 
 ## Observed authored canary
 

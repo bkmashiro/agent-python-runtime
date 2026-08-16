@@ -83,7 +83,16 @@ def _verify_checkout(root: pathlib.Path) -> None:
         ["git", "rev-parse", "HEAD"], cwd=str(root), check=True, capture_output=True, text=True
     ).stdout.strip()
     if revision != EXPECTED_REVISION:
-        raise ValueError("source checkout revision mismatch")
+        raise ValueError("source revision mismatch")
+    tracked = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"], cwd=str(root), check=True, capture_output=True, text=True
+    ).stdout.strip()
+    untracked_source = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", "--", "src/tau2", "data/tau2"],
+        cwd=str(root), check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if tracked or untracked_source:
+        raise ValueError("source checkout is not clean")
 
 
 def _initial_state(root: pathlib.Path) -> Dict[str, Any]:

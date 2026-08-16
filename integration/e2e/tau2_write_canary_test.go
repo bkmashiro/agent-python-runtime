@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -49,6 +50,8 @@ type tau2WriteLane struct {
 	HandlerCalls                                                     uint32
 	Request, Payload                                                 []byte
 	FinalState                                                       json.RawMessage
+	Source, PlanDocument                                             []byte
+	WorkspaceEvent                                                   map[string]any
 	Receipt                                                          receipt.Receipt
 	Approval                                                         []approval.Record
 }
@@ -163,6 +166,10 @@ func runTau2WriteLane(t *testing.T, wasm []byte, profile runtimeconfig.Execution
 	var handlerCalls atomic.Uint32
 	plan := tau2WritePlan(t, python, sourceRoot, statePath, leaseMilliseconds, injectFailure, &handlerCalls)
 	source := "result = tools.apply_task_11_reference_update()\n"
+	planDocument, err := plan.EvidenceDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
 	parent := "tau2-airline-11-" + name
 	resolver := tau2WriteSourceResolver(t, wasm, profile, plan, source, parent)
 	presentation, err := plan.Present(capability.ProgramSurfaceProgrammatic, parent)
@@ -232,7 +239,8 @@ func runTau2WriteLane(t *testing.T, wasm []byte, profile runtimeconfig.Execution
 	result := tau2WriteLane{
 		Name: name, InitialStateSHA256: initialSHA, FinalStateSHA256: tau2Digest(finalBody), PlanIdentity: plan.Identity(),
 		WorkspaceRef: string(attempt.Ref()), HandlerCalls: handlerCalls.Load(), Request: request, Payload: run.payload,
-		FinalState: append(json.RawMessage(nil), finalBody...), Receipt: receipts[0], Approval: controller.Snapshot(),
+		FinalState: append(json.RawMessage(nil), finalBody...), Source: []byte(source), PlanDocument: planDocument,
+		Receipt: receipts[0], Approval: controller.Snapshot(),
 	}
 	if name == "accepted" {
 		response := decodeRealGuestResponse(t, request, run.payload)
@@ -244,22 +252,50 @@ func runTau2WriteLane(t *testing.T, wasm []byte, profile runtimeconfig.Execution
 		t.Fatal(err)
 	}
 	if name == "accepted" {
-		if _, err := attempt.Publish(); err != nil {
+		publishedRef, err := attempt.Publish()
+		if err != nil {
+			t.Fatal(err)
+		}
+		publishedLease, err := manager.Acquire(publishedRef, "tau2-airline-11-verify-published")
+		if err != nil {
+			t.Fatal(err)
+		}
+		publishedRoot, err := publishedLease.BindMountSource()
+		if err != nil {
+			t.Fatal(err)
+		}
+		publishedState, err := os.ReadFile(filepath.Join(publishedRoot, tau2WriteStateFile))
+		if err != nil || tau2Digest(publishedState) != result.FinalStateSHA256 {
+			t.Fatalf("published state verification failed err=%v", err)
+		}
+		if err := publishedLease.Release(); err != nil {
 			t.Fatal(err)
 		}
 		result.Disposition = "published"
+		result.WorkspaceEvent = map[string]any{
+			"action": "publish", "attempt_ref": string(attempt.Ref()), "result_ref": string(publishedRef),
+			"verified": true, "post_state_sha256": result.FinalStateSHA256, "post_state_absent": false,
+		}
 	} else {
 		if err := attempt.Discard(); err != nil {
 			t.Fatal(err)
 		}
+		_, verifyErr := manager.Acquire(attempt.Ref(), "tau2-airline-11-verify-discarded")
+		if !errors.Is(verifyErr, workspace.ErrWorkspaceNotFound) {
+			t.Fatalf("discarded workspace remained acquirable: %v", verifyErr)
+		}
 		result.Disposition = "discarded"
+		result.WorkspaceEvent = map[string]any{
+			"action": "discard", "attempt_ref": string(attempt.Ref()), "result_ref": "",
+			"verified": true, "post_state_sha256": "", "post_state_absent": true,
+		}
 	}
 	return result
 }
 
 func tau2WritePlan(t *testing.T, python, sourceRoot, statePath string, leaseMilliseconds uint64, injectFailure bool, calls *atomic.Uint32) *capability.Plan {
 	t.Helper()
-	grantBody := fmt.Sprintf(`{"benchmark":"tau2","domain":"airline","effect":"workspace_write","operation_sha256":%q,"source_revision":"c3398666e6559e3a063da3fc04b5acf7f941464e","task_id":"11","workspace_scope":"attempt_private"}`, tau2Digest(tau2WriteArguments))
+	grantBody := tau2WriteGrantPolicy()
 	grant, err := capability.NewGrant(json.RawMessage(grantBody))
 	if err != nil {
 		t.Fatal(err)
@@ -285,6 +321,10 @@ func tau2WritePlan(t *testing.T, python, sourceRoot, statePath string, leaseMill
 		t.Fatal(err)
 	}
 	return plan
+}
+
+func tau2WriteGrantPolicy() json.RawMessage {
+	return json.RawMessage(fmt.Sprintf(`{"benchmark":"tau2","domain":"airline","effect":"workspace_write","operation_sha256":%q,"source_revision":"c3398666e6559e3a063da3fc04b5acf7f941464e","task_id":"11","workspace_scope":"attempt_private"}`, tau2Digest(tau2WriteArguments)))
 }
 
 func tau2WriteHandler(python, sourceRoot, statePath string, injectFailure bool, calls *atomic.Uint32) capability.Handler {
@@ -440,7 +480,8 @@ func writeTau2WriteEvidence(t *testing.T, dir string, wasm []byte, lanes []tau2W
 	manifestLanes := make([]map[string]any, 0, len(lanes))
 	for _, lane := range lanes {
 		requestName, responseName := lane.Name+"-request.json", lane.Name+"-response.json"
-		for name, body := range map[string][]byte{requestName: lane.Request, responseName: lane.Payload} {
+		sourceName, planName := lane.Name+"-source.py", lane.Name+"-plan.json"
+		for name, body := range map[string][]byte{requestName: lane.Request, responseName: lane.Payload, sourceName: lane.Source, planName: lane.PlanDocument} {
 			if err := os.WriteFile(filepath.Join(dir, name), body, 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -449,7 +490,8 @@ func writeTau2WriteEvidence(t *testing.T, dir string, wasm []byte, lanes []tau2W
 			"name": lane.Name, "disposition": lane.Disposition, "initial_state_sha256": lane.InitialStateSHA256, "final_state_sha256": lane.FinalStateSHA256,
 			"plan_sha256": lane.PlanIdentity, "workspace_ref": lane.WorkspaceRef, "handler_calls": lane.HandlerCalls,
 			"receipt": lane.Receipt, "approval": lane.Approval, "request_sha256": tau2Digest(lane.Request), "guest_response_sha256": tau2Digest(lane.Payload),
-			"raw_bodies": map[string]string{"request": requestName, "response": responseName},
+			"workspace_event": lane.WorkspaceEvent,
+			"raw_bodies":      map[string]string{"request": requestName, "response": responseName, "source": sourceName, "plan": planName},
 		})
 	}
 	if len(lanes) == 0 || lanes[0].Name != "accepted" || len(lanes[0].FinalState) == 0 {
@@ -458,9 +500,15 @@ func writeTau2WriteEvidence(t *testing.T, dir string, wasm []byte, lanes []tau2W
 	if err := os.WriteFile(filepath.Join(dir, "accepted-final-state.json"), lanes[0].FinalState, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	grantPolicy := tau2WriteGrantPolicy()
+	if err := os.WriteFile(filepath.Join(dir, "grant-policy.json"), grantPolicy, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	manifest := map[string]any{
 		"schema_version": "pysolate.tau2-private-write-evidence.v1", "source": map[string]string{"revision": tau2CanaryRevision, "domain": "airline", "task_id": "11"},
-		"artifact_sha256": tau2Digest(wasm), "arguments": json.RawMessage(tau2WriteArguments), "grant_operation_sha256": tau2Digest(tau2WriteArguments), "accepted_tool_content": lanes[0].Content, "lanes": manifestLanes,
+		"artifact_sha256": tau2Digest(wasm), "arguments": json.RawMessage(tau2WriteArguments), "grant_operation_sha256": tau2Digest(tau2WriteArguments), "accepted_tool_content": lanes[0].Content,
+		"grant_policy_file": "grant-policy.json", "grant_policy_sha256": tau2Digest(grantPolicy),
+		"accepted_final_state_file": "accepted-final-state.json", "accepted_final_state_sha256": tau2Digest(lanes[0].FinalState), "lanes": manifestLanes,
 	}
 	encoded, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {

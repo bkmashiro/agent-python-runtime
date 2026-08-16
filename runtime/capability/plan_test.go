@@ -2,6 +2,8 @@ package capability_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -41,6 +43,28 @@ func TestSealedPlanIsOrderIndependentAndRejectsLateRegistration(t *testing.T) {
 	bindings[0].Name = "mutated"
 	if firstPlan.Capabilities()[0].Name != "workspace.read_text" {
 		t.Fatal("Plan.Capabilities leaked mutable plan state")
+	}
+}
+
+func TestPlanEvidenceDocumentRecomputesIdentity(t *testing.T) {
+	registry := capability.NewRegistry()
+	mustRegister(t, registry, "workspace.write_text", "pysolate.workspace.write-text.v1")
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := plan.EvidenceDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(document)
+	if got := "sha256:" + hex.EncodeToString(digest[:]); got != plan.Identity() {
+		t.Fatalf("evidence identity=%s plan=%s", got, plan.Identity())
+	}
+	document[0] = 'x'
+	again, err := plan.EvidenceDocument()
+	if err != nil || !json.Valid(again) {
+		t.Fatalf("evidence document leaked mutable state: err=%v body=%q", err, again)
 	}
 }
 

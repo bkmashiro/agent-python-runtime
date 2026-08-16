@@ -1,6 +1,8 @@
 import importlib.util
 import pathlib
+import tempfile
 import unittest
+from unittest import mock
 
 MODULE_PATH = pathlib.Path(__file__).parents[1] / "tau2-write-adapter.py"
 SPEC = importlib.util.spec_from_file_location("tau2_write_adapter", MODULE_PATH)
@@ -70,6 +72,17 @@ class Tau2WriteAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.canonical_state(first), adapter.canonical_state(second))
         self.assertEqual(adapter.state_identity(first), adapter.state_identity(second))
         self.assertTrue(adapter.state_identity(first).startswith("sha256:"))
+
+    def test_checkout_verification_rejects_dirty_tree(self):
+        completed = adapter.subprocess.CompletedProcess
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(adapter.subprocess, "run", side_effect=[
+                completed([], 0, stdout=adapter.EXPECTED_REVISION + "\n"),
+                completed([], 0, stdout=" M src/tau2/example.py\n"),
+                completed([], 0, stdout=""),
+            ]):
+                with self.assertRaisesRegex(ValueError, "not clean"):
+                    adapter._verify_checkout(pathlib.Path(directory))
 
 
 if __name__ == "__main__":

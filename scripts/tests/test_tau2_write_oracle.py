@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 import unittest
+from unittest import mock
 
 MODULE_PATH = pathlib.Path(__file__).parents[1] / "tau2-write-oracle.py"
 SPEC = importlib.util.spec_from_file_location("tau2_write_oracle", MODULE_PATH)
@@ -44,6 +45,16 @@ class Tau2WriteOracleTests(unittest.TestCase):
         self.assertFalse(report["assistant_text_included"])
         self.assertNotIn("5244", str(report))
         self.assertNotIn("private tool body", str(report))
+
+    def test_checkout_verification_rejects_untracked_source(self):
+        completed = oracle.subprocess.CompletedProcess
+        with mock.patch.object(oracle.subprocess, "run", side_effect=[
+            completed([], 0, stdout=oracle.EXPECTED_REVISION + "\n"),
+            completed([], 0, stdout=""),
+            completed([], 0, stdout="src/tau2/injected.py\n"),
+        ]):
+            with self.assertRaisesRegex(ValueError, "not clean"):
+                oracle._verify_checkout(pathlib.Path("/private/source"))
 
 
 if __name__ == "__main__":

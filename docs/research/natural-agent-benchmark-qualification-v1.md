@@ -213,7 +213,7 @@ Decision at the audit boundary: `unsupported_effect_class`. That v1 artifact rem
 
 ### Bounded private-WRITE closeout
 
-The later, task-specific implementation is recorded in [tau2-airline-11-private-write-canary-v1.json](../evidence/tau2-airline-11-private-write-canary-v1.json), report SHA-256 `b2d8b3c4512ed96492258692504dd2c1f6c3ca9886c98b8506ba1c93956eb732`.
+The later, task-specific implementation is recorded in [tau2-airline-11-private-write-canary-v1.json](../evidence/tau2-airline-11-private-write-canary-v1.json), report SHA-256 `17a9e03165185684723cff1dcf48166355a9821e88da1aafe908b2b61a4c4335`.
 
 It does not add a production `external_write` effect or a generic tau2 adapter. Instead, one authored zero-argument capability freezes the exact task-11 reference operation in its Grant through `operation_sha256`. Each lane forks a real Pysolate private workspace attempt containing a fresh task-world snapshot. The Host adapter applies the real upstream mutation to a candidate state and installs it atomically only after a successful response.
 
@@ -226,9 +226,11 @@ Four real WASM Guest/Broker controls passed:
 | expired | expired/not executed | `0` | no | `denied` | discarded |
 | injected failure | approved/executed | `1` | no | `error` | discarded |
 
-For the accepted lane, the receipt response digest independently recomputes from the private tool content, frozen operation digest, and final task-world digest. The private workspace's actual final FlightDB is also supplied to the oracle and its upstream DB hash matches the independently built official gold environment. The official tau2 `EnvironmentEvaluator` and `CommunicateEvaluator` replay the same exact call and both return `1.0`.
+For the accepted lane, the receipt response digest independently recomputes from the private tool content, frozen operation digest, and final task-world digest. The private workspace's actual final FlightDB is also supplied to the oracle and its upstream DB hash matches the independently built official gold environment. The official tau2 `EnvironmentEvaluator` and `CommunicateEvaluator` independently replay the same operation semantics (task, tool, arguments and content), under a distinct oracle call identity, and both return `1.0`.
 
 Classification: `SUPPORTED_BENCHMARK_PRIVATE_ONLY`. This supports one exact, authored, authority-gated mutation through the real Guest and Broker. It does not support model WRITE ability, a leaderboard result, generic rollback, or production external effects.
+
+The public report is rebuilt from the private authored source, canonical sealed Plan documents, Grant policy, Guest request/response bodies, receipts, approval records, workspace disposition events, accepted final state and oracle request/report. It independently recomputes source/document/occurrence/receipt/Grant/Plan/body identities and rejects tampered or non-body-safe fields.
 
 ### Negative oracle control — no-op sensitivity
 

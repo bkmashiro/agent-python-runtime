@@ -298,13 +298,7 @@ func (registry *Registry) Seal(config PlanConfig) (*Plan, error) {
 	}
 	sortSpecs(specs)
 	sortGrants(grants)
-	document := struct {
-		SchemaVersion string         `json:"schema_version"`
-		MaxCalls      uint32         `json:"max_calls"`
-		Capabilities  []Spec         `json:"capabilities"`
-		Grants        []GrantBinding `json:"grants"`
-	}{SchemaVersion: capabilityPlanSchemaVersion, MaxCalls: config.MaxCalls, Capabilities: specs, Grants: grants}
-	encoded, err := json.Marshal(document)
+	encoded, err := encodePlanDocument(config.MaxCalls, specs, grants)
 	if err != nil {
 		return nil, ErrInvalidTool
 	}
@@ -319,11 +313,31 @@ func (registry *Registry) Seal(config PlanConfig) (*Plan, error) {
 	}, nil
 }
 
+func encodePlanDocument(maxCalls uint32, specs []Spec, grants []GrantBinding) ([]byte, error) {
+	document := struct {
+		SchemaVersion string         `json:"schema_version"`
+		MaxCalls      uint32         `json:"max_calls"`
+		Capabilities  []Spec         `json:"capabilities"`
+		Grants        []GrantBinding `json:"grants"`
+	}{SchemaVersion: capabilityPlanSchemaVersion, MaxCalls: maxCalls, Capabilities: specs, Grants: grants}
+	return json.Marshal(document)
+}
+
 func (plan *Plan) Identity() string {
 	if plan == nil {
 		return ""
 	}
 	return plan.identity
+}
+
+// EvidenceDocument returns the exact canonical JSON document hashed by Identity.
+// It projects frozen spec and grant identities only; handlers and grant policy
+// bodies remain Host-private.
+func (plan *Plan) EvidenceDocument() ([]byte, error) {
+	if plan == nil || plan.identity == "" {
+		return nil, ErrInvalidTool
+	}
+	return encodePlanDocument(plan.maxCalls, cloneSpecs(plan.specs), append([]GrantBinding(nil), plan.grants...))
 }
 
 // StreamingObservationBinding returns frozen identity material for a future verified

@@ -382,10 +382,11 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 - [x] Define an isolated task-local upstream environment as the protocol-real provider and preserve the official final-state evaluator as an independent oracle.
 - [x] Freeze mixed-denominator inclusion/rejection/placement schema, including `unsupported_effect_class`.
 
-**Gate status:** pending T1 Canary A execution. One real `airline/3` row must travel through source capture, Plan binding, execution, oracle and private evidence without synthetic fields.
+**Gate status:** achieved by the authored `airline/3` canary in [the body-safe report](../evidence/tau2-airline-3-canary-v1.json). Source digest, Plan, real Guest execution, two Broker receipts and the independent official oracle are recorded; exact receipt-to-source occurrence remains explicitly `not_recorded`, so the result is `SUPPORTED_WITH_RECORDED_GAP`, not a complete natural-task causal join.
 
 ### Phase T1 — Deterministic canary
 
+- [x] Run the first authored `airline/3` read-only adapter/Guest/oracle wiring canary.
 - [ ] Run 2–3 tasks covering pure, multi-read and placement-control paths.
 - [ ] Verify task oracle independently from Runtime receipts.
 - [ ] Verify body-safe report determinism and private evidence permissions.

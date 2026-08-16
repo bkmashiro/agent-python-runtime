@@ -1,6 +1,6 @@
 # M4 next experiment decision
 
-**Status:** decision executed on 2026-08-16. The bounded spike is PARTIAL: native and real-Guest RED/GREEN succeeded, while the current verified profile rejected `attr` before physical execution. See [`attrs-770-spike-v1.md`](attrs-770-spike-v1.md). This document does not authorize a package shard, scheduler, worker pool, or additional sharing mechanism.
+**Status:** decision and bounded follow-up executed on 2026-08-16. The initial spike was PARTIAL; the separately authorized exact `attrs-770` artifact profile is now SUPPORTED. See [`attrs-770-spike-v1.md`](attrs-770-spike-v1.md) and [`attrs-770-profile-v1.md`](attrs-770-profile-v1.md). This result does not authorize a generic package system, scheduler, worker pool, or sharing mechanism.
 
 ## Decision
 

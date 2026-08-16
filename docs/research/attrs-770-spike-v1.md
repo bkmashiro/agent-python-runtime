@@ -97,7 +97,7 @@ A future step may design a tiny artifact-bound pure-Python package/shard profile
 - source/profile binding;
 - cross-Run freshness tests.
 
-That is a separate architecture decision. This spike does not authorize or implement it.
+That was a separate architecture decision. The subsequently authorized exact profile is recorded in [`attrs-770-profile-v1.md`](attrs-770-profile-v1.md); it does not generalize to an installer, resolver or shard scheduler.
 
 ## Reproduction
 

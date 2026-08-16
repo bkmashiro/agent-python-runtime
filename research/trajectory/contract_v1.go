@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+
 	"sort"
 	"strings"
 
@@ -23,6 +24,7 @@ const EvidenceSchemaVersion = "pysolate.causal-evidence.v1"
 const evidenceHashDomain = "pysolate.causal-evidence.v1\x00"
 
 const MaxEvidenceEvents = 100_000
+const MaxEvidenceJSONDepth = 64
 
 var (
 	evidenceIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_.:-]{7,127}$`)
@@ -166,6 +168,7 @@ type ToolDecisionPayload struct {
 	ReceiptID            string `json:"receipt_id"`
 	ResultSHA256         string `json:"result_sha256,omitempty"`
 	RunID                string `json:"run_id"`
+	SourceBound          bool   `json:"source_bound"`
 }
 
 type WorkspaceTerminalPayload struct {
@@ -536,7 +539,7 @@ func DecodeEvidenceExportWithStore(raw []byte, store *labstore.Store) (Export, e
 }
 
 func decodeEvidenceExport(raw []byte, store *labstore.Store) (Export, error) {
-	if len(raw) == 0 || len(raw) > 16<<20 {
+	if len(raw) == 0 || len(raw) > 16<<20 || !boundedJSONDepth(raw, MaxEvidenceJSONDepth) {
 		return Export{}, errors.New("invalid causal evidence export")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -829,9 +832,9 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		if kind != EventToolDecision || !evidenceIdentifier.MatchString(value.CallID) || !evidenceIdentifier.MatchString(value.RunID) || !validDigest(value.ArgumentsSHA256) ||
 			!evidenceIdentifier.MatchString(value.Capability) || !validDigest(value.CapabilityPlanSHA256) || !evidenceIdentifier.MatchString(value.ReceiptID) ||
 			(value.ApprovalRequestID != "" && !evidenceIdentifier.MatchString(value.ApprovalRequestID)) || (value.ParentCallID != "" && !evidenceIdentifier.MatchString(value.ParentCallID)) ||
-			(value.Mechanism != "direct" && value.Mechanism != "programmatic") ||
+			(value.Mechanism != "direct" && value.Mechanism != "programmatic") || (value.Mechanism == "direct") != (value.ParentCallID == "") ||
 			(value.BrokerOutcome != "ok" && value.BrokerOutcome != "denied" && value.BrokerOutcome != "error" && value.BrokerOutcome != "timeout" && value.BrokerOutcome != "ambiguous") ||
-			(value.ApprovalDisposition != "not_required" && value.ApprovalDisposition != "approved" && value.ApprovalDisposition != "denied" && value.ApprovalDisposition != "not_recorded") ||
+			(value.ApprovalDisposition != "not_required" && value.ApprovalDisposition != "approved") || (value.ApprovalDisposition == "not_required") != (value.ApprovalRequestID == "") ||
 			(value.BrokerOutcome == "ok" && !validDigest(value.ResultSHA256)) || (value.BrokerOutcome != "ok" && value.ResultSHA256 != "") {
 			return errors.New("invalid tool decision payload")
 		}
@@ -1021,6 +1024,15 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		if len(parents) != 2 || effect == nil || authority == nil || effect.CallID != value.CallID || effect.ReceiptID != value.ReceiptID || authority.RunID != value.RunID || authority.CapabilityPlanSHA256 != value.CapabilityPlanSHA256 {
 			return errors.New("tool decision authority/effect identity mismatch")
 		}
+		if !value.SourceBound {
+			projectedReceipt := receipt.Receipt{ReceiptID: value.ReceiptID, RunID: value.RunID, CapabilityPlanSHA256: value.CapabilityPlanSHA256, CallID: value.CallID, ParentCallID: value.ParentCallID, ApprovalRequestID: value.ApprovalRequestID, Capability: value.Capability, OperationIndex: value.OperationIndex, RequestSHA256: strings.TrimPrefix(value.ArgumentsSHA256, "sha256:"), Outcome: value.BrokerOutcome}
+			if value.ResultSHA256 != "" {
+				projectedReceipt.ResponseSHA256 = strings.TrimPrefix(value.ResultSHA256, "sha256:")
+			}
+			if !receipt.ValidIdentity(projectedReceipt) {
+				return errors.New("tool decision receipt identity mismatch")
+			}
+		}
 	case SourceBodyPayload:
 		parent, err := parentPayload(EventSourceDocument)
 		document, ok := parent.(*SourceDocumentPayload)
@@ -1099,8 +1111,12 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 				return errors.New("source decision receipt identity mismatch")
 			}
 			if value.Admitted {
-				if effect.State != EffectCommitted || tool.BrokerOutcome != "ok" {
-					return errors.New("admitted source decision is not bound to committed tool receipt")
+				validTerminal := (tool.BrokerOutcome == "ok" && effect.State == EffectCommitted) ||
+					(tool.BrokerOutcome == "error" && effect.State == EffectFailed) ||
+					(tool.BrokerOutcome == "timeout" && effect.State == EffectTimedOut) ||
+					(tool.BrokerOutcome == "ambiguous" && effect.State == EffectReconciliationRequired)
+				if !validTerminal {
+					return errors.New("admitted source decision is not bound to its tool receipt outcome")
 				}
 			} else if effect.State != EffectDenied || tool.BrokerOutcome != "denied" {
 				return errors.New("rejected source decision is not bound to denied tool receipt")
@@ -1245,6 +1261,41 @@ func cloneEvidenceRef(ref *labstore.Ref) *labstore.Ref {
 	}
 	copy := *ref
 	return &copy
+}
+
+func boundedJSONDepth(raw []byte, maxDepth int) bool {
+	depth := 0
+	inString := false
+	escaped := false
+	for _, character := range raw {
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if character == '\\' {
+				escaped = true
+			} else if character == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch character {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+			if depth > maxDepth {
+				return false
+			}
+		case '}', ']':
+			depth--
+			if depth < 0 {
+				return false
+			}
+		}
+	}
+	return !inString && depth == 0
 }
 
 func (event EvidenceEvent) String() string {

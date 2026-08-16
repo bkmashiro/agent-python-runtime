@@ -613,6 +613,8 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		workspaceInitial = &snapshot
 	}
 	observation := observationLifecycle{session: observationSession}
+	var broker *capability.Broker
+	capabilityCallsObserved := false
 	if hasObservation && observationSession.Mode() != observe.Off {
 		profileSHA256, profileErr := runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
 		if profileErr != nil {
@@ -630,6 +632,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		defer func() {
 			if runErr != nil && !observation.terminal {
+				if broker != nil && !capabilityCallsObserved {
+					receiptErr := observation.capabilityCalls(context.Background(), broker.Receipts())
+					runErr = errors.Join(runErr, receiptErr)
+					capabilityCallsObserved = receiptErr == nil
+				}
 				terminalErr := observation.fail(context.Background(), "runtime_error")
 				runErr = errors.Join(runErr, terminalErr)
 			}
@@ -702,7 +709,6 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	if err := callSourceValidation(runContext, module, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
-	var broker *capability.Broker
 	brokerFinalized := false
 	if engine.brokerFactory != nil {
 		broker, err = engine.brokerFactory(runContext)
@@ -785,6 +791,7 @@ prepareComplete:
 		if err := observation.capabilityCalls(runContext, receipts); err != nil {
 			return payload, err
 		}
+		capabilityCallsObserved = true
 	}
 	if _, err := runtimeconfig.DecodeAndValidateGuestRunResponse(runRequest, payload); err != nil && !errors.Is(err, runtimeconfig.ErrRunResultSchemaMismatch) {
 		return payload, err

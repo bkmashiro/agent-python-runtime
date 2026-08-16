@@ -98,7 +98,7 @@ function exactKeys(value: Record<string, unknown>, required: string[], optional:
   for (const key of Object.keys(value)) assert(allowed.has(key), `unknown causal evidence field ${label}.${key}`);
   for (const key of required) assert(Object.hasOwn(value, key), `missing causal evidence field ${label}.${key}`);
 }
-function uint(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) >= 0; }
+function uint(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0; }
 async function sha256(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -115,8 +115,23 @@ function validatePayload(event: RawEvidenceEvent) {
     case 'trace.started': exactKeys(payload, ['status']); assert(payload.status === 'running', 'invalid trace start'); break;
     case 'trace.ended': exactKeys(payload, ['status', 'evidence_complete']); assert(payload.status === 'completed' || payload.status === 'failed', 'invalid trace end'); assert(typeof payload.evidence_complete === 'boolean', 'invalid evidence completeness'); break;
     case 'authority.snapshot': exactKeys(payload, ['run_id', 'capability_plan_sha256', 'policy_sha256', 'freshness_sha256', 'grants_sha256']); digest('capability_plan_sha256'); digest('policy_sha256'); digest('freshness_sha256'); digest('grants_sha256'); break;
-    case 'effect.transition': exactKeys(payload, ['call_id', 'state'], ['receipt_id', 'compensator', 'reconciliation_reason']); break;
-    case 'tool.decision': exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'operation_index', 'receipt_id', 'run_id'], ['approval_request_id', 'parent_call_id', 'result_sha256']); digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256'); break;
+    case 'effect.transition': {
+      exactKeys(payload, ['call_id', 'state'], ['receipt_id', 'compensator', 'reconciliation_reason']);
+      assert(['intent','started','committed','failed','denied','timed_out','ambiguous','reconciliation_required','compensated','cleanup_only'].includes(String(payload.state)), 'invalid effect state');
+      assert(['committed','failed','denied','timed_out'].includes(String(payload.state)) ? typeof payload.receipt_id === 'string' : true, 'invalid effect receipt');
+      assert(payload.state === 'compensated' ? typeof payload.compensator === 'string' : payload.compensator === undefined, 'invalid compensator');
+      assert(payload.state === 'ambiguous' || payload.state === 'reconciliation_required' ? typeof payload.reconciliation_reason === 'string' : payload.reconciliation_reason === undefined, 'invalid reconciliation reason');
+      break;
+    }
+    case 'tool.decision': {
+      exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'operation_index', 'receipt_id', 'run_id', 'source_bound'], ['approval_request_id', 'parent_call_id', 'result_sha256']);
+      digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256');
+      assert((payload.mechanism === 'direct' || payload.mechanism === 'programmatic') && (payload.mechanism === 'direct') === (payload.parent_call_id === undefined), 'invalid tool mechanism');
+      assert((payload.approval_disposition === 'not_required' || payload.approval_disposition === 'approved') && (payload.approval_disposition === 'not_required') === (payload.approval_request_id === undefined), 'invalid approval disposition');
+      assert(['ok','denied','error','timeout','ambiguous'].includes(String(payload.broker_outcome)) && typeof payload.source_bound === 'boolean' && uint(payload.operation_index), 'invalid tool outcome');
+      assert(payload.broker_outcome === 'ok' ? payload.result_sha256 !== undefined : payload.result_sha256 === undefined, 'tool result/outcome mismatch');
+      break;
+    }
     case 'workspace.terminal': exactKeys(payload, ['base_workspace_sha256', 'disposition'], ['result_workspace_sha256']); digest('base_workspace_sha256'); if (payload.result_workspace_sha256 !== undefined) digest('result_workspace_sha256'); break;
     case 'execution.attempt': exactKeys(payload, ['run_id', 'attempt_id', 'status'], ['prepared_image_sha256']); if (payload.prepared_image_sha256 !== undefined) digest('prepared_image_sha256'); break;
     case 'model.context': case 'model.body': exactKeys(payload, ['context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
@@ -177,7 +192,8 @@ function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEviden
     } else {
       assert(parents.length === 3 && effect && tool && !authority && occurrence.payload.capability === tool.payload.capability, 'source decision parents/tool mismatch');
       assert(event.payload.receipt_id === effect.payload.receipt_id && event.payload.receipt_id === tool.payload.receipt_id && event.payload.capability_plan_sha256 === tool.payload.capability_plan_sha256, 'source decision receipt/Plan mismatch');
-      assert(event.payload.admitted === true ? (effect.payload.state === 'committed' && tool.payload.broker_outcome === 'ok') : (effect.payload.state === 'denied' && tool.payload.broker_outcome === 'denied'), 'source decision disposition mismatch');
+      const validAdmitted = (tool.payload.broker_outcome === 'ok' && effect.payload.state === 'committed') || (tool.payload.broker_outcome === 'error' && effect.payload.state === 'failed') || (tool.payload.broker_outcome === 'timeout' && effect.payload.state === 'timed_out') || (tool.payload.broker_outcome === 'ambiguous' && effect.payload.state === 'reconciliation_required');
+      assert(event.payload.admitted === true ? validAdmitted : (effect.payload.state === 'denied' && tool.payload.broker_outcome === 'denied'), 'source decision disposition mismatch');
     }
   }
   if (event.type === 'subagent.runtime') {
@@ -219,7 +235,7 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
     exactKeys(event as unknown as Record<string, unknown>, eventKeys.filter((key) => key !== 'parent_event_ids' && key !== 'body'), ['parent_event_ids', 'body'], `event[${event.ordinal}]`);
     assert(event.schema_version === TRAJECTORY_SCHEMA && uint(event.ordinal) && event.ordinal > previousOrdinal && eventTypes.has(event.type), 'invalid causal event envelope');
     assert(digestRE.test(event.event_id) && uint(event.occurred_nanos) && idRE.test(event.actor_id), 'invalid causal event identity');
-    assert(Array.isArray(event.parent_event_ids ?? []) && (event.parent_event_ids ?? []).length <= 256, 'invalid event parents');
+    assert(Array.isArray(event.parent_event_ids ?? []) && (event.parent_event_ids ?? []).length <= 256 && (event.parent_event_ids ?? []).every((parent, index, parents) => index === 0 || parents[index - 1] < parent), 'invalid event parents');
     for (const parent of event.parent_event_ids ?? []) assert(prior.has(parent), 'causal parent is not prior');
     if (event.body !== undefined) {
       exactKeys(object(event.body, 'body'), ['kind', 'sha256'], [], 'body');
@@ -270,6 +286,14 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
       ];
       const identity = await sha256(`${fields.join('\0')}\0`);
       assert(`rcpt_${identity.slice(7)}` === event.payload.receipt_id, 'source receipt identity mismatch');
+    }
+    if (event.type === 'tool.decision' && event.payload.source_bound === false) {
+      const version = event.payload.parent_call_id !== undefined || event.payload.approval_request_id !== undefined ? 'pysolate-receipt-v2' : 'pysolate-receipt-v1';
+      const fields = version === 'pysolate-receipt-v2'
+        ? [version, event.payload.run_id, event.payload.capability_plan_sha256, event.payload.call_id, event.payload.parent_call_id ?? '', event.payload.approval_request_id ?? '', event.payload.capability, String(event.payload.operation_index), String(event.payload.arguments_sha256).slice(7)]
+        : [version, event.payload.run_id, event.payload.capability_plan_sha256, event.payload.call_id, event.payload.capability, String(event.payload.operation_index), String(event.payload.arguments_sha256).slice(7)];
+      const identity = await sha256(`${fields.join('\0')}\0`);
+      assert(`rcpt_${identity.slice(7)}` === event.payload.receipt_id, 'tool receipt identity mismatch');
     }
     const unsignedEvent = { ...event, event_id: '' };
     assert(await evidenceHash(`event\0${raw.header_sha256}`, unsignedEvent) === event.event_id, 'event identity mismatch');
@@ -365,5 +389,24 @@ export async function loadTrajectory(url = '/lab-data/experiment-full-public.jso
   if (!response.ok) throw new Error(`trajectory fetch failed: ${response.status}`);
   const text = await response.text();
   assert(new TextEncoder().encode(text).length <= 16 * 1024 * 1024, 'trajectory exceeds byte budget');
-  return validateTrajectory(JSON.parse(text));
+  assert(boundedJSONDepth(text, 64), 'trajectory exceeds JSON depth budget');
+  const parsed: unknown = JSON.parse(text);
+  assert(JSON.stringify(parsed) === text, 'trajectory JSON is not canonical');
+  return validateTrajectory(parsed);
+}
+
+function boundedJSONDepth(text: string, maxDepth: number): boolean {
+  let depth = 0; let inString = false; let escaped = false;
+  for (const character of text) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === '{' || character === '[') { depth += 1; if (depth > maxDepth) return false; }
+    else if (character === '}' || character === ']') { depth -= 1; if (depth < 0) return false; }
+  }
+  return !inString && depth === 0;
 }

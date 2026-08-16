@@ -279,7 +279,7 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 				ArgumentsSHA256: payload.ArgumentsSHA256, BrokerOutcome: payload.Outcome,
 				CallID: capabilityCallIdentity(payload), Capability: payload.Capability, CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
 				Mechanism: mechanism, OperationIndex: payload.OperationIndex, ParentCallID: parentCallID,
-				ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256, RunID: recorder.config.RunID,
+				ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256, RunID: recorder.config.RunID, SourceBound: payload.Source != nil,
 			},
 		})
 		if err != nil {

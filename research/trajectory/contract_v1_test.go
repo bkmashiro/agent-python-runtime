@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
@@ -44,6 +45,13 @@ func testSubagentWorkspacePayload(t *testing.T, childID, baseRootSHA256 string) 
 	}
 	digest := sha256.Sum256(document)
 	return trajectory.SubagentWorkspacePayload{ChildID: childID, BaseRootSHA256: baseRootSHA256, ResultRootSHA256: "sha256:" + hex.EncodeToString(digest[:]), WorkspaceSHA256: root.WorkspaceSHA256, Depth: root.Depth, ChangedEntries: root.ChangedEntries, ChangedBytes: root.ChangedBytes, Disposition: "selected"}
+}
+
+func TestDecodeRejectsExcessiveJSONDepthBeforeTypedDecode(t *testing.T) {
+	raw := []byte(strings.Repeat("[", trajectory.MaxEvidenceJSONDepth+1) + strings.Repeat("]", trajectory.MaxEvidenceJSONDepth+1))
+	if _, err := trajectory.DecodeEvidenceExport(raw); err == nil {
+		t.Fatal("excessively nested JSON was accepted")
+	}
 }
 
 func TestCheckedInRealGuestArtifactsAreCanonicalAndMatchLab(t *testing.T) {

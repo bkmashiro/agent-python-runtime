@@ -35,7 +35,7 @@ func TestSourceEvidenceCrossBindsVerifiedOccurrenceDynamicCallAndReceipt(t *test
 		Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{started.EventID},
 		Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", ReceiptID: boundReceipt.ReceiptID, State: trajectory.EffectCommitted},
 	})
-	tool := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventToolDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID, effect.EventID}, Payload: trajectory.ToolDecisionPayload{ApprovalDisposition: "not_required", ArgumentsSHA256: "sha256:" + boundReceipt.RequestSHA256, BrokerOutcome: "ok", CallID: boundReceipt.CallID, Capability: boundReceipt.Capability, CapabilityPlanSHA256: boundReceipt.CapabilityPlanSHA256, Mechanism: "direct", OperationIndex: boundReceipt.OperationIndex, ReceiptID: boundReceipt.ReceiptID, ResultSHA256: "sha256:" + boundReceipt.ResponseSHA256, RunID: boundReceipt.RunID}})
+	tool := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventToolDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID, effect.EventID}, Payload: trajectory.ToolDecisionPayload{ApprovalDisposition: "not_required", ArgumentsSHA256: "sha256:" + boundReceipt.RequestSHA256, BrokerOutcome: "ok", CallID: boundReceipt.CallID, Capability: boundReceipt.Capability, CapabilityPlanSHA256: boundReceipt.CapabilityPlanSHA256, Mechanism: "direct", OperationIndex: boundReceipt.OperationIndex, ReceiptID: boundReceipt.ReceiptID, ResultSHA256: "sha256:" + boundReceipt.ResponseSHA256, RunID: boundReceipt.RunID, SourceBound: true}})
 	decision := appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventSourceDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{occurrence.EventID, effect.EventID, tool.EventID},
 		Payload: trajectory.SourceDecisionPayload{
@@ -105,6 +105,28 @@ func TestCrossPlanePayloadIdentityMismatchFailsClosed(t *testing.T) {
 		Payload: testSubagentRuntimePayload(t, "child-cross-plane-0002", testDigest('e'), testDigest('f'), testDigest('b'), testDigest('5')),
 	}); err == nil {
 		t.Fatal("subagent runtime with mismatched child context accepted")
+	}
+}
+
+func TestNonSourceToolDecisionRecomputesReceiptIdentity(t *testing.T) {
+	for name, mutate := range map[string]func(*trajectory.ToolDecisionPayload){
+		"valid":            func(*trajectory.ToolDecisionPayload) {},
+		"tampered request": func(payload *trajectory.ToolDecisionPayload) { payload.ArgumentsSHA256 = testDigest('9') },
+	} {
+		t.Run(name, func(t *testing.T) {
+			builder := newEvidenceBuilder(t)
+			authorized := receipt.NewAuthorized("execution-contract-0001", testDigest('1'), "call-non-source-0001", "", "", "workspace.read_text", 0, "non-source-request", "ok", []byte("result"))
+			authority := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventAuthoritySnapshot, ActorID: "actor-host-0001", Payload: trajectory.AuthoritySnapshotPayload{RunID: authorized.RunID, CapabilityPlanSHA256: authorized.CapabilityPlanSHA256, PolicySHA256: testDigest('2'), FreshnessSHA256: testDigest('3'), GrantsSHA256: testDigest('4')}})
+			intent := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: authorized.CallID, State: trajectory.EffectIntent}})
+			started := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{intent.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: authorized.CallID, State: trajectory.EffectStarted}})
+			effect := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{started.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: authorized.CallID, ReceiptID: authorized.ReceiptID, State: trajectory.EffectCommitted}})
+			payload := trajectory.ToolDecisionPayload{ApprovalDisposition: "not_required", ArgumentsSHA256: "sha256:" + authorized.RequestSHA256, BrokerOutcome: authorized.Outcome, CallID: authorized.CallID, Capability: authorized.Capability, CapabilityPlanSHA256: authorized.CapabilityPlanSHA256, Mechanism: "direct", OperationIndex: authorized.OperationIndex, ReceiptID: authorized.ReceiptID, ResultSHA256: "sha256:" + authorized.ResponseSHA256, RunID: authorized.RunID}
+			mutate(&payload)
+			_, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventToolDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID, effect.EventID}, Payload: payload})
+			if (name == "valid") != (err == nil) {
+				t.Fatalf("err=%v", err)
+			}
+		})
 	}
 }
 

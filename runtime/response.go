@@ -110,15 +110,71 @@ func validPrefixedSHA256(value string) bool {
 	return true
 }
 
+type RunSourceContract struct {
+	SchemaVersion         string `json:"schema_version"`
+	ModelSourceSHA256     string `json:"model_source_sha256"`
+	EffectiveASTSHA256    string `json:"effective_ast_sha256"`
+	WrapperContractSHA256 string `json:"wrapper_contract_sha256"`
+}
+
+func (contract RunSourceContract) Validate() error {
+	if contract.SchemaVersion != "pysolate.guest-source-contract.v1" || !validPrefixedSHA256(contract.ModelSourceSHA256) || !validPrefixedSHA256(contract.EffectiveASTSHA256) || !validPrefixedSHA256(contract.WrapperContractSHA256) {
+		return errors.New("run source contract is invalid")
+	}
+	return nil
+}
+
+func validateModelOutputContract(response RunResponse) error {
+	if len(response.Logs) > 256 {
+		return errors.New("run response contains too many model logs")
+	}
+	logBytes := 0
+	for _, line := range response.Logs {
+		if !utf8.ValidString(line) {
+			return errors.New("run response contains invalid model logs")
+		}
+		logBytes += len([]byte(line))
+	}
+	if logBytes > 64*1024 {
+		return errors.New("run response model logs exceed the byte bound")
+	}
+	if response.SourceContract != nil && response.SourceContract.Validate() != nil {
+		return errors.New("run response source contract is invalid")
+	}
+	if response.ResultPresent == nil && response.ResultSource == "" && response.SourceContract == nil {
+		return nil
+	}
+	if response.ResultPresent == nil || response.SourceContract == nil {
+		return errors.New("run response model output contract is incomplete")
+	}
+	switch response.ResultSource {
+	case "return", "legacy_result":
+		if !*response.ResultPresent {
+			return errors.New("run response result source contradicts presence")
+		}
+	case "missing":
+		if *response.ResultPresent || string(bytes.TrimSpace(response.Result)) != "null" {
+			return errors.New("missing run result has a value")
+		}
+	default:
+		return errors.New("run response has an invalid result source")
+	}
+	return nil
+}
+
 type RunResponse struct {
-	Status               RunResponseStatus `json:"status"`
-	Result               json.RawMessage   `json:"result"`
-	Receipts             json.RawMessage   `json:"receipts"`
-	Metrics              *RunMetrics       `json:"metrics"`
-	Error                *RunError         `json:"error"`
-	CapabilityPlanSHA256 *string           `json:"capability_plan_sha256,omitempty"`
-	ExecutionRef         *ExecutionRef     `json:"execution_ref,omitempty"`
-	WorkspaceReceipt     *WorkspaceReceipt `json:"workspace_receipt,omitempty"`
+	Status               RunResponseStatus  `json:"status"`
+	Result               json.RawMessage    `json:"result"`
+	Logs                 []string           `json:"logs,omitempty"`
+	ResultPresent        *bool              `json:"result_present,omitempty"`
+	ResultSource         string             `json:"result_source,omitempty"`
+	SourceContract       *RunSourceContract `json:"source_contract,omitempty"`
+	Receipts             json.RawMessage    `json:"receipts"`
+	Metrics              *RunMetrics        `json:"metrics"`
+	Error                *RunError          `json:"error"`
+	CapabilityPlanSHA256 *string            `json:"capability_plan_sha256,omitempty"`
+	ExecutionRef         *ExecutionRef      `json:"execution_ref,omitempty"`
+	WorkspaceReceipt     *WorkspaceReceipt  `json:"workspace_receipt,omitempty"`
 }
 
 func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResponse, error) {
@@ -126,7 +182,8 @@ func DecodeAndValidateGuestRunResponse(request RunRequest, data []byte) (RunResp
 		return RunResponse{}, errors.New("Guest run response contains duplicate JSON keys")
 	}
 	var envelope map[string]json.RawMessage
-	if json.Unmarshal(data, &envelope) != nil || !hasExactKeys(envelope, "status", "result", "receipts", "metrics", "error") {
+	if json.Unmarshal(data, &envelope) != nil || !hasRequiredAndOnlyExactKeys(envelope,
+		[]string{"status", "result", "receipts", "metrics", "error"}, "logs", "result_present", "result_source", "source_contract") {
 		return RunResponse{}, errors.New("Guest run response has non-canonical envelope keys")
 	}
 	var metrics map[string]json.RawMessage
@@ -305,7 +362,7 @@ func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEv
 	}
 	if (response.Status != RunResponseOK && response.Status != RunResponseError) || len(response.Result) == 0 || len(response.Receipts) == 0 || response.Metrics == nil ||
 		(response.Metrics.GuestTimeMS != nil && *response.Metrics.GuestTimeMS < 0) || (response.ExecutionRef != nil && response.ExecutionRef.Validate() != nil) ||
-		capabilityPlanInvalid || workspaceReceiptInvalid || hostEvidenceInvalid {
+		capabilityPlanInvalid || workspaceReceiptInvalid || hostEvidenceInvalid || validateModelOutputContract(response) != nil {
 		return RunResponse{}, errors.New("run response has invalid required fields")
 	}
 	if err := validateCapabilityReceipts(response.Receipts, response.CapabilityPlanSHA256); err != nil {

@@ -1,0 +1,15 @@
+{
+  "schema_version": "pysolate.tau2-t2-runtime-replay-anchor.v1",
+  "classification": "HARNESS_VALIDATION_ONLY_NOT_PERFORMANCE_EVIDENCE",
+  "performance_comparison_supported": false,
+  "preregistration_identity": "sha256:fb132f0162952632ec9b70bc7d63faaa7a7a2a9e11a35ce771a4905b3d1dadbf",
+  "parent_remediation_identity": "sha256:0185482fae6882056630bc375a9878ef5e4882a30577b85c91b57b5044e6af4c",
+  "artifact_sha256": "sha256:664077c1d63445ec267b1b30e30ce31c72e7038d62a08fe1682c675a64cff257",
+  "cases": [
+    {
+      "task_id": "1",
+      "turn": "1",
+      "case_sha256": "sha256:85433d74402b6ba3213540224f7773de3e03fb8b7602e5be6c6133453ebd33df"
+    }
+  ]
+}

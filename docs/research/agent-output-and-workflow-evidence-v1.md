@@ -1,0 +1,83 @@
+# Agent Output and Workflow Evidence Contract v1
+
+Status: implemented contract; performance claims remain unmeasured.
+
+## Model-facing output
+
+Pysolate now separates a canonical JSON result from bounded narrative logs:
+
+```python
+print("selected 12 records")
+return {"count": 12, "records": records[:5]}
+```
+
+The Guest emits:
+
+```json
+{
+  "logs": ["selected 12 records"],
+  "result": {"count": 12, "records": []},
+  "result_present": true,
+  "result_source": "return"
+}
+```
+
+`return` is canonical. `print` is ordered, model-facing text with a 64 KiB/256-line bound. Legacy `result = value` remains accepted as `result_source=legacy_result`. Falling through without either is `result_source=missing` and differs from explicit `return None`.
+
+The implementation follows the useful boundary in DeepSeek Harness Code Mode: only outer logs and the completion value re-enter model context, while intermediate tool values remain execution-local. Reference: `deepseek-ai/deepseek-harness@47f943859bef60e4160492346772ded9b24f765a`, `packages/core/tools/README.md`, lines 118–125 and 158–163.
+
+## Source identity
+
+The exact model source remains separate from the Host-owned execution wrapper. Every successful new-Guest response includes:
+
+- `model_source_sha256`;
+- `effective_ast_sha256`;
+- `wrapper_contract_sha256`.
+
+The wrapper preserves original statement line numbers, supports real top-level `return`, executes the model body once, and rejects `_pysolate_*` name collisions. Module docstrings and `from __future__` imports remain in the module preamble. Wrapper metadata is evidence; it does not widen authority.
+
+## Three evidence layers
+
+The executable schema is `research/workflowbench/evidence_layers.go`.
+
+### 1. Natural opportunity census
+
+Examples: tau2, Open-SWE.
+
+Purpose:
+
+- compatibility and task-oracle preservation;
+- absolute isolation cost;
+- observed optimization admission/ineligibility/fallback rates.
+
+Natural workloads may not require optimization and may not support causal speedup claims merely because Pysolate ran them.
+
+### 2. Trace-derived DAG workloads
+
+A private real-Agent trace is projected into a body-safe DAG of model turns, typed tool calls, local computation, dependencies, effect classes, logical-agent ownership and import shards. The public workload binds the private trace digest; raw bodies remain private.
+
+Purpose:
+
+- preserve realistic workflow shape without model variance;
+- compare matched scheduling and placement lanes;
+- measure fan-out/fan-in, local joins, write barriers and multi-Agent sharing.
+
+Claims are bounded to the frozen trace shape.
+
+### 3. Mechanism stress workloads
+
+Authored, falsifiable cases target named mechanisms such as prepared runtime, memory COW, compile single-flight, bounded parallel dispatch and logical-Agent multiplexing.
+
+Purpose:
+
+- prove admission and fallback behavior;
+- measure mechanism-specific latency, throughput, CPU and memory;
+- exercise cancellation, timeout and exclusive-effect barriers.
+
+Claims remain fixture-bounded and cannot be presented as natural benchmark uplift.
+
+## Required matched metrics
+
+Every layer records task oracle, effect/receipt equivalence, admission/fallback, logical versus physical calls, wall and tail latency, Guest starts and compile counts. Agent-level cohorts additionally record model turns and provider calls; resource studies record CPU and peak RSS.
+
+A workload DAG rejects cycles, missing nodes, concurrency-safe external writes and unbound capabilities. A valid suite must contain all three layers, preventing one microbenchmark from silently standing in for natural, trace-derived and mechanism evidence simultaneously.

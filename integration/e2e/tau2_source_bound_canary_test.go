@@ -94,12 +94,25 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	})
 }
 
+func tau2SourceBoundAnalysisConfig(profile runtimeconfig.ExecutionProfile) runtimeconfig.RunConfig {
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	config.Mechanisms.SemanticAnalysis = true
+	return config
+}
+
+func tau2SourceBoundExecutionConfig(profile runtimeconfig.ExecutionProfile, mechanisms runtimeconfig.MechanismSet) runtimeconfig.RunConfig {
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	config.ProgramSurface = runtimeconfig.ProgramSurfaceProgrammatic
+	config.Mechanisms = mechanisms
+	return config
+}
+
 func runTau2SourceBoundTurnWithOptions(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, plan *capability.Plan, runIdentity, capabilityName, arguments, source string, options tau2SourceBoundOptions) tau2SourceBoundRun {
 	t.Helper()
 	totalStarted := time.Now()
-	analysisConfig := runtimeconfig.DefaultRunConfig()
-	analysisConfig.ExecutionProfile = &profile
-	analysisConfig.Mechanisms.SemanticAnalysis = true
+	analysisConfig := tau2SourceBoundAnalysisConfig(profile)
 	analysisEngineStarted := time.Now()
 	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), wasm, analysisConfig)
 	analysisEngineNewMS := float64(time.Since(analysisEngineStarted).Nanoseconds()) / float64(time.Millisecond)
@@ -146,10 +159,7 @@ func runTau2SourceBoundTurnWithOptions(t *testing.T, wasm []byte, profile runtim
 		t.Fatal(err)
 	}
 	var broker *capability.Broker
-	config := runtimeconfig.DefaultRunConfig()
-	config.ExecutionProfile = &profile
-	config.ProgramSurface = runtimeconfig.ProgramSurfaceProgrammatic
-	config.Mechanisms = options.Mechanisms
+	config := tau2SourceBoundExecutionConfig(profile, options.Mechanisms)
 	if !config.Mechanisms.ProgrammaticToolCalling {
 		t.Fatal("source-bound replay requires programmatic tool calling")
 	}

@@ -87,9 +87,10 @@ Never reuse old Run/call/receipt identities. Never call a fallback sample COW or
 
 ## Current implemented slice
 
+- `docs/research/agent-output-and-workflow-evidence-v1.md` and `research/workflowbench/evidence_layers.go` define the `return` + bounded `print` contract and enforce natural-census, trace-DAG, and mechanism-stress claim separation.
 - `integration/e2e/tau2_t2_replay_test.go` defines exact `fresh`/`prepared`/`cow` mechanism variants and variant-bound Run identity.
 - `integration/e2e/tau2_source_bound_canary_test.go` exposes phase timings, `PreparedState`, `COWProbe` and Host observation digests through the same real Guest/Broker path used by T2.
-- A private one-program `fresh`/`prepared` pilot pre-registers a frozen replay corpus identity and validates source/Plan/content digests, distinct variant-bound Run identities, six Host observation events per run, and actual prepared selection/run. It is explicitly `HARNESS_VALIDATION_ONLY_NOT_PERFORMANCE_EVIDENCE`.
+- Pilot v10 binds its private preregistration to the fixed public anchor `docs/evidence/tau2-t2-runtime-replay-pilot-v1.json`. Run identity binds the frozen case and full runtime configuration. Descriptor-rooted private I/O rejects pre-open and post-open path replacement. The pilot passed exact fresh/prepared oracles and remains non-performance evidence.
 
 ## Next implementation tasks
 

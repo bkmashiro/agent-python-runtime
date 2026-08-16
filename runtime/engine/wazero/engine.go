@@ -922,7 +922,7 @@ func projectHostEvidence(
 	}
 	for key := range envelope {
 		switch key {
-		case "status", "result", "receipts", "metrics", "error":
+		case "status", "result", "logs", "result_present", "result_source", "source_contract", "receipts", "metrics", "error":
 		case "capability_plan_sha256":
 			return nil, ErrGuestClaimedCapabilityPlan
 		case "execution_ref":

@@ -21,6 +21,7 @@ _runtime_config: dict[str, Any] = {}
 _validated_request_json: str | None = None
 _validated_code: types.CodeType | None = None
 _validated_import_globals: dict[str, Any] = {}
+_validated_effective_ast_sha256: str | None = None
 _stream_session: _StreamingSession | None = None
 _SOURCE_CONTRACT_OK = 0
 _SOURCE_CONTRACT_UNSUPPORTED = 1
@@ -28,6 +29,46 @@ _SOURCE_CONTRACT_INVALID = 2
 _FORBIDDEN_DYNAMIC_NAMES = {"__import__", "eval", "exec", "import_module"}
 _FORBIDDEN_IMPORT_ROOTS = {"builtins", "importlib"}
 _ORIGINAL_IMPORT = __import__
+_WRAPPER_CONTRACT = "pysolate.agent-output-wrapper.v1:return+legacy-result+bounded-stdout"
+_WRAPPER_CONTRACT_SHA256 = "sha256:" + hashlib.sha256(_WRAPPER_CONTRACT.encode("utf-8")).hexdigest()
+_WRAPPER_MAIN = "_pysolate_agent_main"
+_WRAPPER_RETURN = "_pysolate_explicit_return"
+_WRAPPER_FALLTHROUGH = "_pysolate_fallthrough"
+_WRAPPER_MISSING = "_pysolate_missing"
+_STDOUT_MAX_BYTES = 64 * 1024
+_STDOUT_MAX_LINES = 256
+
+
+class _OutputLimitExceeded(Exception):
+    pass
+
+
+class _BoundedStdout:
+    def __init__(self) -> None:
+        self._parts: list[str] = []
+        self._bytes = 0
+
+    def write(self, value: str) -> int:
+        if not isinstance(value, str):
+            raise TypeError("stdout writes must be strings")
+        encoded = value.encode("utf-8")
+        if self._bytes + len(encoded) > _STDOUT_MAX_BYTES:
+            raise _OutputLimitExceeded("model logs exceed the output byte bound")
+        self._parts.append(value)
+        self._bytes += len(encoded)
+        return len(value)
+
+    def flush(self) -> None:
+        return None
+
+    def logs(self) -> list[str]:
+        text = "".join(self._parts)
+        lines = text.splitlines()
+        if text and not lines:
+            lines = [text]
+        if len(lines) > _STDOUT_MAX_LINES:
+            raise _OutputLimitExceeded("model logs exceed the line bound")
+        return lines
 
 
 def _declared_sealed_importer(declared_roots: list[str]):
@@ -282,12 +323,13 @@ def _initialize(config_json: str) -> None:
     value = json.loads(config_json)
     if not isinstance(value, dict):
         raise ValueError("runtime config must be an object")
-    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals
+    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals, _validated_effective_ast_sha256
     _runtime_config = dict(value)
     _prepared_globals = {}
     _validated_request_json = None
     _validated_code = None
     _validated_import_globals = {}
+    _validated_effective_ast_sha256 = None
 
 
 
@@ -347,7 +389,64 @@ def _code_objects(code: types.CodeType):
             yield from _code_objects(value)
 
 
+class _TopLevelReturnTransformer(ast.NodeTransformer):
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        return node
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        return node
+
+    def visit_Lambda(self, node: ast.Lambda):
+        return node
+
+    def visit_Return(self, node: ast.Return):
+        value = node.value if node.value is not None else ast.Constant(value=None)
+        rewritten = ast.Return(value=ast.Tuple(elts=[ast.Name(id=_WRAPPER_RETURN, ctx=ast.Load()), value], ctx=ast.Load()))
+        return ast.copy_location(rewritten, node)
+
+
+def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tuple[types.CodeType, str]:
+    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
+            raise SyntaxError("agent source uses a reserved runtime name")
+    transformer = _TopLevelReturnTransformer()
+    transformed: list[ast.stmt] = []
+    for node in body:
+        updated = transformer.visit(node)
+        if isinstance(updated, list):
+            transformed.extend(updated)
+        elif updated is not None:
+            transformed.append(updated)
+    fallthrough = ast.Return(
+        value=ast.Tuple(
+            elts=[
+                ast.Name(id=_WRAPPER_FALLTHROUGH, ctx=ast.Load()),
+                ast.Call(
+                    func=ast.Attribute(value=ast.Call(func=ast.Name(id="locals", ctx=ast.Load()), args=[], keywords=[]), attr="get", ctx=ast.Load()),
+                    args=[ast.Constant(value="result"), ast.Name(id=_WRAPPER_MISSING, ctx=ast.Load())],
+                    keywords=[],
+                ),
+            ],
+            ctx=ast.Load(),
+        )
+    )
+    function = ast.FunctionDef(
+        name=_WRAPPER_MAIN,
+        args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
+        body=[*transformed, fallthrough],
+        decorator_list=[],
+    )
+    module = ast.fix_missing_locations(ast.Module(body=[*preamble, function], type_ignores=[]))
+    effective = ast.dump(module, annotate_fields=True, include_attributes=False)
+    digest = "sha256:" + hashlib.sha256(effective.encode("utf-8")).hexdigest()
+    return compile(module, "<agent-run>", "exec"), digest
+
+
 def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) -> tuple[int, types.CodeType | None, list[ast.stmt]]:
+    global _validated_effective_ast_sha256
     try:
         tree = ast.parse(source, filename="<agent-run>", mode="exec")
     except (SyntaxError, ValueError, TypeError, MemoryError):
@@ -397,9 +496,10 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
             return _SOURCE_CONTRACT_UNSUPPORTED, None, []
 
     body = [node for node in tree.body if id(node) not in top_level_import_ids]
-    body_tree = ast.fix_missing_locations(ast.Module(body=body, type_ignores=[]))
+    future_nodes: list[ast.stmt] = [node for node in import_nodes if isinstance(node, ast.ImportFrom) and node.module == "__future__"]
     try:
-        code = compile(body_tree, "<agent-run>", "exec")
+        code, effective_digest = _compile_agent_wrapper(body, future_nodes)
+        _validated_effective_ast_sha256 = effective_digest
     except (SyntaxError, ValueError, TypeError, MemoryError):
         return _SOURCE_CONTRACT_INVALID, None, []
     for candidate in _code_objects(code):
@@ -423,6 +523,24 @@ def _preload_and_seal_imports(import_nodes: list[ast.stmt]) -> dict[str, Any] | 
         return None
 
 
+def _validate_unrestricted_source(source: str) -> tuple[int, types.CodeType | None]:
+    global _validated_effective_ast_sha256
+    try:
+        tree = ast.parse(source, filename="<agent-run>", mode="exec")
+        preamble: list[ast.stmt] = []
+        body: list[ast.stmt] = []
+        for index, node in enumerate(tree.body):
+            if (index == 0 and _module_docstring(node)) or (isinstance(node, ast.ImportFrom) and node.module == "__future__"):
+                preamble.append(node)
+            else:
+                body.append(node)
+        code, digest = _compile_agent_wrapper(body, preamble)
+        _validated_effective_ast_sha256 = digest
+        return _SOURCE_CONTRACT_OK, code
+    except (SyntaxError, ValueError, TypeError, MemoryError):
+        return _SOURCE_CONTRACT_INVALID, None
+
+
 def _validate_request_source(request_json: str) -> int:
     global _validated_request_json, _validated_code, _validated_import_globals
     if not isinstance(request_json, str):
@@ -431,10 +549,9 @@ def _validate_request_source(request_json: str) -> int:
     if error is not None or request is None:
         return _SOURCE_CONTRACT_INVALID
     if request.get("compatibility") is None:
-        try:
-            code = compile(request["code"], "<agent-run>", "exec")
-        except (SyntaxError, ValueError, TypeError, MemoryError):
-            return _SOURCE_CONTRACT_INVALID
+        status, code = _validate_unrestricted_source(request["code"])
+        if status != _SOURCE_CONTRACT_OK or code is None:
+            return status
         _validated_request_json = request_json
         _validated_code = code
         _validated_import_globals = {}
@@ -471,7 +588,7 @@ def _execute(request_json: str) -> str:
         return _encode(error)
     assert request is not None
 
-    global _validated_request_json, _validated_code, _validated_import_globals
+    global _validated_request_json, _validated_code, _validated_import_globals, _validated_effective_ast_sha256
     if _validated_request_json != request_json or _validated_code is None:
         contract_status = _validate_request_source(request_json)
         if contract_status == _SOURCE_CONTRACT_INVALID:
@@ -494,12 +611,49 @@ def _execute(request_json: str) -> str:
             restricted_builtins.pop(forbidden, None)
         restricted_builtins["__import__"] = _declared_sealed_importer(request["compatibility"]["imports"])
         namespace["__builtins__"] = restricted_builtins
+    explicit_return = object()
+    fallthrough = object()
+    missing = object()
+    namespace[_WRAPPER_RETURN] = explicit_return
+    namespace[_WRAPPER_FALLTHROUGH] = fallthrough
+    namespace[_WRAPPER_MISSING] = missing
+    capture = _BoundedStdout()
+    previous_stdout = sys.stdout
     try:
+        sys.stdout = capture
         exec(code, namespace, namespace)
-        result = namespace.get("result")
+        main = namespace.get(_WRAPPER_MAIN)
+        if not isinstance(main, types.FunctionType):
+            raise RuntimeError("agent output wrapper is unavailable")
+        tag, result = main()
+        logs = capture.logs()
+        if tag is explicit_return:
+            result_present = True
+            result_source = "return"
+        elif tag is fallthrough and result is not missing:
+            result_present = True
+            result_source = "legacy_result"
+        elif tag is fallthrough:
+            result = None
+            result_present = False
+            result_source = "missing"
+        else:
+            raise RuntimeError("agent output wrapper returned an invalid disposition")
+        effective_digest = _validated_effective_ast_sha256
+        if effective_digest is None:
+            raise RuntimeError("agent effective source identity is unavailable")
         response = {
             "status": "ok",
             "result": result,
+            "logs": logs,
+            "result_present": result_present,
+            "result_source": result_source,
+            "source_contract": {
+                "schema_version": "pysolate.guest-source-contract.v1",
+                "model_source_sha256": "sha256:" + hashlib.sha256(request["code"].encode("utf-8")).hexdigest(),
+                "effective_ast_sha256": effective_digest,
+                "wrapper_contract_sha256": _WRAPPER_CONTRACT_SHA256,
+            },
             "receipts": [],
             "metrics": {
                 "guest_time_ms": max(0.0, (time.monotonic() - started) * 1000.0),
@@ -517,14 +671,21 @@ def _execute(request_json: str) -> str:
         return encoded
     except BaseException as exc:
         try:
+            logs = capture.logs()
+        except BaseException:
+            logs = []
+        try:
             trace = traceback.format_exc()
         except BaseException:
             trace = f"{type(exc).__name__}: {exc}"
-        return _encode(
-            _error(
-                "python_exception",
-                str(exc),
-                error_type=type(exc).__name__,
-                trace=trace,
-            )
+        code_name = "output_limit_exceeded" if isinstance(exc, _OutputLimitExceeded) else "python_exception"
+        failure = _error(
+            code_name,
+            str(exc),
+            error_type=type(exc).__name__,
+            trace=trace,
         )
+        failure["logs"] = logs
+        return _encode(failure)
+    finally:
+        sys.stdout = previous_stdout

@@ -116,7 +116,7 @@ function validatePayload(event: RawEvidenceEvent) {
     case 'trace.ended': exactKeys(payload, ['status', 'evidence_complete']); assert(payload.status === 'completed' || payload.status === 'failed', 'invalid trace end'); assert(typeof payload.evidence_complete === 'boolean', 'invalid evidence completeness'); break;
     case 'authority.snapshot': exactKeys(payload, ['run_id', 'capability_plan_sha256', 'policy_sha256', 'freshness_sha256', 'grants_sha256']); digest('capability_plan_sha256'); digest('policy_sha256'); digest('freshness_sha256'); digest('grants_sha256'); break;
     case 'effect.transition': exactKeys(payload, ['call_id', 'state'], ['receipt_id', 'compensator', 'reconciliation_reason']); break;
-    case 'tool.decision': exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'operation_index', 'receipt_id'], ['approval_request_id', 'parent_call_id', 'result_sha256']); digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256'); break;
+    case 'tool.decision': exactKeys(payload, ['approval_disposition', 'arguments_sha256', 'broker_outcome', 'call_id', 'capability', 'capability_plan_sha256', 'mechanism', 'operation_index', 'receipt_id', 'run_id'], ['approval_request_id', 'parent_call_id', 'result_sha256']); digest('arguments_sha256'); digest('capability_plan_sha256'); if (payload.result_sha256 !== undefined) digest('result_sha256'); break;
     case 'workspace.terminal': exactKeys(payload, ['base_workspace_sha256', 'disposition'], ['result_workspace_sha256']); digest('base_workspace_sha256'); if (payload.result_workspace_sha256 !== undefined) digest('result_workspace_sha256'); break;
     case 'execution.attempt': exactKeys(payload, ['run_id', 'attempt_id', 'status'], ['prepared_image_sha256']); if (payload.prepared_image_sha256 !== undefined) digest('prepared_image_sha256'); break;
     case 'model.context': case 'model.body': exactKeys(payload, ['context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
@@ -124,11 +124,18 @@ function validatePayload(event: RawEvidenceEvent) {
     case 'source.document': exactKeys(payload, ['document_id', 'source_sha256', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.body': exactKeys(payload, ['document_id', 'source_sha256', 'display_path', 'availability']); digest('document_id'); digest('source_sha256'); break;
     case 'source.occurrence': exactKeys(payload, ['document_id', 'source_sha256', 'occurrence_id', 'start_line', 'start_column', 'end_line', 'end_column', 'capability', 'dynamic_occurrence']); digest('document_id'); digest('source_sha256'); digest('occurrence_id'); break;
-    case 'source.decision': exactKeys(payload, ['decision_id', 'capability_plan_sha256', 'occurrence_id', 'dynamic_occurrence', 'claim_level', 'admitted'], ['reasons', 'receipt_id']); digest('decision_id'); digest('capability_plan_sha256'); digest('occurrence_id'); break;
+    case 'source.decision': {
+      exactKeys(payload, ['decision_id', 'capability_plan_sha256', 'occurrence_id', 'dynamic_occurrence', 'claim_level', 'admitted'], ['reasons', 'receipt_id']);
+      digest('decision_id'); digest('capability_plan_sha256'); digest('occurrence_id');
+      const reasons = payload.reasons === undefined ? [] : payload.reasons;
+      assert(Array.isArray(reasons) && reasons.every((reason) => typeof reason === 'string' && idRE.test(reason)) && reasons.every((reason, index) => index === 0 || reasons[index - 1] < reason), 'invalid source reasons');
+      assert(payload.admitted === true ? reasons.length === 0 && typeof payload.receipt_id === 'string' && idRE.test(payload.receipt_id) : reasons.length > 0 && (payload.receipt_id === undefined || (typeof payload.receipt_id === 'string' && idRE.test(payload.receipt_id))), 'invalid source decision disposition');
+      break;
+    }
     case 'source.executed_line': { exactKeys(payload, ['source_sha256', 'availability'], ['instrumentation', 'instruction_offset', 'start_line', 'start_column', 'end_line', 'end_column']); digest('source_sha256'); const details = ['instrumentation','instruction_offset','start_line','start_column','end_line','end_column'].every((key) => payload[key] !== undefined); assert(payload.availability === 'available' ? details : !details, 'executed-line availability mismatch'); break; }
     case 'subagent.context': exactKeys(payload, ['child_id', 'context_sha256', 'brief_sha256', 'availability']); digest('context_sha256'); digest('brief_sha256'); break;
-    case 'subagent.runtime': exactKeys(payload, ['brief_sha256', 'child_id', 'child_plan_sha256', 'context_sha256', 'descriptor_sha256', 'execution_profile_sha256', 'fresh_run_id', 'parent_live_state_inherited', 'parent_workspace_root_sha256', 'prepared_image_sha256', 'source_sha256']); for (const key of ['brief_sha256', 'child_plan_sha256', 'context_sha256', 'descriptor_sha256', 'execution_profile_sha256', 'parent_workspace_root_sha256', 'prepared_image_sha256', 'source_sha256']) digest(key); assert(payload.parent_live_state_inherited === false, 'parent live state inheritance forbidden'); break;
-    case 'subagent.workspace': exactKeys(payload, ['child_id', 'base_root_sha256', 'result_root_sha256', 'changed_entries', 'changed_bytes', 'disposition']); digest('base_root_sha256'); digest('result_root_sha256'); break;
+    case 'subagent.runtime': exactKeys(payload, ['brief_sha256', 'child_id', 'child_plan_sha256', 'context_sha256', 'depth', 'descriptor_sha256', 'execution_profile_sha256', 'fresh_run_id', 'inputs_sha256', 'parent_lineage_sha256', 'parent_live_state_inherited', 'parent_stream_epoch', 'parent_workspace_root_sha256', 'prepared_image_sha256', 'privacy_partition', 'source_occurrence', 'source_sha256']); for (const key of ['brief_sha256', 'child_plan_sha256', 'context_sha256', 'descriptor_sha256', 'execution_profile_sha256', 'inputs_sha256', 'parent_lineage_sha256', 'parent_workspace_root_sha256', 'prepared_image_sha256', 'source_sha256']) digest(key); assert(payload.parent_live_state_inherited === false && payload.parent_lineage_sha256 === payload.parent_workspace_root_sha256, 'parent live state/root inheritance forbidden'); break;
+    case 'subagent.workspace': exactKeys(payload, ['child_id', 'base_root_sha256', 'result_root_sha256', 'workspace_sha256', 'depth', 'changed_entries', 'changed_bytes', 'disposition']); digest('base_root_sha256'); digest('result_root_sha256'); digest('workspace_sha256'); break;
     case 'workspace.file': exactKeys(payload, ['workspace_sha256', 'path', 'content_sha256', 'availability']); digest('workspace_sha256'); digest('content_sha256'); break;
     case 'evidence.truncated': exactKeys(payload, ['scope', 'reason', 'dropped_events']); assert(uint(payload.dropped_events) && payload.dropped_events > 0, 'invalid truncation'); break;
     case 'runtime.observation': exactKeys(payload, ['observation_type', 'sequence', 'observation_sha256'], ['parent_sequence']); digest('observation_sha256'); break;
@@ -145,14 +152,14 @@ function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEviden
     else if (state === 'denied' && parent.type === 'authority.snapshot') { /* pre-dispatch denial */ }
     else {
       assert(parent.type === 'effect.transition' && parent.payload.call_id === event.payload.call_id, 'effect call chain mismatch');
-      const allowed: Record<string, string[]> = { started:['intent'], committed:['started'], failed:['started'], timed_out:['started'], ambiguous:['started'], denied:['intent'], reconciliation_required:['intent','started','failed','timed_out','ambiguous'], compensated:['committed'], cleanup_only:['started','failed','timed_out'] };
+      const allowed: Record<string, string[]> = { started:['intent'], committed:['intent','started'], failed:['intent','started'], timed_out:['intent','started'], ambiguous:['started'], denied:['intent'], reconciliation_required:['intent','started','failed','timed_out','ambiguous'], compensated:['committed'], cleanup_only:['started','failed','timed_out'] };
       assert((allowed[state] ?? []).includes(priorState), 'invalid effect lifecycle transition');
     }
   }
   if (event.type === 'tool.decision') {
     const effect = parents.find((item) => item.type === 'effect.transition'); const authority = parents.find((item) => item.type === 'authority.snapshot');
     assert(parents.length === 2 && effect && authority, 'tool decision parents mismatch');
-    assert(effect.payload.call_id === event.payload.call_id && effect.payload.receipt_id === event.payload.receipt_id && authority.payload.capability_plan_sha256 === event.payload.capability_plan_sha256, 'tool decision authority/effect identity mismatch');
+    assert(effect.payload.call_id === event.payload.call_id && effect.payload.receipt_id === event.payload.receipt_id && authority.payload.run_id === event.payload.run_id && authority.payload.capability_plan_sha256 === event.payload.capability_plan_sha256, 'tool decision authority/effect identity mismatch');
   }
   if (event.type === 'source.body') {
     assert(parents.length === 1 && parents[0].type === 'source.document', 'source body parent mismatch');
@@ -163,11 +170,15 @@ function validateRelations(event: RawEvidenceEvent, prior: Map<string, RawEviden
     assert(parents[0].payload.document_id === event.payload.document_id && parents[0].payload.source_sha256 === event.payload.source_sha256, 'source identity mismatch');
   }
   if (event.type === 'source.decision') {
-    const occurrence = parents.find((item) => item.type === 'source.occurrence'); const effect = parents.find((item) => item.type === 'effect.transition'); const tool = parents.find((item) => item.type === 'tool.decision');
-    assert(parents.length === 3 && occurrence && effect && tool, 'source decision parents mismatch');
-    assert(occurrence.payload.occurrence_id === event.payload.occurrence_id && occurrence.payload.dynamic_occurrence === event.payload.dynamic_occurrence && occurrence.payload.capability === tool.payload.capability, 'source decision occurrence/tool mismatch');
-    assert(event.payload.receipt_id === effect.payload.receipt_id && event.payload.receipt_id === tool.payload.receipt_id && event.payload.capability_plan_sha256 === tool.payload.capability_plan_sha256, 'source decision receipt/Plan mismatch');
-    assert(event.payload.admitted === true ? (effect.payload.state === 'committed' && tool.payload.broker_outcome === 'ok') : (effect.payload.state === 'denied' && tool.payload.broker_outcome === 'denied'), 'source decision disposition mismatch');
+    const occurrence = parents.find((item) => item.type === 'source.occurrence'); const effect = parents.find((item) => item.type === 'effect.transition'); const tool = parents.find((item) => item.type === 'tool.decision'); const authority = parents.find((item) => item.type === 'authority.snapshot');
+    assert(occurrence && occurrence.payload.occurrence_id === event.payload.occurrence_id && occurrence.payload.dynamic_occurrence === event.payload.dynamic_occurrence, 'source decision occurrence mismatch');
+    if (event.payload.receipt_id === undefined) {
+      assert(event.payload.admitted === false && parents.length === 2 && authority && !effect && !tool && authority.payload.capability_plan_sha256 === event.payload.capability_plan_sha256, 'rejected source decision authority mismatch');
+    } else {
+      assert(parents.length === 3 && effect && tool && !authority && occurrence.payload.capability === tool.payload.capability, 'source decision parents/tool mismatch');
+      assert(event.payload.receipt_id === effect.payload.receipt_id && event.payload.receipt_id === tool.payload.receipt_id && event.payload.capability_plan_sha256 === tool.payload.capability_plan_sha256, 'source decision receipt/Plan mismatch');
+      assert(event.payload.admitted === true ? (effect.payload.state === 'committed' && tool.payload.broker_outcome === 'ok') : (effect.payload.state === 'denied' && tool.payload.broker_outcome === 'denied'), 'source decision disposition mismatch');
+    }
   }
   if (event.type === 'subagent.runtime') {
     const context = parents.find((parent) => parent.type === 'subagent.context');
@@ -202,7 +213,8 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
   let terminalComplete = false;
   let traceStarted = 0;
   let traceEnded = 0;
-	for (const [eventIndex, eventValue] of raw.events.entries()) {
+  const effectStates = new Map<string, string>();
+  for (const [eventIndex, eventValue] of raw.events.entries()) {
     const event = object(eventValue, 'event') as unknown as RawEvidenceEvent;
     exactKeys(event as unknown as Record<string, unknown>, eventKeys.filter((key) => key !== 'parent_event_ids' && key !== 'body'), ['parent_event_ids', 'body'], `event[${event.ordinal}]`);
     assert(event.schema_version === TRAJECTORY_SCHEMA && uint(event.ordinal) && event.ordinal > previousOrdinal && eventTypes.has(event.type), 'invalid causal event envelope');
@@ -219,6 +231,46 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
     assert(!truncated || event.type === 'trace.ended', 'events follow truncation marker');
     validatePayload(event);
     validateRelations(event, prior);
+    if (event.type === 'effect.transition') effectStates.set(String(event.payload.call_id), String(event.payload.state));
+    if ((event.type === 'execution.attempt' || event.type === 'authority.snapshot') && event.payload.run_id !== raw.header.root_execution_id) {
+      throw new Error('event is not bound to root execution');
+    }
+    if (event.type === 'subagent.runtime') {
+      const payload = event.payload;
+      assert(uint(payload.depth), 'invalid subagent depth');
+      const descriptor = {
+        schema_version: 'pysolate.subagent-descriptor.v1', child_id: payload.child_id, parent_stream_epoch: payload.parent_stream_epoch,
+        parent_lineage_sha256: payload.parent_lineage_sha256, source_occurrence: payload.source_occurrence, source_sha256: payload.source_sha256,
+        inputs_sha256: payload.inputs_sha256, artifact_sha256: payload.prepared_image_sha256, execution_profile_sha256: payload.execution_profile_sha256,
+        child_plan_sha256: payload.child_plan_sha256, privacy_partition: payload.privacy_partition, depth: payload.depth,
+      };
+      assert(await sha256(JSON.stringify(descriptor)) === payload.descriptor_sha256, 'subagent descriptor identity mismatch');
+    }
+    if (event.type === 'subagent.workspace') {
+      const payload = event.payload;
+      assert(uint(payload.depth) && uint(payload.changed_entries) && uint(payload.changed_bytes), 'invalid workspace root counters');
+      const root = {
+        schema_version: 'pysolate.workspace-root.v1', workspace_sha256: payload.workspace_sha256,
+        parent_identity_sha256: payload.base_root_sha256, depth: payload.depth,
+        changed_entries: payload.changed_entries, changed_bytes: payload.changed_bytes,
+      };
+      assert(await sha256(JSON.stringify(root)) === payload.result_root_sha256, 'workspace root identity mismatch');
+    }
+    if (event.type === 'source.decision' && event.payload.receipt_id !== undefined) {
+      const parents = (event.parent_event_ids ?? []).map((id) => prior.get(id)!);
+      const occurrence = parents.find((parent) => parent.type === 'source.occurrence')!;
+      const tool = parents.find((parent) => parent.type === 'tool.decision')!;
+      const fields = [
+        'pysolate-receipt-v3', tool.payload.run_id, tool.payload.capability_plan_sha256, tool.payload.call_id,
+        tool.payload.parent_call_id ?? '', tool.payload.approval_request_id ?? '', tool.payload.capability,
+        String(tool.payload.operation_index), String(tool.payload.arguments_sha256).slice(7),
+        'pysolate.source-binding.v0', 'source_bound', occurrence.payload.document_id, occurrence.payload.source_sha256,
+        occurrence.payload.occurrence_id, occurrence.payload.capability, String(occurrence.payload.dynamic_occurrence),
+        String(occurrence.payload.start_line), String(occurrence.payload.start_column), String(occurrence.payload.end_line), String(occurrence.payload.end_column),
+      ];
+      const identity = await sha256(`${fields.join('\0')}\0`);
+      assert(`rcpt_${identity.slice(7)}` === event.payload.receipt_id, 'source receipt identity mismatch');
+    }
     const unsignedEvent = { ...event, event_id: '' };
     assert(await evidenceHash(`event\0${raw.header_sha256}`, unsignedEvent) === event.event_id, 'event identity mismatch');
     if (event.type === 'evidence.truncated') { assert(eventIndex === raw.events.length - 2, 'truncation marker is not terminal'); truncated = true; }
@@ -232,6 +284,9 @@ export async function validateTrajectory(rawValue: unknown): Promise<TrajectoryE
   }
   assert(traceStarted === 1 && traceEnded === 1 && raw.events.at(-1)?.type === 'trace.ended', 'invalid causal evidence lifecycle');
   assert(!(truncated && terminalComplete), 'truncated evidence claimed complete');
+  if (terminalComplete) {
+    for (const state of effectStates.values()) assert(!['intent', 'started', 'ambiguous'].includes(state), 'complete evidence has an outstanding effect');
+  }
   const unsignedExport = { ...raw, seal_sha256: '' };
   assert(await evidenceHash('export', unsignedExport) === raw.seal_sha256, 'export seal mismatch');
 
@@ -300,11 +355,15 @@ export function validateTrajectoryIndex(rawValue: unknown): TrajectoryIndex {
 export async function loadTrajectoryIndex(): Promise<TrajectoryIndex> {
   const response = await fetch('/lab-data/index.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`trajectory index fetch failed: ${response.status}`);
-  return validateTrajectoryIndex(await response.json());
+  const text = await response.text();
+  assert(new TextEncoder().encode(text).length <= 64 * 1024, 'trajectory index exceeds byte budget');
+  return validateTrajectoryIndex(JSON.parse(text));
 }
 export async function loadTrajectory(url = '/lab-data/experiment-full-public.json'): Promise<TrajectoryExport> {
   if (!/^\/lab-data\/[a-z0-9-]+\.json$/.test(url)) throw new Error('invalid trajectory URL');
   const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) throw new Error(`trajectory fetch failed: ${response.status}`);
-  return validateTrajectory(await response.json());
+  const text = await response.text();
+  assert(new TextEncoder().encode(text).length <= 16 * 1024 * 1024, 'trajectory exceeds byte budget');
+  return validateTrajectory(JSON.parse(text));
 }

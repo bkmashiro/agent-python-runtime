@@ -255,10 +255,12 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 	childRuntime, err := evidenceLog.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentRuntime, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childContext.EventID, childSourceDocument.EventID},
 		Payload: trajectory.SubagentRuntimePayload{
-			BriefSHA256: briefSHA256, ChildID: childID, ChildPlanSHA256: descriptor.ChildPlanSHA256,
-			ContextSHA256: contextSHA256, DescriptorSHA256: descriptorSHA256, ExecutionProfileSHA256: descriptor.ExecutionProfileSHA256,
-			FreshRunID: "child-real-run-0001", ParentWorkspaceRootSHA256: joined.SelectedRoot.ParentIdentitySHA256,
-			PreparedImageSHA256: descriptor.ArtifactSHA256, SourceSHA256: childSourceSHA256, ParentLiveStateInherited: false,
+			BriefSHA256: briefSHA256, ChildID: childID, ChildPlanSHA256: descriptor.ChildPlanSHA256, ContextSHA256: contextSHA256, Depth: descriptor.Depth,
+			DescriptorSHA256: descriptorSHA256, ExecutionProfileSHA256: descriptor.ExecutionProfileSHA256, FreshRunID: "child-real-run-0001",
+			InputsSHA256: descriptor.InputsSHA256, ParentLineageSHA256: descriptor.ParentLineageSHA256, ParentLiveStateInherited: false,
+			ParentStreamEpoch: descriptor.ParentStreamEpoch, ParentWorkspaceRootSHA256: joined.SelectedRoot.ParentIdentitySHA256,
+			PreparedImageSHA256: descriptor.ArtifactSHA256, PrivacyPartition: descriptor.PrivacyPartition,
+			SourceOccurrence: descriptor.SourceOccurrence, SourceSHA256: descriptor.SourceSHA256,
 		},
 	})
 	if err != nil {
@@ -268,6 +270,7 @@ func TestRealGuestProgrammaticReceiptBindsExactVerifiedSourceSpan(t *testing.T) 
 		Type: trajectory.EventSubagentWorkspace, ActorID: "actor-real-source-bound-0001", ParentEventIDs: []string{childRuntime.EventID},
 		Payload: trajectory.SubagentWorkspacePayload{
 			ChildID: childID, BaseRootSHA256: joined.SelectedRoot.ParentIdentitySHA256, ResultRootSHA256: joined.SelectedRoot.IdentitySHA256,
+			WorkspaceSHA256: joined.SelectedRoot.WorkspaceSHA256, Depth: joined.SelectedRoot.Depth,
 			ChangedEntries: joined.SelectedRoot.ChangedEntries, ChangedBytes: joined.SelectedRoot.ChangedBytes, Disposition: "selected",
 		},
 	})

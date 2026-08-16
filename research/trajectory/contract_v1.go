@@ -13,6 +13,9 @@ import (
 	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
+	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
 const EvidenceSchemaVersion = "pysolate.causal-evidence.v1"
@@ -162,6 +165,7 @@ type ToolDecisionPayload struct {
 	ParentCallID         string `json:"parent_call_id,omitempty"`
 	ReceiptID            string `json:"receipt_id"`
 	ResultSHA256         string `json:"result_sha256,omitempty"`
+	RunID                string `json:"run_id"`
 }
 
 type WorkspaceTerminalPayload struct {
@@ -251,19 +255,27 @@ type SubagentRuntimePayload struct {
 	ChildID                   string `json:"child_id"`
 	ChildPlanSHA256           string `json:"child_plan_sha256"`
 	ContextSHA256             string `json:"context_sha256"`
+	Depth                     uint32 `json:"depth"`
 	DescriptorSHA256          string `json:"descriptor_sha256"`
 	ExecutionProfileSHA256    string `json:"execution_profile_sha256"`
 	FreshRunID                string `json:"fresh_run_id"`
+	InputsSHA256              string `json:"inputs_sha256"`
+	ParentLineageSHA256       string `json:"parent_lineage_sha256"`
+	ParentLiveStateInherited  bool   `json:"parent_live_state_inherited"`
+	ParentStreamEpoch         string `json:"parent_stream_epoch"`
 	ParentWorkspaceRootSHA256 string `json:"parent_workspace_root_sha256"`
 	PreparedImageSHA256       string `json:"prepared_image_sha256"`
+	PrivacyPartition          string `json:"privacy_partition"`
+	SourceOccurrence          string `json:"source_occurrence"`
 	SourceSHA256              string `json:"source_sha256"`
-	ParentLiveStateInherited  bool   `json:"parent_live_state_inherited"`
 }
 
 type SubagentWorkspacePayload struct {
 	ChildID          string `json:"child_id"`
 	BaseRootSHA256   string `json:"base_root_sha256"`
 	ResultRootSHA256 string `json:"result_root_sha256"`
+	WorkspaceSHA256  string `json:"workspace_sha256"`
+	Depth            uint32 `json:"depth"`
 	ChangedEntries   uint32 `json:"changed_entries"`
 	ChangedBytes     uint64 `json:"changed_bytes"`
 	Disposition      string `json:"disposition"`
@@ -429,6 +441,9 @@ func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
 		if err != nil {
 			return EvidenceEvent{}, errors.New("unresolved causal evidence body")
 		}
+		if object.Privacy != labstore.PrivacyPrivate {
+			return EvidenceEvent{}, errors.New("causal evidence body is not private")
+		}
 		if err := validateEvidenceBodyBinding(input.Type, payload, object); err != nil {
 			return EvidenceEvent{}, err
 		}
@@ -563,6 +578,7 @@ func validateEvidenceExport(exported Export, store *labstore.Store) error {
 	var terminalComplete bool
 	var traceStarted uint32
 	var traceEnded uint32
+	effectStates := make(map[string]EffectState)
 	for eventIndex, event := range exported.Events {
 		if event.SchemaVersion != EvidenceSchemaVersion || event.Ordinal <= lastOrdinal || !event.Type.valid() ||
 			len(event.ParentEventIDs) > 256 || len(event.Payload) == 0 || len(event.Payload) > 1<<20 ||
@@ -574,12 +590,17 @@ func validateEvidenceExport(exported Export, store *labstore.Store) error {
 			(exported.Privacy == labstore.PrivacyPortable && event.Body != nil) {
 			return errors.New("portable evidence leaked private telemetry")
 		}
+		if event.Type == EventModelBody || event.Type == EventSourceBody || event.Type == EventWorkspaceFile {
+			if event.Body == nil {
+				return errors.New("private body evidence is missing its body")
+			}
+		}
 		if event.Body != nil {
 			if store == nil {
 				return errors.New("private causal evidence body is unresolved")
 			}
 			object, err := store.Get(*event.Body)
-			if err != nil || validateEvidenceBodyBinding(event.Type, event.Payload, object) != nil {
+			if err != nil || object.Privacy != labstore.PrivacyPrivate || validateEvidenceBodyBinding(event.Type, event.Payload, object) != nil {
 				return errors.New("private causal evidence body binding is invalid")
 			}
 		}
@@ -611,6 +632,18 @@ func validateEvidenceExport(exported Export, store *labstore.Store) error {
 		if value, ok := decoded.(*TraceEndedPayload); ok {
 			terminalComplete = value.EvidenceComplete
 		}
+		switch value := decoded.(type) {
+		case *ExecutionAttemptPayload:
+			if value.RunID != exported.Header.RootExecutionID {
+				return errors.New("execution attempt is not bound to root execution")
+			}
+		case *AuthoritySnapshotPayload:
+			if value.RunID != exported.Header.RootExecutionID {
+				return errors.New("authority snapshot is not bound to root execution")
+			}
+		case *EffectTransitionPayload:
+			effectStates[value.CallID] = value.State
+		}
 		if err := validateEvidenceRelations(event.Type, dereferenceEvidencePayload(decoded), event.ParentEventIDs, prior); err != nil {
 			return err
 		}
@@ -622,6 +655,13 @@ func validateEvidenceExport(exported Export, store *labstore.Store) error {
 	}
 	if truncated && terminalComplete {
 		return errors.New("truncated evidence claimed complete")
+	}
+	if terminalComplete {
+		for _, state := range effectStates {
+			if state == EffectIntent || state == EffectStarted || state == EffectAmbiguous {
+				return errors.New("complete evidence has unterminated effect")
+			}
+		}
 	}
 	return nil
 }
@@ -786,7 +826,7 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 			return errors.New("invalid effect transition payload")
 		}
 	case ToolDecisionPayload:
-		if kind != EventToolDecision || !evidenceIdentifier.MatchString(value.CallID) || !validDigest(value.ArgumentsSHA256) ||
+		if kind != EventToolDecision || !evidenceIdentifier.MatchString(value.CallID) || !evidenceIdentifier.MatchString(value.RunID) || !validDigest(value.ArgumentsSHA256) ||
 			!evidenceIdentifier.MatchString(value.Capability) || !validDigest(value.CapabilityPlanSHA256) || !evidenceIdentifier.MatchString(value.ReceiptID) ||
 			(value.ApprovalRequestID != "" && !evidenceIdentifier.MatchString(value.ApprovalRequestID)) || (value.ParentCallID != "" && !evidenceIdentifier.MatchString(value.ParentCallID)) ||
 			(value.Mechanism != "direct" && value.Mechanism != "programmatic") ||
@@ -834,7 +874,7 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 		if kind != EventSourceDecision || !validDigest(value.DecisionID) || !validDigest(value.CapabilityPlanSHA256) || !validDigest(value.OccurrenceID) ||
 			value.DynamicOccurrence == 0 || value.ClaimLevel != ClaimSourceBound || !stableReasons(value.Reasons) ||
 			(value.Admitted && (len(value.Reasons) != 0 || !evidenceIdentifier.MatchString(value.ReceiptID))) ||
-			(!value.Admitted && (len(value.Reasons) == 0 || value.ReceiptID != "")) {
+			(!value.Admitted && (len(value.Reasons) == 0 || (value.ReceiptID != "" && !evidenceIdentifier.MatchString(value.ReceiptID)))) {
 			return errors.New("invalid source decision payload")
 		}
 	case ExecutedLinePayload:
@@ -849,14 +889,27 @@ func validateTypedEvidencePayload(kind EvidenceType, payload any) error {
 			return errors.New("invalid subagent context payload")
 		}
 	case SubagentRuntimePayload:
-		if kind != EventSubagentRuntime || !evidenceIdentifier.MatchString(value.ChildID) || !evidenceIdentifier.MatchString(value.FreshRunID) ||
-			!validDigest(value.BriefSHA256) || !validDigest(value.ChildPlanSHA256) || !validDigest(value.ContextSHA256) ||
-			!validDigest(value.DescriptorSHA256) || !validDigest(value.ExecutionProfileSHA256) || !validDigest(value.ParentWorkspaceRootSHA256) ||
-			!validDigest(value.PreparedImageSHA256) || !validDigest(value.SourceSHA256) || value.ParentLiveStateInherited {
+		descriptor := subagent.Descriptor{
+			SchemaVersion: subagent.DescriptorSchemaVersion, ChildID: value.ChildID, ParentStreamEpoch: value.ParentStreamEpoch,
+			ParentLineageSHA256: value.ParentLineageSHA256, SourceOccurrence: value.SourceOccurrence, SourceSHA256: value.SourceSHA256,
+			InputsSHA256: value.InputsSHA256, ArtifactSHA256: value.PreparedImageSHA256, ExecutionProfileSHA256: value.ExecutionProfileSHA256,
+			ChildPlanSHA256: value.ChildPlanSHA256, PrivacyPartition: value.PrivacyPartition, Depth: value.Depth,
+		}
+		descriptorSHA256, _, descriptorErr := descriptor.Identity()
+		if kind != EventSubagentRuntime || !evidenceIdentifier.MatchString(value.FreshRunID) || !validDigest(value.BriefSHA256) ||
+			!validDigest(value.ContextSHA256) || !validDigest(value.ParentWorkspaceRootSHA256) || value.ParentLineageSHA256 != value.ParentWorkspaceRootSHA256 ||
+			value.ParentLiveStateInherited || descriptorErr != nil || descriptorSHA256 != value.DescriptorSHA256 {
 			return errors.New("invalid subagent runtime payload")
 		}
 	case SubagentWorkspacePayload:
-		if kind != EventSubagentWorkspace || !evidenceIdentifier.MatchString(value.ChildID) || !validDigest(value.BaseRootSHA256) || !validDigest(value.ResultRootSHA256) ||
+		root := workspace.Root{
+			SchemaVersion: workspace.RootSchemaVersion, IdentitySHA256: value.ResultRootSHA256, WorkspaceSHA256: value.WorkspaceSHA256,
+			ParentIdentitySHA256: value.BaseRootSHA256, Depth: value.Depth, ChangedEntries: value.ChangedEntries, ChangedBytes: value.ChangedBytes,
+		}
+		document, rootErr := root.IdentityDocument()
+		digest := sha256.Sum256(document)
+		if kind != EventSubagentWorkspace || !evidenceIdentifier.MatchString(value.ChildID) || !validDigest(value.BaseRootSHA256) || !validDigest(value.WorkspaceSHA256) ||
+			rootErr != nil || "sha256:"+hex.EncodeToString(digest[:]) != value.ResultRootSHA256 || value.Depth == 0 ||
 			(value.Disposition != "selected" && value.Disposition != "discarded") {
 			return errors.New("invalid subagent workspace payload")
 		}
@@ -929,7 +982,11 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		switch value.State {
 		case EffectStarted:
 			validPrior = priorEffect.State == EffectIntent
-		case EffectCommitted, EffectFailed, EffectTimedOut, EffectAmbiguous:
+		case EffectCommitted:
+			validPrior = priorEffect.State == EffectIntent || priorEffect.State == EffectStarted
+		case EffectFailed, EffectTimedOut:
+			validPrior = priorEffect.State == EffectIntent || priorEffect.State == EffectStarted
+		case EffectAmbiguous:
 			validPrior = priorEffect.State == EffectStarted
 		case EffectDenied:
 			validPrior = priorEffect.State == EffectIntent
@@ -961,7 +1018,7 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 				return errors.New("invalid tool decision parent")
 			}
 		}
-		if len(parents) != 2 || effect == nil || authority == nil || effect.CallID != value.CallID || effect.ReceiptID != value.ReceiptID || authority.CapabilityPlanSHA256 != value.CapabilityPlanSHA256 {
+		if len(parents) != 2 || effect == nil || authority == nil || effect.CallID != value.CallID || effect.ReceiptID != value.ReceiptID || authority.RunID != value.RunID || authority.CapabilityPlanSHA256 != value.CapabilityPlanSHA256 {
 			return errors.New("tool decision authority/effect identity mismatch")
 		}
 	case SourceBodyPayload:
@@ -980,6 +1037,7 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 		var occurrence *SourceOccurrencePayload
 		var effect *EffectTransitionPayload
 		var tool *ToolDecisionPayload
+		var authority *AuthoritySnapshotPayload
 		for _, parentID := range parents {
 			parent := prior[parentID]
 			decoded, err := decodeEvidencePayload(parent.Type, parent.Payload)
@@ -1002,19 +1060,51 @@ func validateEvidenceRelations(kind EvidenceType, payload any, parents []string,
 					return errors.New("duplicate tool decision parent")
 				}
 				tool = typed
+			case *AuthoritySnapshotPayload:
+				if authority != nil {
+					return errors.New("duplicate authority parent")
+				}
+				authority = typed
 			default:
 				return errors.New("invalid source decision parent")
 			}
 		}
-		if len(parents) != 3 || occurrence == nil || effect == nil || tool == nil || occurrence.OccurrenceID != value.OccurrenceID || occurrence.DynamicOccurrence != value.DynamicOccurrence || occurrence.Capability != tool.Capability || value.CapabilityPlanSHA256 != tool.CapabilityPlanSHA256 || value.ReceiptID != effect.ReceiptID || value.ReceiptID != tool.ReceiptID {
-			return errors.New("source decision authority/tool/occurrence identity mismatch")
+		if occurrence == nil || occurrence.OccurrenceID != value.OccurrenceID || occurrence.DynamicOccurrence != value.DynamicOccurrence {
+			return errors.New("source decision occurrence identity mismatch")
 		}
-		if value.Admitted {
-			if effect.State != EffectCommitted || tool.BrokerOutcome != "ok" {
-				return errors.New("admitted source decision is not bound to committed tool receipt")
+		if value.ReceiptID == "" {
+			if value.Admitted || len(parents) != 2 || authority == nil || effect != nil || tool != nil || authority.CapabilityPlanSHA256 != value.CapabilityPlanSHA256 {
+				return errors.New("rejected source decision is not bound to authority")
 			}
-		} else if effect.State != EffectDenied || tool.BrokerOutcome != "denied" {
-			return errors.New("rejected source decision is not bound to denied tool receipt")
+		} else {
+			if len(parents) != 3 || authority != nil || effect == nil || tool == nil || occurrence.Capability != tool.Capability || value.CapabilityPlanSHA256 != tool.CapabilityPlanSHA256 || value.ReceiptID != effect.ReceiptID || value.ReceiptID != tool.ReceiptID {
+				return errors.New("source decision authority/tool/occurrence identity mismatch")
+			}
+			projectedReceipt := receipt.Receipt{
+				ReceiptID: value.ReceiptID, RunID: tool.RunID, CapabilityPlanSHA256: tool.CapabilityPlanSHA256,
+				CallID: tool.CallID, ParentCallID: tool.ParentCallID, ApprovalRequestID: tool.ApprovalRequestID,
+				Capability: tool.Capability, OperationIndex: tool.OperationIndex,
+				RequestSHA256: strings.TrimPrefix(tool.ArgumentsSHA256, "sha256:"), Outcome: tool.BrokerOutcome,
+			}
+			if tool.ResultSHA256 != "" {
+				projectedReceipt.ResponseSHA256 = strings.TrimPrefix(tool.ResultSHA256, "sha256:")
+			}
+			projectedReceipt.Source = &receipt.SourceBinding{
+				SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound,
+				DocumentID: occurrence.DocumentID, SourceSHA256: occurrence.SourceSHA256, OccurrenceID: occurrence.OccurrenceID,
+				Capability: occurrence.Capability, DynamicOccurrence: occurrence.DynamicOccurrence,
+				StartLine: occurrence.StartLine, StartColumn: occurrence.StartColumn, EndLine: occurrence.EndLine, EndColumn: occurrence.EndColumn,
+			}
+			if !receipt.ValidIdentity(projectedReceipt) {
+				return errors.New("source decision receipt identity mismatch")
+			}
+			if value.Admitted {
+				if effect.State != EffectCommitted || tool.BrokerOutcome != "ok" {
+					return errors.New("admitted source decision is not bound to committed tool receipt")
+				}
+			} else if effect.State != EffectDenied || tool.BrokerOutcome != "denied" {
+				return errors.New("rejected source decision is not bound to denied tool receipt")
+			}
 		}
 	case SubagentRuntimePayload:
 		var childContext *SubagentContextPayload

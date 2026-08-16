@@ -35,6 +35,7 @@ type ObservationRecorder struct {
 	authorityEventID string
 	effectEvents     map[string]string
 	effectStates     map[string]EffectState
+	effectCalls      map[string]observe.CapabilityCallLifecyclePayload
 	started          bool
 	terminal         bool
 	startedAt        time.Time
@@ -52,7 +53,7 @@ func NewObservationRecorder(log *EvidenceLog, config ObservationRecorderConfig) 
 	}
 	return &ObservationRecorder{
 		log: log, config: config, observationIDs: make(map[uint32]string),
-		effectEvents: make(map[string]string), effectStates: make(map[string]EffectState),
+		effectEvents: make(map[string]string), effectStates: make(map[string]EffectState), effectCalls: make(map[string]observe.CapabilityCallLifecyclePayload),
 	}, nil
 }
 
@@ -188,11 +189,13 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 		if observed.Type == observe.EventCapabilityStarted {
 			state = EffectStarted
 			parentID = recorder.effectEvents[callID]
-			if recorder.effectStates[callID] != EffectIntent || parentID == "" {
+			if recorder.effectStates[callID] != EffectIntent || parentID == "" || !sameCapabilityLifecycle(recorder.effectCalls[callID], payload) {
 				return errors.New("capability start without matching intent")
 			}
 		} else if _, exists := recorder.effectEvents[callID]; exists {
 			return errors.New("duplicate capability intent")
+		} else {
+			recorder.effectCalls[callID] = payload
 		}
 		effect, err := recorder.log.Append(EvidenceInput{
 			Type: EventEffectTransition, ActorID: recorder.config.ActorID, ParentEventIDs: productionParent(parentID),
@@ -232,6 +235,10 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			return errors.New("unknown capability outcome")
 		}
 		callID := capabilityCallIdentity(payload)
+		if lifecycle, exists := recorder.effectCalls[callID]; exists &&
+			(lifecycle.ArgumentsSHA256 != payload.ArgumentsSHA256 || lifecycle.Capability != payload.Capability || lifecycle.CapabilityPlanSHA256 != payload.CapabilityPlanSHA256 || lifecycle.OperationIndex != payload.OperationIndex) {
+			return errors.New("capability receipt does not match lifecycle intent")
+		}
 		parentID := recorder.effectEvents[callID]
 		if parentID == "" {
 			if state != EffectDenied {
@@ -272,7 +279,7 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 				ArgumentsSHA256: payload.ArgumentsSHA256, BrokerOutcome: payload.Outcome,
 				CallID: capabilityCallIdentity(payload), Capability: payload.Capability, CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
 				Mechanism: mechanism, OperationIndex: payload.OperationIndex, ParentCallID: parentCallID,
-				ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256,
+				ReceiptID: payload.ReceiptID, ResultSHA256: payload.ResultSHA256, RunID: recorder.config.RunID,
 			},
 		})
 		if err != nil {
@@ -297,12 +304,17 @@ func (recorder *ObservationRecorder) appendProjection(observed observe.Event) er
 			if err != nil {
 				return err
 			}
+			admitted := payload.Outcome != "denied"
+			var reasons []string
+			if !admitted {
+				reasons = []string{"broker_denied"}
+			}
 			if _, err := recorder.log.Append(EvidenceInput{
 				Type: EventSourceDecision, ActorID: recorder.config.ActorID, ParentEventIDs: []string{occurrence.EventID, effect.EventID, tool.EventID},
 				Payload: SourceDecisionPayload{
 					DecisionID: sourceDecisionIdentity(payload), CapabilityPlanSHA256: payload.CapabilityPlanSHA256,
 					OccurrenceID: payload.Source.OccurrenceID, DynamicOccurrence: payload.Source.DynamicOccurrence,
-					ClaimLevel: ClaimSourceBound, Admitted: payload.Outcome != "denied", ReceiptID: payload.ReceiptID,
+					ClaimLevel: ClaimSourceBound, Admitted: admitted, Reasons: reasons, ReceiptID: payload.ReceiptID,
 				},
 			}); err != nil {
 				return err
@@ -457,9 +469,13 @@ func capabilityCallIdentity(payload observe.CapabilityCallPayload) string {
 	return capabilityRawCallIdentity(payload.CallID)
 }
 
+func sameCapabilityLifecycle(left, right observe.CapabilityCallLifecyclePayload) bool {
+	return left.ArgumentsSHA256 == right.ArgumentsSHA256 && left.CallID == right.CallID && left.Capability == right.Capability &&
+		left.CapabilityPlanSHA256 == right.CapabilityPlanSHA256 && left.OperationIndex == right.OperationIndex
+}
+
 func capabilityRawCallIdentity(callID string) string {
-	digest := sha256.Sum256([]byte("pysolate.causal-evidence.call-id.v1\x00" + callID))
-	return "call_" + hex.EncodeToString(digest[:])
+	return callID
 }
 
 func sourceDecisionIdentity(payload observe.CapabilityCallPayload) string {

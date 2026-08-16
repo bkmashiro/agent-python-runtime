@@ -1,6 +1,8 @@
 package trajectory_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +11,40 @@ import (
 
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
 	"github.com/bkmashiro/agent-python-runtime/research/trajectory"
+	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
+
+func testSubagentRuntimePayload(t *testing.T, childID, contextSHA256, briefSHA256, sourceSHA256, parentRootSHA256 string) trajectory.SubagentRuntimePayload {
+	t.Helper()
+	descriptor := subagent.Descriptor{
+		SchemaVersion: subagent.DescriptorSchemaVersion, ChildID: childID, ParentStreamEpoch: "parent-stream-test-0001",
+		ParentLineageSHA256: parentRootSHA256, SourceOccurrence: "test-source-occurrence", SourceSHA256: sourceSHA256,
+		InputsSHA256: testDigest('7'), ArtifactSHA256: testDigest('8'), ExecutionProfileSHA256: testDigest('9'),
+		ChildPlanSHA256: testDigest('a'), PrivacyPartition: "test-private", Depth: 1,
+	}
+	descriptorSHA256, _, err := descriptor.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return trajectory.SubagentRuntimePayload{
+		BriefSHA256: briefSHA256, ChildID: childID, ChildPlanSHA256: descriptor.ChildPlanSHA256, ContextSHA256: contextSHA256, Depth: descriptor.Depth,
+		DescriptorSHA256: descriptorSHA256, ExecutionProfileSHA256: descriptor.ExecutionProfileSHA256, FreshRunID: "run-child-test-0001", InputsSHA256: descriptor.InputsSHA256,
+		ParentLineageSHA256: descriptor.ParentLineageSHA256, ParentStreamEpoch: descriptor.ParentStreamEpoch, ParentWorkspaceRootSHA256: parentRootSHA256,
+		PreparedImageSHA256: descriptor.ArtifactSHA256, PrivacyPartition: descriptor.PrivacyPartition, SourceOccurrence: descriptor.SourceOccurrence, SourceSHA256: descriptor.SourceSHA256,
+	}
+}
+
+func testSubagentWorkspacePayload(t *testing.T, childID, baseRootSHA256 string) trajectory.SubagentWorkspacePayload {
+	t.Helper()
+	root := workspace.Root{SchemaVersion: workspace.RootSchemaVersion, WorkspaceSHA256: testDigest('b'), ParentIdentitySHA256: baseRootSHA256, Depth: 1, ChangedEntries: 2, ChangedBytes: 128}
+	document, err := root.IdentityDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(document)
+	return trajectory.SubagentWorkspacePayload{ChildID: childID, BaseRootSHA256: baseRootSHA256, ResultRootSHA256: "sha256:" + hex.EncodeToString(digest[:]), WorkspaceSHA256: root.WorkspaceSHA256, Depth: root.Depth, ChangedEntries: root.ChangedEntries, ChangedBytes: root.ChangedBytes, Disposition: "selected"}
+}
 
 func TestCheckedInRealGuestArtifactsAreCanonicalAndMatchLab(t *testing.T) {
 	root := filepath.Join("..", "..")
@@ -38,7 +73,7 @@ func TestCheckedInRealGuestArtifactsAreCanonicalAndMatchLab(t *testing.T) {
 func TestDualProfileProjectionPreservesCanonicalEventIdentityAndRemovesExperimentTelemetry(t *testing.T) {
 	builder, err := trajectory.NewBuilder(trajectory.TraceHeader{
 		TraceID: "trace-dual-profile-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567",
-		RootExecutionID: "execution-dual-profile-0001",
+		RootExecutionID: "run-dual-profile-0001",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -234,6 +269,17 @@ func appendEvidence(t *testing.T, builder *trajectory.Builder, input trajectory.
 		t.Fatal(err)
 	}
 	return event
+}
+
+func TestCompleteExportRejectsOutstandingEffect(t *testing.T) {
+	builder := newEvidenceBuilder(t)
+	started := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventTraceStarted, ActorID: "actor-host-0001", Payload: trajectory.TraceStartedPayload{Status: "running"}})
+	authority := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventAuthoritySnapshot, ActorID: "actor-host-0001", ParentEventIDs: []string{started.EventID}, Payload: trajectory.AuthoritySnapshotPayload{RunID: "execution-contract-0001", CapabilityPlanSHA256: testDigest('1'), PolicySHA256: testDigest('2'), FreshnessSHA256: testDigest('3'), GrantsSHA256: testDigest('4')}})
+	intent := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-outstanding-0001", State: trajectory.EffectIntent}})
+	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventTraceEnded, ActorID: "actor-host-0001", ParentEventIDs: []string{intent.EventID}, Payload: trajectory.TraceEndedPayload{Status: "completed", EvidenceComplete: true}})
+	if _, err := builder.Export(trajectory.ProfileProductionRollback, labstore.PrivacyPortable); err == nil {
+		t.Fatal("complete export accepted an outstanding effect")
+	}
 }
 
 func newEvidenceBuilder(t *testing.T) *trajectory.Builder {

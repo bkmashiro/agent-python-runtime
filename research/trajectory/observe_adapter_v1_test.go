@@ -9,6 +9,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/research/labstore"
 	"github.com/bkmashiro/agent-python-runtime/research/trajectory"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *testing.T) {
@@ -19,7 +20,7 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	}
 	defer store.Close()
 	log, err := trajectory.CreateEvidenceLog(filepath.Join(root, "trace.jsonl"), store, trajectory.TraceHeader{
-		TraceID: "trace-observe-adapter-0001", RootExecutionID: "execution-observe-adapter-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567",
+		TraceID: "trace-observe-adapter-0001", RootExecutionID: "run-observe-adapter-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567",
 	}, trajectory.EvidenceLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -44,9 +45,14 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 		CapabilityPlanSHA256: evidenceDigest('5'),
 	})
 	parent = 2
+	baseReceipt := receipt.NewAuthorized("run-observe-adapter-0001", evidenceDigest('5'), "call-observe-adapter-0001", "parent-call-observe-0001", "", "workspace.read_text", 0, "observe-adapter-request", "ok", []byte("observe-adapter-result"))
+	boundReceipt, err := receipt.BindSource(baseReceipt, receipt.SourceBinding{SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound, DocumentID: evidenceDigest('e'), SourceSHA256: evidenceDigest('f'), OccurrenceID: evidenceDigest('0'), Capability: "workspace.read_text", DynamicOccurrence: 1, StartLine: 1, StartColumn: 2, EndLine: 1, EndColumn: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
 	lifecycle := observe.CapabilityCallLifecyclePayload{
-		ArgumentsSHA256: evidenceDigest('8'), CallID: "call-observe-adapter-0001", Capability: "workspace.read_text",
-		CapabilityPlanSHA256: evidenceDigest('5'), OperationIndex: 0, Phase: "intent",
+		ArgumentsSHA256: "sha256:" + boundReceipt.RequestSHA256, CallID: boundReceipt.CallID, Capability: boundReceipt.Capability,
+		CapabilityPlanSHA256: boundReceipt.CapabilityPlanSHA256, OperationIndex: boundReceipt.OperationIndex, Phase: "intent",
 	}
 	appendObservationEvent(t, session, observe.EventCapabilityIntent, &parent, lifecycle)
 	parent = 3
@@ -54,8 +60,8 @@ func TestObservationRecorderProducesPrivateRawAndMinimalProductionEvidence(t *te
 	appendObservationEvent(t, session, observe.EventCapabilityStarted, &parent, lifecycle)
 	parent = 4
 	appendObservationEvent(t, session, observe.EventCapabilityCall, &parent, observe.CapabilityCallPayload{
-		ArgumentsSHA256: evidenceDigest('8'), CallID: "call-observe-adapter-0001", Capability: "workspace.read_text", CapabilityPlanSHA256: evidenceDigest('5'),
-		OperationIndex: 0, Outcome: "ok", ParentCallID: "parent-call-observe-0001", ReceiptID: "rcpt_observe_adapter_0001", ResultSHA256: evidenceDigest('9'),
+		ArgumentsSHA256: "sha256:" + boundReceipt.RequestSHA256, CallID: boundReceipt.CallID, Capability: boundReceipt.Capability, CapabilityPlanSHA256: boundReceipt.CapabilityPlanSHA256,
+		OperationIndex: boundReceipt.OperationIndex, Outcome: boundReceipt.Outcome, ParentCallID: boundReceipt.ParentCallID, ReceiptID: boundReceipt.ReceiptID, ResultSHA256: "sha256:" + boundReceipt.ResponseSHA256,
 		Source: &observe.SourceBindingPayload{
 			SchemaVersion: "pysolate.source-binding.v0", ClaimLevel: "source_bound",
 			DocumentID: evidenceDigest('e'), SourceSHA256: evidenceDigest('f'), OccurrenceID: evidenceDigest('0'),
@@ -187,7 +193,7 @@ func newObservationTestRecorder(t *testing.T, profile trajectory.Profile) (*traj
 	if err != nil {
 		t.Fatal(err)
 	}
-	log, err := trajectory.CreateEvidenceLog(filepath.Join(t.TempDir(), "trace.jsonl"), store, trajectory.TraceHeader{TraceID: "trace-production-recorder-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567", RootExecutionID: "execution-production-recorder-0001"}, trajectory.EvidenceLimits{})
+	log, err := trajectory.CreateEvidenceLog(filepath.Join(t.TempDir(), "trace.jsonl"), store, trajectory.TraceHeader{TraceID: "trace-production-recorder-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567", RootExecutionID: "run-production-recorder-0001"}, trajectory.EvidenceLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}

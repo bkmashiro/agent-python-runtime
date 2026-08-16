@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/trajectory"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 )
 
 func TestSourceEvidenceCrossBindsVerifiedOccurrenceDynamicCallAndReceipt(t *testing.T) {
@@ -23,19 +24,24 @@ func TestSourceEvidenceCrossBindsVerifiedOccurrenceDynamicCallAndReceipt(t *test
 		},
 	})
 	authority := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventAuthoritySnapshot, ActorID: "actor-host-0001", Payload: trajectory.AuthoritySnapshotPayload{RunID: "run-source-decision-0001", CapabilityPlanSHA256: testDigest('e'), PolicySHA256: testDigest('1'), FreshnessSHA256: testDigest('2'), GrantsSHA256: testDigest('3')}})
+	baseReceipt := receipt.NewAuthorized("run-source-decision-0001", testDigest('e'), "call-source-decision-0001", "", "", "workspace.read_text", 0, "request-source-decision", "ok", []byte("result"))
+	boundReceipt, err := receipt.BindSource(baseReceipt, receipt.SourceBinding{SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound, DocumentID: testDigest('a'), SourceSHA256: testDigest('b'), OccurrenceID: testDigest('c'), Capability: "workspace.read_text", DynamicOccurrence: 1, StartLine: 1, StartColumn: 9, EndLine: 1, EndColumn: 27})
+	if err != nil {
+		t.Fatal(err)
+	}
 	intent := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", State: trajectory.EffectIntent}})
 	started := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{intent.EventID}, Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", State: trajectory.EffectStarted}})
 	effect := appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventEffectTransition, ActorID: "actor-host-0001", ParentEventIDs: []string{started.EventID},
-		Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", ReceiptID: "rcpt_source_decision_0001", State: trajectory.EffectCommitted},
+		Payload: trajectory.EffectTransitionPayload{CallID: "call-source-decision-0001", ReceiptID: boundReceipt.ReceiptID, State: trajectory.EffectCommitted},
 	})
-	tool := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventToolDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID, effect.EventID}, Payload: trajectory.ToolDecisionPayload{ApprovalDisposition: "not_required", ArgumentsSHA256: testDigest('4'), BrokerOutcome: "ok", CallID: "call-source-decision-0001", Capability: "workspace.read_text", CapabilityPlanSHA256: testDigest('e'), Mechanism: "direct", ReceiptID: "rcpt_source_decision_0001", ResultSHA256: testDigest('5')}})
+	tool := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventToolDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{authority.EventID, effect.EventID}, Payload: trajectory.ToolDecisionPayload{ApprovalDisposition: "not_required", ArgumentsSHA256: "sha256:" + boundReceipt.RequestSHA256, BrokerOutcome: "ok", CallID: boundReceipt.CallID, Capability: boundReceipt.Capability, CapabilityPlanSHA256: boundReceipt.CapabilityPlanSHA256, Mechanism: "direct", OperationIndex: boundReceipt.OperationIndex, ReceiptID: boundReceipt.ReceiptID, ResultSHA256: "sha256:" + boundReceipt.ResponseSHA256, RunID: boundReceipt.RunID}})
 	decision := appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventSourceDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{occurrence.EventID, effect.EventID, tool.EventID},
 		Payload: trajectory.SourceDecisionPayload{
 			DecisionID: testDigest('d'), CapabilityPlanSHA256: testDigest('e'), OccurrenceID: testDigest('c'),
 			DynamicOccurrence: 1, ClaimLevel: trajectory.ClaimSourceBound, Admitted: true,
-			ReceiptID: "rcpt_source_decision_0001",
+			ReceiptID: boundReceipt.ReceiptID,
 		},
 	})
 	if decision.EventID == "" {
@@ -96,12 +102,19 @@ func TestCrossPlanePayloadIdentityMismatchFailsClosed(t *testing.T) {
 	})
 	if _, err := builder.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001", ParentEventIDs: []string{context.EventID, document.EventID},
-		Payload: trajectory.SubagentRuntimePayload{
-			BriefSHA256: testDigest('f'), ChildID: "child-cross-plane-0002", ChildPlanSHA256: testDigest('2'), ContextSHA256: testDigest('e'), DescriptorSHA256: testDigest('3'),
-			ExecutionProfileSHA256: testDigest('4'), FreshRunID: "run-cross-plane-0002", ParentWorkspaceRootSHA256: testDigest('5'), PreparedImageSHA256: testDigest('1'), SourceSHA256: testDigest('b'),
-		},
+		Payload: testSubagentRuntimePayload(t, "child-cross-plane-0002", testDigest('e'), testDigest('f'), testDigest('b'), testDigest('5')),
 	}); err == nil {
 		t.Fatal("subagent runtime with mismatched child context accepted")
+	}
+}
+
+func TestRejectedSourceDecisionCanTerminateAtHostAuthorityBeforeBrokerDispatch(t *testing.T) {
+	builder := newEvidenceBuilder(t)
+	document := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceDocument, ActorID: "actor-host-0001", Payload: trajectory.SourceDocumentPayload{DocumentID: testDigest('a'), SourceSHA256: testDigest('b'), Availability: trajectory.Available}})
+	occurrence := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceOccurrence, ActorID: "actor-host-0001", ParentEventIDs: []string{document.EventID}, Payload: trajectory.SourceOccurrencePayload{DocumentID: testDigest('a'), SourceSHA256: testDigest('b'), OccurrenceID: testDigest('c'), StartLine: 1, EndLine: 1, EndColumn: 4, Capability: "workspace.read_text", DynamicOccurrence: 1}})
+	authority := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventAuthoritySnapshot, ActorID: "actor-host-0001", Payload: trajectory.AuthoritySnapshotPayload{RunID: "execution-contract-0001", CapabilityPlanSHA256: testDigest('d'), PolicySHA256: testDigest('1'), FreshnessSHA256: testDigest('2'), GrantsSHA256: testDigest('3')}})
+	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventSourceDecision, ActorID: "actor-host-0001", ParentEventIDs: []string{occurrence.EventID, authority.EventID}, Payload: trajectory.SourceDecisionPayload{DecisionID: testDigest('e'), CapabilityPlanSHA256: testDigest('d'), OccurrenceID: testDigest('c'), DynamicOccurrence: 1, ClaimLevel: trajectory.ClaimSourceBound, Admitted: false, Reasons: []string{"static_rejection"}}}); err != nil {
+		t.Fatalf("Host-side rejected decision was not representable: %v", err)
 	}
 }
 
@@ -116,24 +129,17 @@ func TestSubagentContextRuntimeAndWorkspacePlanesRemainIndependent(t *testing.T)
 	source := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventSourceDocument, ActorID: "actor-harness-0001", Payload: trajectory.SourceDocumentPayload{DocumentID: testDigest('1'), SourceSHA256: testDigest('2'), Availability: trajectory.Available}})
 	runtimeEvent := appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001", ParentEventIDs: []string{context.EventID, source.EventID},
-		Payload: trajectory.SubagentRuntimePayload{
-			BriefSHA256: testDigest('b'), ChildID: "child-research-0001", ChildPlanSHA256: testDigest('d'), ContextSHA256: testDigest('a'), DescriptorSHA256: testDigest('3'),
-			ExecutionProfileSHA256: testDigest('4'), FreshRunID: "run-child-research-0001", ParentWorkspaceRootSHA256: testDigest('e'), PreparedImageSHA256: testDigest('c'), SourceSHA256: testDigest('2'), ParentLiveStateInherited: false,
-		},
+		Payload: testSubagentRuntimePayload(t, "child-research-0001", testDigest('a'), testDigest('b'), testDigest('2'), testDigest('e')),
 	})
 	appendEvidence(t, builder, trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentWorkspace, ActorID: "actor-host-0001", ParentEventIDs: []string{runtimeEvent.EventID},
-		Payload: trajectory.SubagentWorkspacePayload{
-			ChildID: "child-research-0001", BaseRootSHA256: testDigest('e'), ResultRootSHA256: testDigest('f'),
-			ChangedEntries: 2, ChangedBytes: 128, Disposition: "selected",
-		},
+		Payload: testSubagentWorkspacePayload(t, "child-research-0001", testDigest('e')),
 	})
+	inherited := testSubagentRuntimePayload(t, "child-research-0002", testDigest('a'), testDigest('b'), testDigest('2'), testDigest('e'))
+	inherited.ParentLiveStateInherited = true
 	if _, err := builder.Append(trajectory.EvidenceInput{
 		Type: trajectory.EventSubagentRuntime, ActorID: "actor-host-0001",
-		Payload: trajectory.SubagentRuntimePayload{
-			BriefSHA256: testDigest('b'), ChildID: "child-research-0002", ChildPlanSHA256: testDigest('d'), ContextSHA256: testDigest('a'), DescriptorSHA256: testDigest('3'),
-			ExecutionProfileSHA256: testDigest('4'), FreshRunID: "run-child-research-0002", ParentWorkspaceRootSHA256: testDigest('e'), PreparedImageSHA256: testDigest('c'), SourceSHA256: testDigest('2'), ParentLiveStateInherited: true,
-		},
+		Payload: inherited,
 	}); err == nil {
 		t.Fatal("parent live runtime inheritance accepted")
 	}

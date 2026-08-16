@@ -9,7 +9,7 @@ import (
 
 func TestConfiguredBoundsRequireExplicitTruncationEvidence(t *testing.T) {
 	builder, err := trajectory.NewBoundedBuilder(trajectory.TraceHeader{
-		TraceID: "trace-bounds-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567", RootExecutionID: "execution-bounds-0001",
+		TraceID: "trace-bounds-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567", RootExecutionID: "run-bounds-0001",
 	}, nil, trajectory.EvidenceLimits{MaxEvents: 2, MaxParents: 1, MaxPayloadBytes: 1024})
 	if err != nil {
 		t.Fatal(err)

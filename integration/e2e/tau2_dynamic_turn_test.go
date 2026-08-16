@@ -51,7 +51,7 @@ func TestTau2DynamicModelTurnThroughRealGuest(t *testing.T) {
 	}
 	plan := tau2ReadPlan(t, python, sourceRoot)
 	profile := tau2CanaryProfile(t, wasm)
-	run := runTau2SourceBoundTurn(t, wasm, profile, plan, "model", capabilityName, string(canonicalArguments), string(source))
+	run := runTau2SourceBoundTurn(t, wasm, profile, plan, "tau2-airline-3-model", capabilityName, string(canonicalArguments), string(source))
 	encoded, err := json.MarshalIndent(map[string]any{
 		"schema_version":  "pysolate.tau2-dynamic-turn-private.v1",
 		"content":         run.Content,

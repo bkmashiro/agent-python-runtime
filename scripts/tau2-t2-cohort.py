@@ -50,7 +50,7 @@ def canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def load_task_contract(path: pathlib.Path, task_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def load_task_contract(path: pathlib.Path, task_id: str) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     value = json.loads(path.read_text())
     if value.get("schema_version") not in {PRIVATE_SCHEMA, REMEDIATION_PRIVATE_SCHEMA} or value.get("source", {}).get("revision") != REVISION:
         raise ValueError("private preregistration mismatch")
@@ -60,7 +60,10 @@ def load_task_contract(path: pathlib.Path, task_id: str) -> tuple[dict[str, Any]
     protocol = value.get("protocol")
     if not isinstance(protocol, dict) or protocol.get("model") != MODEL or protocol.get("post_provider_reruns") != 0:
         raise ValueError("frozen protocol mismatch")
-    return protocol, matches[0]["reference_actions"]
+    public_identity = value.get("public_identity")
+    if not isinstance(public_identity, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", public_identity):
+        raise ValueError("frozen cohort identity missing")
+    return protocol, matches[0]["reference_actions"], public_identity
 
 
 def inspect_program(source: str, allowed_actions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -136,7 +139,7 @@ def bridge_turn(action: dict[str, Any], config: dict[str, str], index: int) -> d
     env.update({
         "AGENT_RUNTIME_GUEST": config["artifact"], "PYSOLATE_TAU2_PYTHON": config["tau2_python"],
         "PYSOLATE_TAU2_SOURCE_ROOT": config["source_root"], "PYSOLATE_TAU2_T2_PRIVATE_MANIFEST": config["private_manifest"],
-        "PYSOLATE_TAU2_T2_TASK_ID": config["task_id"], "PYSOLATE_TAU2_DYNAMIC_SOURCE_FILE": str(source_path),
+        "PYSOLATE_TAU2_T2_COHORT_IDENTITY": config["cohort_identity"], "PYSOLATE_TAU2_T2_TASK_ID": config["task_id"], "PYSOLATE_TAU2_DYNAMIC_SOURCE_FILE": str(source_path),
         "PYSOLATE_TAU2_DYNAMIC_OUTPUT_FILE": str(output_path), "PYSOLATE_TAU2_EXPECTED_CAPABILITY": action["capability"],
         "PYSOLATE_TAU2_EXPECTED_ARGUMENTS": canonical(action["arguments"]), "PYSOLATE_TAU2_EXPECTED_ARGUMENT_NAMES": canonical(action["argument_names"]),
     })
@@ -230,7 +233,7 @@ def run_cell(args) -> dict[str, Any]:
     from tau2.runner import build_agent, build_environment, build_user, get_tasks, run_simulation
     from tau2.user import user_simulator as user_module
 
-    protocol, allowed_actions = load_task_contract(pathlib.Path(args.private_manifest), args.task_id)
+    protocol, allowed_actions, cohort_identity = load_task_contract(pathlib.Path(args.private_manifest), args.task_id)
     environment = build_environment("airline")
     tasks = get_tasks("airline", task_ids=[args.task_id])
     if len(tasks) != 1:
@@ -250,7 +253,8 @@ def run_cell(args) -> dict[str, Any]:
         else:
             config = {
                 "repo_root": args.repo_root, "source_root": args.source_root, "tau2_python": args.tau2_python,
-                "artifact": args.artifact, "evidence_root": args.evidence_root, "private_manifest": args.private_manifest, "task_id": args.task_id,
+                "artifact": args.artifact, "evidence_root": args.evidence_root, "private_manifest": args.private_manifest,
+                "cohort_identity": cohort_identity, "task_id": args.task_id,
             }
             ProgramAgent = make_program_agent(config, allowed_actions, budget, dict(llm_args))
             agent = ProgramAgent(environment.get_policy())

@@ -43,7 +43,7 @@ func TestTau2AirlineSourceBoundFreshTurnCanaryThroughRealGuest(t *testing.T) {
 	}
 	runs := make([]tau2SourceBoundRun, 0, len(steps))
 	for _, step := range steps {
-		runs = append(runs, runTau2SourceBoundTurn(t, wasm, profile, plan, step.name, step.capability, step.arguments, step.source))
+		runs = append(runs, runTau2SourceBoundTurn(t, wasm, profile, plan, "tau2-airline-3-"+step.name, step.capability, step.arguments, step.source))
 	}
 	pureRequest, purePayload, result := runTau2PureAggregation(t, wasm, profile, runs[0].Content, runs[1].Content)
 	if result.Answer != "4" || result.Cabin != "economy" || result.Membership != "silver" || result.PassengerCount != 2 {
@@ -70,7 +70,7 @@ func tau2CanaryProfile(t *testing.T, wasm []byte) runtimeconfig.ExecutionProfile
 	return profile
 }
 
-func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, plan *capability.Plan, name, capabilityName, arguments, source string) tau2SourceBoundRun {
+func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, plan *capability.Plan, runIdentity, capabilityName, arguments, source string) tau2SourceBoundRun {
 	t.Helper()
 	analysisConfig := runtimeconfig.DefaultRunConfig()
 	analysisConfig.ExecutionProfile = &profile
@@ -105,7 +105,7 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent := "tau2-airline-3-" + name
+	parent := runIdentity
 	if _, ok := resolver.ResolveSource(capability.SourceBindingRequest{
 		CallID: parent + ":program:1", ParentCallID: parent, Programmatic: true,
 		Capability: capabilityName, Arguments: json.RawMessage(arguments),
@@ -156,7 +156,7 @@ func runTau2SourceBoundTurn(t *testing.T, wasm []byte, profile runtimeconfig.Exe
 	if len(receipts) != 1 || broker.CallCount() != 1 || receipts[0].Capability != capabilityName || receipts[0].Outcome != "ok" || receipts[0].Source == nil || !receipt.ValidIdentity(receipts[0]) {
 		t.Fatalf("receipts=%+v calls=%d", receipts, broker.CallCount())
 	}
-	return tau2SourceBoundRun{Name: name, Request: request, Payload: payload, Content: content, Receipt: receipts[0]}
+	return tau2SourceBoundRun{Name: runIdentity, Request: request, Payload: payload, Content: content, Receipt: receipts[0]}
 }
 
 func runTau2PureAggregation(t *testing.T, wasm []byte, profile runtimeconfig.ExecutionProfile, reservation, user string) ([]byte, []byte, struct {

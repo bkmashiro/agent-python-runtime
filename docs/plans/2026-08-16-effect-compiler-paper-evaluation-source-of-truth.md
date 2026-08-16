@@ -422,6 +422,8 @@ Decision record: [Natural Agent Benchmark Qualification v1](../research/natural-
 
 **Current T2 evidence boundary:** T2-v1 remains the immutable failed first attempt. Remediation v2 preserves 16 independently rebuilt official oracle outcomes and 35 unique receipt-bound source joins across 15 fully reconstructed rows plus one partial row. It still does not support leaderboard claims, matched-surface direct/treatment deltas, model WRITE ability or production effects.
 
+**Future-run identity repair (not retroactive):** the dynamic T2 harness now derives each Host Run identity from the frozen cohort identity, task ID and task-scoped turn index, rejects malformed cohort identities and task/output identity mismatches, and passes the complete identity into the Guest/Broker helper. The receipt contract already binds Run ID, so repeated identical source/tool/arguments in different future turns produce distinct receipt identities. This code repair does not alter or upgrade remediation-v2: its task `49` row remains partial and its aggregate remains the immutable 35-join result. Any later model cohort must use a newly preregistered protocol after the remaining planned harness changes.
+
 ### Phase T3 — Adversarial identity and lifecycle matrix
 
 - [ ] Mutate source, artifact, profile, import, Plan, grant and handler identities one field at a time.

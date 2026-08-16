@@ -9,23 +9,82 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
+var tau2T2DynamicOutputName = regexp.MustCompile(`^task-([0-9]+)-turn-([0-9]+)$`)
+var tau2T2CohortIdentity = regexp.MustCompile(`^sha256:([0-9a-f]{64})$`)
+
+func tau2T2DynamicRunIdentity(cohortIdentity, taskID, outputPath string) (string, error) {
+	cohort := tau2T2CohortIdentity.FindStringSubmatch(cohortIdentity)
+	if len(cohort) != 2 {
+		return "", fmt.Errorf("invalid frozen cohort identity")
+	}
+	stem := strings.TrimSuffix(filepath.Base(outputPath), filepath.Ext(outputPath))
+	match := tau2T2DynamicOutputName.FindStringSubmatch(stem)
+	if len(match) != 3 || match[1] != taskID {
+		return "", fmt.Errorf("dynamic output identity does not match task %s", taskID)
+	}
+	return fmt.Sprintf("tau2-t2-%s-task-%s-turn-%s", cohort[1], taskID, match[2]), nil
+}
+
+func TestTau2T2DynamicRunIdentityIsFreshPerTurn(t *testing.T) {
+	cohort := "sha256:" + strings.Repeat("a", 64)
+	first, err := tau2T2DynamicRunIdentity(cohort, "49", "/private/task-49-turn-02.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := tau2T2DynamicRunIdentity(cohort, "49", "/private/task-49-turn-04.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatalf("physical attempts reused run identity %q", first)
+	}
+}
+
+func TestTau2T2DynamicRunIdentityIsFreshPerCohort(t *testing.T) {
+	first, err := tau2T2DynamicRunIdentity("sha256:"+strings.Repeat("a", 64), "49", "/private/task-49-turn-02.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := tau2T2DynamicRunIdentity("sha256:"+strings.Repeat("b", 64), "49", "/private/task-49-turn-02.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatalf("different cohorts reused run identity %q", first)
+	}
+}
+
+func TestTau2T2DynamicRunIdentityRejectsTaskMismatch(t *testing.T) {
+	if _, err := tau2T2DynamicRunIdentity("sha256:"+strings.Repeat("a", 64), "49", "/private/task-3-turn-02.json"); err == nil {
+		t.Fatal("task-mismatched output path was accepted")
+	}
+}
+
+func TestTau2T2DynamicRunIdentityRejectsInvalidCohort(t *testing.T) {
+	if _, err := tau2T2DynamicRunIdentity("sha256:short", "49", "/private/task-49-turn-02.json"); err == nil {
+		t.Fatal("invalid cohort identity was accepted")
+	}
+}
+
 func TestTau2T2DynamicModelTurnThroughRealGuest(t *testing.T) {
 	python := os.Getenv("PYSOLATE_TAU2_PYTHON")
 	sourceRoot := os.Getenv("PYSOLATE_TAU2_SOURCE_ROOT")
 	manifest := os.Getenv("PYSOLATE_TAU2_T2_PRIVATE_MANIFEST")
+	cohortIdentity := os.Getenv("PYSOLATE_TAU2_T2_COHORT_IDENTITY")
 	taskID := os.Getenv("PYSOLATE_TAU2_T2_TASK_ID")
 	sourcePath := os.Getenv("PYSOLATE_TAU2_DYNAMIC_SOURCE_FILE")
 	outputPath := os.Getenv("PYSOLATE_TAU2_DYNAMIC_OUTPUT_FILE")
 	capabilityName := os.Getenv("PYSOLATE_TAU2_EXPECTED_CAPABILITY")
 	argumentsText := os.Getenv("PYSOLATE_TAU2_EXPECTED_ARGUMENTS")
 	argumentNamesText := os.Getenv("PYSOLATE_TAU2_EXPECTED_ARGUMENT_NAMES")
-	if python == "" || sourceRoot == "" || manifest == "" || taskID == "" || sourcePath == "" || outputPath == "" || capabilityName == "" || argumentsText == "" || argumentNamesText == "" {
+	if python == "" || sourceRoot == "" || manifest == "" || cohortIdentity == "" || taskID == "" || sourcePath == "" || outputPath == "" || capabilityName == "" || argumentsText == "" || argumentNamesText == "" {
 		t.Skip("T2 dynamic turn environment is required")
 	}
 	for _, path := range []string{sourcePath, filepath.Dir(outputPath), manifest} {
@@ -63,7 +122,11 @@ func TestTau2T2DynamicModelTurnThroughRealGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile := tau2CanaryProfile(t, wasm)
-	run := runTau2SourceBoundTurn(t, wasm, profile, plan, "t2-model", capabilityName, string(canonicalArguments), string(source))
+	runIdentity, err := tau2T2DynamicRunIdentity(cohortIdentity, taskID, outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := runTau2SourceBoundTurn(t, wasm, profile, plan, runIdentity, capabilityName, string(canonicalArguments), string(source))
 	requestName := strings.TrimSuffix(filepath.Base(outputPath), filepath.Ext(outputPath)) + "-guest-request.json"
 	responseName := strings.TrimSuffix(filepath.Base(outputPath), filepath.Ext(outputPath)) + "-guest-response.json"
 	for name, body := range map[string][]byte{requestName: run.Request, responseName: run.Payload} {

@@ -36,6 +36,24 @@ class Tau2T2CohortTests(unittest.TestCase):
             self.assertEqual(resolved.tau2_python, str(link.absolute()))
             self.assertEqual(pathlib.Path(resolved.source_root), root.resolve())
 
+    def test_task_contract_requires_frozen_cohort_identity(self):
+        manifest = {
+            "schema_version": cohort.REMEDIATION_PRIVATE_SCHEMA,
+            "source": {"revision": cohort.REVISION},
+            "public_identity": "sha256:" + "a" * 64,
+            "protocol": {"model": cohort.MODEL, "post_provider_reruns": 0},
+            "tasks": [{"task_id": "49", "reference_actions": [{"name": "read", "arguments": {}}]}],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest))
+            _, _, identity = cohort.load_task_contract(path, "49")
+            self.assertEqual(identity, manifest["public_identity"])
+            manifest["public_identity"] = "sha256:short"
+            path.write_text(json.dumps(manifest))
+            with self.assertRaises(ValueError):
+                cohort.load_task_contract(path, "49")
+
     def actions(self):
         return [
             {"name": "get_user_details", "arguments": {"user_id": "u1"}},

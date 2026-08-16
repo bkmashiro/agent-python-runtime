@@ -451,6 +451,8 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 ## Megagoal 3 — Human-First Source-Bound Lab Debugger
 
+**Status:** Review-ready at the owner visual/product stop gate on 2026-08-16. The portable real-Guest and production projections now have deterministic causal grouping, task-specific inspectors, typed relations, point-event swimlanes and explicit missing-body states. Private Labstore body resolution and rendered before/after file diff remain intentionally open for owner review; M4 has not started.
+
 **Purpose:** Rebuild Lab around causal tasks and developer questions instead of flat event JSON.
 
 **Primary areas:**
@@ -463,18 +465,18 @@ The roadmap is deliberately split into **four megagoals**. Each produces a usefu
 
 **Tracks:**
 
-- [ ] Replace the flat event list with Session → Turn → Step → Tool/Run causal tree grouping.
-- [ ] Collapse start/end and low-information atoms into group summaries.
-- [ ] Add Overview/Input/Output/Code/Timeline/Workspace/Evidence/Raw inspector tabs.
-- [ ] Add bounded recursive JSON decoding with raw preservation.
-- [ ] Add clickable causal, producer/consumer, approval and workspace relations.
-- [ ] Add actor swimlane timeline with honest point/interval semantics.
-- [ ] Add source viewer with program-range, source-bound and optional executed-line highlighting.
-- [ ] Add workspace checkpoint explorer and before/after diff.
+- [x] Replace the flat event list with Session → Turn → Step → Tool/Run causal tree grouping.
+- [x] Collapse start/end and low-information atoms into group summaries.
+- [x] Add Overview/Input/Output/Code/Timeline/Workspace/Evidence/Raw inspector tabs, showing only tabs supported by the selected typed records.
+- [x] Add bounded recursive JSON decoding with raw preservation.
+- [x] Add clickable causal, receipt, source-occurrence and workspace relations.
+- [x] Add actor swimlane timeline with honest point semantics and no inferred intervals.
+- [x] Add source viewer with recorded program range, source-bound claim and explicit executed-line availability; portable missing bodies remain explicit.
+- [ ] Resolve private Labstore source/file bodies and render a recorded before/after diff; the portable review surface currently exposes checkpoint/root/counter/disposition truth and an explicit body-absent state.
 - [ ] Add Pysolate-specific cards for pre-dispatch, hit/miss, single-flight, producer/consumer, approval and terminal dispositions.
-- [ ] Move IDs/digests into Evidence while preserving copy/link affordances.
-- [ ] Verify responsive desktop layout, keyboard navigation, empty/missing-body states and large bounded traces.
-- [ ] Perform real browser visual QA against the real private fixture and public projection.
+- [x] Move IDs/digests into Evidence while preserving copy/link affordances.
+- [x] Verify responsive desktop/narrow layout, keyboard-reachable native controls and empty/missing-body states against the bounded real trace.
+- [ ] Perform real browser visual QA against a resolved private fixture; public real-Guest and strict production projections passed browser QA on 2026-08-16.
 
 **Definition of Done:**
 

@@ -1,6 +1,6 @@
 # Pysolate Lab Web
 
-A static, read-only inspector for portable `pysolate.causal-evidence.v1` exports.
+A static, read-only, human-first causal debugger for portable `pysolate.causal-evidence.v1` exports.
 
 The Lab currently exposes two projections of the same named real-Guest trace:
 
@@ -8,6 +8,8 @@ The Lab currently exposes two projections of the same named real-Guest trace:
 - `production-rollback.json`: the strict body-free production subset containing only execution/effect/terminal facts needed for rollback or reconciliation decisions.
 
 Both projections share the same trace/header and retained event identities. The browser recomputes header, event and export SHA-256 identities, validates prior-only causal parents and typed source/subagent relations, and rejects unknown fields, body references, profile leakage and malformed payloads. It does not execute, retry, replay, schedule, grant capabilities or publish workspaces.
+
+The default view groups canonical atoms into child preparation, fresh execution setup, source-bound capability, workspace terminal and run-completion tasks. Details remain reachable through truthful Overview/Input/Output/Code/Timeline/Workspace/Evidence/Raw tabs. Source and workspace panels show recorded ranges, availability, roots, counters and dispositions; when portable policy removed a body, Lab says so explicitly instead of reconstructing it.
 
 ## Data boundary
 
@@ -25,4 +27,4 @@ npm run test:e2e
 npm run dev
 ```
 
-The current deployment is static and read-only. Live tailing, resume, fork, replay and rollback machinery are outside this Lab surface.
+The current deployment is static and read-only. Private Labstore body resolution, live tailing, resume, fork, replay and rollback machinery are outside this review surface.

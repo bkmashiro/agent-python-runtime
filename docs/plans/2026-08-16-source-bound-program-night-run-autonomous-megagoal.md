@@ -230,6 +230,8 @@ Rules:
 
 ### Track D — Human-First Source-Bound Lab Debugger
 
+**Status:** Review-ready at the owner stop gate on 2026-08-16. Public real-Guest and production views are browser-verified; private Labstore body resolution and before/after diff remain explicit follow-up choices rather than fabricated content.
+
 **Product promise:** A developer can start from one real trace, understand its task/turn/step structure, select generated Python, follow the exact source-bound decision into Host authority/tool/effect/runtime/workspace evidence, and return to raw canonical records without reading a flat ID wall.
 
 **Primary areas:**
@@ -240,16 +242,16 @@ Rules:
 
 **Slices:**
 
-- [ ] Inspect the existing component/data architecture and preserve the strict v1 parser; do not add a second transformed truth store.
-- [ ] Introduce deterministic selectors/view models for Session → Turn → Step → Tool/Run grouping, collapsed start/end atoms and explicit relation navigation.
-- [ ] Replace the flat primary presentation with a causal tree and a focused detail workspace. Keep raw evidence available as an inspector rather than the default reading surface.
-- [ ] Add Overview, Input/Output, Code, Timeline, Workspace, Evidence and Raw views only where the selected event/group has truthful data; unavailable/not-recorded/truncated states must remain visibly distinct.
-- [ ] Add a source viewer for program ranges and `source_bound`; show executed-line highlighting only if actual execution instrumentation exists.
-- [ ] Add workspace checkpoint/result inspection and recorded before/after information without reconstructing absent file bodies.
-- [ ] Add actor swimlanes with honest point/interval semantics and clickable producer/consumer, approval, effect and workspace relations.
-- [ ] Keep IDs/digests copyable in Evidence while reducing them in the primary summary.
-- [ ] Preserve body safety: production/public fixtures never fetch or imply private body objects; Lab remains read-only and non-authoritative.
-- [ ] Ensure keyboard navigation, useful empty/error states and a coherent narrow layout.
+- [x] Inspect the existing component/data architecture and preserve the strict v1 parser; no second transformed truth store was added.
+- [x] Introduce deterministic selectors/view models for Session → Turn → Step → Tool/Run grouping, collapsed start/end atoms and explicit relation navigation.
+- [x] Replace the flat primary presentation with a causal tree and a focused detail workspace. Raw evidence remains available as an inspector rather than the default reading surface.
+- [x] Add Overview, Input/Output, Code, Timeline, Workspace, Evidence and Raw views only where the selected event/group has truthful data; unavailable/not-recorded states remain visibly distinct.
+- [x] Add a source viewer for program ranges and `source_bound`; executed-line availability is shown without inventing instrumentation.
+- [x] Add workspace checkpoint/result inspection and explicit before/after body-unavailable information without reconstructing absent file bodies.
+- [x] Add actor swimlanes with honest point semantics and clickable typed relations.
+- [x] Keep IDs/digests copyable in Evidence while reducing them in the primary summary.
+- [x] Preserve body safety: production/public fixtures never fetch or imply private body objects; Lab remains read-only and non-authoritative.
+- [x] Ensure native keyboard-reachable controls, useful missing-body/error states and a coherent narrow layout.
 
 **Testing discipline:**
 
@@ -381,6 +383,7 @@ A clean checkpoint, successful commit, reviewer timeout or context compaction is
 
 - 2026-08-16 handoff: behavior hardening signed/pushed at `c4b5100`; final capture generated under `dual-profile-mg2-c4b5100`; Go/Python/real-Guest gates green; Lab has one deterministic expectation drift to update; final artifacts/docs are dirty and uncommitted. No M3 work started.
 - 2026-08-16 M2 closeout: artifact/test checkpoint `104937b`; Lab 11/11 unit tests, build and 8/8 Playwright passed; public/production projections byte-match capture with zero body/private-event leakage; private root/files are `0700`/`0600`; controller review found no blocker/high/medium and removed only ignored local v0 runtime artifacts.
+- 2026-08-16 M3 review surface: deterministic causal tree and truthful task inspectors implemented over the real 21-event public and 9-event production views; one focused desktop and one 390px visual pass found no blocked interaction or overflow; final Lab gate passed 14/14 unit tests, production build and 8/8 Playwright cases. Private body resolution/diff remains open at the owner stop gate; M4 was not started.
 
 ## Reporting Format When Finally Stopping
 

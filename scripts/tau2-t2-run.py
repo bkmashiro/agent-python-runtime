@@ -158,6 +158,7 @@ def main() -> int:
     subprocess.run([
         tau2_python, str(report_script), "--public-preregistration", str(public_path),
         "--private-preregistration", str(private_path), "--cells-root", str(evidence_root),
+        *(["--source-root", str(source_root)] if public.get("schema_version") == REMEDIATION_PUBLIC_SCHEMA else []),
         "--output", str(aggregate_output),
     ], cwd=str(repo_root), check=True)
     print(json.dumps({**summary, "execute": True, "pending_cells": 0, "aggregate_output": str(aggregate_output)}, sort_keys=True))

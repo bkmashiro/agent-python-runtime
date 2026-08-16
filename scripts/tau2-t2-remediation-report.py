@@ -15,6 +15,11 @@ assert SPEC is not None and SPEC.loader is not None
 base = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(base)
 
+ORACLE_SPEC = importlib.util.spec_from_file_location("t2_oracle", HERE / "tau2-t2-oracle.py")
+assert ORACLE_SPEC is not None and ORACLE_SPEC.loader is not None
+oracle = importlib.util.module_from_spec(ORACLE_SPEC)
+ORACLE_SPEC.loader.exec_module(oracle)
+
 PUBLIC_SCHEMA = "pysolate.tau2.t2-remediation-preregistration.v1"
 PRIVATE_SCHEMA = "pysolate.tau2.t2-remediation-preregistration-private.v1"
 REPORT_SCHEMA = "pysolate.tau2.t2-remediation-report.v1"
@@ -46,7 +51,7 @@ def validate_prereg(public: dict[str, Any], private: dict[str, Any]) -> dict[str
     return actions
 
 
-def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.Path) -> dict[str, Any]:
+def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.Path, source_root: pathlib.Path) -> dict[str, Any]:
     actions = validate_prereg(public, private)
     raw_refs = collections.Counter()
     cells = {}
@@ -65,7 +70,14 @@ def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.P
         raise ValueError("remediation raw evidence paths collide")
     rows = []
     for task_id, reference in actions.items():
-        result = base.validate_cell(cells[task_id], task_id, "programmatic_python", reference, cells_root, public["protocol"], set())
+        cell = cells[task_id]
+        result = base.validate_cell(cell, task_id, "programmatic_python", reference, cells_root, public["protocol"], set())
+        rebuilt = oracle.rebuild(source_root, private, cell)
+        if result["default_reward"] != rebuilt["default_reward"] or result["action_reward"] != rebuilt["action_reward"]:
+            raise ValueError("aggregate reward differs from independent oracle")
+        result["oracle_rebuilt"] = True
+        result["oracle_evidence_sha256"] = base.sha(base.canonical(rebuilt))
+        result["simulation_messages_sha256"] = rebuilt["simulation_messages_sha256"]
         rows.append({"task_id": task_id, "lane": "programmatic_python", **result})
     statuses = collections.Counter(row["status"] for row in rows)
     return {
@@ -78,6 +90,7 @@ def build(public: dict[str, Any], private: dict[str, Any], cells_root: pathlib.P
             "unknown_provider_cells": sum(row["provider_calls"] is None for row in rows),
             "completed_rows": statuses.get("completed", 0),
             "reconstructed_rows": sum(row["causal_evidence_status"] == "reconstructed" for row in rows),
+            "oracle_rebuilt_rows": sum(row.get("oracle_rebuilt") is True for row in rows),
             "source_joins": sum(row["source_joins"] for row in rows),
         },
         "evidence_integrity": {"shared_raw_path_collisions": 0, "post_provider_reruns": 0, "task_scoped_raw_paths": True},
@@ -95,9 +108,10 @@ def main() -> int:
     parser.add_argument("--public-preregistration", required=True)
     parser.add_argument("--private-preregistration", required=True)
     parser.add_argument("--cells-root", required=True)
+    parser.add_argument("--source-root", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    report = build(json.loads(pathlib.Path(args.public_preregistration).read_text()), json.loads(pathlib.Path(args.private_preregistration).read_text()), pathlib.Path(args.cells_root))
+    report = build(json.loads(pathlib.Path(args.public_preregistration).read_text()), json.loads(pathlib.Path(args.private_preregistration).read_text()), pathlib.Path(args.cells_root), pathlib.Path(args.source_root).resolve())
     body = base.canonical(report) + b"\n"
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

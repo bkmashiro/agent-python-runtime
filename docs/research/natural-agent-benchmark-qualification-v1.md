@@ -193,6 +193,24 @@ Purpose:
 
 This row is a stop gate. Do not execute its WRITE through Pysolate until the attempt-private state contract is proven.
 
+The read-only boundary audit is recorded in [tau2-airline-11-write-boundary-v1.json](../evidence/tau2-airline-11-write-boundary-v1.json), identity `sha256:37c302dac7cca7788279beeee53e990a5552a97b5933dc906a196c6bfac39fea`.
+
+Observed positive facts:
+
+- independent upstream Environment constructors produce distinct DB and target-reservation objects with the same initial hash;
+- the reference action is an upstream-declared mutating WRITE;
+- the official Environment evaluator constructs independent predicted and gold worlds.
+
+Blocking gaps in the current Pysolate treatment:
+
+- the task world is not bound to a Pysolate workspace attempt/disposition;
+- the existing exact adapter has no task-11 or cross-turn persistent WRITE state;
+- no current effect contract honestly describes the Host in-memory task-world mutation;
+- final task-world state is not joined to workspace/effect disposition evidence;
+- cancel or failed execution has no proved discard contract for an attempted task world.
+
+Decision: `unsupported_effect_class`. The row remains in the denominator, no model trial or WRITE dispatch was run, and no production capability or benchmark WRITE adapter is added.
+
 ### Negative oracle control — no-op sensitivity
 
 ```text
@@ -215,10 +233,10 @@ Do not count this row as a positive canary success.
 1. **Done:** build a read-only adapter for only the two capabilities required by `airline/3`.
 2. **Done:** write fail-closed adapter tests and exercise the exact task-local upstream environment.
 3. **Done:** run an authored fresh-turn reference-program wiring check through real WASM Guests; this proves adapter/oracle wiring, not Agent ability.
-4. Run the same model/task/seed through the direct baseline and programmatic-Python treatment.
+4. **Done:** run the same qualified model/task/seed through the direct baseline and programmatic-Python treatment.
 5. **Done for the authored lane:** capture source digest, two distinct source occurrences, Plan, Broker receipts, logical/physical counts and official oracle independently.
 6. **Done for the authored lane:** regenerate a body-safe aggregate from private evidence and verify byte stability.
-7. Audit the `airline/11` state boundary before registering any WRITE capability.
+7. **Done:** audit the `airline/11` state boundary; classify it as `unsupported_effect_class` without registering or dispatching WRITE.
 8. Stop for a design decision only if the WRITE cannot honestly fit existing attempt-private workspace semantics.
 
 ## Observed authored canary

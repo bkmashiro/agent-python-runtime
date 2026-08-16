@@ -492,7 +492,7 @@ A developer can select generated Python, see which exact source boundary produce
 
 **Primary areas:**
 
-- private local workload collection and scrubbed public fixtures
+- existing publi...[truncated]
 - research corpus/census tools
 - selected pass implementation under `runtime/semantic/`
 - real Guest/Harness differential experiments

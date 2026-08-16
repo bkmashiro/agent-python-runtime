@@ -265,7 +265,7 @@ Rules:
 
 ### Track E — Freeze the Natural-Program Corpus Contract
 
-**Product promise:** Subsequent measurements use bounded real agent-written programs with explicit provenance/privacy/oracle classes rather than a polished synthetic demo.
+**Product promise:** Subsequent measurements begin with bounded slices of existing public agent datasets, using explicit provenance/privacy/oracle classes; local collection supplements only missing Pysolate joins.
 
 **Primary areas:**
 
@@ -276,10 +276,12 @@ Rules:
 
 **Slices:**
 
-- [ ] Audit existing workload/corpus/evaluation schemas and reuse the smallest compatible package; do not create a parallel framework without evidence.
+- [ ] Inspect dataset cards, licenses, schemas and small streamed samples before downloading: use `nvidia/Open-SWE-Traces` as the primary oracle-bearing SWE trajectory source, `xingyaoww/code-act` for executable-Python action coverage, and `nebius/SWE-agent-trajectories` only as a secondary comparison.
+- [ ] Select a deterministic bounded subset before any bulk download; prioritize Python repos, structured tool calls, explicit outcome/oracle and reconstructable source/action records.
+- [ ] Audit existing local workload/corpus/evaluation schemas and reuse the smallest compatible package; do not create a parallel framework without evidence.
 - [ ] Define one versioned corpus manifest containing source digest, provenance class, collection adapter, oracle class, privacy class, authority requirements, expected Guest/backend and inclusion/rejection reason.
 - [ ] Require stable item identity, deterministic ordering, bounded source/event/body counts and explicit `included`, `rejected`, `unclassifiable`, `truncated` states.
-- [ ] Keep raw Hermes/Codex/agent conversations and generated programs private under `~/.hermes/evidence/`; checked-in fixtures must be scrubbed/body-safe and must not claim to be the private corpus.
+- [ ] Use local Hermes/Codex/agent conversations only to supplement Host authority/workspace/effect fields absent from public datasets; keep those raw artifacts private under `~/.hermes/evidence/`.
 - [ ] Add adversarial tests for duplicate identity, digest mismatch, unbounded source, unknown class, private path/body leakage and denominator-dropping.
 - [ ] Write a short contract document with exact evidence limitations.
 

@@ -65,6 +65,7 @@ func validSourcePrefixEvidence(t *testing.T) SourcePrefixEvidence {
 	}
 	return SourcePrefixEvidence{
 		SchemaVersion:          SourcePrefixEvidenceSchema,
+		MeasurementAttempt:     SourcePrefixMeasurementAttempt,
 		ExperimentSHA256:       contractSHA,
 		ArtifactSHA256:         testSourcePrefixSHA("artifact"),
 		ArtifactSourceCommit:   "0123456789abcdef0123456789abcdef01234567",
@@ -206,6 +207,7 @@ func TestSourcePrefixEvidenceRejectsDriftAndFalseSpeedup(t *testing.T) {
 		"workspace identity missing": func(value *SourcePrefixEvidence) { value.Rows[0].WorkspaceBeforeSHA256 = "" },
 		"summary drift":              func(value *SourcePrefixEvidence) { value.BaselineMedianNS++ },
 		"identity drift":             func(value *SourcePrefixEvidence) { value.CapabilityPlanSHA256 = "" },
+		"attempt drift":              func(value *SourcePrefixEvidence) { value.MeasurementAttempt = "original" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			evidence := validSourcePrefixEvidence(t)

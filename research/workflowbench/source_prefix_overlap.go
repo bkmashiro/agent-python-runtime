@@ -18,6 +18,7 @@ const SourcePrefixScheduleSchema = "pysolate.source-prefix-schedule.v1"
 const SourcePrefixExperimentContractSchema = "pysolate.source-prefix-experiment-contract.v1"
 const SourcePrefixEvidenceSchema = "pysolate.source-prefix-evidence.v1"
 const SourcePrefixClaimBoundary = "mechanism_fixture_bounded"
+const SourcePrefixMeasurementAttempt = "provenance-remediation-v2"
 
 var sourcePrefixCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
@@ -174,7 +175,7 @@ func ExecuteSourcePrefixPairs(ctx context.Context, contract SourcePrefixExperime
 	}
 	baselineMedian, streamingMedian := medianInt64(baseline), medianInt64(streaming)
 	evidence := SourcePrefixEvidence{
-		SchemaVersion: SourcePrefixEvidenceSchema, ExperimentSHA256: contractSHA,
+		SchemaVersion: SourcePrefixEvidenceSchema, MeasurementAttempt: SourcePrefixMeasurementAttempt, ExperimentSHA256: contractSHA,
 		ArtifactSHA256: identities.ArtifactSHA256, ArtifactSourceCommit: identities.ArtifactSourceCommit, HarnessSourceCommit: identities.HarnessSourceCommit,
 		ExecutionProfileSHA256: identities.ExecutionProfileSHA256, CapabilityPlanSHA256: identities.CapabilityPlanSHA256,
 		CapabilitySpecSHA256: identities.CapabilitySpecSHA256, HandlerSHA256: identities.HandlerSHA256,
@@ -210,6 +211,7 @@ type SourcePrefixRow struct {
 
 type SourcePrefixEvidence struct {
 	SchemaVersion          string            `json:"schema_version"`
+	MeasurementAttempt     string            `json:"measurement_attempt"`
 	ExperimentSHA256       string            `json:"experiment_sha256"`
 	ArtifactSHA256         string            `json:"artifact_sha256"`
 	ArtifactSourceCommit   string            `json:"artifact_source_commit"`
@@ -231,7 +233,7 @@ func ValidateSourcePrefixEvidence(contract SourcePrefixExperimentContract, evide
 	if err != nil {
 		return err
 	}
-	if evidence.SchemaVersion != SourcePrefixEvidenceSchema || evidence.ExperimentSHA256 != contractSHA || evidence.ClaimBoundary != SourcePrefixClaimBoundary || len(evidence.Rows) != int(contract.Repetitions*2) {
+	if evidence.SchemaVersion != SourcePrefixEvidenceSchema || evidence.MeasurementAttempt != SourcePrefixMeasurementAttempt || evidence.ExperimentSHA256 != contractSHA || evidence.ClaimBoundary != SourcePrefixClaimBoundary || len(evidence.Rows) != int(contract.Repetitions*2) {
 		return errors.New("invalid source-prefix evidence identity or row count")
 	}
 	if !evidenceSHA256.MatchString(evidence.ArtifactSHA256) || !sourcePrefixCommitPattern.MatchString(evidence.ArtifactSourceCommit) || !sourcePrefixCommitPattern.MatchString(evidence.HarnessSourceCommit) || !evidenceSHA256.MatchString(evidence.ExecutionProfileSHA256) || !evidenceSHA256.MatchString(evidence.CapabilityPlanSHA256) || !evidenceSHA256.MatchString(evidence.CapabilitySpecSHA256) || !evidenceSHA256.MatchString(evidence.HandlerSHA256) {

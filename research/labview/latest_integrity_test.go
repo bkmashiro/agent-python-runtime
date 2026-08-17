@@ -126,6 +126,17 @@ func TestPaperFigureReadsMetricsAndRejectsLayoutDrift(t *testing.T) {
 	if _, err := PaperFigureSVG(snapshot); err == nil {
 		t.Fatal("paper figure accepted source layout drift")
 	}
+
+	snapshot = acceptedLatestSnapshot(t)
+	snapshot.Demos[0].Annotations = snapshot.Demos[0].Annotations[1:]
+	identity, err = latestSnapshotIdentity(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Identity = identity
+	if _, err := PaperFigureSVG(snapshot); err == nil {
+		t.Fatal("paper figure accepted missing required annotation")
+	}
 }
 
 func TestCampaignTerminalMustBeUnique(t *testing.T) {

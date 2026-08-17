@@ -137,13 +137,16 @@ func figureFallback(buffer *bytes.Buffer, demo LatestDemo, x int) {
 }
 
 func validatePaperFigureLayout(overlap, sharing, fallback LatestDemo) error {
-	if len(strings.Split(overlap.Source, "\n")) < 3 || len(overlap.Lanes) < 2 || len(overlap.Metrics) < 3 || overlap.Metrics[0].Label != "Generate first" || overlap.Metrics[1].Label != "Stream prefix" || overlap.Metrics[2].Label != "Mechanism window" || figureAnnotation(overlap, 1).Label == "" || figureAnnotation(overlap, 2).Label == "" {
+	overlapLine1, overlapLine2 := figureAnnotation(overlap, 1), figureAnnotation(overlap, 2)
+	if len(strings.Split(overlap.Source, "\n")) < 3 || len(overlap.Lanes) < 2 || len(overlap.Metrics) < 3 || overlap.Metrics[0].Label != "Generate first" || overlap.Metrics[1].Label != "Stream prefix" || overlap.Metrics[2].Label != "Mechanism window" || overlapLine1 == nil || overlapLine2 == nil || overlapLine1.Label == "" || overlapLine2.Label == "" {
 		return errors.New("source-prefix paper figure layout contract drifted")
 	}
-	if len(strings.Split(sharing.Source, "\n")) < 5 || len(sharing.Metrics) < 3 || len(sharing.Facts) == 0 || sharing.Metrics[0].Label != "Logical requests" || sharing.Metrics[1].Label != "Physical executions" || sharing.Metrics[2].Label != "Oracle results" || figureAnnotation(sharing, 2).Label == "" || figureAnnotation(sharing, 5).Label == "" {
+	sharingLine2, sharingLine5 := figureAnnotation(sharing, 2), figureAnnotation(sharing, 5)
+	if len(strings.Split(sharing.Source, "\n")) < 5 || len(sharing.Metrics) < 3 || len(sharing.Facts) == 0 || sharing.Metrics[0].Label != "Logical requests" || sharing.Metrics[1].Label != "Physical executions" || sharing.Metrics[2].Label != "Oracle results" || sharingLine2 == nil || sharingLine5 == nil || sharingLine2.Label == "" || sharingLine5.Label == "" {
 		return errors.New("sharing paper figure layout contract drifted")
 	}
-	if len(strings.Split(fallback.Source, "\n")) < 5 || len(fallback.Metrics) < 3 || len(fallback.Facts) == 0 || fallback.Metrics[0].Label != "Logical requests" || fallback.Metrics[1].Label != "Physical executions" || fallback.Metrics[2].Label != "Unsafe reuse" || figureAnnotation(fallback, 2).Label == "" || figureAnnotation(fallback, 5).Label == "" {
+	fallbackLine2, fallbackLine5 := figureAnnotation(fallback, 2), figureAnnotation(fallback, 5)
+	if len(strings.Split(fallback.Source, "\n")) < 5 || len(fallback.Metrics) < 3 || len(fallback.Facts) == 0 || fallback.Metrics[0].Label != "Logical requests" || fallback.Metrics[1].Label != "Physical executions" || fallback.Metrics[2].Label != "Unsafe reuse" || fallbackLine2 == nil || fallbackLine5 == nil || fallbackLine2.Label == "" || fallbackLine5.Label == "" {
 		return errors.New("fallback paper figure layout contract drifted")
 	}
 	return nil

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
@@ -60,6 +62,39 @@ func TestStrictDecodeRejectsUnknownFields(t *testing.T) {
 	var request guestRequest
 	if err := strictDecode([]byte(`{"run_id":"r","code":"result=1","inputs":{},"unknown":true}`), &request); err == nil {
 		t.Fatal("unknown field accepted")
+	}
+}
+
+func TestCheckedInCensusEvidenceAndReportAreBound(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "docs")
+	evidenceRaw, err := os.ReadFile(filepath.Join(root, "evidence", "source-prefix-opportunity-census-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digestBytes(evidenceRaw) != "sha256:c0b9ad69202bf630b864dab1b37af64cf7f22afe2aa758044cc857a53e053022" {
+		t.Fatal("public census evidence raw SHA drift")
+	}
+	evidence, err := workflowbench.DecodeSourcePrefixCensusEvidence(evidenceRaw)
+	if err != nil || evidence.Denominator.Events != 36 || evidence.Denominator.UniqueSources != 30 || evidence.Counts.StructurallyEligible != 0 || evidence.Counts.StructurallyIneligible != 36 || evidence.Counts.TimingNotRecorded != 36 {
+		t.Fatalf("invalid checked-in census evidence: %+v err=%v", evidence, err)
+	}
+	preregistration, err := os.ReadFile(filepath.Join(root, "evidence", "source-prefix-opportunity-census-preregistration-v1.json"))
+	if err != nil || digestBytes(preregistration) != fixedPreregistrationSHA256 {
+		t.Fatal("checked-in census preregistration drift")
+	}
+	report, err := os.ReadFile(filepath.Join(root, "research", "source-prefix-opportunity-census-v1.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []string{
+		fixedParentReportSHA256, fixedPreregistrationSHA256, fixedArtifactSourceCommit, fixedArtifactSHA256,
+		fixedArtifactManifestSHA256, "13831bd8660e8f31c964225fcd0383588bae6989", evidence.Identity,
+		"sha256:c0b9ad69202bf630b864dab1b37af64cf7f22afe2aa758044cc857a53e053022",
+		"Do **not** run trace-derived timing replay for this cohort",
+	} {
+		if !strings.Contains(string(report), identity) {
+			t.Fatalf("census report missing accepted identity/boundary %s", identity)
+		}
 	}
 }
 

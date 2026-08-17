@@ -1,10 +1,12 @@
 package workflowbench
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 
@@ -205,6 +207,22 @@ func BuildSourcePrefixCensusEvidence(build SourcePrefixCensusBuild) (SourcePrefi
 	}
 	evidence.Identity = identity
 	return evidence, ValidateSourcePrefixCensusEvidence(evidence)
+}
+
+func DecodeSourcePrefixCensusEvidence(raw []byte) (SourcePrefixCensusEvidence, error) {
+	var evidence SourcePrefixCensusEvidence
+	if rejectDuplicateJSON(raw) != nil {
+		return evidence, errors.New("duplicate source-prefix census JSON field")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&evidence) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return SourcePrefixCensusEvidence{}, errors.New("invalid source-prefix census JSON")
+	}
+	if err := ValidateSourcePrefixCensusEvidence(evidence); err != nil {
+		return SourcePrefixCensusEvidence{}, err
+	}
+	return evidence, nil
 }
 
 func ValidateSourcePrefixCensusEvidence(evidence SourcePrefixCensusEvidence) error {

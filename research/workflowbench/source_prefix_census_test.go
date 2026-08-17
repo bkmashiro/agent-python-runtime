@@ -130,6 +130,26 @@ func TestSourcePrefixCensusEvidenceBindsDenominatorAndClaimBoundary(t *testing.T
 	}
 }
 
+func TestDecodeSourcePrefixCensusEvidenceRejectsUnknownAndDuplicateFields(t *testing.T) {
+	evidence := validSourcePrefixCensus(t)
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeSourcePrefixCensusEvidence(raw); err != nil {
+		t.Fatal(err)
+	}
+	unknown := append([]byte(nil), raw[:len(raw)-1]...)
+	unknown = append(unknown, []byte(`,"speedup_milli":1000}`)...)
+	if _, err := DecodeSourcePrefixCensusEvidence(unknown); err == nil {
+		t.Fatal("expected unknown performance field rejection")
+	}
+	duplicate := append([]byte(`{"schema_version":"pysolate.source-prefix-opportunity-census.v1",`), raw[1:]...)
+	if _, err := DecodeSourcePrefixCensusEvidence(duplicate); err == nil {
+		t.Fatal("expected duplicate field rejection")
+	}
+}
+
 func TestSourcePrefixCensusEvidenceRejectsPerformanceAndAggregateDrift(t *testing.T) {
 	base := validSourcePrefixCensus(t)
 	tests := []struct {

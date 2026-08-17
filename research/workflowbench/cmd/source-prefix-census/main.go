@@ -21,6 +21,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
@@ -46,22 +47,12 @@ type planDocument struct {
 	Grants        []capability.GrantBinding `json:"grants"`
 }
 
-type sourceBinding struct {
-	SourceSHA256 string `json:"source_sha256"`
-	Capability   string `json:"capability"`
-}
-
-type receiptProjection struct {
-	Capability string        `json:"capability"`
-	Source     sourceBinding `json:"source"`
-}
-
 type cellProjection struct {
 	SchemaVersion        string            `json:"schema_version"`
 	TaskID               string            `json:"task_id"`
 	CapabilityPlanSHA256 string            `json:"capability_plan_sha256"`
 	PlanDocument         json.RawMessage   `json:"plan_document"`
-	Receipt              receiptProjection `json:"receipt"`
+	Receipt              receipt.Receipt   `json:"receipt"`
 	RawBodies            map[string]string `json:"raw_bodies"`
 	Content              json.RawMessage   `json:"content"`
 	GrantPolicy          json.RawMessage   `json:"grant_policy"`
@@ -240,7 +231,7 @@ func run(ctx context.Context, artifactPath, parentReportPath, preregistrationPat
 			return err
 		}
 		var cell cellProjection
-		if err := strictDecode(cellRaw, &cell); err != nil || cell.TaskID != task || cell.Receipt.Capability == "" || cell.Receipt.Source.Capability != cell.Receipt.Capability {
+		if err := strictDecode(cellRaw, &cell); err != nil || cell.TaskID != task || cell.Receipt.Source == nil || cell.Receipt.Capability == "" || cell.Receipt.Source.Capability != cell.Receipt.Capability || !receipt.ValidIdentity(cell.Receipt) {
 			return errors.New("invalid private remediation cell")
 		}
 		sourceSHA := digestBytes([]byte(request.Code))

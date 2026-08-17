@@ -74,6 +74,16 @@ func TestTaskSnapshotRejectsIdentityValidPrivateAndForgedFields(t *testing.T) {
 			}
 		},
 		"invalid digest": func(snapshot *TaskSnapshot) { snapshot.Events[0].InputSHA256 = "sha256:forged" },
+		"negative time":  func(snapshot *TaskSnapshot) { snapshot.Events[0].StartedMillis = -1 },
+		"elapsed rewind": func(snapshot *TaskSnapshot) { snapshot.Events[13].RelativeElapsedMillis = 20000 },
+		"unknown agent":  func(snapshot *TaskSnapshot) { snapshot.Events[13].AgentID = "attacker" },
+		"future parent": func(snapshot *TaskSnapshot) {
+			snapshot.Events[1].ParentSequence = snapshot.Events[len(snapshot.Events)-1].Sequence
+		},
+		"future parent span": func(snapshot *TaskSnapshot) {
+			snapshot.Events[1].ParentSpanID = snapshot.Events[len(snapshot.Events)-1].SpanID
+		},
+		"duplicate span": func(snapshot *TaskSnapshot) { snapshot.Events[1].SpanID = snapshot.Events[0].SpanID },
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {

@@ -58,7 +58,11 @@ describe('latest Pysolate Lab', () => {
   it('restores a real task timeline, trace tree and inspector', async () => {
     const latest = await snapshot();
     const task = await taskSnapshot();
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string) => ({ ok: true, json: async () => input.includes('task.json') ? task : latest })));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string) => ({
+      ok: true,
+      json: async () => input.includes('task.json') ? task : latest,
+      text: async () => JSON.stringify(input.includes('task.json') ? task : latest),
+    })));
     render(<App />);
     await screen.findByRole('heading', { name: 'Runtime mechanisms' });
 
@@ -68,7 +72,8 @@ describe('latest Pysolate Lab', () => {
     expect(screen.getByRole('button', { name: /Research workspace shape/ })).toBeVisible();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Trace tree' }));
-    expect(screen.getByRole('button', { name: /Start parallel analyses/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Start parallel analyses/ })).toHaveStyle({ paddingLeft: '30px' });
+    expect(screen.getByRole('button', { name: /Research workspace shape/ })).toHaveStyle({ paddingLeft: '46px' });
     expect(screen.queryByText(/oracle .*passed/i)).not.toBeInTheDocument();
   });
 

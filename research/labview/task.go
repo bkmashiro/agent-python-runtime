@@ -224,7 +224,7 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 }
 
 func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
-	if snapshot.SchemaVersion != TaskSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || !taskID.MatchString(snapshot.ID) || snapshot.Title == "" || snapshot.Task == "" || snapshot.Status != "passed" || snapshot.ExpectedArtifact == "" || !taskPublicText(snapshot.Title+"\n"+snapshot.Task+"\n"+snapshot.ExpectedArtifact) || len(snapshot.Sources) != 3 || len(snapshot.Events) < 10 {
+	if snapshot.SchemaVersion != TaskSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || snapshot.ID != "dev-workspace-summary" || snapshot.Title == "" || snapshot.Task == "" || snapshot.Status != "passed" || snapshot.ExpectedArtifact == "" || !taskPublicText(snapshot.Title+"\n"+snapshot.Task+"\n"+snapshot.ExpectedArtifact) || len(snapshot.Sources) != 3 || len(snapshot.Events) < 10 {
 		return errors.New("invalid task inspector envelope")
 	}
 	identity, err := taskSnapshotIdentity(snapshot)
@@ -239,15 +239,23 @@ func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
 		sources[source.ID] = source
 	}
 	sequences := map[int]bool{}
+	spans := map[string]bool{}
 	lastSequence := 0
+	lastElapsed := float64(0)
 	workspaceChanges := 0
 	agents := map[string]bool{}
 	for _, event := range snapshot.Events {
-		if event.Sequence <= lastSequence || event.SpanID == "" || (!taskID.MatchString(event.AgentID) || (sources[event.AgentID].ID == "" && event.AgentID != "runtime")) || event.AgentRole == "" || event.EndedMillis < event.StartedMillis || event.Type == "" || event.Action == "" || event.Outcome == "" || event.RelativeElapsedMillis < event.EndedMillis || event.Count < 1 {
+		if event.Sequence <= lastSequence || event.SpanID == "" || spans[event.SpanID] || (!taskID.MatchString(event.AgentID) || (sources[event.AgentID].ID == "" && event.AgentID != "runtime")) || event.AgentRole == "" || event.StartedMillis < 0 || event.EndedMillis < event.StartedMillis || event.Type == "" || event.Action == "" || event.Outcome == "" || event.RelativeElapsedMillis < event.EndedMillis || event.RelativeElapsedMillis < lastElapsed || event.Count < 1 {
 			return errors.New("invalid task inspector event")
 		}
 		if event.ParentSequence != 0 && !sequences[event.ParentSequence] {
 			return errors.New("task inspector event parent is not earlier")
+		}
+		if event.ParentSpanID != "" && !spans[event.ParentSpanID] {
+			return errors.New("task inspector event parent span is not earlier")
+		}
+		if event.ParentAgentID != "" && event.ParentAgentID != "runtime" && sources[event.ParentAgentID].ID == "" {
+			return errors.New("task inspector event parent agent is invalid")
 		}
 		if !taskPublicText(event.SpanID+"\n"+event.ParentSpanID+"\n"+event.AgentRole+"\n"+event.WorkspaceID+"\n"+event.Type+"\n"+event.Action+"\n"+event.Outcome) || event.CheckpointSHA256 != "" && !latestDigest.MatchString(event.CheckpointSHA256) || event.InputSHA256 != "" && !latestDigest.MatchString(event.InputSHA256) || event.OutputSHA256 != "" && !latestDigest.MatchString(event.OutputSHA256) {
 			return errors.New("invalid task inspector event body or digest")
@@ -265,7 +273,9 @@ func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
 			workspaceChanges++
 		}
 		sequences[event.Sequence] = true
+		spans[event.SpanID] = true
 		lastSequence = event.Sequence
+		lastElapsed = event.RelativeElapsedMillis
 		agents[event.AgentID] = true
 	}
 	if len(agents) < 4 || workspaceChanges != 2 || snapshot.Stats.Events != len(snapshot.Events) || snapshot.Stats.Agents != len(agents) || snapshot.Stats.WorkspaceChanges != workspaceChanges || snapshot.Stats.DurationMillis != snapshot.Events[len(snapshot.Events)-1].RelativeElapsedMillis {

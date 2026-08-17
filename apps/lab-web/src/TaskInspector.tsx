@@ -4,8 +4,6 @@ import type { TaskEvent, TaskSnapshot } from './taskData';
 type InspectorTab = 'python' | 'task' | 'io' | 'workspace';
 type ExecutionView = 'timeline' | 'trace';
 
-const agentOrder = ['runtime', 'orchestrator', 'researcher', 'reviewer'];
-
 function eventLabel(event: TaskEvent) {
   const labels: Record<string, string> = {
     'run.start': 'Start task',
@@ -52,6 +50,7 @@ function formatTime(value: number) {
 function TaskTimeline({ task, selected, onSelect }: { task: TaskSnapshot; selected: TaskEvent; onSelect: (event: TaskEvent) => void }) {
   const events = task.events.filter((event) => event.type !== 'oracle');
   const duration = Math.max(...events.map((event) => event.relative_elapsed_millis), 1);
+  const agentOrder = ['runtime', ...task.sources.map((source) => source.id)];
   return (
     <div className="task-timeline" aria-label="Task execution timeline">
       {agentOrder.map((agent) => {
@@ -86,6 +85,10 @@ function TaskTimeline({ task, selected, onSelect }: { task: TaskSnapshot; select
 }
 
 function TraceTree({ task, selected, onSelect }: { task: TaskSnapshot; selected: TaskEvent; onSelect: (event: TaskEvent) => void }) {
+  const depths = new Map<string, number>();
+  for (const event of task.events) {
+    depths.set(event.span_id, event.parent_span_id ? (depths.get(event.parent_span_id) ?? 0) + 1 : 0);
+  }
   return (
     <div className="trace-tree" aria-label="Task trace tree">
       {task.events.filter((event) => event.type !== 'oracle').map((event) => (
@@ -93,7 +96,7 @@ function TraceTree({ task, selected, onSelect }: { task: TaskSnapshot; selected:
           className={`${selected.sequence === event.sequence ? 'selected' : ''} ${eventTone(event)}`}
           key={event.sequence}
           onClick={() => onSelect(event)}
-          style={{ paddingLeft: event.agent_id === 'runtime' ? 14 : event.agent_id === 'orchestrator' ? 30 : 46 }}
+          style={{ paddingLeft: 14 + (depths.get(event.span_id) ?? 0) * 16 }}
           type="button"
         >
           <span>{String(event.sequence).padStart(2, '0')}</span>

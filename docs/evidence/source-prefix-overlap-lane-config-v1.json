@@ -1,0 +1,1 @@
+{"schema_version":"pysolate.source-prefix-lane-config.v1","mechanism":"reach_gated_source_prefix","queue_max_chunks":3,"queue_max_bytes":65536,"clock":"monotonic_host","baseline":"release_after_generation_complete","treatment":"release_at_frozen_offsets"}

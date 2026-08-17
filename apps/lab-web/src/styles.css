@@ -76,10 +76,17 @@ main { width: min(1480px, 100%); margin: auto; padding: 30px 24px 38px; }
 .source-card > header b, .timeline > header b { font-size: 10px; }
 .source-card > header small, .timeline > header span, .timeline > header small { color: #707c90; font-size: 8px; }
 .source-card > header em { color: var(--green); font-size: 7px; font-style: normal; letter-spacing: .08em; }
-.source-card pre { min-height: 242px; margin: 0; padding: 14px 0; overflow: auto; color: #d8e1ee; font-size: 11px; line-height: 1.7; background: linear-gradient(90deg,#0a0d12 0,#0a0d12 42px,#0d1117 42px); }
-.source-card pre > span { display: grid; grid-template-columns: 42px 1fr; padding-right: 14px; }
+.source-card pre { min-height: 290px; margin: 0; padding: 14px 0; overflow: auto; color: #d8e1ee; font-size: 11px; line-height: 1.55; background: linear-gradient(90deg,#0a0d12 0,#0a0d12 42px,#0d1117 42px); }
+.source-card pre > span { display: grid; grid-template-columns: 42px minmax(0,1fr); padding: 5px 14px 5px 0; border-left: 2px solid transparent; }
 .source-card pre i { padding-right: 10px; color: #47556a; font-style: normal; text-align: right; user-select: none; }
-.source-card pre code { padding-left: 12px; white-space: pre; }
+.source-card pre code { padding-left: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.source-card pre small { grid-column: 2; display: flex; gap: 7px; padding: 3px 0 0 12px; color: #8d9ab0; font: 8px/1.35 Inter, sans-serif; white-space: normal; }
+.source-card pre small b { flex: 0 0 auto; color: #dce5f2; text-transform: uppercase; letter-spacing: .04em; }
+.source-card .effect_trigger { border-left-color: #21d4c2; background: rgba(33,212,194,.10); }
+.source-card .overlapped_tail { border-left-color: #4a91ff; background: rgba(74,145,255,.10); }
+.source-card .physical_owner { border-left-color: #46d991; background: rgba(70,217,145,.09); }
+.source-card .shared_skip { border-left-color: #a682ff; background: repeating-linear-gradient(135deg,rgba(166,130,255,.13) 0,rgba(166,130,255,.13) 6px,rgba(166,130,255,.04) 6px,rgba(166,130,255,.04) 12px); }
+.source-card .fresh_fallback { border-left-color: #f5a524; background: rgba(245,165,36,.10); }
 .timeline-axis { display: flex; justify-content: space-between; margin: 12px 14px 7px 140px; color: #59667a; font: 8px var(--mono); }
 .timeline-rows { display: grid; gap: 11px; padding: 0 14px 16px; }
 .timeline-row { min-height: 40px; display: grid; grid-template-columns: 116px 1fr; gap: 10px; align-items: center; }

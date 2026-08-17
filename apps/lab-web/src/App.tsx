@@ -47,7 +47,11 @@ function SourceCard({ demo }: { demo: LatestDemo }) {
   return (
     <section className="source-card">
       <header><div><Braces size={16} /><span><b>Authored Python</b><small>Exact public fixture used by the evidence</small></span></div><em>VISIBLE SOURCE</em></header>
-      <pre>{lines.map((line, index) => <span key={index}><i>{String(index + 1).padStart(2, '0')}</i><code>{line || ' '}</code></span>)}</pre>
+      <pre>{lines.map((line, index) => {
+        const lineNumber = index + 1;
+        const annotation = demo.annotations.find((item) => lineNumber >= item.start_line && lineNumber <= item.end_line);
+        return <span key={index} className={`code-line ${annotation?.tone ?? ''}`}><i>{String(lineNumber).padStart(2, '0')}</i><code>{line || ' '}</code>{annotation && <small><b>{annotation.label}</b>{annotation.note}</small>}</span>;
+      })}</pre>
     </section>
   );
 }

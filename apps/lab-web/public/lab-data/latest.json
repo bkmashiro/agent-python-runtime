@@ -1,6 +1,6 @@
 {
   "schema_version": "pysolate.lab-latest.v1",
-  "identity": "sha256:f01bb9cba721554ea24d9a69797aaf204f6aeba26582dc66ee3687a888b6f2a5",
+  "identity": "sha256:efd6a1588c2cf80b8a4bc062d555237661a1e90c5509740df586c07b80f3d92c",
   "headline": {
     "real_guest_demos": 3,
     "optimization_wins": 2,
@@ -14,6 +14,22 @@
       "status": "optimized",
       "summary": "The first closed Python suite reaches a Host READ while the remaining source is still being generated.",
       "source": "record = slow.lookup('alpha')\nlabel = record['label'].upper()\nresult = {'label': label}\n",
+      "annotations": [
+        {
+          "start_line": 1,
+          "end_line": 1,
+          "tone": "effect_trigger",
+          "label": "READ starts",
+          "note": "The closed suite reaches the Host-mediated READ."
+        },
+        {
+          "start_line": 2,
+          "end_line": 3,
+          "tone": "overlapped_tail",
+          "label": "generated concurrently",
+          "note": "This source tail arrives while the READ is in flight."
+        }
+      ],
       "metrics": [
         {
           "label": "Generate first",
@@ -107,6 +123,22 @@
       "status": "optimized",
       "summary": "Two logical agents submit identical source, inputs, Plan, privacy partition and workspace root. Pysolate shares one physical execution.",
       "source": "# Agent A\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Agent B — byte-identical request\nresult = {'square': inputs['value'] * inputs['value']}\n",
+      "annotations": [
+        {
+          "start_line": 2,
+          "end_line": 2,
+          "tone": "physical_owner",
+          "label": "physical owner",
+          "note": "This logical request owns the measured Guest execution."
+        },
+        {
+          "start_line": 5,
+          "end_line": 5,
+          "tone": "shared_skip",
+          "label": "physical run skipped",
+          "note": "Exact identity attaches this logical request to the same physical result."
+        }
+      ],
       "metrics": [
         {
           "label": "Logical requests",
@@ -176,6 +208,22 @@
       "status": "safety_control",
       "summary": "A semantically similar program has a different source identity. Pysolate refuses sharing and starts an independent physical execution.",
       "source": "# Shareable request\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Source-mismatch request\nresult = {'square': pow(inputs['value'], 2)}\n",
+      "annotations": [
+        {
+          "start_line": 2,
+          "end_line": 2,
+          "tone": "physical_owner",
+          "label": "physical A",
+          "note": "The admitted exact request executes normally."
+        },
+        {
+          "start_line": 5,
+          "end_line": 5,
+          "tone": "fresh_fallback",
+          "label": "fresh physical B",
+          "note": "The source digest differs, so sharing is rejected before execution."
+        }
+      ],
       "metrics": [
         {
           "label": "Logical requests",

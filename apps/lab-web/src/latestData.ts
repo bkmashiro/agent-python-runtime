@@ -28,6 +28,13 @@ export interface LatestDemo {
   status: DemoStatus;
   summary: string;
   source: string;
+  annotations: {
+    start_line: number;
+    end_line: number;
+    tone: 'effect_trigger' | 'overlapped_tail' | 'physical_owner' | 'shared_skip' | 'fresh_fallback';
+    label: string;
+    note: string;
+  }[];
   metrics: LatestMetric[];
   lanes: LatestLane[];
   facts: { label: string; value: string }[];
@@ -63,6 +70,7 @@ const commit = /^[0-9a-f]{40}$/;
 const demoIDs = ['source-prefix-overlap', 'exact-request-sharing', 'source-mismatch-fallback'];
 const tones = new Set(['generation', 'effect', 'finalize', 'shared', 'physical', 'fallback']);
 const metricTones = new Set(['baseline', 'optimized', 'win', 'control']);
+const annotationTones = new Set(['effect_trigger', 'overlapped_tail', 'physical_owner', 'shared_skip', 'fresh_fallback']);
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -91,9 +99,21 @@ export function validateLatestSnapshot(value: unknown): LatestSnapshot {
   if (!Array.isArray(root.demos) || root.demos.length !== 3) throw new Error('latest Lab requires exactly three demos');
   for (const [index, rawDemo] of root.demos.entries()) {
     const demo = object(rawDemo, 'demo');
-    exactKeys(demo, ['id', 'title', 'eyebrow', 'status', 'summary', 'source', 'metrics', 'lanes', 'facts', 'claim_boundary'], 'demo');
+    exactKeys(demo, ['id', 'title', 'eyebrow', 'status', 'summary', 'source', 'annotations', 'metrics', 'lanes', 'facts', 'claim_boundary'], 'demo');
     if (demo.id !== demoIDs[index] || !nonempty(demo.title) || !nonempty(demo.eyebrow) || !nonempty(demo.summary) || !nonempty(demo.source) || !nonempty(demo.claim_boundary) || (demo.status !== 'optimized' && demo.status !== 'safety_control') || String(demo.source).includes('/Users/') || String(demo.source).includes('.hermes')) throw new Error('latest Lab demo is invalid');
     if (!Array.isArray(demo.metrics) || demo.metrics.length < 3) throw new Error('latest Lab metrics are incomplete');
+    const sourceLineCount = String(demo.source).split('\n').length;
+    const annotatedLines = new Set<number>();
+    if (!Array.isArray(demo.annotations) || demo.annotations.length === 0) throw new Error('latest Lab annotations are incomplete');
+    for (const rawAnnotation of demo.annotations) {
+      const annotation = object(rawAnnotation, 'annotation');
+      exactKeys(annotation, ['start_line', 'end_line', 'tone', 'label', 'note'], 'annotation');
+      if (!Number.isInteger(annotation.start_line) || !Number.isInteger(annotation.end_line) || Number(annotation.start_line) < 1 || Number(annotation.end_line) < Number(annotation.start_line) || Number(annotation.end_line) > sourceLineCount || !annotationTones.has(String(annotation.tone)) || !nonempty(annotation.label) || !nonempty(annotation.note)) throw new Error('latest Lab annotation is invalid');
+      for (let line = Number(annotation.start_line); line <= Number(annotation.end_line); line += 1) {
+        if (annotatedLines.has(line)) throw new Error('latest Lab annotations overlap');
+        annotatedLines.add(line);
+      }
+    }
     for (const rawMetric of demo.metrics) {
       const metric = object(rawMetric, 'metric');
       exactKeys(metric, ['label', 'value', 'note', 'tone'], 'metric');

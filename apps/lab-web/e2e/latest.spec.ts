@@ -6,6 +6,8 @@ test('makes source-prefix overlap visually obvious', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Start the READ before the model finishes' })).toBeVisible();
   await expect(page.getByText('1.923×')).toBeVisible();
   await expect(page.getByText("record = slow.lookup('alpha')")).toBeVisible();
+  await expect(page.getByText('READ starts', { exact: true })).toBeVisible();
+  await expect(page.getByText('generated concurrently', { exact: true }).first()).toBeVisible();
   const timeline = page.getByRole('region', { name: 'Measured execution timeline' });
   await expect(timeline).toContainText('generate → execute');
   await expect(timeline).toContainText('stream while generating');
@@ -18,6 +20,7 @@ test('shows one physical Guest for two exact logical requests', async ({ page })
   await expect(page.getByRole('heading', { name: 'Two agents, one physical Guest' })).toBeVisible();
   await expect(page.getByText('same sealed physical ID')).toBeVisible();
   await expect(page.getByText('exact_shared')).toBeVisible();
+  await expect(page.getByText('physical run skipped', { exact: true })).toBeVisible();
   await expect(page.getByText('2', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('1', { exact: true }).first()).toBeVisible();
 });
@@ -28,6 +31,7 @@ test('shows source mismatch as an explicit safe control', async ({ page }) => {
   await expect(page.getByText('safe fallback observed')).toBeVisible();
   await expect(page.getByText('reject_source_mismatch')).toBeVisible();
   await expect(page.getByText("result = {'square': pow(inputs['value'], 2)}")).toBeVisible();
+  await expect(page.getByText('fresh physical B', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('independent IDs')).toBeVisible();
 });
 

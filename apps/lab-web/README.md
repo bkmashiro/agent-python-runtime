@@ -8,7 +8,20 @@ Latest-only, static workspace for visible Pysolate mechanism demonstrations. It 
 - **Exact request sharing** — two identical logical requests share one measured physical execution.
 - **Fail-closed source mismatch** — a different source identity receives a fresh physical execution.
 
-The natural-cohort card is a boundary, not a performance result.
+The natural-cohort card is a boundary, not a performance result. Code lines are annotated by the Go projection as effect triggers, overlapped source tails, physical owners, shared logical requests, or fresh fallbacks; the React UI does not infer these roles.
+
+## Paper artifacts
+
+The same validated snapshot produces a paper-ready note and deterministic SVG:
+
+- `docs/research/pysolate-runtime-optimization-examples-v1.md`
+- `docs/figures/pysolate-runtime-optimization-examples-v1.svg`
+
+```sh
+npm run figure:paper
+```
+
+The figure labels exact sharing as `shared result / physical run skipped`, not as a generic cache.
 
 ## Data pipeline
 

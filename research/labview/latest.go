@@ -57,17 +57,26 @@ type LatestFact struct {
 	Value string `json:"value"`
 }
 
+type LatestCodeAnnotation struct {
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+	Tone      string `json:"tone"`
+	Label     string `json:"label"`
+	Note      string `json:"note"`
+}
+
 type LatestDemo struct {
-	ID            string         `json:"id"`
-	Title         string         `json:"title"`
-	Eyebrow       string         `json:"eyebrow"`
-	Status        string         `json:"status"`
-	Summary       string         `json:"summary"`
-	Source        string         `json:"source"`
-	Metrics       []LatestMetric `json:"metrics"`
-	Lanes         []LatestLane   `json:"lanes"`
-	Facts         []LatestFact   `json:"facts"`
-	ClaimBoundary string         `json:"claim_boundary"`
+	ID            string                 `json:"id"`
+	Title         string                 `json:"title"`
+	Eyebrow       string                 `json:"eyebrow"`
+	Status        string                 `json:"status"`
+	Summary       string                 `json:"summary"`
+	Source        string                 `json:"source"`
+	Annotations   []LatestCodeAnnotation `json:"annotations"`
+	Metrics       []LatestMetric         `json:"metrics"`
+	Lanes         []LatestLane           `json:"lanes"`
+	Facts         []LatestFact           `json:"facts"`
+	ClaimBoundary string                 `json:"claim_boundary"`
 }
 
 type LatestBoundary struct {
@@ -305,6 +314,10 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 			{
 				ID: "source-prefix-overlap", Title: "Start the READ before the model finishes", Eyebrow: "REACH-GATED STREAMING", Status: "optimized",
 				Summary: "The first closed Python suite reaches a Host READ while the remaining source is still being generated.", Source: source,
+				Annotations: []LatestCodeAnnotation{
+					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "READ starts", Note: "The closed suite reaches the Host-mediated READ."},
+					{StartLine: 2, EndLine: 3, Tone: "overlapped_tail", Label: "generated concurrently", Note: "This source tail arrives while the READ is in flight."},
+				},
 				Metrics:       []LatestMetric{{Label: "Generate first", Value: fmt.Sprintf("%.0f ms", float64(evidence.BaselineMedianNS)/1e6), Note: "median wall time", Tone: "baseline"}, {Label: "Stream prefix", Value: fmt.Sprintf("%.0f ms", float64(evidence.StreamingMedianNS)/1e6), Note: "median wall time", Tone: "optimized"}, {Label: "Mechanism window", Value: fmt.Sprintf("%.3f×", float64(evidence.MedianSpeedupMilli)/1000), Note: "authored matched fixture", Tone: "win"}},
 				Lanes:         []LatestLane{sourcePrefixLane("generate → execute", baseline), sourcePrefixLane("stream while generating", streaming)},
 				Facts:         []LatestFact{{Label: "Logical / physical calls", Value: "1 / 1 in both lanes"}, {Label: "Workspace", Value: "unchanged and published"}, {Label: "Fallback", Value: "none"}},
@@ -313,6 +326,10 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 			{
 				ID: "exact-request-sharing", Title: "Two agents, one physical Guest", Eyebrow: "EXACT REQUEST SHARING", Status: "optimized",
 				Summary: "Two logical agents submit identical source, inputs, Plan, privacy partition and workspace root. Pysolate shares one physical execution.", Source: "# Agent A\n" + p05.Source + "\n# Agent B — byte-identical request\n" + p06.Source,
+				Annotations: []LatestCodeAnnotation{
+					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical owner", Note: "This logical request owns the measured Guest execution."},
+					{StartLine: 5, EndLine: 5, Tone: "shared_skip", Label: "physical run skipped", Note: "Exact identity attaches this logical request to the same physical result."},
+				},
 				Metrics:       []LatestMetric{{Label: "Logical requests", Value: "2", Note: "P05 + P06", Tone: "baseline"}, {Label: "Physical executions", Value: "1", Note: "same sealed physical ID", Tone: "optimized"}, {Label: "Oracle results", Value: "2 / 2", Note: "both complete", Tone: "win"}},
 				Lanes:         []LatestLane{campaignLane("agent A · shared waiter", "same physical ID", sharedDuration, sharedStart, sharedEnd, "shared"), campaignLane("agent B · physical owner", "same physical ID", sharedDuration, sharedStart, sharedEnd, "physical")},
 				Facts:         []LatestFact{{Label: "Sharing decision", Value: "exact_shared"}, {Label: "Identity relation", Value: "same physical execution"}, {Label: "Campaign context", Value: "real Guest · qualified repetition 0"}},
@@ -321,6 +338,10 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 			{
 				ID: "source-mismatch-fallback", Title: "Different source stays fresh", Eyebrow: "FAIL-CLOSED CONTROL", Status: "safety_control",
 				Summary: "A semantically similar program has a different source identity. Pysolate refuses sharing and starts an independent physical execution.", Source: "# Shareable request\n" + p05.Source + "\n# Source-mismatch request\n" + p07.Source,
+				Annotations: []LatestCodeAnnotation{
+					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical A", Note: "The admitted exact request executes normally."},
+					{StartLine: 5, EndLine: 5, Tone: "fresh_fallback", Label: "fresh physical B", Note: "The source digest differs, so sharing is rejected before execution."},
+				},
 				Metrics:       []LatestMetric{{Label: "Logical requests", Value: "2", Note: "different source digests", Tone: "baseline"}, {Label: "Physical executions", Value: "2", Note: "sharing rejected", Tone: "control"}, {Label: "Unsafe reuse", Value: "0", Note: "fresh execution preserved", Tone: "win"}},
 				Lanes:         []LatestLane{campaignLane("exact request", "physical A", sharedDuration, sharedStart, sharedEnd, "physical"), campaignLane("source mismatch", "fresh physical B", fallbackDuration, fallbackStart, fallbackEnd, "fallback")},
 				Facts:         []LatestFact{{Label: "Expected reason", Value: p07.Expected.Sharing}, {Label: "Observed disposition", Value: q07.Disposition}, {Label: "Physical relation", Value: "independent IDs"}},
@@ -363,6 +384,23 @@ func ValidateLatestSnapshot(snapshot LatestSnapshot) error {
 	for index, demo := range snapshot.Demos {
 		if demo.ID != wanted[index].id || demo.Status != wanted[index].status || demo.Title == "" || demo.Summary == "" || demo.Source == "" || demo.ClaimBoundary == "" || len(demo.Metrics) < 3 || len(demo.Lanes) == 0 || len(demo.Facts) == 0 || strings.Contains(demo.Source, "/Users/") || strings.Contains(demo.Source, ".hermes") {
 			return errors.New("invalid latest Lab demo")
+		}
+		lineCount := strings.Count(demo.Source, "\n") + 1
+		seenLines := make(map[int]bool)
+		allowedTones := map[string]bool{"effect_trigger": true, "overlapped_tail": true, "physical_owner": true, "shared_skip": true, "fresh_fallback": true}
+		if len(demo.Annotations) == 0 {
+			return errors.New("latest Lab demo lacks code annotations")
+		}
+		for _, annotation := range demo.Annotations {
+			if annotation.StartLine < 1 || annotation.EndLine < annotation.StartLine || annotation.EndLine > lineCount || !allowedTones[annotation.Tone] || annotation.Label == "" || annotation.Note == "" {
+				return errors.New("invalid latest Lab code annotation")
+			}
+			for line := annotation.StartLine; line <= annotation.EndLine; line++ {
+				if seenLines[line] {
+					return errors.New("overlapping latest Lab code annotations")
+				}
+				seenLines[line] = true
+			}
 		}
 		for _, lane := range demo.Lanes {
 			if lane.Label == "" || lane.DurationNS <= 0 || len(lane.Segments) == 0 {

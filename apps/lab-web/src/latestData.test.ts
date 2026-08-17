@@ -14,6 +14,7 @@ describe('latest-only Lab snapshot', () => {
     expect(snapshot.demos.map((demo) => demo.status)).toEqual(['optimized', 'optimized', 'safety_control']);
     expect(snapshot.demos[0].metrics.map((metric) => metric.value)).toContain('1.923×');
     expect(snapshot.demos[1].metrics.slice(0, 2).map((metric) => metric.value)).toEqual(['2', '1']);
+    expect(snapshot.demos[1].annotations.map((annotation) => annotation.tone)).toContain('shared_skip');
     expect(snapshot.demos[2].source).toContain("pow(inputs['value'], 2)");
     expect(snapshot.boundary).toMatchObject({ events: 36, structurally_eligible: 0, performance_supported: false });
   });
@@ -30,5 +31,9 @@ describe('latest-only Lab snapshot', () => {
     const forged = await fixture();
     forged.demos[0].lanes[0].segments[0].end_ns = forged.demos[0].lanes[0].duration_ns + 1;
     expect(() => validateLatestSnapshot(forged)).toThrow(/segment is invalid/);
+
+    const overlappingAnnotations = await fixture();
+    overlappingAnnotations.demos[0].annotations[1].start_line = 1;
+    expect(() => validateLatestSnapshot(overlappingAnnotations)).toThrow(/annotations overlap/);
   });
 });

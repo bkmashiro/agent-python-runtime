@@ -1,8 +1,10 @@
 package labview_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/labview"
@@ -42,14 +44,14 @@ func TestBuildLatestSnapshotProjectsThreeVisibleRealDemos(t *testing.T) {
 	byID := map[string]labview.LatestDemo{}
 	for _, demo := range snapshot.Demos {
 		byID[demo.ID] = demo
-		if demo.Source == "" || len(demo.Lanes) == 0 || len(demo.Metrics) < 3 || demo.ClaimBoundary == "" {
+		if demo.Source == "" || len(demo.Annotations) == 0 || len(demo.Lanes) == 0 || len(demo.Metrics) < 3 || demo.ClaimBoundary == "" {
 			t.Fatalf("incomplete demo %+v", demo)
 		}
 	}
 	if byID["source-prefix-overlap"].Metrics[2].Value != "1.923×" {
 		t.Fatalf("source-prefix metrics=%+v", byID["source-prefix-overlap"].Metrics)
 	}
-	if byID["exact-request-sharing"].Metrics[0].Value != "2" || byID["exact-request-sharing"].Metrics[1].Value != "1" {
+	if byID["exact-request-sharing"].Metrics[0].Value != "2" || byID["exact-request-sharing"].Metrics[1].Value != "1" || byID["exact-request-sharing"].Annotations[1].Tone != "shared_skip" {
 		t.Fatalf("sharing metrics=%+v", byID["exact-request-sharing"].Metrics)
 	}
 	if byID["source-mismatch-fallback"].Status != "safety_control" || byID["source-mismatch-fallback"].Metrics[1].Value != "2" {
@@ -65,6 +67,17 @@ func TestBuildLatestSnapshotProjectsThreeVisibleRealDemos(t *testing.T) {
 	decoded, err := labview.DecodeLatestSnapshot(encoded)
 	if err != nil || decoded.Identity != snapshot.Identity {
 		t.Fatalf("decode=%+v err=%v", decoded, err)
+	}
+	firstSVG, err := labview.PaperFigureSVG(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSVG, err := labview.PaperFigureSVG(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(firstSVG, secondSVG) || !strings.Contains(string(firstSVG), "duplicate physical run skipped") || strings.Contains(strings.ToLower(string(firstSVG)), "cached") {
+		t.Fatal("paper figure is nondeterministic or has incorrect sharing semantics")
 	}
 }
 

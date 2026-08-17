@@ -39,6 +39,26 @@ func TestBuildFixturePlanUsesReachGatedReadWithoutPreDispatch(t *testing.T) {
 	}
 }
 
+func TestCheckedInEvidenceValidates(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
+	contractRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-contract-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := workflowbench.DecodeSourcePrefixExperimentContract(contractRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidenceRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := workflowbench.DecodeSourcePrefixEvidence(evidenceRaw, contract)
+	if err != nil || !evidence.SpeedupSupported || evidence.MedianSpeedupMilli != 1934 {
+		t.Fatalf("checked-in evidence err=%v evidence=%+v", err, evidence)
+	}
+}
+
 func TestCheckedInPreregistrationIsSelfConsistent(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
 	contract, _, _, err := loadPreregistration(

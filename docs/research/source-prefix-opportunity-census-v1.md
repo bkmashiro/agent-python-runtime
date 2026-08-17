@@ -30,9 +30,9 @@ Preregistration SHA             sha256:f824f307a9fc4deaceca150c6f236686b1718c818
 Guest source commit             501daef99796c1af7cd7bab1e0ab712a199820b9
 Guest artifact SHA              sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b
 Guest manifest SHA              sha256:c3bae8db19e0a372101dea11c6873f71ce849dd992b92ac3eba4a4352ddb4045
-Census harness commit           13831bd8660e8f31c964225fcd0383588bae6989
-Public evidence identity        sha256:20418c53671c083294ab82fb8885a34d23cd7c869b77d19ad548974a0d6b2336
-Public evidence file SHA        sha256:c0b9ad69202bf630b864dab1b37af64cf7f22afe2aa758044cc857a53e053022
+Census harness commit           61112106e20959e5894414ca991f8bac2699dd92
+Public evidence identity        sha256:13120c7ec8565fe7599c0c3f362a0ae90deeb67cafdd986dafa4a8cac70d714a
+Public evidence file SHA        sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604
 ```
 
 Preregistration: `docs/evidence/source-prefix-opportunity-census-preregistration-v1.json`
@@ -64,7 +64,7 @@ This does not refute the authored mechanism result. It bounds it:
 
 - the authored mechanism fixture shows that reach-gated source-prefix overlap can reduce the mechanism window when an early READ is followed by a source-generation tail;
 - this frozen natural cohort does not contain that workflow shape;
-- therefore the authored `1.923x` result must not be presented as tau2 or general natural-workload uplift.
+- therefore the authored mechanism result must not be presented as tau2 or general natural-workload uplift.
 
 ## Decision gate
 

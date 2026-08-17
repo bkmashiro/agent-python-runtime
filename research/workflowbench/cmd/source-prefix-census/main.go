@@ -31,6 +31,7 @@ const (
 	fixedArtifactSourceCommit   = "501daef99796c1af7cd7bab1e0ab712a199820b9"
 	fixedArtifactSHA256         = "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b"
 	fixedArtifactManifestSHA256 = "sha256:c3bae8db19e0a372101dea11c6873f71ce849dd992b92ac3eba4a4352ddb4045"
+	fixedAcceptedHarnessCommit  = "61112106e20959e5894414ca991f8bac2699dd92"
 )
 
 var eventFilePattern = regexp.MustCompile(`^task-([0-9]+)-turn-([0-9]+)-guest-request\.json$`)
@@ -127,8 +128,8 @@ func currentHarnessCommit() (string, error) {
 		settings[setting.Key] = setting.Value
 	}
 	revision := settings["vcs.revision"]
-	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(revision) || settings["vcs.modified"] != "false" {
-		return "", errors.New("census harness must be built from one clean exact commit")
+	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(revision) || settings["vcs.modified"] != "false" || revision != fixedAcceptedHarnessCommit {
+		return "", errors.New("census harness must be built from the fixed clean accepted commit")
 	}
 	return revision, nil
 }

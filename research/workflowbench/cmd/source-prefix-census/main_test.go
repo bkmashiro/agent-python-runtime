@@ -118,7 +118,7 @@ func TestCheckedInCensusEvidenceAndReportAreBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digestBytes(evidenceRaw) != "sha256:c0b9ad69202bf630b864dab1b37af64cf7f22afe2aa758044cc857a53e053022" {
+	if digestBytes(evidenceRaw) != "sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604" {
 		t.Fatal("public census evidence raw SHA drift")
 	}
 	evidence, err := workflowbench.DecodeSourcePrefixCensusEvidence(evidenceRaw)
@@ -135,13 +135,22 @@ func TestCheckedInCensusEvidenceAndReportAreBound(t *testing.T) {
 	}
 	for _, identity := range []string{
 		fixedParentReportSHA256, fixedPreregistrationSHA256, fixedArtifactSourceCommit, fixedArtifactSHA256,
-		fixedArtifactManifestSHA256, "13831bd8660e8f31c964225fcd0383588bae6989", evidence.Identity,
-		"sha256:c0b9ad69202bf630b864dab1b37af64cf7f22afe2aa758044cc857a53e053022",
+		fixedArtifactManifestSHA256, fixedAcceptedHarnessCommit, evidence.Identity,
+		"sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604",
 		"Do **not** run trace-derived timing replay for this cohort",
 	} {
 		if !strings.Contains(string(report), identity) {
 			t.Fatalf("census report missing accepted identity/boundary %s", identity)
 		}
+	}
+	if strings.Contains(string(report), "1.923") {
+		t.Fatal("census report must not repeat authored speedup values")
+	}
+}
+
+func TestCurrentHarnessCommitRejectsNonAcceptedBuild(t *testing.T) {
+	if commit, err := currentHarnessCommit(); err == nil || commit != "" {
+		t.Fatalf("post-measurement build must not masquerade as accepted harness: commit=%q err=%v", commit, err)
 	}
 }
 

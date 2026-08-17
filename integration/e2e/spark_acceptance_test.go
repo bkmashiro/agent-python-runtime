@@ -93,7 +93,7 @@ func writeSparkBodyCapture(t *testing.T, scenario composableacceptance.Scenario,
 	if workflowSequence == 0 || selectedChildID == "" || selectedRootSHA256 == "" {
 		t.Fatal("incomplete observed workflow capture")
 	}
-	capture := composableacceptance.BodyCapture{SchemaVersion: composableacceptance.BodyCaptureSchemaVersion, ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, TraceSHA256: traceSHA, ProviderIO: composableacceptance.ProviderIONotApplicable, WorkflowOutput: workflowOutput, WorkflowEventSequence: workflowSequence, SelectedChildID: selectedAgentID, SelectedRootSHA256: selectedRootSHA256}
+	capture := composableacceptance.BodyCapture{SchemaVersion: composableacceptance.BodyCaptureSchemaVersion, ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, TraceSHA256: traceSHA, ProviderIO: composableacceptance.ProviderIONotApplicable, WorkflowOutput: workflowOutput, WorkflowEventSequence: workflowSequence, SelectedChildID: selectedAgentID, SelectedChildDescriptor: selectedChildID, SelectedRootSHA256: selectedRootSHA256}
 	for index, child := range scenario.ChildPrograms {
 		body := string(childBodies[fmt.Sprintf("child-%d", index)])
 		bodyDigest := composableacceptance.ArtifactIdentity(body)

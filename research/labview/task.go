@@ -8,6 +8,7 @@ import (
 	"io"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/research/composableacceptance"
@@ -266,23 +267,37 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 	for _, captured := range capture.AgentOutputs {
 		capturedOutputs[captured.AgentID] = captured
 	}
-	if len(capturedOutputs) != 2 || capture.WorkflowOutput != scenario.ExpectedArtifact || capture.SelectedChildID != scenario.ChildPrograms[scenario.SelectedChild].ID || capture.SelectedRootSHA256 != typedRow.SelectedRootSHA256 {
+	selectedIndex, err := strconv.Atoi(strings.TrimPrefix(capture.SelectedChildDescriptor, "child-"))
+	if err != nil || !strings.HasPrefix(capture.SelectedChildDescriptor, "child-") || selectedIndex < 0 || selectedIndex >= len(scenario.ChildPrograms) || selectedIndex != scenario.SelectedChild || scenario.ChildPrograms[selectedIndex].ID != capture.SelectedChildID || len(capturedOutputs) != 2 || capture.WorkflowOutput != scenario.ExpectedArtifact || capture.SelectedRootSHA256 != typedRow.SelectedRootSHA256 {
 		return TaskSnapshot{}, errors.New("task inspector capture does not match public fixture")
 	}
-	selectedEvents, discardedEvents, selectedRootEvents := 0, 0, 0
+	selectedStartedEvents, selectedEvents, discardedEvents, selectedRootEvents := 0, 0, 0, 0
+	selectedDescriptorDigest := latestSHA([]byte(capture.SelectedChildDescriptor))
+	selectedRootDigest := latestSHA([]byte(capture.SelectedRootSHA256))
 	eventsBySequence := map[int]TaskEvent{}
 	for _, event := range row.Trace {
 		eventsBySequence[event.Sequence] = event
 		switch {
+		case event.Action == "fanout.select" && event.Outcome == "started":
+			if event.InputSHA256 != selectedDescriptorDigest {
+				return TaskSnapshot{}, errors.New("captured selected descriptor is not trace-bound")
+			}
+			selectedStartedEvents++
 		case event.Action == "fanout.select" && event.Outcome == "selected":
+			if event.InputSHA256 != selectedDescriptorDigest {
+				return TaskSnapshot{}, errors.New("captured selected descriptor is not trace-bound")
+			}
 			selectedEvents++
 		case event.Action == "fanout.discard" && event.Outcome == "discarded":
 			discardedEvents++
-		case event.Action == "fanout.selected_root" && event.Outcome == "ok" && latestDigest.MatchString(event.InputSHA256):
+		case event.Action == "fanout.selected_root" && event.Outcome == "ok":
+			if event.InputSHA256 != selectedRootDigest {
+				return TaskSnapshot{}, errors.New("captured selected root is not trace-bound")
+			}
 			selectedRootEvents++
 		}
 	}
-	if selectedEvents != 1 || discardedEvents != 1 || selectedRootEvents != 1 {
+	if selectedStartedEvents != 1 || selectedEvents != 1 || discardedEvents != 1 || selectedRootEvents != 1 {
 		return TaskSnapshot{}, errors.New("captured branch disposition is not trace-bound")
 	}
 	outputs := []TaskOutput{}

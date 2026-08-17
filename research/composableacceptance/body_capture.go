@@ -2,7 +2,7 @@ package composableacceptance
 
 import "bytes"
 
-const BodyCaptureSchemaVersion = "pysolate.research-body-capture.v2"
+const BodyCaptureSchemaVersion = "pysolate.research-body-capture.v3"
 
 const ProviderIONotApplicable = "not_applicable_scripted_fixture"
 
@@ -15,16 +15,17 @@ type CapturedAgentOutput struct {
 }
 
 type BodyCapture struct {
-	SchemaVersion         string                `json:"schema_version"`
-	ScenarioID            string                `json:"scenario_id"`
-	ScenarioSHA256        string                `json:"scenario_sha256"`
-	TraceSHA256           string                `json:"trace_sha256"`
-	ProviderIO            string                `json:"provider_io"`
-	WorkflowOutput        string                `json:"workflow_output"`
-	WorkflowEventSequence uint32                `json:"workflow_event_sequence"`
-	SelectedChildID       string                `json:"selected_child_id"`
-	SelectedRootSHA256    string                `json:"selected_root_sha256"`
-	AgentOutputs          []CapturedAgentOutput `json:"agent_outputs"`
+	SchemaVersion           string                `json:"schema_version"`
+	ScenarioID              string                `json:"scenario_id"`
+	ScenarioSHA256          string                `json:"scenario_sha256"`
+	TraceSHA256             string                `json:"trace_sha256"`
+	ProviderIO              string                `json:"provider_io"`
+	WorkflowOutput          string                `json:"workflow_output"`
+	WorkflowEventSequence   uint32                `json:"workflow_event_sequence"`
+	SelectedChildID         string                `json:"selected_child_id"`
+	SelectedChildDescriptor string                `json:"selected_child_descriptor"`
+	SelectedRootSHA256      string                `json:"selected_root_sha256"`
+	AgentOutputs            []CapturedAgentOutput `json:"agent_outputs"`
 }
 
 func TraceIdentity(events []TraceEvent) (string, error) {
@@ -36,7 +37,8 @@ func TraceIdentity(events []TraceEvent) (string, error) {
 }
 
 func (capture BodyCapture) Validate() error {
-	if capture.SchemaVersion != BodyCaptureSchemaVersion || !idRE.MatchString(capture.ScenarioID) || !digestRE.MatchString(capture.ScenarioSHA256) || !digestRE.MatchString(capture.TraceSHA256) || capture.ProviderIO != ProviderIONotApplicable || capture.WorkflowOutput == "" || len(capture.WorkflowOutput) > 1<<20 || capture.WorkflowEventSequence < 1 || !idRE.MatchString(capture.SelectedChildID) || !digestRE.MatchString(capture.SelectedRootSHA256) || len(capture.AgentOutputs) != 2 {
+	if capture.SchemaVersion != BodyCaptureSchemaVersion || !idRE.MatchString(capture.ScenarioID) || !digestRE.MatchString(capture.ScenarioSHA256) || !digestRE.MatchString(capture.TraceSHA256) || capture.ProviderIO != ProviderIONotApplicable || capture.WorkflowOutput == "" || len(capture.WorkflowOutput) > 1<<20 || capture.WorkflowEventSequence < 1 || !idRE.MatchString(capture.SelectedChildID) || !idRE.MatchString(capture.SelectedChildDescriptor) ||
+		!digestRE.MatchString(capture.SelectedRootSHA256) || len(capture.AgentOutputs) != 2 {
 		return ErrInvalid
 	}
 	seenAgents := map[string]bool{}

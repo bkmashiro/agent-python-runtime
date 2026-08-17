@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/bkmashiro/agent-python-runtime/research/composableacceptance"
 )
 
 func taskRead(t *testing.T, path string) []byte {
@@ -31,6 +33,39 @@ func TestBuildTaskSnapshotProjectsRealWorkspaceTask(t *testing.T) {
 	}
 	if err := ValidateTaskSnapshot(snapshot); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidateTaskBranchEventsRejectsMismatchedObservedIdentities(t *testing.T) {
+	root := filepath.Clean("../..")
+	captureRaw := taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-body-capture.json"))
+	capture, _, err := composableacceptance.DecodeBodyCapture(captureRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := BuildTaskSnapshot(TaskInputs{
+		Corpus:  taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/lab-release-readiness-corpus.json")),
+		Report:  taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-direct-report.json")),
+		Capture: captureRaw,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateTaskBranchEvents(capture.SelectedChildDescriptor, capture.SelectedRootSHA256, snapshot.Events); err != nil {
+		t.Fatal(err)
+	}
+	for name, sequence := range map[string]int{"selected descriptor": 16, "selected root": 18} {
+		t.Run(name, func(t *testing.T) {
+			forged := append([]TaskEvent(nil), snapshot.Events...)
+			for index := range forged {
+				if forged[index].Sequence == sequence {
+					forged[index].InputSHA256 = latestSHA([]byte("forged-observed-identity"))
+				}
+			}
+			if _, err := validateTaskBranchEvents(capture.SelectedChildDescriptor, capture.SelectedRootSHA256, forged); err == nil {
+				t.Fatal("accepted branch event with mismatched observed identity")
+			}
+		})
 	}
 }
 
@@ -82,11 +117,11 @@ func TestTaskSnapshotRejectsIdentityValidPrivateAndForgedFields(t *testing.T) {
 		"reordered sources": func(snapshot *TaskSnapshot) {
 			snapshot.Sources[1], snapshot.Sources[2] = snapshot.Sources[2], snapshot.Sources[1]
 		},
-		"output event drift": func(snapshot *TaskSnapshot) { snapshot.Outputs[1].EventSequence++ },
+		"output event drift":      func(snapshot *TaskSnapshot) { snapshot.Outputs[1].EventSequence++ },
 		"workflow oracle misbind": func(snapshot *TaskSnapshot) { snapshot.Outputs[0].EventSequence = 36 },
-		"negative time":      func(snapshot *TaskSnapshot) { snapshot.Events[0].StartedMillis = -1 },
-		"elapsed rewind":     func(snapshot *TaskSnapshot) { snapshot.Events[13].RelativeElapsedMillis = 20000 },
-		"unknown agent":      func(snapshot *TaskSnapshot) { snapshot.Events[13].AgentID = "attacker" },
+		"negative time":           func(snapshot *TaskSnapshot) { snapshot.Events[0].StartedMillis = -1 },
+		"elapsed rewind":          func(snapshot *TaskSnapshot) { snapshot.Events[13].RelativeElapsedMillis = 20000 },
+		"unknown agent":           func(snapshot *TaskSnapshot) { snapshot.Events[13].AgentID = "attacker" },
 		"future parent": func(snapshot *TaskSnapshot) {
 			snapshot.Events[1].ParentSequence = snapshot.Events[len(snapshot.Events)-1].Sequence
 		},

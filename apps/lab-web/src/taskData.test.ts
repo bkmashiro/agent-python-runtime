@@ -23,7 +23,7 @@ describe('task inspector snapshot', () => {
     expect(task.provider_io).toBe('not_applicable_scripted_fixture');
     expect(task.sources.map((source) => source.id)).toEqual(['orchestrator', 'researcher', 'reviewer']);
     expect(task.events).toHaveLength(37);
-    expect(task.stats).toEqual({ duration_millis: 14608, events: 37, agents: 4, workspace_changes: 2 });
+    expect(task.stats).toEqual({ duration_millis: 14775, events: 37, agents: 4, workspace_changes: 2 });
     expect(task.outputs.map((output) => output.path ?? 'workflow')).toEqual(['workflow', 'dependency-review.md', 'release-checklist.md']);
     expect(task.events.flatMap((event) => event.workspace_changes ?? []).map((change) => change.path)).toEqual(['dependency-review.md', 'release-checklist.md']);
   });

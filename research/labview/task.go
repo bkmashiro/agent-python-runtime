@@ -17,9 +17,9 @@ import (
 
 const TaskSnapshotSchema = "pysolate.lab-task.v2"
 
-const taskCorpusSHA = "sha256:6747020b4d1b10e2cb33eb5b65836afd0746b8217ef3ac6ff7a56db90016d6c9"
-const taskReportSHA = "sha256:b0227956503e8f0d6fc2925f8009a328fedcf7ed24081558a0a458923b18911b"
-const taskCaptureSHA = "sha256:ae319cc316d1c9d7663707f11cb060f3aa6e3a0479e5551227b8a1c8d7ea8199"
+const taskCorpusSHA = "sha256:18474583bac875d94cb40e585f6b444e4bb16d931f6d4cc0e6cf23fc519b4606"
+const taskReportSHA = "sha256:157cdb0b9885ba8c778bd81836258cf866a309fe44a08f6f3bc152e00c688ad0"
+const taskCaptureSHA = "sha256:aa747974a94b42225fbdabc21f0b9f18d0c1a1c0cdb986926babe8c426b34f95"
 
 var taskID = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
@@ -179,6 +179,39 @@ func taskSnapshotIdentity(snapshot TaskSnapshot) (string, error) {
 	return latestSHA(encoded), nil
 }
 
+func validateTaskBranchEvents(selectedDescriptor, selectedRootSHA256 string, events []TaskEvent) (map[int]TaskEvent, error) {
+	selectedStartedEvents, selectedEvents, discardedEvents, selectedRootEvents := 0, 0, 0, 0
+	selectedDescriptorDigest := latestSHA([]byte(selectedDescriptor))
+	selectedRootDigest := latestSHA([]byte(selectedRootSHA256))
+	eventsBySequence := map[int]TaskEvent{}
+	for _, event := range events {
+		eventsBySequence[event.Sequence] = event
+		switch {
+		case event.Action == "fanout.select" && event.Outcome == "started":
+			if event.InputSHA256 != selectedDescriptorDigest {
+				return nil, errors.New("captured selected descriptor is not trace-bound")
+			}
+			selectedStartedEvents++
+		case event.Action == "fanout.select" && event.Outcome == "selected":
+			if event.InputSHA256 != selectedDescriptorDigest {
+				return nil, errors.New("captured selected descriptor is not trace-bound")
+			}
+			selectedEvents++
+		case event.Action == "fanout.discard" && event.Outcome == "discarded":
+			discardedEvents++
+		case event.Action == "fanout.selected_root" && event.Outcome == "ok":
+			if event.InputSHA256 != selectedRootDigest {
+				return nil, errors.New("captured selected root is not trace-bound")
+			}
+			selectedRootEvents++
+		}
+	}
+	if selectedStartedEvents != 1 || selectedEvents != 1 || discardedEvents != 1 || selectedRootEvents != 1 {
+		return nil, errors.New("captured branch disposition is not trace-bound")
+	}
+	return eventsBySequence, nil
+}
+
 func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 	if latestSHA(inputs.Corpus) != taskCorpusSHA || latestSHA(inputs.Report) != taskReportSHA || latestSHA(inputs.Capture) != taskCaptureSHA {
 		return TaskSnapshot{}, errors.New("task inspector input anchor mismatch")
@@ -271,34 +304,9 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 	if err != nil || !strings.HasPrefix(capture.SelectedChildDescriptor, "child-") || selectedIndex < 0 || selectedIndex >= len(scenario.ChildPrograms) || selectedIndex != scenario.SelectedChild || scenario.ChildPrograms[selectedIndex].ID != capture.SelectedChildID || len(capturedOutputs) != 2 || capture.WorkflowOutput != scenario.ExpectedArtifact || capture.SelectedRootSHA256 != typedRow.SelectedRootSHA256 {
 		return TaskSnapshot{}, errors.New("task inspector capture does not match public fixture")
 	}
-	selectedStartedEvents, selectedEvents, discardedEvents, selectedRootEvents := 0, 0, 0, 0
-	selectedDescriptorDigest := latestSHA([]byte(capture.SelectedChildDescriptor))
-	selectedRootDigest := latestSHA([]byte(capture.SelectedRootSHA256))
-	eventsBySequence := map[int]TaskEvent{}
-	for _, event := range row.Trace {
-		eventsBySequence[event.Sequence] = event
-		switch {
-		case event.Action == "fanout.select" && event.Outcome == "started":
-			if event.InputSHA256 != selectedDescriptorDigest {
-				return TaskSnapshot{}, errors.New("captured selected descriptor is not trace-bound")
-			}
-			selectedStartedEvents++
-		case event.Action == "fanout.select" && event.Outcome == "selected":
-			if event.InputSHA256 != selectedDescriptorDigest {
-				return TaskSnapshot{}, errors.New("captured selected descriptor is not trace-bound")
-			}
-			selectedEvents++
-		case event.Action == "fanout.discard" && event.Outcome == "discarded":
-			discardedEvents++
-		case event.Action == "fanout.selected_root" && event.Outcome == "ok":
-			if event.InputSHA256 != selectedRootDigest {
-				return TaskSnapshot{}, errors.New("captured selected root is not trace-bound")
-			}
-			selectedRootEvents++
-		}
-	}
-	if selectedStartedEvents != 1 || selectedEvents != 1 || discardedEvents != 1 || selectedRootEvents != 1 {
-		return TaskSnapshot{}, errors.New("captured branch disposition is not trace-bound")
+	eventsBySequence, err := validateTaskBranchEvents(capture.SelectedChildDescriptor, capture.SelectedRootSHA256, row.Trace)
+	if err != nil {
+		return TaskSnapshot{}, err
 	}
 	outputs := []TaskOutput{}
 	workflowDigest := latestSHA([]byte(capture.WorkflowOutput))

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -16,6 +18,15 @@ import (
 
 const LatestSnapshotSchema = "pysolate.lab-latest.v1"
 
+const latestSourcePrefixContractSHA = "sha256:dab34bfa2a6ea8dce909c375c0b963569cfc67f988fa1adae56de561b1b009ff"
+const latestSourcePrefixEvidenceSHA = "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69"
+const latestSourcePrefixCensusSHA = "sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604"
+const latestCampaignManifestSHA = "sha256:0633e6d98dd67fee6a2aad12cfd491a6d14e5344d5d2d78d91c059e62ec0fe7e"
+const latestCampaignProjectionSHA = "sha256:2955e8b19e4fcd4b450a73415697d798d8ab3fbc9f50f392dd8475e9600bb7bc"
+const latestCampaignArtifactSHA = "sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795"
+const latestCampaignArtifactCommit = "ae922641cd9c539b68a0ea7110b5dc205e5c9a8a"
+const latestCampaignSourceCommit = "40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5"
+
 var latestDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 var latestCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
@@ -23,6 +34,7 @@ type LatestInputs struct {
 	SourcePrefixContract []byte
 	SourcePrefixEvidence []byte
 	SourcePrefixCensus   []byte
+	CampaignManifest     []byte
 	CampaignProjection   []byte
 }
 
@@ -123,18 +135,45 @@ type campaignSource struct {
 	Repetitions          int          `json:"repetitions"`
 }
 
+type campaignMetricSummary struct {
+	Median float64 `json:"median"`
+	Min    float64 `json:"min"`
+	Max    float64 `json:"max"`
+}
+
+type campaignTreatmentMetrics struct {
+	PhysicalExecutions campaignMetricSummary `json:"physical_executions"`
+	WallMS             campaignMetricSummary `json:"wall_ms"`
+	ProcessCPUMS       campaignMetricSummary `json:"process_cpu_ms"`
+}
+
+type campaignPairedMetrics struct {
+	PhysicalReduction campaignMetricSummary `json:"physical_reduction"`
+	WallReductionMS   campaignMetricSummary `json:"wall_reduction_ms"`
+	WallReductionPct  campaignMetricSummary `json:"wall_reduction_pct"`
+	CPUReductionMS    campaignMetricSummary `json:"cpu_reduction_ms"`
+}
+
+type campaignRunProjection struct {
+	Repetition         int                             `json:"repetition"`
+	Treatment          workflowbench.CampaignTreatment `json:"treatment"`
+	PhysicalExecutions uint32                          `json:"physical_executions"`
+	WallMS             float64                         `json:"wall_ms"`
+	ProcessCPUMS       float64                         `json:"process_cpu_ms"`
+}
+
 type campaignProgramProjection struct {
-	ID                     string          `json:"id"`
-	Family                 string          `json:"family"`
-	ReleaseOffsetMS        int64           `json:"release_offset_ms"`
-	PlanSHA256             string          `json:"plan_sha256"`
-	GrantSetSHA256         string          `json:"grant_set_sha256"`
-	PrivacyPartition       string          `json:"privacy_partition"`
-	WorkspaceFixtureSHA256 string          `json:"workspace_fixture_sha256"`
-	Execution              json.RawMessage `json:"execution"`
-	Admission              string          `json:"admission"`
-	Sharing                string          `json:"sharing"`
-	Disposition            string          `json:"disposition"`
+	ID                     string                                  `json:"id"`
+	Family                 string                                  `json:"family"`
+	ReleaseOffsetMS        int64                                   `json:"release_offset_ms"`
+	PlanSHA256             string                                  `json:"plan_sha256"`
+	GrantSetSHA256         string                                  `json:"grant_set_sha256"`
+	PrivacyPartition       string                                  `json:"privacy_partition"`
+	WorkspaceFixtureSHA256 string                                  `json:"workspace_fixture_sha256"`
+	Execution              workflowbench.CampaignExecutionContract `json:"execution"`
+	Admission              string                                  `json:"admission"`
+	Sharing                string                                  `json:"sharing"`
+	Disposition            string                                  `json:"disposition"`
 }
 
 type campaignEventProjection struct {
@@ -149,10 +188,10 @@ type campaignEventProjection struct {
 type campaignProjection struct {
 	SchemaVersion     string                      `json:"schema_version"`
 	Source            campaignSource              `json:"source"`
-	Baseline          json.RawMessage             `json:"baseline"`
-	Qualified         json.RawMessage             `json:"qualified"`
-	Paired            json.RawMessage             `json:"paired"`
-	Runs              json.RawMessage             `json:"runs"`
+	Baseline          campaignTreatmentMetrics    `json:"baseline"`
+	Qualified         campaignTreatmentMetrics    `json:"qualified"`
+	Paired            campaignPairedMetrics       `json:"paired"`
+	Runs              []campaignRunProjection     `json:"runs"`
 	Programs          []campaignProgramProjection `json:"programs"`
 	WalkthroughEvents []campaignEventProjection   `json:"walkthrough_events"`
 	ValidClaim        string                      `json:"valid_claim"`
@@ -176,32 +215,45 @@ func latestSHA(raw []byte) string {
 	return fmt.Sprintf("sha256:%x", digest[:])
 }
 
-func campaignPhysicalInterval(events []campaignEventProjection, physicalID string) (int64, int64, error) {
+func campaignPhysicalInterval(events []campaignEventProjection, physicalID string) (int64, int64, string, error) {
 	var start, end int64 = -1, -1
+	var owner string
+	var starts, ends int
 	for _, event := range events {
 		if event.PhysicalExecutionID != physicalID {
 			continue
 		}
 		if event.Type == "physical.started" {
-			start = event.AtNS
+			starts++
+			start, owner = event.AtNS, event.ProgramID
 		}
 		if event.Type == "physical.ended" {
+			ends++
 			end = event.AtNS
+			if owner != "" && event.ProgramID != owner {
+				return 0, 0, "", errors.New("campaign physical owner drifted")
+			}
 		}
 	}
-	if start < 0 || end <= start {
-		return 0, 0, errors.New("campaign physical interval is incomplete")
+	if starts != 1 || ends != 1 || owner == "" || start < 0 || end <= start {
+		return 0, 0, "", errors.New("campaign physical interval is incomplete or ambiguous")
 	}
-	return start, end, nil
+	return start, end, owner, nil
 }
 
 func campaignTerminal(events []campaignEventProjection, programID string) (campaignEventProjection, error) {
+	var terminal campaignEventProjection
+	count := 0
 	for _, event := range events {
 		if event.ProgramID == programID && event.Type == "logical.terminal" {
-			return event, nil
+			terminal = event
+			count++
 		}
 	}
-	return campaignEventProjection{}, errors.New("campaign terminal event is absent")
+	if count != 1 {
+		return campaignEventProjection{}, errors.New("campaign terminal event is absent or ambiguous")
+	}
+	return terminal, nil
 }
 
 func selectedRow(rows []workflowbench.SourcePrefixRow, treatment workflowbench.SourcePrefixTreatment) (workflowbench.SourcePrefixRow, error) {
@@ -230,7 +282,139 @@ func campaignLane(label, segmentLabel string, duration, start, end int64, tone s
 	return LatestLane{Label: label, DurationNS: duration, Segments: []LatestSegment{{Label: segmentLabel, StartNS: start, EndNS: end, Tone: tone}}}
 }
 
+func validateLatestInputAnchors(inputs LatestInputs) error {
+	if latestSHA(inputs.SourcePrefixContract) != latestSourcePrefixContractSHA || latestSHA(inputs.SourcePrefixEvidence) != latestSourcePrefixEvidenceSHA || latestSHA(inputs.SourcePrefixCensus) != latestSourcePrefixCensusSHA || latestSHA(inputs.CampaignManifest) != latestCampaignManifestSHA || latestSHA(inputs.CampaignProjection) != latestCampaignProjectionSHA {
+		return errors.New("latest Lab inputs do not match accepted evidence anchors")
+	}
+	return nil
+}
+
+func projectedAdmission(expected string) (string, bool) {
+	value, ok := map[string]string{"admit": "admitted", "reject_expired": "authority_expired", "reject_widening": "authority_widening", "reject_budget": "delegation_budget", "reject_terminal": "parent_terminal"}[expected]
+	return value, ok
+}
+
+func validateCampaignPrograms(manifest workflowbench.CampaignManifest, campaign campaignProjection) error {
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil || campaign.Source.ManifestSHA256 != latestSHA(append(manifestJSON, '\n')) || len(campaign.Programs) != len(manifest.Programs) {
+		return errors.New("campaign projection manifest identity mismatch")
+	}
+	seen := make(map[string]bool, len(campaign.Programs))
+	for index, expected := range manifest.Programs {
+		actual := campaign.Programs[index]
+		admission, admissionOK := projectedAdmission(expected.Expected.Admission)
+		if seen[actual.ID] || !admissionOK || actual.ID != expected.ID || actual.Family != expected.Family || actual.ReleaseOffsetMS != expected.ReleaseOffsetMS || actual.PlanSHA256 != expected.PlanSHA256 || actual.GrantSetSHA256 != expected.GrantSetSHA256 || actual.PrivacyPartition != expected.PrivacyPartition || actual.WorkspaceFixtureSHA256 != expected.WorkspaceFixtureSHA256 || !reflect.DeepEqual(actual.Execution, expected.Execution) || actual.Admission != admission || actual.Disposition != expected.Expected.Disposition || actual.Sharing == "" {
+			return errors.New("campaign projection program drifted from canonical manifest")
+		}
+		seen[actual.ID] = true
+	}
+	return nil
+}
+
+func validateCampaignEvents(manifest workflowbench.CampaignManifest, events []campaignEventProjection) error {
+	programs := make(map[string]bool, len(manifest.Programs))
+	for _, program := range manifest.Programs {
+		programs[program.ID] = true
+	}
+	var lastNS int64 = -1
+	for index, event := range events {
+		if event.Sequence != uint64(index+1) || event.AtNS < 0 || event.AtNS < lastNS || !programs[event.ProgramID] || event.Type == "" {
+			return errors.New("campaign walkthrough event ordering or program identity is invalid")
+		}
+		lastNS = event.AtNS
+		if strings.HasPrefix(event.Type, "physical.") && event.PhysicalExecutionID == "" {
+			return errors.New("campaign physical event lacks identity")
+		}
+	}
+	for _, program := range manifest.Programs {
+		if _, err := campaignTerminal(events, program.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func summarizeCampaign(values []float64) campaignMetricSummary {
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	middle := len(sorted) / 2
+	median := sorted[middle]
+	if len(sorted)%2 == 0 {
+		median = (sorted[middle-1] + sorted[middle]) / 2
+	}
+	return campaignMetricSummary{Median: median, Min: sorted[0], Max: sorted[len(sorted)-1]}
+}
+
+func campaignMetricEqual(left, right campaignMetricSummary) bool {
+	return math.Abs(left.Median-right.Median) < 1e-9 && math.Abs(left.Min-right.Min) < 1e-9 && math.Abs(left.Max-right.Max) < 1e-9
+}
+
+func validateCampaignMetrics(campaign campaignProjection) error {
+	if campaign.Source.Repetitions != 5 || len(campaign.Runs) != campaign.Source.Repetitions*2 {
+		return errors.New("campaign projection run set is incomplete")
+	}
+	pairs := make(map[int]map[workflowbench.CampaignTreatment]campaignRunProjection)
+	for _, run := range campaign.Runs {
+		if run.Repetition < 0 || run.Repetition >= campaign.Source.Repetitions || (run.Treatment != workflowbench.CampaignBaseline && run.Treatment != workflowbench.CampaignQualified) || run.PhysicalExecutions == 0 || run.WallMS <= 0 || run.ProcessCPUMS <= 0 {
+			return errors.New("campaign projection run is invalid")
+		}
+		if pairs[run.Repetition] == nil {
+			pairs[run.Repetition] = make(map[workflowbench.CampaignTreatment]campaignRunProjection)
+		}
+		if _, duplicate := pairs[run.Repetition][run.Treatment]; duplicate {
+			return errors.New("campaign projection has duplicate run")
+		}
+		pairs[run.Repetition][run.Treatment] = run
+	}
+	var bp, qp, bw, qw, bc, qc, pr, wr, wp, cr []float64
+	for repetition := 0; repetition < campaign.Source.Repetitions; repetition++ {
+		base, baseOK := pairs[repetition][workflowbench.CampaignBaseline]
+		qualified, qualifiedOK := pairs[repetition][workflowbench.CampaignQualified]
+		if !baseOK || !qualifiedOK {
+			return errors.New("campaign projection lacks paired treatment")
+		}
+		bp, qp = append(bp, float64(base.PhysicalExecutions)), append(qp, float64(qualified.PhysicalExecutions))
+		bw, qw = append(bw, base.WallMS), append(qw, qualified.WallMS)
+		bc, qc = append(bc, base.ProcessCPUMS), append(qc, qualified.ProcessCPUMS)
+		pr, wr, wp, cr = append(pr, float64(base.PhysicalExecutions)-float64(qualified.PhysicalExecutions)), append(wr, base.WallMS-qualified.WallMS), append(wp, (base.WallMS-qualified.WallMS)/base.WallMS*100), append(cr, base.ProcessCPUMS-qualified.ProcessCPUMS)
+	}
+	checks := [][2]campaignMetricSummary{{campaign.Baseline.PhysicalExecutions, summarizeCampaign(bp)}, {campaign.Qualified.PhysicalExecutions, summarizeCampaign(qp)}, {campaign.Baseline.WallMS, summarizeCampaign(bw)}, {campaign.Qualified.WallMS, summarizeCampaign(qw)}, {campaign.Baseline.ProcessCPUMS, summarizeCampaign(bc)}, {campaign.Qualified.ProcessCPUMS, summarizeCampaign(qc)}, {campaign.Paired.PhysicalReduction, summarizeCampaign(pr)}, {campaign.Paired.WallReductionMS, summarizeCampaign(wr)}, {campaign.Paired.WallReductionPct, summarizeCampaign(wp)}, {campaign.Paired.CPUReductionMS, summarizeCampaign(cr)}}
+	for _, check := range checks {
+		if !campaignMetricEqual(check[0], check[1]) {
+			return errors.New("campaign projection metrics drifted from runs")
+		}
+	}
+	return nil
+}
+
+func validateCampaignDemoJoins(campaign campaignProjection, programs map[string]campaignProgramProjection) error {
+	t05, err := campaignTerminal(campaign.WalkthroughEvents, "P05")
+	if err != nil {
+		return err
+	}
+	t06, err := campaignTerminal(campaign.WalkthroughEvents, "P06")
+	if err != nil || t05.PhysicalExecutionID == "" || t05.PhysicalExecutionID != t06.PhysicalExecutionID {
+		return errors.New("exact sharing pair lacks one bound physical execution")
+	}
+	t07, err := campaignTerminal(campaign.WalkthroughEvents, "P07")
+	if err != nil || t07.PhysicalExecutionID == "" || t07.PhysicalExecutionID == t05.PhysicalExecutionID {
+		return errors.New("source mismatch did not retain a distinct physical execution")
+	}
+	_, _, sharedOwner, err := campaignPhysicalInterval(campaign.WalkthroughEvents, t05.PhysicalExecutionID)
+	if err != nil || (sharedOwner != "P05" && sharedOwner != "P06") || programs[sharedOwner].Sharing != "independent" {
+		return errors.New("exact sharing physical owner is not the independently executed pair member")
+	}
+	_, _, fallbackOwner, err := campaignPhysicalInterval(campaign.WalkthroughEvents, t07.PhysicalExecutionID)
+	if err != nil || fallbackOwner != "P07" {
+		return errors.New("source mismatch physical execution has the wrong owner")
+	}
+	return nil
+}
+
 func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
+	if err := validateLatestInputAnchors(inputs); err != nil {
+		return LatestSnapshot{}, err
+	}
 	contract, err := workflowbench.DecodeSourcePrefixExperimentContract(inputs.SourcePrefixContract)
 	if err != nil {
 		return LatestSnapshot{}, err
@@ -244,11 +428,20 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 		return LatestSnapshot{}, err
 	}
 	var campaign campaignProjection
-	if err := strictLatestDecode(inputs.CampaignProjection, &campaign); err != nil || campaign.SchemaVersion != "pysolate.transparent-campaign-public-projection.v1" || len(campaign.Programs) != 20 || len(campaign.WalkthroughEvents) == 0 || !latestDigest.MatchString(campaign.Source.ArtifactSHA256) || !latestCommit.MatchString(campaign.Source.CampaignSourceCommit) {
+	if err := strictLatestDecode(inputs.CampaignProjection, &campaign); err != nil || campaign.SchemaVersion != "pysolate.transparent-campaign-public-projection.v1" || len(campaign.WalkthroughEvents) == 0 || campaign.Source.ArtifactSHA256 != latestCampaignArtifactSHA || campaign.Source.ArtifactSourceCommit != latestCampaignArtifactCommit || campaign.Source.CampaignSourceCommit != latestCampaignSourceCommit {
 		return LatestSnapshot{}, errors.New("invalid campaign projection for latest Lab")
 	}
-	manifest, err := workflowbench.CanonicalTransparentCampaign()
-	if err != nil {
+	var manifest workflowbench.CampaignManifest
+	if err := strictLatestDecode(inputs.CampaignManifest, &manifest); err != nil || manifest.SchemaVersion != "pysolate.transparent-campaign-manifest.v2" || manifest.CampaignID != "authority-transparent-20-v2" || manifest.PhysicalSlots != 3 || len(manifest.Programs) != 20 {
+		return LatestSnapshot{}, errors.New("invalid accepted campaign manifest body")
+	}
+	if err := validateCampaignPrograms(manifest, campaign); err != nil {
+		return LatestSnapshot{}, err
+	}
+	if err := validateCampaignMetrics(campaign); err != nil {
+		return LatestSnapshot{}, err
+	}
+	if err := validateCampaignEvents(manifest, campaign.WalkthroughEvents); err != nil {
 		return LatestSnapshot{}, err
 	}
 	manifestPrograms := map[string]workflowbench.CampaignProgram{}
@@ -258,6 +451,9 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 	}
 	for _, program := range campaign.Programs {
 		projectedPrograms[program.ID] = program
+	}
+	if err := validateCampaignDemoJoins(campaign, projectedPrograms); err != nil {
+		return LatestSnapshot{}, err
 	}
 	p05, p06, p07 := manifestPrograms["P05"], manifestPrograms["P06"], manifestPrograms["P07"]
 	q05, q06, q07 := projectedPrograms["P05"], projectedPrograms["P06"], projectedPrograms["P07"]
@@ -276,13 +472,16 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 	if err != nil || t07.PhysicalExecutionID == "" || t07.PhysicalExecutionID == t05.PhysicalExecutionID {
 		return LatestSnapshot{}, errors.New("source mismatch incorrectly shared physical execution")
 	}
-	sharedStart, sharedEnd, err := campaignPhysicalInterval(campaign.WalkthroughEvents, t05.PhysicalExecutionID)
-	if err != nil {
-		return LatestSnapshot{}, err
+	sharedStart, sharedEnd, sharedOwner, err := campaignPhysicalInterval(campaign.WalkthroughEvents, t05.PhysicalExecutionID)
+	if err != nil || (sharedOwner != "P05" && sharedOwner != "P06") {
+		return LatestSnapshot{}, errors.New("exact sharing physical owner is not a member of the logical pair")
 	}
-	fallbackStart, fallbackEnd, err := campaignPhysicalInterval(campaign.WalkthroughEvents, t07.PhysicalExecutionID)
-	if err != nil {
-		return LatestSnapshot{}, err
+	if projectedPrograms[sharedOwner].Sharing != "independent" {
+		return LatestSnapshot{}, errors.New("exact sharing physical owner was not independently executed")
+	}
+	fallbackStart, fallbackEnd, fallbackOwner, err := campaignPhysicalInterval(campaign.WalkthroughEvents, t07.PhysicalExecutionID)
+	if err != nil || fallbackOwner != "P07" {
+		return LatestSnapshot{}, errors.New("source mismatch physical execution has the wrong owner")
 	}
 	baseline, err := selectedRow(evidence.Rows, workflowbench.SourcePrefixBaseline)
 	if err != nil {
@@ -372,8 +571,22 @@ func latestSnapshotIdentity(snapshot LatestSnapshot) (string, error) {
 	return latestSHA(encoded), nil
 }
 
+func latestContainsPrivateMarker(snapshot LatestSnapshot) bool {
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		return true
+	}
+	lower := strings.ToLower(string(encoded))
+	for _, marker := range []string{"/users/", "/home/", `\\users\\`, ".hermes", "file://", "private://", "body_ref", "body-reference", "prompt_body", "provider_request", "provider_response", "trace_body", "workspace_body"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func ValidateLatestSnapshot(snapshot LatestSnapshot) error {
-	if snapshot.SchemaVersion != LatestSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || snapshot.Headline != (LatestHeadline{RealGuestDemos: 3, OptimizationWins: 2, SafetyControls: 1}) || len(snapshot.Demos) != 3 {
+	if snapshot.SchemaVersion != LatestSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || snapshot.Headline != (LatestHeadline{RealGuestDemos: 3, OptimizationWins: 2, SafetyControls: 1}) || len(snapshot.Demos) != 3 || latestContainsPrivateMarker(snapshot) {
 		return errors.New("invalid latest Lab snapshot envelope")
 	}
 	identity, err := latestSnapshotIdentity(snapshot)

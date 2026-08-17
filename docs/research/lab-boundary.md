@@ -75,7 +75,8 @@ is also a measurement probe, not a service.
 
 `research/labview` now also owns the latest-only `pysolate.lab-latest.v1`
 mechanism-demo projection. Its Go projector validates the current source-prefix
-contract/evidence, natural boundary census, canonical authored campaign source,
+contract/evidence, natural boundary census, accepted campaign manifest and
+projection, canonical authored campaign source,
 and measured logical/physical identities before emitting the body-safe static
 snapshot consumed by `apps/lab-web`. The Web renderer supports only this latest
 shape: authored source, measured timelines, exact sharing, fail-closed controls,

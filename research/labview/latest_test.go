@@ -33,6 +33,7 @@ func TestBuildLatestSnapshotProjectsThreeVisibleRealDemos(t *testing.T) {
 		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
 		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
 		SourcePrefixCensus:   read("docs/evidence/source-prefix-opportunity-census-v1.json"),
+		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
 	})
 	if err != nil {
@@ -94,11 +95,13 @@ func TestBuildLatestSnapshotFailsClosedOnInputDrift(t *testing.T) {
 		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
 		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
 		SourcePrefixCensus:   read("docs/evidence/source-prefix-opportunity-census-v1.json"),
+		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
 	}
 	for name, mutate := range map[string]func(*labview.LatestInputs){
 		"source prefix": func(value *labview.LatestInputs) { value.SourcePrefixEvidence = []byte(`{}`) },
 		"census":        func(value *labview.LatestInputs) { value.SourcePrefixCensus = []byte(`{}`) },
+		"manifest":      func(value *labview.LatestInputs) { value.CampaignManifest = []byte(`{}`) },
 		"campaign":      func(value *labview.LatestInputs) { value.CampaignProjection = []byte(`{}`) },
 	} {
 		t.Run(name, func(t *testing.T) {

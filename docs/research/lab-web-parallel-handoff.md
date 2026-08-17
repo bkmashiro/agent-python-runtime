@@ -14,10 +14,11 @@ There is no compatibility adapter for the former trajectory, campaign, or Lab v1
 
 ## Generation authority
 
-`research/labview.BuildLatestSnapshot` and `research/labview/cmd/project-latest` are the projection authority. They validate current checked-in evidence, canonical authored Python, logical/physical execution joins, source mismatch, natural-cohort boundaries and claim limits before writing:
+`research/labview.BuildLatestSnapshot` and `research/labview/cmd/project-latest` are the projection authority. They pin the accepted evidence/manifest/projection SHA-256 values and validate canonical authored Python, paired runs, logical/physical owner joins, terminal uniqueness, source mismatch, natural-cohort boundaries and claim limits before writing:
 
 ```text
 apps/lab-web/public/lab-data/latest.json
+apps/lab-web/src/latestIdentity.ts
 ```
 
 Regenerate through the repository script:

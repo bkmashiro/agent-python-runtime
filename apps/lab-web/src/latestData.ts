@@ -1,3 +1,5 @@
+import { expectedLatestSnapshotIdentity } from './latestIdentity';
+
 export type DemoStatus = 'optimized' | 'safety_control';
 export type SegmentTone = 'generation' | 'effect' | 'finalize' | 'shared' | 'physical' | 'fallback';
 
@@ -87,8 +89,14 @@ function nonempty(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
-export function validateLatestSnapshot(value: unknown): LatestSnapshot {
+function containsPrivateMarker(value: unknown): boolean {
+  const text = JSON.stringify(value).toLowerCase();
+  return ['/users/', '/home/', '\\\\users\\\\', '.hermes', 'file://', 'private://', 'body_ref', 'body-reference', 'prompt_body', 'provider_request', 'provider_response', 'trace_body', 'workspace_body'].some((marker) => text.includes(marker));
+}
+
+function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
   const root = object(value, 'latest Lab snapshot');
+  if (containsPrivateMarker(root)) throw new Error('latest Lab snapshot contains a private body or path marker');
   exactKeys(root, ['schema_version', 'identity', 'headline', 'demos', 'boundary', 'provenance'], 'latest Lab snapshot');
   if (root.schema_version !== 'pysolate.lab-latest.v1' || !digest.test(String(root.identity))) throw new Error('latest Lab identity is invalid');
 
@@ -148,6 +156,30 @@ export function validateLatestSnapshot(value: unknown): LatestSnapshot {
   }
   if (!commit.test(String(provenance.source_prefix_harness_commit)) || !commit.test(String(provenance.campaign_source_commit))) throw new Error('latest Lab provenance commit is invalid');
   return value as LatestSnapshot;
+}
+
+function goCompatibleIdentityDocument(snapshot: LatestSnapshot): ArrayBuffer {
+  const clone = JSON.parse(JSON.stringify(snapshot)) as LatestSnapshot;
+  clone.identity = '';
+  const encoded = JSON.stringify(clone).replace(/[<>&\u2028\u2029]/g, (character) => {
+    const code = character.charCodeAt(0).toString(16).padStart(4, '0');
+    return `\\u${code}`;
+  });
+  const bytes = new TextEncoder().encode(encoded);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+async function snapshotIdentity(snapshot: LatestSnapshot): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error('Web Crypto is required to verify latest Lab evidence');
+  const hash = await globalThis.crypto.subtle.digest('SHA-256', goCompatibleIdentityDocument(snapshot));
+  return `sha256:${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+export async function validateLatestSnapshot(value: unknown): Promise<LatestSnapshot> {
+  const snapshot = validateLatestSnapshotShape(value);
+  if (snapshot.identity !== expectedLatestSnapshotIdentity) throw new Error('latest Lab snapshot is not the build-pinned evidence');
+  if (await snapshotIdentity(snapshot) !== snapshot.identity) throw new Error('latest Lab snapshot identity mismatch');
+  return snapshot;
 }
 
 export async function loadLatestSnapshot(url = '/lab-data/latest.json'): Promise<LatestSnapshot> {

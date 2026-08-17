@@ -9,7 +9,7 @@ async function fixture(): Promise<LatestSnapshot> {
 
 describe('latest-only Lab snapshot', () => {
   it('loads three visible evidence-bound demos', async () => {
-    const snapshot = validateLatestSnapshot(await fixture());
+    const snapshot = await validateLatestSnapshot(await fixture());
     expect(snapshot.demos.map((demo) => demo.id)).toEqual(['source-prefix-overlap', 'exact-request-sharing', 'source-mismatch-fallback']);
     expect(snapshot.demos.map((demo) => demo.status)).toEqual(['optimized', 'optimized', 'safety_control']);
     expect(snapshot.demos[0].metrics.map((metric) => metric.value)).toContain('1.923×');
@@ -22,18 +22,23 @@ describe('latest-only Lab snapshot', () => {
   it('rejects unknown fields, private paths and forged timeline bounds', async () => {
     const unknown = await fixture() as LatestSnapshot & { legacy?: boolean };
     unknown.legacy = true;
-    expect(() => validateLatestSnapshot(unknown)).toThrow(/unknown or missing fields/);
+    await expect(validateLatestSnapshot(unknown)).rejects.toThrow(/unknown or missing fields/);
 
     const privatePath = await fixture();
     privatePath.demos[0].source = '/Users/private/source.py';
-    expect(() => validateLatestSnapshot(privatePath)).toThrow(/demo is invalid/);
+    await expect(validateLatestSnapshot(privatePath)).rejects.toThrow(/private body or path marker/);
 
     const forged = await fixture();
     forged.demos[0].lanes[0].segments[0].end_ns = forged.demos[0].lanes[0].duration_ns + 1;
-    expect(() => validateLatestSnapshot(forged)).toThrow(/segment is invalid/);
+    await expect(validateLatestSnapshot(forged)).rejects.toThrow(/segment is invalid/);
 
     const overlappingAnnotations = await fixture();
     overlappingAnnotations.demos[0].annotations[1].start_line = 1;
-    expect(() => validateLatestSnapshot(overlappingAnnotations)).toThrow(/annotations overlap/);
+    await expect(validateLatestSnapshot(overlappingAnnotations)).rejects.toThrow(/annotations overlap/);
+
+    const selfReported = await fixture();
+    selfReported.identity = `sha256:${'0'.repeat(64)}`;
+    selfReported.demos[0].metrics[0].value = '9999 ms';
+    await expect(validateLatestSnapshot(selfReported)).rejects.toThrow(/build-pinned evidence/);
   });
 });

@@ -26,13 +26,23 @@ import (
 )
 
 const (
-	fixedParentReportSHA256    = "sha256:5f504a138084f933ba0fd4f3bec7aede7076924ec3c2a5cfb8f05db3dd9a513f"
-	fixedPreregistrationSHA256 = "sha256:f824f307a9fc4deaceca150c6f236686b1718c81820cf5362a79c7f256efe3e7"
-	fixedArtifactSourceCommit  = "501daef99796c1af7cd7bab1e0ab712a199820b9"
-	fixedArtifactSHA256        = "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b"
+	fixedParentReportSHA256     = "sha256:5f504a138084f933ba0fd4f3bec7aede7076924ec3c2a5cfb8f05db3dd9a513f"
+	fixedPreregistrationSHA256  = "sha256:f824f307a9fc4deaceca150c6f236686b1718c81820cf5362a79c7f256efe3e7"
+	fixedArtifactSourceCommit   = "501daef99796c1af7cd7bab1e0ab712a199820b9"
+	fixedArtifactSHA256         = "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b"
+	fixedArtifactManifestSHA256 = "sha256:c3bae8db19e0a372101dea11c6873f71ce849dd992b92ac3eba4a4352ddb4045"
 )
 
 var eventFilePattern = regexp.MustCompile(`^task-([0-9]+)-turn-([0-9]+)-guest-request\.json$`)
+
+type artifactManifest struct {
+	Build struct {
+		RepositoryCommit string `json:"repository_commit"`
+	} `json:"build"`
+	Artifact struct {
+		SHA256 string `json:"sha256"`
+	} `json:"artifact"`
+}
 
 type guestRequest struct {
 	RunID  string          `json:"run_id"`
@@ -191,6 +201,25 @@ func run(ctx context.Context, artifactPath, parentReportPath, preregistrationPat
 	if err != nil || digestBytes(artifact) != fixedArtifactSHA256 {
 		return errors.New("Guest artifact does not match fixed anchor")
 	}
+	manifestRaw, err := os.ReadFile(filepath.Join(filepath.Dir(artifactPath), "manifest.json"))
+	if err != nil || digestBytes(manifestRaw) != fixedArtifactManifestSHA256 {
+		return errors.New("Guest artifact manifest does not match fixed anchor")
+	}
+	var manifest artifactManifest
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil || manifest.Build.RepositoryCommit != fixedArtifactSourceCommit || "sha256:"+manifest.Artifact.SHA256 != fixedArtifactSHA256 {
+		return errors.New("Guest artifact manifest identity mismatch")
+	}
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		return err
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: fixedArtifactSHA256, ManifestSHA256: fixedArtifactManifestSHA256,
+		ImportRoots: []string{"json"}, QualifiedImportRoots: []string{"json"},
+	})
+	if err != nil {
+		return err
+	}
 	cellsRoot := filepath.Join(corpusRoot, "cells")
 	entries, err := os.ReadDir(cellsRoot)
 	if err != nil {
@@ -207,6 +236,7 @@ func run(ctx context.Context, artifactPath, parentReportPath, preregistrationPat
 		return fmt.Errorf("frozen corpus denominator mismatch: got %d events", len(names))
 	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
 	config.Mechanisms.SemanticAnalysis = true
 	runner, err := (wazeroengine.Factory{}).New(ctx, artifact, config)
 	if err != nil {
@@ -248,7 +278,7 @@ func run(ctx context.Context, artifactPath, parentReportPath, preregistrationPat
 			Bindings: semantic.Bindings{
 				ArtifactSHA256:         fixedArtifactSHA256,
 				ExecutionProfileSHA256: runner.Properties().ExecutionProfileBindingSHA256,
-				ImportClosureSHA256:    agentfunction.ImportClosureIdentity(nil, nil),
+				ImportClosureSHA256:    agentfunction.ImportClosureIdentity([]string{"json"}, []string{"json"}),
 				CapabilityPlanSHA256:   cell.CapabilityPlanSHA256,
 			},
 			Capabilities: projections,

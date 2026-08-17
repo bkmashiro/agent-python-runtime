@@ -120,6 +120,38 @@ func TestSourceBodyIsPrivateBoundAndBodySafe(t *testing.T) {
 	}
 }
 
+func TestAvailableModelOutputRequiresPrivateProviderBody(t *testing.T) {
+	store, err := labstore.Open(filepath.Join(t.TempDir(), "store"), labstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	body, _, err := store.Put(labstore.KindProviderBody, []byte(`{"choices":[{"message":{"content":"public answer"}}]}`), labstore.PutOptions{Privacy: labstore.PrivacyPrivate, Credentials: labstore.CredentialsAbsent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	builder, err := trajectory.NewStoredBuilder(trajectory.TraceHeader{TraceID: "trace-model-output-body-0001", SourceCommit: "0123456789abcdef0123456789abcdef01234567", RootExecutionID: "execution-model-output-body-0001"}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventTraceStarted, ActorID: "actor-host-0001", Payload: trajectory.TraceStartedPayload{Status: "running"}})
+	outputDigest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte("public answer")))
+	payload := trajectory.ModelOutputPayload{Availability: trajectory.Available, OutputSHA256: outputDigest}
+	if _, err := builder.Append(trajectory.EvidenceInput{Type: trajectory.EventModelOutput, ActorID: "actor-harness-0001", ParentEventIDs: []string{start.EventID}, Payload: payload}); err == nil {
+		t.Fatal("available model output without provider body accepted")
+	}
+	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventModelOutput, ActorID: "actor-harness-0001", ParentEventIDs: []string{start.EventID}, Payload: payload, Body: &body})
+	appendEvidence(t, builder, trajectory.EvidenceInput{Type: trajectory.EventTraceEnded, ActorID: "actor-host-0001", ParentEventIDs: []string{start.EventID}, Payload: trajectory.TraceEndedPayload{Status: "completed", EvidenceComplete: true}})
+	private, err := builder.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPrivate)
+	if err != nil || len(private.Events) != 3 || private.Events[1].Body == nil {
+		t.Fatalf("private=%+v err=%v", private, err)
+	}
+	portable, err := builder.Export(trajectory.ProfileExperimentFull, labstore.PrivacyPortable)
+	if err != nil || len(portable.Events) != 2 {
+		t.Fatalf("portable leaked provider body: %+v err=%v", portable, err)
+	}
+}
+
 func TestBodyReferenceRequiresStoreAndExperimentOnlyEvent(t *testing.T) {
 	builder := newEvidenceBuilder(t)
 	ref := labstore.Ref{Kind: labstore.KindPrompt, SHA256: testDigest('a')}

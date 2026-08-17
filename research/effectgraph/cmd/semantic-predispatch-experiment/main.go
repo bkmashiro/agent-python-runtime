@@ -23,6 +23,10 @@ import (
 
 const reportSchema = "pysolate.semantic-predispatch-experiment.v0"
 
+const dayTripSource = "result = travel.trains('london', 'oxford', 'saturday')\n"
+
+const dayTripTrainResult = "GBP 34 return; outbound 09:00; return 20:10"
+
 type reportProvenance struct {
 	ArtifactSHA256       string
 	SourceSHA256         string
@@ -71,7 +75,7 @@ func main() {
 		fatal(err)
 	}
 	artifactSHA := digest(artifact)
-	source := "result = sources.read('profile')\n"
+	source := dayTripSource
 
 	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
 	if err != nil {
@@ -90,19 +94,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	spec := capability.Spec{
-		Name: "sources.read", Version: "pysolate.semantic-predispatch-experiment.v0",
-		Description: "Bounded delayed read for semantic pre-dispatch evaluation.", EffectClass: capability.EffectExternalRead,
-		Playback: capability.PlaybackLiveOnly, HandlerIdentity: "pysolate.semantic-predispatch-experiment.v0",
-		InputSchema:  json.RawMessage(`{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
-		Python:       &capability.PythonProjection{Module: "sources", Method: "read", Arguments: []string{"key"}, ResultField: "value"},
-		ReadOnly:     true, Idempotent: true,
-		PreDispatch: &capability.PreDispatchContract{
-			Resource:  capability.ResourceReference{Namespace: "sources", Argument: "key"},
-			Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
-		},
-	}
+	spec := dayTripCapabilitySpec()
 	if err := registry.Register(spec, grant, capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
 		handlerCalls.Add(1)
 		timer := time.NewTimer(*delay)
@@ -111,7 +103,7 @@ func main() {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-timer.C:
-			return json.RawMessage(`{"value":"fixture"}`), nil
+			return json.RawMessage(`{"value":"` + dayTripTrainResult + `"}`), nil
 		}
 	})); err != nil {
 		fatal(err)
@@ -138,7 +130,7 @@ func main() {
 				fatal(err)
 			}
 			row.PhysicalCalls = handlerCalls.Load() - before
-			if row.PhysicalCalls != 1 || row.ResultSHA256 != digest([]byte(`"fixture"`)) {
+			if row.PhysicalCalls != 1 || row.ResultSHA256 != digest([]byte(`"`+dayTripTrainResult+`"`)) {
 				result.NoDuplicatePhysicalCall = false
 				result.EquivalentResults = false
 			}
@@ -167,6 +159,22 @@ func main() {
 		fatal(err)
 	}
 	fmt.Printf("baseline_median_us=%d optimized_median_us=%d savings_us=%d trials=%d\n", result.BaselineMedianMicros, result.OptimizedMedianMicros, result.MedianSavingsMicros, len(result.Trials))
+}
+
+func dayTripCapabilitySpec() capability.Spec {
+	return capability.Spec{
+		Name: "travel.trains", Version: "pysolate.semantic-predispatch-day-trip.v1",
+		Description: "Deterministic delayed return-train lookup for a Saturday day trip.", EffectClass: capability.EffectExternalRead,
+		Playback: capability.PlaybackLiveOnly, HandlerIdentity: "pysolate.semantic-predispatch-day-trip.v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"origin":{"type":"string","const":"london"},"destination":{"type":"string","const":"oxford"},"date":{"type":"string","const":"saturday"}},"required":["origin","destination","date"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"string","const":"` + dayTripTrainResult + `"}},"required":["value"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "travel", Method: "trains", Arguments: []string{"origin", "destination", "date"}, ResultField: "value"},
+		ReadOnly:     true, Idempotent: true,
+		PreDispatch: &capability.PreDispatchContract{
+			Resource:  capability.ResourceReference{Namespace: "travel-trains", Argument: "destination"},
+			Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+		},
+	}
 }
 
 func analyze(artifact []byte, profile runtimeconfig.ExecutionProfile, artifactSHA, source string, plan *capability.Plan) (semantic.VerifiedAnalysis, string) {
@@ -309,7 +317,7 @@ func validateReport(value report, expected reportProvenance) error {
 		value.ContentSHA256 == "" || value.ContentSHA256 != sealReport(value) {
 		return errors.New("invalid semantic pre-dispatch report envelope")
 	}
-	expectedResult := digest([]byte(`"fixture"`))
+	expectedResult := digest([]byte(`"` + dayTripTrainResult + `"`))
 	for index, row := range value.Trials {
 		expectedCondition := "baseline"
 		if index%2 == 1 {

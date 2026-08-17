@@ -1,0 +1,1 @@
+{"schema_version":"pysolate.source-prefix-oracle.v1","expected_result":{"destination":"oxford","plan":"museum","high_c":17},"logical_calls":1,"physical_dispatches":1,"workspace_disposition":"published","external_writes":0}

@@ -71,6 +71,13 @@ func TestOrchestratorStartsTwoChildrenBeforeSealAndSelectsOne(t *testing.T) {
 		t.Fatalf("pre-seal children=%v running=%d", seen, running.Load())
 	}
 	close(release)
+	awaited, err := orchestrator.Await(context.Background())
+	if err != nil || awaited.Completed != 2 || len(awaited.Timeline) != 2 {
+		t.Fatalf("await=%+v err=%v", awaited, err)
+	}
+	if err := orchestrator.Stage(context.Background(), childDescriptor("late", parentLineage)); !errors.Is(err, subagent.ErrOrchestratorAwaited) {
+		t.Fatalf("stage after await error=%v", err)
+	}
 	joined, err := orchestrator.Seal(context.Background(), "right")
 	if err != nil {
 		t.Fatal(err)

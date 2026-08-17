@@ -24,6 +24,7 @@ var (
 	ErrInvalidOrchestrator  = errors.New("invalid subagent orchestrator")
 	ErrFanoutBudget         = errors.New("subagent fanout budget exceeded")
 	ErrOrchestratorTerminal = errors.New("subagent orchestrator is terminal")
+	ErrOrchestratorAwaited  = errors.New("subagent orchestrator fanout is already awaited")
 	ErrChildExecution       = errors.New("subagent child execution failed")
 	ErrAuthorityWidening    = errors.New("subagent authority widening rejected")
 	ErrDelegationBudget     = errors.New("subagent delegation call budget exceeded")
@@ -125,6 +126,8 @@ type Orchestrator struct {
 	mu            sync.Mutex
 	children      map[string]*child
 	terminal      bool
+	awaited       bool
+	ready         bool
 	reservedCalls uint32
 }
 
@@ -164,6 +167,9 @@ func (orchestrator *Orchestrator) Stage(ctx context.Context, descriptor Descript
 	defer orchestrator.mu.Unlock()
 	if orchestrator.terminal {
 		return ErrOrchestratorTerminal
+	}
+	if orchestrator.awaited {
+		return ErrOrchestratorAwaited
 	}
 	if uint32(len(orchestrator.children)) >= orchestrator.config.MaxFanout {
 		return ErrFanoutBudget
@@ -233,6 +239,53 @@ type JoinResult struct {
 	ReservedCalls     uint32
 }
 
+type AwaitResult struct {
+	ChildCount uint32
+	Completed  uint32
+	Timeline   []TimelineEvent
+}
+
+// Await freezes fanout and waits for every staged child without selecting or
+// publishing a branch. The caller may inspect observed outputs before Seal.
+func (orchestrator *Orchestrator) Await(ctx context.Context) (AwaitResult, error) {
+	if orchestrator == nil || ctx == nil {
+		return AwaitResult{}, ErrInvalidOrchestrator
+	}
+	orchestrator.mu.Lock()
+	if orchestrator.terminal {
+		orchestrator.mu.Unlock()
+		return AwaitResult{}, ErrOrchestratorTerminal
+	}
+	if orchestrator.awaited || len(orchestrator.children) == 0 {
+		orchestrator.mu.Unlock()
+		return AwaitResult{}, ErrOrchestratorAwaited
+	}
+	orchestrator.awaited = true
+	children := orderedChildren(orchestrator.children)
+	orchestrator.mu.Unlock()
+	if err := waitChildren(ctx, children); err != nil {
+		orchestrator.failAwait(children)
+		return AwaitResult{}, err
+	}
+	for _, work := range children {
+		if work.err != nil {
+			orchestrator.failAwait(children)
+			return AwaitResult{}, errors.Join(ErrChildExecution, work.err)
+		}
+	}
+	orchestrator.mu.Lock()
+	orchestrator.ready = true
+	orchestrator.mu.Unlock()
+	return AwaitResult{ChildCount: uint32(len(children)), Completed: uint32(len(children)), Timeline: timeline(children)}, nil
+}
+
+func (orchestrator *Orchestrator) failAwait(children []*child) {
+	orchestrator.mu.Lock()
+	orchestrator.terminal = true
+	orchestrator.mu.Unlock()
+	orchestrator.cancelAndDiscard(children)
+}
+
 func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID string) (JoinResult, error) {
 	children, err := orchestrator.beginTerminal(selectedChildID)
 	if err != nil {
@@ -299,6 +352,9 @@ func (orchestrator *Orchestrator) beginTerminal(selectedChildID string) ([]*chil
 	defer orchestrator.mu.Unlock()
 	if orchestrator.terminal {
 		return nil, ErrOrchestratorTerminal
+	}
+	if orchestrator.awaited && !orchestrator.ready {
+		return nil, ErrOrchestratorAwaited
 	}
 	if _, exists := orchestrator.children[selectedChildID]; !exists {
 		return nil, ErrInvalidDescriptor

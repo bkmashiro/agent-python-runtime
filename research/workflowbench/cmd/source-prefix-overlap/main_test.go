@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -98,10 +100,10 @@ func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 	evidence, err := workflowbench.DecodeSourcePrefixEvidence(evidenceRaw, contract)
-	if err != nil || digestBytes(evidenceRaw) != "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69" || evidence.MeasurementAttempt != workflowbench.SourcePrefixMeasurementAttempt || evidence.MedianSpeedupMilli != 1923 || evidence.ArtifactSHA256 != fixedGuestArtifactSHA256 || evidence.ArtifactSourceCommit != fixedGuestArtifactSourceCommit || evidence.HarnessSourceCommit != "ca25b1b767edd50dc25363df5347cb801c5c183a" {
+	if err != nil || digestBytes(evidenceRaw) != "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69" || evidence.MeasurementAttempt != workflowbench.SourcePrefixMeasurementAttempt || evidence.MedianSpeedupMilli != 1923 || evidence.ArtifactSHA256 != legacyGuestArtifactSHA256 || evidence.ArtifactSourceCommit != legacyGuestArtifactSourceCommit || evidence.HarnessSourceCommit != "ca25b1b767edd50dc25363df5347cb801c5c183a" {
 		t.Fatalf("checked-in remediation evidence err=%v evidence=%+v", err, evidence)
 	}
-	plan, err := buildFixturePlan(&timedFixtureHandler{delay: 1})
+	plan, err := buildLegacyFixturePlan(&timedFixtureHandler{delay: 1})
 	if err != nil || len(plan.Specs()) != 1 {
 		t.Fatalf("rebuild fixture plan: plan=%+v err=%v", plan, err)
 	}
@@ -115,7 +117,7 @@ func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.CapabilityPlanSHA256 != plan.Identity() || evidence.CapabilitySpecSHA256 != digestBytes(specJSON) || evidence.ExecutionProfileSHA256 != digestBytes(profileJSON) || evidence.HandlerSHA256 != digestBytes([]byte(fixtureHandlerContract)) {
+	if evidence.CapabilityPlanSHA256 != plan.Identity() || evidence.CapabilitySpecSHA256 != digestBytes(specJSON) || evidence.ExecutionProfileSHA256 != digestBytes(profileJSON) || evidence.HandlerSHA256 != digestBytes([]byte(legacyFixtureHandlerContract)) {
 		t.Fatalf("checked-in runtime identities do not match executable definitions: %+v", evidence)
 	}
 	for _, row := range evidence.Rows {
@@ -152,6 +154,18 @@ func TestCheckedInPreregistrationIsSelfConsistent(t *testing.T) {
 	)
 	if err != nil || contract.ExperimentID != "source-prefix-overlap-v1" {
 		t.Fatalf("checked-in preregistration err=%v contract=%+v", err, contract)
+	}
+}
+
+func TestCheckedInDayTripPreregistrationIsSelfConsistent(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
+	contract, oracle, _, err := loadPreregistration(
+		filepath.Join(root, "source-prefix-day-trip-contract-v2.json"),
+		filepath.Join(root, "source-prefix-day-trip-oracle-v2.json"),
+		filepath.Join(root, "source-prefix-day-trip-lane-config-v2.json"),
+	)
+	if err != nil || contract.ExperimentID != "source-prefix-day-trip-v2" || !strings.Contains(string(oracle.ExpectedResult), "oxford") {
+		t.Fatalf("checked-in day-trip preregistration err=%v contract=%+v oracle=%s", err, contract, oracle.ExpectedResult)
 	}
 }
 
@@ -204,5 +218,17 @@ func TestAtomicPrivateWriteUsesPrivatePermissions(t *testing.T) {
 	file, _ := os.Stat(path)
 	if directory.Mode().Perm() != 0o700 || file.Mode().Perm() != 0o600 {
 		t.Fatalf("modes directory=%o file=%o", directory.Mode().Perm(), file.Mode().Perm())
+	}
+}
+
+func TestTravelWeatherFixtureMatchesPublicDayTripStory(t *testing.T) {
+	spec := fixtureCapabilitySpec()
+	if spec.Name != "travel.weather" || spec.Python == nil || spec.Python.Module != "travel" || spec.Python.Method != "weather" {
+		t.Fatalf("travel weather fixture=%+v", spec)
+	}
+	handler := &timedFixtureHandler{delay: time.Millisecond, origin: time.Now()}
+	result, err := handler.Call(context.Background(), json.RawMessage(`{"destination":"oxford","date":"saturday"}`))
+	if err != nil || string(result) != `{"condition":"light_rain","high_c":17}` {
+		t.Fatalf("weather result=%s err=%v", result, err)
 	}
 }

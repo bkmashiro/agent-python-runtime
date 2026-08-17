@@ -4,16 +4,16 @@ import "testing"
 
 func TestValidateReportRejectsInternallyConsistentMutationWithoutReseal(t *testing.T) {
 	rows := []trial{
-		{Condition: "baseline", DurationMicros: 2000, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "semantic_pre_dispatch", DurationMicros: 1000, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "baseline", DurationMicros: 2100, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "semantic_pre_dispatch", DurationMicros: 1100, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "baseline", DurationMicros: 2200, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "semantic_pre_dispatch", DurationMicros: 1200, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "baseline", DurationMicros: 2300, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "semantic_pre_dispatch", DurationMicros: 1300, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "baseline", DurationMicros: 2400, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"fixture"`))},
-		{Condition: "semantic_pre_dispatch", DurationMicros: 1400, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"fixture"`))},
+		{Condition: "baseline", DurationMicros: 2000, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1000, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "baseline", DurationMicros: 2100, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1100, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "baseline", DurationMicros: 2200, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1200, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "baseline", DurationMicros: 2300, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1300, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "baseline", DurationMicros: 2400, LogicalCalls: 1, PhysicalCalls: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
+		{Condition: "semantic_pre_dispatch", DurationMicros: 1400, LogicalCalls: 1, PhysicalCalls: 1, PhysicalIssues: 1, PhysicalStarts: 1, PhysicalFinishes: 1, ResultSHA256: digest([]byte(`"` + dayTripTrainResult + `"`))},
 	}
 	report := report{
 		SchemaVersion: reportSchema, ArtifactSHA256: digest([]byte("artifact")),
@@ -49,5 +49,15 @@ func TestValidateReportRejectsInternallyConsistentMutationWithoutReseal(t *testi
 	report.ContentSHA256 = sealReport(report)
 	if err := validateReport(report, expected); err == nil {
 		t.Fatal("resealed report with unbound artifact provenance unexpectedly validated")
+	}
+}
+
+func TestDayTripSourceUsesProvenTrainRead(t *testing.T) {
+	if dayTripSource != "result = travel.trains('london', 'oxford', 'saturday')\n" {
+		t.Fatalf("day-trip source=%q", dayTripSource)
+	}
+	spec := dayTripCapabilitySpec()
+	if spec.Name != "travel.trains" || spec.Python == nil || spec.Python.Module != "travel" || spec.Python.Method != "trains" || spec.PreDispatch == nil {
+		t.Fatalf("day-trip train spec=%+v", spec)
 	}
 }

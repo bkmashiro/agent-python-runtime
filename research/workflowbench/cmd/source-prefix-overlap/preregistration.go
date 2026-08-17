@@ -19,6 +19,8 @@ const sourcePrefixLaneConfigSchema = "pysolate.source-prefix-lane-config.v1"
 const fixedSourcePrefixContractSHA256 = "sha256:dab34bfa2a6ea8dce909c375c0b963569cfc67f988fa1adae56de561b1b009ff"
 const fixedSourcePrefixOracleSHA256 = "sha256:6d82769ce151d64df3f040cfa191c677abbd2c9f9016a6856cfbbcf01f97b7f5"
 const fixedSourcePrefixLaneConfigSHA256 = "sha256:c233da70e9d0636d684108cbea8d15a423abf965fc0027dce9840ba0f2d00e42"
+const dayTripSourcePrefixContractSHA256 = "sha256:941467e08e2c0d4dd7351823113b6fa780d68895d8660c709b80575c37094dcd"
+const dayTripSourcePrefixOracleSHA256 = "sha256:602027bd21be45470d9fca66c94b23ea5d4cc1a00ddf4bd889518eec9e3b4324"
 
 type preregistrationAnchors struct {
 	contractSHA256 string
@@ -71,7 +73,17 @@ func canonicalResultSHA(raw json.RawMessage) (string, error) {
 }
 
 func loadPreregistration(contractPath, oraclePath, lanePath string) (workflowbench.SourcePrefixExperimentContract, sourcePrefixOracle, sourcePrefixLaneConfig, error) {
-	return loadPreregistrationWithAnchors(contractPath, oraclePath, lanePath, fixedSourcePrefixAnchors)
+	contractRaw, contractErr := os.ReadFile(contractPath)
+	oracleRaw, oracleErr := os.ReadFile(oraclePath)
+	laneRaw, laneErr := os.ReadFile(lanePath)
+	if contractErr != nil || oracleErr != nil || laneErr != nil {
+		return workflowbench.SourcePrefixExperimentContract{}, sourcePrefixOracle{}, sourcePrefixLaneConfig{}, errors.New("read source-prefix preregistration")
+	}
+	anchors := fixedSourcePrefixAnchors
+	if digestBytes(contractRaw) == dayTripSourcePrefixContractSHA256 && digestBytes(oracleRaw) == dayTripSourcePrefixOracleSHA256 && digestBytes(laneRaw) == fixedSourcePrefixLaneConfigSHA256 {
+		anchors = preregistrationAnchors{contractSHA256: dayTripSourcePrefixContractSHA256, oracleSHA256: dayTripSourcePrefixOracleSHA256, laneSHA256: fixedSourcePrefixLaneConfigSHA256}
+	}
+	return loadPreregistrationWithAnchors(contractPath, oraclePath, lanePath, anchors)
 }
 
 func loadPreregistrationWithAnchors(contractPath, oraclePath, lanePath string, anchors preregistrationAnchors) (workflowbench.SourcePrefixExperimentContract, sourcePrefixOracle, sourcePrefixLaneConfig, error) {

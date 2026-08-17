@@ -1,0 +1,1 @@
+{"schema_version":"pysolate.day-trip-workspace-request.v1","origin":"London","day":"Saturday","travellers":2,"budget_gbp":100,"candidate_ids":["brighton","oxford"],"required_checks":["weather","rail","attractions"]}

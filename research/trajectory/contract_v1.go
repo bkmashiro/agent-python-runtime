@@ -432,11 +432,16 @@ func (builder *Builder) Append(input EvidenceInput) (EvidenceEvent, error) {
 	if err := validateEvidenceRelations(input.Type, input.Payload, parents, prior); err != nil {
 		return EvidenceEvent{}, err
 	}
-	if (input.Type == EventModelBody || input.Type == EventSourceBody || input.Type == EventWorkspaceFile) && input.Body == nil {
+	requiresBody := input.Type == EventModelBody || input.Type == EventSourceBody || input.Type == EventWorkspaceFile
+	if input.Type == EventModelOutput {
+		output, ok := input.Payload.(ModelOutputPayload)
+		requiresBody = ok && output.Availability == Available
+	}
+	if requiresBody && input.Body == nil {
 		return EvidenceEvent{}, errors.New("private body evidence requires a body reference")
 	}
 	if input.Body != nil {
-		bodyAllowed := input.Type == EventModelBody || input.Type == EventSourceBody || input.Type == EventWorkspaceFile || input.Type == EventRuntimeObservation
+		bodyAllowed := input.Type == EventModelBody || input.Type == EventModelOutput || input.Type == EventSourceBody || input.Type == EventWorkspaceFile || input.Type == EventRuntimeObservation
 		if input.Type.productionEligible() || !bodyAllowed || builder.store == nil || input.Body.Kind == "" || input.Body.SHA256 == "" {
 			return EvidenceEvent{}, errors.New("invalid causal evidence body")
 		}
@@ -596,6 +601,12 @@ func validateEvidenceExport(exported Export, store *labstore.Store) error {
 		if event.Type == EventModelBody || event.Type == EventSourceBody || event.Type == EventWorkspaceFile {
 			if event.Body == nil {
 				return errors.New("private body evidence is missing its body")
+			}
+		}
+		if event.Type == EventModelOutput {
+			var output ModelOutputPayload
+			if json.Unmarshal(event.Payload, &output) != nil || (output.Availability == Available && event.Body == nil) {
+				return errors.New("available model output is missing its provider body")
 			}
 		}
 		if event.Body != nil {
@@ -1182,6 +1193,20 @@ func validateEvidenceBodyBinding(kind EvidenceType, raw json.RawMessage, object 
 			fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(modelBody.Brief))) != value.BriefSHA256 ||
 			fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(modelBody.Context))) != value.ContextSHA256 {
 			return errors.New("model body digest mismatch")
+		}
+	case ModelOutputPayload:
+		if kind != EventModelOutput || object.Kind != labstore.KindProviderBody {
+			return errors.New("model output body kind mismatch")
+		}
+		var providerBody struct {
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal(object.Body, &providerBody) != nil || len(providerBody.Choices) != 1 || providerBody.Choices[0].Message.Content == "" || fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(providerBody.Choices[0].Message.Content))) != value.OutputSHA256 {
+			return errors.New("model output body digest mismatch")
 		}
 	case SourceBodyPayload:
 		if object.Kind != labstore.KindCode || bodySHA256 != value.SourceSHA256 {

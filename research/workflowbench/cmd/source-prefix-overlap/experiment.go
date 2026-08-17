@@ -16,7 +16,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
-const fixtureHandlerContract = "pysolate.source-prefix.fixture-handler.v1"
+const fixtureHandlerContract = "pysolate.source-prefix.travel-weather-handler.v2"
+const legacyFixtureHandlerContract = "pysolate.source-prefix.fixture-handler.v1"
 
 type timedFixtureHandler struct {
 	delay   time.Duration
@@ -30,9 +31,10 @@ func (handler *timedFixtureHandler) setOrigin(origin time.Time) { handler.origin
 
 func (handler *timedFixtureHandler) Call(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
 	var input struct {
-		Key string `json:"key"`
+		Destination string `json:"destination"`
+		Date        string `json:"date"`
 	}
-	if json.Unmarshal(arguments, &input) != nil || input.Key != "alpha" || handler.origin.IsZero() {
+	if json.Unmarshal(arguments, &input) != nil || input.Destination != "oxford" || input.Date != "saturday" || handler.origin.IsZero() {
 		return nil, errors.New("invalid source-prefix fixture call")
 	}
 	if handler.calls.Add(1) != 1 {
@@ -47,10 +49,24 @@ func (handler *timedFixtureHandler) Call(ctx context.Context, arguments json.Raw
 	case <-timer.C:
 	}
 	handler.ended.Store(maxInt64(handler.started.Load()+1, time.Since(handler.origin).Nanoseconds()))
-	return json.RawMessage(`{"label":"Alpha"}`), nil
+	return json.RawMessage(`{"condition":"light_rain","high_c":17}`), nil
 }
 
 func fixtureCapabilitySpec() capability.Spec {
+	return capability.Spec{
+		Name: "travel.weather", Version: "pysolate.source-prefix.travel-weather.v2", Description: "Deterministic delayed weather read for a Saturday day-trip plan.",
+		EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "source-prefix-travel-weather-handler-v2",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"destination":{"type":"string","const":"oxford"},"date":{"type":"string","const":"saturday"}},"required":["destination","date"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"condition":{"type":"string","const":"light_rain"},"high_c":{"type":"integer","const":17}},"required":["condition","high_c"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "travel", Method: "weather", Arguments: []string{"destination", "date"}},
+	}
+}
+
+func buildFixturePlan(handler capability.Handler) (*capability.Plan, error) {
+	return buildFixturePlanWithSpec(fixtureCapabilitySpec(), handler)
+}
+
+func legacyFixtureCapabilitySpec() capability.Spec {
 	return capability.Spec{
 		Name: "slow.lookup", Version: "pysolate.source-prefix.slow-lookup.v1", Description: "Authored high-latency read for source-prefix overlap.",
 		EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "source-prefix-handler-v1",
@@ -60,13 +76,17 @@ func fixtureCapabilitySpec() capability.Spec {
 	}
 }
 
-func buildFixturePlan(handler capability.Handler) (*capability.Plan, error) {
+func buildLegacyFixturePlan(handler capability.Handler) (*capability.Plan, error) {
+	return buildFixturePlanWithSpec(legacyFixtureCapabilitySpec(), handler)
+}
+
+func buildFixturePlanWithSpec(spec capability.Spec, handler capability.Handler) (*capability.Plan, error) {
 	grant, err := capability.NewGrant(json.RawMessage(`{"fixture":"source-prefix-overlap","external_writes":false}`))
 	if err != nil {
 		return nil, err
 	}
 	registry := capability.NewRegistry()
-	if err := registry.Register(fixtureCapabilitySpec(), grant, handler); err != nil {
+	if err := registry.Register(spec, grant, handler); err != nil {
 		return nil, err
 	}
 	return registry.Seal(capability.PlanConfig{MaxCalls: 1})

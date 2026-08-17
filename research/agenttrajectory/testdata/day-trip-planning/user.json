@@ -1,0 +1,1 @@
+{"schema_version":"pysolate.day-trip-user.v1","departure_city":"London","day":"Saturday","travellers":2,"budget_gbp":100,"candidate_ids":["brighton","oxford"],"request":"Plan a one-day Saturday trip for two people from London. Compare Brighton and Oxford using the supplied weather, round-trip rail, and attraction data, stay within GBP 100, choose one, and provide the itinerary."}

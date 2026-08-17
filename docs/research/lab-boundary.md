@@ -73,11 +73,16 @@ branch. `research/operator.RunBranch` remains the fresh-Guest API and returns an
 in-memory outcome for a Host caller. The independent `labstore-bench` command
 is also a measurement probe, not a service.
 
-Track F adds a separate read-only `pysolate.lab-semantic-regions.v0` projection.
-`research/labview` can mint it only from an opaque verified semantic analysis;
-portable rows omit source text and private local rows require an exact source digest.
-The Lab Web renderer displays supplied source spans, control/data edges, effects,
-and rejection reasons but cannot infer new semantic facts or request execution.
+`research/labview` now also owns the latest-only `pysolate.lab-latest.v1`
+mechanism-demo projection. Its Go projector validates the current source-prefix
+contract/evidence, natural boundary census, canonical authored campaign source,
+and measured logical/physical identities before emitting the body-safe static
+snapshot consumed by `apps/lab-web`. The Web renderer supports only this latest
+shape: authored source, measured timelines, exact sharing, fail-closed controls,
+claim boundaries and provenance. It cannot infer new facts, execute a program,
+dispatch an effect, resolve a private body or grant authority. The older Lab v1
+and semantic-region Go contracts remain research artifacts, not Web compatibility
+targets.
 
 The current DAG export renders one validated parent and caller-supplied
 manifest/child pairs. It validates child admission identities and Grants, the

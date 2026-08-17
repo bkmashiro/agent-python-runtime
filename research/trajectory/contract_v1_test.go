@@ -54,26 +54,19 @@ func TestDecodeRejectsExcessiveJSONDepthBeforeTypedDecode(t *testing.T) {
 	}
 }
 
-func TestCheckedInRealGuestArtifactsAreCanonicalAndMatchLab(t *testing.T) {
+func TestCheckedInHistoricalRealGuestArtifactsRemainCanonical(t *testing.T) {
 	root := filepath.Join("..", "..")
-	artifacts := map[string]string{
-		"dual-profile-causal-evidence-real-guest-public-v1.json":     "experiment-full-public.json",
-		"dual-profile-causal-evidence-real-guest-production-v1.json": "production-rollback.json",
+	artifacts := []string{
+		"dual-profile-causal-evidence-real-guest-public-v1.json",
+		"dual-profile-causal-evidence-real-guest-production-v1.json",
 	}
-	for documentationName, labName := range artifacts {
-		documentation, err := os.ReadFile(filepath.Join(root, "docs", "evidence", documentationName))
+	for _, name := range artifacts {
+		documentation, err := os.ReadFile(filepath.Join(root, "docs", "evidence", name))
 		if err != nil {
 			t.Fatal(err)
-		}
-		lab, err := os.ReadFile(filepath.Join(root, "apps", "lab-web", "public", "lab-data", labName))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(documentation, lab) {
-			t.Fatalf("artifact drift: %s", documentationName)
 		}
 		if _, err := trajectory.DecodeEvidenceExport(documentation); err != nil {
-			t.Fatalf("noncanonical %s: %v", documentationName, err)
+			t.Fatalf("noncanonical %s: %v", name, err)
 		}
 	}
 }

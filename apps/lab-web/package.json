@@ -1,11 +1,12 @@
 {
   "name": "pysolate-lab-web",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "Pysolate private development trajectory inspector.",
+  "description": "Latest-only Pysolate mechanism evidence workspace.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "data:latest": "cd ../.. && go run ./research/labview/cmd/project-latest --source-prefix-contract docs/evidence/source-prefix-overlap-contract-v1.json --source-prefix-evidence docs/evidence/source-prefix-overlap-v1.json --source-prefix-census docs/evidence/source-prefix-opportunity-census-v1.json --campaign-projection docs/evidence/authority-transparent-campaign-v1.json --output apps/lab-web/public/lab-data/latest.json",
     "test": "vitest run",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",

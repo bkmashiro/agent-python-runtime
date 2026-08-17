@@ -8,9 +8,7 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('@codemirror') || id.includes('@uiw')) return 'editor';
-          if (id.includes('@mantine') || id.includes('lucide-react')) return 'ui';
-          if (id.includes('react-complex-tree') || id.includes('react-resizable-panels') || id.includes('@tanstack')) return 'debugger';
+          if (id.includes('lucide-react')) return 'ui';
           if (id.includes('node_modules/react')) return 'react';
         },
       },

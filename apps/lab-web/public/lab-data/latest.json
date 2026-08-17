@@ -1,0 +1,259 @@
+{
+  "schema_version": "pysolate.lab-latest.v1",
+  "identity": "sha256:f01bb9cba721554ea24d9a69797aaf204f6aeba26582dc66ee3687a888b6f2a5",
+  "headline": {
+    "real_guest_demos": 3,
+    "optimization_wins": 2,
+    "safety_controls": 1
+  },
+  "demos": [
+    {
+      "id": "source-prefix-overlap",
+      "title": "Start the READ before the model finishes",
+      "eyebrow": "REACH-GATED STREAMING",
+      "status": "optimized",
+      "summary": "The first closed Python suite reaches a Host READ while the remaining source is still being generated.",
+      "source": "record = slow.lookup('alpha')\nlabel = record['label'].upper()\nresult = {'label': label}\n",
+      "metrics": [
+        {
+          "label": "Generate first",
+          "value": "2950 ms",
+          "note": "median wall time",
+          "tone": "baseline"
+        },
+        {
+          "label": "Stream prefix",
+          "value": "1534 ms",
+          "note": "median wall time",
+          "tone": "optimized"
+        },
+        {
+          "label": "Mechanism window",
+          "value": "1.923×",
+          "note": "authored matched fixture",
+          "tone": "win"
+        }
+      ],
+      "lanes": [
+        {
+          "label": "generate → execute",
+          "duration_ns": 2950046792,
+          "segments": [
+            {
+              "label": "source generation",
+              "start_ns": 0,
+              "end_ns": 1401178334,
+              "tone": "generation"
+            },
+            {
+              "label": "Host READ",
+              "start_ns": 1413293209,
+              "end_ns": 2915358709,
+              "tone": "effect"
+            },
+            {
+              "label": "Guest finalize",
+              "start_ns": 2915358709,
+              "end_ns": 2950046792,
+              "tone": "finalize"
+            }
+          ]
+        },
+        {
+          "label": "stream while generating",
+          "duration_ns": 1533922917,
+          "segments": [
+            {
+              "label": "source generation",
+              "start_ns": 0,
+              "end_ns": 1400708083,
+              "tone": "generation"
+            },
+            {
+              "label": "Host READ",
+              "start_ns": 3702417,
+              "end_ns": 1505766500,
+              "tone": "effect"
+            },
+            {
+              "label": "Guest finalize",
+              "start_ns": 1505766500,
+              "end_ns": 1533922917,
+              "tone": "finalize"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "label": "Logical / physical calls",
+          "value": "1 / 1 in both lanes"
+        },
+        {
+          "label": "Workspace",
+          "value": "unchanged and published"
+        },
+        {
+          "label": "Fallback",
+          "value": "none"
+        }
+      ],
+      "claim_boundary": "Constructive mechanism demonstration for this fixed authored program; not natural-workload uplift."
+    },
+    {
+      "id": "exact-request-sharing",
+      "title": "Two agents, one physical Guest",
+      "eyebrow": "EXACT REQUEST SHARING",
+      "status": "optimized",
+      "summary": "Two logical agents submit identical source, inputs, Plan, privacy partition and workspace root. Pysolate shares one physical execution.",
+      "source": "# Agent A\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Agent B — byte-identical request\nresult = {'square': inputs['value'] * inputs['value']}\n",
+      "metrics": [
+        {
+          "label": "Logical requests",
+          "value": "2",
+          "note": "P05 + P06",
+          "tone": "baseline"
+        },
+        {
+          "label": "Physical executions",
+          "value": "1",
+          "note": "same sealed physical ID",
+          "tone": "optimized"
+        },
+        {
+          "label": "Oracle results",
+          "value": "2 / 2",
+          "note": "both complete",
+          "tone": "win"
+        }
+      ],
+      "lanes": [
+        {
+          "label": "agent A · shared waiter",
+          "duration_ns": 3922536875,
+          "segments": [
+            {
+              "label": "same physical ID",
+              "start_ns": 10538042,
+              "end_ns": 3918653042,
+              "tone": "shared"
+            }
+          ]
+        },
+        {
+          "label": "agent B · physical owner",
+          "duration_ns": 3922536875,
+          "segments": [
+            {
+              "label": "same physical ID",
+              "start_ns": 10538042,
+              "end_ns": 3918653042,
+              "tone": "physical"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "label": "Sharing decision",
+          "value": "exact_shared"
+        },
+        {
+          "label": "Identity relation",
+          "value": "same physical execution"
+        },
+        {
+          "label": "Campaign context",
+          "value": "real Guest · qualified repetition 0"
+        }
+      ],
+      "claim_boundary": "Exact identity sharing in the fixed campaign; not arbitrary memoization or cross-authority reuse."
+    },
+    {
+      "id": "source-mismatch-fallback",
+      "title": "Different source stays fresh",
+      "eyebrow": "FAIL-CLOSED CONTROL",
+      "status": "safety_control",
+      "summary": "A semantically similar program has a different source identity. Pysolate refuses sharing and starts an independent physical execution.",
+      "source": "# Shareable request\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Source-mismatch request\nresult = {'square': pow(inputs['value'], 2)}\n",
+      "metrics": [
+        {
+          "label": "Logical requests",
+          "value": "2",
+          "note": "different source digests",
+          "tone": "baseline"
+        },
+        {
+          "label": "Physical executions",
+          "value": "2",
+          "note": "sharing rejected",
+          "tone": "control"
+        },
+        {
+          "label": "Unsafe reuse",
+          "value": "0",
+          "note": "fresh execution preserved",
+          "tone": "win"
+        }
+      ],
+      "lanes": [
+        {
+          "label": "exact request",
+          "duration_ns": 3922536875,
+          "segments": [
+            {
+              "label": "physical A",
+              "start_ns": 10538042,
+              "end_ns": 3918653042,
+              "tone": "physical"
+            }
+          ]
+        },
+        {
+          "label": "source mismatch",
+          "duration_ns": 3902657292,
+          "segments": [
+            {
+              "label": "fresh physical B",
+              "start_ns": 11117709,
+              "end_ns": 3896287417,
+              "tone": "fallback"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "label": "Expected reason",
+          "value": "reject_source_mismatch"
+        },
+        {
+          "label": "Observed disposition",
+          "value": "complete"
+        },
+        {
+          "label": "Physical relation",
+          "value": "independent IDs"
+        }
+      ],
+      "claim_boundary": "Safety control: source similarity never substitutes for exact bound identity."
+    }
+  ],
+  "boundary": {
+    "events": 36,
+    "unique_sources": 30,
+    "structurally_eligible": 0,
+    "timing_not_recorded": 36,
+    "performance_supported": false,
+    "decision": "Do not run trace-derived timing replay for this short READ cohort."
+  },
+  "provenance": {
+    "source_prefix_evidence_sha256": "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69",
+    "census_evidence_sha256": "sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604",
+    "campaign_projection_sha256": "sha256:2955e8b19e4fcd4b450a73415697d798d8ab3fbc9f50f392dd8475e9600bb7bc",
+    "source_prefix_artifact_sha256": "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b",
+    "campaign_artifact_sha256": "sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795",
+    "source_prefix_harness_commit": "ca25b1b767edd50dc25363df5347cb801c5c183a",
+    "campaign_source_commit": "40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5"
+  }
+}

@@ -1,29 +1,73 @@
 {
-  "schema_version": "pysolate.lab-task.v1",
-  "identity": "sha256:772c57587878a734c9a61aa8c2abe084f036a96a6f8350f71a06a5edcac66380",
-  "id": "dev-workspace-summary",
-  "title": "Summarize a development workspace",
-  "task": "Summarize a public development workspace and record the selected analysis branch.",
+  "schema_version": "pysolate.lab-task.v2",
+  "identity": "sha256:3b37f6f327d55bdbfa75b6c8eacf50d39dd50500eee1be327ca5671ab0774c04",
+  "id": "dev-release-readiness",
+  "title": "Prepare a release readiness review",
+  "task": "Assess a Python runtime SDK release and produce dependency and release-readiness reviews.",
   "status": "passed",
-  "expected_artifact": "2 files|selected=1|status=ready",
+  "expected_artifact": "pysolate-sdk@0.8.0|tests=128/128|migrations=2|status=ready",
+  "provider_io": "not_applicable_scripted_fixture",
+  "context": {
+    "files": [
+      "pyproject.toml",
+      "CHANGELOG.md",
+      "docs/migrations/authority-v2.md"
+    ],
+    "analyses": [
+      "review pinned runtime dependencies",
+      "verify release gates and rollback notes"
+    ],
+    "repeated_transformation": "normalize release checklist entries",
+    "wait_boundary": "release CI completed",
+    "observation": "release manifest digest unchanged",
+    "selected_child": 1
+  },
   "sources": [
     {
       "id": "orchestrator",
       "role": "orchestrator",
       "file": "orchestrator.py",
-      "source": "files = [\"/workspace/input-a.txt\", \"/workspace/input-b.txt\"]\nselected_child = 1\nresult = f\"{len(files)} files|selected={selected_child}|status=ready\""
+      "source": "release = {\"package\": \"pysolate-sdk\", \"version\": \"0.8.0\", \"tests_passed\": 128, \"tests_failed\": 0, \"migrations\": [\"authority-v2\", \"workspace-receipts\"]}\nstatus = \"ready\" if release[\"tests_failed\"] == 0 else \"blocked\"\nresult = f\"{release['package']}@{release['version']}|tests={release['tests_passed']}/128|migrations={len(release['migrations'])}|status={status}\""
     },
     {
       "id": "researcher",
-      "role": "researcher",
+      "role": "dependency-reviewer",
       "file": "researcher.py",
-      "source": "from pathlib import Path\nanalysis = \"workspace-summary: evidence collected\"\nPath(\"/workspace/researcher.txt\").write_text(analysis)\nresult = analysis"
+      "source": "from pathlib import Path\ndependencies = [\"wazero pinned\", \"CPython/WASI artifact recorded\", \"SQLite schema unchanged\"]\nreport = \"# Dependency review\\n\\n\" + \"\\n\".join(f\"- {item}\" for item in dependencies)\nPath(\"/workspace/dependency-review.md\").write_text(report)\nresult = report"
     },
     {
       "id": "reviewer",
-      "role": "reviewer",
+      "role": "release-reviewer",
       "file": "reviewer.py",
-      "source": "from pathlib import Path\nreview = \"workspace-summary: review approved\"\nPath(\"/workspace/reviewer.txt\").write_text(review)\nresult = review"
+      "source": "from pathlib import Path\nchecks = [\"128 tests passed\", \"migration notes present\", \"rollback documented\"]\nchecklist = \"# Release checklist\\n\\n\" + \"\\n\".join(f\"- [x] {item}\" for item in checks)\nPath(\"/workspace/release-checklist.md\").write_text(checklist)\nresult = checklist"
+    }
+  ],
+  "outputs": [
+    {
+      "agent_id": "orchestrator",
+      "label": "Release decision",
+      "disposition": "workflow_result",
+      "body": "pysolate-sdk@0.8.0|tests=128/128|migrations=2|status=ready",
+      "sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
+      "event_sequence": 36
+    },
+    {
+      "agent_id": "researcher",
+      "label": "Dependency review",
+      "path": "dependency-review.md",
+      "disposition": "discarded_branch",
+      "body": "# Dependency review\n\n- wazero pinned\n- CPython/WASI artifact recorded\n- SQLite schema unchanged",
+      "sha256": "sha256:92a7a3b4cc44b232791bd9d8e76024ab1ded1ff523d07f77de0b20237d5f0587",
+      "event_sequence": 14
+    },
+    {
+      "agent_id": "reviewer",
+      "label": "Release checklist",
+      "path": "release-checklist.md",
+      "disposition": "selected_branch",
+      "body": "# Release checklist\n\n- [x] 128 tests passed\n- [x] migration notes present\n- [x] rollback documented",
+      "sha256": "sha256:87647d8f297e5b3bc63683c6b4a8d411a5043ff42a366db0ef3b4156476362d4",
+      "event_sequence": 15
     }
   ],
   "events": [
@@ -37,7 +81,7 @@
       "type": "run_start",
       "action": "run.start",
       "outcome": "started",
-      "input_sha256": "sha256:74a56b0362bbe40105c273c921b8cc4e47011211d220bbad5126be6daeaa17f1",
+      "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
       "count": 1,
       "relative_elapsed_millis": 0
     },
@@ -63,13 +107,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 4142,
-      "ended_millis": 4142,
+      "started_millis": 1402,
+      "ended_millis": 1402,
       "type": "streaming",
       "action": "stream.begin",
       "outcome": "started",
       "count": 1,
-      "relative_elapsed_millis": 4142
+      "relative_elapsed_millis": 1402
     },
     {
       "sequence": 4,
@@ -78,14 +122,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 4142,
-      "ended_millis": 4142,
+      "started_millis": 1402,
+      "ended_millis": 1402,
       "type": "streaming",
       "action": "stream.prepare",
       "outcome": "ok",
       "input_sha256": "sha256:0d8428b431b9f5c3ca9c74f41bf1634168f4d63c7b67c701132e83ccd59ce48c",
       "count": 1,
-      "relative_elapsed_millis": 4142
+      "relative_elapsed_millis": 1402
     },
     {
       "sequence": 5,
@@ -94,14 +138,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 4142,
-      "ended_millis": 4142,
+      "started_millis": 1402,
+      "ended_millis": 1402,
       "type": "streaming",
       "action": "stream.prepare",
       "outcome": "ok",
-      "input_sha256": "sha256:d98f77da0d309a618008cea38e960329e65d465186c32288e16822ea346b52cd",
+      "input_sha256": "sha256:e59e48ee207e7f876da0e0607cb43930e6bfa96115574477ffa57aa5ee063be9",
       "count": 1,
-      "relative_elapsed_millis": 4142
+      "relative_elapsed_millis": 1402
     },
     {
       "sequence": 6,
@@ -110,14 +154,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 4142,
-      "ended_millis": 4142,
+      "started_millis": 1402,
+      "ended_millis": 1402,
       "type": "streaming",
       "action": "stream.prepare",
       "outcome": "ok",
       "input_sha256": "sha256:cd24e1ff7a326126042ff361744ad2832cde57c875b725685941a927ce356a5d",
       "count": 1,
-      "relative_elapsed_millis": 4142
+      "relative_elapsed_millis": 1402
     },
     {
       "sequence": 7,
@@ -126,8 +170,8 @@
       "parent_span_id": "run",
       "agent_id": "orchestrator",
       "agent_role": "orchestrator",
-      "started_millis": 4142,
-      "ended_millis": 9020,
+      "started_millis": 1402,
+      "ended_millis": 3675,
       "source": {
         "source_id": "orchestrator",
         "file": "orchestrator.py",
@@ -138,10 +182,10 @@
       "type": "guest_lifecycle",
       "action": "guest.python",
       "outcome": "ok",
-      "input_sha256": "sha256:4ada5e1c7e3d4698b1ce9f263b7d3c825b243c58853b1b787cffd083459afdb7",
-      "output_sha256": "sha256:425a4186bcecc91b8db28c0843ddddc5ee265f77faf436bdddd5d8dc986abcea",
+      "input_sha256": "sha256:04ae65bdf7fd888305792a437864c7e0eb9245f0cc42af1eeb5e3cf0906841e4",
+      "output_sha256": "sha256:4fba57df07018719df64ff2cc9f11b570d70345e4eb76766dead3045b93b73a5",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 8,
@@ -150,13 +194,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9020,
-      "ended_millis": 9020,
+      "started_millis": 3675,
+      "ended_millis": 3675,
       "type": "streaming",
       "action": "stream.seal",
       "outcome": "sealed",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 9,
@@ -165,13 +209,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9020,
-      "ended_millis": 9020,
+      "started_millis": 3675,
+      "ended_millis": 3675,
       "type": "streaming",
       "action": "stream.end",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 10,
@@ -180,14 +224,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9020,
-      "ended_millis": 9020,
+      "started_millis": 3675,
+      "ended_millis": 3675,
       "type": "workspace",
       "action": "workspace.commit",
       "outcome": "ok",
       "output_sha256": "sha256:261b7fcf23029a3e57a973e5eda85c2e6cf10205cbd8b687b33c40cca0793506",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 11,
@@ -196,13 +240,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9020,
-      "ended_millis": 9020,
+      "started_millis": 3675,
+      "ended_millis": 3675,
       "type": "guest_lifecycle",
       "action": "guest.close",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 12,
@@ -211,15 +255,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9020,
-      "ended_millis": 9020,
+      "started_millis": 3675,
+      "ended_millis": 3675,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
-      "input_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
-      "output_sha256": "sha256:425a4186bcecc91b8db28c0843ddddc5ee265f77faf436bdddd5d8dc986abcea",
+      "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
+      "output_sha256": "sha256:4fba57df07018719df64ff2cc9f11b570d70345e4eb76766dead3045b93b73a5",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 13,
@@ -228,14 +272,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9020,
-      "ended_millis": 9020,
+      "started_millis": 3675,
+      "ended_millis": 3675,
       "type": "fanout",
       "action": "fanout.select",
       "outcome": "started",
       "input_sha256": "sha256:1ae80cfbd8c8ca02806d4f4d2872a62ded88bd999f35a746ca7bf6cb0a99bc3e",
       "count": 1,
-      "relative_elapsed_millis": 9020
+      "relative_elapsed_millis": 3675
     },
     {
       "sequence": 14,
@@ -244,33 +288,33 @@
       "parent_span_id": "orchestrator-python",
       "agent_id": "researcher",
       "parent_agent_id": "orchestrator",
-      "agent_role": "researcher",
-      "started_millis": 9020.357568,
-      "ended_millis": 18508,
+      "agent_role": "dependency-reviewer",
+      "started_millis": 3684.331292,
+      "ended_millis": 7619,
       "source": {
         "source_id": "researcher",
         "file": "researcher.py",
         "start_line": 1,
-        "end_line": 4
+        "end_line": 5
       },
       "workspace_id": "workspace-researcher",
       "workspace_changes": [
         {
-          "path": "researcher.txt",
+          "path": "dependency-review.md",
           "kind": "added",
-          "after_sha256": "sha256:b3bda5a54a41521c1e5481c504cfe6342f3ebba34114d64c63fdfff3aeb75b9f",
-          "size": 37
+          "after_sha256": "sha256:92a7a3b4cc44b232791bd9d8e76024ab1ded1ff523d07f77de0b20237d5f0587",
+          "size": 95
         }
       ],
       "type": "fanout",
       "action": "agent.execute",
       "outcome": "ok",
-      "checkpoint_sha256": "sha256:b83e1ea6e0fe57025a333acdb0e11a1140db9c0ae40c23efbd4da155b1480d4e",
+      "checkpoint_sha256": "sha256:1d0d907c8d750d7f0a9560bea1b04f9893d7e73fc694a7342dd96fbf9f70ce18",
       "checkpoint_status": "captured",
-      "input_sha256": "sha256:9fd0822dd22319d42f9d096378f7403943e028020a193fa9ded5cc80e24d0c51",
-      "output_sha256": "sha256:b3bda5a54a41521c1e5481c504cfe6342f3ebba34114d64c63fdfff3aeb75b9f",
+      "input_sha256": "sha256:e63f41389c84b67c42a1b40c733ee572ecc415e160ca1e8190d3310a06db8799",
+      "output_sha256": "sha256:92a7a3b4cc44b232791bd9d8e76024ab1ded1ff523d07f77de0b20237d5f0587",
       "count": 1,
-      "relative_elapsed_millis": 18508
+      "relative_elapsed_millis": 7619
     },
     {
       "sequence": 15,
@@ -279,33 +323,33 @@
       "parent_span_id": "orchestrator-python",
       "agent_id": "reviewer",
       "parent_agent_id": "orchestrator",
-      "agent_role": "reviewer",
-      "started_millis": 9092.055747999999,
-      "ended_millis": 18508,
+      "agent_role": "release-reviewer",
+      "started_millis": 3675.295083,
+      "ended_millis": 7619,
       "source": {
         "source_id": "reviewer",
         "file": "reviewer.py",
         "start_line": 1,
-        "end_line": 4
+        "end_line": 5
       },
       "workspace_id": "workspace-reviewer",
       "workspace_changes": [
         {
-          "path": "reviewer.txt",
+          "path": "release-checklist.md",
           "kind": "added",
-          "after_sha256": "sha256:65436cebd947527b35f1edb43fef86d24f290e22b7e880e2abbe11968f80940c",
-          "size": 34
+          "after_sha256": "sha256:87647d8f297e5b3bc63683c6b4a8d411a5043ff42a366db0ef3b4156476362d4",
+          "size": 99
         }
       ],
       "type": "fanout",
       "action": "agent.execute",
       "outcome": "ok",
-      "checkpoint_sha256": "sha256:7af614bd5676bbbb1f57d64b39eac1ff0fd8ee5b4798dc602d02f21b76dffe0d",
+      "checkpoint_sha256": "sha256:3f65589e0576f7399ce4431fef5ba4562d851560118675c900e72b8d82888718",
       "checkpoint_status": "captured",
-      "input_sha256": "sha256:5a8c2a074a933afc0f0aac0b74f4cab5de37f0303b26d102adb58486644da937",
-      "output_sha256": "sha256:65436cebd947527b35f1edb43fef86d24f290e22b7e880e2abbe11968f80940c",
+      "input_sha256": "sha256:01f184acab40af23bde2bddf904b3089f39c21001f4b5840c400ae1e0624ac69",
+      "output_sha256": "sha256:87647d8f297e5b3bc63683c6b4a8d411a5043ff42a366db0ef3b4156476362d4",
       "count": 1,
-      "relative_elapsed_millis": 18508
+      "relative_elapsed_millis": 7619
     },
     {
       "sequence": 16,
@@ -314,14 +358,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18508,
-      "ended_millis": 18508,
+      "started_millis": 7619,
+      "ended_millis": 7619,
       "type": "fanout",
       "action": "fanout.select",
       "outcome": "selected",
       "input_sha256": "sha256:1ae80cfbd8c8ca02806d4f4d2872a62ded88bd999f35a746ca7bf6cb0a99bc3e",
       "count": 1,
-      "relative_elapsed_millis": 18508
+      "relative_elapsed_millis": 7619
     },
     {
       "sequence": 17,
@@ -330,14 +374,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18508,
-      "ended_millis": 18508,
+      "started_millis": 7620,
+      "ended_millis": 7620,
       "type": "fanout",
       "action": "fanout.discard",
       "outcome": "discarded",
-      "input_sha256": "sha256:54637a189e4aba24e17b77fb80af407f4b557e89256eecc1f5eb69d68e449074",
+      "input_sha256": "sha256:5a51385d069d8a09780b5b450dcf7cd0aae44ef676e394dcf84c6ed448b5f745",
       "count": 1,
-      "relative_elapsed_millis": 18508
+      "relative_elapsed_millis": 7620
     },
     {
       "sequence": 18,
@@ -346,14 +390,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18508,
-      "ended_millis": 18508,
+      "started_millis": 7620,
+      "ended_millis": 7620,
       "type": "fanout",
       "action": "fanout.selected_root",
       "outcome": "ok",
-      "input_sha256": "sha256:d8c814659c6681153d4ea36f6edeee2e542f51a1e25ff3dbbe221de65494bd93",
+      "input_sha256": "sha256:837df8db263f687e6078c3bdbafe1c9b67bef95a6077fbc54d5232008ef6c3ed",
       "count": 1,
-      "relative_elapsed_millis": 18508
+      "relative_elapsed_millis": 7620
     },
     {
       "sequence": 19,
@@ -362,14 +406,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "cache",
       "action": "cache.lookup",
       "outcome": "miss",
-      "input_sha256": "sha256:2262c60f022f607acdeb2c7912076a4889da14e3a8443a118111c1af800a870a",
+      "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 20,
@@ -378,15 +422,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "cache",
       "action": "cache.compute",
       "outcome": "ok",
-      "input_sha256": "sha256:74a56b0362bbe40105c273c921b8cc4e47011211d220bbad5126be6daeaa17f1",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 21,
@@ -395,14 +439,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "cache",
       "action": "cache.lookup",
       "outcome": "miss",
-      "input_sha256": "sha256:2262c60f022f607acdeb2c7912076a4889da14e3a8443a118111c1af800a870a",
+      "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 22,
@@ -411,15 +455,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "cache",
       "action": "cache.compute",
       "outcome": "ok",
-      "input_sha256": "sha256:74a56b0362bbe40105c273c921b8cc4e47011211d220bbad5126be6daeaa17f1",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 23,
@@ -428,15 +472,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "single_flight",
       "action": "single_flight.leader",
       "outcome": "leader",
-      "input_sha256": "sha256:2262c60f022f607acdeb2c7912076a4889da14e3a8443a118111c1af800a870a",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 24,
@@ -445,15 +489,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "single_flight",
       "action": "single_flight.follower",
       "outcome": "follower",
-      "input_sha256": "sha256:2262c60f022f607acdeb2c7912076a4889da14e3a8443a118111c1af800a870a",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 25,
@@ -462,14 +506,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "cache",
       "action": "cache.lookup",
       "outcome": "hit",
-      "input_sha256": "sha256:2262c60f022f607acdeb2c7912076a4889da14e3a8443a118111c1af800a870a",
+      "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 26,
@@ -478,14 +522,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "cache",
       "action": "cache.hit",
       "outcome": "hit",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 27,
@@ -494,15 +538,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "single_flight",
       "action": "single_flight.compute",
       "outcome": "ok",
-      "input_sha256": "sha256:74a56b0362bbe40105c273c921b8cc4e47011211d220bbad5126be6daeaa17f1",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 28,
@@ -511,15 +555,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
-      "input_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 29,
@@ -528,15 +572,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
-      "input_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 30,
@@ -545,13 +589,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 18509,
-      "ended_millis": 18509,
+      "started_millis": 7627,
+      "ended_millis": 7627,
       "type": "wait_resume",
       "action": "wait.begin",
       "outcome": "started",
       "count": 1,
-      "relative_elapsed_millis": 18509
+      "relative_elapsed_millis": 7627
     },
     {
       "sequence": 31,
@@ -560,13 +604,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 22646,
-      "ended_millis": 22646,
+      "started_millis": 9011,
+      "ended_millis": 9011,
       "type": "observation",
       "action": "observation.initial",
       "outcome": "started",
       "count": 1,
-      "relative_elapsed_millis": 22646
+      "relative_elapsed_millis": 9011
     },
     {
       "sequence": 32,
@@ -575,14 +619,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 22646,
-      "ended_millis": 22646,
+      "started_millis": 9011,
+      "ended_millis": 9011,
       "type": "wait_resume",
       "action": "wait.release",
       "outcome": "started",
-      "input_sha256": "sha256:2906354e57f9c84dd2cfbdbabce496ebebed00134a12ced25f364a55b60ce73f",
+      "input_sha256": "sha256:5ce5ff49d5c5d8eabf3b049eb81564d7c6f11c03fb85ac57072227b07645a4ed",
       "count": 1,
-      "relative_elapsed_millis": 22646
+      "relative_elapsed_millis": 9011
     },
     {
       "sequence": 33,
@@ -591,13 +635,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 37857,
-      "ended_millis": 37857,
+      "started_millis": 14891,
+      "ended_millis": 14891,
       "type": "wait_resume",
       "action": "wait.release",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 37857
+      "relative_elapsed_millis": 14891
     },
     {
       "sequence": 34,
@@ -606,14 +650,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 37857,
-      "ended_millis": 37857,
+      "started_millis": 14891,
+      "ended_millis": 14891,
       "type": "observation",
       "action": "observation.changed",
       "outcome": "ok",
-      "output_sha256": "sha256:d97c00b9279e9fae6cbacd5c9beba6d2229b7a2b9336e3dd05e27d551032e62f",
+      "output_sha256": "sha256:92b3492fbcc02d8f32d6eba42d23820d1321a4e7b013e4f6d139c0b7be940be3",
       "count": 1,
-      "relative_elapsed_millis": 37857
+      "relative_elapsed_millis": 14891
     },
     {
       "sequence": 35,
@@ -622,14 +666,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 37857,
-      "ended_millis": 37857,
+      "started_millis": 14891,
+      "ended_millis": 14891,
       "type": "wait_resume",
       "action": "resume.fresh",
       "outcome": "ok",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 37857
+      "relative_elapsed_millis": 14891
     },
     {
       "sequence": 36,
@@ -638,15 +682,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 37857,
-      "ended_millis": 37857,
+      "started_millis": 14891,
+      "ended_millis": 14891,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
-      "input_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
-      "output_sha256": "sha256:f48c78742529c42d54bd095f32b9c18b073ca1512588ac049b8116013cc74419",
+      "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
+      "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 37857
+      "relative_elapsed_millis": 14891
     },
     {
       "sequence": 37,
@@ -655,17 +699,17 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 37857,
-      "ended_millis": 37857,
+      "started_millis": 14891,
+      "ended_millis": 14891,
       "type": "run_terminal",
       "action": "run.terminal",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 37857
+      "relative_elapsed_millis": 14891
     }
   ],
   "stats": {
-    "duration_millis": 37857,
+    "duration_millis": 14891,
     "events": 37,
     "agents": 4,
     "workspace_changes": 2

@@ -18,13 +18,14 @@ func taskRead(t *testing.T, path string) []byte {
 func TestBuildTaskSnapshotProjectsRealWorkspaceTask(t *testing.T) {
 	root := filepath.Clean("../..")
 	snapshot, err := BuildTaskSnapshot(TaskInputs{
-		Corpus: taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/public-development-corpus.json")),
-		Report: taskRead(t, filepath.Join(root, "docs/evidence/spark-composable-direct-report.json")),
+		Corpus:  taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/lab-release-readiness-corpus.json")),
+		Report:  taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-direct-report.json")),
+		Capture: taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-body-capture.json")),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.ID != "dev-workspace-summary" || snapshot.Status != "passed" || len(snapshot.Sources) != 3 || len(snapshot.Events) != 37 || snapshot.Stats.Agents != 4 || snapshot.Stats.WorkspaceChanges != 2 {
+	if snapshot.ID != "dev-release-readiness" || snapshot.Status != "passed" || len(snapshot.Sources) != 3 || len(snapshot.Outputs) != 3 || len(snapshot.Events) != 37 || snapshot.Stats.Agents != 4 || snapshot.Stats.WorkspaceChanges != 2 {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 	if err := ValidateTaskSnapshot(snapshot); err != nil {
@@ -47,8 +48,9 @@ func TestTaskSnapshotRejectsIdentityValidPrivateAndForgedFields(t *testing.T) {
 	build := func(t *testing.T) TaskSnapshot {
 		t.Helper()
 		snapshot, err := BuildTaskSnapshot(TaskInputs{
-			Corpus: taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/public-development-corpus.json")),
-			Report: taskRead(t, filepath.Join(root, "docs/evidence/spark-composable-direct-report.json")),
+			Corpus:  taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/lab-release-readiness-corpus.json")),
+			Report:  taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-direct-report.json")),
+			Capture: taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-body-capture.json")),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -73,10 +75,16 @@ func TestTaskSnapshotRejectsIdentityValidPrivateAndForgedFields(t *testing.T) {
 				}
 			}
 		},
-		"invalid digest": func(snapshot *TaskSnapshot) { snapshot.Events[0].InputSHA256 = "sha256:forged" },
-		"negative time":  func(snapshot *TaskSnapshot) { snapshot.Events[0].StartedMillis = -1 },
-		"elapsed rewind": func(snapshot *TaskSnapshot) { snapshot.Events[13].RelativeElapsedMillis = 20000 },
-		"unknown agent":  func(snapshot *TaskSnapshot) { snapshot.Events[13].AgentID = "attacker" },
+		"invalid digest":            func(snapshot *TaskSnapshot) { snapshot.Events[0].InputSHA256 = "sha256:forged" },
+		"forged output body":        func(snapshot *TaskSnapshot) { snapshot.Outputs[1].Body = "forged" },
+		"forged branch disposition": func(snapshot *TaskSnapshot) { snapshot.Outputs[1].Disposition = "workflow_result" },
+		"reordered sources": func(snapshot *TaskSnapshot) {
+			snapshot.Sources[1], snapshot.Sources[2] = snapshot.Sources[2], snapshot.Sources[1]
+		},
+		"output event drift": func(snapshot *TaskSnapshot) { snapshot.Outputs[1].EventSequence++ },
+		"negative time":      func(snapshot *TaskSnapshot) { snapshot.Events[0].StartedMillis = -1 },
+		"elapsed rewind":     func(snapshot *TaskSnapshot) { snapshot.Events[13].RelativeElapsedMillis = 20000 },
+		"unknown agent":      func(snapshot *TaskSnapshot) { snapshot.Events[13].AgentID = "attacker" },
 		"future parent": func(snapshot *TaskSnapshot) {
 			snapshot.Events[1].ParentSequence = snapshot.Events[len(snapshot.Events)-1].Sequence
 		},
@@ -100,8 +108,9 @@ func TestTaskSnapshotRejectsIdentityValidPrivateAndForgedFields(t *testing.T) {
 func TestTaskSnapshotRejectsIdentityValidMissingTrace(t *testing.T) {
 	root := filepath.Clean("../..")
 	snapshot, err := BuildTaskSnapshot(TaskInputs{
-		Corpus: taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/public-development-corpus.json")),
-		Report: taskRead(t, filepath.Join(root, "docs/evidence/spark-composable-direct-report.json")),
+		Corpus:  taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/lab-release-readiness-corpus.json")),
+		Report:  taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-direct-report.json")),
+		Capture: taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-body-capture.json")),
 	})
 	if err != nil {
 		t.Fatal(err)

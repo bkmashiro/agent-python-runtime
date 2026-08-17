@@ -39,8 +39,21 @@ func (function ProgramBuilderFunc) BuildChildProgram(descriptor Descriptor) (Chi
 // FreshRunnerExecutor executes each child in a distinct single-use Runner and
 // always retires it. It never publishes the child workspace.
 type FreshRunnerExecutor struct {
-	Factory RunnerFactory
-	Builder ProgramBuilder
+	Factory  RunnerFactory
+	Builder  ProgramBuilder
+	Observer ChildResponseObserver
+}
+
+// ChildResponseObserver is an explicit experiment/debug seam. Production
+// executors leave it nil and retain no response body.
+type ChildResponseObserver interface {
+	ObserveChildResponse(context.Context, Descriptor, []byte) error
+}
+
+type ChildResponseObserverFunc func(context.Context, Descriptor, []byte) error
+
+func (function ChildResponseObserverFunc) ObserveChildResponse(ctx context.Context, descriptor Descriptor, response []byte) error {
+	return function(ctx, descriptor, response)
 }
 
 func (executor FreshRunnerExecutor) Execute(ctx context.Context, invocation Invocation) error {
@@ -65,6 +78,11 @@ func (executor FreshRunnerExecutor) Execute(ctx context.Context, invocation Invo
 	}
 	if json.Unmarshal(response, &envelope) != nil || envelope.Status != "ok" {
 		return errors.Join(ErrChildExecution, errors.New("child Guest response is not publishable"))
+	}
+	if executor.Observer != nil {
+		if err := executor.Observer.ObserveChildResponse(ctx, invocation.Descriptor, append([]byte(nil), response...)); err != nil {
+			return errors.Join(ErrChildExecution, err)
+		}
 	}
 	return nil
 }

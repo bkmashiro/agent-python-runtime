@@ -62,6 +62,57 @@ func TestBenchmarkTreatmentsDefaultToAll(t *testing.T) {
 	}
 }
 
+func writeSparkBodyCapture(t *testing.T, scenario composableacceptance.Scenario, scenarioSHA, workflowOutput string, childBodies map[string][]byte, row composableacceptance.Row) {
+	t.Helper()
+	outputPath := os.Getenv("PYSOLATE_RESEARCH_BODY_CAPTURE")
+	if outputPath == "" {
+		return
+	}
+	if filter := os.Getenv("PYSOLATE_ACCEPTANCE_SCENARIO"); filter == "" || filter != scenario.ID {
+		t.Fatal("research body capture requires one explicit matching scenario")
+	}
+	traceSHA, err := composableacceptance.TraceIdentity(row.Trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture := composableacceptance.BodyCapture{SchemaVersion: composableacceptance.BodyCaptureSchemaVersion, ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, TraceSHA256: traceSHA, ProviderIO: composableacceptance.ProviderIONotApplicable, WorkflowOutput: workflowOutput}
+	for index, child := range scenario.ChildPrograms {
+		disposition := "discarded_branch"
+		if index == scenario.SelectedChild {
+			disposition = "selected_branch"
+		}
+		capture.AgentOutputs = append(capture.AgentOutputs, composableacceptance.CapturedAgentOutput{AgentID: child.ID, Path: child.OutputPath, Disposition: disposition, Body: string(childBodies[fmt.Sprintf("child-%d", index)])})
+	}
+	encoded, _, err := composableacceptance.EncodeBodyCapture(capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(outputPath), ".body-capture-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := temporary.Write(encoded); err != nil {
+		t.Fatal(err)
+	}
+	if err := temporary.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := temporary.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(temporaryPath, outputPath); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRealGuestSparkScenarioCoreTreatments(t *testing.T) {
 	corpusPath := os.Getenv("PYSOLATE_SPARK_CORPUS")
 	outputPath := os.Getenv("PYSOLATE_ACCEPTANCE_CORE_REPORT")
@@ -541,7 +592,8 @@ func runScenarioStreamingExecution(t *testing.T, artifact []byte, artifactSHA st
 		t.Fatal(err)
 	}
 	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
-	if got := responseStringResult(t, finished.result.Response); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
+	workflowOutput := responseStringResult(t, finished.result.Response)
+	if workflowOutput != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(workflowOutput) != oracleSHA {
 		t.Fatalf("scenario=%s treatment=%s outcome mismatch", scenario.ID, composableacceptance.TreatmentStreaming)
 	}
 	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(finished.result.Response), "", "", 1)
@@ -1040,6 +1092,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	}
 	var childSnapshotsMu sync.Mutex
 	childSnapshots := make(map[string]workspace.Snapshot, len(scenario.ChildPrograms))
+	childBodies := make(map[string][]byte, len(scenario.ChildPrograms))
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(_ context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			childGuests.Add(1)
@@ -1061,6 +1114,18 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 				return subagent.ChildProgram{}, err
 			}
 			return subagent.ChildProgram{Request: request}, nil
+		}),
+		Observer: subagent.ChildResponseObserverFunc(func(_ context.Context, descriptor subagent.Descriptor, response []byte) error {
+			var envelope struct {
+				Result string `json:"result"`
+			}
+			if err := json.Unmarshal(response, &envelope); err != nil || envelope.Result == "" {
+				return errors.New("child response body is not recordable")
+			}
+			childSnapshotsMu.Lock()
+			childBodies[descriptor.ChildID] = []byte(envelope.Result)
+			childSnapshotsMu.Unlock()
+			return nil
 		}),
 	}
 	orchestrator, err := subagent.New(subagent.Config{
@@ -1129,7 +1194,8 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		t.Fatal(err)
 	}
 	recorder.append(composableacceptance.TraceEventTypeGuestLifecycle, "guest.close", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
-	if got := responseStringResult(t, finished.result.Response); got != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(got) != oracleSHA {
+	workflowOutput := responseStringResult(t, finished.result.Response)
+	if workflowOutput != scenario.ExpectedArtifact || composableacceptance.ArtifactIdentity(workflowOutput) != oracleSHA {
 		t.Fatalf("scenario=%s treatment=%s stream outcome mismatch", scenario.ID, composableacceptance.TreatmentAll)
 	}
 	recorder.append(composableacceptance.TraceEventTypeOracle, "oracle.compare", composableacceptance.TraceEventOutcomeOK, nil, []byte(scenario.ExpectedArtifact), []byte(finished.result.Response), "", "", 1)
@@ -1156,9 +1222,10 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 		child := scenario.ChildPrograms[index]
 		childSnapshotsMu.Lock()
 		snapshot, found := childSnapshots[childEvent.ChildID]
+		childBody := append([]byte(nil), childBodies[childEvent.ChildID]...)
 		childSnapshotsMu.Unlock()
-		if !found {
-			t.Fatalf("missing child snapshot %q", childEvent.ChildID)
+		if !found || len(childBody) == 0 || string(childBody) != child.ExpectedResult {
+			t.Fatalf("missing or mismatched child snapshot body %q", childEvent.ChildID)
 		}
 		childRecordedEnd := float64(time.Since(started).Milliseconds())
 		childDuration := childEvent.EndMS - childEvent.StartMS
@@ -1171,7 +1238,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 			startedMillis: childRecordedStart, endedMillis: childRecordedEnd,
 			source: sourceRange(child.ID, child.ID+".py", child.Source), workspaceID: "workspace-" + child.ID,
 			workspaceChanges: workspaceChanges(baseSnapshot, snapshot),
-		}, composableacceptance.TraceEventTypeFanout, "agent.execute", composableacceptance.TraceEventOutcomeOK, nil, []byte(child.Source), []byte(child.ExpectedResult), snapshot.Info.WorkspaceSHA256, "captured", 1)
+		}, composableacceptance.TraceEventTypeFanout, "agent.execute", composableacceptance.TraceEventOutcomeOK, nil, []byte(child.Source), childBody, snapshot.Info.WorkspaceSHA256, "captured", 1)
 	}
 	if joined.SelectedChildID != selected {
 		recorder.append(composableacceptance.TraceEventTypeFanout, "fanout.select", composableacceptance.TraceEventOutcomeRejected, nil, []byte(selected), []byte(joined.SelectedChildID), "", "", 1)
@@ -1376,6 +1443,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	row.GuestCreated = uint64(1) + uint64(childGuests.Load()) + uint64(workflowFactory.created)
 	row.GuestDestroyed = row.GuestCreated
 	completeTraceRow(&row, started, recorder)
+	writeSparkBodyCapture(t, scenario, scenarioSHA, string(resumed.Output), childBodies, row)
 	return row, true
 }
 

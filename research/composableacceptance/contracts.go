@@ -1,5 +1,5 @@
-// Package composableacceptance defines the body-free record boundary for
-// repository-shaped composable-runtime acceptance treatments.
+// Package composableacceptance defines the body-free acceptance-report boundary
+// and its separately enabled research body-capture contract.
 package composableacceptance
 
 import (

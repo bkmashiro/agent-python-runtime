@@ -10,13 +10,15 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bkmashiro/agent-python-runtime/research/composableacceptance"
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 )
 
-const TaskSnapshotSchema = "pysolate.lab-task.v1"
+const TaskSnapshotSchema = "pysolate.lab-task.v2"
 
-const taskCorpusSHA = "sha256:f88e94b462dd39d094512f71f9b8a397e0627b745c217442ccee98dbaed4904a"
-const taskReportSHA = "sha256:269560ea66feee6f3015658be1c3fafe8308d973dc465625580185950f70a104"
+const taskCorpusSHA = "sha256:41a06f50325e5e980cc295c3d4f3373cb85873cadcdbb11bdc13e2dbbea1a8a9"
+const taskReportSHA = "sha256:58cd7dc40aacb903ddf7eb55554a07cd0ad7f73a52ef09a5571545bdd28abd8d"
+const taskCaptureSHA = "sha256:90cffbb02533fabd40a89f7b71dfb107eedd44aa6166c1aee6688356e03dedb2"
 
 var taskID = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
@@ -43,8 +45,9 @@ func taskRelativePath(value string) bool {
 }
 
 type TaskInputs struct {
-	Corpus []byte
-	Report []byte
+	Corpus  []byte
+	Report  []byte
+	Capture []byte
 }
 
 type TaskSource struct {
@@ -99,6 +102,25 @@ type TaskStats struct {
 	WorkspaceChanges int     `json:"workspace_changes"`
 }
 
+type TaskContext struct {
+	Files                  []string `json:"files"`
+	Analyses               []string `json:"analyses"`
+	RepeatedTransformation string   `json:"repeated_transformation"`
+	WaitBoundary           string   `json:"wait_boundary"`
+	Observation            string   `json:"observation"`
+	SelectedChild          int      `json:"selected_child"`
+}
+
+type TaskOutput struct {
+	AgentID       string `json:"agent_id"`
+	Label         string `json:"label"`
+	Path          string `json:"path,omitempty"`
+	Disposition   string `json:"disposition"`
+	Body          string `json:"body"`
+	SHA256        string `json:"sha256"`
+	EventSequence int    `json:"event_sequence"`
+}
+
 type TaskSnapshot struct {
 	SchemaVersion    string       `json:"schema_version"`
 	Identity         string       `json:"identity"`
@@ -107,7 +129,10 @@ type TaskSnapshot struct {
 	Task             string       `json:"task"`
 	Status           string       `json:"status"`
 	ExpectedArtifact string       `json:"expected_artifact"`
+	ProviderIO       string       `json:"provider_io"`
+	Context          TaskContext  `json:"context"`
 	Sources          []TaskSource `json:"sources"`
+	Outputs          []TaskOutput `json:"outputs"`
 	Events           []TaskEvent  `json:"events"`
 	Stats            TaskStats    `json:"stats"`
 }
@@ -118,12 +143,20 @@ type taskCorpus struct {
 		ID            string `json:"id"`
 		GuestSource   string `json:"guest_source"`
 		ChildPrograms []struct {
-			ID     string `json:"id"`
-			Role   string `json:"role"`
-			Source string `json:"source"`
+			ID             string `json:"id"`
+			Role           string `json:"role"`
+			Source         string `json:"source"`
+			ExpectedResult string `json:"expected_result"`
+			OutputPath     string `json:"output_path"`
 		} `json:"child_programs"`
-		Task             string `json:"task"`
-		ExpectedArtifact string `json:"expected_artifact"`
+		Task                   string   `json:"task"`
+		Files                  []string `json:"files"`
+		ChildAnalyses          []string `json:"child_analyses"`
+		RepeatedTransformation string   `json:"repeated_transformation"`
+		WaitBoundary           string   `json:"wait_boundary"`
+		Observation            string   `json:"observation"`
+		SelectedChild          int      `json:"selected_child"`
+		ExpectedArtifact       string   `json:"expected_artifact"`
 	} `json:"scenarios"`
 }
 
@@ -146,8 +179,16 @@ func taskSnapshotIdentity(snapshot TaskSnapshot) (string, error) {
 }
 
 func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
-	if latestSHA(inputs.Corpus) != taskCorpusSHA || latestSHA(inputs.Report) != taskReportSHA {
+	if latestSHA(inputs.Corpus) != taskCorpusSHA || latestSHA(inputs.Report) != taskReportSHA || latestSHA(inputs.Capture) != taskCaptureSHA {
 		return TaskSnapshot{}, errors.New("task inspector input anchor mismatch")
+	}
+	capture, captureIdentity, err := composableacceptance.DecodeBodyCapture(inputs.Capture)
+	if err != nil || captureIdentity != taskCaptureSHA {
+		return TaskSnapshot{}, errors.New("invalid task inspector body capture")
+	}
+	var typedReport composableacceptance.Report
+	if err := composableacceptance.DecodeReport(inputs.Report, &typedReport); err != nil {
+		return TaskSnapshot{}, errors.New("invalid typed task inspector report")
 	}
 	var corpus taskCorpus
 	var report taskReport
@@ -157,17 +198,25 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 	if err := json.Unmarshal(inputs.Report, &report); err != nil || report.SchemaVersion != "pysolate.composable-acceptance-report.v3" {
 		return TaskSnapshot{}, errors.New("invalid task inspector report")
 	}
-	const selected = "dev-workspace-summary"
+	const selected = "dev-release-readiness"
 	var scenario *struct {
 		ID            string `json:"id"`
 		GuestSource   string `json:"guest_source"`
 		ChildPrograms []struct {
-			ID     string `json:"id"`
-			Role   string `json:"role"`
-			Source string `json:"source"`
+			ID             string `json:"id"`
+			Role           string `json:"role"`
+			Source         string `json:"source"`
+			ExpectedResult string `json:"expected_result"`
+			OutputPath     string `json:"output_path"`
 		} `json:"child_programs"`
-		Task             string `json:"task"`
-		ExpectedArtifact string `json:"expected_artifact"`
+		Task                   string   `json:"task"`
+		Files                  []string `json:"files"`
+		ChildAnalyses          []string `json:"child_analyses"`
+		RepeatedTransformation string   `json:"repeated_transformation"`
+		WaitBoundary           string   `json:"wait_boundary"`
+		Observation            string   `json:"observation"`
+		SelectedChild          int      `json:"selected_child"`
+		ExpectedArtifact       string   `json:"expected_artifact"`
 	}
 	for index := range corpus.Scenarios {
 		if corpus.Scenarios[index].ID == selected {
@@ -189,6 +238,20 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 	if scenario == nil || row == nil || row.Status != "passed" || len(row.Trace) == 0 {
 		return TaskSnapshot{}, errors.New("selected task inspector run is unavailable")
 	}
+	var typedRow *composableacceptance.Row
+	for index := range typedReport.Rows {
+		if typedReport.Rows[index].ScenarioID == selected {
+			typedRow = &typedReport.Rows[index]
+			break
+		}
+	}
+	if typedRow == nil {
+		return TaskSnapshot{}, errors.New("selected typed task inspector run is unavailable")
+	}
+	traceIdentity, err := composableacceptance.TraceIdentity(typedRow.Trace)
+	if err != nil || capture.ScenarioID != selected || capture.ScenarioSHA256 != typedRow.ScenarioSHA256 || capture.TraceSHA256 != traceIdentity || capture.ProviderIO != composableacceptance.ProviderIONotApplicable {
+		return TaskSnapshot{}, errors.New("task inspector body capture is not trace-bound")
+	}
 	sources := []TaskSource{{ID: "orchestrator", Role: "orchestrator", File: "orchestrator.py", Source: scenario.GuestSource}}
 	for _, child := range scenario.ChildPrograms {
 		sources = append(sources, TaskSource{ID: child.ID, Role: child.Role, File: child.ID + ".py", Source: child.Source})
@@ -199,15 +262,74 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 		taskAgents[event.AgentID] = true
 		taskChanges += len(event.WorkspaceChanges)
 	}
+	capturedOutputs := map[string]composableacceptance.CapturedAgentOutput{}
+	for _, captured := range capture.AgentOutputs {
+		capturedOutputs[captured.AgentID] = captured
+	}
+	if len(capturedOutputs) != 2 || capture.WorkflowOutput != scenario.ExpectedArtifact {
+		return TaskSnapshot{}, errors.New("task inspector capture does not match public fixture")
+	}
+	outputs := []TaskOutput{}
+	workflowDigest := latestSHA([]byte(capture.WorkflowOutput))
+	workflowSequence := 0
+	for _, event := range row.Trace {
+		if event.Type == "oracle" && event.InputSHA256 == workflowDigest && event.OutputSHA256 == workflowDigest {
+			workflowSequence = event.Sequence
+		}
+	}
+	if workflowSequence == 0 {
+		return TaskSnapshot{}, errors.New("release workflow output body is not trace-bound")
+	}
+	outputs = append(outputs, TaskOutput{AgentID: "orchestrator", Label: "Release decision", Disposition: "workflow_result", Body: capture.WorkflowOutput, SHA256: workflowDigest, EventSequence: workflowSequence})
+	for childIndex, child := range scenario.ChildPrograms {
+		captured, ok := capturedOutputs[child.ID]
+		expectedDisposition := "discarded_branch"
+		if childIndex == scenario.SelectedChild {
+			expectedDisposition = "selected_branch"
+		}
+		if !ok || captured.Path != child.OutputPath || captured.Disposition != expectedDisposition || captured.Body != child.ExpectedResult {
+			return TaskSnapshot{}, fmt.Errorf("captured release output for %s does not match the public fixture", child.ID)
+		}
+		bodyDigest := latestSHA([]byte(captured.Body))
+		sequence := 0
+		for _, event := range row.Trace {
+			if event.AgentID != child.ID || event.Action != "agent.execute" || event.OutputSHA256 != bodyDigest {
+				continue
+			}
+			for _, change := range event.WorkspaceChanges {
+				if change.Path == child.OutputPath && change.AfterSHA256 == bodyDigest && change.Size == len([]byte(child.ExpectedResult)) {
+					sequence = event.Sequence
+				}
+			}
+		}
+		if sequence == 0 {
+			return TaskSnapshot{}, fmt.Errorf("release output body for %s is not trace-bound", child.ID)
+		}
+		label := "Dependency review"
+		if child.ID == "reviewer" {
+			label = "Release checklist"
+		}
+		outputs = append(outputs, TaskOutput{AgentID: child.ID, Label: label, Path: captured.Path, Disposition: captured.Disposition, Body: captured.Body, SHA256: bodyDigest, EventSequence: sequence})
+	}
 	snapshot := TaskSnapshot{
 		SchemaVersion:    TaskSnapshotSchema,
 		ID:               selected,
-		Title:            "Summarize a development workspace",
+		Title:            "Prepare a release readiness review",
 		Task:             scenario.Task,
 		Status:           row.Status,
 		ExpectedArtifact: scenario.ExpectedArtifact,
-		Sources:          sources,
-		Events:           row.Trace,
+		ProviderIO:       capture.ProviderIO,
+		Context: TaskContext{
+			Files:                  scenario.Files,
+			Analyses:               scenario.ChildAnalyses,
+			RepeatedTransformation: scenario.RepeatedTransformation,
+			WaitBoundary:           scenario.WaitBoundary,
+			Observation:            scenario.Observation,
+			SelectedChild:          scenario.SelectedChild,
+		},
+		Sources: sources,
+		Outputs: outputs,
+		Events:  row.Trace,
 		Stats: TaskStats{
 			DurationMillis:   row.Trace[len(row.Trace)-1].RelativeElapsedMillis,
 			Events:           len(row.Trace),
@@ -224,25 +346,55 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 }
 
 func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
-	if snapshot.SchemaVersion != TaskSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || snapshot.ID != "dev-workspace-summary" || snapshot.Title == "" || snapshot.Task == "" || snapshot.Status != "passed" || snapshot.ExpectedArtifact == "" || !taskPublicText(snapshot.Title+"\n"+snapshot.Task+"\n"+snapshot.ExpectedArtifact) || len(snapshot.Sources) != 3 || len(snapshot.Events) < 10 {
+	if snapshot.SchemaVersion != TaskSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || snapshot.ID != "dev-release-readiness" || snapshot.Title == "" || snapshot.Task == "" || snapshot.Status != "passed" || snapshot.ProviderIO != composableacceptance.ProviderIONotApplicable || snapshot.ExpectedArtifact == "" || !taskPublicText(snapshot.Title+"\n"+snapshot.Task+"\n"+snapshot.ExpectedArtifact) || len(snapshot.Context.Files) < 1 || len(snapshot.Context.Analyses) != 2 || snapshot.Context.RepeatedTransformation == "" || snapshot.Context.WaitBoundary == "" || snapshot.Context.Observation == "" || snapshot.Context.SelectedChild < 0 || snapshot.Context.SelectedChild > 1 || len(snapshot.Sources) != 3 || len(snapshot.Events) < 10 {
 		return errors.New("invalid task inspector envelope")
 	}
 	identity, err := taskSnapshotIdentity(snapshot)
 	if err != nil || identity != snapshot.Identity {
 		return errors.New("task inspector identity mismatch")
 	}
+	for _, file := range snapshot.Context.Files {
+		if !taskRelativePath(file) {
+			return errors.New("invalid task inspector context file")
+		}
+	}
+	if !taskPublicText(strings.Join(snapshot.Context.Analyses, "\n") + "\n" + snapshot.Context.RepeatedTransformation + "\n" + snapshot.Context.WaitBoundary + "\n" + snapshot.Context.Observation) {
+		return errors.New("invalid task inspector context")
+	}
 	sources := map[string]TaskSource{}
-	for _, source := range snapshot.Sources {
-		if !taskID.MatchString(source.ID) || source.Role == "" || !taskRelativePath(source.File) || source.Source == "" || !taskPublicText(source.Role+"\n"+source.Source) || sources[source.ID].ID != "" {
+	expectedSources := []struct{ id, role, file string }{{"orchestrator", "orchestrator", "orchestrator.py"}, {"researcher", "dependency-reviewer", "researcher.py"}, {"reviewer", "release-reviewer", "reviewer.py"}}
+	for index, source := range snapshot.Sources {
+		expected := expectedSources[index]
+		if source.ID != expected.id || source.Role != expected.role || source.File != expected.file || !taskID.MatchString(source.ID) || source.Source == "" || !taskPublicText(source.Source) || sources[source.ID].ID != "" {
 			return errors.New("invalid task inspector source")
 		}
 		sources[source.ID] = source
+	}
+	if len(snapshot.Outputs) != 3 {
+		return errors.New("task inspector outputs are incomplete")
+	}
+	outputs := map[string]TaskOutput{}
+	outputSequences := map[int]TaskOutput{}
+	selectedAgent := snapshot.Sources[snapshot.Context.SelectedChild+1].ID
+	for _, output := range snapshot.Outputs {
+		expectedDisposition := "discarded_branch"
+		if output.AgentID == "orchestrator" {
+			expectedDisposition = "workflow_result"
+		} else if output.AgentID == selectedAgent {
+			expectedDisposition = "selected_branch"
+		}
+		if sources[output.AgentID].ID == "" || output.Label == "" || output.Disposition != expectedDisposition || output.Body == "" || !taskPublicText(output.Label+"\n"+output.Body) || output.SHA256 != latestSHA([]byte(output.Body)) || output.EventSequence < 1 || outputs[output.AgentID].AgentID != "" || outputSequences[output.EventSequence].AgentID != "" || output.Path != "" && !taskRelativePath(output.Path) {
+			return errors.New("invalid task inspector output")
+		}
+		outputs[output.AgentID] = output
+		outputSequences[output.EventSequence] = output
 	}
 	sequences := map[int]bool{}
 	spans := map[string]bool{}
 	lastSequence := 0
 	lastElapsed := float64(0)
 	workspaceChanges := 0
+	seenOutputs := map[string]bool{}
 	agents := map[string]bool{}
 	for _, event := range snapshot.Events {
 		if event.Sequence <= lastSequence || event.SpanID == "" || spans[event.SpanID] || (!taskID.MatchString(event.AgentID) || (sources[event.AgentID].ID == "" && event.AgentID != "runtime")) || event.AgentRole == "" || event.StartedMillis < 0 || event.EndedMillis < event.StartedMillis || event.Type == "" || event.Action == "" || event.Outcome == "" || event.RelativeElapsedMillis < event.EndedMillis || event.RelativeElapsedMillis < lastElapsed || event.Count < 1 {
@@ -262,9 +414,28 @@ func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
 		}
 		if event.Source != nil {
 			source := sources[event.Source.SourceID]
-			if source.ID == "" || event.Source.File != source.File || event.Source.StartLine < 1 || event.Source.EndLine < event.Source.StartLine || event.Source.EndLine > strings.Count(source.Source, "\n")+1 {
-				return errors.New("invalid task inspector source reference")
+			if source.ID == "" || event.Source.File != source.File || event.Source.StartLine < 1 || event.Source.EndLine < event.Source.StartLine || event.Source.EndLine > len(strings.Split(source.Source, "\n")) {
+				return errors.New("invalid task inspector source ref")
 			}
+		}
+		if output := outputSequences[event.Sequence]; output.AgentID != "" {
+			if output.Path == "" {
+				if event.Type != "oracle" || event.InputSHA256 != output.SHA256 || event.OutputSHA256 != output.SHA256 {
+					return errors.New("workflow output body is not bound to its recorded event")
+				}
+			} else {
+				if event.AgentID != output.AgentID || event.OutputSHA256 != output.SHA256 {
+					return errors.New("agent output body is not bound to its recorded event")
+				}
+				matchedChange := false
+				for _, change := range event.WorkspaceChanges {
+					matchedChange = matchedChange || change.Path == output.Path && change.AfterSHA256 == output.SHA256 && change.Size == len([]byte(output.Body))
+				}
+				if !matchedChange {
+					return errors.New("workspace output body is not bound to its recorded change")
+				}
+			}
+			seenOutputs[output.AgentID] = true
 		}
 		for _, change := range event.WorkspaceChanges {
 			if !taskRelativePath(change.Path) || change.Kind == "" || !taskPublicText(change.Kind) || !latestDigest.MatchString(change.AfterSHA256) || change.Size < 0 {
@@ -278,7 +449,7 @@ func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
 		lastElapsed = event.RelativeElapsedMillis
 		agents[event.AgentID] = true
 	}
-	if len(agents) < 4 || workspaceChanges != 2 || snapshot.Stats.Events != len(snapshot.Events) || snapshot.Stats.Agents != len(agents) || snapshot.Stats.WorkspaceChanges != workspaceChanges || snapshot.Stats.DurationMillis != snapshot.Events[len(snapshot.Events)-1].RelativeElapsedMillis {
+	if len(agents) < 4 || len(seenOutputs) != len(snapshot.Outputs) || workspaceChanges != 2 || snapshot.Stats.Events != len(snapshot.Events) || snapshot.Stats.Agents != len(agents) || snapshot.Stats.WorkspaceChanges != workspaceChanges || snapshot.Stats.DurationMillis != snapshot.Events[len(snapshot.Events)-1].RelativeElapsedMillis {
 		return errors.New("task inspector lost agents, timing, or workspace changes")
 	}
 	return nil

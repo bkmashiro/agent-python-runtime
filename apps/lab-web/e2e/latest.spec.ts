@@ -78,17 +78,25 @@ test('keeps code mono, restores the icon and contains timeline geometry', async 
   expect(aligned).toBe(true);
 });
 
-test('inspects one real workspace task across timeline, trace, source and workspace', async ({ page }) => {
+test('restores the execution-list inspector with full agent outputs and a separate timeline', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Task Inspector' }).click();
-  await expect(page.getByRole('heading', { name: 'Summarize a development workspace' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Research workspace shape/ })).toBeVisible();
-  await page.getByRole('tab', { name: 'Trace tree' }).click();
-  await expect(page.getByRole('button', { name: /Start parallel analyses/ })).toBeVisible();
-  await page.getByRole('navigation', { name: 'Inspector tabs' }).getByRole('button', { name: 'Workspace', exact: true }).click();
-  await expect(page.getByText('researcher.txt')).toBeVisible();
-  await expect(page.getByText('reviewer.txt')).toBeVisible();
+  await page.getByRole('button', { name: 'Inspector' }).click();
+  await expect(page.getByRole('heading', { name: 'Prepare a release readiness review' })).toBeVisible();
+  await expect(page.getByText('SCRIPTED GUEST · FULL RUNTIME RECORDING', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Execution trace')).toBeVisible();
+  await expect(page.getByLabel('Selected operation inspector')).toBeVisible();
+  await expect(page.getByText('wazero pinned', { exact: false })).toBeVisible();
+  await page.getByRole('tab', { name: 'Workspace' }).click();
+  await expect(page.getByText('dependency-review.md', { exact: true })).toBeVisible();
+  await expect(page.getByText('discarded branch · researcher', { exact: true })).toBeVisible();
+  await expect(page.getByText('release-checklist.md', { exact: true })).toBeVisible();
+  await expect(page.getByText('selected branch · reviewer', { exact: true })).toBeVisible();
   await expect(page.getByText(/oracle .*passed/i)).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Timeline' }).click();
+  await expect(page.getByRole('heading', { name: 'Execution timeline' })).toBeVisible();
+  await expect(page.getByLabel('Full execution timeline')).toBeVisible();
+  await expect(page.getByLabel('Selected operation inspector')).toHaveCount(0);
 });
 
 test('remains usable at narrow viewport', async ({ page }) => {

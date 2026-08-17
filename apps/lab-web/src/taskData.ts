@@ -7,6 +7,16 @@ export interface TaskSource {
   source: string;
 }
 
+export interface TaskOutput {
+  agent_id: string;
+  label: string;
+  path?: string;
+  disposition: 'selected_branch' | 'discarded_branch' | 'workflow_result';
+  body: string;
+  sha256: string;
+  event_sequence: number;
+}
+
 export interface TaskSourceRef {
   source_id: string;
   file: string;
@@ -46,14 +56,24 @@ export interface TaskEvent {
 }
 
 export interface TaskSnapshot {
-  schema_version: 'pysolate.lab-task.v1';
+  schema_version: 'pysolate.lab-task.v2';
   identity: string;
-  id: 'dev-workspace-summary';
+  id: 'dev-release-readiness';
   title: string;
   task: string;
   status: 'passed';
   expected_artifact: string;
+  provider_io: 'not_applicable_scripted_fixture';
+  context: {
+    files: string[];
+    analyses: string[];
+    repeated_transformation: string;
+    wait_boundary: string;
+    observation: string;
+    selected_child: number;
+  };
   sources: TaskSource[];
+  outputs: TaskOutput[];
   events: TaskEvent[];
   stats: {
     duration_millis: number;
@@ -145,19 +165,43 @@ function assertUniqueJSONKeys(raw: string) {
 
 function validateTaskSnapshotShape(raw: unknown): TaskSnapshot {
   const root = object(raw, 'task snapshot');
-  exactKeys(root, ['schema_version', 'identity', 'id', 'title', 'task', 'status', 'expected_artifact', 'sources', 'events', 'stats'], 'task snapshot');
-  if (root.schema_version !== 'pysolate.lab-task.v1' || typeof root.identity !== 'string' || !digest.test(root.identity) || root.id !== 'dev-workspace-summary' || root.status !== 'passed' || !nonempty(root.title) || !nonempty(root.task) || !nonempty(root.expected_artifact)) throw new Error('task snapshot envelope is invalid');
+  exactKeys(root, ['schema_version', 'identity', 'id', 'title', 'task', 'status', 'expected_artifact', 'provider_io', 'context', 'sources', 'outputs', 'events', 'stats'], 'task snapshot');
+  if (root.schema_version !== 'pysolate.lab-task.v2' || typeof root.identity !== 'string' || !digest.test(root.identity) || root.id !== 'dev-release-readiness' || root.status !== 'passed' || root.provider_io !== 'not_applicable_scripted_fixture' || !nonempty(root.title) || !nonempty(root.task) || !nonempty(root.expected_artifact)) throw new Error('task snapshot envelope is invalid');
   const serialized = JSON.stringify(root).toLowerCase();
   if (privateMarkers.some((marker) => serialized.includes(marker))) throw new Error('task snapshot contains private body or path marker');
+  const context = object(root.context, 'task context');
+  exactKeys(context, ['files', 'analyses', 'repeated_transformation', 'wait_boundary', 'observation', 'selected_child'], 'task context');
+  if (!Array.isArray(context.files) || context.files.length < 1 || context.files.some((file) => !relativePath(file)) || !Array.isArray(context.analyses) || context.analyses.length !== 2 || context.analyses.some((item) => !nonempty(item)) || !nonempty(context.repeated_transformation) || !nonempty(context.wait_boundary) || !nonempty(context.observation) || !Number.isInteger(context.selected_child) || (context.selected_child as number) < 0 || (context.selected_child as number) > 1) throw new Error('task context is invalid');
   if (!Array.isArray(root.sources) || root.sources.length !== 3) throw new Error('task sources are invalid');
   const sourceIDs = new Set<string>();
   const sourceFiles = new Map<string, { file: string; lines: number }>();
-  for (const rawSource of root.sources) {
+  const expectedSources = [
+    ['orchestrator', 'orchestrator', 'orchestrator.py'],
+    ['researcher', 'dependency-reviewer', 'researcher.py'],
+    ['reviewer', 'release-reviewer', 'reviewer.py'],
+  ];
+  for (const [index, rawSource] of root.sources.entries()) {
     const source = object(rawSource, 'task source');
+    const expected = expectedSources[index];
     exactKeys(source, ['id', 'role', 'file', 'source'], 'task source');
-    if (!nonempty(source.id) || !taskID.test(source.id) || !nonempty(source.role) || !relativePath(source.file) || !nonempty(source.source) || sourceIDs.has(source.id)) throw new Error('task source is invalid');
+    if (!expected || source.id !== expected[0] || source.role !== expected[1] || source.file !== expected[2] || !nonempty(source.source) || sourceIDs.has(source.id)) throw new Error('task source is invalid');
     sourceIDs.add(source.id);
     sourceFiles.set(source.id, { file: source.file, lines: source.source.split('\n').length });
+  }
+  const selectedSource = object(root.sources[(context.selected_child as number) + 1], 'selected child source');
+  const selectedAgent = selectedSource.id;
+  if (!nonempty(selectedAgent)) throw new Error('selected child source is invalid');
+  if (!Array.isArray(root.outputs) || root.outputs.length !== 3) throw new Error('task outputs are incomplete');
+  const outputAgents = new Set<string>();
+  const outputSequences = new Set<number>();
+  for (const rawOutput of root.outputs) {
+    const output = object(rawOutput, 'task output');
+    const keys = output.path === undefined ? ['agent_id', 'label', 'disposition', 'body', 'sha256', 'event_sequence'] : ['agent_id', 'label', 'path', 'disposition', 'body', 'sha256', 'event_sequence'];
+    exactKeys(output, keys, 'task output');
+    const expectedDisposition = output.agent_id === 'orchestrator' ? 'workflow_result' : output.agent_id === selectedAgent ? 'selected_branch' : 'discarded_branch';
+    if (!nonempty(output.agent_id) || !sourceIDs.has(output.agent_id) || outputAgents.has(output.agent_id) || output.disposition !== expectedDisposition || !nonempty(output.label) || !nonempty(output.body) || typeof output.sha256 !== 'string' || !digest.test(output.sha256) || !Number.isInteger(output.event_sequence) || (output.event_sequence as number) < 1 || outputSequences.has(output.event_sequence as number) || output.path !== undefined && !relativePath(output.path)) throw new Error('task output is invalid');
+    outputAgents.add(output.agent_id);
+    outputSequences.add(output.event_sequence as number);
   }
   if (!Array.isArray(root.events) || root.events.length < 10) throw new Error('task events are invalid');
   let lastSequence = 0;
@@ -222,8 +266,30 @@ async function taskSnapshotIdentity(snapshot: TaskSnapshot): Promise<string> {
   return `sha256:${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
+async function bodySHA256(body: string): Promise<string> {
+  const bytes = new TextEncoder().encode(body);
+  const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return `sha256:${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+async function validateTaskOutputs(snapshot: TaskSnapshot) {
+  const events = new Map(snapshot.events.map((event) => [event.sequence, event]));
+  for (const output of snapshot.outputs) {
+    if (await bodySHA256(output.body) !== output.sha256) throw new Error('task output body digest mismatch');
+    const event = events.get(output.event_sequence);
+    if (!event) throw new Error('task output event is missing');
+    if (!output.path) {
+      if (event.type !== 'oracle' || event.input_sha256 !== output.sha256 || event.output_sha256 !== output.sha256) throw new Error('workflow output body is not event-bound');
+      continue;
+    }
+    const change = event.workspace_changes?.find((item) => item.path === output.path);
+    if (event.agent_id !== output.agent_id || event.output_sha256 !== output.sha256 || change?.after_sha256 !== output.sha256 || change.size !== new TextEncoder().encode(output.body).byteLength) throw new Error('agent output body is not workspace-bound');
+  }
+}
+
 export async function validateTaskSnapshot(raw: unknown): Promise<TaskSnapshot> {
   const snapshot = validateTaskSnapshotShape(raw);
+  await validateTaskOutputs(snapshot);
   if (await taskSnapshotIdentity(snapshot) !== snapshot.identity) throw new Error('task snapshot identity mismatch');
   if (snapshot.identity !== expectedTaskSnapshotIdentity) throw new Error('task snapshot is not the build-pinned run');
   return snapshot;

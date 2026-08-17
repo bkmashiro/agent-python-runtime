@@ -17,13 +17,15 @@ async function reseal(task: TaskSnapshot) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('task inspector snapshot', () => {
-  it('loads one real workspace task with source, timeline and workspace changes', async () => {
+  it('loads one real release-readiness recording with source, outputs, timeline and workspace changes', async () => {
     const task = await validateTaskSnapshot(await fixture());
-    expect(task.id).toBe('dev-workspace-summary');
+    expect(task.id).toBe('dev-release-readiness');
+    expect(task.provider_io).toBe('not_applicable_scripted_fixture');
     expect(task.sources.map((source) => source.id)).toEqual(['orchestrator', 'researcher', 'reviewer']);
     expect(task.events).toHaveLength(37);
-    expect(task.stats).toEqual({ duration_millis: 37857, events: 37, agents: 4, workspace_changes: 2 });
-    expect(task.events.flatMap((event) => event.workspace_changes ?? []).map((change) => change.path)).toEqual(['researcher.txt', 'reviewer.txt']);
+    expect(task.stats).toEqual({ duration_millis: 14891, events: 37, agents: 4, workspace_changes: 2 });
+    expect(task.outputs.map((output) => output.path ?? 'workflow')).toEqual(['workflow', 'dependency-review.md', 'release-checklist.md']);
+    expect(task.events.flatMap((event) => event.workspace_changes ?? []).map((change) => change.path)).toEqual(['dependency-review.md', 'release-checklist.md']);
   });
 
   it('rejects missing trace and private source markers', async () => {
@@ -38,6 +40,15 @@ describe('task inspector snapshot', () => {
     const privateSource = await fixture();
     privateSource.sources[0].source = '/Users/private/task.py';
     await expect(validateTaskSnapshot(privateSource)).rejects.toThrow(/private body or path marker/);
+
+    const forgedOutput = await fixture();
+    forgedOutput.outputs[1].body = 'forged dependency review';
+    await expect(validateTaskSnapshot(forgedOutput)).rejects.toThrow(/body digest mismatch/);
+
+    const branchDrift = await fixture();
+    branchDrift.outputs[1].disposition = 'selected_branch';
+    await reseal(branchDrift);
+    await expect(validateTaskSnapshot(branchDrift)).rejects.toThrow(/output is invalid/);
 
     const forgedSource = await fixture();
     const sourced = forgedSource.events.find((event) => event.source);
@@ -57,6 +68,11 @@ describe('task inspector snapshot', () => {
     unknownAgent.events.find((event) => event.agent_id === 'researcher')!.agent_id = 'attacker';
     await reseal(unknownAgent);
     await expect(validateTaskSnapshot(unknownAgent)).rejects.toThrow(/event is invalid/);
+
+    const reorderedSources = await fixture();
+    [reorderedSources.sources[1], reorderedSources.sources[2]] = [reorderedSources.sources[2], reorderedSources.sources[1]];
+    await reseal(reorderedSources);
+    await expect(validateTaskSnapshot(reorderedSources)).rejects.toThrow(/source is invalid/);
 
     const futureParent = await fixture();
     futureParent.events[1].parent_sequence = futureParent.events.at(-1)!.sequence;

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { loadLatestSnapshot, type LatestCodeAnnotation, type LatestDemo, type LatestSnapshot } from './latestData';
 import { loadTaskSnapshot, type TaskSnapshot } from './taskData';
-import TaskInspector from './TaskInspector';
+import TaskInspector, { TaskTimeline } from './TaskInspector';
 import './styles.css';
 
 function tierLabel(status: LatestDemo['status']) {
@@ -109,7 +109,7 @@ function MetricStrip({ demo }: { demo: LatestDemo }) {
 export default function App() {
   const [snapshot, setSnapshot] = useState<LatestSnapshot | null>(null);
   const [task, setTask] = useState<TaskSnapshot | null>(null);
-  const [surface, setSurface] = useState<'mechanisms' | 'task'>('mechanisms');
+  const [surface, setSurface] = useState<'mechanisms' | 'inspector' | 'timeline'>('mechanisms');
   const [selectedID, setSelectedID] = useState<string>('source-prefix-overlap');
   const [error, setError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -119,7 +119,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (surface !== 'task' || task || taskError) return;
+    if (surface === 'mechanisms' || task || taskError) return;
     loadTaskSnapshot().then(setTask).catch((reason: unknown) => setTaskError(reason instanceof Error ? reason.message : String(reason)));
   }, [surface, task, taskError]);
 
@@ -137,7 +137,8 @@ export default function App() {
         </a>
         <nav className="surface-nav" aria-label="Lab views">
           <button aria-pressed={surface === 'mechanisms'} onClick={() => setSurface('mechanisms')} type="button">Mechanisms</button>
-          <button aria-pressed={surface === 'task'} onClick={() => setSurface('task')} type="button">Task Inspector</button>
+          <button aria-pressed={surface === 'inspector'} onClick={() => setSurface('inspector')} type="button">Inspector</button>
+          <button aria-pressed={surface === 'timeline'} onClick={() => setSurface('timeline')} type="button">Timeline</button>
         </nav>
       </header>
 
@@ -184,14 +185,14 @@ export default function App() {
               </article>
             </div>
           </>
+        ) : taskError ? (
+          <section className="inline-error"><h2>Recording rejected</h2><p>{taskError}</p></section>
+        ) : !task ? (
+          <section className="inline-loading">Loading experiment recording…</section>
+        ) : surface === 'inspector' ? (
+          <TaskInspector task={task} />
         ) : (
-          <>
-            <section className="intro compact">
-              <h1>Task Inspector</h1>
-              <p>One real Guest task, from Python source to workspace output.</p>
-            </section>
-            {taskError ? <section className="inline-error"><h2>Task rejected</h2><p>{taskError}</p></section> : task ? <TaskInspector task={task} /> : <section className="inline-loading">Loading task…</section>}
-          </>
+          <TaskTimeline task={task} />
         )}
       </main>
     </div>

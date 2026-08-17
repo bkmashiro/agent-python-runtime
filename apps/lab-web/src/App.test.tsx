@@ -55,7 +55,7 @@ describe('latest Pysolate Lab', () => {
     expect(screen.getAllByText('384 MiB')[0]).toBeVisible();
   });
 
-  it('restores a real task timeline, trace tree and inspector', async () => {
+  it('restores the old execution-list inspector and keeps timeline separate', async () => {
     const latest = await snapshot();
     const task = await taskSnapshot();
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string) => ({
@@ -66,14 +66,18 @@ describe('latest Pysolate Lab', () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Runtime mechanisms' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Task Inspector' }));
-    expect(await screen.findByRole('heading', { name: 'Summarize a development workspace' })).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('button', { name: /Research workspace shape/ })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Inspector' }));
+    expect(await screen.findByRole('heading', { name: 'Prepare a release readiness review' })).toBeVisible();
+    expect(screen.getByLabelText('Execution trace')).toBeVisible();
+    expect(screen.getByLabelText('Selected operation inspector')).toBeVisible();
+    expect(screen.getByText(/wazero pinned/)).toBeVisible();
+    fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }));
+    expect(screen.getByText('dependency-review.md')).toBeVisible();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Trace tree' }));
-    expect(screen.getByRole('button', { name: /Start parallel analyses/ })).toHaveStyle({ paddingLeft: '30px' });
-    expect(screen.getByRole('button', { name: /Research workspace shape/ })).toHaveStyle({ paddingLeft: '46px' });
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    expect(await screen.findByRole('heading', { name: 'Execution timeline' })).toBeVisible();
+    expect(screen.getByLabelText('Full execution timeline')).toBeVisible();
+    expect(screen.queryByLabelText('Selected operation inspector')).not.toBeInTheDocument();
     expect(screen.queryByText(/oracle .*passed/i)).not.toBeInTheDocument();
   });
 

@@ -57,6 +57,11 @@ class GuestOutputContractTests(unittest.TestCase):
         request = json.dumps({"run_id": "yield", "code": "yield 1", "inputs": {}})
         self.assertEqual(module._validate_request_source(request), module._SOURCE_CONTRACT_INVALID)
 
+    def test_wrapper_preserves_module_global_semantics(self):
+        response = execute(load_runtime(), "counter = 0\ndef callback():\n    global counter\n    counter += 1\ndef program():\n    callback()\ncallback()\nprogram()\nreturn {'counter': counter, 'freevars': list(program.__code__.co_freevars)}")
+        self.assertEqual(response["status"], "ok")
+        self.assertEqual(response["result"], {"counter": 2, "freevars": []})
+
     def test_print_is_bounded(self):
         response = execute(load_runtime(), "print('x' * 70000)\nreturn 1")
         self.assertEqual(response["status"], "error")

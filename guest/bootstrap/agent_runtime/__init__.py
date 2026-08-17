@@ -409,13 +409,77 @@ class _TopLevelReturnTransformer(ast.NodeTransformer):
         return ast.copy_location(rewritten, node)
 
 
+class _ModuleAssignedNameCollector(ast.NodeVisitor):
+    """Collect names that module execution would bind in its global namespace."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.names.add(node.id)
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.names.update(node.names)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self.names.add(alias.asname or alias.name.split(".", 1)[0])
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for alias in node.names:
+            if alias.name != "*":
+                self.names.add(alias.asname or alias.name)
+
+    def _visit_function_binding(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+        for value in (*node.decorator_list, *node.args.defaults, *node.args.kw_defaults):
+            if value is not None:
+                self.visit(value)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function_binding(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function_binding(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)
+        for value in (*node.decorator_list, *node.bases):
+            self.visit(value)
+        for keyword in node.keywords:
+            self.visit(keyword.value)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        for value in (*node.args.defaults, *node.args.kw_defaults):
+            if value is not None:
+                self.visit(value)
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        return
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        return
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        return
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        return
+
+
 def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tuple[types.CodeType, str]:
     for node in ast.walk(ast.Module(body=body, type_ignores=[])):
         if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
             raise SyntaxError("agent source uses a reserved runtime name")
+    collector = _ModuleAssignedNameCollector()
+    for node in body:
+        collector.visit(node)
     transformer = _TopLevelReturnTransformer()
     transformed: list[ast.stmt] = []
     for node in body:
+        if isinstance(node, ast.Global):
+            continue
         updated = transformer.visit(node)
         if isinstance(updated, list):
             transformed.extend(updated)
@@ -426,7 +490,7 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
             elts=[
                 ast.Name(id=_WRAPPER_FALLTHROUGH, ctx=ast.Load()),
                 ast.Call(
-                    func=ast.Attribute(value=ast.Call(func=ast.Name(id="locals", ctx=ast.Load()), args=[], keywords=[]), attr="get", ctx=ast.Load()),
+                    func=ast.Attribute(value=ast.Call(func=ast.Name(id="globals", ctx=ast.Load()), args=[], keywords=[]), attr="get", ctx=ast.Load()),
                     args=[ast.Constant(value="result"), ast.Name(id=_WRAPPER_MISSING, ctx=ast.Load())],
                     keywords=[],
                 ),
@@ -434,10 +498,15 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
             ctx=ast.Load(),
         )
     )
+    wrapper_body: list[ast.stmt] = []
+    if collector.names:
+        wrapper_body.append(ast.Global(names=sorted(collector.names)))
+    wrapper_body.extend(transformed)
+    wrapper_body.append(fallthrough)
     function = ast.FunctionDef(
         name=_WRAPPER_MAIN,
         args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
-        body=[*transformed, fallthrough],
+        body=wrapper_body,
         decorator_list=[],
     )
     module = ast.fix_missing_locations(ast.Module(body=[*preamble, function], type_ignores=[]))

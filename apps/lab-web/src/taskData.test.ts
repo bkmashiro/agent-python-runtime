@@ -23,7 +23,7 @@ describe('task inspector snapshot', () => {
     expect(task.provider_io).toBe('not_applicable_scripted_fixture');
     expect(task.sources.map((source) => source.id)).toEqual(['orchestrator', 'researcher', 'reviewer']);
     expect(task.events).toHaveLength(37);
-    expect(task.stats).toEqual({ duration_millis: 14857, events: 37, agents: 4, workspace_changes: 2 });
+    expect(task.stats).toEqual({ duration_millis: 14608, events: 37, agents: 4, workspace_changes: 2 });
     expect(task.outputs.map((output) => output.path ?? 'workflow')).toEqual(['workflow', 'dependency-review.md', 'release-checklist.md']);
     expect(task.events.flatMap((event) => event.workspace_changes ?? []).map((change) => change.path)).toEqual(['dependency-review.md', 'release-checklist.md']);
   });
@@ -49,6 +49,16 @@ describe('task inspector snapshot', () => {
     branchDrift.outputs[1].disposition = 'selected_branch';
     await reseal(branchDrift);
     await expect(validateTaskSnapshot(branchDrift)).rejects.toThrow(/output is invalid/);
+
+    const workflowMisbind = await fixture();
+    workflowMisbind.outputs[0].event_sequence = 36;
+    await reseal(workflowMisbind);
+    await expect(validateTaskSnapshot(workflowMisbind)).rejects.toThrow(/workflow output body is not event-bound/);
+
+    const explicitNull = await fixture();
+    (explicitNull.events[0] as unknown as { workspace_changes: null }).workspace_changes = null;
+    await reseal(explicitNull);
+    await expect(validateTaskSnapshot(explicitNull)).rejects.toThrow(/workspace changes are invalid/);
 
     const forgedSource = await fixture();
     const sourced = forgedSource.events.find((event) => event.source);

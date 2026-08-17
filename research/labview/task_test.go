@@ -83,6 +83,7 @@ func TestTaskSnapshotRejectsIdentityValidPrivateAndForgedFields(t *testing.T) {
 			snapshot.Sources[1], snapshot.Sources[2] = snapshot.Sources[2], snapshot.Sources[1]
 		},
 		"output event drift": func(snapshot *TaskSnapshot) { snapshot.Outputs[1].EventSequence++ },
+		"workflow oracle misbind": func(snapshot *TaskSnapshot) { snapshot.Outputs[0].EventSequence = 36 },
 		"negative time":      func(snapshot *TaskSnapshot) { snapshot.Events[0].StartedMillis = -1 },
 		"elapsed rewind":     func(snapshot *TaskSnapshot) { snapshot.Events[13].RelativeElapsedMillis = 20000 },
 		"unknown agent":      func(snapshot *TaskSnapshot) { snapshot.Events[13].AgentID = "attacker" },

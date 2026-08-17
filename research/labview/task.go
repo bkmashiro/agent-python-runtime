@@ -16,9 +16,9 @@ import (
 
 const TaskSnapshotSchema = "pysolate.lab-task.v2"
 
-const taskCorpusSHA = "sha256:ec93b6b81f3bb28dd84e3bb5d903a4498a26baa47fe30e5d24bb5f043de336e4"
-const taskReportSHA = "sha256:984b6046ca9e8c825f9ade3a3886736bf14fb737b205d92a78a50756e5b9027d"
-const taskCaptureSHA = "sha256:edbf83c23fbe696e45464e9bdb968fe0aeedac1ebf1627cda0a6cff993a202bd"
+const taskCorpusSHA = "sha256:6747020b4d1b10e2cb33eb5b65836afd0746b8217ef3ac6ff7a56db90016d6c9"
+const taskReportSHA = "sha256:b0227956503e8f0d6fc2925f8009a328fedcf7ed24081558a0a458923b18911b"
+const taskCaptureSHA = "sha256:ae319cc316d1c9d7663707f11cb060f3aa6e3a0479e5551227b8a1c8d7ea8199"
 
 var taskID = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 

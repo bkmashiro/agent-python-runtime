@@ -279,7 +279,7 @@ async function validateTaskOutputs(snapshot: TaskSnapshot) {
     const event = events.get(output.event_sequence);
     if (!event) throw new Error('task output event is missing');
     if (!output.path) {
-      if (event.type !== 'oracle' || event.input_sha256 !== output.sha256 || event.output_sha256 !== output.sha256) throw new Error('workflow output body is not event-bound');
+      if (event.agent_id !== 'runtime' || event.type !== 'wait_resume' || event.action !== 'resume.fresh' || event.outcome !== 'ok' || event.output_sha256 !== output.sha256) throw new Error('workflow output body is not event-bound');
       continue;
     }
     const change = event.workspace_changes?.find((item) => item.path === output.path);

@@ -28,4 +28,14 @@ func TestBodyCaptureRoundTripAndRejectsDrift(t *testing.T) {
 	if _, _, err := EncodeBodyCapture(capture); err == nil {
 		t.Fatal("invalid disposition accepted")
 	}
+	capture.AgentOutputs[0].Disposition = "discarded_branch"
+	capture.AgentOutputs[0].EventSequence = capture.WorkflowEventSequence
+	if _, _, err := EncodeBodyCapture(capture); err == nil {
+		t.Fatal("duplicate body event sequence accepted")
+	}
+	capture.AgentOutputs[0].EventSequence = 14
+	capture.SelectedChildID = "missing-agent"
+	if _, _, err := EncodeBodyCapture(capture); err == nil {
+		t.Fatal("selected child without selected output accepted")
+	}
 }

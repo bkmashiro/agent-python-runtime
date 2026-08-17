@@ -25,7 +25,7 @@ func TestRecordTaskExperimentCapturesSourcesAndAgentOutputBodies(t *testing.T) {
 	if err := os.Mkdir(recordingRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	exported, err := RecordTaskExperiment(recordingRoot, snapshot, "d6d72c66c738f6f906a35bd78e9f885bd286ee75")
+	exported, err := RecordTaskExperiment(recordingRoot, snapshot, "5708b77d22aafa5827bab986462a3a9d333d9832")
 	if err != nil {
 		t.Fatal(err)
 	}

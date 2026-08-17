@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
 func testSHA(value []byte) string {
@@ -96,8 +97,25 @@ func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 	evidence, err := workflowbench.DecodeSourcePrefixEvidence(evidenceRaw, contract)
-	if err != nil || evidence.MeasurementAttempt != workflowbench.SourcePrefixMeasurementAttempt || evidence.MedianSpeedupMilli != 1923 || evidence.ArtifactSourceCommit != fixedGuestArtifactSourceCommit || evidence.HarnessSourceCommit != "ca25b1b767edd50dc25363df5347cb801c5c183a" {
+	if err != nil || digestBytes(evidenceRaw) != "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69" || evidence.MeasurementAttempt != workflowbench.SourcePrefixMeasurementAttempt || evidence.MedianSpeedupMilli != 1923 || evidence.ArtifactSHA256 != fixedGuestArtifactSHA256 || evidence.ArtifactSourceCommit != fixedGuestArtifactSourceCommit || evidence.HarnessSourceCommit != "ca25b1b767edd50dc25363df5347cb801c5c183a" {
 		t.Fatalf("checked-in remediation evidence err=%v evidence=%+v", err, evidence)
+	}
+	plan, err := buildFixturePlan(&timedFixtureHandler{delay: 1})
+	if err != nil || len(plan.Specs()) != 1 {
+		t.Fatalf("rebuild fixture plan: plan=%+v err=%v", plan, err)
+	}
+	specJSON, err := json.Marshal(plan.Specs()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, StagedObservation: true, PrivateWorkspace: true}
+	profileJSON, err := json.Marshal(runConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence.CapabilityPlanSHA256 != plan.Identity() || evidence.CapabilitySpecSHA256 != digestBytes(specJSON) || evidence.ExecutionProfileSHA256 != digestBytes(profileJSON) || evidence.HandlerSHA256 != digestBytes([]byte(fixtureHandlerContract)) {
+		t.Fatalf("checked-in runtime identities do not match executable definitions: %+v", evidence)
 	}
 	for _, row := range evidence.Rows {
 		if row.WorkspaceBeforeSHA256 == "" || row.WorkspaceBeforeSHA256 != row.WorkspaceAfterSHA256 {

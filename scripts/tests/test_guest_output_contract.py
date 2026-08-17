@@ -48,8 +48,22 @@ class GuestOutputContractTests(unittest.TestCase):
         self.assertEqual(module._prepared_globals["calls"], ["once"])
 
     def test_reserved_wrapper_names_are_rejected(self):
+        sources = [
+            "_pysolate_agent_main = 1\nreturn 1",
+            "def _pysolate_agent_main():\n    pass\nreturn 1",
+            "class _pysolate_agent_main:\n    pass\nreturn 1",
+            "import json as _pysolate_agent_main\nreturn 1",
+            "match {'value': 1}:\n    case {'value': _pysolate_agent_main}:\n        return 1",
+        ]
+        for index, source in enumerate(sources):
+            with self.subTest(source=source):
+                module = load_runtime()
+                request = json.dumps({"run_id": f"reserved-{index}", "code": source, "inputs": {}})
+                self.assertEqual(module._validate_request_source(request), module._SOURCE_CONTRACT_INVALID)
+
+    def test_late_future_import_is_rejected(self):
         module = load_runtime()
-        request = json.dumps({"run_id": "reserved", "code": "_pysolate_agent_main = 1\nreturn 1", "inputs": {}})
+        request = json.dumps({"run_id": "late-future", "code": "value = 1\nfrom __future__ import annotations\nreturn value", "inputs": {}})
         self.assertEqual(module._validate_request_source(request), module._SOURCE_CONTRACT_INVALID)
 
     def test_wrapper_does_not_legalize_module_level_yield(self):
@@ -62,11 +76,18 @@ class GuestOutputContractTests(unittest.TestCase):
         self.assertEqual(response["status"], "ok")
         self.assertEqual(response["result"], {"counter": 2, "freevars": []})
 
-    def test_print_is_bounded(self):
-        response = execute(load_runtime(), "print('x' * 70000)\nreturn 1")
+    def test_print_is_bounded_and_auditable(self):
+        runtime = load_runtime()
+        response = execute(runtime, "print('🙂' * 70000)\nreturn 1")
         self.assertEqual(response["status"], "error")
         self.assertEqual(response["error"]["code"], "output_limit_exceeded")
-        self.assertLessEqual(sum(len(line.encode("utf-8")) for line in response["logs"]), 64 * 1024)
+        self.assertEqual(response["logs"][-1], runtime._STDOUT_TRUNCATION_MARKER)
+        self.assertLessEqual(sum(len(line.encode("utf-8")) for line in response["logs"]), runtime._STDOUT_MAX_BYTES)
+
+        line_response = execute(load_runtime(), "print('\\n'.join(str(i) for i in range(300)))\nreturn 1")
+        self.assertEqual(line_response["status"], "ok")
+        self.assertEqual(len(line_response["logs"]), 256)
+        self.assertEqual(line_response["logs"][-1], runtime._STDOUT_TRUNCATION_MARKER)
 
 
 if __name__ == "__main__":

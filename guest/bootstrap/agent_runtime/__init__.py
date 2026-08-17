@@ -38,6 +38,7 @@ _WRAPPER_FALLTHROUGH = "_pysolate_fallthrough"
 _WRAPPER_MISSING = "_pysolate_missing"
 _STDOUT_MAX_BYTES = 64 * 1024
 _STDOUT_MAX_LINES = 256
+_STDOUT_TRUNCATION_MARKER = "[pysolate stdout truncated]"
 
 
 class _OutputLimitExceeded(Exception):
@@ -48,12 +49,20 @@ class _BoundedStdout:
     def __init__(self) -> None:
         self._parts: list[str] = []
         self._bytes = 0
+        self._truncated = False
 
     def write(self, value: str) -> int:
         if not isinstance(value, str):
             raise TypeError("stdout writes must be strings")
         encoded = value.encode("utf-8")
         if self._bytes + len(encoded) > _STDOUT_MAX_BYTES:
+            marker_bytes = len(_STDOUT_TRUNCATION_MARKER.encode("utf-8"))
+            content_budget = _STDOUT_MAX_BYTES - marker_bytes
+            combined = ("".join(self._parts) + value).encode("utf-8")
+            prefix = combined[:content_budget].decode("utf-8", errors="ignore")
+            self._parts = [prefix]
+            self._bytes = len(prefix.encode("utf-8"))
+            self._truncated = True
             raise _OutputLimitExceeded("model logs exceed the output byte bound")
         self._parts.append(value)
         self._bytes += len(encoded)
@@ -67,8 +76,9 @@ class _BoundedStdout:
         lines = text.splitlines()
         if text and not lines:
             lines = [text]
-        if len(lines) > _STDOUT_MAX_LINES:
-            raise _OutputLimitExceeded("model logs exceed the line bound")
+        truncated = self._truncated or len(lines) > _STDOUT_MAX_LINES
+        if truncated:
+            lines = [*lines[: _STDOUT_MAX_LINES - 1], _STDOUT_TRUNCATION_MARKER]
         return lines
 
 
@@ -455,6 +465,30 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
             if value is not None:
                 self.visit(value)
 
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.name:
+            self.names.add(node.name)
+        if node.type is not None:
+            self.visit(node.type)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        if node.name:
+            self.names.add(node.name)
+        if node.pattern is not None:
+            self.visit(node.pattern)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        if node.name:
+            self.names.add(node.name)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        if node.rest:
+            self.names.add(node.rest)
+        for pattern in node.patterns:
+            self.visit(pattern)
+
     def visit_ListComp(self, node: ast.ListComp) -> None:
         return
 
@@ -469,12 +503,14 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
 
 
 def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tuple[types.CodeType, str]:
+    collector = _ModuleAssignedNameCollector()
+    for node in (*preamble, *body):
+        collector.visit(node)
+    if any(name.startswith("_pysolate_") for name in collector.names):
+        raise SyntaxError("agent source binds a reserved runtime name")
     for node in ast.walk(ast.Module(body=body, type_ignores=[])):
         if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
             raise SyntaxError("agent source uses a reserved runtime name")
-    collector = _ModuleAssignedNameCollector()
-    for node in body:
-        collector.visit(node)
     transformer = _TopLevelReturnTransformer()
     transformed: list[ast.stmt] = []
     for node in body:
@@ -603,11 +639,18 @@ def _validate_unrestricted_source(source: str) -> tuple[int, types.CodeType | No
         tree = ast.parse(source, filename="<agent-run>", mode="exec")
         preamble: list[ast.stmt] = []
         body: list[ast.stmt] = []
+        future_open = True
         for index, node in enumerate(tree.body):
-            if (index == 0 and _module_docstring(node)) or (isinstance(node, ast.ImportFrom) and node.module == "__future__"):
+            if index == 0 and _module_docstring(node):
                 preamble.append(node)
-            else:
-                body.append(node)
+                continue
+            if future_open and isinstance(node, ast.ImportFrom) and node.module == "__future__":
+                preamble.append(node)
+                continue
+            future_open = False
+            if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+                raise SyntaxError("from __future__ imports must occur at the beginning of the file")
+            body.append(node)
         code, digest = _compile_agent_wrapper(body, preamble)
         _validated_effective_ast_sha256 = digest
         return _SOURCE_CONTRACT_OK, code

@@ -22,7 +22,7 @@ The Guest emits:
 }
 ```
 
-`return` is canonical. `print` is ordered, model-facing text with a 64 KiB/256-line bound. Legacy `result = value` remains accepted as `result_source=legacy_result`. Falling through without either is `result_source=missing` and differs from explicit `return None`.
+`return` is canonical. `print` is ordered, model-facing text with a 64 KiB/256-line bound and an explicit `[pysolate stdout truncated]` marker. Byte overflow aborts with `output_limit_exceeded` while preserving a UTF-8-safe bounded prefix; line overflow keeps the terminal result and returns at most 255 content lines plus the marker. Legacy `result = value` remains accepted as `result_source=legacy_result`. Falling through without either is `result_source=missing` and differs from explicit `return None`.
 
 The implementation follows the useful boundary in DeepSeek Harness Code Mode: only outer logs and the completion value re-enter model context, while intermediate tool values remain execution-local. Reference: `deepseek-ai/deepseek-harness@47f943859bef60e4160492346772ded9b24f765a`, `packages/core/tools/README.md`, lines 118–125 and 158–163.
 
@@ -34,7 +34,7 @@ The exact model source remains separate from the Host-owned execution wrapper. E
 - `effective_ast_sha256`;
 - `wrapper_contract_sha256`.
 
-The wrapper preserves original statement line numbers, supports real top-level `return`, executes the model body once, and rejects `_pysolate_*` name collisions. Module docstrings and `from __future__` imports remain in the module preamble. Wrapper metadata is evidence; it does not widen authority.
+The wrapper preserves original statement line numbers, module-global binding behavior for top-level assignments, supports real top-level `return`, and executes the model body once. Late `from __future__` imports and all `_pysolate_*` binding forms are rejected. Module docstrings and legal `from __future__` imports remain in the module preamble. The Host independently recomputes and joins `model_source_sha256` to `RunRequest.Code`; effective-AST and wrapper digests remain Guest execution facts, not Host receipts or evaluation evidence. Wrapper metadata does not widen authority.
 
 ## Three evidence layers
 

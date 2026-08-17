@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -124,7 +126,7 @@ func (contract RunSourceContract) Validate() error {
 	return nil
 }
 
-func validateModelOutputContract(response RunResponse) error {
+func validateModelOutputContract(request RunRequest, response RunResponse) error {
 	if len(response.Logs) > 256 {
 		return errors.New("run response contains too many model logs")
 	}
@@ -138,8 +140,15 @@ func validateModelOutputContract(response RunResponse) error {
 	if logBytes > 64*1024 {
 		return errors.New("run response model logs exceed the byte bound")
 	}
-	if response.SourceContract != nil && response.SourceContract.Validate() != nil {
-		return errors.New("run response source contract is invalid")
+	if response.SourceContract != nil {
+		if response.SourceContract.Validate() != nil {
+			return errors.New("run response source contract is invalid")
+		}
+		digest := sha256.Sum256([]byte(request.Code))
+		expected := "sha256:" + hex.EncodeToString(digest[:])
+		if response.SourceContract.ModelSourceSHA256 != expected {
+			return errors.New("run response model source identity mismatch")
+		}
 	}
 	if response.ResultPresent == nil && response.ResultSource == "" && response.SourceContract == nil {
 		return nil
@@ -362,7 +371,7 @@ func decodeAndValidateRunResponse(request RunRequest, data []byte, requireHostEv
 	}
 	if (response.Status != RunResponseOK && response.Status != RunResponseError) || len(response.Result) == 0 || len(response.Receipts) == 0 || response.Metrics == nil ||
 		(response.Metrics.GuestTimeMS != nil && *response.Metrics.GuestTimeMS < 0) || (response.ExecutionRef != nil && response.ExecutionRef.Validate() != nil) ||
-		capabilityPlanInvalid || workspaceReceiptInvalid || hostEvidenceInvalid || validateModelOutputContract(response) != nil {
+		capabilityPlanInvalid || workspaceReceiptInvalid || hostEvidenceInvalid || validateModelOutputContract(request, response) != nil {
 		return RunResponse{}, errors.New("run response has invalid required fields")
 	}
 	if err := validateCapabilityReceipts(response.Receipts, response.CapabilityPlanSHA256); err != nil {

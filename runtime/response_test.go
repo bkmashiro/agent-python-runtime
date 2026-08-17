@@ -33,7 +33,7 @@ func TestDecodeAndValidateRunResponseEnforcesOutputSchema(t *testing.T) {
 
 func TestDecodeAndValidateGuestRunResponseAcceptsBoundedModelOutputContract(t *testing.T) {
 	request := RunRequest{RunID: "run", Code: "print('count'); return {'count': 1}", Inputs: []byte(`{}`)}
-	valid := []byte(`{"status":"ok","result":{"count":1},"logs":["count"],"result_present":true,"result_source":"return","source_contract":{"schema_version":"pysolate.guest-source-contract.v1","model_source_sha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","effective_ast_sha256":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","wrapper_contract_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"receipts":[],"metrics":{"capability_calls":0,"result_bytes":11},"error":null}`)
+	valid := []byte(`{"status":"ok","result":{"count":1},"logs":["count"],"result_present":true,"result_source":"return","source_contract":{"schema_version":"pysolate.guest-source-contract.v1","model_source_sha256":"sha256:cdc9d10494b415b7df21f654d0afe57dd02503373e42aad9f749bb0c17e1f4e8","effective_ast_sha256":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","wrapper_contract_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"receipts":[],"metrics":{"capability_calls":0,"result_bytes":11},"error":null}`)
 	response, err := DecodeAndValidateGuestRunResponse(request, valid)
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +44,10 @@ func TestDecodeAndValidateGuestRunResponseAcceptsBoundedModelOutputContract(t *t
 	invalid := bytes.Replace(valid, []byte(`"result_source":"return"`), []byte(`"result_source":"forged"`), 1)
 	if _, err := DecodeAndValidateGuestRunResponse(request, invalid); err == nil {
 		t.Fatal("invalid result source accepted")
+	}
+	forgedSource := bytes.Replace(valid, []byte(`cdc9d10494b415b7df21f654d0afe57dd02503373e42aad9f749bb0c17e1f4e8`), []byte(`aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`), 1)
+	if _, err := DecodeAndValidateGuestRunResponse(request, forgedSource); err == nil {
+		t.Fatal("Guest-supplied model source identity was not joined to the Host request")
 	}
 }
 

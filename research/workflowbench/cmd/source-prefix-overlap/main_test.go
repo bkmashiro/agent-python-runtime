@@ -28,6 +28,17 @@ func writeFixture(t *testing.T, path string, value any) []byte {
 	return raw
 }
 
+func TestBuildFixturePlanUsesReachGatedReadWithoutPreDispatch(t *testing.T) {
+	plan, err := buildFixturePlan(&timedFixtureHandler{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	specs := plan.Specs()
+	if len(specs) != 1 || specs[0].PreDispatch != nil || specs[0].ReadOnly || specs[0].Idempotent || specs[0].EffectClass != "external_read" {
+		t.Fatalf("unexpected fixture spec: %+v", specs)
+	}
+}
+
 func TestCheckedInPreregistrationIsSelfConsistent(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
 	contract, _, _, err := loadPreregistration(

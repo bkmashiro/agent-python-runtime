@@ -57,7 +57,6 @@ func fixtureCapabilitySpec() capability.Spec {
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{"key":{"type":"string","const":"alpha"}},"required":["key"],"additionalProperties":false}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"label":{"type":"string","const":"Alpha"}},"required":["label"],"additionalProperties":false}`),
 		Python:       &capability.PythonProjection{Module: "slow", Method: "lookup", Arguments: []string{"key"}},
-		ReadOnly:     true, Idempotent: true,
 	}
 }
 

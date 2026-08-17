@@ -734,19 +734,19 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 		SchemaVersion: LatestSnapshotSchema,
 		Demos: []LatestDemo{
 			{
-				ID: "source-prefix-overlap", Title: "Start the READ before generation finishes", Eyebrow: "SOURCE PREFIX", Status: "measured", ViewKind: "timeline",
-				Summary: "Read a workspace manifest as soon as that call is complete, while the report source is still arriving.", Source: "manifest = workspace.read(\"release-manifest.json\")\nfiles = manifest[\"changed_files\"]\nsummary = summarize_changes(files)\nresult = {\"files\": len(files), \"summary\": summary}\n",
+				ID: "source-prefix-overlap", Title: "Check the weather while the plan is still being written", Eyebrow: "SOURCE PREFIX", Status: "measured", ViewKind: "timeline",
+				Summary: "Start Oxford's weather lookup as soon as that first line is complete, while the rest of the day-plan Python is still arriving.", Source: "weather = travel.weather(\"oxford\", \"saturday\")\nneeds_indoor = weather[\"condition\"] != \"sunny\"\nresult = {\"destination\": \"oxford\", \"plan\": \"museum\" if needs_indoor else \"walking tour\", \"high_c\": weather[\"high_c\"]}\n",
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "manifest READ", Note: "The closed prefix can start this Host read immediately."},
-					{StartLine: 2, EndLine: 4, Tone: "overlapped_tail", Label: "report source", Note: "The remaining report logic arrives while the manifest is in flight."},
+					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "Oxford weather", Note: "The closed prefix can start this delayed Host lookup immediately."},
+					{StartLine: 2, EndLine: 3, Tone: "overlapped_tail", Label: "finish the plan", Note: "The remaining day-plan logic arrives while the weather lookup is in flight."},
 				},
 				Metrics: []LatestMetric{{Label: "Generate first", Value: fmt.Sprintf("%.0f ms", float64(evidence.BaselineMedianNS)/1e6), Note: "median", Tone: "baseline"}, {Label: "Stream prefix", Value: fmt.Sprintf("%.0f ms", float64(evidence.StreamingMedianNS)/1e6), Note: "median", Tone: "optimized"}, {Label: "Mechanism window", Value: fmt.Sprintf("%.3f×", float64(evidence.MedianSpeedupMilli)/1000), Note: "matched run", Tone: "win"}},
 				Lanes:   []LatestLane{sourcePrefixLane("generate → execute", baseline), sourcePrefixLane("stream while generating", streaming)},
 			},
 			{
-				ID: "semantic-predispatch", Title: "Pre-dispatch one proven READ", Eyebrow: "SEMANTIC PRE-DISPATCH", Status: "measured", ViewKind: "timeline",
-				Summary: "Start the required release-manifest READ before Guest startup, then consume it at the exact call site.", Source: "manifest = workspace.read(\"release-manifest.json\")\nresult = {\"release\": manifest[\"version\"]}\n",
-				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "manifest READ", Note: "The staged observation is consumed only at this exact call."}},
+				ID: "semantic-predispatch", Title: "Fetch the proven train option before Guest startup", Eyebrow: "SEMANTIC PRE-DISPATCH", Status: "measured", ViewKind: "timeline",
+				Summary: "The fixed London-to-Oxford train lookup is proven before execution, so the Host can start it early and consume it at the exact call site.", Source: "trains = travel.trains(\"london\", \"oxford\", \"saturday\")\nresult = trains\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "London → Oxford trains", Note: "The staged observation is consumed only at this exact call."}},
 				Metrics:     []LatestMetric{{Label: "Baseline", Value: fmt.Sprintf("%.0f ms", float64(predispatch.BaselineMedianMicros)/1000), Note: "median", Tone: "baseline"}, {Label: "Pre-dispatch", Value: fmt.Sprintf("%.0f ms", float64(predispatch.OptimizedMedianMicros)/1000), Note: "median", Tone: "optimized"}, {Label: "Saved", Value: fmt.Sprintf("%.0f ms", float64(predispatch.MedianSavingsMicros)/1000), Note: "5 matched trials", Tone: "win"}},
 				Lanes: []LatestLane{
 					campaignLane("ordinary dispatch", "total wall", predispatch.BaselineMedianMicros*1000, 0, predispatch.BaselineMedianMicros*1000, "physical"),

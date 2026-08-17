@@ -131,8 +131,9 @@ class _StreamingSession:
         self.imports_sealed = False
         self.staged_results: dict[str, tuple[bool, Any]] = {}
         self.preflighted_occurrences: set[str] = set()
-        self.speculation_max_calls = speculation_max_calls
         self.consumed_occurrences: set[str] = set()
+        self.stdout = _BoundedStdout()
+        self.speculation_max_calls = speculation_max_calls
         self.namespace["_stream_invoke_eager"] = self._invoke_eager
 
     def _occurrence(self, node: ast.Call) -> str:
@@ -234,21 +235,29 @@ class _StreamingSession:
         execution_started = self._elapsed_ms()
         if pending_has_import and (not self.preamble_open or not pending_is_preamble):
             raise SyntaxError("late import in streamed Python source")
-        if pending_is_preamble:
-            import_namespace = {"__builtins__": __builtins__}
-            exec(code, import_namespace, import_namespace)
-            for key, value in import_namespace.items():
-                if key != "__builtins__":
-                    self.namespace[key] = value
-        else:
-            if not self.imports_sealed:
-                import _agent_runtime_host  # type: ignore[import-not-found]
-                _agent_runtime_host.seal_imports(tuple(sorted(sys.modules)))
-                self.imports_sealed = True
-            self.preamble_open = False
-            self._eager_preflight(pending_tree)
-            rewritten = self._rewrite_eager(pending_tree)
-            exec(compile(rewritten, "<agent-stream>", "exec"), self.namespace, self.namespace)
+        previous_stdout = sys.stdout
+        sys.stdout = self.stdout
+        try:
+            if pending_is_preamble:
+                import_namespace = {"__builtins__": __builtins__}
+                exec(code, import_namespace, import_namespace)
+                for key, value in import_namespace.items():
+                    if key != "__builtins__":
+                        self.namespace[key] = value
+            else:
+                if not self.imports_sealed:
+                    import _agent_runtime_host  # type: ignore[import-not-found]
+                    _agent_runtime_host.seal_imports(tuple(sorted(sys.modules)))
+                    self.imports_sealed = True
+                self.preamble_open = False
+                self._eager_preflight(pending_tree)
+                rewritten = self._rewrite_eager(pending_tree)
+                exec(compile(rewritten, "<agent-stream>", "exec"), self.namespace, self.namespace)
+        except _OutputLimitExceeded:
+            self.ended = True
+            raise
+        finally:
+            sys.stdout = previous_stdout
         start = self.executed_bytes
         end = len(self.source.encode("utf-8"))
         digest = hashlib.sha256(self.pending.encode("utf-8")).hexdigest()
@@ -278,8 +287,12 @@ class _StreamingSession:
         status, _, _ = _validate_agent_source(self.source, None)
         if status != _SOURCE_CONTRACT_OK:
             raise SyntaxError("final stream violates the source contract")
+        result_present = "result" in self.namespace
         return {
             "result": self.namespace.get("result"),
+            "logs": self.stdout.logs(),
+            "result_present": result_present,
+            "result_source": "legacy_result" if result_present else "missing",
             "suites": [dict(value) for value in self.suites],
             "timeline": [dict(value) for value in self.timeline],
             "eager": {
@@ -401,6 +414,9 @@ def _code_objects(code: types.CodeType):
 
 
 class _TopLevelReturnTransformer(ast.NodeTransformer):
+    def __init__(self, future_annotations: bool) -> None:
+        self._future_annotations = future_annotations
+
     def visit_FunctionDef(self, node: ast.FunctionDef):
         return node
 
@@ -417,6 +433,23 @@ class _TopLevelReturnTransformer(ast.NodeTransformer):
         value = node.value if node.value is not None else ast.Constant(value=None)
         rewritten = ast.Return(value=ast.Tuple(elts=[ast.Name(id=_WRAPPER_RETURN, ctx=ast.Load()), value], ctx=ast.Load()))
         return ast.copy_location(rewritten, node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign):
+        if not isinstance(node.target, ast.Name) or not node.simple:
+            return self.generic_visit(node)
+        annotation: ast.expr = ast.Constant(value=ast.unparse(node.annotation)) if self._future_annotations else node.annotation
+        statements: list[ast.stmt] = []
+        if node.value is not None:
+            statements.append(ast.Assign(targets=[node.target], value=self.visit(node.value)))
+        statements.append(_module_annotation_store(node.target.id, annotation))
+        return [ast.copy_location(statement, node) for statement in statements]
+
+
+def _module_annotation_store(name: str, annotation: ast.expr) -> ast.Assign:
+    annotations = ast.Call(
+        func=ast.Attribute(value=ast.Call(func=ast.Name(id="globals", ctx=ast.Load()), args=[], keywords=[]), attr="setdefault", ctx=ast.Load()),
+        args=[ast.Constant(value="__annotations__"), ast.Dict(keys=[], values=[])], keywords=[])
+    return ast.Assign(targets=[ast.Subscript(value=annotations, slice=ast.Constant(value=name), ctx=ast.Store())], value=annotation)
 
 
 class _ModuleAssignedNameCollector(ast.NodeVisitor):
@@ -489,17 +522,29 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
         for pattern in node.patterns:
             self.visit(pattern)
 
+    def _visit_comprehensions(self, generators: list[ast.comprehension]) -> None:
+        for generator in generators:
+            # The iteration target belongs to the comprehension's implicit scope.
+            self.visit(generator.iter)
+            for condition in generator.ifs:
+                self.visit(condition)
+
     def visit_ListComp(self, node: ast.ListComp) -> None:
-        return
+        self.visit(node.elt)
+        self._visit_comprehensions(node.generators)
 
     def visit_SetComp(self, node: ast.SetComp) -> None:
-        return
+        self.visit(node.elt)
+        self._visit_comprehensions(node.generators)
 
     def visit_DictComp(self, node: ast.DictComp) -> None:
-        return
+        self.visit(node.key)
+        self.visit(node.value)
+        self._visit_comprehensions(node.generators)
 
     def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
-        return
+        self.visit(node.elt)
+        self._visit_comprehensions(node.generators)
 
 
 def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tuple[types.CodeType, str]:
@@ -511,7 +556,11 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
     for node in ast.walk(ast.Module(body=body, type_ignores=[])):
         if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
             raise SyntaxError("agent source uses a reserved runtime name")
-    transformer = _TopLevelReturnTransformer()
+    future_annotations = any(
+        isinstance(node, ast.ImportFrom) and node.module == "__future__" and any(alias.name == "annotations" for alias in node.names)
+        for node in preamble
+    )
+    transformer = _TopLevelReturnTransformer(future_annotations)
     transformed: list[ast.stmt] = []
     for node in body:
         if isinstance(node, ast.Global):

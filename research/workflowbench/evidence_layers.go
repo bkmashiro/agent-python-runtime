@@ -74,6 +74,11 @@ type EvidenceWorkload struct {
 	ID                         string                 `json:"id"`
 	Layer                      EvidenceLayer          `json:"layer"`
 	Origin                     string                 `json:"origin"`
+	CaseSHA256                 string                 `json:"case_sha256"`
+	OracleSHA256               string                 `json:"oracle_sha256"`
+	LaneConfigSHA256           string                 `json:"lane_config_sha256"`
+	OracleAuthority            string                 `json:"oracle_authority"`
+	OracleFailClosed           bool                   `json:"oracle_fail_closed"`
 	SourceTraceSHA256          string                 `json:"source_trace_sha256,omitempty"`
 	RawBodiesRetainedPrivately bool                   `json:"raw_bodies_retained_privately"`
 	OptimizationRequired       bool                   `json:"optimization_required"`
@@ -126,20 +131,23 @@ func (workload EvidenceWorkload) Validate() error {
 	if workload.Factors.LogicalAgents == 0 || workload.Factors.PhysicalSlots == 0 || workload.Factors.CallsPerProgram == 0 || workload.Factors.LocalComputePct > 100 {
 		return errors.New("invalid workflow factors")
 	}
+	if !evidenceSHA256.MatchString(workload.CaseSHA256) || !evidenceSHA256.MatchString(workload.OracleSHA256) || !evidenceSHA256.MatchString(workload.LaneConfigSHA256) || !workload.OracleFailClosed {
+		return errors.New("workload lacks frozen case, independent oracle, or lane configuration identity")
+	}
 	if !workload.Metrics.TaskOracle || !workload.Metrics.EffectReceiptEquivalence || !workload.Metrics.AdmissionAndFallback || !workload.Metrics.LogicalAndPhysicalCalls || !workload.Metrics.WallAndTailLatency || !workload.Metrics.GuestStartsAndCompiles {
 		return errors.New("required correctness, mechanism, and latency metrics are absent")
 	}
 	switch workload.Layer {
 	case EvidenceNaturalCensus:
-		if workload.Origin != "natural_benchmark" || workload.OptimizationRequired || len(workload.TargetMechanisms) != 0 || workload.ClaimBoundary != "compatibility_and_opportunity_only" {
+		if workload.Origin != "natural_benchmark" || workload.OracleAuthority != "upstream_official" || workload.OptimizationRequired || len(workload.TargetMechanisms) != 0 || workload.ClaimBoundary != "compatibility_and_opportunity_only" {
 			return errors.New("natural benchmark cannot require or causally claim optimization")
 		}
 	case EvidenceTraceDAG:
-		if workload.Origin != "private_trace_projection" || !evidenceSHA256.MatchString(workload.SourceTraceSHA256) || !workload.RawBodiesRetainedPrivately || workload.ClaimBoundary != "trace_shape_bounded" {
+		if workload.Origin != "private_trace_projection" || workload.OracleAuthority != "private_projection_validator" || !evidenceSHA256.MatchString(workload.SourceTraceSHA256) || !workload.RawBodiesRetainedPrivately || workload.ClaimBoundary != "trace_shape_bounded" {
 			return errors.New("trace-derived workload lacks private source identity or bounded claim")
 		}
 	case EvidenceMechanism:
-		if workload.Origin != "authored_mechanism_case" || len(workload.TargetMechanisms) == 0 || workload.ClaimBoundary != "mechanism_fixture_bounded" {
+		if workload.Origin != "authored_mechanism_case" || workload.OracleAuthority != "independent_fixture" || len(workload.TargetMechanisms) == 0 || workload.ClaimBoundary != "mechanism_fixture_bounded" {
 			return errors.New("mechanism stress workload lacks a named target")
 		}
 	default:

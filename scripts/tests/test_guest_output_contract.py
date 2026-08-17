@@ -1,6 +1,8 @@
 import importlib.util
 import json
 import pathlib
+import sys
+import types
 import unittest
 
 
@@ -75,6 +77,42 @@ class GuestOutputContractTests(unittest.TestCase):
         response = execute(load_runtime(), "counter = 0\ndef callback():\n    global counter\n    counter += 1\ndef program():\n    callback()\ncallback()\nprogram()\nreturn {'counter': counter, 'freevars': list(program.__code__.co_freevars)}")
         self.assertEqual(response["status"], "ok")
         self.assertEqual(response["result"], {"counter": 2, "freevars": []})
+
+    def test_wrapper_preserves_module_annotations(self):
+        plain = execute(load_runtime(), "if True:\n    x: list[int] = [1]\nreturn {'x': x, 'annotation': __annotations__['x'].__name__}")
+        future = execute(load_runtime(), "from __future__ import annotations\ny: list[int] = [2]\nreturn {'y': y, 'annotation': __annotations__['y']}")
+        self.assertEqual(plain["result"], {"x": [1], "annotation": "list"})
+        self.assertEqual(future["result"], {"y": [2], "annotation": "list[int]"})
+
+    def test_wrapper_preserves_comprehension_walrus_global(self):
+        response = execute(load_runtime(), "[z := i for i in range(2)]\ndef inspect_z():\n    return globals().get('z'), list(inspect_z.__code__.co_freevars)\nreturn inspect_z()")
+        self.assertEqual(response["status"], "ok")
+        self.assertEqual(response["result"], [1, []])
+
+    def test_streaming_print_uses_same_bound_and_terminal_metadata(self):
+        previous = sys.modules.get("_agent_runtime_host")
+        host = types.ModuleType("_agent_runtime_host")
+        setattr(host, "seal_imports", lambda _: None)
+        sys.modules["_agent_runtime_host"] = host
+        try:
+            runtime = load_runtime()
+            runtime._stream_begin({}, 0)
+            runtime._stream_chunk("print('first')\n")
+            runtime._stream_chunk("print('second')\nresult = {'value': 1}\n")
+            ended = runtime._stream_end()
+            self.assertEqual(ended["logs"], ["first", "second"])
+            self.assertEqual((ended["result_source"], ended["result_present"], ended["result"]), ("legacy_result", True, {"value": 1}))
+
+            runtime._stream_begin({}, 0)
+            with self.assertRaises(runtime._OutputLimitExceeded):
+                runtime._stream_chunk("print('🙂' * 70000)\n")
+            self.assertTrue(runtime._stream_session.ended)
+            self.assertEqual(runtime._stream_session.stdout.logs()[-1], runtime._STDOUT_TRUNCATION_MARKER)
+        finally:
+            if previous is None:
+                sys.modules.pop("_agent_runtime_host", None)
+            else:
+                sys.modules["_agent_runtime_host"] = previous
 
     def test_print_is_bounded_and_auditable(self):
         runtime = load_runtime()

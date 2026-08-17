@@ -33,7 +33,7 @@ func TestDecodeAndValidateRunResponseEnforcesOutputSchema(t *testing.T) {
 
 func TestDecodeAndValidateGuestRunResponseAcceptsBoundedModelOutputContract(t *testing.T) {
 	request := RunRequest{RunID: "run", Code: "print('count'); return {'count': 1}", Inputs: []byte(`{}`)}
-	valid := []byte(`{"status":"ok","result":{"count":1},"logs":["count"],"result_present":true,"result_source":"return","source_contract":{"schema_version":"pysolate.guest-source-contract.v1","model_source_sha256":"sha256:cdc9d10494b415b7df21f654d0afe57dd02503373e42aad9f749bb0c17e1f4e8","effective_ast_sha256":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","wrapper_contract_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"receipts":[],"metrics":{"capability_calls":0,"result_bytes":11},"error":null}`)
+	valid := []byte(`{"status":"ok","result":{"count":1},"logs":["count"],"result_present":true,"result_source":"return","source_contract":{"schema_version":"pysolate.guest-source-contract.v1","authority":"guest_reported_execution_fact","model_source_sha256":"sha256:cdc9d10494b415b7df21f654d0afe57dd02503373e42aad9f749bb0c17e1f4e8","effective_ast_sha256":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","wrapper_contract_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"receipts":[],"metrics":{"capability_calls":0,"result_bytes":11},"error":null}`)
 	response, err := DecodeAndValidateGuestRunResponse(request, valid)
 	if err != nil {
 		t.Fatal(err)

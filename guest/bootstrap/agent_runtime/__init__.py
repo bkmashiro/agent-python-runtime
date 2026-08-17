@@ -51,6 +51,10 @@ class _BoundedStdout:
         self._bytes = 0
         self._truncated = False
 
+    @property
+    def truncated(self) -> bool:
+        return self._truncated
+
     def write(self, value: str) -> int:
         if not isinstance(value, str):
             raise TypeError("stdout writes must be strings")
@@ -236,7 +240,9 @@ class _StreamingSession:
         if pending_has_import and (not self.preamble_open or not pending_is_preamble):
             raise SyntaxError("late import in streamed Python source")
         previous_stdout = sys.stdout
+        previous_dunder_stdout = sys.__stdout__
         sys.stdout = self.stdout
+        sys.__stdout__ = self.stdout
         try:
             if pending_is_preamble:
                 import_namespace = {"__builtins__": __builtins__}
@@ -253,11 +259,14 @@ class _StreamingSession:
                 self._eager_preflight(pending_tree)
                 rewritten = self._rewrite_eager(pending_tree)
                 exec(compile(rewritten, "<agent-stream>", "exec"), self.namespace, self.namespace)
-        except _OutputLimitExceeded:
+            if self.stdout.truncated:
+                raise _OutputLimitExceeded("model logs exceed the output byte bound")
+        except BaseException:
             self.ended = True
             raise
         finally:
             sys.stdout = previous_stdout
+            sys.__stdout__ = previous_dunder_stdout
         start = self.executed_bytes
         end = len(self.source.encode("utf-8"))
         digest = hashlib.sha256(self.pending.encode("utf-8")).hexdigest()
@@ -790,13 +799,17 @@ def _execute(request_json: str) -> str:
     namespace[_WRAPPER_MISSING] = missing
     capture = _BoundedStdout()
     previous_stdout = sys.stdout
+    previous_dunder_stdout = sys.__stdout__
     try:
         sys.stdout = capture
+        sys.__stdout__ = capture
         exec(code, namespace, namespace)
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):
             raise RuntimeError("agent output wrapper is unavailable")
         tag, result = main()
+        if capture.truncated:
+            raise _OutputLimitExceeded("model logs exceed the output byte bound")
         logs = capture.logs()
         if tag is explicit_return:
             result_present = True
@@ -821,6 +834,7 @@ def _execute(request_json: str) -> str:
             "result_source": result_source,
             "source_contract": {
                 "schema_version": "pysolate.guest-source-contract.v1",
+                "authority": "guest_reported_execution_fact",
                 "model_source_sha256": "sha256:" + hashlib.sha256(request["code"].encode("utf-8")).hexdigest(),
                 "effective_ast_sha256": effective_digest,
                 "wrapper_contract_sha256": _WRAPPER_CONTRACT_SHA256,
@@ -860,3 +874,4 @@ def _execute(request_json: str) -> str:
         return _encode(failure)
     finally:
         sys.stdout = previous_stdout
+        sys.__stdout__ = previous_dunder_stdout

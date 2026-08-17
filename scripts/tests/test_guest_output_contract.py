@@ -32,7 +32,7 @@ class GuestOutputContractTests(unittest.TestCase):
         self.assertEqual(response["result"], {"value": 42})
         self.assertTrue(response["result_present"])
         self.assertEqual(response["result_source"], "return")
-        self.assertEqual(set(response["source_contract"]), {"schema_version", "model_source_sha256", "effective_ast_sha256", "wrapper_contract_sha256"})
+        self.assertEqual(set(response["source_contract"]), {"schema_version", "authority", "model_source_sha256", "effective_ast_sha256", "wrapper_contract_sha256"})
 
     def test_legacy_missing_and_explicit_none_are_distinct(self):
         legacy = execute(load_runtime(), "result = {'value': 7}")
@@ -89,6 +89,12 @@ class GuestOutputContractTests(unittest.TestCase):
         self.assertEqual(response["status"], "ok")
         self.assertEqual(response["result"], [1, []])
 
+    def test_stdout_aliases_and_swallowed_limit_cannot_bypass_capture(self):
+        response = execute(load_runtime(), "import sys\nsys.__stdout__.write('raw\\n')\nsys.stdout = sys.__stdout__\nprint('printed')\nreturn 1")
+        self.assertEqual(response["logs"], ["raw", "printed"])
+        swallowed = execute(load_runtime(), "try:\n    print('x' * 70000)\nexcept BaseException:\n    pass\nreturn 1")
+        self.assertEqual((swallowed["status"], swallowed["error"]["code"]), ("error", "output_limit_exceeded"))
+
     def test_streaming_print_uses_same_bound_and_terminal_metadata(self):
         previous = sys.modules.get("_agent_runtime_host")
         host = types.ModuleType("_agent_runtime_host")
@@ -97,17 +103,20 @@ class GuestOutputContractTests(unittest.TestCase):
         try:
             runtime = load_runtime()
             runtime._stream_begin({}, 0)
-            runtime._stream_chunk("print('first')\n")
-            runtime._stream_chunk("print('second')\nresult = {'value': 1}\n")
+            runtime._stream_chunk("import sys\n")
+            runtime._stream_chunk("sys.__stdout__.write('first\\n')\nprint('second')\nresult = {'value': 1}\n")
             ended = runtime._stream_end()
             self.assertEqual(ended["logs"], ["first", "second"])
             self.assertEqual((ended["result_source"], ended["result_present"], ended["result"]), ("legacy_result", True, {"value": 1}))
 
             runtime._stream_begin({}, 0)
             with self.assertRaises(runtime._OutputLimitExceeded):
-                runtime._stream_chunk("print('🙂' * 70000)\n")
+                runtime._stream_chunk("try:\n    print('🙂' * 70000)\nexcept BaseException:\n    pass\n")
             self.assertTrue(runtime._stream_session.ended)
             self.assertEqual(runtime._stream_session.stdout.logs()[-1], runtime._STDOUT_TRUNCATION_MARKER)
+            with self.assertRaises((ValueError, RuntimeError)):
+                runtime._stream_chunk("result = 1\n")
+            self.assertTrue(runtime._stream_session.ended)
         finally:
             if previous is None:
                 sys.modules.pop("_agent_runtime_host", None)

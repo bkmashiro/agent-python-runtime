@@ -114,13 +114,14 @@ func validPrefixedSHA256(value string) bool {
 
 type RunSourceContract struct {
 	SchemaVersion         string `json:"schema_version"`
+	Authority             string `json:"authority"`
 	ModelSourceSHA256     string `json:"model_source_sha256"`
 	EffectiveASTSHA256    string `json:"effective_ast_sha256"`
 	WrapperContractSHA256 string `json:"wrapper_contract_sha256"`
 }
 
 func (contract RunSourceContract) Validate() error {
-	if contract.SchemaVersion != "pysolate.guest-source-contract.v1" || !validPrefixedSHA256(contract.ModelSourceSHA256) || !validPrefixedSHA256(contract.EffectiveASTSHA256) || !validPrefixedSHA256(contract.WrapperContractSHA256) {
+	if contract.SchemaVersion != "pysolate.guest-source-contract.v1" || contract.Authority != "guest_reported_execution_fact" || !validPrefixedSHA256(contract.ModelSourceSHA256) || !validPrefixedSHA256(contract.EffectiveASTSHA256) || !validPrefixedSHA256(contract.WrapperContractSHA256) {
 		return errors.New("run source contract is invalid")
 	}
 	return nil

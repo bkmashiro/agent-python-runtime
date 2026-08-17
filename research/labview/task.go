@@ -16,9 +16,9 @@ import (
 
 const TaskSnapshotSchema = "pysolate.lab-task.v2"
 
-const taskCorpusSHA = "sha256:ed1bd1b525484d19ec46902801afb286261aa1deecc285bfc1d4dd8d2ab56584"
-const taskReportSHA = "sha256:ea2a1e6e4b8934f502a5a4cae50377ca0d9ec4950f8502453fc2e534e5b0041a"
-const taskCaptureSHA = "sha256:4e51bf4c457e093f7384e559ee6467aa10bbcc46805149df4ce3da112fbf342e"
+const taskCorpusSHA = "sha256:ec93b6b81f3bb28dd84e3bb5d903a4498a26baa47fe30e5d24bb5f043de336e4"
+const taskReportSHA = "sha256:984b6046ca9e8c825f9ade3a3886736bf14fb737b205d92a78a50756e5b9027d"
+const taskCaptureSHA = "sha256:edbf83c23fbe696e45464e9bdb968fe0aeedac1ebf1627cda0a6cff993a202bd"
 
 var taskID = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
@@ -278,7 +278,7 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 			selectedEvents++
 		case event.Action == "fanout.discard" && event.Outcome == "discarded":
 			discardedEvents++
-		case event.Action == "fanout.selected_root" && event.Outcome == "ok" && event.InputSHA256 == capture.SelectedRootSHA256:
+		case event.Action == "fanout.selected_root" && event.Outcome == "ok" && latestDigest.MatchString(event.InputSHA256):
 			selectedRootEvents++
 		}
 	}

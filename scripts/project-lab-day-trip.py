@@ -13,6 +13,10 @@ from typing import Any
 SCHEMA = "pysolate.public-day-trip.v1"
 CANDIDATES = ("brighton", "oxford")
 SKILLS = ("budget-checking", "itinerary-formatting", "travel-research")
+REVIEWED_SOURCE_COMMIT = "f4989d48fc08fce2a97444d729bada2f3f9745b6"
+REVIEWED_RESULT_SHA256 = "ee28678c5052f31d6099e1a6168c000a00831714a09cff425b66811f26415885"
+REVIEWED_RESULT_CANONICAL_SHA256 = "704469ab21b72e67fda5266a5176fb931e9df8ff68e488f9c07dd3b26ddab91d"
+PRIVATE_MARKERS = ("/users/", "/home/", ".hermes", "bearer ", "sk-", "api_key", "apikey", "password", "secret")
 
 
 def load_json(path: Path, *, private: bool = False) -> Any:
@@ -44,7 +48,9 @@ def require_digest(value: Any, message: str) -> None:
 
 
 def project(result: dict[str, Any], fixture_root: Path, source_commit: str) -> dict[str, Any]:
-    require(len(source_commit) == 40 and all(c in "0123456789abcdef" for c in source_commit), "invalid source commit")
+    require(source_commit == REVIEWED_SOURCE_COMMIT, "source commit is not the reviewed private recording")
+    canonical_result = json.dumps(result, separators=(",", ":"), ensure_ascii=False).encode()
+    require(hashlib.sha256(canonical_result).hexdigest() == REVIEWED_RESULT_CANONICAL_SHA256, "private result content is not the reviewed recording")
     system = (fixture_root / "system.md").read_text()
     skills = [{"id": skill, "body": (fixture_root / "skills" / f"{skill}.md").read_text()} for skill in SKILLS]
     request = load_json(fixture_root / "workspace" / "request.json")
@@ -133,6 +139,8 @@ def project(result: dict[str, Any], fixture_root: Path, source_commit: str) -> d
         "privacy": {"public_projection": "allowlisted reviewed fields only", "private_recording": "experiment-full CAS", "credentials": "never recorded in public artifact"},
     }
     unsigned = json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode()
+    lowered = unsigned.decode().lower()
+    require(not any(marker in lowered for marker in PRIVATE_MARKERS), "public projection contains a private or credential-like marker")
     document["artifact_sha256"] = "sha256:" + hashlib.sha256(unsigned).hexdigest()
     return document
 
@@ -145,6 +153,12 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     result = load_json(args.input, private=True)
+    require(hashlib.sha256(args.input.read_bytes()).hexdigest() == REVIEWED_RESULT_SHA256, "private result is not the reviewed recording")
+    trajectory_path = args.input.parent / "trajectory.jsonl"
+    require(not trajectory_path.is_symlink() and trajectory_path.is_file(), "reviewed trajectory is missing")
+    header_line = trajectory_path.read_text().splitlines()[0]
+    header_record = json.loads(header_line)
+    require(header_record.get("kind") == "header" and header_record.get("header", {}).get("source_commit") == args.source_commit, "source commit is not bound to the private trajectory header")
     document = project(result, args.fixture, args.source_commit)
     body = json.dumps(document, separators=(",", ":"), ensure_ascii=False) + "\n"
     args.output.parent.mkdir(parents=True, exist_ok=True)

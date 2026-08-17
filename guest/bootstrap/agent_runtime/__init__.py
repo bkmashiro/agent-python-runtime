@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import __future__
 import ast
 import codeop
 import dis
@@ -36,9 +37,11 @@ _WRAPPER_MAIN = "_pysolate_agent_main"
 _WRAPPER_RETURN = "_pysolate_explicit_return"
 _WRAPPER_FALLTHROUGH = "_pysolate_fallthrough"
 _WRAPPER_MISSING = "_pysolate_missing"
+_WRAPPER_GLOBALS = "_pysolate_module_globals"
 _STDOUT_MAX_BYTES = 64 * 1024
 _STDOUT_MAX_LINES = 256
 _STDOUT_TRUNCATION_MARKER = "[pysolate stdout truncated]"
+_FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
 
 
 class _OutputLimitExceeded(Exception):
@@ -258,7 +261,7 @@ class _StreamingSession:
                 self.preamble_open = False
                 self._eager_preflight(pending_tree)
                 rewritten = self._rewrite_eager(pending_tree)
-                exec(compile(rewritten, "<agent-stream>", "exec"), self.namespace, self.namespace)
+                exec(compile(rewritten, "<agent-stream>", "exec", flags=code.co_flags & _FUTURE_FLAGS, dont_inherit=True), self.namespace, self.namespace)
             if self.stdout.truncated:
                 raise _OutputLimitExceeded("model logs exceed the output byte bound")
         except BaseException:
@@ -374,7 +377,7 @@ def _prepare(source: str) -> None:
     # Trusted preparation may intentionally build a streaming session while
     # definitions are still being installed into this private namespace.
     _prepared_globals = namespace
-    exec(compile(source, "<trusted-prepare>", "exec"), namespace, namespace)
+    exec(compile(source, "<trusted-prepare>", "exec", dont_inherit=True), namespace, namespace)
 
 
 
@@ -456,7 +459,7 @@ class _TopLevelReturnTransformer(ast.NodeTransformer):
 
 def _module_annotation_store(name: str, annotation: ast.expr) -> ast.Assign:
     annotations = ast.Call(
-        func=ast.Attribute(value=ast.Call(func=ast.Name(id="globals", ctx=ast.Load()), args=[], keywords=[]), attr="setdefault", ctx=ast.Load()),
+        func=ast.Attribute(value=ast.Name(id=_WRAPPER_GLOBALS, ctx=ast.Load()), attr="setdefault", ctx=ast.Load()),
         args=[ast.Constant(value="__annotations__"), ast.Dict(keys=[], values=[])], keywords=[])
     return ast.Assign(targets=[ast.Subscript(value=annotations, slice=ast.Constant(value=name), ctx=ast.Store())], value=annotation)
 
@@ -485,6 +488,15 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
 
     def _visit_function_binding(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.names.add(node.name)
+        arguments = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+        for argument in arguments:
+            if argument.annotation is not None:
+                self.visit(argument.annotation)
+        for argument in (node.args.vararg, node.args.kwarg):
+            if argument is not None and argument.annotation is not None:
+                self.visit(argument.annotation)
+        if node.returns is not None:
+            self.visit(node.returns)
         for value in (*node.decorator_list, *node.args.defaults, *node.args.kw_defaults):
             if value is not None:
                 self.visit(value)
@@ -584,7 +596,7 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
             elts=[
                 ast.Name(id=_WRAPPER_FALLTHROUGH, ctx=ast.Load()),
                 ast.Call(
-                    func=ast.Attribute(value=ast.Call(func=ast.Name(id="globals", ctx=ast.Load()), args=[], keywords=[]), attr="get", ctx=ast.Load()),
+                    func=ast.Attribute(value=ast.Name(id=_WRAPPER_GLOBALS, ctx=ast.Load()), attr="get", ctx=ast.Load()),
                     args=[ast.Constant(value="result"), ast.Name(id=_WRAPPER_MISSING, ctx=ast.Load())],
                     keywords=[],
                 ),
@@ -606,7 +618,7 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
     module = ast.fix_missing_locations(ast.Module(body=[*preamble, function], type_ignores=[]))
     effective = ast.dump(module, annotate_fields=True, include_attributes=False)
     digest = "sha256:" + hashlib.sha256(effective.encode("utf-8")).hexdigest()
-    code = compile(module, "<agent-run>", "exec")
+    code = compile(module, "<agent-run>", "exec", dont_inherit=True)
     wrapper = next((candidate for candidate in _code_objects(code) if candidate.co_name == _WRAPPER_MAIN), None)
     if wrapper is None or wrapper.co_flags & (inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR):
         raise SyntaxError("agent body cannot be a generator or coroutine")
@@ -688,7 +700,7 @@ def _preload_and_seal_imports(import_nodes: list[ast.stmt]) -> dict[str, Any] | 
         namespace: dict[str, Any] = {"__builtins__": __builtins__}
         if import_nodes:
             preamble = ast.fix_missing_locations(ast.Module(body=import_nodes, type_ignores=[]))
-            exec(compile(preamble, "<agent-import-preamble>", "exec"), namespace, namespace)
+            exec(compile(preamble, "<agent-import-preamble>", "exec", dont_inherit=True), namespace, namespace)
         seal(tuple(sorted(sys.modules)))
         namespace.pop("__builtins__", None)
         return namespace
@@ -797,6 +809,7 @@ def _execute(request_json: str) -> str:
     namespace[_WRAPPER_RETURN] = explicit_return
     namespace[_WRAPPER_FALLTHROUGH] = fallthrough
     namespace[_WRAPPER_MISSING] = missing
+    namespace[_WRAPPER_GLOBALS] = namespace
     capture = _BoundedStdout()
     previous_stdout = sys.stdout
     previous_dunder_stdout = sys.__stdout__

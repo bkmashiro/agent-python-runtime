@@ -75,8 +75,12 @@ class GuestOutputContractTests(unittest.TestCase):
 
     def test_wrapper_preserves_module_global_semantics(self):
         response = execute(load_runtime(), "counter = 0\ndef callback():\n    global counter\n    counter += 1\ndef program():\n    callback()\ncallback()\nprogram()\nreturn {'counter': counter, 'freevars': list(program.__code__.co_freevars)}")
+        shadowed = execute(load_runtime(), "globals = 1\nvalue: int = 2\nresult = {'globals': globals, 'value': value, 'annotation': __annotations__['value'].__name__}")
+        annotated = execute(load_runtime(), "def f(x: (annotation_binding := int)) -> (return_binding := str):\n    pass\nreturn {'argument': annotation_binding.__name__, 'return': return_binding.__name__}")
         self.assertEqual(response["status"], "ok")
         self.assertEqual(response["result"], {"counter": 2, "freevars": []})
+        self.assertEqual(shadowed["result"], {"globals": 1, "value": 2, "annotation": "int"})
+        self.assertEqual(annotated["result"], {"argument": "int", "return": "str"})
 
     def test_wrapper_preserves_module_annotations(self):
         plain = execute(load_runtime(), "if True:\n    x: list[int] = [1]\nreturn {'x': x, 'annotation': __annotations__['x'].__name__}")

@@ -39,6 +39,10 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def require_digest(value: Any, message: str) -> None:
+    require(isinstance(value, str) and value.startswith("sha256:") and len(value) == 71 and all(c in "0123456789abcdef" for c in value[7:]), message)
+
+
 def project(result: dict[str, Any], fixture_root: Path, source_commit: str) -> dict[str, Any]:
     require(len(source_commit) == 40 and all(c in "0123456789abcdef" for c in source_commit), "invalid source commit")
     system = (fixture_root / "system.md").read_text()
@@ -48,16 +52,22 @@ def project(result: dict[str, Any], fixture_root: Path, source_commit: str) -> d
     planning = result["planning"]
     candidates = result["candidates"]
     executions = result["executions"]
+    selection = result["selection"]
     branch = result["branch"]
     final = result["final"]
     require(planning["candidate_ids"] == list(CANDIDATES), "candidate plan drift")
     require(len(candidates) == len(executions) == 2, "candidate evidence incomplete")
-    require(branch["selected_candidate_id"] == final["selected_candidate_id"] == "oxford", "selection drift")
+    require([candidate["candidate_id"] for candidate in candidates] == list(CANDIDATES), "candidate order or identity drift")
+    require([execution["candidate_id"] for execution in executions] == list(CANDIDATES), "execution order or identity drift")
+    require(selection["selected_candidate_id"] == branch["selected_candidate_id"] == final["selected_candidate_id"] == "oxford", "selection drift")
+    require(branch["discarded_candidate_ids"] == ["brighton"], "discarded branch drift")
+    require_digest(branch["selected_root_sha256"], "selected root identity drift")
 
     public_agents: list[dict[str, Any]] = []
     for candidate, execution in zip(candidates, executions):
         candidate_id = candidate["candidate_id"]
         require(candidate_id in CANDIDATES and candidate_id == execution["candidate_id"], "candidate identity mismatch")
+        require_digest(execution["workspace_sha256"], "workspace identity drift")
         observed = execution["output"]
         require(observed["candidate_id"] == candidate_id, "observed output identity mismatch")
         expected_total = observed["rail"]["total_cost_gbp"] + observed["attraction"]["entry_cost_gbp"] * request["travellers"]

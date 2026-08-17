@@ -199,8 +199,11 @@ func TestSourcePrefixEvidenceRejectsDriftAndFalseSpeedup(t *testing.T) {
 		"fallback":                  func(value *SourcePrefixEvidence) { value.Rows[0].Fallback = true },
 		"baseline dispatched early": func(value *SourcePrefixEvidence) { value.Rows[0].ToolStartedNS = 100 },
 		"stream failed to overlap":  func(value *SourcePrefixEvidence) { value.Rows[1].ToolStartedNS = value.Rows[1].GenerationCompleteNS },
-		"summary drift":             func(value *SourcePrefixEvidence) { value.BaselineMedianNS++ },
-		"identity drift":            func(value *SourcePrefixEvidence) { value.CapabilityPlanSHA256 = "" },
+		"tool delay shorter than preregistered": func(value *SourcePrefixEvidence) {
+			value.Rows[0].ToolEndedNS = value.Rows[0].ToolStartedNS + int64(time.Millisecond)
+		},
+		"summary drift":  func(value *SourcePrefixEvidence) { value.BaselineMedianNS++ },
+		"identity drift": func(value *SourcePrefixEvidence) { value.CapabilityPlanSHA256 = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			evidence := validSourcePrefixEvidence(t)

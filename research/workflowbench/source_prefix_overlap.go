@@ -248,7 +248,7 @@ func ValidateSourcePrefixEvidence(contract SourcePrefixExperimentContract, evide
 			return errors.New("duplicate source-prefix lane")
 		}
 		seen[key] = row.Treatment
-		if row.WallNS <= 0 || row.WallNS != row.RunEndedNS || row.GenerationCompleteNS < generationFloor || row.ToolStartedNS < 0 || row.ToolEndedNS <= row.ToolStartedNS || row.RunEndedNS < row.ToolEndedNS || row.RunEndedNS < row.GenerationCompleteNS {
+		if row.WallNS <= 0 || row.WallNS != row.RunEndedNS || row.GenerationCompleteNS < generationFloor || row.ToolStartedNS < 0 || row.ToolEndedNS <= row.ToolStartedNS || row.ToolEndedNS-row.ToolStartedNS < int64(contract.ToolDelayMS)*int64(time.Millisecond) || row.RunEndedNS < row.ToolEndedNS || row.RunEndedNS < row.GenerationCompleteNS {
 			return errors.New("source-prefix row has an invalid timeline")
 		}
 		if row.ResultSHA256 != contract.ExpectedResultSHA256 || !row.OraclePassed || row.LogicalCalls != 1 || row.PhysicalDispatches != 1 || row.GuestStarts != 1 || row.Fallback || row.WorkspaceDisposition != "published" {

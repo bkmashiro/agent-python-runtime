@@ -50,7 +50,6 @@ export interface LatestDemo {
   }[];
   metrics: LatestMetric[];
   lanes: LatestLane[];
-  facts: { label: string; value: string }[];
 }
 
 export type LatestCodeAnnotation = LatestDemo['annotations'][number];
@@ -119,11 +118,11 @@ function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
 
   for (const [index, rawDemo] of root.demos.entries()) {
     const demo = object(rawDemo, 'demo');
-    exactKeys(demo, ['id', 'title', 'eyebrow', 'status', 'view_kind', 'summary', 'source', 'annotations', 'metrics', 'lanes', 'facts'], 'demo');
+    exactKeys(demo, ['id', 'title', 'eyebrow', 'status', 'view_kind', 'summary', 'source', 'annotations', 'metrics', 'lanes'], 'demo');
     const contract = demoContracts[index];
     if (demo.id !== contract.id || demo.status !== contract.status || demo.view_kind !== contract.view || !nonempty(demo.title) || !nonempty(demo.eyebrow) || !nonempty(demo.summary) || !nonempty(demo.source)) throw new Error('latest Lab demo is invalid');
 
-    if (!Array.isArray(demo.metrics) || demo.metrics.length !== 3) throw new Error('latest Lab metrics are incomplete');
+    if (!Array.isArray(demo.metrics) || demo.metrics.length < 2 || demo.metrics.length > 3) throw new Error('latest Lab metrics are incomplete');
     for (const rawMetric of demo.metrics) {
       const metric = object(rawMetric, 'metric');
       exactKeys(metric, ['label', 'value', 'note', 'tone'], 'metric');
@@ -156,11 +155,6 @@ function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
       }
     }
 
-    if (!Array.isArray(demo.facts) || demo.facts.length !== 3 || demo.facts.some((rawFact) => {
-      const fact = object(rawFact, 'fact');
-      exactKeys(fact, ['label', 'value'], 'fact');
-      return !nonempty(fact.label) || !nonempty(fact.value);
-    })) throw new Error('latest Lab facts are invalid');
   }
 
   const provenance = object(root.provenance, 'provenance');

@@ -96,7 +96,7 @@ func TestCampaignDemoJoinRejectsUnrelatedPhysicalOwner(t *testing.T) {
 }
 
 func TestLatestSnapshotPrivateMarkersFailClosed(t *testing.T) {
-	snapshot := LatestSnapshot{Demos: []LatestDemo{{Facts: []LatestFact{{Label: "body", Value: "private://trace/body"}}}}}
+	snapshot := LatestSnapshot{Demos: []LatestDemo{{Source: "private://trace/body"}}}
 	if !latestContainsPrivateMarker(snapshot) {
 		t.Fatal("private body marker was not detected")
 	}
@@ -146,7 +146,7 @@ func TestPaperFigureReadsMetricsAndRejectsLayoutDrift(t *testing.T) {
 func TestLatestSnapshotRejectsMalformedVisibleFields(t *testing.T) {
 	mutations := map[string]func(*LatestSnapshot){
 		"metric tone":            func(snapshot *LatestSnapshot) { snapshot.Demos[3].Metrics[0].Tone = "forged" },
-		"empty fact":             func(snapshot *LatestSnapshot) { snapshot.Demos[4].Facts[0].Value = "" },
+		"empty metric note":      func(snapshot *LatestSnapshot) { snapshot.Demos[4].Metrics[0].Note = "" },
 		"segment tone":           func(snapshot *LatestSnapshot) { snapshot.Demos[6].Lanes[0].Segments[0].Tone = "forged" },
 		"missing timeline":       func(snapshot *LatestSnapshot) { snapshot.Demos[6].Lanes = nil },
 		"null state flow lanes":  func(snapshot *LatestSnapshot) { snapshot.Demos[4].Lanes = nil },

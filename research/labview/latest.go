@@ -66,11 +66,6 @@ type LatestLane struct {
 	Segments   []LatestSegment `json:"segments"`
 }
 
-type LatestFact struct {
-	Label string `json:"label"`
-	Value string `json:"value"`
-}
-
 type LatestCodeAnnotation struct {
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
@@ -90,7 +85,6 @@ type LatestDemo struct {
 	Annotations []LatestCodeAnnotation `json:"annotations"`
 	Metrics     []LatestMetric         `json:"metrics"`
 	Lanes       []LatestLane           `json:"lanes"`
-	Facts       []LatestFact           `json:"facts"`
 }
 
 type LatestProvenance struct {
@@ -724,10 +718,6 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 	if err != nil {
 		return LatestSnapshot{}, err
 	}
-	source := ""
-	for _, chunk := range contract.Schedule.Chunks {
-		source += chunk.Source
-	}
 	sharedDuration := sharedEnd
 	if t05.AtNS > sharedDuration {
 		sharedDuration = t05.AtNS
@@ -739,98 +729,83 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 	if t07.AtNS > fallbackDuration {
 		fallbackDuration = t07.AtNS
 	}
-	cowNextCheckout := "not clean"
-	if cow.Outcomes.PostGrowthClean && cow.Outcomes.PostOverflowRefill {
-		cowNextCheckout = "clean"
-	}
-	coldFreshSlot := "not clean"
-	if cold.OfficialGuestVerification.FreshSlotClean {
-		coldFreshSlot = "clean"
-	}
+
 	snapshot := LatestSnapshot{
 		SchemaVersion: LatestSnapshotSchema,
 		Demos: []LatestDemo{
 			{
 				ID: "source-prefix-overlap", Title: "Start the READ before generation finishes", Eyebrow: "SOURCE PREFIX", Status: "measured", ViewKind: "timeline",
-				Summary: "Execute the first closed suite while the remaining Python is still arriving.", Source: source,
+				Summary: "Read a workspace manifest as soon as that call is complete, while the report source is still arriving.", Source: "manifest = workspace.read(\"release-manifest.json\")\nfiles = manifest[\"changed_files\"]\nsummary = summarize_changes(files)\nresult = {\"files\": len(files), \"summary\": summary}\n",
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "READ starts", Note: "The first closed suite reaches the Host READ."},
-					{StartLine: 2, EndLine: 3, Tone: "overlapped_tail", Label: "source continues", Note: "These lines arrive while the READ is in flight."},
+					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "manifest READ", Note: "The closed prefix can start this Host read immediately."},
+					{StartLine: 2, EndLine: 4, Tone: "overlapped_tail", Label: "report source", Note: "The remaining report logic arrives while the manifest is in flight."},
 				},
 				Metrics: []LatestMetric{{Label: "Generate first", Value: fmt.Sprintf("%.0f ms", float64(evidence.BaselineMedianNS)/1e6), Note: "median", Tone: "baseline"}, {Label: "Stream prefix", Value: fmt.Sprintf("%.0f ms", float64(evidence.StreamingMedianNS)/1e6), Note: "median", Tone: "optimized"}, {Label: "Mechanism window", Value: fmt.Sprintf("%.3f×", float64(evidence.MedianSpeedupMilli)/1000), Note: "matched run", Tone: "win"}},
 				Lanes:   []LatestLane{sourcePrefixLane("generate → execute", baseline), sourcePrefixLane("stream while generating", streaming)},
-				Facts:   []LatestFact{{Label: "Calls", Value: "1 logical · 1 physical"}, {Label: "READ", Value: "reached before source tail"}, {Label: "Result", Value: "same oracle"}},
 			},
 			{
 				ID: "semantic-predispatch", Title: "Pre-dispatch one proven READ", Eyebrow: "SEMANTIC PRE-DISPATCH", Status: "measured", ViewKind: "timeline",
-				Summary: "Start one necessarily-reached READ before the Guest reaches its exact call site.", Source: "result = sources.read('profile')\n",
-				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "exact call site", Note: "The staged result can only be claimed here."}},
+				Summary: "Start the required release-manifest READ before Guest startup, then consume it at the exact call site.", Source: "manifest = workspace.read(\"release-manifest.json\")\nresult = {\"release\": manifest[\"version\"]}\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "manifest READ", Note: "The staged observation is consumed only at this exact call."}},
 				Metrics:     []LatestMetric{{Label: "Baseline", Value: fmt.Sprintf("%.0f ms", float64(predispatch.BaselineMedianMicros)/1000), Note: "median", Tone: "baseline"}, {Label: "Pre-dispatch", Value: fmt.Sprintf("%.0f ms", float64(predispatch.OptimizedMedianMicros)/1000), Note: "median", Tone: "optimized"}, {Label: "Saved", Value: fmt.Sprintf("%.0f ms", float64(predispatch.MedianSavingsMicros)/1000), Note: "5 matched trials", Tone: "win"}},
 				Lanes: []LatestLane{
 					campaignLane("ordinary dispatch", "total wall", predispatch.BaselineMedianMicros*1000, 0, predispatch.BaselineMedianMicros*1000, "physical"),
 					campaignLane("semantic pre-dispatch", "total wall", predispatch.BaselineMedianMicros*1000, 0, predispatch.OptimizedMedianMicros*1000, "shared"),
 				},
-				Facts: []LatestFact{{Label: "Physical READs", Value: "1 in both lanes"}, {Label: "Results", Value: "equivalent"}, {Label: "Rejected claims", Value: fmt.Sprintf("%d", predispatchRejectedClaims)}},
 			},
 			{
 				ID: "exact-request-sharing", Title: "Two agents, one physical Guest", Eyebrow: "EXACT CONCURRENT SHARING", Status: "measured", ViewKind: "timeline",
-				Summary: "Two exact logical requests attach to one sealed physical execution.", Source: "# Agent A\n" + p05.Source + "\n# Agent B — exact request\n" + p06.Source,
+				Summary: "A release agent and reviewer request the same deterministic workspace summary and attach to one Guest.", Source: "# Release agent\nfiles = [\"input-a.txt\", \"input-b.txt\"]\nresult = f\"{len(files)} files|status=ready\"\n\n# Reviewer — exact same program\nfiles = [\"input-a.txt\", \"input-b.txt\"]\nresult = f\"{len(files)} files|status=ready\"\n",
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical owner", Note: "This request owns the Guest execution."},
-					{StartLine: 5, EndLine: 5, Tone: "shared_skip", Label: "joins owner", Note: "No duplicate physical Guest starts."},
+					{StartLine: 2, EndLine: 3, Tone: "physical_owner", Label: "release agent", Note: "This request owns the physical Guest."},
+					{StartLine: 6, EndLine: 7, Tone: "shared_skip", Label: "reviewer joins", Note: "The exact same program attaches without another Guest start."},
 				},
-				Metrics: []LatestMetric{{Label: "Logical requests", Value: "2", Note: "requests", Tone: "baseline"}, {Label: "Physical executions", Value: "1", Note: "Guest", Tone: "optimized"}, {Label: "Oracle results", Value: "2 / 2", Note: "complete", Tone: "win"}},
+				Metrics: []LatestMetric{{Label: "Logical requests", Value: "2", Note: "agents", Tone: "baseline"}, {Label: "Physical executions", Value: "1", Note: "Guest", Tone: "optimized"}, {Label: "Guest starts avoided", Value: "1", Note: "duplicate", Tone: "win"}},
 				Lanes:   []LatestLane{campaignLane("agent A", "same physical run", sharedDuration, sharedStart, sharedEnd, "shared"), campaignLane("agent B", "same physical run", sharedDuration, sharedStart, sharedEnd, "physical")},
-				Facts:   []LatestFact{{Label: "Decision", Value: "exact_shared"}, {Label: "Physical relation", Value: "same execution"}, {Label: "Duplicate starts", Value: "0"}},
 			},
 			{
 				ID: "whole-run-retention", Title: "Compute once, reuse twice", Eyebrow: "WHOLE-RUN RETENTION", Status: "experimental", ViewKind: "timeline",
-				Summary: "One leader computes; a concurrent waiter and a later exact request reuse the canonical result.", Source: "# leader\nresult = {'value': inputs['value'] + 1}\n# concurrent waiter → same physical compute\n# later request → retained hit\n",
+				Summary: "Compute one deterministic dependency report; a concurrent reviewer and a later dashboard request reuse it.", Source: "# First request\nlockfile = \"package-lock.json\"\nresult = build_dependency_report(lockfile)\n\n# Reviewer joins the in-flight report\n# Dashboard reuses the retained report\n",
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "leader computes", Note: "The only physical Guest run."},
-					{StartLine: 3, EndLine: 4, Tone: "shared_skip", Label: "reuse", Note: "One waiter and one retained hit skip duplicate compute."},
+					{StartLine: 2, EndLine: 3, Tone: "physical_owner", Label: "build report", Note: "The only physical Guest computes the dependency report."},
+					{StartLine: 5, EndLine: 6, Tone: "shared_skip", Label: "reuse report", Note: "The reviewer joins in flight; the dashboard later hits retention."},
 				},
 				Metrics: []LatestMetric{{Label: "Logical", Value: fmt.Sprintf("%d", reuse.Workload.LogicalInvocations), Note: "invocations", Tone: "baseline"}, {Label: "Physical", Value: fmt.Sprintf("%d", reuse.Workload.PhysicalComputes), Note: "compute", Tone: "optimized"}, {Label: "Later lookup", Value: fmt.Sprintf("%.3f ms", float64(reuse.TimingMicros.LaterLookup)/1000), Note: "retained hit", Tone: "win"}},
 				Lanes: []LatestLane{
 					campaignLane("3 fresh computes", "estimated baseline", reuse.Economics.Baseline*1000, 0, reuse.Economics.Baseline*1000, "physical"),
 					campaignLane("analyze + reuse", "observed path", reuse.Economics.Baseline*1000, 0, reuse.Economics.Observed*1000, "shared"),
 				},
-				Facts: []LatestFact{{Label: "Leader", Value: "1"}, {Label: "Concurrent waiter", Value: "1"}, {Label: "Retained hit", Value: "1"}},
 			},
 			{
 				ID: "cow-fresh-memory", Title: "Share the baseline, keep writes private", Eyebrow: "SINGLE-USE COW", Status: "experimental", ViewKind: "state_flow",
-				Summary: "Map a sealed initialized baseline into each fresh Run, then grow private memory on demand.", Source: "payload = bytearray(200_000_000)\npayload[-1] = 7\nresult = {'allocation_bytes': len(payload), 'last': payload[-1]}\n",
-				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 3, Tone: "physical_owner", Label: "private Run", Note: "Writes and growth stay private to this execution."}},
+				Summary: "A fresh Guest opens a 200 MB in-memory workspace index without copying the initialized baseline.", Source: "workspace_index = bytearray(200_000_000)\nworkspace_index[-1] = 7\nresult = {\"index_bytes\": len(workspace_index), \"ready\": workspace_index[-1] == 7}\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 3, Tone: "physical_owner", Label: "private index", Note: "The workspace index grows privately; the initialized baseline remains shared."}},
 				Metrics:     []LatestMetric{{Label: "Baseline", Value: fmt.Sprintf("%d MiB", cow.SealedImage.BaselineBytes/(1<<20)), Note: "sealed image", Tone: "baseline"}, {Label: "Growth tail", Value: fmt.Sprintf("%d MiB", cow.SealedImage.SparseGrowthTailBytes/(1<<20)), Note: "sparse", Tone: "optimized"}, {Label: "Maximum", Value: fmt.Sprintf("%d MiB", cow.SealedImage.MaximumVirtualBytes/(1<<20)), Note: "bounded", Tone: "win"}},
 				Lanes:       []LatestLane{},
-				Facts:       []LatestFact{{Label: "200 MB allocation", Value: cow.Outcomes.Allocation200}, {Label: "600 MB allocation", Value: cow.Outcomes.OverMaximumError.ErrorType}, {Label: "Next checkout", Value: cowNextCheckout}},
 			},
 			{
 				ID: "cold-io-continuation", Title: "Page out memory while waiting", Eyebrow: "COLD I/O CONTINUATION", Status: "experimental", ViewKind: "state_flow",
-				Summary: "Page out private dirty pages in a controlled mapping while a real Guest test verifies same-continuation resume.", Source: "import builtins\npayload = bytearray(200_000_000)\npayload[-1] = 7\nstate = {'value': 91}\nbuiltins._cold_marker = state\nbefore = id(state)\nok = testio.wait()\nresult = {'same': id(state) == before and builtins._cold_marker is state, 'value': state['value'], 'last': payload[-1], 'ok': ok}\n",
-				Annotations: []LatestCodeAnnotation{{StartLine: 7, EndLine: 7, Tone: "effect_trigger", Label: "Host wait", Note: "The same continuation pauses here."}, {StartLine: 8, EndLine: 8, Tone: "physical_owner", Label: "state survived", Note: "Python identity and the private-memory sentinel are checked after resume."}},
+				Summary: "Page out a large workspace index while its Guest waits for review, then continue with the same Python state.", Source: "workspace_index = bytearray(200_000_000)\nworkspace_index[-1] = 7\nreview = {\"selected_branch\": 1}\napproved = reviews.wait(\"workspace-summary\")\nresult = {\"branch\": review[\"selected_branch\"], \"index_ready\": workspace_index[-1] == 7, \"approved\": approved}\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 4, EndLine: 4, Tone: "effect_trigger", Label: "wait for review", Note: "Private pages can be reclaimed while this continuation is paused."}, {StartLine: 5, EndLine: 5, Tone: "physical_owner", Label: "same state", Note: "The selected branch and index sentinel remain available after resume."}},
 				Metrics:     []LatestMetric{{Label: "Before wait", Value: fmt.Sprintf("%d MiB", pageout.Before.RSSKiB/1024), Note: "private RSS", Tone: "baseline"}, {Label: "During wait", Value: fmt.Sprintf("%d MiB", pageout.After.RSSKiB/1024), Note: "pageout", Tone: "optimized"}, {Label: "Resume", Value: fmt.Sprintf("%.1f ms", float64(pageout.ResumeMicros)/1000), Note: "full refault scan", Tone: "control"}},
 				Lanes:       []LatestLane{},
-				Facts:       []LatestFact{{Label: "RSS probe", Value: "controlled mapping"}, {Label: "Guest continuation", Value: cold.OfficialGuestVerification.Result}, {Label: "Fresh slot", Value: coldFreshSlot}},
 			},
 			{
 				ID: "fresh-reevaluation", Title: "Release the Guest, resume fresh", Eyebrow: "FRESH RE-EVALUATION", Status: "experimental", ViewKind: "timeline",
-				Summary: "Release the waiting Guest and re-evaluate the workflow through a fresh execution after the observation arrives.", Source: "observations = [\"input-ready\", \"checkpoint-stable\"]\nresumed = all(value for value in observations)\nstatus = \"resumed\" if resumed else \"blocked\"\nresult = f\"observations={len(observations)}|status={status}|report=ready\"\n",
-				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 4, Tone: "fresh_fallback", Label: "fresh execution", Note: "After the Host wait, this source is re-evaluated in a new Guest."}},
-				Metrics:     []LatestMetric{{Label: "Wait", Value: fmt.Sprintf("%.1f s", float64(waitEnd-waitStart)/1000), Note: "released", Tone: "baseline"}, {Label: "Resume", Value: "fresh", Note: "Guest", Tone: "optimized"}, {Label: "Oracle", Value: fmt.Sprintf("%d / %d", oraclePasses, oracleChecks), Note: "passed", Tone: "win"}},
+				Summary: "Release the waiting Guest, then rebuild the workspace summary in a fresh Guest after the inputs are stable.", Source: "files = [\"input-a.txt\", \"input-b.txt\"]\nselected_child = 1\nresult = f\"{len(files)} files|selected={selected_child}|status=ready\"\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 3, Tone: "fresh_fallback", Label: "fresh re-evaluation", Note: "After the Host wait, this workspace-summary program runs in a new Guest."}},
+				Metrics:     []LatestMetric{{Label: "Wait", Value: fmt.Sprintf("%.1f s", float64(waitEnd-waitStart)/1000), Note: "Guest released", Tone: "baseline"}, {Label: "Resume execution", Value: "fresh Guest", Note: "re-evaluated", Tone: "optimized"}},
 				Lanes:       []LatestLane{{Label: "logical workflow", DurationNS: int64(reevaluationRow.RelativeElapsedMillis * 1e6), Segments: []LatestSegment{{Label: "Host wait", StartNS: int64(waitStart * 1e6), EndNS: int64(waitEnd * 1e6), Tone: "effect"}}}},
-				Facts:       []LatestFact{{Label: "Observed event", Value: "resume.fresh"}, {Label: "Evidence", Value: "complete"}, {Label: "Disposition", Value: "closed"}},
 			},
 			{
 				ID: "source-mismatch-fallback", Title: "Different source stays fresh", Eyebrow: "FAIL-CLOSED CONTROL", Status: "control", ViewKind: "timeline",
-				Summary: "A different source identity cannot attach to the existing physical execution.", Source: "# Exact request\n" + p05.Source + "\n# Different source\n" + p07.Source,
+				Summary: "A reviewer changes the workspace-summary program, so the request must start an independent Guest.", Source: "# Existing request\nfiles = [\"input-a.txt\", \"input-b.txt\"]\nresult = f\"{len(files)} files|status=ready\"\n\n# Reviewer adds sorting — different source\nfiles = sorted([\"input-a.txt\", \"input-b.txt\"])\nresult = f\"{len(files)} files|status=ready\"\n",
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical A", Note: "The exact request executes normally."},
-					{StartLine: 5, EndLine: 5, Tone: "fresh_fallback", Label: "fresh physical B", Note: "Different source starts an independent Guest."},
+					{StartLine: 2, EndLine: 3, Tone: "physical_owner", Label: "existing program", Note: "The first workspace summary executes normally."},
+					{StartLine: 6, EndLine: 7, Tone: "fresh_fallback", Label: "changed program", Note: "Adding sorting changes source identity, so this request gets a fresh Guest."},
 				},
 				Metrics: []LatestMetric{{Label: "Logical requests", Value: "2", Note: "requests", Tone: "baseline"}, {Label: "Physical executions", Value: "2", Note: "Guests", Tone: "control"}, {Label: "Unsafe reuse", Value: "0", Note: "rejected", Tone: "win"}},
 				Lanes:   []LatestLane{campaignLane("exact request", "physical A", sharedDuration, sharedStart, sharedEnd, "physical"), campaignLane("different source", "fresh physical B", fallbackDuration, fallbackStart, fallbackEnd, "fallback")},
-				Facts:   []LatestFact{{Label: "Decision", Value: p07.Expected.Sharing}, {Label: "Disposition", Value: q07.Disposition}, {Label: "Physical relation", Value: "independent"}},
 			},
 		},
 		Provenance: LatestProvenance{
@@ -890,7 +865,7 @@ func ValidateLatestSnapshot(snapshot LatestSnapshot) error {
 		{"source-mismatch-fallback", "control", "timeline"},
 	}
 	for index, demo := range snapshot.Demos {
-		if demo.ID != wanted[index].id || demo.Status != wanted[index].status || demo.ViewKind != wanted[index].view || demo.Title == "" || demo.Summary == "" || demo.Source == "" || len(demo.Metrics) != 3 || len(demo.Facts) != 3 || strings.Contains(demo.Source, "/Users/") || strings.Contains(demo.Source, ".hermes") {
+		if demo.ID != wanted[index].id || demo.Status != wanted[index].status || demo.ViewKind != wanted[index].view || demo.Title == "" || demo.Summary == "" || demo.Source == "" || len(demo.Metrics) < 2 || len(demo.Metrics) > 3 || strings.Contains(demo.Source, "/Users/") || strings.Contains(demo.Source, ".hermes") {
 			return errors.New("invalid latest Lab demo")
 		}
 		allowedMetricTones := map[string]bool{"baseline": true, "optimized": true, "win": true, "control": true}
@@ -899,11 +874,7 @@ func ValidateLatestSnapshot(snapshot LatestSnapshot) error {
 				return errors.New("invalid latest Lab metric")
 			}
 		}
-		for _, fact := range demo.Facts {
-			if fact.Label == "" || fact.Value == "" {
-				return errors.New("invalid latest Lab fact")
-			}
-		}
+
 		lineCount := strings.Count(demo.Source, "\n") + 1
 		seenLines := make(map[int]bool)
 		allowedTones := map[string]bool{"effect_trigger": true, "overlapped_tail": true, "physical_owner": true, "shared_skip": true, "fresh_fallback": true}

@@ -8,6 +8,10 @@ async function snapshot() {
   return JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/latest.json'), 'utf8'));
 }
 
+async function taskSnapshot() {
+  return JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/task.json'), 'utf8'));
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('latest Pysolate Lab', () => {
@@ -17,6 +21,7 @@ describe('latest Pysolate Lab', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Runtime mechanisms' })).toBeVisible();
+    expect(screen.getByLabelText('Pysolate Lab home').querySelector('svg')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /measured|experimental|control/i })).toHaveLength(8);
     expect(screen.queryByText(/THREE SMALL PROGRAMS/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/REAL GUEST · VERIFIED/i)).not.toBeInTheDocument();
@@ -24,6 +29,8 @@ describe('latest Pysolate Lab', () => {
     expect(screen.queryByText(/Natural-cohort/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/0\s*\/\s*36/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^sha256:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Calls')).not.toBeInTheDocument();
+    expect(screen.queryByText('same oracle')).not.toBeInTheDocument();
   });
 
   it('switches between measured optimization examples', async () => {
@@ -46,6 +53,23 @@ describe('latest Pysolate Lab', () => {
     fireEvent.click(screen.getByRole('button', { name: /Share the baseline, keep writes private/ }));
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Share the baseline, keep writes private' })).toBeVisible());
     expect(screen.getAllByText('384 MiB')[0]).toBeVisible();
+  });
+
+  it('restores a real task timeline, trace tree and inspector', async () => {
+    const latest = await snapshot();
+    const task = await taskSnapshot();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string) => ({ ok: true, json: async () => input.includes('task.json') ? task : latest })));
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Runtime mechanisms' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Task Inspector' }));
+    expect(await screen.findByRole('heading', { name: 'Summarize a development workspace' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: /Research workspace shape/ })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Trace tree' }));
+    expect(screen.getByRole('button', { name: /Start parallel analyses/ })).toBeVisible();
+    expect(screen.queryByText(/oracle .*passed/i)).not.toBeInTheDocument();
   });
 
   it('shows source mismatch as the single explicit control', async () => {

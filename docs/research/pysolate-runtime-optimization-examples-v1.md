@@ -158,7 +158,7 @@ For the sharing case, avoid labelling the purple region simply as `cached`: that
 
 A compact three-panel figure can teach the complete story:
 
-1. **Overlap:** highlight line 1 in teal and lines 2–3 in blue; place baseline and streaming timelines below the code.
+1. **Overlap:** highlight line 1 in teal and lines 2–4 in blue; place baseline and streaming timelines below the code.
 2. **Share:** show the same source twice; mark one copy green as the physical owner and hatch the second purple as the attached logical request.
 3. **Reject:** highlight the changed source in orange and route both requests to separate physical Guests.
 

@@ -31,6 +31,8 @@ describe('latest-only Lab snapshot', () => {
     expect(snapshot.demos[3].metrics.slice(0, 2).map((metric) => metric.value)).toEqual(['3', '1']);
     expect(snapshot.demos[4].metrics.map((metric) => metric.value)).toContain('384 MiB');
     expect(snapshot.demos[5].metrics.map((metric) => metric.value)).toContain('0 MiB');
+    expect(snapshot.demos.flatMap((demo) => demo.metrics).some((metric) => /oracle|passed/i.test(`${metric.label} ${metric.value} ${metric.note}`))).toBe(false);
+    expect(snapshot.demos.map((demo) => demo.source).join('\n')).not.toMatch(/\balpha\b|\bbeta\b|\bprofile\b|\bticket\b|inputs\[['\"]value['\"]\]/i);
     expect(snapshot).not.toHaveProperty('headline');
     expect(snapshot).not.toHaveProperty('boundary');
     expect(snapshot.demos.every((demo) => !('claim_boundary' in demo))).toBe(true);

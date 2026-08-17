@@ -73,16 +73,9 @@ branch. `research/operator.RunBranch` remains the fresh-Guest API and returns an
 in-memory outcome for a Host caller. The independent `labstore-bench` command
 is also a measurement probe, not a service.
 
-`research/labview` now also owns the latest-only `pysolate.lab-latest.v2`
-mechanism projection. Its Go projector pins and validates the accepted source-prefix,
-campaign, semantic pre-dispatch, whole-Run reuse, growable COW, cold-I/O and
-composable-runtime evidence before emitting the body-safe static snapshot consumed
-by `apps/lab-web`. The Web renderer shows eight code-and-execution views, including
-one fail-closed source-mismatch control. Evidence identities remain part of the
-machine validation contract but are not rendered as primary UI. The natural
-short-form source-prefix census is not a Web input. The renderer cannot infer new
-facts, execute a program, dispatch an effect, resolve a private body or grant
-authority. Older Web shapes remain research artifacts, not compatibility targets.
+`research/labview` now owns the latest-only `pysolate.lab-latest.v2` mechanism projection and `pysolate.lab-task.v1` task-inspector projection. The mechanism projector pins accepted source-prefix, campaign, semantic pre-dispatch, whole-Run reuse, growable COW, cold-I/O and composable-runtime evidence. The task projector pins the public development corpus and accepted composable report, then selects the real `dev-workspace-summary` run with its three Python sources, Host/runtime trace and workspace changes. Both emit body-safe static snapshots consumed by `apps/lab-web`.
+
+The Web renderer shows eight code-and-execution views plus a clickable task timeline, trace tree and inspector. Correctness bookkeeping and evidence identities remain part of machine validation but are not rendered as accomplishments. The natural short-form source-prefix census is not a Web input. The renderer cannot infer new facts, execute a program, dispatch an effect, resolve a private body or grant authority. Older Web shapes remain research artifacts, not compatibility targets.
 
 The current DAG export renders one validated parent and caller-supplied
 manifest/child pairs. It validates child admission identities and Grants, the

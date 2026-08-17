@@ -4,21 +4,24 @@
 
 ## Contract
 
-The browser consumes only:
+The browser consumes only two current, build-pinned projections:
 
 ```text
 pysolate.lab-latest.v2
+pysolate.lab-task.v1
 ```
 
-There is no compatibility adapter for the former trajectory, campaign, or Lab v1 Web shapes. Historical Go research contracts remain in the repository but are not browser inputs.
+There is no compatibility adapter for the former trajectory, campaign, debugger, or Lab v1 Web shapes. The task inspector is a new projection of one accepted composable run, not a decoder for the removed historical debugger schema.
 
 ## Generation authority
 
-`research/labview.BuildLatestSnapshot` and `research/labview/cmd/project-latest` are the projection authority. They pin accepted evidence for source-prefix overlap, the transparent campaign, semantic pre-dispatch, whole-Run reuse, growable COW, cold-I/O continuation and composable re-evaluation. They validate canonical source, logical/physical joins and terminal outcomes before writing:
+`research/labview.BuildLatestSnapshot` and `research/labview/cmd/project-latest` are the mechanism projection authority. `research/labview.BuildTaskSnapshot` and `research/labview/cmd/project-task` pin the public development corpus plus the accepted composable report and select the real `dev-workspace-summary` run. They write:
 
 ```text
 apps/lab-web/public/lab-data/latest.json
 apps/lab-web/src/latestIdentity.ts
+apps/lab-web/public/lab-data/task.json
+apps/lab-web/src/taskIdentity.ts
 ```
 
 Regenerate through the repository script:
@@ -26,6 +29,7 @@ Regenerate through the repository script:
 ```sh
 cd apps/lab-web
 npm run data:latest
+npm run data:task
 ```
 
 Do not hand-edit the snapshot.
@@ -43,12 +47,9 @@ The UI contains eight mechanism examples:
 7. fresh re-evaluation after a Host wait;
 8. a source-mismatch fail-closed control.
 
-Each view is reduced to code, three useful measurements, an explicit `timeline`
-or `state_flow` execution view, and three runtime facts. Low-noise `MEASURED`,
-`EXPERIMENTAL`, and `CONTROL` labels preserve evidence tier without restoring a
-claim-boundary panel. Evidence hashes remain in the snapshot and browser
-verification path but are not rendered. The natural 36-event source-prefix
-census is no longer a Web input or visible card.
+Each mechanism view keeps only a semantic workspace-report program, two or three useful measurements, and an explicit `timeline` or `state_flow`. Correctness bookkeeping and evidence hashes remain in the validated projection but are not rendered. Low-noise `MEASURED`, `EXPERIMENTAL`, and `CONTROL` labels preserve evidence tier without a claim-boundary panel. The natural 36-event source-prefix census is no longer a Web input or visible card.
+
+The separate Task Inspector renders one accepted `dev-workspace-summary` run: orchestrator, researcher and reviewer Python; Host/runtime events; a clickable timeline or trace tree; and Python, task, I/O and workspace panels. Oracle events remain validated but are not presented as UI accomplishments.
 
 ## Safety boundary
 
@@ -67,9 +68,10 @@ Unknown fields and malformed enums fail closed in both the Go projector and Type
 ```sh
 cd apps/lab-web
 npm run data:latest
+npm run data:task
 npm test -- --run
 npm run build
 npm run test:e2e
 ```
 
-Desktop and 390px viewport tests must cover all eight mechanisms. Visual review must confirm that overlapping generation/effect bars remain separately visible and that sharing/fallback physical identities are explicit.
+Desktop and 390px viewport tests must cover all eight mechanisms and the Task Inspector. Visual review must confirm that short terminal events remain readable without leaving the shared time axis, state-flow arrows stay centered, and timeline/trace/inspector interactions remain usable.

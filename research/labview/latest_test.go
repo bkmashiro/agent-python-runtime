@@ -49,7 +49,7 @@ func TestBuildLatestSnapshotProjectsEightVisibleMechanisms(t *testing.T) {
 	byID := map[string]labview.LatestDemo{}
 	for _, demo := range snapshot.Demos {
 		byID[demo.ID] = demo
-		if demo.Source == "" || len(demo.Annotations) == 0 || len(demo.Metrics) != 3 || len(demo.Facts) != 3 {
+		if demo.Source == "" || len(demo.Annotations) == 0 || len(demo.Metrics) < 2 || len(demo.Metrics) > 3 {
 			t.Fatalf("incomplete demo %+v", demo)
 		}
 	}
@@ -62,7 +62,7 @@ func TestBuildLatestSnapshotProjectsEightVisibleMechanisms(t *testing.T) {
 	if byID["source-mismatch-fallback"].Status != "control" || byID["source-mismatch-fallback"].Metrics[1].Value != "2" {
 		t.Fatalf("fallback=%+v", byID["source-mismatch-fallback"])
 	}
-	if byID["semantic-predispatch"].Metrics[2].Value != "1018 ms" || byID["whole-run-retention"].Metrics[0].Value != "3" || byID["cow-fresh-memory"].Metrics[1].Value != "384 MiB" || byID["cold-io-continuation"].Metrics[1].Value != "0 MiB" || byID["fresh-reevaluation"].Facts[0].Value != "resume.fresh" {
+	if byID["semantic-predispatch"].Metrics[2].Value != "1018 ms" || byID["whole-run-retention"].Metrics[0].Value != "3" || byID["cow-fresh-memory"].Metrics[1].Value != "384 MiB" || byID["cold-io-continuation"].Metrics[1].Value != "0 MiB" || byID["fresh-reevaluation"].Metrics[1].Value != "fresh Guest" {
 		t.Fatalf("expanded demos are incomplete: %+v", byID)
 	}
 	encoded, err := labview.EncodeLatestSnapshot(snapshot)

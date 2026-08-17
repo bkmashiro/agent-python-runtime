@@ -1,7 +1,10 @@
 # Pysolate Lab Web
 
-Latest-only static viewer for eight evidence-backed runtime mechanisms.
+Static viewer with two build-pinned surfaces:
 
-Generate with `npm run data:latest`; verify with `npm test -- --run`, `npm run build`, and `npm run test:e2e`.
+- **Mechanisms** — eight compact workspace-report examples backed by accepted runtime evidence.
+- **Task Inspector** — one real `dev-workspace-summary` Guest run with a clickable timeline, trace tree, Python, task, I/O, and workspace views.
 
-The browser accepts only `pysolate.lab-latest.v2`. Evidence hashes remain internal and are not rendered.
+Generate the public projections with `npm run data:latest` and `npm run data:task`. Verify with `npm test -- --run`, `npm run build`, and `npm run test:e2e`.
+
+The browser accepts only `pysolate.lab-latest.v2` and `pysolate.lab-task.v1`. Evidence identities are verified but not rendered.

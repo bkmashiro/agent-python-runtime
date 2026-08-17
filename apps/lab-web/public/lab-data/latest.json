@@ -1,6 +1,6 @@
 {
   "schema_version": "pysolate.lab-latest.v2",
-  "identity": "sha256:24666ec0363d380536bae38fbafb54b3f6d4a2a237db9c3c77e58d05070bbfed",
+  "identity": "sha256:e13058cb91bab4a567182ffc1ed86bb479154ad256b83edae51e6a8f5a9fa86c",
   "demos": [
     {
       "id": "source-prefix-overlap",
@@ -8,22 +8,22 @@
       "eyebrow": "SOURCE PREFIX",
       "status": "measured",
       "view_kind": "timeline",
-      "summary": "Execute the first closed suite while the remaining Python is still arriving.",
-      "source": "record = slow.lookup('alpha')\nlabel = record['label'].upper()\nresult = {'label': label}\n",
+      "summary": "Read a workspace manifest as soon as that call is complete, while the report source is still arriving.",
+      "source": "manifest = workspace.read(\"release-manifest.json\")\nfiles = manifest[\"changed_files\"]\nsummary = summarize_changes(files)\nresult = {\"files\": len(files), \"summary\": summary}\n",
       "annotations": [
         {
           "start_line": 1,
           "end_line": 1,
           "tone": "effect_trigger",
-          "label": "READ starts",
-          "note": "The first closed suite reaches the Host READ."
+          "label": "manifest READ",
+          "note": "The closed prefix can start this Host read immediately."
         },
         {
           "start_line": 2,
-          "end_line": 3,
+          "end_line": 4,
           "tone": "overlapped_tail",
-          "label": "source continues",
-          "note": "These lines arrive while the READ is in flight."
+          "label": "report source",
+          "note": "The remaining report logic arrives while the manifest is in flight."
         }
       ],
       "metrics": [
@@ -95,20 +95,6 @@
             }
           ]
         }
-      ],
-      "facts": [
-        {
-          "label": "Calls",
-          "value": "1 logical · 1 physical"
-        },
-        {
-          "label": "READ",
-          "value": "reached before source tail"
-        },
-        {
-          "label": "Result",
-          "value": "same oracle"
-        }
       ]
     },
     {
@@ -117,15 +103,15 @@
       "eyebrow": "SEMANTIC PRE-DISPATCH",
       "status": "measured",
       "view_kind": "timeline",
-      "summary": "Start one necessarily-reached READ before the Guest reaches its exact call site.",
-      "source": "result = sources.read('profile')\n",
+      "summary": "Start the required release-manifest READ before Guest startup, then consume it at the exact call site.",
+      "source": "manifest = workspace.read(\"release-manifest.json\")\nresult = {\"release\": manifest[\"version\"]}\n",
       "annotations": [
         {
           "start_line": 1,
           "end_line": 1,
           "tone": "effect_trigger",
-          "label": "exact call site",
-          "note": "The staged result can only be claimed here."
+          "label": "manifest READ",
+          "note": "The staged observation is consumed only at this exact call."
         }
       ],
       "metrics": [
@@ -173,20 +159,6 @@
             }
           ]
         }
-      ],
-      "facts": [
-        {
-          "label": "Physical READs",
-          "value": "1 in both lanes"
-        },
-        {
-          "label": "Results",
-          "value": "equivalent"
-        },
-        {
-          "label": "Rejected claims",
-          "value": "0"
-        }
       ]
     },
     {
@@ -195,29 +167,29 @@
       "eyebrow": "EXACT CONCURRENT SHARING",
       "status": "measured",
       "view_kind": "timeline",
-      "summary": "Two exact logical requests attach to one sealed physical execution.",
-      "source": "# Agent A\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Agent B — exact request\nresult = {'square': inputs['value'] * inputs['value']}\n",
+      "summary": "A release agent and reviewer request the same deterministic workspace summary and attach to one Guest.",
+      "source": "# Release agent\nfiles = [\"input-a.txt\", \"input-b.txt\"]\nresult = f\"{len(files)} files|status=ready\"\n\n# Reviewer — exact same program\nfiles = [\"input-a.txt\", \"input-b.txt\"]\nresult = f\"{len(files)} files|status=ready\"\n",
       "annotations": [
         {
           "start_line": 2,
-          "end_line": 2,
+          "end_line": 3,
           "tone": "physical_owner",
-          "label": "physical owner",
-          "note": "This request owns the Guest execution."
+          "label": "release agent",
+          "note": "This request owns the physical Guest."
         },
         {
-          "start_line": 5,
-          "end_line": 5,
+          "start_line": 6,
+          "end_line": 7,
           "tone": "shared_skip",
-          "label": "joins owner",
-          "note": "No duplicate physical Guest starts."
+          "label": "reviewer joins",
+          "note": "The exact same program attaches without another Guest start."
         }
       ],
       "metrics": [
         {
           "label": "Logical requests",
           "value": "2",
-          "note": "requests",
+          "note": "agents",
           "tone": "baseline"
         },
         {
@@ -227,9 +199,9 @@
           "tone": "optimized"
         },
         {
-          "label": "Oracle results",
-          "value": "2 / 2",
-          "note": "complete",
+          "label": "Guest starts avoided",
+          "value": "1",
+          "note": "duplicate",
           "tone": "win"
         }
       ],
@@ -258,20 +230,6 @@
             }
           ]
         }
-      ],
-      "facts": [
-        {
-          "label": "Decision",
-          "value": "exact_shared"
-        },
-        {
-          "label": "Physical relation",
-          "value": "same execution"
-        },
-        {
-          "label": "Duplicate starts",
-          "value": "0"
-        }
       ]
     },
     {
@@ -280,22 +238,22 @@
       "eyebrow": "WHOLE-RUN RETENTION",
       "status": "experimental",
       "view_kind": "timeline",
-      "summary": "One leader computes; a concurrent waiter and a later exact request reuse the canonical result.",
-      "source": "# leader\nresult = {'value': inputs['value'] + 1}\n# concurrent waiter → same physical compute\n# later request → retained hit\n",
+      "summary": "Compute one deterministic dependency report; a concurrent reviewer and a later dashboard request reuse it.",
+      "source": "# First request\nlockfile = \"package-lock.json\"\nresult = build_dependency_report(lockfile)\n\n# Reviewer joins the in-flight report\n# Dashboard reuses the retained report\n",
       "annotations": [
         {
           "start_line": 2,
-          "end_line": 2,
+          "end_line": 3,
           "tone": "physical_owner",
-          "label": "leader computes",
-          "note": "The only physical Guest run."
+          "label": "build report",
+          "note": "The only physical Guest computes the dependency report."
         },
         {
-          "start_line": 3,
-          "end_line": 4,
+          "start_line": 5,
+          "end_line": 6,
           "tone": "shared_skip",
-          "label": "reuse",
-          "note": "One waiter and one retained hit skip duplicate compute."
+          "label": "reuse report",
+          "note": "The reviewer joins in flight; the dashboard later hits retention."
         }
       ],
       "metrics": [
@@ -343,20 +301,6 @@
             }
           ]
         }
-      ],
-      "facts": [
-        {
-          "label": "Leader",
-          "value": "1"
-        },
-        {
-          "label": "Concurrent waiter",
-          "value": "1"
-        },
-        {
-          "label": "Retained hit",
-          "value": "1"
-        }
       ]
     },
     {
@@ -365,15 +309,15 @@
       "eyebrow": "SINGLE-USE COW",
       "status": "experimental",
       "view_kind": "state_flow",
-      "summary": "Map a sealed initialized baseline into each fresh Run, then grow private memory on demand.",
-      "source": "payload = bytearray(200_000_000)\npayload[-1] = 7\nresult = {'allocation_bytes': len(payload), 'last': payload[-1]}\n",
+      "summary": "A fresh Guest opens a 200 MB in-memory workspace index without copying the initialized baseline.",
+      "source": "workspace_index = bytearray(200_000_000)\nworkspace_index[-1] = 7\nresult = {\"index_bytes\": len(workspace_index), \"ready\": workspace_index[-1] == 7}\n",
       "annotations": [
         {
           "start_line": 1,
           "end_line": 3,
           "tone": "physical_owner",
-          "label": "private Run",
-          "note": "Writes and growth stay private to this execution."
+          "label": "private index",
+          "note": "The workspace index grows privately; the initialized baseline remains shared."
         }
       ],
       "metrics": [
@@ -396,21 +340,7 @@
           "tone": "win"
         }
       ],
-      "lanes": [],
-      "facts": [
-        {
-          "label": "200 MB allocation",
-          "value": "succeeded"
-        },
-        {
-          "label": "600 MB allocation",
-          "value": "MemoryError"
-        },
-        {
-          "label": "Next checkout",
-          "value": "clean"
-        }
-      ]
+      "lanes": []
     },
     {
       "id": "cold-io-continuation",
@@ -418,22 +348,22 @@
       "eyebrow": "COLD I/O CONTINUATION",
       "status": "experimental",
       "view_kind": "state_flow",
-      "summary": "Page out private dirty pages in a controlled mapping while a real Guest test verifies same-continuation resume.",
-      "source": "import builtins\npayload = bytearray(200_000_000)\npayload[-1] = 7\nstate = {'value': 91}\nbuiltins._cold_marker = state\nbefore = id(state)\nok = testio.wait()\nresult = {'same': id(state) == before and builtins._cold_marker is state, 'value': state['value'], 'last': payload[-1], 'ok': ok}\n",
+      "summary": "Page out a large workspace index while its Guest waits for review, then continue with the same Python state.",
+      "source": "workspace_index = bytearray(200_000_000)\nworkspace_index[-1] = 7\nreview = {\"selected_branch\": 1}\napproved = reviews.wait(\"workspace-summary\")\nresult = {\"branch\": review[\"selected_branch\"], \"index_ready\": workspace_index[-1] == 7, \"approved\": approved}\n",
       "annotations": [
         {
-          "start_line": 7,
-          "end_line": 7,
+          "start_line": 4,
+          "end_line": 4,
           "tone": "effect_trigger",
-          "label": "Host wait",
-          "note": "The same continuation pauses here."
+          "label": "wait for review",
+          "note": "Private pages can be reclaimed while this continuation is paused."
         },
         {
-          "start_line": 8,
-          "end_line": 8,
+          "start_line": 5,
+          "end_line": 5,
           "tone": "physical_owner",
-          "label": "state survived",
-          "note": "Python identity and the private-memory sentinel are checked after resume."
+          "label": "same state",
+          "note": "The selected branch and index sentinel remain available after resume."
         }
       ],
       "metrics": [
@@ -456,21 +386,7 @@
           "tone": "control"
         }
       ],
-      "lanes": [],
-      "facts": [
-        {
-          "label": "RSS probe",
-          "value": "controlled mapping"
-        },
-        {
-          "label": "Guest continuation",
-          "value": "PASS"
-        },
-        {
-          "label": "Fresh slot",
-          "value": "clean"
-        }
-      ]
+      "lanes": []
     },
     {
       "id": "fresh-reevaluation",
@@ -478,35 +394,29 @@
       "eyebrow": "FRESH RE-EVALUATION",
       "status": "experimental",
       "view_kind": "timeline",
-      "summary": "Release the waiting Guest and re-evaluate the workflow through a fresh execution after the observation arrives.",
-      "source": "observations = [\"input-ready\", \"checkpoint-stable\"]\nresumed = all(value for value in observations)\nstatus = \"resumed\" if resumed else \"blocked\"\nresult = f\"observations={len(observations)}|status={status}|report=ready\"\n",
+      "summary": "Release the waiting Guest, then rebuild the workspace summary in a fresh Guest after the inputs are stable.",
+      "source": "files = [\"input-a.txt\", \"input-b.txt\"]\nselected_child = 1\nresult = f\"{len(files)} files|selected={selected_child}|status=ready\"\n",
       "annotations": [
         {
           "start_line": 1,
-          "end_line": 4,
+          "end_line": 3,
           "tone": "fresh_fallback",
-          "label": "fresh execution",
-          "note": "After the Host wait, this source is re-evaluated in a new Guest."
+          "label": "fresh re-evaluation",
+          "note": "After the Host wait, this workspace-summary program runs in a new Guest."
         }
       ],
       "metrics": [
         {
           "label": "Wait",
           "value": "19.6 s",
-          "note": "released",
+          "note": "Guest released",
           "tone": "baseline"
         },
         {
-          "label": "Resume",
-          "value": "fresh",
-          "note": "Guest",
+          "label": "Resume execution",
+          "value": "fresh Guest",
+          "note": "re-evaluated",
           "tone": "optimized"
-        },
-        {
-          "label": "Oracle",
-          "value": "4 / 4",
-          "note": "passed",
-          "tone": "win"
         }
       ],
       "lanes": [
@@ -522,20 +432,6 @@
             }
           ]
         }
-      ],
-      "facts": [
-        {
-          "label": "Observed event",
-          "value": "resume.fresh"
-        },
-        {
-          "label": "Evidence",
-          "value": "complete"
-        },
-        {
-          "label": "Disposition",
-          "value": "closed"
-        }
       ]
     },
     {
@@ -544,22 +440,22 @@
       "eyebrow": "FAIL-CLOSED CONTROL",
       "status": "control",
       "view_kind": "timeline",
-      "summary": "A different source identity cannot attach to the existing physical execution.",
-      "source": "# Exact request\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Different source\nresult = {'square': pow(inputs['value'], 2)}\n",
+      "summary": "A reviewer changes the workspace-summary program, so the request must start an independent Guest.",
+      "source": "# Existing request\nfiles = [\"input-a.txt\", \"input-b.txt\"]\nresult = f\"{len(files)} files|status=ready\"\n\n# Reviewer adds sorting — different source\nfiles = sorted([\"input-a.txt\", \"input-b.txt\"])\nresult = f\"{len(files)} files|status=ready\"\n",
       "annotations": [
         {
           "start_line": 2,
-          "end_line": 2,
+          "end_line": 3,
           "tone": "physical_owner",
-          "label": "physical A",
-          "note": "The exact request executes normally."
+          "label": "existing program",
+          "note": "The first workspace summary executes normally."
         },
         {
-          "start_line": 5,
-          "end_line": 5,
+          "start_line": 6,
+          "end_line": 7,
           "tone": "fresh_fallback",
-          "label": "fresh physical B",
-          "note": "Different source starts an independent Guest."
+          "label": "changed program",
+          "note": "Adding sorting changes source identity, so this request gets a fresh Guest."
         }
       ],
       "metrics": [
@@ -606,20 +502,6 @@
               "tone": "fallback"
             }
           ]
-        }
-      ],
-      "facts": [
-        {
-          "label": "Decision",
-          "value": "reject_source_mismatch"
-        },
-        {
-          "label": "Disposition",
-          "value": "complete"
-        },
-        {
-          "label": "Physical relation",
-          "value": "independent"
         }
       ]
     }

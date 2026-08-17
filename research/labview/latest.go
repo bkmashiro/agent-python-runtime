@@ -18,8 +18,8 @@ import (
 
 const LatestSnapshotSchema = "pysolate.lab-latest.v2"
 
-const latestSourcePrefixContractSHA = "sha256:dab34bfa2a6ea8dce909c375c0b963569cfc67f988fa1adae56de561b1b009ff"
-const latestSourcePrefixEvidenceSHA = "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69"
+const latestSourcePrefixContractSHA = "sha256:941467e08e2c0d4dd7351823113b6fa780d68895d8660c709b80575c37094dcd"
+const latestSourcePrefixEvidenceSHA = "sha256:9253bfd22e97fdd2e59b9a49b81f729de73aaa24439b9dc4e4aa8f81918c4db9"
 const latestCampaignManifestSHA = "sha256:0633e6d98dd67fee6a2aad12cfd491a6d14e5344d5d2d78d91c059e62ec0fe7e"
 const latestCampaignProjectionSHA = "sha256:2955e8b19e4fcd4b450a73415697d798d8ab3fbc9f50f392dd8475e9600bb7bc"
 const latestSemanticPredispatchSHA = "sha256:2cbba19b48611d76a216c4adaf63ed02e2f57519a215cf1779b1e97ca431e21e"

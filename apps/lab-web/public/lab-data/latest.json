@@ -1,47 +1,47 @@
 {
   "schema_version": "pysolate.lab-latest.v2",
-  "identity": "sha256:e13058cb91bab4a567182ffc1ed86bb479154ad256b83edae51e6a8f5a9fa86c",
+  "identity": "sha256:bf6d3eeccb567a7074028151ffe6a2175625c4fb9abaf12499702bb5b604e15c",
   "demos": [
     {
       "id": "source-prefix-overlap",
-      "title": "Start the READ before generation finishes",
+      "title": "Check the weather while the plan is still being written",
       "eyebrow": "SOURCE PREFIX",
       "status": "measured",
       "view_kind": "timeline",
-      "summary": "Read a workspace manifest as soon as that call is complete, while the report source is still arriving.",
-      "source": "manifest = workspace.read(\"release-manifest.json\")\nfiles = manifest[\"changed_files\"]\nsummary = summarize_changes(files)\nresult = {\"files\": len(files), \"summary\": summary}\n",
+      "summary": "Start Oxford's weather lookup as soon as that first line is complete, while the rest of the day-plan Python is still arriving.",
+      "source": "weather = travel.weather(\"oxford\", \"saturday\")\nneeds_indoor = weather[\"condition\"] != \"sunny\"\nresult = {\"destination\": \"oxford\", \"plan\": \"museum\" if needs_indoor else \"walking tour\", \"high_c\": weather[\"high_c\"]}\n",
       "annotations": [
         {
           "start_line": 1,
           "end_line": 1,
           "tone": "effect_trigger",
-          "label": "manifest READ",
-          "note": "The closed prefix can start this Host read immediately."
+          "label": "Oxford weather",
+          "note": "The closed prefix can start this delayed Host lookup immediately."
         },
         {
           "start_line": 2,
-          "end_line": 4,
+          "end_line": 3,
           "tone": "overlapped_tail",
-          "label": "report source",
-          "note": "The remaining report logic arrives while the manifest is in flight."
+          "label": "finish the plan",
+          "note": "The remaining day-plan logic arrives while the weather lookup is in flight."
         }
       ],
       "metrics": [
         {
           "label": "Generate first",
-          "value": "2950 ms",
+          "value": "2943 ms",
           "note": "median",
           "tone": "baseline"
         },
         {
           "label": "Stream prefix",
-          "value": "1534 ms",
+          "value": "1537 ms",
           "note": "median",
           "tone": "optimized"
         },
         {
           "label": "Mechanism window",
-          "value": "1.923×",
+          "value": "1.914×",
           "note": "matched run",
           "tone": "win"
         }
@@ -49,48 +49,48 @@
       "lanes": [
         {
           "label": "generate → execute",
-          "duration_ns": 2950046792,
+          "duration_ns": 2942787333,
           "segments": [
             {
               "label": "source generation",
               "start_ns": 0,
-              "end_ns": 1401178334,
+              "end_ns": 1402086875,
               "tone": "generation"
             },
             {
               "label": "Host READ",
-              "start_ns": 1413293209,
-              "end_ns": 2915358709,
+              "start_ns": 1411528917,
+              "end_ns": 2913591458,
               "tone": "effect"
             },
             {
               "label": "Guest finalize",
-              "start_ns": 2915358709,
-              "end_ns": 2950046792,
+              "start_ns": 2913591458,
+              "end_ns": 2942787333,
               "tone": "finalize"
             }
           ]
         },
         {
           "label": "stream while generating",
-          "duration_ns": 1533922917,
+          "duration_ns": 1537471584,
           "segments": [
             {
               "label": "source generation",
               "start_ns": 0,
-              "end_ns": 1400708083,
+              "end_ns": 1401786542,
               "tone": "generation"
             },
             {
               "label": "Host READ",
-              "start_ns": 3702417,
-              "end_ns": 1505766500,
+              "start_ns": 3884125,
+              "end_ns": 1505946000,
               "tone": "effect"
             },
             {
               "label": "Guest finalize",
-              "start_ns": 1505766500,
-              "end_ns": 1533922917,
+              "start_ns": 1505946000,
+              "end_ns": 1537471584,
               "tone": "finalize"
             }
           ]
@@ -99,37 +99,37 @@
     },
     {
       "id": "semantic-predispatch",
-      "title": "Pre-dispatch one proven READ",
+      "title": "Fetch the proven train option before Guest startup",
       "eyebrow": "SEMANTIC PRE-DISPATCH",
       "status": "measured",
       "view_kind": "timeline",
-      "summary": "Start the required release-manifest READ before Guest startup, then consume it at the exact call site.",
-      "source": "manifest = workspace.read(\"release-manifest.json\")\nresult = {\"release\": manifest[\"version\"]}\n",
+      "summary": "The fixed London-to-Oxford train lookup is proven before execution, so the Host can start it early and consume it at the exact call site.",
+      "source": "trains = travel.trains(\"london\", \"oxford\", \"saturday\")\nresult = trains\n",
       "annotations": [
         {
           "start_line": 1,
           "end_line": 1,
           "tone": "effect_trigger",
-          "label": "manifest READ",
+          "label": "London → Oxford trains",
           "note": "The staged observation is consumed only at this exact call."
         }
       ],
       "metrics": [
         {
           "label": "Baseline",
-          "value": "3215 ms",
+          "value": "3149 ms",
           "note": "median",
           "tone": "baseline"
         },
         {
           "label": "Pre-dispatch",
-          "value": "2196 ms",
+          "value": "2132 ms",
           "note": "median",
           "tone": "optimized"
         },
         {
           "label": "Saved",
-          "value": "1018 ms",
+          "value": "1017 ms",
           "note": "5 matched trials",
           "tone": "win"
         }
@@ -137,24 +137,24 @@
       "lanes": [
         {
           "label": "ordinary dispatch",
-          "duration_ns": 3214550000,
+          "duration_ns": 3149103000,
           "segments": [
             {
               "label": "total wall",
               "start_ns": 0,
-              "end_ns": 3214550000,
+              "end_ns": 3149103000,
               "tone": "physical"
             }
           ]
         },
         {
           "label": "semantic pre-dispatch",
-          "duration_ns": 3214550000,
+          "duration_ns": 3149103000,
           "segments": [
             {
               "label": "total wall",
               "start_ns": 0,
-              "end_ns": 2196151000,
+              "end_ns": 2132259000,
               "tone": "shared"
             }
           ]
@@ -507,16 +507,16 @@
     }
   ],
   "provenance": {
-    "source_prefix_evidence_sha256": "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69",
+    "source_prefix_evidence_sha256": "sha256:9253bfd22e97fdd2e59b9a49b81f729de73aaa24439b9dc4e4aa8f81918c4db9",
     "campaign_projection_sha256": "sha256:2955e8b19e4fcd4b450a73415697d798d8ab3fbc9f50f392dd8475e9600bb7bc",
-    "semantic_predispatch_sha256": "sha256:9ca672d010cad1f6b191919e4a2f7bc972048b57db1b17c3da7cb39b4e49bcf7",
+    "semantic_predispatch_sha256": "sha256:2cbba19b48611d76a216c4adaf63ed02e2f57519a215cf1779b1e97ca431e21e",
     "semantic_reuse_sha256": "sha256:64ea355829ba9dfe71724df0f89eafa67e69c8e2f73886221289c1e9ed54632b",
     "cow_growable_sha256": "sha256:d97f5ab56f85b2ee91af6bfc220bb8d386cc5cf201fa49f7490207e28ff2fb68",
     "cold_io_sha256": "sha256:117598fcb3031d0fba97be30e65e3c5f16c74e5644c634e95f600871e1ecb361",
     "composable_sha256": "sha256:269560ea66feee6f3015658be1c3fafe8308d973dc465625580185950f70a104",
-    "source_prefix_artifact_sha256": "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b",
+    "source_prefix_artifact_sha256": "sha256:2da82e65061a9680dc5921150ae50ea44766590fc44e2a6fa554784f2ce3167e",
     "campaign_artifact_sha256": "sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795",
-    "source_prefix_harness_commit": "ca25b1b767edd50dc25363df5347cb801c5c183a",
+    "source_prefix_harness_commit": "d7baa92918f1954dc6584cd4f537cc1e817d8f8d",
     "campaign_source_commit": "40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5"
   }
 }

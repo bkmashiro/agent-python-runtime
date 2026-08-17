@@ -30,8 +30,8 @@ func TestBuildLatestSnapshotProjectsEightVisibleMechanisms(t *testing.T) {
 		return raw
 	}
 	snapshot, err := labview.BuildLatestSnapshot(labview.LatestInputs{
-		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
-		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
+		SourcePrefixContract: read("docs/evidence/source-prefix-day-trip-contract-v2.json"),
+		SourcePrefixEvidence: read("docs/evidence/source-prefix-day-trip-evidence-v2.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
 		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-day-trip-v1.json"),
@@ -53,7 +53,7 @@ func TestBuildLatestSnapshotProjectsEightVisibleMechanisms(t *testing.T) {
 			t.Fatalf("incomplete demo %+v", demo)
 		}
 	}
-	if byID["source-prefix-overlap"].Metrics[2].Value != "1.923×" {
+	if byID["source-prefix-overlap"].Metrics[2].Value != "1.914×" {
 		t.Fatalf("source-prefix metrics=%+v", byID["source-prefix-overlap"].Metrics)
 	}
 	if byID["exact-request-sharing"].Metrics[0].Value != "2" || byID["exact-request-sharing"].Metrics[1].Value != "1" || byID["exact-request-sharing"].Annotations[1].Tone != "shared_skip" {
@@ -96,8 +96,8 @@ func TestBuildLatestSnapshotFailsClosedOnInputDrift(t *testing.T) {
 		return raw
 	}
 	base := labview.LatestInputs{
-		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
-		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
+		SourcePrefixContract: read("docs/evidence/source-prefix-day-trip-contract-v2.json"),
+		SourcePrefixEvidence: read("docs/evidence/source-prefix-day-trip-evidence-v2.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
 		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-day-trip-v1.json"),

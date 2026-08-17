@@ -48,8 +48,8 @@ func acceptedLatestSnapshot(t *testing.T) LatestSnapshot {
 		return raw
 	}
 	snapshot, err := BuildLatestSnapshot(LatestInputs{
-		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
-		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
+		SourcePrefixContract: read("docs/evidence/source-prefix-day-trip-contract-v2.json"),
+		SourcePrefixEvidence: read("docs/evidence/source-prefix-day-trip-evidence-v2.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
 		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-day-trip-v1.json"),

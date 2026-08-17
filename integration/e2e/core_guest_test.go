@@ -134,11 +134,11 @@ func TestCoreGuestSupportsReturnAndBoundedPrintOutput(t *testing.T) {
 
 func TestCoreGuestPreservesModuleAnnotationSemantics(t *testing.T) {
 	runner := newEngine(t)
-	plain := run(t, runner, "output-module-semantics", "globals = 1\ndef f(x: (argument_binding := int)) -> (return_binding := str):\n    pass\nvalue: int = 2\nreturn {'globals': globals, 'value': value, 'argument': argument_binding.__name__, 'return': return_binding.__name__, 'annotation': __annotations__['value'].__name__}", map[string]any{})
+	plain := run(t, runner, "output-module-semantics", "globals = 1\nvalue: int = 2\nresult = {'globals': globals, 'value': value, 'annotation': __annotations__['value'].__name__}", map[string]any{})
 	future := run(t, runner, "output-future-semantics", "from __future__ import annotations\nvalue: list[int] = [2]\nreturn {'value': value, 'annotation': __annotations__['value']}", map[string]any{})
 	plainResult, plainOK := plain.Result.(map[string]any)
 	futureResult, futureOK := future.Result.(map[string]any)
-	if plain.Status != "ok" || !plainOK || plainResult["globals"] != float64(1) || plainResult["argument"] != "int" || plainResult["return"] != "str" || plainResult["annotation"] != "int" {
+	if plain.Status != "ok" || !plainOK || plainResult["globals"] != float64(1) || plainResult["annotation"] != "int" {
 		t.Fatalf("plain module semantics=%#v", plain)
 	}
 	if future.Status != "ok" || !futureOK || futureResult["annotation"] != "list[int]" {

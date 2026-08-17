@@ -1,6 +1,6 @@
 {
   "schema_version": "pysolate.lab-task.v2",
-  "identity": "sha256:3b37f6f327d55bdbfa75b6c8eacf50d39dd50500eee1be327ca5671ab0774c04",
+  "identity": "sha256:f5ee435dfbaac43b211f30b64008dd2dff7c1e1909af0ca6c5e9af185fd9ec6d",
   "id": "dev-release-readiness",
   "title": "Prepare a release readiness review",
   "task": "Assess a Python runtime SDK release and produce dependency and release-readiness reviews.",
@@ -92,13 +92,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 0,
-      "ended_millis": 0,
+      "started_millis": 1,
+      "ended_millis": 1,
       "type": "workspace",
       "action": "workspace.fork",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 0
+      "relative_elapsed_millis": 1
     },
     {
       "sequence": 3,
@@ -107,13 +107,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 1402,
-      "ended_millis": 1402,
+      "started_millis": 1389,
+      "ended_millis": 1389,
       "type": "streaming",
       "action": "stream.begin",
       "outcome": "started",
       "count": 1,
-      "relative_elapsed_millis": 1402
+      "relative_elapsed_millis": 1389
     },
     {
       "sequence": 4,
@@ -122,14 +122,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 1402,
-      "ended_millis": 1402,
+      "started_millis": 1389,
+      "ended_millis": 1389,
       "type": "streaming",
       "action": "stream.prepare",
       "outcome": "ok",
       "input_sha256": "sha256:0d8428b431b9f5c3ca9c74f41bf1634168f4d63c7b67c701132e83ccd59ce48c",
       "count": 1,
-      "relative_elapsed_millis": 1402
+      "relative_elapsed_millis": 1389
     },
     {
       "sequence": 5,
@@ -138,14 +138,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 1402,
-      "ended_millis": 1402,
+      "started_millis": 1389,
+      "ended_millis": 1389,
       "type": "streaming",
       "action": "stream.prepare",
       "outcome": "ok",
       "input_sha256": "sha256:e59e48ee207e7f876da0e0607cb43930e6bfa96115574477ffa57aa5ee063be9",
       "count": 1,
-      "relative_elapsed_millis": 1402
+      "relative_elapsed_millis": 1389
     },
     {
       "sequence": 6,
@@ -154,14 +154,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 1402,
-      "ended_millis": 1402,
+      "started_millis": 1389,
+      "ended_millis": 1389,
       "type": "streaming",
       "action": "stream.prepare",
       "outcome": "ok",
       "input_sha256": "sha256:cd24e1ff7a326126042ff361744ad2832cde57c875b725685941a927ce356a5d",
       "count": 1,
-      "relative_elapsed_millis": 1402
+      "relative_elapsed_millis": 1389
     },
     {
       "sequence": 7,
@@ -170,8 +170,8 @@
       "parent_span_id": "run",
       "agent_id": "orchestrator",
       "agent_role": "orchestrator",
-      "started_millis": 1402,
-      "ended_millis": 3675,
+      "started_millis": 1389,
+      "ended_millis": 3631,
       "source": {
         "source_id": "orchestrator",
         "file": "orchestrator.py",
@@ -183,9 +183,9 @@
       "action": "guest.python",
       "outcome": "ok",
       "input_sha256": "sha256:04ae65bdf7fd888305792a437864c7e0eb9245f0cc42af1eeb5e3cf0906841e4",
-      "output_sha256": "sha256:4fba57df07018719df64ff2cc9f11b570d70345e4eb76766dead3045b93b73a5",
+      "output_sha256": "sha256:82d1c9941fa702e5dc50115566eb7247020a103eb6cda0fd4cb166487e71c649",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 8,
@@ -194,13 +194,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 3675,
-      "ended_millis": 3675,
+      "started_millis": 3631,
+      "ended_millis": 3631,
       "type": "streaming",
       "action": "stream.seal",
       "outcome": "sealed",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 9,
@@ -209,13 +209,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 3675,
-      "ended_millis": 3675,
+      "started_millis": 3631,
+      "ended_millis": 3631,
       "type": "streaming",
       "action": "stream.end",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 10,
@@ -224,14 +224,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 3675,
-      "ended_millis": 3675,
+      "started_millis": 3631,
+      "ended_millis": 3631,
       "type": "workspace",
       "action": "workspace.commit",
       "outcome": "ok",
       "output_sha256": "sha256:261b7fcf23029a3e57a973e5eda85c2e6cf10205cbd8b687b33c40cca0793506",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 11,
@@ -240,13 +240,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 3675,
-      "ended_millis": 3675,
+      "started_millis": 3631,
+      "ended_millis": 3631,
       "type": "guest_lifecycle",
       "action": "guest.close",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 12,
@@ -255,15 +255,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 3675,
-      "ended_millis": 3675,
+      "started_millis": 3631,
+      "ended_millis": 3631,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
       "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
-      "output_sha256": "sha256:4fba57df07018719df64ff2cc9f11b570d70345e4eb76766dead3045b93b73a5",
+      "output_sha256": "sha256:82d1c9941fa702e5dc50115566eb7247020a103eb6cda0fd4cb166487e71c649",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 13,
@@ -272,14 +272,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 3675,
-      "ended_millis": 3675,
+      "started_millis": 3631,
+      "ended_millis": 3631,
       "type": "fanout",
       "action": "fanout.select",
       "outcome": "started",
       "input_sha256": "sha256:1ae80cfbd8c8ca02806d4f4d2872a62ded88bd999f35a746ca7bf6cb0a99bc3e",
       "count": 1,
-      "relative_elapsed_millis": 3675
+      "relative_elapsed_millis": 3631
     },
     {
       "sequence": 14,
@@ -289,8 +289,8 @@
       "agent_id": "researcher",
       "parent_agent_id": "orchestrator",
       "agent_role": "dependency-reviewer",
-      "started_millis": 3684.331292,
-      "ended_millis": 7619,
+      "started_millis": 3631.38275,
+      "ended_millis": 7590,
       "source": {
         "source_id": "researcher",
         "file": "researcher.py",
@@ -314,7 +314,7 @@
       "input_sha256": "sha256:e63f41389c84b67c42a1b40c733ee572ecc415e160ca1e8190d3310a06db8799",
       "output_sha256": "sha256:92a7a3b4cc44b232791bd9d8e76024ab1ded1ff523d07f77de0b20237d5f0587",
       "count": 1,
-      "relative_elapsed_millis": 7619
+      "relative_elapsed_millis": 7590
     },
     {
       "sequence": 15,
@@ -324,8 +324,8 @@
       "agent_id": "reviewer",
       "parent_agent_id": "orchestrator",
       "agent_role": "release-reviewer",
-      "started_millis": 3675.295083,
-      "ended_millis": 7619,
+      "started_millis": 3648.486125,
+      "ended_millis": 7590,
       "source": {
         "source_id": "reviewer",
         "file": "reviewer.py",
@@ -349,7 +349,7 @@
       "input_sha256": "sha256:01f184acab40af23bde2bddf904b3089f39c21001f4b5840c400ae1e0624ac69",
       "output_sha256": "sha256:87647d8f297e5b3bc63683c6b4a8d411a5043ff42a366db0ef3b4156476362d4",
       "count": 1,
-      "relative_elapsed_millis": 7619
+      "relative_elapsed_millis": 7590
     },
     {
       "sequence": 16,
@@ -358,14 +358,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7619,
-      "ended_millis": 7619,
+      "started_millis": 7590,
+      "ended_millis": 7590,
       "type": "fanout",
       "action": "fanout.select",
       "outcome": "selected",
       "input_sha256": "sha256:1ae80cfbd8c8ca02806d4f4d2872a62ded88bd999f35a746ca7bf6cb0a99bc3e",
       "count": 1,
-      "relative_elapsed_millis": 7619
+      "relative_elapsed_millis": 7590
     },
     {
       "sequence": 17,
@@ -374,14 +374,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7620,
-      "ended_millis": 7620,
+      "started_millis": 7590,
+      "ended_millis": 7590,
       "type": "fanout",
       "action": "fanout.discard",
       "outcome": "discarded",
-      "input_sha256": "sha256:5a51385d069d8a09780b5b450dcf7cd0aae44ef676e394dcf84c6ed448b5f745",
+      "input_sha256": "sha256:e12c8e4ac4f2635f9b83265c9032624832587a85c5d203230a22b2f0fbc1ef86",
       "count": 1,
-      "relative_elapsed_millis": 7620
+      "relative_elapsed_millis": 7590
     },
     {
       "sequence": 18,
@@ -390,14 +390,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7620,
-      "ended_millis": 7620,
+      "started_millis": 7590,
+      "ended_millis": 7590,
       "type": "fanout",
       "action": "fanout.selected_root",
       "outcome": "ok",
       "input_sha256": "sha256:837df8db263f687e6078c3bdbafe1c9b67bef95a6077fbc54d5232008ef6c3ed",
       "count": 1,
-      "relative_elapsed_millis": 7620
+      "relative_elapsed_millis": 7590
     },
     {
       "sequence": 19,
@@ -406,14 +406,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "cache",
       "action": "cache.lookup",
       "outcome": "miss",
       "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 20,
@@ -422,15 +422,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "cache",
       "action": "cache.compute",
       "outcome": "ok",
       "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 21,
@@ -439,14 +439,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "cache",
       "action": "cache.lookup",
       "outcome": "miss",
       "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 22,
@@ -455,15 +455,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "cache",
       "action": "cache.compute",
       "outcome": "ok",
       "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 23,
@@ -472,15 +472,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "single_flight",
       "action": "single_flight.leader",
       "outcome": "leader",
       "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 24,
@@ -489,15 +489,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "single_flight",
       "action": "single_flight.follower",
       "outcome": "follower",
       "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 25,
@@ -506,14 +506,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "cache",
       "action": "cache.lookup",
       "outcome": "hit",
       "input_sha256": "sha256:f61531a74ab5d20c0ee3dd21b484702b7ba19a72518e2b3cefa4ae6f673a94ee",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 26,
@@ -522,14 +522,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "cache",
       "action": "cache.hit",
       "outcome": "hit",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 27,
@@ -538,15 +538,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "single_flight",
       "action": "single_flight.compute",
       "outcome": "ok",
       "input_sha256": "sha256:93bea09b4e94bece653aa9bed6bf1ad3869138f991d5f92b1963c6e0709ffd6e",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 28,
@@ -555,15 +555,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
       "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 29,
@@ -572,15 +572,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
       "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 30,
@@ -589,13 +589,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 7627,
-      "ended_millis": 7627,
+      "started_millis": 7611,
+      "ended_millis": 7611,
       "type": "wait_resume",
       "action": "wait.begin",
       "outcome": "started",
       "count": 1,
-      "relative_elapsed_millis": 7627
+      "relative_elapsed_millis": 7611
     },
     {
       "sequence": 31,
@@ -604,13 +604,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9011,
-      "ended_millis": 9011,
+      "started_millis": 8997,
+      "ended_millis": 8997,
       "type": "observation",
       "action": "observation.initial",
       "outcome": "started",
       "count": 1,
-      "relative_elapsed_millis": 9011
+      "relative_elapsed_millis": 8997
     },
     {
       "sequence": 32,
@@ -619,14 +619,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 9011,
-      "ended_millis": 9011,
+      "started_millis": 8997,
+      "ended_millis": 8997,
       "type": "wait_resume",
       "action": "wait.release",
       "outcome": "started",
       "input_sha256": "sha256:5ce5ff49d5c5d8eabf3b049eb81564d7c6f11c03fb85ac57072227b07645a4ed",
       "count": 1,
-      "relative_elapsed_millis": 9011
+      "relative_elapsed_millis": 8997
     },
     {
       "sequence": 33,
@@ -635,13 +635,13 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 14891,
-      "ended_millis": 14891,
+      "started_millis": 14857,
+      "ended_millis": 14857,
       "type": "wait_resume",
       "action": "wait.release",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 14891
+      "relative_elapsed_millis": 14857
     },
     {
       "sequence": 34,
@@ -650,14 +650,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 14891,
-      "ended_millis": 14891,
+      "started_millis": 14857,
+      "ended_millis": 14857,
       "type": "observation",
       "action": "observation.changed",
       "outcome": "ok",
       "output_sha256": "sha256:92b3492fbcc02d8f32d6eba42d23820d1321a4e7b013e4f6d139c0b7be940be3",
       "count": 1,
-      "relative_elapsed_millis": 14891
+      "relative_elapsed_millis": 14857
     },
     {
       "sequence": 35,
@@ -666,14 +666,14 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 14891,
-      "ended_millis": 14891,
+      "started_millis": 14857,
+      "ended_millis": 14857,
       "type": "wait_resume",
       "action": "resume.fresh",
       "outcome": "ok",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 14891
+      "relative_elapsed_millis": 14857
     },
     {
       "sequence": 36,
@@ -682,15 +682,15 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 14891,
-      "ended_millis": 14891,
+      "started_millis": 14857,
+      "ended_millis": 14857,
       "type": "oracle",
       "action": "oracle.compare",
       "outcome": "ok",
       "input_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "output_sha256": "sha256:6fad160505f329d7b2b2b338686fc745530bf382409d7b8e6523fd2db23e7d7d",
       "count": 1,
-      "relative_elapsed_millis": 14891
+      "relative_elapsed_millis": 14857
     },
     {
       "sequence": 37,
@@ -699,17 +699,17 @@
       "parent_span_id": "run",
       "agent_id": "runtime",
       "agent_role": "host-runtime",
-      "started_millis": 14891,
-      "ended_millis": 14891,
+      "started_millis": 14857,
+      "ended_millis": 14857,
       "type": "run_terminal",
       "action": "run.terminal",
       "outcome": "ok",
       "count": 1,
-      "relative_elapsed_millis": 14891
+      "relative_elapsed_millis": 14857
     }
   ],
   "stats": {
-    "duration_millis": 14891,
+    "duration_millis": 14857,
     "events": 37,
     "agents": 4,
     "workspace_changes": 2

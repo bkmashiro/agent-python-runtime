@@ -8,15 +8,15 @@ Status: one public scripted multi-agent fixture recorded successfully with a rea
 
 ## Direct run
 
-- source commit: `e6eb50fb35d53f90d70a478da1633d4d9de24d70`
+- source commit: `d6d72c66c738f6f906a35bd78e9f885bd286ee75`
 - treatment: `all`
 - events: 37
 - Host/Guest lanes: 4
-- elapsed: 14.891 s
+- elapsed: 14.857 s
 - Guest artifact SHA-256: `a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b`
-- corpus SHA-256: `41a06f50325e5e980cc295c3d4f3373cb85873cadcdbb11bdc13e2dbbea1a8a9`
-- report SHA-256: `58cd7dc40aacb903ddf7eb55554a07cd0ad7f73a52ef09a5571545bdd28abd8d`
-- body-capture SHA-256: `90cffbb02533fabd40a89f7b71dfb107eedd44aa6166c1aee6688356e03dedb2`
+- corpus SHA-256: `ed1bd1b525484d19ec46902801afb286261aa1deecc285bfc1d4dd8d2ab56584`
+- report SHA-256: `ea2a1e6e4b8934f502a5a4cae50377ca0d9ec4950f8502453fc2e534e5b0041a`
+- body-capture SHA-256: `4e51bf4c457e093f7384e559ee6467aa10bbcc46805149df4ce3da112fbf342e`
 
 The direct test passed with real parent/child Guest execution and two recorded workspace changes.
 

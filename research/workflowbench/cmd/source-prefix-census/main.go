@@ -78,12 +78,13 @@ func strictDecode(raw []byte, target any) error {
 }
 
 func planProjections(raw json.RawMessage, expectedSHA string) ([]semantic.CapabilityProjection, map[string]string, error) {
-	if digestBytes(raw) != expectedSHA {
-		return nil, nil, errors.New("capability plan document identity mismatch")
-	}
 	var document planDocument
 	if err := strictDecode(raw, &document); err != nil || document.SchemaVersion != "pysolate.capability-plan.v6" || document.MaxCalls == 0 || len(document.Capabilities) == 0 {
 		return nil, nil, errors.New("invalid private capability plan document")
+	}
+	canonical, err := json.Marshal(document)
+	if err != nil || digestBytes(canonical) != expectedSHA {
+		return nil, nil, errors.New("capability plan document identity mismatch")
 	}
 	projections := make([]semantic.CapabilityProjection, 0, len(document.Capabilities))
 	effects := make(map[string]string, len(document.Capabilities))

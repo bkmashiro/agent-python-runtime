@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -30,7 +31,11 @@ func testPlanDocument(t *testing.T) []byte {
 
 func TestPlanProjectionsBindsDocumentAndEffect(t *testing.T) {
 	raw := testPlanDocument(t)
-	projections, effects, err := planProjections(raw, digestBytes(raw))
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, raw, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	projections, effects, err := planProjections(indented.Bytes(), digestBytes(raw))
 	if err != nil {
 		t.Fatal(err)
 	}

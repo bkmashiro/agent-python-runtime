@@ -189,21 +189,23 @@ func ExecuteSourcePrefixPairs(ctx context.Context, contract SourcePrefixExperime
 }
 
 type SourcePrefixRow struct {
-	Pair                 uint32                `json:"pair"`
-	LaneOrder            uint32                `json:"lane_order"`
-	Treatment            SourcePrefixTreatment `json:"treatment"`
-	WallNS               int64                 `json:"wall_ns"`
-	GenerationCompleteNS int64                 `json:"generation_complete_ns"`
-	ToolStartedNS        int64                 `json:"tool_started_ns"`
-	ToolEndedNS          int64                 `json:"tool_ended_ns"`
-	RunEndedNS           int64                 `json:"run_ended_ns"`
-	ResultSHA256         string                `json:"result_sha256"`
-	OraclePassed         bool                  `json:"oracle_passed"`
-	LogicalCalls         uint32                `json:"logical_calls"`
-	PhysicalDispatches   uint32                `json:"physical_dispatches"`
-	GuestStarts          uint32                `json:"guest_starts"`
-	Fallback             bool                  `json:"fallback"`
-	WorkspaceDisposition string                `json:"workspace_disposition"`
+	Pair                  uint32                `json:"pair"`
+	LaneOrder             uint32                `json:"lane_order"`
+	Treatment             SourcePrefixTreatment `json:"treatment"`
+	WallNS                int64                 `json:"wall_ns"`
+	GenerationCompleteNS  int64                 `json:"generation_complete_ns"`
+	ToolStartedNS         int64                 `json:"tool_started_ns"`
+	ToolEndedNS           int64                 `json:"tool_ended_ns"`
+	RunEndedNS            int64                 `json:"run_ended_ns"`
+	ResultSHA256          string                `json:"result_sha256"`
+	OraclePassed          bool                  `json:"oracle_passed"`
+	LogicalCalls          uint32                `json:"logical_calls"`
+	PhysicalDispatches    uint32                `json:"physical_dispatches"`
+	GuestStarts           uint32                `json:"guest_starts"`
+	WorkspaceBeforeSHA256 string                `json:"workspace_before_sha256"`
+	WorkspaceAfterSHA256  string                `json:"workspace_after_sha256"`
+	Fallback              bool                  `json:"fallback"`
+	WorkspaceDisposition  string                `json:"workspace_disposition"`
 }
 
 type SourcePrefixEvidence struct {
@@ -239,6 +241,7 @@ func ValidateSourcePrefixEvidence(contract SourcePrefixExperimentContract, evide
 	seen := make(map[[2]uint32]SourcePrefixTreatment, len(evidence.Rows))
 	baseline := make([]int64, 0, contract.Repetitions)
 	streaming := make([]int64, 0, contract.Repetitions)
+	workspaceSHA256 := ""
 	for _, row := range evidence.Rows {
 		if row.Pair >= contract.Repetitions || row.LaneOrder > 1 || row.Treatment != SourcePrefixTreatmentOrder(int(row.Pair))[row.LaneOrder] {
 			return errors.New("source-prefix row has invalid pair or treatment order")
@@ -254,6 +257,10 @@ func ValidateSourcePrefixEvidence(contract SourcePrefixExperimentContract, evide
 		if row.ResultSHA256 != contract.ExpectedResultSHA256 || !row.OraclePassed || row.LogicalCalls != 1 || row.PhysicalDispatches != 1 || row.GuestStarts != 1 || row.Fallback || row.WorkspaceDisposition != "published" {
 			return errors.New("source-prefix row failed correctness or matched-call gates")
 		}
+		if !evidenceSHA256.MatchString(row.WorkspaceBeforeSHA256) || row.WorkspaceAfterSHA256 != row.WorkspaceBeforeSHA256 || (workspaceSHA256 != "" && workspaceSHA256 != row.WorkspaceBeforeSHA256) {
+			return errors.New("source-prefix row failed workspace identity gates")
+		}
+		workspaceSHA256 = row.WorkspaceBeforeSHA256
 		switch row.Treatment {
 		case SourcePrefixBaseline:
 			if row.ToolStartedNS < row.GenerationCompleteNS {

@@ -16,6 +16,22 @@ import (
 const sourcePrefixOracleSchema = "pysolate.source-prefix-oracle.v1"
 const sourcePrefixLaneConfigSchema = "pysolate.source-prefix-lane-config.v1"
 
+const fixedSourcePrefixContractSHA256 = "sha256:dab34bfa2a6ea8dce909c375c0b963569cfc67f988fa1adae56de561b1b009ff"
+const fixedSourcePrefixOracleSHA256 = "sha256:6d82769ce151d64df3f040cfa191c677abbd2c9f9016a6856cfbbcf01f97b7f5"
+const fixedSourcePrefixLaneConfigSHA256 = "sha256:c233da70e9d0636d684108cbea8d15a423abf965fc0027dce9840ba0f2d00e42"
+
+type preregistrationAnchors struct {
+	contractSHA256 string
+	oracleSHA256   string
+	laneSHA256     string
+}
+
+var fixedSourcePrefixAnchors = preregistrationAnchors{
+	contractSHA256: fixedSourcePrefixContractSHA256,
+	oracleSHA256:   fixedSourcePrefixOracleSHA256,
+	laneSHA256:     fixedSourcePrefixLaneConfigSHA256,
+}
+
 type sourcePrefixOracle struct {
 	SchemaVersion        string          `json:"schema_version"`
 	ExpectedResult       json.RawMessage `json:"expected_result"`
@@ -55,6 +71,10 @@ func canonicalResultSHA(raw json.RawMessage) (string, error) {
 }
 
 func loadPreregistration(contractPath, oraclePath, lanePath string) (workflowbench.SourcePrefixExperimentContract, sourcePrefixOracle, sourcePrefixLaneConfig, error) {
+	return loadPreregistrationWithAnchors(contractPath, oraclePath, lanePath, fixedSourcePrefixAnchors)
+}
+
+func loadPreregistrationWithAnchors(contractPath, oraclePath, lanePath string, anchors preregistrationAnchors) (workflowbench.SourcePrefixExperimentContract, sourcePrefixOracle, sourcePrefixLaneConfig, error) {
 	var oracle sourcePrefixOracle
 	var lane sourcePrefixLaneConfig
 	contractRaw, err := os.ReadFile(contractPath)
@@ -68,6 +88,9 @@ func loadPreregistration(contractPath, oraclePath, lanePath string) (workflowben
 	laneRaw, err := os.ReadFile(lanePath)
 	if err != nil {
 		return workflowbench.SourcePrefixExperimentContract{}, oracle, lane, err
+	}
+	if digestBytes(contractRaw) != anchors.contractSHA256 || digestBytes(oracleRaw) != anchors.oracleSHA256 || digestBytes(laneRaw) != anchors.laneSHA256 {
+		return workflowbench.SourcePrefixExperimentContract{}, oracle, lane, errors.New("source-prefix preregistration does not match fixed anchors")
 	}
 	contract, err := workflowbench.DecodeSourcePrefixExperimentContract(contractRaw)
 	if err != nil || decodeStrictJSON(oracleRaw, &oracle) != nil || decodeStrictJSON(laneRaw, &lane) != nil {

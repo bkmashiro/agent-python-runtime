@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -18,26 +19,31 @@ import (
 
 var exactCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+const fixedGuestArtifactSourceCommit = "501daef99796c1af7cd7bab1e0ab712a199820b9"
+const fixedGuestArtifactSHA256 = "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b"
+
 func main() {
-	artifact := flag.String("artifact", "", "exact verified Guest artifact")
-	artifactCommit := flag.String("artifact-source-commit", "", "exact artifact source commit")
-	harnessCommit := flag.String("harness-source-commit", "", "exact experiment harness source commit")
+	artifact := flag.String("artifact", "", "fixed verified Guest artifact")
 	contract := flag.String("contract", "", "frozen experiment contract JSON")
 	oracle := flag.String("oracle", "", "independent oracle JSON")
 	laneConfig := flag.String("lane-config", "", "frozen lane config JSON")
 	output := flag.String("output", "", "private evidence output JSON")
 	flag.Parse()
-	if *artifact == "" || *contract == "" || *oracle == "" || *laneConfig == "" || *output == "" || !exactCommitPattern.MatchString(*artifactCommit) || !exactCommitPattern.MatchString(*harnessCommit) {
-		fmt.Fprintln(os.Stderr, "artifact, exact source commits, preregistration files and private output are required")
+	if *artifact == "" || *contract == "" || *oracle == "" || *laneConfig == "" || *output == "" {
+		fmt.Fprintln(os.Stderr, "fixed artifact, preregistration files and private output are required")
 		os.Exit(2)
 	}
-	if err := run(context.Background(), *artifact, *artifactCommit, *harnessCommit, *contract, *oracle, *laneConfig, *output); err != nil {
+	if err := run(context.Background(), *artifact, *contract, *oracle, *laneConfig, *output); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, artifactPath, artifactCommit, harnessCommit, contractPath, oraclePath, laneConfigPath, output string) error {
+func run(ctx context.Context, artifactPath, contractPath, oraclePath, laneConfigPath, output string) error {
+	harnessCommit, err := currentHarnessSourceCommit()
+	if err != nil {
+		return err
+	}
 	contract, oracle, _, err := loadPreregistration(contractPath, oraclePath, laneConfigPath)
 	if err != nil {
 		return err
@@ -46,7 +52,7 @@ func run(ctx context.Context, artifactPath, artifactCommit, harnessCommit, contr
 	if err != nil {
 		return err
 	}
-	if err := verifyArtifactManifest(artifactPath, artifactCommit, artifact); err != nil {
+	if err := verifyArtifactManifest(artifactPath, artifact); err != nil {
 		return err
 	}
 	identityHandler := &timedFixtureHandler{delay: 1}
@@ -87,7 +93,7 @@ func run(ctx context.Context, artifactPath, artifactCommit, harnessCommit, contr
 	}
 	environment := sourcePrefixEnvironment{artifact: artifact, manager: manager, base: base, config: runConfig}
 	identities := workflowbench.SourcePrefixRuntimeIdentities{
-		ArtifactSHA256: digestBytes(artifact), ArtifactSourceCommit: artifactCommit, HarnessSourceCommit: harnessCommit,
+		ArtifactSHA256: digestBytes(artifact), ArtifactSourceCommit: fixedGuestArtifactSourceCommit, HarnessSourceCommit: harnessCommit,
 		ExecutionProfileSHA256: digestBytes(profileJSON), CapabilityPlanSHA256: identityPlan.Identity(),
 		CapabilitySpecSHA256: digestBytes(specJSON), HandlerSHA256: digestBytes([]byte(fixtureHandlerContract)),
 	}
@@ -115,7 +121,30 @@ func run(ctx context.Context, artifactPath, artifactCommit, harnessCommit, contr
 	return nil
 }
 
-func verifyArtifactManifest(artifactPath, sourceCommit string, artifact []byte) error {
+func currentHarnessSourceCommit() (string, error) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", errors.New("harness lacks Go build identity")
+	}
+	settings := make(map[string]string, len(info.Settings))
+	for _, setting := range info.Settings {
+		settings[setting.Key] = setting.Value
+	}
+	return resolveVCSIdentity(settings)
+}
+
+func resolveVCSIdentity(settings map[string]string) (string, error) {
+	commit := settings["vcs.revision"]
+	if !exactCommitPattern.MatchString(commit) || settings["vcs.modified"] != "false" {
+		return "", errors.New("harness must be built from a clean exact VCS revision")
+	}
+	return commit, nil
+}
+
+func verifyArtifactManifest(artifactPath string, artifact []byte) error {
+	if digestBytes(artifact) != fixedGuestArtifactSHA256 {
+		return errors.New("artifact does not match fixed Guest anchor")
+	}
 	artifactInfo, err := os.Lstat(artifactPath)
 	if err != nil || !artifactInfo.Mode().IsRegular() {
 		return errors.New("artifact must be a regular file")
@@ -138,7 +167,7 @@ func verifyArtifactManifest(artifactPath, sourceCommit string, artifact []byte) 
 			RepositoryCommit string `json:"repository_commit"`
 		} `json:"build"`
 	}
-	if json.Unmarshal(raw, &manifest) != nil || manifest.Build.RepositoryCommit != sourceCommit || manifest.Artifact.Filename != filepath.Base(artifactPath) || manifest.Artifact.SHA256 != digestBytes(artifact)[len("sha256:"):] {
+	if json.Unmarshal(raw, &manifest) != nil || manifest.Build.RepositoryCommit != fixedGuestArtifactSourceCommit || manifest.Artifact.Filename != filepath.Base(artifactPath) || manifest.Artifact.SHA256 != digestBytes(artifact)[len("sha256:"):] {
 		return errors.New("artifact manifest identity mismatch")
 	}
 	return nil

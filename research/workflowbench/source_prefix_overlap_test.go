@@ -58,10 +58,10 @@ func validSourcePrefixEvidence(t *testing.T) SourcePrefixEvidence {
 		t.Fatal(err)
 	}
 	rows := []SourcePrefixRow{
-		{Pair: 0, LaneOrder: 0, Treatment: SourcePrefixBaseline, WallNS: 3_010_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 1_450_000_000, ToolEndedNS: 2_950_000_000, RunEndedNS: 3_010_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceDisposition: "published"},
-		{Pair: 0, LaneOrder: 1, Treatment: SourcePrefixStreaming, WallNS: 1_620_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 50_000_000, ToolEndedNS: 1_550_000_000, RunEndedNS: 1_620_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceDisposition: "published"},
-		{Pair: 1, LaneOrder: 0, Treatment: SourcePrefixStreaming, WallNS: 1_640_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 60_000_000, ToolEndedNS: 1_560_000_000, RunEndedNS: 1_640_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceDisposition: "published"},
-		{Pair: 1, LaneOrder: 1, Treatment: SourcePrefixBaseline, WallNS: 3_030_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 1_470_000_000, ToolEndedNS: 2_970_000_000, RunEndedNS: 3_030_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceDisposition: "published"},
+		{Pair: 0, LaneOrder: 0, Treatment: SourcePrefixBaseline, WallNS: 3_010_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 1_450_000_000, ToolEndedNS: 2_950_000_000, RunEndedNS: 3_010_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceBeforeSHA256: testSourcePrefixSHA("workspace"), WorkspaceAfterSHA256: testSourcePrefixSHA("workspace"), WorkspaceDisposition: "published"},
+		{Pair: 0, LaneOrder: 1, Treatment: SourcePrefixStreaming, WallNS: 1_620_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 50_000_000, ToolEndedNS: 1_550_000_000, RunEndedNS: 1_620_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceBeforeSHA256: testSourcePrefixSHA("workspace"), WorkspaceAfterSHA256: testSourcePrefixSHA("workspace"), WorkspaceDisposition: "published"},
+		{Pair: 1, LaneOrder: 0, Treatment: SourcePrefixStreaming, WallNS: 1_640_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 60_000_000, ToolEndedNS: 1_560_000_000, RunEndedNS: 1_640_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceBeforeSHA256: testSourcePrefixSHA("workspace"), WorkspaceAfterSHA256: testSourcePrefixSHA("workspace"), WorkspaceDisposition: "published"},
+		{Pair: 1, LaneOrder: 1, Treatment: SourcePrefixBaseline, WallNS: 3_030_000_000, GenerationCompleteNS: 1_400_000_000, ToolStartedNS: 1_470_000_000, ToolEndedNS: 2_970_000_000, RunEndedNS: 3_030_000_000, ResultSHA256: contract.ExpectedResultSHA256, OraclePassed: true, LogicalCalls: 1, PhysicalDispatches: 1, GuestStarts: 1, WorkspaceBeforeSHA256: testSourcePrefixSHA("workspace"), WorkspaceAfterSHA256: testSourcePrefixSHA("workspace"), WorkspaceDisposition: "published"},
 	}
 	return SourcePrefixEvidence{
 		SchemaVersion:          SourcePrefixEvidenceSchema,
@@ -202,8 +202,10 @@ func TestSourcePrefixEvidenceRejectsDriftAndFalseSpeedup(t *testing.T) {
 		"tool delay shorter than preregistered": func(value *SourcePrefixEvidence) {
 			value.Rows[0].ToolEndedNS = value.Rows[0].ToolStartedNS + int64(time.Millisecond)
 		},
-		"summary drift":  func(value *SourcePrefixEvidence) { value.BaselineMedianNS++ },
-		"identity drift": func(value *SourcePrefixEvidence) { value.CapabilityPlanSHA256 = "" },
+		"workspace changed":          func(value *SourcePrefixEvidence) { value.Rows[0].WorkspaceAfterSHA256 = testSourcePrefixSHA("changed") },
+		"workspace identity missing": func(value *SourcePrefixEvidence) { value.Rows[0].WorkspaceBeforeSHA256 = "" },
+		"summary drift":              func(value *SourcePrefixEvidence) { value.BaselineMedianNS++ },
+		"identity drift":             func(value *SourcePrefixEvidence) { value.CapabilityPlanSHA256 = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			evidence := validSourcePrefixEvidence(t)

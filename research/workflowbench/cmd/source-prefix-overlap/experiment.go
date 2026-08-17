@@ -94,6 +94,11 @@ func (environment sourcePrefixEnvironment) executeLane(ctx context.Context, cont
 	if err != nil {
 		return workflowbench.SourcePrefixRow{}, err
 	}
+	workspaceBeforeSHA256, err := snapshotWorkspaceSHA256(environment.manager, attempt.Ref(), "source-prefix-before")
+	if err != nil {
+		_ = attempt.Discard()
+		return workflowbench.SourcePrefixRow{}, err
+	}
 	runID := fmt.Sprintf("source-prefix-%d-%d", pair, order)
 	var broker *capability.Broker
 	factory := wazeroengine.Factory{
@@ -202,12 +207,16 @@ func (environment sourcePrefixEnvironment) executeLane(ctx context.Context, cont
 	if outcome.err != nil {
 		return workflowbench.SourcePrefixRow{}, outcome.err
 	}
+	workspaceAfterSHA256, err := snapshotWorkspaceSHA256(environment.manager, outcome.result.PublishedWorkspace, "source-prefix-after")
+	if err != nil {
+		return workflowbench.SourcePrefixRow{}, err
+	}
 	canonicalResult, err := stableStreamResult(outcome.result.Response)
 	if err != nil {
 		return workflowbench.SourcePrefixRow{}, err
 	}
 	resultSHA := digestBytes(canonicalResult)
-	if resultSHA != expectedResultSHA || broker == nil || broker.Calls() != 1 || len(broker.Receipts()) != 1 || handler.calls.Load() != 1 || outcome.result.PublishedWorkspace == "" {
+	if resultSHA != expectedResultSHA || broker == nil || broker.Calls() != 1 || len(broker.Receipts()) != 1 || handler.calls.Load() != 1 || outcome.result.PublishedWorkspace == "" || workspaceBeforeSHA256 != workspaceAfterSHA256 {
 		return workflowbench.SourcePrefixRow{}, errors.New("source-prefix independent oracle failed")
 	}
 	generationNS := generationComplete.Load()
@@ -218,7 +227,7 @@ func (environment sourcePrefixEnvironment) executeLane(ctx context.Context, cont
 		Pair: pair, LaneOrder: order, Treatment: treatment, WallNS: runEnded, GenerationCompleteNS: generationNS,
 		ToolStartedNS: handler.started.Load(), ToolEndedNS: handler.ended.Load(), RunEndedNS: runEnded,
 		ResultSHA256: resultSHA, OraclePassed: true, LogicalCalls: broker.Calls(), PhysicalDispatches: handler.calls.Load(),
-		GuestStarts: 1, Fallback: false, WorkspaceDisposition: "published",
+		GuestStarts: 1, Fallback: false, WorkspaceBeforeSHA256: workspaceBeforeSHA256, WorkspaceAfterSHA256: workspaceAfterSHA256, WorkspaceDisposition: "published",
 	}, nil
 }
 
@@ -231,6 +240,25 @@ func sendPrepare(ctx context.Context, prepares chan<- string, completed <-chan l
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func snapshotWorkspaceSHA256(manager *workspace.Manager, ref workspace.Ref, owner string) (string, error) {
+	lease, err := manager.Acquire(ref, owner)
+	if err != nil {
+		return "", err
+	}
+	snapshot, snapshotErr := lease.Snapshot()
+	releaseErr := lease.Release()
+	if snapshotErr != nil {
+		return "", snapshotErr
+	}
+	if releaseErr != nil {
+		return "", releaseErr
+	}
+	if snapshot.Info.WorkspaceSHA256 == "" {
+		return "", errors.New("workspace snapshot lacks portable identity")
+	}
+	return snapshot.Info.WorkspaceSHA256, nil
 }
 
 func maxInt64(left, right int64) int64 {

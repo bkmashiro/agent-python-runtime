@@ -39,23 +39,45 @@ func TestBuildFixturePlanUsesReachGatedReadWithoutPreDispatch(t *testing.T) {
 	}
 }
 
-func TestCheckedInEvidenceValidates(t *testing.T) {
+func TestProductionPreregistrationRejectsUnanchoredContractMutation(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
 	contractRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-contract-v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	contract, err := workflowbench.DecodeSourcePrefixExperimentContract(contractRaw)
-	if err != nil {
+	var contract workflowbench.SourcePrefixExperimentContract
+	if json.Unmarshal(contractRaw, &contract) != nil {
+		t.Fatal("decode checked-in contract")
+	}
+	contract.ToolDelayMS++
+	temporary := t.TempDir()
+	writeFixture(t, filepath.Join(temporary, "contract.json"), contract)
+	oracleRaw, _ := os.ReadFile(filepath.Join(root, "source-prefix-overlap-oracle-v1.json"))
+	laneRaw, _ := os.ReadFile(filepath.Join(root, "source-prefix-overlap-lane-config-v1.json"))
+	if err := os.WriteFile(filepath.Join(temporary, "oracle.json"), oracleRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	evidenceRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-v1.json"))
-	if err != nil {
+	if err := os.WriteFile(filepath.Join(temporary, "lane.json"), laneRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	evidence, err := workflowbench.DecodeSourcePrefixEvidence(evidenceRaw, contract)
-	if err != nil || !evidence.SpeedupSupported || evidence.MedianSpeedupMilli != 1934 {
-		t.Fatalf("checked-in evidence err=%v evidence=%+v", err, evidence)
+	if _, _, _, err := loadPreregistration(filepath.Join(temporary, "contract.json"), filepath.Join(temporary, "oracle.json"), filepath.Join(temporary, "lane.json")); err == nil {
+		t.Fatal("unanchored contract mutation accepted")
+	}
+}
+
+func TestResolveVCSIdentityRequiresCleanEmbeddedRevision(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	if got, err := resolveVCSIdentity(map[string]string{"vcs.revision": commit, "vcs.modified": "false"}); err != nil || got != commit {
+		t.Fatalf("identity=%q err=%v", got, err)
+	}
+	for _, settings := range []map[string]string{
+		{"vcs.revision": commit, "vcs.modified": "true"},
+		{"vcs.revision": "caller-chosen", "vcs.modified": "false"},
+		{"vcs.modified": "false"},
+	} {
+		if _, err := resolveVCSIdentity(settings); err == nil {
+			t.Fatalf("invalid settings accepted: %#v", settings)
+		}
 	}
 }
 
@@ -86,15 +108,16 @@ func TestLoadPreregistrationCrossChecksOracleAndLaneConfig(t *testing.T) {
 		Schedule:    workflowbench.SourcePrefixSchedule{SchemaVersion: workflowbench.SourcePrefixScheduleSchema, CaseID: "source-prefix-overlap-v1", Chunks: []workflowbench.TimedSourceChunk{{OffsetMS: 0, Source: "record = slow.lookup('alpha')\n"}, {OffsetMS: 700, Source: "label = record['label'].upper()\n"}, {OffsetMS: 1400, Source: "result = {'label': label}\n"}}, MaxBufferedChunks: 3, MaxBufferedBytes: 65536},
 		Repetitions: 3, ToolDelayMS: 1500, ExpectedResultSHA256: expected, OracleSHA256: testSHA(oracleRaw), LaneConfigSHA256: testSHA(laneRaw), ClaimBoundary: workflowbench.SourcePrefixClaimBoundary,
 	}
-	writeFixture(t, filepath.Join(root, "contract.json"), contract)
-	loaded, loadedOracle, loadedLane, err := loadPreregistration(filepath.Join(root, "contract.json"), filepath.Join(root, "oracle.json"), filepath.Join(root, "lane.json"))
+	contractRaw := writeFixture(t, filepath.Join(root, "contract.json"), contract)
+	anchors := preregistrationAnchors{contractSHA256: testSHA(contractRaw), oracleSHA256: testSHA(oracleRaw), laneSHA256: testSHA(laneRaw)}
+	loaded, loadedOracle, loadedLane, err := loadPreregistrationWithAnchors(filepath.Join(root, "contract.json"), filepath.Join(root, "oracle.json"), filepath.Join(root, "lane.json"), anchors)
 	if err != nil || loaded.ExperimentID != contract.ExperimentID || loadedOracle.LogicalCalls != 1 || loadedLane.QueueMaxChunks != 3 {
 		t.Fatalf("contract=%+v oracle=%+v lane=%+v err=%v", loaded, loadedOracle, loadedLane, err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "oracle.json"), append(oracleRaw, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := loadPreregistration(filepath.Join(root, "contract.json"), filepath.Join(root, "oracle.json"), filepath.Join(root, "lane.json")); err == nil {
+	if _, _, _, err := loadPreregistrationWithAnchors(filepath.Join(root, "contract.json"), filepath.Join(root, "oracle.json"), filepath.Join(root, "lane.json"), anchors); err == nil {
 		t.Fatal("oracle byte drift accepted")
 	}
 }

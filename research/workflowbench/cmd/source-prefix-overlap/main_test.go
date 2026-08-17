@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
@@ -120,6 +121,24 @@ func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
 	for _, row := range evidence.Rows {
 		if row.WorkspaceBeforeSHA256 == "" || row.WorkspaceBeforeSHA256 != row.WorkspaceAfterSHA256 {
 			t.Fatalf("workspace identity drift: %+v", row)
+		}
+	}
+}
+
+func TestCheckedInReportBindsAcceptedEvidenceIdentities(t *testing.T) {
+	reportPath := filepath.Join("..", "..", "..", "..", "docs", "research", "source-prefix-execution-overlap-v1.md")
+	raw, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []string{
+		"501daef99796c1af7cd7bab1e0ab712a199820b9",
+		"sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b",
+		"ca25b1b767edd50dc25363df5347cb801c5c183a",
+		"sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69",
+	} {
+		if !strings.Contains(string(raw), identity) {
+			t.Fatalf("report does not bind accepted identity %s", identity)
 		}
 	}
 }

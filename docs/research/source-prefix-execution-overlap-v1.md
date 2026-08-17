@@ -41,6 +41,15 @@ The accepted measurement is explicitly labeled `provenance-remediation-v2` and c
 
 Accepted public evidence: `docs/evidence/source-prefix-overlap-v1.json`
 
+Exact accepted identities:
+
+```text
+Guest source commit  501daef99796c1af7cd7bab1e0ab712a199820b9
+Guest artifact SHA   sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b
+Harness source       ca25b1b767edd50dc25363df5347cb801c5c183a
+Public evidence SHA  sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69
+```
+
 ```text
 matched pairs                 3
 baseline median               2950.047 ms

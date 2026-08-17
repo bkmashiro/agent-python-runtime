@@ -81,6 +81,31 @@ func TestResolveVCSIdentityRequiresCleanEmbeddedRevision(t *testing.T) {
 	}
 }
 
+func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
+	contractRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-contract-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := workflowbench.DecodeSourcePrefixExperimentContract(contractRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidenceRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := workflowbench.DecodeSourcePrefixEvidence(evidenceRaw, contract)
+	if err != nil || evidence.MeasurementAttempt != workflowbench.SourcePrefixMeasurementAttempt || evidence.MedianSpeedupMilli != 1923 || evidence.ArtifactSourceCommit != fixedGuestArtifactSourceCommit || evidence.HarnessSourceCommit != "ca25b1b767edd50dc25363df5347cb801c5c183a" {
+		t.Fatalf("checked-in remediation evidence err=%v evidence=%+v", err, evidence)
+	}
+	for _, row := range evidence.Rows {
+		if row.WorkspaceBeforeSHA256 == "" || row.WorkspaceBeforeSHA256 != row.WorkspaceAfterSHA256 {
+			t.Fatalf("workspace identity drift: %+v", row)
+		}
+	}
+}
+
 func TestCheckedInPreregistrationIsSelfConsistent(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
 	contract, _, _, err := loadPreregistration(

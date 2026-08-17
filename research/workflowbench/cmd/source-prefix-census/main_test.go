@@ -10,6 +10,8 @@ import (
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
 func testPlanDocument(t *testing.T) []byte {
@@ -46,6 +48,51 @@ func TestPlanProjectionsBindsDocumentAndEffect(t *testing.T) {
 	}
 	if _, _, err := planProjections(raw, digestBytes([]byte("other"))); err == nil {
 		t.Fatal("tampered plan identity accepted")
+	}
+}
+
+func joinedReceipt(t *testing.T, runID, planSHA, capabilityName, sourceSHA, occurrenceID string, span semantic.SourceSpan) receipt.Receipt {
+	t.Helper()
+	base := receipt.NewBound(runID, planSHA, "call-1", "", capabilityName, 1, digestBytes([]byte("request")), "success", []byte(`{}`))
+	bound, err := receipt.BindSource(base, receipt.SourceBinding{
+		SchemaVersion: receipt.SourceBindingSchemaVersion, ClaimLevel: receipt.SourceClaimBound,
+		DocumentID: semantic.SourceDocumentIdentity(sourceSHA), SourceSHA256: sourceSHA, OccurrenceID: occurrenceID,
+		Capability: capabilityName, DynamicOccurrence: 1, StartLine: span.StartLine, StartColumn: span.StartColumn, EndLine: span.EndLine, EndColumn: span.EndColumn,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bound
+}
+
+func TestVerifyReceiptJoinBindsPlanRunDocumentOccurrenceAndSpan(t *testing.T) {
+	runID, planSHA, capabilityName := "run-1", digestBytes([]byte("plan")), "tool.read"
+	sourceSHA, occurrenceID := digestBytes([]byte("source")), digestBytes([]byte("occurrence"))
+	span := semantic.SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 12}
+	analysis := semantic.Analysis{SourceSHA256: sourceSHA, CallSites: []semantic.CallSite{{ID: occurrenceID, Span: span, Capability: capabilityName, DynamicOccurrence: 1}}}
+	request := guestRequest{RunID: runID, Code: "source"}
+	cell := cellProjection{CapabilityPlanSHA256: planSHA, Receipt: joinedReceipt(t, runID, planSHA, capabilityName, sourceSHA, occurrenceID, span)}
+	if err := verifyReceiptJoin(cell, request, analysis, sourceSHA); err != nil {
+		t.Fatal(err)
+	}
+	mutations := []struct {
+		name     string
+		cell     cellProjection
+		req      guestRequest
+		analysis semantic.Analysis
+	}{
+		{name: "self-consistent wrong plan", cell: cellProjection{CapabilityPlanSHA256: planSHA, Receipt: joinedReceipt(t, runID, digestBytes([]byte("other-plan")), capabilityName, sourceSHA, occurrenceID, span)}, req: request, analysis: analysis},
+		{name: "wrong run", cell: cell, req: guestRequest{RunID: "other-run"}, analysis: analysis},
+		{name: "wrong document", cell: cell, req: request, analysis: semantic.Analysis{SourceSHA256: digestBytes([]byte("other-source")), CallSites: analysis.CallSites}},
+		{name: "wrong occurrence", cell: cell, req: request, analysis: semantic.Analysis{SourceSHA256: sourceSHA, CallSites: []semantic.CallSite{{ID: digestBytes([]byte("other-occurrence")), Span: span, Capability: capabilityName, DynamicOccurrence: 1}}}},
+		{name: "wrong span", cell: cell, req: request, analysis: semantic.Analysis{SourceSHA256: sourceSHA, CallSites: []semantic.CallSite{{ID: occurrenceID, Span: semantic.SourceSpan{StartLine: 1, EndLine: 1, EndColumn: 13}, Capability: capabilityName, DynamicOccurrence: 1}}}},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			if err := verifyReceiptJoin(mutation.cell, mutation.req, mutation.analysis, sourceSHA); err == nil {
+				t.Fatal("expected receipt join rejection")
+			}
+		})
 	}
 }
 

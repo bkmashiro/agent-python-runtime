@@ -136,7 +136,7 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 		}
 	}
 	document := SourceDocument{
-		ID: sourceDocumentIdentity(analysis.SourceSHA256), Language: "python",
+		ID: SourceDocumentIdentity(analysis.SourceSHA256), Language: "python",
 		SHA256: analysis.SourceSHA256, Span: analysis.ModuleSpan,
 	}
 	occurrences := make([]SourceOccurrence, 0, len(analysis.CallSites))
@@ -277,7 +277,9 @@ func validatePassConfig(config []PassConfig) ([]PassSelection, error) {
 	return passes, nil
 }
 
-func sourceDocumentIdentity(sourceSHA256 string) string {
+// SourceDocumentIdentity returns the stable source-document identity used by
+// source-bound plans and receipts for one exact Python source digest.
+func SourceDocumentIdentity(sourceSHA256 string) string {
 	digest := sha256.Sum256([]byte("pysolate.source-document.v0\x00python\x00" + sourceSHA256))
 	return "sha256:" + hex.EncodeToString(digest[:])
 }

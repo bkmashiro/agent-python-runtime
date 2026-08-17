@@ -184,6 +184,27 @@ func writePrivate(path string, value []byte) error {
 	return os.Rename(name, path)
 }
 
+func verifyReceiptJoin(cell cellProjection, request guestRequest, analysis semantic.Analysis, sourceSHA string) error {
+	if cell.Receipt.Source == nil || !receipt.ValidIdentity(cell.Receipt) ||
+		cell.Receipt.CapabilityPlanSHA256 != cell.CapabilityPlanSHA256 || cell.Receipt.RunID != request.RunID ||
+		cell.Receipt.Source.SourceSHA256 != sourceSHA || cell.Receipt.Source.DocumentID != semantic.SourceDocumentIdentity(analysis.SourceSHA256) ||
+		cell.Receipt.Source.Capability != cell.Receipt.Capability {
+		return errors.New("private receipt identity join mismatch")
+	}
+	matches := 0
+	for _, call := range analysis.CallSites {
+		if call.ID == cell.Receipt.Source.OccurrenceID && call.Capability == cell.Receipt.Capability &&
+			call.DynamicOccurrence == cell.Receipt.Source.DynamicOccurrence && call.Span.StartLine == cell.Receipt.Source.StartLine &&
+			call.Span.StartColumn == cell.Receipt.Source.StartColumn && call.Span.EndLine == cell.Receipt.Source.EndLine && call.Span.EndColumn == cell.Receipt.Source.EndColumn {
+			matches++
+		}
+	}
+	if matches != 1 {
+		return errors.New("private receipt does not bind one exact Guest call site")
+	}
+	return nil
+}
+
 func run(ctx context.Context, artifactPath, parentReportPath, preregistrationPath, corpusRoot, outputPath string) error {
 	harnessCommit, err := currentHarnessCommit()
 	if err != nil {
@@ -286,6 +307,9 @@ func run(ctx context.Context, artifactPath, parentReportPath, preregistrationPat
 		analysis, err := semantic.Analyze(ctx, runner, analysisRequest)
 		if err != nil {
 			return fmt.Errorf("exact Guest semantic analysis failed: %w", err)
+		}
+		if err := verifyReceiptJoin(cell, request, analysis, sourceSHA); err != nil {
+			return err
 		}
 		itemID := eventIdentity(fixedParentReportSHA256, task, turn, sourceSHA, cell.CapabilityPlanSHA256)
 		if _, duplicate := seen[itemID]; duplicate {

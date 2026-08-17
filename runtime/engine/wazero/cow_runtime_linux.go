@@ -3,7 +3,6 @@
 package wazero
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -76,7 +75,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	if runtime == nil || runtime.image == nil {
 		return nil, errors.New("COW baseline is unavailable")
 	}
-	stderr := &bytes.Buffer{}
+	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
 	allocator := runtime.image.newAllocator()
 	moduleConfig, temporary, err := engine.moduleConfig(stderr, stdout)

@@ -160,6 +160,13 @@ func TestCoreGuestRejectsRawWASIStdout(t *testing.T) {
 	}
 }
 
+func TestCoreGuestDoesNotPromoteRawStderr(t *testing.T) {
+	response := run(t, newEngine(t), "output-stderr", "import os\nos.write(2, b'x' * 70000)\nreturn 1", map[string]any{})
+	if response.Status != "ok" || response.Result != float64(1) || len(response.Logs) != 0 {
+		t.Fatalf("raw stderr became model output: %#v", response)
+	}
+}
+
 func TestCoreGuestBoundsModelPrintOutput(t *testing.T) {
 	response := run(t, newEngine(t), "output-limit", "print('x' * 70000)\nreturn 1", map[string]any{})
 	if response.Status != "error" || response.Error["code"] != "output_limit_exceeded" {

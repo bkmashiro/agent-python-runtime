@@ -1,7 +1,6 @@
 package wazero
 
 import (
-	"bytes"
 	"context"
 	cryptorand "crypto/rand"
 	"crypto/sha256"
@@ -99,9 +98,49 @@ func (stdout *forbiddenStdout) Used() bool {
 	return stdout.used
 }
 
+type boundedDiagnostic struct {
+	mu        sync.Mutex
+	buffer    []byte
+	truncated bool
+}
+
+func (diagnostic *boundedDiagnostic) Write(payload []byte) (int, error) {
+	diagnostic.mu.Lock()
+	defer diagnostic.mu.Unlock()
+	original := len(payload)
+	remaining := guestDiagnosticMax - len(diagnostic.buffer)
+	if remaining > 0 {
+		if len(payload) > remaining {
+			payload = payload[:remaining]
+		}
+		diagnostic.buffer = append(diagnostic.buffer, payload...)
+	}
+	if original > remaining {
+		diagnostic.truncated = true
+	}
+	return original, nil
+}
+
+func (diagnostic *boundedDiagnostic) String() string {
+	diagnostic.mu.Lock()
+	defer diagnostic.mu.Unlock()
+	value := string(diagnostic.buffer)
+	if diagnostic.truncated {
+		value += "\n[guest stderr truncated]"
+	}
+	return value
+}
+
+func (diagnostic *boundedDiagnostic) Reset() {
+	diagnostic.mu.Lock()
+	defer diagnostic.mu.Unlock()
+	diagnostic.buffer = diagnostic.buffer[:0]
+	diagnostic.truncated = false
+}
+
 type preparedInstance struct {
 	module    api.Module
-	stderr    *bytes.Buffer
+	stderr    *boundedDiagnostic
 	stdout    *forbiddenStdout
 	temporary *workspace.Temporary
 	cold      coldIOContinuation
@@ -415,7 +454,7 @@ func (engine *Engine) moduleConfig(stderr io.Writer, stdout io.Writer) (wazerort
 func (engine *Engine) newPrepared(ctx context.Context) (*preparedInstance, error) {
 	prepareContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
-	stderr := &bytes.Buffer{}
+	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
 	moduleConfig, temporary, err := engine.moduleConfig(stderr, stdout)
 	if err != nil {
@@ -540,7 +579,7 @@ func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payl
 	}
 	analysisContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
-	stderr := &bytes.Buffer{}
+	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
 	module, err := engine.runtime.InstantiateModule(analysisContext, engine.compiled, engine.baseModuleConfig(stderr, stdout))
 	if err != nil {
@@ -688,7 +727,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	} else {
 		prepared = engine.takePrepared()
 	}
-	stderr := &bytes.Buffer{}
+	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
 	var temporary *workspace.Temporary
 	var module api.Module

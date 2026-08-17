@@ -266,50 +266,57 @@ func BuildTaskSnapshot(inputs TaskInputs) (TaskSnapshot, error) {
 	for _, captured := range capture.AgentOutputs {
 		capturedOutputs[captured.AgentID] = captured
 	}
-	if len(capturedOutputs) != 2 || capture.WorkflowOutput != scenario.ExpectedArtifact {
+	if len(capturedOutputs) != 2 || capture.WorkflowOutput != scenario.ExpectedArtifact || capture.SelectedChildID != scenario.ChildPrograms[scenario.SelectedChild].ID || capture.SelectedRootSHA256 != typedRow.SelectedRootSHA256 {
 		return TaskSnapshot{}, errors.New("task inspector capture does not match public fixture")
+	}
+	selectedEvents, discardedEvents, selectedRootEvents := 0, 0, 0
+	eventsBySequence := map[int]TaskEvent{}
+	for _, event := range row.Trace {
+		eventsBySequence[event.Sequence] = event
+		switch {
+		case event.Action == "fanout.select" && event.Outcome == "selected":
+			selectedEvents++
+		case event.Action == "fanout.discard" && event.Outcome == "discarded":
+			discardedEvents++
+		case event.Action == "fanout.selected_root" && event.Outcome == "ok" && event.InputSHA256 == capture.SelectedRootSHA256:
+			selectedRootEvents++
+		}
+	}
+	if selectedEvents != 1 || discardedEvents != 1 || selectedRootEvents != 1 {
+		return TaskSnapshot{}, errors.New("captured branch disposition is not trace-bound")
 	}
 	outputs := []TaskOutput{}
 	workflowDigest := latestSHA([]byte(capture.WorkflowOutput))
-	workflowSequence := 0
-	for _, event := range row.Trace {
-		if event.Type == "oracle" && event.InputSHA256 == workflowDigest && event.OutputSHA256 == workflowDigest {
-			workflowSequence = event.Sequence
-		}
-	}
-	if workflowSequence == 0 {
+	workflowEvent := eventsBySequence[int(capture.WorkflowEventSequence)]
+	if workflowEvent.Sequence == 0 || workflowEvent.AgentID != "runtime" || workflowEvent.Type != "wait_resume" || workflowEvent.Action != "resume.fresh" || workflowEvent.Outcome != "ok" || workflowEvent.OutputSHA256 != workflowDigest {
 		return TaskSnapshot{}, errors.New("release workflow output body is not trace-bound")
 	}
-	outputs = append(outputs, TaskOutput{AgentID: "orchestrator", Label: "Release decision", Disposition: "workflow_result", Body: capture.WorkflowOutput, SHA256: workflowDigest, EventSequence: workflowSequence})
-	for childIndex, child := range scenario.ChildPrograms {
+	outputs = append(outputs, TaskOutput{AgentID: "orchestrator", Label: "Release decision", Disposition: "workflow_result", Body: capture.WorkflowOutput, SHA256: workflowDigest, EventSequence: workflowEvent.Sequence})
+	for _, child := range scenario.ChildPrograms {
 		captured, ok := capturedOutputs[child.ID]
 		expectedDisposition := "discarded_branch"
-		if childIndex == scenario.SelectedChild {
+		if child.ID == capture.SelectedChildID {
 			expectedDisposition = "selected_branch"
 		}
 		if !ok || captured.Path != child.OutputPath || captured.Disposition != expectedDisposition || captured.Body != child.ExpectedResult {
 			return TaskSnapshot{}, fmt.Errorf("captured release output for %s does not match the public fixture", child.ID)
 		}
 		bodyDigest := latestSHA([]byte(captured.Body))
-		sequence := 0
-		for _, event := range row.Trace {
-			if event.AgentID != child.ID || event.Action != "agent.execute" || event.OutputSHA256 != bodyDigest {
-				continue
-			}
-			for _, change := range event.WorkspaceChanges {
-				if change.Path == child.OutputPath && change.AfterSHA256 == bodyDigest && change.Size == len([]byte(child.ExpectedResult)) {
-					sequence = event.Sequence
-				}
+		event := eventsBySequence[int(captured.EventSequence)]
+		changeBound := false
+		for _, change := range event.WorkspaceChanges {
+			if change.Path == child.OutputPath && change.AfterSHA256 == bodyDigest && change.Size == len([]byte(captured.Body)) {
+				changeBound = true
 			}
 		}
-		if sequence == 0 {
+		if event.Sequence == 0 || event.AgentID != child.ID || event.Action != "agent.execute" || event.OutputSHA256 != bodyDigest || !changeBound {
 			return TaskSnapshot{}, fmt.Errorf("release output body for %s is not trace-bound", child.ID)
 		}
 		label := "Dependency review"
 		if child.ID == "reviewer" {
 			label = "Release checklist"
 		}
-		outputs = append(outputs, TaskOutput{AgentID: child.ID, Label: label, Path: captured.Path, Disposition: captured.Disposition, Body: captured.Body, SHA256: bodyDigest, EventSequence: sequence})
+		outputs = append(outputs, TaskOutput{AgentID: child.ID, Label: label, Path: captured.Path, Disposition: captured.Disposition, Body: captured.Body, SHA256: bodyDigest, EventSequence: event.Sequence})
 	}
 	snapshot := TaskSnapshot{
 		SchemaVersion:    TaskSnapshotSchema,
@@ -420,7 +427,7 @@ func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
 		}
 		if output := outputSequences[event.Sequence]; output.AgentID != "" {
 			if output.Path == "" {
-				if event.Type != "oracle" || event.InputSHA256 != output.SHA256 || event.OutputSHA256 != output.SHA256 {
+				if event.AgentID != "runtime" || event.Type != "wait_resume" || event.Action != "resume.fresh" || event.Outcome != "ok" || event.OutputSHA256 != output.SHA256 {
 					return errors.New("workflow output body is not bound to its recorded event")
 				}
 			} else {
@@ -455,9 +462,35 @@ func ValidateTaskSnapshot(snapshot TaskSnapshot) error {
 	return nil
 }
 
+func taskJSONContainsNull(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case []any:
+		for _, item := range typed {
+			if taskJSONContainsNull(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		for _, item := range typed {
+			if taskJSONContainsNull(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func DecodeTaskSnapshot(raw []byte) (TaskSnapshot, error) {
 	if workflowbench.ValidateUniqueJSONKeys(raw) != nil {
 		return TaskSnapshot{}, errors.New("task inspector input contains duplicate JSON keys")
+	}
+	var probe any
+	probeDecoder := json.NewDecoder(bytes.NewReader(raw))
+	probeDecoder.UseNumber()
+	if probeDecoder.Decode(&probe) != nil || probeDecoder.Decode(&struct{}{}) != io.EOF || taskJSONContainsNull(probe) {
+		return TaskSnapshot{}, errors.New("task inspector input contains invalid or null JSON value")
 	}
 	var snapshot TaskSnapshot
 	decoder := json.NewDecoder(bytes.NewReader(raw))

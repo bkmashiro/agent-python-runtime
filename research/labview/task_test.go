@@ -3,6 +3,7 @@ package labview
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -120,5 +121,28 @@ func TestTaskSnapshotRejectsIdentityValidMissingTrace(t *testing.T) {
 	resealTask(t, &snapshot)
 	if err := ValidateTaskSnapshot(snapshot); err == nil {
 		t.Fatal("accepted missing task trace")
+	}
+}
+
+func TestDecodeTaskSnapshotRejectsExplicitNullOptionalField(t *testing.T) {
+	root := filepath.Clean("../..")
+	snapshot, err := BuildTaskSnapshot(TaskInputs{
+		Corpus:  taskRead(t, filepath.Join(root, "research/composableacceptance/testdata/lab-release-readiness-corpus.json")),
+		Report:  taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-direct-report.json")),
+		Capture: taskRead(t, filepath.Join(root, "docs/evidence/lab-release-readiness-body-capture.json")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := TaskSnapshotJSON(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged := strings.Replace(string(raw), `"type": "run_start"`, `"workspace_changes": null, "type": "run_start"`, 1)
+	if forged == string(raw) {
+		t.Fatal("failed to construct null-field probe")
+	}
+	if _, err := DecodeTaskSnapshot([]byte(forged)); err == nil {
+		t.Fatal("accepted explicit null optional field")
 	}
 }

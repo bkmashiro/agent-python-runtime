@@ -62,7 +62,7 @@ func TestBenchmarkTreatmentsDefaultToAll(t *testing.T) {
 	}
 }
 
-func writeSparkBodyCapture(t *testing.T, scenario composableacceptance.Scenario, scenarioSHA, workflowOutput string, childBodies map[string][]byte, row composableacceptance.Row) {
+func writeSparkBodyCapture(t *testing.T, scenario composableacceptance.Scenario, scenarioSHA, workflowOutput, selectedChildID, selectedRootSHA256 string, childBodies map[string][]byte, row composableacceptance.Row) {
 	t.Helper()
 	outputPath := os.Getenv("PYSOLATE_RESEARCH_BODY_CAPTURE")
 	if outputPath == "" {
@@ -71,17 +71,49 @@ func writeSparkBodyCapture(t *testing.T, scenario composableacceptance.Scenario,
 	if filter := os.Getenv("PYSOLATE_ACCEPTANCE_SCENARIO"); filter == "" || filter != scenario.ID {
 		t.Fatal("research body capture requires one explicit matching scenario")
 	}
+	selectedIndex, err := strconv.Atoi(strings.TrimPrefix(selectedChildID, "child-"))
+	if err != nil || selectedIndex < 0 || selectedIndex >= len(scenario.ChildPrograms) || selectedChildID != fmt.Sprintf("child-%d", selectedIndex) {
+		t.Fatal("invalid observed selected child descriptor")
+	}
+	selectedAgentID := scenario.ChildPrograms[selectedIndex].ID
 	traceSHA, err := composableacceptance.TraceIdentity(row.Trace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	capture := composableacceptance.BodyCapture{SchemaVersion: composableacceptance.BodyCaptureSchemaVersion, ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, TraceSHA256: traceSHA, ProviderIO: composableacceptance.ProviderIONotApplicable, WorkflowOutput: workflowOutput}
+	workflowDigest := composableacceptance.ArtifactIdentity(workflowOutput)
+	workflowSequence := uint32(0)
+	for _, event := range row.Trace {
+		if event.Action == "resume.fresh" && event.OutputSHA256 == workflowDigest {
+			if workflowSequence != 0 {
+				t.Fatal("ambiguous workflow output event")
+			}
+			workflowSequence = event.Sequence
+		}
+	}
+	if workflowSequence == 0 || selectedChildID == "" || selectedRootSHA256 == "" {
+		t.Fatal("incomplete observed workflow capture")
+	}
+	capture := composableacceptance.BodyCapture{SchemaVersion: composableacceptance.BodyCaptureSchemaVersion, ScenarioID: scenario.ID, ScenarioSHA256: scenarioSHA, TraceSHA256: traceSHA, ProviderIO: composableacceptance.ProviderIONotApplicable, WorkflowOutput: workflowOutput, WorkflowEventSequence: workflowSequence, SelectedChildID: selectedAgentID, SelectedRootSHA256: selectedRootSHA256}
 	for index, child := range scenario.ChildPrograms {
+		body := string(childBodies[fmt.Sprintf("child-%d", index)])
+		bodyDigest := composableacceptance.ArtifactIdentity(body)
+		sequence := uint32(0)
+		for _, event := range row.Trace {
+			if event.AgentID == child.ID && event.Action == "agent.execute" && event.OutputSHA256 == bodyDigest {
+				if sequence != 0 {
+					t.Fatalf("ambiguous output event for %s", child.ID)
+				}
+				sequence = event.Sequence
+			}
+		}
+		if sequence == 0 {
+			t.Fatalf("missing observed output event for %s", child.ID)
+		}
 		disposition := "discarded_branch"
-		if index == scenario.SelectedChild {
+		if child.ID == selectedAgentID {
 			disposition = "selected_branch"
 		}
-		capture.AgentOutputs = append(capture.AgentOutputs, composableacceptance.CapturedAgentOutput{AgentID: child.ID, Path: child.OutputPath, Disposition: disposition, Body: string(childBodies[fmt.Sprintf("child-%d", index)])})
+		capture.AgentOutputs = append(capture.AgentOutputs, composableacceptance.CapturedAgentOutput{AgentID: child.ID, Path: child.OutputPath, Disposition: disposition, Body: body, EventSequence: sequence})
 	}
 	encoded, _, err := composableacceptance.EncodeBodyCapture(capture)
 	if err != nil {
@@ -1443,7 +1475,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	row.GuestCreated = uint64(1) + uint64(childGuests.Load()) + uint64(workflowFactory.created)
 	row.GuestDestroyed = row.GuestCreated
 	completeTraceRow(&row, started, recorder)
-	writeSparkBodyCapture(t, scenario, scenarioSHA, string(resumed.Output), childBodies, row)
+	writeSparkBodyCapture(t, scenario, scenarioSHA, string(resumed.Output), joined.SelectedChildID, row.SelectedRootSHA256, childBodies, row)
 	return row, true
 }
 

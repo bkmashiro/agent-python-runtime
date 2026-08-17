@@ -2,25 +2,29 @@ package composableacceptance
 
 import "bytes"
 
-const BodyCaptureSchemaVersion = "pysolate.research-body-capture.v1"
+const BodyCaptureSchemaVersion = "pysolate.research-body-capture.v2"
 
 const ProviderIONotApplicable = "not_applicable_scripted_fixture"
 
 type CapturedAgentOutput struct {
-	AgentID     string `json:"agent_id"`
-	Path        string `json:"path"`
-	Disposition string `json:"disposition"`
-	Body        string `json:"body"`
+	AgentID       string `json:"agent_id"`
+	Path          string `json:"path"`
+	Disposition   string `json:"disposition"`
+	Body          string `json:"body"`
+	EventSequence uint32 `json:"event_sequence"`
 }
 
 type BodyCapture struct {
-	SchemaVersion  string                `json:"schema_version"`
-	ScenarioID     string                `json:"scenario_id"`
-	ScenarioSHA256 string                `json:"scenario_sha256"`
-	TraceSHA256    string                `json:"trace_sha256"`
-	ProviderIO     string                `json:"provider_io"`
-	WorkflowOutput string                `json:"workflow_output"`
-	AgentOutputs   []CapturedAgentOutput `json:"agent_outputs"`
+	SchemaVersion         string                `json:"schema_version"`
+	ScenarioID            string                `json:"scenario_id"`
+	ScenarioSHA256        string                `json:"scenario_sha256"`
+	TraceSHA256           string                `json:"trace_sha256"`
+	ProviderIO            string                `json:"provider_io"`
+	WorkflowOutput        string                `json:"workflow_output"`
+	WorkflowEventSequence uint32                `json:"workflow_event_sequence"`
+	SelectedChildID       string                `json:"selected_child_id"`
+	SelectedRootSHA256    string                `json:"selected_root_sha256"`
+	AgentOutputs          []CapturedAgentOutput `json:"agent_outputs"`
 }
 
 func TraceIdentity(events []TraceEvent) (string, error) {
@@ -32,15 +36,27 @@ func TraceIdentity(events []TraceEvent) (string, error) {
 }
 
 func (capture BodyCapture) Validate() error {
-	if capture.SchemaVersion != BodyCaptureSchemaVersion || !idRE.MatchString(capture.ScenarioID) || !digestRE.MatchString(capture.ScenarioSHA256) || !digestRE.MatchString(capture.TraceSHA256) || capture.ProviderIO != ProviderIONotApplicable || capture.WorkflowOutput == "" || len(capture.WorkflowOutput) > 1<<20 || len(capture.AgentOutputs) != 2 {
+	if capture.SchemaVersion != BodyCaptureSchemaVersion || !idRE.MatchString(capture.ScenarioID) || !digestRE.MatchString(capture.ScenarioSHA256) || !digestRE.MatchString(capture.TraceSHA256) || capture.ProviderIO != ProviderIONotApplicable || capture.WorkflowOutput == "" || len(capture.WorkflowOutput) > 1<<20 || capture.WorkflowEventSequence < 1 || !idRE.MatchString(capture.SelectedChildID) || !digestRE.MatchString(capture.SelectedRootSHA256) || len(capture.AgentOutputs) != 2 {
 		return ErrInvalid
 	}
-	seen := map[string]bool{}
+	seenAgents := map[string]bool{}
+	seenSequences := map[uint32]bool{capture.WorkflowEventSequence: true}
+	selected := 0
 	for _, output := range capture.AgentOutputs {
-		if !idRE.MatchString(output.AgentID) || output.Path == "" || output.Body == "" || len(output.Body) > 1<<20 || seen[output.AgentID] || (output.Disposition != "selected_branch" && output.Disposition != "discarded_branch") {
+		if !idRE.MatchString(output.AgentID) || output.Path == "" || output.Body == "" || len(output.Body) > 1<<20 || output.EventSequence < 1 || seenAgents[output.AgentID] || seenSequences[output.EventSequence] || (output.Disposition != "selected_branch" && output.Disposition != "discarded_branch") {
 			return ErrInvalid
 		}
-		seen[output.AgentID] = true
+		if output.Disposition == "selected_branch" {
+			selected++
+			if output.AgentID != capture.SelectedChildID {
+				return ErrInvalid
+			}
+		}
+		seenAgents[output.AgentID] = true
+		seenSequences[output.EventSequence] = true
+	}
+	if selected != 1 || !seenAgents[capture.SelectedChildID] {
+		return ErrInvalid
 	}
 	return nil
 }

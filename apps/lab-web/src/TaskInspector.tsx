@@ -133,6 +133,7 @@ function WorkspaceInspector({ task, event }: { task: TaskSnapshot; event: TaskEv
 }
 
 function ContextInspector({ task }: { task: TaskSnapshot }) {
+  const workflow = task.outputs.find((output) => output.disposition === 'workflow_result');
   const selected = task.outputs.find((output) => output.disposition === 'selected_branch');
   const discarded = task.outputs.find((output) => output.disposition === 'discarded_branch');
   return (
@@ -144,7 +145,7 @@ function ContextInspector({ task }: { task: TaskSnapshot }) {
       <section><span>Repeated transformation</span><p>{task.context.repeated_transformation}</p></section>
       <section><span>Wait boundary</span><p>{task.context.wait_boundary}</p></section>
       <section><span>Stable observation</span><p>{task.context.observation}</p></section>
-      <section><span>Final workflow output</span><pre>{task.expected_artifact}</pre></section>
+      <section><span>Observed workflow output</span><pre>{workflow?.body ?? 'No observed workflow body recorded.'}</pre></section>
     </div>
   );
 }

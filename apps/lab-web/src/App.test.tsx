@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import TaskInspector from './TaskInspector';
 
 async function snapshot() {
   return JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/latest.json'), 'utf8'));
@@ -79,6 +80,16 @@ describe('latest Pysolate Lab', () => {
     expect(screen.getByLabelText('Full execution timeline')).toBeVisible();
     expect(screen.queryByLabelText('Selected operation inspector')).not.toBeInTheDocument();
     expect(screen.queryByText(/oracle .*passed/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the observed workflow body rather than the expected oracle in task context', async () => {
+    const task = await taskSnapshot();
+    task.expected_artifact = 'EXPECTED ORACLE SENTINEL';
+    task.outputs.find((output: { disposition: string }) => output.disposition === 'workflow_result').body = 'OBSERVED WORKFLOW SENTINEL';
+    render(<TaskInspector task={task} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Task context' }));
+    expect(screen.getByText('OBSERVED WORKFLOW SENTINEL')).toBeVisible();
+    expect(screen.queryByText('EXPECTED ORACLE SENTINEL')).not.toBeInTheDocument();
   });
 
   it('shows source mismatch as the single explicit control', async () => {

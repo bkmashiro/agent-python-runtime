@@ -19,8 +19,8 @@ import (
 
 var exactCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-const fixedGuestArtifactSourceCommit = "db756fd7b40d465072b5fb1b6f3867d29c5d8114"
-const fixedGuestArtifactSHA256 = "sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af"
+const fixedGuestArtifactSourceCommit = "cb32e4f5ec942620d82c3918aa7607b76af9185c"
+const fixedGuestArtifactSHA256 = "sha256:2da82e65061a9680dc5921150ae50ea44766590fc44e2a6fa554784f2ce3167e"
 const legacyGuestArtifactSourceCommit = "501daef99796c1af7cd7bab1e0ab712a199820b9"
 const legacyGuestArtifactSHA256 = "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b"
 

@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { loadLatestSnapshot, type LatestCodeAnnotation, type LatestDemo, type LatestSnapshot } from './latestData';
-import { loadTaskSnapshot, type TaskSnapshot } from './taskData';
+import { loadDayTripSnapshot, type DayTripSnapshot } from './dayTripData';
 import TaskInspector, { TaskTimeline } from './TaskInspector';
 import './styles.css';
 
@@ -106,33 +105,40 @@ function MetricStrip({ demo }: { demo: LatestDemo }) {
   );
 }
 
+function LabMark() {
+  return <svg aria-hidden="true" fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24" width="17"><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7z" /><path d="M19 16v5M21.5 18.5h-5M5 3v3M6.5 4.5h-3" /></svg>;
+}
+
 export default function App() {
   const [snapshot, setSnapshot] = useState<LatestSnapshot | null>(null);
-  const [task, setTask] = useState<TaskSnapshot | null>(null);
-  const [surface, setSurface] = useState<'mechanisms' | 'inspector' | 'timeline'>('mechanisms');
+  const [dayTrip, setDayTrip] = useState<DayTripSnapshot | null>(null);
+  const [surface, setSurface] = useState<'mechanisms' | 'inspector' | 'timeline'>('inspector');
   const [selectedID, setSelectedID] = useState<string>('source-prefix-overlap');
   const [error, setError] = useState<string | null>(null);
-  const [taskError, setTaskError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadLatestSnapshot().then(setSnapshot).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+    let active = true;
+    Promise.all([loadLatestSnapshot(), loadDayTripSnapshot()]).then(([latest, travel]) => {
+      if (!active) return;
+      setSnapshot(latest);
+      setDayTrip(travel);
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      setError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { active = false; };
   }, []);
-
-  useEffect(() => {
-    if (surface === 'mechanisms' || task || taskError) return;
-    loadTaskSnapshot().then(setTask).catch((reason: unknown) => setTaskError(reason instanceof Error ? reason.message : String(reason)));
-  }, [surface, task, taskError]);
 
   const selected = useMemo(() => snapshot?.demos.find((demo) => demo.id === selectedID) ?? snapshot?.demos[0], [snapshot, selectedID]);
 
-  if (error) return <main className="load-state"><h1>Snapshot rejected</h1><p>{error}</p></main>;
-  if (!snapshot || !selected) return <main className="load-state"><p>Loading mechanisms…</p></main>;
+  if (error) return <main className="load-state"><h1>Lab data rejected</h1><p>{error}</p></main>;
+  if (!snapshot || !dayTrip || !selected) return <main className="load-state"><p>Loading Lab evidence…</p></main>;
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Pysolate Lab home">
-          <span className="brand-mark" aria-hidden="true"><Sparkles size={17} strokeWidth={1.8} /></span>
+          <span className="brand-mark" aria-hidden="true"><LabMark /></span>
           <span>Pysolate Lab</span>
         </a>
         <nav className="surface-nav" aria-label="Lab views">
@@ -185,14 +191,10 @@ export default function App() {
               </article>
             </div>
           </>
-        ) : taskError ? (
-          <section className="inline-error"><h2>Recording rejected</h2><p>{taskError}</p></section>
-        ) : !task ? (
-          <section className="inline-loading">Loading experiment recording…</section>
         ) : surface === 'inspector' ? (
-          <TaskInspector task={task} />
+          <TaskInspector snapshot={dayTrip} />
         ) : (
-          <TaskTimeline task={task} />
+          <TaskTimeline />
         )}
       </main>
     </div>

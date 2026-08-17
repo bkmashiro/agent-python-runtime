@@ -34,7 +34,7 @@ func TestBuildLatestSnapshotProjectsEightVisibleMechanisms(t *testing.T) {
 		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
-		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-experiment.json"),
+		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-day-trip-v1.json"),
 		SemanticReuse:        read("docs/evidence/semantic-reuse-observation.json"),
 		COWGrowable:          read("docs/evidence/linux-cow-growable-outcome.json"),
 		ColdIO:               read("docs/evidence/linux-cold-io-continuation-observation.json"),
@@ -62,7 +62,7 @@ func TestBuildLatestSnapshotProjectsEightVisibleMechanisms(t *testing.T) {
 	if byID["source-mismatch-fallback"].Status != "control" || byID["source-mismatch-fallback"].Metrics[1].Value != "2" {
 		t.Fatalf("fallback=%+v", byID["source-mismatch-fallback"])
 	}
-	if byID["semantic-predispatch"].Metrics[2].Value != "1018 ms" || byID["whole-run-retention"].Metrics[0].Value != "3" || byID["cow-fresh-memory"].Metrics[1].Value != "384 MiB" || byID["cold-io-continuation"].Metrics[1].Value != "0 MiB" || byID["fresh-reevaluation"].Metrics[1].Value != "fresh Guest" {
+	if byID["semantic-predispatch"].Metrics[2].Value != "1017 ms" || byID["whole-run-retention"].Metrics[0].Value != "3" || byID["cow-fresh-memory"].Metrics[1].Value != "384 MiB" || byID["cold-io-continuation"].Metrics[1].Value != "0 MiB" || byID["fresh-reevaluation"].Metrics[1].Value != "fresh Guest" {
 		t.Fatalf("expanded demos are incomplete: %+v", byID)
 	}
 	encoded, err := labview.EncodeLatestSnapshot(snapshot)
@@ -100,7 +100,7 @@ func TestBuildLatestSnapshotFailsClosedOnInputDrift(t *testing.T) {
 		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
-		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-experiment.json"),
+		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-day-trip-v1.json"),
 		SemanticReuse:        read("docs/evidence/semantic-reuse-observation.json"),
 		COWGrowable:          read("docs/evidence/linux-cow-growable-outcome.json"),
 		ColdIO:               read("docs/evidence/linux-cold-io-continuation-observation.json"),

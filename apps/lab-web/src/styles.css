@@ -106,7 +106,7 @@ main { width: min(1440px, 100%); margin: 0 auto; padding: 0 clamp(18px, 4vw, 64p
 .code-row.fresh_fallback { border-left-color: var(--orange); }
 .code-row.fresh_fallback::before { background: var(--orange); }
 .line-number { z-index: 1; text-align: right; padding-right: 12px; color: #465160; font: 11px var(--mono); user-select: none; }
-.code-row code { z-index: 1; min-width: 0; overflow-wrap: anywhere; color: #e4e9ef; font: 12px/1.6 var(--mono); white-space: pre-wrap; padding: 8px 12px 8px 0; }
+.code-row code { z-index: 1; min-width: 0; overflow-wrap: anywhere; color: #e4e9ef; font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; padding: 8px 12px 8px 0; }
 .code-note { z-index: 1; padding: 7px 12px; border-left: 1px solid rgba(255,255,255,.1); display: grid; gap: 3px; }
 .code-note b { color: #dce4ed; font-size: 10px; }
 .code-note span { color: #8b97a8; font-size: 10px; line-height: 1.35; }
@@ -326,4 +326,169 @@ main { width: min(1440px, 100%); margin: 0 auto; padding: 0 clamp(18px, 4vw, 64p
   .full-timeline { padding-inline: 10px; }
   .full-timeline-lane { grid-template-columns: 70px minmax(0, 1fr); gap: 8px; }
   .full-timeline-lane > span { font-size: 8px; }
+}
+
+/* Public day-trip inspector: evidence is grouped, not flattened into a fake timeline. */
+.daytrip-inspector { margin-top: 28px; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: #0d131b; box-shadow: 0 24px 70px rgba(0,0,0,.22); }
+.daytrip-hero { display: flex; justify-content: space-between; gap: 28px; padding: clamp(24px, 4vw, 44px); border-bottom: 1px solid var(--border); background: linear-gradient(120deg, #101923, #0d131b 62%); }
+.daytrip-hero-copy { min-width: 0; }
+.daytrip-kicker, .card-eyebrow, .legacy-label { color: var(--cyan); font: 9px var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+.daytrip-hero h1 { margin: 10px 0 9px; max-width: 720px; font-size: clamp(30px, 4.3vw, 56px); line-height: 1; letter-spacing: -.055em; }
+.daytrip-hero p { max-width: 720px; margin: 0; color: #98a6b6; line-height: 1.55; }
+.hero-final { flex: 0 0 180px; align-self: center; display: grid; gap: 5px; padding: 18px; border: 1px solid #365144; border-radius: 11px; background: #101d19; }
+.hero-final span { color: #9fb3aa; font: 9px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.hero-final strong { color: var(--green); font: 500 34px var(--mono); letter-spacing: -.05em; }
+.hero-final b { color: #e9f3ed; font-size: 15px; }
+.daytrip-provenance { min-width: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 22px; border-bottom: 1px solid var(--border); background: #0a1016; color: #7f8c9e; font: 10px var(--mono); }
+.daytrip-provenance code { color: #aab7c5; overflow-wrap: anywhere; }
+.daytrip-provenance span:last-child { margin-left: auto; color: #617183; }
+.daytrip-layout { display: grid; grid-template-columns: minmax(210px, 255px) minmax(0, 1fr); align-items: start; }
+.daytrip-groups { position: sticky; top: 80px; display: grid; gap: 6px; padding: 17px 12px; background: #0a0f15; border-right: 1px solid var(--border); }
+.daytrip-groups-label { padding: 3px 10px 8px; color: #6c798a; font: 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.daytrip-groups button { display: grid; grid-template-columns: 25px 18px minmax(0, 1fr); gap: 7px; align-items: start; width: 100%; padding: 11px 9px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #d8e1e9; text-align: left; cursor: pointer; }
+.daytrip-groups button:hover { background: #111a23; border-color: #263443; }
+.daytrip-groups button.active { background: #16232c; border-color: #38505a; }
+.group-index { padding-top: 2px; color: #556476; font: 9px var(--mono); }
+.inline-icon { width: 17px; height: 17px; color: #7d91a4; }
+.daytrip-groups button.active .inline-icon, .daytrip-groups button.active .group-index { color: var(--cyan); }
+.group-copy { min-width: 0; display: grid; gap: 5px; }
+.group-copy strong { font-size: 11px; line-height: 1.25; }
+.group-copy small { color: #718093; font-size: 9px; line-height: 1.35; }
+.groups-note { display: flex; align-items: center; gap: 7px; margin: 13px 9px 2px; padding-top: 13px; border-top: 1px solid #202b37; color: #697789; font: 9px var(--mono); }
+.inline-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(81,207,139,.12); }
+.daytrip-content { min-width: 0; }
+.daytrip-section { scroll-margin-top: 82px; padding: 30px clamp(18px, 3.2vw, 38px); border-bottom: 1px solid var(--border); }
+.daytrip-section:last-child { border-bottom: 0; }
+.daytrip-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 18px; }
+.daytrip-section-heading h2 { margin: 7px 0 0; font-size: clamp(23px, 3vw, 32px); letter-spacing: -.04em; }
+.daytrip-section-heading p { max-width: 460px; margin: 0; color: #7f8d9e; font-size: 11px; line-height: 1.5; text-align: right; }
+.daytrip-input-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 10px; }
+.daytrip-card, .candidate-card, .guest-run, .decision-card, .final-output-card { min-width: 0; border: 1px solid #293644; border-radius: 10px; background: #101820; }
+.daytrip-card { padding: 19px; }
+.daytrip-card h3, .candidate-card h3, .guest-run h3, .decision-card h3 { margin: 7px 0 9px; font-size: 17px; letter-spacing: -.025em; }
+.daytrip-card p, .candidate-summary { margin: 0; color: #bdc9d5; font-size: 12px; line-height: 1.6; }
+.envelope-card { background: #0e171f; }
+.daytrip-facts { display: grid; gap: 9px; margin: 14px 0 0; }
+.daytrip-facts div { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 9px; }
+.daytrip-facts dt { color: #6e7c8d; font: 9px var(--mono); text-transform: uppercase; }
+.daytrip-facts dd { min-width: 0; margin: 0; color: #c6d2dd; font: 10px/1.45 var(--mono); overflow-wrap: anywhere; }
+.daytrip-facts code { color: var(--cyan); }
+.daytrip-disclosure-stack { display: grid; gap: 7px; margin-top: 10px; }
+.daytrip-disclosure { min-width: 0; border: 1px solid #293644; border-radius: 8px; background: #0b1118; }
+.daytrip-disclosure summary { padding: 13px 15px; color: #cbd6e0; cursor: pointer; font-size: 11px; font-weight: 600; list-style-position: inside; }
+.daytrip-disclosure summary::marker { color: var(--cyan); }
+.daytrip-disclosure-body { min-width: 0; padding: 0 15px 15px; border-top: 1px solid #202b37; }
+.daytrip-prose, .daytrip-code, .daytrip-json { margin: 0; color: #cbd7e2; font: 11px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.daytrip-prose { padding-top: 14px; }
+.skill-list { display: grid; gap: 12px; padding-top: 12px; }
+.skill-body { padding: 12px; border: 1px solid #273440; border-radius: 7px; background: #0e161e; }
+.skill-body h3 { margin: 0 0 8px; color: var(--green); font: 11px var(--mono); }
+.contract-list { display: grid; gap: 7px; padding-top: 12px; }
+.contract-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 11px 12px; border: 1px solid #273440; border-radius: 7px; background: #0e161e; }
+.contract-row div { min-width: 0; display: grid; gap: 4px; }
+.contract-row strong, .contract-row code { color: #d6e2eb; font: 11px var(--mono); overflow-wrap: anywhere; }
+.contract-row span { color: #718093; font-size: 10px; }
+.contract-row code { color: var(--orange); white-space: nowrap; }
+.withheld-callout { margin-top: 10px; padding: 16px; border: 1px solid #594b34; border-radius: 9px; background: #19150f; }
+.withheld-callout strong { color: #f0bd75; font-size: 12px; }
+.withheld-callout p { margin: 7px 0 11px; color: #b6a48a; font-size: 11px; line-height: 1.5; }
+.withheld-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.withheld-tags code { padding: 4px 6px; border-radius: 4px; background: #2a2217; color: #d1b483; font: 9px var(--mono); }
+.candidate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.candidate-card { padding: 18px; border-top: 2px solid #5b4c35; }
+.candidate-card.selected { border-top-color: var(--green); }
+.candidate-card-heading, .guest-run-heading { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
+.status-chip { flex: 0 0 auto; padding: 5px 7px; border-radius: 4px; background: #2b2117; color: #e1b77b; font: 9px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.status-chip.selected { background: #153323; color: var(--green); }
+.candidate-summary { margin: 1px 0 12px; min-height: 58px; }
+.candidate-card .daytrip-disclosure { background: #0b1118; }
+.daytrip-code { padding-top: 12px; color: #d5e3ee; }
+.capture-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; margin-top: 12px; padding-top: 11px; border-top: 1px solid #202c38; font: 9px var(--mono); }
+.capture-line span { color: #667588; }
+.capture-line strong { color: #8292a4; font-weight: 400; overflow-wrap: anywhere; }
+.guest-run-list { display: grid; gap: 12px; }
+.guest-run { overflow: hidden; }
+.guest-run-heading { padding: 18px; border-bottom: 1px solid #293644; background: #101a22; }
+.guest-run-heading h3 { margin-bottom: 0; }
+.guest-badge { padding: 5px 7px; border: 1px solid #345163; border-radius: 4px; color: #9db8c7; font: 9px var(--mono); white-space: nowrap; }
+.wait-summary { display: flex; align-items: baseline; gap: 10px; padding: 13px 18px; border-bottom: 1px solid #222f3b; }
+.wait-summary strong { color: var(--cyan); font: 11px var(--mono); }
+.wait-summary span { color: #718092; font-size: 10px; }
+.wait-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 13px 18px 17px; list-style: none; }
+.wait-card { min-width: 0; padding: 11px; border: 1px solid #293744; border-radius: 7px; background: #0b1118; }
+.wait-card-heading { display: grid; gap: 5px; }
+.wait-card-heading strong { color: #d9e6ee; font: 10px var(--mono); overflow-wrap: anywhere; }
+.wait-card-heading span { color: var(--orange); font: 9px var(--mono); }
+.wait-result { margin-top: 12px; padding-top: 9px; border-top: 1px solid #202d39; }
+.wait-result > span { color: #718092; font: 9px var(--mono); text-transform: uppercase; }
+.wait-result .daytrip-json { max-height: 190px; overflow: auto; margin-top: 7px; color: #b6c5d2; font-size: 9px; }
+.guest-output-grid { display: grid; grid-template-columns: 1.2fr .8fr; border-top: 1px solid #293644; }
+.guest-output-card { min-width: 0; padding: 17px 18px; border-right: 1px solid #293644; }
+.guest-output-card:last-child { border-right: 0; }
+.guest-output-card h4 { margin: 7px 0 10px; font-size: 13px; }
+.guest-output-card .daytrip-json { max-height: 270px; overflow: auto; color: #c9dbd2; font-size: 10px; }
+.sha-card code { display: block; margin: 16px 0; color: var(--green); font: 10px/1.55 var(--mono); overflow-wrap: anywhere; }
+.cost-line { margin: 0; color: #758597; font-size: 11px; }
+.cost-line strong { color: var(--green); font: 15px var(--mono); }
+.decision-card { display: grid; grid-template-columns: 1.15fr .85fr; overflow: hidden; }
+.decision-result { padding: 20px; }
+.decision-result h3 { color: var(--green); font-size: 21px; }
+.decision-result p { margin: 0; color: #bdc9d4; font-size: 12px; line-height: 1.55; }
+.decision-disposition { display: grid; grid-template-columns: 1fr 1fr; border-left: 1px solid #293644; }
+.decision-disposition div { display: grid; align-content: center; gap: 6px; padding: 16px; }
+.decision-disposition div + div { border-left: 1px solid #293644; background: #151413; }
+.decision-disposition span, .decision-sha span { color: #6d7b8c; font: 9px var(--mono); text-transform: uppercase; }
+.decision-disposition strong { color: #d5e0e8; font-size: 11px; }
+.decision-disposition em { color: var(--green); font: 13px var(--mono); font-style: normal; }
+.decision-disposition div + div em { color: var(--orange); }
+.decision-sha { grid-column: 1 / -1; display: grid; grid-template-columns: 125px minmax(0, 1fr); gap: 10px; padding: 13px 20px; border-top: 1px solid #293644; }
+.decision-sha code { color: #9eb0bf; font: 10px var(--mono); overflow-wrap: anywhere; }
+.final-output-section { background: #0e1714; }
+.final-output-card { display: grid; grid-template-columns: 220px minmax(0, 1fr); border-color: #365144; background: #101d19; }
+.final-output-lead { display: grid; align-content: center; gap: 6px; padding: 22px; border-right: 1px solid #365144; }
+.final-output-lead span { color: #a7bdb1; font: 9px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.final-output-lead strong { color: var(--green); font: 500 34px var(--mono); letter-spacing: -.05em; }
+.final-output-lead b { color: #e5f0e9; font-size: 18px; }
+.itinerary-copy { padding: 22px; }
+.itinerary-copy p { margin: 10px 0 0; color: #d0ded6; font-size: 13px; line-height: 1.65; }
+.legacy-timeline { margin-top: 28px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: 0 24px 70px rgba(0,0,0,.2); }
+.legacy-timeline-heading { display: flex; justify-content: space-between; gap: 20px; align-items: start; padding: 28px 30px; border-bottom: 1px solid var(--border); background: #10161d; }
+.legacy-label { color: var(--orange); }
+.legacy-timeline-heading h1 { margin: 9px 0 7px; font-size: clamp(27px, 3.2vw, 42px); letter-spacing: -.04em; }
+.legacy-timeline-heading p { max-width: 700px; margin: 0; color: #94a0b0; line-height: 1.5; }
+.legacy-pill { padding: 6px 8px; border: 1px solid #61482e; border-radius: 4px; color: var(--orange); font: 9px var(--mono); letter-spacing: .1em; }
+.legacy-timeline-body { min-height: 240px; display: grid; place-content: center; padding: 30px; text-align: center; }
+.legacy-timeline-body strong { color: #c9d4de; font-size: 15px; }
+.legacy-timeline-body p { max-width: 560px; margin: 9px auto 0; color: #8290a0; line-height: 1.55; }
+
+@media (max-width: 920px) {
+  .daytrip-layout { grid-template-columns: 1fr; }
+  .daytrip-groups { position: static; grid-template-columns: repeat(5, minmax(150px, 1fr)); overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .daytrip-groups-label, .groups-note { display: none; }
+  .daytrip-groups button { min-width: 150px; }
+}
+
+@media (max-width: 680px) {
+  .daytrip-hero { display: block; padding: 23px 18px; }
+  .daytrip-hero h1 { font-size: 34px; }
+  .hero-final { margin-top: 18px; width: 100%; }
+  .daytrip-provenance { padding-inline: 14px; }
+  .daytrip-provenance span:last-child { width: 100%; margin-left: 0; }
+  .daytrip-section { padding: 24px 14px; }
+  .daytrip-section-heading { display: block; }
+  .daytrip-section-heading p { margin-top: 9px; text-align: left; }
+  .daytrip-input-grid, .candidate-grid, .guest-output-grid, .decision-card, .final-output-card { grid-template-columns: 1fr; }
+  .wait-list { grid-template-columns: 1fr; padding-inline: 12px; }
+  .guest-output-card, .final-output-lead { border-right: 0; border-bottom: 1px solid #293644; }
+  .decision-disposition { border-left: 0; border-top: 1px solid #293644; }
+  .decision-sha { grid-template-columns: 1fr; }
+  .final-output-lead { border-color: #365144; }
+  .daytrip-groups { grid-template-columns: repeat(5, minmax(138px, 1fr)); padding: 10px; }
+  .daytrip-groups button { min-width: 138px; padding: 10px 8px; }
+  .group-copy small { font-size: 8px; }
+  .daytrip-facts div { grid-template-columns: 74px minmax(0, 1fr); }
+  .contract-row { align-items: start; }
+  .contract-row code { white-space: normal; text-align: right; }
+  .legacy-timeline-heading { padding: 22px 18px; }
+  .legacy-pill { display: none; }
 }

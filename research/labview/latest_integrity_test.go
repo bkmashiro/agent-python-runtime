@@ -52,7 +52,7 @@ func acceptedLatestSnapshot(t *testing.T) LatestSnapshot {
 		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
-		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-experiment.json"),
+		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-day-trip-v1.json"),
 		SemanticReuse:        read("docs/evidence/semantic-reuse-observation.json"),
 		COWGrowable:          read("docs/evidence/linux-cow-growable-outcome.json"),
 		ColdIO:               read("docs/evidence/linux-cold-io-continuation-observation.json"),

@@ -1,0 +1,126 @@
+{
+  "schema_version": "pysolate.semantic-predispatch-experiment.v0",
+  "artifact_sha256": "sha256:d5706fbf113c7042a4484ad5713ee5baa8fe4788c33beb9b6223b0ff9f1201af",
+  "source_sha256": "sha256:0a4920d4356e37f733517065e92eb46eb0f39fe4e2c67722d030177717ecbcb0",
+  "capability_plan_sha256": "sha256:e8944dfef1bd283caf18a153ba14e7aeb879d92a808852cae91f5cdb2bc14859",
+  "trials_per_condition": 5,
+  "physical_delay_micros": 1000000,
+  "baseline_median_micros": 3149103,
+  "optimized_median_micros": 2132259,
+  "median_savings_micros": 1016844,
+  "equivalent_results": true,
+  "no_duplicate_physical_call": true,
+  "content_sha256": "sha256:32157daf1bef55a37f9bf17abcbaa49a13cebb1dbed0735518cd1dc15622a0b6",
+  "trials": [
+    {
+      "condition": "baseline",
+      "duration_micros": 3135911,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 0,
+      "physical_starts": 0,
+      "physical_finishes": 0,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "semantic_pre_dispatch",
+      "duration_micros": 2119000,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 1,
+      "physical_starts": 1,
+      "physical_finishes": 1,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "baseline",
+      "duration_micros": 3149103,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 0,
+      "physical_starts": 0,
+      "physical_finishes": 0,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "semantic_pre_dispatch",
+      "duration_micros": 2156950,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 1,
+      "physical_starts": 1,
+      "physical_finishes": 1,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "baseline",
+      "duration_micros": 3153891,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 0,
+      "physical_starts": 0,
+      "physical_finishes": 0,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "semantic_pre_dispatch",
+      "duration_micros": 2131646,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 1,
+      "physical_starts": 1,
+      "physical_finishes": 1,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "baseline",
+      "duration_micros": 3144303,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 0,
+      "physical_starts": 0,
+      "physical_finishes": 0,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "semantic_pre_dispatch",
+      "duration_micros": 2132259,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 1,
+      "physical_starts": 1,
+      "physical_finishes": 1,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "baseline",
+      "duration_micros": 3169840,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 0,
+      "physical_starts": 0,
+      "physical_finishes": 0,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    },
+    {
+      "condition": "semantic_pre_dispatch",
+      "duration_micros": 2148437,
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "physical_issues": 1,
+      "physical_starts": 1,
+      "physical_finishes": 1,
+      "rejected_claims": 0,
+      "result_sha256": "sha256:598130cd30fe82f725b6f259b0c445c4d3b2bcd1209e7e5540873cac5ffc1508"
+    }
+  ]
+}

@@ -79,9 +79,30 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 var _ enginecontract.Factory = Factory{}
 var _ enginecontract.Runner = (*Engine)(nil)
 
+type forbiddenStdout struct {
+	mu   sync.Mutex
+	used bool
+}
+
+func (stdout *forbiddenStdout) Write(payload []byte) (int, error) {
+	if len(payload) != 0 {
+		stdout.mu.Lock()
+		stdout.used = true
+		stdout.mu.Unlock()
+	}
+	return len(payload), nil
+}
+
+func (stdout *forbiddenStdout) Used() bool {
+	stdout.mu.Lock()
+	defer stdout.mu.Unlock()
+	return stdout.used
+}
+
 type preparedInstance struct {
 	module    api.Module
 	stderr    *bytes.Buffer
+	stdout    *forbiddenStdout
 	temporary *workspace.Temporary
 	cold      coldIOContinuation
 }
@@ -354,8 +375,8 @@ func (engine *Engine) Close(ctx context.Context) error {
 	return errors.Join(preparedErr, runtimeErr, workspaceErr)
 }
 
-func (engine *Engine) baseModuleConfig(stderr io.Writer) wazerort.ModuleConfig {
-	config := wazerort.NewModuleConfig().WithName("").WithStderr(stderr)
+func (engine *Engine) baseModuleConfig(stderr io.Writer, stdout io.Writer) wazerort.ModuleConfig {
+	config := wazerort.NewModuleConfig().WithName("").WithStderr(stderr).WithStdout(stdout)
 	if profile := engine.config.DeterministicVerification; profile != nil {
 		clock := newDeterministicClock(profile.WalltimeUnixNano(), profile.MonotonicStartNano(), profile.ClockStepNano())
 		resolution := wazerosys.ClockResolution(profile.ClockStepNano())
@@ -369,8 +390,8 @@ func (engine *Engine) baseModuleConfig(stderr io.Writer) wazerort.ModuleConfig {
 	return config
 }
 
-func (engine *Engine) moduleConfig(stderr io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
-	config := engine.baseModuleConfig(stderr)
+func (engine *Engine) moduleConfig(stderr io.Writer, stdout io.Writer) (wazerort.ModuleConfig, *workspace.Temporary, error) {
+	config := engine.baseModuleConfig(stderr, stdout)
 	if engine.workspaceLease == nil {
 		return config, nil, nil
 	}
@@ -395,7 +416,8 @@ func (engine *Engine) newPrepared(ctx context.Context) (*preparedInstance, error
 	prepareContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
 	stderr := &bytes.Buffer{}
-	moduleConfig, temporary, err := engine.moduleConfig(stderr)
+	stdout := &forbiddenStdout{}
+	moduleConfig, temporary, err := engine.moduleConfig(stderr, stdout)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +445,7 @@ func (engine *Engine) newPrepared(ctx context.Context) (*preparedInstance, error
 	}
 	stderr.Reset()
 	failed = false
-	return &preparedInstance{module: module, stderr: stderr, temporary: temporary}, nil
+	return &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary}, nil
 }
 
 func (engine *Engine) takePrepared() *preparedInstance {
@@ -519,7 +541,8 @@ func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payl
 	analysisContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
 	stderr := &bytes.Buffer{}
-	module, err := engine.runtime.InstantiateModule(analysisContext, engine.compiled, engine.baseModuleConfig(stderr))
+	stdout := &forbiddenStdout{}
+	module, err := engine.runtime.InstantiateModule(analysisContext, engine.compiled, engine.baseModuleConfig(stderr, stdout))
 	if err != nil {
 		return nil, fmt.Errorf("instantiate semantic analyzer Guest: %w", err)
 	}
@@ -533,6 +556,9 @@ func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payl
 	payload, err = callGuestResponse(analysisContext, module, "runtime_analyze_source", request, engine.config.MaxResponseBytes)
 	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	if stdout.Used() {
+		return payload, ErrGuestStdoutBypass
 	}
 	return payload, nil
 }
@@ -663,16 +689,18 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		prepared = engine.takePrepared()
 	}
 	stderr := &bytes.Buffer{}
+	stdout := &forbiddenStdout{}
 	var temporary *workspace.Temporary
 	var module api.Module
 	initialized := false
 	if prepared != nil {
 		stderr = prepared.stderr
+		stdout = prepared.stdout
 		temporary = prepared.temporary
 		module = prepared.module
 		initialized = true
 	} else {
-		moduleConfig, moduleTemporary, moduleErr := engine.moduleConfig(stderr)
+		moduleConfig, moduleTemporary, moduleErr := engine.moduleConfig(stderr, stdout)
 		if moduleErr != nil {
 			return nil, moduleErr
 		}
@@ -773,6 +801,9 @@ prepareComplete:
 	payload, err = callExecute(runContext, module, request, engine.config.MaxResponseBytes)
 	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	if stdout != nil && stdout.Used() {
+		return payload, ErrGuestStdoutBypass
 	}
 	if broker != nil {
 		brokerFinalized = true
@@ -899,7 +930,8 @@ func hostCall(
 
 var (
 	ErrGuestClaimedExecutionRef    = errors.New("Guest response claimed Host execution reference")
-	ErrGuestClaimedCapabilityPlan  = errors.New("Guest response claimed Host capability plan")
+	ErrGuestClaimedCapabilityPlan  = errors.New("Guest response claimed Host capability plan identity")
+	ErrGuestStdoutBypass           = errors.New("Guest wrote outside the canonical model log channel")
 	ErrExecutionIdentityMismatch   = errors.New("Host execution identity mismatch")
 	ErrCapabilityPlanMismatch      = errors.New("Host capability plan identity mismatch")
 	ErrObservationIdentityMismatch = errors.New("Host observation execution identity mismatch")

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -128,6 +129,20 @@ func TestCoreGuestSupportsReturnAndBoundedPrintOutput(t *testing.T) {
 	}
 	if legacy.ResultSource != "legacy_result" || legacy.ResultPresent == nil || !*legacy.ResultPresent || missing.ResultSource != "missing" || missing.ResultPresent == nil || *missing.ResultPresent || returnedNone.ResultSource != "return" || returnedNone.ResultPresent == nil || !*returnedNone.ResultPresent {
 		t.Fatalf("legacy=%#v missing=%#v none=%#v", legacy, missing, returnedNone)
+	}
+}
+
+func TestCoreGuestRejectsRawWASIStdout(t *testing.T) {
+	request, err := json.Marshal(map[string]any{
+		"run_id": "output-fd-bypass", "inputs": map[string]any{},
+		"code": "import os\nos.write(1, b'raw bypass')\nreturn 1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := newEngine(t).Run(context.Background(), request, "")
+	if !errors.Is(err, wazeroengine.ErrGuestStdoutBypass) {
+		t.Fatalf("raw WASI stdout payload=%q err=%v", payload, err)
 	}
 }
 

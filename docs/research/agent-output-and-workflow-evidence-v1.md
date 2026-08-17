@@ -24,7 +24,9 @@ The Guest emits:
 
 `return` is canonical for one-shot execution. `print` is ordered, model-facing text with a 64 KiB/256-line bound and an explicit `[pysolate stdout truncated]` marker. Byte overflow aborts with `output_limit_exceeded` while preserving a UTF-8-safe bounded prefix; line overflow keeps the terminal result and returns at most 255 content lines plus the marker. Legacy `result = value` remains accepted as `result_source=legacy_result`. Falling through without either is `result_source=missing` and differs from explicit `return None`. The append-only streaming executor uses the same persistent bounded log capture across chunks; because completed chunks execute incrementally, its terminal value remains explicitly `legacy_result`/`missing` rather than pretending to support a deferred top-level `return`.
 
-The implementation follows the useful boundary in DeepSeek Harness Code Mode: only outer logs and the completion value re-enter model context, while intermediate tool values remain execution-local. Reference: `deepseek-ai/deepseek-harness@47f943859bef60e4160492346772ded9b24f765a`, `packages/core/tools/README.md`, lines 118–125 and 158–163.
+The Host attaches a discard-only WASI stdout detector. Canonical Python `print` never reaches FD1. Any direct low-level write, such as `os.write(1, ...)`, marks the run invalid even when Guest code catches the write result.
+
+The implementation follows the useful DeepSeek Harness Code Mode boundary: only outer logs and the completion value re-enter model context, while intermediate tool values remain execution-local. Reference: `deepseek-ai/deepseek-harness@47f943859bef60e4160492346772ded9b24f765a`, `packages/core/tools/README.md`, lines 118–125 and 158–163.
 
 ## Source identity
 

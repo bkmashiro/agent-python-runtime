@@ -77,8 +77,9 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 		return nil, errors.New("COW baseline is unavailable")
 	}
 	stderr := &bytes.Buffer{}
+	stdout := &forbiddenStdout{}
 	allocator := runtime.image.newAllocator()
-	moduleConfig, temporary, err := engine.moduleConfig(stderr)
+	moduleConfig, temporary, err := engine.moduleConfig(stderr, stdout)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +123,7 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 		cold = continuation
 	}
 	failed = false
-	return &preparedInstance{module: module, stderr: stderr, temporary: temporary, cold: cold}, nil
+	return &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary, cold: cold}, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) close() error {

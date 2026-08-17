@@ -662,6 +662,11 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
     except (SyntaxError, ValueError, TypeError, MemoryError):
         return _SOURCE_CONTRACT_INVALID, None, []
     for candidate in _code_objects(code):
+        if candidate is code:
+            # The outer module contains only validated __future__ directives and
+            # the trusted wrapper definition; CPython emits import opcodes for
+            # those compiler directives.
+            continue
         if any(instruction.opname in {"IMPORT_NAME", "IMPORT_FROM", "IMPORT_STAR"} for instruction in dis.get_instructions(candidate)):
             return _SOURCE_CONTRACT_UNSUPPORTED, None, []
     return _SOURCE_CONTRACT_OK, code, import_nodes

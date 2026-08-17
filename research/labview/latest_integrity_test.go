@@ -50,9 +50,13 @@ func acceptedLatestSnapshot(t *testing.T) LatestSnapshot {
 	snapshot, err := BuildLatestSnapshot(LatestInputs{
 		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
 		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
-		SourcePrefixCensus:   read("docs/evidence/source-prefix-opportunity-census-v1.json"),
 		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
 		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
+		SemanticPredispatch:  read("docs/evidence/semantic-predispatch-experiment.json"),
+		SemanticReuse:        read("docs/evidence/semantic-reuse-observation.json"),
+		COWGrowable:          read("docs/evidence/linux-cow-growable-outcome.json"),
+		ColdIO:               read("docs/evidence/linux-cold-io-continuation-observation.json"),
+		Composable:           read("docs/evidence/spark-composable-direct-report.json"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +121,7 @@ func TestPaperFigureReadsMetricsAndRejectsLayoutDrift(t *testing.T) {
 	}
 
 	snapshot = acceptedLatestSnapshot(t)
-	snapshot.Demos[1].Source = "result = 1\n"
+	snapshot.Demos[2].Source = "result = 1\n"
 	identity, err = latestSnapshotIdentity(snapshot)
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +140,31 @@ func TestPaperFigureReadsMetricsAndRejectsLayoutDrift(t *testing.T) {
 	snapshot.Identity = identity
 	if _, err := PaperFigureSVG(snapshot); err == nil {
 		t.Fatal("paper figure accepted missing required annotation")
+	}
+}
+
+func TestLatestSnapshotRejectsMalformedVisibleFields(t *testing.T) {
+	mutations := map[string]func(*LatestSnapshot){
+		"metric tone":            func(snapshot *LatestSnapshot) { snapshot.Demos[3].Metrics[0].Tone = "forged" },
+		"empty fact":             func(snapshot *LatestSnapshot) { snapshot.Demos[4].Facts[0].Value = "" },
+		"segment tone":           func(snapshot *LatestSnapshot) { snapshot.Demos[6].Lanes[0].Segments[0].Tone = "forged" },
+		"missing timeline":       func(snapshot *LatestSnapshot) { snapshot.Demos[6].Lanes = nil },
+		"null state flow lanes":  func(snapshot *LatestSnapshot) { snapshot.Demos[4].Lanes = nil },
+		"timeline on state flow": func(snapshot *LatestSnapshot) { snapshot.Demos[4].Lanes = snapshot.Demos[0].Lanes },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			snapshot := acceptedLatestSnapshot(t)
+			mutate(&snapshot)
+			identity, err := latestSnapshotIdentity(snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot.Identity = identity
+			if err := ValidateLatestSnapshot(snapshot); err == nil {
+				t.Fatal("identity-valid malformed visible field accepted")
+			}
+		})
 	}
 }
 

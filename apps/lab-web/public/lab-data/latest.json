@@ -1,18 +1,14 @@
 {
-  "schema_version": "pysolate.lab-latest.v1",
-  "identity": "sha256:efd6a1588c2cf80b8a4bc062d555237661a1e90c5509740df586c07b80f3d92c",
-  "headline": {
-    "real_guest_demos": 3,
-    "optimization_wins": 2,
-    "safety_controls": 1
-  },
+  "schema_version": "pysolate.lab-latest.v2",
+  "identity": "sha256:24666ec0363d380536bae38fbafb54b3f6d4a2a237db9c3c77e58d05070bbfed",
   "demos": [
     {
       "id": "source-prefix-overlap",
-      "title": "Start the READ before the model finishes",
-      "eyebrow": "REACH-GATED STREAMING",
-      "status": "optimized",
-      "summary": "The first closed Python suite reaches a Host READ while the remaining source is still being generated.",
+      "title": "Start the READ before generation finishes",
+      "eyebrow": "SOURCE PREFIX",
+      "status": "measured",
+      "view_kind": "timeline",
+      "summary": "Execute the first closed suite while the remaining Python is still arriving.",
       "source": "record = slow.lookup('alpha')\nlabel = record['label'].upper()\nresult = {'label': label}\n",
       "annotations": [
         {
@@ -20,33 +16,33 @@
           "end_line": 1,
           "tone": "effect_trigger",
           "label": "READ starts",
-          "note": "The closed suite reaches the Host-mediated READ."
+          "note": "The first closed suite reaches the Host READ."
         },
         {
           "start_line": 2,
           "end_line": 3,
           "tone": "overlapped_tail",
-          "label": "generated concurrently",
-          "note": "This source tail arrives while the READ is in flight."
+          "label": "source continues",
+          "note": "These lines arrive while the READ is in flight."
         }
       ],
       "metrics": [
         {
           "label": "Generate first",
           "value": "2950 ms",
-          "note": "median wall time",
+          "note": "median",
           "tone": "baseline"
         },
         {
           "label": "Stream prefix",
           "value": "1534 ms",
-          "note": "median wall time",
+          "note": "median",
           "tone": "optimized"
         },
         {
           "label": "Mechanism window",
           "value": "1.923×",
-          "note": "authored matched fixture",
+          "note": "matched run",
           "tone": "win"
         }
       ],
@@ -102,70 +98,148 @@
       ],
       "facts": [
         {
-          "label": "Logical / physical calls",
-          "value": "1 / 1 in both lanes"
+          "label": "Calls",
+          "value": "1 logical · 1 physical"
         },
         {
-          "label": "Workspace",
-          "value": "unchanged and published"
+          "label": "READ",
+          "value": "reached before source tail"
         },
         {
-          "label": "Fallback",
-          "value": "none"
+          "label": "Result",
+          "value": "same oracle"
+        }
+      ]
+    },
+    {
+      "id": "semantic-predispatch",
+      "title": "Pre-dispatch one proven READ",
+      "eyebrow": "SEMANTIC PRE-DISPATCH",
+      "status": "measured",
+      "view_kind": "timeline",
+      "summary": "Start one necessarily-reached READ before the Guest reaches its exact call site.",
+      "source": "result = sources.read('profile')\n",
+      "annotations": [
+        {
+          "start_line": 1,
+          "end_line": 1,
+          "tone": "effect_trigger",
+          "label": "exact call site",
+          "note": "The staged result can only be claimed here."
         }
       ],
-      "claim_boundary": "Constructive mechanism demonstration for this fixed authored program; not natural-workload uplift."
+      "metrics": [
+        {
+          "label": "Baseline",
+          "value": "3215 ms",
+          "note": "median",
+          "tone": "baseline"
+        },
+        {
+          "label": "Pre-dispatch",
+          "value": "2196 ms",
+          "note": "median",
+          "tone": "optimized"
+        },
+        {
+          "label": "Saved",
+          "value": "1018 ms",
+          "note": "5 matched trials",
+          "tone": "win"
+        }
+      ],
+      "lanes": [
+        {
+          "label": "ordinary dispatch",
+          "duration_ns": 3214550000,
+          "segments": [
+            {
+              "label": "total wall",
+              "start_ns": 0,
+              "end_ns": 3214550000,
+              "tone": "physical"
+            }
+          ]
+        },
+        {
+          "label": "semantic pre-dispatch",
+          "duration_ns": 3214550000,
+          "segments": [
+            {
+              "label": "total wall",
+              "start_ns": 0,
+              "end_ns": 2196151000,
+              "tone": "shared"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "label": "Physical READs",
+          "value": "1 in both lanes"
+        },
+        {
+          "label": "Results",
+          "value": "equivalent"
+        },
+        {
+          "label": "Rejected claims",
+          "value": "0"
+        }
+      ]
     },
     {
       "id": "exact-request-sharing",
       "title": "Two agents, one physical Guest",
-      "eyebrow": "EXACT REQUEST SHARING",
-      "status": "optimized",
-      "summary": "Two logical agents submit identical source, inputs, Plan, privacy partition and workspace root. Pysolate shares one physical execution.",
-      "source": "# Agent A\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Agent B — byte-identical request\nresult = {'square': inputs['value'] * inputs['value']}\n",
+      "eyebrow": "EXACT CONCURRENT SHARING",
+      "status": "measured",
+      "view_kind": "timeline",
+      "summary": "Two exact logical requests attach to one sealed physical execution.",
+      "source": "# Agent A\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Agent B — exact request\nresult = {'square': inputs['value'] * inputs['value']}\n",
       "annotations": [
         {
           "start_line": 2,
           "end_line": 2,
           "tone": "physical_owner",
           "label": "physical owner",
-          "note": "This logical request owns the measured Guest execution."
+          "note": "This request owns the Guest execution."
         },
         {
           "start_line": 5,
           "end_line": 5,
           "tone": "shared_skip",
-          "label": "physical run skipped",
-          "note": "Exact identity attaches this logical request to the same physical result."
+          "label": "joins owner",
+          "note": "No duplicate physical Guest starts."
         }
       ],
       "metrics": [
         {
           "label": "Logical requests",
           "value": "2",
-          "note": "P05 + P06",
+          "note": "requests",
           "tone": "baseline"
         },
         {
           "label": "Physical executions",
           "value": "1",
-          "note": "same sealed physical ID",
+          "note": "Guest",
           "tone": "optimized"
         },
         {
           "label": "Oracle results",
           "value": "2 / 2",
-          "note": "both complete",
+          "note": "complete",
           "tone": "win"
         }
       ],
       "lanes": [
         {
-          "label": "agent A · shared waiter",
+          "label": "agent A",
           "duration_ns": 3922536875,
           "segments": [
             {
-              "label": "same physical ID",
+              "label": "same physical run",
               "start_ns": 10538042,
               "end_ns": 3918653042,
               "tone": "shared"
@@ -173,11 +247,11 @@
           ]
         },
         {
-          "label": "agent B · physical owner",
+          "label": "agent B",
           "duration_ns": 3922536875,
           "segments": [
             {
-              "label": "same physical ID",
+              "label": "same physical run",
               "start_ns": 10538042,
               "end_ns": 3918653042,
               "tone": "physical"
@@ -187,60 +261,324 @@
       ],
       "facts": [
         {
-          "label": "Sharing decision",
+          "label": "Decision",
           "value": "exact_shared"
         },
         {
-          "label": "Identity relation",
-          "value": "same physical execution"
+          "label": "Physical relation",
+          "value": "same execution"
         },
         {
-          "label": "Campaign context",
-          "value": "real Guest · qualified repetition 0"
+          "label": "Duplicate starts",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "id": "whole-run-retention",
+      "title": "Compute once, reuse twice",
+      "eyebrow": "WHOLE-RUN RETENTION",
+      "status": "experimental",
+      "view_kind": "timeline",
+      "summary": "One leader computes; a concurrent waiter and a later exact request reuse the canonical result.",
+      "source": "# leader\nresult = {'value': inputs['value'] + 1}\n# concurrent waiter → same physical compute\n# later request → retained hit\n",
+      "annotations": [
+        {
+          "start_line": 2,
+          "end_line": 2,
+          "tone": "physical_owner",
+          "label": "leader computes",
+          "note": "The only physical Guest run."
+        },
+        {
+          "start_line": 3,
+          "end_line": 4,
+          "tone": "shared_skip",
+          "label": "reuse",
+          "note": "One waiter and one retained hit skip duplicate compute."
         }
       ],
-      "claim_boundary": "Exact identity sharing in the fixed campaign; not arbitrary memoization or cross-authority reuse."
+      "metrics": [
+        {
+          "label": "Logical",
+          "value": "3",
+          "note": "invocations",
+          "tone": "baseline"
+        },
+        {
+          "label": "Physical",
+          "value": "1",
+          "note": "compute",
+          "tone": "optimized"
+        },
+        {
+          "label": "Later lookup",
+          "value": "0.433 ms",
+          "note": "retained hit",
+          "tone": "win"
+        }
+      ],
+      "lanes": [
+        {
+          "label": "3 fresh computes",
+          "duration_ns": 29892897000,
+          "segments": [
+            {
+              "label": "estimated baseline",
+              "start_ns": 0,
+              "end_ns": 29892897000,
+              "tone": "physical"
+            }
+          ]
+        },
+        {
+          "label": "analyze + reuse",
+          "duration_ns": 29892897000,
+          "segments": [
+            {
+              "label": "observed path",
+              "start_ns": 0,
+              "end_ns": 19949821000,
+              "tone": "shared"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "label": "Leader",
+          "value": "1"
+        },
+        {
+          "label": "Concurrent waiter",
+          "value": "1"
+        },
+        {
+          "label": "Retained hit",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "cow-fresh-memory",
+      "title": "Share the baseline, keep writes private",
+      "eyebrow": "SINGLE-USE COW",
+      "status": "experimental",
+      "view_kind": "state_flow",
+      "summary": "Map a sealed initialized baseline into each fresh Run, then grow private memory on demand.",
+      "source": "payload = bytearray(200_000_000)\npayload[-1] = 7\nresult = {'allocation_bytes': len(payload), 'last': payload[-1]}\n",
+      "annotations": [
+        {
+          "start_line": 1,
+          "end_line": 3,
+          "tone": "physical_owner",
+          "label": "private Run",
+          "note": "Writes and growth stay private to this execution."
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Baseline",
+          "value": "128 MiB",
+          "note": "sealed image",
+          "tone": "baseline"
+        },
+        {
+          "label": "Growth tail",
+          "value": "384 MiB",
+          "note": "sparse",
+          "tone": "optimized"
+        },
+        {
+          "label": "Maximum",
+          "value": "512 MiB",
+          "note": "bounded",
+          "tone": "win"
+        }
+      ],
+      "lanes": [],
+      "facts": [
+        {
+          "label": "200 MB allocation",
+          "value": "succeeded"
+        },
+        {
+          "label": "600 MB allocation",
+          "value": "MemoryError"
+        },
+        {
+          "label": "Next checkout",
+          "value": "clean"
+        }
+      ]
+    },
+    {
+      "id": "cold-io-continuation",
+      "title": "Page out memory while waiting",
+      "eyebrow": "COLD I/O CONTINUATION",
+      "status": "experimental",
+      "view_kind": "state_flow",
+      "summary": "Page out private dirty pages in a controlled mapping while a real Guest test verifies same-continuation resume.",
+      "source": "import builtins\npayload = bytearray(200_000_000)\npayload[-1] = 7\nstate = {'value': 91}\nbuiltins._cold_marker = state\nbefore = id(state)\nok = testio.wait()\nresult = {'same': id(state) == before and builtins._cold_marker is state, 'value': state['value'], 'last': payload[-1], 'ok': ok}\n",
+      "annotations": [
+        {
+          "start_line": 7,
+          "end_line": 7,
+          "tone": "effect_trigger",
+          "label": "Host wait",
+          "note": "The same continuation pauses here."
+        },
+        {
+          "start_line": 8,
+          "end_line": 8,
+          "tone": "physical_owner",
+          "label": "state survived",
+          "note": "Python identity and the private-memory sentinel are checked after resume."
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Before wait",
+          "value": "96 MiB",
+          "note": "private RSS",
+          "tone": "baseline"
+        },
+        {
+          "label": "During wait",
+          "value": "0 MiB",
+          "note": "pageout",
+          "tone": "optimized"
+        },
+        {
+          "label": "Resume",
+          "value": "17.9 ms",
+          "note": "full refault scan",
+          "tone": "control"
+        }
+      ],
+      "lanes": [],
+      "facts": [
+        {
+          "label": "RSS probe",
+          "value": "controlled mapping"
+        },
+        {
+          "label": "Guest continuation",
+          "value": "PASS"
+        },
+        {
+          "label": "Fresh slot",
+          "value": "clean"
+        }
+      ]
+    },
+    {
+      "id": "fresh-reevaluation",
+      "title": "Release the Guest, resume fresh",
+      "eyebrow": "FRESH RE-EVALUATION",
+      "status": "experimental",
+      "view_kind": "timeline",
+      "summary": "Release the waiting Guest and re-evaluate the workflow through a fresh execution after the observation arrives.",
+      "source": "observations = [\"input-ready\", \"checkpoint-stable\"]\nresumed = all(value for value in observations)\nstatus = \"resumed\" if resumed else \"blocked\"\nresult = f\"observations={len(observations)}|status={status}|report=ready\"\n",
+      "annotations": [
+        {
+          "start_line": 1,
+          "end_line": 4,
+          "tone": "fresh_fallback",
+          "label": "fresh execution",
+          "note": "After the Host wait, this source is re-evaluated in a new Guest."
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Wait",
+          "value": "19.6 s",
+          "note": "released",
+          "tone": "baseline"
+        },
+        {
+          "label": "Resume",
+          "value": "fresh",
+          "note": "Guest",
+          "tone": "optimized"
+        },
+        {
+          "label": "Oracle",
+          "value": "4 / 4",
+          "note": "passed",
+          "tone": "win"
+        }
+      ],
+      "lanes": [
+        {
+          "label": "logical workflow",
+          "duration_ns": 38187000000,
+          "segments": [
+            {
+              "label": "Host wait",
+              "start_ns": 18579000000,
+              "end_ns": 38187000000,
+              "tone": "effect"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "label": "Observed event",
+          "value": "resume.fresh"
+        },
+        {
+          "label": "Evidence",
+          "value": "complete"
+        },
+        {
+          "label": "Disposition",
+          "value": "closed"
+        }
+      ]
     },
     {
       "id": "source-mismatch-fallback",
       "title": "Different source stays fresh",
       "eyebrow": "FAIL-CLOSED CONTROL",
-      "status": "safety_control",
-      "summary": "A semantically similar program has a different source identity. Pysolate refuses sharing and starts an independent physical execution.",
-      "source": "# Shareable request\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Source-mismatch request\nresult = {'square': pow(inputs['value'], 2)}\n",
+      "status": "control",
+      "view_kind": "timeline",
+      "summary": "A different source identity cannot attach to the existing physical execution.",
+      "source": "# Exact request\nresult = {'square': inputs['value'] * inputs['value']}\n\n# Different source\nresult = {'square': pow(inputs['value'], 2)}\n",
       "annotations": [
         {
           "start_line": 2,
           "end_line": 2,
           "tone": "physical_owner",
           "label": "physical A",
-          "note": "The admitted exact request executes normally."
+          "note": "The exact request executes normally."
         },
         {
           "start_line": 5,
           "end_line": 5,
           "tone": "fresh_fallback",
           "label": "fresh physical B",
-          "note": "The source digest differs, so sharing is rejected before execution."
+          "note": "Different source starts an independent Guest."
         }
       ],
       "metrics": [
         {
           "label": "Logical requests",
           "value": "2",
-          "note": "different source digests",
+          "note": "requests",
           "tone": "baseline"
         },
         {
           "label": "Physical executions",
           "value": "2",
-          "note": "sharing rejected",
+          "note": "Guests",
           "tone": "control"
         },
         {
           "label": "Unsafe reuse",
           "value": "0",
-          "note": "fresh execution preserved",
+          "note": "rejected",
           "tone": "win"
         }
       ],
@@ -258,7 +596,7 @@
           ]
         },
         {
-          "label": "source mismatch",
+          "label": "different source",
           "duration_ns": 3902657292,
           "segments": [
             {
@@ -272,33 +610,28 @@
       ],
       "facts": [
         {
-          "label": "Expected reason",
+          "label": "Decision",
           "value": "reject_source_mismatch"
         },
         {
-          "label": "Observed disposition",
+          "label": "Disposition",
           "value": "complete"
         },
         {
           "label": "Physical relation",
-          "value": "independent IDs"
+          "value": "independent"
         }
-      ],
-      "claim_boundary": "Safety control: source similarity never substitutes for exact bound identity."
+      ]
     }
   ],
-  "boundary": {
-    "events": 36,
-    "unique_sources": 30,
-    "structurally_eligible": 0,
-    "timing_not_recorded": 36,
-    "performance_supported": false,
-    "decision": "Do not run trace-derived timing replay for this short READ cohort."
-  },
   "provenance": {
     "source_prefix_evidence_sha256": "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69",
-    "census_evidence_sha256": "sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604",
     "campaign_projection_sha256": "sha256:2955e8b19e4fcd4b450a73415697d798d8ab3fbc9f50f392dd8475e9600bb7bc",
+    "semantic_predispatch_sha256": "sha256:9ca672d010cad1f6b191919e4a2f7bc972048b57db1b17c3da7cb39b4e49bcf7",
+    "semantic_reuse_sha256": "sha256:64ea355829ba9dfe71724df0f89eafa67e69c8e2f73886221289c1e9ed54632b",
+    "cow_growable_sha256": "sha256:d97f5ab56f85b2ee91af6bfc220bb8d386cc5cf201fa49f7490207e28ff2fb68",
+    "cold_io_sha256": "sha256:117598fcb3031d0fba97be30e65e3c5f16c74e5644c634e95f600871e1ecb361",
+    "composable_sha256": "sha256:269560ea66feee6f3015658be1c3fafe8308d973dc465625580185950f70a104",
     "source_prefix_artifact_sha256": "sha256:a443042fb080d22f8e352aca0d0c8a5c87a7801e8afcc603e174d75fbe11c69b",
     "campaign_artifact_sha256": "sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795",
     "source_prefix_harness_commit": "ca25b1b767edd50dc25363df5347cb801c5c183a",

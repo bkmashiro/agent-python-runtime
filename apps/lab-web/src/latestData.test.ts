@@ -7,16 +7,33 @@ async function fixture(): Promise<LatestSnapshot> {
   return JSON.parse(await readFile(join(process.cwd(), 'public/lab-data/latest.json'), 'utf8')) as LatestSnapshot;
 }
 
+const visibleMechanisms = [
+  'source-prefix-overlap',
+  'semantic-predispatch',
+  'exact-request-sharing',
+  'whole-run-retention',
+  'cow-fresh-memory',
+  'cold-io-continuation',
+  'fresh-reevaluation',
+  'source-mismatch-fallback',
+];
+
 describe('latest-only Lab snapshot', () => {
-  it('loads three visible evidence-bound demos', async () => {
+  it('loads eight evidence-bound mechanism examples without a cohort panel', async () => {
     const snapshot = await validateLatestSnapshot(await fixture());
-    expect(snapshot.demos.map((demo) => demo.id)).toEqual(['source-prefix-overlap', 'exact-request-sharing', 'source-mismatch-fallback']);
-    expect(snapshot.demos.map((demo) => demo.status)).toEqual(['optimized', 'optimized', 'safety_control']);
+    expect(snapshot.schema_version).toBe('pysolate.lab-latest.v2');
+    expect(snapshot.demos.map((demo) => demo.id)).toEqual(visibleMechanisms);
+    expect(snapshot.demos.map((demo) => demo.status)).toEqual(['measured', 'measured', 'measured', 'experimental', 'experimental', 'experimental', 'experimental', 'control']);
+    expect(snapshot.demos.map((demo) => demo.view_kind)).toEqual(['timeline', 'timeline', 'timeline', 'timeline', 'state_flow', 'state_flow', 'timeline', 'timeline']);
     expect(snapshot.demos[0].metrics.map((metric) => metric.value)).toContain('1.923×');
-    expect(snapshot.demos[1].metrics.slice(0, 2).map((metric) => metric.value)).toEqual(['2', '1']);
-    expect(snapshot.demos[1].annotations.map((annotation) => annotation.tone)).toContain('shared_skip');
-    expect(snapshot.demos[2].source).toContain("pow(inputs['value'], 2)");
-    expect(snapshot.boundary).toMatchObject({ events: 36, structurally_eligible: 0, performance_supported: false });
+    expect(snapshot.demos[1].metrics.map((metric) => metric.value)).toEqual(['3215 ms', '2196 ms', '1018 ms']);
+    expect(snapshot.demos[2].metrics.slice(0, 2).map((metric) => metric.value)).toEqual(['2', '1']);
+    expect(snapshot.demos[3].metrics.slice(0, 2).map((metric) => metric.value)).toEqual(['3', '1']);
+    expect(snapshot.demos[4].metrics.map((metric) => metric.value)).toContain('384 MiB');
+    expect(snapshot.demos[5].metrics.map((metric) => metric.value)).toContain('0 MiB');
+    expect(snapshot).not.toHaveProperty('headline');
+    expect(snapshot).not.toHaveProperty('boundary');
+    expect(snapshot.demos.every((demo) => !('claim_boundary' in demo))).toBe(true);
   });
 
   it('rejects unknown fields, private paths and forged timeline bounds', async () => {
@@ -35,6 +52,14 @@ describe('latest-only Lab snapshot', () => {
     const overlappingAnnotations = await fixture();
     overlappingAnnotations.demos[0].annotations[1].start_line = 1;
     await expect(validateLatestSnapshot(overlappingAnnotations)).rejects.toThrow(/annotations overlap/);
+
+    const missingTimeline = await fixture();
+    missingTimeline.demos[6].lanes = [];
+    await expect(validateLatestSnapshot(missingTimeline)).rejects.toThrow(/view contract drifted/);
+
+    const stateFlowWithTimeline = await fixture();
+    stateFlowWithTimeline.demos[4].lanes = structuredClone(stateFlowWithTimeline.demos[0].lanes);
+    await expect(validateLatestSnapshot(stateFlowWithTimeline)).rejects.toThrow(/view contract drifted/);
 
     const selfReported = await fixture();
     selfReported.identity = `sha256:${'0'.repeat(64)}`;

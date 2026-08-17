@@ -7,14 +7,14 @@
 The browser consumes only:
 
 ```text
-pysolate.lab-latest.v1
+pysolate.lab-latest.v2
 ```
 
 There is no compatibility adapter for the former trajectory, campaign, or Lab v1 Web shapes. Historical Go research contracts remain in the repository but are not browser inputs.
 
 ## Generation authority
 
-`research/labview.BuildLatestSnapshot` and `research/labview/cmd/project-latest` are the projection authority. They pin the accepted evidence/manifest/projection SHA-256 values and validate canonical authored Python, paired runs, logical/physical owner joins, terminal uniqueness, source mismatch, natural-cohort boundaries and claim limits before writing:
+`research/labview.BuildLatestSnapshot` and `research/labview/cmd/project-latest` are the projection authority. They pin accepted evidence for source-prefix overlap, the transparent campaign, semantic pre-dispatch, whole-Run reuse, growable COW, cold-I/O continuation and composable re-evaluation. They validate canonical source, logical/physical joins and terminal outcomes before writing:
 
 ```text
 apps/lab-web/public/lab-data/latest.json
@@ -32,13 +32,23 @@ Do not hand-edit the snapshot.
 
 ## Current views
 
-The UI intentionally contains three obvious mechanism examples:
+The UI contains eight mechanism examples:
 
-1. reach-gated source-prefix overlap, with generate-first and streaming timelines;
-2. exact request sharing, with two logical agents bound to one physical Guest;
-3. a source-mismatch control, with independent physical executions and zero unsafe reuse.
+1. reach-gated source-prefix overlap;
+2. semantic pre-dispatch;
+3. exact concurrent request sharing;
+4. whole-Run retention and single-flight;
+5. single-use growable COW memory;
+6. cold-I/O pageout with continuation;
+7. fresh re-evaluation after a Host wait;
+8. a source-mismatch fail-closed control.
 
-Each view shows authored source, recorded metrics/timelines, authoritative facts, a claim boundary and evidence identities. The natural 36-event cohort is displayed only as an ineligible boundary, not performance evidence.
+Each view is reduced to code, three useful measurements, an explicit `timeline`
+or `state_flow` execution view, and three runtime facts. Low-noise `MEASURED`,
+`EXPERIMENTAL`, and `CONTROL` labels preserve evidence tier without restoring a
+claim-boundary panel. Evidence hashes remain in the snapshot and browser
+verification path but are not rendered. The natural 36-event source-prefix
+census is no longer a Web input or visible card.
 
 ## Safety boundary
 
@@ -62,4 +72,4 @@ npm run build
 npm run test:e2e
 ```
 
-Desktop and 390px viewport tests must cover all three demos. Visual review must confirm that overlapping generation/effect bars remain separately visible and that sharing/fallback physical identities are explicit.
+Desktop and 390px viewport tests must cover all eight mechanisms. Visual review must confirm that overlapping generation/effect bars remain separately visible and that sharing/fallback physical identities are explicit.

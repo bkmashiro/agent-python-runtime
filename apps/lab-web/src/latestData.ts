@@ -1,7 +1,17 @@
 import { expectedLatestSnapshotIdentity } from './latestIdentity';
 
-export type DemoStatus = 'optimized' | 'safety_control';
+export type DemoStatus = 'measured' | 'experimental' | 'control';
+export type ViewKind = 'timeline' | 'state_flow';
 export type SegmentTone = 'generation' | 'effect' | 'finalize' | 'shared' | 'physical' | 'fallback';
+export type DemoID =
+  | 'source-prefix-overlap'
+  | 'semantic-predispatch'
+  | 'exact-request-sharing'
+  | 'whole-run-retention'
+  | 'cow-fresh-memory'
+  | 'cold-io-continuation'
+  | 'fresh-reevaluation'
+  | 'source-mismatch-fallback';
 
 export interface LatestMetric {
   label: string;
@@ -24,10 +34,11 @@ export interface LatestLane {
 }
 
 export interface LatestDemo {
-  id: 'source-prefix-overlap' | 'exact-request-sharing' | 'source-mismatch-fallback';
+  id: DemoID;
   title: string;
   eyebrow: string;
   status: DemoStatus;
+  view_kind: ViewKind;
   summary: string;
   source: string;
   annotations: {
@@ -40,26 +51,22 @@ export interface LatestDemo {
   metrics: LatestMetric[];
   lanes: LatestLane[];
   facts: { label: string; value: string }[];
-  claim_boundary: string;
 }
 
+export type LatestCodeAnnotation = LatestDemo['annotations'][number];
+
 export interface LatestSnapshot {
-  schema_version: 'pysolate.lab-latest.v1';
+  schema_version: 'pysolate.lab-latest.v2';
   identity: string;
-  headline: { real_guest_demos: number; optimization_wins: number; safety_controls: number };
   demos: LatestDemo[];
-  boundary: {
-    events: number;
-    unique_sources: number;
-    structurally_eligible: number;
-    timing_not_recorded: number;
-    performance_supported: boolean;
-    decision: string;
-  };
   provenance: {
     source_prefix_evidence_sha256: string;
-    census_evidence_sha256: string;
     campaign_projection_sha256: string;
+    semantic_predispatch_sha256: string;
+    semantic_reuse_sha256: string;
+    cow_growable_sha256: string;
+    cold_io_sha256: string;
+    composable_sha256: string;
     source_prefix_artifact_sha256: string;
     campaign_artifact_sha256: string;
     source_prefix_harness_commit: string;
@@ -69,7 +76,16 @@ export interface LatestSnapshot {
 
 const digest = /^sha256:[0-9a-f]{64}$/;
 const commit = /^[0-9a-f]{40}$/;
-const demoIDs = ['source-prefix-overlap', 'exact-request-sharing', 'source-mismatch-fallback'];
+const demoContracts: Array<{ id: DemoID; status: DemoStatus; view: ViewKind }> = [
+  { id: 'source-prefix-overlap', status: 'measured', view: 'timeline' },
+  { id: 'semantic-predispatch', status: 'measured', view: 'timeline' },
+  { id: 'exact-request-sharing', status: 'measured', view: 'timeline' },
+  { id: 'whole-run-retention', status: 'experimental', view: 'timeline' },
+  { id: 'cow-fresh-memory', status: 'experimental', view: 'state_flow' },
+  { id: 'cold-io-continuation', status: 'experimental', view: 'state_flow' },
+  { id: 'fresh-reevaluation', status: 'experimental', view: 'timeline' },
+  { id: 'source-mismatch-fallback', status: 'control', view: 'timeline' },
+];
 const tones = new Set(['generation', 'effect', 'finalize', 'shared', 'physical', 'fallback']);
 const metricTones = new Set(['baseline', 'optimized', 'win', 'control']);
 const annotationTones = new Set(['effect_trigger', 'overlapped_tail', 'physical_owner', 'shared_skip', 'fresh_fallback']);
@@ -97,19 +113,23 @@ function containsPrivateMarker(value: unknown): boolean {
 function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
   const root = object(value, 'latest Lab snapshot');
   if (containsPrivateMarker(root)) throw new Error('latest Lab snapshot contains a private body or path marker');
-  exactKeys(root, ['schema_version', 'identity', 'headline', 'demos', 'boundary', 'provenance'], 'latest Lab snapshot');
-  if (root.schema_version !== 'pysolate.lab-latest.v1' || !digest.test(String(root.identity))) throw new Error('latest Lab identity is invalid');
+  exactKeys(root, ['schema_version', 'identity', 'demos', 'provenance'], 'latest Lab snapshot');
+  if (root.schema_version !== 'pysolate.lab-latest.v2' || !digest.test(String(root.identity))) throw new Error('latest Lab identity is invalid');
+  if (!Array.isArray(root.demos) || root.demos.length !== demoContracts.length) throw new Error('latest Lab requires exactly eight demos');
 
-  const headline = object(root.headline, 'headline');
-  exactKeys(headline, ['real_guest_demos', 'optimization_wins', 'safety_controls'], 'headline');
-  if (headline.real_guest_demos !== 3 || headline.optimization_wins !== 2 || headline.safety_controls !== 1) throw new Error('latest Lab headline is invalid');
-
-  if (!Array.isArray(root.demos) || root.demos.length !== 3) throw new Error('latest Lab requires exactly three demos');
   for (const [index, rawDemo] of root.demos.entries()) {
     const demo = object(rawDemo, 'demo');
-    exactKeys(demo, ['id', 'title', 'eyebrow', 'status', 'summary', 'source', 'annotations', 'metrics', 'lanes', 'facts', 'claim_boundary'], 'demo');
-    if (demo.id !== demoIDs[index] || !nonempty(demo.title) || !nonempty(demo.eyebrow) || !nonempty(demo.summary) || !nonempty(demo.source) || !nonempty(demo.claim_boundary) || (demo.status !== 'optimized' && demo.status !== 'safety_control') || String(demo.source).includes('/Users/') || String(demo.source).includes('.hermes')) throw new Error('latest Lab demo is invalid');
-    if (!Array.isArray(demo.metrics) || demo.metrics.length < 3) throw new Error('latest Lab metrics are incomplete');
+    exactKeys(demo, ['id', 'title', 'eyebrow', 'status', 'view_kind', 'summary', 'source', 'annotations', 'metrics', 'lanes', 'facts'], 'demo');
+    const contract = demoContracts[index];
+    if (demo.id !== contract.id || demo.status !== contract.status || demo.view_kind !== contract.view || !nonempty(demo.title) || !nonempty(demo.eyebrow) || !nonempty(demo.summary) || !nonempty(demo.source)) throw new Error('latest Lab demo is invalid');
+
+    if (!Array.isArray(demo.metrics) || demo.metrics.length !== 3) throw new Error('latest Lab metrics are incomplete');
+    for (const rawMetric of demo.metrics) {
+      const metric = object(rawMetric, 'metric');
+      exactKeys(metric, ['label', 'value', 'note', 'tone'], 'metric');
+      if (!nonempty(metric.label) || !nonempty(metric.value) || !nonempty(metric.note) || !metricTones.has(String(metric.tone))) throw new Error('latest Lab metric is invalid');
+    }
+
     const sourceLineCount = String(demo.source).split('\n').length;
     const annotatedLines = new Set<number>();
     if (!Array.isArray(demo.annotations) || demo.annotations.length === 0) throw new Error('latest Lab annotations are incomplete');
@@ -122,12 +142,9 @@ function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
         annotatedLines.add(line);
       }
     }
-    for (const rawMetric of demo.metrics) {
-      const metric = object(rawMetric, 'metric');
-      exactKeys(metric, ['label', 'value', 'note', 'tone'], 'metric');
-      if (!nonempty(metric.label) || !nonempty(metric.value) || !nonempty(metric.note) || !metricTones.has(String(metric.tone))) throw new Error('latest Lab metric is invalid');
-    }
-    if (!Array.isArray(demo.lanes) || demo.lanes.length === 0) throw new Error('latest Lab lanes are incomplete');
+
+    if (!Array.isArray(demo.lanes)) throw new Error('latest Lab lanes are invalid');
+    if ((contract.view === 'timeline' && demo.lanes.length === 0) || (contract.view === 'state_flow' && demo.lanes.length !== 0)) throw new Error('latest Lab view contract drifted');
     for (const rawLane of demo.lanes) {
       const lane = object(rawLane, 'lane');
       exactKeys(lane, ['label', 'duration_ns', 'segments'], 'lane');
@@ -138,22 +155,18 @@ function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
         if (!nonempty(segment.label) || !tones.has(String(segment.tone)) || !Number.isFinite(segment.start_ns) || !Number.isFinite(segment.end_ns) || Number(segment.start_ns) < 0 || Number(segment.end_ns) <= Number(segment.start_ns) || Number(segment.end_ns) > Number(lane.duration_ns)) throw new Error('latest Lab segment is invalid');
       }
     }
-    if (!Array.isArray(demo.facts) || demo.facts.length === 0 || demo.facts.some((rawFact) => {
+
+    if (!Array.isArray(demo.facts) || demo.facts.length !== 3 || demo.facts.some((rawFact) => {
       const fact = object(rawFact, 'fact');
       exactKeys(fact, ['label', 'value'], 'fact');
       return !nonempty(fact.label) || !nonempty(fact.value);
     })) throw new Error('latest Lab facts are invalid');
   }
 
-  const boundary = object(root.boundary, 'boundary');
-  exactKeys(boundary, ['events', 'unique_sources', 'structurally_eligible', 'timing_not_recorded', 'performance_supported', 'decision'], 'boundary');
-  if (boundary.events !== 36 || !Number.isInteger(boundary.unique_sources) || Number(boundary.unique_sources) <= 0 || boundary.structurally_eligible !== 0 || boundary.timing_not_recorded !== 36 || boundary.performance_supported !== false || !nonempty(boundary.decision)) throw new Error('latest Lab boundary is invalid');
-
   const provenance = object(root.provenance, 'provenance');
-  exactKeys(provenance, ['source_prefix_evidence_sha256', 'census_evidence_sha256', 'campaign_projection_sha256', 'source_prefix_artifact_sha256', 'campaign_artifact_sha256', 'source_prefix_harness_commit', 'campaign_source_commit'], 'provenance');
-  for (const key of ['source_prefix_evidence_sha256', 'census_evidence_sha256', 'campaign_projection_sha256', 'source_prefix_artifact_sha256', 'campaign_artifact_sha256']) {
-    if (!digest.test(String(provenance[key]))) throw new Error('latest Lab provenance digest is invalid');
-  }
+  const digestKeys = ['source_prefix_evidence_sha256', 'campaign_projection_sha256', 'semantic_predispatch_sha256', 'semantic_reuse_sha256', 'cow_growable_sha256', 'cold_io_sha256', 'composable_sha256', 'source_prefix_artifact_sha256', 'campaign_artifact_sha256'];
+  exactKeys(provenance, [...digestKeys, 'source_prefix_harness_commit', 'campaign_source_commit'], 'provenance');
+  for (const key of digestKeys) if (!digest.test(String(provenance[key]))) throw new Error('latest Lab provenance digest is invalid');
   if (!commit.test(String(provenance.source_prefix_harness_commit)) || !commit.test(String(provenance.campaign_source_commit))) throw new Error('latest Lab provenance commit is invalid');
   return value as LatestSnapshot;
 }
@@ -161,10 +174,7 @@ function validateLatestSnapshotShape(value: unknown): LatestSnapshot {
 function goCompatibleIdentityDocument(snapshot: LatestSnapshot): ArrayBuffer {
   const clone = JSON.parse(JSON.stringify(snapshot)) as LatestSnapshot;
   clone.identity = '';
-  const encoded = JSON.stringify(clone).replace(/[<>&\u2028\u2029]/g, (character) => {
-    const code = character.charCodeAt(0).toString(16).padStart(4, '0');
-    return `\\u${code}`;
-  });
+  const encoded = JSON.stringify(clone).replace(/[<>&\u2028\u2029]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`);
   const bytes = new TextEncoder().encode(encoded);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }

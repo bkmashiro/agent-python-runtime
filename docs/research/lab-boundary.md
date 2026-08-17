@@ -73,17 +73,16 @@ branch. `research/operator.RunBranch` remains the fresh-Guest API and returns an
 in-memory outcome for a Host caller. The independent `labstore-bench` command
 is also a measurement probe, not a service.
 
-`research/labview` now also owns the latest-only `pysolate.lab-latest.v1`
-mechanism-demo projection. Its Go projector validates the current source-prefix
-contract/evidence, natural boundary census, accepted campaign manifest and
-projection, canonical authored campaign source,
-and measured logical/physical identities before emitting the body-safe static
-snapshot consumed by `apps/lab-web`. The Web renderer supports only this latest
-shape: authored source, measured timelines, exact sharing, fail-closed controls,
-claim boundaries and provenance. It cannot infer new facts, execute a program,
-dispatch an effect, resolve a private body or grant authority. The older Lab v1
-and semantic-region Go contracts remain research artifacts, not Web compatibility
-targets.
+`research/labview` now also owns the latest-only `pysolate.lab-latest.v2`
+mechanism projection. Its Go projector pins and validates the accepted source-prefix,
+campaign, semantic pre-dispatch, whole-Run reuse, growable COW, cold-I/O and
+composable-runtime evidence before emitting the body-safe static snapshot consumed
+by `apps/lab-web`. The Web renderer shows eight code-and-execution views, including
+one fail-closed source-mismatch control. Evidence identities remain part of the
+machine validation contract but are not rendered as primary UI. The natural
+short-form source-prefix census is not a Web input. The renderer cannot infer new
+facts, execute a program, dispatch an effect, resolve a private body or grant
+authority. Older Web shapes remain research artifacts, not compatibility targets.
 
 The current DAG export renders one validated parent and caller-supplied
 manifest/child pairs. It validates child admission identities and Grants, the

@@ -6,7 +6,7 @@
   "description": "Latest-only Pysolate mechanism evidence workspace.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "data:latest": "cd ../.. && go run ./research/labview/cmd/project-latest --source-prefix-contract docs/evidence/source-prefix-overlap-contract-v1.json --source-prefix-evidence docs/evidence/source-prefix-overlap-v1.json --source-prefix-census docs/evidence/source-prefix-opportunity-census-v1.json --campaign-manifest docs/evidence/authority-transparent-campaign-manifest-v1.json --campaign-projection docs/evidence/authority-transparent-campaign-v1.json --output apps/lab-web/public/lab-data/latest.json --identity-output apps/lab-web/src/latestIdentity.ts",
+    "data:latest": "cd ../.. && go run ./research/labview/cmd/project-latest --source-prefix-contract docs/evidence/source-prefix-overlap-contract-v1.json --source-prefix-evidence docs/evidence/source-prefix-overlap-v1.json --campaign-manifest docs/evidence/authority-transparent-campaign-manifest-v1.json --campaign-projection docs/evidence/authority-transparent-campaign-v1.json --semantic-predispatch docs/evidence/semantic-predispatch-experiment.json --semantic-reuse docs/evidence/semantic-reuse-observation.json --cow-growable docs/evidence/linux-cow-growable-outcome.json --cold-io docs/evidence/linux-cold-io-continuation-observation.json --composable docs/evidence/spark-composable-direct-report.json --output apps/lab-web/public/lab-data/latest.json --identity-output apps/lab-web/src/latestIdentity.ts",
     "figure:paper": "cd ../.. && go run ./research/labview/cmd/render-paper-figure --input apps/lab-web/public/lab-data/latest.json --output docs/figures/pysolate-runtime-optimization-examples-v1.svg",
     "test": "vitest run",
     "build": "tsc -b && vite build",

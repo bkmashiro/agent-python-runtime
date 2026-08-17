@@ -16,13 +16,17 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 )
 
-const LatestSnapshotSchema = "pysolate.lab-latest.v1"
+const LatestSnapshotSchema = "pysolate.lab-latest.v2"
 
 const latestSourcePrefixContractSHA = "sha256:dab34bfa2a6ea8dce909c375c0b963569cfc67f988fa1adae56de561b1b009ff"
 const latestSourcePrefixEvidenceSHA = "sha256:51e97f7604351aac6f1822b503e0c6425286f9cd44c6ebd21f0b6ea43b64da69"
-const latestSourcePrefixCensusSHA = "sha256:cfedf4adfe63051d9e7b233ef8b36031fb4fda360a7d32e0e634cdce31da5604"
 const latestCampaignManifestSHA = "sha256:0633e6d98dd67fee6a2aad12cfd491a6d14e5344d5d2d78d91c059e62ec0fe7e"
 const latestCampaignProjectionSHA = "sha256:2955e8b19e4fcd4b450a73415697d798d8ab3fbc9f50f392dd8475e9600bb7bc"
+const latestSemanticPredispatchSHA = "sha256:9ca672d010cad1f6b191919e4a2f7bc972048b57db1b17c3da7cb39b4e49bcf7"
+const latestSemanticReuseSHA = "sha256:64ea355829ba9dfe71724df0f89eafa67e69c8e2f73886221289c1e9ed54632b"
+const latestCOWGrowableSHA = "sha256:d97f5ab56f85b2ee91af6bfc220bb8d386cc5cf201fa49f7490207e28ff2fb68"
+const latestColdIOSHA = "sha256:117598fcb3031d0fba97be30e65e3c5f16c74e5644c634e95f600871e1ecb361"
+const latestComposableSHA = "sha256:269560ea66feee6f3015658be1c3fafe8308d973dc465625580185950f70a104"
 const latestCampaignArtifactSHA = "sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795"
 const latestCampaignArtifactCommit = "ae922641cd9c539b68a0ea7110b5dc205e5c9a8a"
 const latestCampaignSourceCommit = "40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5"
@@ -33,15 +37,13 @@ var latestCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 type LatestInputs struct {
 	SourcePrefixContract []byte
 	SourcePrefixEvidence []byte
-	SourcePrefixCensus   []byte
 	CampaignManifest     []byte
 	CampaignProjection   []byte
-}
-
-type LatestHeadline struct {
-	RealGuestDemos   int `json:"real_guest_demos"`
-	OptimizationWins int `json:"optimization_wins"`
-	SafetyControls   int `json:"safety_controls"`
+	SemanticPredispatch  []byte
+	SemanticReuse        []byte
+	COWGrowable          []byte
+	ColdIO               []byte
+	Composable           []byte
 }
 
 type LatestMetric struct {
@@ -78,32 +80,27 @@ type LatestCodeAnnotation struct {
 }
 
 type LatestDemo struct {
-	ID            string                 `json:"id"`
-	Title         string                 `json:"title"`
-	Eyebrow       string                 `json:"eyebrow"`
-	Status        string                 `json:"status"`
-	Summary       string                 `json:"summary"`
-	Source        string                 `json:"source"`
-	Annotations   []LatestCodeAnnotation `json:"annotations"`
-	Metrics       []LatestMetric         `json:"metrics"`
-	Lanes         []LatestLane           `json:"lanes"`
-	Facts         []LatestFact           `json:"facts"`
-	ClaimBoundary string                 `json:"claim_boundary"`
-}
-
-type LatestBoundary struct {
-	Events               int    `json:"events"`
-	UniqueSources        int    `json:"unique_sources"`
-	StructurallyEligible int    `json:"structurally_eligible"`
-	TimingNotRecorded    int    `json:"timing_not_recorded"`
-	PerformanceSupported bool   `json:"performance_supported"`
-	Decision             string `json:"decision"`
+	ID          string                 `json:"id"`
+	Title       string                 `json:"title"`
+	Eyebrow     string                 `json:"eyebrow"`
+	Status      string                 `json:"status"`
+	ViewKind    string                 `json:"view_kind"`
+	Summary     string                 `json:"summary"`
+	Source      string                 `json:"source"`
+	Annotations []LatestCodeAnnotation `json:"annotations"`
+	Metrics     []LatestMetric         `json:"metrics"`
+	Lanes       []LatestLane           `json:"lanes"`
+	Facts       []LatestFact           `json:"facts"`
 }
 
 type LatestProvenance struct {
 	SourcePrefixEvidenceSHA256 string `json:"source_prefix_evidence_sha256"`
-	CensusEvidenceSHA256       string `json:"census_evidence_sha256"`
 	CampaignProjectionSHA256   string `json:"campaign_projection_sha256"`
+	SemanticPredispatchSHA256  string `json:"semantic_predispatch_sha256"`
+	SemanticReuseSHA256        string `json:"semantic_reuse_sha256"`
+	COWGrowableSHA256          string `json:"cow_growable_sha256"`
+	ColdIOSHA256               string `json:"cold_io_sha256"`
+	ComposableSHA256           string `json:"composable_sha256"`
 	SourcePrefixArtifactSHA256 string `json:"source_prefix_artifact_sha256"`
 	CampaignArtifactSHA256     string `json:"campaign_artifact_sha256"`
 	SourcePrefixHarnessCommit  string `json:"source_prefix_harness_commit"`
@@ -113,10 +110,145 @@ type LatestProvenance struct {
 type LatestSnapshot struct {
 	SchemaVersion string           `json:"schema_version"`
 	Identity      string           `json:"identity"`
-	Headline      LatestHeadline   `json:"headline"`
 	Demos         []LatestDemo     `json:"demos"`
-	Boundary      LatestBoundary   `json:"boundary"`
 	Provenance    LatestProvenance `json:"provenance"`
+}
+
+type semanticPredispatchEvidence struct {
+	SchemaVersion           string `json:"schema_version"`
+	ArtifactSHA256          string `json:"artifact_sha256"`
+	SourceSHA256            string `json:"source_sha256"`
+	CapabilityPlanSHA256    string `json:"capability_plan_sha256"`
+	TrialsPerCondition      int    `json:"trials_per_condition"`
+	PhysicalDelayMicros     int64  `json:"physical_delay_micros"`
+	BaselineMedianMicros    int64  `json:"baseline_median_micros"`
+	OptimizedMedianMicros   int64  `json:"optimized_median_micros"`
+	MedianSavingsMicros     int64  `json:"median_savings_micros"`
+	EquivalentResults       bool   `json:"equivalent_results"`
+	NoDuplicatePhysicalCall bool   `json:"no_duplicate_physical_call"`
+	ContentSHA256           string `json:"content_sha256"`
+	Trials                  []struct {
+		Condition      string `json:"condition"`
+		LogicalCalls   int    `json:"logical_calls"`
+		PhysicalCalls  int    `json:"physical_calls"`
+		RejectedClaims int    `json:"rejected_claims"`
+	} `json:"trials"`
+}
+
+type semanticReuseEvidence struct {
+	SchemaVersion string          `json:"schema_version"`
+	Status        string          `json:"status"`
+	Date          string          `json:"date"`
+	SourceCommit  string          `json:"source_commit"`
+	TargetGuest   json.RawMessage `json:"target_guest"`
+	Workload      struct {
+		LogicalInvocations   int  `json:"logical_invocations"`
+		PhysicalComputes     int  `json:"physical_computes"`
+		ConcurrentLeaders    int  `json:"concurrent_leaders"`
+		ConcurrentWaiters    int  `json:"concurrent_waiters"`
+		LaterRetainedHits    int  `json:"later_retained_hits"`
+		CanonicalResultBytes int  `json:"canonical_result_bytes"`
+		ResultBodiesRecorded bool `json:"result_bodies_recorded"`
+	} `json:"workload"`
+	TimingMicros struct {
+		AnalysisPhase   int64 `json:"analysis_phase_including_analyzer_guest_initialization"`
+		ConcurrentBatch int64 `json:"concurrent_batch_including_one_guest_initialization_and_compute"`
+		LaterLookup     int64 `json:"later_qualification_lookup_and_materialization"`
+	} `json:"timing_micros"`
+	PassStats  json.RawMessage `json:"pass_stats"`
+	StoreStats json.RawMessage `json:"store_stats"`
+	Economics  struct {
+		Baseline      int64   `json:"three_physical_compute_baseline_micros"`
+		Observed      int64   `json:"observed_analysis_plus_reuse_micros"`
+		Saved         int64   `json:"observed_saved_micros"`
+		SavedFraction float64 `json:"observed_saved_fraction"`
+		BreakEven     float64 `json:"hit_probability_break_even_excluding_one_time_analysis"`
+		Amortize      float64 `json:"retained_hits_to_amortize_one_time_analysis"`
+	} `json:"economics"`
+	Interpretation json.RawMessage `json:"interpretation"`
+}
+
+type cowGrowableEvidence struct {
+	SchemaVersion string          `json:"schema_version"`
+	RecordedOn    string          `json:"recorded_on"`
+	ClaimScope    string          `json:"claim_scope"`
+	Host          json.RawMessage `json:"host"`
+	Guest         json.RawMessage `json:"guest"`
+	Probe         struct {
+		COWSelected bool `json:"cow_selected"`
+		Fallback    bool `json:"fallback"`
+	} `json:"probe"`
+	SealedImage struct {
+		BaselineBytes         int64 `json:"baseline_bytes"`
+		MaximumVirtualBytes   int64 `json:"maximum_virtual_bytes"`
+		MemfdAllocatedBytes   int64 `json:"memfd_allocated_bytes"`
+		SparseGrowthTailBytes int64 `json:"sparse_growth_tail_bytes"`
+	} `json:"sealed_image"`
+	Outcomes struct {
+		PrivateStateIsolation        bool   `json:"private_state_isolation"`
+		Allocation200                string `json:"allocation_200000000_bytes"`
+		PostGrowthClean              bool   `json:"post_growth_clean_checkout"`
+		Allocation600                string `json:"allocation_600000000_bytes"`
+		PostOverflowRefill           bool   `json:"post_overflow_refill"`
+		TemporaryFilesystemIsolation bool   `json:"temporary_filesystem_isolation"`
+		ModuleImportIsolation        bool   `json:"module_import_isolation"`
+		CancelledRequestRecovery     bool   `json:"cancelled_request_recovery"`
+		OverMaximumError             struct {
+			Status    string `json:"status"`
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			ErrorType string `json:"error_type"`
+		} `json:"over_maximum_error"`
+	} `json:"outcomes"`
+	ProcessObservation json.RawMessage `json:"process_observation"`
+	Test               string          `json:"test"`
+}
+
+type coldIOEvidence struct {
+	SchemaVersion             string          `json:"schema_version"`
+	Status                    string          `json:"status"`
+	Date                      string          `json:"date"`
+	SourceCommit              string          `json:"source_commit"`
+	Host                      json.RawMessage `json:"host"`
+	Fixture                   json.RawMessage `json:"fixture"`
+	OfficialGuestVerification struct {
+		Result         string `json:"result"`
+		FreshSlotClean bool   `json:"fresh_slot_clean"`
+	} `json:"official_guest_verification"`
+	Observations []struct {
+		Mode   string `json:"mode"`
+		Before struct {
+			RSSKiB int64 `json:"rss_kib"`
+		} `json:"before"`
+		After struct {
+			RSSKiB  int64 `json:"rss_kib"`
+			SwapKiB int64 `json:"swap_kib"`
+		} `json:"after"`
+		AfterResume struct {
+			RSSKiB int64 `json:"rss_kib"`
+		} `json:"after_resume"`
+		ResumeMicros int64 `json:"resume_micros"`
+		Bytes        int64 `json:"bytes"`
+	} `json:"observations"`
+	BoundedConclusion json.RawMessage `json:"bounded_conclusion"`
+	NonClaims         json.RawMessage `json:"non_claims"`
+}
+
+type composableEvidence struct {
+	SchemaVersion string `json:"schema_version"`
+	Rows          []struct {
+		ScenarioID            string  `json:"scenario_id"`
+		Status                string  `json:"status"`
+		TerminalDisposition   string  `json:"terminal_disposition"`
+		EvidenceComplete      bool    `json:"evidence_complete"`
+		RelativeElapsedMillis float64 `json:"relative_elapsed_millis"`
+		Trace                 []struct {
+			Action        string  `json:"action"`
+			Outcome       string  `json:"outcome"`
+			StartedMillis float64 `json:"started_millis"`
+			EndedMillis   float64 `json:"ended_millis"`
+		} `json:"trace"`
+	} `json:"rows"`
 }
 
 type campaignHost struct {
@@ -283,8 +415,24 @@ func campaignLane(label, segmentLabel string, duration, start, end int64, tone s
 }
 
 func validateLatestInputAnchors(inputs LatestInputs) error {
-	if latestSHA(inputs.SourcePrefixContract) != latestSourcePrefixContractSHA || latestSHA(inputs.SourcePrefixEvidence) != latestSourcePrefixEvidenceSHA || latestSHA(inputs.SourcePrefixCensus) != latestSourcePrefixCensusSHA || latestSHA(inputs.CampaignManifest) != latestCampaignManifestSHA || latestSHA(inputs.CampaignProjection) != latestCampaignProjectionSHA {
-		return errors.New("latest Lab inputs do not match accepted evidence anchors")
+	anchors := []struct {
+		raw  []byte
+		want string
+	}{
+		{inputs.SourcePrefixContract, latestSourcePrefixContractSHA},
+		{inputs.SourcePrefixEvidence, latestSourcePrefixEvidenceSHA},
+		{inputs.CampaignManifest, latestCampaignManifestSHA},
+		{inputs.CampaignProjection, latestCampaignProjectionSHA},
+		{inputs.SemanticPredispatch, latestSemanticPredispatchSHA},
+		{inputs.SemanticReuse, latestSemanticReuseSHA},
+		{inputs.COWGrowable, latestCOWGrowableSHA},
+		{inputs.ColdIO, latestColdIOSHA},
+		{inputs.Composable, latestComposableSHA},
+	}
+	for _, anchor := range anchors {
+		if latestSHA(anchor.raw) != anchor.want {
+			return errors.New("latest Lab inputs do not match accepted evidence anchors")
+		}
 	}
 	return nil
 }
@@ -423,9 +571,94 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 	if err != nil {
 		return LatestSnapshot{}, err
 	}
-	census, err := workflowbench.DecodeSourcePrefixCensusEvidence(inputs.SourcePrefixCensus)
-	if err != nil {
-		return LatestSnapshot{}, err
+	var predispatch semanticPredispatchEvidence
+	if err := json.Unmarshal(inputs.SemanticPredispatch, &predispatch); err != nil || predispatch.SchemaVersion != "pysolate.semantic-predispatch-experiment.v0" || predispatch.TrialsPerCondition != 5 || len(predispatch.Trials) != 10 || predispatch.BaselineMedianMicros <= predispatch.OptimizedMedianMicros || predispatch.MedianSavingsMicros != predispatch.BaselineMedianMicros-predispatch.OptimizedMedianMicros || !predispatch.EquivalentResults || !predispatch.NoDuplicatePhysicalCall {
+		return LatestSnapshot{}, errors.New("invalid semantic pre-dispatch evidence for latest Lab")
+	}
+	predispatchRejectedClaims := 0
+	conditions := map[string]int{}
+	for _, trial := range predispatch.Trials {
+		conditions[trial.Condition]++
+		predispatchRejectedClaims += trial.RejectedClaims
+		if trial.LogicalCalls != 1 || trial.PhysicalCalls != 1 {
+			return LatestSnapshot{}, errors.New("semantic pre-dispatch trial call counts drifted")
+		}
+	}
+	if conditions["baseline"] != 5 || conditions["semantic_pre_dispatch"] != 5 || predispatchRejectedClaims != 0 {
+		return LatestSnapshot{}, errors.New("semantic pre-dispatch trial set drifted")
+	}
+	var reuse semanticReuseEvidence
+	if err := json.Unmarshal(inputs.SemanticReuse, &reuse); err != nil || reuse.SchemaVersion != "pysolate.semantic-reuse-observation.v0" || reuse.Workload.LogicalInvocations != 3 || reuse.Workload.PhysicalComputes != 1 || reuse.Workload.ConcurrentWaiters != 1 || reuse.Workload.LaterRetainedHits != 1 || reuse.Economics.Baseline <= reuse.Economics.Observed || reuse.TimingMicros.LaterLookup <= 0 {
+		return LatestSnapshot{}, errors.New("invalid semantic reuse evidence for latest Lab")
+	}
+	var cow cowGrowableEvidence
+	if err := json.Unmarshal(inputs.COWGrowable, &cow); err != nil || cow.SchemaVersion != "pysolate.cow-growable-evidence.v1" || !cow.Probe.COWSelected || cow.Probe.Fallback || !cow.Outcomes.PrivateStateIsolation || !cow.Outcomes.PostGrowthClean || !cow.Outcomes.PostOverflowRefill || cow.Outcomes.Allocation200 != "succeeded" || cow.Outcomes.Allocation600 != "rejected_above_declared_maximum" || cow.Outcomes.OverMaximumError.Status != "error" || cow.Outcomes.OverMaximumError.Code != "python_exception" || cow.Outcomes.OverMaximumError.Message != "MemoryError" || cow.Outcomes.OverMaximumError.ErrorType != "MemoryError" || cow.SealedImage.BaselineBytes <= 0 || cow.SealedImage.MaximumVirtualBytes <= cow.SealedImage.BaselineBytes || cow.SealedImage.SparseGrowthTailBytes != cow.SealedImage.MaximumVirtualBytes-cow.SealedImage.BaselineBytes {
+		return LatestSnapshot{}, errors.New("invalid growable COW evidence for latest Lab")
+	}
+	var cold coldIOEvidence
+	if err := json.Unmarshal(inputs.ColdIO, &cold); err != nil || cold.SchemaVersion != "pysolate.cold-io-observation.v0" || cold.OfficialGuestVerification.Result != "PASS" || !cold.OfficialGuestVerification.FreshSlotClean || len(cold.Observations) != 3 {
+		return LatestSnapshot{}, errors.New("invalid cold-I/O evidence for latest Lab")
+	}
+	var pageoutIndex = -1
+	for index, observation := range cold.Observations {
+		if observation.Mode == "pageout" {
+			pageoutIndex = index
+		}
+	}
+	if pageoutIndex < 0 || cold.Observations[pageoutIndex].Before.RSSKiB <= 0 || cold.Observations[pageoutIndex].After.RSSKiB != 0 || cold.Observations[pageoutIndex].AfterResume.RSSKiB <= 0 {
+		return LatestSnapshot{}, errors.New("cold-I/O pageout observation is incomplete")
+	}
+	pageout := cold.Observations[pageoutIndex]
+	var composable composableEvidence
+	if err := json.Unmarshal(inputs.Composable, &composable); err != nil {
+		return LatestSnapshot{}, fmt.Errorf("decode composable evidence: %w", err)
+	}
+	if composable.SchemaVersion != "pysolate.composable-acceptance-report.v3" || len(composable.Rows) == 0 {
+		return LatestSnapshot{}, errors.New("invalid composable evidence for latest Lab")
+	}
+	var reevaluationRow *struct {
+		ScenarioID            string  `json:"scenario_id"`
+		Status                string  `json:"status"`
+		TerminalDisposition   string  `json:"terminal_disposition"`
+		EvidenceComplete      bool    `json:"evidence_complete"`
+		RelativeElapsedMillis float64 `json:"relative_elapsed_millis"`
+		Trace                 []struct {
+			Action        string  `json:"action"`
+			Outcome       string  `json:"outcome"`
+			StartedMillis float64 `json:"started_millis"`
+			EndedMillis   float64 `json:"ended_millis"`
+		} `json:"trace"`
+	}
+	for index := range composable.Rows {
+		if composable.Rows[index].ScenarioID == "dev-wait-resume-report" {
+			reevaluationRow = &composable.Rows[index]
+		}
+	}
+	if reevaluationRow == nil || reevaluationRow.Status != "passed" || reevaluationRow.TerminalDisposition != "closed" || !reevaluationRow.EvidenceComplete {
+		return LatestSnapshot{}, errors.New("fresh re-evaluation row is absent or incomplete")
+	}
+	var waitStart, waitEnd float64 = -1, -1
+	freshObserved := false
+	oracleChecks, oraclePasses := 0, 0
+	for _, event := range reevaluationRow.Trace {
+		switch event.Action {
+		case "wait.begin":
+			waitStart = event.StartedMillis
+		case "wait.release":
+			if event.Outcome == "ok" {
+				waitEnd = event.EndedMillis
+			}
+		case "resume.fresh":
+			freshObserved = event.Outcome == "ok"
+		case "oracle.compare":
+			oracleChecks++
+			if event.Outcome == "ok" {
+				oraclePasses++
+			}
+		}
+	}
+	if waitStart < 0 || waitEnd <= waitStart || !freshObserved || oracleChecks == 0 || oraclePasses != oracleChecks || reevaluationRow.RelativeElapsedMillis < waitEnd {
+		return LatestSnapshot{}, errors.New("fresh re-evaluation trace is incomplete")
 	}
 	var campaign campaignProjection
 	if err := strictLatestDecode(inputs.CampaignProjection, &campaign); err != nil || campaign.SchemaVersion != "pysolate.transparent-campaign-public-projection.v1" || len(campaign.WalkthroughEvents) == 0 || campaign.Source.ArtifactSHA256 != latestCampaignArtifactSHA || campaign.Source.ArtifactSourceCommit != latestCampaignArtifactCommit || campaign.Source.CampaignSourceCommit != latestCampaignSourceCommit {
@@ -506,50 +739,103 @@ func BuildLatestSnapshot(inputs LatestInputs) (LatestSnapshot, error) {
 	if t07.AtNS > fallbackDuration {
 		fallbackDuration = t07.AtNS
 	}
+	cowNextCheckout := "not clean"
+	if cow.Outcomes.PostGrowthClean && cow.Outcomes.PostOverflowRefill {
+		cowNextCheckout = "clean"
+	}
+	coldFreshSlot := "not clean"
+	if cold.OfficialGuestVerification.FreshSlotClean {
+		coldFreshSlot = "clean"
+	}
 	snapshot := LatestSnapshot{
 		SchemaVersion: LatestSnapshotSchema,
-		Headline:      LatestHeadline{RealGuestDemos: 3, OptimizationWins: 2, SafetyControls: 1},
 		Demos: []LatestDemo{
 			{
-				ID: "source-prefix-overlap", Title: "Start the READ before the model finishes", Eyebrow: "REACH-GATED STREAMING", Status: "optimized",
-				Summary: "The first closed Python suite reaches a Host READ while the remaining source is still being generated.", Source: source,
+				ID: "source-prefix-overlap", Title: "Start the READ before generation finishes", Eyebrow: "SOURCE PREFIX", Status: "measured", ViewKind: "timeline",
+				Summary: "Execute the first closed suite while the remaining Python is still arriving.", Source: source,
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "READ starts", Note: "The closed suite reaches the Host-mediated READ."},
-					{StartLine: 2, EndLine: 3, Tone: "overlapped_tail", Label: "generated concurrently", Note: "This source tail arrives while the READ is in flight."},
+					{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "READ starts", Note: "The first closed suite reaches the Host READ."},
+					{StartLine: 2, EndLine: 3, Tone: "overlapped_tail", Label: "source continues", Note: "These lines arrive while the READ is in flight."},
 				},
-				Metrics:       []LatestMetric{{Label: "Generate first", Value: fmt.Sprintf("%.0f ms", float64(evidence.BaselineMedianNS)/1e6), Note: "median wall time", Tone: "baseline"}, {Label: "Stream prefix", Value: fmt.Sprintf("%.0f ms", float64(evidence.StreamingMedianNS)/1e6), Note: "median wall time", Tone: "optimized"}, {Label: "Mechanism window", Value: fmt.Sprintf("%.3f×", float64(evidence.MedianSpeedupMilli)/1000), Note: "authored matched fixture", Tone: "win"}},
-				Lanes:         []LatestLane{sourcePrefixLane("generate → execute", baseline), sourcePrefixLane("stream while generating", streaming)},
-				Facts:         []LatestFact{{Label: "Logical / physical calls", Value: "1 / 1 in both lanes"}, {Label: "Workspace", Value: "unchanged and published"}, {Label: "Fallback", Value: "none"}},
-				ClaimBoundary: "Constructive mechanism demonstration for this fixed authored program; not natural-workload uplift.",
+				Metrics: []LatestMetric{{Label: "Generate first", Value: fmt.Sprintf("%.0f ms", float64(evidence.BaselineMedianNS)/1e6), Note: "median", Tone: "baseline"}, {Label: "Stream prefix", Value: fmt.Sprintf("%.0f ms", float64(evidence.StreamingMedianNS)/1e6), Note: "median", Tone: "optimized"}, {Label: "Mechanism window", Value: fmt.Sprintf("%.3f×", float64(evidence.MedianSpeedupMilli)/1000), Note: "matched run", Tone: "win"}},
+				Lanes:   []LatestLane{sourcePrefixLane("generate → execute", baseline), sourcePrefixLane("stream while generating", streaming)},
+				Facts:   []LatestFact{{Label: "Calls", Value: "1 logical · 1 physical"}, {Label: "READ", Value: "reached before source tail"}, {Label: "Result", Value: "same oracle"}},
 			},
 			{
-				ID: "exact-request-sharing", Title: "Two agents, one physical Guest", Eyebrow: "EXACT REQUEST SHARING", Status: "optimized",
-				Summary: "Two logical agents submit identical source, inputs, Plan, privacy partition and workspace root. Pysolate shares one physical execution.", Source: "# Agent A\n" + p05.Source + "\n# Agent B — byte-identical request\n" + p06.Source,
-				Annotations: []LatestCodeAnnotation{
-					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical owner", Note: "This logical request owns the measured Guest execution."},
-					{StartLine: 5, EndLine: 5, Tone: "shared_skip", Label: "physical run skipped", Note: "Exact identity attaches this logical request to the same physical result."},
+				ID: "semantic-predispatch", Title: "Pre-dispatch one proven READ", Eyebrow: "SEMANTIC PRE-DISPATCH", Status: "measured", ViewKind: "timeline",
+				Summary: "Start one necessarily-reached READ before the Guest reaches its exact call site.", Source: "result = sources.read('profile')\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 1, Tone: "effect_trigger", Label: "exact call site", Note: "The staged result can only be claimed here."}},
+				Metrics:     []LatestMetric{{Label: "Baseline", Value: fmt.Sprintf("%.0f ms", float64(predispatch.BaselineMedianMicros)/1000), Note: "median", Tone: "baseline"}, {Label: "Pre-dispatch", Value: fmt.Sprintf("%.0f ms", float64(predispatch.OptimizedMedianMicros)/1000), Note: "median", Tone: "optimized"}, {Label: "Saved", Value: fmt.Sprintf("%.0f ms", float64(predispatch.MedianSavingsMicros)/1000), Note: "5 matched trials", Tone: "win"}},
+				Lanes: []LatestLane{
+					campaignLane("ordinary dispatch", "total wall", predispatch.BaselineMedianMicros*1000, 0, predispatch.BaselineMedianMicros*1000, "physical"),
+					campaignLane("semantic pre-dispatch", "total wall", predispatch.BaselineMedianMicros*1000, 0, predispatch.OptimizedMedianMicros*1000, "shared"),
 				},
-				Metrics:       []LatestMetric{{Label: "Logical requests", Value: "2", Note: "P05 + P06", Tone: "baseline"}, {Label: "Physical executions", Value: "1", Note: "same sealed physical ID", Tone: "optimized"}, {Label: "Oracle results", Value: "2 / 2", Note: "both complete", Tone: "win"}},
-				Lanes:         []LatestLane{campaignLane("agent A · shared waiter", "same physical ID", sharedDuration, sharedStart, sharedEnd, "shared"), campaignLane("agent B · physical owner", "same physical ID", sharedDuration, sharedStart, sharedEnd, "physical")},
-				Facts:         []LatestFact{{Label: "Sharing decision", Value: "exact_shared"}, {Label: "Identity relation", Value: "same physical execution"}, {Label: "Campaign context", Value: "real Guest · qualified repetition 0"}},
-				ClaimBoundary: "Exact identity sharing in the fixed campaign; not arbitrary memoization or cross-authority reuse.",
+				Facts: []LatestFact{{Label: "Physical READs", Value: "1 in both lanes"}, {Label: "Results", Value: "equivalent"}, {Label: "Rejected claims", Value: fmt.Sprintf("%d", predispatchRejectedClaims)}},
 			},
 			{
-				ID: "source-mismatch-fallback", Title: "Different source stays fresh", Eyebrow: "FAIL-CLOSED CONTROL", Status: "safety_control",
-				Summary: "A semantically similar program has a different source identity. Pysolate refuses sharing and starts an independent physical execution.", Source: "# Shareable request\n" + p05.Source + "\n# Source-mismatch request\n" + p07.Source,
+				ID: "exact-request-sharing", Title: "Two agents, one physical Guest", Eyebrow: "EXACT CONCURRENT SHARING", Status: "measured", ViewKind: "timeline",
+				Summary: "Two exact logical requests attach to one sealed physical execution.", Source: "# Agent A\n" + p05.Source + "\n# Agent B — exact request\n" + p06.Source,
 				Annotations: []LatestCodeAnnotation{
-					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical A", Note: "The admitted exact request executes normally."},
-					{StartLine: 5, EndLine: 5, Tone: "fresh_fallback", Label: "fresh physical B", Note: "The source digest differs, so sharing is rejected before execution."},
+					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical owner", Note: "This request owns the Guest execution."},
+					{StartLine: 5, EndLine: 5, Tone: "shared_skip", Label: "joins owner", Note: "No duplicate physical Guest starts."},
 				},
-				Metrics:       []LatestMetric{{Label: "Logical requests", Value: "2", Note: "different source digests", Tone: "baseline"}, {Label: "Physical executions", Value: "2", Note: "sharing rejected", Tone: "control"}, {Label: "Unsafe reuse", Value: "0", Note: "fresh execution preserved", Tone: "win"}},
-				Lanes:         []LatestLane{campaignLane("exact request", "physical A", sharedDuration, sharedStart, sharedEnd, "physical"), campaignLane("source mismatch", "fresh physical B", fallbackDuration, fallbackStart, fallbackEnd, "fallback")},
-				Facts:         []LatestFact{{Label: "Expected reason", Value: p07.Expected.Sharing}, {Label: "Observed disposition", Value: q07.Disposition}, {Label: "Physical relation", Value: "independent IDs"}},
-				ClaimBoundary: "Safety control: source similarity never substitutes for exact bound identity.",
+				Metrics: []LatestMetric{{Label: "Logical requests", Value: "2", Note: "requests", Tone: "baseline"}, {Label: "Physical executions", Value: "1", Note: "Guest", Tone: "optimized"}, {Label: "Oracle results", Value: "2 / 2", Note: "complete", Tone: "win"}},
+				Lanes:   []LatestLane{campaignLane("agent A", "same physical run", sharedDuration, sharedStart, sharedEnd, "shared"), campaignLane("agent B", "same physical run", sharedDuration, sharedStart, sharedEnd, "physical")},
+				Facts:   []LatestFact{{Label: "Decision", Value: "exact_shared"}, {Label: "Physical relation", Value: "same execution"}, {Label: "Duplicate starts", Value: "0"}},
+			},
+			{
+				ID: "whole-run-retention", Title: "Compute once, reuse twice", Eyebrow: "WHOLE-RUN RETENTION", Status: "experimental", ViewKind: "timeline",
+				Summary: "One leader computes; a concurrent waiter and a later exact request reuse the canonical result.", Source: "# leader\nresult = {'value': inputs['value'] + 1}\n# concurrent waiter → same physical compute\n# later request → retained hit\n",
+				Annotations: []LatestCodeAnnotation{
+					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "leader computes", Note: "The only physical Guest run."},
+					{StartLine: 3, EndLine: 4, Tone: "shared_skip", Label: "reuse", Note: "One waiter and one retained hit skip duplicate compute."},
+				},
+				Metrics: []LatestMetric{{Label: "Logical", Value: fmt.Sprintf("%d", reuse.Workload.LogicalInvocations), Note: "invocations", Tone: "baseline"}, {Label: "Physical", Value: fmt.Sprintf("%d", reuse.Workload.PhysicalComputes), Note: "compute", Tone: "optimized"}, {Label: "Later lookup", Value: fmt.Sprintf("%.3f ms", float64(reuse.TimingMicros.LaterLookup)/1000), Note: "retained hit", Tone: "win"}},
+				Lanes: []LatestLane{
+					campaignLane("3 fresh computes", "estimated baseline", reuse.Economics.Baseline*1000, 0, reuse.Economics.Baseline*1000, "physical"),
+					campaignLane("analyze + reuse", "observed path", reuse.Economics.Baseline*1000, 0, reuse.Economics.Observed*1000, "shared"),
+				},
+				Facts: []LatestFact{{Label: "Leader", Value: "1"}, {Label: "Concurrent waiter", Value: "1"}, {Label: "Retained hit", Value: "1"}},
+			},
+			{
+				ID: "cow-fresh-memory", Title: "Share the baseline, keep writes private", Eyebrow: "SINGLE-USE COW", Status: "experimental", ViewKind: "state_flow",
+				Summary: "Map a sealed initialized baseline into each fresh Run, then grow private memory on demand.", Source: "payload = bytearray(200_000_000)\npayload[-1] = 7\nresult = {'allocation_bytes': len(payload), 'last': payload[-1]}\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 3, Tone: "physical_owner", Label: "private Run", Note: "Writes and growth stay private to this execution."}},
+				Metrics:     []LatestMetric{{Label: "Baseline", Value: fmt.Sprintf("%d MiB", cow.SealedImage.BaselineBytes/(1<<20)), Note: "sealed image", Tone: "baseline"}, {Label: "Growth tail", Value: fmt.Sprintf("%d MiB", cow.SealedImage.SparseGrowthTailBytes/(1<<20)), Note: "sparse", Tone: "optimized"}, {Label: "Maximum", Value: fmt.Sprintf("%d MiB", cow.SealedImage.MaximumVirtualBytes/(1<<20)), Note: "bounded", Tone: "win"}},
+				Lanes:       []LatestLane{},
+				Facts:       []LatestFact{{Label: "200 MB allocation", Value: cow.Outcomes.Allocation200}, {Label: "600 MB allocation", Value: cow.Outcomes.OverMaximumError.ErrorType}, {Label: "Next checkout", Value: cowNextCheckout}},
+			},
+			{
+				ID: "cold-io-continuation", Title: "Page out memory while waiting", Eyebrow: "COLD I/O CONTINUATION", Status: "experimental", ViewKind: "state_flow",
+				Summary: "Page out private dirty pages in a controlled mapping while a real Guest test verifies same-continuation resume.", Source: "import builtins\npayload = bytearray(200_000_000)\npayload[-1] = 7\nstate = {'value': 91}\nbuiltins._cold_marker = state\nbefore = id(state)\nok = testio.wait()\nresult = {'same': id(state) == before and builtins._cold_marker is state, 'value': state['value'], 'last': payload[-1], 'ok': ok}\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 7, EndLine: 7, Tone: "effect_trigger", Label: "Host wait", Note: "The same continuation pauses here."}, {StartLine: 8, EndLine: 8, Tone: "physical_owner", Label: "state survived", Note: "Python identity and the private-memory sentinel are checked after resume."}},
+				Metrics:     []LatestMetric{{Label: "Before wait", Value: fmt.Sprintf("%d MiB", pageout.Before.RSSKiB/1024), Note: "private RSS", Tone: "baseline"}, {Label: "During wait", Value: fmt.Sprintf("%d MiB", pageout.After.RSSKiB/1024), Note: "pageout", Tone: "optimized"}, {Label: "Resume", Value: fmt.Sprintf("%.1f ms", float64(pageout.ResumeMicros)/1000), Note: "full refault scan", Tone: "control"}},
+				Lanes:       []LatestLane{},
+				Facts:       []LatestFact{{Label: "RSS probe", Value: "controlled mapping"}, {Label: "Guest continuation", Value: cold.OfficialGuestVerification.Result}, {Label: "Fresh slot", Value: coldFreshSlot}},
+			},
+			{
+				ID: "fresh-reevaluation", Title: "Release the Guest, resume fresh", Eyebrow: "FRESH RE-EVALUATION", Status: "experimental", ViewKind: "timeline",
+				Summary: "Release the waiting Guest and re-evaluate the workflow through a fresh execution after the observation arrives.", Source: "observations = [\"input-ready\", \"checkpoint-stable\"]\nresumed = all(value for value in observations)\nstatus = \"resumed\" if resumed else \"blocked\"\nresult = f\"observations={len(observations)}|status={status}|report=ready\"\n",
+				Annotations: []LatestCodeAnnotation{{StartLine: 1, EndLine: 4, Tone: "fresh_fallback", Label: "fresh execution", Note: "After the Host wait, this source is re-evaluated in a new Guest."}},
+				Metrics:     []LatestMetric{{Label: "Wait", Value: fmt.Sprintf("%.1f s", float64(waitEnd-waitStart)/1000), Note: "released", Tone: "baseline"}, {Label: "Resume", Value: "fresh", Note: "Guest", Tone: "optimized"}, {Label: "Oracle", Value: fmt.Sprintf("%d / %d", oraclePasses, oracleChecks), Note: "passed", Tone: "win"}},
+				Lanes:       []LatestLane{{Label: "logical workflow", DurationNS: int64(reevaluationRow.RelativeElapsedMillis * 1e6), Segments: []LatestSegment{{Label: "Host wait", StartNS: int64(waitStart * 1e6), EndNS: int64(waitEnd * 1e6), Tone: "effect"}}}},
+				Facts:       []LatestFact{{Label: "Observed event", Value: "resume.fresh"}, {Label: "Evidence", Value: "complete"}, {Label: "Disposition", Value: "closed"}},
+			},
+			{
+				ID: "source-mismatch-fallback", Title: "Different source stays fresh", Eyebrow: "FAIL-CLOSED CONTROL", Status: "control", ViewKind: "timeline",
+				Summary: "A different source identity cannot attach to the existing physical execution.", Source: "# Exact request\n" + p05.Source + "\n# Different source\n" + p07.Source,
+				Annotations: []LatestCodeAnnotation{
+					{StartLine: 2, EndLine: 2, Tone: "physical_owner", Label: "physical A", Note: "The exact request executes normally."},
+					{StartLine: 5, EndLine: 5, Tone: "fresh_fallback", Label: "fresh physical B", Note: "Different source starts an independent Guest."},
+				},
+				Metrics: []LatestMetric{{Label: "Logical requests", Value: "2", Note: "requests", Tone: "baseline"}, {Label: "Physical executions", Value: "2", Note: "Guests", Tone: "control"}, {Label: "Unsafe reuse", Value: "0", Note: "rejected", Tone: "win"}},
+				Lanes:   []LatestLane{campaignLane("exact request", "physical A", sharedDuration, sharedStart, sharedEnd, "physical"), campaignLane("different source", "fresh physical B", fallbackDuration, fallbackStart, fallbackEnd, "fallback")},
+				Facts:   []LatestFact{{Label: "Decision", Value: p07.Expected.Sharing}, {Label: "Disposition", Value: q07.Disposition}, {Label: "Physical relation", Value: "independent"}},
 			},
 		},
-		Boundary: LatestBoundary{Events: census.Denominator.Events, UniqueSources: census.Denominator.UniqueSources, StructurallyEligible: census.Counts.StructurallyEligible, TimingNotRecorded: census.Counts.TimingNotRecorded, PerformanceSupported: census.PerformanceComparisonSupported, Decision: "Do not run trace-derived timing replay for this short READ cohort."},
 		Provenance: LatestProvenance{
-			SourcePrefixEvidenceSHA256: latestSHA(inputs.SourcePrefixEvidence), CensusEvidenceSHA256: latestSHA(inputs.SourcePrefixCensus), CampaignProjectionSHA256: latestSHA(inputs.CampaignProjection),
+			SourcePrefixEvidenceSHA256: latestSHA(inputs.SourcePrefixEvidence), CampaignProjectionSHA256: latestSHA(inputs.CampaignProjection),
+			SemanticPredispatchSHA256: latestSHA(inputs.SemanticPredispatch), SemanticReuseSHA256: latestSHA(inputs.SemanticReuse), COWGrowableSHA256: latestSHA(inputs.COWGrowable), ColdIOSHA256: latestSHA(inputs.ColdIO), ComposableSHA256: latestSHA(inputs.Composable),
 			SourcePrefixArtifactSHA256: evidence.ArtifactSHA256, CampaignArtifactSHA256: campaign.Source.ArtifactSHA256,
 			SourcePrefixHarnessCommit: evidence.HarnessSourceCommit, CampaignSourceCommit: campaign.Source.CampaignSourceCommit,
 		},
@@ -586,17 +872,37 @@ func latestContainsPrivateMarker(snapshot LatestSnapshot) bool {
 }
 
 func ValidateLatestSnapshot(snapshot LatestSnapshot) error {
-	if snapshot.SchemaVersion != LatestSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || snapshot.Headline != (LatestHeadline{RealGuestDemos: 3, OptimizationWins: 2, SafetyControls: 1}) || len(snapshot.Demos) != 3 || latestContainsPrivateMarker(snapshot) {
+	if snapshot.SchemaVersion != LatestSnapshotSchema || !latestDigest.MatchString(snapshot.Identity) || len(snapshot.Demos) != 8 || latestContainsPrivateMarker(snapshot) {
 		return errors.New("invalid latest Lab snapshot envelope")
 	}
 	identity, err := latestSnapshotIdentity(snapshot)
 	if err != nil || identity != snapshot.Identity {
 		return errors.New("latest Lab snapshot identity mismatch")
 	}
-	wanted := []struct{ id, status string }{{"source-prefix-overlap", "optimized"}, {"exact-request-sharing", "optimized"}, {"source-mismatch-fallback", "safety_control"}}
+	wanted := []struct{ id, status, view string }{
+		{"source-prefix-overlap", "measured", "timeline"},
+		{"semantic-predispatch", "measured", "timeline"},
+		{"exact-request-sharing", "measured", "timeline"},
+		{"whole-run-retention", "experimental", "timeline"},
+		{"cow-fresh-memory", "experimental", "state_flow"},
+		{"cold-io-continuation", "experimental", "state_flow"},
+		{"fresh-reevaluation", "experimental", "timeline"},
+		{"source-mismatch-fallback", "control", "timeline"},
+	}
 	for index, demo := range snapshot.Demos {
-		if demo.ID != wanted[index].id || demo.Status != wanted[index].status || demo.Title == "" || demo.Summary == "" || demo.Source == "" || demo.ClaimBoundary == "" || len(demo.Metrics) < 3 || len(demo.Lanes) == 0 || len(demo.Facts) == 0 || strings.Contains(demo.Source, "/Users/") || strings.Contains(demo.Source, ".hermes") {
+		if demo.ID != wanted[index].id || demo.Status != wanted[index].status || demo.ViewKind != wanted[index].view || demo.Title == "" || demo.Summary == "" || demo.Source == "" || len(demo.Metrics) != 3 || len(demo.Facts) != 3 || strings.Contains(demo.Source, "/Users/") || strings.Contains(demo.Source, ".hermes") {
 			return errors.New("invalid latest Lab demo")
+		}
+		allowedMetricTones := map[string]bool{"baseline": true, "optimized": true, "win": true, "control": true}
+		for _, metric := range demo.Metrics {
+			if metric.Label == "" || metric.Value == "" || metric.Note == "" || !allowedMetricTones[metric.Tone] {
+				return errors.New("invalid latest Lab metric")
+			}
+		}
+		for _, fact := range demo.Facts {
+			if fact.Label == "" || fact.Value == "" {
+				return errors.New("invalid latest Lab fact")
+			}
 		}
 		lineCount := strings.Count(demo.Source, "\n") + 1
 		seenLines := make(map[int]bool)
@@ -615,21 +921,32 @@ func ValidateLatestSnapshot(snapshot LatestSnapshot) error {
 				seenLines[line] = true
 			}
 		}
+		if demo.Lanes == nil || (demo.ViewKind == "timeline" && len(demo.Lanes) == 0) || (demo.ViewKind == "state_flow" && len(demo.Lanes) != 0) {
+			return errors.New("latest Lab view contract drifted")
+		}
+		allowedSegmentTones := map[string]bool{"generation": true, "effect": true, "finalize": true, "shared": true, "physical": true, "fallback": true}
 		for _, lane := range demo.Lanes {
 			if lane.Label == "" || lane.DurationNS <= 0 || len(lane.Segments) == 0 {
 				return errors.New("invalid latest Lab lane")
 			}
 			for _, segment := range lane.Segments {
-				if segment.Label == "" || segment.StartNS < 0 || segment.EndNS <= segment.StartNS || segment.EndNS > lane.DurationNS {
+				if segment.Label == "" || segment.StartNS < 0 || segment.EndNS <= segment.StartNS || segment.EndNS > lane.DurationNS || !allowedSegmentTones[segment.Tone] {
 					return errors.New("invalid latest Lab timeline segment")
 				}
 			}
 		}
 	}
-	if snapshot.Boundary.Events != 36 || snapshot.Boundary.UniqueSources <= 0 || snapshot.Boundary.StructurallyEligible != 0 || snapshot.Boundary.TimingNotRecorded != 36 || snapshot.Boundary.PerformanceSupported || snapshot.Boundary.Decision == "" {
-		return errors.New("invalid latest Lab claim boundary")
-	}
-	for _, value := range []string{snapshot.Provenance.SourcePrefixEvidenceSHA256, snapshot.Provenance.CensusEvidenceSHA256, snapshot.Provenance.CampaignProjectionSHA256, snapshot.Provenance.SourcePrefixArtifactSHA256, snapshot.Provenance.CampaignArtifactSHA256} {
+	for _, value := range []string{
+		snapshot.Provenance.SourcePrefixEvidenceSHA256,
+		snapshot.Provenance.CampaignProjectionSHA256,
+		snapshot.Provenance.SemanticPredispatchSHA256,
+		snapshot.Provenance.SemanticReuseSHA256,
+		snapshot.Provenance.COWGrowableSHA256,
+		snapshot.Provenance.ColdIOSHA256,
+		snapshot.Provenance.ComposableSHA256,
+		snapshot.Provenance.SourcePrefixArtifactSHA256,
+		snapshot.Provenance.CampaignArtifactSHA256,
+	} {
 		if !latestDigest.MatchString(value) {
 			return errors.New("invalid latest Lab provenance digest")
 		}

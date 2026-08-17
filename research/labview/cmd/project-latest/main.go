@@ -15,33 +15,25 @@ func read(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func run(contractPath, overlapPath, censusPath, manifestPath, campaignPath, outputPath, identityOutputPath string) error {
-	contract, err := read(contractPath)
-	if err != nil {
-		return err
-	}
-	overlap, err := read(overlapPath)
-	if err != nil {
-		return err
-	}
-	census, err := read(censusPath)
-	if err != nil {
-		return err
-	}
-	manifest, err := read(manifestPath)
-	if err != nil {
-		return err
-	}
-	campaign, err := read(campaignPath)
-	if err != nil {
-		return err
+func run(paths map[string]string, outputPath, identityOutputPath string) error {
+	inputs := map[string][]byte{}
+	for name, path := range paths {
+		raw, err := read(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", name, err)
+		}
+		inputs[name] = raw
 	}
 	snapshot, err := labview.BuildLatestSnapshot(labview.LatestInputs{
-		SourcePrefixContract: contract,
-		SourcePrefixEvidence: overlap,
-		SourcePrefixCensus:   census,
-		CampaignManifest:     manifest,
-		CampaignProjection:   campaign,
+		SourcePrefixContract: inputs["source-prefix-contract"],
+		SourcePrefixEvidence: inputs["source-prefix-evidence"],
+		CampaignManifest:     inputs["campaign-manifest"],
+		CampaignProjection:   inputs["campaign-projection"],
+		SemanticPredispatch:  inputs["semantic-predispatch"],
+		SemanticReuse:        inputs["semantic-reuse"],
+		COWGrowable:          inputs["cow-growable"],
+		ColdIO:               inputs["cold-io"],
+		Composable:           inputs["composable"],
 	})
 	if err != nil {
 		return err
@@ -64,15 +56,18 @@ func run(contractPath, overlapPath, censusPath, manifestPath, campaignPath, outp
 }
 
 func main() {
-	contract := flag.String("source-prefix-contract", "", "source-prefix contract JSON")
-	overlap := flag.String("source-prefix-evidence", "", "source-prefix evidence JSON")
-	census := flag.String("source-prefix-census", "", "source-prefix census JSON")
-	manifest := flag.String("campaign-manifest", "", "accepted campaign manifest JSON")
-	campaign := flag.String("campaign-projection", "", "transparent campaign public projection JSON")
+	flags := map[string]*string{}
+	for _, name := range []string{"source-prefix-contract", "source-prefix-evidence", "campaign-manifest", "campaign-projection", "semantic-predispatch", "semantic-reuse", "cow-growable", "cold-io", "composable"} {
+		flags[name] = flag.String(name, "", name+" JSON")
+	}
 	output := flag.String("output", "", "latest Lab snapshot output JSON")
 	identityOutput := flag.String("identity-output", "", "generated TypeScript identity output")
 	flag.Parse()
-	if err := run(*contract, *overlap, *census, *manifest, *campaign, *output, *identityOutput); err != nil {
+	paths := map[string]string{}
+	for name, value := range flags {
+		paths[name] = *value
+	}
+	if err := run(paths, *output, *identityOutput); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

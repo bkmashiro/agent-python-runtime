@@ -99,11 +99,11 @@ func figureSourcePrefix(buffer *bytes.Buffer, demo LatestDemo, x int) {
 			fmt.Fprintf(buffer, `<rect x="%.1f" y="%d" width="%.1f" height="%d" rx="2" fill="%s"/>`, segmentX, segmentY, segmentWidth, segmentHeight, fill)
 		}
 	}
-	fmt.Fprintf(buffer, `<text x="%d" y="430" class="metric">2950 ms → 1534 ms</text><text x="%d" y="450" class="metric-note">1.923× mechanism window · matched authored fixture</text>`, x, x)
+	fmt.Fprintf(buffer, `<text x="%d" y="430" class="metric">%s → %s</text><text x="%d" y="450" class="metric-note">%s mechanism window · %s</text>`, x, html.EscapeString(demo.Metrics[0].Value), html.EscapeString(demo.Metrics[1].Value), x, html.EscapeString(demo.Metrics[2].Value), html.EscapeString(demo.Metrics[2].Note))
 }
 
 func figureSharing(buffer *bytes.Buffer, demo LatestDemo, x int) {
-	figurePanelHeader(buffer, x, "(b)", "Exact request sharing", "Two logical requests, one physical Guest")
+	figurePanelHeader(buffer, x, "(b)", "Exact request sharing", "Logical requests share a sealed physical Guest")
 	lines := strings.Split(demo.Source, "\n")
 	fmt.Fprintf(buffer, `<text x="%d" y="103" class="actor">AGENT A</text>`, x)
 	figureCodeRow(buffer, x, 111, 360, 2, lines[1], figureAnnotation(demo, 2))
@@ -112,10 +112,10 @@ func figureSharing(buffer *bytes.Buffer, demo LatestDemo, x int) {
 
 	fmt.Fprintf(buffer, `<rect x="%d" y="302" width="92" height="38" rx="5" class="logical"/><text x="%d" y="325" class="box-text">logical A</text>`, x, x+19)
 	fmt.Fprintf(buffer, `<rect x="%d" y="362" width="92" height="38" rx="5" class="logical"/><text x="%d" y="385" class="box-text">logical B</text>`, x, x+19)
-	fmt.Fprintf(buffer, `<rect x="%d" y="327" width="142" height="48" rx="5" fill="#e2f5e9" stroke="#6eb68a"/><text x="%d" y="348" class="box-text">one physical Guest</text><text x="%d" y="364" class="box-sub">same sealed ID</text>`, x+208, x+222, x+236)
+	fmt.Fprintf(buffer, `<rect x="%d" y="327" width="142" height="48" rx="5" fill="#e2f5e9" stroke="#6eb68a"/><text x="%d" y="348" class="box-text">%s physical Guest</text><text x="%d" y="364" class="box-sub">%s</text>`, x+208, x+222, html.EscapeString(demo.Metrics[1].Value), x+214, html.EscapeString(demo.Facts[0].Value))
 	figureArrow(buffer, x+92, 321, x+208, 343)
 	figureArrow(buffer, x+92, 381, x+208, 359)
-	fmt.Fprintf(buffer, `<text x="%d" y="430" class="metric">2 logical → 1 physical</text><text x="%d" y="450" class="metric-note">both oracle results accepted</text>`, x, x)
+	fmt.Fprintf(buffer, `<text x="%d" y="430" class="metric">%s logical → %s physical</text><text x="%d" y="450" class="metric-note">%s oracle results accepted</text>`, x, html.EscapeString(demo.Metrics[0].Value), html.EscapeString(demo.Metrics[1].Value), x, html.EscapeString(demo.Metrics[2].Value))
 }
 
 func figureFallback(buffer *bytes.Buffer, demo LatestDemo, x int) {
@@ -124,15 +124,29 @@ func figureFallback(buffer *bytes.Buffer, demo LatestDemo, x int) {
 	fmt.Fprintf(buffer, `<text x="%d" y="103" class="actor">EXACT REQUEST</text>`, x)
 	figureCodeRow(buffer, x, 111, 360, 2, lines[1], figureAnnotation(demo, 2))
 	fmt.Fprintf(buffer, `<text x="%d" y="178" class="actor">SOURCE-MISMATCH REQUEST</text>`, x)
-	figureCodeRow(buffer, x, 186, 360, 5, lines[4], figureAnnotation(demo, 5))
+	fallbackAnnotation := figureAnnotation(demo, 5)
+	figureCodeRow(buffer, x, 186, 360, 5, lines[4], fallbackAnnotation)
 
 	fmt.Fprintf(buffer, `<rect x="%d" y="302" width="112" height="38" rx="5" class="logical"/><text x="%d" y="325" class="box-text">exact request</text>`, x, x+16)
 	fmt.Fprintf(buffer, `<rect x="%d" y="362" width="112" height="38" rx="5" fill="#fff0d8" stroke="#d59a3b"/><text x="%d" y="385" class="box-text">source mismatch</text>`, x, x+10)
 	fmt.Fprintf(buffer, `<rect x="%d" y="302" width="128" height="38" rx="5" fill="#e2f5e9" stroke="#6eb68a"/><text x="%d" y="325" class="box-text">physical Guest A</text>`, x+222, x+239)
-	fmt.Fprintf(buffer, `<rect x="%d" y="362" width="128" height="38" rx="5" fill="#fff0d8" stroke="#d59a3b"/><text x="%d" y="385" class="box-text">fresh Guest B</text>`, x+222, x+245)
+	fmt.Fprintf(buffer, `<rect x="%d" y="362" width="128" height="38" rx="5" fill="#fff0d8" stroke="#d59a3b"/><text x="%d" y="385" class="box-text">%s</text>`, x+222, x+232, html.EscapeString(fallbackAnnotation.Label))
 	figureArrow(buffer, x+112, 321, x+222, 321)
 	figureArrow(buffer, x+112, 381, x+222, 381)
-	fmt.Fprintf(buffer, `<text x="%d" y="430" class="metric">2 logical → 2 physical</text><text x="%d" y="450" class="metric-note">unsafe reuse = 0</text>`, x, x)
+	fmt.Fprintf(buffer, `<text x="%d" y="430" class="metric">%s logical → %s physical</text><text x="%d" y="450" class="metric-note">unsafe reuse = %s · %s</text>`, x, html.EscapeString(demo.Metrics[0].Value), html.EscapeString(demo.Metrics[1].Value), x, html.EscapeString(demo.Metrics[2].Value), html.EscapeString(demo.Facts[0].Value))
+}
+
+func validatePaperFigureLayout(overlap, sharing, fallback LatestDemo) error {
+	if len(strings.Split(overlap.Source, "\n")) < 3 || len(overlap.Lanes) < 2 || len(overlap.Metrics) < 3 || overlap.Metrics[0].Label != "Generate first" || overlap.Metrics[1].Label != "Stream prefix" || overlap.Metrics[2].Label != "Mechanism window" || figureAnnotation(overlap, 1).Label == "" || figureAnnotation(overlap, 2).Label == "" {
+		return errors.New("source-prefix paper figure layout contract drifted")
+	}
+	if len(strings.Split(sharing.Source, "\n")) < 5 || len(sharing.Metrics) < 3 || len(sharing.Facts) == 0 || sharing.Metrics[0].Label != "Logical requests" || sharing.Metrics[1].Label != "Physical executions" || sharing.Metrics[2].Label != "Oracle results" || figureAnnotation(sharing, 2).Label == "" || figureAnnotation(sharing, 5).Label == "" {
+		return errors.New("sharing paper figure layout contract drifted")
+	}
+	if len(strings.Split(fallback.Source, "\n")) < 5 || len(fallback.Metrics) < 3 || len(fallback.Facts) == 0 || fallback.Metrics[0].Label != "Logical requests" || fallback.Metrics[1].Label != "Physical executions" || fallback.Metrics[2].Label != "Unsafe reuse" || figureAnnotation(fallback, 2).Label == "" || figureAnnotation(fallback, 5).Label == "" {
+		return errors.New("fallback paper figure layout contract drifted")
+	}
+	return nil
 }
 
 func PaperFigureSVG(snapshot LatestSnapshot) ([]byte, error) {
@@ -149,6 +163,10 @@ func PaperFigureSVG(snapshot LatestSnapshot) ([]byte, error) {
 	}
 	fallback, err := figureDemo(snapshot, "source-mismatch-fallback")
 	if err != nil {
+		return nil, err
+	}
+
+	if err := validatePaperFigureLayout(overlap, sharing, fallback); err != nil {
 		return nil, err
 	}
 

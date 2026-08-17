@@ -115,7 +115,7 @@ result = {'square': inputs['value'] * inputs['value']}
 Source-mismatch request:
 
 ```python
-result = {'square_plus_one': inputs['value'] * inputs['value'] + 1}
+result = {'square': pow(inputs['value'], 2)}
 ```
 
 ### Execution shape

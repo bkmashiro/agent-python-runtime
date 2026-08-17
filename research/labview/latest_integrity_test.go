@@ -1,6 +1,7 @@
 package labview
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,6 +32,32 @@ func acceptedCampaignFixture(t *testing.T) (workflowbench.CampaignManifest, camp
 		t.Fatal(err)
 	}
 	return manifest, projection
+}
+
+func acceptedLatestSnapshot(t *testing.T) LatestSnapshot {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(path string) []byte {
+		raw, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	snapshot, err := BuildLatestSnapshot(LatestInputs{
+		SourcePrefixContract: read("docs/evidence/source-prefix-overlap-contract-v1.json"),
+		SourcePrefixEvidence: read("docs/evidence/source-prefix-overlap-v1.json"),
+		SourcePrefixCensus:   read("docs/evidence/source-prefix-opportunity-census-v1.json"),
+		CampaignManifest:     read("docs/evidence/authority-transparent-campaign-manifest-v1.json"),
+		CampaignProjection:   read("docs/evidence/authority-transparent-campaign-v1.json"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
 }
 
 func TestCampaignProjectionRejectsCanonicalIdentityDrift(t *testing.T) {
@@ -68,6 +95,36 @@ func TestLatestSnapshotPrivateMarkersFailClosed(t *testing.T) {
 	snapshot := LatestSnapshot{Demos: []LatestDemo{{Facts: []LatestFact{{Label: "body", Value: "private://trace/body"}}}}}
 	if !latestContainsPrivateMarker(snapshot) {
 		t.Fatal("private body marker was not detected")
+	}
+}
+
+func TestPaperFigureReadsMetricsAndRejectsLayoutDrift(t *testing.T) {
+	snapshot := acceptedLatestSnapshot(t)
+	snapshot.Demos[0].Metrics[0].Value = "9999 ms"
+	snapshot.Demos[0].Metrics[1].Value = "8888 ms"
+	snapshot.Demos[0].Metrics[2].Value = "7.777×"
+	identity, err := latestSnapshotIdentity(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Identity = identity
+	figure, err := PaperFigureSVG(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(figure, []byte("9999 ms → 8888 ms")) || !bytes.Contains(figure, []byte("7.777× mechanism window")) || bytes.Contains(figure, []byte("2950 ms → 1534 ms")) {
+		t.Fatal("paper figure did not follow validated snapshot metrics")
+	}
+
+	snapshot = acceptedLatestSnapshot(t)
+	snapshot.Demos[1].Source = "result = 1\n"
+	identity, err = latestSnapshotIdentity(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Identity = identity
+	if _, err := PaperFigureSVG(snapshot); err == nil {
+		t.Fatal("paper figure accepted source layout drift")
 	}
 }
 

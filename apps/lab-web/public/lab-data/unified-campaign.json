@@ -1,0 +1,841 @@
+{
+  "schema_version": "pysolate.lab-unified-campaign.v1",
+  "identity": "sha256:a61840ba11a66062818bf9dd20deb00fda8d4065f4c9eb248dea0cfd57099aa2",
+  "title": "One London day-trip campaign",
+  "summary": "A single typed evidence chain combines source-prefix pre-dispatch, fresh Guest execution, exact claims, candidate fanout, selection, workspace resume, COW, cold I/O, sharing, retention, and fail-closed controls.",
+  "selected": "oxford",
+  "final_total_gbp": 78,
+  "candidates": [
+    {
+      "id": "brighton",
+      "total_cost_gbp": 118.4,
+      "disposition": "discarded",
+      "physical_issues": 3,
+      "logical_claims": 3,
+      "source_sha256": "sha256:fea088951e637b788235af7ca817a4d780fab0f29d53f7fef26c392f41a4d9bd",
+      "cow_selected": true
+    },
+    {
+      "id": "oxford",
+      "total_cost_gbp": 78,
+      "disposition": "selected",
+      "physical_issues": 3,
+      "logical_claims": 3,
+      "source_sha256": "sha256:01c6e9f934155c0c258f4887fc128d32e73ded6bd9e9dec6153cbca7f6c5b370",
+      "cow_selected": true
+    }
+  ],
+  "phases": [
+    {
+      "id": "source-predispatch",
+      "index": 1,
+      "title": "Generate and pre-dispatch",
+      "summary": "Closed, straight-line read statements are analyzed from visible source prefixes. Six Host requests start before source feed completion.",
+      "facts": [
+        {
+          "label": "qualified reads",
+          "value": "6",
+          "note": "weather, rail, attractions × 2 candidates"
+        },
+        {
+          "label": "source schedule",
+          "value": "600 ms + 7000 ms tail",
+          "note": "deterministic and preregistered"
+        }
+      ]
+    },
+    {
+      "id": "fresh-execution",
+      "index": 2,
+      "title": "Seal, then execute fresh",
+      "summary": "Each complete source is sealed before a fresh isolated Guest starts from line one and claims exact staged observations.",
+      "facts": [
+        {
+          "label": "physical requests",
+          "value": "6",
+          "note": "one per qualified call"
+        },
+        {
+          "label": "logical claims",
+          "value": "6",
+          "note": "no duplicate physical call"
+        }
+      ]
+    },
+    {
+      "id": "sharing-retention",
+      "index": 3,
+      "title": "Share origin, retain result",
+      "summary": "Brighton and Oxford share one in-flight origin computation; Main later consumes the retained whole-run result.",
+      "facts": [
+        {
+          "label": "logical calls",
+          "value": "3",
+          "note": "two candidates plus Main"
+        },
+        {
+          "label": "physical computes",
+          "value": "1",
+          "note": "single-flight owner"
+        }
+      ]
+    },
+    {
+      "id": "branch-resume",
+      "index": 4,
+      "title": "Select, seal, and resume",
+      "summary": "Oxford is selected from observed Guest outputs. Its non-empty workspace is sealed, exported, imported, bound, and read by a fresh Main Guest.",
+      "facts": [
+        {
+          "label": "selected",
+          "value": "Oxford · £78.00",
+          "note": "Brighton £118.40 discarded"
+        },
+        {
+          "label": "workspace",
+          "value": "sha256:22d4025eb315…",
+          "note": "export/import identity preserved"
+        }
+      ]
+    },
+    {
+      "id": "memory-io",
+      "index": 5,
+      "title": "Private memory and cold I/O",
+      "summary": "Linux candidate Guests use private COW memory. The resumed Main continuation pages out and resumes once without losing Python state.",
+      "facts": [
+        {
+          "label": "COW",
+          "value": "2 / 2 selected",
+          "note": "Brighton and Oxford candidates"
+        },
+        {
+          "label": "cold I/O",
+          "value": "1 wait · 1 resume",
+          "note": "551157760 bytes advised"
+        }
+      ]
+    },
+    {
+      "id": "fail-closed",
+      "index": 6,
+      "title": "Reject mismatched reuse",
+      "summary": "Source and canonical-argument mutations are rejected before an observation can cross the Host boundary.",
+      "facts": [
+        {
+          "label": "source mismatch",
+          "value": "rejected",
+          "note": "fresh Guest not started"
+        },
+        {
+          "label": "argument mismatch",
+          "value": "rejected",
+          "note": "staged observation not reused"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "sequence": 1,
+      "id": "event-0001",
+      "at_ns": 5534250868,
+      "type": "function.logical",
+      "actor_id": "brighton",
+      "logical_id": "origin-brighton"
+    },
+    {
+      "sequence": 2,
+      "id": "event-0002",
+      "at_ns": 5534356299,
+      "type": "function.logical",
+      "actor_id": "oxford",
+      "logical_id": "origin-oxford"
+    },
+    {
+      "sequence": 3,
+      "id": "event-0003",
+      "at_ns": 7734289244,
+      "type": "function.physical.start",
+      "actor_id": "host",
+      "physical_id": "origin-physical-1"
+    },
+    {
+      "sequence": 4,
+      "id": "event-0004",
+      "at_ns": 11131971667,
+      "type": "function.physical.end",
+      "actor_id": "host",
+      "physical_id": "origin-physical-1",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 5,
+      "id": "event-0005",
+      "at_ns": 11144269857,
+      "type": "function.leader",
+      "actor_id": "brighton",
+      "logical_id": "origin-brighton",
+      "physical_id": "origin-physical-1",
+      "outcome": "leader"
+    },
+    {
+      "sequence": 6,
+      "id": "event-0006",
+      "at_ns": 11144271027,
+      "type": "function.waiter",
+      "actor_id": "oxford",
+      "logical_id": "origin-oxford",
+      "physical_id": "origin-physical-1",
+      "outcome": "waiter"
+    },
+    {
+      "sequence": 7,
+      "id": "event-0007",
+      "at_ns": 11194491747,
+      "type": "source.generation.start",
+      "actor_id": "oxford",
+      "logical_id": "source-oxford"
+    },
+    {
+      "sequence": 8,
+      "id": "event-0008",
+      "at_ns": 11194517567,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-1"
+    },
+    {
+      "sequence": 9,
+      "id": "event-0009",
+      "at_ns": 11194763620,
+      "type": "source.generation.start",
+      "actor_id": "brighton",
+      "logical_id": "source-brighton"
+    },
+    {
+      "sequence": 10,
+      "id": "event-0010",
+      "at_ns": 11194778830,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-1"
+    },
+    {
+      "sequence": 11,
+      "id": "event-0011",
+      "at_ns": 11794887368,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-2"
+    },
+    {
+      "sequence": 12,
+      "id": "event-0012",
+      "at_ns": 11795027420,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-2"
+    },
+    {
+      "sequence": 13,
+      "id": "event-0013",
+      "at_ns": 12395835826,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-3"
+    },
+    {
+      "sequence": 14,
+      "id": "event-0014",
+      "at_ns": 12395853616,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-3"
+    },
+    {
+      "sequence": 15,
+      "id": "event-0015",
+      "at_ns": 17723512968,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+    },
+    {
+      "sequence": 16,
+      "id": "event-0016",
+      "at_ns": 17723517779,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+    },
+    {
+      "sequence": 17,
+      "id": "event-0017",
+      "at_ns": 17723549969,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather"
+    },
+    {
+      "sequence": 18,
+      "id": "event-0018",
+      "at_ns": 17757506475,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
+    },
+    {
+      "sequence": 19,
+      "id": "event-0019",
+      "at_ns": 17757509725,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
+    },
+    {
+      "sequence": 20,
+      "id": "event-0020",
+      "at_ns": 17757535025,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather"
+    },
+    {
+      "sequence": 21,
+      "id": "event-0021",
+      "at_ns": 18023837141,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 22,
+      "id": "event-0022",
+      "at_ns": 18057958938,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 23,
+      "id": "event-0023",
+      "at_ns": 18414655971,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+    },
+    {
+      "sequence": 24,
+      "id": "event-0024",
+      "at_ns": 18414659121,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+    },
+    {
+      "sequence": 25,
+      "id": "event-0025",
+      "at_ns": 18414690152,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail"
+    },
+    {
+      "sequence": 26,
+      "id": "event-0026",
+      "at_ns": 18496166787,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
+    },
+    {
+      "sequence": 27,
+      "id": "event-0027",
+      "at_ns": 18496169877,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
+    },
+    {
+      "sequence": 28,
+      "id": "event-0028",
+      "at_ns": 18496193648,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail"
+    },
+    {
+      "sequence": 29,
+      "id": "event-0029",
+      "at_ns": 19014752690,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 30,
+      "id": "event-0030",
+      "at_ns": 19025707414,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+    },
+    {
+      "sequence": 31,
+      "id": "event-0031",
+      "at_ns": 19025710314,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+    },
+    {
+      "sequence": 32,
+      "id": "event-0032",
+      "at_ns": 19025735344,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions"
+    },
+    {
+      "sequence": 33,
+      "id": "event-0033",
+      "at_ns": 19033385741,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
+    },
+    {
+      "sequence": 34,
+      "id": "event-0034",
+      "at_ns": 19033387691,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
+    },
+    {
+      "sequence": 35,
+      "id": "event-0035",
+      "at_ns": 19033401351,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions"
+    },
+    {
+      "sequence": 36,
+      "id": "event-0036",
+      "at_ns": 19096977704,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 37,
+      "id": "event-0037",
+      "at_ns": 19396382366,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-4"
+    },
+    {
+      "sequence": 38,
+      "id": "event-0038",
+      "at_ns": 19396410176,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-4"
+    },
+    {
+      "sequence": 39,
+      "id": "event-0039",
+      "at_ns": 19426581779,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 40,
+      "id": "event-0040",
+      "at_ns": 19433704080,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 41,
+      "id": "event-0041",
+      "at_ns": 19997370154,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-5"
+    },
+    {
+      "sequence": 42,
+      "id": "event-0042",
+      "at_ns": 19997380524,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-5"
+    },
+    {
+      "sequence": 43,
+      "id": "event-0043",
+      "at_ns": 20598086469,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-6"
+    },
+    {
+      "sequence": 44,
+      "id": "event-0044",
+      "at_ns": 20598087769,
+      "type": "source.feed.complete",
+      "actor_id": "brighton",
+      "logical_id": "source-brighton",
+      "identity_sha256": "sha256:fea088951e637b788235af7ca817a4d780fab0f29d53f7fef26c392f41a4d9bd"
+    },
+    {
+      "sequence": 45,
+      "id": "event-0045",
+      "at_ns": 20598108440,
+      "type": "source.sealed",
+      "actor_id": "brighton",
+      "logical_id": "source-brighton",
+      "identity_sha256": "sha256:fea088951e637b788235af7ca817a4d780fab0f29d53f7fef26c392f41a4d9bd"
+    },
+    {
+      "sequence": 46,
+      "id": "event-0046",
+      "at_ns": 20598109960,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-6"
+    },
+    {
+      "sequence": 47,
+      "id": "event-0047",
+      "at_ns": 20598111520,
+      "type": "source.feed.complete",
+      "actor_id": "oxford",
+      "logical_id": "source-oxford",
+      "identity_sha256": "sha256:01c6e9f934155c0c258f4887fc128d32e73ded6bd9e9dec6153cbca7f6c5b370"
+    },
+    {
+      "sequence": 48,
+      "id": "event-0048",
+      "at_ns": 20598135300,
+      "type": "source.sealed",
+      "actor_id": "oxford",
+      "logical_id": "source-oxford",
+      "identity_sha256": "sha256:01c6e9f934155c0c258f4887fc128d32e73ded6bd9e9dec6153cbca7f6c5b370"
+    },
+    {
+      "sequence": 49,
+      "id": "event-0049",
+      "at_ns": 22725330639,
+      "type": "guest.start",
+      "actor_id": "oxford",
+      "logical_id": "candidate-oxford",
+      "physical_id": "guest-oxford"
+    },
+    {
+      "sequence": 50,
+      "id": "event-0050",
+      "at_ns": 22745092334,
+      "type": "guest.start",
+      "actor_id": "brighton",
+      "logical_id": "candidate-brighton",
+      "physical_id": "guest-brighton"
+    },
+    {
+      "sequence": 51,
+      "id": "event-0051",
+      "at_ns": 26212895655,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
+    },
+    {
+      "sequence": 52,
+      "id": "event-0052",
+      "at_ns": 26213110908,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
+    },
+    {
+      "sequence": 53,
+      "id": "event-0053",
+      "at_ns": 26213338350,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
+    },
+    {
+      "sequence": 54,
+      "id": "event-0054",
+      "at_ns": 26221319311,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+    },
+    {
+      "sequence": 55,
+      "id": "event-0055",
+      "at_ns": 26221493833,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+    },
+    {
+      "sequence": 56,
+      "id": "event-0056",
+      "at_ns": 26221655825,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+    },
+    {
+      "sequence": 57,
+      "id": "event-0057",
+      "at_ns": 26236911758,
+      "type": "guest.end",
+      "actor_id": "oxford",
+      "logical_id": "candidate-oxford",
+      "physical_id": "guest-oxford",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 58,
+      "id": "event-0058",
+      "at_ns": 26236951679,
+      "type": "cow.selected",
+      "actor_id": "oxford",
+      "logical_id": "candidate-oxford",
+      "physical_id": "guest-oxford",
+      "outcome": "private_memory"
+    },
+    {
+      "sequence": 59,
+      "id": "event-0059",
+      "at_ns": 26245691958,
+      "type": "guest.end",
+      "actor_id": "brighton",
+      "logical_id": "candidate-brighton",
+      "physical_id": "guest-brighton",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 60,
+      "id": "event-0060",
+      "at_ns": 26245716108,
+      "type": "cow.selected",
+      "actor_id": "brighton",
+      "logical_id": "candidate-brighton",
+      "physical_id": "guest-brighton",
+      "outcome": "private_memory"
+    },
+    {
+      "sequence": 61,
+      "id": "event-0061",
+      "at_ns": 26295653976,
+      "type": "capsule.export",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:22d4025eb3158834bd1b94586b2b9ddc61ae958eb7383a38fbf70c4a889f2c3d",
+      "outcome": "serialized"
+    },
+    {
+      "sequence": 62,
+      "id": "event-0062",
+      "at_ns": 26313187335,
+      "type": "branch.discard",
+      "actor_id": "host",
+      "logical_id": "brighton",
+      "outcome": "discarded"
+    },
+    {
+      "sequence": 63,
+      "id": "event-0063",
+      "at_ns": 26313187775,
+      "type": "branch.seal",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:18dad83456ab265e6cf16bd635e7dc7071fcb5fdb45ac7645ac44302defb4dcb",
+      "outcome": "selected"
+    },
+    {
+      "sequence": 64,
+      "id": "event-0064",
+      "at_ns": 26365210457,
+      "type": "function.logical",
+      "actor_id": "main",
+      "logical_id": "origin-main"
+    },
+    {
+      "sequence": 65,
+      "id": "event-0065",
+      "at_ns": 26372001574,
+      "type": "function.retained",
+      "actor_id": "main",
+      "logical_id": "origin-main",
+      "physical_id": "origin-physical-1",
+      "outcome": "retained"
+    },
+    {
+      "sequence": 66,
+      "id": "event-0066",
+      "at_ns": 26414337755,
+      "type": "capsule.import",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:22d4025eb3158834bd1b94586b2b9ddc61ae958eb7383a38fbf70c4a889f2c3d",
+      "outcome": "verified"
+    },
+    {
+      "sequence": 67,
+      "id": "event-0067",
+      "at_ns": 26420385084,
+      "type": "capsule.bind",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:18dad83456ab265e6cf16bd635e7dc7071fcb5fdb45ac7645ac44302defb4dcb",
+      "outcome": "portable_root_bound"
+    },
+    {
+      "sequence": 68,
+      "id": "event-0068",
+      "at_ns": 28490241852,
+      "type": "guest.start",
+      "actor_id": "main",
+      "logical_id": "resume-main",
+      "physical_id": "guest-main-resumed"
+    },
+    {
+      "sequence": 69,
+      "id": "event-0069",
+      "at_ns": 32090882533,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "main-platform-notice",
+      "physical_id": "request-main-platform-notice",
+      "outcome": "start"
+    },
+    {
+      "sequence": 70,
+      "id": "event-0070",
+      "at_ns": 32191926081,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "main-platform-notice",
+      "physical_id": "request-main-platform-notice",
+      "outcome": "finish"
+    },
+    {
+      "sequence": 71,
+      "id": "event-0071",
+      "at_ns": 32232439682,
+      "type": "guest.complete",
+      "actor_id": "main",
+      "logical_id": "resume-main",
+      "physical_id": "guest-main-resumed",
+      "outcome": "published"
+    },
+    {
+      "sequence": 72,
+      "id": "event-0072",
+      "at_ns": 32232479012,
+      "type": "cold_io.resume",
+      "actor_id": "main",
+      "logical_id": "resume-main",
+      "physical_id": "guest-main-resumed",
+      "outcome": "fresh_continuation"
+    },
+    {
+      "sequence": 73,
+      "id": "event-0073",
+      "at_ns": 32269568593,
+      "type": "control.argument_mismatch",
+      "actor_id": "host",
+      "logical_id": "argument-mismatch",
+      "outcome": "rejected"
+    },
+    {
+      "sequence": 74,
+      "id": "event-0074",
+      "at_ns": 34315508520,
+      "type": "control.source_mismatch",
+      "actor_id": "host",
+      "logical_id": "source-mismatch",
+      "outcome": "rejected"
+    }
+  ],
+  "matched_control": {
+    "pair_count": 3,
+    "baseline_median_ns": 16331132100,
+    "optimized_median_ns": 14998927338,
+    "median_savings_ns": 1332204762,
+    "equivalent_results": true
+  },
+  "provenance": {
+    "evidence_sha256": "sha256:18d9db93b2f09659c314db6a9034a9f1e6f0399cc14a8ccb8b062a3346841c2d",
+    "source_commit": "294e9b6da915fc06e7b34bc04eb948a657782e1a",
+    "artifact_sha256": "sha256:815f529d8c0cae18fac3730e6ffc6fe7e817fc5a01df69d709601b68d090559a",
+    "fixture_sha256": "sha256:07ee8df0c2dac355229b569e1033ac5b4884e6b3fa7109ffd1f9254fa70a0ab2",
+    "platform": "linux/amd64"
+  }
+}

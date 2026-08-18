@@ -1,0 +1,294 @@
+package semantic
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"runtime"
+	"sort"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+)
+
+func TestStreamingSemanticPreDispatchStartsVisibleCallsConcurrentlyAndClaimsExactlyOnce(t *testing.T) {
+	var active atomic.Int32
+	var peak atomic.Int32
+	release := make(chan struct{})
+	plan := legalityTestPlanWithHandler(t, true, capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+		current := active.Add(1)
+		for observed := peak.Load(); current > observed && !peak.CompareAndSwap(observed, current); observed = peak.Load() {
+		}
+		<-release
+		active.Add(-1)
+		return json.RawMessage(`{"value":"ok"}`), nil
+	}))
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	base, ok := decision.QualifiedCall()
+	if !ok {
+		t.Fatal("base call not qualified")
+	}
+	base.exclusiveDynamicCall = false
+	budget, err := NewPreDispatchBudget(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, goroutineTestLauncher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, key := range []string{"weather", "rail", "attractions"} {
+		call := streamingTestCall(t, base, plan, index+1, key)
+		added, err := controller.Add(context.Background(), call)
+		if err != nil || !added {
+			t.Fatalf("add %s: added=%t err=%v", key, added, err)
+		}
+	}
+	for attempts := 0; peak.Load() != 3 && attempts < 10000; attempts++ {
+		runtime.Gosched()
+	}
+	if peak.Load() != 3 {
+		t.Fatalf("peak physical reads=%d", peak.Load())
+	}
+	close(release)
+	for _, key := range []string{"weather", "rail", "attractions"} {
+		arguments := json.RawMessage(`{"key":"` + key + `"}`)
+		outcome, err := controller.Claim(context.Background(), "sources.read", arguments)
+		if err != nil || outcome.Validate() != nil {
+			t.Fatalf("claim %s: outcome=%+v err=%v", key, outcome, err)
+		}
+	}
+	if _, err := controller.Claim(context.Background(), "sources.read", json.RawMessage(`{"key":"weather"}`)); !errors.Is(err, capability.ErrStagedObservationNotTargeted) {
+		t.Fatalf("second weather claim error=%v", err)
+	}
+	if err := controller.Finalize(true); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := controller.Snapshot()
+	if snapshot.PhysicalIssues != 3 || snapshot.PhysicalStarts != 3 || snapshot.PhysicalFinishes != 3 || snapshot.LogicalClaims != 3 || snapshot.Consumed != 3 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestStreamingSemanticPreDispatchDeduplicatesSameVisiblePrefixOccurrence(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	call.exclusiveDynamicCall = false
+	budget, _ := NewPreDispatchBudget(2)
+	launcher := &queuedLauncher{}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := controller.Add(context.Background(), call)
+	if err != nil || !first {
+		t.Fatalf("first add=%t err=%v", first, err)
+	}
+	extended := call
+	extended.sourceSHA256 = legalityDigest("same prefix plus later source")
+	extended.callSiteID = legalityDigest("same occurrence in extended source")
+	second, err := controller.Add(context.Background(), extended)
+	if err != nil || second || launcher.Count() != 1 {
+		t.Fatalf("second add=%t launches=%d err=%v", second, launcher.Count(), err)
+	}
+}
+
+func TestStreamingSemanticPreDispatchSameCapabilityMismatchFailsClosed(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	decision := CanPreissue(verified, plan, site.ID, legalityContext())
+	call, _ := decision.QualifiedCall()
+	call.exclusiveDynamicCall = false
+	budget, _ := NewPreDispatchBudget(1)
+	launcher := &queuedLauncher{}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added, err := controller.Add(context.Background(), call); err != nil || !added {
+		t.Fatalf("added=%t err=%v", added, err)
+	}
+	launcher.RunAll()
+	if _, err := controller.Claim(context.Background(), call.Capability(), json.RawMessage(`{"key":"different"}`)); !errors.Is(err, ErrPreDispatchClaimMismatch) {
+		t.Fatalf("claim mismatch error=%v", err)
+	}
+	if snapshot := controller.Snapshot(); snapshot.RejectedClaims != 1 || snapshot.LogicalClaims != 0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestStreamingSemanticPreDispatchFinalizesUnclaimedReadsWithTypedDisposition(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	base, _ := CanPreissue(verified, plan, site.ID, legalityContext()).QualifiedCall()
+	base.exclusiveDynamicCall = false
+	budget, _ := NewPreDispatchBudget(3)
+	launcher := &queuedLauncher{}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, key := range []string{"weather", "rail", "attractions"} {
+		if added, err := controller.Add(context.Background(), streamingTestCall(t, base, plan, index+1, key)); err != nil || !added {
+			t.Fatalf("add %s: added=%t err=%v", key, added, err)
+		}
+	}
+	launcher.RunAll()
+	if _, err := controller.Claim(context.Background(), "sources.read", json.RawMessage(`{"key":"weather"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Finalize(true); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := controller.Snapshot(); snapshot.Consumed != 1 || snapshot.Orphaned != 2 || snapshot.LogicalClaims != 1 || snapshot.PhysicalFinishes != 3 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestCanPreissueStreamingPrefixAllowsOnlyStraightLineIndependentReadLookahead(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, secondSite := streamingLookaheadAnalysis(t, plan, false)
+	if _, ok := CanPreissue(verified, plan, secondSite.ID, legalityContext()).QualifiedCall(); ok {
+		t.Fatal("ordinary pre-dispatch accepted a non-necessarily-reached call")
+	}
+	if _, ok := CanPreissueStreamingPrefix(verified, plan, secondSite.ID, legalityContext()).QualifiedCall(); !ok {
+		t.Fatal("streaming prefix rejected straight-line independent read look-ahead")
+	}
+	unsafe, unsafeSite := streamingLookaheadAnalysis(t, plan, true)
+	if _, ok := CanPreissueStreamingPrefix(unsafe, plan, unsafeSite.ID, legalityContext()).QualifiedCall(); ok {
+		t.Fatal("streaming prefix crossed an opaque-control rejection")
+	}
+}
+
+func streamingLookaheadAnalysis(t *testing.T, plan *capability.Plan, opaqueControl bool) (VerifiedAnalysis, CallSite) {
+	t.Helper()
+	verified, first := legalityVerifiedAnalysis(t, plan, true)
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis.SourceSHA256 = legalityDigest("first and second source")
+	analysis.ModuleSpan = SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 2, EndColumn: 30}
+	control := legalityDigest("streaming-control")
+	first.ID = legalityDigest("streaming-first")
+	first.ControlRegionID = control
+	first.Span = SourceSpan{StartLine: 1, StartColumn: 8, EndLine: 1, EndColumn: 31}
+	second := first
+	second.ID = legalityDigest("streaming-second")
+	second.Span = SourceSpan{StartLine: 2, StartColumn: 9, EndLine: 2, EndColumn: 29}
+	second.NecessarilyReached = false
+	second.CanonicalArguments = json.RawMessage(`{"key":"rail"}`)
+	regionOne := CandidateRegion{
+		ID: legalityDigest("streaming-region-one"), Kind: CandidateRegionStraightLine,
+		Span: SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 31}, ControlRegionID: control,
+		ControlPredecessors: []string{}, DataDependencies: []RegionDataDependency{}, LiveIns: []string{}, LiveOuts: []string{},
+		LiveInsCanonical: true, LiveOutsCanonical: true, Effects: EffectSummary{MayObserveLive: true, MaySuspend: true},
+		CapabilityOccurrences: []string{first.ID}, Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{CandidateRejectMayRaise},
+	}
+	regionTwo := CandidateRegion{
+		ID: legalityDigest("streaming-region-two"), Kind: CandidateRegionStraightLine,
+		Span: SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 29}, ControlRegionID: control,
+		ControlPredecessors: []string{regionOne.ID}, DataDependencies: []RegionDataDependency{}, LiveIns: []string{}, LiveOuts: []string{},
+		LiveInsCanonical: true, LiveOutsCanonical: true,
+		Effects: EffectSummary{MayObserveLive: true, MaySuspend: true}, CapabilityOccurrences: []string{second.ID},
+		Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{CandidateRejectMayRaise},
+	}
+	if opaqueControl {
+		regionTwo.RejectionReasons = append(regionTwo.RejectionReasons, CandidateRejectOpaqueControl)
+		sort.Slice(regionTwo.RejectionReasons, func(i, j int) bool { return regionTwo.RejectionReasons[i] < regionTwo.RejectionReasons[j] })
+	}
+	analysis.CallSites = []CallSite{first, second}
+	sort.Slice(analysis.CallSites, func(i, j int) bool { return analysis.CallSites[i].ID < analysis.CallSites[j].ID })
+	analysis.CandidateRegions = []CandidateRegion{regionOne, regionTwo}
+	analysis.CandidateRegionCount = 2
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return VerifiedAnalysis{analysisJSON: encoded}, second
+}
+
+func streamingTestCall(t *testing.T, base QualifiedCall, plan *capability.Plan, line int, key string) QualifiedCall {
+	t.Helper()
+	arguments := json.RawMessage(`{"key":"` + key + `"}`)
+	argumentsDigest := sha256.Sum256(arguments)
+	qualification, ok := plan.PreDispatch(base.Capability())
+	if !ok {
+		t.Fatal("missing pre-dispatch qualification")
+	}
+	resourceSHA, err := resourceIdentity(qualification.Contract().Resource, arguments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := base
+	call.callSiteID = legalityDigest("site:" + key)
+	call.sourceSHA256 = legalityDigest("prefix:" + key)
+	call.canonicalArguments = arguments
+	call.argumentsSHA256 = "sha256:" + hex.EncodeToString(argumentsDigest[:])
+	call.resourceSHA256 = resourceSHA
+	call.budgetReservationSHA256 = legalityDigest("reservation:" + key)
+	call.startLine, call.startColumn = uint32(line), 0
+	call.endLine, call.endColumn = uint32(line), uint32(20+len(key))
+	call.exclusiveDynamicCall = false
+	return call
+}
+
+func TestVerifiedSourceGenerationDoesNotBlockSourceCompletionOnPrefixAnalysis(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	budget, err := NewPreDispatchBudget(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, &queuedLauncher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission, err := NewStreamingPrefixAdmission(plan, controller, PreissueContext{
+		StreamEpoch: "stream-test", WorkflowEpoch: "workflow-test", FreshnessEpoch: "fresh-test",
+		ExpiryEpoch: "run-end", PrivacyPartition: "test", ParentLineageSHA256: legalityDigest("lineage"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	chunks := make(chan string, 2)
+	chunks <- "value = 1\n"
+	chunks <- "result = value\n"
+	close(chunks)
+	sourceComplete := make(chan struct{}, 1)
+	returned := make(chan error, 1)
+	go func() {
+		_, generationErr := GenerateVerifiedSourceWithPreDispatch(ctx, VerifiedSourceGenerationConfig{
+			Plan: plan, Admission: admission, SourceChunks: chunks,
+			Bindings: Bindings{ArtifactSHA256: legalityDigest("artifact"), ExecutionProfileSHA256: legalityDigest("profile"), ImportClosureSHA256: legalityDigest("imports"), CapabilityPlanSHA256: plan.Identity()},
+			Analyze: func(callContext context.Context, _ string, _ Bindings, _ *capability.Plan) (VerifiedAnalysis, error) {
+				<-callContext.Done()
+				return VerifiedAnalysis{}, callContext.Err()
+			},
+			Observe: func(event VerifiedSourceGenerationEvent) {
+				if event.Phase == "source_complete" {
+					sourceComplete <- struct{}{}
+				}
+			},
+		})
+		returned <- generationErr
+	}()
+	select {
+	case <-sourceComplete:
+	case <-time.After(time.Second):
+		t.Fatal("source generation waited for prefix analysis")
+	}
+	cancel()
+	if err := <-returned; !errors.Is(err, context.Canceled) {
+		t.Fatalf("generation error=%v", err)
+	}
+}
+
+var _ capability.StagedObservationClaimer = (*StreamingSemanticPreDispatch)(nil)

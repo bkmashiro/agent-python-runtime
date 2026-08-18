@@ -93,7 +93,11 @@ type SemanticPreDispatch struct {
 }
 
 func NewSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *PreDispatchBudget) (*SemanticPreDispatch, error) {
-	if !call.valid() || !call.exclusiveDynamicCall || plan == nil || budget == nil || call.binding.PlanSHA256 != plan.Identity() {
+	return newSemanticPreDispatch(call, plan, budget, true)
+}
+
+func newSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *PreDispatchBudget, requireExclusive bool) (*SemanticPreDispatch, error) {
+	if !call.valid() || requireExclusive && !call.exclusiveDynamicCall || plan == nil || budget == nil || call.binding.PlanSHA256 != plan.Identity() {
 		return nil, ErrPreDispatchInvalid
 	}
 	prepared, err := plan.PreparePreDispatch(call.capability, call.CanonicalArguments())

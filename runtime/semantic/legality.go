@@ -167,6 +167,10 @@ type QualifiedCall struct {
 	privacyPartition        string
 	parentLineageSHA256     string
 	budgetReservationSHA256 string
+	startLine               uint32
+	startColumn             uint32
+	endLine                 uint32
+	endColumn               uint32
 	exclusiveDynamicCall    bool
 }
 
@@ -190,7 +194,8 @@ func (call QualifiedCall) valid() bool {
 		legalityTokenPattern.MatchString(call.streamEpoch) && legalityTokenPattern.MatchString(call.workflowEpoch) &&
 		legalityTokenPattern.MatchString(call.freshnessEpoch) && legalityTokenPattern.MatchString(call.expiryEpoch) &&
 		legalityTokenPattern.MatchString(call.privacyPartition) && digestPattern.MatchString(call.parentLineageSHA256) &&
-		digestPattern.MatchString(call.budgetReservationSHA256)
+		digestPattern.MatchString(call.budgetReservationSHA256) && call.startLine > 0 && call.endLine >= call.startLine &&
+		(call.endLine != call.startLine || call.endColumn >= call.startColumn)
 }
 
 func (call QualifiedCall) clone() QualifiedCall {
@@ -238,6 +243,18 @@ func (call QualifiedCall) ExpectedObservationClaim() ObservationClaim {
 // CanPreissue is the only v0 join between verified Guest occurrence facts and the
 // sealed Host capability contract. It starts no work and has no side effects.
 func CanPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID string, context PreissueContext) Decision {
+	return canPreissue(verified, plan, callSiteID, context, false)
+}
+
+// CanPreissueStreamingPrefix permits bounded look-ahead past earlier qualified
+// reads in one straight-line source prefix. It does not weaken CanPreissue:
+// conditional, data-dependent, publishing, or unknown predecessors still fail
+// closed, and every skipped read must carry an explicit unclaimed disposition.
+func CanPreissueStreamingPrefix(verified VerifiedAnalysis, plan *capability.Plan, callSiteID string, context PreissueContext) Decision {
+	return canPreissue(verified, plan, callSiteID, context, true)
+}
+
+func canPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID string, context PreissueContext, allowPrefixSpeculation bool) Decision {
 	analysis, err := verified.Analysis()
 	if err != nil {
 		return rejected(RejectUnverifiedAnalysis)
@@ -253,7 +270,7 @@ func CanPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 	if !found {
 		reasons = append(reasons, RejectCallSiteMissing)
 	}
-	if found && !site.NecessarilyReached {
+	if found && !site.NecessarilyReached && (!allowPrefixSpeculation || !streamingPrefixSpeculationAllowed(analysis, site, plan)) {
 		reasons = append(reasons, RejectCallNotNecessarilyReached)
 	}
 	if !context.valid() {
@@ -296,12 +313,76 @@ func CanPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 		freshnessEpoch: context.FreshnessEpoch, expiryEpoch: context.ExpiryEpoch,
 		privacyPartition: context.PrivacyPartition, parentLineageSHA256: context.ParentLineageSHA256,
 		budgetReservationSHA256: context.BudgetReservationSHA256,
-		exclusiveDynamicCall:    exclusiveDynamicCallAnalysis(analysis),
+		startLine:               site.Span.StartLine, startColumn: site.Span.StartColumn,
+		endLine: site.Span.EndLine, endColumn: site.Span.EndColumn,
+		exclusiveDynamicCall: exclusiveDynamicCallAnalysis(analysis),
 	}
 	if !call.valid() {
 		return rejected(RejectQualifiedCallInvalid)
 	}
 	return Decision{allowed: true, call: &call}
+}
+
+func streamingPrefixSpeculationAllowed(analysis Analysis, site CallSite, plan *capability.Plan) bool {
+	if plan == nil || analysis.ModuleEffects.MayPublish || analysis.ModuleEffects.MayBeUnknown || len(analysis.Barriers) != 0 ||
+		!site.ArgumentsCanonical || site.DynamicOccurrence != 1 {
+		return false
+	}
+	regions := make(map[string]CandidateRegion, len(analysis.CandidateRegions))
+	var target CandidateRegion
+	foundTarget := false
+	for _, region := range analysis.CandidateRegions {
+		regions[region.ID] = region
+		for _, occurrence := range region.CapabilityOccurrences {
+			if occurrence == site.ID {
+				target, foundTarget = region, true
+			}
+		}
+	}
+	if !foundTarget {
+		return false
+	}
+	pending := []CandidateRegion{target}
+	seen := make(map[string]struct{}, len(regions))
+	for len(pending) != 0 {
+		region := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if _, duplicate := seen[region.ID]; duplicate {
+			continue
+		}
+		seen[region.ID] = struct{}{}
+		if region.Kind != CandidateRegionStraightLine || len(region.DataDependencies) != 0 || len(region.Barriers) != 0 ||
+			region.Effects.MayPublish || region.Effects.MayBeUnknown || !onlyMayRaise(region.RejectionReasons) {
+			return false
+		}
+		for _, occurrence := range region.CapabilityOccurrences {
+			predecessorSite, ok := findCallSite(analysis.CallSites, occurrence)
+			if !ok || !predecessorSite.ArgumentsCanonical || predecessorSite.DynamicOccurrence != 1 {
+				return false
+			}
+			qualification, ok := plan.PreDispatch(predecessorSite.Capability)
+			if !ok || !qualification.Eligible() || qualification.Contract().Unclaimed != capability.UnclaimedDiscardWithDisposition {
+				return false
+			}
+		}
+		for _, predecessorID := range region.ControlPredecessors {
+			predecessor, ok := regions[predecessorID]
+			if !ok {
+				return false
+			}
+			pending = append(pending, predecessor)
+		}
+	}
+	return true
+}
+
+func onlyMayRaise(reasons []CandidateRejection) bool {
+	for _, reason := range reasons {
+		if reason != CandidateRejectMayRaise {
+			return false
+		}
+	}
+	return true
 }
 
 func (call QualifiedCall) ClaimIdentitySHA256() string {

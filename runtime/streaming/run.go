@@ -25,10 +25,19 @@ type StreamRunner interface {
 
 // Execute preserves the complete-source compatibility path.
 func Execute(ctx context.Context, runner engine.Runner, attempt *workspace.Attempt, request []byte, prepare string) (RunResult, error) {
+	return ExecuteObserved(ctx, runner, attempt, request, prepare, nil)
+}
+
+// ExecuteObserved exposes read-only post-run/pre-close evidence without
+// extending the Guest lifetime or transferring runner ownership.
+func ExecuteObserved(ctx context.Context, runner engine.Runner, attempt *workspace.Attempt, request []byte, prepare string, observe func(engine.Runner) error) (RunResult, error) {
 	if runner == nil || attempt == nil {
 		return RunResult{}, errors.New("streaming runner and workspace attempt are required")
 	}
 	response, err := runner.Run(ctx, request, prepare)
+	if err == nil && observe != nil {
+		err = observe(runner)
+	}
 	return finish(ctx, runner, attempt, response, err)
 }
 

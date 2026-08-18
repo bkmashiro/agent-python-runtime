@@ -30,6 +30,16 @@ type PysolateExecutorConfig struct {
 	WorkspaceRoot string
 }
 
+type TravelCallEvent struct {
+	Phase       string
+	API         string
+	Destination string
+	LatencyMS   int
+	Outcome     string
+}
+
+type TravelCallObserver func(TravelCallEvent)
+
 type PysolateCandidateExecutor struct {
 	artifact       []byte
 	artifactSHA256 string
@@ -254,6 +264,12 @@ func (executor *PysolateCandidateExecutor) Close(ctx context.Context) error {
 }
 
 func buildTravelPlan(fixture Fixture, maxCalls uint32) (*capability.Plan, error) {
+	return NewTravelCapabilityPlan(fixture, maxCalls, nil)
+}
+
+// NewTravelCapabilityPlan exposes only the reviewed deterministic public
+// fixture; it carries no provider request or response data.
+func NewTravelCapabilityPlan(fixture Fixture, maxCalls uint32, observe TravelCallObserver) (*capability.Plan, error) {
 	registry := capability.NewRegistry()
 	grant, err := capability.NewGrant(json.RawMessage(`{"fixture":"public-day-trip","network":false}`))
 	if err != nil {
@@ -270,7 +286,7 @@ func buildTravelPlan(fixture Fixture, maxCalls uint32) (*capability.Plan, error)
 	for _, item := range specs {
 		kind := item.kind
 		handler := capability.HandlerFunc(func(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
-			return callTravelFixture(ctx, fixture, kind, arguments)
+			return callTravelFixtureObserved(ctx, fixture, kind, arguments, observe)
 		})
 		if err := registry.Register(item.spec, grant, handler); err != nil {
 			return nil, fmt.Errorf("register travel.%s: %w", kind, err)
@@ -286,6 +302,29 @@ func travelCapabilitySpec(method string, input, output json.RawMessage, argument
 		InputSchema: input, OutputSchema: output, Python: &capability.PythonProjection{Module: "travel", Method: method, Arguments: arguments}, ReadOnly: true, Idempotent: true,
 		PreDispatch: &capability.PreDispatchContract{Resource: capability.ResourceReference{Namespace: "travel-" + method, Argument: "destination"}, Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition},
 	}
+}
+
+func callTravelFixtureObserved(ctx context.Context, fixture Fixture, kind string, arguments json.RawMessage, observe TravelCallObserver) (result json.RawMessage, resultErr error) {
+	var input struct {
+		Destination string `json:"destination"`
+		Travellers  int    `json:"travellers"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(arguments))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&input) != nil {
+		return nil, errors.New("invalid travel fixture call")
+	}
+	if observe != nil {
+		observe(TravelCallEvent{Phase: "start", API: kind, Destination: input.Destination, LatencyMS: fixture.Workspace.API.APILatencyMS[kind]})
+		defer func() {
+			outcome := "ok"
+			if resultErr != nil {
+				outcome = "error"
+			}
+			observe(TravelCallEvent{Phase: "finish", API: kind, Destination: input.Destination, LatencyMS: fixture.Workspace.API.APILatencyMS[kind], Outcome: outcome})
+		}()
+	}
+	return callTravelFixture(ctx, fixture, kind, arguments)
 }
 
 func callTravelFixture(ctx context.Context, fixture Fixture, kind string, arguments json.RawMessage) (json.RawMessage, error) {

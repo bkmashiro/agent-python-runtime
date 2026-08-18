@@ -1,0 +1,220 @@
+package semantic
+
+import (
+	"context"
+	"errors"
+	"sync"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
+)
+
+// VerifiedSourceGenerationConfig admits only complete statement prefixes that
+// have actually arrived. It never receives a future or hidden full source.
+type VerifiedSourceGenerationConfig struct {
+	Analyzer     *wazeroengine.Engine
+	Analyze      func(context.Context, string, Bindings, *capability.Plan) (VerifiedAnalysis, error)
+	Plan         *capability.Plan
+	Bindings     Bindings
+	Admission    *StreamingPrefixAdmission
+	SourceChunks <-chan string
+	Observe      func(VerifiedSourceGenerationEvent)
+}
+
+type VerifiedSourceGenerationEvent struct {
+	Phase        string
+	PrefixIndex  uint32
+	SourceBytes  uint32
+	AddedCalls   uint32
+	Complete     bool
+	SourceSHA256 string
+}
+
+type GeneratedSource struct {
+	source     string
+	sha256     string
+	controller *StreamingSemanticPreDispatch
+	binding    *generatedSourceBinding
+}
+
+type generatedSourceBinding struct {
+	mu       sync.Mutex
+	executed bool
+}
+
+func (generated GeneratedSource) Source() string { return generated.source }
+func (generated GeneratedSource) SHA256() string { return generated.sha256 }
+
+func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedSourceGenerationConfig) (GeneratedSource, error) {
+	if ctx == nil || (config.Analyzer == nil && config.Analyze == nil) || config.Plan == nil || config.Admission == nil ||
+		config.Admission.plan != config.Plan || config.SourceChunks == nil {
+		return GeneratedSource{}, ErrPreDispatchInvalid
+	}
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			_ = config.Admission.controller.Finalize(false)
+		}
+	}()
+	type analysisResult struct {
+		index    uint32
+		source   string
+		verified VerifiedAnalysis
+		err      error
+	}
+	results := make(chan analysisResult, 32)
+	var analyzerMu sync.Mutex
+	analyze := config.Analyze
+	if analyze == nil {
+		analyze = func(callContext context.Context, source string, bindings Bindings, plan *capability.Plan) (VerifiedAnalysis, error) {
+			analyzerMu.Lock()
+			defer analyzerMu.Unlock()
+			request, err := NewRequest(source, bindings, plan)
+			if err != nil {
+				return VerifiedAnalysis{}, err
+			}
+			return AnalyzeVerified(callContext, config.Analyzer, request)
+		}
+	}
+	var source string
+	var visible uint32
+	var nextCommit uint32 = 1
+	pending := 0
+	sourceChannel := config.SourceChunks
+	completed := false
+	committed := make(map[uint32]analysisResult)
+	for sourceChannel != nil || pending > 0 {
+		select {
+		case <-runContext.Done():
+			return GeneratedSource{}, runContext.Err()
+		case chunk, ok := <-sourceChannel:
+			if !ok {
+				if source == "" {
+					return GeneratedSource{}, errors.New("verified source generation produced no source")
+				}
+				sourceChannel = nil
+				completed = true
+				if config.Observe != nil {
+					config.Observe(VerifiedSourceGenerationEvent{
+						Phase: "source_complete", PrefixIndex: visible, SourceBytes: uint32(len(source)), Complete: true,
+						SourceSHA256: digestText(source),
+					})
+				}
+				continue
+			}
+			if chunk == "" {
+				return GeneratedSource{}, errors.New("verified source chunk is empty")
+			}
+			source += chunk
+			visible++
+			prefixIndex := visible
+			prefixSource := source
+			if config.Observe != nil {
+				config.Observe(VerifiedSourceGenerationEvent{
+					Phase: "prefix_visible", PrefixIndex: prefixIndex, SourceBytes: uint32(len(prefixSource)),
+				})
+			}
+			pending++
+			go func() {
+				verified, err := analyze(runContext, prefixSource, config.Bindings, config.Plan)
+				select {
+				case results <- analysisResult{index: prefixIndex, source: prefixSource, verified: verified, err: err}:
+				case <-runContext.Done():
+				}
+			}()
+		case result := <-results:
+			pending--
+			if result.err != nil {
+				return GeneratedSource{}, result.err
+			}
+			committed[result.index] = result
+			for {
+				ready, ok := committed[nextCommit]
+				if !ok {
+					break
+				}
+				added, err := config.Admission.AdmitVerifiedPrefix(ctx, ready.source, ready.verified)
+				if err != nil {
+					return GeneratedSource{}, err
+				}
+				delete(committed, nextCommit)
+				if config.Observe != nil {
+					config.Observe(VerifiedSourceGenerationEvent{
+						Phase: "prefix_admitted", PrefixIndex: nextCommit, SourceBytes: uint32(len(ready.source)), AddedCalls: added,
+						SourceSHA256: config.Admission.Snapshot().LastSourceSHA256,
+					})
+				}
+				nextCommit++
+			}
+		}
+	}
+	if !completed || nextCommit != visible+1 {
+		return GeneratedSource{}, ErrPreDispatchInvalid
+	}
+	if err := config.Admission.SealFinalSource(source); err != nil {
+		return GeneratedSource{}, err
+	}
+	snapshot := config.Admission.Snapshot()
+	if config.Observe != nil {
+		config.Observe(VerifiedSourceGenerationEvent{
+			Phase: "source_sealed", PrefixIndex: visible, SourceBytes: uint32(len(source)), Complete: true,
+			SourceSHA256: snapshot.LastSourceSHA256,
+		})
+	}
+	succeeded = true
+	return GeneratedSource{
+		source: source, sha256: snapshot.LastSourceSHA256,
+		controller: config.Admission.controller, binding: &generatedSourceBinding{},
+	}, nil
+}
+
+// ExecuteGeneratedSource starts the fresh execution Guest only after final
+// source sealing, and verifies that the normal RunRequest contains exactly that
+// complete source. The controller remains one-Run/one-execution.
+func ExecuteGeneratedSource(
+	ctx context.Context,
+	runner enginecontract.Runner,
+	attempt *workspace.Attempt,
+	request []byte,
+	trustedPrepare string,
+	generated GeneratedSource,
+) (streaming.RunResult, error) {
+	return ExecuteGeneratedSourceObserved(ctx, runner, attempt, request, trustedPrepare, generated, nil)
+}
+
+func ExecuteGeneratedSourceObserved(
+	ctx context.Context,
+	runner enginecontract.Runner,
+	attempt *workspace.Attempt,
+	request []byte,
+	trustedPrepare string,
+	generated GeneratedSource,
+	observe func(enginecontract.Runner) error,
+) (streaming.RunResult, error) {
+	if ctx == nil || runner == nil || attempt == nil || generated.binding == nil || generated.controller == nil ||
+		generated.source == "" || generated.sha256 == "" {
+		return streaming.RunResult{}, ErrPreDispatchInvalid
+	}
+	decoded, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil || decoded.Code != generated.source {
+		return streaming.RunResult{}, ErrAnalysisBinding
+	}
+	snapshot := generated.controller.Snapshot()
+	if !snapshot.SourceSealed || snapshot.FinalSourceSHA256 != generated.sha256 {
+		return streaming.RunResult{}, ErrAnalysisBinding
+	}
+	generated.binding.mu.Lock()
+	if generated.binding.executed {
+		generated.binding.mu.Unlock()
+		return streaming.RunResult{}, ErrPreDispatchInvalid
+	}
+	generated.binding.executed = true
+	generated.binding.mu.Unlock()
+	return streaming.ExecuteObserved(ctx, runner, attempt, request, trustedPrepare, observe)
+}

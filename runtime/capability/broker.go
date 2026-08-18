@@ -19,7 +19,10 @@ import (
 
 const maxCallBytes = 1 << 20
 
-var ErrInvalidBroker = errors.New("invalid Host tool broker")
+var (
+	ErrInvalidBroker                = errors.New("invalid Host tool broker")
+	ErrStagedObservationNotTargeted = errors.New("dynamic call was not targeted by staged observation")
+)
 
 type CallLifecyclePhase string
 
@@ -290,34 +293,36 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "staged_observation_unqualified", Message: "capability is not eligible for staged observation"}})
 		}
 		staged, claimErr := broker.config.StagedClaimer.Claim(ctx, call.Capability, append(json.RawMessage(nil), arguments...))
-		if claimErr != nil {
+		if claimErr != nil && !errors.Is(claimErr, ErrStagedObservationNotTargeted) {
 			broker.record(call, operation, "error", nil)
 			if errors.Is(claimErr, context.Canceled) || errors.Is(claimErr, context.DeadlineExceeded) {
 				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
 			}
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}})
 		}
-		if staged.Validate() != nil {
+		if claimErr == nil && staged.Validate() != nil {
 			broker.record(call, operation, "error", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
 		}
-		if staged.ErrorCode != "" {
+		if claimErr == nil && staged.ErrorCode != "" {
 			broker.record(call, operation, "error", nil)
 			if staged.ErrorCode == "handler_error" {
 				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
 			}
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
 		}
-		canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, staged.Result)
-		if resultErr == nil {
-			resultErr = validateSpecResultSemantics(registered.spec, canonicalResult)
+		if claimErr == nil {
+			canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, staged.Result)
+			if resultErr == nil {
+				resultErr = validateSpecResultSemantics(registered.spec, canonicalResult)
+			}
+			if resultErr != nil || len(canonicalResult) > maxCallBytes {
+				broker.record(call, operation, "error", nil)
+				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
+			}
+			broker.record(call, operation, "ok", canonicalResult)
+			return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
 		}
-		if resultErr != nil || len(canonicalResult) > maxCallBytes {
-			broker.record(call, operation, "error", nil)
-			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
-		}
-		broker.record(call, operation, "ok", canonicalResult)
-		return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
 	}
 	if broker.branch != nil {
 		entry, live, matchErr := broker.matchBranch(operation, call.Capability, arguments)

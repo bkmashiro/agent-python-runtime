@@ -1,4 +1,5 @@
 import type { UnifiedSnapshot } from './unifiedCampaignData';
+import { expectedProviderSummarySHA256, expectedProviderSummaryURL } from './providerSummaryIdentity';
 
 export interface ProviderSummaryCall {
   id: 'candidate-brighton' | 'candidate-oxford' | 'main-selection' | 'main-final';
@@ -21,10 +22,9 @@ export interface ProviderSummary {
 }
 
 const digest = /^sha256:[0-9a-f]{64}$/;
-const expectedProviderSummarySHA256 = 'sha256:0c1d355a8cb6ff09373dadd050096ce81fb8cd3e2e70c1248598edf0ae720d96';
 const expectedCallIDs = ['candidate-brighton', 'candidate-oxford', 'main-selection', 'main-final'];
 
-export async function loadProviderSummary(url = '/lab-data/provider-summary.json'): Promise<ProviderSummary> {
+export async function loadProviderSummary(url = expectedProviderSummaryURL): Promise<ProviderSummary> {
   const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) throw new Error(`provider summary load failed (${response.status})`);
   const raw = await response.text();

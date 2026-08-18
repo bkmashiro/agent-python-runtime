@@ -1,4 +1,4 @@
-import { expectedUnifiedSnapshotIdentity } from './unifiedIdentity';
+import { expectedUnifiedSnapshotIdentity, expectedUnifiedSnapshotURL } from './unifiedIdentity';
 
 export interface UnifiedFact { label: string; value: string; note: string }
 export interface UnifiedPhase { id: string; index: number; title: string; summary: string; facts: UnifiedFact[]; event_ids: string[] }
@@ -210,7 +210,7 @@ export async function validateUnifiedSnapshot(value: unknown): Promise<UnifiedSn
   return snapshot;
 }
 
-export async function loadUnifiedSnapshot(url = '/lab-data/unified-campaign.json'): Promise<UnifiedSnapshot> {
+export async function loadUnifiedSnapshot(url = expectedUnifiedSnapshotURL): Promise<UnifiedSnapshot> {
   const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) throw new Error(`unified Lab snapshot load failed (${response.status})`);
   const raw = await response.text();

@@ -1,0 +1,1281 @@
+{
+  "schema_version": "pysolate.lab-unified-campaign.v3",
+  "identity": "sha256:bc222c95b47d260a7b1b2788431ff667958ac65f2a4c0a652d35da2a21bb8288",
+  "title": "One London day-trip campaign",
+  "summary": "A single typed evidence chain combines source-prefix pre-dispatch, fresh Guest execution, exact claims, candidate fanout, selection, workspace resume, COW, cold I/O, sharing, retention, and fail-closed controls.",
+  "selected": "oxford",
+  "final_total_gbp": 78,
+  "main_guest_response": {
+    "capability_plan_sha256": "sha256:951dfd2ac8f9e82904e1f47cf75dde31b3ba852b50353278723b5c143907452c",
+    "error": null,
+    "logs": [],
+    "metrics": {
+      "capability_calls": 1,
+      "guest_time_ms": 294.42513454705477,
+      "result_bytes": 111
+    },
+    "receipts": [
+      {
+        "receipt_id": "rcpt_65f26963863695a6116ef47bc3de701caeef5d8d4900c1246c15695e805a9097",
+        "run_id": "campaign-resume-main",
+        "capability_plan_sha256": "sha256:951dfd2ac8f9e82904e1f47cf75dde31b3ba852b50353278723b5c143907452c",
+        "call_id": "capability-1",
+        "capability": "travel.platform_notice",
+        "operation_index": 0,
+        "request_sha256": "0ae4f041d15ebf89ffc93db7976241a7da4a4b3e5cc915f93457caf008e2576a",
+        "response_sha256": "7a615f7b0f2add3866daa9fc4ecc17875b29b1427d3e53f70991b3cb27fa66ed",
+        "outcome": "ok"
+      }
+    ],
+    "result": {
+      "last": 7,
+      "notice": "Platform shown after live operations check",
+      "same": true,
+      "selected": "oxford",
+      "total_gbp": 78
+    },
+    "result_present": true,
+    "result_source": "legacy_result",
+    "source_contract": {
+      "schema_version": "pysolate.guest-source-contract.v1",
+      "authority": "guest_reported_execution_fact",
+      "model_source_sha256": "sha256:878b4e9d7685b5c99b275a3816d07e50c7a13fabb24353c7b7dfd30ee2e1f7b4",
+      "effective_ast_sha256": "sha256:aaccb5151a47c333722bd662155f15e43f813a4734621f405917ceb523a5581c",
+      "wrapper_contract_sha256": "sha256:c183299cadc74d551b1f5c8b16b555fc4391bad583f0c2b2dac979a3639f3969"
+    },
+    "status": "ok"
+  },
+  "candidates": [
+    {
+      "id": "brighton",
+      "total_cost_gbp": 118.4,
+      "disposition": "discarded",
+      "physical_issues": 3,
+      "logical_claims": 3,
+      "source_sha256": "sha256:77096a78c25da34a3bfcb2b9abb0828acdbab110de38de076a11e75091adcd9b",
+      "cow_selected": true,
+      "model_source": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}",
+      "executed_source": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\nimport json\nwith open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "guest_response": {
+        "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+        "error": null,
+        "logs": [],
+        "metrics": {
+          "capability_calls": 3,
+          "guest_time_ms": 17.255935817956924,
+          "result_bytes": 413
+        },
+        "receipts": [
+          {
+            "receipt_id": "rcpt_e422506be54c73ec10debc1be49e0bcbe5692cefdb7fde94b533f2699f73f5b9",
+            "run_id": "candidate-brighton",
+            "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+            "call_id": "capability-1",
+            "capability": "travel.weather",
+            "operation_index": 0,
+            "request_sha256": "81f432e58edfa219a6bbb6fcf10887e43e1825dc8d80c1929ff113c9675405c5",
+            "response_sha256": "cf60b9c3253613150dc13e9f65c421a9ed89a86f504f926f02abe89806e0e2e8",
+            "outcome": "ok"
+          },
+          {
+            "receipt_id": "rcpt_59678f0e9087a437da5b83fb1f70f2d189eeaf49611f6bf11f7decc074afd0d7",
+            "run_id": "candidate-brighton",
+            "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+            "call_id": "capability-2",
+            "capability": "travel.rail",
+            "operation_index": 1,
+            "request_sha256": "578ef05b95d6bf184d2995f37dbd3b01dde51b553a8d0887eecb4007b634ce08",
+            "response_sha256": "25d03e4d6f5dab6ad3c3dba27b8a8654dd78a2fa4ec089f67017cc0c24b899a3",
+            "outcome": "ok"
+          },
+          {
+            "receipt_id": "rcpt_30bf702e6b5431c8363a29dc234f27278c9428bb841c0bfae8abd950edfcb645",
+            "run_id": "candidate-brighton",
+            "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+            "call_id": "capability-3",
+            "capability": "travel.attractions",
+            "operation_index": 2,
+            "request_sha256": "81f432e58edfa219a6bbb6fcf10887e43e1825dc8d80c1929ff113c9675405c5",
+            "response_sha256": "42e5a7038cca863a8e5a9918e38f7051418e03ff961175b08ff55459fbc86cb2",
+            "outcome": "ok"
+          }
+        ],
+        "result": {
+          "candidate_id": "brighton",
+          "weather": {
+            "forecast": "dry and bright",
+            "high_c": 18,
+            "rain_chance_pct": 20
+          },
+          "rail": {
+            "currency": "GBP",
+            "outbound": {
+              "arrival": "09:18",
+              "cost_gbp": 31.2,
+              "departure": "08:15"
+            },
+            "return": {
+              "arrival": "19:24",
+              "cost_gbp": 31.2,
+              "departure": "18:20"
+            },
+            "total_cost_gbp": 62.4
+          },
+          "attraction": {
+            "entry_cost_gbp": 28,
+            "name": "Royal Pavilion",
+            "open_saturday": true,
+            "opening_hours": "10:00-17:15"
+          },
+          "total_cost_gbp": 118.4
+        },
+        "result_present": true,
+        "result_source": "legacy_result",
+        "source_contract": {
+          "schema_version": "pysolate.guest-source-contract.v1",
+          "authority": "guest_reported_execution_fact",
+          "model_source_sha256": "sha256:77096a78c25da34a3bfcb2b9abb0828acdbab110de38de076a11e75091adcd9b",
+          "effective_ast_sha256": "sha256:30ea8b12fd35380a3eaa3f863c00826f4feff542063afac4a894d5d9c3549e08",
+          "wrapper_contract_sha256": "sha256:c183299cadc74d551b1f5c8b16b555fc4391bad583f0c2b2dac979a3639f3969"
+        },
+        "status": "ok"
+      }
+    },
+    {
+      "id": "oxford",
+      "total_cost_gbp": 78,
+      "disposition": "selected",
+      "physical_issues": 3,
+      "logical_claims": 3,
+      "source_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71",
+      "cow_selected": true,
+      "model_source": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}",
+      "executed_source": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\nimport json\nwith open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "guest_response": {
+        "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+        "error": null,
+        "logs": [],
+        "metrics": {
+          "capability_calls": 3,
+          "guest_time_ms": 17.035911791026592,
+          "result_bytes": 414
+        },
+        "receipts": [
+          {
+            "receipt_id": "rcpt_396eb8c96887f6500245d494e9e79ce2ddf8ec0b693f58ff09d55d2d32bb98b5",
+            "run_id": "candidate-oxford",
+            "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+            "call_id": "capability-1",
+            "capability": "travel.weather",
+            "operation_index": 0,
+            "request_sha256": "93181edf0d482fe23109f00da00a2d9e19e76dc92eaddd345716ef2b0eee49c3",
+            "response_sha256": "c0dc78396fce808c725d19ec13327e131fd5304613031544d9c8de19a6e68f77",
+            "outcome": "ok"
+          },
+          {
+            "receipt_id": "rcpt_372d7e85fb34b2ea8dd85057efd6c0d9b838b010043ebc17202eeef35d033219",
+            "run_id": "candidate-oxford",
+            "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+            "call_id": "capability-2",
+            "capability": "travel.rail",
+            "operation_index": 1,
+            "request_sha256": "1e5fc9bc1a801ecd21fa7bb1f0dbfde9d982535fc3ee87949ec608c0373674bc",
+            "response_sha256": "c3f44029d863f6b763c9a7f2a946efb124f4f17ee6fb8501b277c3284a1bf3f6",
+            "outcome": "ok"
+          },
+          {
+            "receipt_id": "rcpt_0ce88a6ca5785962a45a8a646191345536d4efd2557fc027d8e92e5d078bfbfb",
+            "run_id": "candidate-oxford",
+            "capability_plan_sha256": "sha256:1f8ae9c962a778d6a4b60b78487b6628dc272843fce94615c643b9a8ead34e4a",
+            "call_id": "capability-3",
+            "capability": "travel.attractions",
+            "operation_index": 2,
+            "request_sha256": "93181edf0d482fe23109f00da00a2d9e19e76dc92eaddd345716ef2b0eee49c3",
+            "response_sha256": "b6a01351cba17669b8485d010ff51bedcb1ca9e594bcd3d1f2a24335e6db5ea5",
+            "outcome": "ok"
+          }
+        ],
+        "result": {
+          "candidate_id": "oxford",
+          "weather": {
+            "forecast": "cloudy with light showers",
+            "high_c": 16,
+            "rain_chance_pct": 45
+          },
+          "rail": {
+            "currency": "GBP",
+            "outbound": {
+              "arrival": "09:02",
+              "cost_gbp": 39,
+              "departure": "08:05"
+            },
+            "return": {
+              "arrival": "19:04",
+              "cost_gbp": 39,
+              "departure": "18:05"
+            },
+            "total_cost_gbp": 78
+          },
+          "attraction": {
+            "entry_cost_gbp": 0,
+            "name": "Ashmolean Museum",
+            "open_saturday": true,
+            "opening_hours": "10:00-17:00"
+          },
+          "total_cost_gbp": 78
+        },
+        "result_present": true,
+        "result_source": "legacy_result",
+        "source_contract": {
+          "schema_version": "pysolate.guest-source-contract.v1",
+          "authority": "guest_reported_execution_fact",
+          "model_source_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71",
+          "effective_ast_sha256": "sha256:f68dc74f8933dfa519b2fbfcaa83a7b71acbcd61da43601033cf8d5747626641",
+          "wrapper_contract_sha256": "sha256:c183299cadc74d551b1f5c8b16b555fc4391bad583f0c2b2dac979a3639f3969"
+        },
+        "status": "ok"
+      }
+    }
+  ],
+  "phases": [
+    {
+      "id": "source-predispatch",
+      "index": 1,
+      "title": "Generate and pre-dispatch",
+      "summary": "Closed, straight-line read statements are analyzed from visible source prefixes. Six Host requests start before source feed completion.",
+      "facts": [
+        {
+          "label": "qualified reads",
+          "value": "6",
+          "note": "weather, rail, attractions × 2 candidates"
+        },
+        {
+          "label": "source schedule",
+          "value": "600 ms + 7000 ms tail",
+          "note": "deterministic and preregistered"
+        }
+      ],
+      "event_ids": [
+        "event-0007",
+        "event-0008",
+        "event-0009",
+        "event-0010",
+        "event-0011",
+        "event-0012",
+        "event-0013",
+        "event-0014",
+        "event-0015",
+        "event-0016",
+        "event-0017",
+        "event-0018",
+        "event-0019",
+        "event-0020",
+        "event-0021",
+        "event-0022",
+        "event-0023",
+        "event-0024",
+        "event-0025",
+        "event-0026",
+        "event-0027",
+        "event-0028",
+        "event-0029",
+        "event-0030",
+        "event-0031",
+        "event-0032",
+        "event-0033",
+        "event-0034",
+        "event-0035",
+        "event-0036",
+        "event-0037",
+        "event-0038",
+        "event-0039",
+        "event-0040",
+        "event-0041",
+        "event-0042",
+        "event-0043",
+        "event-0044",
+        "event-0045",
+        "event-0047",
+        "event-0048",
+        "event-0049",
+        "event-0050",
+        "event-0051",
+        "event-0052",
+        "event-0053"
+      ]
+    },
+    {
+      "id": "fresh-execution",
+      "index": 2,
+      "title": "Seal, then execute fresh",
+      "summary": "Each complete source is sealed before a fresh isolated Guest starts from line one and claims exact staged observations.",
+      "facts": [
+        {
+          "label": "physical requests",
+          "value": "6",
+          "note": "one per qualified call"
+        },
+        {
+          "label": "logical claims",
+          "value": "6",
+          "note": "no duplicate physical call"
+        }
+      ],
+      "event_ids": [
+        "event-0046",
+        "event-0054",
+        "event-0055",
+        "event-0056",
+        "event-0057",
+        "event-0058",
+        "event-0059",
+        "event-0060",
+        "event-0061",
+        "event-0062",
+        "event-0063",
+        "event-0065"
+      ]
+    },
+    {
+      "id": "sharing-retention",
+      "index": 3,
+      "title": "Share origin, retain result",
+      "summary": "Brighton and Oxford share one in-flight origin computation; Main later consumes the retained whole-run result.",
+      "facts": [
+        {
+          "label": "logical calls",
+          "value": "3",
+          "note": "two candidates plus Main"
+        },
+        {
+          "label": "physical computes",
+          "value": "1",
+          "note": "single-flight owner"
+        }
+      ],
+      "event_ids": [
+        "event-0001",
+        "event-0002",
+        "event-0003",
+        "event-0004",
+        "event-0005",
+        "event-0006",
+        "event-0070",
+        "event-0071"
+      ]
+    },
+    {
+      "id": "branch-resume",
+      "index": 4,
+      "title": "Select, seal, and resume",
+      "summary": "Oxford is selected from observed Guest outputs. Its non-empty workspace is sealed, exported, imported, bound, and read by a fresh Main Guest.",
+      "facts": [
+        {
+          "label": "selected",
+          "value": "Oxford · £78.00",
+          "note": "Brighton £118.40 discarded"
+        },
+        {
+          "label": "workspace",
+          "value": "sha256:22d4025eb315…",
+          "note": "export/import identity preserved"
+        }
+      ],
+      "event_ids": [
+        "event-0067",
+        "event-0068",
+        "event-0069",
+        "event-0072",
+        "event-0073",
+        "event-0074",
+        "event-0077"
+      ]
+    },
+    {
+      "id": "memory-io",
+      "index": 5,
+      "title": "Private memory and cold I/O",
+      "summary": "Linux candidate Guests use private COW memory. Host campaign counters report one successful page-out; a typed resume event closes the fresh Main continuation.",
+      "facts": [
+        {
+          "label": "COW",
+          "value": "2 / 2 selected",
+          "note": "Brighton and Oxford candidates"
+        },
+        {
+          "label": "cold I/O counters",
+          "value": "1 wait · 1 page-out · 1 resume",
+          "note": "Host counter; 551157760 bytes advised"
+        }
+      ],
+      "event_ids": [
+        "event-0064",
+        "event-0066",
+        "event-0078"
+      ]
+    },
+    {
+      "id": "fail-closed",
+      "index": 6,
+      "title": "Reject mismatched reuse",
+      "summary": "Source and canonical-argument mutations are rejected before an observation can cross the Host boundary.",
+      "facts": [
+        {
+          "label": "source mismatch",
+          "value": "rejected",
+          "note": "fresh Guest not started"
+        },
+        {
+          "label": "argument mismatch",
+          "value": "rejected",
+          "note": "staged observation not reused"
+        }
+      ],
+      "event_ids": [
+        "event-0079",
+        "event-0080"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "sequence": 1,
+      "id": "event-0001",
+      "at_ns": 6147020424,
+      "type": "function.logical",
+      "actor_id": "brighton",
+      "logical_id": "origin-brighton"
+    },
+    {
+      "sequence": 2,
+      "id": "event-0002",
+      "at_ns": 6147087945,
+      "type": "function.logical",
+      "actor_id": "oxford",
+      "logical_id": "origin-oxford"
+    },
+    {
+      "sequence": 3,
+      "id": "event-0003",
+      "at_ns": 8466764493,
+      "type": "function.physical.start",
+      "actor_id": "host",
+      "physical_id": "origin-physical-1"
+    },
+    {
+      "sequence": 4,
+      "id": "event-0004",
+      "at_ns": 12180203130,
+      "type": "function.physical.end",
+      "actor_id": "host",
+      "physical_id": "origin-physical-1",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 5,
+      "id": "event-0005",
+      "at_ns": 12191411720,
+      "type": "function.leader",
+      "actor_id": "brighton",
+      "logical_id": "origin-brighton",
+      "physical_id": "origin-physical-1",
+      "outcome": "leader"
+    },
+    {
+      "sequence": 6,
+      "id": "event-0006",
+      "at_ns": 12191416310,
+      "type": "function.waiter",
+      "actor_id": "oxford",
+      "logical_id": "origin-oxford",
+      "physical_id": "origin-physical-1",
+      "outcome": "waiter"
+    },
+    {
+      "sequence": 7,
+      "id": "event-0007",
+      "at_ns": 12245542739,
+      "type": "source.generation.start",
+      "actor_id": "oxford",
+      "logical_id": "source-oxford"
+    },
+    {
+      "sequence": 8,
+      "id": "event-0008",
+      "at_ns": 12245582039,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-1",
+      "source_prefix": "weather = travel.weather(\"oxford\")\n",
+      "source_delta": "weather = travel.weather(\"oxford\")\n",
+      "source_prefix_sha256": "sha256:699676218f079eb7fcf14c8f907e0bbda5abfd277887f081ae9b53f9e338f9cb",
+      "source_step": 1,
+      "source_step_count": 6
+    },
+    {
+      "sequence": 9,
+      "id": "event-0009",
+      "at_ns": 12245808632,
+      "type": "source.generation.start",
+      "actor_id": "brighton",
+      "logical_id": "source-brighton"
+    },
+    {
+      "sequence": 10,
+      "id": "event-0010",
+      "at_ns": 12245826462,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-1",
+      "source_prefix": "weather = travel.weather(\"brighton\")\n",
+      "source_delta": "weather = travel.weather(\"brighton\")\n",
+      "source_prefix_sha256": "sha256:553545ee576b0e147248791efb7a241894bd918c612bec9e92368066c90e6ce9",
+      "source_step": 1,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 11,
+      "id": "event-0011",
+      "at_ns": 12845830209,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-2",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\n",
+      "source_delta": "rail = travel.rail(\"oxford\", travellers=2)\n",
+      "source_prefix_sha256": "sha256:1f76eb14f9f0b563c11c12cbaccfb074ddc1c65674d18a11cae1c312a45b1acc",
+      "source_step": 2,
+      "source_step_count": 6
+    },
+    {
+      "sequence": 12,
+      "id": "event-0012",
+      "at_ns": 12845912260,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-2",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\n",
+      "source_delta": "rail = travel.rail(\"brighton\", travellers=2)\n",
+      "source_prefix_sha256": "sha256:06b8de87bcb86c27942deb66be3bbb40afbb779fbfd7987fdc3216ac7b9a1b92",
+      "source_step": 2,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 13,
+      "id": "event-0013",
+      "at_ns": 13446240590,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-3",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\n",
+      "source_delta": "attraction = travel.attractions(\"oxford\")\n",
+      "source_prefix_sha256": "sha256:8f429d8bc294973d1f82cb8a0e001eba3d17f784646cfd60cb3cbe8bdb1e6e26",
+      "source_step": 3,
+      "source_step_count": 6
+    },
+    {
+      "sequence": 14,
+      "id": "event-0014",
+      "at_ns": 13446246000,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-3",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\n",
+      "source_delta": "attraction = travel.attractions(\"brighton\")\n",
+      "source_prefix_sha256": "sha256:9926c3541dd303e4ff35a140c0401d9af8de3dd4ded354b6614e25f6ceff4ef3",
+      "source_step": 3,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 15,
+      "id": "event-0015",
+      "at_ns": 18772703210,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
+    },
+    {
+      "sequence": 16,
+      "id": "event-0016",
+      "at_ns": 18772710250,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
+    },
+    {
+      "sequence": 17,
+      "id": "event-0017",
+      "at_ns": 18772752391,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather"
+    },
+    {
+      "sequence": 18,
+      "id": "event-0018",
+      "at_ns": 18868270434,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+    },
+    {
+      "sequence": 19,
+      "id": "event-0019",
+      "at_ns": 18868274354,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+    },
+    {
+      "sequence": 20,
+      "id": "event-0020",
+      "at_ns": 18868304334,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather"
+    },
+    {
+      "sequence": 21,
+      "id": "event-0021",
+      "at_ns": 19073201929,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 22,
+      "id": "event-0022",
+      "at_ns": 19169363109,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 23,
+      "id": "event-0023",
+      "at_ns": 19517147385,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+    },
+    {
+      "sequence": 24,
+      "id": "event-0024",
+      "at_ns": 19517151105,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+    },
+    {
+      "sequence": 25,
+      "id": "event-0025",
+      "at_ns": 19517178355,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail"
+    },
+    {
+      "sequence": 26,
+      "id": "event-0026",
+      "at_ns": 19519993905,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
+    },
+    {
+      "sequence": 27,
+      "id": "event-0027",
+      "at_ns": 19519996845,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
+    },
+    {
+      "sequence": 28,
+      "id": "event-0028",
+      "at_ns": 19520021556,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail"
+    },
+    {
+      "sequence": 29,
+      "id": "event-0029",
+      "at_ns": 20053918465,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
+    },
+    {
+      "sequence": 30,
+      "id": "event-0030",
+      "at_ns": 20053921675,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
+    },
+    {
+      "sequence": 31,
+      "id": "event-0031",
+      "at_ns": 20053946495,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions"
+    },
+    {
+      "sequence": 32,
+      "id": "event-0032",
+      "at_ns": 20093383518,
+      "type": "semantic.qualified",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+    },
+    {
+      "sequence": 33,
+      "id": "event-0033",
+      "at_ns": 20093387588,
+      "type": "semantic.issue",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+    },
+    {
+      "sequence": 34,
+      "id": "event-0034",
+      "at_ns": 20093418688,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions"
+    },
+    {
+      "sequence": 35,
+      "id": "event-0035",
+      "at_ns": 20117924090,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 36,
+      "id": "event-0036",
+      "at_ns": 20121039894,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 37,
+      "id": "event-0037",
+      "at_ns": 20446437209,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-4",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\n",
+      "source_delta": "result = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\n",
+      "source_prefix_sha256": "sha256:1c5b739e07ce14a8351d93d3650366007ce504bac57e3893d181e8efc177da16",
+      "source_step": 4,
+      "source_step_count": 6
+    },
+    {
+      "sequence": 38,
+      "id": "event-0038",
+      "at_ns": 20446448470,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-4",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n",
+      "source_delta": "result = {\n",
+      "source_prefix_sha256": "sha256:cb41eac2b3ead8057731ba0a284b0754c054becbe869de9df9cb25b2ac44c3f6",
+      "source_step": 4,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 39,
+      "id": "event-0039",
+      "at_ns": 20454806689,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 40,
+      "id": "event-0040",
+      "at_ns": 20494009259,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 41,
+      "id": "event-0041",
+      "at_ns": 21046643899,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-5",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n",
+      "source_delta": "    \"candidate_id\": \"brighton\",\n",
+      "source_prefix_sha256": "sha256:d18efbfd7762bb71a92496f1821516f1779b3c765b0288d3a7ab229bb16b5687",
+      "source_step": 5,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 42,
+      "id": "event-0042",
+      "at_ns": 21046694269,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-5",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\nimport json\n",
+      "source_delta": "import json\n",
+      "source_prefix_sha256": "sha256:228edb6bf2c0b36635bfe58dbc8cfceae867cda5dc852819dad02a06f47b4623",
+      "source_step": 5,
+      "source_step_count": 6
+    },
+    {
+      "sequence": 43,
+      "id": "event-0043",
+      "at_ns": 21647234282,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-6",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n",
+      "source_delta": "    \"weather\": weather,\n",
+      "source_prefix_sha256": "sha256:fbe9e97bbd9daf5e75f2938719ff4b7e6e10483ab0a828eb04c6fa2a72173191",
+      "source_step": 6,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 44,
+      "id": "event-0044",
+      "at_ns": 21647250202,
+      "type": "source.statement.complete",
+      "actor_id": "oxford",
+      "logical_id": "oxford-statement-6",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\nimport json\nwith open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_delta": "with open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_prefix_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71",
+      "source_step": 6,
+      "source_step_count": 6
+    },
+    {
+      "sequence": 45,
+      "id": "event-0045",
+      "at_ns": 21647273083,
+      "type": "source.feed.complete",
+      "actor_id": "oxford",
+      "logical_id": "source-oxford",
+      "identity_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71"
+    },
+    {
+      "sequence": 46,
+      "id": "event-0046",
+      "at_ns": 21647285573,
+      "type": "source.sealed",
+      "actor_id": "oxford",
+      "logical_id": "source-oxford",
+      "identity_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71"
+    },
+    {
+      "sequence": 47,
+      "id": "event-0047",
+      "at_ns": 22247992338,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-7",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n",
+      "source_delta": "    \"rail\": rail,\n",
+      "source_prefix_sha256": "sha256:636d75b74745272bb2a6f3b886372d61df03682cfe3354d5961f02fb0b638a25",
+      "source_step": 7,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 48,
+      "id": "event-0048",
+      "at_ns": 22848708202,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-8",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n",
+      "source_delta": "    \"attraction\": attraction,\n",
+      "source_prefix_sha256": "sha256:f473ef49d673476dc190bc56d9eaa3524e752e6bca98af110884c3073dc952ef",
+      "source_step": 8,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 49,
+      "id": "event-0049",
+      "at_ns": 23449464698,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-9",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n",
+      "source_delta": "    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n",
+      "source_prefix_sha256": "sha256:6478f36dc2bcc8d2c8b9e41fcc3c62f607cc74d69738eb121d60d312bf23cf67",
+      "source_step": 9,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 50,
+      "id": "event-0050",
+      "at_ns": 24050253183,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-10",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\n",
+      "source_delta": "}\n",
+      "source_prefix_sha256": "sha256:c3a0c74c1578f82a5d06f1b5b1610bb074c7e2fd147d16f9afcb1d7ae0b1a3d2",
+      "source_step": 10,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 51,
+      "id": "event-0051",
+      "at_ns": 24650985158,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-11",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\nimport json\n",
+      "source_delta": "import json\n",
+      "source_prefix_sha256": "sha256:8320c6f0b69ff12ade3245b29d0d575bcc706ddeba7ea64b8a4ef73fdbb3c5bc",
+      "source_step": 11,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 52,
+      "id": "event-0052",
+      "at_ns": 25251755993,
+      "type": "source.statement.complete",
+      "actor_id": "brighton",
+      "logical_id": "brighton-statement-12",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\nimport json\nwith open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_delta": "with open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_prefix_sha256": "sha256:77096a78c25da34a3bfcb2b9abb0828acdbab110de38de076a11e75091adcd9b",
+      "source_step": 12,
+      "source_step_count": 12
+    },
+    {
+      "sequence": 53,
+      "id": "event-0053",
+      "at_ns": 25251759774,
+      "type": "source.feed.complete",
+      "actor_id": "brighton",
+      "logical_id": "source-brighton",
+      "identity_sha256": "sha256:77096a78c25da34a3bfcb2b9abb0828acdbab110de38de076a11e75091adcd9b"
+    },
+    {
+      "sequence": 54,
+      "id": "event-0054",
+      "at_ns": 25251780734,
+      "type": "source.sealed",
+      "actor_id": "brighton",
+      "logical_id": "source-brighton",
+      "identity_sha256": "sha256:77096a78c25da34a3bfcb2b9abb0828acdbab110de38de076a11e75091adcd9b"
+    },
+    {
+      "sequence": 55,
+      "id": "event-0055",
+      "at_ns": 27599235961,
+      "type": "guest.start",
+      "actor_id": "oxford",
+      "logical_id": "candidate-oxford",
+      "physical_id": "guest-oxford"
+    },
+    {
+      "sequence": 56,
+      "id": "event-0056",
+      "at_ns": 27648024343,
+      "type": "guest.start",
+      "actor_id": "brighton",
+      "logical_id": "candidate-brighton",
+      "physical_id": "guest-brighton"
+    },
+    {
+      "sequence": 57,
+      "id": "event-0057",
+      "at_ns": 31457111907,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "oxford-weather",
+      "physical_id": "request-oxford-weather",
+      "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
+    },
+    {
+      "sequence": 58,
+      "id": "event-0058",
+      "at_ns": 31457374790,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "oxford-rail",
+      "physical_id": "request-oxford-rail",
+      "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
+    },
+    {
+      "sequence": 59,
+      "id": "event-0059",
+      "at_ns": 31457555401,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "oxford-attractions",
+      "physical_id": "request-oxford-attractions",
+      "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
+    },
+    {
+      "sequence": 60,
+      "id": "event-0060",
+      "at_ns": 31490704727,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "brighton-weather",
+      "physical_id": "request-brighton-weather",
+      "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+    },
+    {
+      "sequence": 61,
+      "id": "event-0061",
+      "at_ns": 31490980289,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "brighton-rail",
+      "physical_id": "request-brighton-rail",
+      "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+    },
+    {
+      "sequence": 62,
+      "id": "event-0062",
+      "at_ns": 31491371134,
+      "type": "semantic.claim",
+      "actor_id": "host",
+      "logical_id": "brighton-attractions",
+      "physical_id": "request-brighton-attractions",
+      "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+    },
+    {
+      "sequence": 63,
+      "id": "event-0063",
+      "at_ns": 31495804651,
+      "type": "guest.end",
+      "actor_id": "oxford",
+      "logical_id": "candidate-oxford",
+      "physical_id": "guest-oxford",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 64,
+      "id": "event-0064",
+      "at_ns": 31495857792,
+      "type": "cow.selected",
+      "actor_id": "oxford",
+      "logical_id": "candidate-oxford",
+      "physical_id": "guest-oxford",
+      "outcome": "private_memory"
+    },
+    {
+      "sequence": 65,
+      "id": "event-0065",
+      "at_ns": 31530779796,
+      "type": "guest.end",
+      "actor_id": "brighton",
+      "logical_id": "candidate-brighton",
+      "physical_id": "guest-brighton",
+      "outcome": "ok"
+    },
+    {
+      "sequence": 66,
+      "id": "event-0066",
+      "at_ns": 31530826266,
+      "type": "cow.selected",
+      "actor_id": "brighton",
+      "logical_id": "candidate-brighton",
+      "physical_id": "guest-brighton",
+      "outcome": "private_memory"
+    },
+    {
+      "sequence": 67,
+      "id": "event-0067",
+      "at_ns": 31598861995,
+      "type": "branch.seal",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:18dad83456ab265e6cf16bd635e7dc7071fcb5fdb45ac7645ac44302defb4dcb",
+      "outcome": "selected"
+    },
+    {
+      "sequence": 68,
+      "id": "event-0068",
+      "at_ns": 31610878934,
+      "type": "capsule.export",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:22d4025eb3158834bd1b94586b2b9ddc61ae958eb7383a38fbf70c4a889f2c3d",
+      "outcome": "serialized"
+    },
+    {
+      "sequence": 69,
+      "id": "event-0069",
+      "at_ns": 31636033113,
+      "type": "branch.discard",
+      "actor_id": "host",
+      "logical_id": "brighton",
+      "outcome": "discarded"
+    },
+    {
+      "sequence": 70,
+      "id": "event-0070",
+      "at_ns": 31689760160,
+      "type": "function.logical",
+      "actor_id": "main",
+      "logical_id": "origin-main"
+    },
+    {
+      "sequence": 71,
+      "id": "event-0071",
+      "at_ns": 31700701007,
+      "type": "function.retained",
+      "actor_id": "main",
+      "logical_id": "origin-main",
+      "physical_id": "origin-physical-1",
+      "outcome": "retained"
+    },
+    {
+      "sequence": 72,
+      "id": "event-0072",
+      "at_ns": 31756378993,
+      "type": "capsule.import",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:22d4025eb3158834bd1b94586b2b9ddc61ae958eb7383a38fbf70c4a889f2c3d",
+      "outcome": "verified"
+    },
+    {
+      "sequence": 73,
+      "id": "event-0073",
+      "at_ns": 31765626422,
+      "type": "capsule.bind",
+      "actor_id": "host",
+      "logical_id": "oxford",
+      "identity_sha256": "sha256:18dad83456ab265e6cf16bd635e7dc7071fcb5fdb45ac7645ac44302defb4dcb",
+      "outcome": "portable_root_bound"
+    },
+    {
+      "sequence": 74,
+      "id": "event-0074",
+      "at_ns": 34040312509,
+      "type": "guest.start",
+      "actor_id": "main",
+      "logical_id": "resume-main",
+      "physical_id": "guest-main-resumed"
+    },
+    {
+      "sequence": 75,
+      "id": "event-0075",
+      "at_ns": 38134416356,
+      "type": "request.start",
+      "actor_id": "host",
+      "logical_id": "main-platform-notice",
+      "physical_id": "request-main-platform-notice",
+      "outcome": "start"
+    },
+    {
+      "sequence": 76,
+      "id": "event-0076",
+      "at_ns": 38235444558,
+      "type": "request.finish",
+      "actor_id": "host",
+      "logical_id": "main-platform-notice",
+      "physical_id": "request-main-platform-notice",
+      "outcome": "finish"
+    },
+    {
+      "sequence": 77,
+      "id": "event-0077",
+      "at_ns": 38563349421,
+      "type": "guest.complete",
+      "actor_id": "main",
+      "logical_id": "resume-main",
+      "physical_id": "guest-main-resumed",
+      "outcome": "published"
+    },
+    {
+      "sequence": 78,
+      "id": "event-0078",
+      "at_ns": 38563428872,
+      "type": "cold_io.resume",
+      "actor_id": "main",
+      "logical_id": "resume-main",
+      "physical_id": "guest-main-resumed",
+      "outcome": "fresh_continuation"
+    },
+    {
+      "sequence": 79,
+      "id": "event-0079",
+      "at_ns": 39823156106,
+      "type": "control.argument_mismatch",
+      "actor_id": "host",
+      "logical_id": "argument-mismatch",
+      "outcome": "rejected"
+    },
+    {
+      "sequence": 80,
+      "id": "event-0080",
+      "at_ns": 42635239821,
+      "type": "control.source_mismatch",
+      "actor_id": "host",
+      "logical_id": "source-mismatch",
+      "outcome": "rejected"
+    }
+  ],
+  "matched_control": {
+    "pair_count": 3,
+    "baseline_median_ns": 20415891997,
+    "optimized_median_ns": 19251013703,
+    "median_savings_ns": 1164878294,
+    "equivalent_results": true
+  },
+  "provenance": {
+    "evidence_sha256": "sha256:bd758ac77b67acbe85845a25cdc9c608e95463293be8e2c7d17283b2ccedfab9",
+    "source_commit": "46ecc4ecc9ab8bb804312054be566b463f8d9bcd",
+    "artifact_sha256": "sha256:815f529d8c0cae18fac3730e6ffc6fe7e817fc5a01df69d709601b68d090559a",
+    "fixture_sha256": "sha256:07ee8df0c2dac355229b569e1033ac5b4884e6b3fa7109ffd1f9254fa70a0ab2",
+    "platform": "linux/amd64"
+  }
+}

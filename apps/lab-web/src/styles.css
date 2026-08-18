@@ -705,8 +705,14 @@ main { width: min(1440px, 100%); margin: 0 auto; padding: 0 clamp(18px, 4vw, 64p
 .lane-note { fill: #647286; font-size: 8px; text-transform: uppercase; }
 .lane-milestone line { stroke: #26303e; stroke-dasharray: 3 5; }
 .lane-milestone text { fill: #667489; font-size: 7px; text-transform: uppercase; }
+.lane-orchestration .orchestration-boundary { stroke: #7a8598; stroke-dasharray: 2 4; opacity: .8; }
+.lane-orchestration circle { fill: #111923; stroke: #d7a95b; stroke-width: 1.8; }
+.lane-orchestration .orchestration-stage { fill: #aab5c5; font-size: 7px; text-transform: uppercase; }
+.lane-orchestration .orchestration-title { fill: #e3bd72; font-size: 8px; font-weight: 700; text-transform: uppercase; }
+.lane-orchestration .orchestration-note { fill: #77869a; font-size: 7px; }
 .lane-transition { fill: none; stroke-width: 1.35; opacity: .66; }
 .lane-transition.brighton { stroke: #a78bda; } .lane-transition.oxford { stroke: #48b9b5; }
+.lane-orchestration-link { stroke-dasharray: 3 4; opacity: .72; }
 .lane-fanout { marker-end: url(#lane-arrow); }
 .lane-reuse { stroke-dasharray: 4 4; opacity: .48; }
 .branch-discard { stroke: #ed7888; } .branch-seal, .lane-resume { stroke: #d7a95b; }

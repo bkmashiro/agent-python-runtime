@@ -264,12 +264,14 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
     { id: 'brighton', label: 'Brighton', note: 'candidate · discarded', y: 104 },
     { id: 'oxford', label: 'Oxford', note: 'candidate · selected', y: 212 },
     { id: 'host', label: 'Host', note: 'effects · sharing · workspace', y: 354 },
-    { id: 'main', label: 'Main', note: 'selection · resume', y: 482 },
+    { id: 'main', label: 'Main', note: 'orchestration · selection · resume', y: 482 },
   ];
-  const width = 1180, height = 540, left = 132, right = 24;
+  const width = 1180, height = 540, left = 164, right = 24;
+  const orchestrationX = 132;
   const xFor = (event: DebugEvent) => left + (event.order - 1) / Math.max(1, events.length - 1) * (width - left - right);
   const find = (type: string, predicate: (event: DebugEvent) => boolean = () => true) => events.find((event) => event.type === type && predicate(event));
   const candidates = ['brighton', 'oxford'] as const;
+  const fanoutTargets = candidates.map((candidate) => ({ candidate, event: find('function.logical', (event) => event.actor === candidate)! }));
   const tools = [
     { id: 'weather', name: 'travel.weather', short: 'W', y: -74 },
     { id: 'rail', name: 'travel.rail', short: 'R', y: -36 },
@@ -298,13 +300,11 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
   const activate = (callback: () => void) => (keyEvent: ReactKeyboardEvent) => { if (keyEvent.key === 'Enter' || keyEvent.key === ' ') callback(); };
   useEffect(() => {
     const scroller = laneScrollRef.current;
-    const firstSource = sourcePoints[0]?.event;
-    if (!scroller || !firstSource || scroller.clientWidth > 620) return;
-    scroller.scrollLeft = Math.max(0, xFor(firstSource) * (scroller.scrollWidth / width) - 122);
+    if (!scroller || scroller.clientWidth > 620) return;
+    scroller.scrollLeft = 0;
   }, [events]);
   const path = (from: DebugEvent, fromY: number, to: DebugEvent, toY: number) => `M ${xFor(from)} ${fromY} C ${xFor(from) + 28} ${fromY}, ${xFor(to) - 28} ${toY}, ${xFor(to)} ${toY}`;
   const stages = [
-    { event: find('source.generation.start')!, label: 'fan-out', anchor: 'start' as const },
     { event: find('source.sealed')!, label: 'fresh execution', anchor: 'start' as const },
     { event: find('branch.seal')!, label: 'branch decision', anchor: 'end' as const },
     { event: find('guest.start', (event) => event.actor === 'main')!, label: 'resume Main', anchor: 'start' as const },
@@ -315,11 +315,20 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
   const selectedDetail = selectedSpan?.note ?? logicalID(selectedEvent!) ?? selectedEvent?.label ?? '';
   const selectedTool = selectedSpan?.tool ?? selectedEvent?.tool;
   return <section className="lane-map" aria-label="Semantic causal lane timeline">
-    <header><div><span className="eyebrow">Operation and transition map</span><h2>Fan-out, spans, and convergence</h2><p>The overview shows only transitions people reason about: source-triggered fan-out, physical request lifetimes, staged-result claims, shared work, branch disposition, and capsule resume. The complete event ledger remains below.</p></div><div className="lane-legend"><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
+    <header><div><span className="eyebrow">Operation and transition map</span><h2>Main orchestration, fan-out, and convergence</h2><p>Main first arranges the candidate fan-out; the dashed launch marker is a pre-trace orchestration boundary, not a timed Guest span. Its arrows land on the first recorded work in Brighton and Oxford. Evidence-backed generation, request, Guest, branch, and resume spans follow.</p></div><div className="lane-legend"><span className="legend-control">pre-trace boundary</span><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
     <div className="lane-map-viewport"><div aria-hidden="true" className="lane-mobile-labels">{lanes.map((lane) => <span key={lane.id} style={{ top: `${lane.y / height * 100}%` }}><strong>{lane.label}</strong><small>{lane.note}</small></span>)}</div><div className="lane-map-scroll" ref={laneScrollRef}><svg aria-label="Brighton, Oxford, Host, and Main operation lanes" className="lane-map-svg semantic-map-svg" role="img" viewBox={`0 0 ${width} ${height}`}>
       <defs><marker id="lane-arrow" markerHeight="5" markerWidth="6" orient="auto" refX="5" refY="2.5"><path d="M0 0 6 2.5 0 5z" /></marker></defs>
       {stages.map(({ event, label, anchor }) => <g className="lane-milestone" key={label}><line x1={xFor(event)} x2={xFor(event)} y1="34" y2={height - 24} /><text textAnchor={anchor} x={xFor(event) + (anchor === 'end' ? -4 : 4)} y="24">{label}</text></g>)}
       {lanes.map((lane) => <g className="lane-axis" key={lane.id}><text className="lane-title" x="12" y={lane.y - 6}>{lane.label}</text><text className="lane-note" x="12" y={lane.y + 11}>{lane.note}</text><line x1={left} x2={width - right} y1={lane.y} y2={lane.y} /></g>)}
+      <g aria-label="Main orchestrates candidate fan-out before the first recorded runtime event" className="lane-orchestration" data-evidence="pre-trace-boundary">
+        <title>Orchestration precedes the event ledger; no duration is claimed.</title>
+        <line className="orchestration-boundary" x1={orchestrationX} x2={orchestrationX} y1="34" y2={height - 24} />
+        <text className="orchestration-stage" x={orchestrationX + 4} y="24">Main orchestration</text>
+        <circle cx={orchestrationX} cy={lanes[3].y} r="6" />
+        <text className="orchestration-title" x={orchestrationX + 9} y={lanes[3].y - 9}>orchestrates fan-out</text>
+        <text className="orchestration-note" x={orchestrationX + 9} y={lanes[3].y + 15}>before first recorded event</text>
+      </g>
+      {fanoutTargets.map(({ candidate, event }) => <path className={`lane-transition lane-orchestration-link ${candidate}`} d={`M ${orchestrationX} ${lanes[3].y} C ${orchestrationX} ${lanes[3].y - 90}, ${xFor(event) - 28} ${lanes.find((lane) => lane.id === candidate)!.y + 42}, ${xFor(event)} ${lanes.find((lane) => lane.id === candidate)!.y}`} key={`orchestrate:${candidate}`} markerEnd="url(#lane-arrow)" />)}
       {sourcePoints.map((source) => { const request = requestSpans.find((span) => span?.id === `request:${source.candidate}:${source.tool.id}`)!; return <path className={`lane-transition lane-fanout ${source.candidate}`} d={path(source.event, lanes.find((lane) => lane.id === source.candidate)!.y - 18, request.start, request.y)} key={`fanout:${source.candidate}:${source.tool.id}`} markerEnd="url(#lane-arrow)" />; })}
       {claimPoints.map((claim) => { const request = requestSpans.find((span) => span?.id === `request:${claim.candidate}:${claim.tool.id}`)!; return <path className={`lane-transition lane-reuse ${claim.candidate}`} d={path(request.end, request.y, claim.event, lanes.find((lane) => lane.id === claim.candidate)!.y + 20)} key={`reuse:${claim.candidate}:${claim.tool.id}`} markerEnd="url(#lane-arrow)" />; })}
       {candidates.map((candidate) => { const logical = find('function.logical', (event) => event.actor === candidate)!; return <path className={`lane-transition lane-fanout ${candidate}`} d={path(logical, lanes.find((lane) => lane.id === candidate)!.y, originSpan!.start, originSpan!.y)} key={`origin:${candidate}`} markerEnd="url(#lane-arrow)" />; })}

@@ -31,6 +31,18 @@ func TestUnifiedEvidenceRejectsBindingAndPrivacyMutations(t *testing.T) {
 		func(value *Evidence) { value.FullRun.Events[14].Outcome = "error" },
 		func(value *Evidence) { value.FullRun.Events[2].Outcome = "access_token=deadbeef" },
 		func(value *Evidence) { value.Mechanisms[0].EventIDs[0] = value.Mechanisms[1].EventIDs[0] },
+		func(value *Evidence) {
+			seal, exported := -1, -1
+			for index, event := range value.FullRun.Events {
+				if event.Type == "branch.seal" {
+					seal = index
+				}
+				if event.Type == "capsule.export" {
+					exported = index
+				}
+			}
+			value.FullRun.Events[seal].AtNS = value.FullRun.Events[exported].AtNS + 1
+		},
 	}
 	for index, mutate := range mutations {
 		candidate := valid
@@ -82,10 +94,14 @@ func validUnifiedEvidence(t *testing.T) Evidence {
 		{Type: "guest.start", ActorID: "oxford", LogicalID: "candidate-oxford", PhysicalID: "guest-oxford"},
 		{Type: "guest.end", ActorID: "oxford", LogicalID: "candidate-oxford", PhysicalID: "guest-oxford", Outcome: "ok"},
 		{Type: "cow.selected", ActorID: "oxford", LogicalID: "candidate-oxford", PhysicalID: "guest-oxford", Outcome: "private_memory"},
-		{Type: "function.retained", ActorID: "main", LogicalID: "origin-main", PhysicalID: "origin-physical", Outcome: "retained"},
+		{Type: "branch.seal", ActorID: "host", LogicalID: "oxford", IdentitySHA256: digest, Outcome: "selected"},
 		{Type: "capsule.export", ActorID: "host", LogicalID: "oxford", IdentitySHA256: digest, Outcome: "serialized"},
+		{Type: "branch.discard", ActorID: "host", LogicalID: "brighton", Outcome: "discarded"},
+		{Type: "function.retained", ActorID: "main", LogicalID: "origin-main", PhysicalID: "origin-physical", Outcome: "retained"},
 		{Type: "capsule.import", ActorID: "host", LogicalID: "oxford", IdentitySHA256: digest, Outcome: "verified"},
 		{Type: "capsule.bind", ActorID: "host", LogicalID: "oxford", IdentitySHA256: digest, Outcome: "portable_root_bound"},
+		{Type: "guest.start", ActorID: "main", LogicalID: "resume-main", PhysicalID: "guest-main"},
+		{Type: "guest.complete", ActorID: "main", LogicalID: "resume-main", PhysicalID: "guest-main", Outcome: "published"},
 		{Type: "cold_io.resume", ActorID: "main", LogicalID: "resume-main", PhysicalID: "guest-main", Outcome: "fresh_continuation"},
 		{Type: "control.argument_mismatch", ActorID: "host", LogicalID: "control-argument", Outcome: "rejected"},
 		{Type: "control.source_mismatch", ActorID: "host", LogicalID: "control-source", Outcome: "rejected"},

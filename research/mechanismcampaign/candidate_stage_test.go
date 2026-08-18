@@ -46,6 +46,7 @@ func TestRealDayTripCandidateStagePreDispatchesSixReadsBeforeFreshGuests(t *test
 	guestStart := map[string]int64{}
 	guestEnd := map[string]int64{}
 	requestStarts := map[string]int64{}
+	var branchSeal, capsuleExport, branchDiscard int64
 	semanticIssues, semanticClaims := 0, 0
 	for _, event := range result.Events {
 		switch event.Type {
@@ -63,6 +64,12 @@ func TestRealDayTripCandidateStagePreDispatchesSixReadsBeforeFreshGuests(t *test
 			semanticIssues++
 		case "semantic.claim":
 			semanticClaims++
+		case "branch.seal":
+			branchSeal = event.AtNS
+		case "capsule.export":
+			capsuleExport = event.AtNS
+		case "branch.discard":
+			branchDiscard = event.AtNS
 		}
 	}
 	for _, id := range []string{"brighton", "oxford"} {
@@ -80,6 +87,9 @@ func TestRealDayTripCandidateStagePreDispatchesSixReadsBeforeFreshGuests(t *test
 	}
 	if semanticIssues != 6 || semanticClaims != 6 {
 		t.Fatalf("semantic issues=%d claims=%d", semanticIssues, semanticClaims)
+	}
+	if lastGuestEnd := max64(guestEnd["brighton"], guestEnd["oxford"]); branchSeal <= lastGuestEnd || capsuleExport <= branchSeal || branchDiscard <= capsuleExport {
+		t.Fatalf("selected workspace order guest_end=%d seal=%d export=%d discard=%d", lastGuestEnd, branchSeal, capsuleExport, branchDiscard)
 	}
 }
 

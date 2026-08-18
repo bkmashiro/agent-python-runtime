@@ -170,6 +170,7 @@ func RunCandidateStage(ctx context.Context, config CandidateStageConfig) (Candid
 	if err != nil {
 		return CandidateStageResult{}, err
 	}
+	recorder.record(Event{Type: "branch.seal", ActorID: "host", LogicalID: "oxford", IdentitySHA256: selectedRoot.IdentitySHA256, Outcome: "selected"})
 	var capsule bytes.Buffer
 	capsuleInfo, err := manager.ExportCapsule(selectedRoot.Ref(), &capsule)
 	if err != nil {
@@ -186,7 +187,6 @@ func RunCandidateStage(ctx context.Context, config CandidateStageConfig) (Candid
 		return CandidateStageResult{}, err
 	}
 	recorder.record(Event{Type: "branch.discard", ActorID: "host", LogicalID: "brighton", Outcome: "discarded"})
-	recorder.record(Event{Type: "branch.seal", ActorID: "host", LogicalID: "oxford", IdentitySHA256: selectedRoot.IdentitySHA256, Outcome: "selected"})
 	return CandidateStageResult{
 		Candidates: outputs, Events: recorder.snapshot(), Selected: selectedRoot.Ref(), Base: base,
 		SelectedCapsule: append([]byte(nil), capsule.Bytes()...), SelectedInfo: capsuleInfo, SelectedRoot: selectedRoot,

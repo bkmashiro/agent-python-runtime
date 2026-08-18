@@ -349,8 +349,13 @@ func validateRun(run FullRunEvidence, events map[string]Event) error {
 	exported := firstEvent(events, "capsule.export", "host")
 	imported := firstEvent(events, "capsule.import", "host")
 	bound := firstEvent(events, "capsule.bind", "host")
+	sealedBranch := firstEvent(events, "branch.seal", "host")
+	discardedBranch := firstEvent(events, "branch.discard", "host")
+	mainGuestStart := firstEvent(events, "guest.start", "main")
 	if exported.ID == "" || imported.ID == "" || bound.ID == "" || exported.IdentitySHA256 != imported.IdentitySHA256 ||
 		exported.IdentitySHA256 != run.ImportedWorkspaceSHA256 || imported.Outcome != "verified" || bound.Outcome != "portable_root_bound" ||
+		sealedBranch.LogicalID != "oxford" || sealedBranch.Outcome != "selected" || sealedBranch.IdentitySHA256 != run.SelectedRootSHA256 || discardedBranch.LogicalID != "brighton" || discardedBranch.Outcome != "discarded" ||
+		sealedBranch.AtNS <= candidateEnd || exported.AtNS <= sealedBranch.AtNS || discardedBranch.AtNS <= exported.AtNS || retained.AtNS <= discardedBranch.AtNS || imported.AtNS <= retained.AtNS || bound.AtNS <= imported.AtNS || mainGuestStart.AtNS <= bound.AtNS ||
 		bound.IdentitySHA256 != run.BoundRootSHA256 || firstEvent(events, "cold_io.resume", "main").ID == "" ||
 		firstEvent(events, "control.argument_mismatch", "host").Outcome != "rejected" || firstEvent(events, "control.source_mismatch", "host").Outcome != "rejected" {
 		return ErrInvalidEvidence

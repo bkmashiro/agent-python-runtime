@@ -3,6 +3,7 @@ package mechanismcampaign
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"runtime"
 	"sort"
@@ -179,9 +180,17 @@ func (evidence Evidence) Validate() error {
 		}
 	}
 	events, err := validateEvents(evidence.FullRun.Events)
-	if err != nil || validateMechanisms(evidence.Mechanisms, events) != nil || validateRun(evidence.FullRun, events) != nil ||
-		validateMatched(evidence.MatchedControl, evidence.FullRun.CandidateResultSHA256) != nil {
-		return ErrInvalidEvidence
+	if err != nil {
+		return fmt.Errorf("%w: events", ErrInvalidEvidence)
+	}
+	if validateMechanisms(evidence.Mechanisms, events) != nil {
+		return fmt.Errorf("%w: mechanisms", ErrInvalidEvidence)
+	}
+	if validateRun(evidence.FullRun, events) != nil {
+		return fmt.Errorf("%w: full run", ErrInvalidEvidence)
+	}
+	if validateMatched(evidence.MatchedControl, evidence.FullRun.CandidateResultSHA256) != nil {
+		return fmt.Errorf("%w: matched controls", ErrInvalidEvidence)
 	}
 	return nil
 }

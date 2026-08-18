@@ -119,7 +119,7 @@ func RunResumeStage(ctx context.Context, config ResumeStageConfig) (ResumeStageR
 			payloadBytes = 1_000_000
 		}
 	}
-	code := fmt.Sprintf("import builtins\nimport json\nwith open('/workspace/candidate-result.json', 'r', encoding='utf-8') as handle:\n    selected_observation=json.load(handle)\npayload=bytearray(%d)\npayload[-1]=7\nstate={'selected':selected_observation['candidate_id'],'total':selected_observation['total_cost_gbp']}\nbuiltins._campaign_resume_marker=state\nbefore=id(state)\nnotice=travel.platform_notice('GWR')\nresult={'last':payload[-1],'notice':notice,'same':id(state)==before and builtins._campaign_resume_marker is state,'selected':state['selected'],'total':state['total']}", payloadBytes)
+	code := fmt.Sprintf("import builtins\nimport json\nwith open('/workspace/candidate-result.json', 'r', encoding='utf-8') as handle:\n    selected_observation=json.load(handle)\npayload=bytearray(%d)\npayload[-1]=7\nstate={'selected':selected_observation['candidate_id'],'total':selected_observation['total_cost_gbp']}\nbuiltins._campaign_resume_marker=state\nbefore=id(state)\nnotice=travel.platform_notice('GWR')\nresult={'last':payload[-1],'notice':notice,'same':id(state)==before and builtins._campaign_resume_marker is state,'selected':state['selected'],'total_gbp':state['total']}", payloadBytes)
 	request, err := json.Marshal(map[string]any{
 		"run_id": "campaign-resume-main", "code": code,
 		"inputs": map[string]any{},
@@ -151,7 +151,7 @@ func RunResumeStage(ctx context.Context, config ResumeStageConfig) (ResumeStageR
 			Notice   string  `json:"notice"`
 			Same     bool    `json:"same"`
 			Selected string  `json:"selected"`
-			Total    float64 `json:"total"`
+			Total    float64 `json:"total_gbp"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(runResult.Response, &response); err != nil || response.Status != "ok" || !response.Result.Same ||

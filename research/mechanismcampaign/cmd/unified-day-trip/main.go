@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,14 +24,15 @@ func main() {
 	fixturePath := flag.String("fixture", "research/agenttrajectory/testdata/day-trip-planning", "public day-trip fixture")
 	outputPath := flag.String("output", "docs/evidence/unified-day-trip-campaign-v2.json", "evidence output")
 	workspaceRoot := flag.String("workspace-root", "", "private scratch root")
+	harnessResultPath := flag.String("harness-result", "", "selected real-provider day-trip harness result")
 	repository := flag.String("repository", ".", "clean Git checkout used for the campaign")
 	sourceCommit := flag.String("source-commit", "", "optional expected implementation commit")
 	pairs := flag.Int("pairs", 3, "matched baseline/optimized pairs")
 	enableCOW := flag.Bool("cow", runtime.GOOS == "linux", "require Linux memory COW")
 	enableColdIO := flag.Bool("cold-io", runtime.GOOS == "linux", "require cold-I/O continuation")
 	flag.Parse()
-	if *artifactPath == "" || *workspaceRoot == "" || *pairs != 3 {
-		fatalf("artifact and workspace-root are required; pairs must equal the preregistered value 3")
+	if *artifactPath == "" || *workspaceRoot == "" || *harnessResultPath == "" || *pairs != 3 {
+		fatalf("artifact, workspace-root, and harness-result are required; pairs must equal the preregistered value 3")
 	}
 	verifiedCommit, err := verifyCleanCommit(*repository, *sourceCommit)
 	if err != nil {
@@ -48,6 +50,10 @@ func main() {
 	if err != nil {
 		fatalf("marshal fixture: %v", err)
 	}
+	candidateSources, err := loadCandidateSources(*harnessResultPath)
+	if err != nil {
+		fatalf("load selected provider sources: %v", err)
+	}
 	if err := os.MkdirAll(*workspaceRoot, 0o700); err != nil {
 		fatalf("create workspace root: %v", err)
 	}
@@ -56,14 +62,14 @@ func main() {
 	campaign, err := mechanismcampaign.RunCampaign(context.Background(), mechanismcampaign.CampaignConfig{
 		ArtifactPath: *artifactPath, Fixture: fixture, WorkspaceRoot: filepath.Join(*workspaceRoot, "full"),
 		GenerationStep: statementStep, FinalizationDelay: finalizationDelay,
-		EnableCOW: *enableCOW, EnableColdIO: *enableColdIO, ColdPayloadBytes: 200_000_000,
+		EnableCOW: *enableCOW, EnableColdIO: *enableColdIO, ColdPayloadBytes: 200_000_000, CandidateSources: candidateSources,
 	})
 	if err != nil {
 		fatalf("run full campaign: %v", err)
 	}
 	matched, err := mechanismcampaign.RunMatchedControls(context.Background(), mechanismcampaign.MatchedControlConfig{
 		ArtifactPath: *artifactPath, Fixture: fixture, WorkspaceRoot: filepath.Join(*workspaceRoot, "matched"),
-		GenerationStep: statementStep, FinalizationDelay: finalizationDelay, Pairs: *pairs,
+		GenerationStep: statementStep, FinalizationDelay: finalizationDelay, Pairs: *pairs, CandidateSources: candidateSources,
 	})
 	if err != nil {
 		fatalf("run matched controls: %v", err)
@@ -96,6 +102,33 @@ func main() {
 func digest(value []byte) string {
 	sum := sha256.Sum256(value)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func loadCandidateSources(path string) (map[string]string, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Candidates []struct {
+			CandidateID  string `json:"candidate_id"`
+			PythonSource string `json:"python_source"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil || len(result.Candidates) != 2 {
+		return nil, errors.New("invalid selected harness result")
+	}
+	sources := make(map[string]string, 2)
+	for _, candidate := range result.Candidates {
+		if (candidate.CandidateID != "brighton" && candidate.CandidateID != "oxford") || strings.TrimSpace(candidate.PythonSource) == "" {
+			return nil, errors.New("invalid selected candidate source")
+		}
+		sources[candidate.CandidateID] = candidate.PythonSource
+	}
+	if len(sources) != 2 {
+		return nil, errors.New("selected candidate sources are incomplete")
+	}
+	return sources, nil
 }
 
 func verifyCleanCommit(repository, expected string) (string, error) {

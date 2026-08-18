@@ -59,7 +59,11 @@ func RunBaselineCandidateStage(ctx context.Context, config CandidateStageConfig)
 		go func() {
 			recorder.record(Event{Type: "source.generation.start", ActorID: candidateID, LogicalID: "source-" + candidateID})
 			var source string
-			chunks := candidateSourceChunks(candidateID)
+			chunks, chunkErr := candidateSourceChunks(candidateID, config.CandidateSources[candidateID])
+			if chunkErr != nil {
+				generatedSources <- generated{err: chunkErr}
+				return
+			}
 			for index, chunk := range chunks {
 				source += chunk
 				recorder.record(Event{Type: "source.statement.complete", ActorID: candidateID, LogicalID: candidateID + "-baseline-statement"})

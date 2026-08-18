@@ -30,6 +30,7 @@ type CandidateStageConfig struct {
 	FinalizationDelay time.Duration
 	EnableCOW         bool
 	OriginBriefing    json.RawMessage
+	CandidateSources  map[string]string
 }
 
 type CandidateStageResult struct {
@@ -49,6 +50,8 @@ type CandidateStageOutput struct {
 	Response           json.RawMessage
 	Workspace          workspace.Ref
 	SourceSHA256       string
+	ModelSource        string
+	ExecutedSource     string
 	ControllerSnapshot semantic.StreamingPreDispatchSnapshot
 	AdmissionSnapshot  semantic.StreamingPrefixAdmissionSnapshot
 	COWSelected        bool
@@ -235,7 +238,10 @@ func prepareCandidate(ctx context.Context, candidateID string, artifact []byte, 
 		ArtifactSHA256: digestBytes(artifact), ExecutionProfileSHA256: profileBinding,
 		ImportClosureSHA256: digestTextValue("day-trip-imports-v1"), CapabilityPlanSHA256: plan.Identity(),
 	}
-	chunks := candidateSourceChunks(candidateID)
+	chunks, err := candidateSourceChunks(candidateID, config.CandidateSources[candidateID])
+	if err != nil {
+		return nil, err
+	}
 	finalSourceSHA := digestTextValue(strings.Join(chunks, ""))
 	sourceChunks := make(chan string, len(chunks))
 	recorder.record(Event{Type: "source.generation.start", ActorID: candidateID, LogicalID: "source-" + candidateID})
@@ -357,21 +363,37 @@ func executeCandidate(ctx context.Context, candidateID string, artifact []byte, 
 	}
 	return CandidateStageOutput{
 		CandidateID: candidateID, TotalCostGBP: response.Result.TotalCostGBP, Response: append(json.RawMessage(nil), runResult.Response...),
-		Workspace: runResult.PublishedWorkspace, SourceSHA256: item.generated.SHA256(),
+		Workspace: runResult.PublishedWorkspace, SourceSHA256: item.generated.SHA256(), ModelSource: configSource(item.generated.Source()), ExecutedSource: item.generated.Source(),
 		ControllerSnapshot: item.controller.Snapshot(), AdmissionSnapshot: item.admission.Snapshot(),
 		COWSelected: cow.COWSelected, COWFallbackReason: strings.Join(cow.Blockers, ","),
 	}, nil
 }
 
-func candidateSourceChunks(candidateID string) []string {
-	return []string{
-		fmt.Sprintf("weather = travel.weather(%q)\n", candidateID),
-		fmt.Sprintf("rail = travel.rail(%q, travellers=2)\n", candidateID),
-		fmt.Sprintf("attraction = travel.attractions(%q)\n", candidateID),
-		"import json\n",
-		fmt.Sprintf("result = {\"candidate_id\": %q, \"origin\": inputs[\"origin\"], \"weather\": weather, \"rail\": rail, \"attraction\": attraction, \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2}\n", candidateID),
-		"with open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+func candidateSourceChunks(candidateID, modelSource string) ([]string, error) {
+	modelSource = strings.TrimSpace(modelSource)
+	if modelSource == "" {
+		modelSource = fmt.Sprintf("weather = travel.weather(%q)\nrail = travel.rail(%q, travellers=2)\nattraction = travel.attractions(%q)\nresult = {\"candidate_id\": %q, \"origin\": inputs[\"origin\"], \"weather\": weather, \"rail\": rail, \"attraction\": attraction, \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2}", candidateID, candidateID, candidateID, candidateID)
 	}
+	lines := strings.Split(modelSource, "\n")
+	if len(lines) < 4 || strings.TrimSpace(lines[0]) != fmt.Sprintf("weather = travel.weather(%q)", candidateID) ||
+		strings.TrimSpace(lines[1]) != fmt.Sprintf("rail = travel.rail(%q, travellers=2)", candidateID) ||
+		strings.TrimSpace(lines[2]) != fmt.Sprintf("attraction = travel.attractions(%q)", candidateID) {
+		return nil, errors.New("selected model source does not satisfy the preregistered prefix shape")
+	}
+	chunks := make([]string, 0, len(lines)+2)
+	for _, line := range lines {
+		chunks = append(chunks, line+"\n")
+	}
+	chunks = append(chunks, "import json\n", "with open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n")
+	return chunks, nil
+}
+
+func configSource(executed string) string {
+	marker := "\nimport json\nwith open(\"/workspace/candidate-result.json\""
+	if index := strings.LastIndex(executed, marker); index >= 0 {
+		return strings.TrimSpace(executed[:index])
+	}
+	return strings.TrimSpace(executed)
 }
 
 func candidateExecutionProfile(artifact []byte) (runtimeconfig.ExecutionProfile, error) {

@@ -21,6 +21,7 @@ type CampaignConfig struct {
 	EnableCOW         bool
 	EnableColdIO      bool
 	ColdPayloadBytes  int
+	CandidateSources  map[string]string
 }
 
 type CampaignResult struct {
@@ -54,7 +55,8 @@ func RunCampaign(ctx context.Context, config CampaignConfig) (CampaignResult, er
 		ArtifactPath: config.ArtifactPath, Fixture: config.Fixture,
 		WorkspaceRoot:  filepath.Join(config.WorkspaceRoot, "candidates"),
 		GenerationStep: config.GenerationStep, FinalizationDelay: config.FinalizationDelay, EnableCOW: config.EnableCOW,
-		OriginBriefing: origin.Value,
+		OriginBriefing:   origin.Value,
+		CandidateSources: config.CandidateSources,
 	})
 	if err != nil {
 		return CampaignResult{}, err

@@ -28,7 +28,27 @@ var mechanismNames = []string{
 
 var privateMarkers = []string{
 	"/users/", "/home/", `\\users\\`, ".hermes", "file://", "private://",
-	"bearer ", "api_key", "apikey", "password", "secret", "provider_request", "provider_response",
+	"bearer ", "authorization", "access_token", "credential", "api_key", "apikey", "password", "secret", "provider_request", "provider_response",
+}
+
+var eventOutcomes = map[string]map[string]bool{
+	"function.physical.end":     {"ok": true},
+	"function.leader":           {"leader": true},
+	"function.waiter":           {"waiter": true},
+	"function.retained":         {"retained": true},
+	"request.start":             {"": true, "start": true},
+	"request.finish":            {"ok": true, "finish": true},
+	"guest.end":                 {"ok": true},
+	"guest.complete":            {"published": true},
+	"branch.discard":            {"discarded": true},
+	"branch.seal":               {"selected": true},
+	"cow.selected":              {"private_memory": true},
+	"capsule.export":            {"serialized": true},
+	"capsule.import":            {"verified": true},
+	"capsule.bind":              {"portable_root_bound": true},
+	"cold_io.resume":            {"fresh_continuation": true},
+	"control.argument_mismatch": {"rejected": true},
+	"control.source_mismatch":   {"rejected": true},
 }
 
 var eventTypes = map[string]bool{
@@ -67,12 +87,15 @@ type GenerationSchedule struct {
 }
 
 type CandidateEvidence struct {
-	TotalCostGBP   float64 `json:"total_cost_gbp"`
-	SourceSHA256   string  `json:"source_sha256"`
-	PhysicalIssues uint32  `json:"physical_issues"`
-	LogicalClaims  uint32  `json:"logical_claims"`
-	SourceSealed   bool    `json:"source_sealed"`
-	COWSelected    bool    `json:"cow_selected"`
+	TotalCostGBP   float64         `json:"total_cost_gbp"`
+	SourceSHA256   string          `json:"source_sha256"`
+	PhysicalIssues uint32          `json:"physical_issues"`
+	LogicalClaims  uint32          `json:"logical_claims"`
+	SourceSealed   bool            `json:"source_sealed"`
+	COWSelected    bool            `json:"cow_selected"`
+	ModelSource    string          `json:"model_source"`
+	ExecutedSource string          `json:"executed_source"`
+	GuestResponse  json.RawMessage `json:"guest_response"`
 }
 
 type FullRunEvidence struct {
@@ -89,6 +112,7 @@ type FullRunEvidence struct {
 	BoundRootSHA256          string                       `json:"bound_root_sha256"`
 	MainSelected             string                       `json:"main_selected"`
 	MainTotalGBP             float64                      `json:"main_total_gbp"`
+	MainGuestResponse        json.RawMessage              `json:"main_guest_response"`
 	ColdWaits                uint64                       `json:"cold_waits"`
 	ColdSucceeded            uint64                       `json:"cold_succeeded"`
 	PageOutSucceeded         uint64                       `json:"page_out_succeeded"`
@@ -129,6 +153,7 @@ func ProjectEvidence(campaign CampaignResult, matched MatchedControlResult, camp
 			TotalCostGBP: candidate.TotalCostGBP, SourceSHA256: candidate.SourceSHA256,
 			PhysicalIssues: candidate.ControllerSnapshot.PhysicalIssues, LogicalClaims: candidate.ControllerSnapshot.LogicalClaims,
 			SourceSealed: candidate.ControllerSnapshot.SourceSealed, COWSelected: candidate.COWSelected,
+			ModelSource: candidate.ModelSource, ExecutedSource: candidate.ExecutedSource, GuestResponse: append(json.RawMessage(nil), candidate.Response...),
 		}
 	}
 	candidateResultSHA256, err := candidateOutputsSHA256(campaign.Candidates.Candidates)
@@ -142,7 +167,7 @@ func ProjectEvidence(campaign CampaignResult, matched MatchedControlResult, camp
 		SelectedCandidate: "oxford", SelectedRootSHA256: campaign.Candidates.SelectedRoot.IdentitySHA256,
 		SelectedTreeSHA256:      campaign.Candidates.SelectedInfo.TreeSHA256,
 		ImportedWorkspaceSHA256: campaign.Resume.ImportedInfo.WorkspaceSHA256, BoundRootSHA256: campaign.Resume.BoundRoot.IdentitySHA256,
-		MainSelected: mainEnvelope.Result.Selected, MainTotalGBP: mainEnvelope.Result.Total,
+		MainSelected: mainEnvelope.Result.Selected, MainTotalGBP: mainEnvelope.Result.Total, MainGuestResponse: append(json.RawMessage(nil), campaign.Resume.Response...),
 		ColdWaits: campaign.Resume.ColdIO.Waits, ColdSucceeded: campaign.Resume.ColdIO.ColdSucceeded,
 		PageOutSucceeded: campaign.Resume.ColdIO.PageOutSucceeded, ColdResumes: campaign.Resume.ColdIO.Resumes,
 		ColdAdvisedBytes:         campaign.Resume.ColdIO.AdvisedBytes,
@@ -183,7 +208,7 @@ func (evidence Evidence) Validate() error {
 	if err != nil {
 		return fmt.Errorf("%w: events", ErrInvalidEvidence)
 	}
-	if validateMechanisms(evidence.Mechanisms, events) != nil {
+	if validateMechanisms(evidence.Mechanisms, evidence.FullRun.Events) != nil {
 		return fmt.Errorf("%w: mechanisms", ErrInvalidEvidence)
 	}
 	if validateRun(evidence.FullRun, events) != nil {
@@ -202,7 +227,7 @@ func validateEvents(input []Event) (map[string]Event, error) {
 		if event.Sequence != uint64(index+1) || !identifierPattern.MatchString(event.ID) || event.AtNS < lastNS || !eventTypes[event.Type] ||
 			!identifierPattern.MatchString(event.ActorID) || (event.LogicalID != "" && !identifierPattern.MatchString(event.LogicalID)) ||
 			(event.PhysicalID != "" && !identifierPattern.MatchString(event.PhysicalID)) ||
-			(event.IdentitySHA256 != "" && !digestPattern.MatchString(event.IdentitySHA256)) {
+			(event.IdentitySHA256 != "" && !digestPattern.MatchString(event.IdentitySHA256)) || !validEventOutcome(event.Type, event.Outcome) {
 			return nil, ErrInvalidEvidence
 		}
 		if _, exists := events[event.ID]; exists {
@@ -214,13 +239,17 @@ func validateEvents(input []Event) (map[string]Event, error) {
 	return events, nil
 }
 
-func validateMechanisms(mechanisms []Mechanism, events map[string]Event) error {
+func validateMechanisms(mechanisms []Mechanism, events []Event) error {
+	expected := projectMechanisms(events)
+	if len(mechanisms) != len(expected) {
+		return ErrInvalidEvidence
+	}
 	for index, mechanism := range mechanisms {
-		if mechanism.Name != mechanismNames[index] || mechanism.Disposition != "selected" || len(mechanism.EventIDs) == 0 {
+		if mechanism.Name != expected[index].Name || mechanism.Disposition != expected[index].Disposition || len(mechanism.EventIDs) != len(expected[index].EventIDs) {
 			return ErrInvalidEvidence
 		}
-		for _, id := range mechanism.EventIDs {
-			if _, ok := events[id]; !ok {
+		for eventIndex, id := range mechanism.EventIDs {
+			if id != expected[index].EventIDs[eventIndex] {
 				return ErrInvalidEvidence
 			}
 		}
@@ -228,20 +257,50 @@ func validateMechanisms(mechanisms []Mechanism, events map[string]Event) error {
 	return nil
 }
 
+func validEventOutcome(eventType, outcome string) bool {
+	allowed, constrained := eventOutcomes[eventType]
+	if !constrained {
+		return outcome == ""
+	}
+	return allowed[outcome]
+}
+
 func validateRun(run FullRunEvidence, events map[string]Event) error {
 	if run.OriginLogicalCalls != 3 || run.OriginPhysicalComputes != 1 || !run.OriginRetained || !digestPattern.MatchString(run.CandidateResultSHA256) || run.SelectedCandidate != "oxford" ||
 		run.MainSelected != "oxford" || run.MainTotalGBP != 78 || !digestPattern.MatchString(run.SelectedRootSHA256) ||
 		!digestPattern.MatchString(run.SelectedTreeSHA256) || run.SelectedRootSHA256 != run.BoundRootSHA256 || !digestPattern.MatchString(run.ImportedWorkspaceSHA256) ||
 		run.ColdWaits != 1 || run.ColdSucceeded != 1 || run.PageOutSucceeded != 1 || run.ColdResumes != 1 || run.ColdAdvisedBytes == 0 ||
-		!run.ArgumentMismatchRejected || !run.SourceMismatchRejected {
+		!run.ArgumentMismatchRejected || !run.SourceMismatchRejected || len(run.Candidates) != 2 {
 		return ErrInvalidEvidence
 	}
 	for _, id := range []string{"brighton", "oxford"} {
 		candidate, ok := run.Candidates[id]
-		if !ok || !digestPattern.MatchString(candidate.SourceSHA256) || candidate.PhysicalIssues != 3 || candidate.LogicalClaims != 3 ||
-			!candidate.SourceSealed || !candidate.COWSelected {
+		if !ok || candidate.PhysicalIssues != 3 || candidate.LogicalClaims != 3 || !candidate.SourceSealed || !candidate.COWSelected || !digestPattern.MatchString(candidate.SourceSHA256) {
 			return ErrInvalidEvidence
 		}
+		if strings.TrimSpace(candidate.ModelSource) == "" || configSource(candidate.ExecutedSource) != strings.TrimSpace(candidate.ModelSource) || digestTextValue(candidate.ExecutedSource) != candidate.SourceSHA256 {
+			return ErrInvalidEvidence
+		}
+		var guest struct {
+			Status string `json:"status"`
+			Result struct {
+				CandidateID string  `json:"candidate_id"`
+				Total       float64 `json:"total_cost_gbp"`
+			} `json:"result"`
+		}
+		if json.Unmarshal(candidate.GuestResponse, &guest) != nil || guest.Status != "ok" || guest.Result.CandidateID != id || guest.Result.Total != candidate.TotalCostGBP {
+			return ErrInvalidEvidence
+		}
+	}
+	var mainGuest struct {
+		Status string `json:"status"`
+		Result struct {
+			Selected string  `json:"selected"`
+			Total    float64 `json:"total_gbp"`
+		} `json:"result"`
+	}
+	if json.Unmarshal(run.MainGuestResponse, &mainGuest) != nil || mainGuest.Status != "ok" || mainGuest.Result.Selected != run.MainSelected || mainGuest.Result.Total != run.MainTotalGBP {
+		return ErrInvalidEvidence
 	}
 	if run.Candidates["brighton"].TotalCostGBP != 118.4 || run.Candidates["oxford"].TotalCostGBP != 78 {
 		return ErrInvalidEvidence
@@ -250,7 +309,11 @@ func validateRun(run FullRunEvidence, events map[string]Event) error {
 		feedComplete := firstEvent(events, "source.feed.complete", candidateID)
 		sealed := firstEvent(events, "source.sealed", candidateID)
 		guest := firstEvent(events, "guest.start", candidateID)
-		if feedComplete.ID == "" || sealed.ID == "" || guest.ID == "" || sealed.AtNS < feedComplete.AtNS || guest.AtNS <= sealed.AtNS {
+		guestEnd := firstEvent(events, "guest.end", candidateID)
+		cow := firstEvent(events, "cow.selected", candidateID)
+		if feedComplete.ID == "" || sealed.ID == "" || guest.ID == "" || guestEnd.Outcome != "ok" || cow.Outcome != "private_memory" ||
+			sealed.IdentitySHA256 != run.Candidates[candidateID].SourceSHA256 || feedComplete.IdentitySHA256 != sealed.IdentitySHA256 ||
+			sealed.AtNS < feedComplete.AtNS || guest.AtNS <= sealed.AtNS || cow.AtNS <= guestEnd.AtNS {
 			return ErrInvalidEvidence
 		}
 		for _, api := range []string{"weather", "rail", "attractions"} {
@@ -269,6 +332,7 @@ func validateRun(run FullRunEvidence, events map[string]Event) error {
 		waiter = firstEvent(events, "function.waiter", "oxford")
 	}
 	physical := firstEvent(events, "function.physical.start", "host")
+	physicalEnd := firstEvent(events, "function.physical.end", "host")
 	retained := firstEvent(events, "function.retained", "main")
 	var candidateEnd int64 = -1
 	for _, event := range events {
@@ -276,8 +340,9 @@ func validateRun(run FullRunEvidence, events map[string]Event) error {
 			candidateEnd = event.AtNS
 		}
 	}
-	if leader.ID == "" || waiter.ID == "" || physical.ID == "" || retained.ID == "" ||
+	if leader.ID == "" || waiter.ID == "" || physical.ID == "" || physicalEnd.Outcome != "ok" || retained.ID == "" ||
 		leader.PhysicalID != waiter.PhysicalID || leader.PhysicalID != physical.PhysicalID || retained.PhysicalID != physical.PhysicalID ||
+		physicalEnd.PhysicalID != physical.PhysicalID || physicalEnd.AtNS <= physical.AtNS ||
 		candidateEnd < 0 || retained.AtNS <= candidateEnd {
 		return ErrInvalidEvidence
 	}
@@ -285,6 +350,7 @@ func validateRun(run FullRunEvidence, events map[string]Event) error {
 	imported := firstEvent(events, "capsule.import", "host")
 	bound := firstEvent(events, "capsule.bind", "host")
 	if exported.ID == "" || imported.ID == "" || bound.ID == "" || exported.IdentitySHA256 != imported.IdentitySHA256 ||
+		exported.IdentitySHA256 != run.ImportedWorkspaceSHA256 || imported.Outcome != "verified" || bound.Outcome != "portable_root_bound" ||
 		bound.IdentitySHA256 != run.BoundRootSHA256 || firstEvent(events, "cold_io.resume", "main").ID == "" ||
 		firstEvent(events, "control.argument_mismatch", "host").Outcome != "rejected" || firstEvent(events, "control.source_mismatch", "host").Outcome != "rejected" {
 		return ErrInvalidEvidence

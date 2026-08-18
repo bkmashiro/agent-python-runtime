@@ -20,6 +20,7 @@ type MatchedControlConfig struct {
 	GenerationStep    time.Duration
 	FinalizationDelay time.Duration
 	Pairs             int
+	CandidateSources  map[string]string
 }
 
 type MatchedPair struct {
@@ -59,6 +60,7 @@ func RunMatchedControls(ctx context.Context, config MatchedControlConfig) (Match
 			stageConfig := CandidateStageConfig{
 				ArtifactPath: config.ArtifactPath, Fixture: config.Fixture, WorkspaceRoot: root,
 				GenerationStep: config.GenerationStep, FinalizationDelay: config.FinalizationDelay,
+				CandidateSources: config.CandidateSources,
 			}
 			if lane == "baseline" {
 				baseline, err = RunBaselineCandidateStage(ctx, stageConfig)

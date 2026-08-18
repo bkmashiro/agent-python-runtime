@@ -67,9 +67,9 @@ describe('Pysolate Lab development debugger', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /model.output/ })[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Input / output' }));
     expect(screen.getByText(/deepseek-v4-flash/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
     expect(screen.getByText(/travel\.weather\("brighton"\)/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'raw' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Raw event' }));
     expect(screen.getByRole('complementary', { name: 'Execution event inspector' }).textContent).toContain('"type": "model.output"');
   });
 

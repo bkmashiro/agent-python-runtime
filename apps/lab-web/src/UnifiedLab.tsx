@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { ProviderDebug, ProviderDebugEvent } from './providerDebugData';
 import type { UnifiedCandidate, UnifiedEvent, UnifiedFact, UnifiedSnapshot } from './unifiedCampaignData';
 
@@ -22,6 +23,36 @@ type InspectorTab = 'overview' | 'source' | 'io' | 'raw';
 function seconds(value: number) { return `${(value / 1_000_000_000).toFixed(3)}s`; }
 function pretty(value: unknown) { return JSON.stringify(value, null, 2); }
 function actorLabel(actor: string) { return actor.replace(/^actor-/, '').replaceAll('-', ' '); }
+
+type IconName = 'tree' | 'list' | 'search' | 'actor' | 'model' | 'source' | 'request' | 'guest' | 'workspace' | 'control' | 'bindings' | 'io' | 'raw';
+function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
+  const paths: Record<IconName, ReactNode> = {
+    tree: <><path d="M4 4h5v4H4zM15 3v3M9 6h6v11M15 12h5v4h-5zM15 18h5v4h-5z" /></>,
+    list: <><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
+    search: <><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></>,
+    actor: <><circle cx="12" cy="8" r="3" /><path d="M5 21a7 7 0 0 1 14 0" /></>,
+    model: <><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M9 10h.01M15 10h.01M8 15h8M12 2v3" /></>,
+    source: <><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" /><path d="m17 3 4 4-9 9-4 1 1-4z" /></>,
+    request: <><path d="M4 12h15M14 7l5 5-5 5" /><path d="M5 5h5M5 19h5" /></>,
+    guest: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" /></>,
+    workspace: <><path d="M3 7h7l2 2h9v11H3z" /><path d="M3 7V5h7l2 2" /></>,
+    control: <><path d="M12 3v18M3 12h18" /><circle cx="12" cy="12" r="8" /></>,
+    bindings: <><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1" /><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1" /></>,
+    io: <><path d="M7 7h10M7 17h10M10 4 7 7l3 3M14 14l3 3-3 3" /></>,
+    raw: <><path d="M8 3h8l4 4v14H8z" /><path d="M16 3v5h5M4 8h4M4 13h4M4 18h4" /></>,
+  };
+  return <svg aria-hidden="true" className="ui-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+function eventIcon(type: string): IconName {
+  if (type.startsWith('model.')) return 'model';
+  if (type.startsWith('source.') || type.startsWith('semantic.')) return 'source';
+  if (type.startsWith('request.') || type.startsWith('function.')) return 'request';
+  if (type.startsWith('guest.')) return 'guest';
+  if (type.startsWith('capsule.') || type.startsWith('cow.') || type.startsWith('cold_io.')) return 'workspace';
+  if (type.startsWith('control.')) return 'control';
+  return 'raw';
+}
 
 function candidateForEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot): UnifiedCandidate | undefined {
   const id = event.actor_id === 'brighton' || event.actor_id === 'oxford'
@@ -103,30 +134,64 @@ function GroupNav({ groups, selected, onSelect }: { groups: TraceGroup[]; select
 }
 
 function EventTree({ events, selected, onSelect }: { events: DebugEvent[]; selected: string; onSelect: (id: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [treeMode, setTreeMode] = useState(true);
+  const searchRef = useRef<HTMLInputElement>(null);
   const actors = [...new Set(events.map((event) => event.actor))];
-  return <div className="debug-event-tree" aria-label="Grouped execution events">{actors.map((actor) => {
-    const actorEvents = events.filter((event) => event.actor === actor);
-    return <section className="event-actor-group" key={actor}>
-      <header><span className="actor-dot" /> <strong>{actorLabel(actor)}</strong><small>{actorEvents.length}</small></header>
-      {actorEvents.map((event) => <button className={selected === event.id ? 'active' : ''} key={event.id} onClick={() => onSelect(event.id)} type="button">
-        <time>{event.atNS === undefined ? event.label : `+${seconds(event.atNS)}`}</time><span>{event.type}</span><small>{event.bindings.outcome ? String(event.bindings.outcome) : event.label}</small>
-      </button>)}
-    </section>;
-  })}</div>;
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => setCollapsed(new Set()), [events]);
+  const normalized = query.trim().toLowerCase();
+  const visible = events.filter((event) => !normalized || `${event.type} ${event.actor} ${event.label} ${pretty(event.bindings)}`.toLowerCase().includes(normalized));
+  useEffect(() => {
+    const focusFilter = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchRef.current?.focus(); } };
+    window.addEventListener('keydown', focusFilter);
+    return () => window.removeEventListener('keydown', focusFilter);
+  }, []);
+  useEffect(() => {
+    if (visible.length && !visible.some((event) => event.id === selected)) onSelect(visible[0].id);
+  }, [normalized, events, selected]);
+  const eventRow = (event: DebugEvent, nested: boolean) => <button className={`event-row-button ${nested ? 'nested' : ''} ${selected === event.id ? 'active' : ''}`} key={event.id} onClick={() => onSelect(event.id)} type="button">
+    <span className={`event-kind kind-${eventIcon(event.type)}`}><Icon name={eventIcon(event.type)} size={13} /></span>
+    <time>{event.atNS === undefined ? event.label : `+${seconds(event.atNS)}`}</time><span className="event-name">{event.type}</span><small>{event.bindings.outcome ? String(event.bindings.outcome) : event.label}</small>
+  </button>;
+  return <section className="trace-browser" aria-label="Grouped execution events">
+    <div className="trace-toolbar">
+      <div className="view-switch" role="group" aria-label="Trace display"><button aria-pressed={treeMode} onClick={() => setTreeMode(true)} type="button"><Icon name="tree" /> Tree</button><button aria-pressed={!treeMode} onClick={() => setTreeMode(false)} type="button"><Icon name="list" /> Flat</button></div>
+      <label className="trace-search"><Icon name="search" /><input aria-label="Filter trace events" onChange={(event) => setQuery(event.target.value)} placeholder="Filter events" ref={searchRef} value={query} /><kbd>⌘K</kbd></label>
+      <span className="trace-count">{visible.length}/{events.length}</span>
+    </div>
+    <div className={`debug-event-tree ${treeMode ? 'tree-mode' : 'flat-mode'}`}>{treeMode ? actors.map((actor) => {
+      const actorEvents = visible.filter((event) => event.actor === actor);
+      if (!actorEvents.length) return null;
+      const isCollapsed = collapsed.has(actor);
+      return <section className="event-actor-group" key={actor}>
+        <button className="actor-tree-row" aria-expanded={!isCollapsed} onClick={() => setCollapsed((current) => { const next = new Set(current); if (next.has(actor)) next.delete(actor); else next.add(actor); return next; })} type="button">
+          <span className="tree-chevron">{isCollapsed ? '▸' : '▾'}</span><span className="actor-icon"><Icon name={actor.startsWith('actor-') ? 'model' : 'actor'} /></span><strong>{actorLabel(actor)}</strong><small>{actorEvents.length}</small>
+        </button>
+        {!isCollapsed && <div className="actor-tree-children">{actorEvents.map((event) => eventRow(event, true))}</div>}
+      </section>;
+    }) : visible.map((event) => eventRow(event, false))}</div>
+  </section>;
 }
 
 function EventInspector({ event }: { event: DebugEvent }) {
   const [tab, setTab] = useState<InspectorTab>('overview');
+  const sourceLines = event.source?.split('\n') ?? [];
   return <aside className="debug-inspector" aria-label="Execution event inspector">
-    <header><div><span className="eyebrow">{event.label} · {actorLabel(event.actor)}</span><h3>{event.type}</h3></div>{event.atNS !== undefined && <time>+{seconds(event.atNS)}</time>}</header>
-    <nav aria-label="Inspector details">{(['overview', 'source', 'io', 'raw'] as InspectorTab[]).map((name) => <button aria-pressed={tab === name} key={name} onClick={() => setTab(name)} type="button">{name === 'io' ? 'Input / output' : name}</button>)}</nav>
+    <header><span className={`inspector-event-icon kind-${eventIcon(event.type)}`}><Icon name={eventIcon(event.type)} size={17} /></span><div><span className="eyebrow">{event.label} · {actorLabel(event.actor)}</span><h3>{event.type}</h3><small>{event.bindings.outcome ? String(event.bindings.outcome) : 'recorded event'}</small></div>{event.atNS !== undefined && <time>+{seconds(event.atNS)}</time>}</header>
+    <nav aria-label="Inspector details">{([['overview', 'bindings', 'Overview'], ['source', 'source', 'Python'], ['io', 'io', 'Input / output'], ['raw', 'raw', 'Raw event']] as Array<[InspectorTab, IconName, string]>).map(([name, icon, label]) => <button aria-pressed={tab === name} key={name} onClick={() => setTab(name)} type="button"><Icon name={icon} />{label}</button>)}</nav>
     <div className="inspector-body">
-      {tab === 'overview' && <><h4>Bindings</h4><pre>{pretty(event.bindings)}</pre></>}
-      {tab === 'source' && (event.source ? <pre className="source-code">{event.source}</pre> : <p className="empty-detail">This event has no Python source body.</p>)}
-      {tab === 'io' && <div className="io-grid"><section><h4>Input</h4>{event.input === undefined ? <p>—</p> : <pre>{pretty(event.input)}</pre>}</section><section><h4>Output</h4>{event.output === undefined ? <p>—</p> : <pre>{pretty(event.output)}</pre>}</section></div>}
-      {tab === 'raw' && <pre>{pretty(event.raw)}</pre>}
+      {tab === 'overview' && <div className="binding-view"><div className="detail-strip"><span>actor<strong>{actorLabel(event.actor)}</strong></span><span>sequence<strong>{event.label}</strong></span><span>time<strong>{event.atNS === undefined ? 'model phase' : `+${seconds(event.atNS)}`}</strong></span></div><CodeBlock label="Exact bindings" value={event.bindings} /></div>}
+      {tab === 'source' && (event.source ? <div className="source-view"><div className="code-label"><span>candidate.py</span><small>{sourceLines.length} lines</small></div><pre className="source-code">{sourceLines.map((line, index) => <code key={index}><i>{index + 1}</i><span>{line || ' '}</span></code>)}</pre></div> : <p className="empty-detail"><Icon name="source" size={22} />This event has no Python source body.</p>)}
+      {tab === 'io' && <div className="io-grid"><CodeBlock label="Input" value={event.input} /><CodeBlock label="Output" value={event.output} /></div>}
+      {tab === 'raw' && <CodeBlock label="Recorded event" value={event.raw} />}
     </div>
   </aside>;
+}
+
+function CodeBlock({ label, value }: { label: string; value: unknown }) {
+  const text = value === undefined ? '—' : pretty(value);
+  return <section className="code-block"><div className="code-label"><span>{label}</span><small>{new Blob([text]).size} bytes</small></div><pre>{text}</pre></section>;
 }
 
 function TraceWorkbench({ groups, initialGroup, timeline = false }: { groups: TraceGroup[]; initialGroup: string; timeline?: boolean }) {

@@ -184,7 +184,7 @@ function CompactSummary({ snapshot }: { snapshot: UnifiedSnapshot }) {
   return <section className="debug-summary" aria-label="Run summary">
     <div><span>Brighton</span><strong>£118.40</strong><small>discarded</small></div>
     <div className="selected"><span>Oxford</span><strong>£78.00</strong><small>selected by Main</small></div>
-    <div><span>Matched ×3</span><strong>{baseline} → {optimized}</strong><small>−{saving}</small></div>
+    <div><span>Matched ×3</span><strong>{baseline} → {optimized}</strong><small>−{saving} · authored 7 s stream window</small></div>
     <div><span>Evidence</span><strong>Linux / amd64</strong><small>{snapshot.provenance.source_commit.slice(0, 8)}</small></div>
   </section>;
 }

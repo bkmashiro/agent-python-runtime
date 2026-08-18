@@ -1,0 +1,553 @@
+{
+  "schema_version": "pysolate.observed-stream-sample.v1",
+  "scope": "Live DeepSeek stream arrivals; deterministic travel-call latencies; simultaneous counterfactual replay; no runtime mechanism overhead.",
+  "runs": [
+    {
+      "schema_version": "pysolate.observed-stream-campaign.v1",
+      "observed_at": "2026-08-18T18:35:13.332386Z",
+      "platform": "darwin/arm64",
+      "endpoint": "api.deepseek.com",
+      "fixture_sha256": "sha256:13ec6da68d48f7f14f5801f7034fb536ddd68c4934174ffa9b681b29093d4671",
+      "method": "Two live provider streams were recorded sequentially with one reused HTTP client. Lane readiness is a simultaneous timestamp replay using deterministic fixture tool latencies; it excludes runtime mechanism overhead.",
+      "candidates": [
+        {
+          "schema_version": "pysolate.observed-stream-opportunity.v1",
+          "candidate_id": "brighton",
+          "model": "deepseek-v4-flash",
+          "trace_sha256": "sha256:802ea316b17be181773022b02002d9cdf816a4ea94449aaef84070f8e72b99ce",
+          "headers_elapsed_ns": 324468417,
+          "network": {
+            "dns_start_ns": 629334,
+            "dns_done_ns": 33550125,
+            "connect_start_ns": 33556792,
+            "connect_done_ns": 38255334,
+            "tls_start_ns": 38301375,
+            "tls_done_ns": 55299667,
+            "got_conn_ns": 56268417,
+            "wrote_request_ns": 56463459,
+            "first_response_byte_ns": 324393500,
+            "connection_reused": false
+          },
+          "first_sse_event_ns": 324671834,
+          "first_reasoning_ns": 638165542,
+          "first_content_ns": 8144239917,
+          "source_complete_ns": 8906536042,
+          "stream_complete_ns": 8909308834,
+          "eligible_window_ns": 350657833,
+          "statements": [
+            {
+              "index": 1,
+              "source": "weather = travel.weather(\"brighton\")",
+              "closed_ns": 8555878209
+            },
+            {
+              "index": 2,
+              "source": "rail = travel.rail(\"brighton\", travellers=2)",
+              "closed_ns": 8624670250
+            },
+            {
+              "index": 3,
+              "source": "attraction = travel.attractions(\"brighton\")",
+              "closed_ns": 8702732250
+            },
+            {
+              "index": 4,
+              "source": "result = {\"candidate_id\": \"brighton\", \"weather\": weather, \"rail\": rail, \"attraction\": attraction, \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2}",
+              "closed_ns": 8906536042
+            }
+          ],
+          "tool_calls": [
+            {
+              "capability": "weather",
+              "statement": 1,
+              "eligible_ns": 8555878209,
+              "latency_ns": 300000000,
+              "ready_ns": 8855878209
+            },
+            {
+              "capability": "rail",
+              "statement": 2,
+              "eligible_ns": 8624670250,
+              "latency_ns": 600000000,
+              "ready_ns": 9224670250
+            },
+            {
+              "capability": "attractions",
+              "statement": 3,
+              "eligible_ns": 8702732250,
+              "latency_ns": 400000000,
+              "ready_ns": 9102732250
+            }
+          ],
+          "native_sequential_ready_ns": 10206536042,
+          "native_parallel_ready_ns": 9506536042,
+          "prefix_pre_dispatch_ready_ns": 9224670250,
+          "savings_vs_sequential_ns": 981865792,
+          "savings_vs_parallel_ns": 281865792
+        },
+        {
+          "schema_version": "pysolate.observed-stream-opportunity.v1",
+          "candidate_id": "oxford",
+          "model": "deepseek-v4-flash",
+          "trace_sha256": "sha256:62e7de1fa42e8fccc50e4031027042d57de6c76c4a72a22357ab31f66d4815c2",
+          "headers_elapsed_ns": 287215875,
+          "network": {
+            "got_conn_ns": 52458,
+            "wrote_request_ns": 387958,
+            "first_response_byte_ns": 287155583,
+            "connection_reused": true
+          },
+          "first_sse_event_ns": 287281458,
+          "first_reasoning_ns": 604338000,
+          "first_content_ns": 5599106417,
+          "source_complete_ns": 6321373125,
+          "stream_complete_ns": 6345604542,
+          "eligible_window_ns": 326084417,
+          "statements": [
+            {
+              "index": 1,
+              "source": "weather = travel.weather(\"oxford\")",
+              "closed_ns": 5995288708
+            },
+            {
+              "index": 2,
+              "source": "rail = travel.rail(\"oxford\", travellers=2)",
+              "closed_ns": 6041132833
+            },
+            {
+              "index": 3,
+              "source": "attraction = travel.attractions(\"oxford\")",
+              "closed_ns": 6087957583
+            },
+            {
+              "index": 4,
+              "source": "result = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}",
+              "closed_ns": 6321373125
+            }
+          ],
+          "tool_calls": [
+            {
+              "capability": "weather",
+              "statement": 1,
+              "eligible_ns": 5995288708,
+              "latency_ns": 300000000,
+              "ready_ns": 6295288708
+            },
+            {
+              "capability": "rail",
+              "statement": 2,
+              "eligible_ns": 6041132833,
+              "latency_ns": 600000000,
+              "ready_ns": 6641132833
+            },
+            {
+              "capability": "attractions",
+              "statement": 3,
+              "eligible_ns": 6087957583,
+              "latency_ns": 400000000,
+              "ready_ns": 6487957583
+            }
+          ],
+          "native_sequential_ready_ns": 7621373125,
+          "native_parallel_ready_ns": 6921373125,
+          "prefix_pre_dispatch_ready_ns": 6641132833,
+          "savings_vs_sequential_ns": 980240292,
+          "savings_vs_parallel_ns": 280240292
+        }
+      ],
+      "simultaneous_replay_opportunity": {
+        "native_sequential_ready_ns": 10206536042,
+        "native_parallel_ready_ns": 9506536042,
+        "prefix_pre_dispatch_ready_ns": 9224670250,
+        "savings_vs_sequential_ns": 981865792,
+        "savings_vs_parallel_ns": 281865792
+      }
+    },
+    {
+      "schema_version": "pysolate.observed-stream-campaign.v1",
+      "observed_at": "2026-08-18T18:40:36.035011Z",
+      "platform": "darwin/arm64",
+      "endpoint": "api.deepseek.com",
+      "fixture_sha256": "sha256:13ec6da68d48f7f14f5801f7034fb536ddd68c4934174ffa9b681b29093d4671",
+      "method": "Two live provider streams were recorded sequentially with one reused HTTP client. Lane readiness is a simultaneous timestamp replay using deterministic fixture tool latencies; it excludes runtime mechanism overhead.",
+      "candidates": [
+        {
+          "schema_version": "pysolate.observed-stream-opportunity.v1",
+          "candidate_id": "brighton",
+          "model": "deepseek-v4-flash",
+          "trace_sha256": "sha256:4cc5fac9e2f78a0cb11ea4e2816b264e679bef99ac2c4ed9b74f9f9c0a30cbc8",
+          "headers_elapsed_ns": 322670292,
+          "network": {
+            "dns_start_ns": 722917,
+            "dns_done_ns": 21981583,
+            "connect_start_ns": 21994375,
+            "connect_done_ns": 26864250,
+            "tls_start_ns": 26917375,
+            "tls_done_ns": 40422292,
+            "got_conn_ns": 41225125,
+            "wrote_request_ns": 41761500,
+            "first_response_byte_ns": 322593292,
+            "connection_reused": false
+          },
+          "first_sse_event_ns": 322870417,
+          "first_reasoning_ns": 960129875,
+          "first_content_ns": 17121703875,
+          "source_complete_ns": 18048071042,
+          "stream_complete_ns": 18049560583,
+          "eligible_window_ns": 428531125,
+          "statements": [
+            {
+              "index": 1,
+              "source": "import travel",
+              "closed_ns": 17569059167
+            },
+            {
+              "index": 2,
+              "source": "weather = travel.weather(\"brighton\")",
+              "closed_ns": 17619539917
+            },
+            {
+              "index": 3,
+              "source": "rail = travel.rail(\"brighton\", travellers=2)",
+              "closed_ns": 17691708292
+            },
+            {
+              "index": 4,
+              "source": "attraction = travel.attractions(\"brighton\")",
+              "closed_ns": 17740484458
+            },
+            {
+              "index": 5,
+              "source": "result = {",
+              "closed_ns": 17765713417
+            },
+            {
+              "index": 6,
+              "source": "    \"candidate_id\": \"brighton\",",
+              "closed_ns": 17815801083
+            },
+            {
+              "index": 7,
+              "source": "    \"weather\": weather,",
+              "closed_ns": 17842302250
+            },
+            {
+              "index": 8,
+              "source": "    \"rail\": rail,",
+              "closed_ns": 17866366708
+            },
+            {
+              "index": 9,
+              "source": "    \"attraction\": attraction,",
+              "closed_ns": 17916178708
+            },
+            {
+              "index": 10,
+              "source": "    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2",
+              "closed_ns": 18048054417
+            },
+            {
+              "index": 11,
+              "source": "}",
+              "closed_ns": 18048071042
+            }
+          ],
+          "tool_calls": [
+            {
+              "capability": "weather",
+              "statement": 2,
+              "eligible_ns": 17619539917,
+              "latency_ns": 300000000,
+              "ready_ns": 17919539917
+            },
+            {
+              "capability": "rail",
+              "statement": 3,
+              "eligible_ns": 17691708292,
+              "latency_ns": 600000000,
+              "ready_ns": 18291708292
+            },
+            {
+              "capability": "attractions",
+              "statement": 4,
+              "eligible_ns": 17740484458,
+              "latency_ns": 400000000,
+              "ready_ns": 18140484458
+            }
+          ],
+          "native_sequential_ready_ns": 19348071042,
+          "native_parallel_ready_ns": 18648071042,
+          "prefix_pre_dispatch_ready_ns": 18291708292,
+          "savings_vs_sequential_ns": 1056362750,
+          "savings_vs_parallel_ns": 356362750
+        },
+        {
+          "schema_version": "pysolate.observed-stream-opportunity.v1",
+          "candidate_id": "oxford",
+          "model": "deepseek-v4-flash",
+          "trace_sha256": "sha256:d3085cd116df8b9fd1e4e081f4f55746fcf2a14548201d6fc2d34ffb076920a5",
+          "headers_elapsed_ns": 352266083,
+          "network": {
+            "got_conn_ns": 33750,
+            "wrote_request_ns": 292583,
+            "first_response_byte_ns": 352205000,
+            "connection_reused": true
+          },
+          "first_sse_event_ns": 352439916,
+          "first_reasoning_ns": 620651375,
+          "first_content_ns": 7268234291,
+          "source_complete_ns": 8022803541,
+          "stream_complete_ns": 8030129208,
+          "eligible_window_ns": 403669125,
+          "statements": [
+            {
+              "index": 1,
+              "source": "weather = travel.weather(\"oxford\")",
+              "closed_ns": 7619134416
+            },
+            {
+              "index": 2,
+              "source": "rail = travel.rail(\"oxford\", travellers=2)",
+              "closed_ns": 7691649125
+            },
+            {
+              "index": 3,
+              "source": "attraction = travel.attractions(\"oxford\")",
+              "closed_ns": 7738323041
+            },
+            {
+              "index": 4,
+              "source": "total_cost_gbp = rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2",
+              "closed_ns": 7857055375
+            },
+            {
+              "index": 5,
+              "source": "result = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":total_cost_gbp}",
+              "closed_ns": 8022803541
+            }
+          ],
+          "tool_calls": [
+            {
+              "capability": "weather",
+              "statement": 1,
+              "eligible_ns": 7619134416,
+              "latency_ns": 300000000,
+              "ready_ns": 7919134416
+            },
+            {
+              "capability": "rail",
+              "statement": 2,
+              "eligible_ns": 7691649125,
+              "latency_ns": 600000000,
+              "ready_ns": 8291649125
+            },
+            {
+              "capability": "attractions",
+              "statement": 3,
+              "eligible_ns": 7738323041,
+              "latency_ns": 400000000,
+              "ready_ns": 8138323041
+            }
+          ],
+          "native_sequential_ready_ns": 9322803541,
+          "native_parallel_ready_ns": 8622803541,
+          "prefix_pre_dispatch_ready_ns": 8291649125,
+          "savings_vs_sequential_ns": 1031154416,
+          "savings_vs_parallel_ns": 331154416
+        }
+      ],
+      "simultaneous_replay_opportunity": {
+        "native_sequential_ready_ns": 19348071042,
+        "native_parallel_ready_ns": 18648071042,
+        "prefix_pre_dispatch_ready_ns": 18291708292,
+        "savings_vs_sequential_ns": 1056362750,
+        "savings_vs_parallel_ns": 356362750
+      }
+    },
+    {
+      "schema_version": "pysolate.observed-stream-campaign.v1",
+      "observed_at": "2026-08-18T18:41:10.578533Z",
+      "platform": "darwin/arm64",
+      "endpoint": "api.deepseek.com",
+      "fixture_sha256": "sha256:13ec6da68d48f7f14f5801f7034fb536ddd68c4934174ffa9b681b29093d4671",
+      "method": "Two live provider streams were recorded sequentially with one reused HTTP client. Lane readiness is a simultaneous timestamp replay using deterministic fixture tool latencies; it excludes runtime mechanism overhead.",
+      "candidates": [
+        {
+          "schema_version": "pysolate.observed-stream-opportunity.v1",
+          "candidate_id": "brighton",
+          "model": "deepseek-v4-flash",
+          "trace_sha256": "sha256:a9415c867ae7f2a5b48c3dc50eed1a08d81f24376705e0a084f3043740533a6c",
+          "headers_elapsed_ns": 389615292,
+          "network": {
+            "dns_start_ns": 542417,
+            "dns_done_ns": 4556167,
+            "connect_start_ns": 4560084,
+            "connect_done_ns": 9266667,
+            "tls_start_ns": 9298917,
+            "tls_done_ns": 20226667,
+            "got_conn_ns": 20736167,
+            "wrote_request_ns": 21189709,
+            "first_response_byte_ns": 389543250,
+            "connection_reused": false
+          },
+          "first_sse_event_ns": 389796917,
+          "first_reasoning_ns": 663411417,
+          "first_content_ns": 4767333917,
+          "source_complete_ns": 5420432792,
+          "stream_complete_ns": 5420449792,
+          "eligible_window_ns": 372877167,
+          "statements": [
+            {
+              "index": 1,
+              "source": "weather = travel.weather(\"brighton\")",
+              "closed_ns": 5047555625
+            },
+            {
+              "index": 2,
+              "source": "rail = travel.rail(\"brighton\", travellers=2)",
+              "closed_ns": 5117261667
+            },
+            {
+              "index": 3,
+              "source": "attraction = travel.attractions(\"brighton\")",
+              "closed_ns": 5169032459
+            },
+            {
+              "index": 4,
+              "source": "result = {\"candidate_id\":\"brighton\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}",
+              "closed_ns": 5420432792
+            }
+          ],
+          "tool_calls": [
+            {
+              "capability": "weather",
+              "statement": 1,
+              "eligible_ns": 5047555625,
+              "latency_ns": 300000000,
+              "ready_ns": 5347555625
+            },
+            {
+              "capability": "rail",
+              "statement": 2,
+              "eligible_ns": 5117261667,
+              "latency_ns": 600000000,
+              "ready_ns": 5717261667
+            },
+            {
+              "capability": "attractions",
+              "statement": 3,
+              "eligible_ns": 5169032459,
+              "latency_ns": 400000000,
+              "ready_ns": 5569032459
+            }
+          ],
+          "native_sequential_ready_ns": 6720432792,
+          "native_parallel_ready_ns": 6020432792,
+          "prefix_pre_dispatch_ready_ns": 5717261667,
+          "savings_vs_sequential_ns": 1003171125,
+          "savings_vs_parallel_ns": 303171125
+        },
+        {
+          "schema_version": "pysolate.observed-stream-opportunity.v1",
+          "candidate_id": "oxford",
+          "model": "deepseek-v4-flash",
+          "trace_sha256": "sha256:f9e64583213a24f2841ab4b7311f97f8e863b4fef39e1b1ab1bc80c75e369450",
+          "headers_elapsed_ns": 360128000,
+          "network": {
+            "got_conn_ns": 28959,
+            "wrote_request_ns": 278959,
+            "first_response_byte_ns": 360074667,
+            "connection_reused": true
+          },
+          "first_sse_event_ns": 360185584,
+          "first_reasoning_ns": 538743209,
+          "first_content_ns": 12515265792,
+          "source_complete_ns": 13212563417,
+          "stream_complete_ns": 13218906834,
+          "eligible_window_ns": 334321833,
+          "statements": [
+            {
+              "index": 1,
+              "source": "import travel",
+              "closed_ns": 12830289834
+            },
+            {
+              "index": 2,
+              "source": "weather = travel.weather('oxford')",
+              "closed_ns": 12878241584
+            },
+            {
+              "index": 3,
+              "source": "rail = travel.rail('oxford', travellers=2)",
+              "closed_ns": 12940764209
+            },
+            {
+              "index": 4,
+              "source": "attraction = travel.attractions('oxford')",
+              "closed_ns": 12996995792
+            },
+            {
+              "index": 5,
+              "source": "result = {'candidate_id': 'oxford', 'weather': weather, 'rail': rail, 'attraction': attraction, 'total_cost_gbp': rail['total_cost_gbp'] + attraction['entry_cost_gbp']*2}",
+              "closed_ns": 13212550625
+            },
+            {
+              "index": 6,
+              "source": "",
+              "closed_ns": 13212563417
+            }
+          ],
+          "tool_calls": [
+            {
+              "capability": "weather",
+              "statement": 2,
+              "eligible_ns": 12878241584,
+              "latency_ns": 300000000,
+              "ready_ns": 13178241584
+            },
+            {
+              "capability": "rail",
+              "statement": 3,
+              "eligible_ns": 12940764209,
+              "latency_ns": 600000000,
+              "ready_ns": 13540764209
+            },
+            {
+              "capability": "attractions",
+              "statement": 4,
+              "eligible_ns": 12996995792,
+              "latency_ns": 400000000,
+              "ready_ns": 13396995792
+            }
+          ],
+          "native_sequential_ready_ns": 14512563417,
+          "native_parallel_ready_ns": 13812563417,
+          "prefix_pre_dispatch_ready_ns": 13540764209,
+          "savings_vs_sequential_ns": 971799208,
+          "savings_vs_parallel_ns": 271799208
+        }
+      ],
+      "simultaneous_replay_opportunity": {
+        "native_sequential_ready_ns": 14512563417,
+        "native_parallel_ready_ns": 13812563417,
+        "prefix_pre_dispatch_ready_ns": 13540764209,
+        "savings_vs_sequential_ns": 971799208,
+        "savings_vs_parallel_ns": 271799208
+      }
+    }
+  ],
+  "summary": {
+    "run_count": 3,
+    "candidate_observation_count": 6,
+    "excluded_attempt_count": 1,
+    "median_first_response_byte_ns": 338299250,
+    "median_first_reasoning_ns": 629408458,
+    "median_first_content_ns": 7706237104,
+    "median_source_complete_ns": 8464669791,
+    "median_eligible_window_ns": 361767500,
+    "median_run_savings_vs_sequential_ns": 981865792,
+    "median_run_savings_vs_parallel_ns": 281865792,
+    "min_run_savings_vs_parallel_ns": 271799208,
+    "max_run_savings_vs_parallel_ns": 356362750
+  }
+}

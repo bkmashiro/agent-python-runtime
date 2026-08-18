@@ -169,20 +169,40 @@ func (harness *Harness) call(ctx context.Context, request ModelRequest) (ModelRe
 }
 
 func (harness *Harness) publicSystem() string {
-	ids := make([]string, 0, len(harness.config.Fixture.Skills))
-	for id := range harness.config.Fixture.Skills {
+	return fixturePublicSystem(harness.config.Fixture)
+}
+
+func fixturePublicSystem(fixture Fixture) string {
+	ids := make([]string, 0, len(fixture.Skills))
+	for id := range fixture.Skills {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	var output strings.Builder
-	output.WriteString(harness.config.Fixture.System)
+	output.WriteString(fixture.System)
 	for _, id := range ids {
 		output.WriteString("\n\n# Loaded public skill: ")
 		output.WriteString(id)
 		output.WriteByte('\n')
-		output.WriteString(harness.config.Fixture.Skills[id])
+		output.WriteString(fixture.Skills[id])
 	}
 	return output.String()
+}
+
+// NewCandidateModelRequest returns the exact candidate-generation request used
+// by Harness.Run so live stream observations cannot drift from the campaign.
+func NewCandidateModelRequest(fixture Fixture, candidateID string) (ModelRequest, error) {
+	if fixture.AggregateSHA256 != DayTripFixtureAggregateSHA256 || !validCandidateID(candidateID) {
+		return ModelRequest{}, ErrInvalidContract
+	}
+	planning := PlanningBrief{SchemaVersion: PlanningBriefSchemaVersion, Task: fixture.User.Request, CandidateIDs: []string{CandidateBrighton, CandidateOxford}}
+	if planning.Validate() != nil {
+		return ModelRequest{}, ErrInvalidContract
+	}
+	return ModelRequest{
+		CallID: "candidate-" + candidateID, ActorID: candidateID, ResponseKind: ResponseCandidate,
+		Messages: []ModelMessage{{Role: "system", Content: fixturePublicSystem(fixture) + "\n\nYou are the " + candidateID + " candidate Agent."}, {Role: "user", Content: candidatePrompt(planning, candidateID)}},
+	}, nil
 }
 
 func candidatePrompt(planning PlanningBrief, candidateID string) string {

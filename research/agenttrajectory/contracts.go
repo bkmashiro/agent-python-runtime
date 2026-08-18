@@ -409,7 +409,7 @@ func validPythonSource(source string) bool {
 }
 
 func validCandidatePythonSource(source, candidateID string) bool {
-	if !validPythonSource(source) || !strings.Contains(source, `"`+candidateID+`"`) {
+	if !validPythonSource(source) || (!strings.Contains(source, `"`+candidateID+`"`) && !strings.Contains(source, `'`+candidateID+`'`)) {
 		return false
 	}
 	counts := map[string]int{}

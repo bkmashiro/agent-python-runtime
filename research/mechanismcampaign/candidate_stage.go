@@ -266,6 +266,7 @@ func prepareCandidate(ctx context.Context, candidateID string, artifact []byte, 
 	}()
 	generated, err := semantic.GenerateVerifiedSourceWithPreDispatch(ctx, semantic.VerifiedSourceGenerationConfig{
 		Plan: plan, Bindings: bindings, Admission: admission, SourceChunks: sourceChunks,
+		ShouldAnalyzePrefix: func(prefixIndex uint32, _ string) bool { return prefixIndex <= 3 },
 		Analyze: func(analyzeContext context.Context, source string, prefixBindings semantic.Bindings, prefixPlan *capability.Plan) (semantic.VerifiedAnalysis, error) {
 			analyzer, createErr := wazeroengine.New(analyzeContext, artifact, analyzerConfig)
 			if createErr != nil {

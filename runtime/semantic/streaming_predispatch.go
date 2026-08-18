@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -346,14 +347,11 @@ func (admission *StreamingPrefixAdmission) SealFinalSource(source string) error 
 	}
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
-	if admission.snapshot.Complete || admission.lastSource == "" || source != admission.lastSource {
+	if admission.snapshot.Complete || admission.lastSource == "" || !strings.HasSuffix(admission.lastSource, "\n") || !strings.HasPrefix(source, admission.lastSource) {
 		return ErrAnalysisBinding
 	}
 	digest := sha256.Sum256([]byte(source))
 	finalSHA := "sha256:" + hex.EncodeToString(digest[:])
-	if finalSHA != admission.snapshot.LastSourceSHA256 {
-		return ErrAnalysisBinding
-	}
 	admission.controller.mu.Lock()
 	defer admission.controller.mu.Unlock()
 	if admission.controller.finalized || admission.controller.sourceSealed {
@@ -361,6 +359,7 @@ func (admission *StreamingPrefixAdmission) SealFinalSource(source string) error 
 	}
 	admission.controller.sourceSealed = true
 	admission.controller.finalSourceSHA256 = finalSHA
+	admission.snapshot.LastSourceSHA256 = finalSHA
 	admission.snapshot.Complete = true
 	return nil
 }

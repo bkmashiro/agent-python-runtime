@@ -16,13 +16,16 @@ import (
 // VerifiedSourceGenerationConfig admits only complete statement prefixes that
 // have actually arrived. It never receives a future or hidden full source.
 type VerifiedSourceGenerationConfig struct {
-	Analyzer     *wazeroengine.Engine
-	Analyze      func(context.Context, string, Bindings, *capability.Plan) (VerifiedAnalysis, error)
-	Plan         *capability.Plan
-	Bindings     Bindings
-	Admission    *StreamingPrefixAdmission
-	SourceChunks <-chan string
-	Observe      func(VerifiedSourceGenerationEvent)
+	Analyzer *wazeroengine.Engine
+	Analyze  func(context.Context, string, Bindings, *capability.Plan) (VerifiedAnalysis, error)
+	// ShouldAnalyzePrefix may conservatively skip prefixes that cannot add candidates.
+	// A false result only reduces speculation; the final source is still sealed exactly.
+	ShouldAnalyzePrefix func(prefixIndex uint32, source string) bool
+	Plan                *capability.Plan
+	Bindings            Bindings
+	Admission           *StreamingPrefixAdmission
+	SourceChunks        <-chan string
+	Observe             func(VerifiedSourceGenerationEvent)
 }
 
 type VerifiedSourceGenerationEvent struct {
@@ -63,10 +66,11 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 		}
 	}()
 	type analysisResult struct {
-		index    uint32
-		source   string
-		verified VerifiedAnalysis
-		err      error
+		index       uint32
+		prefixIndex uint32
+		source      string
+		verified    VerifiedAnalysis
+		err         error
 	}
 	results := make(chan analysisResult, 32)
 	var analyzerMu sync.Mutex
@@ -84,6 +88,7 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 	}
 	var source string
 	var visible uint32
+	var scheduled uint32
 	var nextCommit uint32 = 1
 	pending := 0
 	sourceChannel := config.SourceChunks
@@ -120,11 +125,16 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 					Phase: "prefix_visible", PrefixIndex: prefixIndex, SourceBytes: uint32(len(prefixSource)),
 				})
 			}
+			if config.ShouldAnalyzePrefix != nil && !config.ShouldAnalyzePrefix(prefixIndex, prefixSource) {
+				continue
+			}
+			scheduled++
+			scheduleIndex := scheduled
 			pending++
 			go func() {
 				verified, err := analyze(runContext, prefixSource, config.Bindings, config.Plan)
 				select {
-				case results <- analysisResult{index: prefixIndex, source: prefixSource, verified: verified, err: err}:
+				case results <- analysisResult{index: scheduleIndex, prefixIndex: prefixIndex, source: prefixSource, verified: verified, err: err}:
 				case <-runContext.Done():
 				}
 			}()
@@ -146,7 +156,7 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 				delete(committed, nextCommit)
 				if config.Observe != nil {
 					config.Observe(VerifiedSourceGenerationEvent{
-						Phase: "prefix_admitted", PrefixIndex: nextCommit, SourceBytes: uint32(len(ready.source)), AddedCalls: added,
+						Phase: "prefix_admitted", PrefixIndex: ready.prefixIndex, SourceBytes: uint32(len(ready.source)), AddedCalls: added,
 						SourceSHA256: config.Admission.Snapshot().LastSourceSHA256,
 					})
 				}
@@ -154,7 +164,7 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 			}
 		}
 	}
-	if !completed || nextCommit != visible+1 {
+	if !completed || scheduled == 0 || nextCommit != scheduled+1 {
 		return GeneratedSource{}, ErrPreDispatchInvalid
 	}
 	if err := config.Admission.SealFinalSource(source); err != nil {

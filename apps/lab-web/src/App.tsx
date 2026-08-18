@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { CampaignView, MechanismsView, TimelineView } from './UnifiedLab';
+import { MechanismsView, TimelineView } from './UnifiedLab';
 import { loadUnifiedSnapshot, type UnifiedSnapshot } from './unifiedCampaignData';
+import { loadProviderDebug, validateProviderDebugBinding, type ProviderDebug } from './providerDebugData';
 import './styles.css';
 
 function LabMark() {
@@ -9,32 +10,33 @@ function LabMark() {
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<UnifiedSnapshot | null>(null);
-  const [surface, setSurface] = useState<'campaign' | 'mechanisms' | 'timeline'>('campaign');
+  const [providerDebug, setProviderDebug] = useState<ProviderDebug | null>(null);
+  const [surface, setSurface] = useState<'mechanisms' | 'timeline'>('mechanisms');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    loadUnifiedSnapshot().then((result) => { if (active) setSnapshot(result); }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : String(reason));
-    });
+    Promise.all([loadUnifiedSnapshot(), loadProviderDebug()]).then(([campaign, debug]) => {
+		validateProviderDebugBinding(debug, campaign);
+		if (active) { setSnapshot(campaign); setProviderDebug(debug); }
+    }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
   }, []);
 
   if (error) return <main className="load-state"><h1>Lab data rejected</h1><p>{error}</p></main>;
-  if (!snapshot) return <main className="load-state"><p>Loading unified campaign evidence…</p></main>;
+  if (!snapshot || !providerDebug) return <main className="load-state"><p>Loading full development trace…</p></main>;
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Pysolate Lab home"><span className="brand-mark" aria-hidden="true"><LabMark /></span><span>Pysolate Lab</span></a>
         <nav className="surface-nav" aria-label="Lab views">
-          <button aria-pressed={surface === 'campaign'} onClick={() => setSurface('campaign')} type="button">Campaign</button>
           <button aria-pressed={surface === 'mechanisms'} onClick={() => setSurface('mechanisms')} type="button">Mechanisms</button>
           <button aria-pressed={surface === 'timeline'} onClick={() => setSurface('timeline')} type="button">Timeline</button>
         </nav>
       </header>
       <main id="top">
-        {surface === 'campaign' ? <CampaignView snapshot={snapshot} /> : surface === 'mechanisms' ? <MechanismsView snapshot={snapshot} /> : <TimelineView snapshot={snapshot} />}
+        {surface === 'mechanisms' ? <MechanismsView debug={providerDebug} snapshot={snapshot} /> : <TimelineView debug={providerDebug} snapshot={snapshot} />}
       </main>
     </div>
   );

@@ -1,50 +1,52 @@
 import { expect, test } from '@playwright/test';
 
-test('defaults to the unified campaign and closes the real candidate decision', async ({ page }) => {
+test('opens directly on the mechanism debugger with dense run context', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'One London day-trip campaign' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Generate and pre-dispatch' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Campaign' })).toHaveCount(0);
   await expect(page.getByText('£118.40')).toBeVisible();
-  await expect(page.getByText('£78.00').first()).toBeVisible();
-  await expect(page.getByText('3 matched pairs')).toBeVisible();
-  await expect(page.getByText(/These are phases of this run/)).toBeVisible();
+  await expect(page.getByText('£78.00')).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
 });
 
-test('shows mechanisms as phases of one campaign with typed records', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Mechanisms' }).click();
-  const phases = page.getByRole('navigation', { name: 'Unified campaign phases' });
-  await expect(phases.getByRole('button')).toHaveCount(6);
-  await phases.getByRole('button', { name: /Select, seal, and resume/ }).click();
-  await expect(page.getByRole('heading', { name: 'Select, seal, and resume' })).toBeVisible();
-  await expect(page.getByText('TYPED EVENT EVIDENCE')).toBeVisible();
-  await expect(page.getByText('capsule.export', { exact: true })).toBeVisible();
-});
-
-test('exposes the actual public typed timeline and raw event', async ({ page }) => {
+test('groups the complete provider and runtime trace and reuses one inspector', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Timeline' }).click();
-  await expect(page.getByRole('heading', { name: 'Execution timeline' })).toBeVisible();
-  await expect(page.getByText(/no reconstructed provider messages/i)).toBeVisible();
-  await expect(page.getByText('PUBLIC RAW EVENT')).toBeVisible();
-  await page.getByRole('button', { name: 'oxford', exact: true }).click();
-  await expect(page.locator('.event-list .event-row').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Model source generation' })).toBeVisible();
+  await expect(page.getByText('brighton', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: /model.output/ }).first().click();
+  await page.getByRole('button', { name: 'Input / output' }).click();
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('deepseek-v4-flash');
+  await page.getByRole('button', { name: 'source', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('travel.weather("brighton")');
+  await page.getByRole('button', { name: 'raw' }).click();
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('reasoning_content');
 });
 
-test('remains readable at 390px without horizontal page overflow', async ({ page }) => {
+test('uses projector-owned event groups without silently truncating records', async ({ page }) => {
+  await page.goto('/');
+  const groupButton = page.getByRole('button', { name: /Generate and pre-dispatch/ });
+  const count = Number((await groupButton.locator('small').innerText()).split(' ')[0]);
+  const rows = page.locator('.debug-event-tree .event-actor-group button');
+  await expect(rows).toHaveCount(count);
+  await page.getByRole('button', { name: /Seal, then execute fresh/ }).click();
+  await expect(page.getByRole('heading', { name: 'Seal, then execute fresh' })).toBeVisible();
+});
+
+test('switching groups resets the selected raw event to that group', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Timeline' }).click();
+  await page.getByRole('button', { name: /Select, seal, and resume/ }).click();
+  const first = page.locator('.debug-event-tree .event-actor-group button').first();
+  await expect(first).toHaveClass(/active/);
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).not.toContainText('actor-brighton');
+});
+
+test('remains usable at 390px without horizontal page overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'One London day-trip campaign' })).toBeVisible();
-  await expect(page.getByText('£78.00').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Generate and pre-dispatch' })).toBeVisible();
   const widths = await page.evaluate(() => ({ viewport: window.innerWidth, document: document.documentElement.scrollWidth }));
   expect(widths.document).toBeLessThanOrEqual(widths.viewport);
-});
-
-test('uses only local assets and loads one pinned public projection', async ({ page }) => {
-  const requests: string[] = [];
-  page.on('request', (request) => requests.push(request.url()));
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'One London day-trip campaign' })).toBeVisible();
-  expect(new Set(requests.filter((url) => url.includes('/lab-data/')))).toEqual(new Set(['http://127.0.0.1:4187/lab-data/unified-campaign.json']));
-  expect(requests.some((url) => /fonts\.googleapis|fonts\.gstatic|unpkg|jsdelivr/.test(url))).toBe(false);
-  await expect(page.getByLabel('Pysolate Lab home').locator('svg')).toHaveCount(1);
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
 });

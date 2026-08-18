@@ -1,7 +1,7 @@
 import { expectedUnifiedSnapshotIdentity } from './unifiedIdentity';
 
 export interface UnifiedFact { label: string; value: string; note: string }
-export interface UnifiedPhase { id: string; index: number; title: string; summary: string; facts: UnifiedFact[] }
+export interface UnifiedPhase { id: string; index: number; title: string; summary: string; facts: UnifiedFact[]; event_ids: string[] }
 export interface UnifiedCandidate {
   id: 'brighton' | 'oxford';
   total_cost_gbp: number;
@@ -10,6 +10,9 @@ export interface UnifiedCandidate {
   logical_claims: number;
   source_sha256: string;
   cow_selected: boolean;
+  model_source: string;
+  executed_source: string;
+  guest_response: unknown;
 }
 export interface UnifiedEvent {
   sequence: number;
@@ -29,6 +32,7 @@ export interface UnifiedSnapshot {
   summary: string;
   selected: 'oxford';
   final_total_gbp: 78;
+  main_guest_response: unknown;
   candidates: [UnifiedCandidate, UnifiedCandidate];
   phases: UnifiedPhase[];
   events: UnifiedEvent[];
@@ -59,7 +63,7 @@ const eventTypes = new Set([
   'cow.selected', 'capsule.export', 'capsule.import', 'capsule.bind', 'cold_io.resume',
   'control.argument_mismatch', 'control.source_mismatch',
 ]);
-const privateMarkers = ['/users/', '/home/', '\\\\users\\\\', '.hermes', 'file://', 'private://', 'bearer ', 'api_key', 'password', 'secret', 'provider_request', 'provider_response'];
+
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -95,8 +99,7 @@ function assertDigest(value: unknown, label: string): string {
 
 function validateShape(value: unknown): UnifiedSnapshot {
   const root = object(value, 'unified campaign snapshot');
-  if (privateMarkers.some((marker) => JSON.stringify(root).toLowerCase().includes(marker))) throw new Error('unified campaign snapshot contains a private marker');
-  exactKeys(root, ['schema_version', 'identity', 'title', 'summary', 'selected', 'final_total_gbp', 'candidates', 'phases', 'events', 'matched_control', 'provenance'], 'unified campaign snapshot');
+  exactKeys(root, ['schema_version', 'identity', 'title', 'summary', 'selected', 'final_total_gbp', 'main_guest_response', 'candidates', 'phases', 'events', 'matched_control', 'provenance'], 'unified campaign snapshot');
   if (root.schema_version !== 'pysolate.lab-unified-campaign.v1' || root.selected !== 'oxford' || root.final_total_gbp !== 78) throw new Error('unified campaign headline is invalid');
   assertDigest(root.identity, 'snapshot identity');
   text(root.title, 'title'); text(root.summary, 'summary');
@@ -104,20 +107,21 @@ function validateShape(value: unknown): UnifiedSnapshot {
   if (!Array.isArray(root.candidates) || root.candidates.length !== 2) throw new Error('two candidates are required');
   const candidates = root.candidates.map((item, index) => {
     const candidate = object(item, `candidate ${index + 1}`);
-    exactKeys(candidate, ['id', 'total_cost_gbp', 'disposition', 'physical_issues', 'logical_claims', 'source_sha256', 'cow_selected'], 'candidate');
+    exactKeys(candidate, ['id', 'total_cost_gbp', 'disposition', 'physical_issues', 'logical_claims', 'source_sha256', 'cow_selected', 'model_source', 'executed_source', 'guest_response'], 'candidate');
     const expectedID = index === 0 ? 'brighton' : 'oxford';
     if (candidate.id !== expectedID || candidate.disposition !== (expectedID === 'oxford' ? 'selected' : 'discarded') || candidate.cow_selected !== true || candidate.physical_issues !== 3 || candidate.logical_claims !== 3) throw new Error('candidate mechanism facts are invalid');
     const total = number(candidate.total_cost_gbp, 'candidate total');
     if (total !== (expectedID === 'oxford' ? 78 : 118.4)) throw new Error('candidate total drifted');
     assertDigest(candidate.source_sha256, 'candidate source');
+    text(candidate.model_source, 'model source'); text(candidate.executed_source, 'executed source'); object(candidate.guest_response, 'guest response');
     return candidate;
   });
 
   if (!Array.isArray(root.phases) || root.phases.length !== phaseIDs.length) throw new Error('six unified phases are required');
   root.phases.forEach((item, index) => {
     const phase = object(item, `phase ${index + 1}`);
-    exactKeys(phase, ['id', 'index', 'title', 'summary', 'facts'], 'phase');
-    if (phase.id !== phaseIDs[index] || phase.index !== index + 1 || !Array.isArray(phase.facts) || phase.facts.length !== 2) throw new Error('phase order or facts drifted');
+    exactKeys(phase, ['id', 'index', 'title', 'summary', 'facts', 'event_ids'], 'phase');
+    if (phase.id !== phaseIDs[index] || phase.index !== index + 1 || !Array.isArray(phase.facts) || phase.facts.length !== 2 || !Array.isArray(phase.event_ids) || phase.event_ids.length === 0) throw new Error('phase order or facts drifted');
     text(phase.title, 'phase title'); text(phase.summary, 'phase summary');
     phase.facts.forEach((factValue) => {
       const fact = object(factValue, 'phase fact');

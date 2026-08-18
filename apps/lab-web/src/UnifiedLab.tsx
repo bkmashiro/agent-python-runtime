@@ -16,6 +16,7 @@ type DebugEvent = {
   sourceStep?: number;
   sourceStepCount?: number;
   sourcePrefixSHA256?: string;
+  sourceReason?: string;
   input?: unknown;
   output?: unknown;
   tool?: string;
@@ -24,6 +25,7 @@ type DebugEvent = {
 
 type TraceGroup = { id: string; title: string; summary: string; facts: UnifiedFact[]; events: DebugEvent[]; icon: IconName; synthetic?: boolean; preferFlat?: boolean };
 type InspectorTab = 'overview' | 'source' | 'io' | 'raw';
+type SourceBinding = { prefix: string; delta: string; step: number; stepCount: number; sha256: string; tool: string };
 
 function seconds(value: number) { return `${(value / 1_000_000_000).toFixed(3)}s`; }
 function pretty(value: unknown) { return JSON.stringify(value, null, 2); }
@@ -40,6 +42,15 @@ function sourceTool(delta?: string) {
   if (delta?.includes('travel.rail(')) return 'travel.rail';
   if (delta?.includes('travel.attractions(')) return 'travel.attractions';
   return undefined;
+}
+function sourceBindings(snapshot: UnifiedSnapshot) {
+  const bindings = new Map<string, SourceBinding>();
+  for (const event of snapshot.events) {
+    const tool = sourceTool(event.source_delta);
+    if (event.type !== 'source.statement.complete' || !tool || !event.source_prefix || !event.source_delta || !event.source_step || !event.source_step_count || !event.source_prefix_sha256) continue;
+    bindings.set(`${event.actor_id}:${tool}`, { prefix: event.source_prefix, delta: event.source_delta, step: event.source_step, stepCount: event.source_step_count, sha256: event.source_prefix_sha256, tool });
+  }
+  return bindings;
 }
 
 type IconName = 'tree' | 'list' | 'search' | 'actor' | 'model' | 'source' | 'request' | 'guest' | 'workspace' | 'control' | 'bindings' | 'io' | 'raw';
@@ -80,12 +91,14 @@ function candidateForEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot): Unif
   return snapshot.candidates.find((candidate) => candidate.id === id);
 }
 
-function runtimeEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot): DebugEvent {
+function runtimeEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot, sourceByBinding: Map<string, SourceBinding>): DebugEvent {
   const candidate = candidateForEvent(event, snapshot);
   const result = candidate && typeof candidate.guest_response === 'object' && candidate.guest_response
     ? (candidate.guest_response as { result?: Record<string, unknown> }).result
     : undefined;
   const api = event.logical_id?.split('-').at(-1);
+  const logicalTool = toolName(event.logical_id);
+  const qualifyingSource = candidate && logicalTool ? sourceByBinding.get(`${candidate.id}:${logicalTool}`) : undefined;
   const capabilityOutput = api === 'weather' ? result?.weather : api === 'rail' ? result?.rail : api === 'attractions' ? result?.attraction : undefined;
   const capabilityInput = candidate && api ? { destination: candidate.id, ...(api === 'rail' ? { travellers: 2 } : {}) } : undefined;
   return {
@@ -96,11 +109,12 @@ function runtimeEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot): DebugEven
     actor: event.actor_id,
     atNS: event.at_ns,
     raw: event,
-    source: event.source_prefix ?? candidate?.executed_source,
-    sourceDelta: event.source_delta,
-    sourceStep: event.source_step,
-    sourceStepCount: event.source_step_count,
-    sourcePrefixSHA256: event.source_prefix_sha256,
+    source: event.source_prefix ?? qualifyingSource?.prefix ?? candidate?.executed_source,
+    sourceDelta: event.source_delta ?? qualifyingSource?.delta,
+    sourceStep: event.source_step ?? qualifyingSource?.step,
+    sourceStepCount: event.source_step_count ?? qualifyingSource?.stepCount,
+    sourcePrefixSHA256: event.source_prefix_sha256 ?? qualifyingSource?.sha256,
+    sourceReason: event.source_prefix ? 'observed source prefix' : qualifyingSource ? 'qualifying source prefix' : candidate ? 'complete executed source' : undefined,
     input: capabilityInput ?? (event.type === 'guest.start' && candidate ? { code: candidate.executed_source, candidate: candidate.id } : undefined),
     output: capabilityOutput ?? (event.type === 'guest.end' && candidate ? candidate.guest_response : event.actor_id === 'main' && event.type.startsWith('guest.') ? snapshot.main_guest_response : undefined),
     tool: toolName(event.logical_id) ?? sourceTool(event.source_delta),
@@ -127,7 +141,8 @@ function providerEvent(event: ProviderDebugEvent, debug: ProviderDebug): DebugEv
 
 function buildGroups(snapshot: UnifiedSnapshot, debug: ProviderDebug): TraceGroup[] {
   const byID = new Map(snapshot.events.map((event) => [event.id, event]));
-  const runtime = snapshot.events.map((event) => runtimeEvent(event, snapshot));
+  const sourceByBinding = sourceBindings(snapshot);
+  const runtime = snapshot.events.map((event) => runtimeEvent(event, snapshot, sourceByBinding));
   const toolEvent = (event: DebugEvent) => event.type.startsWith('request.') || event.type.startsWith('function.') || event.type === 'semantic.qualified' || event.type === 'semantic.issue' || event.type === 'semantic.claim';
   return [
     {
@@ -148,7 +163,7 @@ function buildGroups(snapshot: UnifiedSnapshot, debug: ProviderDebug): TraceGrou
       facts: [{ label: 'provider calls', value: '4', note: 'candidate ×2, selection, final' }, { label: 'selection rule', value: 'first valid', note: 'contract + safety + Guest oracle' }],
       events: debug.events.map((event) => providerEvent(event, debug)),
     },
-    ...snapshot.phases.map((phase) => ({ ...phase, icon: phase.id === 'source-predispatch' ? 'source' as const : phase.id === 'fresh-execution' ? 'guest' as const : phase.id === 'fail-closed' ? 'control' as const : 'workspace' as const, events: phase.event_ids.map((id) => byID.get(id)).filter((event): event is UnifiedEvent => Boolean(event)).map((event) => runtimeEvent(event, snapshot)) })),
+    ...snapshot.phases.map((phase) => ({ ...phase, icon: phase.id === 'source-predispatch' ? 'source' as const : phase.id === 'fresh-execution' ? 'guest' as const : phase.id === 'fail-closed' ? 'control' as const : 'workspace' as const, events: phase.event_ids.map((id) => byID.get(id)).filter((event): event is UnifiedEvent => Boolean(event)).map((event) => runtimeEvent(event, snapshot, sourceByBinding)) })),
   ];
 }
 
@@ -224,7 +239,7 @@ function EventInspector({ event }: { event: DebugEvent }) {
     <nav aria-label="Inspector details">{([['overview', 'bindings', 'Overview'], ['source', 'source', 'Python'], ['io', 'io', 'Input / output'], ['raw', 'raw', 'Raw event']] as Array<[InspectorTab, IconName, string]>).map(([name, icon, label]) => <button aria-pressed={tab === name} key={name} onClick={() => setTab(name)} type="button"><Icon name={icon} />{label}</button>)}</nav>
     <div className="inspector-body">
       {tab === 'overview' && <div className="binding-view"><div className="detail-strip"><span>actor<strong>{actorLabel(event.actor)}</strong></span><span>sequence<strong>{event.label}</strong></span><span>time<strong>{event.atNS === undefined ? 'model phase' : `+${seconds(event.atNS)}`}</strong></span></div><CodeBlock label="Exact bindings" value={event.bindings} /></div>}
-      {tab === 'source' && (event.source ? <div className="source-view"><div className="code-label"><span>candidate.py {event.sourceStep ? `· prefix ${event.sourceStep}/${event.sourceStepCount}` : '· complete source'}</span><small>{event.sourceStep ? `+${deltaLines} line${deltaLines === 1 ? '' : 's'} · reconstructed` : `${sourceLines.length} lines`}</small></div>{event.sourcePrefixSHA256 && <div className="prefix-identity"><span>prefix identity</span><code>{event.sourcePrefixSHA256}</code></div>}<pre className="source-code">{sourceLines.map((line, index) => <code className={event.sourceStep && index >= deltaStart ? 'source-line-delta' : ''} key={index}><i>{index + 1}</i><span>{line || ' '}</span></code>)}</pre></div> : <p className="empty-detail"><Icon name="source" size={22} />This event has no Python source body.</p>)}
+      {tab === 'source' && (event.source ? <div className="source-view"><div className="code-label"><span>candidate.py · {event.sourceReason ?? (event.sourceStep ? 'source prefix' : 'complete source')} {event.sourceStep && `${event.sourceStep}/${event.sourceStepCount}`}</span><small>{event.sourceStep ? `+${deltaLines} line${deltaLines === 1 ? '' : 's'} · reconstructed` : `${sourceLines.length} lines`}</small></div>{event.sourcePrefixSHA256 && <div className="prefix-identity"><span>prefix identity</span><code>{event.sourcePrefixSHA256}</code></div>}<pre className="source-code">{sourceLines.map((line, index) => <code className={event.sourceStep && index >= deltaStart ? 'source-line-delta' : ''} key={index}><i>{index + 1}</i><span>{line || ' '}</span></code>)}</pre></div> : <p className="empty-detail"><Icon name="source" size={22} />This event has no Python source body.</p>)}
       {tab === 'io' && <div className="io-grid"><CodeBlock label="Input" value={event.input} /><CodeBlock label="Output" value={event.output} /></div>}
       {tab === 'raw' && <CodeBlock label="Recorded event" value={event.raw} />}
     </div>
@@ -234,6 +249,83 @@ function EventInspector({ event }: { event: DebugEvent }) {
 function CodeBlock({ label, value }: { label: string; value: unknown }) {
   const text = value === undefined ? '—' : pretty(value);
   return <section className="code-block"><div className="code-label"><span>{label}</span><small>{new Blob([text]).size} bytes</small></div><pre>{text}</pre></section>;
+}
+
+type LaneKind = 'source' | 'qualified' | 'request-start' | 'request-finish' | 'guest' | 'workspace' | 'control' | 'event';
+function laneKind(event: DebugEvent): LaneKind {
+  if (event.type === 'source.statement.complete' && event.tool) return 'source';
+  if (event.type === 'semantic.qualified') return 'qualified';
+  if (event.type === 'request.start') return 'request-start';
+  if (event.type === 'request.finish') return 'request-finish';
+  if (event.type.startsWith('guest.')) return 'guest';
+  if (event.type.startsWith('capsule.') || event.type.startsWith('branch.') || event.type.startsWith('cow.') || event.type.startsWith('cold_io.')) return 'workspace';
+  if (event.type.startsWith('control.')) return 'control';
+  return 'event';
+}
+function logicalID(event: DebugEvent) { return typeof event.bindings.logical_id === 'string' ? event.bindings.logical_id : undefined; }
+function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
+  const events = useMemo(() => {
+    const bindings = sourceBindings(snapshot);
+    return snapshot.events.map((event) => runtimeEvent(event, snapshot, bindings));
+  }, [snapshot]);
+  const [selectedID, setSelectedID] = useState(events.find((event) => event.type === 'request.start')?.id ?? events[0].id);
+  const laneScrollRef = useRef<HTMLDivElement>(null);
+  const selected = events.find((event) => event.id === selectedID) ?? events[0];
+  const lanes = [
+    { id: 'brighton', label: 'Brighton', note: 'candidate · discarded', y: 86 },
+    { id: 'oxford', label: 'Oxford', note: 'candidate · selected', y: 174 },
+    { id: 'host', label: 'Host', note: 'qualification · effects', y: 262 },
+    { id: 'main', label: 'Main', note: 'selection · resume', y: 350 },
+  ];
+  const width = 1180, left = 132, right = 24;
+  const timed = events.filter((event) => event.atNS !== undefined);
+  const min = Math.min(...timed.map((event) => event.atNS!));
+  const max = Math.max(...timed.map((event) => event.atNS!));
+  const xFor = (event: DebugEvent) => {
+    const time = event.atNS === undefined ? 0 : Math.sqrt(Math.max(0, (event.atNS - min) / Math.max(1, max - min)));
+    const order = (event.order - 1) / Math.max(1, events.length - 1);
+    return left + (time * .86 + order * .14) * (width - left - right);
+  };
+  useEffect(() => {
+    const scroller = laneScrollRef.current;
+    const firstSource = events.find((event) => event.type === 'source.statement.complete' && event.tool);
+    if (!scroller || !firstSource || scroller.clientWidth > 620) return;
+    scroller.scrollLeft = Math.max(0, xFor(firstSource) * (scroller.scrollWidth / width) - 122);
+  }, [events]);
+  const toolOffset = (tool?: string) => tool === 'travel.weather' ? -24 : tool === 'travel.attractions' ? 24 : 0;
+  const yFor = (event: DebugEvent) => {
+    const base = lanes.find((lane) => lane.id === event.actor)?.y ?? lanes[2].y;
+    if (event.actor !== 'host') return base + toolOffset(event.tool) * .55;
+    const kindOffset = event.type === 'semantic.qualified' ? -8 : event.type === 'request.finish' ? 8 : 0;
+    const logical = logicalID(event);
+    const candidateOffset = logical?.startsWith('brighton-') ? -5 : logical?.startsWith('oxford-') ? 5 : 0;
+    return base + toolOffset(event.tool) + kindOffset + candidateOffset;
+  };
+  const chains: DebugEvent[][] = [];
+  for (const candidate of ['brighton', 'oxford']) for (const tool of ['travel.weather', 'travel.rail', 'travel.attractions']) {
+    const suffix = tool.split('.')[1];
+    const chain = [
+      events.find((event) => event.actor === candidate && event.type === 'source.statement.complete' && event.tool === tool),
+      events.find((event) => event.type === 'semantic.qualified' && logicalID(event) === `${candidate}-${suffix}`),
+      events.find((event) => event.type === 'request.start' && logicalID(event) === `${candidate}-${suffix}`),
+      events.find((event) => event.type === 'request.finish' && logicalID(event) === `${candidate}-${suffix}`),
+    ].filter((event): event is DebugEvent => Boolean(event));
+    if (chain.length === 4) chains.push(chain);
+  }
+  const milestones = [
+    ['source.generation.start', 'generation'], ['request.start', 'first request'], ['source.sealed', 'sealed'], ['guest.start', 'fresh Guests'], ['guest.complete', 'Main complete'],
+  ].map(([type, label]) => ({ event: events.find((event) => event.type === type), label })).filter((item): item is { event: DebugEvent; label: string } => Boolean(item.event));
+  return <section className="lane-map" aria-label="Complete causal lane timeline">
+    <header><div><span className="eyebrow">Complete typed-event map</span><h2>Roles across causal time</h2><p>All {events.length} runtime events remain on the lanes. Six emphasized paths bind the source line that became complete to Host qualification, request start, and completion.</p></div><div className="lane-legend"><span className="legend-source">source closes</span><span className="legend-qualified">qualified</span><span className="legend-start">request starts</span><span className="legend-finish">request finishes</span><span className="legend-guest">Guest / capsule</span></div></header>
+    <div className="lane-map-viewport"><div aria-hidden="true" className="lane-mobile-labels">{lanes.map((lane) => <span key={lane.id} style={{ top: `${lane.y / 410 * 100}%` }}><strong>{lane.label}</strong><small>{lane.note}</small></span>)}</div><div className="lane-map-scroll" ref={laneScrollRef}><svg aria-label="Brighton, Oxford, Host, and Main event lanes" className="lane-map-svg" role="img" viewBox={`0 0 ${width} 410`}>
+      <defs><marker id="lane-arrow" markerHeight="5" markerWidth="6" orient="auto" refX="5" refY="2.5"><path d="M0 0 6 2.5 0 5z" /></marker></defs>
+      {milestones.map(({ event, label }) => { const x = xFor(event); const end = x > width - 150; return <g className="lane-milestone" key={`${event.id}-${label}`}><line x1={x} x2={x} y1="34" y2="382" /><text textAnchor={end ? 'end' : 'start'} x={x + (end ? -4 : 4)} y="24">{label} · +{seconds(event.atNS!)}</text></g>; })}
+      {lanes.map((lane) => <g className="lane-axis" key={lane.id}><text className="lane-title" x="12" y={lane.y - 6}>{lane.label}</text><text className="lane-note" x="12" y={lane.y + 11}>{lane.note}</text><line x1={left} x2={width - right} y1={lane.y} y2={lane.y} /></g>)}
+      {chains.map((chain) => chain.slice(0, -1).map((event, index) => { const next = chain[index + 1]; return <path className={`lane-chain ${chain[0].actor}`} d={`M ${xFor(event)} ${yFor(event)} C ${xFor(event) + 24} ${yFor(event)}, ${xFor(next) - 24} ${yFor(next)}, ${xFor(next)} ${yFor(next)}`} key={`${chain[0].id}-${index}`} markerEnd="url(#lane-arrow)" />; }))}
+      {events.map((event) => { const kind = laneKind(event); const key = kind !== 'event'; const select = () => key && setSelectedID(event.id); return <g aria-label={`${event.type} · ${actorLabel(event.actor)} · ${event.tool ?? event.label}`} className={`lane-node lane-${kind} ${selectedID === event.id ? 'selected' : ''}`} key={event.id} onClick={select} onKeyDown={(keyEvent) => { if (key && (keyEvent.key === 'Enter' || keyEvent.key === ' ')) setSelectedID(event.id); }} role={key ? 'button' : undefined} tabIndex={key ? 0 : undefined} transform={`translate(${xFor(event)} ${yFor(event)})`}><title>{event.type} · {actorLabel(event.actor)} · +{event.atNS === undefined ? 'n/a' : seconds(event.atNS)}{event.tool ? ` · ${event.tool}` : ''}</title>{key ? <circle r={selectedID === event.id ? 7 : 5} /> : <circle r="2" />}</g>; })}
+    </svg></div></div>
+    <div className="lane-selection"><span className={`event-kind kind-${eventIcon(selected.type)}`}><Icon name={eventIcon(selected.type)} /></span><div><small>selected event · {actorLabel(selected.actor)} · {selected.atNS === undefined ? selected.label : `+${seconds(selected.atNS)}`}</small><strong>{selected.type}</strong></div>{selected.tool && <code>{selected.tool}</code>}<code>{logicalID(selected) ?? selected.label}</code></div>
+  </section>;
 }
 
 function combineGroupEvents(groups: TraceGroup[], selected: Set<string>) {
@@ -281,5 +373,5 @@ export function MechanismsView({ snapshot, debug }: { snapshot: UnifiedSnapshot;
 
 export function TimelineView({ snapshot, debug }: { snapshot: UnifiedSnapshot; debug: ProviderDebug }) {
   const groups = useMemo(() => buildGroups(snapshot, debug), [snapshot, debug]);
-  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><TraceWorkbench groups={groups} initialFilters={[]} timeline /></div>;
+  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><CausalLaneMap snapshot={snapshot} /><TraceWorkbench groups={groups} initialFilters={[]} timeline /></div>;
 }

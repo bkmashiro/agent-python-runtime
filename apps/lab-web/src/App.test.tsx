@@ -90,6 +90,31 @@ describe('Pysolate Lab development debugger', () => {
     expect(screen.getByRole('complementary', { name: 'Execution event inspector' }).querySelectorAll('.source-line-delta')).toHaveLength(1);
   });
 
+  it('shows semantic qualification against its triggering prefix rather than final source', async () => {
+    stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
+    await screen.findByRole('heading', { name: 'Code + tool calls' });
+    fireEvent.click(screen.getAllByRole('button', { name: /semantic\.qualified · host · travel\.weather/ })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+    expect(screen.getByText(/qualifying source prefix 1\/6/)).toBeVisible();
+    expect(screen.getByText('weather = travel.weather("oxford")')).toBeVisible();
+    expect(screen.queryByText(/rail = travel\.rail\("oxford"/)).not.toBeInTheDocument();
+  });
+
+  it('adds a complete clickable role-lane map to Timeline without removing the inspector', async () => {
+    stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
+    await screen.findByRole('heading', { name: 'Code + tool calls' });
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    const map = screen.getByRole('region', { name: 'Complete causal lane timeline' });
+    expect(screen.getByRole('heading', { name: 'Roles across causal time' })).toBeVisible();
+    expect(map.querySelectorAll('.lane-axis')).toHaveLength(4);
+    expect(map.querySelectorAll('.lane-node')).toHaveLength(80);
+    expect(map.querySelectorAll('.lane-chain')).toHaveLength(18);
+    fireEvent.click(map.querySelector('.lane-request-finish')!);
+    expect(map.querySelector('.lane-selection')?.textContent).toContain('request.finish');
+    expect(screen.getByRole('navigation', { name: 'Evidence filters' })).toBeVisible();
+    expect(screen.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
+  });
+
   it('combines filters and exposes an explicit tool-call-only view', async () => {
     stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
     await screen.findByRole('heading', { name: 'Code + tool calls' });

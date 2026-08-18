@@ -66,6 +66,33 @@ test('shows the incremental source prefix at every statement completion', async 
   await expect(inspector.locator('.source-line-delta')).toHaveCount(1);
 });
 
+test('binds semantic qualification to the triggering source prefix', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /semantic\.qualified · host · travel\.weather/ }).first().click();
+  await page.getByRole('button', { name: 'Python' }).click();
+  const inspector = page.getByRole('complementary', { name: 'Execution event inspector' });
+  await expect(inspector).toContainText('qualifying source prefix 1/6');
+  await expect(inspector).toContainText('weather = travel.weather("oxford")');
+  await expect(inspector).not.toContainText('rail = travel.rail("oxford"');
+});
+
+test('renders the complete role-lane timeline and retains the evidence workbench', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Timeline' }).click();
+  const map = page.getByRole('region', { name: 'Complete causal lane timeline' });
+  await expect(page.getByRole('heading', { name: 'Roles across causal time' })).toBeVisible();
+  await expect(map.locator('.lane-axis')).toHaveCount(4);
+  await expect(map.locator('.lane-node')).toHaveCount(80);
+  await expect(map.locator('.lane-chain')).toHaveCount(18);
+  const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, laneScroll: (document.querySelector('.lane-map-scroll') as HTMLElement)?.scrollLeft ?? 0 }));
+  expect(layout.document).toBeLessThanOrEqual(layout.viewport);
+  if (layout.viewport <= 620) expect(layout.laneScroll).toBeGreaterThan(0);
+  await map.locator('.lane-request-finish').first().press('Enter');
+  await expect(map.locator('.lane-selection')).toContainText('request.finish');
+  await expect(page.getByRole('navigation', { name: 'Evidence filters' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
+});
+
 test('supports collapsible trace branches and Chrome-style filtering without stale inspection', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'By role' }).click();

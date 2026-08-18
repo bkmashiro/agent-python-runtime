@@ -5,3 +5,9 @@
 /dist/
 __pycache__/
 *.pyc
+/report/*.pdf
+/report/demo-slides/*.pdf
+/web-slides/node_modules/
+/web-slides/dist/
+/web-slides/test-results/
+/web-slides/artifacts/

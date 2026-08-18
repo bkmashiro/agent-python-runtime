@@ -705,19 +705,30 @@ main { width: min(1440px, 100%); margin: 0 auto; padding: 0 clamp(18px, 4vw, 64p
 .lane-note { fill: #647286; font-size: 8px; text-transform: uppercase; }
 .lane-milestone line { stroke: #26303e; stroke-dasharray: 3 5; }
 .lane-milestone text { fill: #667489; font-size: 7px; text-transform: uppercase; }
-.lane-chain { fill: none; stroke-width: 1.35; opacity: .58; marker-end: url(#lane-arrow); }
-.lane-chain.brighton { stroke: #a78bda; } .lane-chain.oxford { stroke: #48b9b5; }
+.lane-transition { fill: none; stroke-width: 1.35; opacity: .66; }
+.lane-transition.brighton { stroke: #a78bda; } .lane-transition.oxford { stroke: #48b9b5; }
+.lane-fanout { marker-end: url(#lane-arrow); }
+.lane-reuse { stroke-dasharray: 4 4; opacity: .48; }
+.branch-discard { stroke: #ed7888; } .branch-seal, .lane-resume { stroke: #d7a95b; }
 #lane-arrow path { fill: #718098; }
-.lane-node { outline: none; cursor: pointer; pointer-events: bounding-box; }
-.lane-node.lane-event { pointer-events: none; }
-.lane-node circle { fill: #566276; stroke: #0c1118; stroke-width: 1.5; pointer-events: none; transition: r .12s ease, filter .12s ease; }
-.lane-node:hover circle, .lane-node:focus circle, .lane-node.selected circle { filter: drop-shadow(0 0 4px currentColor); stroke: #eef4fb; }
-.lane-source { color: #9a86ef; } .lane-source circle { fill: #9a86ef; }
-.lane-qualified { color: #58a6ff; } .lane-qualified circle { fill: #58a6ff; }
-.lane-request-start { color: #4ec9c2; } .lane-request-start circle { fill: #4ec9c2; }
-.lane-request-finish { color: #73c991; } .lane-request-finish circle { fill: #73c991; }
-.lane-guest, .lane-workspace { color: #d7a95b; } .lane-guest circle, .lane-workspace circle { fill: #d7a95b; }
-.lane-control { color: #ed7888; } .lane-control circle { fill: #ed7888; }
+.lane-span, .lane-point { outline: none; cursor: pointer; pointer-events: bounding-box; }
+.lane-span rect { fill: #536076; opacity: .78; stroke: #0c1118; stroke-width: 1; }
+.lane-span circle { fill: #8b98ab; stroke: #0c1118; stroke-width: 1.3; }
+.lane-span text { fill: #8e9bae; font-size: 8px; text-transform: uppercase; }
+.lane-span:hover rect, .lane-span:focus rect, .lane-span.selected rect { opacity: 1; stroke: #e7eef7; filter: drop-shadow(0 0 3px currentColor); }
+.span-source { color: #9a86ef; } .span-source rect, .span-source circle { fill: #8f7add; }
+.span-request { color: #4ec9c2; } .span-request rect, .span-request circle { fill: #3faea9; }
+.span-guest { color: #d7a95b; } .span-guest rect, .span-guest circle { fill: #bb914b; }
+.span-shared { color: #58a6ff; } .span-shared rect, .span-shared circle { fill: #4d8fd6; }
+.span-workspace { color: #c586c0; } .span-workspace rect, .span-workspace circle { fill: #ac72a7; }
+.lane-point circle, .lane-point path { stroke: #0c1118; stroke-width: 1.4; }
+.lane-point text { fill: #dfe7f1; font: 700 7px var(--mono); pointer-events: none; }
+.lane-point:hover circle, .lane-point:hover path, .lane-point:focus circle, .lane-point:focus path { stroke: #fff; filter: drop-shadow(0 0 4px currentColor); }
+.point-source { color: #9a86ef; } .point-source circle { fill: #9a86ef; }
+.point-claim { color: #73c991; } .point-claim path { fill: #73c991; }
+.point-discard { color: #ed7888; } .point-discard circle { fill: #ed7888; }
+.point-seal, .point-resume { color: #d7a95b; } .point-seal circle, .point-resume circle { fill: #d7a95b; }
+.point-discard text, .point-seal text, .point-resume text { fill: currentColor; font-size: 8px; }
 .lane-selection { min-height: 48px; display: grid; grid-template-columns: 28px minmax(180px, 1fr) auto auto; align-items: center; gap: 10px; padding: 7px 12px; border-top: 1px solid var(--debug-line); background: #111721; }
 .lane-selection div { min-width: 0; display: grid; gap: 2px; }
 .lane-selection small { color: #68768a; font: 8px var(--mono); text-transform: uppercase; }

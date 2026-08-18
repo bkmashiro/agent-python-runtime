@@ -79,16 +79,21 @@ test('binds semantic qualification to the triggering source prefix', async ({ pa
 test('renders the complete role-lane timeline and retains the evidence workbench', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Timeline' }).click();
-  const map = page.getByRole('region', { name: 'Complete causal lane timeline' });
-  await expect(page.getByRole('heading', { name: 'Roles across causal time' })).toBeVisible();
+  const map = page.getByRole('region', { name: 'Semantic causal lane timeline' });
+  await expect(page.getByRole('heading', { name: 'Fan-out, spans, and convergence' })).toBeVisible();
   await expect(map.locator('.lane-axis')).toHaveCount(4);
-  await expect(map.locator('.lane-node')).toHaveCount(80);
-  await expect(map.locator('.lane-chain')).toHaveCount(18);
+  await expect(map.locator('.lane-span')).toHaveCount(13);
+  await expect(map.locator('.span-request')).toHaveCount(6);
+  await expect(map.locator('.span-request rect')).toHaveCount(6);
+  await expect(map.locator('.span-request circle')).toHaveCount(12);
+  await expect(map.locator('.lane-node')).toHaveCount(0);
+  await expect(map.locator('.lane-transition')).toHaveCount(18);
+  await expect(map.locator('.lane-reuse')).toHaveCount(6);
   const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, laneScroll: (document.querySelector('.lane-map-scroll') as HTMLElement)?.scrollLeft ?? 0 }));
   expect(layout.document).toBeLessThanOrEqual(layout.viewport);
   if (layout.viewport <= 620) expect(layout.laneScroll).toBeGreaterThan(0);
-  await map.locator('.lane-request-finish').first().press('Enter');
-  await expect(map.locator('.lane-selection')).toContainText('request.finish');
+  await map.locator('.span-request').first().press('Enter');
+  await expect(map.locator('.lane-selection')).toContainText('physical request start → finish');
   await expect(page.getByRole('navigation', { name: 'Evidence filters' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
 });

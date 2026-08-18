@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { ProviderDebug, ProviderDebugEvent } from './providerDebugData';
 import type { UnifiedCandidate, UnifiedEvent, UnifiedFact, UnifiedSnapshot } from './unifiedCampaignData';
 
@@ -251,80 +251,87 @@ function CodeBlock({ label, value }: { label: string; value: unknown }) {
   return <section className="code-block"><div className="code-label"><span>{label}</span><small>{new Blob([text]).size} bytes</small></div><pre>{text}</pre></section>;
 }
 
-type LaneKind = 'source' | 'qualified' | 'request-start' | 'request-finish' | 'guest' | 'workspace' | 'control' | 'event';
-function laneKind(event: DebugEvent): LaneKind {
-  if (event.type === 'source.statement.complete' && event.tool) return 'source';
-  if (event.type === 'semantic.qualified') return 'qualified';
-  if (event.type === 'request.start') return 'request-start';
-  if (event.type === 'request.finish') return 'request-finish';
-  if (event.type.startsWith('guest.')) return 'guest';
-  if (event.type.startsWith('capsule.') || event.type.startsWith('branch.') || event.type.startsWith('cow.') || event.type.startsWith('cold_io.')) return 'workspace';
-  if (event.type.startsWith('control.')) return 'control';
-  return 'event';
-}
+type LaneSpanKind = 'source' | 'request' | 'guest' | 'shared' | 'workspace';
+type LaneSpan = { id: string; title: string; actor: string; y: number; start: DebugEvent; end: DebugEvent; kind: LaneSpanKind; tool?: string; note: string };
 function logicalID(event: DebugEvent) { return typeof event.bindings.logical_id === 'string' ? event.bindings.logical_id : undefined; }
 function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
   const events = useMemo(() => {
     const bindings = sourceBindings(snapshot);
     return snapshot.events.map((event) => runtimeEvent(event, snapshot, bindings));
   }, [snapshot]);
-  const [selectedID, setSelectedID] = useState(events.find((event) => event.type === 'request.start')?.id ?? events[0].id);
   const laneScrollRef = useRef<HTMLDivElement>(null);
-  const selected = events.find((event) => event.id === selectedID) ?? events[0];
   const lanes = [
-    { id: 'brighton', label: 'Brighton', note: 'candidate · discarded', y: 86 },
-    { id: 'oxford', label: 'Oxford', note: 'candidate · selected', y: 174 },
-    { id: 'host', label: 'Host', note: 'qualification · effects', y: 262 },
-    { id: 'main', label: 'Main', note: 'selection · resume', y: 350 },
+    { id: 'brighton', label: 'Brighton', note: 'candidate · discarded', y: 104 },
+    { id: 'oxford', label: 'Oxford', note: 'candidate · selected', y: 212 },
+    { id: 'host', label: 'Host', note: 'effects · sharing · workspace', y: 354 },
+    { id: 'main', label: 'Main', note: 'selection · resume', y: 482 },
   ];
-  const width = 1180, left = 132, right = 24;
-  const timed = events.filter((event) => event.atNS !== undefined);
-  const min = Math.min(...timed.map((event) => event.atNS!));
-  const max = Math.max(...timed.map((event) => event.atNS!));
-  const xFor = (event: DebugEvent) => {
-    const time = event.atNS === undefined ? 0 : Math.sqrt(Math.max(0, (event.atNS - min) / Math.max(1, max - min)));
-    const order = (event.order - 1) / Math.max(1, events.length - 1);
-    return left + (time * .86 + order * .14) * (width - left - right);
-  };
+  const width = 1180, height = 540, left = 132, right = 24;
+  const xFor = (event: DebugEvent) => left + (event.order - 1) / Math.max(1, events.length - 1) * (width - left - right);
+  const find = (type: string, predicate: (event: DebugEvent) => boolean = () => true) => events.find((event) => event.type === type && predicate(event));
+  const candidates = ['brighton', 'oxford'] as const;
+  const tools = [
+    { id: 'weather', name: 'travel.weather', short: 'W', y: -74 },
+    { id: 'rail', name: 'travel.rail', short: 'R', y: -36 },
+    { id: 'attractions', name: 'travel.attractions', short: 'A', y: 2 },
+  ] as const;
+  const makeSpan = (id: string, title: string, actor: string, y: number, start: DebugEvent | undefined, end: DebugEvent | undefined, kind: LaneSpanKind, note: string, tool?: string): LaneSpan | undefined => start && end ? { id, title, actor, y, start, end, kind, note, tool } : undefined;
+  const sourceSpans = candidates.map((candidate) => makeSpan(`source:${candidate}`, 'source generation', candidate, lanes.find((lane) => lane.id === candidate)!.y - 18, find('source.generation.start', (event) => event.actor === candidate), find('source.sealed', (event) => event.actor === candidate), 'source', 'visible prefixes → sealed source'));
+  const guestSpans = candidates.map((candidate) => makeSpan(`guest:${candidate}`, 'fresh Guest', candidate, lanes.find((lane) => lane.id === candidate)!.y + 20, find('guest.start', (event) => event.actor === candidate), find('guest.end', (event) => event.actor === candidate), 'guest', 'execute from line one → observed output'));
+  const requestSpans = candidates.flatMap((candidate, candidateIndex) => tools.map((tool) => makeSpan(`request:${candidate}:${tool.id}`, `${candidate} · ${tool.id}`, 'host', lanes[2].y + tool.y + (candidateIndex ? 7 : -7), find('request.start', (event) => logicalID(event) === `${candidate}-${tool.id}`), find('request.finish', (event) => logicalID(event) === `${candidate}-${tool.id}`), 'request', 'physical request start → finish', tool.name)));
+  const originSpan = makeSpan('origin:physical', 'shared origin · 1 physical', 'host', lanes[2].y + 48, find('function.physical.start'), find('function.physical.end'), 'shared', '2 logical callers → leader + waiter');
+  const capsuleSpan = makeSpan('capsule:selected', 'selected workspace capsule', 'host', lanes[2].y + 82, find('capsule.export'), find('capsule.bind'), 'workspace', 'export → import → bind');
+  const mainSpan = makeSpan('guest:main', 'fresh Main Guest', 'main', lanes[3].y, find('guest.start', (event) => event.actor === 'main'), find('guest.complete'), 'guest', 'bound workspace → final decision');
+  const spans = [...sourceSpans, ...guestSpans, ...requestSpans, originSpan, capsuleSpan, mainSpan].filter((span): span is LaneSpan => Boolean(span));
+  const sourcePoints = candidates.flatMap((candidate) => tools.map((tool) => ({ candidate, tool, event: find('source.statement.complete', (event) => event.actor === candidate && event.tool === tool.name)! })));
+  const claimPoints = candidates.flatMap((candidate) => tools.map((tool) => ({ candidate, tool, event: find('semantic.claim', (event) => logicalID(event) === `${candidate}-${tool.id}`)! })));
+  const branchPoints = [
+    { event: find('branch.discard')!, title: 'discard', actor: 'brighton', y: lanes[0].y + 20, kind: 'discard' },
+    { event: find('branch.seal')!, title: 'seal', actor: 'oxford', y: lanes[1].y + 20, kind: 'seal' },
+    { event: find('cold_io.resume')!, title: 'cold-I/O resume', actor: 'main', y: lanes[3].y, kind: 'resume' },
+  ];
+  const pointEvents = [...sourcePoints.map((point) => point.event), ...claimPoints.map((point) => point.event), ...branchPoints.map((point) => point.event)];
+  const [selectedID, setSelectedID] = useState(requestSpans.find(Boolean)?.id ?? spans[0].id);
+  const selectedSpan = spans.find((span) => span.id === selectedID);
+  const selectedEvent = pointEvents.find((event) => `event:${event.id}` === selectedID);
+  const selectEvent = (event: DebugEvent) => setSelectedID(`event:${event.id}`);
+  const activate = (callback: () => void) => (keyEvent: ReactKeyboardEvent) => { if (keyEvent.key === 'Enter' || keyEvent.key === ' ') callback(); };
   useEffect(() => {
     const scroller = laneScrollRef.current;
-    const firstSource = events.find((event) => event.type === 'source.statement.complete' && event.tool);
+    const firstSource = sourcePoints[0]?.event;
     if (!scroller || !firstSource || scroller.clientWidth > 620) return;
     scroller.scrollLeft = Math.max(0, xFor(firstSource) * (scroller.scrollWidth / width) - 122);
   }, [events]);
-  const toolOffset = (tool?: string) => tool === 'travel.weather' ? -24 : tool === 'travel.attractions' ? 24 : 0;
-  const yFor = (event: DebugEvent) => {
-    const base = lanes.find((lane) => lane.id === event.actor)?.y ?? lanes[2].y;
-    if (event.actor !== 'host') return base + toolOffset(event.tool) * .55;
-    const kindOffset = event.type === 'semantic.qualified' ? -8 : event.type === 'request.finish' ? 8 : 0;
-    const logical = logicalID(event);
-    const candidateOffset = logical?.startsWith('brighton-') ? -5 : logical?.startsWith('oxford-') ? 5 : 0;
-    return base + toolOffset(event.tool) + kindOffset + candidateOffset;
-  };
-  const chains: DebugEvent[][] = [];
-  for (const candidate of ['brighton', 'oxford']) for (const tool of ['travel.weather', 'travel.rail', 'travel.attractions']) {
-    const suffix = tool.split('.')[1];
-    const chain = [
-      events.find((event) => event.actor === candidate && event.type === 'source.statement.complete' && event.tool === tool),
-      events.find((event) => event.type === 'semantic.qualified' && logicalID(event) === `${candidate}-${suffix}`),
-      events.find((event) => event.type === 'request.start' && logicalID(event) === `${candidate}-${suffix}`),
-      events.find((event) => event.type === 'request.finish' && logicalID(event) === `${candidate}-${suffix}`),
-    ].filter((event): event is DebugEvent => Boolean(event));
-    if (chain.length === 4) chains.push(chain);
-  }
-  const milestones = [
-    ['source.generation.start', 'generation'], ['request.start', 'first request'], ['source.sealed', 'sealed'], ['guest.start', 'fresh Guests'], ['guest.complete', 'Main complete'],
-  ].map(([type, label]) => ({ event: events.find((event) => event.type === type), label })).filter((item): item is { event: DebugEvent; label: string } => Boolean(item.event));
-  return <section className="lane-map" aria-label="Complete causal lane timeline">
-    <header><div><span className="eyebrow">Complete typed-event map</span><h2>Roles across causal time</h2><p>All {events.length} runtime events remain on the lanes. Six emphasized paths bind the source line that became complete to Host qualification, request start, and completion.</p></div><div className="lane-legend"><span className="legend-source">source closes</span><span className="legend-qualified">qualified</span><span className="legend-start">request starts</span><span className="legend-finish">request finishes</span><span className="legend-guest">Guest / capsule</span></div></header>
-    <div className="lane-map-viewport"><div aria-hidden="true" className="lane-mobile-labels">{lanes.map((lane) => <span key={lane.id} style={{ top: `${lane.y / 410 * 100}%` }}><strong>{lane.label}</strong><small>{lane.note}</small></span>)}</div><div className="lane-map-scroll" ref={laneScrollRef}><svg aria-label="Brighton, Oxford, Host, and Main event lanes" className="lane-map-svg" role="img" viewBox={`0 0 ${width} 410`}>
+  const path = (from: DebugEvent, fromY: number, to: DebugEvent, toY: number) => `M ${xFor(from)} ${fromY} C ${xFor(from) + 28} ${fromY}, ${xFor(to) - 28} ${toY}, ${xFor(to)} ${toY}`;
+  const stages = [
+    { event: find('source.generation.start')!, label: 'fan-out', anchor: 'start' as const },
+    { event: find('source.sealed')!, label: 'fresh execution', anchor: 'start' as const },
+    { event: find('branch.seal')!, label: 'branch decision', anchor: 'end' as const },
+    { event: find('guest.start', (event) => event.actor === 'main')!, label: 'resume Main', anchor: 'start' as const },
+  ];
+  const selectedTitle = selectedSpan?.title ?? selectedEvent?.type ?? 'operation';
+  const selectedActor = selectedSpan?.actor ?? selectedEvent?.actor ?? 'host';
+  const selectedTime = selectedSpan ? `+${seconds(selectedSpan.start.atNS!)} → +${seconds(selectedSpan.end.atNS!)}` : selectedEvent?.atNS !== undefined ? `+${seconds(selectedEvent.atNS)}` : 'recorded';
+  const selectedDetail = selectedSpan?.note ?? logicalID(selectedEvent!) ?? selectedEvent?.label ?? '';
+  const selectedTool = selectedSpan?.tool ?? selectedEvent?.tool;
+  return <section className="lane-map" aria-label="Semantic causal lane timeline">
+    <header><div><span className="eyebrow">Operation and transition map</span><h2>Fan-out, spans, and convergence</h2><p>The overview shows only transitions people reason about: source-triggered fan-out, physical request lifetimes, staged-result claims, shared work, branch disposition, and capsule resume. The complete event ledger remains below.</p></div><div className="lane-legend"><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
+    <div className="lane-map-viewport"><div aria-hidden="true" className="lane-mobile-labels">{lanes.map((lane) => <span key={lane.id} style={{ top: `${lane.y / height * 100}%` }}><strong>{lane.label}</strong><small>{lane.note}</small></span>)}</div><div className="lane-map-scroll" ref={laneScrollRef}><svg aria-label="Brighton, Oxford, Host, and Main operation lanes" className="lane-map-svg semantic-map-svg" role="img" viewBox={`0 0 ${width} ${height}`}>
       <defs><marker id="lane-arrow" markerHeight="5" markerWidth="6" orient="auto" refX="5" refY="2.5"><path d="M0 0 6 2.5 0 5z" /></marker></defs>
-      {milestones.map(({ event, label }) => { const x = xFor(event); const end = x > width - 150; return <g className="lane-milestone" key={`${event.id}-${label}`}><line x1={x} x2={x} y1="34" y2="382" /><text textAnchor={end ? 'end' : 'start'} x={x + (end ? -4 : 4)} y="24">{label} · +{seconds(event.atNS!)}</text></g>; })}
+      {stages.map(({ event, label, anchor }) => <g className="lane-milestone" key={label}><line x1={xFor(event)} x2={xFor(event)} y1="34" y2={height - 24} /><text textAnchor={anchor} x={xFor(event) + (anchor === 'end' ? -4 : 4)} y="24">{label}</text></g>)}
       {lanes.map((lane) => <g className="lane-axis" key={lane.id}><text className="lane-title" x="12" y={lane.y - 6}>{lane.label}</text><text className="lane-note" x="12" y={lane.y + 11}>{lane.note}</text><line x1={left} x2={width - right} y1={lane.y} y2={lane.y} /></g>)}
-      {chains.map((chain) => chain.slice(0, -1).map((event, index) => { const next = chain[index + 1]; return <path className={`lane-chain ${chain[0].actor}`} d={`M ${xFor(event)} ${yFor(event)} C ${xFor(event) + 24} ${yFor(event)}, ${xFor(next) - 24} ${yFor(next)}, ${xFor(next)} ${yFor(next)}`} key={`${chain[0].id}-${index}`} markerEnd="url(#lane-arrow)" />; }))}
-      {events.map((event) => { const kind = laneKind(event); const key = kind !== 'event'; const select = () => key && setSelectedID(event.id); return <g aria-label={`${event.type} · ${actorLabel(event.actor)} · ${event.tool ?? event.label}`} className={`lane-node lane-${kind} ${selectedID === event.id ? 'selected' : ''}`} key={event.id} onClick={select} onKeyDown={(keyEvent) => { if (key && (keyEvent.key === 'Enter' || keyEvent.key === ' ')) setSelectedID(event.id); }} role={key ? 'button' : undefined} tabIndex={key ? 0 : undefined} transform={`translate(${xFor(event)} ${yFor(event)})`}><title>{event.type} · {actorLabel(event.actor)} · +{event.atNS === undefined ? 'n/a' : seconds(event.atNS)}{event.tool ? ` · ${event.tool}` : ''}</title>{key ? <circle r={selectedID === event.id ? 7 : 5} /> : <circle r="2" />}</g>; })}
+      {sourcePoints.map((source) => { const request = requestSpans.find((span) => span?.id === `request:${source.candidate}:${source.tool.id}`)!; return <path className={`lane-transition lane-fanout ${source.candidate}`} d={path(source.event, lanes.find((lane) => lane.id === source.candidate)!.y - 18, request.start, request.y)} key={`fanout:${source.candidate}:${source.tool.id}`} markerEnd="url(#lane-arrow)" />; })}
+      {claimPoints.map((claim) => { const request = requestSpans.find((span) => span?.id === `request:${claim.candidate}:${claim.tool.id}`)!; return <path className={`lane-transition lane-reuse ${claim.candidate}`} d={path(request.end, request.y, claim.event, lanes.find((lane) => lane.id === claim.candidate)!.y + 20)} key={`reuse:${claim.candidate}:${claim.tool.id}`} markerEnd="url(#lane-arrow)" />; })}
+      {candidates.map((candidate) => { const logical = find('function.logical', (event) => event.actor === candidate)!; return <path className={`lane-transition lane-fanout ${candidate}`} d={path(logical, lanes.find((lane) => lane.id === candidate)!.y, originSpan!.start, originSpan!.y)} key={`origin:${candidate}`} markerEnd="url(#lane-arrow)" />; })}
+      {branchPoints.slice(0, 2).map((point) => { const end = find('guest.end', (event) => event.actor === point.actor)!; return <path className={`lane-transition branch-${point.kind}`} d={path(end, point.y, point.event, point.y)} key={point.kind} markerEnd="url(#lane-arrow)" />; })}
+      <path className="lane-transition lane-resume" d={path(branchPoints[1].event, branchPoints[1].y, capsuleSpan!.start, capsuleSpan!.y)} markerEnd="url(#lane-arrow)" />
+      <path className="lane-transition lane-resume" d={path(capsuleSpan!.end, capsuleSpan!.y, mainSpan!.start, mainSpan!.y)} markerEnd="url(#lane-arrow)" />
+      {spans.map((span) => { const x = xFor(span.start), end = xFor(span.end), spanWidth = Math.max(8, end - x); const selected = selectedID === span.id; const choose = () => setSelectedID(span.id); return <g aria-label={`${span.title} · ${span.actor} · start to finish`} className={`lane-span span-${span.kind} ${selected ? 'selected' : ''}`} key={span.id} onClick={choose} onKeyDown={activate(choose)} role="button" tabIndex={0}><title>{span.title} · +{seconds(span.start.atNS!)} → +{seconds(span.end.atNS!)}</title><rect height="10" rx="5" width={spanWidth} x={x} y={span.y - 5} /><circle cx={x} cy={span.y} r="4" /><circle cx={end} cy={span.y} r="4" /><text x={x + 4} y={span.y - 9}>{span.title}</text></g>; })}
+      {sourcePoints.map((point) => { const y = lanes.find((lane) => lane.id === point.candidate)!.y - 18; return <g aria-label={`${point.tool.name} source closes · ${point.candidate}`} className="lane-point point-source" key={`source:${point.candidate}:${point.tool.id}`} onClick={() => selectEvent(point.event)} onKeyDown={activate(() => selectEvent(point.event))} role="button" tabIndex={0} transform={`translate(${xFor(point.event)} ${y})`}><circle r="6" /><text textAnchor="middle" y="2.5">{point.tool.short}</text></g>; })}
+      {claimPoints.map((point) => { const y = lanes.find((lane) => lane.id === point.candidate)!.y + 20; return <g aria-label={`${point.tool.name} exact claim · ${point.candidate}`} className="lane-point point-claim" key={`claim:${point.candidate}:${point.tool.id}`} onClick={() => selectEvent(point.event)} onKeyDown={activate(() => selectEvent(point.event))} role="button" tabIndex={0} transform={`translate(${xFor(point.event)} ${y})`}><path d="M0 -6 6 0 0 6 -6 0z" /><title>{point.tool.name} exact staged claim</title></g>; })}
+      {branchPoints.map((point) => <g aria-label={`${point.title} · ${point.actor}`} className={`lane-point point-${point.kind}`} key={point.kind} onClick={() => selectEvent(point.event)} onKeyDown={activate(() => selectEvent(point.event))} role="button" tabIndex={0} transform={`translate(${xFor(point.event)} ${point.y})`}><circle r="6" /><text x="9" y="3">{point.title}</text></g>)}
     </svg></div></div>
-    <div className="lane-selection"><span className={`event-kind kind-${eventIcon(selected.type)}`}><Icon name={eventIcon(selected.type)} /></span><div><small>selected event · {actorLabel(selected.actor)} · {selected.atNS === undefined ? selected.label : `+${seconds(selected.atNS)}`}</small><strong>{selected.type}</strong></div>{selected.tool && <code>{selected.tool}</code>}<code>{logicalID(selected) ?? selected.label}</code></div>
+    <div className="lane-selection"><span className="event-kind kind-request"><Icon name={selectedSpan?.kind === 'guest' || selectedSpan?.kind === 'workspace' ? 'workspace' : selectedSpan?.kind === 'source' ? 'source' : 'request'} /></span><div><small>{selectedSpan ? 'selected span' : 'selected transition'} · {actorLabel(selectedActor)} · {selectedTime}</small><strong>{selectedTitle}</strong></div>{selectedTool && <code>{selectedTool}</code>}<code>{selectedDetail}</code></div>
   </section>;
 }
 

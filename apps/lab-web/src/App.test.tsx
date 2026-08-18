@@ -51,7 +51,7 @@ describe('Pysolate Lab development debugger', () => {
   it('opens directly on mechanisms with dense run context and no campaign landing page', async () => {
     const fetchMock = stubFetch(await fixture(), await providerFixtureRaw());
     render(<App />);
-    expect(await screen.findByRole('heading', { name: 'Generate and pre-dispatch' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Code + tool calls' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Campaign' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(screen.getByText('£118.40')).toBeVisible();
@@ -61,9 +61,10 @@ describe('Pysolate Lab development debugger', () => {
 
   it('reuses the grouped inspector and exposes full provider body, source, bindings, and raw event', async () => {
     stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
-    await screen.findByRole('heading', { name: 'Generate and pre-dispatch' });
+    await screen.findByRole('heading', { name: 'Code + tool calls' });
     fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
-    expect(screen.getByRole('heading', { name: 'Model source generation' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /^Model generation/ }));
+    expect(screen.getByRole('heading', { name: 'Model generation' })).toBeVisible();
     fireEvent.click(screen.getAllByRole('button', { name: /model.output/ })[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Input / output' }));
     expect(screen.getByText(/deepseek-v4-flash/)).toBeVisible();
@@ -75,8 +76,8 @@ describe('Pysolate Lab development debugger', () => {
 
   it('shows each source.statement.complete prefix and highlights only its appended chunk', async () => {
     stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
-    await screen.findByRole('heading', { name: 'Generate and pre-dispatch' });
-    const statements = screen.getAllByRole('button', { name: /source\.statement\.complete/ });
+    await screen.findByRole('heading', { name: 'Code + tool calls' });
+    const statements = screen.getAllByRole('button', { name: /source\.statement\.complete · oxford/ });
     fireEvent.click(statements[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Python' }));
     expect(screen.getByText(/prefix 1\/6/)).toBeVisible();
@@ -87,6 +88,23 @@ describe('Pysolate Lab development debugger', () => {
     expect(screen.getByText(/prefix 2\/6/)).toBeVisible();
     expect(screen.getByText('rail = travel.rail("oxford", travellers=2)')).toBeVisible();
     expect(screen.getByRole('complementary', { name: 'Execution event inspector' }).querySelectorAll('.source-line-delta')).toHaveLength(1);
+  });
+
+  it('combines filters and exposes an explicit tool-call-only view', async () => {
+    stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
+    await screen.findByRole('heading', { name: 'Code + tool calls' });
+    const code = screen.getByRole('button', { name: /^Code \+ tool calls/ });
+    const tools = screen.getByRole('button', { name: /^Tool calls/ });
+    expect(code).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(tools);
+    expect(screen.getByRole('heading', { name: 'Combined evidence filters' })).toBeVisible();
+    expect(code).toHaveAttribute('aria-pressed', 'true');
+    expect(tools).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(code);
+    expect(screen.getByRole('heading', { name: 'Tool calls' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /source\.statement\.complete/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText('travel.weather').length).toBeGreaterThan(0);
+    expect(screen.getByRole('navigation', { name: 'Evidence filters' }).textContent).not.toMatch(/\b0[0-9]\b/);
   });
 
   it('fails closed instead of rendering a mutated campaign projection', async () => {

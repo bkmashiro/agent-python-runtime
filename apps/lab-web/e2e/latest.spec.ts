@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('opens directly on the mechanism debugger with dense run context', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Generate and pre-dispatch' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Code + tool calls' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Campaign' })).toHaveCount(0);
   await expect(page.getByText('£118.40')).toBeVisible();
   await expect(page.getByText('£78.00')).toBeVisible();
@@ -12,7 +12,8 @@ test('opens directly on the mechanism debugger with dense run context', async ({
 test('groups the complete provider and runtime trace and reuses one inspector', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Timeline' }).click();
-  await expect(page.getByRole('heading', { name: 'Model source generation' })).toBeVisible();
+  await page.getByRole('button', { name: /^Model generation/ }).click();
+  await expect(page.getByRole('heading', { name: 'Model generation' })).toBeVisible();
   await expect(page.getByText('brighton', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: /model.output/ }).first().click();
   await page.getByRole('button', { name: 'Input / output' }).click();
@@ -25,17 +26,33 @@ test('groups the complete provider and runtime trace and reuses one inspector', 
 
 test('uses projector-owned event groups without silently truncating records', async ({ page }) => {
   await page.goto('/');
-  const groupButton = page.getByRole('button', { name: /Generate and pre-dispatch/ });
+  const groupButton = page.getByRole('button', { name: /^Code \+ tool calls/ });
   const count = Number((await groupButton.locator('small').innerText()).split(' ')[0]);
   const rows = page.locator('.debug-event-tree .event-row-button');
   await expect(rows).toHaveCount(count);
+  await groupButton.click();
   await page.getByRole('button', { name: /Seal, then execute fresh/ }).click();
   await expect(page.getByRole('heading', { name: 'Seal, then execute fresh' })).toBeVisible();
 });
 
+test('combines filter chips and provides an explicit tool-call view', async ({ page }) => {
+  await page.goto('/');
+  const code = page.getByRole('button', { name: /^Code \+ tool calls/ });
+  const tools = page.getByRole('button', { name: /^Tool calls/ });
+  await tools.click();
+  await expect(page.getByRole('heading', { name: 'Combined evidence filters' })).toBeVisible();
+  await expect(code).toHaveAttribute('aria-pressed', 'true');
+  await expect(tools).toHaveAttribute('aria-pressed', 'true');
+  await code.click();
+  await expect(page.getByRole('heading', { name: 'Tool calls' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /source\.statement\.complete/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /travel\.weather/ }).first()).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Evidence filters' })).not.toContainText('00');
+});
+
 test('shows the incremental source prefix at every statement completion', async ({ page }) => {
   await page.goto('/');
-  const statements = page.getByRole('button', { name: /source\.statement\.complete/ });
+  const statements = page.getByRole('button', { name: /source\.statement\.complete · oxford/ });
   await statements.nth(0).click();
   await page.getByRole('button', { name: 'Python' }).click();
   const inspector = page.getByRole('complementary', { name: 'Execution event inspector' });
@@ -51,16 +68,17 @@ test('shows the incremental source prefix at every statement completion', async 
 
 test('supports collapsible trace branches and Chrome-style filtering without stale inspection', async ({ page }) => {
   await page.goto('/');
-  const oxford = page.getByRole('button', { name: /oxford 8/ });
+  await page.getByRole('button', { name: 'By role' }).click();
+  const oxford = page.getByRole('button', { name: /oxford \d+/ });
   await oxford.click();
   await expect(oxford).toHaveAttribute('aria-expanded', 'false');
   await expect(oxford.locator('xpath=..').locator('.event-row-button')).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Filter trace events' }).fill('request.start');
-  await expect(page.locator('.trace-count')).toHaveText('6/46');
+  await expect(page.locator('.trace-count')).toHaveText('7/56');
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('request.start');
-  await page.getByRole('button', { name: 'Flat' }).click();
+  await page.getByRole('button', { name: 'By time' }).click();
   await expect(page.locator('.actor-tree-row')).toHaveCount(0);
-  await expect(page.locator('.event-row-button')).toHaveCount(6);
+  await expect(page.locator('.event-row-button')).toHaveCount(7);
 });
 
 test('switching groups resets the selected raw event to that group', async ({ page }) => {
@@ -75,7 +93,7 @@ test('switching groups resets the selected raw event to that group', async ({ pa
 test('remains usable at 390px without horizontal page overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Generate and pre-dispatch' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Code + tool calls' })).toBeVisible();
   const widths = await page.evaluate(() => ({ viewport: window.innerWidth, document: document.documentElement.scrollWidth }));
   expect(widths.document).toBeLessThanOrEqual(widths.viewport);
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();

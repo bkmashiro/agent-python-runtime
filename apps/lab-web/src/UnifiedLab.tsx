@@ -18,15 +18,29 @@ type DebugEvent = {
   sourcePrefixSHA256?: string;
   input?: unknown;
   output?: unknown;
+  tool?: string;
   bindings: Record<string, unknown>;
 };
 
-type TraceGroup = { id: string; index: number; title: string; summary: string; facts: UnifiedFact[]; events: DebugEvent[] };
+type TraceGroup = { id: string; title: string; summary: string; facts: UnifiedFact[]; events: DebugEvent[]; icon: IconName; synthetic?: boolean; preferFlat?: boolean };
 type InspectorTab = 'overview' | 'source' | 'io' | 'raw';
 
 function seconds(value: number) { return `${(value / 1_000_000_000).toFixed(3)}s`; }
 function pretty(value: unknown) { return JSON.stringify(value, null, 2); }
 function actorLabel(actor: string) { return actor.replace(/^actor-/, '').replaceAll('-', ' '); }
+function toolName(logicalID?: string) {
+  if (logicalID?.endsWith('-weather')) return 'travel.weather';
+  if (logicalID?.endsWith('-rail')) return 'travel.rail';
+  if (logicalID?.endsWith('-attractions')) return 'travel.attractions';
+  if (logicalID?.includes('origin')) return 'trip.origin';
+  return undefined;
+}
+function sourceTool(delta?: string) {
+  if (delta?.includes('travel.weather(')) return 'travel.weather';
+  if (delta?.includes('travel.rail(')) return 'travel.rail';
+  if (delta?.includes('travel.attractions(')) return 'travel.attractions';
+  return undefined;
+}
 
 type IconName = 'tree' | 'list' | 'search' | 'actor' | 'model' | 'source' | 'request' | 'guest' | 'workspace' | 'control' | 'bindings' | 'io' | 'raw';
 function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
@@ -50,7 +64,8 @@ function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
 
 function eventIcon(type: string): IconName {
   if (type.startsWith('model.')) return 'model';
-  if (type.startsWith('source.') || type.startsWith('semantic.')) return 'source';
+  if (type.startsWith('source.') || type === 'semantic.qualified') return 'source';
+  if (type === 'semantic.issue' || type === 'semantic.claim') return 'request';
   if (type.startsWith('request.') || type.startsWith('function.')) return 'request';
   if (type.startsWith('guest.')) return 'guest';
   if (type.startsWith('capsule.') || type.startsWith('cow.') || type.startsWith('cold_io.')) return 'workspace';
@@ -88,6 +103,7 @@ function runtimeEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot): DebugEven
     sourcePrefixSHA256: event.source_prefix_sha256,
     input: capabilityInput ?? (event.type === 'guest.start' && candidate ? { code: candidate.executed_source, candidate: candidate.id } : undefined),
     output: capabilityOutput ?? (event.type === 'guest.end' && candidate ? candidate.guest_response : event.actor_id === 'main' && event.type.startsWith('guest.') ? snapshot.main_guest_response : undefined),
+    tool: toolName(event.logical_id) ?? sourceTool(event.source_delta),
     bindings: { logical_id: event.logical_id, physical_id: event.physical_id, identity_sha256: event.identity_sha256, outcome: event.outcome },
   };
 }
@@ -111,14 +127,28 @@ function providerEvent(event: ProviderDebugEvent, debug: ProviderDebug): DebugEv
 
 function buildGroups(snapshot: UnifiedSnapshot, debug: ProviderDebug): TraceGroup[] {
   const byID = new Map(snapshot.events.map((event) => [event.id, event]));
+  const runtime = snapshot.events.map((event) => runtimeEvent(event, snapshot));
+  const toolEvent = (event: DebugEvent) => event.type.startsWith('request.') || event.type.startsWith('function.') || event.type === 'semantic.qualified' || event.type === 'semantic.issue' || event.type === 'semantic.claim';
   return [
     {
-      id: 'provider-generation', index: 0, title: 'Model source generation',
+      id: 'code-tools', title: 'Code + tool calls', icon: 'source', synthetic: true, preferFlat: true,
+      summary: 'Source prefixes and the Host requests they unlock, interleaved by causal time. Use this view to see the exact statement after which each tool call is qualified and issued.',
+      facts: [{ label: 'source increments', value: '18', note: 'each prefix shown explicitly' }, { label: 'travel requests', value: '6', note: 'weather, rail, attractions ×2' }],
+      events: runtime.filter((event) => event.type.startsWith('source.') || event.type.startsWith('semantic.') || event.type.startsWith('request.')),
+    },
+    {
+      id: 'tool-calls', title: 'Tool calls', icon: 'request', synthetic: true, preferFlat: true,
+      summary: 'Runtime tool qualification, issue, physical request, completion, and exact claim events. Tool names are shown directly beside their typed event.',
+      facts: [{ label: 'travel tools', value: '6', note: 'candidate read calls' }, { label: 'shared origin', value: '3 logical / 1 physical', note: 'sharing then retention' }],
+      events: runtime.filter(toolEvent),
+    },
+    {
+      id: 'provider-generation', title: 'Model generation', icon: 'model',
       summary: 'The complete provider requests and responses that produced the selected candidate Python. This first valid attempt was used; no performance-based retry or cherry-pick occurred.',
       facts: [{ label: 'provider calls', value: '4', note: 'candidate ×2, selection, final' }, { label: 'selection rule', value: 'first valid', note: 'contract + safety + Guest oracle' }],
       events: debug.events.map((event) => providerEvent(event, debug)),
     },
-    ...snapshot.phases.map((phase) => ({ ...phase, events: phase.event_ids.map((id) => byID.get(id)).filter((event): event is UnifiedEvent => Boolean(event)).map((event) => runtimeEvent(event, snapshot)) })),
+    ...snapshot.phases.map((phase) => ({ ...phase, icon: phase.id === 'source-predispatch' ? 'source' as const : phase.id === 'fresh-execution' ? 'guest' as const : phase.id === 'fail-closed' ? 'control' as const : 'workspace' as const, events: phase.event_ids.map((id) => byID.get(id)).filter((event): event is UnifiedEvent => Boolean(event)).map((event) => runtimeEvent(event, snapshot)) })),
   ];
 }
 
@@ -134,16 +164,18 @@ function CompactSummary({ snapshot }: { snapshot: UnifiedSnapshot }) {
   </section>;
 }
 
-function GroupNav({ groups, selected, onSelect }: { groups: TraceGroup[]; selected: string; onSelect: (id: string) => void }) {
-  return <nav className="trace-group-nav" aria-label="Execution groups">{groups.map((group) =>
-    <button aria-pressed={selected === group.id} key={group.id} onClick={() => onSelect(group.id)} type="button">
-      <span>{String(group.index).padStart(2, '0')}</span><strong>{group.title}</strong><small>{group.events.length} events</small>
-    </button>)}</nav>;
+function GroupNav({ groups, selected, onToggle, onAll }: { groups: TraceGroup[]; selected: Set<string>; onToggle: (id: string) => void; onAll: () => void }) {
+  return <nav className="trace-group-nav" aria-label="Evidence filters">
+    <button aria-pressed={selected.size === 0} className="all-filter" onClick={onAll} type="button"><Icon name="list" /><strong>All evidence</strong><small>clear filters</small></button>
+    {groups.map((group) => <button aria-pressed={selected.has(group.id)} key={group.id} onClick={() => onToggle(group.id)} type="button">
+      <Icon name={group.icon} /><strong>{group.title}</strong><small>{group.events.length} events</small>
+    </button>)}
+  </nav>;
 }
 
-function EventTree({ events, selected, onSelect }: { events: DebugEvent[]; selected: string; onSelect: (id: string) => void }) {
+function EventTree({ events, selected, onSelect, preferFlat = false }: { events: DebugEvent[]; selected: string; onSelect: (id: string) => void; preferFlat?: boolean }) {
   const [query, setQuery] = useState('');
-  const [treeMode, setTreeMode] = useState(true);
+  const [treeMode, setTreeMode] = useState(!preferFlat);
   const searchRef = useRef<HTMLInputElement>(null);
   const actors = [...new Set(events.map((event) => event.actor))];
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -158,13 +190,13 @@ function EventTree({ events, selected, onSelect }: { events: DebugEvent[]; selec
   useEffect(() => {
     if (visible.length && !visible.some((event) => event.id === selected)) onSelect(visible[0].id);
   }, [normalized, events, selected]);
-  const eventRow = (event: DebugEvent, nested: boolean) => <button className={`event-row-button ${nested ? 'nested' : ''} ${selected === event.id ? 'active' : ''}`} key={event.id} onClick={() => onSelect(event.id)} type="button">
+  const eventRow = (event: DebugEvent, nested: boolean) => <button aria-label={`${event.type} · ${actorLabel(event.actor)} · ${event.tool ?? event.label}`} className={`event-row-button ${nested ? 'nested' : ''} ${selected === event.id ? 'active' : ''}`} key={event.id} onClick={() => onSelect(event.id)} type="button">
     <span className={`event-kind kind-${eventIcon(event.type)}`}><Icon name={eventIcon(event.type)} size={13} /></span>
-    <time>{event.atNS === undefined ? event.label : `+${seconds(event.atNS)}`}</time><span className="event-name">{event.type}</span><small>{event.bindings.outcome ? String(event.bindings.outcome) : event.label}</small>
+    <time>{event.atNS === undefined ? event.label : `+${seconds(event.atNS)}`}</time><span className="event-name">{event.type}{!nested && <em>{actorLabel(event.actor)}</em>}</span><small>{event.tool ?? (event.bindings.outcome ? String(event.bindings.outcome) : event.label)}</small>
   </button>;
   return <section className="trace-browser" aria-label="Grouped execution events">
     <div className="trace-toolbar">
-      <div className="view-switch" role="group" aria-label="Trace display"><button aria-pressed={treeMode} onClick={() => setTreeMode(true)} type="button"><Icon name="tree" /> Tree</button><button aria-pressed={!treeMode} onClick={() => setTreeMode(false)} type="button"><Icon name="list" /> Flat</button></div>
+      <div className="view-switch" role="group" aria-label="Trace organization"><button aria-pressed={treeMode} onClick={() => setTreeMode(true)} type="button"><Icon name="tree" /> By role</button><button aria-pressed={!treeMode} onClick={() => setTreeMode(false)} type="button"><Icon name="list" /> By time</button></div>
       <label className="trace-search"><Icon name="search" /><input aria-label="Filter trace events" onChange={(event) => setQuery(event.target.value)} placeholder="Filter events" ref={searchRef} value={query} /><kbd>⌘K</kbd></label>
       <span className="trace-count">{visible.length}/{events.length}</span>
     </div>
@@ -204,26 +236,50 @@ function CodeBlock({ label, value }: { label: string; value: unknown }) {
   return <section className="code-block"><div className="code-label"><span>{label}</span><small>{new Blob([text]).size} bytes</small></div><pre>{text}</pre></section>;
 }
 
-function TraceWorkbench({ groups, initialGroup, timeline = false }: { groups: TraceGroup[]; initialGroup: string; timeline?: boolean }) {
-  const [groupID, setGroupID] = useState(initialGroup);
-  const group = groups.find((item) => item.id === groupID) ?? groups[0];
-  const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string>>({});
-  const selectedID = selectedByGroup[group.id] ?? group.events[0]?.id ?? '';
-  const event = group.events.find((item) => item.id === selectedID) ?? group.events[0];
-  const setGroup = (id: string) => setGroupID(id);
+function combineGroupEvents(groups: TraceGroup[], selected: Set<string>) {
+  const active = selected.size ? groups.filter((group) => selected.has(group.id)) : groups.filter((group) => !group.synthetic);
+  const byID = new Map<string, DebugEvent>();
+  for (const group of active) for (const event of group.events) byID.set(event.id, event);
+  return [...byID.values()].sort((left, right) => {
+    if (left.atNS === undefined && right.atNS !== undefined) return -1;
+    if (left.atNS !== undefined && right.atNS === undefined) return 1;
+    return left.atNS !== undefined && right.atNS !== undefined ? left.atNS - right.atNS || left.order - right.order : left.order - right.order;
+  });
+}
+
+function TraceWorkbench({ groups, initialFilters, timeline = false }: { groups: TraceGroup[]; initialFilters: string[]; timeline?: boolean }) {
+  const [selectedFilters, setSelectedFilters] = useState<Set<string>>(new Set(initialFilters));
+  const activeGroups = groups.filter((group) => selectedFilters.has(group.id));
+  const events = useMemo(() => combineGroupEvents(groups, selectedFilters), [groups, selectedFilters]);
+  const filterKey = [...selectedFilters].sort().join('+') || 'all';
+  const primary = activeGroups.length === 1 ? activeGroups[0] : undefined;
+  const title = primary?.title ?? (selectedFilters.size ? 'Combined evidence filters' : 'All evidence');
+  const summary = primary?.summary ?? (selectedFilters.size ? 'Events matching any selected filter are deduplicated and merged by causal time.' : 'The complete provider and runtime ledger, with synthetic shortcut filters excluded from duplication.');
+  const facts = primary?.facts ?? [
+    { label: 'active filters', value: selectedFilters.size ? String(selectedFilters.size) : 'none', note: selectedFilters.size ? [...selectedFilters].join(' + ') : 'showing the full ledger' },
+    { label: 'visible events', value: String(events.length), note: `${new Set(events.map((event) => event.actor)).size} actors` },
+  ];
+  const [selectedByFilter, setSelectedByFilter] = useState<Record<string, string>>({});
+  const selectedID = selectedByFilter[filterKey] ?? events[0]?.id ?? '';
+  const event = events.find((item) => item.id === selectedID) ?? events[0];
+  const toggleFilter = (id: string) => setSelectedFilters((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   return <>
-    <GroupNav groups={groups} onSelect={setGroup} selected={group.id} />
-    <section className="group-context"><div><span className="eyebrow">{timeline ? 'Grouped execution timeline' : `Mechanism ${String(group.index).padStart(2, '0')}`}</span><h2>{group.title}</h2><p>{group.summary}</p></div><div className="group-facts">{group.facts.map((fact) => <div key={fact.label}><span>{fact.label}</span><strong>{fact.value}</strong><small>{fact.note}</small></div>)}</div></section>
-    <div className="debug-workbench">{timeline && <div className="timeline-ruler"><span>GROUPED BY ACTOR</span><i /></div>}<EventTree events={group.events} onSelect={(id) => setSelectedByGroup((current) => ({ ...current, [group.id]: id }))} selected={selectedID} />{event && <EventInspector event={event} />}</div>
+    <GroupNav groups={groups} onAll={() => setSelectedFilters(new Set())} onToggle={toggleFilter} selected={selectedFilters} />
+    <section className="group-context"><div><span className="eyebrow">{timeline ? 'Causal evidence timeline' : 'Evidence filters · multi-select'}</span><h2>{title}</h2><p>{summary}</p></div><div className="group-facts">{facts.map((fact) => <div key={fact.label}><span>{fact.label}</span><strong>{fact.value}</strong><small>{fact.note}</small></div>)}</div></section>
+    <div className="debug-workbench">{timeline && <div className="timeline-ruler"><span>CAUSAL ORDER</span><i /></div>}<EventTree events={events} key={filterKey} onSelect={(id) => setSelectedByFilter((current) => ({ ...current, [filterKey]: id }))} preferFlat={activeGroups.some((group) => group.preferFlat)} selected={selectedID} />{event && <EventInspector event={event} />}</div>
   </>;
 }
 
 export function MechanismsView({ snapshot, debug }: { snapshot: UnifiedSnapshot; debug: ProviderDebug }) {
   const groups = useMemo(() => buildGroups(snapshot, debug), [snapshot, debug]);
-  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><TraceWorkbench groups={groups} initialGroup="source-predispatch" /></div>;
+  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><TraceWorkbench groups={groups} initialFilters={['code-tools']} /></div>;
 }
 
 export function TimelineView({ snapshot, debug }: { snapshot: UnifiedSnapshot; debug: ProviderDebug }) {
   const groups = useMemo(() => buildGroups(snapshot, debug), [snapshot, debug]);
-  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><TraceWorkbench groups={groups} initialGroup="provider-generation" timeline /></div>;
+  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><TraceWorkbench groups={groups} initialFilters={[]} timeline /></div>;
 }

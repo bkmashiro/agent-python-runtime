@@ -9,7 +9,7 @@ test('opens directly on the mechanism debugger with dense run context', async ({
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
 });
 
-test('uses a processed provider projection without raw reasoning or request metadata', async ({ page }) => {
+test('shows the complete recorded Harness context, body, output, and reasoning', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /^Code \+ tool calls/ }).click();
   await page.getByRole('button', { name: /^Model generation/ }).click();
@@ -21,8 +21,9 @@ test('uses a processed provider projection without raw reasoning or request meta
   await page.getByRole('button', { name: 'Python', exact: true }).click();
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('travel.weather("brighton")');
   await page.getByRole('button', { name: 'Raw event' }).click();
-  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).not.toContainText('reasoning_content');
-  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).not.toContainText('request_id');
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('reasoning_content');
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('model.context');
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('model.output');
 });
 
 test('uses projector-owned event groups without silently truncating records', async ({ page }) => {
@@ -93,18 +94,20 @@ test('renders the role-lane timeline with a focused model and tool inspector', a
   await expect(map.locator('.lane-orchestration')).toHaveCount(1);
   await expect(map.locator('.lane-orchestration-link')).toHaveCount(2);
   await expect(map).toContainText('orchestrates fan-out');
-  await expect(map).toContainText('before first recorded event');
+  await expect(map).toContainText('recorded by Harness · untimed in Runtime');
   await expect(map).toContainText('seal → export → import → bind');
   await expect(page.getByRole('navigation', { name: 'Evidence filters' })).toHaveCount(0);
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toHaveCount(0);
   const focused = page.getByRole('complementary', { name: 'Selected timeline operation' });
   await expect(focused).toContainText('Select one operation');
   await page.getByRole('button', { name: /M01.*brighton.*candidate-generation/i }).click();
-  await expect(focused).toContainText('Processed thinking summary');
-  await expect(focused).toContainText('raw reasoning omitted');
-  await expect(focused).not.toContainText('reasoning_content');
+  await expect(focused).toContainText('Recorded model reasoning');
+  await expect(focused).toContainText('verbatim experiment trace');
+  await expect(focused).toContainText('produce JSON for the brighton candidate');
   await expect(focused.locator('.syntax-key')).not.toHaveCount(0);
   await expect(focused.locator('.syntax-string')).not.toHaveCount(0);
+  await page.getByRole('button', { name: /P00.*main.*orchestration/i }).click();
+  await expect(focused).toContainText('Plan a one-day Saturday trip for two people from London');
   const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, laneScroll: (document.querySelector('.lane-map-scroll') as HTMLElement)?.scrollLeft ?? 0 }));
   expect(layout.document).toBeLessThanOrEqual(layout.viewport);
   if (layout.viewport <= 620) expect(layout.laneScroll).toBe(0);

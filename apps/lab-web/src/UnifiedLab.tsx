@@ -19,7 +19,7 @@ type DebugEvent = {
   sourceReason?: string;
   input?: unknown;
   output?: unknown;
-  thinking?: string[];
+  reasoning?: string;
   tool?: string;
   bindings: Record<string, unknown>;
 };
@@ -75,7 +75,7 @@ function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
 }
 
 function eventIcon(type: string): IconName {
-  if (type.startsWith('model.')) return 'model';
+  if (type.startsWith('model.') || type.startsWith('harness.')) return 'model';
   if (type.startsWith('source.') || type === 'semantic.qualified') return 'source';
   if (type === 'semantic.issue' || type === 'semantic.claim') return 'request';
   if (type.startsWith('request.') || type.startsWith('function.')) return 'request';
@@ -131,13 +131,21 @@ function providerEvent(call: ProviderSummaryCall): DebugEvent {
     label: `M${String(call.ordinal).padStart(2, '0')}`,
     type: `model.${call.phase}`,
     actor: `actor-${call.actor}`,
-    raw: { id: call.id, phase: call.phase, model: call.model, token_usage: call.token_usage },
+    raw: { id: call.id, phase: call.phase, model: call.model, provider_response_id: call.provider_response_id, system_fingerprint: call.system_fingerprint, token_usage: call.token_usage, recorded: call.recorded },
     source: output?.python_source,
     sourceReason: output?.python_source ? 'model-generated candidate source' : undefined,
     input: call.input,
     output: call.output,
-    thinking: call.thinking_summary,
-    bindings: { model: call.model, phase: call.phase, token_usage: call.token_usage },
+    reasoning: call.reasoning,
+    bindings: { model: call.model, phase: call.phase, provider_response_id: call.provider_response_id, system_fingerprint: call.system_fingerprint, token_usage: call.token_usage },
+  };
+}
+
+function orchestrationEvent(provider: ProviderSummary): DebugEvent {
+  return {
+    id: 'provider:harness-planning', order: 0, label: 'P00', type: 'harness.orchestration', actor: 'actor-main',
+    raw: provider.orchestration, input: provider.orchestration.planning,
+    bindings: { phase: provider.orchestration.phase, source_trace_sha256: provider.source_trace_sha256 },
   };
 }
 
@@ -161,9 +169,9 @@ function buildGroups(snapshot: UnifiedSnapshot, provider: ProviderSummary): Trac
     },
     {
       id: 'provider-generation', title: 'Model generation', icon: 'model',
-      summary: 'Four reviewed model-call projections show structured input, a concise decision summary, and parsed output. Raw provider bodies, request metadata, and chain-of-thought are deliberately absent.',
-      facts: [{ label: 'provider calls', value: '4', note: 'candidate ×2, selection, final' }, { label: 'selection rule', value: 'first valid', note: 'contract + safety + Guest oracle' }],
-      events: provider.calls.map(providerEvent),
+      summary: 'The complete recorded Harness trajectory: Main planning, four model context/body/output triplets, provider metadata, recorded reasoning, parsed output, and Runtime-bound results.',
+      facts: [{ label: 'Harness stages', value: '1 + 4', note: 'planning + four model calls' }, { label: 'raw events', value: String(provider.raw_trace.events.length), note: 'trace start/end + call triplets' }],
+      events: [orchestrationEvent(provider), ...provider.calls.map(providerEvent)],
     },
     ...snapshot.phases.map((phase) => ({ ...phase, icon: phase.id === 'source-predispatch' ? 'source' as const : phase.id === 'fresh-execution' ? 'guest' as const : phase.id === 'fail-closed' ? 'control' as const : 'workspace' as const, events: phase.event_ids.map((id) => byID.get(id)).filter((event): event is UnifiedEvent => Boolean(event)).map((event) => runtimeEvent(event, snapshot, sourceByBinding)) })),
   ];
@@ -297,12 +305,12 @@ function TimelineInspector({ span, event }: { span?: LaneSpan; event?: DebugEven
   const source = event?.source ?? start.source;
   const input = start.input ?? event?.input;
   const output = end.output ?? event?.output;
-  const thinking = event?.thinking;
+  const reasoning = event?.reasoning;
   const time = span ? `+${seconds(start.atNS!)} → +${seconds(end.atNS!)}` : event?.atNS === undefined ? event?.label : `+${seconds(event.atNS)}`;
   return <aside className="timeline-inspector" aria-label="Selected timeline operation">
     <header><span className={`inspector-event-icon kind-${eventIcon(event?.type ?? start.type)}`}><Icon name={eventIcon(event?.type ?? start.type)} size={18} /></span><div><span className="eyebrow">{actorLabel(actor)} · {time}</span><h3>{title}</h3><small>{tool ?? span?.note ?? event?.sourceReason ?? 'processed evidence view'}</small></div></header>
     {tool && <div className="timeline-tool-summary"><span>tool</span><code>{tool}</code><small>typed input → typed output</small></div>}
-    {thinking && <section className="thinking-summary"><div className="code-label"><span>Processed thinking summary</span><small>raw reasoning omitted</small></div><ol>{thinking.map((item) => <li key={item}>{item}</li>)}</ol></section>}
+    {reasoning && <section className="thinking-summary"><div className="code-label"><span>Recorded model reasoning</span><small>verbatim experiment trace</small></div><pre>{reasoning}</pre></section>}
     <div className="timeline-detail-grid">
       {input !== undefined && <SyntaxBlock label={tool ? 'Tool input' : 'Input'} language="json" value={input} />}
       {output !== undefined && <SyntaxBlock label={tool ? 'Tool output' : 'Output'} language="json" value={withoutPythonSource(output)} />}
@@ -317,7 +325,7 @@ function CausalLaneMap({ snapshot, provider }: { snapshot: UnifiedSnapshot; prov
     const bindings = sourceBindings(snapshot);
     return snapshot.events.map((event) => runtimeEvent(event, snapshot, bindings));
   }, [snapshot]);
-  const providerEvents = useMemo(() => provider.calls.map(providerEvent), [provider]);
+  const providerEvents = useMemo(() => [orchestrationEvent(provider), ...provider.calls.map(providerEvent)], [provider]);
   const laneScrollRef = useRef<HTMLDivElement>(null);
   const lanes = [
     { id: 'brighton', label: 'Brighton', note: 'candidate · discarded', y: 104 },
@@ -369,19 +377,19 @@ function CausalLaneMap({ snapshot, provider }: { snapshot: UnifiedSnapshot; prov
     { event: find('guest.start', (event) => event.actor === 'main')!, label: 'resume Main', anchor: 'start' as const },
   ];
   return <section className="lane-map" aria-label="Semantic causal lane timeline">
-    <header><div><span className="eyebrow">Operation and transition map</span><h2>Main orchestration, fan-out, and convergence</h2><p>Main first arranges the candidate fan-out; the dashed launch marker is a pre-trace orchestration boundary, not a timed Guest span. The selected workspace bar is serial: seal → export → import → bind.</p></div><div className="lane-legend"><span className="legend-control">pre-trace boundary</span><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
-    <nav className="provider-call-strip" aria-label="Projected model calls">{providerEvents.map((event) => <button aria-pressed={`event:${event.id}` === selectedID} key={event.id} onClick={() => selectEvent(event)} type="button"><span><Icon name="model" />{event.label}</span><strong>{actorLabel(event.actor)}</strong><small>{event.type.replace('model.', '')}</small></button>)}</nav>
+    <header><div><span className="eyebrow">Operation and transition map</span><h2>Main orchestration, fan-out, and convergence</h2><p>Harness records Main's planning and all four model calls; the dashed launch marker remains untimed only in the Runtime ledger. The selected workspace bar is serial: seal → export → import → bind.</p></div><div className="lane-legend"><span className="legend-control">Harness planning</span><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
+    <nav className="provider-call-strip" aria-label="Recorded Harness trajectory">{providerEvents.map((event) => <button aria-pressed={`event:${event.id}` === selectedID} key={event.id} onClick={() => selectEvent(event)} type="button"><span><Icon name="model" />{event.label}</span><strong>{actorLabel(event.actor)}</strong><small>{event.type.replace('model.', '').replace('harness.', '')}</small></button>)}</nav>
     <div className="lane-map-viewport"><div aria-hidden="true" className="lane-mobile-labels">{lanes.map((lane) => <span key={lane.id} style={{ top: `${lane.y / height * 100}%` }}><strong>{lane.label}</strong><small>{lane.note}</small></span>)}</div><div className="lane-map-scroll" ref={laneScrollRef}><svg aria-label="Brighton, Oxford, Host, and Main operation lanes" className="lane-map-svg semantic-map-svg" role="img" viewBox={`0 0 ${width} ${height}`}>
       <defs><marker id="lane-arrow" markerHeight="5" markerWidth="6" orient="auto" refX="5" refY="2.5"><path d="M0 0 6 2.5 0 5z" /></marker></defs>
       {stages.map(({ event, label, anchor }) => <g className="lane-milestone" key={label}><line x1={xFor(event)} x2={xFor(event)} y1="34" y2={height - 24} /><text textAnchor={anchor} x={xFor(event) + (anchor === 'end' ? -4 : 4)} y="24">{label}</text></g>)}
       {lanes.map((lane) => <g className="lane-axis" key={lane.id}><text className="lane-title" x="12" y={lane.y - 6}>{lane.label}</text><text className="lane-note" x="12" y={lane.y + 11}>{lane.note}</text><line x1={left} x2={width - right} y1={lane.y} y2={lane.y} /></g>)}
-      <g aria-label="Main orchestrates candidate fan-out before the first recorded runtime event" className="lane-orchestration" data-evidence="pre-trace-boundary">
-        <title>Orchestration precedes the event ledger; no duration is claimed.</title>
+      <g aria-label="Main recorded Harness planning orchestrates candidate fan-out" className={`lane-orchestration ${selectedID === 'event:provider:harness-planning' ? 'selected' : ''}`} data-evidence="recorded-harness-planning" onClick={() => selectEvent(providerEvents[0])} onKeyDown={activate(() => selectEvent(providerEvents[0]))} role="button" tabIndex={0}>
+        <title>Recorded Harness planning precedes the Runtime event ledger; no Runtime duration is claimed.</title>
         <line className="orchestration-boundary" x1={orchestrationX} x2={orchestrationX} y1="34" y2={height - 24} />
         <text className="orchestration-stage" x={orchestrationX + 4} y="24">Main orchestration</text>
         <circle cx={orchestrationX} cy={lanes[3].y} r="6" />
         <text className="orchestration-title" x={orchestrationX + 9} y={lanes[3].y - 9}>orchestrates fan-out</text>
-        <text className="orchestration-note" x={orchestrationX + 9} y={lanes[3].y + 15}>before first recorded event</text>
+        <text className="orchestration-note" x={orchestrationX + 9} y={lanes[3].y + 15}>recorded by Harness · untimed in Runtime</text>
       </g>
       {fanoutTargets.map(({ candidate, event }) => <path className={`lane-transition lane-orchestration-link ${candidate}`} d={`M ${orchestrationX} ${lanes[3].y} C ${orchestrationX} ${lanes[3].y - 90}, ${xFor(event) - 28} ${lanes.find((lane) => lane.id === candidate)!.y + 42}, ${xFor(event)} ${lanes.find((lane) => lane.id === candidate)!.y}`} key={`orchestrate:${candidate}`} markerEnd="url(#lane-arrow)" />)}
       {sourcePoints.map((source) => { const request = requestSpans.find((span) => span?.id === `request:${source.candidate}:${source.tool.id}`)!; return <path className={`lane-transition lane-fanout ${source.candidate}`} d={path(source.event, lanes.find((lane) => lane.id === source.candidate)!.y - 18, request.start, request.y)} key={`fanout:${source.candidate}:${source.tool.id}`} markerEnd="url(#lane-arrow)" />; })}

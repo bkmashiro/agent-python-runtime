@@ -59,7 +59,7 @@ describe('Pysolate Lab development debugger', () => {
     expect(screen.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
   });
 
-  it('shows only the processed provider projection in the mechanism inspector', async () => {
+  it('shows the complete recorded Harness model triplet and reasoning in the mechanism inspector', async () => {
     stubFetch(await fixture(), await providerSummaryRaw()); render(<App />);
     await screen.findByRole('heading', { name: 'Code + tool calls' });
     fireEvent.click(screen.getByRole('button', { name: /^Code \+ tool calls/ }));
@@ -73,8 +73,11 @@ describe('Pysolate Lab development debugger', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raw event' }));
     const inspector = screen.getByRole('complementary', { name: 'Execution event inspector' });
     expect(inspector.textContent).toContain('"phase": "candidate-generation"');
-    expect(inspector.textContent).not.toContain('reasoning_content');
-    expect(inspector.textContent).not.toContain('request_id');
+    expect(inspector.textContent).toContain('reasoning_content');
+    expect(inspector.textContent).toContain('provider_response_id');
+    expect(inspector.textContent).toContain('model.context');
+    expect(inspector.textContent).toContain('model.body');
+    expect(inspector.textContent).toContain('model.output');
   });
 
   it('shows each source.statement.complete prefix and highlights only its appended chunk', async () => {
@@ -120,18 +123,20 @@ describe('Pysolate Lab development debugger', () => {
     expect(map.querySelectorAll('.lane-orchestration')).toHaveLength(1);
     expect(map.querySelectorAll('.lane-orchestration-link')).toHaveLength(2);
     expect(map.textContent).toContain('orchestrates fan-out');
-    expect(map.textContent).toContain('before first recorded event');
+    expect(map.textContent).toContain('recorded by Harness · untimed in Runtime');
     expect(map.textContent).toContain('seal → export → import → bind');
     expect(screen.queryByRole('navigation', { name: 'Evidence filters' })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Execution event inspector' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Selected timeline operation' })).toHaveTextContent('Select one operation');
     fireEvent.click(screen.getByRole('button', { name: /M01.*brighton.*candidate-generation/i }));
     const focused = screen.getByRole('complementary', { name: 'Selected timeline operation' });
-    expect(focused).toHaveTextContent('Processed thinking summary');
-    expect(focused).toHaveTextContent('raw reasoning omitted');
-    expect(focused.textContent).not.toContain('reasoning_content');
+    expect(focused).toHaveTextContent('Recorded model reasoning');
+    expect(focused).toHaveTextContent('verbatim experiment trace');
+    expect(focused).toHaveTextContent('produce JSON for the brighton candidate');
     expect(focused.querySelectorAll('.syntax-key').length).toBeGreaterThan(0);
     expect(focused.querySelectorAll('.syntax-string').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /P00.*main.*orchestration/i }));
+    expect(focused).toHaveTextContent('Plan a one-day Saturday trip for two people from London');
     fireEvent.click(map.querySelector('.span-request')!);
     expect(focused).toHaveTextContent('typed input → typed output');
     expect(focused).toHaveTextContent('Tool input');

@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/research/mechanismcampaign"
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 )
 
-const UnifiedSnapshotSchema = "pysolate.lab-unified-campaign.v1"
+const UnifiedSnapshotSchema = "pysolate.lab-unified-campaign.v3"
 
 const (
 	expectedCampaignID     = "day-trip-unified-v2"
@@ -69,18 +70,27 @@ type UnifiedProvenance struct {
 }
 
 type UnifiedSnapshot struct {
-	SchemaVersion     string                    `json:"schema_version"`
-	Identity          string                    `json:"identity"`
-	Title             string                    `json:"title"`
-	Summary           string                    `json:"summary"`
-	Selected          string                    `json:"selected"`
-	FinalTotalGBP     float64                   `json:"final_total_gbp"`
-	MainGuestResponse json.RawMessage           `json:"main_guest_response"`
-	Candidates        []UnifiedCandidate        `json:"candidates"`
-	Phases            []UnifiedPhase            `json:"phases"`
-	Events            []mechanismcampaign.Event `json:"events"`
-	MatchedControl    UnifiedMatchedControl     `json:"matched_control"`
-	Provenance        UnifiedProvenance         `json:"provenance"`
+	SchemaVersion     string                `json:"schema_version"`
+	Identity          string                `json:"identity"`
+	Title             string                `json:"title"`
+	Summary           string                `json:"summary"`
+	Selected          string                `json:"selected"`
+	FinalTotalGBP     float64               `json:"final_total_gbp"`
+	MainGuestResponse json.RawMessage       `json:"main_guest_response"`
+	Candidates        []UnifiedCandidate    `json:"candidates"`
+	Phases            []UnifiedPhase        `json:"phases"`
+	Events            []UnifiedEvent        `json:"events"`
+	MatchedControl    UnifiedMatchedControl `json:"matched_control"`
+	Provenance        UnifiedProvenance     `json:"provenance"`
+}
+
+type UnifiedEvent struct {
+	mechanismcampaign.Event
+	SourcePrefix       string `json:"source_prefix,omitempty"`
+	SourceDelta        string `json:"source_delta,omitempty"`
+	SourcePrefixSHA256 string `json:"source_prefix_sha256,omitempty"`
+	SourceStep         int    `json:"source_step,omitempty"`
+	SourceStepCount    int    `json:"source_step_count,omitempty"`
 }
 
 func BuildUnifiedSnapshot(raw []byte) (UnifiedSnapshot, error) {
@@ -115,31 +125,35 @@ func BuildUnifiedSnapshot(raw []byte) (UnifiedSnapshot, error) {
 			SourceSHA256: candidate.SourceSHA256, COWSelected: candidate.COWSelected, ModelSource: candidate.ModelSource, ExecutedSource: candidate.ExecutedSource, GuestResponse: candidate.GuestResponse,
 		})
 	}
-	events := append([]mechanismcampaign.Event(nil), evidence.FullRun.Events...)
-	sort.Slice(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
+	rawEvents := append([]mechanismcampaign.Event(nil), evidence.FullRun.Events...)
+	sort.Slice(rawEvents, func(i, j int) bool { return rawEvents[i].Sequence < rawEvents[j].Sequence })
+	events, err := projectUnifiedEvents(rawEvents, evidence.FullRun.Candidates)
+	if err != nil {
+		return UnifiedSnapshot{}, err
+	}
 	full := evidence.FullRun
 	phases := []UnifiedPhase{
-		{ID: "source-predispatch", Index: 1, Title: "Generate and pre-dispatch", Summary: "Closed, straight-line read statements are analyzed from visible source prefixes. Six Host requests start before source feed completion.", EventIDs: phaseEventIDs(events, "source-predispatch"), Facts: []UnifiedFact{
+		{ID: "source-predispatch", Index: 1, Title: "Generate and pre-dispatch", Summary: "Closed, straight-line read statements are analyzed from visible source prefixes. Six Host requests start before source feed completion.", EventIDs: phaseEventIDs(rawEvents, "source-predispatch"), Facts: []UnifiedFact{
 			{Label: "qualified reads", Value: "6", Note: "weather, rail, attractions × 2 candidates"},
 			{Label: "source schedule", Value: fmt.Sprintf("%d ms + %d ms tail", evidence.Schedule.StatementStepMS, evidence.Schedule.FinalizationDelayMS), Note: "deterministic and preregistered"},
 		}},
-		{ID: "fresh-execution", Index: 2, Title: "Seal, then execute fresh", Summary: "Each complete source is sealed before a fresh isolated Guest starts from line one and claims exact staged observations.", EventIDs: phaseEventIDs(events, "fresh-execution"), Facts: []UnifiedFact{
+		{ID: "fresh-execution", Index: 2, Title: "Seal, then execute fresh", Summary: "Each complete source is sealed before a fresh isolated Guest starts from line one and claims exact staged observations.", EventIDs: phaseEventIDs(rawEvents, "fresh-execution"), Facts: []UnifiedFact{
 			{Label: "physical requests", Value: "6", Note: "one per qualified call"},
 			{Label: "logical claims", Value: "6", Note: "no duplicate physical call"},
 		}},
-		{ID: "sharing-retention", Index: 3, Title: "Share origin, retain result", Summary: "Brighton and Oxford share one in-flight origin computation; Main later consumes the retained whole-run result.", EventIDs: phaseEventIDs(events, "sharing-retention"), Facts: []UnifiedFact{
+		{ID: "sharing-retention", Index: 3, Title: "Share origin, retain result", Summary: "Brighton and Oxford share one in-flight origin computation; Main later consumes the retained whole-run result.", EventIDs: phaseEventIDs(rawEvents, "sharing-retention"), Facts: []UnifiedFact{
 			{Label: "logical calls", Value: fmt.Sprintf("%d", full.OriginLogicalCalls), Note: "two candidates plus Main"},
 			{Label: "physical computes", Value: fmt.Sprintf("%d", full.OriginPhysicalComputes), Note: "single-flight owner"},
 		}},
-		{ID: "branch-resume", Index: 4, Title: "Select, seal, and resume", Summary: "Oxford is selected from observed Guest outputs. Its non-empty workspace is sealed, exported, imported, bound, and read by a fresh Main Guest.", EventIDs: phaseEventIDs(events, "branch-resume"), Facts: []UnifiedFact{
+		{ID: "branch-resume", Index: 4, Title: "Select, seal, and resume", Summary: "Oxford is selected from observed Guest outputs. Its non-empty workspace is sealed, exported, imported, bound, and read by a fresh Main Guest.", EventIDs: phaseEventIDs(rawEvents, "branch-resume"), Facts: []UnifiedFact{
 			{Label: "selected", Value: "Oxford · £78.00", Note: "Brighton £118.40 discarded"},
 			{Label: "workspace", Value: shortDigest(full.ImportedWorkspaceSHA256), Note: "export/import identity preserved"},
 		}},
-		{ID: "memory-io", Index: 5, Title: "Private memory and cold I/O", Summary: "Linux candidate Guests use private COW memory. Host campaign counters report one successful page-out; a typed resume event closes the fresh Main continuation.", EventIDs: phaseEventIDs(events, "memory-io"), Facts: []UnifiedFact{
+		{ID: "memory-io", Index: 5, Title: "Private memory and cold I/O", Summary: "Linux candidate Guests use private COW memory. Host campaign counters report one successful page-out; a typed resume event closes the fresh Main continuation.", EventIDs: phaseEventIDs(rawEvents, "memory-io"), Facts: []UnifiedFact{
 			{Label: "COW", Value: "2 / 2 selected", Note: "Brighton and Oxford candidates"},
 			{Label: "cold I/O counters", Value: fmt.Sprintf("%d wait · %d page-out · %d resume", full.ColdWaits, full.PageOutSucceeded, full.ColdResumes), Note: fmt.Sprintf("Host counter; %d bytes advised", full.ColdAdvisedBytes)},
 		}},
-		{ID: "fail-closed", Index: 6, Title: "Reject mismatched reuse", Summary: "Source and canonical-argument mutations are rejected before an observation can cross the Host boundary.", EventIDs: phaseEventIDs(events, "fail-closed"), Facts: []UnifiedFact{
+		{ID: "fail-closed", Index: 6, Title: "Reject mismatched reuse", Summary: "Source and canonical-argument mutations are rejected before an observation can cross the Host boundary.", EventIDs: phaseEventIDs(rawEvents, "fail-closed"), Facts: []UnifiedFact{
 			{Label: "source mismatch", Value: passLabel(full.SourceMismatchRejected), Note: "fresh Guest not started"},
 			{Label: "argument mismatch", Value: passLabel(full.ArgumentMismatchRejected), Note: "staged observation not reused"},
 		}},
@@ -204,6 +218,60 @@ func passLabel(value bool) string {
 		return "rejected"
 	}
 	return "not proven"
+}
+
+func projectUnifiedEvents(events []mechanismcampaign.Event, candidates map[string]mechanismcampaign.CandidateEvidence) ([]UnifiedEvent, error) {
+	type sourcePlan struct {
+		chunks   []string
+		prefixes []string
+	}
+	plans := make(map[string]sourcePlan, len(candidates))
+	for _, candidateID := range []string{"brighton", "oxford"} {
+		candidate, ok := candidates[candidateID]
+		if !ok {
+			return nil, fmt.Errorf("missing source candidate %s", candidateID)
+		}
+		chunks, err := mechanismcampaign.CandidateSourceChunks(candidateID, candidate.ModelSource)
+		if err != nil {
+			return nil, fmt.Errorf("reconstruct %s source chunks: %w", candidateID, err)
+		}
+		prefixes := make([]string, len(chunks))
+		var prefix strings.Builder
+		for index, chunk := range chunks {
+			prefix.WriteString(chunk)
+			prefixes[index] = prefix.String()
+		}
+		if prefixes[len(prefixes)-1] != candidate.ExecutedSource || snapshotSHA([]byte(candidate.ExecutedSource)) != candidate.SourceSHA256 {
+			return nil, fmt.Errorf("reconstructed %s source does not bind to executed source", candidateID)
+		}
+		plans[candidateID] = sourcePlan{chunks: chunks, prefixes: prefixes}
+	}
+	projected := make([]UnifiedEvent, 0, len(events))
+	seen := map[string]map[int]bool{"brighton": {}, "oxford": {}}
+	for _, event := range events {
+		item := UnifiedEvent{Event: event}
+		if event.Type == "source.statement.complete" {
+			plan, ok := plans[event.ActorID]
+			prefix := event.ActorID + "-statement-"
+			step, err := strconv.Atoi(strings.TrimPrefix(event.LogicalID, prefix))
+			if !ok || !strings.HasPrefix(event.LogicalID, prefix) || err != nil || step < 1 || step > len(plan.chunks) || seen[event.ActorID][step] {
+				return nil, fmt.Errorf("invalid source statement event %s", event.ID)
+			}
+			seen[event.ActorID][step] = true
+			item.SourcePrefix = plan.prefixes[step-1]
+			item.SourceDelta = plan.chunks[step-1]
+			item.SourcePrefixSHA256 = snapshotSHA([]byte(item.SourcePrefix))
+			item.SourceStep = step
+			item.SourceStepCount = len(plan.chunks)
+		}
+		projected = append(projected, item)
+	}
+	for candidateID, plan := range plans {
+		if len(seen[candidateID]) != len(plan.chunks) {
+			return nil, fmt.Errorf("source statement coverage incomplete for %s", candidateID)
+		}
+	}
+	return projected, nil
 }
 
 func phaseEventIDs(events []mechanismcampaign.Event, phase string) []string {

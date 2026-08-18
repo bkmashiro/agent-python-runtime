@@ -24,9 +24,14 @@ export interface UnifiedEvent {
   physical_id?: string;
   identity_sha256?: string;
   outcome?: string;
+  source_prefix?: string;
+  source_delta?: string;
+  source_prefix_sha256?: string;
+  source_step?: number;
+  source_step_count?: number;
 }
 export interface UnifiedSnapshot {
-  schema_version: 'pysolate.lab-unified-campaign.v1';
+  schema_version: 'pysolate.lab-unified-campaign.v3';
   identity: string;
   title: string;
   summary: string;
@@ -100,7 +105,7 @@ function assertDigest(value: unknown, label: string): string {
 function validateShape(value: unknown): UnifiedSnapshot {
   const root = object(value, 'unified campaign snapshot');
   exactKeys(root, ['schema_version', 'identity', 'title', 'summary', 'selected', 'final_total_gbp', 'main_guest_response', 'candidates', 'phases', 'events', 'matched_control', 'provenance'], 'unified campaign snapshot');
-  if (root.schema_version !== 'pysolate.lab-unified-campaign.v1' || root.selected !== 'oxford' || root.final_total_gbp !== 78) throw new Error('unified campaign headline is invalid');
+  if (root.schema_version !== 'pysolate.lab-unified-campaign.v3' || root.selected !== 'oxford' || root.final_total_gbp !== 78) throw new Error('unified campaign headline is invalid');
   assertDigest(root.identity, 'snapshot identity');
   text(root.title, 'title'); text(root.summary, 'summary');
 
@@ -132,17 +137,33 @@ function validateShape(value: unknown): UnifiedSnapshot {
 
   if (!Array.isArray(root.events) || root.events.length < 50) throw new Error('typed campaign event ledger is incomplete');
   let previousAt = -1;
+  const sourceSteps: Record<string, number> = { brighton: 0, oxford: 0 };
   const events = root.events.map((item, index) => {
     const event = object(item, `event ${index + 1}`);
-    allowedKeys(event, ['sequence', 'id', 'at_ns', 'type', 'actor_id'], ['logical_id', 'physical_id', 'identity_sha256', 'outcome'], 'event');
+    allowedKeys(event, ['sequence', 'id', 'at_ns', 'type', 'actor_id'], ['logical_id', 'physical_id', 'identity_sha256', 'outcome', 'source_prefix', 'source_delta', 'source_prefix_sha256', 'source_step', 'source_step_count'], 'event');
     const sequence = integer(event.sequence, 'event sequence');
     const at = integer(event.at_ns, 'event timestamp');
     if (sequence !== index + 1 || at < previousAt || !eventTypes.has(String(event.type))) throw new Error('event ledger order or type is invalid');
     previousAt = at;
     text(event.id, 'event id'); text(event.actor_id, 'event actor');
     if (event.identity_sha256 !== undefined) assertDigest(event.identity_sha256, 'event identity');
+    if (event.type === 'source.statement.complete') {
+      const actor = String(event.actor_id);
+      if (!(actor in sourceSteps)) throw new Error('source statement actor is invalid');
+      sourceSteps[actor] += 1;
+      const prefix = text(event.source_prefix, 'source prefix');
+      const delta = text(event.source_delta, 'source delta');
+      const step = integer(event.source_step, 'source step');
+      const stepCount = integer(event.source_step_count, 'source step count');
+      assertDigest(event.source_prefix_sha256, 'source prefix identity');
+      if (step !== sourceSteps[actor] || !prefix.endsWith(delta) || stepCount !== (actor === 'brighton' ? 12 : 6)) throw new Error('source prefix progression is invalid');
+      if (step === stepCount && prefix !== String(candidates.find((candidate) => candidate.id === actor)?.executed_source)) throw new Error('source prefix does not close over executed source');
+    } else if (['source_prefix', 'source_delta', 'source_prefix_sha256', 'source_step', 'source_step_count'].some((key) => key in event)) {
+      throw new Error('source prefix fields are attached to a non-statement event');
+    }
     return event as unknown as UnifiedEvent;
   });
+  if (sourceSteps.brighton !== 12 || sourceSteps.oxford !== 6) throw new Error('source prefix coverage is incomplete');
   validateCausality(events);
 
   const matched = object(root.matched_control, 'matched control');

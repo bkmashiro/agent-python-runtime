@@ -388,6 +388,13 @@ func candidateSourceChunks(candidateID, modelSource string) ([]string, error) {
 	return chunks, nil
 }
 
+// CandidateSourceChunks reconstructs the exact source chunks used by the
+// preregistered day-trip generator. Projectors use it to expose each observed
+// source.statement.complete prefix without duplicating the chunking contract.
+func CandidateSourceChunks(candidateID, modelSource string) ([]string, error) {
+	return candidateSourceChunks(candidateID, modelSource)
+}
+
 func configSource(executed string) string {
 	marker := "\nimport json\nwith open(\"/workspace/candidate-result.json\""
 	if index := strings.LastIndex(executed, marker); index >= 0 {

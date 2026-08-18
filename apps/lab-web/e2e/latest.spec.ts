@@ -33,6 +33,22 @@ test('uses projector-owned event groups without silently truncating records', as
   await expect(page.getByRole('heading', { name: 'Seal, then execute fresh' })).toBeVisible();
 });
 
+test('shows the incremental source prefix at every statement completion', async ({ page }) => {
+  await page.goto('/');
+  const statements = page.getByRole('button', { name: /source\.statement\.complete/ });
+  await statements.nth(0).click();
+  await page.getByRole('button', { name: 'Python' }).click();
+  const inspector = page.getByRole('complementary', { name: 'Execution event inspector' });
+  await expect(inspector).toContainText('prefix 1/6');
+  await expect(inspector).toContainText('weather = travel.weather("oxford")');
+  await expect(inspector).not.toContainText('rail = travel.rail("oxford"');
+  await expect(inspector.locator('.source-line-delta')).toHaveCount(1);
+  await statements.nth(1).click();
+  await expect(inspector).toContainText('prefix 2/6');
+  await expect(inspector).toContainText('rail = travel.rail("oxford", travellers=2)');
+  await expect(inspector.locator('.source-line-delta')).toHaveCount(1);
+});
+
 test('supports collapsible trace branches and Chrome-style filtering without stale inspection', async ({ page }) => {
   await page.goto('/');
   const oxford = page.getByRole('button', { name: /oxford 8/ });

@@ -73,6 +73,22 @@ describe('Pysolate Lab development debugger', () => {
     expect(screen.getByRole('complementary', { name: 'Execution event inspector' }).textContent).toContain('"type": "model.output"');
   });
 
+  it('shows each source.statement.complete prefix and highlights only its appended chunk', async () => {
+    stubFetch(await fixture(), await providerFixtureRaw()); render(<App />);
+    await screen.findByRole('heading', { name: 'Generate and pre-dispatch' });
+    const statements = screen.getAllByRole('button', { name: /source\.statement\.complete/ });
+    fireEvent.click(statements[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+    expect(screen.getByText(/prefix 1\/6/)).toBeVisible();
+    expect(screen.getByText('weather = travel.weather("oxford")')).toBeVisible();
+    expect(screen.queryByText(/rail = travel\.rail\("oxford"/)).not.toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Execution event inspector' }).querySelectorAll('.source-line-delta')).toHaveLength(1);
+    fireEvent.click(statements[1]);
+    expect(screen.getByText(/prefix 2\/6/)).toBeVisible();
+    expect(screen.getByText('rail = travel.rail("oxford", travellers=2)')).toBeVisible();
+    expect(screen.getByRole('complementary', { name: 'Execution event inspector' }).querySelectorAll('.source-line-delta')).toHaveLength(1);
+  });
+
   it('fails closed instead of rendering a mutated campaign projection', async () => {
     const invalid = await fixture();
     invalid.candidates[1].total_cost_gbp = 79;

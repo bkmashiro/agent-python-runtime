@@ -12,6 +12,10 @@ type DebugEvent = {
   atNS?: number;
   raw: unknown;
   source?: string;
+  sourceDelta?: string;
+  sourceStep?: number;
+  sourceStepCount?: number;
+  sourcePrefixSHA256?: string;
   input?: unknown;
   output?: unknown;
   bindings: Record<string, unknown>;
@@ -77,7 +81,11 @@ function runtimeEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot): DebugEven
     actor: event.actor_id,
     atNS: event.at_ns,
     raw: event,
-    source: candidate?.executed_source,
+    source: event.source_prefix ?? candidate?.executed_source,
+    sourceDelta: event.source_delta,
+    sourceStep: event.source_step,
+    sourceStepCount: event.source_step_count,
+    sourcePrefixSHA256: event.source_prefix_sha256,
     input: capabilityInput ?? (event.type === 'guest.start' && candidate ? { code: candidate.executed_source, candidate: candidate.id } : undefined),
     output: capabilityOutput ?? (event.type === 'guest.end' && candidate ? candidate.guest_response : event.actor_id === 'main' && event.type.startsWith('guest.') ? snapshot.main_guest_response : undefined),
     bindings: { logical_id: event.logical_id, physical_id: event.physical_id, identity_sha256: event.identity_sha256, outcome: event.outcome },
@@ -176,13 +184,15 @@ function EventTree({ events, selected, onSelect }: { events: DebugEvent[]; selec
 
 function EventInspector({ event }: { event: DebugEvent }) {
   const [tab, setTab] = useState<InspectorTab>('overview');
-  const sourceLines = event.source?.split('\n') ?? [];
+  const sourceLines = event.source ? event.source.replace(/\n$/, '').split('\n') : [];
+  const deltaLines = event.sourceDelta ? event.sourceDelta.replace(/\n$/, '').split('\n').length : 0;
+  const deltaStart = Math.max(0, sourceLines.length - deltaLines);
   return <aside className="debug-inspector" aria-label="Execution event inspector">
     <header><span className={`inspector-event-icon kind-${eventIcon(event.type)}`}><Icon name={eventIcon(event.type)} size={17} /></span><div><span className="eyebrow">{event.label} · {actorLabel(event.actor)}</span><h3>{event.type}</h3><small>{event.bindings.outcome ? String(event.bindings.outcome) : 'recorded event'}</small></div>{event.atNS !== undefined && <time>+{seconds(event.atNS)}</time>}</header>
     <nav aria-label="Inspector details">{([['overview', 'bindings', 'Overview'], ['source', 'source', 'Python'], ['io', 'io', 'Input / output'], ['raw', 'raw', 'Raw event']] as Array<[InspectorTab, IconName, string]>).map(([name, icon, label]) => <button aria-pressed={tab === name} key={name} onClick={() => setTab(name)} type="button"><Icon name={icon} />{label}</button>)}</nav>
     <div className="inspector-body">
       {tab === 'overview' && <div className="binding-view"><div className="detail-strip"><span>actor<strong>{actorLabel(event.actor)}</strong></span><span>sequence<strong>{event.label}</strong></span><span>time<strong>{event.atNS === undefined ? 'model phase' : `+${seconds(event.atNS)}`}</strong></span></div><CodeBlock label="Exact bindings" value={event.bindings} /></div>}
-      {tab === 'source' && (event.source ? <div className="source-view"><div className="code-label"><span>candidate.py</span><small>{sourceLines.length} lines</small></div><pre className="source-code">{sourceLines.map((line, index) => <code key={index}><i>{index + 1}</i><span>{line || ' '}</span></code>)}</pre></div> : <p className="empty-detail"><Icon name="source" size={22} />This event has no Python source body.</p>)}
+      {tab === 'source' && (event.source ? <div className="source-view"><div className="code-label"><span>candidate.py {event.sourceStep ? `· prefix ${event.sourceStep}/${event.sourceStepCount}` : '· complete source'}</span><small>{event.sourceStep ? `+${deltaLines} line${deltaLines === 1 ? '' : 's'} · reconstructed` : `${sourceLines.length} lines`}</small></div>{event.sourcePrefixSHA256 && <div className="prefix-identity"><span>prefix identity</span><code>{event.sourcePrefixSHA256}</code></div>}<pre className="source-code">{sourceLines.map((line, index) => <code className={event.sourceStep && index >= deltaStart ? 'source-line-delta' : ''} key={index}><i>{index + 1}</i><span>{line || ' '}</span></code>)}</pre></div> : <p className="empty-detail"><Icon name="source" size={22} />This event has no Python source body.</p>)}
       {tab === 'io' && <div className="io-grid"><CodeBlock label="Input" value={event.input} /><CodeBlock label="Output" value={event.output} /></div>}
       {tab === 'raw' && <CodeBlock label="Recorded event" value={event.raw} />}
     </div>

@@ -1,6 +1,6 @@
 {
-  "schema_version": "pysolate.lab-unified-campaign.v1",
-  "identity": "sha256:2321fc5865783805007be9e38bb36282639166406efa45620a76df3dcaad5ba6",
+  "schema_version": "pysolate.lab-unified-campaign.v3",
+  "identity": "sha256:3922dad7a120d1cca327b62117d5f5632154dc3da7b566ccb041488d33767ca0",
   "title": "One London day-trip campaign",
   "summary": "A single typed evidence chain combines source-prefix pre-dispatch, fresh Guest execution, exact claims, candidate fanout, selection, workspace resume, COW, cold I/O, sharing, retention, and fail-closed controls.",
   "selected": "oxford",
@@ -505,7 +505,12 @@
       "at_ns": 10782988745,
       "type": "source.statement.complete",
       "actor_id": "oxford",
-      "logical_id": "oxford-statement-1"
+      "logical_id": "oxford-statement-1",
+      "source_prefix": "weather = travel.weather(\"oxford\")\n",
+      "source_delta": "weather = travel.weather(\"oxford\")\n",
+      "source_prefix_sha256": "sha256:699676218f079eb7fcf14c8f907e0bbda5abfd277887f081ae9b53f9e338f9cb",
+      "source_step": 1,
+      "source_step_count": 6
     },
     {
       "sequence": 9,
@@ -521,7 +526,12 @@
       "at_ns": 10783092977,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-1"
+      "logical_id": "brighton-statement-1",
+      "source_prefix": "weather = travel.weather(\"brighton\")\n",
+      "source_delta": "weather = travel.weather(\"brighton\")\n",
+      "source_prefix_sha256": "sha256:553545ee576b0e147248791efb7a241894bd918c612bec9e92368066c90e6ce9",
+      "source_step": 1,
+      "source_step_count": 12
     },
     {
       "sequence": 11,
@@ -529,7 +539,12 @@
       "at_ns": 11383722881,
       "type": "source.statement.complete",
       "actor_id": "oxford",
-      "logical_id": "oxford-statement-2"
+      "logical_id": "oxford-statement-2",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\n",
+      "source_delta": "rail = travel.rail(\"oxford\", travellers=2)\n",
+      "source_prefix_sha256": "sha256:1f76eb14f9f0b563c11c12cbaccfb074ddc1c65674d18a11cae1c312a45b1acc",
+      "source_step": 2,
+      "source_step_count": 6
     },
     {
       "sequence": 12,
@@ -537,7 +552,12 @@
       "at_ns": 11383725831,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-2"
+      "logical_id": "brighton-statement-2",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\n",
+      "source_delta": "rail = travel.rail(\"brighton\", travellers=2)\n",
+      "source_prefix_sha256": "sha256:06b8de87bcb86c27942deb66be3bbb40afbb779fbfd7987fdc3216ac7b9a1b92",
+      "source_step": 2,
+      "source_step_count": 12
     },
     {
       "sequence": 13,
@@ -545,7 +565,12 @@
       "at_ns": 11986098125,
       "type": "source.statement.complete",
       "actor_id": "oxford",
-      "logical_id": "oxford-statement-3"
+      "logical_id": "oxford-statement-3",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\n",
+      "source_delta": "attraction = travel.attractions(\"oxford\")\n",
+      "source_prefix_sha256": "sha256:8f429d8bc294973d1f82cb8a0e001eba3d17f784646cfd60cb3cbe8bdb1e6e26",
+      "source_step": 3,
+      "source_step_count": 6
     },
     {
       "sequence": 14,
@@ -553,7 +578,12 @@
       "at_ns": 11986549100,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-3"
+      "logical_id": "brighton-statement-3",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\n",
+      "source_delta": "attraction = travel.attractions(\"brighton\")\n",
+      "source_prefix_sha256": "sha256:9926c3541dd303e4ff35a140c0401d9af8de3dd4ded354b6614e25f6ceff4ef3",
+      "source_step": 3,
+      "source_step_count": 12
     },
     {
       "sequence": 15,
@@ -795,7 +825,12 @@
       "at_ns": 18986221544,
       "type": "source.statement.complete",
       "actor_id": "oxford",
-      "logical_id": "oxford-statement-4"
+      "logical_id": "oxford-statement-4",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\n",
+      "source_delta": "result = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\n",
+      "source_prefix_sha256": "sha256:1c5b739e07ce14a8351d93d3650366007ce504bac57e3893d181e8efc177da16",
+      "source_step": 4,
+      "source_step_count": 6
     },
     {
       "sequence": 40,
@@ -803,7 +838,12 @@
       "at_ns": 18987310096,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-4"
+      "logical_id": "brighton-statement-4",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n",
+      "source_delta": "result = {\n",
+      "source_prefix_sha256": "sha256:cb41eac2b3ead8057731ba0a284b0754c054becbe869de9df9cb25b2ac44c3f6",
+      "source_step": 4,
+      "source_step_count": 12
     },
     {
       "sequence": 41,
@@ -811,7 +851,12 @@
       "at_ns": 19587040770,
       "type": "source.statement.complete",
       "actor_id": "oxford",
-      "logical_id": "oxford-statement-5"
+      "logical_id": "oxford-statement-5",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\nimport json\n",
+      "source_delta": "import json\n",
+      "source_prefix_sha256": "sha256:228edb6bf2c0b36635bfe58dbc8cfceae867cda5dc852819dad02a06f47b4623",
+      "source_step": 5,
+      "source_step_count": 6
     },
     {
       "sequence": 42,
@@ -819,7 +864,12 @@
       "at_ns": 19588142973,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-5"
+      "logical_id": "brighton-statement-5",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n",
+      "source_delta": "    \"candidate_id\": \"brighton\",\n",
+      "source_prefix_sha256": "sha256:d18efbfd7762bb71a92496f1821516f1779b3c765b0288d3a7ab229bb16b5687",
+      "source_step": 5,
+      "source_step_count": 12
     },
     {
       "sequence": 43,
@@ -827,7 +877,12 @@
       "at_ns": 20187880167,
       "type": "source.statement.complete",
       "actor_id": "oxford",
-      "logical_id": "oxford-statement-6"
+      "logical_id": "oxford-statement-6",
+      "source_prefix": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}\nimport json\nwith open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_delta": "with open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_prefix_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71",
+      "source_step": 6,
+      "source_step_count": 6
     },
     {
       "sequence": 44,
@@ -853,7 +908,12 @@
       "at_ns": 20189005590,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-6"
+      "logical_id": "brighton-statement-6",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n",
+      "source_delta": "    \"weather\": weather,\n",
+      "source_prefix_sha256": "sha256:fbe9e97bbd9daf5e75f2938719ff4b7e6e10483ab0a828eb04c6fa2a72173191",
+      "source_step": 6,
+      "source_step_count": 12
     },
     {
       "sequence": 47,
@@ -861,7 +921,12 @@
       "at_ns": 20789706945,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-7"
+      "logical_id": "brighton-statement-7",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n",
+      "source_delta": "    \"rail\": rail,\n",
+      "source_prefix_sha256": "sha256:636d75b74745272bb2a6f3b886372d61df03682cfe3354d5961f02fb0b638a25",
+      "source_step": 7,
+      "source_step_count": 12
     },
     {
       "sequence": 48,
@@ -869,7 +934,12 @@
       "at_ns": 21390426420,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-8"
+      "logical_id": "brighton-statement-8",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n",
+      "source_delta": "    \"attraction\": attraction,\n",
+      "source_prefix_sha256": "sha256:f473ef49d673476dc190bc56d9eaa3524e752e6bca98af110884c3073dc952ef",
+      "source_step": 8,
+      "source_step_count": 12
     },
     {
       "sequence": 49,
@@ -877,7 +947,12 @@
       "at_ns": 21991125875,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-9"
+      "logical_id": "brighton-statement-9",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n",
+      "source_delta": "    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n",
+      "source_prefix_sha256": "sha256:6478f36dc2bcc8d2c8b9e41fcc3c62f607cc74d69738eb121d60d312bf23cf67",
+      "source_step": 9,
+      "source_step_count": 12
     },
     {
       "sequence": 50,
@@ -885,7 +960,12 @@
       "at_ns": 22591863781,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-10"
+      "logical_id": "brighton-statement-10",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\n",
+      "source_delta": "}\n",
+      "source_prefix_sha256": "sha256:c3a0c74c1578f82a5d06f1b5b1610bb074c7e2fd147d16f9afcb1d7ae0b1a3d2",
+      "source_step": 10,
+      "source_step_count": 12
     },
     {
       "sequence": 51,
@@ -893,7 +973,12 @@
       "at_ns": 23192581566,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-11"
+      "logical_id": "brighton-statement-11",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\nimport json\n",
+      "source_delta": "import json\n",
+      "source_prefix_sha256": "sha256:8320c6f0b69ff12ade3245b29d0d575bcc706ddeba7ea64b8a4ef73fdbb3c5bc",
+      "source_step": 11,
+      "source_step_count": 12
     },
     {
       "sequence": 52,
@@ -901,7 +986,12 @@
       "at_ns": 23793307622,
       "type": "source.statement.complete",
       "actor_id": "brighton",
-      "logical_id": "brighton-statement-12"
+      "logical_id": "brighton-statement-12",
+      "source_prefix": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}\nimport json\nwith open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_delta": "with open(\"/workspace/candidate-result.json\", \"w\", encoding=\"utf-8\") as handle:\n    json.dump({\"candidate_id\": result[\"candidate_id\"], \"total_cost_gbp\": result[\"total_cost_gbp\"]}, handle, sort_keys=True, separators=(\",\", \":\"))\n",
+      "source_prefix_sha256": "sha256:77096a78c25da34a3bfcb2b9abb0828acdbab110de38de076a11e75091adcd9b",
+      "source_step": 12,
+      "source_step_count": 12
     },
     {
       "sequence": 53,

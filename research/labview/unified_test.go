@@ -22,6 +22,27 @@ func TestBuildUnifiedSnapshotProjectsOneCampaign(t *testing.T) {
 	if snapshot.MatchedControl.PairCount != 3 || snapshot.MatchedControl.MedianSavingsNS <= 0 || !snapshot.MatchedControl.EquivalentResults {
 		t.Fatalf("invalid matched control: %+v", snapshot.MatchedControl)
 	}
+	candidates := map[string]UnifiedCandidate{}
+	for _, candidate := range snapshot.Candidates {
+		candidates[candidate.ID] = candidate
+	}
+	steps := map[string]int{}
+	for _, event := range snapshot.Events {
+		if event.Type != "source.statement.complete" {
+			continue
+		}
+		steps[event.ActorID]++
+		if event.SourceStep != steps[event.ActorID] || event.SourceStepCount == 0 || event.SourceDelta == "" ||
+			!bytes.HasSuffix([]byte(event.SourcePrefix), []byte(event.SourceDelta)) || snapshotSHA([]byte(event.SourcePrefix)) != event.SourcePrefixSHA256 {
+			t.Fatalf("invalid projected source prefix at %s step %d", event.ActorID, event.SourceStep)
+		}
+		if event.SourceStep == event.SourceStepCount && event.SourcePrefix != candidates[event.ActorID].ExecutedSource {
+			t.Fatalf("final source prefix does not close for %s", event.ActorID)
+		}
+	}
+	if steps["brighton"] != 12 || steps["oxford"] != 6 {
+		t.Fatalf("unexpected source step counts: %+v", steps)
+	}
 	encoded, err := EncodeUnifiedSnapshot(snapshot)
 	if err != nil || bytes.Contains(bytes.ToLower(encoded), []byte("/users/")) || bytes.Contains(bytes.ToLower(encoded), []byte(".hermes")) {
 		t.Fatalf("unsafe encoded projection: err=%v", err)

@@ -1,0 +1,236 @@
+{
+  "schema_version": "pysolate.lab-provider-summary.v1",
+  "source_trace_sha256": "sha256:7eb2b9c908de8fa218000a5cd03377fd38767c3bf28a7df0280c07fa6749c8f3",
+  "disclosure": "Processed public projection. Raw provider request IDs, headers, context bodies, and reasoning are omitted.",
+  "calls": [
+    {
+      "id": "candidate-brighton",
+      "ordinal": 1,
+      "actor": "brighton",
+      "phase": "candidate-generation",
+      "purpose": "Generate constrained Brighton Python",
+      "model": "deepseek-v4-flash",
+      "token_usage": {
+        "prompt": 824,
+        "completion": 762,
+        "reasoning_tokens": 574
+      },
+      "input": {
+        "planning": {
+          "schema_version": "pysolate.day-trip-planning-brief.v1",
+          "task": "Plan a one-day Saturday trip for two people from London. Compare Brighton and Oxford using the supplied weather, round-trip rail, and attraction data, stay within GBP 100, choose one, and provide the itinerary.",
+          "candidate_ids": [
+            "brighton",
+            "oxford"
+          ]
+        },
+        "candidate_id": "brighton",
+        "required_tool_calls": [
+          "travel.weather(\"brighton\")",
+          "travel.rail(\"brighton\", travellers=2)",
+          "travel.attractions(\"brighton\")"
+        ],
+        "output_contract": "pysolate.day-trip-candidate.v1"
+      },
+      "thinking_summary": [
+        "Check the candidate-only JSON contract.",
+        "Emit each allowlisted travel read exactly once.",
+        "Compute the two-traveller total in Python instead of inventing fixture values."
+      ],
+      "output": {
+        "schema_version": "pysolate.day-trip-candidate.v1",
+        "candidate_id": "brighton",
+        "summary": "The code observes the deterministic fixture weather, round-trip rail for two travellers, and the listed attraction for Brighton, then computes total cost as rail total plus twice the attraction entry cost.",
+        "python_source": "weather = travel.weather(\"brighton\")\nrail = travel.rail(\"brighton\", travellers=2)\nattraction = travel.attractions(\"brighton\")\nresult = {\n    \"candidate_id\": \"brighton\",\n    \"weather\": weather,\n    \"rail\": rail,\n    \"attraction\": attraction,\n    \"total_cost_gbp\": rail[\"total_cost_gbp\"] + attraction[\"entry_cost_gbp\"] * 2\n}"
+      }
+    },
+    {
+      "id": "candidate-oxford",
+      "ordinal": 2,
+      "actor": "oxford",
+      "phase": "candidate-generation",
+      "purpose": "Generate constrained Oxford Python",
+      "model": "deepseek-v4-flash",
+      "token_usage": {
+        "prompt": 824,
+        "completion": 609,
+        "reasoning_tokens": 454
+      },
+      "input": {
+        "planning": {
+          "schema_version": "pysolate.day-trip-planning-brief.v1",
+          "task": "Plan a one-day Saturday trip for two people from London. Compare Brighton and Oxford using the supplied weather, round-trip rail, and attraction data, stay within GBP 100, choose one, and provide the itinerary.",
+          "candidate_ids": [
+            "brighton",
+            "oxford"
+          ]
+        },
+        "candidate_id": "oxford",
+        "required_tool_calls": [
+          "travel.weather(\"oxford\")",
+          "travel.rail(\"oxford\", travellers=2)",
+          "travel.attractions(\"oxford\")"
+        ],
+        "output_contract": "pysolate.day-trip-candidate.v1"
+      },
+      "thinking_summary": [
+        "Check the candidate-only JSON contract.",
+        "Emit each allowlisted travel read exactly once.",
+        "Leave observed values to the deterministic runtime fixture."
+      ],
+      "output": {
+        "schema_version": "pysolate.day-trip-candidate.v1",
+        "candidate_id": "oxford",
+        "summary": "Observed Oxford weather, round-trip rail for two travellers, and attraction entry data; computed total cost within budget check constraints.",
+        "python_source": "weather = travel.weather(\"oxford\")\nrail = travel.rail(\"oxford\", travellers=2)\nattraction = travel.attractions(\"oxford\")\nresult = {\"candidate_id\":\"oxford\",\"weather\":weather,\"rail\":rail,\"attraction\":attraction,\"total_cost_gbp\":rail[\"total_cost_gbp\"]+attraction[\"entry_cost_gbp\"]*2}"
+      }
+    },
+    {
+      "id": "main-selection",
+      "ordinal": 3,
+      "actor": "main",
+      "phase": "selection",
+      "purpose": "Select one observed candidate",
+      "model": "deepseek-v4-flash",
+      "token_usage": {
+        "prompt": 1043,
+        "completion": 643,
+        "reasoning_tokens": 586
+      },
+      "input": {
+        "budget_gbp": 100,
+        "travellers": 2,
+        "candidate_outputs": {
+          "brighton": {
+            "candidate_id": "brighton",
+            "weather": {
+              "forecast": "dry and bright",
+              "high_c": 18,
+              "rain_chance_pct": 20
+            },
+            "rail": {
+              "outbound": {
+                "departure": "08:15",
+                "arrival": "09:18",
+                "cost_gbp": 31.2
+              },
+              "return": {
+                "departure": "18:20",
+                "arrival": "19:24",
+                "cost_gbp": 31.2
+              },
+              "total_cost_gbp": 62.4,
+              "currency": "GBP"
+            },
+            "attraction": {
+              "name": "Royal Pavilion",
+              "open_saturday": true,
+              "opening_hours": "10:00-17:15",
+              "entry_cost_gbp": 28
+            },
+            "total_cost_gbp": 118.4
+          },
+          "oxford": {
+            "candidate_id": "oxford",
+            "weather": {
+              "forecast": "cloudy with light showers",
+              "high_c": 16,
+              "rain_chance_pct": 45
+            },
+            "rail": {
+              "outbound": {
+                "departure": "08:05",
+                "arrival": "09:02",
+                "cost_gbp": 39
+              },
+              "return": {
+                "departure": "18:05",
+                "arrival": "19:04",
+                "cost_gbp": 39
+              },
+              "total_cost_gbp": 78,
+              "currency": "GBP"
+            },
+            "attraction": {
+              "name": "Ashmolean Museum",
+              "open_saturday": true,
+              "opening_hours": "10:00-17:00",
+              "entry_cost_gbp": 0
+            },
+            "total_cost_gbp": 78
+          }
+        }
+      },
+      "thinking_summary": [
+        "Compare the observed candidate totals against the fixed £100 budget.",
+        "Brighton is £118.40 and is rejected.",
+        "Oxford is £78.00 and remains within budget."
+      ],
+      "output": {
+        "schema_version": "pysolate.day-trip-selection.v1",
+        "selected_candidate_id": "oxford",
+        "justification": "Oxford total cost is 78 GBP, within the 100 GBP budget; Brighton total cost is 118.4 GBP, exceeding the budget."
+      }
+    },
+    {
+      "id": "main-final",
+      "ordinal": 4,
+      "actor": "main",
+      "phase": "final-response",
+      "purpose": "Format the selected itinerary",
+      "model": "deepseek-v4-flash",
+      "token_usage": {
+        "prompt": 993,
+        "completion": 191,
+        "reasoning_tokens": 93
+      },
+      "input": {
+        "selection": {
+          "schema_version": "pysolate.day-trip-selection.v1",
+          "selected_candidate_id": "oxford",
+          "justification": "Oxford total cost is 78 GBP, within the 100 GBP budget; Brighton total cost is 118.4 GBP, exceeding the budget."
+        },
+        "selected_observation": {
+          "candidate_id": "oxford",
+          "weather": {
+            "forecast": "cloudy with light showers",
+            "high_c": 16,
+            "rain_chance_pct": 45
+          },
+          "rail": {
+            "outbound": {
+              "departure": "08:05",
+              "arrival": "09:02",
+              "cost_gbp": 39
+            },
+            "return": {
+              "departure": "18:05",
+              "arrival": "19:04",
+              "cost_gbp": 39
+            },
+            "total_cost_gbp": 78,
+            "currency": "GBP"
+          },
+          "attraction": {
+            "name": "Ashmolean Museum",
+            "open_saturday": true,
+            "opening_hours": "10:00-17:00",
+            "entry_cost_gbp": 0
+          },
+          "total_cost_gbp": 78
+        }
+      },
+      "thinking_summary": [
+        "Use only the selected Oxford observation.",
+        "Preserve the observed rail times, Saturday opening hours, and £78.00 total.",
+        "Return the bounded final-response contract."
+      ],
+      "output": {
+        "schema_version": "pysolate.day-trip-final.v1",
+        "selected_candidate_id": "oxford",
+        "itinerary": "Outbound train from London departs 08:05, arrives 09:02. Visit Ashmolean Museum (open Saturday 10:00-17:00, free entry). Return train departs 18:05, arrives 19:04. Total cost: 78 GBP for two travellers.",
+        "total_cost_gbp": 78
+      }
+    }
+  ]
+}

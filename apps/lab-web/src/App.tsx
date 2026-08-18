@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MechanismsView, TimelineView } from './UnifiedLab';
 import { loadUnifiedSnapshot, type UnifiedSnapshot } from './unifiedCampaignData';
-import { loadProviderDebug, validateProviderDebugBinding, type ProviderDebug } from './providerDebugData';
+import { loadProviderSummary, validateProviderSummaryBinding, type ProviderSummary } from './providerSummaryData';
 import './styles.css';
 
 function LabMark() {
@@ -10,21 +10,21 @@ function LabMark() {
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<UnifiedSnapshot | null>(null);
-  const [providerDebug, setProviderDebug] = useState<ProviderDebug | null>(null);
+  const [providerSummary, setProviderSummary] = useState<ProviderSummary | null>(null);
   const [surface, setSurface] = useState<'mechanisms' | 'timeline'>('mechanisms');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([loadUnifiedSnapshot(), loadProviderDebug()]).then(([campaign, debug]) => {
-		validateProviderDebugBinding(debug, campaign);
-		if (active) { setSnapshot(campaign); setProviderDebug(debug); }
+    Promise.all([loadUnifiedSnapshot(), loadProviderSummary()]).then(([campaign, summary]) => {
+		validateProviderSummaryBinding(summary, campaign);
+		if (active) { setSnapshot(campaign); setProviderSummary(summary); }
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
   }, []);
 
   if (error) return <main className="load-state"><h1>Lab data rejected</h1><p>{error}</p></main>;
-  if (!snapshot || !providerDebug) return <main className="load-state"><p>Loading full development trace…</p></main>;
+  if (!snapshot || !providerSummary) return <main className="load-state"><p>Loading projected campaign evidence…</p></main>;
 
   return (
     <div className="app-shell">
@@ -36,7 +36,7 @@ export default function App() {
         </nav>
       </header>
       <main id="top">
-        {surface === 'mechanisms' ? <MechanismsView debug={providerDebug} snapshot={snapshot} /> : <TimelineView debug={providerDebug} snapshot={snapshot} />}
+        {surface === 'mechanisms' ? <MechanismsView provider={providerSummary} snapshot={snapshot} /> : <TimelineView provider={providerSummary} snapshot={snapshot} />}
       </main>
     </div>
   );

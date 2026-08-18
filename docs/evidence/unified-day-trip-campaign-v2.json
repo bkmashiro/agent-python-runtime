@@ -1,7 +1,7 @@
 {
   "schema_version": "pysolate.unified-mechanism-campaign.v2",
   "campaign_id": "day-trip-unified-v2",
-  "source_commit": "9e7535c9ca084dc05b00345af3291f49afb13b21",
+  "source_commit": "46ecc4ecc9ab8bb804312054be566b463f8d9bcd",
   "artifact_sha256": "sha256:815f529d8c0cae18fac3730e6ffc6fe7e817fc5a01df69d709601b68d090559a",
   "fixture_sha256": "sha256:07ee8df0c2dac355229b569e1033ac5b4884e6b3fa7109ffd1f9254fa70a0ab2",
   "platform": "linux/amd64",
@@ -10,7 +10,7 @@
     "finalization_delay_ms": 7000
   },
   "full_run": {
-    "duration_ns": 46252402201,
+    "duration_ns": 52367283336,
     "origin_logical_calls": 3,
     "origin_physical_computes": 1,
     "origin_retained": true,
@@ -30,7 +30,7 @@
           "logs": [],
           "metrics": {
             "capability_calls": 3,
-            "guest_time_ms": 10.814881883561611,
+            "guest_time_ms": 17.255935817956924,
             "result_bytes": 413
           },
           "receipts": [
@@ -124,7 +124,7 @@
           "logs": [],
           "metrics": {
             "capability_calls": 3,
-            "guest_time_ms": 11.710063554346561,
+            "guest_time_ms": 17.035911791026592,
             "result_bytes": 414
           },
           "receipts": [
@@ -218,7 +218,7 @@
       "logs": [],
       "metrics": {
         "capability_calls": 1,
-        "guest_time_ms": 239.49121683835983,
+        "guest_time_ms": 294.42513454705477,
         "result_bytes": 111
       },
       "receipts": [
@@ -263,23 +263,23 @@
       {
         "sequence": 1,
         "id": "event-0001",
-        "at_ns": 5436327376,
-        "type": "function.logical",
-        "actor_id": "oxford",
-        "logical_id": "origin-oxford"
-      },
-      {
-        "sequence": 2,
-        "id": "event-0002",
-        "at_ns": 5436343486,
+        "at_ns": 6147020424,
         "type": "function.logical",
         "actor_id": "brighton",
         "logical_id": "origin-brighton"
       },
       {
+        "sequence": 2,
+        "id": "event-0002",
+        "at_ns": 6147087945,
+        "type": "function.logical",
+        "actor_id": "oxford",
+        "logical_id": "origin-oxford"
+      },
+      {
         "sequence": 3,
         "id": "event-0003",
-        "at_ns": 7447613335,
+        "at_ns": 8466764493,
         "type": "function.physical.start",
         "actor_id": "host",
         "physical_id": "origin-physical-1"
@@ -287,7 +287,7 @@
       {
         "sequence": 4,
         "id": "event-0004",
-        "at_ns": 10721310626,
+        "at_ns": 12180203130,
         "type": "function.physical.end",
         "actor_id": "host",
         "physical_id": "origin-physical-1",
@@ -296,27 +296,27 @@
       {
         "sequence": 5,
         "id": "event-0005",
-        "at_ns": 10733617265,
+        "at_ns": 12191411720,
         "type": "function.leader",
-        "actor_id": "oxford",
-        "logical_id": "origin-oxford",
+        "actor_id": "brighton",
+        "logical_id": "origin-brighton",
         "physical_id": "origin-physical-1",
         "outcome": "leader"
       },
       {
         "sequence": 6,
         "id": "event-0006",
-        "at_ns": 10733619025,
+        "at_ns": 12191416310,
         "type": "function.waiter",
-        "actor_id": "brighton",
-        "logical_id": "origin-brighton",
+        "actor_id": "oxford",
+        "logical_id": "origin-oxford",
         "physical_id": "origin-physical-1",
         "outcome": "waiter"
       },
       {
         "sequence": 7,
         "id": "event-0007",
-        "at_ns": 10782971735,
+        "at_ns": 12245542739,
         "type": "source.generation.start",
         "actor_id": "oxford",
         "logical_id": "source-oxford"
@@ -324,7 +324,7 @@
       {
         "sequence": 8,
         "id": "event-0008",
-        "at_ns": 10782988745,
+        "at_ns": 12245582039,
         "type": "source.statement.complete",
         "actor_id": "oxford",
         "logical_id": "oxford-statement-1"
@@ -332,7 +332,7 @@
       {
         "sequence": 9,
         "id": "event-0009",
-        "at_ns": 10783083076,
+        "at_ns": 12245808632,
         "type": "source.generation.start",
         "actor_id": "brighton",
         "logical_id": "source-brighton"
@@ -340,7 +340,7 @@
       {
         "sequence": 10,
         "id": "event-0010",
-        "at_ns": 10783092977,
+        "at_ns": 12245826462,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-1"
@@ -348,7 +348,7 @@
       {
         "sequence": 11,
         "id": "event-0011",
-        "at_ns": 11383722881,
+        "at_ns": 12845830209,
         "type": "source.statement.complete",
         "actor_id": "oxford",
         "logical_id": "oxford-statement-2"
@@ -356,7 +356,7 @@
       {
         "sequence": 12,
         "id": "event-0012",
-        "at_ns": 11383725831,
+        "at_ns": 12845912260,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-2"
@@ -364,7 +364,7 @@
       {
         "sequence": 13,
         "id": "event-0013",
-        "at_ns": 11986098125,
+        "at_ns": 13446240590,
         "type": "source.statement.complete",
         "actor_id": "oxford",
         "logical_id": "oxford-statement-3"
@@ -372,7 +372,7 @@
       {
         "sequence": 14,
         "id": "event-0014",
-        "at_ns": 11986549100,
+        "at_ns": 13446246000,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-3"
@@ -380,7 +380,7 @@
       {
         "sequence": 15,
         "id": "event-0015",
-        "at_ns": 16970377383,
+        "at_ns": 18772703210,
         "type": "semantic.qualified",
         "actor_id": "host",
         "logical_id": "oxford-weather",
@@ -390,7 +390,7 @@
       {
         "sequence": 16,
         "id": "event-0016",
-        "at_ns": 16970382133,
+        "at_ns": 18772710250,
         "type": "semantic.issue",
         "actor_id": "host",
         "logical_id": "oxford-weather",
@@ -400,7 +400,7 @@
       {
         "sequence": 17,
         "id": "event-0017",
-        "at_ns": 16970417094,
+        "at_ns": 18772752391,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "oxford-weather",
@@ -409,7 +409,7 @@
       {
         "sequence": 18,
         "id": "event-0018",
-        "at_ns": 16976672805,
+        "at_ns": 18868270434,
         "type": "semantic.qualified",
         "actor_id": "host",
         "logical_id": "brighton-weather",
@@ -419,7 +419,7 @@
       {
         "sequence": 19,
         "id": "event-0019",
-        "at_ns": 16976675645,
+        "at_ns": 18868274354,
         "type": "semantic.issue",
         "actor_id": "host",
         "logical_id": "brighton-weather",
@@ -429,7 +429,7 @@
       {
         "sequence": 20,
         "id": "event-0020",
-        "at_ns": 16976700385,
+        "at_ns": 18868304334,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "brighton-weather",
@@ -438,7 +438,7 @@
       {
         "sequence": 21,
         "id": "event-0021",
-        "at_ns": 17270861442,
+        "at_ns": 19073201929,
         "type": "request.finish",
         "actor_id": "host",
         "logical_id": "oxford-weather",
@@ -448,7 +448,7 @@
       {
         "sequence": 22,
         "id": "event-0022",
-        "at_ns": 17276969372,
+        "at_ns": 19169363109,
         "type": "request.finish",
         "actor_id": "host",
         "logical_id": "brighton-weather",
@@ -458,7 +458,7 @@
       {
         "sequence": 23,
         "id": "event-0023",
-        "at_ns": 17650319667,
+        "at_ns": 19517147385,
         "type": "semantic.qualified",
         "actor_id": "host",
         "logical_id": "brighton-rail",
@@ -468,7 +468,7 @@
       {
         "sequence": 24,
         "id": "event-0024",
-        "at_ns": 17650322717,
+        "at_ns": 19517151105,
         "type": "semantic.issue",
         "actor_id": "host",
         "logical_id": "brighton-rail",
@@ -478,7 +478,7 @@
       {
         "sequence": 25,
         "id": "event-0025",
-        "at_ns": 17650348118,
+        "at_ns": 19517178355,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "brighton-rail",
@@ -487,7 +487,7 @@
       {
         "sequence": 26,
         "id": "event-0026",
-        "at_ns": 17671987743,
+        "at_ns": 19519993905,
         "type": "semantic.qualified",
         "actor_id": "host",
         "logical_id": "oxford-rail",
@@ -497,7 +497,7 @@
       {
         "sequence": 27,
         "id": "event-0027",
-        "at_ns": 17671989853,
+        "at_ns": 19519996845,
         "type": "semantic.issue",
         "actor_id": "host",
         "logical_id": "oxford-rail",
@@ -507,7 +507,7 @@
       {
         "sequence": 28,
         "id": "event-0028",
-        "at_ns": 17672008473,
+        "at_ns": 19520021556,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "oxford-rail",
@@ -516,18 +516,18 @@
       {
         "sequence": 29,
         "id": "event-0029",
-        "at_ns": 18250467336,
-        "type": "request.finish",
+        "at_ns": 20053918465,
+        "type": "semantic.qualified",
         "actor_id": "host",
-        "logical_id": "brighton-rail",
-        "physical_id": "request-brighton-rail",
-        "outcome": "ok"
+        "logical_id": "oxford-attractions",
+        "physical_id": "request-oxford-attractions",
+        "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
       },
       {
         "sequence": 30,
         "id": "event-0030",
-        "at_ns": 18250672298,
-        "type": "semantic.qualified",
+        "at_ns": 20053921675,
+        "type": "semantic.issue",
         "actor_id": "host",
         "logical_id": "oxford-attractions",
         "physical_id": "request-oxford-attractions",
@@ -536,27 +536,27 @@
       {
         "sequence": 31,
         "id": "event-0031",
-        "at_ns": 18250674949,
-        "type": "semantic.issue",
-        "actor_id": "host",
-        "logical_id": "oxford-attractions",
-        "physical_id": "request-oxford-attractions",
-        "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
-      },
-      {
-        "sequence": 32,
-        "id": "event-0032",
-        "at_ns": 18250694239,
+        "at_ns": 20053946495,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "oxford-attractions",
         "physical_id": "request-oxford-attractions"
       },
       {
+        "sequence": 32,
+        "id": "event-0032",
+        "at_ns": 20093383518,
+        "type": "semantic.qualified",
+        "actor_id": "host",
+        "logical_id": "brighton-attractions",
+        "physical_id": "request-brighton-attractions",
+        "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+      },
+      {
         "sequence": 33,
         "id": "event-0033",
-        "at_ns": 18267384548,
-        "type": "semantic.qualified",
+        "at_ns": 20093387588,
+        "type": "semantic.issue",
         "actor_id": "host",
         "logical_id": "brighton-attractions",
         "physical_id": "request-brighton-attractions",
@@ -565,26 +565,26 @@
       {
         "sequence": 34,
         "id": "event-0034",
-        "at_ns": 18267386318,
-        "type": "semantic.issue",
-        "actor_id": "host",
-        "logical_id": "brighton-attractions",
-        "physical_id": "request-brighton-attractions",
-        "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
-      },
-      {
-        "sequence": 35,
-        "id": "event-0035",
-        "at_ns": 18267400508,
+        "at_ns": 20093418688,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "brighton-attractions",
         "physical_id": "request-brighton-attractions"
       },
       {
+        "sequence": 35,
+        "id": "event-0035",
+        "at_ns": 20117924090,
+        "type": "request.finish",
+        "actor_id": "host",
+        "logical_id": "brighton-rail",
+        "physical_id": "request-brighton-rail",
+        "outcome": "ok"
+      },
+      {
         "sequence": 36,
         "id": "event-0036",
-        "at_ns": 18272229813,
+        "at_ns": 20121039894,
         "type": "request.finish",
         "actor_id": "host",
         "logical_id": "oxford-rail",
@@ -594,7 +594,23 @@
       {
         "sequence": 37,
         "id": "event-0037",
-        "at_ns": 18651708258,
+        "at_ns": 20446437209,
+        "type": "source.statement.complete",
+        "actor_id": "oxford",
+        "logical_id": "oxford-statement-4"
+      },
+      {
+        "sequence": 38,
+        "id": "event-0038",
+        "at_ns": 20446448470,
+        "type": "source.statement.complete",
+        "actor_id": "brighton",
+        "logical_id": "brighton-statement-4"
+      },
+      {
+        "sequence": 39,
+        "id": "event-0039",
+        "at_ns": 20454806689,
         "type": "request.finish",
         "actor_id": "host",
         "logical_id": "oxford-attractions",
@@ -602,9 +618,9 @@
         "outcome": "ok"
       },
       {
-        "sequence": 38,
-        "id": "event-0038",
-        "at_ns": 18667872432,
+        "sequence": 40,
+        "id": "event-0040",
+        "at_ns": 20494009259,
         "type": "request.finish",
         "actor_id": "host",
         "logical_id": "brighton-attractions",
@@ -612,59 +628,42 @@
         "outcome": "ok"
       },
       {
-        "sequence": 39,
-        "id": "event-0039",
-        "at_ns": 18986221544,
-        "type": "source.statement.complete",
-        "actor_id": "oxford",
-        "logical_id": "oxford-statement-4"
-      },
-      {
-        "sequence": 40,
-        "id": "event-0040",
-        "at_ns": 18987310096,
-        "type": "source.statement.complete",
-        "actor_id": "brighton",
-        "logical_id": "brighton-statement-4"
-      },
-      {
         "sequence": 41,
         "id": "event-0041",
-        "at_ns": 19587040770,
-        "type": "source.statement.complete",
-        "actor_id": "oxford",
-        "logical_id": "oxford-statement-5"
-      },
-      {
-        "sequence": 42,
-        "id": "event-0042",
-        "at_ns": 19588142973,
+        "at_ns": 21046643899,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-5"
       },
       {
+        "sequence": 42,
+        "id": "event-0042",
+        "at_ns": 21046694269,
+        "type": "source.statement.complete",
+        "actor_id": "oxford",
+        "logical_id": "oxford-statement-5"
+      },
+      {
         "sequence": 43,
         "id": "event-0043",
-        "at_ns": 20187880167,
+        "at_ns": 21647234282,
+        "type": "source.statement.complete",
+        "actor_id": "brighton",
+        "logical_id": "brighton-statement-6"
+      },
+      {
+        "sequence": 44,
+        "id": "event-0044",
+        "at_ns": 21647250202,
         "type": "source.statement.complete",
         "actor_id": "oxford",
         "logical_id": "oxford-statement-6"
       },
       {
-        "sequence": 44,
-        "id": "event-0044",
-        "at_ns": 20187882207,
-        "type": "source.feed.complete",
-        "actor_id": "oxford",
-        "logical_id": "source-oxford",
-        "identity_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71"
-      },
-      {
         "sequence": 45,
         "id": "event-0045",
-        "at_ns": 20187903567,
-        "type": "source.sealed",
+        "at_ns": 21647273083,
+        "type": "source.feed.complete",
         "actor_id": "oxford",
         "logical_id": "source-oxford",
         "identity_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71"
@@ -672,15 +671,16 @@
       {
         "sequence": 46,
         "id": "event-0046",
-        "at_ns": 20189005590,
-        "type": "source.statement.complete",
-        "actor_id": "brighton",
-        "logical_id": "brighton-statement-6"
+        "at_ns": 21647285573,
+        "type": "source.sealed",
+        "actor_id": "oxford",
+        "logical_id": "source-oxford",
+        "identity_sha256": "sha256:0616098fdf07f5e022d92a36d94cdb1b2d110b52dd530da16de6d8b04ca6ff71"
       },
       {
         "sequence": 47,
         "id": "event-0047",
-        "at_ns": 20789706945,
+        "at_ns": 22247992338,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-7"
@@ -688,7 +688,7 @@
       {
         "sequence": 48,
         "id": "event-0048",
-        "at_ns": 21390426420,
+        "at_ns": 22848708202,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-8"
@@ -696,7 +696,7 @@
       {
         "sequence": 49,
         "id": "event-0049",
-        "at_ns": 21991125875,
+        "at_ns": 23449464698,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-9"
@@ -704,7 +704,7 @@
       {
         "sequence": 50,
         "id": "event-0050",
-        "at_ns": 22591863781,
+        "at_ns": 24050253183,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-10"
@@ -712,7 +712,7 @@
       {
         "sequence": 51,
         "id": "event-0051",
-        "at_ns": 23192581566,
+        "at_ns": 24650985158,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-11"
@@ -720,7 +720,7 @@
       {
         "sequence": 52,
         "id": "event-0052",
-        "at_ns": 23793307622,
+        "at_ns": 25251755993,
         "type": "source.statement.complete",
         "actor_id": "brighton",
         "logical_id": "brighton-statement-12"
@@ -728,7 +728,7 @@
       {
         "sequence": 53,
         "id": "event-0053",
-        "at_ns": 23793309912,
+        "at_ns": 25251759774,
         "type": "source.feed.complete",
         "actor_id": "brighton",
         "logical_id": "source-brighton",
@@ -737,7 +737,7 @@
       {
         "sequence": 54,
         "id": "event-0054",
-        "at_ns": 23793321582,
+        "at_ns": 25251780734,
         "type": "source.sealed",
         "actor_id": "brighton",
         "logical_id": "source-brighton",
@@ -746,55 +746,25 @@
       {
         "sequence": 55,
         "id": "event-0055",
-        "at_ns": 25956515874,
-        "type": "guest.start",
-        "actor_id": "brighton",
-        "logical_id": "candidate-brighton",
-        "physical_id": "guest-brighton"
-      },
-      {
-        "sequence": 56,
-        "id": "event-0056",
-        "at_ns": 25987564196,
+        "at_ns": 27599235961,
         "type": "guest.start",
         "actor_id": "oxford",
         "logical_id": "candidate-oxford",
         "physical_id": "guest-oxford"
       },
       {
+        "sequence": 56,
+        "id": "event-0056",
+        "at_ns": 27648024343,
+        "type": "guest.start",
+        "actor_id": "brighton",
+        "logical_id": "candidate-brighton",
+        "physical_id": "guest-brighton"
+      },
+      {
         "sequence": 57,
         "id": "event-0057",
-        "at_ns": 29434543844,
-        "type": "semantic.claim",
-        "actor_id": "host",
-        "logical_id": "brighton-weather",
-        "physical_id": "request-brighton-weather",
-        "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
-      },
-      {
-        "sequence": 58,
-        "id": "event-0058",
-        "at_ns": 29434761486,
-        "type": "semantic.claim",
-        "actor_id": "host",
-        "logical_id": "brighton-rail",
-        "physical_id": "request-brighton-rail",
-        "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
-      },
-      {
-        "sequence": 59,
-        "id": "event-0059",
-        "at_ns": 29434929678,
-        "type": "semantic.claim",
-        "actor_id": "host",
-        "logical_id": "brighton-attractions",
-        "physical_id": "request-brighton-attractions",
-        "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
-      },
-      {
-        "sequence": 60,
-        "id": "event-0060",
-        "at_ns": 29452724010,
+        "at_ns": 31457111907,
         "type": "semantic.claim",
         "actor_id": "host",
         "logical_id": "oxford-weather",
@@ -802,9 +772,9 @@
         "identity_sha256": "sha256:8c3927f9fa2f07ba5224ee5dd647407318d19d0a3cd1d26ef806f5c9e3775353"
       },
       {
-        "sequence": 61,
-        "id": "event-0061",
-        "at_ns": 29452887982,
+        "sequence": 58,
+        "id": "event-0058",
+        "at_ns": 31457374790,
         "type": "semantic.claim",
         "actor_id": "host",
         "logical_id": "oxford-rail",
@@ -812,9 +782,9 @@
         "identity_sha256": "sha256:e531e393d1cc18c125a17de84aebddca9afe78975e889a31b78bb09e42526711"
       },
       {
-        "sequence": 62,
-        "id": "event-0062",
-        "at_ns": 29453034844,
+        "sequence": 59,
+        "id": "event-0059",
+        "at_ns": 31457555401,
         "type": "semantic.claim",
         "actor_id": "host",
         "logical_id": "oxford-attractions",
@@ -822,19 +792,69 @@
         "identity_sha256": "sha256:3066b44aaa8c5e4e5a5d6b3c7c1870a318c6828f3d2b739133aaf0218e7414d8"
       },
       {
+        "sequence": 60,
+        "id": "event-0060",
+        "at_ns": 31490704727,
+        "type": "semantic.claim",
+        "actor_id": "host",
+        "logical_id": "brighton-weather",
+        "physical_id": "request-brighton-weather",
+        "identity_sha256": "sha256:577bdc011e56087ea48a77d92d277294223581dd3386cbace85fbb4669de9bfc"
+      },
+      {
+        "sequence": 61,
+        "id": "event-0061",
+        "at_ns": 31490980289,
+        "type": "semantic.claim",
+        "actor_id": "host",
+        "logical_id": "brighton-rail",
+        "physical_id": "request-brighton-rail",
+        "identity_sha256": "sha256:b506b024f57da50c702ee605471d9638778222b41d16017d8b99dc04624b03d8"
+      },
+      {
+        "sequence": 62,
+        "id": "event-0062",
+        "at_ns": 31491371134,
+        "type": "semantic.claim",
+        "actor_id": "host",
+        "logical_id": "brighton-attractions",
+        "physical_id": "request-brighton-attractions",
+        "identity_sha256": "sha256:96bf710a9480f682a01109495d6e3cd3a236a8013fccdb9620479cf4171e80c2"
+      },
+      {
         "sequence": 63,
         "id": "event-0063",
-        "at_ns": 29457220931,
+        "at_ns": 31495804651,
         "type": "guest.end",
-        "actor_id": "brighton",
-        "logical_id": "candidate-brighton",
-        "physical_id": "guest-brighton",
+        "actor_id": "oxford",
+        "logical_id": "candidate-oxford",
+        "physical_id": "guest-oxford",
         "outcome": "ok"
       },
       {
         "sequence": 64,
         "id": "event-0064",
-        "at_ns": 29457259462,
+        "at_ns": 31495857792,
+        "type": "cow.selected",
+        "actor_id": "oxford",
+        "logical_id": "candidate-oxford",
+        "physical_id": "guest-oxford",
+        "outcome": "private_memory"
+      },
+      {
+        "sequence": 65,
+        "id": "event-0065",
+        "at_ns": 31530779796,
+        "type": "guest.end",
+        "actor_id": "brighton",
+        "logical_id": "candidate-brighton",
+        "physical_id": "guest-brighton",
+        "outcome": "ok"
+      },
+      {
+        "sequence": 66,
+        "id": "event-0066",
+        "at_ns": 31530826266,
         "type": "cow.selected",
         "actor_id": "brighton",
         "logical_id": "candidate-brighton",
@@ -842,48 +862,9 @@
         "outcome": "private_memory"
       },
       {
-        "sequence": 65,
-        "id": "event-0065",
-        "at_ns": 29476166686,
-        "type": "guest.end",
-        "actor_id": "oxford",
-        "logical_id": "candidate-oxford",
-        "physical_id": "guest-oxford",
-        "outcome": "ok"
-      },
-      {
-        "sequence": 66,
-        "id": "event-0066",
-        "at_ns": 29476189436,
-        "type": "cow.selected",
-        "actor_id": "oxford",
-        "logical_id": "candidate-oxford",
-        "physical_id": "guest-oxford",
-        "outcome": "private_memory"
-      },
-      {
         "sequence": 67,
         "id": "event-0067",
-        "at_ns": 29526155943,
-        "type": "capsule.export",
-        "actor_id": "host",
-        "logical_id": "oxford",
-        "identity_sha256": "sha256:22d4025eb3158834bd1b94586b2b9ddc61ae958eb7383a38fbf70c4a889f2c3d",
-        "outcome": "serialized"
-      },
-      {
-        "sequence": 68,
-        "id": "event-0068",
-        "at_ns": 29544757144,
-        "type": "branch.discard",
-        "actor_id": "host",
-        "logical_id": "brighton",
-        "outcome": "discarded"
-      },
-      {
-        "sequence": 69,
-        "id": "event-0069",
-        "at_ns": 29544757454,
+        "at_ns": 31598861995,
         "type": "branch.seal",
         "actor_id": "host",
         "logical_id": "oxford",
@@ -891,9 +872,28 @@
         "outcome": "selected"
       },
       {
+        "sequence": 68,
+        "id": "event-0068",
+        "at_ns": 31610878934,
+        "type": "capsule.export",
+        "actor_id": "host",
+        "logical_id": "oxford",
+        "identity_sha256": "sha256:22d4025eb3158834bd1b94586b2b9ddc61ae958eb7383a38fbf70c4a889f2c3d",
+        "outcome": "serialized"
+      },
+      {
+        "sequence": 69,
+        "id": "event-0069",
+        "at_ns": 31636033113,
+        "type": "branch.discard",
+        "actor_id": "host",
+        "logical_id": "brighton",
+        "outcome": "discarded"
+      },
+      {
         "sequence": 70,
         "id": "event-0070",
-        "at_ns": 29590863107,
+        "at_ns": 31689760160,
         "type": "function.logical",
         "actor_id": "main",
         "logical_id": "origin-main"
@@ -901,7 +901,7 @@
       {
         "sequence": 71,
         "id": "event-0071",
-        "at_ns": 29597427122,
+        "at_ns": 31700701007,
         "type": "function.retained",
         "actor_id": "main",
         "logical_id": "origin-main",
@@ -911,7 +911,7 @@
       {
         "sequence": 72,
         "id": "event-0072",
-        "at_ns": 29638252635,
+        "at_ns": 31756378993,
         "type": "capsule.import",
         "actor_id": "host",
         "logical_id": "oxford",
@@ -921,7 +921,7 @@
       {
         "sequence": 73,
         "id": "event-0073",
-        "at_ns": 29644121552,
+        "at_ns": 31765626422,
         "type": "capsule.bind",
         "actor_id": "host",
         "logical_id": "oxford",
@@ -931,7 +931,7 @@
       {
         "sequence": 74,
         "id": "event-0074",
-        "at_ns": 31676238497,
+        "at_ns": 34040312509,
         "type": "guest.start",
         "actor_id": "main",
         "logical_id": "resume-main",
@@ -940,7 +940,7 @@
       {
         "sequence": 75,
         "id": "event-0075",
-        "at_ns": 35237631633,
+        "at_ns": 38134416356,
         "type": "request.start",
         "actor_id": "host",
         "logical_id": "main-platform-notice",
@@ -950,7 +950,7 @@
       {
         "sequence": 76,
         "id": "event-0076",
-        "at_ns": 35337660428,
+        "at_ns": 38235444558,
         "type": "request.finish",
         "actor_id": "host",
         "logical_id": "main-platform-notice",
@@ -960,7 +960,7 @@
       {
         "sequence": 77,
         "id": "event-0077",
-        "at_ns": 35376737821,
+        "at_ns": 38563349421,
         "type": "guest.complete",
         "actor_id": "main",
         "logical_id": "resume-main",
@@ -970,7 +970,7 @@
       {
         "sequence": 78,
         "id": "event-0078",
-        "at_ns": 35376771981,
+        "at_ns": 38563428872,
         "type": "cold_io.resume",
         "actor_id": "main",
         "logical_id": "resume-main",
@@ -980,7 +980,7 @@
       {
         "sequence": 79,
         "id": "event-0079",
-        "at_ns": 35407157746,
+        "at_ns": 39823156106,
         "type": "control.argument_mismatch",
         "actor_id": "host",
         "logical_id": "argument-mismatch",
@@ -989,7 +989,7 @@
       {
         "sequence": 80,
         "id": "event-0080",
-        "at_ns": 37434311426,
+        "at_ns": 42635239821,
         "type": "control.source_mismatch",
         "actor_id": "host",
         "logical_id": "source-mismatch",
@@ -1002,28 +1002,28 @@
       {
         "pair_index": 1,
         "first_lane": "baseline",
-        "baseline_latency_ns": 19852471229,
-        "optimized_latency_ns": 18945460781,
+        "baseline_latency_ns": 20611849403,
+        "optimized_latency_ns": 19312476302,
         "result_sha256": "sha256:6b894863d7ebf305f79191f6d86029f907141bc17f8d6844f9fb9adb9e66051f"
       },
       {
         "pair_index": 2,
         "first_lane": "optimized",
-        "baseline_latency_ns": 19831157965,
-        "optimized_latency_ns": 18553865540,
+        "baseline_latency_ns": 20266095266,
+        "optimized_latency_ns": 18956488775,
         "result_sha256": "sha256:6b894863d7ebf305f79191f6d86029f907141bc17f8d6844f9fb9adb9e66051f"
       },
       {
         "pair_index": 3,
         "first_lane": "baseline",
-        "baseline_latency_ns": 19867652142,
-        "optimized_latency_ns": 18672883858,
+        "baseline_latency_ns": 20415891997,
+        "optimized_latency_ns": 19251013703,
         "result_sha256": "sha256:6b894863d7ebf305f79191f6d86029f907141bc17f8d6844f9fb9adb9e66051f"
       }
     ],
-    "baseline_median_ns": 19852471229,
-    "optimized_median_ns": 18672883858,
-    "savings_ns": 1179587371
+    "baseline_median_ns": 20415891997,
+    "optimized_median_ns": 19251013703,
+    "savings_ns": 1164878294
   },
   "mechanisms": [
     {
@@ -1036,8 +1036,8 @@
         "event-0012",
         "event-0013",
         "event-0014",
-        "event-0039",
-        "event-0040",
+        "event-0037",
+        "event-0038",
         "event-0041",
         "event-0042",
         "event-0043",
@@ -1070,12 +1070,12 @@
         "event-0026",
         "event-0027",
         "event-0028",
+        "event-0029",
         "event-0030",
         "event-0031",
         "event-0032",
         "event-0033",
         "event-0034",
-        "event-0035",
         "event-0057",
         "event-0058",
         "event-0059",
@@ -1133,7 +1133,7 @@
       "name": "serializable_resume",
       "disposition": "selected",
       "event_ids": [
-        "event-0067",
+        "event-0068",
         "event-0072",
         "event-0073"
       ]

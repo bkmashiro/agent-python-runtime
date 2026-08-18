@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
-import type { ProviderDebug, ProviderDebugEvent } from './providerDebugData';
+import type { ProviderSummary, ProviderSummaryCall } from './providerSummaryData';
 import type { UnifiedCandidate, UnifiedEvent, UnifiedFact, UnifiedSnapshot } from './unifiedCampaignData';
 
 type DebugEvent = {
@@ -19,6 +19,7 @@ type DebugEvent = {
   sourceReason?: string;
   input?: unknown;
   output?: unknown;
+  thinking?: string[];
   tool?: string;
   bindings: Record<string, unknown>;
 };
@@ -122,24 +123,25 @@ function runtimeEvent(event: UnifiedEvent, snapshot: UnifiedSnapshot, sourceByBi
   };
 }
 
-function providerEvent(event: ProviderDebugEvent, debug: ProviderDebug): DebugEvent {
-  const candidateID = event.actor_id.endsWith('brighton') ? 'brighton' : event.actor_id.endsWith('oxford') ? 'oxford' : undefined;
-  const candidate = debug.harness_result.candidates.find((item) => item.candidate_id === candidateID);
+function providerEvent(call: ProviderSummaryCall): DebugEvent {
+  const output = call.output as { python_source?: string } | undefined;
   return {
-    id: event.event_id,
-    order: event.ordinal,
-    label: `M${String(event.ordinal).padStart(2, '0')}`,
-    type: event.type,
-    actor: event.actor_id,
-    raw: event,
-    source: candidate?.python_source,
-    input: event.type === 'model.body' ? event.body : undefined,
-    output: event.type === 'model.output' ? event.body : undefined,
-    bindings: { parent_event_ids: event.parent_event_ids, payload: event.payload },
+    id: `provider:${call.id}`,
+    order: call.ordinal,
+    label: `M${String(call.ordinal).padStart(2, '0')}`,
+    type: `model.${call.phase}`,
+    actor: `actor-${call.actor}`,
+    raw: { id: call.id, phase: call.phase, model: call.model, token_usage: call.token_usage },
+    source: output?.python_source,
+    sourceReason: output?.python_source ? 'model-generated candidate source' : undefined,
+    input: call.input,
+    output: call.output,
+    thinking: call.thinking_summary,
+    bindings: { model: call.model, phase: call.phase, token_usage: call.token_usage },
   };
 }
 
-function buildGroups(snapshot: UnifiedSnapshot, debug: ProviderDebug): TraceGroup[] {
+function buildGroups(snapshot: UnifiedSnapshot, provider: ProviderSummary): TraceGroup[] {
   const byID = new Map(snapshot.events.map((event) => [event.id, event]));
   const sourceByBinding = sourceBindings(snapshot);
   const runtime = snapshot.events.map((event) => runtimeEvent(event, snapshot, sourceByBinding));
@@ -159,9 +161,9 @@ function buildGroups(snapshot: UnifiedSnapshot, debug: ProviderDebug): TraceGrou
     },
     {
       id: 'provider-generation', title: 'Model generation', icon: 'model',
-      summary: 'The complete provider requests and responses that produced the selected candidate Python. This first valid attempt was used; no performance-based retry or cherry-pick occurred.',
+      summary: 'Four reviewed model-call projections show structured input, a concise decision summary, and parsed output. Raw provider bodies, request metadata, and chain-of-thought are deliberately absent.',
       facts: [{ label: 'provider calls', value: '4', note: 'candidate ×2, selection, final' }, { label: 'selection rule', value: 'first valid', note: 'contract + safety + Guest oracle' }],
-      events: debug.events.map((event) => providerEvent(event, debug)),
+      events: provider.calls.map(providerEvent),
     },
     ...snapshot.phases.map((phase) => ({ ...phase, icon: phase.id === 'source-predispatch' ? 'source' as const : phase.id === 'fresh-execution' ? 'guest' as const : phase.id === 'fail-closed' ? 'control' as const : 'workspace' as const, events: phase.event_ids.map((id) => byID.get(id)).filter((event): event is UnifiedEvent => Boolean(event)).map((event) => runtimeEvent(event, snapshot, sourceByBinding)) })),
   ];
@@ -251,14 +253,71 @@ function CodeBlock({ label, value }: { label: string; value: unknown }) {
   return <section className="code-block"><div className="code-label"><span>{label}</span><small>{new Blob([text]).size} bytes</small></div><pre>{text}</pre></section>;
 }
 
+type SyntaxLanguage = 'json' | 'python';
+function syntaxTokens(text: string, language: SyntaxLanguage): ReactNode[] {
+  const expression = language === 'json'
+    ? /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?\b)/g
+    : /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\b(def|class|return|if|else|elif|for|while|in|import|from|as|with|try|except|raise|True|False|None)\b|(-?\b\d+(?:\.\d+)?\b)/g;
+  const tokens: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(expression)) {
+    if (match.index! > cursor) tokens.push(text.slice(cursor, match.index));
+    const className = language === 'json'
+      ? match[1] ? 'syntax-key' : match[2] ? 'syntax-string' : match[3] ? 'syntax-literal' : 'syntax-number'
+      : match[1] ? 'syntax-comment' : match[2] ? 'syntax-string' : match[3] ? 'syntax-keyword' : 'syntax-number';
+    tokens.push(<span className={className} key={`${match.index}:${match[0]}`}>{match[0]}</span>);
+    cursor = match.index! + match[0].length;
+  }
+  if (cursor < text.length) tokens.push(text.slice(cursor));
+  return tokens;
+}
+
+function SyntaxBlock({ label, value, language }: { label: string; value: unknown; language: SyntaxLanguage }) {
+  const text = language === 'python' && typeof value === 'string' ? value : value === undefined ? '—' : pretty(value);
+  return <section className={`syntax-block language-${language}`}><div className="code-label"><span>{label}</span><small>{language}</small></div><pre><code>{syntaxTokens(text, language)}</code></pre></section>;
+}
+
+function withoutPythonSource(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof (value as { python_source?: unknown }).python_source !== 'string') return value;
+  const { python_source: _source, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
+
 type LaneSpanKind = 'source' | 'request' | 'guest' | 'shared' | 'workspace';
 type LaneSpan = { id: string; title: string; actor: string; y: number; start: DebugEvent; end: DebugEvent; kind: LaneSpanKind; tool?: string; note: string };
 function logicalID(event: DebugEvent) { return typeof event.bindings.logical_id === 'string' ? event.bindings.logical_id : undefined; }
-function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
+
+function TimelineInspector({ span, event }: { span?: LaneSpan; event?: DebugEvent }) {
+  if (!span && !event) return <aside className="timeline-inspector empty" aria-label="Selected timeline operation"><Icon name="search" size={24} /><div><strong>Select one operation</strong><p>Choose a model call, source point, request, claim, Guest, or workspace span. Only evidence for that operation appears here.</p></div></aside>;
+  const start = span?.start ?? event!;
+  const end = span?.end ?? event!;
+  const title = span?.title ?? event!.type;
+  const actor = span?.actor ?? event!.actor;
+  const tool = span?.tool ?? event?.tool;
+  const source = event?.source ?? start.source;
+  const input = start.input ?? event?.input;
+  const output = end.output ?? event?.output;
+  const thinking = event?.thinking;
+  const time = span ? `+${seconds(start.atNS!)} → +${seconds(end.atNS!)}` : event?.atNS === undefined ? event?.label : `+${seconds(event.atNS)}`;
+  return <aside className="timeline-inspector" aria-label="Selected timeline operation">
+    <header><span className={`inspector-event-icon kind-${eventIcon(event?.type ?? start.type)}`}><Icon name={eventIcon(event?.type ?? start.type)} size={18} /></span><div><span className="eyebrow">{actorLabel(actor)} · {time}</span><h3>{title}</h3><small>{tool ?? span?.note ?? event?.sourceReason ?? 'processed evidence view'}</small></div></header>
+    {tool && <div className="timeline-tool-summary"><span>tool</span><code>{tool}</code><small>typed input → typed output</small></div>}
+    {thinking && <section className="thinking-summary"><div className="code-label"><span>Processed thinking summary</span><small>raw reasoning omitted</small></div><ol>{thinking.map((item) => <li key={item}>{item}</li>)}</ol></section>}
+    <div className="timeline-detail-grid">
+      {input !== undefined && <SyntaxBlock label={tool ? 'Tool input' : 'Input'} language="json" value={input} />}
+      {output !== undefined && <SyntaxBlock label={tool ? 'Tool output' : 'Output'} language="json" value={withoutPythonSource(output)} />}
+      {source && <SyntaxBlock label={event?.sourceReason ?? 'Python source'} language="python" value={source} />}
+      {!input && !output && !source && <SyntaxBlock label="Bound transition" language="json" value={{ start: start.bindings, finish: end.bindings }} />}
+    </div>
+  </aside>;
+}
+
+function CausalLaneMap({ snapshot, provider }: { snapshot: UnifiedSnapshot; provider: ProviderSummary }) {
   const events = useMemo(() => {
     const bindings = sourceBindings(snapshot);
     return snapshot.events.map((event) => runtimeEvent(event, snapshot, bindings));
   }, [snapshot]);
+  const providerEvents = useMemo(() => provider.calls.map(providerEvent), [provider]);
   const laneScrollRef = useRef<HTMLDivElement>(null);
   const lanes = [
     { id: 'brighton', label: 'Brighton', note: 'candidate · discarded', y: 104 },
@@ -282,7 +341,7 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
   const guestSpans = candidates.map((candidate) => makeSpan(`guest:${candidate}`, 'fresh Guest', candidate, lanes.find((lane) => lane.id === candidate)!.y + 20, find('guest.start', (event) => event.actor === candidate), find('guest.end', (event) => event.actor === candidate), 'guest', 'execute from line one → observed output'));
   const requestSpans = candidates.flatMap((candidate, candidateIndex) => tools.map((tool) => makeSpan(`request:${candidate}:${tool.id}`, `${candidate} · ${tool.id}`, 'host', lanes[2].y + tool.y + (candidateIndex ? 7 : -7), find('request.start', (event) => logicalID(event) === `${candidate}-${tool.id}`), find('request.finish', (event) => logicalID(event) === `${candidate}-${tool.id}`), 'request', 'physical request start → finish', tool.name)));
   const originSpan = makeSpan('origin:physical', 'shared origin · 1 physical', 'host', lanes[2].y + 48, find('function.physical.start'), find('function.physical.end'), 'shared', '2 logical callers → leader + waiter');
-  const capsuleSpan = makeSpan('capsule:selected', 'selected workspace capsule', 'host', lanes[2].y + 82, find('capsule.export'), find('capsule.bind'), 'workspace', 'export → import → bind');
+  const capsuleSpan = makeSpan('capsule:selected', 'selected workspace capsule', 'host', lanes[2].y + 82, find('branch.seal'), find('capsule.bind'), 'workspace', 'seal → export → import → bind');
   const mainSpan = makeSpan('guest:main', 'fresh Main Guest', 'main', lanes[3].y, find('guest.start', (event) => event.actor === 'main'), find('guest.complete'), 'guest', 'bound workspace → final decision');
   const spans = [...sourceSpans, ...guestSpans, ...requestSpans, originSpan, capsuleSpan, mainSpan].filter((span): span is LaneSpan => Boolean(span));
   const sourcePoints = candidates.flatMap((candidate) => tools.map((tool) => ({ candidate, tool, event: find('source.statement.complete', (event) => event.actor === candidate && event.tool === tool.name)! })));
@@ -293,9 +352,9 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
     { event: find('cold_io.resume')!, title: 'cold-I/O resume', actor: 'main', y: lanes[3].y, kind: 'resume' },
   ];
   const pointEvents = [...sourcePoints.map((point) => point.event), ...claimPoints.map((point) => point.event), ...branchPoints.map((point) => point.event)];
-  const [selectedID, setSelectedID] = useState(requestSpans.find(Boolean)?.id ?? spans[0].id);
+  const [selectedID, setSelectedID] = useState<string | null>(null);
   const selectedSpan = spans.find((span) => span.id === selectedID);
-  const selectedEvent = pointEvents.find((event) => `event:${event.id}` === selectedID);
+  const selectedEvent = [...pointEvents, ...providerEvents].find((event) => `event:${event.id}` === selectedID);
   const selectEvent = (event: DebugEvent) => setSelectedID(`event:${event.id}`);
   const activate = (callback: () => void) => (keyEvent: ReactKeyboardEvent) => { if (keyEvent.key === 'Enter' || keyEvent.key === ' ') callback(); };
   useEffect(() => {
@@ -309,13 +368,9 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
     { event: find('branch.seal')!, label: 'branch decision', anchor: 'end' as const },
     { event: find('guest.start', (event) => event.actor === 'main')!, label: 'resume Main', anchor: 'start' as const },
   ];
-  const selectedTitle = selectedSpan?.title ?? selectedEvent?.type ?? 'operation';
-  const selectedActor = selectedSpan?.actor ?? selectedEvent?.actor ?? 'host';
-  const selectedTime = selectedSpan ? `+${seconds(selectedSpan.start.atNS!)} → +${seconds(selectedSpan.end.atNS!)}` : selectedEvent?.atNS !== undefined ? `+${seconds(selectedEvent.atNS)}` : 'recorded';
-  const selectedDetail = selectedSpan?.note ?? logicalID(selectedEvent!) ?? selectedEvent?.label ?? '';
-  const selectedTool = selectedSpan?.tool ?? selectedEvent?.tool;
   return <section className="lane-map" aria-label="Semantic causal lane timeline">
-    <header><div><span className="eyebrow">Operation and transition map</span><h2>Main orchestration, fan-out, and convergence</h2><p>Main first arranges the candidate fan-out; the dashed launch marker is a pre-trace orchestration boundary, not a timed Guest span. Its arrows land on the first recorded work in Brighton and Oxford. Evidence-backed generation, request, Guest, branch, and resume spans follow.</p></div><div className="lane-legend"><span className="legend-control">pre-trace boundary</span><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
+    <header><div><span className="eyebrow">Operation and transition map</span><h2>Main orchestration, fan-out, and convergence</h2><p>Main first arranges the candidate fan-out; the dashed launch marker is a pre-trace orchestration boundary, not a timed Guest span. The selected workspace bar is serial: seal → export → import → bind.</p></div><div className="lane-legend"><span className="legend-control">pre-trace boundary</span><span className="legend-source">generation span</span><span className="legend-start">request span</span><span className="legend-qualified">fan-out</span><span className="legend-finish">claim / reuse</span><span className="legend-guest">Guest / capsule</span></div></header>
+    <nav className="provider-call-strip" aria-label="Projected model calls">{providerEvents.map((event) => <button aria-pressed={`event:${event.id}` === selectedID} key={event.id} onClick={() => selectEvent(event)} type="button"><span><Icon name="model" />{event.label}</span><strong>{actorLabel(event.actor)}</strong><small>{event.type.replace('model.', '')}</small></button>)}</nav>
     <div className="lane-map-viewport"><div aria-hidden="true" className="lane-mobile-labels">{lanes.map((lane) => <span key={lane.id} style={{ top: `${lane.y / height * 100}%` }}><strong>{lane.label}</strong><small>{lane.note}</small></span>)}</div><div className="lane-map-scroll" ref={laneScrollRef}><svg aria-label="Brighton, Oxford, Host, and Main operation lanes" className="lane-map-svg semantic-map-svg" role="img" viewBox={`0 0 ${width} ${height}`}>
       <defs><marker id="lane-arrow" markerHeight="5" markerWidth="6" orient="auto" refX="5" refY="2.5"><path d="M0 0 6 2.5 0 5z" /></marker></defs>
       {stages.map(({ event, label, anchor }) => <g className="lane-milestone" key={label}><line x1={xFor(event)} x2={xFor(event)} y1="34" y2={height - 24} /><text textAnchor={anchor} x={xFor(event) + (anchor === 'end' ? -4 : 4)} y="24">{label}</text></g>)}
@@ -333,14 +388,13 @@ function CausalLaneMap({ snapshot }: { snapshot: UnifiedSnapshot }) {
       {claimPoints.map((claim) => { const request = requestSpans.find((span) => span?.id === `request:${claim.candidate}:${claim.tool.id}`)!; return <path className={`lane-transition lane-reuse ${claim.candidate}`} d={path(request.end, request.y, claim.event, lanes.find((lane) => lane.id === claim.candidate)!.y + 20)} key={`reuse:${claim.candidate}:${claim.tool.id}`} markerEnd="url(#lane-arrow)" />; })}
       {candidates.map((candidate) => { const logical = find('function.logical', (event) => event.actor === candidate)!; return <path className={`lane-transition lane-fanout ${candidate}`} d={path(logical, lanes.find((lane) => lane.id === candidate)!.y, originSpan!.start, originSpan!.y)} key={`origin:${candidate}`} markerEnd="url(#lane-arrow)" />; })}
       {branchPoints.slice(0, 2).map((point) => { const end = find('guest.end', (event) => event.actor === point.actor)!; return <path className={`lane-transition branch-${point.kind}`} d={path(end, point.y, point.event, point.y)} key={point.kind} markerEnd="url(#lane-arrow)" />; })}
-      <path className="lane-transition lane-resume" d={path(branchPoints[1].event, branchPoints[1].y, capsuleSpan!.start, capsuleSpan!.y)} markerEnd="url(#lane-arrow)" />
       <path className="lane-transition lane-resume" d={path(capsuleSpan!.end, capsuleSpan!.y, mainSpan!.start, mainSpan!.y)} markerEnd="url(#lane-arrow)" />
       {spans.map((span) => { const x = xFor(span.start), end = xFor(span.end), spanWidth = Math.max(8, end - x); const selected = selectedID === span.id; const choose = () => setSelectedID(span.id); return <g aria-label={`${span.title} · ${span.actor} · start to finish`} className={`lane-span span-${span.kind} ${selected ? 'selected' : ''}`} key={span.id} onClick={choose} onKeyDown={activate(choose)} role="button" tabIndex={0}><title>{span.title} · +{seconds(span.start.atNS!)} → +{seconds(span.end.atNS!)}</title><rect height="10" rx="5" width={spanWidth} x={x} y={span.y - 5} /><circle cx={x} cy={span.y} r="4" /><circle cx={end} cy={span.y} r="4" /><text x={x + 4} y={span.y - 9}>{span.title}</text></g>; })}
       {sourcePoints.map((point) => { const y = lanes.find((lane) => lane.id === point.candidate)!.y - 18; return <g aria-label={`${point.tool.name} source closes · ${point.candidate}`} className="lane-point point-source" key={`source:${point.candidate}:${point.tool.id}`} onClick={() => selectEvent(point.event)} onKeyDown={activate(() => selectEvent(point.event))} role="button" tabIndex={0} transform={`translate(${xFor(point.event)} ${y})`}><circle r="6" /><text textAnchor="middle" y="2.5">{point.tool.short}</text></g>; })}
       {claimPoints.map((point) => { const y = lanes.find((lane) => lane.id === point.candidate)!.y + 20; return <g aria-label={`${point.tool.name} exact claim · ${point.candidate}`} className="lane-point point-claim" key={`claim:${point.candidate}:${point.tool.id}`} onClick={() => selectEvent(point.event)} onKeyDown={activate(() => selectEvent(point.event))} role="button" tabIndex={0} transform={`translate(${xFor(point.event)} ${y})`}><path d="M0 -6 6 0 0 6 -6 0z" /><title>{point.tool.name} exact staged claim</title></g>; })}
       {branchPoints.map((point) => <g aria-label={`${point.title} · ${point.actor}`} className={`lane-point point-${point.kind}`} key={point.kind} onClick={() => selectEvent(point.event)} onKeyDown={activate(() => selectEvent(point.event))} role="button" tabIndex={0} transform={`translate(${xFor(point.event)} ${point.y})`}><circle r="6" /><text x="9" y="3">{point.title}</text></g>)}
     </svg></div></div>
-    <div className="lane-selection"><span className="event-kind kind-request"><Icon name={selectedSpan?.kind === 'guest' || selectedSpan?.kind === 'workspace' ? 'workspace' : selectedSpan?.kind === 'source' ? 'source' : 'request'} /></span><div><small>{selectedSpan ? 'selected span' : 'selected transition'} · {actorLabel(selectedActor)} · {selectedTime}</small><strong>{selectedTitle}</strong></div>{selectedTool && <code>{selectedTool}</code>}<code>{selectedDetail}</code></div>
+    <TimelineInspector event={selectedEvent} span={selectedSpan} />
   </section>;
 }
 
@@ -382,12 +436,11 @@ function TraceWorkbench({ groups, initialFilters, timeline = false }: { groups: 
   </>;
 }
 
-export function MechanismsView({ snapshot, debug }: { snapshot: UnifiedSnapshot; debug: ProviderDebug }) {
-  const groups = useMemo(() => buildGroups(snapshot, debug), [snapshot, debug]);
+export function MechanismsView({ snapshot, provider }: { snapshot: UnifiedSnapshot; provider: ProviderSummary }) {
+  const groups = useMemo(() => buildGroups(snapshot, provider), [snapshot, provider]);
   return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><TraceWorkbench groups={groups} initialFilters={['code-tools']} /></div>;
 }
 
-export function TimelineView({ snapshot, debug }: { snapshot: UnifiedSnapshot; debug: ProviderDebug }) {
-  const groups = useMemo(() => buildGroups(snapshot, debug), [snapshot, debug]);
-  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><CausalLaneMap snapshot={snapshot} /><TraceWorkbench groups={groups} initialFilters={[]} timeline /></div>;
+export function TimelineView({ snapshot, provider }: { snapshot: UnifiedSnapshot; provider: ProviderSummary }) {
+  return <div className="unified-shell debug-shell"><CompactSummary snapshot={snapshot} /><CausalLaneMap provider={provider} snapshot={snapshot} /></div>;
 }

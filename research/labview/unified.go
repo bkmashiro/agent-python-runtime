@@ -19,8 +19,8 @@ const UnifiedSnapshotSchema = "pysolate.lab-unified-campaign.v3"
 
 const (
 	expectedCampaignID     = "day-trip-unified-v2"
-	expectedEvidenceSHA256 = "sha256:86ac9b773b930f514e3e18039d1091d96555506a2d2e71bfeec11fb88c018a58"
-	expectedSourceCommit   = "9e7535c9ca084dc05b00345af3291f49afb13b21"
+	expectedEvidenceSHA256 = "sha256:bd758ac77b67acbe85845a25cdc9c608e95463293be8e2c7d17283b2ccedfab9"
+	expectedSourceCommit   = "46ecc4ecc9ab8bb804312054be566b463f8d9bcd"
 	expectedArtifactSHA256 = "sha256:815f529d8c0cae18fac3730e6ffc6fe7e817fc5a01df69d709601b68d090559a"
 	expectedFixtureSHA256  = "sha256:07ee8df0c2dac355229b569e1033ac5b4884e6b3fa7109ffd1f9254fa70a0ab2"
 )

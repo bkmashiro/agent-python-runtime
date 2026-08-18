@@ -9,19 +9,20 @@ test('opens directly on the mechanism debugger with dense run context', async ({
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
 });
 
-test('groups the complete provider and runtime trace and reuses one inspector', async ({ page }) => {
+test('uses a processed provider projection without raw reasoning or request metadata', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Timeline' }).click();
+  await page.getByRole('button', { name: /^Code \+ tool calls/ }).click();
   await page.getByRole('button', { name: /^Model generation/ }).click();
   await expect(page.getByRole('heading', { name: 'Model generation' })).toBeVisible();
   await expect(page.getByText('brighton', { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: /model.output/ }).first().click();
+  await page.getByRole('button', { name: /model\.candidate-generation/ }).first().click();
   await page.getByRole('button', { name: 'Input / output' }).click();
-  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('deepseek-v4-flash');
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('required_tool_calls');
   await page.getByRole('button', { name: 'Python', exact: true }).click();
   await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('travel.weather("brighton")');
   await page.getByRole('button', { name: 'Raw event' }).click();
-  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toContainText('reasoning_content');
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).not.toContainText('reasoning_content');
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).not.toContainText('request_id');
 });
 
 test('uses projector-owned event groups without silently truncating records', async ({ page }) => {
@@ -76,7 +77,7 @@ test('binds semantic qualification to the triggering source prefix', async ({ pa
   await expect(inspector).not.toContainText('rail = travel.rail("oxford"');
 });
 
-test('renders the complete role-lane timeline and retains the evidence workbench', async ({ page }) => {
+test('renders the role-lane timeline with a focused model and tool inspector', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Timeline' }).click();
   const map = page.getByRole('region', { name: 'Semantic causal lane timeline' });
@@ -87,19 +88,30 @@ test('renders the complete role-lane timeline and retains the evidence workbench
   await expect(map.locator('.span-request rect')).toHaveCount(6);
   await expect(map.locator('.span-request circle')).toHaveCount(12);
   await expect(map.locator('.lane-node')).toHaveCount(0);
-  await expect(map.locator('.lane-transition')).toHaveCount(20);
+  await expect(map.locator('.lane-transition')).toHaveCount(19);
   await expect(map.locator('.lane-reuse')).toHaveCount(6);
   await expect(map.locator('.lane-orchestration')).toHaveCount(1);
   await expect(map.locator('.lane-orchestration-link')).toHaveCount(2);
   await expect(map).toContainText('orchestrates fan-out');
   await expect(map).toContainText('before first recorded event');
+  await expect(map).toContainText('seal → export → import → bind');
+  await expect(page.getByRole('navigation', { name: 'Evidence filters' })).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toHaveCount(0);
+  const focused = page.getByRole('complementary', { name: 'Selected timeline operation' });
+  await expect(focused).toContainText('Select one operation');
+  await page.getByRole('button', { name: /M01.*brighton.*candidate-generation/i }).click();
+  await expect(focused).toContainText('Processed thinking summary');
+  await expect(focused).toContainText('raw reasoning omitted');
+  await expect(focused).not.toContainText('reasoning_content');
+  await expect(focused.locator('.syntax-key')).not.toHaveCount(0);
+  await expect(focused.locator('.syntax-string')).not.toHaveCount(0);
   const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, laneScroll: (document.querySelector('.lane-map-scroll') as HTMLElement)?.scrollLeft ?? 0 }));
   expect(layout.document).toBeLessThanOrEqual(layout.viewport);
   if (layout.viewport <= 620) expect(layout.laneScroll).toBe(0);
   await map.locator('.span-request').first().press('Enter');
-  await expect(map.locator('.lane-selection')).toContainText('physical request start → finish');
-  await expect(page.getByRole('navigation', { name: 'Evidence filters' })).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'Execution event inspector' })).toBeVisible();
+  await expect(focused).toContainText('typed input → typed output');
+  await expect(focused).toContainText('Tool input');
+  await expect(focused).toContainText('Tool output');
 });
 
 test('supports collapsible trace branches and Chrome-style filtering without stale inspection', async ({ page }) => {
@@ -117,9 +129,8 @@ test('supports collapsible trace branches and Chrome-style filtering without sta
   await expect(page.locator('.event-row-button')).toHaveCount(7);
 });
 
-test('switching groups resets the selected raw event to that group', async ({ page }) => {
+test('switching mechanism groups resets the selected event to that group', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Timeline' }).click();
   await page.getByRole('button', { name: /Select, seal, and resume/ }).click();
   const first = page.locator('.debug-event-tree .event-row-button').first();
   await expect(first).toHaveClass(/active/);

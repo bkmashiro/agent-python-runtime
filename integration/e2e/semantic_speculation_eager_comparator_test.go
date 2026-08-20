@@ -146,7 +146,7 @@ func eagerComparatorCapabilityPlan(t *testing.T, handler capability.Handler) *ca
 	}
 	registry := capability.NewRegistry()
 	spec := capability.Spec{
-		Name: "fixture.eager-time", Version: "fixture.eager-time.v1", Description: "Comparator external read.",
+		Name: "fixture.eager_time", Version: "fixture.eager-time.v1", Description: "Comparator external read.",
 		EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly,
 		ReadOnly: true, Idempotent: true, HandlerIdentity: "fixture-eager-time-handler-v1",
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),

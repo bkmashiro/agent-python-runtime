@@ -33,6 +33,14 @@ The last three bullets are explicit comparator choices needed for a matched dete
 
 Every `eager_style_gate` trial must bind the contract identity. Other treatments must leave the comparator-contract field empty.
 
+## Verified research adapter
+
+The comparator is implemented in `guest/bootstrap/agent_runtime/eager_comparator.py` and is reachable only through research prepare fragments from `research/semanticspeculation`. Normal whole-file execution, streaming execution and `semantic_pre_dispatch` do not import or activate it.
+
+Each trial retains one module-private comparator session across fresh trusted-prepare namespaces. Agent-visible globals are filtered to public Host-prepared projections plus canonical inputs; private trusted globals are not copied. Imports use an explicit sorted Host allowlist, with `__future__` admitted solely for compiler semantics. Prefix runtime failures are frozen while the source schedule continues; `finish` emits a body-free terminal class and never an exception message or source body.
+
+Exact CPython 3.14 WASI verification at source `3e92cb4a0b3f9e9945a1d63933d3e8b6b93896ad` used artifact `sha256:12dbb89ec0d9ae1510c990539ab9316c0f4ab979f8d15d4320973ff4f3fcfb54`. Four exact-Guest rows covered one-token lookahead with a persistent namespace, denied-name sealing until final source, invalid final suffix after an executed prefix, and frozen runtime failure without message-body disclosure. This establishes comparator mechanics, not matched timing.
+
 ## Claim boundary
 
 This contract supports a fair local `eager_style_gate` implementation and matched timing study. It does not reproduce the authors' unpublished runtime source, claim identical chunk schedules on their benchmark corpus, or turn persistent-interpreter semantics into a Pysolate production feature.

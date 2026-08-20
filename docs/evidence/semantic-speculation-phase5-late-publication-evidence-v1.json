@@ -1,0 +1,60 @@
+{
+  "artifact": {
+    "archive": "/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-selection-fa5dd83/dist/",
+    "manifest_sha256": "ad1affb32a14f0feababcf5c3c6fd614aa699ac71a97b9ec44278bdf6098ad9c",
+    "wasm_sha256": "621f5fcec3f4bc7fc3550aa8fd1a275e7a6c09017518f535395c5bae84a297cb"
+  },
+  "authority": {
+    "broker_available": false,
+    "capsule_published_by_host": true,
+    "execution_authority_added": false,
+    "generic_result_transport_added": false,
+    "workspace_mounted": false
+  },
+  "contract": {
+    "closed_table_publish": "rejected",
+    "empty_table_can_be_bound_after_capacity_provision": true,
+    "invalid_decision_or_capsule": "rejected",
+    "late_publish_replaces_existing_ready_state": false,
+    "publish_after_consumption_or_discard": "rejected",
+    "published_capsule_claims": 1,
+    "republish": "rejected",
+    "schema": "pysolate.prepared-region-table-evidence.v1"
+  },
+  "exact_guest": {
+    "controls": [
+      "final Engine and its never-served capacity are created against an empty run-private table",
+      "capacity provisioning does not create or consume a table entry",
+      "Host publishes the exact decision-bound capsule only after capacity is ready",
+      "final Guest validates the sealed selection and claims the capsule exactly once",
+      "baseline and derived canonical result remain 42",
+      "no original fallback or replay"
+    ],
+    "linux_gpu31": {
+      "final_capacity": "private COW required and observed",
+      "late_publication_and_final_execution": "PASS (21.85s)",
+      "test_binary_sha256": "08a9904f531f4dec40e1a099a2ab25c7cb79efd4cd088c9f79ba1dd807eed8d3"
+    },
+    "macos": {
+      "final_capacity": "single-use PreparedRuntime ready before publication",
+      "late_publication_and_final_execution": "PASS (13.93s)"
+    },
+    "result": "42"
+  },
+  "gates": {
+    "late_capsule_publication": true,
+    "phase5_gate_passed": false,
+    "preprovisioned_final_capacity": true,
+    "timing_campaign_started": false
+  },
+  "next": "Implement the Exact Guest Phase5CoordinateOperations adapter over separate analyzer, scratch, and final Engines, then exercise only the excluded pilot before sealing the final harness identity.",
+  "recorded_at": "2026-08-20",
+  "schema_version": "pysolate.semantic-speculation-phase5-late-publication-evidence.v1",
+  "source": {
+    "commit": "e7e4be585ac8418627dff6243b9c4f9ccbfbf886",
+    "phase3_negative_baseline_modified": false,
+    "phase4_frozen_evidence_modified": false,
+    "pysolate_thesis_modified": false,
+    "repository": "agent-python-runtime"
+  }
+}

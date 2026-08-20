@@ -108,4 +108,12 @@ func TestExactGuestMatchedPureLocalCampaignSealsThreeAchievedLanes(t *testing.T)
 	if err != nil || decoded.Identity != evidence.Identity || decoded.ProductionGeneralization || !decoded.OracleAnalysisOnly {
 		t.Fatalf("evidence=%+v decoded=%+v err=%v", evidence, decoded, err)
 	}
+	evidenceRoot := t.TempDir()
+	if err := os.Chmod(evidenceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ref, err := semanticspeculation.WriteMatchedCaseEvidenceFile(evidenceRoot, evidence)
+	if err != nil || ref.Identity != evidence.Identity || ref.CaseID != "pure_local" || ref.TrialIndex != 1 {
+		t.Fatalf("ref=%+v err=%v", ref, err)
+	}
 }

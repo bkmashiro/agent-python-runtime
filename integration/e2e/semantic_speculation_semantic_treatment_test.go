@@ -110,3 +110,46 @@ func TestExactGuestScheduledSemanticPreDispatchProjectsRuntimeFailureAfterConsum
 		t.Fatalf("result=%+v physical=%d", result, physical.Load())
 	}
 }
+
+func TestExactGuestScheduledSemanticPreDispatchRejectsFinalSyntaxBeforePythonAndLogicalCall(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSHA := testDigestBytes(artifact)
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: testDigest("phase3-semantic-manifest"),
+		ImportRoots: []string{"json"}, QualifiedImportRoots: []string{"json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var physical atomic.Uint32
+	plan := eagerComparatorCapabilityPlan(t, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"value":"weather"}`), nil
+	}))
+	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.ExecutionProfile = &profile
+	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
+		Artifact: artifact, RunConfig: runConfig, Plan: plan,
+		ImportClosureSHA256: testDigest("phase3-semantic-imports"), PhysicalReadBudget: 1,
+		RunID: "phase3-semantic-syntax", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "phase3-semantic-syntax",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := semanticspeculation.RunScheduledTreatment(context.Background(), semanticspeculation.Phase3SyntheticCases()[4], treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome.FinalProgramOutcome != "syntax_error" || result.Outcome.FinalPythonStarted || result.Outcome.ErrorClass != "syntax_error" ||
+		result.Outcome.LogicalCalls != 0 || result.Outcome.AuthorityDisposition != "unchanged" ||
+		result.Outcome.WorkspaceDisposition != "discarded" || result.Outcome.PhysicalDispositions.Consumed != 0 {
+		t.Fatalf("result=%+v physical=%d", result, physical.Load())
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -50,6 +51,7 @@ type SemanticPreDispatchTreatment struct {
 	manager    *workspace.Manager
 	attempt    *workspace.Attempt
 	broker     *capability.Broker
+	source     strings.Builder
 	chunks     chan string
 	generated  chan semanticGenerationResult
 	begun      bool
@@ -181,6 +183,7 @@ func (t *SemanticPreDispatchTreatment) ObserveChunk(ctx context.Context, chunk s
 	}
 	select {
 	case t.chunks <- chunk:
+		t.source.WriteString(chunk)
 		return nil
 	case result := <-t.generated:
 		t.generated <- result
@@ -206,8 +209,13 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		_ = t.attempt.Discard()
 		_ = t.manager.Close()
 		_ = t.analyzer.Close(ctx)
-		if errors.Is(generation.err, runtimeconfig.ErrAgentSourceInvalid) {
-			return TreatmentOutcome{FinalProgramOutcome: "syntax_error", ErrorClass: "syntax_error", AuthorityDisposition: "unchanged", WorkspaceDisposition: "discarded", PhysicalAttempts: t.controller.Snapshot().PhysicalIssues, PhysicalDispositions: controllerDispositions(t.controller.Snapshot())}, nil
+		if errors.Is(generation.err, runtimeconfig.ErrAgentSourceInvalid) || errors.Is(generation.err, semantic.ErrInvalidAnalysis) && t.exactSourceInvalid(ctx) {
+			snapshot := t.controller.Snapshot()
+			return TreatmentOutcome{
+				FinalProgramOutcome: "syntax_error", ErrorClass: "syntax_error", AuthorityDisposition: "unchanged", WorkspaceDisposition: "discarded",
+				PhysicalAttempts: snapshot.PhysicalIssues, PhysicalResultBytes: snapshot.PhysicalResultBytes, ProviderCostUnits: snapshot.ProviderCostUnits,
+				ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: controllerDispositions(snapshot),
+			}, nil
 		}
 		return TreatmentOutcome{}, generation.err
 	}
@@ -266,6 +274,26 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest status")
 	}
 	return outcome, nil
+}
+
+// exactSourceInvalid confirms an analyzer decode failure with the exact target
+// Guest parser. The probe has no Broker or workspace mount, so valid source can
+// perform no authority-bearing effect; only ErrAgentSourceInvalid is admitted as
+// a syntax outcome.
+func (t *SemanticPreDispatchTreatment) exactSourceInvalid(ctx context.Context) bool {
+	config := t.config.RunConfig
+	config.Mechanisms = runtimeconfig.MechanismSet{}
+	probe, err := wazeroengine.New(ctx, t.config.Artifact, config)
+	if err != nil {
+		return false
+	}
+	defer probe.Close(ctx)
+	request, err := json.Marshal(runtimeconfig.RunRequest{RunID: t.config.RunID + "-syntax-probe", Code: t.source.String(), Inputs: t.inputs})
+	if err != nil {
+		return false
+	}
+	_, err = probe.Run(ctx, request, "")
+	return errors.Is(err, runtimeconfig.ErrAgentSourceInvalid)
 }
 
 func controllerDispositions(snapshot semantic.StreamingPreDispatchSnapshot) PhysicalDispositions {

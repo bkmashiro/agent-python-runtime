@@ -68,6 +68,16 @@ func TestExactGuestPhase5OriginalOperationsExcludedPilot(t *testing.T) {
 	if derivedSnapshot.AnalyzerSessionCount != 1 || derivedSnapshot.AnalyzerRuntimeInitCount != 1 || derivedSnapshot.ScratchRuntimeInitCount != 1 || derivedSnapshot.FinalRuntimeInitCount != 1 || derivedSnapshot.ScratchGuestExecutions != 0 || derivedSnapshot.FormalGuestExecutions != 0 {
 		t.Fatalf("derived capacities were served during provisioning: %+v", derivedSnapshot)
 	}
+	if err := derived.Analyze(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if err := derived.Analyze(ctx, input); err == nil {
+		t.Fatal("derived analyzer accepted a second request")
+	}
+	derivedSnapshot = derived.Snapshot()
+	if derivedSnapshot.ScratchGuestExecutions != 0 || derivedSnapshot.FormalGuestExecutions != 0 || derivedSnapshot.HelperClaimCount != 0 {
+		t.Fatalf("analysis executed source or consumed downstream capacity: %+v", derivedSnapshot)
+	}
 	if err := derived.Teardown(ctx); err != nil {
 		t.Fatal(err)
 	}

@@ -11,8 +11,10 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
 var ErrPhase5DerivedOperationsUnavailable = errors.New("phase 5 derived Exact Guest operations are not yet provisioned")
@@ -33,6 +35,9 @@ type Phase5ExactGuestOperations struct {
 	scratchCapacity *wazeroengine.PreparedRegionScratchCapacity
 	preparedTable   *preparedregion.PreparedRegionTable
 	derivedMode     bool
+	analysis        *semantic.Analysis
+	candidate       *semantic.CandidateRegion
+	analysisSHA256  string
 	request         []byte
 	snapshot        Phase5ExecutionSnapshot
 	teardown        bool
@@ -193,8 +198,49 @@ func (operations *Phase5ExactGuestOperations) BeginFinalizationGap(ctx context.C
 	return &phase5TimerGap{done: time.After(duration)}, nil
 }
 
-func (operations *Phase5ExactGuestOperations) Analyze(context.Context, Phase5ExecutionInput) error {
-	return ErrPhase5DerivedOperationsUnavailable
+func (operations *Phase5ExactGuestOperations) Analyze(ctx context.Context, input Phase5ExecutionInput) error {
+	if operations == nil || ctx == nil || input.Source == "" || input.OutputName == "" {
+		return errors.New("invalid phase 5 analysis input")
+	}
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if operations.teardown || !operations.derivedMode || operations.analyzerSession == nil || operations.scratchCapacity == nil || operations.finalCapacity == nil || operations.analysis != nil {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	artifactSHA256 := phase5Digest(operations.artifact)
+	profileSHA256 := operations.analyzerEngine.Properties().ExecutionProfileBindingSHA256
+	request, err := semantic.NewRequest(input.Source, semantic.Bindings{
+		ArtifactSHA256:         artifactSHA256,
+		ExecutionProfileSHA256: profileSHA256,
+		ImportClosureSHA256:    agentfunction.ImportClosureIdentity([]string{}, []string{}),
+		CapabilityPlanSHA256:   phase5Digest([]byte("pysolate.phase5.empty-capability-plan.v1")),
+	}, nil)
+	if err != nil {
+		return err
+	}
+	verified, err := semantic.AnalyzeVerifiedSession(ctx, operations.analyzerSession, request)
+	if err != nil {
+		return err
+	}
+	analysis, err := verified.Analysis()
+	if err != nil {
+		return err
+	}
+	if int(input.FocusRegionIndex) >= len(analysis.CandidateRegions) {
+		return errors.New("phase 5 focus region is unavailable")
+	}
+	candidate := analysis.CandidateRegions[input.FocusRegionIndex]
+	if !candidate.LocallyReusable() || len(candidate.LiveOuts) != 1 || candidate.LiveOuts[0] != input.OutputName {
+		return errors.New("phase 5 focus region is not an exact scalar candidate")
+	}
+	analysisSHA256, _, err := analysis.Identity()
+	if err != nil {
+		return err
+	}
+	operations.analysis = &analysis
+	operations.candidate = &candidate
+	operations.analysisSHA256 = analysisSHA256
+	return nil
 }
 func (operations *Phase5ExactGuestOperations) EmitPatch(context.Context, Phase5ExecutionInput) error {
 	return ErrPhase5DerivedOperationsUnavailable

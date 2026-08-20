@@ -48,6 +48,7 @@ type report struct {
 	SchemaVersion           string          `json:"schema_version"`
 	StructuralCasesPassed   uint32          `json:"structural_cases_passed"`
 	StudyID                 string          `json:"study_id"`
+	SupersedesSHA256        string          `json:"supersedes_sha256,omitempty"`
 	Trials                  []trialEvidence `json:"trials"`
 }
 
@@ -126,7 +127,10 @@ func main() {
 	}
 	defer costRunner.Close(context.Background())
 	coordinates := []coordinate{}
-	for caseIndex := range programs {
+	for caseIndex := range matrix.Cases {
+		if _, ok := programs[caseIndex]; !ok {
+			continue
+		}
 		for trial := uint32(0); trial < 5; trial++ {
 			coordinates = append(coordinates, coordinate{caseIndex, trial})
 		}
@@ -168,7 +172,17 @@ func main() {
 	}
 	sort.Slice(positive, func(i, j int) bool { return positive[i].OperatorCount < positive[j].OperatorCount })
 	gate = len(positive) == 3 && positive[0].MedianConstructedRegionExecutionNanos < positive[1].MedianConstructedRegionExecutionNanos && positive[1].MedianConstructedRegionExecutionNanos < positive[2].MedianConstructedRegionExecutionNanos
-	value := report{artifactSHA, map[string]any{"broker_available": false, "fresh_guest_per_trial": true, "whole_source_scope": "authority_free_constructed_dependency_closure_plus_exact_focus", "workspace_mounted": false}, summaries, semanticspeculation.Phase4RegionMatrixIdentity, *measurementSourceCommit, gate, semanticspeculation.Phase4RegionPreregistrationIdentity, "pysolate.semantic-speculation-phase4-region-cost-evidence.v1", uint32(len(matrix.Cases)), semanticspeculation.Phase4RegionStudyID, trials}
+	value := report{
+		AnalyzerArtifactSHA256: artifactSHA,
+		Authority:              map[string]any{"broker_available": false, "fresh_guest_per_trial": true, "whole_source_scope": "authority_free_constructed_dependency_closure_plus_exact_focus", "workspace_mounted": false},
+		CaseSummaries:          summaries, MatrixIdentity: semanticspeculation.Phase4RegionMatrixIdentity,
+		MeasurementSourceCommit: *measurementSourceCommit, OpportunityGatePassed: gate,
+		PreregistrationIdentity: semanticspeculation.Phase4RegionPreregistrationIdentity,
+		SchemaVersion:           "pysolate.semantic-speculation-phase4-region-cost-evidence.v2",
+		StructuralCasesPassed:   uint32(len(matrix.Cases)), StudyID: semanticspeculation.Phase4RegionStudyID,
+		SupersedesSHA256: "sha256:9efab34298523f81ff1294c2199f3154792345bcc456fcca72657ff15e420083",
+		Trials:           trials,
+	}
 	encoded, _ := json.Marshal(value)
 	encoded = append(encoded, '\n')
 	output, err := os.OpenFile(*outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)

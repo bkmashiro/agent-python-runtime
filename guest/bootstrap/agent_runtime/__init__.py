@@ -41,6 +41,8 @@ _WRAPPER_GLOBALS = "_pysolate_module_globals"
 _STDOUT_MAX_BYTES = 64 * 1024
 _STDOUT_MAX_LINES = 256
 _STDOUT_TRUNCATION_MARKER = "[pysolate stdout truncated]"
+_PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
+_PREPARED_REGION_PAYLOAD_MAX = 256
 _FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
 
 
@@ -772,6 +774,29 @@ def _encode(response: dict[str, Any]) -> str:
         )
 
 
+def _materialize_prepared_region(decision: str) -> bool | int:
+    if (
+        not isinstance(decision, str)
+        or len(decision) != 71
+        or not decision.startswith("sha256:")
+        or any(character not in "0123456789abcdef" for character in decision[7:])
+    ):
+        raise RuntimeError("prepared region decision identity is invalid")
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    raw = _agent_runtime_host.materialize_value(decision)
+    if not isinstance(raw, str) or not raw or len(raw.encode("utf-8")) > _PREPARED_REGION_PAYLOAD_MAX:
+        raise RuntimeError("prepared region payload is invalid")
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("prepared region payload is invalid") from exc
+    if type(value) not in (bool, int) or (type(value) is int and not -(2**63) <= value < 2**63):
+        raise RuntimeError("prepared region payload type is unsupported")
+    if json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False) != raw:
+        raise RuntimeError("prepared region payload is not canonical")
+    return value
+
+
 def _execute(request_json: str) -> str:
     if not isinstance(request_json, str):
         return _encode(_error("invalid_request", "request_json must be a string"))
@@ -817,6 +842,7 @@ def _execute(request_json: str) -> str:
         sys.stdout = capture
         sys.__stdout__ = capture
         exec(code, namespace, namespace)
+        namespace[_PREPARED_REGION_HELPER] = _materialize_prepared_region
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):
             raise RuntimeError("agent output wrapper is unavailable")

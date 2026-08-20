@@ -51,6 +51,7 @@ class ArtifactVerifierTests(unittest.TestCase):
                 "imports": [
                     {"module": "wasi_snapshot_preview1", "name": "fd_write"},
                     {"module": "agent_runtime_v1", "name": "host_call"},
+                    {"module": "agent_runtime_v1", "name": "materialize_value"},
                 ],
                 "exports": [
                     "_initialize",
@@ -90,6 +91,12 @@ class ArtifactVerifierTests(unittest.TestCase):
         manifest = copy.deepcopy(self.manifest)
         manifest["wasm"]["imports"].append({"module": "agent_runtime_v1", "name": "raw_socket"})
         with self.assertRaisesRegex(ValueError, "forbidden import"):
+            self.verifier.verify(self.artifact, manifest)
+
+    def test_rejects_missing_prepared_region_import(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["wasm"]["imports"] = [row for row in manifest["wasm"]["imports"] if row["name"] != "materialize_value"]
+        with self.assertRaisesRegex(ValueError, "missing required import"):
             self.verifier.verify(self.artifact, manifest)
 
     def test_rejects_missing_required_export(self):

@@ -28,7 +28,10 @@ ALLOWED_SUPPORT_EXPORTS = {
     "wasi_vfs_pack_fs",
 }
 ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v1"}
-REQUIRED_CUSTOM_IMPORTS = {("agent_runtime_v1", "host_call")}
+REQUIRED_CUSTOM_IMPORTS = {
+    ("agent_runtime_v1", "host_call"),
+    ("agent_runtime_v1", "materialize_value"),
+}
 ARTIFACT_FILENAMES = {
     "base": "agent-python-runtime.wasm",
     "attrs-770": "agent-python-runtime-attrs-770.wasm",

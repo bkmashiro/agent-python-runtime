@@ -1,4 +1,4 @@
-package semantic
+package preparedregion
 
 import (
 	"bytes"
@@ -24,9 +24,22 @@ const (
 
 var (
 	ErrInvalidPreparedRegion = errors.New("invalid prepared region contract")
+	digestPattern            = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	pythonIdentifierPattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 	canonicalIntegerPattern  = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 )
+
+type SourceSpan struct {
+	StartLine   uint32 `json:"start_line"`
+	StartColumn uint32 `json:"start_column"`
+	EndLine     uint32 `json:"end_line"`
+	EndColumn   uint32 `json:"end_column"`
+}
+
+func (span SourceSpan) valid() bool {
+	return span.StartLine > 0 && span.EndLine >= span.StartLine &&
+		(span.EndLine != span.StartLine || span.EndColumn >= span.StartColumn)
+}
 
 type PreparedRegionBinding struct {
 	SourceSHA256           string     `json:"source_sha256"`

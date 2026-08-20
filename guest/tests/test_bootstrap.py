@@ -25,6 +25,8 @@ class BootstrapTests(unittest.TestCase):
         native_stub = types.ModuleType("_agent_runtime_host")
         native_stub.seal_imports = lambda names: None  # type: ignore[attr-defined]
         native_stub.import_receipts = lambda: []  # type: ignore[attr-defined]
+        native_stub.materialize_value = lambda decision: (_ for _ in ()).throw(RuntimeError("prepared region unavailable"))  # type: ignore[attr-defined]
+        self.native_stub = native_stub
         sys.modules["_agent_runtime_host"] = native_stub
         self.runtime = load_bootstrap()
         self.runtime._initialize("{}")
@@ -50,6 +52,47 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual({"value": 3}, response["result"])
         self.assertEqual([], response["receipts"])
         self.assertIsNone(response["error"])
+
+    def test_prepared_region_helper_reconstructs_only_bool_or_int_from_native_claim(self):
+        decision = "sha256:" + "a" * 64
+        calls = []
+
+        def claim(value):
+            calls.append(value)
+            return "42"
+
+        self.native_stub.materialize_value = claim  # type: ignore[attr-defined]
+        response = self.execute(code=f'result = __pysolate_materialize_value__("{decision}")')
+        self.assertEqual("ok", response["status"])
+        self.assertEqual(42, response["result"])
+        self.assertEqual([decision], calls)
+
+        for payload in ("null", "1.5", '"value"', "[]", "{}"):
+            self.native_stub.materialize_value = lambda _decision, raw=payload: raw  # type: ignore[attr-defined]
+            rejected = self.execute(code=f'result = __pysolate_materialize_value__("{decision}")')
+            self.assertEqual("python_exception", rejected["error"]["code"])
+
+    def test_prepared_region_helper_fails_closed_on_invalid_or_second_claim(self):
+        decision = "sha256:" + "b" * 64
+        claims = 0
+
+        def claim(value):
+            nonlocal claims
+            self.assertEqual(decision, value)
+            claims += 1
+            if claims != 1:
+                raise RuntimeError("prepared region already consumed")
+            return "7"
+
+        self.native_stub.materialize_value = claim  # type: ignore[attr-defined]
+        response = self.execute(code=f'a = __pysolate_materialize_value__("{decision}")\nresult = a + __pysolate_materialize_value__("{decision}")')
+        self.assertEqual("python_exception", response["error"]["code"])
+        self.assertEqual(2, claims)
+        for invalid in ("", "a" * 64, "sha256:" + "g" * 64):
+            claims = 0
+            rejected = self.execute(code=f'result = __pysolate_materialize_value__({invalid!r})')
+            self.assertEqual("python_exception", rejected["error"]["code"])
+            self.assertEqual(0, claims)
 
     def test_streaming_session_uses_exact_guest_compiler_and_one_namespace(self):
         self.runtime._stream_begin({"value": 2})

@@ -21,6 +21,7 @@ import (
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
+	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	wazerort "github.com/tetratelabs/wazero"
@@ -38,6 +39,7 @@ type Factory struct {
 	WorkspaceManager *workspace.Manager
 	WorkspaceRef     workspace.Ref
 	WorkspaceOwner   string
+	PreparedRegions  *preparedregion.PreparedRegionTable
 }
 
 func (Factory) Name() string { return "wazero" }
@@ -72,7 +74,10 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.WorkspaceManager != nil {
 		binding = &workspaceBinding{manager: factory.WorkspaceManager, ref: factory.WorkspaceRef, owner: factory.WorkspaceOwner}
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding)
+	if factory.PreparedRegions != nil && (!config.Mechanisms.SemanticAnalysis || config.Mechanisms.Streaming) {
+		return nil, errors.New("prepared region table requires non-streaming semantic analysis")
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions)
 }
 
 var _ enginecontract.Factory = Factory{}
@@ -205,17 +210,18 @@ type Engine struct {
 	semanticClosing     bool
 	coldEvidence        coldEvidenceStore
 	semanticLifecycle   semanticAnalysisLifecycleStore
+	preparedRegions     *preparedregion.PreparedRegionTable
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil)
+	return newEngine(ctx, wasm, config, nil, nil, nil)
 }
 
 func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory BrokerFactory) (*Engine, error) {
-	return newEngine(ctx, wasm, config, factory, nil)
+	return newEngine(ctx, wasm, config, factory, nil, nil)
 }
 
-func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding) (*Engine, error) {
+func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
@@ -252,7 +258,7 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
 	engine := &Engine{
-		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceBinding: binding,
+		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceBinding: binding, preparedRegions: preparedRegions,
 		artifactSHA256: artifactSHA256,
 	}
 	if binding != nil {
@@ -469,7 +475,7 @@ func (engine *Engine) Close(ctx context.Context) error {
 	if engine.workspaceLease != nil {
 		workspaceErr = engine.workspaceLease.Release()
 	}
-	return errors.Join(preparedErr, runtimeErr, workspaceErr)
+	return errors.Join(preparedErr, runtimeErr, workspaceErr, engine.preparedRegions.Close())
 }
 
 func (engine *Engine) baseModuleConfig(stderr io.Writer, stdout io.Writer) wazerort.ModuleConfig {
@@ -741,6 +747,10 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	}
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
+	if engine.preparedRegions != nil {
+		runContext = context.WithValue(runContext, preparedRegionContextKey{}, engine.preparedRegions)
+		defer func() { runErr = errors.Join(runErr, engine.preparedRegions.Close()) }()
+	}
 	if engine.workspaceRun != nil {
 		select {
 		case engine.workspaceRun <- struct{}{}:
@@ -997,6 +1007,7 @@ prepareComplete:
 
 type brokerContextKey struct{}
 type streamingContextKey struct{}
+type preparedRegionContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
 
@@ -1005,8 +1016,33 @@ func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) er
 		NewFunctionBuilder().
 		WithFunc(hostCall).
 		Export("host_call").
+		NewFunctionBuilder().
+		WithFunc(hostMaterializeValue).
+		Export("materialize_value").
 		Instantiate(ctx)
 	return err
+}
+
+func hostMaterializeValue(ctx context.Context, module api.Module, decisionPointer uint32, decisionLength uint32, responsePointer uint32, responseCapacity uint32) int32 {
+	if decisionLength != 71 || responseCapacity == 0 || responseCapacity > preparedregion.PreparedRegionMaxPayloadBytes {
+		return -1
+	}
+	table, ok := ctx.Value(preparedRegionContextKey{}).(*preparedregion.PreparedRegionTable)
+	if !ok || table == nil {
+		return -1
+	}
+	decisionView, ok := module.Memory().Read(decisionPointer, decisionLength)
+	if !ok {
+		return -1
+	}
+	payload, err := table.Claim(string(decisionView))
+	if err != nil || len(payload) == 0 || len(payload) > int(responseCapacity) {
+		return -1
+	}
+	if !module.Memory().Write(responsePointer, payload) {
+		return -1
+	}
+	return int32(len(payload))
 }
 
 func hostCall(

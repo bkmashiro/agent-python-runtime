@@ -1,4 +1,4 @@
-package semantic
+package preparedregion
 
 import (
 	"encoding/json"

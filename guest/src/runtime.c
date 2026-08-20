@@ -16,6 +16,7 @@
 #define AGENT_RUNTIME_REQUEST_MAX (1024 * 1024)
 #define AGENT_RUNTIME_RESPONSE_MAX (1024 * 1024)
 #define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)
+#define AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX 256
 
 static uint8_t response_buffer[AGENT_RUNTIME_RESPONSE_MAX + 4];
 static PyObject *runtime_module = NULL;
@@ -135,6 +136,28 @@ static PyObject *python_host_call(PyObject *self, PyObject *args) {
     return result;
 }
 
+static PyObject *python_materialize_value(PyObject *self, PyObject *args) {
+    (void)self;
+    const char *decision = NULL;
+    Py_ssize_t decision_len = 0;
+    if (!PyArg_ParseTuple(args, "s#:materialize_value", &decision, &decision_len)) {
+        return NULL;
+    }
+    if (decision_len != 71) {
+        PyErr_SetString(PyExc_RuntimeError, "prepared region decision identity is invalid");
+        return NULL;
+    }
+    char response[AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX];
+    int32_t response_len = agent_runtime_materialize_value(
+        decision, (int32_t)decision_len, response,
+        AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX);
+    if (response_len <= 0 || response_len > AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX) {
+        PyErr_SetString(PyExc_RuntimeError, "Host prepared region claim failed");
+        return NULL;
+    }
+    return PyUnicode_DecodeUTF8(response, response_len, "strict");
+}
+
 static PyObject *python_seal_imports(PyObject *self, PyObject *names) {
     (void)self;
     if (import_policy_sealed) {
@@ -189,6 +212,7 @@ static PyObject *python_import_receipts(PyObject *self, PyObject *unused) {
 
 static PyMethodDef agent_runtime_host_methods[] = {
     {"call", python_host_call, METH_VARARGS, "Perform a bounded Host capability call."},
+    {"materialize_value", python_materialize_value, METH_VARARGS, "Claim one exact prepared scalar value."},
     {"seal_imports", python_seal_imports, METH_O, "Seal the exact per-Run import set."},
     {"import_receipts", python_import_receipts, METH_NOARGS, "Read bounded native import receipts."},
     {NULL, NULL, 0, NULL},

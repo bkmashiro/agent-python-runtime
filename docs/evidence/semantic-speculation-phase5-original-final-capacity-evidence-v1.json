@@ -1,0 +1,54 @@
+{
+  "artifact": {
+    "archive": "/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-selection-fa5dd83/dist/",
+    "manifest_sha256": "ad1affb32a14f0feababcf5c3c6fd614aa699ac71a97b9ec44278bdf6098ad9c",
+    "wasm_sha256": "621f5fcec3f4bc7fc3550aa8fd1a275e7a6c09017518f535395c5bae84a297cb"
+  },
+  "authority": {
+    "broker_available": false,
+    "generic_result_transport": false,
+    "materialisation_table_present_for_original": false,
+    "workspace_mounted": false
+  },
+  "evidence_schema_version": "pysolate.semantic-speculation-phase5-original-final-capacity-evidence.v1",
+  "exact_guest": {
+    "linux": {
+      "command": "AGENT_RUNTIME_GUEST=/tmp/ys25-p5-selection-fa5dd83/dist/agent-python-runtime.wasm /tmp/p5oc.test -test.v -test.run ^TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution$",
+      "formal_guest_executions": 1,
+      "private_cow_required": true,
+      "result": "42",
+      "status": "pass",
+      "test_binary_sha256": "180d784aa6ff3bbecca64be47b8e257c27c0d5873b4c33cc0597fe9e6da888ca",
+      "wall_seconds": 25.50
+    },
+    "macos": {
+      "command": "AGENT_RUNTIME_GUEST=/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-selection-fa5dd83/dist/agent-python-runtime.wasm go test ./integration/e2e -run TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution -count=1 -v",
+      "formal_guest_executions": 1,
+      "prepared_runtime_required": true,
+      "result": "42",
+      "status": "pass",
+      "wall_seconds": 16.20
+    }
+  },
+  "implementation_commit": "cfd7db2e3517fa1c5a03af28d148f2f37b675ef5",
+  "lifecycle": {
+    "execute_original_source_validation_count": 1,
+    "execute_original_formal_guest_execution_count": 1,
+    "execute_original_module_instantiations": 0,
+    "execute_original_runtime_init_calls": 0,
+    "fresh_fallback_allowed": false,
+    "original_capacity_count": 1,
+    "original_materialisation_claims": 0,
+    "provisioned_before_execution": true,
+    "second_execution_rejected": true
+  },
+  "phase5_gate_passed": false,
+  "purpose": "Prove that the original treatment receives one treatment-equivalent initialized final capacity, including a private COW slot on Linux, and executes unchanged source exactly once without a prepared-region table.",
+  "timing_campaign_started": false,
+  "verification": {
+    "git_diff_check": "pass",
+    "go_test_runtime": "pass",
+    "go_test_runtime_race_targeted": "pass",
+    "go_vet_runtime": "pass"
+  }
+}

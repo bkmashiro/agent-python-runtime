@@ -1,6 +1,10 @@
 package semanticspeculation
 
-import "errors"
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+)
 
 type TrialBindings struct {
 	ArtifactSHA256         string
@@ -18,7 +22,7 @@ func BuildScheduledTrialRecord(
 	bindings TrialBindings,
 	result ScheduledTreatmentResult,
 ) (TrialRecord, error) {
-	if fixture.Validate() != nil || !validTreatment(treatment) || treatment == "perfect_effect_oracle" || trialIndex == 0 || trialIndex > 5 {
+	if !isFrozenPhase3Case(fixture) || !validTreatment(treatment) || treatment == "perfect_effect_oracle" || trialIndex == 0 || trialIndex > 5 {
 		return TrialRecord{}, errors.New("invalid scheduled trial")
 	}
 	comparatorIdentity := ""
@@ -61,4 +65,22 @@ func BuildScheduledTrialRecord(
 		EndedNanos:               result.EndedNanos,
 	}
 	return SealTrialRecord(value)
+}
+
+func isFrozenPhase3Case(fixture SyntheticCase) bool {
+	if fixture.Validate() != nil {
+		return false
+	}
+	want, err := json.Marshal(fixture.Projection())
+	if err != nil {
+		return false
+	}
+	for _, frozen := range Phase3SyntheticCases() {
+		if frozen.ID != fixture.ID {
+			continue
+		}
+		got, marshalErr := json.Marshal(frozen.Projection())
+		return marshalErr == nil && bytes.Equal(want, got)
+	}
+	return false
 }

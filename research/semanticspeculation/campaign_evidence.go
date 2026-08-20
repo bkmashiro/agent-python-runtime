@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	MatchedCaseEvidenceSchemaVersion = "pysolate.semantic-speculation-matched-case-evidence.v1"
+	MatchedCaseEvidenceSchemaVersion = "pysolate.semantic-speculation-matched-case-evidence.v2"
 	matchedCaseEvidenceMaxBytes      = 256 << 10
 )
 
@@ -24,6 +24,7 @@ type MatchedCaseEvidence struct {
 	ClaimScope               string                      `json:"claim_scope"`
 	ProductionGeneralization bool                        `json:"production_generalization"`
 	OracleAnalysisOnly       bool                        `json:"oracle_analysis_only"`
+	ExecutionOrder           []string                    `json:"execution_order"`
 	Records                  []TrialRecord               `json:"records"`
 	Oracle                   PerfectEffectOracleEstimate `json:"oracle"`
 	Aggregate                MatchedCaseAggregate        `json:"aggregate"`
@@ -38,7 +39,7 @@ func SealMatchedCaseEvidence(campaign MatchedCampaignResult) (MatchedCaseEvidenc
 		SchemaVersion: MatchedCaseEvidenceSchemaVersion,
 		StudyID:       "semantic-speculation-v1", PreregistrationSHA256: PreregistrationIdentity,
 		CaseMatrixSHA256: SyntheticCaseMatrixIdentity, ClaimScope: "synthetic_matched_mechanism_only",
-		ProductionGeneralization: false, OracleAnalysisOnly: true,
+		ProductionGeneralization: false, OracleAnalysisOnly: true, ExecutionOrder: treatmentNames(campaign.Records),
 		Records: append([]TrialRecord(nil), campaign.Records...), Oracle: campaign.Oracle, Aggregate: campaign.Aggregate,
 	}
 	if validateMatchedCaseEvidence(value, false) != nil {
@@ -87,8 +88,14 @@ func validateMatchedCaseEvidence(value MatchedCaseEvidence, sealed bool) error {
 	if value.SchemaVersion != MatchedCaseEvidenceSchemaVersion || value.StudyID != "semantic-speculation-v1" ||
 		value.PreregistrationSHA256 != PreregistrationIdentity || value.CaseMatrixSHA256 != SyntheticCaseMatrixIdentity ||
 		value.ClaimScope != "synthetic_matched_mechanism_only" || value.ProductionGeneralization || !value.OracleAnalysisOnly ||
-		len(value.Records) != 3 || sealed != digestPattern.MatchString(value.Identity) {
+		len(value.Records) != 3 || len(value.ExecutionOrder) != 3 || sealed != digestPattern.MatchString(value.Identity) {
 		return ErrInvalidMatchedCaseEvidence
+	}
+	expectedOrder := matchedTreatmentOrder(value.Records[0].CaseID, value.Records[0].TrialIndex)
+	for index := range expectedOrder {
+		if value.ExecutionOrder[index] != expectedOrder[index] || value.Records[index].Treatment != expectedOrder[index] {
+			return ErrInvalidMatchedCaseEvidence
+		}
 	}
 	aggregate, err := AggregateMatchedTrials(value.Records, value.Oracle)
 	if err != nil || aggregate != value.Aggregate {
@@ -101,6 +108,14 @@ func validateMatchedCaseEvidence(value MatchedCaseEvidence, sealed bool) error {
 		}
 	}
 	return nil
+}
+
+func treatmentNames(records []TrialRecord) []string {
+	result := make([]string, len(records))
+	for index, record := range records {
+		result[index] = record.Treatment
+	}
+	return result
 }
 
 func matchedCaseEvidenceIdentity(value MatchedCaseEvidence) (string, error) {

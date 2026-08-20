@@ -1,13 +1,19 @@
 package semanticspeculation
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"sort"
 )
 
 var ErrInvalidMatchedCampaign = errors.New("invalid matched semantic-speculation campaign")
 
-var achievedTreatmentOrder = [...]string{"serial_whole_file", "eager_style_gate", "semantic_pre_dispatch"}
+var achievedTreatments = [...]string{"serial_whole_file", "eager_style_gate", "semantic_pre_dispatch"}
+
+const phase3ShuffleSeed uint64 = 20260820
 
 type MatchedTreatmentFactory func(treatment string, trialIndex uint32) (ScheduledTreatment, error)
 type PerfectEffectEstimator func(serial TrialRecord) (uint64, error)
@@ -34,8 +40,9 @@ func RunMatchedCaseCampaign(
 	if ctx == nil || !isFrozenPhase3Case(fixture) || trialIndex == 0 || trialIndex > 5 || factory == nil || estimator == nil {
 		return MatchedCampaignResult{}, ErrInvalidMatchedCampaign
 	}
-	records := make([]TrialRecord, 0, len(achievedTreatmentOrder))
-	for _, treatmentName := range achievedTreatmentOrder {
+	order := matchedTreatmentOrder(fixture.ID, trialIndex)
+	records := make([]TrialRecord, 0, len(order))
+	for _, treatmentName := range order {
 		treatment, err := factory(treatmentName, trialIndex)
 		if err != nil || treatment == nil {
 			return MatchedCampaignResult{}, errors.Join(ErrInvalidMatchedCampaign, err)
@@ -53,7 +60,13 @@ func RunMatchedCaseCampaign(
 
 	// Aggregate once without an oracle-equivalent shortcut: only after all three
 	// achieved records satisfy frozen expectations may analysis-only estimation run.
-	serial := records[0]
+	var serial TrialRecord
+	for _, record := range records {
+		if record.Treatment == "serial_whole_file" {
+			serial = record
+			break
+		}
+	}
 	oracleElapsed, err := estimator(serial)
 	if err != nil || oracleElapsed == 0 {
 		return MatchedCampaignResult{}, errors.Join(ErrInvalidMatchedCampaign, err)
@@ -67,6 +80,26 @@ func RunMatchedCaseCampaign(
 		return MatchedCampaignResult{}, errors.Join(ErrInvalidMatchedCampaign, err)
 	}
 	return MatchedCampaignResult{Records: records, Oracle: oracle, Aggregate: aggregate}, nil
+}
+
+func matchedTreatmentOrder(caseID string, trialIndex uint32) []string {
+	type rankedTreatment struct {
+		name string
+		rank [sha256.Size]byte
+	}
+	ranked := make([]rankedTreatment, 0, len(achievedTreatments))
+	for _, name := range achievedTreatments {
+		ranked = append(ranked, rankedTreatment{
+			name: name,
+			rank: sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s\x00%d\x00%s", phase3ShuffleSeed, caseID, trialIndex, name))),
+		})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return bytes.Compare(ranked[i].rank[:], ranked[j].rank[:]) < 0 })
+	order := make([]string, len(ranked))
+	for index, treatment := range ranked {
+		order[index] = treatment.name
+	}
+	return order
 }
 
 func recordMatchesFrozenExpectation(record TrialRecord, fixture SyntheticCase) bool {

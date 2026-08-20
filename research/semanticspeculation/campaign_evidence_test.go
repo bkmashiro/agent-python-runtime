@@ -34,6 +34,14 @@ func TestMatchedCaseEvidenceRejectsTamperingAndUnknownFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sealed.ExecutionOrder[0], sealed.ExecutionOrder[1] = sealed.ExecutionOrder[1], sealed.ExecutionOrder[0]
+	if _, err := EncodeMatchedCaseEvidence(sealed); err == nil {
+		t.Fatal("tampered execution order was accepted")
+	}
+	sealed, err = SealMatchedCaseEvidence(matchedCampaignFixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 	sealed.Aggregate.SerialElapsedNanos++
 	if _, err := EncodeMatchedCaseEvidence(sealed); err == nil {
 		t.Fatal("tampered aggregate was accepted")
@@ -63,7 +71,7 @@ func matchedCampaignFixture(t *testing.T) MatchedCampaignResult {
 	bindings := matchedTestBindings()
 	resultSHA := syntheticDigest([]byte("result"))
 	records := make([]TrialRecord, 0, 3)
-	for index, treatment := range achievedTreatmentOrder {
+	for index, treatment := range matchedTreatmentOrder(fixture.ID, 1) {
 		outcome := TreatmentOutcome{
 			FinalProgramOutcome: "success", FinalPythonStarted: true, ResultSHA256: resultSHA,
 			AuthorityDisposition: "unchanged", WorkspaceDisposition: "published",

@@ -21,9 +21,11 @@ func TestRunMatchedCaseCampaignSealsAndAggregatesThreeAchievedLanes(t *testing.T
 	bindings := matchedTestBindings()
 	resultSHA := syntheticDigest([]byte("result"))
 	factoryCalls := 0
+	var executionOrder []string
 	result, err := RunMatchedCaseCampaign(context.Background(), fixture, 1, bindings,
 		func(treatment string, trialIndex uint32) (ScheduledTreatment, error) {
 			factoryCalls++
+			executionOrder = append(executionOrder, treatment)
 			if trialIndex != 1 {
 				t.Fatal("unexpected trial index")
 			}
@@ -43,6 +45,12 @@ func TestRunMatchedCaseCampaignSealsAndAggregatesThreeAchievedLanes(t *testing.T
 	}
 	if factoryCalls != 3 || len(result.Records) != 3 || !result.Aggregate.OracleExcludedFromAchievedSpeedup || result.Oracle.ElapsedNanos == 0 {
 		t.Fatalf("result=%+v calls=%d", result, factoryCalls)
+	}
+	expectedOrder := matchedTreatmentOrder(fixture.ID, 1)
+	for index := range expectedOrder {
+		if executionOrder[index] != expectedOrder[index] || result.Records[index].Treatment != expectedOrder[index] {
+			t.Fatalf("execution_order=%v records=%+v", executionOrder, result.Records)
+		}
 	}
 	for _, record := range result.Records {
 		if record.Identity == "" || record.CaseID != fixture.ID || record.TrialIndex != 1 {

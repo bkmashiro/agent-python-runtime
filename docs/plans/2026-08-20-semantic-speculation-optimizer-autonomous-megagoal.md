@@ -449,6 +449,31 @@ Tasks:
 
 **Gate P5:** The admitted mechanism case matrix has positive net critical-path benefit and exact declared outcome parity. Stop if the patch requires arbitrary heap transfer, broad Python semantics or unsafe exception substitution. A win on the frozen authored matrix establishes bounded mechanism feasibility, not production prevalence or expected end-to-end uplift.
 
+### Phase 5R: Mechanism remediation and paper closure
+
+**Promise:** Preserve the immutable P5 no-go, then repair only the exposed deep-AST robustness and lifecycle-evidence defects under a separately identified artifact/harness lineage. P5R asks whether the bounded source-bound scalar materialisation mechanism is technically coherent and evidence-complete; positive net economics is informational rather than a promotion gate.
+
+Frozen history and non-goals:
+
+- P5 matrix, preregistration, artifact, no-go evidence and `timing_samples_observed = 0` remain unchanged;
+- do not run, resume or reinterpret the original 80-record economics campaign;
+- do not raise the global Python recursion limit, add a generic AST rewrite, broaden scalar semantics, transfer Python heap state, or expand Broker/workspace authority;
+- keep research `Phase5...` names phase-specific while reusable Runtime primitives remain phase-neutral;
+- no generic typed transport before P5R mechanism closure and a separate Phase 6 decision.
+
+Tasks:
+
+- [ ] RED-test every recursive stage on the unchanged 256-multiply and 512-add sources: source validation, assigned-name collection, reserved-helper scan, patch copy/transform/location/digest, scratch evaluation and final compile.
+- [ ] Replace only demonstrated recursive bottlenecks with bounded iterative traversal/evaluation, preserving exact source, AST identities, helper reservation and fail-closed limits.
+- [ ] Project prepared-region table claim/consume/reject/discard evidence after teardown into the body-free adapter snapshot.
+- [ ] Build a new remediation artifact and bind it append-only to the original P5 failure lineage without changing frozen P5 inputs.
+- [ ] Execute the unchanged 11-case matrix on macOS and Linux private COW; require exact result/error/traceback/log parity, fresh-Guest counts, one-shot selection and complete terminal capsule lifecycle.
+- [ ] Run targeted/race/static gates and an independent post-fix review before accepting evidence.
+- [ ] Record a body-free P5R mechanism report and stage-cost characterization. Do not require positive savings or collect the original campaign.
+- [ ] Update the roadmap, sign, push and stop for a Phase 6 decision.
+
+**Gate P5R-M:** All unchanged 11 cases pass under the new remediation artifact with no semantic, freshness, replay, authority or lifecycle-evidence drift. If CPython compilation itself cannot admit a frozen deep source without prohibited global/runtime broadening, retain the exact blocker and close P5R honestly. Economics cannot override a mechanism failure and cannot block a mechanism success.
+
 ### Phase 6: Minimal pass and consumer architecture
 
 **Promise:** Two real consumers share provenance/admission machinery without turning Pysolate into a generic compiler framework.

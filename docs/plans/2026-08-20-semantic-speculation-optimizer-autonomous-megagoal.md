@@ -315,16 +315,18 @@ The EAGER arm is a research comparator, not a production mode. Do not claim sour
 Tasks:
 
 - [x] Freeze comparator semantics and mutation-resistant treatment identities before measurement.
-- [ ] Implement the minimum complete-statement/name-gate comparator over the same source stream.
-- [ ] Preserve persistent-interpreter behavior only inside the comparator lane.
-- [ ] Include valid suffix, invalid suffix, external read, pure local work, unknown wrapper, branch and cancellation cases.
-- [ ] Compute independently validated medians/pairwise deltas, safe overlap coverage, false-conservative critical-path time, orphaned work/bytes/billing units and logical/physical counts.
-- [ ] Keep the perfect oracle analysis-only and excluded from achieved speedup.
-- [ ] Run exact Guest matched pairs with deterministic lane order and a body-safe aggregate.
-- [ ] Run full gates and independent frozen-diff/evidence calculation review.
+- [x] Implement the minimum complete-statement/name-gate comparator over the same source stream.
+- [x] Preserve persistent-interpreter behavior only inside the comparator lane.
+- [x] Include valid suffix, invalid suffix, external read, pure local work, unknown wrapper, branch and cancellation cases.
+- [x] Compute independently validated medians/pairwise deltas, safe overlap coverage, false-conservative critical-path time, orphaned work/bytes/billing units and logical/physical counts.
+- [x] Keep the perfect oracle analysis-only and excluded from achieved speedup.
+- [x] Run exact Guest matched pairs with deterministic lane order and a body-safe aggregate.
+- [x] Run full gates and independent frozen-diff/evidence calculation review.
 - [ ] Update roadmap, signed commit, push, continue only if P3 passes.
 
 **Gate P3:** At least one non-trivial, predeclared workload family matching the comparator paper's execution shape shows syntax-level gating serialising a Host-qualified operation while Pysolate recovers positive net overlap after analyser, Broker and cancellation/orphan accounting. Authored fixtures are admissible because this gate establishes mechanism behavior, not population-level benchmark prevalence; the fixture must not branch on treatment or encode the expected result.
+
+**Observed result (2026-08-20): not passed.** The complete 35-coordinate Exact Guest campaign preserved matched semantics but produced 0/35 positive semantic-versus-serial coordinates and 0/35 prepared results ready before finalization. See `docs/research/semantic-speculation-phase3-campaign-result-v1.md`. Phase 4 is paused because changing the frozen matrix post hoc or silently weakening this gate would invalidate the roadmap's decision boundary.
 
 ### Phase 4: Region-local semantic precision and mechanism case matrix
 
@@ -557,6 +559,7 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 
 ## Completion log
 
+- 2026-08-20 Phase 3 sealed-campaign review: the committed driver completed all 35 frozen coordinates and 105 achieved Exact Guest trials, sealed manifest identity `sha256:a0397a28664675e5f450745a7315ea8f088f6a64cff864b69c2d66a8eeba1d33`, and removed its disposable workspace root. The independent Python review verified every canonical file, hash, identity, seeded order, binding, semantic outcome and aggregate. Semantic equivalence passed, with zero orphaned physical attempts, but Gate P3 did not: 0/35 coordinates recovered positive achieved overlap and 0/35 semantic results were ready before finalization. The frozen cases were not changed; Phase 4 is paused at the documented decision boundary.
 - 2026-08-20 Phase 3 full-campaign driver slice: added a SHA-256-ranked 35-coordinate schedule covering every frozen case and five trials, a canonical complete-grid manifest bound to source commit and all shared treatment identities, strict file/order/permission/hash/evidence verification, non-overwriting private manifest persistence, and the `semantic-speculation-campaign` CLI. The CLI requires fresh evidence/workspace roots, runs every coordinate through `ExactGuestCampaign`, exclusive-writes each envelope, verifies the complete set before sealing the manifest, and emits only the body-free manifest reference.
 - 2026-08-20 Phase 3 executable-factory slice: extracted the verified treatment wiring into `ExactGuestCampaign`. It derives real artifact, manifest, import-inventory, execution-profile, capability-plan and canonical exact-partition privacy bindings; creates a fresh handler/plan/workspace per seeded lane; gives adapters only opaque hashed Run IDs; applies the frozen 250 ms provider latency; reconciles provider observations; computes the explicitly analysis-only oracle; and returns a sealed v2 envelope ready for exclusive persistence. Plan identity is handler-instance independent. An exact-Guest `pure_local` trial 2 ran through this executable and persisted successfully.
 - 2026-08-20 Phase 3 live-fallback accounting slice: the frozen `unknown_wrapper` matched run exposed that semantic-pre-dispatch controller counters covered speculative issues and prepared claims but omitted ordinary live fallback calls. The adapter now reconciles controller evidence with total provider observations, counts only attempts outside the controller as live logical calls, marks them consumed and fails closed when provider counters lag controller evidence. Exact Guest matched evidence passed all three lanes with one physical attempt, one logical call, `read_consumed` authority and a published workspace.

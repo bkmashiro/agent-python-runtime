@@ -355,6 +355,9 @@ func (engine *Engine) ensurePreparedWithResult(ctx context.Context) (bool, error
 			engine.preparedInitErr = err
 			return true, err
 		}
+		engine.preparedMu.Lock()
+		engine.preparedState.Ready = true
+		engine.preparedMu.Unlock()
 	} else if engine.config.Mechanisms.PreparedRuntime {
 		started := time.Now()
 		prepared, err := engine.newPrepared(ctx)

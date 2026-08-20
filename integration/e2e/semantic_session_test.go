@@ -147,13 +147,18 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := func(runConfig runtimeconfig.RunConfig, preprovision, consumeTwice bool) (wazeroengine.PreparedState, wazeroengine.SemanticAnalysisLifecycleEvidence, string) {
+	run := func(runConfig runtimeconfig.RunConfig, preprovision, consumeTwice bool) (wazeroengine.PreparedState, wazeroengine.PreparedImageState, wazeroengine.SemanticAnalysisLifecycleEvidence, string) {
 		t.Helper()
 		analyzer, newErr := wazeroengine.New(ctx, artifact, runConfig)
 		if newErr != nil {
 			t.Fatal(newErr)
 		}
-		defer analyzer.Close(context.Background())
+		closed := false
+		defer func() {
+			if !closed {
+				_ = analyzer.Close(context.Background())
+			}
+		}()
 		if preprovision {
 			if prepareErr := analyzer.PrepareRuntime(ctx); prepareErr != nil {
 				t.Fatal(prepareErr)
@@ -194,16 +199,26 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 		if consumeTwice {
 			analyzeOnce()
 		}
-		return analyzer.PreparedState(), analyzer.SemanticAnalysisLifecycleEvidence(), identity
+		state := analyzer.PreparedState()
+		image := analyzer.PreparedImageState()
+		evidence := analyzer.SemanticAnalysisLifecycleEvidence()
+		if closeErr := analyzer.Close(context.Background()); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		closed = true
+		if retained := analyzer.PreparedImageState(); retained.Available {
+			t.Fatalf("closed analyzer retained prepared image: %+v", retained)
+		}
+		return state, image, evidence, identity
 	}
-	coldState, coldEvidence, coldIdentity := run(config, false, false)
+	coldState, _, coldEvidence, coldIdentity := run(config, false, false)
 	t.Logf("cold prepared=%+v lifecycle=%+v", coldState, coldEvidence)
 	if !coldState.Selected || coldState.Ready || coldState.PreparedRuns != 1 || coldState.FreshFallbackRuns != 0 ||
 		coldEvidence.PreparedProvisions != 1 || coldEvidence.PreparedHits != 1 || coldEvidence.FreshFallbacks != 0 ||
 		coldEvidence.PreparedProvisionNanos == 0 || coldEvidence.ModuleInstantiations != 1 || coldEvidence.RuntimeInitCalls != 1 {
 		t.Fatalf("cold prepared=%+v lifecycle=%+v", coldState, coldEvidence)
 	}
-	warmState, warmEvidence, warmIdentity := run(config, true, true)
+	warmState, _, warmEvidence, warmIdentity := run(config, true, true)
 	t.Logf("preprovisioned prepared=%+v lifecycle=%+v", warmState, warmEvidence)
 	if !warmState.Selected || warmState.Ready || warmState.PreparedRuns != 1 || warmState.FreshFallbackRuns != 1 ||
 		warmEvidence.PreparedProvisions != 0 || warmEvidence.PreparedHits != 1 || warmEvidence.FreshFallbacks != 1 ||
@@ -216,13 +231,36 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 	if goruntime.GOOS != "linux" {
 		cowConfig := config
 		cowConfig.Mechanisms.MemoryCOW = true
-		fallbackState, fallbackEvidence, fallbackIdentity := run(cowConfig, false, false)
+		fallbackState, _, fallbackEvidence, fallbackIdentity := run(cowConfig, false, false)
 		if fallbackState.FreshFallbackRuns != 1 || fallbackEvidence.PreparedProvisionFailures != 1 ||
 			fallbackEvidence.FreshFallbacks != 1 || fallbackEvidence.Successes != 1 || fallbackEvidence.COWHits != 0 {
 			t.Fatalf("unsupported COW fallback prepared=%+v lifecycle=%+v", fallbackState, fallbackEvidence)
 		}
 		if fallbackIdentity != coldIdentity {
 			t.Fatalf("fallback identity=%s cold identity=%s", fallbackIdentity, coldIdentity)
+		}
+	} else {
+		cowConfig := config
+		cowConfig.Mechanisms.MemoryCOW = true
+		cowState, image, cowEvidence, cowIdentity := run(cowConfig, false, false)
+		t.Logf("linux COW prepared=%+v image=%+v lifecycle=%+v", cowState, image, cowEvidence)
+		if !cowState.Ready || cowState.PreparedRuns != 1 || cowState.FreshFallbackRuns != 0 || !image.Available || image.BaselineBytes == 0 ||
+			cowEvidence.PreparedProvisions != 1 || cowEvidence.COWHits != 1 || cowEvidence.PreparedHits != 0 ||
+			cowEvidence.FreshFallbacks != 0 || cowEvidence.ModuleInstantiations != 2 || cowEvidence.InitializeCalls != 2 || cowEvidence.RuntimeInitCalls != 1 {
+			t.Fatalf("COW prepared=%+v image=%+v lifecycle=%+v", cowState, image, cowEvidence)
+		}
+		if cowIdentity != coldIdentity {
+			t.Fatalf("COW identity=%s cold identity=%s", cowIdentity, coldIdentity)
+		}
+		warmCOWState, warmImage, warmCOWEvidence, warmCOWIdentity := run(cowConfig, true, false)
+		t.Logf("linux preprovisioned COW prepared=%+v image=%+v lifecycle=%+v", warmCOWState, warmImage, warmCOWEvidence)
+		if !warmCOWState.Ready || warmCOWState.PreparedRuns != 1 || warmCOWState.FreshFallbackRuns != 0 || !warmImage.Available ||
+			warmCOWEvidence.PreparedProvisions != 0 || warmCOWEvidence.PreparedProvisionNanos != 0 || warmCOWEvidence.COWHits != 1 ||
+			warmCOWEvidence.FreshFallbacks != 0 || warmCOWEvidence.ModuleInstantiations != 1 || warmCOWEvidence.InitializeCalls != 1 || warmCOWEvidence.RuntimeInitCalls != 0 {
+			t.Fatalf("preprovisioned COW prepared=%+v image=%+v lifecycle=%+v", warmCOWState, warmImage, warmCOWEvidence)
+		}
+		if warmCOWIdentity != coldIdentity {
+			t.Fatalf("preprovisioned COW identity=%s cold identity=%s", warmCOWIdentity, coldIdentity)
 		}
 	}
 }

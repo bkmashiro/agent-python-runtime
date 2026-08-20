@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	goruntime "runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/research/semanticspeculation"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 )
 
@@ -48,7 +50,7 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 	runConfig := runtimeconfig.DefaultRunConfig()
 	runConfig.ExecutionProfile = &profile
 	runConfig.Mechanisms.PreparedRuntime = true
-	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
+	config := semanticspeculation.SemanticPreDispatchTreatmentConfig{
 		Artifact: artifact, RunConfig: runConfig, Plan: plan,
 		ProviderObservation: func() semanticspeculation.ProviderObservation {
 			attempts := physical.Load()
@@ -59,7 +61,22 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		},
 		ImportClosureSHA256: testDigest("phase3-semantic-imports"), PhysicalReadBudget: 1,
 		RunID: "phase3-semantic-external-read", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "phase3-semantic-external-read",
-	})
+	}
+	if goruntime.GOOS == "linux" {
+		config.RunConfig.Mechanisms.MemoryCOW = true
+		config.NewAnalyzer = func(ctx context.Context, artifact []byte, runConfig runtimeconfig.RunConfig) (*wazeroengine.Engine, error) {
+			analyzer, newErr := wazeroengine.New(ctx, artifact, runConfig)
+			if newErr != nil {
+				return nil, newErr
+			}
+			if prepareErr := analyzer.PrepareRuntime(ctx); prepareErr != nil {
+				_ = analyzer.Close(context.Background())
+				return nil, prepareErr
+			}
+			return analyzer, nil
+		}
+	}
+	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,10 +96,23 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		t.Fatalf("result=%+v physical=%d", result, physical.Load())
 	}
 	lifecycle := treatment.LifecycleEvidence()
-	assertColdSemanticLifecycle(t, lifecycle, uint32(len(caseValue.Chunks)), 1, true)
-	if !lifecycle.AnalyzerPrepared.Selected || lifecycle.AnalyzerPrepared.Ready || lifecycle.AnalyzerPrepared.PreparedRuns != 1 ||
-		lifecycle.Analyzer.PreparedProvisions != 1 || lifecycle.Analyzer.PreparedHits != 1 || lifecycle.Analyzer.FreshFallbacks != 0 {
-		t.Fatalf("prepared analyzer lifecycle=%+v", lifecycle)
+	if goruntime.GOOS == "linux" {
+		if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v5" || lifecycle.AnalyzerSessions != 1 ||
+			lifecycle.Analyzer.Invocations != 1 || lifecycle.Analyzer.ModuleInstantiations != 1 || lifecycle.Analyzer.InitializeCalls != 1 || lifecycle.Analyzer.RuntimeInitCalls != 0 ||
+			lifecycle.Analyzer.Successes != 1 || lifecycle.VisiblePrefixes != uint32(len(caseValue.Chunks)) || lifecycle.SkippedPrefixes != uint32(len(caseValue.Chunks))-1 ||
+			lifecycle.FormalGuestExecutions != 1 || lifecycle.FormalExecutionNanos == 0 || lifecycle.SourceGenerationNanos == 0 || lifecycle.ProviderNanos == 0 ||
+			!lifecycle.AnalyzerPrepared.Selected || !lifecycle.AnalyzerPrepared.Ready || lifecycle.AnalyzerPrepared.PreparedRuns != 1 ||
+			!lifecycle.AnalyzerPreparedImage.Available || lifecycle.AnalyzerPreparedImage.BaselineBytes == 0 ||
+			lifecycle.Analyzer.PreparedProvisions != 0 || lifecycle.Analyzer.COWHits != 1 || lifecycle.Analyzer.PreparedHits != 0 || lifecycle.Analyzer.FreshFallbacks != 0 {
+			t.Fatalf("preprovisioned COW analyzer lifecycle=%+v", lifecycle)
+		}
+		t.Logf("preprovisioned COW body-free lifecycle: %+v", lifecycle)
+	} else {
+		assertColdSemanticLifecycle(t, lifecycle, uint32(len(caseValue.Chunks)), 1, true)
+		if !lifecycle.AnalyzerPrepared.Selected || lifecycle.AnalyzerPrepared.Ready || lifecycle.AnalyzerPrepared.PreparedRuns != 1 ||
+			lifecycle.Analyzer.PreparedProvisions != 1 || lifecycle.Analyzer.PreparedHits != 1 || lifecycle.Analyzer.FreshFallbacks != 0 {
+			t.Fatalf("prepared analyzer lifecycle=%+v", lifecycle)
+		}
 	}
 }
 
@@ -128,7 +158,7 @@ func TestExactGuestScheduledSemanticPreDispatchPureLocalSkipsAllAnalyzerInvocati
 
 func assertColdSemanticLifecycle(t *testing.T, lifecycle semanticspeculation.SemanticTreatmentLifecycleEvidence, visible, analyzed uint32, expectProvider bool) {
 	t.Helper()
-	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v4" || lifecycle.AnalyzerSessions != 1 ||
+	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v5" || lifecycle.AnalyzerSessions != 1 ||
 		lifecycle.Analyzer.Invocations != analyzed || lifecycle.Analyzer.ModuleInstantiations != min(analyzed, 1) ||
 		lifecycle.Analyzer.InitializeCalls != min(analyzed, 1) || lifecycle.Analyzer.RuntimeInitCalls != min(analyzed, 1) ||
 		lifecycle.Analyzer.Successes != analyzed || lifecycle.Analyzer.Failures != 0 ||

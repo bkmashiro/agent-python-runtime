@@ -23,6 +23,7 @@ import (
 type SemanticPreDispatchTreatmentConfig struct {
 	Artifact            []byte
 	RunConfig           runtimeconfig.RunConfig
+	NewAnalyzer         func(context.Context, []byte, runtimeconfig.RunConfig) (*wazeroengine.Engine, error)
 	Plan                *capability.Plan
 	ProviderObservation func() ProviderObservation
 	ImportClosureSHA256 string
@@ -37,7 +38,7 @@ type semanticGenerationResult struct {
 	err       error
 }
 
-const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v4"
+const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v5"
 
 type SemanticTreatmentLifecycleEvidence struct {
 	SchemaVersion         string                                         `json:"schema_version"`
@@ -90,6 +91,10 @@ type SemanticPreDispatchTreatment struct {
 	analyzerSessions      uint32
 	formalGuestExecutions uint32
 	formalExecutionNanos  uint64
+	analyzerEvidence      wazeroengine.SemanticAnalysisLifecycleEvidence
+	analyzerPrepared      wazeroengine.PreparedState
+	analyzerPreparedImage wazeroengine.PreparedImageState
+	analyzerSnapshotted   bool
 	begun                 bool
 	finalized             bool
 	once                  sync.Once
@@ -131,8 +136,12 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 		PreparedRuntime:  t.config.RunConfig.Mechanisms.PreparedRuntime,
 		MemoryCOW:        t.config.RunConfig.Mechanisms.MemoryCOW,
 	}
+	newAnalyzer := t.config.NewAnalyzer
+	if newAnalyzer == nil {
+		newAnalyzer = wazeroengine.New
+	}
 	analyzerStarted := time.Now()
-	analyzer, err := wazeroengine.New(runContext, t.config.Artifact, analyzerConfig)
+	analyzer, err := newAnalyzer(runContext, t.config.Artifact, analyzerConfig)
 	t.lifecycleMu.Lock()
 	t.analyzerEngineNanos = uint64(time.Since(analyzerStarted))
 	t.lifecycleMu.Unlock()
@@ -267,7 +276,7 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 
 func (t *SemanticPreDispatchTreatment) failBegin(err error) error {
 	if t.analyzer != nil {
-		_ = t.analyzer.Close(context.Background())
+		t.closeAnalyzer(context.Background())
 	}
 	if t.cancel != nil {
 		t.cancel()
@@ -311,7 +320,7 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		_ = t.runner.Close(ctx)
 		_ = t.attempt.Discard()
 		_ = t.manager.Close()
-		_ = t.analyzer.Close(ctx)
+		t.closeAnalyzer(ctx)
 		if errors.Is(generation.err, runtimeconfig.ErrAgentSourceInvalid) || errors.Is(generation.err, semantic.ErrInvalidAnalysis) && t.exactSourceInvalid(ctx) {
 			return t.syntaxErrorOutcome(readyAtFinalize)
 		}
@@ -331,14 +340,14 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		_ = t.runner.Close(ctx)
 		_ = t.attempt.Discard()
 		_ = t.manager.Close()
-		_ = t.analyzer.Close(ctx)
+		t.closeAnalyzer(ctx)
 		if errors.Is(err, runtimeconfig.ErrAgentSourceInvalid) {
 			return t.syntaxErrorOutcome(readyAtFinalize)
 		}
 		return TreatmentOutcome{}, err
 	}
 	defer t.manager.Close()
-	defer t.analyzer.Close(ctx)
+	defer t.closeAnalyzer(ctx)
 	decodedRequest, err := runtimeconfig.DecodeRunRequest(request)
 	if err != nil {
 		return TreatmentOutcome{}, err
@@ -393,11 +402,19 @@ func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLife
 	if t == nil {
 		return result
 	}
-	if t.analyzer != nil {
+	t.lifecycleMu.Lock()
+	snapshotted := t.analyzerSnapshotted
+	if snapshotted {
+		result.Analyzer = t.analyzerEvidence
+		result.AnalyzerPrepared = t.analyzerPrepared
+		result.AnalyzerPreparedImage = t.analyzerPreparedImage
+	}
+	t.lifecycleMu.Unlock()
+	if !snapshotted && t.analyzer != nil {
 		result.Analyzer = t.analyzer.SemanticAnalysisLifecycleEvidence()
 		result.AnalyzerPrepared = t.analyzer.PreparedState()
 		result.AnalyzerPreparedImage = t.analyzer.PreparedImageState()
-	} else {
+	} else if !snapshotted {
 		result.Analyzer = wazeroengine.SemanticAnalysisLifecycleEvidence{SchemaVersion: wazeroengine.SemanticAnalysisLifecycleSchemaVersion}
 	}
 	providerNanos := uint64(0)
@@ -419,6 +436,23 @@ func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLife
 	result.FormalExecutionNanos = t.formalExecutionNanos
 	t.lifecycleMu.Unlock()
 	return result
+}
+
+func (t *SemanticPreDispatchTreatment) closeAnalyzer(ctx context.Context) {
+	if t == nil || t.analyzer == nil {
+		return
+	}
+	t.lifecycleMu.Lock()
+	if t.analyzerSnapshotted {
+		t.lifecycleMu.Unlock()
+		return
+	}
+	t.analyzerEvidence = t.analyzer.SemanticAnalysisLifecycleEvidence()
+	t.analyzerPrepared = t.analyzer.PreparedState()
+	t.analyzerPreparedImage = t.analyzer.PreparedImageState()
+	t.analyzerSnapshotted = true
+	t.lifecycleMu.Unlock()
+	_ = t.analyzer.Close(ctx)
 }
 
 func (t *SemanticPreDispatchTreatment) providerOutcome(snapshot semantic.StreamingPreDispatchSnapshot) (uint32, uint64, uint64, PhysicalDispositions, uint32, error) {
@@ -493,7 +527,7 @@ func (t *SemanticPreDispatchTreatment) Cancel(ctx context.Context) error {
 			_ = t.manager.Close()
 		}
 		if t.analyzer != nil {
-			_ = t.analyzer.Close(ctx)
+			t.closeAnalyzer(ctx)
 		}
 	})
 	return closeErr

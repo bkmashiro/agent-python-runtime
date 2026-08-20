@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -204,6 +205,7 @@ func TestExactGuestScratchExecutesOneScalarRegionAndPublishesBoundCapsule(t *tes
 
 	preparedConfig := config
 	preparedConfig.Mechanisms.PreparedRuntime = true
+	preparedConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
 	preparedEngine, err := wazeroengine.New(ctx, artifact, preparedConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -214,6 +216,9 @@ func TestExactGuestScratchExecutesOneScalarRegionAndPublishesBoundCapsule(t *tes
 	}
 	if !provisionEvidence.NeverServed || provisionEvidence.RuntimeInitCalls != 1 || provisionEvidence.BrokerAvailable || provisionEvidence.WorkspaceMounted {
 		t.Fatalf("provision evidence=%+v", provisionEvidence)
+	}
+	if runtime.GOOS == "linux" && !provisionEvidence.COWHit {
+		t.Fatalf("Linux prepared scratch did not use private COW: %+v", provisionEvidence)
 	}
 	preparedResult, preparedEvidence, err := capacity.Execute(ctx, request, decision)
 	if err != nil {

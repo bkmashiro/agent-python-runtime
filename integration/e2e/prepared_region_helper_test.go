@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -199,6 +200,63 @@ func TestExactGuestScratchExecutesOneScalarRegionAndPublishesBoundCapsule(t *tes
 	payload, err := table.Claim(decision.IdentitySHA256)
 	if err != nil || string(payload) != "42" {
 		t.Fatalf("payload=%s err=%v", payload, err)
+	}
+
+	preparedConfig := config
+	preparedConfig.Mechanisms.PreparedRuntime = true
+	preparedEngine, err := wazeroengine.New(ctx, artifact, preparedConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capacity, provisionEvidence, err := preparedEngine.PreparePreparedRegionScratch(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !provisionEvidence.NeverServed || provisionEvidence.RuntimeInitCalls != 1 || provisionEvidence.BrokerAvailable || provisionEvidence.WorkspaceMounted {
+		t.Fatalf("provision evidence=%+v", provisionEvidence)
+	}
+	preparedResult, preparedEvidence, err := capacity.Execute(ctx, request, decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preparedResult.Status != preparedregion.PreparedRegionScratchReady || string(preparedResult.Payload) != "42" || !preparedEvidence.FreshModule || !preparedEvidence.PreparedCapacity || preparedEvidence.ModuleInstantiations != 0 || preparedEvidence.RuntimeInitCalls != 0 {
+		t.Fatalf("prepared result=%+v evidence=%+v", preparedResult, preparedEvidence)
+	}
+	if _, _, err := capacity.Execute(ctx, request, decision); !errors.Is(err, wazeroengine.ErrPreparedRegionScratchCapacityConsumed) {
+		t.Fatalf("second execute err=%v", err)
+	}
+	if lifecycle := capacity.Evidence(); lifecycle.Ready != 0 || lifecycle.Claims != 1 || lifecycle.Consumed != 1 || lifecycle.RejectedClaims != 1 || lifecycle.Discarded != 0 {
+		t.Fatalf("prepared capacity lifecycle=%+v", lifecycle)
+	}
+	if err := capacity.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := preparedEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	discardEngine, err := wazeroengine.New(ctx, artifact, preparedConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discardCapacity, _, err := discardEngine.PreparePreparedRegionScratch(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lifecycle := discardCapacity.Evidence(); lifecycle.Ready != 1 || lifecycle.Claims != 0 || lifecycle.Discarded != 0 {
+		t.Fatalf("ready discard lifecycle=%+v", lifecycle)
+	}
+	if err := discardCapacity.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if lifecycle := discardCapacity.Evidence(); lifecycle.Ready != 0 || lifecycle.Claims != 0 || lifecycle.Consumed != 0 || lifecycle.Discarded != 1 {
+		t.Fatalf("closed discard lifecycle=%+v", lifecycle)
+	}
+	if _, _, err := discardCapacity.Execute(ctx, request, decision); !errors.Is(err, wazeroengine.ErrPreparedRegionScratchCapacityConsumed) {
+		t.Fatalf("discarded execute err=%v", err)
+	}
+	if err := discardEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 
 	wrongLiveIns, _, err := preparedregion.SealPreparedRegionLiveIns(map[string]json.RawMessage{"seed": json.RawMessage(`41`)})

@@ -24,3 +24,17 @@ func TestPreparedRegionScratchRejectsAuthorityAndReturnsTypedCancellationBeforeI
 		t.Fatalf("result=%+v evidence=%+v err=%v", result, evidence, err)
 	}
 }
+
+func TestPreparePreparedRegionScratchRejectsAuthorityAndDisabledCapacity(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	config.Mechanisms.PreparedRuntime = true
+	authorityEngine := &Engine{config: config, workspaceBinding: &workspaceBinding{}}
+	if _, _, err := authorityEngine.PreparePreparedRegionScratch(context.Background()); !errors.Is(err, ErrPreparedRegionScratchAuthority) {
+		t.Fatalf("authority err=%v", err)
+	}
+	config.Mechanisms.PreparedRuntime = false
+	if _, _, err := (&Engine{config: config}).PreparePreparedRegionScratch(context.Background()); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+		t.Fatalf("disabled err=%v", err)
+	}
+}

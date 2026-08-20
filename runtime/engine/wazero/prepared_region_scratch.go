@@ -25,6 +25,7 @@ type PreparedRegionScratchExecutionEvidence struct {
 	ExecuteNanos         uint64                                     `json:"execute_nanos"`
 	CloseNanos           uint64                                     `json:"close_nanos"`
 	FreshModule          bool                                       `json:"fresh_module"`
+	PreparedCapacity     bool                                       `json:"prepared_capacity"`
 	BrokerAvailable      bool                                       `json:"broker_available"`
 	WorkspaceMounted     bool                                       `json:"workspace_mounted"`
 	TerminalStatus       preparedregion.PreparedRegionScratchStatus `json:"terminal_status"`

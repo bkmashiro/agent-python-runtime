@@ -1,6 +1,6 @@
 # Semantic speculation roadmap v0
 
-Status: proposed research roadmap; no executable region consumer is enabled by this document.
+Status: design rationale; execution is governed by `docs/plans/2026-08-20-semantic-speculation-optimizer-autonomous-megagoal.md`. No executable region consumer is enabled by this document.
 
 Runtime baseline: `dd40411edef47cc47b7361defe88f630a3b6385b`.
 

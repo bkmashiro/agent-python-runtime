@@ -37,11 +37,13 @@ type semanticGenerationResult struct {
 	err       error
 }
 
-const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v3"
+const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v4"
 
 type SemanticTreatmentLifecycleEvidence struct {
 	SchemaVersion         string                                         `json:"schema_version"`
 	Analyzer              wazeroengine.SemanticAnalysisLifecycleEvidence `json:"analyzer"`
+	AnalyzerPrepared      wazeroengine.PreparedState                     `json:"analyzer_prepared"`
+	AnalyzerPreparedImage wazeroengine.PreparedImageState                `json:"analyzer_prepared_image"`
 	BeginNanos            uint64                                         `json:"begin_nanos"`
 	AnalyzerEngineNanos   uint64                                         `json:"analyzer_engine_nanos"`
 	WorkspaceSetupNanos   uint64                                         `json:"workspace_setup_nanos"`
@@ -124,7 +126,11 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	t.ctx, t.cancel = runContext, cancel
 
 	analyzerConfig := t.config.RunConfig
-	analyzerConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	analyzerConfig.Mechanisms = runtimeconfig.MechanismSet{
+		SemanticAnalysis: true,
+		PreparedRuntime:  t.config.RunConfig.Mechanisms.PreparedRuntime,
+		MemoryCOW:        t.config.RunConfig.Mechanisms.MemoryCOW,
+	}
 	analyzerStarted := time.Now()
 	analyzer, err := wazeroengine.New(runContext, t.config.Artifact, analyzerConfig)
 	t.lifecycleMu.Lock()
@@ -389,6 +395,8 @@ func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLife
 	}
 	if t.analyzer != nil {
 		result.Analyzer = t.analyzer.SemanticAnalysisLifecycleEvidence()
+		result.AnalyzerPrepared = t.analyzer.PreparedState()
+		result.AnalyzerPreparedImage = t.analyzer.PreparedImageState()
 	} else {
 		result.Analyzer = wazeroengine.SemanticAnalysisLifecycleEvidence{SchemaVersion: wazeroengine.SemanticAnalysisLifecycleSchemaVersion}
 	}

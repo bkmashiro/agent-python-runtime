@@ -47,6 +47,7 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 	}))
 	runConfig := runtimeconfig.DefaultRunConfig()
 	runConfig.ExecutionProfile = &profile
+	runConfig.Mechanisms.PreparedRuntime = true
 	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
 		Artifact: artifact, RunConfig: runConfig, Plan: plan,
 		ProviderObservation: func() semanticspeculation.ProviderObservation {
@@ -77,7 +78,12 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		result.Outcome.WorkspaceDisposition != "published" || result.Outcome.ReadyBeforeFinalize != 0 {
 		t.Fatalf("result=%+v physical=%d", result, physical.Load())
 	}
-	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), 1, true)
+	lifecycle := treatment.LifecycleEvidence()
+	assertColdSemanticLifecycle(t, lifecycle, uint32(len(caseValue.Chunks)), 1, true)
+	if !lifecycle.AnalyzerPrepared.Selected || lifecycle.AnalyzerPrepared.Ready || lifecycle.AnalyzerPrepared.PreparedRuns != 1 ||
+		lifecycle.Analyzer.PreparedProvisions != 1 || lifecycle.Analyzer.PreparedHits != 1 || lifecycle.Analyzer.FreshFallbacks != 0 {
+		t.Fatalf("prepared analyzer lifecycle=%+v", lifecycle)
+	}
 }
 
 func TestExactGuestScheduledSemanticPreDispatchPureLocalSkipsAllAnalyzerInvocations(t *testing.T) {
@@ -122,7 +128,7 @@ func TestExactGuestScheduledSemanticPreDispatchPureLocalSkipsAllAnalyzerInvocati
 
 func assertColdSemanticLifecycle(t *testing.T, lifecycle semanticspeculation.SemanticTreatmentLifecycleEvidence, visible, analyzed uint32, expectProvider bool) {
 	t.Helper()
-	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v3" || lifecycle.AnalyzerSessions != 1 ||
+	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v4" || lifecycle.AnalyzerSessions != 1 ||
 		lifecycle.Analyzer.Invocations != analyzed || lifecycle.Analyzer.ModuleInstantiations != min(analyzed, 1) ||
 		lifecycle.Analyzer.InitializeCalls != min(analyzed, 1) || lifecycle.Analyzer.RuntimeInitCalls != min(analyzed, 1) ||
 		lifecycle.Analyzer.Successes != analyzed || lifecycle.Analyzer.Failures != 0 ||

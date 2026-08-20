@@ -315,13 +315,28 @@ func (engine *Engine) publishCOWRuntime(runtime cowPreparedRuntime) error {
 }
 
 func (engine *Engine) ensurePrepared(ctx context.Context) error {
+	_, err := engine.ensurePreparedWithResult(ctx)
+	return err
+}
+
+// PrepareRuntime provisions the configured single-use prepared slot or Linux
+// COW baseline without serving it. Capacity profiles use this before a Run;
+// consumers still acquire only private single-use modules.
+func (engine *Engine) PrepareRuntime(ctx context.Context) error {
+	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime {
+		return runtimeconfig.ErrMechanismDisabled
+	}
+	return engine.ensurePrepared(ctx)
+}
+
+func (engine *Engine) ensurePreparedWithResult(ctx context.Context) (bool, error) {
 	engine.preparedInitMu.Lock()
 	defer engine.preparedInitMu.Unlock()
 	if engine.cowIsClosing() {
-		return errCOWEngineClosing
+		return false, errCOWEngineClosing
 	}
 	if engine.preparedInitialized {
-		return engine.preparedInitErr
+		return false, engine.preparedInitErr
 	}
 	engine.preparedInitialized = true
 	if engine.config.Mechanisms.MemoryCOW {
@@ -333,12 +348,12 @@ func (engine *Engine) ensurePrepared(ctx context.Context) error {
 		engine.preparedMu.Unlock()
 		if err != nil {
 			engine.preparedInitErr = fmt.Errorf("prepare COW baseline: %w: %w", err, runtimeconfig.ErrMechanismDisabled)
-			return engine.preparedInitErr
+			return true, engine.preparedInitErr
 		}
 		if err := engine.publishCOWRuntime(cowRuntime); err != nil {
 			_ = cowRuntime.close()
 			engine.preparedInitErr = err
-			return err
+			return true, err
 		}
 	} else if engine.config.Mechanisms.PreparedRuntime {
 		started := time.Now()
@@ -349,14 +364,14 @@ func (engine *Engine) ensurePrepared(ctx context.Context) error {
 		engine.preparedMu.Unlock()
 		if err != nil {
 			engine.preparedInitErr = fmt.Errorf("prepare single-use guest: %w", err)
-			return engine.preparedInitErr
+			return true, engine.preparedInitErr
 		}
 		engine.preparedMu.Lock()
 		engine.prepared = prepared
 		engine.preparedState.Ready = true
 		engine.preparedMu.Unlock()
 	}
-	return nil
+	return true, nil
 }
 
 func (engine *Engine) acquireCOWRuntime() (cowPreparedRuntime, func(), bool, error) {

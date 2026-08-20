@@ -52,6 +52,8 @@ type SemanticAnalysisSession struct {
 	requests        uint32
 	cumulativeBytes uint64
 	module          api.Module
+	prepared        *preparedInstance
+	releaseCOW      func()
 	stderr          *boundedDiagnostic
 	stdout          *forbiddenStdout
 	lifecycle       SemanticAnalysisLifecycleEvidence
@@ -150,6 +152,78 @@ func (session *SemanticAnalysisSession) ensureModuleLocked(ctx context.Context) 
 	if session.module != nil {
 		return nil
 	}
+	if session.engine.config.Mechanisms.PreparedRuntime {
+		started := time.Now()
+		provisioned, err := session.engine.ensurePreparedWithResult(ctx)
+		provisionNanos := uint64(time.Since(started))
+		if err != nil {
+			if ctx.Err() != nil || errors.Is(err, errCOWEngineClosing) {
+				return err
+			}
+			session.lifecycle.PreparedProvisionFailures++
+			session.lifecycle.PreparedProvisionNanos += provisionNanos
+			session.recordFreshFallback(true)
+			return session.ensureFreshModuleLocked(ctx)
+		}
+		if provisioned {
+			session.lifecycle.PreparedProvisions++
+			session.lifecycle.PreparedProvisionNanos += provisionNanos
+			session.lifecycle.ModuleInstantiations++
+			session.lifecycle.InitializeCalls++
+			session.lifecycle.RuntimeInitCalls++
+		}
+		cowRuntime, release, cowSelected, err := session.engine.acquireCOWRuntime()
+		if err != nil {
+			return err
+		}
+		if cowSelected {
+			cloneStarted := time.Now()
+			prepared, prepareErr := cowRuntime.prepare(ctx, session.engine)
+			session.lifecycle.COWCloneNanos += uint64(time.Since(cloneStarted))
+			if prepareErr != nil {
+				release()
+				if ctx.Err() != nil {
+					return fmt.Errorf("prepare semantic analyzer COW slot: %w", prepareErr)
+				}
+				session.recordFreshFallback(true)
+				return session.ensureFreshModuleLocked(ctx)
+			}
+			session.prepared = prepared
+			session.releaseCOW = release
+			session.lifecycle.COWHits++
+			session.lifecycle.ModuleInstantiations++
+			session.lifecycle.InitializeCalls++
+			session.engine.preparedMu.Lock()
+			session.engine.preparedState.PreparedRuns++
+			session.engine.preparedMu.Unlock()
+		} else {
+			session.prepared = session.engine.takePrepared()
+			if session.prepared != nil {
+				session.lifecycle.PreparedHits++
+			} else {
+				session.recordFreshFallback(false)
+			}
+		}
+		if session.prepared != nil {
+			session.module = session.prepared.module
+			session.stderr = session.prepared.stderr
+			session.stdout = session.prepared.stdout
+			return nil
+		}
+	}
+	return session.ensureFreshModuleLocked(ctx)
+}
+
+func (session *SemanticAnalysisSession) recordFreshFallback(updatePreparedState bool) {
+	session.lifecycle.FreshFallbacks++
+	if updatePreparedState {
+		session.engine.preparedMu.Lock()
+		session.engine.preparedState.FreshFallbackRuns++
+		session.engine.preparedMu.Unlock()
+	}
+}
+
+func (session *SemanticAnalysisSession) ensureFreshModuleLocked(ctx context.Context) error {
 	started := time.Now()
 	session.lifecycle.ModuleInstantiations++
 	module, err := session.engine.runtime.InstantiateModule(ctx, session.engine.compiled, session.engine.baseModuleConfig(session.stderr, session.stdout))
@@ -198,6 +272,14 @@ func (session *SemanticAnalysisSession) closeLocked() error {
 	if session.module != nil {
 		err = session.module.Close(context.Background())
 		session.module = nil
+	}
+	if session.prepared != nil && session.prepared.temporary != nil {
+		err = errors.Join(err, session.prepared.temporary.Close())
+	}
+	session.prepared = nil
+	if session.releaseCOW != nil {
+		session.releaseCOW()
+		session.releaseCOW = nil
 	}
 	session.stderr.mu.Lock()
 	session.stderr.buffer = nil

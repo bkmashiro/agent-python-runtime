@@ -21,22 +21,31 @@ def _token(hasher, tag, value):
     hasher.update(b";")
 
 
-def walk_ast_bounded(root, max_nodes=MAX_AST_NODES, max_depth=MAX_AST_DEPTH):
-    """Yield AST nodes depth-first without using the Python call stack."""
+def _walk_ast_with_depth(root, max_nodes=MAX_AST_NODES, max_depth=MAX_AST_DEPTH):
     if not isinstance(root, ast.AST) or type(max_nodes) is not int or max_nodes <= 0 or type(max_depth) is not int or max_depth <= 0:
         raise ValueError("invalid AST traversal")
-    stack = [(root, 1)]
+    stack = [(iter((root,)), 1)]
     seen = 0
     while stack:
-        node, depth = stack.pop()
+        children, depth = stack[-1]
+        try:
+            node = next(children)
+        except StopIteration:
+            stack.pop()
+            continue
         seen += 1
         if seen > max_nodes:
             raise ValueError("AST node bound exceeded")
         if depth > max_depth:
             raise ValueError("AST depth bound exceeded")
+        yield node, depth
+        stack.append((ast.iter_child_nodes(node), depth + 1))
+
+
+def walk_ast_bounded(root, max_nodes=MAX_AST_NODES, max_depth=MAX_AST_DEPTH):
+    """Yield AST nodes depth-first with iterator frames bounded by AST depth."""
+    for node, _ in _walk_ast_with_depth(root, max_nodes=max_nodes, max_depth=max_depth):
         yield node
-        children = list(ast.iter_child_nodes(node))
-        stack.extend((child, depth + 1) for child in reversed(children))
 
 
 def validate_ast_recursion_shape_bounded(root, max_recursive_depth=MAX_RECURSIVE_VISITOR_DEPTH):
@@ -45,23 +54,6 @@ def validate_ast_recursion_shape_bounded(root, max_recursive_depth=MAX_RECURSIVE
     for node, depth in _walk_ast_with_depth(root):
         if depth > max_recursive_depth and not isinstance(node, deep_scalar_nodes):
             raise ValueError("AST recursive visitor depth bound exceeded")
-
-
-def _walk_ast_with_depth(root):
-    if not isinstance(root, ast.AST):
-        raise ValueError("invalid AST traversal")
-    stack = [(root, 1)]
-    seen = 0
-    while stack:
-        node, depth = stack.pop()
-        seen += 1
-        if seen > MAX_AST_NODES:
-            raise ValueError("AST node bound exceeded")
-        if depth > MAX_AST_DEPTH:
-            raise ValueError("AST depth bound exceeded")
-        yield node, depth
-        children = list(ast.iter_child_nodes(node))
-        stack.extend((child, depth + 1) for child in reversed(children))
 
 
 def _structural_ast_digest(root, max_nodes):
@@ -74,29 +66,42 @@ def _structural_ast_digest(root, max_nodes):
         if kind == "token":
             hasher.update(value)
             continue
+        if kind == "field":
+            _token(hasher, b"F", value)
+            continue
+        if kind == "fields":
+            try:
+                name, field_value = next(value)
+            except StopIteration:
+                continue
+            stack.append(("fields", value))
+            stack.append(("value", field_value))
+            stack.append(("field", name))
+            continue
+        if kind == "items":
+            try:
+                item = next(value)
+            except StopIteration:
+                continue
+            stack.append(("items", value))
+            stack.append(("value", item))
+            continue
         if isinstance(value, ast.AST):
             nodes += 1
             if nodes > max_nodes:
                 raise ValueError("AST node bound exceeded")
             _token(hasher, b"N", type(value).__name__)
-            fields = list(ast.iter_fields(value))
+            hasher.update(b"(")
             stack.append(("token", b")"))
-            for name, field_value in reversed(fields):
-                stack.append(("value", field_value))
-                stack.append(("field", name))
-            stack.append(("token", b"("))
-        elif kind == "field":
-            _token(hasher, b"F", value)
+            stack.append(("fields", iter(ast.iter_fields(value))))
         elif isinstance(value, list):
             hasher.update(b"L" + str(len(value)).encode("ascii") + b"[")
             stack.append(("token", b"]"))
-            for item in reversed(value):
-                stack.append(("value", item))
+            stack.append(("items", iter(value)))
         elif isinstance(value, tuple):
             hasher.update(b"T" + str(len(value)).encode("ascii") + b"[")
             stack.append(("token", b"]"))
-            for item in reversed(value):
-                stack.append(("value", item))
+            stack.append(("items", iter(value)))
         else:
             _token(hasher, b"P", type(value).__name__ + ":" + repr(value))
     return "sha256:" + hasher.hexdigest()
@@ -110,13 +115,23 @@ def ast_digest_bounded(root, max_nodes=MAX_AST_NODES, max_depth=MAX_AST_DEPTH):
 
 
 def fix_missing_locations_bounded(root: _AST, max_nodes=MAX_AST_NODES, max_depth=MAX_AST_DEPTH) -> _AST:
-    """Fill compiler-required locations iteratively while preserving source nodes."""
+    """Fill compiler-required locations with iterator frames bounded by AST depth."""
     if not isinstance(root, ast.AST):
         raise ValueError("invalid AST location root")
-    stack = [(root, 1, 1, 0, 1, 0)]
+    stack: list = [("node", (root, 1, 1, 0, 1, 0))]
     seen = 0
     while stack:
-        node, depth, parent_line, parent_column, parent_end_line, parent_end_column = stack.pop()
+        kind, state = stack.pop()
+        if kind == "children":
+            children, depth, line, column, end_line, end_column = state
+            try:
+                child = next(children)
+            except StopIteration:
+                continue
+            stack.append(("children", state))
+            stack.append(("node", (child, depth, line, column, end_line, end_column)))
+            continue
+        node, depth, parent_line, parent_column, parent_end_line, parent_end_column = state
         seen += 1
         if seen > max_nodes:
             raise ValueError("AST node bound exceeded")
@@ -137,7 +152,5 @@ def fix_missing_locations_bounded(root: _AST, max_nodes=MAX_AST_NODES, max_depth
         end_column = getattr(node, "end_col_offset", None)
         if end_column is None:
             end_column = column
-        children = list(ast.iter_child_nodes(node))
-        for child in reversed(children):
-            stack.append((child, depth + 1, line, column, end_line, end_column))
+        stack.append(("children", (ast.iter_child_nodes(node), depth + 1, line, column, end_line, end_column)))
     return root

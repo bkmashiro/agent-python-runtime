@@ -5,6 +5,36 @@ from agent_runtime.ast_support import MAX_AST_DEPTH, MAX_AST_NODES, ast_digest_b
 
 
 class BoundedASTSupportTests(unittest.TestCase):
+    def test_high_fanout_fails_before_eagerly_consuming_all_children(self):
+        class CountingList(list):
+            def __init__(self, values):
+                super().__init__(values)
+                self.yielded = 0
+
+            def __iter__(self):
+                for value in super().__iter__():
+                    self.yielded += 1
+                    yield value
+
+        def tree():
+            body = CountingList(ast.Pass() for _ in range(100))
+            return ast.Module(body=body, type_ignores=[]), body
+
+        candidate, body = tree()
+        with self.assertRaisesRegex(ValueError, "AST node bound exceeded"):
+            list(walk_ast_bounded(candidate, max_nodes=2))
+        self.assertLessEqual(body.yielded, 2)
+
+        candidate, body = tree()
+        with self.assertRaisesRegex(ValueError, "AST node bound exceeded"):
+            ast_digest_bounded(candidate, max_nodes=2)
+        self.assertLessEqual(body.yielded, 2)
+
+        candidate, body = tree()
+        with self.assertRaisesRegex(ValueError, "AST node bound exceeded"):
+            fix_missing_locations_bounded(candidate, max_nodes=2)
+        self.assertLessEqual(body.yielded, 2)
+
     def test_structural_digest_is_deterministic_and_shape_sensitive(self):
         first = ast.parse("value = seed + 1\n")
         repeated = ast.parse("value = seed + 1\n")

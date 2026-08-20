@@ -9,7 +9,7 @@ from .ast_support import MAX_AST_NODES, ast_digest_bounded, validate_ast_recursi
 
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v3"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v9").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v10").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_SCALAR_OPERATORS = 1024
 MAX_CAPABILITIES = 128

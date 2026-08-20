@@ -30,6 +30,12 @@ func AnalyzeVerified(ctx context.Context, runner *wazeroengine.Engine, request R
 	return analyzeVerified(ctx, runner, request)
 }
 
+// AnalyzeVerifiedSession preserves the same concrete target-Guest provenance
+// boundary while allowing multiple exact requests in one private bounded session.
+func AnalyzeVerifiedSession(ctx context.Context, session *wazeroengine.SemanticAnalysisSession, request Request) (VerifiedAnalysis, error) {
+	return analyzeVerified(ctx, session, request)
+}
+
 // AnalyzeVerifiedTrusted is restricted by Go's internal-package boundary to runtime
 // TCB code. It exists for Host-internal composition and tests; external plugins cannot
 // name or construct semantictrusted.Authority.

@@ -1,9 +1,14 @@
 package wazero
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
 func TestSemanticAnalysisLifecycleStoreAggregatesBodyFreeEvidence(t *testing.T) {
@@ -39,5 +44,31 @@ func TestNilEngineSemanticAnalysisLifecycleEvidenceIsTypedEmpty(t *testing.T) {
 	got := engine.SemanticAnalysisLifecycleEvidence()
 	if got.SchemaVersion != SemanticAnalysisLifecycleSchemaVersion || got.Invocations != 0 {
 		t.Fatalf("evidence=%+v", got)
+	}
+}
+
+func TestSemanticAnalysisSessionCloseDropsDiagnosticBodies(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	session := &SemanticAnalysisSession{
+		engine: &Engine{}, context: ctx, cancel: cancel, started: time.Now(),
+		stderr: &boundedDiagnostic{buffer: []byte("sensitive source excerpt")}, stdout: &forbiddenStdout{},
+	}
+	if err := session.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if session.module != nil || len(session.stderr.buffer) != 0 || !session.closed {
+		t.Fatalf("closed session retained body-bearing state")
+	}
+}
+
+func TestSemanticAnalysisSessionRejectsAuthorityBearingEngine(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	engine := &Engine{config: config, workspaceBinding: &workspaceBinding{}}
+	_, err := engine.NewSemanticAnalysisSession(context.Background(), SemanticAnalysisSessionLimits{
+		MaxRequests: 1, MaxCumulativeRequestBytes: 1, MaxDuration: time.Second,
+	})
+	if !errors.Is(err, ErrSemanticAnalysisSessionAuthority) {
+		t.Fatalf("err=%v", err)
 	}
 }

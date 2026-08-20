@@ -65,6 +65,7 @@ func runExactGuestMatchedExternalCase(t *testing.T, caseIndex int, caseID string
 		ExecutionProfileSHA256: profileSHA, CapabilityPlanSHA256: identityPlan.Identity(), PrivacySHA256: testDigest("exact-partition-forbidden-coalescing-v1"),
 	}
 	var physicalTotal atomic.Uint32
+	var semanticTreatment *semanticspeculation.SemanticPreDispatchTreatment
 	factory := func(treatment string, trial uint32) (semanticspeculation.ScheduledTreatment, error) {
 		var physical atomic.Uint32
 		handler := capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
@@ -105,11 +106,13 @@ func runExactGuestMatchedExternalCase(t *testing.T, caseIndex int, caseID string
 				ProviderObservation: observation, RunID: runID, WorkspaceRoot: t.TempDir(), WorkspaceOwner: runID,
 			})
 		case "semantic_pre_dispatch":
-			return semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
+			created, createErr := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
 				Artifact: artifact, RunConfig: baseConfig, Plan: plan, ProviderObservation: observation,
 				ImportClosureSHA256: testDigestBytes(imports), PhysicalReadBudget: 1,
 				RunID: runID, WorkspaceRoot: t.TempDir(), WorkspaceOwner: runID,
 			})
+			semanticTreatment = created
+			return created, createErr
 		default:
 			return nil, fmt.Errorf("unexpected treatment %q", treatment)
 		}
@@ -133,6 +136,16 @@ func runExactGuestMatchedExternalCase(t *testing.T, caseIndex int, caseID string
 		if record.FinalProgramOutcome != "success" || record.LogicalCalls != 1 || record.PhysicalAttempts != 1 || record.AuthorityDisposition != "read_consumed" || record.WorkspaceDisposition != "published" {
 			t.Fatalf("record=%+v", record)
 		}
+	}
+	wantInvocations := uint32(1)
+	if caseID == "unknown_wrapper" {
+		wantInvocations = 2
+	}
+	lifecycle := semanticTreatment.LifecycleEvidence()
+	t.Logf("semantic lifecycle: %+v", lifecycle)
+	if lifecycle.AnalyzerSessions != 1 || lifecycle.Analyzer.Invocations != wantInvocations ||
+		lifecycle.Analyzer.ModuleInstantiations != 1 || lifecycle.Analyzer.InitializeCalls != 1 || lifecycle.Analyzer.RuntimeInitCalls != 1 {
+		t.Fatalf("semantic lifecycle=%+v", lifecycle)
 	}
 	evidence, err := semanticspeculation.SealMatchedCaseEvidence(result)
 	if err != nil {

@@ -37,7 +37,7 @@ type semanticGenerationResult struct {
 	err       error
 }
 
-const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v2"
+const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v3"
 
 type SemanticTreatmentLifecycleEvidence struct {
 	SchemaVersion         string                                         `json:"schema_version"`
@@ -51,6 +51,7 @@ type SemanticTreatmentLifecycleEvidence struct {
 	ProviderNanos         uint64                                         `json:"provider_nanos"`
 	VisiblePrefixes       uint32                                         `json:"visible_prefixes"`
 	SkippedPrefixes       uint32                                         `json:"skipped_prefixes"`
+	AnalyzerSessions      uint32                                         `json:"analyzer_sessions"`
 	FormalGuestExecutions uint32                                         `json:"formal_guest_executions"`
 	FormalExecutionNanos  uint64                                         `json:"formal_execution_nanos"`
 }
@@ -84,6 +85,7 @@ type SemanticPreDispatchTreatment struct {
 	admissionNanos        uint64
 	visiblePrefixes       uint32
 	skippedPrefixes       uint32
+	analyzerSessions      uint32
 	formalGuestExecutions uint32
 	formalExecutionNanos  uint64
 	begun                 bool
@@ -214,10 +216,29 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	if err != nil {
 		return t.failBegin(err)
 	}
+	analyzerEngine := analyzer
+	const analyzerSessionMaxRequests = uint32(32)
+	session, err := analyzerEngine.NewSemanticAnalysisSession(runContext, wazeroengine.SemanticAnalysisSessionLimits{
+		MaxRequests: analyzerSessionMaxRequests, MaxCumulativeRequestBytes: uint64(analyzerSessionMaxRequests) * semantic.MaxDocumentBytes,
+		MaxDuration: t.config.RunConfig.Timeout,
+	})
+	if err != nil {
+		return t.failBegin(err)
+	}
+	t.lifecycleMu.Lock()
+	t.analyzerSessions++
+	t.lifecycleMu.Unlock()
 	go func() {
 		generated, generationErr := semantic.GenerateVerifiedSourceWithPreDispatch(runContext, semantic.VerifiedSourceGenerationConfig{
-			Analyzer: analyzer, Plan: t.config.Plan, Bindings: bindings, Admission: admission, SourceChunks: t.chunks,
+			Plan: t.config.Plan, Bindings: bindings, Admission: admission, SourceChunks: t.chunks,
 			ShouldAnalyzePrefix: readiness.ShouldAnalyzePrefix,
+			Analyze: func(ctx context.Context, source string, bindings semantic.Bindings, plan *capability.Plan) (semantic.VerifiedAnalysis, error) {
+				request, requestErr := semantic.NewRequest(source, bindings, plan)
+				if requestErr != nil {
+					return semantic.VerifiedAnalysis{}, requestErr
+				}
+				return semantic.AnalyzeVerifiedSession(ctx, session, request)
+			},
 			Observe: func(event semantic.VerifiedSourceGenerationEvent) {
 				t.lifecycleMu.Lock()
 				switch event.Phase {
@@ -231,7 +252,8 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 				t.lifecycleMu.Unlock()
 			},
 		})
-		t.generated <- semanticGenerationResult{generated: generated, err: generationErr}
+		closeErr := session.Close(context.Background())
+		t.generated <- semanticGenerationResult{generated: generated, err: errors.Join(generationErr, closeErr)}
 	}()
 	t.begun = true
 	return nil
@@ -388,6 +410,7 @@ func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLife
 	result.ProviderNanos = providerNanos
 	result.VisiblePrefixes = t.visiblePrefixes
 	result.SkippedPrefixes = t.skippedPrefixes
+	result.AnalyzerSessions = t.analyzerSessions
 	result.FormalGuestExecutions = t.formalGuestExecutions
 	result.FormalExecutionNanos = t.formalExecutionNanos
 	t.lifecycleMu.Unlock()

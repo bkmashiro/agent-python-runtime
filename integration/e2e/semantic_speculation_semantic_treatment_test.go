@@ -122,9 +122,9 @@ func TestExactGuestScheduledSemanticPreDispatchPureLocalSkipsAllAnalyzerInvocati
 
 func assertColdSemanticLifecycle(t *testing.T, lifecycle semanticspeculation.SemanticTreatmentLifecycleEvidence, visible, analyzed uint32, expectProvider bool) {
 	t.Helper()
-	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v2" ||
-		lifecycle.Analyzer.Invocations != analyzed || lifecycle.Analyzer.ModuleInstantiations != analyzed ||
-		lifecycle.Analyzer.InitializeCalls != analyzed || lifecycle.Analyzer.RuntimeInitCalls != analyzed ||
+	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v3" || lifecycle.AnalyzerSessions != 1 ||
+		lifecycle.Analyzer.Invocations != analyzed || lifecycle.Analyzer.ModuleInstantiations != min(analyzed, 1) ||
+		lifecycle.Analyzer.InitializeCalls != min(analyzed, 1) || lifecycle.Analyzer.RuntimeInitCalls != min(analyzed, 1) ||
 		lifecycle.Analyzer.Successes != analyzed || lifecycle.Analyzer.Failures != 0 ||
 		lifecycle.VisiblePrefixes != visible || lifecycle.SkippedPrefixes != visible-analyzed ||
 		lifecycle.BeginNanos == 0 || lifecycle.AnalyzerEngineNanos == 0 || lifecycle.WorkspaceSetupNanos == 0 ||

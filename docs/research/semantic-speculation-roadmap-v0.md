@@ -80,6 +80,14 @@ selected complete prefix
 
 If the capsule is not ready and pinned before compilation, execute the original source. Do not inject a racy runtime fallback.
 
+The derived AST should call one narrow trusted helper, conceptually:
+
+```python
+__pysolate_materialize_value__(opaque_decision)
+```
+
+The embedded value is an opaque per-Run decision identity, not a blob handle, cache key, path or credential. The Host materialisation table must already hold a pinned exact typed result before derived compilation is selected. Missing, stale, consumed, mismatched or unready decisions fail closed and never trigger recomputation. V1 should replace only one exact RHS/single assignment, preserve source locations, reserve the helper binding and reject source capable of shadowing or dynamically mutating it.
+
 This remains a semantic sidecar architecture plus one explicit compiler consumer. It is not overlay-only execution.
 
 ## Why this is materialisation, not ordinary constant folding

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/research/semanticspeculation"
@@ -33,16 +34,26 @@ func TestExactGuestPhase4CampaignColdShortCoordinate(t *testing.T) {
 	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
-	for _, profileID := range []string{"cold_end_to_end", "preprovisioned_equivalent_capacity"} {
-		t.Run(profileID, func(t *testing.T) {
-			record, runErr := semanticspeculation.RunPhase4CampaignCoordinate(context.Background(), semanticspeculation.Phase4CampaignConfig{Artifact: artifact, RunConfig: config, WorkspaceRoot: t.TempDir()}, semanticspeculation.Phase4CampaignCoordinate{Profile: profileID, CaseID: "direct_read_short_control", Treatment: "semantic_pre_dispatch", TrialIndex: 1})
+	profiles := []struct {
+		name, id string
+		cow      bool
+	}{{"cold", "cold_end_to_end", false}, {"portable_preprovisioned", "preprovisioned_equivalent_capacity", false}}
+	if runtime.GOOS == "linux" {
+		profiles = append(profiles, struct {
+			name, id string
+			cow      bool
+		}{"linux_cow_preprovisioned", "preprovisioned_equivalent_capacity", true})
+	}
+	for _, candidate := range profiles {
+		t.Run(candidate.name, func(t *testing.T) {
+			record, runErr := semanticspeculation.RunPhase4CampaignCoordinate(context.Background(), semanticspeculation.Phase4CampaignConfig{Artifact: artifact, RunConfig: config, WorkspaceRoot: t.TempDir(), UseLinuxCOW: candidate.cow}, semanticspeculation.Phase4CampaignCoordinate{Profile: candidate.id, CaseID: "direct_read_short_control", Treatment: "semantic_pre_dispatch", TrialIndex: 1})
 			if runErr != nil {
 				t.Fatal(runErr)
 			}
 			if record.FinalProgramOutcome != "success" || record.LogicalCallCount != 1 || record.AnalyzerSessionCount != 1 || record.FormalGuestExecutions != 1 || record.OrphanedPhysicalCount != 0 {
 				t.Fatalf("record=%+v", record)
 			}
-			if profileID == "preprovisioned_equivalent_capacity" && record.PreparedOrCOWHitCount != 1 {
+			if candidate.id == "preprovisioned_equivalent_capacity" && record.PreparedOrCOWHitCount != 1 {
 				t.Fatalf("preprovisioned record=%+v", record)
 			}
 		})

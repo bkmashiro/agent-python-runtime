@@ -1,0 +1,59 @@
+{
+  "artifact": {
+    "archive": "/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-selection-fa5dd83/dist/",
+    "manifest_sha256": "ad1affb32a14f0feababcf5c3c6fd614aa699ac71a97b9ec44278bdf6098ad9c",
+    "wasm_sha256": "621f5fcec3f4bc7fc3550aa8fd1a275e7a6c09017518f535395c5bae84a297cb"
+  },
+  "authority": {
+    "broker_available": false,
+    "generic_transport": false,
+    "guest_claim_during_compile": false,
+    "replay_or_fallback": false,
+    "workspace_mounted": false
+  },
+  "controls": {
+    "compile_failure_closes_capacity": true,
+    "compile_then_execute_result": 42,
+    "exact_request_binding": true,
+    "final_guest_executions": 1,
+    "host_validation_before_guest_compile": true,
+    "late_capsule_publication": true,
+    "module_instantiations_during_compile": 0,
+    "module_instantiations_during_execution": 0,
+    "repeated_execute_rejected": true,
+    "runtime_init_calls_during_compile": 0,
+    "runtime_init_calls_during_execution": 0,
+    "source_validation_during_compile": 1,
+    "target_guest_selection_compile_during_compile": 1
+  },
+  "implementation_commit": "358a90eacbd6c8e10bfe9b3667209e0d91afcfeb",
+  "linux_exact_guest": {
+    "command": "AGENT_RUNTIME_GUEST=/tmp/ys25-p5-selection-fa5dd83/dist/agent-python-runtime.wasm /tmp/p5dc.test -test.v -test.run ^TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution$",
+    "private_cow_required": true,
+    "status": "pass",
+    "test_binary_sha256": "d8eeceb5c48b1240129d1247a89ea5f95064891dbbe3a09f94a2ca0897d958bf",
+    "test_wall_seconds": 25.30
+  },
+  "macos_exact_guest": {
+    "command": "AGENT_RUNTIME_GUEST=/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-selection-fa5dd83/dist/agent-python-runtime.wasm go test ./integration/e2e -run TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution -count=1 -v",
+    "status": "pass",
+    "test_wall_seconds": 16.21
+  },
+  "race_exact_guest": {
+    "command": "AGENT_RUNTIME_GUEST=<immutable-selection-artifact> go test -race ./integration/e2e -run TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution -count=1 -v",
+    "status": "pass",
+    "test_wall_seconds": 94.66
+  },
+  "phase5_gate_passed": false,
+  "purpose": "Prove that target-Guest derived validation and compile/load can be timed separately from exactly one formal execution on the same initialized never-served capacity.",
+  "schema_version": "pysolate.semantic-speculation-phase5-derived-final-capacity-evidence.v1",
+  "timing_campaign_started": false,
+  "verification": [
+    "go test ./runtime/... -count=1",
+    "go vet ./runtime/...",
+    "go test -race ./runtime/preparedregion ./runtime/engine/wazero -count=1",
+    "Exact Guest macOS split compile/execution",
+    "Exact Guest race split compile/execution",
+    "Exact Guest Linux private-COW split compile/execution"
+  ]
+}

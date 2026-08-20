@@ -140,6 +140,78 @@ func TestExactGuestEmitsCanonicalPreparedRegionPatchBindingInPrivateSession(t *t
 	}
 }
 
+func TestExactGuestScratchExecutesOneScalarRegionAndPublishesBoundCapsule(t *testing.T) {
+	artifact, profile := loadPreparedRegionArtifact(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	config.ExecutionProfile = &profile
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	engine, err := wazeroengine.New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close(context.Background())
+	if properties := engine.Properties(); properties.CapabilityBrokerAvailable || properties.WorkspaceMounted {
+		t.Fatalf("scratch engine gained authority: %+v", properties)
+	}
+
+	source := "seed = 40\nvalue = seed + 2\nresult = value\n"
+	liveInsRaw, liveInsSHA, err := preparedregion.SealPreparedRegionLiveIns(map[string]json.RawMessage{"seed": json.RawMessage(`40`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	span := preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}
+	sourceSHA := preparedRegionDigest([]byte(source))
+	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x001\x002:0:2:16", sourceSHA)
+	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(preparedregion.PreparedRegionBinding{
+		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
+		RegionSourceSHA256: preparedRegionDigest([]byte("value = seed + 2")), LiveInsSHA256: liveInsSHA,
+		EnvironmentSHA256: digestA, ExecutionProfileSHA256: digestA, ImportClosureSHA256: digestA,
+		CapabilityPlanSHA256: digestA, PassConfigSHA256: digestA,
+		Codec: preparedregion.PreparedRegionCodecJSONScalarV1, OutputName: "value",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source, "live_ins": string(liveInsRaw)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, evidence, err := engine.ExecutePreparedRegionScratch(ctx, request, decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != preparedregion.PreparedRegionScratchReady || string(result.Payload) != "42" || !evidence.FreshModule || evidence.ModuleInstantiations != 1 || evidence.BrokerAvailable || evidence.WorkspaceMounted || evidence.TerminalStatus != preparedregion.PreparedRegionScratchReady {
+		t.Fatalf("result=%+v evidence=%+v", result, evidence)
+	}
+	_, capsule, err := preparedregion.PublishPreparedRegionScratchResult(decision, result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := table.Claim(decision.IdentitySHA256)
+	if err != nil || string(payload) != "42" {
+		t.Fatalf("payload=%s err=%v", payload, err)
+	}
+
+	wrongLiveIns, _, err := preparedregion.SealPreparedRegionLiveIns(map[string]json.RawMessage{"seed": json.RawMessage(`41`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source, "live_ins": string(wrongLiveIns)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, driftEvidence, err := engine.ExecutePreparedRegionScratch(ctx, wrongRequest, decision); err == nil || driftEvidence.ModuleInstantiations != 1 || driftEvidence.TerminalStatus != "" {
+		t.Fatalf("live-in drift evidence=%+v err=%v", driftEvidence, err)
+	}
+}
+
 const digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 func preparedRegionDigest(value []byte) string {

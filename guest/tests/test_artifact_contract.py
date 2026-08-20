@@ -60,6 +60,7 @@ class ArtifactVerifierTests(unittest.TestCase):
                     "runtime_validate_source",
                     "runtime_analyze_source",
                     "runtime_emit_prepared_region_patch",
+                    "runtime_execute_prepared_region_scratch",
                     "runtime_prepare",
                     "alloc",
                     "dealloc",

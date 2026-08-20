@@ -13,6 +13,8 @@ PASS_SCHEMA_VERSION = "pysolate.prepared-pure-region-pass.v1"
 CONSUMER = "prepared_pure_region"
 CODEC = "canonical_json_bool_or_int64.v1"
 HELPER_BINDING = "__pysolate_materialize_value__"
+LIVE_INS_SCHEMA_VERSION = "pysolate.prepared-region-live-ins.v1"
+SCRATCH_RESULT_SCHEMA_VERSION = "pysolate.prepared-region-scratch-result.v1"
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _SPAN_KEYS = {"start_line", "start_column", "end_line", "end_column"}
@@ -29,6 +31,8 @@ _PATCH_KEYS = {
     "region_span", "output_name", "identity_sha256",
 }
 _EMIT_REQUEST_KEYS = {"decision", "final_source"}
+_LIVE_INS_KEYS = {"schema_version", "values"}
+_SCRATCH_REQUEST_KEYS = {"decision", "final_source", "live_ins"}
 
 
 def _digest(value):
@@ -131,6 +135,30 @@ def _decode_patch(raw):
     return value
 
 
+def _valid_scalar(value):
+    return type(value) is bool or (type(value) is int and -(2**63) <= value < 2**63)
+
+
+def encode_prepared_region_live_ins(values):
+    if (
+        not isinstance(values, dict)
+        or any(not isinstance(name, str) or _IDENTIFIER.fullmatch(name) is None or name == HELPER_BINDING for name in values)
+        or any(not _valid_scalar(value) for value in values.values())
+    ):
+        raise ValueError("invalid prepared region live-ins")
+    return _contract_canonical({"schema_version": LIVE_INS_SCHEMA_VERSION, "values": values})
+
+
+def _decode_live_ins(raw):
+    value = _decode(raw, _LIVE_INS_KEYS, contract=True)
+    if value["schema_version"] != LIVE_INS_SCHEMA_VERSION:
+        raise ValueError("invalid prepared region live-ins")
+    encoded = encode_prepared_region_live_ins(value["values"])
+    if encoded != raw:
+        raise ValueError("invalid prepared region live-ins")
+    return value["values"]
+
+
 def _ast_digest(tree):
     return _digest(ast.dump(tree, annotate_fields=True, include_attributes=False).encode("utf-8"))
 
@@ -225,6 +253,56 @@ def emit_prepared_region_patch_request_json(request_json):
         raise ValueError("invalid prepared region patch request")
     binding = emit_prepared_region_patch_binding(request["final_source"], request["decision"])
     return _canonical(binding)
+
+
+def _safe_scalar_rhs(node, live_ins):
+    if isinstance(node, ast.Constant):
+        return _valid_scalar(node.value)
+    if isinstance(node, ast.Name):
+        return node.id in live_ins and _valid_scalar(live_ins[node.id])
+    return (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult))
+        and _safe_scalar_rhs(node.left, live_ins)
+        and _safe_scalar_rhs(node.right, live_ins)
+    )
+
+
+def execute_prepared_region_scratch_request_json(request_json):
+    request = _decode(request_json, _SCRATCH_REQUEST_KEYS)
+    if any(not isinstance(request[key], str) for key in _SCRATCH_REQUEST_KEYS):
+        raise ValueError("invalid prepared region scratch request")
+    decision = _decode_decision(request["decision"])
+    live_ins = _decode_live_ins(request["live_ins"])
+    if _digest(request["live_ins"].encode("utf-8")) != decision["live_ins_sha256"]:
+        raise ValueError("prepared region live-ins do not match decision")
+    # Reuse the exact source/region/assignment validator used by patch emission,
+    # then execute only the original RHS in this fresh scratch Guest.
+    _derive(request["final_source"], decision)
+    tree = ast.parse(request["final_source"], filename="<prepared-region-scratch>", mode="exec")
+    statement = next(node for node in tree.body if _span(node) == decision["region_span"])
+    if not isinstance(statement, ast.Assign) or not _safe_scalar_rhs(statement.value, live_ins):
+        raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
+    try:
+        value = eval(compile(ast.Expression(statement.value), "<prepared-region-scratch>", "eval"), {"__builtins__": {}}, dict(live_ins))
+    except BaseException as exc:
+        return _canonical({
+            "decision_sha256": decision["identity_sha256"], "error_type": type(exc).__name__,
+            "payload": None, "payload_sha256": "", "schema_version": SCRATCH_RESULT_SCHEMA_VERSION,
+            "status": "failed",
+        })
+    if not _valid_scalar(value):
+        return _canonical({
+            "decision_sha256": decision["identity_sha256"], "error_type": "result_out_of_range",
+            "payload": None, "payload_sha256": "", "schema_version": SCRATCH_RESULT_SCHEMA_VERSION,
+            "status": "rejected",
+        })
+    payload = _canonical(value)
+    return _canonical({
+        "decision_sha256": decision["identity_sha256"], "error_type": "", "payload": value,
+        "payload_sha256": _digest(payload.encode("utf-8")), "schema_version": SCRATCH_RESULT_SCHEMA_VERSION,
+        "status": "ready",
+    })
 
 
 def derive_prepared_region_tree(final_source, decision_json, patch_json):

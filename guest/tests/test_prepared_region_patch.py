@@ -9,6 +9,8 @@ from agent_runtime.prepared_region import (
     derive_prepared_region_tree,
     emit_prepared_region_patch_binding,
     emit_prepared_region_patch_request_json,
+    encode_prepared_region_live_ins,
+    execute_prepared_region_scratch_request_json,
 )
 from agent_runtime.semantic import analyze_source
 
@@ -26,7 +28,7 @@ def contract_canonical(value):
 
 
 class PreparedRegionPatchTests(unittest.TestCase):
-    def decision(self, source, line=2):
+    def decision(self, source, line=2, live_ins=None):
         bindings = {
             "artifact_sha256": "sha256:" + "a" * 64,
             "execution_profile_sha256": "sha256:" + "b" * 64,
@@ -50,7 +52,7 @@ class PreparedRegionPatchTests(unittest.TestCase):
             "region_id": region["id"],
             "region_span": span,
             "region_source_sha256": digest_bytes(source.encode("utf-8")[start:end]),
-            "live_ins_sha256": digest_bytes(canonical(region["live_ins"]).encode("utf-8")),
+            "live_ins_sha256": digest_bytes((live_ins if live_ins is not None else canonical(region["live_ins"])).encode("utf-8")),
             "environment_sha256": "sha256:" + "e" * 64,
             "execution_profile_sha256": bindings["execution_profile_sha256"],
             "import_closure_sha256": bindings["import_closure_sha256"],
@@ -147,6 +149,41 @@ class PreparedRegionPatchTests(unittest.TestCase):
         for candidate in (request + " ", request[:-1] + ',"extra":true}'):
             with self.subTest(candidate=candidate), self.assertRaises(ValueError):
                 emit_prepared_region_patch_request_json(candidate)
+
+    def test_scratch_executes_only_the_exact_scalar_rhs_and_returns_typed_ready(self):
+        source = "seed = 40\nvalue = seed + 2\nresult = value\n"
+        live_ins = encode_prepared_region_live_ins({"seed": 40})
+        decision = self.decision(source, live_ins=live_ins)
+        request = canonical({"decision": decision, "final_source": source, "live_ins": live_ins})
+        response = execute_prepared_region_scratch_request_json(request)
+        decoded = json.loads(response)
+        self.assertEqual(decoded["status"], "ready")
+        self.assertEqual(decoded["payload"], 42)
+        self.assertEqual(decoded["error_type"], "")
+        self.assertEqual(decoded["payload_sha256"], digest_bytes(b"42"))
+        self.assertEqual(response, canonical(decoded))
+
+    def test_scratch_rejects_live_in_drift_unsafe_rhs_and_out_of_range_result(self):
+        source = "seed = 40\nvalue = seed + 2\nresult = value\n"
+        live_ins = encode_prepared_region_live_ins({"seed": 40})
+        decision = self.decision(source, live_ins=live_ins)
+        wrong_live_ins = encode_prepared_region_live_ins({"seed": 41})
+        with self.assertRaises(ValueError):
+            execute_prepared_region_scratch_request_json(canonical({"decision": decision, "final_source": source, "live_ins": wrong_live_ins}))
+
+        unsafe = "seed = 40\nvalue = int(seed)\nresult = value\n"
+        unsafe_decision = self.decision(unsafe, live_ins=live_ins)
+        with self.assertRaises(ValueError):
+            execute_prepared_region_scratch_request_json(canonical({"decision": unsafe_decision, "final_source": unsafe, "live_ins": live_ins}))
+
+        overflow = "seed = 9223372036854775807\nvalue = seed * seed\nresult = value\n"
+        overflow_live_ins = encode_prepared_region_live_ins({"seed": 9223372036854775807})
+        overflow_decision = self.decision(overflow, live_ins=overflow_live_ins)
+        response = json.loads(execute_prepared_region_scratch_request_json(canonical({"decision": overflow_decision, "final_source": overflow, "live_ins": overflow_live_ins})))
+        self.assertEqual(response["status"], "rejected")
+        self.assertEqual(response["error_type"], "result_out_of_range")
+        self.assertIsNone(response["payload"])
+        self.assertEqual(response["payload_sha256"], "")
 
 
 if __name__ == "__main__":

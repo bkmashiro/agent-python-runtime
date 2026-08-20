@@ -1,6 +1,9 @@
 package semanticspeculation
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestAggregatePhase4CampaignRequiresCompleteMechanismAndProfileEconomics(t *testing.T) {
 	records := make([]Phase4TrialRecord, 0, 360)
@@ -12,7 +15,7 @@ func TestAggregatePhase4CampaignRequiresCompleteMechanismAndProfileEconomics(t *
 		if coordinate.Treatment == "semantic_pre_dispatch" {
 			total = 1000000000
 		}
-		record := Phase4TrialRecord{SchemaVersion: Phase4TrialRecordSchemaVersion, Profile: coordinate.Profile, CaseID: coordinate.CaseID, Treatment: coordinate.Treatment, TrialIndex: coordinate.TrialIndex, TotalElapsedNanos: total, FormalExecutionNanos: 1, FinalProgramOutcome: "success", ResultSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", LogicalCallCount: 1, PhysicalAttemptCount: 1, ReadyBeforeFinalize: 1, AuthorityTerminalDisposition: "consumed", WorkspaceTerminalDisposition: "published", FormalGuestExecutions: 1}
+		record := Phase4TrialRecord{SchemaVersion: Phase4TrialRecordSchemaVersion, Profile: coordinate.Profile, CaseID: coordinate.CaseID, Treatment: coordinate.Treatment, TrialIndex: coordinate.TrialIndex, ExecutionTimeoutNanos: uint64(30 * time.Second), TotalElapsedNanos: total, FormalExecutionNanos: 1, FinalProgramOutcome: "success", ResultSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", LogicalCallCount: 1, PhysicalAttemptCount: 1, ReadyBeforeFinalize: 1, AuthorityTerminalDisposition: "consumed", WorkspaceTerminalDisposition: "published", FormalGuestExecutions: 1}
 		if coordinate.Treatment == "semantic_pre_dispatch" {
 			record.AnalyzerSessionCount = 1
 			record.AnalyzerInvocations = 1

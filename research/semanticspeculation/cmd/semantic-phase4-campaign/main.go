@@ -49,6 +49,7 @@ func main() {
 		fatalf("bind profile: %v", err)
 	}
 	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.Timeout = 30 * time.Second
 	runConfig.ExecutionProfile = &profile
 	coordinates := semanticspeculation.Phase4CampaignCoordinates()
 	for index, coordinate := range coordinates {

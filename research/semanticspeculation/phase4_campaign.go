@@ -17,7 +17,7 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
-const Phase4TrialRecordSchemaVersion = "pysolate.semantic-speculation-phase4-trial.v1"
+const Phase4TrialRecordSchemaVersion = "pysolate.semantic-speculation-phase4-trial.v2"
 
 type Phase4CampaignConfig struct {
 	Artifact      []byte
@@ -32,6 +32,7 @@ type Phase4TrialRecord struct {
 	CaseID                       string `json:"case_id"`
 	Treatment                    string `json:"treatment"`
 	TrialIndex                   uint32 `json:"trial_index"`
+	ExecutionTimeoutNanos        uint64 `json:"execution_timeout_nanos"`
 	TotalElapsedNanos            uint64 `json:"total_elapsed_nanos"`
 	ProvisioningNanos            uint64 `json:"provisioning_nanos"`
 	AdmissionNanos               uint64 `json:"admission_nanos"`
@@ -157,7 +158,7 @@ func RunPhase4CampaignCoordinate(ctx context.Context, config Phase4CampaignConfi
 	}
 	provider := observation()
 	outcome := scheduled.Outcome
-	record := Phase4TrialRecord{SchemaVersion: Phase4TrialRecordSchemaVersion, Profile: coordinate.Profile, CaseID: coordinate.CaseID, Treatment: coordinate.Treatment, TrialIndex: coordinate.TrialIndex, TotalElapsedNanos: total, ProvisioningNanos: provisioningNanos, ProviderNanos: provider.ElapsedNanos, LogicalCallCount: outcome.LogicalCalls, PhysicalAttemptCount: outcome.PhysicalAttempts, ReadyBeforeFinalize: outcome.ReadyBeforeFinalize, ResidentMemoryBytes: processResidentBytes(), AuthorityTerminalDisposition: outcome.AuthorityDisposition, WorkspaceTerminalDisposition: outcome.WorkspaceDisposition, FinalProgramOutcome: outcome.FinalProgramOutcome, ResultSHA256: outcome.ResultSHA256, ErrorClass: outcome.ErrorClass}
+	record := Phase4TrialRecord{SchemaVersion: Phase4TrialRecordSchemaVersion, Profile: coordinate.Profile, CaseID: coordinate.CaseID, Treatment: coordinate.Treatment, TrialIndex: coordinate.TrialIndex, ExecutionTimeoutNanos: uint64(config.RunConfig.Timeout), TotalElapsedNanos: total, ProvisioningNanos: provisioningNanos, ProviderNanos: provider.ElapsedNanos, LogicalCallCount: outcome.LogicalCalls, PhysicalAttemptCount: outcome.PhysicalAttempts, ReadyBeforeFinalize: outcome.ReadyBeforeFinalize, ResidentMemoryBytes: processResidentBytes(), AuthorityTerminalDisposition: outcome.AuthorityDisposition, WorkspaceTerminalDisposition: outcome.WorkspaceDisposition, FinalProgramOutcome: outcome.FinalProgramOutcome, ResultSHA256: outcome.ResultSHA256, ErrorClass: outcome.ErrorClass}
 	if reporter, ok := treatment.(formalExecutionReporter); ok {
 		record.FormalExecutionNanos = reporter.FormalExecutionNanos()
 	}

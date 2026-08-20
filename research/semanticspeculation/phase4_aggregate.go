@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"sort"
+	"time"
 )
 
 const Phase4CampaignReportSchemaVersion = "pysolate.semantic-speculation-phase4-campaign-report.v1"
@@ -140,7 +141,7 @@ func AggregatePhase4Campaign(records []Phase4TrialRecord) (Phase4CampaignReport,
 }
 
 func validatePhase4TrialRecord(r Phase4TrialRecord) error {
-	if r.SchemaVersion != Phase4TrialRecordSchemaVersion || r.TotalElapsedNanos == 0 || r.Profile == "" || r.CaseID == "" || r.Treatment == "" || r.TrialIndex == 0 {
+	if r.SchemaVersion != Phase4TrialRecordSchemaVersion || r.ExecutionTimeoutNanos != uint64(30*time.Second) || r.TotalElapsedNanos == 0 || r.Profile == "" || r.CaseID == "" || r.Treatment == "" || r.TrialIndex == 0 {
 		return errors.New("invalid phase 4 trial")
 	}
 	return nil

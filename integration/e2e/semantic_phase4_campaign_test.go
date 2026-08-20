@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/research/semanticspeculation"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -33,6 +34,7 @@ func TestExactGuestPhase4CampaignColdShortCoordinate(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 30 * time.Second
 	config.ExecutionProfile = &profile
 	profiles := []struct {
 		name, id string

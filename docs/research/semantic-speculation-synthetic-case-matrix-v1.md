@@ -26,6 +26,7 @@ All treatments receive identical source chunks, inputs, release offsets, capabil
 
 The first timing campaign uses `pysolate.semantic-speculation-trial.v2`. It supersedes the pre-campaign v1 projection by requiring explicit bindings for:
 
+- the frozen synthetic case matrix;
 - source schedule;
 - canonical inputs;
 - artifact manifest;

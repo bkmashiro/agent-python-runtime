@@ -11,6 +11,7 @@ func validTrialRecord() TrialRecord {
 		SchemaVersion:          TrialSchemaVersion,
 		StudyID:                "semantic-speculation-v1",
 		PreregistrationSHA256:  "sha256:5c0ec80ded86f07784d51d74aa503108fbd4a587918bc483bd564b35bdc18a47",
+		CaseMatrixSHA256:       SyntheticCaseMatrixIdentity,
 		CaseID:                 "later_syntax_error",
 		Treatment:              "semantic_pre_dispatch",
 		TrialIndex:             1,
@@ -97,6 +98,7 @@ func TestTrialRecordRejectsEveryBoundIdentityMutation(t *testing.T) {
 	mutations := map[string]any{
 		"study_id":                 "semantic-speculation-other",
 		"preregistration_sha256":   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"case_matrix_sha256":       "sha256:aeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeae",
 		"case_id":                  "other_case",
 		"treatment":                "eager_style_gate",
 		"trial_index":              float64(2),

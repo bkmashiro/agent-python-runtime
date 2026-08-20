@@ -33,6 +33,7 @@ type TrialRecord struct {
 	SchemaVersion            string               `json:"schema_version"`
 	StudyID                  string               `json:"study_id"`
 	PreregistrationSHA256    string               `json:"preregistration_sha256"`
+	CaseMatrixSHA256         string               `json:"case_matrix_sha256"`
 	CaseID                   string               `json:"case_id"`
 	Treatment                string               `json:"treatment"`
 	ComparatorContractSHA256 string               `json:"comparator_contract_sha256,omitempty"`
@@ -109,7 +110,8 @@ func DecodeTrialRecord(raw []byte) (TrialRecord, error) {
 
 func validateTrialRecord(value TrialRecord, sealed bool) error {
 	if value.SchemaVersion != TrialSchemaVersion || value.StudyID != "semantic-speculation-v1" ||
-		!digestPattern.MatchString(value.PreregistrationSHA256) || !identifierPattern.MatchString(value.CaseID) ||
+		!digestPattern.MatchString(value.PreregistrationSHA256) || !digestPattern.MatchString(value.CaseMatrixSHA256) ||
+		!identifierPattern.MatchString(value.CaseID) ||
 		!validTreatment(value.Treatment) || value.Treatment == "perfect_effect_oracle" || value.TrialIndex == 0 || value.TrialIndex > 5 ||
 		!digestPattern.MatchString(value.SourceSHA256) || !digestPattern.MatchString(value.SourceScheduleSHA256) ||
 		!digestPattern.MatchString(value.InputsSHA256) || !digestPattern.MatchString(value.ArtifactSHA256) ||

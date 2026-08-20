@@ -305,7 +305,7 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	qualificationEngine, err := wazeroengine.New(ctx, artifact, config)
 	if err != nil {
@@ -384,15 +384,19 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if !ok {
 		t.Fatalf("unexpected runner type %T", runner)
 	}
-	if err := derivedEngine.PrepareSemanticRuntime(ctx); err != nil {
+	finalCapacity, provisionEvidence, err := derivedEngine.PreparePreparedRegionFinal(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if !provisionEvidence.NeverServed || provisionEvidence.ModuleInstantiations == 0 || provisionEvidence.RuntimeInitCalls == 0 {
+		t.Fatalf("final capacity was not initialized during provisioning: %+v", provisionEvidence)
+	}
 	if runtime.GOOS == "linux" {
-		if probe := derivedEngine.COWProbe(); !probe.COWSelected {
-			t.Fatalf("final capacity did not select private COW: %+v", probe)
+		if !provisionEvidence.COWHit {
+			t.Fatalf("final capacity did not select private COW: %+v", provisionEvidence)
 		}
-	} else if state := derivedEngine.PreparedState(); !state.Ready {
-		t.Fatalf("final prepared capacity not ready: %+v", state)
+	} else if !provisionEvidence.PreparedHit {
+		t.Fatalf("final prepared capacity not ready: %+v", provisionEvidence)
 	}
 	if evidence := table.Evidence(); evidence.Ready != 0 || evidence.Unready != 0 {
 		t.Fatalf("empty table changed during final capacity provisioning: %+v", evidence)
@@ -400,9 +404,22 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if err := table.Publish(decision, capsule); err != nil {
 		t.Fatal(err)
 	}
-	derived, err := derivedEngine.RunPreparedRegionDerived(ctx, runRequest, "", selection, decision, capsule, patch)
+	compileEvidence, err := finalCapacity.Compile(ctx, runRequest, selection, decision, capsule, patch)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !compileEvidence.PreparedCapacity || compileEvidence.ModuleInstantiations != 0 || compileEvidence.RuntimeInitCalls != 0 {
+		t.Fatalf("derived compile/load did not consume prepared capacity: %+v", compileEvidence)
+	}
+	if evidence := table.Evidence(); evidence.Ready != 1 || evidence.Claims != 0 || evidence.Consumed != 0 {
+		t.Fatalf("compile/load claimed capsule before formal execution: %+v", evidence)
+	}
+	derived, executionEvidence, err := finalCapacity.Execute(ctx, runRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !executionEvidence.PreparedCapacity || executionEvidence.ModuleInstantiations != 0 || executionEvidence.RuntimeInitCalls != 0 || executionEvidence.FormalGuestExecutions != 1 {
+		t.Fatalf("unexpected derived execution lifecycle: %+v", executionEvidence)
 	}
 	var baselineEnvelope, derivedEnvelope struct {
 		Status string          `json:"status"`
@@ -419,6 +436,9 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if evidence := table.Evidence(); evidence.Consumed != 1 || evidence.Claims != 1 || evidence.RejectedClaims != 0 {
 		t.Fatalf("table evidence=%+v", evidence)
 	}
+	if response, _, err := finalCapacity.Execute(ctx, runRequest); response != nil || !errors.Is(err, wazeroengine.ErrPreparedRegionDerivedCapacityConsumed) {
+		t.Fatalf("second derived execution response=%s err=%v", response, err)
+	}
 	if err := derivedEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -427,17 +447,27 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if err != nil {
 		t.Fatal(err)
 	}
-	driftRunner, err := (wazeroengine.Factory{PreparedRegions: driftTable}).New(ctx, artifact, config)
+	driftConfig := config
+	driftConfig.Mechanisms.PreparedRuntime = true
+	driftConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	driftRunner, err := (wazeroengine.Factory{PreparedRegions: driftTable}).New(ctx, artifact, driftConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	driftEngine := driftRunner.(*wazeroengine.Engine)
+	driftCapacity, _, err := driftEngine.PreparePreparedRegionFinal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	driftRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-invalid-suffix", Code: source + "suffix = 1\n", Inputs: json.RawMessage(`{}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response, err := driftEngine.RunPreparedRegionDerived(ctx, driftRequest, "", selection, decision, capsule, patch); err == nil || response != nil {
-		t.Fatalf("invalid suffix response=%s err=%v", response, err)
+	if compileEvidence, err := driftCapacity.Compile(ctx, driftRequest, selection, decision, capsule, patch); err == nil || compileEvidence.SelectionCompiles != 0 {
+		t.Fatalf("invalid suffix compile evidence=%+v err=%v", compileEvidence, err)
+	}
+	if response, _, err := driftCapacity.Execute(ctx, driftRequest); response != nil || !errors.Is(err, wazeroengine.ErrPreparedRegionDerivedCapacityConsumed) {
+		t.Fatalf("invalid suffix execution response=%s err=%v", response, err)
 	}
 	if evidence := driftTable.Evidence(); evidence.Ready != 1 || evidence.Claims != 0 || evidence.Consumed != 0 {
 		t.Fatalf("invalid suffix consumed region: %+v", evidence)

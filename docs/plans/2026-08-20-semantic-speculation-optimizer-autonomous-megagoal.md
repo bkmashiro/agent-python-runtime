@@ -439,13 +439,18 @@ Explicitly deferred:
 - no arbitrary dirty-page promotion or Python heap transfer;
 - no shared mutable memory, raw FD transfer, general CPython allocator replacement or wazero fork.
 
-Cache branch:
+Cache and multi-agent reuse branch:
 
-- [ ] Use the Phase 4 census to distinguish run-scoped occurrences, coalescible simultaneous duplicates and durable cross-run exact repeats.
+- [ ] Keep AST qualification and Host reuse authority separate. The semantic analyser may identify an exact pure producer/consumer region, but only the Host subagent descriptor/plan may authorize lineage, privacy scope and value delivery.
+- [ ] Support automatic lineage-scoped reuse only for an exact computation identity repeated by parent/children or sibling children. Multi-agent context alone is never a cache key or admission proof.
+- [ ] For a parent-produced value consumed by different child source, use a Host-authored typed `ValueRef` bound to parent lineage, producer computation, typed blob, child input identity, artifact/profile and privacy partition. Materialize it as an ordinary child input; do not ask the model to carry a blob handle or special sharing protocol.
+- [ ] Use the Phase 4 census to distinguish run-scoped occurrences, coalescible simultaneous duplicates and durable cross-session exact repeats.
 - [ ] Add single-flight only when Host coalescing authority and one physical/multiple logical evidence are present.
-- [ ] Add durable cache only when exact repeated computation identity is observed naturally and binds source region, canonical live-ins, immutable dependencies, artifact/profile/imports/packages, pass/emitter, codec, privacy and policy epoch.
-- [ ] Never use overlay digest, natural-language task text or equal arguments alone as cache identity.
-- [ ] Add expiry/invalidation/quota/body-size and corrupted-entry tests before enabling any completed-result reuse.
+- [ ] Add durable cross-session cache only when exact repeated computation identity is observed naturally and binds source region, canonical live-ins, immutable dependencies, artifact/profile/imports/packages, pass/emitter, codec, privacy and policy epoch.
+- [ ] Define durable reuse as fresh-interpreter value materialisation, not persistent-interpreter continuation. Every claim constructs a new local Python object; `id()`, aliases, weakrefs, module globals, heap, descriptors and in-place mutations do not cross Runs.
+- [ ] Treat every modified consumer value as private. Persistence requires explicit publication of a new immutable blob generation; never mutate a retained canonical blob in place.
+- [ ] Never use session ID, multi-agent status, overlay digest, natural-language task text or equal arguments alone as cache identity.
+- [ ] Add expiry/invalidation/quota/body-size, process-reopen, stale lineage, cross-session/cross-project denial, mutation isolation and corrupted-entry tests before enabling completed-result reuse.
 
 **Gate P7:** Each retained codec/cache mode has positive measured economics and strict identity. The Host owns one immutable canonical body; every consuming Guest receives one bounded private copy and reconstructs interpreter-local wrappers. If scalar succeeds but every large type loses to recomputation, record scalar-only support and continue. If safe transport requires arbitrary heap transfer, pointer-bearing values, generic pickle semantics, shared mappings, broad allocator replacement or a wazero fork, stop.
 

@@ -112,6 +112,17 @@ The Host owns the blob handle, generation, body, computation/content identity, p
 
 This intentionally trades zero-copy fan-out for a smaller and clearer authority boundary. It needs no transferable linear-memory arena, subrange remapping, general CPython allocator change, shared mutable memory or engine fork. NumPy and DataFrame support remains typed: pointer-bearing `dtype=object`, arbitrary extension arrays, pickle and generic Python object graphs are rejected. The implementation must measure producer-to-Host copy, Host-to-Guest copy per consumer, reconstruction, peak memory and recomputation before retaining a large type.
 
+## Transparent multi-agent and cross-session reuse
+
+Generated producer and consumer programs need no blob-handle or sharing protocol. AST facts may qualify an exact pure producer/consumer region; Host orchestration supplies reuse authority. The current subagent descriptor already binds parent lineage, source, inputs, artifact, execution profile, child plan and privacy partition, which is the correct place to authorize a typed `ValueRef`.
+
+Two cases remain distinct:
+
+1. The same exact computation appears in parent/children or sibling children. A complete computation identity may select one Host blob automatically.
+2. A parent-produced value is consumed by different child source. The Host binds a typed `ValueRef` to a declared child input and privately materialises it before child execution; the model never sees the storage handle.
+
+Multi-agent status alone never enables reuse. Cross-session retention additionally needs observed exact repeats, durable blob storage, expiry/invalidation/quota, policy and privacy identity, and process-reopen verification. It preserves a value, not an interpreter: every Run constructs a fresh local Python wrapper and does not retain `id()`, aliases, weakrefs, module globals, heap, descriptors or in-place mutation. A modified value can persist only by explicit publication as a new immutable blob generation.
+
 ## Computation identity for a prepared region
 
 An overlay or AST digest alone is not a cache key. At minimum bind:

@@ -92,7 +92,7 @@ func AggregatePhase4Campaign(records []Phase4TrialRecord) (Phase4CampaignReport,
 				if !samePhase4Outcome(serial, eager) || !samePhase4Outcome(serial, semantic) || semantic.AnalyzerSessionCount != 1 || semantic.FormalGuestExecutions != 1 || semantic.OrphanedPhysicalCount != 0 || semantic.AnalyzerInvocations > uint32(len(row.CandidatePrefixIndices)) {
 					mechanism = false
 				}
-				if profile == "preprovisioned_equivalent_capacity" && (semantic.PreparedOrCOWHitCount != 1 || semantic.PreparedOrCOWFallbackCount != 0 || semantic.ProvisioningNanos == 0) {
+				if profile == "preprovisioned_equivalent_capacity" && (semantic.PreparedOrCOWFallbackCount != 0 || semantic.ProvisioningNanos == 0 || (semantic.AnalyzerInvocations > 0 && semantic.PreparedOrCOWHitCount != 1) || (semantic.AnalyzerInvocations == 0 && semantic.PreparedOrCOWHitCount != 0)) {
 					mechanism = false
 				}
 				if profile == "cold_end_to_end" && (semantic.PreparedOrCOWHitCount != 0 || semantic.ProvisioningNanos != 0) {

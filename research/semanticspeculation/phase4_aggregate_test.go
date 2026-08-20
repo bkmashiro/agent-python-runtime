@@ -22,6 +22,10 @@ func TestAggregatePhase4CampaignRequiresCompleteMechanismAndProfileEconomics(t *
 			if coordinate.Profile == "preprovisioned_equivalent_capacity" {
 				record.PreparedOrCOWHitCount = 1
 				record.ProvisioningNanos = 1
+				if coordinate.CaseID == "pure_local_gap6_control" {
+					record.AnalyzerInvocations = 0
+					record.PreparedOrCOWHitCount = 0
+				}
 			}
 		}
 		records = append(records, record)

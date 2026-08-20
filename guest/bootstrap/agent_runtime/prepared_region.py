@@ -255,17 +255,32 @@ def emit_prepared_region_patch_request_json(request_json):
     return _canonical(binding)
 
 
-def _safe_scalar_rhs(node, live_ins):
+class _ScratchRangeError(Exception):
+    pass
+
+
+def _evaluate_scalar_rhs(node, live_ins):
     if isinstance(node, ast.Constant):
-        return _valid_scalar(node.value)
+        if _valid_scalar(node.value):
+            return node.value
+        raise ValueError("prepared region scratch constant is outside the scalar v1 subset")
     if isinstance(node, ast.Name):
-        return node.id in live_ins and _valid_scalar(live_ins[node.id])
-    return (
-        isinstance(node, ast.BinOp)
-        and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult))
-        and _safe_scalar_rhs(node.left, live_ins)
-        and _safe_scalar_rhs(node.right, live_ins)
-    )
+        if node.id in live_ins and _valid_scalar(live_ins[node.id]):
+            return live_ins[node.id]
+        raise ValueError("prepared region scratch name is not an admitted scalar live-in")
+    if not isinstance(node, ast.BinOp) or not isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
+    left = _evaluate_scalar_rhs(node.left, live_ins)
+    right = _evaluate_scalar_rhs(node.right, live_ins)
+    if isinstance(node.op, ast.Add):
+        value = left + right
+    elif isinstance(node.op, ast.Sub):
+        value = left - right
+    else:
+        value = left * right
+    if not _valid_scalar(value):
+        raise _ScratchRangeError("prepared region scratch intermediate is outside int64")
+    return value
 
 
 def execute_prepared_region_scratch_request_json(request_json):
@@ -281,21 +296,23 @@ def execute_prepared_region_scratch_request_json(request_json):
     _derive(request["final_source"], decision)
     tree = ast.parse(request["final_source"], filename="<prepared-region-scratch>", mode="exec")
     statement = next(node for node in tree.body if _span(node) == decision["region_span"])
-    if not isinstance(statement, ast.Assign) or not _safe_scalar_rhs(statement.value, live_ins):
+    if not isinstance(statement, ast.Assign):
         raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
     try:
-        value = eval(compile(ast.Expression(statement.value), "<prepared-region-scratch>", "eval"), {"__builtins__": {}}, dict(live_ins))
+        value = _evaluate_scalar_rhs(statement.value, live_ins)
+    except _ScratchRangeError:
+        return _canonical({
+            "decision_sha256": decision["identity_sha256"], "error_type": "result_out_of_range",
+            "payload": None, "payload_sha256": "", "schema_version": SCRATCH_RESULT_SCHEMA_VERSION,
+            "status": "rejected",
+        })
+    except ValueError:
+        raise
     except BaseException as exc:
         return _canonical({
             "decision_sha256": decision["identity_sha256"], "error_type": type(exc).__name__,
             "payload": None, "payload_sha256": "", "schema_version": SCRATCH_RESULT_SCHEMA_VERSION,
             "status": "failed",
-        })
-    if not _valid_scalar(value):
-        return _canonical({
-            "decision_sha256": decision["identity_sha256"], "error_type": "result_out_of_range",
-            "payload": None, "payload_sha256": "", "schema_version": SCRATCH_RESULT_SCHEMA_VERSION,
-            "status": "rejected",
         })
     payload = _canonical(value)
     return _canonical({

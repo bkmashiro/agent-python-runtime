@@ -1,0 +1,92 @@
+{
+  "artifact": {
+    "archive": "/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-scratch-5c8f036/",
+    "manifest_sha256": "a9d3105a8dc7df3b375556a9d30c7505abfc896525c66a461f523fe29a2911b6",
+    "source_date_epoch": "1787252651",
+    "wasm_sha256": "aae56baf0ea4b977cdc764e8246e7f358aea1ce3af87105e0f56c2af95af9c73"
+  },
+  "authority": {
+    "analyzer_executes_agent_source": false,
+    "broker_available": false,
+    "cross_run_mutable_state": false,
+    "host_capsule_publication": true,
+    "official_workspace_mutation": false,
+    "scratch_guest_fresh": true,
+    "workspace_mounted": false
+  },
+  "contract": {
+    "admitted_rhs": [
+      "bool/int64 constant",
+      "bound scalar live-in",
+      "Add",
+      "Sub",
+      "Mult"
+    ],
+    "bounds": [
+      "all constants and live-ins are int64/bool",
+      "every arithmetic intermediate remains int64",
+      "payload <= 256 bytes",
+      "one fresh Guest module per scratch attempt",
+      "one source-bound decision",
+      "one exact top-level single-name assignment"
+    ],
+    "capsule_publication": "ready_only",
+    "codec": "canonical_json_bool_or_int64.v1",
+    "live_ins_schema": "pysolate.prepared-region-live-ins.v1",
+    "scratch_result_schema": "pysolate.prepared-region-scratch-result.v1",
+    "terminal_states": [
+      "ready",
+      "rejected",
+      "failed",
+      "cancelled"
+    ],
+    "validation_failures": "fail closed before capsule publication"
+  },
+  "exact_guest": {
+    "controls": [
+      "ready payload 42 is sealed into a decision-bound capsule",
+      "capsule is single-use through PreparedRegionTable",
+      "live-in identity drift returns error and publishes no capsule",
+      "fresh module evidence is exactly one instantiation per attempt",
+      "Broker/workspace properties remain false"
+    ],
+    "linux_gpu31": {
+      "helper_claim": "PASS (16.19s)",
+      "patch_emitter": "PASS (5.48s)",
+      "scratch_execution_and_publication": "PASS (8.95s)",
+      "test_binary_sha256": "aa0bdb116c188cc9fe871ab47bcc88b127aa57197316c95bd0b8852690865d59"
+    },
+    "macos": {
+      "helper_claim": "PASS (10.67s)",
+      "patch_emitter": "PASS (3.60s)",
+      "scratch_execution_and_publication": "PASS (5.84s)"
+    }
+  },
+  "gates": {
+    "final_program_selection": false,
+    "phase5_gate_passed": false,
+    "scratch_execution_and_typed_publication": true
+  },
+  "negative_controls": [
+    "unknown/noncanonical live-ins rejected",
+    "wrong live-in identity rejected",
+    "unsafe RHS rejected",
+    "out-of-range intermediate returns typed rejected",
+    "non-ready result cannot publish capsule",
+    "pre-cancelled context returns typed cancelled plus context error",
+    "authority-bearing engine rejected"
+  ],
+  "next": "Select original or sealed derived program before fresh final Guest execution, with no racy runtime fallback.",
+  "recorded_at": "2026-08-20",
+  "schema_version": "pysolate.semantic-speculation-phase5-scratch-evidence.v1",
+  "source": {
+    "commit": "5c8f036959964c6a54d13a319178d67283a97dfd",
+    "implementation_commits": [
+      "d01f74ff9262d6d744134bd71101c59c966ee2e9",
+      "5c8f036959964c6a54d13a319178d67283a97dfd"
+    ],
+    "phase3_negative_baseline_modified": false,
+    "pysolate_thesis_modified": false,
+    "repository": "agent-python-runtime"
+  }
+}

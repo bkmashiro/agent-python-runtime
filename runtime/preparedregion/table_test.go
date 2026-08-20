@@ -98,6 +98,49 @@ func TestPreparedRegionTableValidateReadyDoesNotConsumeAndBindsExactCapsule(t *t
 	}
 }
 
+func TestPreparedRegionTablePublishesLateIntoEmptyTableExactlyOnce(t *testing.T) {
+	decision, capsule := preparedRegionFixture(t, `42`)
+	table, err := NewPreparedRegionTable(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Publish(decision, capsule); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Publish(decision, capsule); !errors.Is(err, ErrPreparedRegionAlreadyPublished) {
+		t.Fatalf("second publish error=%v", err)
+	}
+	if err := table.ValidateReady(decision, capsule); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := table.Claim(decision.IdentitySHA256)
+	if err != nil || string(payload) != "42" {
+		t.Fatalf("payload=%s err=%v", payload, err)
+	}
+	if evidence := table.Evidence(); evidence.Ready != 0 || evidence.Consumed != 1 || evidence.Claims != 1 || evidence.RejectedClaims != 0 || evidence.PayloadBytes != 2 {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
+
+func TestPreparedRegionTableLatePublishRejectsClosedAndInvalidInputs(t *testing.T) {
+	decision, capsule := preparedRegionFixture(t, `true`)
+	table, err := NewPreparedRegionTable(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := capsule
+	tampered.PayloadSHA256 = testDigestB
+	if err := table.Publish(decision, tampered); !errors.Is(err, ErrInvalidPreparedRegion) {
+		t.Fatalf("tampered publish error=%v", err)
+	}
+	if err := table.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Publish(decision, capsule); !errors.Is(err, ErrPreparedRegionClosed) {
+		t.Fatalf("closed publish error=%v", err)
+	}
+}
+
 func TestPreparedRegionTableCloseDiscardsReadyEntries(t *testing.T) {
 	decision, capsule := preparedRegionFixture(t, `-7`)
 	table, err := NewPreparedRegionTable([]PreparedRegionEntry{{Decision: decision, Capsule: capsule}})

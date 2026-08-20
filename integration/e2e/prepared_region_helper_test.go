@@ -369,17 +369,36 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if err := baselineEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	table, err := preparedregion.NewPreparedRegionTable(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, config)
+	derivedConfig := config
+	derivedConfig.Mechanisms.PreparedRuntime = true
+	derivedConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, derivedConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	derivedEngine, ok := runner.(*wazeroengine.Engine)
 	if !ok {
 		t.Fatalf("unexpected runner type %T", runner)
+	}
+	if err := derivedEngine.PrepareSemanticRuntime(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "linux" {
+		if probe := derivedEngine.COWProbe(); !probe.COWSelected {
+			t.Fatalf("final capacity did not select private COW: %+v", probe)
+		}
+	} else if state := derivedEngine.PreparedState(); !state.Ready {
+		t.Fatalf("final prepared capacity not ready: %+v", state)
+	}
+	if evidence := table.Evidence(); evidence.Ready != 0 || evidence.Unready != 0 {
+		t.Fatalf("empty table changed during final capacity provisioning: %+v", evidence)
+	}
+	if err := table.Publish(decision, capsule); err != nil {
+		t.Fatal(err)
 	}
 	derived, err := derivedEngine.RunPreparedRegionDerived(ctx, runRequest, "", selection, decision, capsule, patch)
 	if err != nil {

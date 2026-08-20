@@ -6,10 +6,11 @@ import (
 )
 
 var (
-	ErrPreparedRegionMissing  = errors.New("prepared region decision is missing")
-	ErrPreparedRegionUnready  = errors.New("prepared region decision is not ready")
-	ErrPreparedRegionConsumed = errors.New("prepared region decision is already consumed")
-	ErrPreparedRegionClosed   = errors.New("prepared region table is closed")
+	ErrPreparedRegionMissing          = errors.New("prepared region decision is missing")
+	ErrPreparedRegionUnready          = errors.New("prepared region decision is not ready")
+	ErrPreparedRegionConsumed         = errors.New("prepared region decision is already consumed")
+	ErrPreparedRegionClosed           = errors.New("prepared region table is closed")
+	ErrPreparedRegionAlreadyPublished = errors.New("prepared region decision is already published")
 )
 
 const PreparedRegionTableEvidenceSchemaVersion = "pysolate.prepared-region-table-evidence.v1"
@@ -74,6 +75,37 @@ func NewPreparedRegionTable(entries []PreparedRegionEntry) (*PreparedRegionTable
 		table.entries[identity] = entry
 	}
 	return table, nil
+}
+
+// Publish installs one Host-sealed capsule after treatment capacity has been
+// provisioned. It never replaces ready, consumed, or discarded state.
+func (table *PreparedRegionTable) Publish(decision PreparedRegionDecision, capsule PreparedRegionCapsule) error {
+	if table == nil || !decision.valid() || capsule.ValidateDecision(decision) != nil {
+		return ErrInvalidPreparedRegion
+	}
+	table.mu.Lock()
+	defer table.mu.Unlock()
+	if table.closed {
+		return ErrPreparedRegionClosed
+	}
+	entry, exists := table.entries[decision.IdentitySHA256]
+	if !exists {
+		table.entries[decision.IdentitySHA256] = &preparedRegionTableEntry{
+			decision: decision,
+			capsule:  capsule,
+			state:    preparedRegionReady,
+		}
+		return nil
+	}
+	if entry.state != preparedRegionUnready {
+		return ErrPreparedRegionAlreadyPublished
+	}
+	if entry.decision != decision {
+		return ErrInvalidPreparedRegion
+	}
+	entry.capsule = capsule
+	entry.state = preparedRegionReady
+	return nil
 }
 
 func (table *PreparedRegionTable) Claim(decisionSHA256 string) ([]byte, error) {

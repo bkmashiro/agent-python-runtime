@@ -1,7 +1,7 @@
 import ast
 import unittest
 
-from agent_runtime.ast_support import MAX_AST_DEPTH, MAX_AST_NODES, ast_digest_bounded, fix_missing_locations_bounded, walk_ast_bounded
+from agent_runtime.ast_support import MAX_AST_DEPTH, MAX_AST_NODES, ast_digest_bounded, fix_missing_locations_bounded, validate_ast_recursion_shape_bounded, walk_ast_bounded
 
 
 class BoundedASTSupportTests(unittest.TestCase):
@@ -35,6 +35,13 @@ class BoundedASTSupportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "AST depth bound exceeded"):
             fix_missing_locations_bounded(tree, max_depth=16)
         self.assertGreater(MAX_AST_DEPTH, 512)
+
+    def test_only_the_deep_scalar_binop_lane_bypasses_recursive_visitor_depth(self):
+        scalar = ast.parse("value = seed" + " + 1" * 512 + "\n")
+        validate_ast_recursion_shape_bounded(scalar)
+        unary = ast.parse("value = " + "-" * 500 + "seed\n")
+        with self.assertRaisesRegex(ValueError, "recursive visitor depth bound exceeded"):
+            validate_ast_recursion_shape_bounded(unary)
 
 
 if __name__ == "__main__":

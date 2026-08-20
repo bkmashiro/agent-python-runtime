@@ -7,6 +7,7 @@ from typing import TypeVar
 
 MAX_AST_NODES = 8192
 MAX_AST_DEPTH = 1024
+MAX_RECURSIVE_VISITOR_DEPTH = 256
 _AST_DIGEST_DOMAIN = b"pysolate.ast-structure.v1\x00"
 _AST = TypeVar("_AST", bound=ast.AST)
 
@@ -34,6 +35,31 @@ def walk_ast_bounded(root, max_nodes=MAX_AST_NODES, max_depth=MAX_AST_DEPTH):
         if depth > max_depth:
             raise ValueError("AST depth bound exceeded")
         yield node
+        children = list(ast.iter_child_nodes(node))
+        stack.extend((child, depth + 1) for child in reversed(children))
+
+
+def validate_ast_recursion_shape_bounded(root, max_recursive_depth=MAX_RECURSIVE_VISITOR_DEPTH):
+    """Reject deep shapes unless they are the narrow iterative scalar BinOp lane."""
+    deep_scalar_nodes = (ast.BinOp, ast.operator, ast.Name, ast.Constant, ast.expr_context)
+    for node, depth in _walk_ast_with_depth(root):
+        if depth > max_recursive_depth and not isinstance(node, deep_scalar_nodes):
+            raise ValueError("AST recursive visitor depth bound exceeded")
+
+
+def _walk_ast_with_depth(root):
+    if not isinstance(root, ast.AST):
+        raise ValueError("invalid AST traversal")
+    stack = [(root, 1)]
+    seen = 0
+    while stack:
+        node, depth = stack.pop()
+        seen += 1
+        if seen > MAX_AST_NODES:
+            raise ValueError("AST node bound exceeded")
+        if depth > MAX_AST_DEPTH:
+            raise ValueError("AST depth bound exceeded")
+        yield node, depth
         children = list(ast.iter_child_nodes(node))
         stack.extend((child, depth + 1) for child in reversed(children))
 

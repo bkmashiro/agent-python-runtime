@@ -49,6 +49,11 @@ class SemanticAnalysisTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             analyze_source(source, BINDINGS, [])
 
+    def test_deep_non_scalar_shape_fails_closed_before_recursive_visitors(self):
+        source = "seed = 1\nvalue = " + "-" * 500 + "seed\nresult = value\n"
+        with self.assertRaisesRegex(ValueError, "recursive visitor depth bound exceeded"):
+            analyze_source(source, BINDINGS, [])
+
     def analyze(self, source, bindings=None, capabilities=None):
         return analyze_source(
             source,

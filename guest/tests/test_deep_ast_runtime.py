@@ -23,6 +23,12 @@ class DeepASTRuntimeTests(unittest.TestCase):
         self.assertEqual(_SOURCE_CONTRACT_INVALID, status)
         self.assertIsNone(code)
 
+    def test_deep_non_scalar_shape_is_invalid_not_an_unhandled_recursion(self):
+        source = "seed = 1\nvalue = " + "-" * 500 + "seed\nresult = value\n"
+        status, code = _validate_unrestricted_source(source)
+        self.assertEqual(_SOURCE_CONTRACT_INVALID, status)
+        self.assertIsNone(code)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,11 +5,11 @@ import hashlib
 import json
 import re
 
-from .ast_support import MAX_AST_NODES, ast_digest_bounded, walk_ast_bounded
+from .ast_support import MAX_AST_NODES, ast_digest_bounded, validate_ast_recursion_shape_bounded, walk_ast_bounded
 
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v3"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v8").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v9").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_SCALAR_OPERATORS = 1024
 MAX_CAPABILITIES = 128
@@ -872,6 +872,7 @@ def analyze_source(source, bindings, capabilities):
         tree = ast.parse(source, filename="<agent-semantic-analysis>", mode="exec")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError) as exc:
         raise ValueError("invalid semantic source") from exc
+    validate_ast_recursion_shape_bounded(tree)
     source_sha256 = _digest(source.encode("utf-8"))
     ast_sha256 = ast_digest_bounded(tree)
     capability_index = _capability_index(capabilities)

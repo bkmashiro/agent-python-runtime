@@ -16,7 +16,7 @@ import traceback
 import types
 from typing import Any
 
-from .ast_support import ast_digest_bounded, fix_missing_locations_bounded, walk_ast_bounded
+from .ast_support import ast_digest_bounded, fix_missing_locations_bounded, validate_ast_recursion_shape_bounded, walk_ast_bounded
 
 _ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "compatibility", "requirements"}
 _TRACEBACK_MAX = 16_384
@@ -586,6 +586,7 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
 
 
 def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tuple[types.CodeType, str]:
+    validate_ast_recursion_shape_bounded(ast.Module(body=body, type_ignores=[]))
     collector = _ModuleAssignedNameCollector()
     for node in (*preamble, *body):
         collector.visit(node)

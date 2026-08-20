@@ -77,12 +77,21 @@ func TestExactGuestPhase5OriginalOperationsExcludedPilot(t *testing.T) {
 	if patched := derived.Snapshot(); patched.DecisionSHA256 == "" || patched.PatchSHA256 == "" {
 		t.Fatalf("derived patch identities missing: %+v", patched)
 	}
+	if err := derived.ExecuteScratch(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if err := derived.SealCapsule(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if sealed := derived.Snapshot(); sealed.CapsuleSHA256 == "" || sealed.CapsuleBytes == 0 || sealed.CapsuleBytes > 256 || sealed.ScratchGuestExecutions != 1 {
+		t.Fatalf("derived capsule lifecycle drift: %+v", sealed)
+	}
 	if err := derived.Analyze(ctx, input); err == nil {
 		t.Fatal("derived analyzer accepted a second request")
 	}
 	derivedSnapshot = derived.Snapshot()
-	if derivedSnapshot.ScratchGuestExecutions != 0 || derivedSnapshot.FormalGuestExecutions != 0 || derivedSnapshot.HelperClaimCount != 0 {
-		t.Fatalf("analysis executed source or consumed downstream capacity: %+v", derivedSnapshot)
+	if derivedSnapshot.FormalGuestExecutions != 0 || derivedSnapshot.HelperClaimCount != 0 {
+		t.Fatalf("analysis/scratch executed formal source or claimed capsule: %+v", derivedSnapshot)
 	}
 	if err := derived.Teardown(ctx); err != nil {
 		t.Fatal(err)

@@ -44,6 +44,8 @@ type Phase5ExactGuestOperations struct {
 	decisionRaw     []byte
 	liveInsRaw      []byte
 	patch           preparedregion.PreparedRegionPatch
+	scratchResult   preparedregion.PreparedRegionScratchResult
+	capsule         preparedregion.PreparedRegionCapsule
 	request         []byte
 	snapshot        Phase5ExecutionSnapshot
 	teardown        bool
@@ -301,11 +303,50 @@ func (operations *Phase5ExactGuestOperations) EmitPatch(ctx context.Context, inp
 	operations.snapshot.PatchSHA256 = patch.IdentitySHA256
 	return nil
 }
-func (operations *Phase5ExactGuestOperations) ExecuteScratch(context.Context, Phase5ExecutionInput) error {
-	return ErrPhase5DerivedOperationsUnavailable
+func (operations *Phase5ExactGuestOperations) ExecuteScratch(ctx context.Context, input Phase5ExecutionInput) error {
+	if operations == nil || ctx == nil {
+		return errors.New("invalid phase 5 scratch input")
+	}
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if operations.decisionRaw == nil || operations.liveInsRaw == nil || operations.scratchCapacity == nil || operations.scratchResult.Status != "" {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	request, err := json.Marshal(map[string]string{"decision": string(operations.decisionRaw), "final_source": input.Source, "live_ins": string(operations.liveInsRaw)})
+	if err != nil {
+		return err
+	}
+	result, evidence, err := operations.scratchCapacity.Execute(ctx, request, operations.decision)
+	if err != nil {
+		return err
+	}
+	if !evidence.PreparedCapacity || evidence.BrokerAvailable || evidence.WorkspaceMounted {
+		return errors.New("phase 5 scratch capacity lifecycle drift")
+	}
+	operations.scratchResult = result
+	operations.snapshot.ScratchGuestExecutions = 1
+	return nil
 }
 func (operations *Phase5ExactGuestOperations) SealCapsule(context.Context) error {
-	return ErrPhase5DerivedOperationsUnavailable
+	if operations == nil {
+		return errors.New("invalid phase 5 capsule operation")
+	}
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if operations.scratchResult.Status == "" || operations.capsule.IdentitySHA256 != "" || operations.preparedTable == nil {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	_, capsule, err := preparedregion.PublishPreparedRegionScratchResult(operations.decision, operations.scratchResult)
+	if err != nil {
+		return err
+	}
+	if err := operations.preparedTable.Publish(operations.decision, capsule); err != nil {
+		return err
+	}
+	operations.capsule = capsule
+	operations.snapshot.CapsuleSHA256 = capsule.IdentitySHA256
+	operations.snapshot.CapsuleBytes = capsule.PayloadBytes
+	return nil
 }
 func (operations *Phase5ExactGuestOperations) ValidateSelection(context.Context, Phase5ExecutionInput) error {
 	return ErrPhase5DerivedOperationsUnavailable

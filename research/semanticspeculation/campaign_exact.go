@@ -62,6 +62,13 @@ func NewExactGuestCampaign(config ExactGuestCampaignConfig) (*ExactGuestCampaign
 	}}, nil
 }
 
+func (campaign *ExactGuestCampaign) Bindings() TrialBindings {
+	if campaign == nil {
+		return TrialBindings{}
+	}
+	return campaign.bindings
+}
+
 func NewPhase3CampaignPlan(handler capability.Handler) (*capability.Plan, error) {
 	if handler == nil {
 		return nil, errors.New("phase 3 campaign handler is nil")

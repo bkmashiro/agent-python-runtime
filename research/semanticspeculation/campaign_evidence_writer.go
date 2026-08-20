@@ -24,6 +24,10 @@ type MatchedCaseEvidenceReference struct {
 	SizeBytes  uint64 `json:"size_bytes"`
 }
 
+func matchedEvidenceFileName(caseID string, trialIndex uint32) string {
+	return fmt.Sprintf("%s-trial-%02d.json", caseID, trialIndex)
+}
+
 // WriteMatchedCaseEvidenceFile persists one immutable body-free matched-case
 // envelope. The root must already exist as a private non-symlink directory. A
 // pre-existing destination is never replaced, including a partial prior write.
@@ -32,16 +36,15 @@ func WriteMatchedCaseEvidenceFile(root string, evidence MatchedCaseEvidence) (Ma
 	if err != nil || root == "" || len(evidence.Records) != 3 {
 		return MatchedCaseEvidenceReference{}, ErrEvidenceWriteInvalid
 	}
-	info, err := os.Lstat(root)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
-		return MatchedCaseEvidenceReference{}, ErrEvidenceRootNotPrivate
+	if err := validatePrivateEvidenceRoot(root); err != nil {
+		return MatchedCaseEvidenceReference{}, err
 	}
 	caseID := evidence.Records[0].CaseID
 	trialIndex := evidence.Records[0].TrialIndex
 	if !identifierPattern.MatchString(caseID) || trialIndex == 0 || trialIndex > 5 {
 		return MatchedCaseEvidenceReference{}, ErrEvidenceWriteInvalid
 	}
-	fileName := fmt.Sprintf("%s-trial-%02d.json", caseID, trialIndex)
+	fileName := matchedEvidenceFileName(caseID, trialIndex)
 	path := filepath.Join(root, fileName)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {

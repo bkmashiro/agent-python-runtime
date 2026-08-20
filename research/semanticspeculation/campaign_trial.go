@@ -7,12 +7,12 @@ import (
 )
 
 type TrialBindings struct {
-	ArtifactSHA256         string
-	ManifestSHA256         string
-	ImportInventorySHA256  string
-	ExecutionProfileSHA256 string
-	CapabilityPlanSHA256   string
-	PrivacySHA256          string
+	ArtifactSHA256         string `json:"artifact_sha256"`
+	ManifestSHA256         string `json:"manifest_sha256"`
+	ImportInventorySHA256  string `json:"import_inventory_sha256"`
+	ExecutionProfileSHA256 string `json:"execution_profile_sha256"`
+	CapabilityPlanSHA256   string `json:"capability_plan_sha256"`
+	PrivacySHA256          string `json:"privacy_sha256"`
 }
 
 func BuildScheduledTrialRecord(

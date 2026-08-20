@@ -71,6 +71,12 @@ func TestExactGuestPhase5OriginalOperationsExcludedPilot(t *testing.T) {
 	if err := derived.Analyze(ctx, input); err != nil {
 		t.Fatal(err)
 	}
+	if err := derived.EmitPatch(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if patched := derived.Snapshot(); patched.DecisionSHA256 == "" || patched.PatchSHA256 == "" {
+		t.Fatalf("derived patch identities missing: %+v", patched)
+	}
 	if err := derived.Analyze(ctx, input); err == nil {
 		t.Fatal("derived analyzer accepted a second request")
 	}

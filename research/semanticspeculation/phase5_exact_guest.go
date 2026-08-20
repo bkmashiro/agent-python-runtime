@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +40,10 @@ type Phase5ExactGuestOperations struct {
 	analysis        *semantic.Analysis
 	candidate       *semantic.CandidateRegion
 	analysisSHA256  string
+	decision        preparedregion.PreparedRegionDecision
+	decisionRaw     []byte
+	liveInsRaw      []byte
+	patch           preparedregion.PreparedRegionPatch
 	request         []byte
 	snapshot        Phase5ExecutionSnapshot
 	teardown        bool
@@ -86,7 +92,7 @@ func (operations *Phase5ExactGuestOperations) Provision(ctx context.Context, kin
 		if err != nil {
 			return err
 		}
-		session, err := engine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: 16 * 1024, MaxDuration: 20 * time.Second})
+		session, err := engine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 2, MaxCumulativeRequestBytes: 32 * 1024, MaxDuration: 20 * time.Second})
 		if err != nil {
 			_ = engine.Close(context.Background())
 			return err
@@ -242,8 +248,58 @@ func (operations *Phase5ExactGuestOperations) Analyze(ctx context.Context, input
 	operations.analysisSHA256 = analysisSHA256
 	return nil
 }
-func (operations *Phase5ExactGuestOperations) EmitPatch(context.Context, Phase5ExecutionInput) error {
-	return ErrPhase5DerivedOperationsUnavailable
+func (operations *Phase5ExactGuestOperations) EmitPatch(ctx context.Context, input Phase5ExecutionInput) error {
+	if operations == nil || ctx == nil {
+		return errors.New("invalid phase 5 patch input")
+	}
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if operations.analysis == nil || operations.candidate == nil || operations.decisionRaw != nil || operations.analyzerSession == nil {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	candidate := *operations.candidate
+	span := preparedregion.SourceSpan{StartLine: candidate.Span.StartLine, StartColumn: candidate.Span.StartColumn, EndLine: candidate.Span.EndLine, EndColumn: candidate.Span.EndColumn}
+	regionSource, liveIns, err := phase5ExactScalarInputs(input.Source, candidate)
+	if err != nil {
+		return err
+	}
+	liveInsRaw, liveInsSHA256, err := preparedregion.SealPreparedRegionLiveIns(liveIns)
+	if err != nil {
+		return err
+	}
+	binding := preparedregion.PreparedRegionBinding{
+		SourceSHA256: operations.analysis.SourceSHA256, ASTSHA256: operations.analysis.ASTSHA256,
+		AnalysisSHA256: operations.analysisSHA256, RegionID: candidate.ID, RegionSpan: span,
+		RegionSourceSHA256: phase5Digest([]byte(regionSource)), LiveInsSHA256: liveInsSHA256,
+		EnvironmentSHA256:      phase5Digest([]byte("pysolate.phase5.environment.v1\x00" + operations.analysis.SourceSHA256 + "\x00" + operations.analysis.ExecutionProfileSHA256)),
+		ExecutionProfileSHA256: operations.analysis.ExecutionProfileSHA256, ImportClosureSHA256: operations.analysis.ImportClosureSHA256,
+		CapabilityPlanSHA256: operations.analysis.CapabilityPlanSHA256, PassConfigSHA256: phase5Digest([]byte("pysolate.phase5.scalar-pass.v1")),
+		Codec: preparedregion.PreparedRegionCodecJSONScalarV1, OutputName: input.OutputName,
+	}
+	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(binding)
+	if err != nil {
+		return err
+	}
+	emitRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": input.Source})
+	if err != nil {
+		return err
+	}
+	bindingRaw, err := operations.analyzerSession.EmitPreparedRegionPatch(ctx, emitRequest)
+	if err != nil {
+		return err
+	}
+	patchBinding, err := preparedregion.DecodePreparedRegionPatchBinding(bindingRaw)
+	if err != nil {
+		return err
+	}
+	_, patch, err := preparedregion.SealPreparedRegionPatch(patchBinding)
+	if err != nil || patch.ValidateDecision(decision) != nil {
+		return errors.Join(err, preparedregion.ErrInvalidPreparedRegion)
+	}
+	operations.decision, operations.decisionRaw, operations.liveInsRaw, operations.patch = decision, decisionRaw, liveInsRaw, patch
+	operations.snapshot.DecisionSHA256 = decision.IdentitySHA256
+	operations.snapshot.PatchSHA256 = patch.IdentitySHA256
+	return nil
 }
 func (operations *Phase5ExactGuestOperations) ExecuteScratch(context.Context, Phase5ExecutionInput) error {
 	return ErrPhase5DerivedOperationsUnavailable
@@ -359,6 +415,39 @@ func (operations *Phase5ExactGuestOperations) Snapshot() Phase5ExecutionSnapshot
 	operations.mu.Lock()
 	defer operations.mu.Unlock()
 	return operations.snapshot
+}
+
+func phase5ExactScalarInputs(source string, candidate semantic.CandidateRegion) (string, map[string]json.RawMessage, error) {
+	lines := strings.Split(source, "\n")
+	if candidate.Span.StartLine == 0 || candidate.Span.StartLine != candidate.Span.EndLine || int(candidate.Span.StartLine) > len(lines) {
+		return "", nil, errors.New("phase 5 scalar region must occupy one source line")
+	}
+	line := lines[candidate.Span.StartLine-1]
+	if int(candidate.Span.EndColumn) > len(line) || candidate.Span.StartColumn > candidate.Span.EndColumn {
+		return "", nil, errors.New("phase 5 scalar region span is invalid")
+	}
+	region := line[candidate.Span.StartColumn:candidate.Span.EndColumn]
+	liveIns := make(map[string]json.RawMessage, len(candidate.LiveIns))
+	for _, name := range candidate.LiveIns {
+		found := false
+		for index := int(candidate.Span.StartLine) - 2; index >= 0; index-- {
+			parts := strings.SplitN(strings.TrimSpace(lines[index]), "=", 2)
+			if len(parts) != 2 || strings.TrimSpace(parts[0]) != name {
+				continue
+			}
+			value := strings.TrimSpace(parts[1])
+			if _, err := strconv.ParseInt(value, 10, 64); err != nil {
+				return "", nil, errors.New("phase 5 live-in is not a signed int64 literal")
+			}
+			liveIns[name] = json.RawMessage(value)
+			found = true
+			break
+		}
+		if !found {
+			return "", nil, errors.New("phase 5 live-in literal is unavailable")
+		}
+	}
+	return region, liveIns, nil
 }
 
 func phase5Digest(value []byte) string {

@@ -198,6 +198,79 @@ func ExecuteGeneratedSource(
 	return ExecuteGeneratedSourceObserved(ctx, runner, attempt, request, trustedPrepare, generated, nil)
 }
 
+// GeneratedExecutionOutcome preserves the exact generated-source binding while
+// exposing a body-bearing response only to the immediate Host consumer. The
+// response is never evidence: callers must project a canonical result digest or
+// error class before persistence. Successful responses publish the private
+// workspace attempt; Python error responses discard it.
+type GeneratedExecutionOutcome struct {
+	Response             []byte
+	WorkspaceDisposition string
+}
+
+// ExecuteGeneratedSourceOutcome is the non-success-aware companion to
+// ExecuteGeneratedSource. It keeps the same one-shot source/controller binding
+// but returns a validated Python error envelope after discarding the attempt.
+func ExecuteGeneratedSourceOutcome(
+	ctx context.Context,
+	runner enginecontract.Runner,
+	attempt *workspace.Attempt,
+	request []byte,
+	trustedPrepare string,
+	generated GeneratedSource,
+) (GeneratedExecutionOutcome, error) {
+	if ctx == nil || runner == nil || attempt == nil || generated.binding == nil || generated.controller == nil ||
+		generated.source == "" || generated.sha256 == "" {
+		return GeneratedExecutionOutcome{}, ErrPreDispatchInvalid
+	}
+	decoded, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil || decoded.Code != generated.source {
+		return GeneratedExecutionOutcome{}, ErrAnalysisBinding
+	}
+	snapshot := generated.controller.Snapshot()
+	if !snapshot.SourceSealed || snapshot.FinalSourceSHA256 != generated.sha256 {
+		return GeneratedExecutionOutcome{}, ErrAnalysisBinding
+	}
+	generated.binding.mu.Lock()
+	if generated.binding.executed {
+		generated.binding.mu.Unlock()
+		return GeneratedExecutionOutcome{}, ErrPreDispatchInvalid
+	}
+	generated.binding.executed = true
+	generated.binding.mu.Unlock()
+	response, runErr := runner.Run(ctx, request, trustedPrepare)
+	if runErr != nil {
+		_ = runner.Close(ctx)
+		_ = attempt.Discard()
+		return GeneratedExecutionOutcome{}, runErr
+	}
+	if err := runner.Close(ctx); err != nil {
+		_ = attempt.Discard()
+		return GeneratedExecutionOutcome{}, err
+	}
+	validated, err := runtimeconfig.DecodeAndValidateRunResponse(decoded, response)
+	if err != nil {
+		_ = attempt.Discard()
+		return GeneratedExecutionOutcome{}, err
+	}
+	switch validated.Status {
+	case runtimeconfig.RunResponseOK:
+		if _, err := attempt.Publish(); err != nil {
+			_ = attempt.Discard()
+			return GeneratedExecutionOutcome{}, err
+		}
+		return GeneratedExecutionOutcome{Response: append([]byte(nil), response...), WorkspaceDisposition: "published"}, nil
+	case runtimeconfig.RunResponseError:
+		if err := attempt.Discard(); err != nil {
+			return GeneratedExecutionOutcome{}, err
+		}
+		return GeneratedExecutionOutcome{Response: append([]byte(nil), response...), WorkspaceDisposition: "discarded"}, nil
+	default:
+		_ = attempt.Discard()
+		return GeneratedExecutionOutcome{}, ErrPreDispatchInvalid
+	}
+}
+
 func ExecuteGeneratedSourceObserved(
 	ctx context.Context,
 	runner enginecontract.Runner,

@@ -67,3 +67,46 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		t.Fatalf("result=%+v physical=%d", result, physical.Load())
 	}
 }
+
+func TestExactGuestScheduledSemanticPreDispatchProjectsRuntimeFailureAfterConsumedRead(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSHA := testDigestBytes(artifact)
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: testDigest("phase3-semantic-manifest"),
+		ImportRoots: []string{"json"}, QualifiedImportRoots: []string{"json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var physical atomic.Uint32
+	plan := eagerComparatorCapabilityPlan(t, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"value":"weather"}`), nil
+	}))
+	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.ExecutionProfile = &profile
+	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
+		Artifact: artifact, RunConfig: runConfig, Plan: plan,
+		ImportClosureSHA256: testDigest("phase3-semantic-imports"), PhysicalReadBudget: 1,
+		RunID: "phase3-semantic-runtime-error", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "phase3-semantic-runtime-error",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := semanticspeculation.RunScheduledTreatment(context.Background(), semanticspeculation.Phase3SyntheticCases()[3], treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome.FinalProgramOutcome != "runtime_error" || !result.Outcome.FinalPythonStarted || result.Outcome.ErrorClass != "RuntimeError" ||
+		result.Outcome.ResultSHA256 != "" || result.Outcome.LogicalCalls != 1 || physical.Load() != 1 ||
+		result.Outcome.AuthorityDisposition != "read_consumed" || result.Outcome.WorkspaceDisposition != "discarded" {
+		t.Fatalf("result=%+v physical=%d", result, physical.Load())
+	}
+}

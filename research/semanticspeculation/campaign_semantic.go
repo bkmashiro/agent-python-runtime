@@ -215,45 +215,55 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 	if err != nil {
 		return TreatmentOutcome{}, err
 	}
-	runResult, err := semantic.ExecuteGeneratedSource(ctx, t.runner, t.attempt, request, t.config.Plan.StreamingPythonPrelude(), generation.generated)
+	execution, err := semantic.ExecuteGeneratedSourceOutcome(ctx, t.runner, t.attempt, request, t.config.Plan.StreamingPythonPrelude(), generation.generated)
 	if err != nil {
 		_ = t.manager.Close()
 		_ = t.analyzer.Close(ctx)
 		return TreatmentOutcome{}, err
 	}
+	defer t.manager.Close()
+	defer t.analyzer.Close(ctx)
 	decodedRequest, err := runtimeconfig.DecodeRunRequest(request)
 	if err != nil {
 		return TreatmentOutcome{}, err
 	}
-	response, err := runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, runResult.Response)
-	if err != nil || response.Status != runtimeconfig.RunResponseOK || response.ResultPresent == nil || !*response.ResultPresent {
-		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest success response")
-	}
-	var value any
-	if json.Unmarshal(response.Result, &value) != nil {
-		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch result")
-	}
-	canonical, _ := json.Marshal(value)
-	resultSHA, err := playback.CanonicalSHA256(canonical)
+	response, err := runtimeconfig.DecodeAndValidateRunResponse(decodedRequest, execution.Response)
 	if err != nil {
-		return TreatmentOutcome{}, err
+		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest response")
 	}
 	snapshot := t.controller.Snapshot()
 	outcome := TreatmentOutcome{
-		FinalProgramOutcome: "success", FinalPythonStarted: true, ResultSHA256: resultSHA,
-		LogicalCalls: snapshot.LogicalClaims, PhysicalAttempts: snapshot.PhysicalIssues,
+		FinalPythonStarted: true, LogicalCalls: snapshot.LogicalClaims, PhysicalAttempts: snapshot.PhysicalIssues,
 		PhysicalResultBytes: snapshot.PhysicalResultBytes, ProviderCostUnits: snapshot.ProviderCostUnits,
-		ReadyBeforeFinalize:  readyAtFinalize,
-		PhysicalDispositions: controllerDispositions(snapshot), AuthorityDisposition: "unchanged", WorkspaceDisposition: "published",
+		ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: controllerDispositions(snapshot),
+		AuthorityDisposition: "unchanged", WorkspaceDisposition: execution.WorkspaceDisposition,
 	}
 	if outcome.LogicalCalls > 0 {
 		outcome.AuthorityDisposition = "read_consumed"
 	}
-	if err := t.manager.Close(); err != nil {
-		return TreatmentOutcome{}, err
-	}
-	if err := t.analyzer.Close(ctx); err != nil {
-		return TreatmentOutcome{}, err
+	switch response.Status {
+	case runtimeconfig.RunResponseOK:
+		if response.ResultPresent == nil || !*response.ResultPresent {
+			return TreatmentOutcome{}, errors.New("semantic pre-dispatch success has no result")
+		}
+		var value any
+		if json.Unmarshal(response.Result, &value) != nil {
+			return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch result")
+		}
+		canonical, _ := json.Marshal(value)
+		outcome.ResultSHA256, err = playback.CanonicalSHA256(canonical)
+		if err != nil {
+			return TreatmentOutcome{}, err
+		}
+		outcome.FinalProgramOutcome = "success"
+	case runtimeconfig.RunResponseError:
+		if response.Error == nil || response.Error.ErrorType == nil || *response.Error.ErrorType == "" {
+			return TreatmentOutcome{}, errors.New("semantic pre-dispatch error has no error class")
+		}
+		outcome.FinalProgramOutcome = "runtime_error"
+		outcome.ErrorClass = *response.Error.ErrorType
+	default:
+		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest status")
 	}
 	return outcome, nil
 }

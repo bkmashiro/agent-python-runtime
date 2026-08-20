@@ -13,9 +13,10 @@ from agent_runtime.prepared_region import (
     emit_prepared_region_patch_request_json,
     encode_prepared_region_live_ins,
     execute_prepared_region_scratch_request_json,
+    _evaluate_scalar_rhs,
     validate_prepared_region_execution_selection,
 )
-from agent_runtime.semantic import analyze_source
+from agent_runtime.semantic import MAX_SCALAR_OPERATORS, _safe_scalar_expression, analyze_source
 
 
 def digest_bytes(value):
@@ -31,6 +32,15 @@ def contract_canonical(value):
 
 
 class PreparedRegionPatchTests(unittest.TestCase):
+    def test_scalar_operator_bound_fails_closed_in_analysis_and_scratch(self):
+        expression = ast.Name(id="seed", ctx=ast.Load())
+        for _ in range(MAX_SCALAR_OPERATORS + 1):
+            expression = ast.BinOp(left=expression, op=ast.Add(), right=ast.Constant(value=1))
+        with self.assertRaisesRegex(ValueError, "operator bound exceeded"):
+            _safe_scalar_expression(expression, {"seed": "int"})
+        with self.assertRaisesRegex(ValueError, "operator bound exceeded"):
+            _evaluate_scalar_rhs(expression, {"seed": 1})
+
     def decision(self, source, line=2, live_ins=None):
         bindings = {
             "artifact_sha256": "sha256:" + "a" * 64,
@@ -107,6 +117,8 @@ class PreparedRegionPatchTests(unittest.TestCase):
         decision = self.decision(valid_source)
         binding = emit_prepared_region_patch_binding(valid_source, decision)
         patch = self.seal_patch(binding)
+        with self.assertRaises(ValueError):
+            emit_prepared_region_patch_binding(valid_source + "# drift\n", decision)
         cases = {
             "final source": (valid_source + "# drift\n", decision, patch),
             "decision": (valid_source, decision.replace('"output_name":"value"', '"output_name":"other"'), patch),
@@ -165,6 +177,30 @@ class PreparedRegionPatchTests(unittest.TestCase):
         self.assertEqual(decoded["error_type"], "")
         self.assertEqual(decoded["payload_sha256"], digest_bytes(b"42"))
         self.assertEqual(response, canonical(decoded))
+
+    def test_frozen_256_multiply_chain_emits_and_executes_without_recursive_ast_failure(self):
+        source = "seed = 1\nvalue = seed" + " * 1" * 256 + "\nresult = value\n"
+        live_ins = encode_prepared_region_live_ins({"seed": 1})
+        decision = self.decision(source, live_ins=live_ins)
+        binding = emit_prepared_region_patch_binding(source, decision)
+        self.assertEqual("value", binding["output_name"])
+        request = canonical({"decision": decision, "final_source": source, "live_ins": live_ins})
+        result = json.loads(execute_prepared_region_scratch_request_json(request))
+        self.assertEqual("ready", result["status"])
+        self.assertEqual(1, result["payload"])
+
+    def test_frozen_512_add_chain_emits_executes_and_compiles_derived_tree(self):
+        source = "seed = 1\nvalue = seed" + " + 1" * 512 + "\nresult = value\n"
+        live_ins = encode_prepared_region_live_ins({"seed": 1})
+        decision = self.decision(source, live_ins=live_ins)
+        binding = emit_prepared_region_patch_binding(source, decision)
+        tree, repeated = derive_prepared_region_tree(source, decision, self.seal_patch(binding))
+        self.assertEqual(binding, repeated)
+        compile(tree, "<agent-run>", "exec")
+        request = canonical({"decision": decision, "final_source": source, "live_ins": live_ins})
+        result = json.loads(execute_prepared_region_scratch_request_json(request))
+        self.assertEqual("ready", result["status"])
+        self.assertEqual(513, result["payload"])
 
     def test_scratch_rejects_live_in_drift_unsafe_rhs_and_out_of_range_result(self):
         source = "seed = 40\nvalue = seed + 2\nresult = value\n"

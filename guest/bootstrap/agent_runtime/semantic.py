@@ -5,10 +5,13 @@ import hashlib
 import json
 import re
 
+from .ast_support import MAX_AST_NODES, ast_digest_bounded, walk_ast_bounded
+
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v3"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v7").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v8").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
+MAX_SCALAR_OPERATORS = 1024
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
 MAX_BARRIERS = 256
@@ -149,6 +152,16 @@ class _ScopeAnalyzer(ast.NodeVisitor):
             self._track_assignment(target, node.value)
             self.visit(target)
         self.visit(node.value)
+
+    def visit_BinOp(self, node):
+        stack: list[ast.AST] = [node]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, ast.BinOp):
+                stack.append(current.right)
+                stack.append(current.left)
+            else:
+                self.visit(current)
 
     def visit_AnnAssign(self, node):
         if node.value is not None:
@@ -464,6 +477,16 @@ class _RegionNames(ast.NodeVisitor):
             self.loads.add(node.id)
             self.deletes.add(node.id)
 
+    def visit_BinOp(self, node):
+        stack: list[ast.AST] = [node]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, ast.BinOp):
+                stack.append(current.right)
+                stack.append(current.left)
+            else:
+                self.visit(current)
+
     def visit_AugAssign(self, node):
         if isinstance(node.target, ast.Name):
             self.loads.add(node.target.id)
@@ -506,72 +529,54 @@ class _RegionNames(ast.NodeVisitor):
                 self.stores.add(alias.asname or alias.name)
 
 
-class _ReservedHelperUse(ast.NodeVisitor):
-    def __init__(self):
-        self.unsafe = False
-
-    def visit_Name(self, node):
-        if node.id == _PREPARED_REGION_HELPER:
-            self.unsafe = True
-
-    def visit_arg(self, node):
-        if node.arg == _PREPARED_REGION_HELPER:
-            self.unsafe = True
-
-    def visit_alias(self, node):
-        if (node.asname or node.name.split(".", 1)[0]) == _PREPARED_REGION_HELPER:
-            self.unsafe = True
-
-    def visit_FunctionDef(self, node):
-        if node.name == _PREPARED_REGION_HELPER:
-            self.unsafe = True
-        self.generic_visit(node)
-
-    def visit_AsyncFunctionDef(self, node):
-        if node.name == _PREPARED_REGION_HELPER:
-            self.unsafe = True
-        self.generic_visit(node)
-
-    def visit_ClassDef(self, node):
-        if node.name == _PREPARED_REGION_HELPER:
-            self.unsafe = True
-        self.generic_visit(node)
-
-    def visit_Global(self, node):
-        if _PREPARED_REGION_HELPER in node.names:
-            self.unsafe = True
-
-    def visit_Nonlocal(self, node):
-        if _PREPARED_REGION_HELPER in node.names:
-            self.unsafe = True
-
-    def visit_Call(self, node):
-        if isinstance(node.func, ast.Name) and node.func.id in _DYNAMIC_NAMESPACE_CALLS:
-            self.unsafe = True
-        self.generic_visit(node)
-
-
 def _uses_reserved_helper_binding(tree):
-    visitor = _ReservedHelperUse()
-    visitor.visit(tree)
-    return visitor.unsafe
+    for node in walk_ast_bounded(tree):
+        if isinstance(node, ast.Name) and node.id == _PREPARED_REGION_HELPER:
+            return True
+        if isinstance(node, ast.arg) and node.arg == _PREPARED_REGION_HELPER:
+            return True
+        if isinstance(node, ast.alias) and (node.asname or node.name.split(".", 1)[0]) == _PREPARED_REGION_HELPER:
+            return True
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == _PREPARED_REGION_HELPER:
+            return True
+        if isinstance(node, (ast.Global, ast.Nonlocal)) and _PREPARED_REGION_HELPER in node.names:
+            return True
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _DYNAMIC_NAMESPACE_CALLS:
+            return True
+    return False
 
 
 def _safe_scalar_expression(node, scalar_names):
-    if isinstance(node, ast.Constant):
-        if type(node.value) is bool:
-            return "bool"
-        if type(node.value) is int:
-            return "int"
-        return None
-    if isinstance(node, ast.Name):
-        return scalar_names.get(node.id)
-    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
-        left = _safe_scalar_expression(node.left, scalar_names)
-        right = _safe_scalar_expression(node.right, scalar_names)
-        if left in ("bool", "int") and right in ("bool", "int"):
-            return "int"
-    return None
+    stack = [(node, False)]
+    values = {}
+    seen = 0
+    operators = 0
+    while stack:
+        current, expanded = stack.pop()
+        seen += 1
+        if seen > 2 * MAX_AST_NODES:
+            raise ValueError("semantic scalar expression bound exceeded")
+        if not expanded and isinstance(current, ast.BinOp):
+            operators += 1
+            if operators > MAX_SCALAR_OPERATORS:
+                raise ValueError("semantic scalar operator bound exceeded")
+        if expanded:
+            if isinstance(current, ast.Constant):
+                values[id(current)] = "bool" if type(current.value) is bool else "int" if type(current.value) is int else None
+            elif isinstance(current, ast.Name):
+                values[id(current)] = scalar_names.get(current.id)
+            elif isinstance(current, ast.BinOp) and isinstance(current.op, (ast.Add, ast.Sub, ast.Mult)):
+                left = values.get(id(current.left))
+                right = values.get(id(current.right))
+                values[id(current)] = "int" if left in ("bool", "int") and right in ("bool", "int") else None
+            else:
+                values[id(current)] = None
+            continue
+        stack.append((current, True))
+        if isinstance(current, ast.BinOp):
+            stack.append((current.right, False))
+            stack.append((current.left, False))
+    return values.get(id(node))
 
 
 def _safe_scalar_statement_outputs(statement, scalar_names):
@@ -600,7 +605,7 @@ def _may_raise(statement):
         ast.Compare, ast.NamedExpr, ast.ListComp, ast.SetComp, ast.DictComp,
         ast.GeneratorExp, ast.JoinedStr, ast.AugAssign, ast.Delete,
     )
-    if any(isinstance(node, risky) for node in ast.walk(statement)):
+    if any(isinstance(node, risky) for node in walk_ast_bounded(statement)):
         return True
     if isinstance(statement, (ast.Assign, ast.AnnAssign)):
         targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
@@ -624,32 +629,65 @@ def _candidate_kind(statement):
 def _canonical_expression(node, canonical_names):
     if node is None:
         return False
-    if isinstance(node, ast.Constant):
-        return isinstance(node.value, (type(None), bool, int, float, str))
-    if isinstance(node, ast.Name):
-        return node.id in canonical_names
-    if isinstance(node, ast.Subscript):
-        return (isinstance(node.value, ast.Name) and node.value.id == "inputs" and
-                isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str))
-    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-        return all(_canonical_expression(value, canonical_names) for value in node.elts)
-    if isinstance(node, ast.Dict):
-        return all(key is not None and _canonical_expression(key, canonical_names) and
-                   _canonical_expression(value, canonical_names)
-                   for key, value in zip(node.keys, node.values))
-    if isinstance(node, ast.UnaryOp):
-        return _canonical_expression(node.operand, canonical_names)
-    if isinstance(node, ast.BinOp):
-        return (_canonical_expression(node.left, canonical_names) and
-                _canonical_expression(node.right, canonical_names))
-    if isinstance(node, ast.BoolOp):
-        return all(_canonical_expression(value, canonical_names) for value in node.values)
-    if isinstance(node, ast.Compare):
-        return (_canonical_expression(node.left, canonical_names) and
-                all(_canonical_expression(value, canonical_names) for value in node.comparators))
-    if isinstance(node, ast.IfExp):
-        return all(_canonical_expression(value, canonical_names) for value in (node.test, node.body, node.orelse))
-    return False
+    stack = [(node, False)]
+    values = {}
+    seen = 0
+    operators = 0
+    while stack:
+        current, expanded = stack.pop()
+        seen += 1
+        if seen > 2 * MAX_AST_NODES:
+            raise ValueError("semantic canonical expression bound exceeded")
+        if not expanded and isinstance(current, (ast.BinOp, ast.BoolOp, ast.Compare, ast.UnaryOp)):
+            operators += 1
+            if operators > MAX_SCALAR_OPERATORS:
+                raise ValueError("semantic canonical operator bound exceeded")
+        if expanded:
+            if isinstance(current, ast.Constant):
+                result = isinstance(current.value, (type(None), bool, int, float, str))
+            elif isinstance(current, ast.Name):
+                result = current.id in canonical_names
+            elif isinstance(current, ast.Subscript):
+                result = (isinstance(current.value, ast.Name) and current.value.id == "inputs" and
+                          isinstance(current.slice, ast.Constant) and isinstance(current.slice.value, str))
+            elif isinstance(current, (ast.List, ast.Tuple, ast.Set)):
+                result = all(values.get(id(value), False) for value in current.elts)
+            elif isinstance(current, ast.Dict):
+                result = all(key is not None and values.get(id(key), False) and values.get(id(value), False)
+                             for key, value in zip(current.keys, current.values))
+            elif isinstance(current, ast.UnaryOp):
+                result = values.get(id(current.operand), False)
+            elif isinstance(current, ast.BinOp):
+                result = values.get(id(current.left), False) and values.get(id(current.right), False)
+            elif isinstance(current, ast.BoolOp):
+                result = all(values.get(id(value), False) for value in current.values)
+            elif isinstance(current, ast.Compare):
+                result = values.get(id(current.left), False) and all(values.get(id(value), False) for value in current.comparators)
+            elif isinstance(current, ast.IfExp):
+                result = all(values.get(id(value), False) for value in (current.test, current.body, current.orelse))
+            else:
+                result = False
+            values[id(current)] = result
+            continue
+        stack.append((current, True))
+        children = []
+        if isinstance(current, (ast.List, ast.Tuple, ast.Set)):
+            children = list(current.elts)
+        elif isinstance(current, ast.Dict):
+            children = [item for pair in zip(current.keys, current.values) for item in pair if item is not None]
+        elif isinstance(current, ast.UnaryOp):
+            children = [current.operand]
+        elif isinstance(current, ast.BinOp):
+            children = [current.left, current.right]
+        elif isinstance(current, ast.BoolOp):
+            children = list(current.values)
+        elif isinstance(current, ast.Compare):
+            children = [current.left, *current.comparators]
+        elif isinstance(current, ast.IfExp):
+            children = [current.test, current.body, current.orelse]
+        for child in reversed(children):
+            stack.append((child, False))
+    return values.get(id(node), False)
 
 
 def _canonical_statement_outputs(statement, canonical_names):
@@ -830,10 +868,12 @@ def analyze_source(source, bindings, capabilities):
         raise ValueError("invalid semantic bindings")
     if any(not isinstance(bindings[key], str) or _DIGEST.fullmatch(bindings[key]) is None for key in _BINDING_KEYS):
         raise ValueError("invalid semantic binding identity")
-    tree = ast.parse(source, filename="<agent-semantic-analysis>", mode="exec")
+    try:
+        tree = ast.parse(source, filename="<agent-semantic-analysis>", mode="exec")
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError) as exc:
+        raise ValueError("invalid semantic source") from exc
     source_sha256 = _digest(source.encode("utf-8"))
-    ast_dump = ast.dump(tree, annotate_fields=True, include_attributes=False)
-    ast_sha256 = _digest(ast_dump.encode("utf-8"))
+    ast_sha256 = ast_digest_bounded(tree)
     capability_index = _capability_index(capabilities)
     call_sites = _module_call_sites(tree, source_sha256, capability_index)
     function_nodes = {}

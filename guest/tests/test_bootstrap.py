@@ -11,10 +11,14 @@ BOOTSTRAP = ROOT / "guest" / "bootstrap" / "agent_runtime" / "__init__.py"
 
 
 def load_bootstrap():
-    spec = importlib.util.spec_from_file_location("agent_runtime_bootstrap", BOOTSTRAP)
+    spec = importlib.util.spec_from_file_location(
+        "agent_runtime_bootstrap", BOOTSTRAP,
+        submodule_search_locations=[str(BOOTSTRAP.parent)],
+    )
     if spec is None or spec.loader is None:
         raise RuntimeError("cannot load guest bootstrap")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 

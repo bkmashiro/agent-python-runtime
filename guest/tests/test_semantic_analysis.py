@@ -44,6 +44,11 @@ CAPABILITIES = [
 
 
 class SemanticAnalysisTests(unittest.TestCase):
+    def test_over_bounded_deep_source_fails_closed_without_recursion_escape(self):
+        source = "seed = 1\nvalue = seed" + " + 1" * 4096 + "\nresult = value\n"
+        with self.assertRaises(ValueError):
+            analyze_source(source, BINDINGS, [])
+
     def analyze(self, source, bindings=None, capabilities=None):
         return analyze_source(
             source,

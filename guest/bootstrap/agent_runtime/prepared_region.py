@@ -1,10 +1,10 @@
 import ast
-import copy
 import hashlib
 import json
 import re
 
-from .semantic import MAX_SOURCE_BYTES, _uses_reserved_helper_binding
+from .ast_support import MAX_AST_NODES, ast_digest_bounded, fix_missing_locations_bounded
+from .semantic import MAX_SCALAR_OPERATORS, MAX_SOURCE_BYTES, _uses_reserved_helper_binding
 
 
 DECISION_SCHEMA_VERSION = "pysolate.prepared-region-decision.v1"
@@ -216,7 +216,7 @@ def _decode_live_ins(raw):
 
 
 def _ast_digest(tree):
-    return _digest(ast.dump(tree, annotate_fields=True, include_attributes=False).encode("utf-8"))
+    return ast_digest_bounded(tree)
 
 
 def _source_slice(source, span):
@@ -253,9 +253,12 @@ def _region_identity(source_sha256, index, span):
 def _derive(final_source, decision):
     if not isinstance(final_source, str) or len(final_source.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ValueError("invalid final source")
+    final_source_sha256 = _digest(final_source.encode("utf-8"))
+    if final_source_sha256 != decision["source_sha256"]:
+        raise ValueError("final source does not match prepared region decision")
     try:
         tree = ast.parse(final_source, filename="<agent-run>", mode="exec")
-    except (SyntaxError, ValueError, TypeError, MemoryError) as exc:
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError) as exc:
         raise ValueError("invalid final source") from exc
     if _uses_reserved_helper_binding(tree):
         raise ValueError("final source uses the reserved prepared region helper")
@@ -274,7 +277,7 @@ def _derive(final_source, decision):
         or _digest(_source_slice(final_source, span)) != decision["region_source_sha256"]
     ):
         raise ValueError("prepared region does not match its admitted assignment")
-    derived = copy.deepcopy(tree)
+    derived = ast.parse(final_source, filename="<agent-run>", mode="exec")
     replacement_statement = derived.body[index]
     if not isinstance(replacement_statement, ast.Assign):
         raise ValueError("derived prepared region lost assignment shape")
@@ -284,10 +287,10 @@ def _derive(final_source, decision):
         keywords=[],
     )
     replacement_statement.value = ast.copy_location(call, replacement_statement.value)
-    derived = ast.fix_missing_locations(derived)
+    derived = fix_missing_locations_bounded(derived)
     binding = {
         "decision_sha256": decision["identity_sha256"],
-        "final_source_sha256": _digest(final_source.encode("utf-8")),
+        "final_source_sha256": final_source_sha256,
         "final_ast_sha256": _ast_digest(tree),
         "derived_ast_sha256": _ast_digest(derived),
         "region_id": decision["region_id"],
@@ -316,27 +319,52 @@ class _ScratchRangeError(Exception):
 
 
 def _evaluate_scalar_rhs(node, live_ins):
-    if isinstance(node, ast.Constant):
-        if _valid_scalar(node.value):
-            return node.value
-        raise ValueError("prepared region scratch constant is outside the scalar v1 subset")
-    if isinstance(node, ast.Name):
-        if node.id in live_ins and _valid_scalar(live_ins[node.id]):
-            return live_ins[node.id]
-        raise ValueError("prepared region scratch name is not an admitted scalar live-in")
-    if not isinstance(node, ast.BinOp) or not isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
-        raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
-    left = _evaluate_scalar_rhs(node.left, live_ins)
-    right = _evaluate_scalar_rhs(node.right, live_ins)
-    if isinstance(node.op, ast.Add):
-        value = left + right
-    elif isinstance(node.op, ast.Sub):
-        value = left - right
-    else:
-        value = left * right
-    if not _valid_scalar(value):
-        raise _ScratchRangeError("prepared region scratch intermediate is outside int64")
-    return value
+    stack = [(node, False)]
+    values = {}
+    seen = 0
+    operators = 0
+    while stack:
+        current, expanded = stack.pop()
+        seen += 1
+        if seen > 2 * MAX_AST_NODES:
+            raise ValueError("prepared region scratch expression bound exceeded")
+        if not expanded and isinstance(current, ast.BinOp):
+            operators += 1
+            if operators > MAX_SCALAR_OPERATORS:
+                raise ValueError("prepared region scratch operator bound exceeded")
+        if expanded:
+            if isinstance(current, ast.Constant):
+                if not _valid_scalar(current.value):
+                    raise ValueError("prepared region scratch constant is outside the scalar v1 subset")
+                value = current.value
+            elif isinstance(current, ast.Name):
+                if current.id not in live_ins or not _valid_scalar(live_ins[current.id]):
+                    raise ValueError("prepared region scratch name is not an admitted scalar live-in")
+                value = live_ins[current.id]
+            elif isinstance(current, ast.BinOp) and isinstance(current.op, (ast.Add, ast.Sub, ast.Mult)):
+                left = values[id(current.left)]
+                right = values[id(current.right)]
+                if isinstance(current.op, ast.Add):
+                    value = left + right
+                elif isinstance(current.op, ast.Sub):
+                    value = left - right
+                else:
+                    value = left * right
+                if not _valid_scalar(value):
+                    raise _ScratchRangeError("prepared region scratch intermediate is outside int64")
+            else:
+                raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
+            values[id(current)] = value
+            continue
+        if not isinstance(current, (ast.Constant, ast.Name, ast.BinOp)):
+            raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
+        stack.append((current, True))
+        if isinstance(current, ast.BinOp):
+            if not isinstance(current.op, (ast.Add, ast.Sub, ast.Mult)):
+                raise ValueError("prepared region scratch RHS is outside the scalar v1 subset")
+            stack.append((current.right, False))
+            stack.append((current.left, False))
+    return values[id(node)]
 
 
 def execute_prepared_region_scratch_request_json(request_json):

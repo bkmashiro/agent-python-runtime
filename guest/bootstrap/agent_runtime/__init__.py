@@ -16,6 +16,8 @@ import traceback
 import types
 from typing import Any
 
+from .ast_support import ast_digest_bounded, fix_missing_locations_bounded
+
 _ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "compatibility", "requirements"}
 _TRACEBACK_MAX = 16_384
 _prepared_globals: dict[str, Any] = {}
@@ -443,6 +445,9 @@ class _TopLevelReturnTransformer(ast.NodeTransformer):
     def visit_Lambda(self, node: ast.Lambda):
         return node
 
+    def visit_BinOp(self, node: ast.BinOp):
+        return node
+
     def visit_Return(self, node: ast.Return):
         value = node.value if node.value is not None else ast.Constant(value=None)
         rewritten = ast.Return(value=ast.Tuple(elts=[ast.Name(id=_WRAPPER_RETURN, ctx=ast.Load()), value], ctx=ast.Load()))
@@ -475,6 +480,16 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
     def visit_Name(self, node: ast.Name) -> None:
         if isinstance(node.ctx, (ast.Store, ast.Del)):
             self.names.add(node.id)
+
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        stack: list[ast.AST] = [node]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, ast.BinOp):
+                stack.append(current.right)
+                stack.append(current.left)
+            else:
+                self.visit(current)
 
     def visit_Global(self, node: ast.Global) -> None:
         self.names.update(node.names)
@@ -617,9 +632,8 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
         body=wrapper_body,
         decorator_list=[],
     )
-    module = ast.fix_missing_locations(ast.Module(body=[*preamble, function], type_ignores=[]))
-    effective = ast.dump(module, annotate_fields=True, include_attributes=False)
-    digest = "sha256:" + hashlib.sha256(effective.encode("utf-8")).hexdigest()
+    module = fix_missing_locations_bounded(ast.Module(body=[*preamble, function], type_ignores=[]))
+    digest = ast_digest_bounded(module)
     code = compile(module, "<agent-run>", "exec", dont_inherit=True)
     wrapper = next((candidate for candidate in _code_objects(code) if candidate.co_name == _WRAPPER_MAIN), None)
     if wrapper is None or wrapper.co_flags & (inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR):
@@ -631,7 +645,7 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
     global _validated_effective_ast_sha256
     try:
         tree = ast.parse(source, filename="<agent-run>", mode="exec")
-    except (SyntaxError, ValueError, TypeError, MemoryError):
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return _SOURCE_CONTRACT_INVALID, None, []
 
     import_nodes: list[ast.stmt] = []
@@ -682,7 +696,7 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
     try:
         code, effective_digest = _compile_agent_wrapper(body, future_nodes)
         _validated_effective_ast_sha256 = effective_digest
-    except (SyntaxError, ValueError, TypeError, MemoryError):
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return _SOURCE_CONTRACT_INVALID, None, []
     for candidate in _code_objects(code):
         if candidate is code:
@@ -731,7 +745,7 @@ def _validate_unrestricted_source(source: str) -> tuple[int, types.CodeType | No
         code, digest = _compile_agent_wrapper(body, preamble)
         _validated_effective_ast_sha256 = digest
         return _SOURCE_CONTRACT_OK, code
-    except (SyntaxError, ValueError, TypeError, MemoryError):
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return _SOURCE_CONTRACT_INVALID, None
 
 

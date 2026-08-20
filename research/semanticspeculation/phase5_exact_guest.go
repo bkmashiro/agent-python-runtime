@@ -529,6 +529,11 @@ func (operations *Phase5ExactGuestOperations) Teardown(ctx context.Context) erro
 	}
 	if operations.preparedTable != nil {
 		err = errors.Join(err, operations.preparedTable.Close())
+		tableEvidence := operations.preparedTable.Evidence()
+		operations.snapshot.HelperClaimCount = tableEvidence.Claims
+		operations.snapshot.CapsuleConsumedCount = tableEvidence.Consumed
+		operations.snapshot.CapsuleRejectedClaimCount = tableEvidence.RejectedClaims
+		operations.snapshot.CapsuleDiscardedCount = tableEvidence.Discarded
 	}
 	operations.snapshot.AuthorityTerminalDisposition = "none"
 	operations.snapshot.WorkspaceTerminalDisposition = "unmounted"

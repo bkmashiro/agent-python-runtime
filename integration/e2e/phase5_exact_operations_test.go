@@ -102,7 +102,7 @@ func TestExactGuestPhase5OriginalOperationsExcludedPilot(t *testing.T) {
 		t.Fatal("derived analyzer accepted a second request")
 	}
 	derivedSnapshot = derived.Snapshot()
-	if derivedSnapshot.FormalGuestExecutions != 1 || derivedSnapshot.HelperClaimCount != 1 || derivedSnapshot.CapsuleConsumedCount != 1 || derivedSnapshot.ActualOutcome != snapshot.ActualOutcome || derivedSnapshot.ResultSHA256 != snapshot.ResultSHA256 || derivedSnapshot.LogsSHA256 != snapshot.LogsSHA256 {
+	if derivedSnapshot.FormalGuestExecutions != 2 || derivedSnapshot.HelperClaimCount != 1 || derivedSnapshot.CapsuleConsumedCount != 1 || derivedSnapshot.ActualOutcome != snapshot.ActualOutcome || derivedSnapshot.ResultSHA256 != snapshot.ResultSHA256 || derivedSnapshot.LogsSHA256 != snapshot.LogsSHA256 {
 		t.Fatalf("derived parity/lifecycle drift: original=%+v derived=%+v", snapshot, derivedSnapshot)
 	}
 	if err := derived.Teardown(ctx); err != nil {

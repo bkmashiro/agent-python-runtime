@@ -401,6 +401,9 @@ func (operations *Phase5ExactGuestOperations) ExecuteDerived(ctx context.Context
 	if err := operations.recordResponse(operations.request, payload); err != nil {
 		return err
 	}
+	// The frozen Phase 5 schema counts the independent scratch Guest and the
+	// fresh final Guest as the two formal treatment executions.
+	operations.snapshot.FormalGuestExecutions = operations.snapshot.ScratchGuestExecutions + evidence.FormalGuestExecutions
 	tableEvidence := operations.preparedTable.Evidence()
 	operations.snapshot.HelperClaimCount = tableEvidence.Claims
 	operations.snapshot.CapsuleConsumedCount = tableEvidence.Consumed

@@ -26,12 +26,14 @@ func (gap *fakePhase5Gap) Wait(context.Context) error {
 }
 
 type fakePhase5Operations struct {
-	clock        *phase5FakeClock
-	mu           sync.Mutex
-	calls        []string
-	derived      bool
-	failAnalysis bool
-	resultSHA    string
+	clock            *phase5FakeClock
+	mu               sync.Mutex
+	calls            []string
+	derived          bool
+	failAnalysis     bool
+	resultSHA        string
+	originalDuration time.Duration
+	derivedDuration  time.Duration
 }
 
 func (adapter *fakePhase5Operations) call(name string, duration time.Duration) {
@@ -76,15 +78,27 @@ func (adapter *fakePhase5Operations) CompileDerived(context.Context, Phase5Execu
 	return nil
 }
 func (adapter *fakePhase5Operations) ExecuteOriginal(context.Context, Phase5ExecutionInput) error {
-	adapter.call("execute_original", 10*time.Nanosecond)
+	duration := adapter.originalDuration
+	if duration == 0 {
+		duration = 10 * time.Nanosecond
+	}
+	adapter.call("execute_original", duration)
 	adapter.derived = false
-	adapter.resultSHA = syntheticDigest([]byte("65"))
+	if adapter.resultSHA == "" {
+		adapter.resultSHA = syntheticDigest([]byte("65"))
+	}
 	return nil
 }
 func (adapter *fakePhase5Operations) ExecuteDerived(context.Context, Phase5ExecutionInput) error {
-	adapter.call("execute_derived", 10*time.Nanosecond)
+	duration := adapter.derivedDuration
+	if duration == 0 {
+		duration = 10 * time.Nanosecond
+	}
+	adapter.call("execute_derived", duration)
 	adapter.derived = true
-	adapter.resultSHA = syntheticDigest([]byte("65"))
+	if adapter.resultSHA == "" {
+		adapter.resultSHA = syntheticDigest([]byte("65"))
+	}
 	return nil
 }
 func (adapter *fakePhase5Operations) Teardown(context.Context) error {

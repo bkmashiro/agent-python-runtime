@@ -16,7 +16,7 @@ import traceback
 import types
 from typing import Any
 
-from .ast_support import ast_digest_bounded, fix_missing_locations_bounded
+from .ast_support import ast_digest_bounded, fix_missing_locations_bounded, walk_ast_bounded
 
 _ALLOWED_REQUEST_FIELDS = {"run_id", "code", "inputs", "output_schema", "compatibility", "requirements"}
 _TRACEBACK_MAX = 16_384
@@ -591,7 +591,7 @@ def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tu
         collector.visit(node)
     if any(name.startswith("_pysolate_") for name in collector.names):
         raise SyntaxError("agent source binds a reserved runtime name")
-    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+    for node in walk_ast_bounded(ast.Module(body=body, type_ignores=[])):
         if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
             raise SyntaxError("agent source uses a reserved runtime name")
     future_annotations = any(
@@ -676,7 +676,7 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
         preamble_open = False
 
     top_level_import_ids = {id(node) for node in import_nodes}
-    for node in ast.walk(tree):
+    for node in walk_ast_bounded(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)) and id(node) not in top_level_import_ids:
             return _SOURCE_CONTRACT_UNSUPPORTED, None, []
         if isinstance(node, ast.Name) and node.id in _FORBIDDEN_DYNAMIC_NAMES:

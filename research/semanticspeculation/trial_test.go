@@ -145,6 +145,14 @@ func TestTrialRecordRejectsMutationUnknownFieldsAndBodies(t *testing.T) {
 	}
 }
 
+func TestTrialRecordAllowsProviderCostIndependentOfAttemptCount(t *testing.T) {
+	value := validTrialRecord()
+	value.ProviderCostUnits = 17
+	if _, err := SealTrialRecord(value); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTrialRecordAcceptsEveryPhysicalTerminalDisposition(t *testing.T) {
 	values := map[string]PhysicalDispositions{
 		"consumed":  {Consumed: 1},

@@ -108,7 +108,7 @@ func validateTrialRecord(value TrialRecord, sealed bool) error {
 		!digestPattern.MatchString(value.SourceSHA256) || !digestPattern.MatchString(value.ArtifactSHA256) ||
 		!digestPattern.MatchString(value.CapabilityPlanSHA256) || !digestPattern.MatchString(value.PrivacySHA256) ||
 		value.StartedNanos == 0 || value.EndedNanos < value.StartedNanos || value.PhysicalDispositions.total() != value.PhysicalAttempts ||
-		value.ReadyBeforeFinalize > value.PhysicalAttempts || value.ProviderCostUnits > uint64(value.PhysicalAttempts) || !validAuthorityDisposition(value.AuthorityDisposition) ||
+		value.ReadyBeforeFinalize > value.PhysicalAttempts || !validAuthorityDisposition(value.AuthorityDisposition) ||
 		!validWorkspaceDisposition(value.WorkspaceDisposition) || sealed != digestPattern.MatchString(value.Identity) {
 		return ErrInvalidTrialRecord
 	}

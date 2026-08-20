@@ -237,3 +237,27 @@ func TestTrialRecordAcceptsSerialSuccessAndEagerPrefixFailure(t *testing.T) {
 		t.Fatal("eager comparator contract accepted on serial lane")
 	}
 }
+
+func TestTrialRecordAdmitsComparatorPrefixRuntimeErrorAndDiscardedSyntaxAttempt(t *testing.T) {
+	prefixFailure := validTrialRecord()
+	prefixFailure.Treatment = "eager_style_gate"
+	prefixFailure.ComparatorContractSHA256 = EagerStyleGateV1Identity
+	prefixFailure.FinalProgramOutcome = "runtime_error"
+	prefixFailure.FinalPythonStarted = false
+	prefixFailure.PrefixPythonExecutions = 1
+	prefixFailure.ResultSHA256 = ""
+	prefixFailure.ErrorClass = "ValueError"
+	prefixFailure.WorkspaceDisposition = "discarded"
+	if _, err := SealTrialRecord(prefixFailure); err != nil {
+		t.Fatal(err)
+	}
+	syntax := validTrialRecord()
+	syntax.FinalProgramOutcome = "syntax_error"
+	syntax.FinalPythonStarted = false
+	syntax.ResultSHA256 = ""
+	syntax.ErrorClass = "syntax_error"
+	syntax.WorkspaceDisposition = "discarded"
+	if _, err := SealTrialRecord(syntax); err != nil {
+		t.Fatal(err)
+	}
+}

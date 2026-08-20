@@ -141,11 +141,11 @@ func validateTrialRecord(value TrialRecord, sealed bool) error {
 			return ErrInvalidTrialRecord
 		}
 	case "syntax_error":
-		if value.FinalPythonStarted || value.ResultSHA256 != "" || value.ErrorClass != "syntax_error" || value.LogicalCalls != 0 || value.AuthorityDisposition != "unchanged" || value.WorkspaceDisposition != "untouched" {
+		if value.FinalPythonStarted || value.ResultSHA256 != "" || value.ErrorClass != "syntax_error" || value.LogicalCalls != 0 || value.AuthorityDisposition != "unchanged" || value.WorkspaceDisposition == "published" {
 			return ErrInvalidTrialRecord
 		}
 	case "runtime_error":
-		if !value.FinalPythonStarted || value.ResultSHA256 != "" || !identifierPattern.MatchString(value.ErrorClass) {
+		if (!value.FinalPythonStarted && value.PrefixPythonExecutions == 0) || value.ResultSHA256 != "" || !validErrorClass(value.ErrorClass) {
 			return ErrInvalidTrialRecord
 		}
 	case "cancelled":
@@ -168,6 +168,19 @@ func validateTrialRecord(value TrialRecord, sealed bool) error {
 		}
 	}
 	return nil
+}
+
+func validErrorClass(value string) bool {
+	if value == "" || len(value) > 128 || !((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= 'A' && value[0] <= 'Z') || value[0] == '_') {
+		return false
+	}
+	for index := 1; index < len(value); index++ {
+		character := value[index]
+		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func validTreatment(value string) bool {

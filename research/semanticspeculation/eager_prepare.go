@@ -17,14 +17,14 @@ type EagerComparatorPrepareConfig struct {
 	AllowedImportRoots []string
 }
 
-func BuildEagerComparatorPrepareChunks(config EagerComparatorPrepareConfig) ([]string, error) {
+func BuildEagerComparatorBeginPrepare(config EagerComparatorPrepareConfig) (string, error) {
 	var inputs any
-	if len(config.Inputs) == 0 || json.Unmarshal(config.Inputs, &inputs) != nil || len(config.Chunks) == 0 {
-		return nil, errors.New("eager comparator requires JSON inputs and source chunks")
+	if len(config.Inputs) == 0 || json.Unmarshal(config.Inputs, &inputs) != nil {
+		return "", errors.New("eager comparator requires JSON inputs")
 	}
 	canonicalInputs, err := json.Marshal(inputs)
 	if err != nil {
-		return nil, fmt.Errorf("canonicalize comparator inputs: %w", err)
+		return "", fmt.Errorf("canonicalize comparator inputs: %w", err)
 	}
 	allowedRoots := append([]string(nil), config.AllowedImportRoots...)
 	if allowedRoots == nil {
@@ -32,12 +32,12 @@ func BuildEagerComparatorPrepareChunks(config EagerComparatorPrepareConfig) ([]s
 	}
 	for index, root := range allowedRoots {
 		if !validComparatorImportRoot(root) || (index > 0 && allowedRoots[index-1] >= root) {
-			return nil, errors.New("comparator import roots must be sorted unique public identifiers")
+			return "", errors.New("comparator import roots must be sorted unique public identifiers")
 		}
 	}
 	allowedImports, err := json.Marshal(allowedRoots)
 	if err != nil {
-		return nil, fmt.Errorf("canonicalize comparator imports: %w", err)
+		return "", fmt.Errorf("canonicalize comparator imports: %w", err)
 	}
 	var begin strings.Builder
 	if config.Plan != nil {
@@ -46,15 +46,37 @@ func BuildEagerComparatorPrepareChunks(config EagerComparatorPrepareConfig) ([]s
 	begin.WriteString("\nimport json as _eager_json\nimport agent_runtime as _eager_runtime\n")
 	begin.WriteString("from agent_runtime import eager_comparator as _eager_comparator_module\n")
 	fmt.Fprintf(&begin, "_eager_comparator_module._begin(_eager_json.loads(%s), dict(_eager_runtime._prepared_globals), %s)\n", strconv.Quote(string(canonicalInputs)), allowedImports)
+	return begin.String(), nil
+}
 
-	fragments := []string{begin.String()}
-	for _, chunk := range config.Chunks {
-		if chunk == "" {
-			return nil, errors.New("eager comparator chunks must be non-empty")
-		}
-		fragments = append(fragments, "from agent_runtime import eager_comparator as _eager_comparator_module\ncomparator_event = _eager_comparator_module._chunk("+strconv.Quote(chunk)+")\n")
+func BuildEagerComparatorChunkPrepare(chunk string) (string, error) {
+	if chunk == "" {
+		return "", errors.New("eager comparator chunk must be non-empty")
 	}
-	return append(fragments, "from agent_runtime import eager_comparator as _eager_comparator_module\ncomparator_final = _eager_comparator_module._finish()\n"), nil
+	return "from agent_runtime import eager_comparator as _eager_comparator_module\ncomparator_event = _eager_comparator_module._chunk(" + strconv.Quote(chunk) + ")\n", nil
+}
+
+func BuildEagerComparatorFinishPrepare() string {
+	return "from agent_runtime import eager_comparator as _eager_comparator_module\ncomparator_final = _eager_comparator_module._finish()\n"
+}
+
+func BuildEagerComparatorPrepareChunks(config EagerComparatorPrepareConfig) ([]string, error) {
+	if len(config.Chunks) == 0 {
+		return nil, errors.New("eager comparator requires source chunks")
+	}
+	begin, err := BuildEagerComparatorBeginPrepare(config)
+	if err != nil {
+		return nil, err
+	}
+	fragments := []string{begin}
+	for _, chunk := range config.Chunks {
+		fragment, err := BuildEagerComparatorChunkPrepare(chunk)
+		if err != nil {
+			return nil, err
+		}
+		fragments = append(fragments, fragment)
+	}
+	return append(fragments, BuildEagerComparatorFinishPrepare()), nil
 }
 
 func validComparatorImportRoot(root string) bool {

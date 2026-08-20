@@ -79,6 +79,44 @@ func TestExactGuestEagerStyleComparatorFreezesRuntimeFailureWithoutMessageBody(t
 	}
 }
 
+func TestExactGuestScheduledEagerTreatmentUsesFrozenCaseWithoutHints(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Uint32
+	handler := capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		calls.Add(1)
+		return json.RawMessage(`{"value":"weather"}`), nil
+	})
+	plan := eagerComparatorCapabilityPlan(t, handler)
+	factory := func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "eager-scheduled-pure-local", Plan: plan})
+	}
+	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	treatment, err := semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{
+		Artifact:      artifact,
+		RunConfig:     runConfig,
+		Plan:          plan,
+		BrokerFactory: factory,
+		RunID:         "eager-scheduled-pure-local",
+		WorkspaceRoot: t.TempDir(), WorkspaceOwner: "eager-scheduled-pure-local",
+		ProviderObservation: func() semanticspeculation.ProviderObservation { return semanticspeculation.ProviderObservation{} },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := semanticspeculation.RunScheduledTreatment(context.Background(), semanticspeculation.Phase3SyntheticCases()[5], treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome.FinalProgramOutcome != "success" || !result.Outcome.FinalPythonStarted ||
+		result.Outcome.PrefixPythonExecutions != 1 || result.Outcome.LogicalCalls != 0 || calls.Load() != 0 {
+		t.Fatalf("result=%+v calls=%d", result, calls.Load())
+	}
+}
+
 func runExactGuestEagerComparator(
 	t *testing.T,
 	label string,

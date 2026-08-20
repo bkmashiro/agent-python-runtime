@@ -54,4 +54,21 @@ func TestExactGuestPhase5OriginalOperationsExcludedPilot(t *testing.T) {
 	if snapshot.DecisionSHA256 != "" || snapshot.PatchSHA256 != "" || snapshot.CapsuleSHA256 != "" || snapshot.SelectionSHA256 != "" || snapshot.DerivedASTSHA256 != "" {
 		t.Fatalf("original pilot leaked derived identities: %+v", snapshot)
 	}
+
+	derived, err := semanticspeculation.NewPhase5ExactGuestOperations(artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []semanticspeculation.Phase5CapacityKind{semanticspeculation.Phase5AnalyzerCapacity, semanticspeculation.Phase5ScratchCapacity, semanticspeculation.Phase5FinalCapacity} {
+		if err := derived.Provision(ctx, kind); err != nil {
+			t.Fatalf("provision %s: %v", kind, err)
+		}
+	}
+	derivedSnapshot := derived.Snapshot()
+	if derivedSnapshot.AnalyzerSessionCount != 1 || derivedSnapshot.AnalyzerRuntimeInitCount != 1 || derivedSnapshot.ScratchRuntimeInitCount != 1 || derivedSnapshot.FinalRuntimeInitCount != 1 || derivedSnapshot.ScratchGuestExecutions != 0 || derivedSnapshot.FormalGuestExecutions != 0 {
+		t.Fatalf("derived capacities were served during provisioning: %+v", derivedSnapshot)
+	}
+	if err := derived.Teardown(ctx); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -12,6 +12,7 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 )
 
 var ErrPhase5DerivedOperationsUnavailable = errors.New("phase 5 derived Exact Guest operations are not yet provisioned")
@@ -24,11 +25,17 @@ type Phase5ExactGuestOperations struct {
 	artifact []byte
 	config   runtimeconfig.RunConfig
 
-	finalEngine   *wazeroengine.Engine
-	finalCapacity *wazeroengine.PreparedRegionFinalCapacity
-	request       []byte
-	snapshot      Phase5ExecutionSnapshot
-	teardown      bool
+	finalEngine     *wazeroengine.Engine
+	finalCapacity   *wazeroengine.PreparedRegionFinalCapacity
+	analyzerEngine  *wazeroengine.Engine
+	analyzerSession *wazeroengine.SemanticAnalysisSession
+	scratchEngine   *wazeroengine.Engine
+	scratchCapacity *wazeroengine.PreparedRegionScratchCapacity
+	preparedTable   *preparedregion.PreparedRegionTable
+	derivedMode     bool
+	request         []byte
+	snapshot        Phase5ExecutionSnapshot
+	teardown        bool
 }
 
 func NewPhase5ExactGuestOperations(artifact []byte, config runtimeconfig.RunConfig) (*Phase5ExactGuestOperations, error) {
@@ -47,30 +54,116 @@ func (operations *Phase5ExactGuestOperations) Provision(ctx context.Context, kin
 	}
 	operations.mu.Lock()
 	defer operations.mu.Unlock()
-	if operations.teardown || kind != Phase5FinalCapacity || operations.finalEngine != nil {
-		if kind == Phase5AnalyzerCapacity || kind == Phase5ScratchCapacity {
-			return ErrPhase5DerivedOperationsUnavailable
+	if operations.teardown {
+		return errors.New("phase 5 operations already closed")
+	}
+	newEngine := func(table *preparedregion.PreparedRegionTable) (*wazeroengine.Engine, error) {
+		if table == nil {
+			return wazeroengine.New(ctx, operations.artifact, operations.config)
 		}
-		return errors.New("phase 5 final capacity already provisioned or closed")
+		runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, operations.artifact, operations.config)
+		if err != nil {
+			return nil, err
+		}
+		engine, ok := runner.(*wazeroengine.Engine)
+		if !ok {
+			_ = runner.Close(ctx)
+			return nil, errors.New("phase 5 final engine type drift")
+		}
+		return engine, nil
 	}
-	engine, err := wazeroengine.New(ctx, operations.artifact, operations.config)
-	if err != nil {
-		return err
+	switch kind {
+	case Phase5AnalyzerCapacity:
+		if operations.analyzerEngine != nil || operations.finalEngine != nil {
+			return errors.New("phase 5 analyzer capacity ordering drift")
+		}
+		engine, err := newEngine(nil)
+		if err != nil {
+			return err
+		}
+		session, err := engine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: 16 * 1024, MaxDuration: 20 * time.Second})
+		if err != nil {
+			_ = engine.Close(context.Background())
+			return err
+		}
+		evidence, err := session.Prepare(ctx)
+		if err != nil {
+			_ = session.Close(context.Background())
+			_ = engine.Close(context.Background())
+			return err
+		}
+		if !evidence.NeverServed || evidence.RuntimeInitCalls != 1 || evidence.BrokerAvailable || evidence.WorkspaceMounted || (runtime.GOOS == "linux" && !evidence.COWHit) || (runtime.GOOS != "linux" && !evidence.PreparedHit) {
+			_ = session.Close(context.Background())
+			_ = engine.Close(context.Background())
+			return errors.New("phase 5 analyzer capacity evidence drift")
+		}
+		operations.derivedMode = true
+		operations.analyzerEngine, operations.analyzerSession = engine, session
+		operations.snapshot.AnalyzerSessionCount = 1
+		operations.snapshot.AnalyzerRuntimeInitCount = evidence.RuntimeInitCalls
+		return nil
+	case Phase5ScratchCapacity:
+		if !operations.derivedMode || operations.analyzerSession == nil || operations.scratchEngine != nil || operations.finalEngine != nil {
+			return errors.New("phase 5 scratch capacity ordering drift")
+		}
+		engine, err := newEngine(nil)
+		if err != nil {
+			return err
+		}
+		capacity, evidence, err := engine.PreparePreparedRegionScratch(ctx)
+		if err != nil {
+			_ = engine.Close(context.Background())
+			return err
+		}
+		if !evidence.NeverServed || evidence.RuntimeInitCalls != 1 || evidence.BrokerAvailable || evidence.WorkspaceMounted || (runtime.GOOS == "linux" && !evidence.COWHit) || (runtime.GOOS != "linux" && !evidence.PreparedHit) {
+			_ = capacity.Close(context.Background())
+			_ = engine.Close(context.Background())
+			return errors.New("phase 5 scratch capacity evidence drift")
+		}
+		operations.scratchEngine, operations.scratchCapacity = engine, capacity
+		operations.snapshot.ScratchRuntimeInitCount = evidence.RuntimeInitCalls
+		return nil
+	case Phase5FinalCapacity:
+		if operations.finalEngine != nil || (operations.derivedMode && operations.scratchCapacity == nil) {
+			return errors.New("phase 5 final capacity ordering drift")
+		}
+		var table *preparedregion.PreparedRegionTable
+		var err error
+		if operations.derivedMode {
+			table, err = preparedregion.NewPreparedRegionTable(nil)
+			if err != nil {
+				return err
+			}
+		}
+		engine, err := newEngine(table)
+		if err != nil {
+			if table != nil {
+				_ = table.Close()
+			}
+			return err
+		}
+		capacity, evidence, err := engine.PreparePreparedRegionFinal(ctx)
+		if err != nil {
+			_ = engine.Close(context.Background())
+			if table != nil {
+				_ = table.Close()
+			}
+			return err
+		}
+		if !evidence.NeverServed || evidence.RuntimeInitCalls != 1 || evidence.ModuleInstantiations == 0 || evidence.BrokerAvailable || evidence.WorkspaceMounted || (runtime.GOOS == "linux" && !evidence.COWHit) || (runtime.GOOS != "linux" && !evidence.PreparedHit) {
+			_ = capacity.Close(context.Background())
+			_ = engine.Close(context.Background())
+			if table != nil {
+				_ = table.Close()
+			}
+			return errors.New("phase 5 final capacity evidence drift")
+		}
+		operations.finalEngine, operations.finalCapacity, operations.preparedTable = engine, capacity, table
+		operations.snapshot.FinalRuntimeInitCount = evidence.RuntimeInitCalls
+		return nil
+	default:
+		return errors.New("invalid phase 5 capacity kind")
 	}
-	capacity, evidence, err := engine.PreparePreparedRegionFinal(ctx)
-	if err != nil {
-		_ = engine.Close(context.Background())
-		return err
-	}
-	if !evidence.NeverServed || evidence.RuntimeInitCalls != 1 || evidence.ModuleInstantiations == 0 || evidence.BrokerAvailable || evidence.WorkspaceMounted || (runtime.GOOS == "linux" && !evidence.COWHit) || (runtime.GOOS != "linux" && !evidence.PreparedHit) {
-		_ = capacity.Close(context.Background())
-		_ = engine.Close(context.Background())
-		return errors.New("phase 5 final capacity evidence drift")
-	}
-	operations.finalEngine = engine
-	operations.finalCapacity = capacity
-	operations.snapshot.FinalRuntimeInitCount = evidence.RuntimeInitCalls
-	return nil
 }
 
 type phase5TimerGap struct {
@@ -190,8 +283,23 @@ func (operations *Phase5ExactGuestOperations) Teardown(ctx context.Context) erro
 	if operations.finalCapacity != nil {
 		err = errors.Join(err, operations.finalCapacity.Close(ctx))
 	}
+	if operations.scratchCapacity != nil {
+		err = errors.Join(err, operations.scratchCapacity.Close(ctx))
+	}
+	if operations.analyzerSession != nil {
+		err = errors.Join(err, operations.analyzerSession.Close(ctx))
+	}
 	if operations.finalEngine != nil {
 		err = errors.Join(err, operations.finalEngine.Close(ctx))
+	}
+	if operations.scratchEngine != nil {
+		err = errors.Join(err, operations.scratchEngine.Close(ctx))
+	}
+	if operations.analyzerEngine != nil {
+		err = errors.Join(err, operations.analyzerEngine.Close(ctx))
+	}
+	if operations.preparedTable != nil {
+		err = errors.Join(err, operations.preparedTable.Close())
 	}
 	operations.snapshot.AuthorityTerminalDisposition = "none"
 	operations.snapshot.WorkspaceTerminalDisposition = "unmounted"

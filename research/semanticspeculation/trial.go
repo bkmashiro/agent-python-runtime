@@ -9,7 +9,7 @@ import (
 	"io"
 )
 
-const TrialSchemaVersion = "pysolate.semantic-speculation-trial.v1"
+const TrialSchemaVersion = "pysolate.semantic-speculation-trial.v2"
 
 const maxTrialBytes = 64 << 10
 
@@ -38,7 +38,12 @@ type TrialRecord struct {
 	ComparatorContractSHA256 string               `json:"comparator_contract_sha256,omitempty"`
 	TrialIndex               uint32               `json:"trial_index"`
 	SourceSHA256             string               `json:"source_sha256"`
+	SourceScheduleSHA256     string               `json:"source_schedule_sha256"`
+	InputsSHA256             string               `json:"inputs_sha256"`
 	ArtifactSHA256           string               `json:"artifact_sha256"`
+	ManifestSHA256           string               `json:"manifest_sha256"`
+	ImportInventorySHA256    string               `json:"import_inventory_sha256"`
+	ExecutionProfileSHA256   string               `json:"execution_profile_sha256"`
 	CapabilityPlanSHA256     string               `json:"capability_plan_sha256"`
 	PrivacySHA256            string               `json:"privacy_sha256"`
 	FinalProgramOutcome      string               `json:"final_program_outcome"`
@@ -106,8 +111,11 @@ func validateTrialRecord(value TrialRecord, sealed bool) error {
 	if value.SchemaVersion != TrialSchemaVersion || value.StudyID != "semantic-speculation-v1" ||
 		!digestPattern.MatchString(value.PreregistrationSHA256) || !identifierPattern.MatchString(value.CaseID) ||
 		!validTreatment(value.Treatment) || value.Treatment == "perfect_effect_oracle" || value.TrialIndex == 0 || value.TrialIndex > 5 ||
-		!digestPattern.MatchString(value.SourceSHA256) || !digestPattern.MatchString(value.ArtifactSHA256) ||
-		!digestPattern.MatchString(value.CapabilityPlanSHA256) || !digestPattern.MatchString(value.PrivacySHA256) ||
+		!digestPattern.MatchString(value.SourceSHA256) || !digestPattern.MatchString(value.SourceScheduleSHA256) ||
+		!digestPattern.MatchString(value.InputsSHA256) || !digestPattern.MatchString(value.ArtifactSHA256) ||
+		!digestPattern.MatchString(value.ManifestSHA256) || !digestPattern.MatchString(value.ImportInventorySHA256) ||
+		!digestPattern.MatchString(value.ExecutionProfileSHA256) || !digestPattern.MatchString(value.CapabilityPlanSHA256) ||
+		!digestPattern.MatchString(value.PrivacySHA256) ||
 		value.StartedNanos == 0 || value.EndedNanos < value.StartedNanos || value.PhysicalDispositions.total() != value.PhysicalAttempts ||
 		value.ReadyBeforeFinalize > value.PhysicalAttempts || !validAuthorityDisposition(value.AuthorityDisposition) ||
 		!validWorkspaceDisposition(value.WorkspaceDisposition) || sealed != digestPattern.MatchString(value.Identity) {

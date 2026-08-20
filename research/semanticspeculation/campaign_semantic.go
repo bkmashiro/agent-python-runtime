@@ -307,16 +307,7 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		_ = t.manager.Close()
 		_ = t.analyzer.Close(ctx)
 		if errors.Is(generation.err, runtimeconfig.ErrAgentSourceInvalid) || errors.Is(generation.err, semantic.ErrInvalidAnalysis) && t.exactSourceInvalid(ctx) {
-			snapshot := t.controller.Snapshot()
-			providerAttempts, providerBytes, providerCost, dispositions, _, providerErr := t.providerOutcome(snapshot)
-			if providerErr != nil {
-				return TreatmentOutcome{}, providerErr
-			}
-			return TreatmentOutcome{
-				FinalProgramOutcome: "syntax_error", ErrorClass: "syntax_error", AuthorityDisposition: "unchanged", WorkspaceDisposition: "discarded",
-				PhysicalAttempts: providerAttempts, PhysicalResultBytes: providerBytes, ProviderCostUnits: providerCost,
-				ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: dispositions,
-			}, nil
+			return t.syntaxErrorOutcome(readyAtFinalize)
 		}
 		return TreatmentOutcome{}, generation.err
 	}
@@ -331,8 +322,13 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 	t.formalExecutionNanos += uint64(time.Since(formalStarted))
 	t.lifecycleMu.Unlock()
 	if err != nil {
+		_ = t.runner.Close(ctx)
+		_ = t.attempt.Discard()
 		_ = t.manager.Close()
 		_ = t.analyzer.Close(ctx)
+		if errors.Is(err, runtimeconfig.ErrAgentSourceInvalid) {
+			return t.syntaxErrorOutcome(readyAtFinalize)
+		}
 		return TreatmentOutcome{}, err
 	}
 	defer t.manager.Close()
@@ -431,6 +427,19 @@ func (t *SemanticPreDispatchTreatment) providerOutcome(snapshot semantic.Streami
 	liveFallbackCalls := provider.Attempts - snapshot.PhysicalIssues
 	dispositions.Consumed += liveFallbackCalls
 	return provider.Attempts, provider.ResultBytes, provider.CostUnits, dispositions, liveFallbackCalls, nil
+}
+
+func (t *SemanticPreDispatchTreatment) syntaxErrorOutcome(readyAtFinalize uint32) (TreatmentOutcome, error) {
+	snapshot := t.controller.Snapshot()
+	providerAttempts, providerBytes, providerCost, dispositions, _, err := t.providerOutcome(snapshot)
+	if err != nil {
+		return TreatmentOutcome{}, err
+	}
+	return TreatmentOutcome{
+		FinalProgramOutcome: "syntax_error", ErrorClass: "syntax_error", AuthorityDisposition: "unchanged", WorkspaceDisposition: "discarded",
+		PhysicalAttempts: providerAttempts, PhysicalResultBytes: providerBytes, ProviderCostUnits: providerCost,
+		ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: dispositions,
+	}, nil
 }
 
 // exactSourceInvalid confirms an analyzer decode failure with the exact target

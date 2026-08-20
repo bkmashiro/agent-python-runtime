@@ -15,7 +15,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
-func TestSemanticPreDispatchRecordsPhysicalOrphanForLaterSyntaxError(t *testing.T) {
+func TestSemanticPreDispatchRecordsCancelledPhysicalWithoutLogicalCallForLaterSyntaxError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	wasm, err := os.ReadFile(guestArtifact(t))

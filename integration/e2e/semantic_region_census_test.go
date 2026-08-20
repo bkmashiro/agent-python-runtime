@@ -88,7 +88,74 @@ func TestExactGuestRemediatedFrozenPhase4RegionMechanismMatrix(t *testing.T) {
 			if focus.LocallyReusable() != candidate.ExpectedLocalReusable {
 				t.Fatalf("expected_local=%t focus=%+v", candidate.ExpectedLocalReusable, focus)
 			}
+			requirePhase4RegionControlTags(t, analysis.CandidateRegions, int(candidate.FocusRegionIndex), candidate.RequiredControlTags)
 		})
+	}
+}
+
+func requirePhase4RegionControlTags(t *testing.T, regions []semantic.CandidateRegion, focusIndex int, tags []string) {
+	t.Helper()
+	hasCapabilityBefore, hasCapabilityAfter, hasHeapMutationAfter, hasUnknownEffectAfter := false, false, false, false
+	for index, region := range regions {
+		if len(region.CapabilityOccurrences) != 0 {
+			hasCapabilityBefore = hasCapabilityBefore || index < focusIndex
+			hasCapabilityAfter = hasCapabilityAfter || index > focusIndex
+		}
+		if index > focusIndex {
+			for _, rejection := range region.RejectionReasons {
+				hasHeapMutationAfter = hasHeapMutationAfter || rejection == semantic.CandidateRejectHeapMutation
+				hasUnknownEffectAfter = hasUnknownEffectAfter || rejection == semantic.CandidateRejectUnknownEffect
+			}
+		}
+	}
+	focus := regions[focusIndex]
+	hasRejection := func(expected semantic.CandidateRejection) bool {
+		for _, rejection := range focus.RejectionReasons {
+			if rejection == expected {
+				return true
+			}
+		}
+		return false
+	}
+	for _, tag := range tags {
+		matched := true
+		switch tag {
+		case "effect_before_focus":
+			matched = hasCapabilityBefore
+		case "effect_after_focus":
+			matched = hasCapabilityAfter
+		case "effects_before_and_after_focus":
+			matched = hasCapabilityBefore && hasCapabilityAfter
+		case "host_effect":
+			matched = len(focus.CapabilityOccurrences) != 0
+		case "may_observe_live":
+			matched = focus.Effects.MayObserveLive
+		case "may_suspend":
+			matched = focus.Effects.MaySuspend
+		case "may_raise", "division":
+			matched = hasRejection(semantic.CandidateRejectMayRaise)
+		case "unknown_input_type":
+			matched = hasRejection(semantic.CandidateRejectLiveInNotCanonical) || hasRejection(semantic.CandidateRejectMayRaise)
+		case "unknown_call", "unknown_effect":
+			matched = hasRejection(semantic.CandidateRejectUnknownEffect)
+		case "heap_mutation":
+			matched = hasRejection(semantic.CandidateRejectHeapMutation)
+		case "later_heap_mutation":
+			matched = hasHeapMutationAfter || hasRejection(semantic.CandidateRejectIdentityAlias) && hasUnknownEffectAfter
+		case "alias_identity":
+			matched = hasRejection(semantic.CandidateRejectIdentityAlias)
+		case "opaque_control":
+			matched = hasRejection(semantic.CandidateRejectOpaqueControl)
+		case "non_json_transport", "bytes_identity":
+			matched = hasRejection(semantic.CandidateRejectLiveOutNotCanonical)
+		case "scalar":
+			matched = focus.LocallyReusable()
+		default:
+			t.Fatalf("unimplemented frozen control tag %q", tag)
+		}
+		if !matched {
+			t.Fatalf("control tag %q not evidenced by focus=%+v regions=%+v", tag, focus, regions)
+		}
 	}
 }
 
@@ -109,7 +176,7 @@ func phase4RegionCapabilityPlan(t *testing.T) *capability.Plan {
 		EffectClass: capability.EffectWorkspaceWrite, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "pysolate.phase4-mail-handler.v1",
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}},"required":["value"],"additionalProperties":false}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
-		Python:       &capability.PythonProjection{Module: "mail", Method: "send", Arguments: []string{"value"}},
+		Python:       &capability.PythonProjection{Module: "sinks", Method: "demo_publish", Arguments: []string{"value"}},
 	}
 	mailGrant, err := capability.NewGrant(json.RawMessage(`{"study":"phase4-region-census"}`))
 	if err != nil {

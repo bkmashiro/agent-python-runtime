@@ -280,6 +280,8 @@ Do not use `pickle` and do not add a generic Python interception hook.
 
 **2026-08-20 original equivalent capacity:** The same final-capacity primitive now supports unchanged original execution without creating a prepared-region table. This matters on Linux because merely preparing the shared COW baseline is not equivalent to allocating a private final lane: the original treatment now acquires its own initialized private COW slot before the clock, just as derived acquires its own final slot. `ExecuteOriginal` performs one source validation and one formal execution with no module instantiation or runtime init, then closes terminally and rejects reuse. Exact macOS/Linux original and derived runs both returned `42`. No campaign timing was observed.
 
+**2026-08-20 analyzer equivalent capacity:** A bounded analyzer session now has an explicit `Prepare` step that acquires its private initialized capacity without consuming an analysis request. Preparation requires an actual PreparedRuntime or Linux private-COW hit and rejects any fresh fallback, repeat preparation, workspace/Broker authority or Agent-source `Run`. Its lifetime/request/byte limits remain attached to one source-generation Run. Exact macOS, race and Linux controls passed; no campaign timing was observed.
+
 **Gate R4:** Baseline and patched lanes match result, exception class, logical calls and authority state across positive and adversarial cases. Net latency remains positive after scratch execution, capsule transport, final validation, AST emission and loading.
 
 ### R5: decide whether to retain the execution-patch class

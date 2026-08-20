@@ -269,7 +269,7 @@ Tasks:
 - [x] Prove syntax-error source produces no Python execution/logical call in baseline.
 - [x] Prove any Pysolate physical preparation remains separately recorded and cannot masquerade as a logical call.
 - [x] Record provider-visible physical work as observable cost; do not call it semantic nothing.
-- [ ] Run focused/race gates, update roadmap, signed commit, push, continue.
+- [x] Run focused/race gates, update roadmap, signed commit, push, continue.
 
 **Gate P1:** Every adversarial row is classifiable without invented evidence. Unknown/unclassifiable is a failed gate, not an excluded sample.
 
@@ -553,10 +553,11 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 
 ### Current execution pointer
 
-`Phase 1: whole-program semantics and adversarial oracle.`
+`Phase 2: Host speculative-preparation contract.`
 
 ## Completion log
 
+- 2026-08-20 Phase 1 complete: Gate P1 passed with every preregistered adversarial row mapped to a typed outcome and direct test. Exact source commit `1c07fc2b9a012abab9071abb777e9ba80f18ee66`; base CPython 3.14 WASI artifact `sha256:7be7bc7ea15951364427764d36fa6ac40b6f2ed68e71a5a6c639492a2f21df79`; private body-free evidence manifest `sha256:d2902898091a95c71da9214e6643673dfbb8d6289a6b1ec95a49bb8f2e675d35`. Three exact-Guest oracle tests passed in 27.024 s, 14-package focused gate passed, three-package race gate passed, vet and artifact/supply-chain verification passed.
 - 2026-08-20 Phase 1 qualification slice: target-Guest analysis of a custom wrapper records the inner direct capability only in the function summary, emits no positive call-site occurrence for pre-dispatch, and marks the dynamic wrapper invocation region `unknown_effect`; the planner emits no decision and no physical work.
 - 2026-08-20 Phase 1 outcome-contract slice: added strict body-free `pysolate.semantic-speculation-trial.v1` projections for final-program, prefix-Python, logical-call, physical-attempt, provider-cost, terminal-disposition, authority and workspace outcomes. Exact-Guest oracle tests cover whole-file syntax rejection, reached and unreached runtime errors, untaken control, ordinary success, and separately recorded pre-dispatch physical work on an invalid final suffix. The initial RED exposed two real semantics: full-file syntax rejection occurs as `ErrAgentSourceInvalid` before Broker creation, and invalid streamed suffix finalisation classifies an already issued pre-dispatch as cancelled rather than a logical call.
 - 2026-08-20 Phase 0: froze `pysolate.semantic-speculation-preregistration.v1` at parent `f604ce16b5bc7135c92e1dc70f9b91b124cf9f2c`; contract identity `sha256:5c0ec80ded86f07784d51d74aa503108fbd4a587918bc483bd564b35bdc18a47`, public file SHA-256 `479b9c7fb7aa1f8fe70a34824cf1221b04d9d36ef2fd52fecdbfbc96da0f8ccb`, private manifest SHA-256 `00797778c209a875abf989029d4efa7103a0992c389eb9a1eb585810364c9b5c`. RED was an undefined contract API; GREEN covered strict canonical round-trip, mutation, unknown fields, ordering, duplicates, unsafe claims and deterministic construction. Focused gate passed 14 Go packages in 6.28 s; the new package/command passed in 0.28 s; Guest Python passed 108 tests and scripts passed 105 tests.

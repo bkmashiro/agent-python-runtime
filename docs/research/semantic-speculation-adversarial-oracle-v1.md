@@ -48,3 +48,22 @@ The public contract never stores source, result, logs, tracebacks, credentials o
 ## Claim boundary
 
 This oracle establishes that the selected adversarial outcomes are representable and directly testable without treating physical preparation as a logical call. It does not establish arbitrary Python observational equivalence, safe external-write speculation, production latency, or an EAGER performance comparison. Physical work that is never consumed remains provider-visible work and cost.
+
+## Exact Guest checkpoint
+
+Phase 1 was rerun against the base-profile CPython 3.14 WASI artifact built at source commit `1c07fc2b9a012abab9071abb777e9ba80f18ee66`:
+
+- artifact SHA-256: `7be7bc7ea15951364427764d36fa6ac40b6f2ed68e71a5a6c639492a2f21df79`;
+- manifest SHA-256: `0a0113e0ef7a47d30116c2d3ad1264c8e39772cadb38d81a62ea68c5534633b8`;
+- import inventory SHA-256: `165761d1b40630089fc57b1f97033d9dc37290c87d6876ac5f94987b53ae122a`;
+- import qualification SHA-256: `f3e8dc64d7c98d8f21d0ddad27ee53b410c3dd2eebd8a1514ad593554116a506`;
+- exact-Guest oracle tests: 3 tests passed in 27.024 s;
+- focused gate: 14 packages passed;
+- race gate: 3 packages passed;
+- artifact manifest, dist checksums and supply-chain verification passed.
+
+The body-free private Phase 1 evidence manifest has SHA-256 `d2902898091a95c71da9214e6643673dfbb8d6289a6b1ec95a49bb8f2e675d35`. The first remote attempt failed after the runtime compile because Go still used the quota-limited default home `GOPATH`; recovery preserved the verified private build tree, redirected `GOPATH`, `GOMODCACHE` and `GOCACHE`, reran configure/artifact assembly at the exact source commit, and passed canonical artifact verification. No canonical source file was modified for the recovery.
+
+## Current limit
+
+This phase supplies classifications and semantics gates. It does not yet provide the matched serial/EAGER/Pysolate campaign, performance distributions or a pure-region materialisation result. Those remain later phases.

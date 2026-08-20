@@ -49,10 +49,24 @@ Campaign totals:
 - 380 semantic physical result bytes and 20 semantic provider cost units;
 - perfect-effect estimates remained analysis-only and were never counted as achieved speedup.
 
-## Decision boundary
+## Decision boundary and approved continuation
 
-The campaign validates the comparator, seeded matched runner, exact-Guest terminal semantics, authority/workspace accounting, private evidence codec and complete-grid sealing. It does not satisfy Gate P3's required positive net overlap.
+The campaign validates the comparator, seeded matched runner, exact-Guest terminal semantics, authority/workspace accounting, private evidence codec and complete-grid sealing. It satisfies the roadmap's renamed P3-S semantics/evidence gate. It does not satisfy P3-E's required positive net overlap.
 
-The observed failure is consequential: under this frozen 300 ms source schedule and 250 ms external-operation latency, target-Guest semantic analysis did not produce a prepared result before finalization, and its achieved lane paid substantially more startup/analysis cost than serial execution. Changing these frozen cases after observing the result would invalidate their preregistration.
+The observed failure is consequential: under this frozen 300 ms source schedule and 250 ms external-operation latency, target-Guest semantic analysis did not produce a prepared result before finalization, and its achieved lane paid substantially more startup/analysis cost than serial execution. Changing these frozen cases after observing the result would invalidate their preregistration, so the matrix and this negative result remain immutable.
 
-Phase 4 should therefore not start under the current roadmap's “continue only if P3 passes” rule without an explicit decision. Defensible next paths include preregistering a separate extension matrix that tests a longer operation/source-gap regime, revising the roadmap so region-local analysis is itself the proposed remedy and must pass a new post-Phase-4 economics gate, or accepting semantic mechanism evidence while dropping the positive-overlap requirement. None of those decisions is implied by this result.
+Subsequent source inspection localized the cost. `GenerateVerifiedSourceWithPreDispatch` scheduled exact analysis for every cumulative prefix. `AnalyzeSemantic` directly instantiated a fresh module, called `_initialize` and `runtime_init`, analyzed one prefix and destroyed the module; it bypassed the ordinary Run path's `PreparedRuntime`, and the macOS campaign did not use Linux memory COW. Two-chunk rows therefore paid two analyzer Guests plus one formal Guest; three-chunk rows paid three plus one. This is the measured cold-analyzer implementation boundary, not evidence for a hot prepared/COW treatment.
+
+On 2026-08-20 the owner approved the remediation path. Phase 4 may proceed under these rules:
+
+- retain this campaign as the permanent cold baseline;
+- do not mutate or relabel the original matrix;
+- use conservative Host screening only to skip unnecessary analysis, never to mint semantic authority;
+- reduce exact target-Guest analyzer invocations to candidate transitions;
+- acquire one fresh or prepared/COW analyzer instance per source-generation Run and use it as a bounded REPL-like RPC session for multiple prefix analyses; never reuse that mutable session across Runs;
+- use only single-use prepared modules or private Linux COW clones across Runs, never reset a served interpreter into a pool;
+- keep formal execution fresh and original source/AST unchanged;
+- freeze a separate versioned extension protocol before measuring remediation economics;
+- require a new P4-E gate to account for provisioning, analyzer, Broker, memory, cancellation/orphan and discarded-capacity costs.
+
+This decision permits investigation and implementation. It does not retroactively turn P3-E green or authorize a production-general speedup claim.

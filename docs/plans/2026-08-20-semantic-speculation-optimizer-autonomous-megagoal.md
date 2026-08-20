@@ -322,28 +322,54 @@ Tasks:
 - [x] Keep the perfect oracle analysis-only and excluded from achieved speedup.
 - [x] Run exact Guest matched pairs with deterministic lane order and a body-safe aggregate.
 - [x] Run full gates and independent frozen-diff/evidence calculation review.
-- [ ] Update roadmap, signed commit, push, continue only if P3 passes.
+- [x] Record the sealed result, update the roadmap decision, sign, push and continue under the approved remediation phase.
 
-**Gate P3:** At least one non-trivial, predeclared workload family matching the comparator paper's execution shape shows syntax-level gating serialising a Host-qualified operation while Pysolate recovers positive net overlap after analyser, Broker and cancellation/orphan accounting. Authored fixtures are admissible because this gate establishes mechanism behavior, not population-level benchmark prevalence; the fixture must not branch on treatment or encode the expected result.
+**Gate P3-S (semantics/evidence): passed.** The complete predeclared campaign must preserve final result or exception, logical calls, authority state and workspace disposition across all achieved lanes; seal all coordinates canonically; keep the perfect oracle analysis-only; and pass independent aggregate verification.
 
-**Observed result (2026-08-20): not passed.** The complete 35-coordinate Exact Guest campaign preserved matched semantics but produced 0/35 positive semantic-versus-serial coordinates and 0/35 prepared results ready before finalization. See `docs/research/semantic-speculation-phase3-campaign-result-v1.md`. Phase 4 is paused because changing the frozen matrix post hoc or silently weakening this gate would invalidate the roadmap's decision boundary.
+**Gate P3-E (economics diagnostic): not passed by the original cold-analyzer implementation.** At least one non-trivial, predeclared workload family matching the comparator paper's execution shape should show syntax-level gating serialising a Host-qualified operation while Pysolate recovers positive net overlap after analyser, Broker and cancellation/orphan accounting. Authored fixtures are admissible because this gate establishes mechanism behavior, not population-level benchmark prevalence; the fixture must not branch on treatment or encode the expected result.
 
-### Phase 4: Region-local semantic precision and mechanism case matrix
+**Observed result and approved decision (2026-08-20).** The immutable 35-coordinate Exact Guest campaign passed P3-S but produced 0/35 positive semantic-versus-serial coordinates and 0/35 prepared results ready before finalization. Inspection localized the cost to the implementation: every cumulative prefix called `AnalyzeSemantic`, which instantiated, initialized and destroyed a fresh CPython/WASI module; two-chunk cases paid two analyzer Guests plus one formal Guest, and three-chunk cases paid three plus one. The campaign used neither `PreparedRuntime` nor Linux memory COW for analysis. This result remains a permanent negative baseline and the original matrix is never changed.
 
-**Promise:** Pure-region implementation begins only after source analysis admits predeclared mechanism-revealing cases without relying on the v0 whole-module false-negative rule.
+The owner approved continuing. Phase 4 is now an explicit remedy phase rather than a claim that P3-E passed: reduce exact analyzer invocations, attach analysis to single-use prepared/COW lifecycle where supported, add region-local precision, and then run a new preregistered economics gate. No later result may rewrite or relabel the original failure.
+
+### Phase 4: Region-local precision and cold-prefix analyzer remediation
+
+**Promise:** Pysolate removes repeated cold-prefix work without introducing a reusable mutable interpreter, then proves region-local admission and bounded economics under a new preregistered protocol. Host screening may suppress unnecessary analysis but can never mint semantic authority; exact target-Guest analysis remains the qualification boundary.
+
+Lifecycle constraints:
+
+- `PreparedRuntime` means one initialized, never-served, single-use module; it is consumed once and retired, never reset into a pool;
+- Linux memory COW may derive a private single-use analyzer instance from a sealed initialized baseline; every clone is discarded;
+- one private analyzer instance may operate as a bounded REPL-like RPC session for the lifetime of one source-generation Run, accepting multiple canonical `runtime_analyze_source` requests without restarting CPython between prefixes;
+- the analyzer session executes analyzer code only, never Agent source, has no Broker or workspace, retains no source/result bodies after close, and is never reused by another Run;
+- production must not retain or reuse mutable Python heap, frames, globals, GC/refcount state, FDs, WASI state or workspace state across source-generation Runs or Agent executions; the bounded analyzer RPC calls inside one Run are the only scoped exception and cannot execute Agent source;
+- the research-private EAGER persistent interpreter remains comparator-only;
+- formal Agent execution remains fresh and executes original source/AST unchanged;
+- provisioning time, resident memory and discarded capacity are measured separately and never hidden from total-cost reporting.
 
 Tasks:
 
+- [ ] Write RED timing/lifecycle instrumentation that proves the current two-chunk treatment performs two analyzer instantiations plus one formal execution and the three-chunk treatment performs three plus one. Record instantiate, `_initialize`, `runtime_init`, target analysis, admission, provider and formal execution spans without source/result bodies.
+- [ ] Freeze a versioned remediation preregistration before implementation measurements. Preserve the original seven-case matrix byte-for-byte; add a separate extension matrix with multiple predeclared source-gap/operation-latency regimes, more than one computation/effect shape and negative controls. Never tune a row after observing its result.
+- [ ] Add a conservative Host-owned prefix-readiness/change filter that can only skip analysis. It may request exact target-Guest qualification when a candidate statement/region first becomes complete or its relevant binding changes; uncertainty analyzes or rejects, never admits.
+- [ ] RED-test that two- and three-chunk frozen cases invoke exact analysis only on predeclared candidate transitions, while syntax failure, unknown wrappers, changed bindings and opaque control remain fail-closed.
+- [ ] Add a bounded `SemanticAnalysisSession`: acquire one fresh or never-served prepared analyzer at source-generation start, serialize multiple prefix requests through that same private interpreter, enforce request-count/byte/time limits, and close it at finalization/cancellation. RED-test repeated-call parity against fresh one-shot analysis and reject any cross-Run session reuse.
+- [ ] Route the authority-free session through an analyzer-specific single-use prepared instance where portable. Missing/unready/consumed/mismatched preparation falls back to one fresh per-Run analyzer session, not one fresh module per prefix and not cross-Run mutable reuse.
+- [ ] Add the Linux-only analyzer COW path behind capability detection: sealed initialized baseline, one private single-use clone per source-generation Run, bounded memory, unconditional close/unmap, and explicit fallback evidence. Do not make Linux COW necessary for semantic correctness.
+- [ ] Preserve exact artifact/profile/import/plan/source binding across Host screening, prepared/COW selection and target-Guest analysis. No prepared lifecycle choice may broaden capability authority.
 - [ ] Write RED Guest tests showing a pure top-level region remains locally classifiable when an unrelated later region has a Host effect, while unknown calls/heap mutation/`may_raise`/opaque control still reject.
-- [ ] Improve only region-local top-level effect/dependency coverage needed by the test; do not build SSA or arbitrary interprocedural proof.
+- [ ] Improve only region-local top-level effect/dependency coverage needed by the tests; do not build SSA or arbitrary interprocedural proof.
 - [ ] Preserve exact byte spans, target-Guest AST identity, canonical live-ins/live-outs, barriers and explicit unknown reasons.
 - [ ] Freeze a deterministic multi-region case matrix before observing region eligibility. Include positive scalar/local-compute shapes plus effects, `may_raise`, alias/identity, opaque-control and transport-negative controls; do not switch runtime behavior on case IDs or expected outcomes.
-- [ ] Add bounded cost-shape estimates from actual execution of the constructed regions, not AST node count alone.
-- [ ] Report candidate/admitted/rejected counts, lead-time availability, canonical inputs/outputs, result shapes, same-run opportunity and exact-repeat opportunity separately.
-- [ ] Independently validate aggregate calculations and case-matrix identity.
-- [ ] Update roadmap, signed commit, push, continue only if P4 passes.
+- [ ] Add bounded cost-shape estimates from actual execution of constructed regions, not AST node count alone.
+- [ ] Run two clearly separated matched profiles: cold end-to-end and equivalently pre-provisioned capacity. Apply the same capacity boundary to serial, EAGER-style and semantic treatments; report provisioning and steady-state measurements separately.
+- [ ] Report analyzer invocation counts, candidate/admitted/rejected counts, lead-time availability, canonical inputs/outputs, result shapes, same-run opportunity, exact-repeat opportunity, prepared/COW hits/fallbacks, memory and discarded capacity.
+- [ ] Independently validate aggregate calculations, extension/multi-region matrix identities and the unchanged identity of the original Phase 3 matrix.
+- [ ] Update roadmap, signed commit, push, continue only if both P4 mechanism and economics gates pass.
 
-**Gate P4:** Multiple predeclared cases must contain expensive, straight-line, effect-free, transportable regions with a usable source-generation lead window, while nearby negative controls remain rejected. A synthetic authored matrix is sufficient for mechanism acceptance; it must include more than one computation shape and preserve identical source/input schedules across treatments. This gate makes no claim about natural-workload frequency.
+**Gate P4-M (mechanism):** Multiple predeclared cases contain expensive, straight-line, effect-free, transportable regions with a usable source-generation lead window; exact target-Guest analysis is invoked only for admissible candidate transitions; each source-generation Run uses at most one bounded private analyzer session; prepared/COW analyzer instances remain single-use across Runs; nearby negative controls reject; and an ordinary fresh per-Run analysis session plus fresh formal execution remains the fallback.
+
+**Gate P4-E (economics):** Under at least one non-trivial regime frozen before remediation measurements, achieved semantic pre-dispatch recovers positive net overlap after analyzer, provisioning, Broker, memory, cancellation/orphan and discarded-capacity accounting. The original Phase 3 matrix may remain negative and must be reported unchanged. Results support only the named synthetic regime and never natural-workload prevalence or production-general speedup.
 
 ### Phase 5: Run-scoped scalar region materialisation
 
@@ -555,11 +581,12 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 
 ### Current execution pointer
 
-`Phase 3: matched EAGER comparison.`
+`Phase 4: RED timing/lifecycle instrumentation for cold-prefix analyzer invocations and phase spans.`
 
 ## Completion log
 
-- 2026-08-20 Phase 3 sealed-campaign review: the committed driver completed all 35 frozen coordinates and 105 achieved Exact Guest trials, sealed manifest identity `sha256:a0397a28664675e5f450745a7315ea8f088f6a64cff864b69c2d66a8eeba1d33`, and removed its disposable workspace root. The independent Python review verified every canonical file, hash, identity, seeded order, binding, semantic outcome and aggregate. Semantic equivalence passed, with zero orphaned physical attempts, but Gate P3 did not: 0/35 coordinates recovered positive achieved overlap and 0/35 semantic results were ready before finalization. The frozen cases were not changed; Phase 4 is paused at the documented decision boundary.
+- 2026-08-20 Phase 4 remediation decision: after inspecting the measured slowdown, the owner approved continuing rather than treating the cold-path economics result as an optimizer-wide no-go. The roadmap now preserves P3-S semantic/evidence success and P3-E cold-analyzer failure separately, records that `AnalyzeSemantic` bypassed `PreparedRuntime`/COW and repeated fresh CPython/WASI initialization per prefix, and activates a bounded remediation phase: lifecycle instrumentation, immutable extension preregistration, conservative skip-only Host readiness, exact analyzer invocation reduction, one bounded REPL-like private analyzer session per source-generation Run, single-use prepared/COW lifecycle across Runs, region-local precision and a new independently reviewed P4-E economics gate. Cross-Run mutable interpreter reuse and post-hoc mutation of the original matrix remain prohibited.
+- 2026-08-20 Phase 3 sealed-campaign review: the committed driver completed all 35 frozen coordinates and 105 achieved Exact Guest trials, sealed manifest identity `sha256:a0397a28664675e5f450745a7315ea8f088f6a64cff864b69c2d66a8eeba1d33`, and removed its disposable workspace root. The independent Python review verified every canonical file, hash, identity, seeded order, binding, semantic outcome and aggregate. Semantic equivalence passed, with zero orphaned physical attempts, but Gate P3 did not: 0/35 coordinates recovered positive achieved overlap and 0/35 semantic results were ready before finalization. The frozen cases were not changed; Phase 4 was paused at that decision boundary until the owner approved the remediation path recorded above.
 - 2026-08-20 Phase 3 full-campaign driver slice: added a SHA-256-ranked 35-coordinate schedule covering every frozen case and five trials, a canonical complete-grid manifest bound to source commit and all shared treatment identities, strict file/order/permission/hash/evidence verification, non-overwriting private manifest persistence, and the `semantic-speculation-campaign` CLI. The CLI requires fresh evidence/workspace roots, runs every coordinate through `ExactGuestCampaign`, exclusive-writes each envelope, verifies the complete set before sealing the manifest, and emits only the body-free manifest reference.
 - 2026-08-20 Phase 3 executable-factory slice: extracted the verified treatment wiring into `ExactGuestCampaign`. It derives real artifact, manifest, import-inventory, execution-profile, capability-plan and canonical exact-partition privacy bindings; creates a fresh handler/plan/workspace per seeded lane; gives adapters only opaque hashed Run IDs; applies the frozen 250 ms provider latency; reconciles provider observations; computes the explicitly analysis-only oracle; and returns a sealed v2 envelope ready for exclusive persistence. Plan identity is handler-instance independent. An exact-Guest `pure_local` trial 2 ran through this executable and persisted successfully.
 - 2026-08-20 Phase 3 live-fallback accounting slice: the frozen `unknown_wrapper` matched run exposed that semantic-pre-dispatch controller counters covered speculative issues and prepared claims but omitted ordinary live fallback calls. The adapter now reconciles controller evidence with total provider observations, counts only attempts outside the controller as live logical calls, marks them consumed and fails closed when provider counters lag controller evidence. Exact Guest matched evidence passed all three lanes with one physical attempt, one logical call, `read_consumed` authority and a published workspace.

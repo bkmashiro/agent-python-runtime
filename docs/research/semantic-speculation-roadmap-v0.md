@@ -149,7 +149,9 @@ Conservative misses after any identity change are acceptable.
 
 ## Roadmap
 
-The tranches are sequential decision gates. A failed opportunity or cost gate stops later implementation rather than forcing the architecture toward EAGER parity.
+The tranches are sequential decision gates. A failed opportunity or cost gate stops dependent implementation unless the negative result is sealed and the owner explicitly approves a versioned remediation hypothesis. Remediation never changes the frozen input or relabels the failed gate; it must preregister a new gate before collecting successor measurements. The active execution details and current sequencing live in `docs/plans/2026-08-20-semantic-speculation-optimizer-autonomous-megagoal.md`.
+
+**2026-08-20 decision:** R2 semantic/evidence equivalence passed, while its cold-analyzer economics gate failed with 0/35 positive achieved coordinates and 0/35 results ready before finalization. The implementation analyzed every cumulative prefix in a fresh CPython/WASI module and did not use `PreparedRuntime` or Linux COW. The owner approved R3 as a bounded remediation: reduce exact analyzer invocations, use one bounded REPL-like private analyzer session per source-generation Run, add single-use prepared/private-COW lifecycle across Runs and region-local precision, then evaluate a separately preregistered economics gate. The original R2 campaign remains immutable negative evidence.
 
 ### R0: freeze semantics and an adversarial comparison corpus
 

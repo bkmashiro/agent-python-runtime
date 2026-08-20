@@ -393,9 +393,9 @@ Architecture constraints:
 Tasks:
 
 - [x] Freeze a source-bound `prepared_region` decision/capsule/patch identity and strict decoder.
-- [ ] RED-test positive scalar materialisation plus every source/input/environment/codec/pass mismatch.
-- [ ] Add one trusted Guest helper, conceptually `__pysolate_materialize_value__(opaque_decision)`, backed by a Host-owned per-Run materialisation table. The AST embeds no blob handle, cache key, Host path, body or authority-bearing credential.
-- [ ] Make the helper claim only an already pinned exact decision and reconstruct a typed local value. Missing, stale, consumed, mismatched or unready decisions fail closed; derived execution never turns a claim failure into recomputation or another physical attempt.
+- [x] RED-test positive scalar materialisation plus every source/input/environment/codec/pass mismatch.
+- [x] Add one trusted Guest helper, conceptually `__pysolate_materialize_value__(opaque_decision)`, backed by a Host-owned per-Run materialisation table. The AST embeds no blob handle, cache key, Host path, body or authority-bearing credential.
+- [x] Make the helper claim only an already pinned exact decision and reconstruct a typed local value. Missing, stale, consumed, mismatched or unready decisions fail closed; derived execution never turns a claim failure into recomputation or another physical attempt.
 - [ ] Reserve the helper binding and reject source forms that can shadow, overwrite or dynamically mutate its execution binding. Keep the v1 patch to one exact RHS/single-assignment form and preserve source locations.
 - [ ] Implement a target-Guest-owned narrow AST patch emitter/validator preserving source locations.
 - [ ] Implement scratch-Guest execution and bounded capsule publication with typed terminal states.
@@ -405,6 +405,8 @@ Tasks:
 - [ ] Measure analysis + scratch execution + transport + final validation + patch compile/load costs.
 - [ ] Run focused/race/exact Guest gates and matched positive/negative trials.
 - [ ] Update roadmap, signed commit, push, continue only if P5 passes.
+
+**2026-08-20 bounded helper slice:** Decision, capsule and execution-patch contracts now bind the exact source, AST, analyzed region/span/bytes, live-ins, environment, execution profile, import closure, capability plan, pass config and scalar codec. A run-private Host table exposes one separate bounded `agent_runtime_v1.materialize_value` import; the trusted Guest helper accepts only canonical JSON `bool`/`int64`, and successful claim consumes the pinned capsule exactly once. Missing, unready, mismatched, stale and repeated claims fail without Broker calls, workspace state, recomputation or another physical attempt. Exact Guest artifact `sha256:bb3cd9464f54b242ec908e143ee3fbb359a05b7b9db6fe8f30053aed5dc0366c` passed macOS and Linux positive/missing/repeated claim cases. This does not yet execute a candidate region or emit/select a derived AST; that remains the next boundary.
 
 **Gate P5:** The admitted mechanism case matrix has positive net critical-path benefit and exact declared outcome parity. Stop if the patch requires arbitrary heap transfer, broad Python semantics or unsafe exception substitution. A win on the frozen authored matrix establishes bounded mechanism feasibility, not production prevalence or expected end-to-end uplift.
 

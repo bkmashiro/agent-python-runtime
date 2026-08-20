@@ -254,6 +254,8 @@ Execute in a scratch Guest, retain a bounded typed capsule, wait for successful 
 
 Do not use `pickle` and do not add a generic Python interception hook.
 
+**2026-08-20 bounded helper slice:** The run-scoped `prepared_region` contract now binds source/AST/region/live-in/environment/profile/import/plan/pass/codec identities before any consumer exists. A Host-owned single-use table and separate bounded WASM import feed only canonical JSON `bool`/`int64` to the reserved trusted helper; missing, unready, mismatched, stale and repeated claims fail closed with no Broker/workspace authority or recomputation. Exact Guest positive, missing and repeated-claim controls passed on macOS and Linux with artifact `sha256:bb3cd9464f54b242ec908e143ee3fbb359a05b7b9db6fe8f30053aed5dc0366c`. Region execution, final-source-bound AST patch emission and lane economics remain unimplemented, so R4 has not passed.
+
 **Gate R4:** Baseline and patched lanes match result, exception class, logical calls and authority state across positive and adversarial cases. Net latency remains positive after scratch execution, capsule transport, final validation, AST emission and loading.
 
 ### R5: decide whether to retain the execution-patch class

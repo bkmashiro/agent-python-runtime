@@ -38,21 +38,7 @@ func TestExactGuestPreparedRegionHelperClaimsHostTableWithoutBrokerOrWorkspace(t
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.SemanticAnalysis = true
 	config.ExecutionProfile = &profile
-	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-positive", Code: fmt.Sprintf("result = __pysolate_materialize_value__(%q)", decision.IdentitySHA256), Inputs: json.RawMessage(`{}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := runner.Run(context.Background(), request, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := runner.Close(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	response := runPreparedRegionExact(t, artifact, config, table, "prepared-region-positive", fmt.Sprintf("result = __pysolate_materialize_value__(%q)", decision.IdentitySHA256))
 	var envelope struct {
 		Status string          `json:"status"`
 		Result json.RawMessage `json:"result"`
@@ -65,9 +51,60 @@ func TestExactGuestPreparedRegionHelperClaimsHostTableWithoutBrokerOrWorkspace(t
 	if evidence.Consumed != 1 || evidence.Claims != 1 || evidence.RejectedClaims != 0 || evidence.Ready != 0 || evidence.Discarded != 0 {
 		t.Fatalf("evidence=%+v", evidence)
 	}
+
+	secondTable, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response = runPreparedRegionExact(t, artifact, config, secondTable, "prepared-region-second-claim", fmt.Sprintf("a = __pysolate_materialize_value__(%[1]q)\nresult = a + __pysolate_materialize_value__(%[1]q)", decision.IdentitySHA256))
+	if err := json.Unmarshal(response, &envelope); err != nil || envelope.Status != "error" {
+		t.Fatalf("second response=%s err=%v", response, err)
+	}
+	evidence = secondTable.Evidence()
+	if evidence.Consumed != 1 || evidence.Claims != 1 || evidence.RejectedClaims != 1 {
+		t.Fatalf("second evidence=%+v", evidence)
+	}
+
+	missingTable, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingDecision := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	response = runPreparedRegionExact(t, artifact, config, missingTable, "prepared-region-missing", fmt.Sprintf("result = __pysolate_materialize_value__(%q)", missingDecision))
+	if err := json.Unmarshal(response, &envelope); err != nil || envelope.Status != "error" {
+		t.Fatalf("missing response=%s err=%v", response, err)
+	}
+	evidence = missingTable.Evidence()
+	if evidence.Consumed != 0 || evidence.RejectedClaims != 1 || evidence.Discarded != 1 {
+		t.Fatalf("missing evidence=%+v", evidence)
+	}
 }
 
 const digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+func runPreparedRegionExact(t *testing.T, artifact []byte, config runtimeconfig.RunConfig, table *preparedregion.PreparedRegionTable, runID string, code string) []byte {
+	t.Helper()
+	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties := runner.Properties()
+	if properties.CapabilityBrokerAvailable || properties.WorkspaceMounted {
+		t.Fatalf("prepared region helper gained authority: %+v", properties)
+	}
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := runner.Run(context.Background(), request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
 
 func loadPreparedRegionArtifact(t *testing.T) ([]byte, runtimeconfig.ExecutionProfile) {
 	t.Helper()

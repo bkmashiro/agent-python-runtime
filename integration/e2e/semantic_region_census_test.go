@@ -17,7 +17,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
-func TestExactGuestFrozenPhase4RegionMechanismMatrix(t *testing.T) {
+func TestExactGuestRemediatedFrozenPhase4RegionMechanismMatrix(t *testing.T) {
 	matrixRaw, err := os.ReadFile("../../docs/evidence/semantic-speculation-phase4-region-case-matrix-v1.json")
 	if err != nil {
 		t.Fatal(err)
@@ -32,8 +32,8 @@ func TestExactGuestFrozenPhase4RegionMechanismMatrix(t *testing.T) {
 	}
 	artifactDigest := sha256.Sum256(artifact)
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
-	if artifactSHA != semanticspeculation.Phase4RegionAnalyzerArtifactSHA256 {
-		t.Fatalf("artifact=%s frozen=%s", artifactSHA, semanticspeculation.Phase4RegionAnalyzerArtifactSHA256)
+	if artifactSHA != semanticspeculation.Phase4RegionRemediationArtifactSHA256 {
+		t.Fatalf("artifact=%s remediation=%s", artifactSHA, semanticspeculation.Phase4RegionRemediationArtifactSHA256)
 	}
 	allowedImports := []string{"json"}
 	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)

@@ -19,6 +19,8 @@ const Phase4RegionPreregistrationIdentity = "sha256:81a3110d66c8f84dc1be9bfea057
 const Phase4RegionFreezeParentCommit = "5f12bfcd57f529fc5bc4af42f8e18ee9ba0f12c1"
 const Phase4RegionAnalyzerSourceCommit = "384327f413138434455af77a322f63afbace7384"
 const Phase4RegionAnalyzerArtifactSHA256 = "sha256:cdb440e794b5865878e602eeebf4fe8198a20b33a140f7d4e87a679b1fa89191"
+const Phase4RegionRemediationSourceCommit = "44574ddaf907181e9354b6e8c47c9a33a2657bf1"
+const Phase4RegionRemediationArtifactSHA256 = "sha256:8780338cf3b4330371b13f06a2846006077c3ff99ee89d7fb618ea19e252d242"
 
 const phase4RegionPilotCaseID = "scalar_chain_2_before_effect"
 

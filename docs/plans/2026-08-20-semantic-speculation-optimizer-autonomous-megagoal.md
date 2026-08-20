@@ -404,11 +404,12 @@ Tasks:
 
 Subphases in order:
 
-1. bytes/text/JSON structures;
-2. NumPy array only under an exact profile containing NumPy;
-3. Arrow/Parquet table only if the selected Guest profile already contains the required package and a natural workload justifies it.
+1. bytes/text/JSON structures with ordinary typed copy transport;
+2. a measurement-triggered Linux-only immutable shared-backing feasibility spike;
+3. NumPy array only under an exact profile containing NumPy;
+4. Arrow/Parquet table only if the selected Guest profile already contains the required package and a natural workload justifies it.
 
-Tasks for each type:
+Tasks for each copied type:
 
 - [ ] Freeze schema/codec/version/size bounds and semantic limitations.
 - [ ] RED-test malformed data, decompression/shape/size bombs, version/profile mismatch, object-identity assumptions and unsafe path access.
@@ -416,6 +417,18 @@ Tasks for each type:
 - [ ] Measure early compute, serialize, hash/store, final load, peak memory and recompute baseline across predeclared sizes.
 - [ ] Retain a type only over a measured profitable range and document fallback.
 - [ ] Keep result bodies private; commit body-safe aggregates.
+
+Shared-backing branch, only when measured copy/serialization cost dominates:
+
+- [ ] Freeze the boundary as Host-owned immutable value storage with per-Guest local wrappers; never share `PyObject*`, CPython allocator metadata, interpreter heap, capability tables or arbitrary mutable memory.
+- [ ] Compare three bounded transports for the same pointer-free bytes/array payload: ordinary copy, `SHARED_RO`, and `SHARED_COW`; do not implement `SHARED_RW`.
+- [ ] Start from the existing Linux `experimental.MemoryAllocator` and sealed-`memfd` COW path. Reserve a fixed page-aligned transferable arena and test same-address subrange remapping only at a quiescent boundary. Do not fork wazero or replace the general CPython allocator in this goal.
+- [ ] Give each Guest a fresh generation-bound opaque handle and local buffer-protocol wrapper. A Host-owned lease owns the backing FD, mapping lifetime, refcount, privacy partition and content/computation identity; raw FDs and Host pointers never enter Guest-visible state.
+- [ ] For producer-created data, require a dedicated arena from allocation time. Quiesce the producer, remove writable shared mappings, seal the backing, then map consumers read-only or private-COW. Do not attempt to promote arbitrary dirty CPython heap pages after allocation.
+- [ ] RED-test stale handles, cross-project claims, unsealed/mutable backing, producer or consumer teardown, failed remap, concurrent access, consumer write isolation, source/object identity drift, `memory.grow`, and partial publication.
+- [ ] Prove A and B observe identical initial bytes, B writes cannot affect A or the sealed backing, and every teardown releases Host leases without relying on Python finalizers.
+- [ ] Measure physical sharing with Linux mapping/PSS evidence and active dirty bytes; do not infer zero-copy from equal values or refcounts.
+- [ ] Stop before an engine fork, arbitrary Python-object sharing, movable backing, shared mutable memory or broad allocator replacement. Preserve typed copy transport as fallback.
 
 Cache branch:
 
@@ -425,7 +438,7 @@ Cache branch:
 - [ ] Never use overlay digest, natural-language task text or equal arguments alone as cache identity.
 - [ ] Add expiry/invalidation/quota/body-size and corrupted-entry tests before enabling any completed-result reuse.
 
-**Gate P7:** Each retained codec/cache mode has positive measured economics and strict identity. If scalar succeeds but every large type loses to recomputation, record scalar-only support and continue; if implementing safe transport requires generic heap/pickle semantics, stop.
+**Gate P7:** Each retained codec/cache/backing mode has positive measured economics and strict identity. `SHARED_RO`/`SHARED_COW` additionally require a dedicated pointer-free arena, local wrappers, quiescent publication, sealed Host backing, cross-instance write isolation and deterministic teardown. If scalar succeeds but every large type loses to recomputation, record scalar-only support and continue. If safe transport requires arbitrary heap transfer, general CPython allocator replacement, shared mutable authority, generic pickle semantics or a wazero fork, stop.
 
 ### Phase 8: Private-workspace file preparation
 

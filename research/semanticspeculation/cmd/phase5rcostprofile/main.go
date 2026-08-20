@@ -74,6 +74,7 @@ func run(ctx context.Context, artifact []byte, config rc.RunConfig, candidate ss
 		stages[name] = float64(time.Since(start).Microseconds()) / 1000
 	}
 	criticalStart := time.Now()
+	gapStart := time.Now()
 	gap, err := operations.BeginFinalizationGap(ctx, time.Duration(candidate.FinalizationGapMillis)*time.Millisecond)
 	must(err)
 	input := ss.Phase5ExecutionInput{Source: candidate.Source, FocusRegionIndex: candidate.FocusRegionIndex, OutputName: candidate.OutputName}
@@ -88,7 +89,8 @@ func run(ctx context.Context, artifact []byte, config rc.RunConfig, candidate ss
 		timed("scratch_execution", func() error { return operations.ExecuteScratch(ctx, input) })
 		timed("capsule_seal_transport", func() error { return operations.SealCapsule(ctx) })
 	}
-	timed("finalization_gap", func() error { return gap.Wait(ctx) })
+	must(gap.Wait(ctx))
+	stages["finalization_gap"] = float64(time.Since(gapStart).Microseconds()) / 1000
 	if treatment == "original" {
 		timed("final_execution", func() error { return operations.ExecuteOriginal(ctx, input) })
 	} else {

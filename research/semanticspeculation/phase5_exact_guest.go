@@ -46,6 +46,7 @@ type Phase5ExactGuestOperations struct {
 	patch           preparedregion.PreparedRegionPatch
 	scratchResult   preparedregion.PreparedRegionScratchResult
 	capsule         preparedregion.PreparedRegionCapsule
+	selection       preparedregion.PreparedRegionExecutionSelection
 	request         []byte
 	snapshot        Phase5ExecutionSnapshot
 	teardown        bool
@@ -348,14 +349,64 @@ func (operations *Phase5ExactGuestOperations) SealCapsule(context.Context) error
 	operations.snapshot.CapsuleBytes = capsule.PayloadBytes
 	return nil
 }
-func (operations *Phase5ExactGuestOperations) ValidateSelection(context.Context, Phase5ExecutionInput) error {
-	return ErrPhase5DerivedOperationsUnavailable
+func (operations *Phase5ExactGuestOperations) ValidateSelection(_ context.Context, input Phase5ExecutionInput) error {
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if operations.capsule.IdentitySHA256 == "" || operations.selection.IdentitySHA256 != "" || operations.patch.FinalSourceSHA256 != phase5Digest([]byte(input.Source)) {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	_, selection, err := preparedregion.SealPreparedRegionExecutionSelection(operations.decision, operations.capsule, operations.patch)
+	if err != nil {
+		return err
+	}
+	operations.selection = selection
+	operations.snapshot.SelectionSHA256 = selection.IdentitySHA256
+	operations.snapshot.DerivedASTSHA256 = selection.DerivedASTSHA256
+	return nil
 }
-func (operations *Phase5ExactGuestOperations) CompileDerived(context.Context, Phase5ExecutionInput) error {
-	return ErrPhase5DerivedOperationsUnavailable
+func (operations *Phase5ExactGuestOperations) CompileDerived(ctx context.Context, input Phase5ExecutionInput) error {
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if operations.selection.IdentitySHA256 == "" || operations.finalCapacity == nil || len(operations.request) != 0 {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	sourceDigest := sha256.Sum256([]byte(input.Source))
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "p5-" + hex.EncodeToString(sourceDigest[:8]), Code: input.Source, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		return err
+	}
+	evidence, err := operations.finalCapacity.Compile(ctx, request, operations.selection, operations.decision, operations.capsule, operations.patch)
+	if err != nil {
+		return err
+	}
+	if !evidence.PreparedCapacity || evidence.SourceValidations != 1 || evidence.SelectionCompiles != 1 || evidence.ModuleInstantiations != 0 || evidence.RuntimeInitCalls != 0 {
+		return errors.New("phase 5 derived compile lifecycle drift")
+	}
+	operations.request = request
+	return nil
 }
-func (operations *Phase5ExactGuestOperations) ExecuteDerived(context.Context, Phase5ExecutionInput) error {
-	return ErrPhase5DerivedOperationsUnavailable
+func (operations *Phase5ExactGuestOperations) ExecuteDerived(ctx context.Context, _ Phase5ExecutionInput) error {
+	operations.mu.Lock()
+	defer operations.mu.Unlock()
+	if len(operations.request) == 0 || operations.snapshot.FormalGuestExecutions != 0 {
+		return ErrPhase5DerivedOperationsUnavailable
+	}
+	payload, evidence, err := operations.finalCapacity.Execute(ctx, operations.request)
+	if err != nil {
+		return err
+	}
+	if !evidence.PreparedCapacity || evidence.FormalGuestExecutions != 1 || evidence.ModuleInstantiations != 0 || evidence.RuntimeInitCalls != 0 {
+		return errors.New("phase 5 derived execution lifecycle drift")
+	}
+	if err := operations.recordResponse(operations.request, payload); err != nil {
+		return err
+	}
+	tableEvidence := operations.preparedTable.Evidence()
+	operations.snapshot.HelperClaimCount = tableEvidence.Claims
+	operations.snapshot.CapsuleConsumedCount = tableEvidence.Consumed
+	operations.snapshot.CapsuleRejectedClaimCount = tableEvidence.RejectedClaims
+	operations.snapshot.CapsuleDiscardedCount = tableEvidence.Discarded
+	return nil
 }
 
 func (operations *Phase5ExactGuestOperations) ExecuteOriginal(ctx context.Context, input Phase5ExecutionInput) error {
@@ -390,6 +441,38 @@ func (operations *Phase5ExactGuestOperations) ExecuteOriginal(ctx context.Contex
 		return err
 	}
 	operations.snapshot.FormalGuestExecutions = evidence.FormalGuestExecutions
+	operations.snapshot.ActualDisposition = "ready_consumed"
+	if response.Status == runtimeconfig.RunResponseOK {
+		operations.snapshot.ActualOutcome = "success"
+		operations.snapshot.ResultSHA256 = phase5Digest(response.Result)
+	} else {
+		operations.snapshot.ActualOutcome = "error"
+		if response.Error != nil {
+			operations.snapshot.ErrorClass = response.Error.Code
+			operations.snapshot.ErrorMessageSHA256 = phase5Digest([]byte(response.Error.Message))
+			if response.Error.Traceback != nil {
+				operations.snapshot.TracebackSHA256 = phase5Digest([]byte(*response.Error.Traceback))
+			}
+		}
+	}
+	logs, err := json.Marshal(response.Logs)
+	if err != nil {
+		return err
+	}
+	operations.snapshot.LogsSHA256 = phase5Digest(logs)
+	return nil
+}
+
+func (operations *Phase5ExactGuestOperations) recordResponse(request, payload []byte) error {
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return err
+	}
+	response, err := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload)
+	if err != nil {
+		return err
+	}
+	operations.snapshot.FormalGuestExecutions = 1
 	operations.snapshot.ActualDisposition = "ready_consumed"
 	if response.Status == runtimeconfig.RunResponseOK {
 		operations.snapshot.ActualOutcome = "success"

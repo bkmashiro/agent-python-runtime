@@ -86,12 +86,24 @@ func TestExactGuestPhase5OriginalOperationsExcludedPilot(t *testing.T) {
 	if sealed := derived.Snapshot(); sealed.CapsuleSHA256 == "" || sealed.CapsuleBytes == 0 || sealed.CapsuleBytes > 256 || sealed.ScratchGuestExecutions != 1 {
 		t.Fatalf("derived capsule lifecycle drift: %+v", sealed)
 	}
+	if err := derived.ValidateSelection(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if err := derived.CompileDerived(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if before := derived.Snapshot(); before.HelperClaimCount != 0 || before.CapsuleConsumedCount != 0 {
+		t.Fatalf("compile claimed capsule: %+v", before)
+	}
+	if err := derived.ExecuteDerived(ctx, input); err != nil {
+		t.Fatal(err)
+	}
 	if err := derived.Analyze(ctx, input); err == nil {
 		t.Fatal("derived analyzer accepted a second request")
 	}
 	derivedSnapshot = derived.Snapshot()
-	if derivedSnapshot.FormalGuestExecutions != 0 || derivedSnapshot.HelperClaimCount != 0 {
-		t.Fatalf("analysis/scratch executed formal source or claimed capsule: %+v", derivedSnapshot)
+	if derivedSnapshot.FormalGuestExecutions != 1 || derivedSnapshot.HelperClaimCount != 1 || derivedSnapshot.CapsuleConsumedCount != 1 || derivedSnapshot.ActualOutcome != snapshot.ActualOutcome || derivedSnapshot.ResultSHA256 != snapshot.ResultSHA256 || derivedSnapshot.LogsSHA256 != snapshot.LogsSHA256 {
+		t.Fatalf("derived parity/lifecycle drift: original=%+v derived=%+v", snapshot, derivedSnapshot)
 	}
 	if err := derived.Teardown(ctx); err != nil {
 		t.Fatal(err)

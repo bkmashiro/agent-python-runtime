@@ -144,6 +144,36 @@ class SemanticAnalysisTests(unittest.TestCase):
         self.assertEqual([], call["data_dependencies"])
         self.assertIn("unknown_effect", call["rejection_reasons"])
 
+    def test_candidate_regions_accept_proven_scalar_arithmetic_before_unrelated_effect(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}, copy.deepcopy(CAPABILITIES[1])]
+        report = self.analyze(
+            "seed = 40\n"
+            "value = seed * 2 + 2\n"
+            "remote = sources.read('profile')\n"
+            "result = value\n",
+            capabilities=capabilities,
+        )
+        seed, value, effect, result = report["candidate_regions"]
+        self.assertEqual([], seed["rejection_reasons"])
+        self.assertEqual([], value["rejection_reasons"])
+        self.assertEqual({"start_line": 2, "start_column": 0, "end_line": 2, "end_column": 20}, value["span"])
+        self.assertEqual(["seed"], value["live_ins"])
+        self.assertEqual(["value"], value["live_outs"])
+        self.assertEqual([], value["barriers"])
+        self.assertEqual(
+            [{"name": "seed", "producer_region_id": seed["id"]}],
+            value["data_dependencies"],
+        )
+        self.assertEqual({"may_publish": False, "may_observe_live": False, "may_suspend": False, "may_be_unknown": False}, value["effects"])
+        self.assertTrue(effect["effects"]["may_observe_live"])
+        self.assertIn("may_raise", effect["rejection_reasons"])
+        self.assertEqual([], result["rejection_reasons"])
+        repeated = self.analyze(
+            "seed = 40\nvalue = seed * 2 + 2\nremote = sources.read('profile')\nresult = value\n",
+            capabilities=capabilities,
+        )
+        self.assertEqual(report["candidate_regions"], repeated["candidate_regions"])
+
     def test_candidate_regions_reject_explicit_and_expression_exception_paths(self):
         for source in (
             "assert inputs['ok']\n",

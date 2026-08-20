@@ -504,6 +504,32 @@ class _RegionNames(ast.NodeVisitor):
                 self.stores.add(alias.asname or alias.name)
 
 
+def _safe_scalar_expression(node, scalar_names):
+    if isinstance(node, ast.Constant):
+        if type(node.value) is bool:
+            return "bool"
+        if type(node.value) is int:
+            return "int"
+        return None
+    if isinstance(node, ast.Name):
+        return scalar_names.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        left = _safe_scalar_expression(node.left, scalar_names)
+        right = _safe_scalar_expression(node.right, scalar_names)
+        if left in ("bool", "int") and right in ("bool", "int"):
+            return "int"
+    return None
+
+
+def _safe_scalar_statement_outputs(statement, scalar_names):
+    if not isinstance(statement, ast.Assign) or len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+        return {}
+    scalar_type = _safe_scalar_expression(statement.value, scalar_names)
+    if scalar_type is None:
+        return {}
+    return {statement.targets[0].id: scalar_type}
+
+
 def _may_raise(statement):
     risky = (
         ast.Assert, ast.Raise, ast.Call, ast.Await, ast.Yield, ast.YieldFrom,
@@ -601,6 +627,7 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
 
     module_state = _ScopeAnalyzer("", function_ids, capability_index)
     canonical_names = {"inputs"}
+    scalar_names = {}
     spans = [_span(statement) for statement in tree.body]
     region_ids = [
         _digest(("pysolate.semantic-candidate-region.v0\x00%s\x00%d\x00%d:%d:%d:%d" % (
@@ -629,6 +656,7 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
         region_live_ins = sorted(set(loads) - external_bindings)
         region_live_outs = sorted(live_outs[index])
         canonical_outputs = _canonical_statement_outputs(statement, canonical_names)
+        safe_scalar_outputs = _safe_scalar_statement_outputs(statement, scalar_names)
         live_ins_canonical = all(name in canonical_names for name in region_live_ins)
         live_outs_canonical = all(name in canonical_outputs for name in region_live_outs)
         rejections = set()
@@ -638,7 +666,7 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
             rejections.add("declaration")
         if visitor.heap_mutation:
             rejections.add("heap_mutation")
-        if _may_raise(statement):
+        if _may_raise(statement) and not safe_scalar_outputs:
             rejections.add("may_raise")
         if region_state.effects["may_be_unknown"]:
             rejections.add("unknown_effect")
@@ -675,9 +703,14 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
                 canonical_names.add(output)
             else:
                 canonical_names.discard(output)
+            if output in safe_scalar_outputs:
+                scalar_names[output] = safe_scalar_outputs[output]
+            else:
+                scalar_names.pop(output, None)
         for deleted in deletes:
             producers.pop(deleted, None)
             canonical_names.discard(deleted)
+            scalar_names.pop(deleted, None)
     return regions
 
 

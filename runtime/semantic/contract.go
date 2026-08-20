@@ -147,6 +147,14 @@ type CandidateRegion struct {
 	RejectionReasons      []CandidateRejection   `json:"rejection_reasons"`
 }
 
+// LocallyReusable reports only analyzer-local eligibility. It carries no Host
+// authority to execute, cache, transport, admit, or replace the region.
+func (region CandidateRegion) LocallyReusable() bool {
+	return region.Kind == CandidateRegionStraightLine &&
+		region.Effects == (EffectSummary{}) && region.LiveInsCanonical && region.LiveOutsCanonical &&
+		len(region.CapabilityOccurrences) == 0 && len(region.Barriers) == 0 && len(region.RejectionReasons) == 0
+}
+
 type Analysis struct {
 	SchemaVersion           string            `json:"schema_version"`
 	SourceSHA256            string            `json:"source_sha256"`

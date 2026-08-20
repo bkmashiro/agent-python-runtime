@@ -153,6 +153,43 @@ func TestRealGuestSemanticOverlayBindsExactModuleEntryCall(t *testing.T) {
 	if !site.NecessarilyReached || site.Capability != spec.Name || string(site.CanonicalArguments) != `{}` || site.DynamicOccurrence != 1 {
 		t.Fatalf("call site=%+v", site)
 	}
+	regionSource := "seed = 40\nvalue = seed * 2 + 2\nremote = sources.demo_catalog()\nresult = value\n"
+	regionRequest, err := semantic.NewRequest(regionSource, request.Bindings, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	regionAnalysis, err := semantic.Analyze(context.Background(), runner, regionRequest)
+	if err != nil || len(regionAnalysis.CandidateRegions) != 4 {
+		t.Fatalf("region-local analysis=%+v err=%v", regionAnalysis, err)
+	}
+	seed, value, effect, result := regionAnalysis.CandidateRegions[0], regionAnalysis.CandidateRegions[1], regionAnalysis.CandidateRegions[2], regionAnalysis.CandidateRegions[3]
+	if !seed.LocallyReusable() || !value.LocallyReusable() || value.Effects != (semantic.EffectSummary{}) ||
+		len(value.DataDependencies) != 1 || value.DataDependencies[0].Name != "seed" || value.DataDependencies[0].ProducerRegionID != seed.ID ||
+		!effect.Effects.MayObserveLive || effect.LocallyReusable() || !containsCandidateRejection(effect.RejectionReasons, semantic.CandidateRejectMayRaise) || !result.LocallyReusable() {
+		t.Fatalf("seed=%+v value=%+v effect=%+v result=%+v", seed, value, effect, result)
+	}
+	for _, negative := range []struct {
+		source   string
+		expected semantic.CandidateRejection
+	}{
+		{"value = mystery(1)\n", semantic.CandidateRejectUnknownEffect},
+		{"items = [1]\nitems[0] = 2\n", semantic.CandidateRejectHeapMutation},
+		{"value = 1 // 0\n", semantic.CandidateRejectMayRaise},
+		{"if True:\n    value = 1\n", semantic.CandidateRejectOpaqueControl},
+	} {
+		negativeRequest, requestErr := semantic.NewRequest(negative.source, request.Bindings, plan)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		negativeAnalysis, analyzeErr := semantic.Analyze(context.Background(), runner, negativeRequest)
+		found := false
+		for _, region := range negativeAnalysis.CandidateRegions {
+			found = found || containsCandidateRejection(region.RejectionReasons, negative.expected)
+		}
+		if analyzeErr != nil || !found {
+			t.Fatalf("negative source=%q expected=%s analysis=%+v err=%v", negative.source, negative.expected, negativeAnalysis, analyzeErr)
+		}
+	}
 	conditional, err := semantic.NewRequest("if inputs['flag']:\n    result = sources.demo_catalog()\n", request.Bindings, plan)
 	if err != nil {
 		t.Fatal(err)
@@ -178,6 +215,15 @@ func TestRealGuestSemanticOverlayBindsExactModuleEntryCall(t *testing.T) {
 			t.Fatalf("source=%q blocked=%+v err=%v", source, blocked, analyzeErr)
 		}
 	}
+}
+
+func containsCandidateRejection(values []semantic.CandidateRejection, expected semantic.CandidateRejection) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSemanticAnalyzerIsDefaultOff(t *testing.T) {

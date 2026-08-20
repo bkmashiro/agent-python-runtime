@@ -15,9 +15,9 @@ func TestBuildEagerComparatorPrepareChunksBindsResearchOnlySession(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fragments) != 4 || !strings.Contains(fragments[0], "agent_runtime.eager_comparator") ||
-		!strings.Contains(fragments[0], "EagerStyleGateSession") || !strings.Contains(fragments[0], `["json","math"]`) ||
-		!strings.Contains(fragments[1], ".chunk(") || !strings.Contains(fragments[3], ".finish()") {
+	if len(fragments) != 4 || !strings.Contains(fragments[0], "from agent_runtime import eager_comparator") ||
+		!strings.Contains(fragments[0], "_eager_comparator_module._begin") || !strings.Contains(fragments[0], `["json","math"]`) ||
+		!strings.Contains(fragments[1], "._chunk(") || !strings.Contains(fragments[3], "._finish()") {
 		t.Fatalf("fragments=%q", fragments)
 	}
 	for _, fragment := range fragments {

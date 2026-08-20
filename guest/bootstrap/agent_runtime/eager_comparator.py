@@ -217,6 +217,45 @@ class EagerStyleGateSession:
         return dict(event)
 
 
+_ACTIVE_SESSION: Optional[EagerStyleGateSession] = None
+
+
+def _begin(inputs: Any, prepared_globals: Dict[str, Any], allowed_import_roots: Sequence[str] = ()) -> Dict[str, Any]:
+    global _ACTIVE_SESSION
+    if _ACTIVE_SESSION is not None:
+        raise ValueError("comparator session already active")
+    _ACTIVE_SESSION = EagerStyleGateSession(inputs, prepared_globals, allowed_import_roots)
+    return {"status": "begun"}
+
+
+def _chunk(text: str) -> Dict[str, Any]:
+    if _ACTIVE_SESSION is None:
+        raise ValueError("comparator session is not active")
+    return _ACTIVE_SESSION.chunk(text)
+
+
+def _finish() -> Dict[str, Any]:
+    global _ACTIVE_SESSION
+    if _ACTIVE_SESSION is None:
+        raise ValueError("comparator session is not active")
+    session = _ACTIVE_SESSION
+    try:
+        return session.finish()
+    finally:
+        _ACTIVE_SESSION = None
+
+
+def _cancel() -> Dict[str, Any]:
+    global _ACTIVE_SESSION
+    if _ACTIVE_SESSION is None:
+        raise ValueError("comparator session is not active")
+    session = _ACTIVE_SESSION
+    try:
+        return session.cancel()
+    finally:
+        _ACTIVE_SESSION = None
+
+
 def _starts_continuation(text: str) -> bool:
     try:
         tokens = tokenize.generate_tokens(io.StringIO(text).readline)

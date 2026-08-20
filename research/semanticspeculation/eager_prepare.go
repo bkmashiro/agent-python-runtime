@@ -44,17 +44,17 @@ func BuildEagerComparatorPrepareChunks(config EagerComparatorPrepareConfig) ([]s
 		begin.WriteString(config.Plan.StreamingPythonPrelude())
 	}
 	begin.WriteString("\nimport json as _eager_json\nimport agent_runtime as _eager_runtime\n")
-	begin.WriteString("from agent_runtime.eager_comparator import EagerStyleGateSession as _EagerStyleGateSession\n")
-	fmt.Fprintf(&begin, "_eager_comparator = _EagerStyleGateSession(_eager_json.loads(%s), dict(_eager_runtime._prepared_globals), %s)\n", strconv.Quote(string(canonicalInputs)), allowedImports)
+	begin.WriteString("from agent_runtime import eager_comparator as _eager_comparator_module\n")
+	fmt.Fprintf(&begin, "_eager_comparator_module._begin(_eager_json.loads(%s), dict(_eager_runtime._prepared_globals), %s)\n", strconv.Quote(string(canonicalInputs)), allowedImports)
 
 	fragments := []string{begin.String()}
 	for _, chunk := range config.Chunks {
 		if chunk == "" {
 			return nil, errors.New("eager comparator chunks must be non-empty")
 		}
-		fragments = append(fragments, "comparator_event = _eager_comparator.chunk("+strconv.Quote(chunk)+")\n")
+		fragments = append(fragments, "from agent_runtime import eager_comparator as _eager_comparator_module\ncomparator_event = _eager_comparator_module._chunk("+strconv.Quote(chunk)+")\n")
 	}
-	return append(fragments, "comparator_final = _eager_comparator.finish()\n"), nil
+	return append(fragments, "from agent_runtime import eager_comparator as _eager_comparator_module\ncomparator_final = _eager_comparator_module._finish()\n"), nil
 }
 
 func validComparatorImportRoot(root string) bool {

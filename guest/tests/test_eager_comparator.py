@@ -7,10 +7,23 @@ BOOTSTRAP = ROOT / "guest" / "bootstrap"
 if str(BOOTSTRAP) not in sys.path:
     sys.path.insert(0, str(BOOTSTRAP))
 
+from agent_runtime import eager_comparator
 from agent_runtime.eager_comparator import EagerStyleGateSession
 
 
 class EagerStyleGateSessionTests(unittest.TestCase):
+    def test_module_bridge_retains_only_one_research_session(self):
+        eager_comparator._begin({"value": 2}, {}, ())
+        with self.assertRaises(ValueError):
+            eager_comparator._begin({}, {}, ())
+        eager_comparator._chunk("result = inputs['value'] + 1\n")
+        self.assertEqual(3, eager_comparator._finish()["result"])
+        with self.assertRaises(ValueError):
+            eager_comparator._chunk("result = 4\n")
+
+        eager_comparator._begin({}, {}, ())
+        eager_comparator._cancel()
+
     def test_waits_for_one_token_and_reuses_one_namespace(self):
         session = EagerStyleGateSession({"value": 2}, {})
 

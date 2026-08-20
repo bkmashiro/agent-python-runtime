@@ -224,14 +224,14 @@ Use `scripts/track-f-gate.sh focused/full/lab` where applicable rather than rebu
 
 **Promise:** The run starts from one clean, exact baseline and cannot reinterpret historical evidence as current implementation proof.
 
-- [ ] Inspect live status, recent signed history, active processes and worktree ownership.
-- [ ] Mark `docs/research/semantic-speculation-roadmap-v0.md` as superseded for execution by this file while retaining it as design rationale.
-- [ ] Inventory exact current semantic contracts, pre-dispatch identities, capability fields, result terminal states, candidate-region fields, Guest analyser entry points and streaming integration tests.
-- [ ] Inventory existing research/evidence generators that can be reused without altering historical preregistrations.
-- [ ] Freeze an implementation-neutral experiment schema and claim boundary before behaviour changes.
-- [ ] Create a protected private evidence root and body-safe public preregistration for Phases 1–3.
-- [ ] Run focused baseline gates and record exact counts/duration.
-- [ ] Update this roadmap, signed commit, push, verify signature/upstream, continue.
+- [x] Inspect live status, recent signed history, active processes and worktree ownership.
+- [x] Mark `docs/research/semantic-speculation-roadmap-v0.md` as superseded for execution by this file while retaining it as design rationale.
+- [x] Inventory exact current semantic contracts, pre-dispatch identities, capability fields, result terminal states, candidate-region fields, Guest analyser entry points and streaming integration tests.
+- [x] Inventory existing research/evidence generators that can be reused without altering historical preregistrations.
+- [x] Freeze an implementation-neutral experiment schema and claim boundary before behaviour changes.
+- [x] Create a protected private evidence root and body-safe public preregistration for Phases 1–3.
+- [x] Run focused baseline gates and record exact counts/duration.
+- [x] Update this roadmap, signed commit, push, verify signature/upstream, continue.
 
 **Stop:** sibling writer, dirty unowned work, unverifiable active generated artifacts, or inability to preserve historical evidence immutability.
 
@@ -553,10 +553,11 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 
 ### Current execution pointer
 
-`Phase 0: baseline, freeze and roadmap activation.`
+`Phase 1: whole-program semantics and adversarial oracle.`
 
 ## Completion log
 
+- 2026-08-20 Phase 0: froze `pysolate.semantic-speculation-preregistration.v1` at parent `f604ce16b5bc7135c92e1dc70f9b91b124cf9f2c`; contract identity `sha256:5c0ec80ded86f07784d51d74aa503108fbd4a587918bc483bd564b35bdc18a47`, public file SHA-256 `479b9c7fb7aa1f8fe70a34824cf1221b04d9d36ef2fd52fecdbfbc96da0f8ccb`, private manifest SHA-256 `00797778c209a875abf989029d4efa7103a0992c389eb9a1eb585810364c9b5c`. RED was an undefined contract API; GREEN covered strict canonical round-trip, mutation, unknown fields, ordering, duplicates, unsafe claims and deterministic construction. Focused gate passed 14 Go packages in 6.28 s; the new package/command passed in 0.28 s; Guest Python passed 108 tests and scripts passed 105 tests.
 - 2026-08-20 preparation: froze this autonomous handoff from clean `main` after focused semantic/capability/e2e tests passed. No implementation, report or slide changes were started.
 
 ## Final stopping report

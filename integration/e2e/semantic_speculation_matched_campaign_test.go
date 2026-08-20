@@ -96,4 +96,16 @@ func TestExactGuestMatchedPureLocalCampaignSealsThreeAchievedLanes(t *testing.T)
 	if len(result.Records) != 3 || calls.Load() != 0 || result.Aggregate.CaseID != "pure_local" || !result.Aggregate.OracleExcludedFromAchievedSpeedup {
 		t.Fatalf("result=%+v calls=%d", result, calls.Load())
 	}
+	evidence, err := semanticspeculation.SealMatchedCaseEvidence(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := semanticspeculation.EncodeMatchedCaseEvidence(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := semanticspeculation.DecodeMatchedCaseEvidence(encoded)
+	if err != nil || decoded.Identity != evidence.Identity || decoded.ProductionGeneralization || !decoded.OracleAnalysisOnly {
+		t.Fatalf("evidence=%+v decoded=%+v err=%v", evidence, decoded, err)
+	}
 }

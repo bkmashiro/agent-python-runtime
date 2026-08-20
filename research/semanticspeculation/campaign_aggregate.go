@@ -5,21 +5,21 @@ import "errors"
 var ErrInvalidMatchedTrials = errors.New("invalid matched semantic-speculation trials")
 
 type PerfectEffectOracleEstimate struct {
-	StudyID                string
-	PreregistrationSHA256  string
-	CaseMatrixSHA256       string
-	CaseID                 string
-	TrialIndex             uint32
-	SourceSHA256           string
-	SourceScheduleSHA256   string
-	InputsSHA256           string
-	ArtifactSHA256         string
-	ManifestSHA256         string
-	ImportInventorySHA256  string
-	ExecutionProfileSHA256 string
-	CapabilityPlanSHA256   string
-	PrivacySHA256          string
-	ElapsedNanos           uint64
+	StudyID                string `json:"study_id"`
+	PreregistrationSHA256  string `json:"preregistration_sha256"`
+	CaseMatrixSHA256       string `json:"case_matrix_sha256"`
+	CaseID                 string `json:"case_id"`
+	TrialIndex             uint32 `json:"trial_index"`
+	SourceSHA256           string `json:"source_sha256"`
+	SourceScheduleSHA256   string `json:"source_schedule_sha256"`
+	InputsSHA256           string `json:"inputs_sha256"`
+	ArtifactSHA256         string `json:"artifact_sha256"`
+	ManifestSHA256         string `json:"manifest_sha256"`
+	ImportInventorySHA256  string `json:"import_inventory_sha256"`
+	ExecutionProfileSHA256 string `json:"execution_profile_sha256"`
+	CapabilityPlanSHA256   string `json:"capability_plan_sha256"`
+	PrivacySHA256          string `json:"privacy_sha256"`
+	ElapsedNanos           uint64 `json:"elapsed_nanos"`
 }
 
 type MatchedCaseAggregate struct {

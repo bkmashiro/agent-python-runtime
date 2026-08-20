@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -36,28 +37,54 @@ type semanticGenerationResult struct {
 	err       error
 }
 
+const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v1"
+
+type SemanticTreatmentLifecycleEvidence struct {
+	SchemaVersion         string                                         `json:"schema_version"`
+	Analyzer              wazeroengine.SemanticAnalysisLifecycleEvidence `json:"analyzer"`
+	BeginNanos            uint64                                         `json:"begin_nanos"`
+	AnalyzerEngineNanos   uint64                                         `json:"analyzer_engine_nanos"`
+	WorkspaceSetupNanos   uint64                                         `json:"workspace_setup_nanos"`
+	FormalEngineNanos     uint64                                         `json:"formal_engine_nanos"`
+	SourceGenerationNanos uint64                                         `json:"source_generation_nanos"`
+	AdmissionNanos        uint64                                         `json:"admission_nanos"`
+	ProviderNanos         uint64                                         `json:"provider_nanos"`
+	FormalGuestExecutions uint32                                         `json:"formal_guest_executions"`
+	FormalExecutionNanos  uint64                                         `json:"formal_execution_nanos"`
+}
+
 type semanticPreDispatchLauncher struct{}
 
 func (semanticPreDispatchLauncher) Launch(run func()) { go run() }
 
 type SemanticPreDispatchTreatment struct {
-	config     SemanticPreDispatchTreatmentConfig
-	inputs     json.RawMessage
-	ctx        context.Context
-	cancel     context.CancelFunc
-	analyzer   *wazeroengine.Engine
-	runner     enginecontract.Runner
-	controller *semantic.StreamingSemanticPreDispatch
-	admission  *semantic.StreamingPrefixAdmission
-	manager    *workspace.Manager
-	attempt    *workspace.Attempt
-	broker     *capability.Broker
-	source     strings.Builder
-	chunks     chan string
-	generated  chan semanticGenerationResult
-	begun      bool
-	finalized  bool
-	once       sync.Once
+	config                SemanticPreDispatchTreatmentConfig
+	inputs                json.RawMessage
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	analyzer              *wazeroengine.Engine
+	runner                enginecontract.Runner
+	controller            *semantic.StreamingSemanticPreDispatch
+	admission             *semantic.StreamingPrefixAdmission
+	manager               *workspace.Manager
+	attempt               *workspace.Attempt
+	broker                *capability.Broker
+	source                strings.Builder
+	chunks                chan string
+	generated             chan semanticGenerationResult
+	lifecycleMu           sync.Mutex
+	generationStarted     time.Time
+	beginNanos            uint64
+	analyzerEngineNanos   uint64
+	workspaceSetupNanos   uint64
+	formalEngineNanos     uint64
+	sourceGenerationNanos uint64
+	admissionNanos        uint64
+	formalGuestExecutions uint32
+	formalExecutionNanos  uint64
+	begun                 bool
+	finalized             bool
+	once                  sync.Once
 }
 
 func NewSemanticPreDispatchTreatment(config SemanticPreDispatchTreatmentConfig) (*SemanticPreDispatchTreatment, error) {
@@ -69,7 +96,15 @@ func NewSemanticPreDispatchTreatment(config SemanticPreDispatchTreatmentConfig) 
 	return &SemanticPreDispatchTreatment{config: config}, nil
 }
 
-func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.RawMessage) error {
+func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.RawMessage) (beginErr error) {
+	beginStarted := time.Now()
+	defer func() {
+		if t != nil {
+			t.lifecycleMu.Lock()
+			t.beginNanos = uint64(time.Since(beginStarted))
+			t.lifecycleMu.Unlock()
+		}
+	}()
 	if t == nil || t.begun || ctx == nil || len(inputs) == 0 || !json.Valid(inputs) {
 		return errors.New("invalid semantic pre-dispatch begin")
 	}
@@ -84,7 +119,11 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 
 	analyzerConfig := t.config.RunConfig
 	analyzerConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	analyzerStarted := time.Now()
 	analyzer, err := wazeroengine.New(runContext, t.config.Artifact, analyzerConfig)
+	t.lifecycleMu.Lock()
+	t.analyzerEngineNanos = uint64(time.Since(analyzerStarted))
+	t.lifecycleMu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -111,6 +150,7 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	}
 	t.admission = admission
 
+	workspaceStarted := time.Now()
 	manager, err := workspace.NewManager(t.config.WorkspaceRoot)
 	if err != nil {
 		return t.failBegin(err)
@@ -126,10 +166,14 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 		return t.failBegin(err)
 	}
 	t.manager, t.attempt = manager, attempt
+	t.lifecycleMu.Lock()
+	t.workspaceSetupNanos = uint64(time.Since(workspaceStarted))
+	t.lifecycleMu.Unlock()
 	executionConfig := t.config.RunConfig
 	executionConfig.Mechanisms = runtimeconfig.MechanismSet{
 		StagedObservation: true, PrivateWorkspace: true, SemanticAnalysis: true, SemanticPreDispatch: true,
 	}
+	formalEngineStarted := time.Now()
 	runner, err := (wazeroengine.Factory{
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
@@ -142,6 +186,9 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 			return broker, brokerErr
 		},
 	}).New(runContext, t.config.Artifact, executionConfig)
+	t.lifecycleMu.Lock()
+	t.formalEngineNanos = uint64(time.Since(formalEngineStarted))
+	t.lifecycleMu.Unlock()
 	if err != nil {
 		_ = attempt.Discard()
 		_ = manager.Close()
@@ -151,6 +198,7 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	t.inputs = append(json.RawMessage(nil), inputs...)
 	t.chunks = make(chan string, 32)
 	t.generated = make(chan semanticGenerationResult, 1)
+	t.generationStarted = time.Now()
 	artifactDigest := sha256.Sum256(t.config.Artifact)
 	bindings := semantic.Bindings{
 		ArtifactSHA256:         "sha256:" + hex.EncodeToString(artifactDigest[:]),
@@ -161,6 +209,13 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	go func() {
 		generated, generationErr := semantic.GenerateVerifiedSourceWithPreDispatch(runContext, semantic.VerifiedSourceGenerationConfig{
 			Analyzer: analyzer, Plan: t.config.Plan, Bindings: bindings, Admission: admission, SourceChunks: t.chunks,
+			Observe: func(event semantic.VerifiedSourceGenerationEvent) {
+				if event.Phase == "prefix_admitted" {
+					t.lifecycleMu.Lock()
+					t.admissionNanos += event.ElapsedNanos
+					t.lifecycleMu.Unlock()
+				}
+			},
 		})
 		t.generated <- semanticGenerationResult{generated: generated, err: generationErr}
 	}()
@@ -205,6 +260,11 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 	readyAtFinalize := t.controller.Snapshot().PhysicalFinishes
 	close(t.chunks)
 	generation := <-t.generated
+	t.lifecycleMu.Lock()
+	if !t.generationStarted.IsZero() && t.sourceGenerationNanos == 0 {
+		t.sourceGenerationNanos = uint64(time.Since(t.generationStarted))
+	}
+	t.lifecycleMu.Unlock()
 	if generation.err != nil {
 		_ = t.runner.Close(ctx)
 		_ = t.attempt.Discard()
@@ -228,7 +288,12 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 	if err != nil {
 		return TreatmentOutcome{}, err
 	}
+	formalStarted := time.Now()
 	execution, err := semantic.ExecuteGeneratedSourceOutcome(ctx, t.runner, t.attempt, request, t.config.Plan.StreamingPythonPrelude(), generation.generated)
+	t.lifecycleMu.Lock()
+	t.formalGuestExecutions++
+	t.formalExecutionNanos += uint64(time.Since(formalStarted))
+	t.lifecycleMu.Unlock()
 	if err != nil {
 		_ = t.manager.Close()
 		_ = t.analyzer.Close(ctx)
@@ -283,6 +348,34 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest status")
 	}
 	return outcome, nil
+}
+
+func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLifecycleEvidence {
+	result := SemanticTreatmentLifecycleEvidence{SchemaVersion: SemanticTreatmentLifecycleSchemaVersion}
+	if t == nil {
+		return result
+	}
+	if t.analyzer != nil {
+		result.Analyzer = t.analyzer.SemanticAnalysisLifecycleEvidence()
+	} else {
+		result.Analyzer = wazeroengine.SemanticAnalysisLifecycleEvidence{SchemaVersion: wazeroengine.SemanticAnalysisLifecycleSchemaVersion}
+	}
+	providerNanos := uint64(0)
+	if t.config.ProviderObservation != nil {
+		providerNanos = t.config.ProviderObservation().ElapsedNanos
+	}
+	t.lifecycleMu.Lock()
+	result.BeginNanos = t.beginNanos
+	result.AnalyzerEngineNanos = t.analyzerEngineNanos
+	result.WorkspaceSetupNanos = t.workspaceSetupNanos
+	result.FormalEngineNanos = t.formalEngineNanos
+	result.SourceGenerationNanos = t.sourceGenerationNanos
+	result.AdmissionNanos = t.admissionNanos
+	result.ProviderNanos = providerNanos
+	result.FormalGuestExecutions = t.formalGuestExecutions
+	result.FormalExecutionNanos = t.formalExecutionNanos
+	t.lifecycleMu.Unlock()
+	return result
 }
 
 func (t *SemanticPreDispatchTreatment) providerOutcome(snapshot semantic.StreamingPreDispatchSnapshot) (uint32, uint64, uint64, PhysicalDispositions, uint32, error) {

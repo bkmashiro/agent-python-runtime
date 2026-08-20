@@ -201,6 +201,7 @@ type Engine struct {
 	cowActive           uint64
 	cowClosing          bool
 	coldEvidence        coldEvidenceStore
+	semanticLifecycle   semanticAnalysisLifecycleStore
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -574,6 +575,17 @@ func (engine *Engine) closePrepared() error {
 }
 
 func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payload []byte, analysisErr error) {
+	lifecycle := SemanticAnalysisLifecycleEvidence{Invocations: 1}
+	defer func() {
+		if analysisErr == nil {
+			lifecycle.Successes = 1
+		} else {
+			lifecycle.Failures = 1
+		}
+		if engine != nil {
+			engine.semanticLifecycle.add(lifecycle)
+		}
+	}()
 	if engine == nil || !engine.config.Mechanisms.SemanticAnalysis {
 		return nil, runtimeconfig.ErrMechanismDisabled
 	}
@@ -581,18 +593,35 @@ func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payl
 	defer cancel()
 	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
+	started := time.Now()
+	lifecycle.ModuleInstantiations = 1
 	module, err := engine.runtime.InstantiateModule(analysisContext, engine.compiled, engine.baseModuleConfig(stderr, stdout))
+	lifecycle.InstantiateNanos = uint64(time.Since(started))
 	if err != nil {
 		return nil, fmt.Errorf("instantiate semantic analyzer Guest: %w", err)
 	}
-	defer func() { analysisErr = errors.Join(analysisErr, module.Close(context.Background())) }()
+	defer func() {
+		started := time.Now()
+		analysisErr = errors.Join(analysisErr, module.Close(context.Background()))
+		lifecycle.CloseNanos += uint64(time.Since(started))
+	}()
+	started = time.Now()
+	lifecycle.InitializeCalls = 1
 	if err := callNoArgs(analysisContext, module, "_initialize"); err != nil {
+		lifecycle.InitializeNanos = uint64(time.Since(started))
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
+	lifecycle.InitializeNanos = uint64(time.Since(started))
+	started = time.Now()
+	lifecycle.RuntimeInitCalls = 1
 	if err := callStatusWithBytes(analysisContext, module, "runtime_init", []byte("{}")); err != nil {
+		lifecycle.RuntimeInitNanos = uint64(time.Since(started))
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
+	lifecycle.RuntimeInitNanos = uint64(time.Since(started))
+	started = time.Now()
 	payload, err = callGuestResponse(analysisContext, module, "runtime_analyze_source", request, engine.config.MaxResponseBytes)
+	lifecycle.AnalyzeNanos = uint64(time.Since(started))
 	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}

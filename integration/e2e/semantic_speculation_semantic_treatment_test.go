@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -32,7 +33,10 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		t.Fatal(err)
 	}
 	var physical atomic.Uint32
+	var providerNanos atomic.Uint64
 	plan := eagerComparatorCapabilityPlan(t, capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		started := time.Now()
+		defer func() { providerNanos.Add(uint64(time.Since(started))) }()
 		physical.Add(1)
 		select {
 		case <-ctx.Done():
@@ -45,6 +49,13 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 	runConfig.ExecutionProfile = &profile
 	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
 		Artifact: artifact, RunConfig: runConfig, Plan: plan,
+		ProviderObservation: func() semanticspeculation.ProviderObservation {
+			attempts := physical.Load()
+			return semanticspeculation.ProviderObservation{
+				Attempts: attempts, ResultBytes: uint64(attempts) * uint64(len(`{"value":"weather"}`)),
+				CostUnits: uint64(attempts), ElapsedNanos: providerNanos.Load(),
+			}
+		},
 		ImportClosureSHA256: testDigest("phase3-semantic-imports"), PhysicalReadBudget: 1,
 		RunID: "phase3-semantic-external-read", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "phase3-semantic-external-read",
 	})
@@ -66,6 +77,66 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		result.Outcome.WorkspaceDisposition != "published" || result.Outcome.ReadyBeforeFinalize != 0 {
 		t.Fatalf("result=%+v physical=%d", result, physical.Load())
 	}
+	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), true)
+}
+
+func TestExactGuestScheduledSemanticPreDispatchTwoChunkColdLifecycle(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: testDigestBytes(artifact), ManifestSHA256: testDigest("phase4-lifecycle-manifest"),
+		ImportRoots: []string{"json"}, QualifiedImportRoots: []string{"json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := eagerComparatorCapabilityPlan(t, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return nil, errors.New("pure-local lifecycle probe unexpectedly called capability")
+	}))
+	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.ExecutionProfile = &profile
+	treatment, err := semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
+		Artifact: artifact, RunConfig: runConfig, Plan: plan,
+		ImportClosureSHA256: testDigest("phase4-lifecycle-imports"), PhysicalReadBudget: 1,
+		RunID: "phase4-two-chunk-lifecycle", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "phase4-two-chunk-lifecycle",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	caseValue := semanticspeculation.Phase3SyntheticCases()[5]
+	result, err := semanticspeculation.RunScheduledTreatment(context.Background(), caseValue, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome.FinalProgramOutcome != "success" || result.Outcome.LogicalCalls != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), false)
+}
+
+func assertColdSemanticLifecycle(t *testing.T, lifecycle semanticspeculation.SemanticTreatmentLifecycleEvidence, chunks uint32, expectProvider bool) {
+	t.Helper()
+	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v1" ||
+		lifecycle.Analyzer.Invocations != chunks || lifecycle.Analyzer.ModuleInstantiations != chunks ||
+		lifecycle.Analyzer.InitializeCalls != chunks || lifecycle.Analyzer.RuntimeInitCalls != chunks ||
+		lifecycle.Analyzer.Successes != chunks || lifecycle.Analyzer.Failures != 0 ||
+		lifecycle.Analyzer.InstantiateNanos == 0 || lifecycle.Analyzer.InitializeNanos == 0 ||
+		lifecycle.Analyzer.RuntimeInitNanos == 0 || lifecycle.Analyzer.AnalyzeNanos == 0 ||
+		lifecycle.BeginNanos == 0 || lifecycle.AnalyzerEngineNanos == 0 || lifecycle.WorkspaceSetupNanos == 0 ||
+		lifecycle.FormalEngineNanos == 0 || lifecycle.SourceGenerationNanos == 0 ||
+		lifecycle.FormalGuestExecutions != 1 || lifecycle.FormalExecutionNanos == 0 {
+		t.Fatalf("lifecycle=%+v", lifecycle)
+	}
+	if (lifecycle.ProviderNanos > 0) != expectProvider {
+		t.Fatalf("provider lifecycle=%+v expectProvider=%t", lifecycle, expectProvider)
+	}
+	t.Logf("body-free lifecycle: %+v", lifecycle)
 }
 
 func TestExactGuestScheduledSemanticPreDispatchProjectsRuntimeFailureAfterConsumedRead(t *testing.T) {

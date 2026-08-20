@@ -32,8 +32,8 @@ type ExactGuestCampaign struct {
 }
 
 type campaignProviderTracker struct {
-	attempts, successes, cancelled atomic.Uint32
-	resultBytes, costUnits         atomic.Uint64
+	attempts, successes, cancelled       atomic.Uint32
+	resultBytes, costUnits, elapsedNanos atomic.Uint64
 }
 
 func NewExactGuestCampaign(config ExactGuestCampaignConfig) (*ExactGuestCampaign, error) {
@@ -104,6 +104,8 @@ func (campaign *ExactGuestCampaign) RunCoordinate(ctx context.Context, fixture S
 	factory := func(treatment string, _ uint32) (ScheduledTreatment, error) {
 		tracker := &campaignProviderTracker{}
 		plan, err := NewPhase3CampaignPlan(capability.HandlerFunc(func(callCtx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+			started := time.Now()
+			defer func() { tracker.elapsedNanos.Add(uint64(time.Since(started))) }()
 			tracker.attempts.Add(1)
 			timer := time.NewTimer(campaign.config.PhysicalDelay)
 			defer timer.Stop()
@@ -128,7 +130,7 @@ func (campaign *ExactGuestCampaign) RunCoordinate(ctx context.Context, fixture S
 		runID := campaignOpaqueRunID(fixture.ID, trialIndex, treatment)
 		observation := func() ProviderObservation {
 			return ProviderObservation{
-				Attempts: tracker.attempts.Load(), ResultBytes: tracker.resultBytes.Load(), CostUnits: tracker.costUnits.Load(),
+				Attempts: tracker.attempts.Load(), ResultBytes: tracker.resultBytes.Load(), CostUnits: tracker.costUnits.Load(), ElapsedNanos: tracker.elapsedNanos.Load(),
 				Dispositions: PhysicalDispositions{Consumed: tracker.successes.Load(), Cancelled: tracker.cancelled.Load()},
 			}
 		}

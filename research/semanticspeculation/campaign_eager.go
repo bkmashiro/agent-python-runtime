@@ -19,6 +19,7 @@ type ProviderObservation struct {
 	Attempts            uint32
 	ResultBytes         uint64
 	CostUnits           uint64
+	ElapsedNanos        uint64
 	Dispositions        PhysicalDispositions
 	ReadyBeforeFinalize uint32
 }

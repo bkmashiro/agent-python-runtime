@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -33,6 +34,7 @@ type VerifiedSourceGenerationEvent struct {
 	PrefixIndex  uint32
 	SourceBytes  uint32
 	AddedCalls   uint32
+	ElapsedNanos uint64
 	Complete     bool
 	SourceSHA256 string
 }
@@ -149,14 +151,16 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 				if !ok {
 					break
 				}
+				admissionStarted := time.Now()
 				added, err := config.Admission.AdmitVerifiedPrefix(ctx, ready.source, ready.verified)
+				admissionNanos := uint64(time.Since(admissionStarted))
 				if err != nil {
 					return GeneratedSource{}, err
 				}
 				delete(committed, nextCommit)
 				if config.Observe != nil {
 					config.Observe(VerifiedSourceGenerationEvent{
-						Phase: "prefix_admitted", PrefixIndex: ready.prefixIndex, SourceBytes: uint32(len(ready.source)), AddedCalls: added,
+						Phase: "prefix_admitted", PrefixIndex: ready.prefixIndex, SourceBytes: uint32(len(ready.source)), AddedCalls: added, ElapsedNanos: admissionNanos,
 						SourceSHA256: config.Admission.Snapshot().LastSourceSHA256,
 					})
 				}

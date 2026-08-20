@@ -24,7 +24,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 			defer cancel()
 			input := semanticspeculation.Phase5ExecutionInput{Source: candidate.Source, FocusRegionIndex: candidate.FocusRegionIndex, OutputName: candidate.OutputName}
 
-			original := newPhase5ExactOperations(t, artifact, config)
+			original := newPhase5RExactOperations(t, artifact, config)
 			if err := original.Provision(ctx, semanticspeculation.Phase5FinalCapacity); err != nil {
 				t.Fatal(err)
 			}
@@ -36,7 +36,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 			}
 			baseline := original.Snapshot()
 
-			derived := newPhase5ExactOperations(t, artifact, config)
+			derived := newPhase5RExactOperations(t, artifact, config)
 			for _, kind := range []semanticspeculation.Phase5CapacityKind{semanticspeculation.Phase5AnalyzerCapacity, semanticspeculation.Phase5ScratchCapacity, semanticspeculation.Phase5FinalCapacity} {
 				if err := derived.Provision(ctx, kind); err != nil {
 					t.Fatal(err)
@@ -47,7 +47,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 				if analyzeErr == nil {
 					t.Fatal("unsafe RHS admitted")
 				}
-				phase5AssertTerminalControl(t, ctx, derived, 0, 0, 0)
+				phase5RAssertTerminalControl(t, ctx, derived, 0, 0, 0)
 				return
 			}
 			if analyzeErr != nil {
@@ -63,7 +63,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 				if err := derived.SealCapsule(ctx); err == nil {
 					t.Fatal("overflow published capsule")
 				}
-				phase5AssertTerminalControl(t, ctx, derived, 1, 0, 0)
+				phase5RAssertTerminalControl(t, ctx, derived, 1, 0, 0)
 				return
 			}
 			if err := derived.SealCapsule(ctx); err != nil {
@@ -75,7 +75,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 				if err := derived.ValidateSelection(ctx, drift); err == nil {
 					t.Fatal("suffix drift selected")
 				}
-				phase5AssertTerminalControl(t, ctx, derived, 1, 0, 1)
+				phase5RAssertTerminalControl(t, ctx, derived, 1, 0, 1)
 				return
 			}
 			if err := derived.ValidateSelection(ctx, input); err != nil {
@@ -90,7 +90,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 				if err := derived.ExecuteDerived(cancelled, input); !errors.Is(err, context.Canceled) {
 					t.Fatalf("cancel err=%v", err)
 				}
-				phase5AssertTerminalControl(t, ctx, derived, 1, 0, 1)
+				phase5RAssertTerminalControl(t, ctx, derived, 1, 0, 1)
 				return
 			}
 			if err := derived.ExecuteDerived(ctx, input); err != nil {
@@ -111,5 +111,25 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 				t.Fatalf("terminal lifecycle drift: %+v", actual)
 			}
 		})
+	}
+}
+
+func newPhase5RExactOperations(t *testing.T, artifact []byte, config runtimeconfig.RunConfig) *semanticspeculation.Phase5ExactGuestOperations {
+	t.Helper()
+	operations, err := semanticspeculation.NewPhase5ExactGuestOperations(artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return operations
+}
+
+func phase5RAssertTerminalControl(t *testing.T, ctx context.Context, operations *semanticspeculation.Phase5ExactGuestOperations, scratch, consumed, discarded uint32) {
+	t.Helper()
+	if err := operations.Teardown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := operations.Snapshot()
+	if snapshot.ScratchGuestExecutions != scratch || snapshot.CapsuleConsumedCount != consumed || snapshot.CapsuleDiscardedCount != discarded || snapshot.FormalGuestExecutions != 0 || snapshot.HelperClaimCount != 0 || snapshot.AuthorityTerminalDisposition != "none" || snapshot.WorkspaceTerminalDisposition != "unmounted" {
+		t.Fatalf("terminal control drift: %+v", snapshot)
 	}
 }

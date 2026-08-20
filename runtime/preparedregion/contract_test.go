@@ -137,6 +137,15 @@ func TestPreparedRegionPatchBindsFinalSourceAndCarriesNoPayload(t *testing.T) {
 	if err := decoded.ValidateDecision(decision); err != nil {
 		t.Fatal(err)
 	}
+	driftedAST := binding
+	driftedAST.FinalASTSHA256 = testDigestB
+	_, driftedPatch, err := SealPreparedRegionPatch(driftedAST)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if driftedPatch.ValidateDecision(decision) == nil {
+		t.Fatal("final AST mismatch accepted against decision")
+	}
 	binding.FinalSourceSHA256 = testDigestB
 	if decoded.ValidateBinding(binding) == nil {
 		t.Fatal("final source mismatch accepted")

@@ -276,7 +276,7 @@ func (patch PreparedRegionPatch) ValidateBinding(binding PreparedRegionPatchBind
 }
 
 func (patch PreparedRegionPatch) ValidateDecision(decision PreparedRegionDecision) error {
-	if !patch.valid() || !decision.valid() || patch.DecisionSHA256 != decision.IdentitySHA256 || patch.RegionID != decision.RegionID || patch.RegionSpan != decision.RegionSpan || patch.OutputName != decision.OutputName {
+	if !patch.valid() || !decision.valid() || patch.DecisionSHA256 != decision.IdentitySHA256 || patch.FinalASTSHA256 != decision.ASTSHA256 || patch.RegionID != decision.RegionID || patch.RegionSpan != decision.RegionSpan || patch.OutputName != decision.OutputName {
 		return ErrInvalidPreparedRegion
 	}
 	return nil

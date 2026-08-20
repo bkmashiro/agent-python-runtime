@@ -263,12 +263,12 @@ RED cases must include:
 
 Tasks:
 
-- [ ] Define strict versioned baseline outcome, logical-call, physical-attempt and workspace/authority projections.
-- [ ] Build a full-file target-CPython baseline oracle rather than a line-by-line imitation.
-- [ ] Add mutation/tamper tests for every identity and terminal outcome.
-- [ ] Prove syntax-error source produces no Python execution/logical call in baseline.
-- [ ] Prove any Pysolate physical preparation remains separately recorded and cannot masquerade as a logical call.
-- [ ] Record provider-visible physical work as observable cost; do not call it semantic nothing.
+- [x] Define strict versioned baseline outcome, logical-call, physical-attempt and workspace/authority projections.
+- [x] Build a full-file target-CPython baseline oracle rather than a line-by-line imitation.
+- [x] Add mutation/tamper tests for every identity and terminal outcome.
+- [x] Prove syntax-error source produces no Python execution/logical call in baseline.
+- [x] Prove any Pysolate physical preparation remains separately recorded and cannot masquerade as a logical call.
+- [x] Record provider-visible physical work as observable cost; do not call it semantic nothing.
 - [ ] Run focused/race gates, update roadmap, signed commit, push, continue.
 
 **Gate P1:** Every adversarial row is classifiable without invented evidence. Unknown/unclassifiable is a failed gate, not an excluded sample.

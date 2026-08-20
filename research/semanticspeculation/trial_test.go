@@ -143,6 +143,14 @@ func TestTrialRecordRejectsMutationUnknownFieldsAndBodies(t *testing.T) {
 	if _, err := DecodeTrialRecord(unknown); err == nil {
 		t.Fatal("unknown body field accepted")
 	}
+	duplicate := append([]byte(nil), encoded[:len(encoded)-1]...)
+	duplicate = append(duplicate, []byte(`,"study_id":"semantic-speculation-v1"}`)...)
+	if _, err := DecodeTrialRecord(duplicate); err == nil {
+		t.Fatal("duplicate field accepted")
+	}
+	if _, err := DecodeTrialRecord(append(append([]byte(nil), encoded...), '\n')); err == nil {
+		t.Fatal("non-canonical trailing newline accepted")
+	}
 }
 
 func TestTrialRecordAllowsProviderCostIndependentOfAttemptCount(t *testing.T) {

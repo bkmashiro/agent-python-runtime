@@ -1,0 +1,102 @@
+{
+  "artifact": {
+    "archive": "/Users/yuzhe/.hermes/evidence/pysolate/semantic-phase5-selection-fa5dd83",
+    "manifest_sha256": "ad1affb32a14f0feababcf5c3c6fd614aa699ac71a97b9ec44278bdf6098ad9c",
+    "remote_build_root": "gpu31:/tmp/ys25-p5-selection-fa5dd83",
+    "wasm_sha256": "621f5fcec3f4bc7fc3550aa8fd1a275e7a6c09017518f535395c5bae84a297cb"
+  },
+  "exact_guest": {
+    "linux_gpu31": {
+      "emitter_seconds": 5.51,
+      "helper_seconds": 16.33,
+      "scratch_seconds": 8.96,
+      "selection_seconds": 21.81,
+      "status": "PASS",
+      "test_binary_sha256": "a4ada5d1ff29f172215577f1d1beb9472e252ac91555b544ffcbc43a4f472148"
+    },
+    "macos": {
+      "command_filter": "TestExactGuest(PreparedRegionHelperClaimsHostTableWithoutBrokerOrWorkspace|EmitsCanonicalPreparedRegionPatchBindingInPrivateSession|ScratchExecutesOneScalarRegionAndPublishesBoundCapsule|PreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution)$",
+      "selection_seconds": 14.11,
+      "status": "PASS",
+      "total_seconds": 34.087
+    }
+  },
+  "frozen_boundaries": {
+    "phase3_negative_baseline_modified": false,
+    "phase4_evidence_modified": false,
+    "production_result_replacement_authorized": false,
+    "pysolate_thesis_modified": false,
+    "typed_transport_expansion_authorized": false
+  },
+  "local_verification": {
+    "artifact_verifier": "PASS",
+    "git_diff_check": "PASS",
+    "go_vet_runtime": "PASS",
+    "python_guest_tests": 135,
+    "race_packages": [
+      "./runtime/preparedregion",
+      "./runtime/engine/wazero"
+    ],
+    "runtime_packages": "PASS"
+  },
+  "mechanism": {
+    "authority_bearing_derived_execution_rejected": true,
+    "broker_available": false,
+    "final_guest_claim_is_single_use": true,
+    "generic_runner_interface_unchanged": true,
+    "guest_validates_original_source_before_derived_compile": true,
+    "host_commits_before_guest_instantiation": true,
+    "mode": "derived",
+    "original_run_request_source_unchanged": true,
+    "patch_shape": "one exact top-level single-name Assign RHS",
+    "ready_table_prevalidation_is_nonconsuming": true,
+    "runtime_fallback_to_original": false,
+    "selection_binds": [
+      "decision_sha256",
+      "capsule_sha256",
+      "patch_sha256",
+      "final_source_sha256",
+      "derived_ast_sha256"
+    ],
+    "selection_schema": "pysolate.prepared-region-execution-selection.v1",
+    "workspace_mounted": false
+  },
+  "negative_controls": {
+    "claim_failure_replays_original": false,
+    "invalid_final_source_suffix": "rejected by Host before final Guest execution",
+    "invalid_suffix_capsule_claims": 0,
+    "invalid_suffix_capsule_consumed": 0,
+    "noncanonical_or_unknown_selection_fields": "rejected",
+    "patch_or_derived_ast_drift": "rejected",
+    "selection_identity_drift": "rejected",
+    "unready_table_entry": "rejected before final execution",
+    "wrong_capsule_identity": "rejected without consumption"
+  },
+  "parity": {
+    "baseline_result": 42,
+    "baseline_status": "ok",
+    "capsule_claims": 1,
+    "capsule_consumed": 1,
+    "derived_result": 42,
+    "derived_status": "ok",
+    "error_equal": true,
+    "logical_log_count_equal": true,
+    "rejected_claims": 0
+  },
+  "phase": "P5 bounded derived-AST selection",
+  "phase5_gate_passed": false,
+  "recorded_at": "2026-08-20",
+  "remaining": [
+    "cancellation, earlier-exception, unclaimed-capsule and traceback/source-location matched controls",
+    "independent P5 remediation preregistration",
+    "cold and preprovisioned mechanism/economics campaign",
+    "independent aggregate/evidence gate"
+  ],
+  "schema_version": "pysolate.semantic-speculation-phase5-selection-evidence.v1",
+  "source": {
+    "commit": "fa5dd8351a31672741e5054df2773f3caf476f44",
+    "implementation_commits": [
+      "fa5dd8351a31672741e5054df2773f3caf476f44"
+    ]
+  }
+}

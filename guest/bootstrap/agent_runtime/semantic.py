@@ -530,6 +530,16 @@ def _safe_scalar_statement_outputs(statement, scalar_names):
     return {statement.targets[0].id: scalar_type}
 
 
+def _identity_alias(statement, scalar_names):
+    return (
+        isinstance(statement, ast.Assign)
+        and len(statement.targets) == 1
+        and isinstance(statement.targets[0], ast.Name)
+        and isinstance(statement.value, ast.Name)
+        and statement.value.id not in scalar_names
+    )
+
+
 def _may_raise(statement):
     risky = (
         ast.Assert, ast.Raise, ast.Call, ast.Await, ast.Yield, ast.YieldFrom,
@@ -666,6 +676,8 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
             rejections.add("declaration")
         if visitor.heap_mutation:
             rejections.add("heap_mutation")
+        if _identity_alias(statement, scalar_names):
+            rejections.add("identity_alias")
         if _may_raise(statement) and not safe_scalar_outputs:
             rejections.add("may_raise")
         if region_state.effects["may_be_unknown"]:

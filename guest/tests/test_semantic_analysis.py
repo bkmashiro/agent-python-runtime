@@ -174,6 +174,14 @@ class SemanticAnalysisTests(unittest.TestCase):
         )
         self.assertEqual(report["candidate_regions"], repeated["candidate_regions"])
 
+    def test_candidate_regions_reject_non_scalar_name_alias_identity(self):
+        report = self.analyze("items = [1]\nalias = items\nalias.append(2)\nresult = alias\n")
+        alias = report["candidate_regions"][1]
+        self.assertEqual(["identity_alias"], alias["rejection_reasons"])
+        self.assertEqual(["items"], alias["live_ins"])
+        self.assertEqual(["alias"], alias["live_outs"])
+        self.assertEqual("items", alias["data_dependencies"][0]["name"])
+
     def test_candidate_regions_reject_explicit_and_expression_exception_paths(self):
         for source in (
             "assert inputs['ok']\n",

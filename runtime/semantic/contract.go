@@ -64,6 +64,7 @@ const (
 	CandidateRejectOpaqueControl       CandidateRejection = "opaque_control"
 	CandidateRejectDeclaration         CandidateRejection = "declaration"
 	CandidateRejectHeapMutation        CandidateRejection = "heap_mutation"
+	CandidateRejectIdentityAlias       CandidateRejection = "identity_alias"
 	CandidateRejectMayRaise            CandidateRejection = "may_raise"
 	CandidateRejectUnknownEffect       CandidateRejection = "unknown_effect"
 	CandidateRejectLiveInNotCanonical  CandidateRejection = "live_in_not_canonical"
@@ -527,7 +528,7 @@ func validCandidateRejections(values []CandidateRejection) bool {
 
 func validCandidateRejection(value CandidateRejection) bool {
 	switch value {
-	case CandidateRejectOpaqueControl, CandidateRejectDeclaration, CandidateRejectHeapMutation, CandidateRejectMayRaise,
+	case CandidateRejectOpaqueControl, CandidateRejectDeclaration, CandidateRejectHeapMutation, CandidateRejectIdentityAlias, CandidateRejectMayRaise,
 		CandidateRejectUnknownEffect, CandidateRejectLiveInNotCanonical, CandidateRejectLiveOutNotCanonical:
 		return true
 	default:

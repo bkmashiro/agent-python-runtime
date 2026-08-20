@@ -26,7 +26,7 @@ Prioritise, in order:
 
 1. mechanised correctness and authority boundaries;
 2. a fair matched comparison with EAGER's syntax-level gate;
-3. natural-workload opportunity and net critical-path benefit;
+3. mechanism-revealing workload cases and net critical-path benefit;
 4. minimal reusable semantic/pass contracts;
 5. typed, bounded result transport;
 6. performance only after correctness/equivalence gates;
@@ -142,7 +142,7 @@ The megagoal is complete only when every non-blocked approved family has a real 
 - a typed Host contract for unconsumed speculative physical work, freshness, privacy/billing partition, coalescing and terminal disposition;
 - adversarial whole-program oracles including invalid suffix, unreachable call, earlier exception, cancellation and unknown effects;
 - a matched serial/EAGER-style/Pysolate/oracle comparison over identical source schedules and capability delays;
-- an improved region-local opportunity census over a frozen natural corpus;
+- a frozen, mechanism-revealing region-local case matrix aligned with the comparator paper's workload shape;
 - if admitted, a target-Guest-owned source-bound scalar materialisation consumer with a fully validated derived AST;
 - if economically admitted, typed large-result capsules one codec/type at a time;
 - if identity repetition is observed, narrowly justified single-flight/durable reuse with separate identities;
@@ -173,7 +173,7 @@ Continue automatically until one of these is proved with tools and recorded belo
 2. a named opportunity/economics gate fails and the result changes whether a later architecture should exist;
 3. safe implementation requires arbitrary heap/process continuation, a general Python interpreter/compiler, or an unsafe broad rewrite outside this contract;
 4. an exact target-Guest parser/executor invariant cannot be preserved by the proposed patch after one bounded lower-risk alternative;
-5. the EAGER-distinct workload slice has no measurable opportunity after the frozen matched experiment and one independently chosen natural corpus;
+5. the EAGER-distinct workload slice has no measurable opportunity across the frozen matched mechanism cases;
 6. required real Guest/toolchain/evidence input is unavailable after bounded local and documented workstation alternatives;
 7. focused/global gates repeatedly fail and the remaining alternatives require Yuzhe to select a semantic/product trade-off;
 8. an operation would require deployment, paid resources, production access, external authority-bearing writes or another permission not granted here.
@@ -314,7 +314,7 @@ The EAGER arm is a research comparator, not a production mode. Do not claim sour
 
 Tasks:
 
-- [ ] Freeze comparator semantics and mutation-resistant treatment identities before measurement.
+- [x] Freeze comparator semantics and mutation-resistant treatment identities before measurement.
 - [ ] Implement the minimum complete-statement/name-gate comparator over the same source stream.
 - [ ] Preserve persistent-interpreter behavior only inside the comparator lane.
 - [ ] Include valid suffix, invalid suffix, external read, pure local work, unknown wrapper, branch and cancellation cases.
@@ -324,24 +324,24 @@ Tasks:
 - [ ] Run full gates and independent frozen-diff/evidence calculation review.
 - [ ] Update roadmap, signed commit, push, continue only if P3 passes.
 
-**Gate P3:** At least one non-trivial, non-authored-only workload family shows syntax-level gating serialising a Host-qualified operation while Pysolate recovers positive net overlap after analyser, Broker and cancellation/orphan accounting. If only authored fixtures pass and the independently frozen natural corpus contains zero opportunities, stop for Yuzhe rather than redesigning the workload.
+**Gate P3:** At least one non-trivial, predeclared workload family matching the comparator paper's execution shape shows syntax-level gating serialising a Host-qualified operation while Pysolate recovers positive net overlap after analyser, Broker and cancellation/orphan accounting. Authored fixtures are admissible because this gate establishes mechanism behavior, not population-level benchmark prevalence; the fixture must not branch on treatment or encode the expected result.
 
-### Phase 4: Region-local semantic precision and natural census
+### Phase 4: Region-local semantic precision and mechanism case matrix
 
-**Promise:** Pure-region implementation begins only after source analysis finds useful natural candidates without relying on the v0 whole-module false-negative rule.
+**Promise:** Pure-region implementation begins only after source analysis admits predeclared mechanism-revealing cases without relying on the v0 whole-module false-negative rule.
 
 Tasks:
 
 - [ ] Write RED Guest tests showing a pure top-level region remains locally classifiable when an unrelated later region has a Host effect, while unknown calls/heap mutation/`may_raise`/opaque control still reject.
 - [ ] Improve only region-local top-level effect/dependency coverage needed by the test; do not build SSA or arbitrary interprocedural proof.
 - [ ] Preserve exact byte spans, target-Guest AST identity, canonical live-ins/live-outs, barriers and explicit unknown reasons.
-- [ ] Freeze a natural multi-region agent-program corpus before observing region eligibility. Reuse existing private Hermes/natural corpus only through body-safe manifests; retain all rejected/unclassifiable denominators.
-- [ ] Add bounded cost-shape estimates from actual measured local regions, not AST node count alone.
+- [ ] Freeze a deterministic multi-region case matrix before observing region eligibility. Include positive scalar/local-compute shapes plus effects, `may_raise`, alias/identity, opaque-control and transport-negative controls; do not switch runtime behavior on case IDs or expected outcomes.
+- [ ] Add bounded cost-shape estimates from actual execution of the constructed regions, not AST node count alone.
 - [ ] Report candidate/admitted/rejected counts, lead-time availability, canonical inputs/outputs, result shapes, same-run opportunity and exact-repeat opportunity separately.
-- [ ] Independently validate aggregate calculations and corpus identity.
+- [ ] Independently validate aggregate calculations and case-matrix identity.
 - [ ] Update roadmap, signed commit, push, continue only if P4 passes.
 
-**Gate P4:** Multiple naturally generated programs must contain expensive, straight-line, effect-free, transportable regions with a usable source-generation lead window. If no such cohort exists, stop. Do not proceed using only a hand-authored expensive expression.
+**Gate P4:** Multiple predeclared cases must contain expensive, straight-line, effect-free, transportable regions with a usable source-generation lead window, while nearby negative controls remain rejected. A synthetic authored matrix is sufficient for mechanism acceptance; it must include more than one computation shape and preserve identical source/input schedules across treatments. This gate makes no claim about natural-workload frequency.
 
 ### Phase 5: Run-scoped scalar region materialisation
 
@@ -376,7 +376,7 @@ Tasks:
 - [ ] Run focused/race/exact Guest gates and matched positive/negative trials.
 - [ ] Update roadmap, signed commit, push, continue only if P5 passes.
 
-**Gate P5:** The natural admitted cohort has positive net critical-path benefit and exact declared outcome parity. Stop if the patch requires arbitrary heap transfer, broad Python semantics, unsafe exception substitution, or only wins on an authored toy.
+**Gate P5:** The admitted mechanism case matrix has positive net critical-path benefit and exact declared outcome parity. Stop if the patch requires arbitrary heap transfer, broad Python semantics or unsafe exception substitution. A win on the frozen authored matrix establishes bounded mechanism feasibility, not production prevalence or expected end-to-end uplift.
 
 ### Phase 6: Minimal pass and consumer architecture
 
@@ -409,7 +409,7 @@ Subphases in order:
 
 1. bytes/text/JSON structures with Host-owned immutable blob storage;
 2. NumPy array only under an exact profile containing NumPy;
-3. DataFrame/Arrow/Parquet only if the selected Guest profile contains the required package and a natural workload justifies it.
+3. DataFrame/Arrow/Parquet only if the selected Guest profile contains the required package and a predeclared mechanism case demonstrates favorable transport economics.
 
 Transport boundary:
 
@@ -557,6 +557,7 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 
 ## Completion log
 
+- 2026-08-20 Phase 3 comparator-contract slice: froze body-free `pysolate.eager-style-gate-contract.v1` against arXiv `2604.00491` PDF `sha256:23af671ca94b7cbbc0866a37391520ae39e75c964320e7809b1612dfb3e023cb`, including target-CPython statement boundaries, one-token lookahead, comparator-private persistent interpreter, low-yield declarations, static denied module/dynamic-name matching and explicit invalid-suffix behavior. Contract identity `sha256:16e76c741749bddb61c68ae80902827f73e9dc7efdad6208d858f8edae100ab8`; checked-in canonical file `sha256:6fe4f615ac532d855b87be26bc785573c94291b8075dedc71125b44d042f263b`. Trial records bind the comparator identity only for `eager_style_gate`. Focused gate, semanticspeculation tests and vet passed. The evidence route now admits frozen synthetic mechanism cases without claiming natural-workload prevalence.
 - 2026-08-20 Phase 2 contract slice: capability Plan v7 now requires positive pre-dispatch v1 declarations for exact partition privacy, forbidden coalescing, result-byte ceiling and provider cost units in addition to the existing resource/freshness/unclaimed-safety contract. Run-private admission reserves attempt count, cost units and worst-case result bytes atomically; evidence separates reservations, physical starts and returned physical bytes. Oversized Host results become typed `invalid_result` outcomes without exposing bodies. Historical source-prefix v6 evidence is recomputed with its frozen canonical document rather than rewritten. Full `go test ./...` (including 543.931 s integration/e2e), all 105 script tests, focused gates, targeted race, vet and exact Guest adversarial/pre-dispatch tests passed.
 - 2026-08-20 Phase 1 complete: Gate P1 passed with every preregistered adversarial row mapped to a typed outcome and direct test. Exact source commit `1c07fc2b9a012abab9071abb777e9ba80f18ee66`; base CPython 3.14 WASI artifact `sha256:7be7bc7ea15951364427764d36fa6ac40b6f2ed68e71a5a6c639492a2f21df79`; private body-free evidence manifest `sha256:d2902898091a95c71da9214e6643673dfbb8d6289a6b1ec95a49bb8f2e675d35`. Three exact-Guest oracle tests passed in 27.024 s, 14-package focused gate passed, three-package race gate passed, vet and artifact/supply-chain verification passed.
 - 2026-08-20 Phase 1 qualification slice: target-Guest analysis of a custom wrapper records the inner direct capability only in the function summary, emits no positive call-site occurrence for pre-dispatch, and marks the dynamic wrapper invocation region `unknown_effect`; the planner emits no decision and no physical work.

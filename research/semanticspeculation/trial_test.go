@@ -204,6 +204,7 @@ func TestTrialRecordAcceptsSerialSuccessAndEagerPrefixFailure(t *testing.T) {
 
 	eager := validTrialRecord()
 	eager.Treatment = "eager_style_gate"
+	eager.ComparatorContractSHA256 = EagerStyleGateV1Identity
 	eager.PhysicalAttempts = 0
 	eager.PhysicalResultBytes = 0
 	eager.ProviderCostUnits = 0
@@ -212,5 +213,15 @@ func TestTrialRecordAcceptsSerialSuccessAndEagerPrefixFailure(t *testing.T) {
 	eager.PrefixPythonExecutions = 1
 	if _, err := SealTrialRecord(eager); err != nil {
 		t.Fatal(err)
+	}
+	missingComparator := eager
+	missingComparator.ComparatorContractSHA256 = ""
+	if _, err := SealTrialRecord(missingComparator); err == nil {
+		t.Fatal("missing eager comparator contract accepted")
+	}
+	wrongLane := serial
+	wrongLane.ComparatorContractSHA256 = EagerStyleGateV1Identity
+	if _, err := SealTrialRecord(wrongLane); err == nil {
+		t.Fatal("eager comparator contract accepted on serial lane")
 	}
 }

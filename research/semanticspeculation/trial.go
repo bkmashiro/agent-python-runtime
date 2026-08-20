@@ -30,32 +30,33 @@ func (value PhysicalDispositions) total() uint32 {
 }
 
 type TrialRecord struct {
-	SchemaVersion          string               `json:"schema_version"`
-	StudyID                string               `json:"study_id"`
-	PreregistrationSHA256  string               `json:"preregistration_sha256"`
-	CaseID                 string               `json:"case_id"`
-	Treatment              string               `json:"treatment"`
-	TrialIndex             uint32               `json:"trial_index"`
-	SourceSHA256           string               `json:"source_sha256"`
-	ArtifactSHA256         string               `json:"artifact_sha256"`
-	CapabilityPlanSHA256   string               `json:"capability_plan_sha256"`
-	PrivacySHA256          string               `json:"privacy_sha256"`
-	FinalProgramOutcome    string               `json:"final_program_outcome"`
-	FinalPythonStarted     bool                 `json:"final_python_started"`
-	PrefixPythonExecutions uint32               `json:"prefix_python_executions"`
-	ResultSHA256           string               `json:"result_sha256"`
-	ErrorClass             string               `json:"error_class"`
-	LogicalCalls           uint32               `json:"logical_calls"`
-	PhysicalAttempts       uint32               `json:"physical_attempts"`
-	PhysicalResultBytes    uint64               `json:"physical_result_bytes"`
-	ProviderCostUnits      uint64               `json:"provider_cost_units"`
-	ReadyBeforeFinalize    uint32               `json:"ready_before_finalize"`
-	PhysicalDispositions   PhysicalDispositions `json:"physical_dispositions"`
-	AuthorityDisposition   string               `json:"authority_disposition"`
-	WorkspaceDisposition   string               `json:"workspace_disposition"`
-	StartedNanos           uint64               `json:"started_nanos"`
-	EndedNanos             uint64               `json:"ended_nanos"`
-	Identity               string               `json:"identity"`
+	SchemaVersion            string               `json:"schema_version"`
+	StudyID                  string               `json:"study_id"`
+	PreregistrationSHA256    string               `json:"preregistration_sha256"`
+	CaseID                   string               `json:"case_id"`
+	Treatment                string               `json:"treatment"`
+	ComparatorContractSHA256 string               `json:"comparator_contract_sha256,omitempty"`
+	TrialIndex               uint32               `json:"trial_index"`
+	SourceSHA256             string               `json:"source_sha256"`
+	ArtifactSHA256           string               `json:"artifact_sha256"`
+	CapabilityPlanSHA256     string               `json:"capability_plan_sha256"`
+	PrivacySHA256            string               `json:"privacy_sha256"`
+	FinalProgramOutcome      string               `json:"final_program_outcome"`
+	FinalPythonStarted       bool                 `json:"final_python_started"`
+	PrefixPythonExecutions   uint32               `json:"prefix_python_executions"`
+	ResultSHA256             string               `json:"result_sha256"`
+	ErrorClass               string               `json:"error_class"`
+	LogicalCalls             uint32               `json:"logical_calls"`
+	PhysicalAttempts         uint32               `json:"physical_attempts"`
+	PhysicalResultBytes      uint64               `json:"physical_result_bytes"`
+	ProviderCostUnits        uint64               `json:"provider_cost_units"`
+	ReadyBeforeFinalize      uint32               `json:"ready_before_finalize"`
+	PhysicalDispositions     PhysicalDispositions `json:"physical_dispositions"`
+	AuthorityDisposition     string               `json:"authority_disposition"`
+	WorkspaceDisposition     string               `json:"workspace_disposition"`
+	StartedNanos             uint64               `json:"started_nanos"`
+	EndedNanos               uint64               `json:"ended_nanos"`
+	Identity                 string               `json:"identity"`
 }
 
 func SealTrialRecord(value TrialRecord) (TrialRecord, error) {
@@ -113,6 +114,13 @@ func validateTrialRecord(value TrialRecord, sealed bool) error {
 		return ErrInvalidTrialRecord
 	}
 	if value.Treatment != "eager_style_gate" && value.PrefixPythonExecutions != 0 {
+		return ErrInvalidTrialRecord
+	}
+	if value.Treatment == "eager_style_gate" {
+		if value.ComparatorContractSHA256 != EagerStyleGateV1Identity {
+			return ErrInvalidTrialRecord
+		}
+	} else if value.ComparatorContractSHA256 != "" {
 		return ErrInvalidTrialRecord
 	}
 	switch value.FinalProgramOutcome {

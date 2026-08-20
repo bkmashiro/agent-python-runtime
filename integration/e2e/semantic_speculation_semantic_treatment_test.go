@@ -77,10 +77,10 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		result.Outcome.WorkspaceDisposition != "published" || result.Outcome.ReadyBeforeFinalize != 0 {
 		t.Fatalf("result=%+v physical=%d", result, physical.Load())
 	}
-	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), true)
+	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), 1, true)
 }
 
-func TestExactGuestScheduledSemanticPreDispatchTwoChunkColdLifecycle(t *testing.T) {
+func TestExactGuestScheduledSemanticPreDispatchPureLocalSkipsAllAnalyzerInvocations(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {
 		t.Fatal(err)
@@ -117,21 +117,24 @@ func TestExactGuestScheduledSemanticPreDispatchTwoChunkColdLifecycle(t *testing.
 	if result.Outcome.FinalProgramOutcome != "success" || result.Outcome.LogicalCalls != 0 {
 		t.Fatalf("result=%+v", result)
 	}
-	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), false)
+	assertColdSemanticLifecycle(t, treatment.LifecycleEvidence(), uint32(len(caseValue.Chunks)), 0, false)
 }
 
-func assertColdSemanticLifecycle(t *testing.T, lifecycle semanticspeculation.SemanticTreatmentLifecycleEvidence, chunks uint32, expectProvider bool) {
+func assertColdSemanticLifecycle(t *testing.T, lifecycle semanticspeculation.SemanticTreatmentLifecycleEvidence, visible, analyzed uint32, expectProvider bool) {
 	t.Helper()
-	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v1" ||
-		lifecycle.Analyzer.Invocations != chunks || lifecycle.Analyzer.ModuleInstantiations != chunks ||
-		lifecycle.Analyzer.InitializeCalls != chunks || lifecycle.Analyzer.RuntimeInitCalls != chunks ||
-		lifecycle.Analyzer.Successes != chunks || lifecycle.Analyzer.Failures != 0 ||
-		lifecycle.Analyzer.InstantiateNanos == 0 || lifecycle.Analyzer.InitializeNanos == 0 ||
-		lifecycle.Analyzer.RuntimeInitNanos == 0 || lifecycle.Analyzer.AnalyzeNanos == 0 ||
+	if lifecycle.SchemaVersion != "pysolate.semantic-treatment-lifecycle.v2" ||
+		lifecycle.Analyzer.Invocations != analyzed || lifecycle.Analyzer.ModuleInstantiations != analyzed ||
+		lifecycle.Analyzer.InitializeCalls != analyzed || lifecycle.Analyzer.RuntimeInitCalls != analyzed ||
+		lifecycle.Analyzer.Successes != analyzed || lifecycle.Analyzer.Failures != 0 ||
+		lifecycle.VisiblePrefixes != visible || lifecycle.SkippedPrefixes != visible-analyzed ||
 		lifecycle.BeginNanos == 0 || lifecycle.AnalyzerEngineNanos == 0 || lifecycle.WorkspaceSetupNanos == 0 ||
 		lifecycle.FormalEngineNanos == 0 || lifecycle.SourceGenerationNanos == 0 ||
 		lifecycle.FormalGuestExecutions != 1 || lifecycle.FormalExecutionNanos == 0 {
 		t.Fatalf("lifecycle=%+v", lifecycle)
+	}
+	phaseNanos := lifecycle.Analyzer.InstantiateNanos | lifecycle.Analyzer.InitializeNanos | lifecycle.Analyzer.RuntimeInitNanos | lifecycle.Analyzer.AnalyzeNanos
+	if (phaseNanos > 0) != (analyzed > 0) {
+		t.Fatalf("analyzer phase lifecycle=%+v analyzed=%d", lifecycle, analyzed)
 	}
 	if (lifecycle.ProviderNanos > 0) != expectProvider {
 		t.Fatalf("provider lifecycle=%+v expectProvider=%t", lifecycle, expectProvider)

@@ -435,6 +435,14 @@ func TestSealedPlanGeneratesPythonProjectionAndDefensiveSpecs(t *testing.T) {
 	if fresh.Python.Arguments[0] != "path" || !json.Valid(fresh.InputSchema) || fresh.PreDispatch.Resource.Namespace != "workspace" {
 		t.Fatalf("Plan.Specs leaked mutable state: %#v", fresh)
 	}
+	projections := plan.PreDispatchPythonProjections()
+	if len(projections) != 1 || projections[0].Module != "workspace" || projections[0].Method != "read_text" {
+		t.Fatalf("pre-dispatch projections=%#v", projections)
+	}
+	projections[0].Arguments[0] = "mutated"
+	if freshProjection := plan.PreDispatchPythonProjections()[0]; freshProjection.Arguments[0] != "path" {
+		t.Fatalf("pre-dispatch projection leaked mutable state: %#v", freshProjection)
+	}
 }
 
 func sealedPlan(t *testing.T, maxCalls uint32, spec capability.Spec, grant capability.Grant) *capability.Plan {

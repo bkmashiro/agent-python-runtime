@@ -37,7 +37,7 @@ type semanticGenerationResult struct {
 	err       error
 }
 
-const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v1"
+const SemanticTreatmentLifecycleSchemaVersion = "pysolate.semantic-treatment-lifecycle.v2"
 
 type SemanticTreatmentLifecycleEvidence struct {
 	SchemaVersion         string                                         `json:"schema_version"`
@@ -49,6 +49,8 @@ type SemanticTreatmentLifecycleEvidence struct {
 	SourceGenerationNanos uint64                                         `json:"source_generation_nanos"`
 	AdmissionNanos        uint64                                         `json:"admission_nanos"`
 	ProviderNanos         uint64                                         `json:"provider_nanos"`
+	VisiblePrefixes       uint32                                         `json:"visible_prefixes"`
+	SkippedPrefixes       uint32                                         `json:"skipped_prefixes"`
 	FormalGuestExecutions uint32                                         `json:"formal_guest_executions"`
 	FormalExecutionNanos  uint64                                         `json:"formal_execution_nanos"`
 }
@@ -80,6 +82,8 @@ type SemanticPreDispatchTreatment struct {
 	formalEngineNanos     uint64
 	sourceGenerationNanos uint64
 	admissionNanos        uint64
+	visiblePrefixes       uint32
+	skippedPrefixes       uint32
 	formalGuestExecutions uint32
 	formalExecutionNanos  uint64
 	begun                 bool
@@ -206,15 +210,25 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 		ImportClosureSHA256:    t.config.ImportClosureSHA256,
 		CapabilityPlanSHA256:   t.config.Plan.Identity(),
 	}
+	readiness, err := semantic.NewConservativePrefixReadinessFilter(t.config.Plan)
+	if err != nil {
+		return t.failBegin(err)
+	}
 	go func() {
 		generated, generationErr := semantic.GenerateVerifiedSourceWithPreDispatch(runContext, semantic.VerifiedSourceGenerationConfig{
 			Analyzer: analyzer, Plan: t.config.Plan, Bindings: bindings, Admission: admission, SourceChunks: t.chunks,
+			ShouldAnalyzePrefix: readiness.ShouldAnalyzePrefix,
 			Observe: func(event semantic.VerifiedSourceGenerationEvent) {
-				if event.Phase == "prefix_admitted" {
-					t.lifecycleMu.Lock()
+				t.lifecycleMu.Lock()
+				switch event.Phase {
+				case "prefix_visible":
+					t.visiblePrefixes++
+				case "prefix_skipped":
+					t.skippedPrefixes++
+				case "prefix_admitted":
 					t.admissionNanos += event.ElapsedNanos
-					t.lifecycleMu.Unlock()
 				}
+				t.lifecycleMu.Unlock()
 			},
 		})
 		t.generated <- semanticGenerationResult{generated: generated, err: generationErr}
@@ -372,6 +386,8 @@ func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLife
 	result.SourceGenerationNanos = t.sourceGenerationNanos
 	result.AdmissionNanos = t.admissionNanos
 	result.ProviderNanos = providerNanos
+	result.VisiblePrefixes = t.visiblePrefixes
+	result.SkippedPrefixes = t.skippedPrefixes
 	result.FormalGuestExecutions = t.formalGuestExecutions
 	result.FormalExecutionNanos = t.formalExecutionNanos
 	t.lifecycleMu.Unlock()

@@ -161,6 +161,23 @@ func TestRealGuestSemanticOverlayBindsExactModuleEntryCall(t *testing.T) {
 	if err != nil || len(conditionalAnalysis.CallSites) != 0 {
 		t.Fatalf("conditional analysis=%+v err=%v", conditionalAnalysis, err)
 	}
+	for _, source := range []string{
+		"sources = inputs['wrapper']\nresult = sources.demo_catalog()\n",
+		"def fetch():\n    return sources.demo_catalog()\nresult = fetch()\n",
+	} {
+		blockedRequest, requestErr := semantic.NewRequest(source, request.Bindings, plan)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		blocked, analyzeErr := semantic.Analyze(context.Background(), runner, blockedRequest)
+		hasBarrier := len(blocked.Barriers) > 0
+		for _, region := range blocked.CandidateRegions {
+			hasBarrier = hasBarrier || len(region.Barriers) > 0 || len(region.RejectionReasons) > 0
+		}
+		if analyzeErr != nil || len(blocked.CallSites) != 0 || !hasBarrier {
+			t.Fatalf("source=%q blocked=%+v err=%v", source, blocked, analyzeErr)
+		}
+	}
 }
 
 func TestSemanticAnalyzerIsDefaultOff(t *testing.T) {

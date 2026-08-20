@@ -338,6 +338,25 @@ func (plan *Plan) Identity() string {
 	return plan.identity
 }
 
+// PreDispatchPythonProjections returns a detached, deterministic view of only
+// the Python call surfaces that have an explicit pre-dispatch contract. It does
+// not expose handlers or grant bodies and cannot widen the sealed Plan.
+func (plan *Plan) PreDispatchPythonProjections() []PythonProjection {
+	if plan == nil {
+		return nil
+	}
+	projections := make([]PythonProjection, 0, len(plan.specs))
+	for _, spec := range plan.specs {
+		if spec.Python == nil || spec.PreDispatch == nil {
+			continue
+		}
+		projection := *spec.Python
+		projection.Arguments = append([]string(nil), spec.Python.Arguments...)
+		projections = append(projections, projection)
+	}
+	return projections
+}
+
 // EvidenceDocument returns the exact canonical JSON document hashed by Identity.
 // It projects frozen spec and grant identities only; handlers and grant policy
 // bodies remain Host-private.

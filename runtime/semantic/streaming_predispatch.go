@@ -38,6 +38,7 @@ type StreamingPreDispatchSnapshot struct {
 
 type StreamingPrefixAdmissionSnapshot struct {
 	PrefixCount        uint32
+	SkippedPrefixCount uint32
 	QualifiedCallCount uint32
 	RejectedCallCount  uint32
 	LastSourceSHA256   string
@@ -257,13 +258,14 @@ func streamingControllerEvent(kind string, call QualifiedCall, occurrence string
 // StreamingPrefixAdmission joins analyses of monotonically growing,
 // actually-visible source prefixes to one Run-private controller.
 type StreamingPrefixAdmission struct {
-	mu         sync.Mutex
-	plan       *capability.Plan
-	controller *StreamingSemanticPreDispatch
-	context    PreissueContext
-	lastSource string
-	seen       map[string]struct{}
-	snapshot   StreamingPrefixAdmissionSnapshot
+	mu                sync.Mutex
+	plan              *capability.Plan
+	controller        *StreamingSemanticPreDispatch
+	context           PreissueContext
+	lastSource        string
+	lastVisibleSource string
+	seen              map[string]struct{}
+	snapshot          StreamingPrefixAdmissionSnapshot
 }
 
 func NewStreamingPrefixAdmission(plan *capability.Plan, controller *StreamingSemanticPreDispatch, baseContext PreissueContext) (*StreamingPrefixAdmission, error) {
@@ -297,7 +299,8 @@ func (admission *StreamingPrefixAdmission) AdmitVerifiedPrefix(ctx context.Conte
 	sourceSHA := "sha256:" + hex.EncodeToString(sourceDigest[:])
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
-	if analysis.SourceSHA256 != sourceSHA || admission.lastSource != "" && !bytes.HasPrefix([]byte(source), []byte(admission.lastSource)) {
+	if analysis.SourceSHA256 != sourceSHA || admission.lastSource != "" && !bytes.HasPrefix([]byte(source), []byte(admission.lastSource)) ||
+		admission.lastSource == "" && admission.lastVisibleSource != "" && !bytes.HasPrefix([]byte(source), []byte(admission.lastVisibleSource)) && !bytes.HasPrefix([]byte(admission.lastVisibleSource), []byte(source)) {
 		return 0, ErrAnalysisBinding
 	}
 	sites := append([]CallSite(nil), analysis.CallSites...)
@@ -336,7 +339,9 @@ func (admission *StreamingPrefixAdmission) AdmitVerifiedPrefix(ctx context.Conte
 	admission.snapshot.PrefixCount++
 	admission.snapshot.QualifiedCallCount += added
 	admission.snapshot.RejectedCallCount += rejected
-	admission.snapshot.LastSourceSHA256 = sourceSHA
+	if admission.lastVisibleSource == "" || len(source) >= len(admission.lastVisibleSource) {
+		admission.snapshot.LastSourceSHA256 = sourceSHA
+	}
 	return added, nil
 }
 
@@ -349,13 +354,39 @@ func (admission *StreamingPrefixAdmission) Snapshot() StreamingPrefixAdmissionSn
 	return admission.snapshot
 }
 
+// RecordSkippedPrefix advances only the visible-source binding. It cannot add
+// a call or spend authority; later exact analysis must still extend this source.
+func (admission *StreamingPrefixAdmission) RecordSkippedPrefix(source string) error {
+	if admission == nil || source == "" {
+		return ErrPreDispatchInvalid
+	}
+	admission.mu.Lock()
+	defer admission.mu.Unlock()
+	base := admission.lastVisibleSource
+	if base == "" {
+		base = admission.lastSource
+	}
+	if admission.snapshot.Complete || base != "" && !strings.HasPrefix(source, base) {
+		return ErrAnalysisBinding
+	}
+	digest := sha256.Sum256([]byte(source))
+	admission.lastVisibleSource = source
+	admission.snapshot.SkippedPrefixCount++
+	admission.snapshot.LastSourceSHA256 = "sha256:" + hex.EncodeToString(digest[:])
+	return nil
+}
+
 func (admission *StreamingPrefixAdmission) SealFinalSource(source string) error {
 	if admission == nil || source == "" {
 		return ErrPreDispatchInvalid
 	}
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
-	if admission.snapshot.Complete || admission.lastSource == "" || !strings.HasSuffix(admission.lastSource, "\n") || !strings.HasPrefix(source, admission.lastSource) {
+	base := admission.lastVisibleSource
+	if base == "" {
+		base = admission.lastSource
+	}
+	if admission.snapshot.Complete || base == "" || !strings.HasSuffix(base, "\n") || !strings.HasPrefix(source, base) {
 		return ErrAnalysisBinding
 	}
 	digest := sha256.Sum256([]byte(source))

@@ -128,6 +128,14 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 				})
 			}
 			if config.ShouldAnalyzePrefix != nil && !config.ShouldAnalyzePrefix(prefixIndex, prefixSource) {
+				if err := config.Admission.RecordSkippedPrefix(prefixSource); err != nil {
+					return GeneratedSource{}, err
+				}
+				if config.Observe != nil {
+					config.Observe(VerifiedSourceGenerationEvent{
+						Phase: "prefix_skipped", PrefixIndex: prefixIndex, SourceBytes: uint32(len(prefixSource)),
+					})
+				}
 				continue
 			}
 			scheduled++
@@ -168,7 +176,7 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 			}
 		}
 	}
-	if !completed || scheduled == 0 || nextCommit != scheduled+1 {
+	if !completed || nextCommit != scheduled+1 {
 		return GeneratedSource{}, ErrPreDispatchInvalid
 	}
 	if err := config.Admission.SealFinalSource(source); err != nil {

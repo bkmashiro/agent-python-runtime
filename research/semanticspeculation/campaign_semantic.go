@@ -23,6 +23,7 @@ type SemanticPreDispatchTreatmentConfig struct {
 	Artifact            []byte
 	RunConfig           runtimeconfig.RunConfig
 	Plan                *capability.Plan
+	ProviderObservation func() ProviderObservation
 	ImportClosureSHA256 string
 	PhysicalReadBudget  uint32
 	RunID               string
@@ -211,10 +212,14 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		_ = t.analyzer.Close(ctx)
 		if errors.Is(generation.err, runtimeconfig.ErrAgentSourceInvalid) || errors.Is(generation.err, semantic.ErrInvalidAnalysis) && t.exactSourceInvalid(ctx) {
 			snapshot := t.controller.Snapshot()
+			providerAttempts, providerBytes, providerCost, dispositions, _, providerErr := t.providerOutcome(snapshot)
+			if providerErr != nil {
+				return TreatmentOutcome{}, providerErr
+			}
 			return TreatmentOutcome{
 				FinalProgramOutcome: "syntax_error", ErrorClass: "syntax_error", AuthorityDisposition: "unchanged", WorkspaceDisposition: "discarded",
-				PhysicalAttempts: snapshot.PhysicalIssues, PhysicalResultBytes: snapshot.PhysicalResultBytes, ProviderCostUnits: snapshot.ProviderCostUnits,
-				ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: controllerDispositions(snapshot),
+				PhysicalAttempts: providerAttempts, PhysicalResultBytes: providerBytes, ProviderCostUnits: providerCost,
+				ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: dispositions,
 			}, nil
 		}
 		return TreatmentOutcome{}, generation.err
@@ -240,10 +245,14 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest response")
 	}
 	snapshot := t.controller.Snapshot()
+	providerAttempts, providerBytes, providerCost, dispositions, liveFallbackCalls, err := t.providerOutcome(snapshot)
+	if err != nil {
+		return TreatmentOutcome{}, err
+	}
 	outcome := TreatmentOutcome{
-		FinalPythonStarted: true, LogicalCalls: snapshot.LogicalClaims, PhysicalAttempts: snapshot.PhysicalIssues,
-		PhysicalResultBytes: snapshot.PhysicalResultBytes, ProviderCostUnits: snapshot.ProviderCostUnits,
-		ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: controllerDispositions(snapshot),
+		FinalPythonStarted: true, LogicalCalls: snapshot.LogicalClaims + liveFallbackCalls, PhysicalAttempts: providerAttempts,
+		PhysicalResultBytes: providerBytes, ProviderCostUnits: providerCost,
+		ReadyBeforeFinalize: readyAtFinalize, PhysicalDispositions: dispositions,
 		AuthorityDisposition: "unchanged", WorkspaceDisposition: execution.WorkspaceDisposition,
 	}
 	if outcome.LogicalCalls > 0 {
@@ -274,6 +283,22 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest status")
 	}
 	return outcome, nil
+}
+
+func (t *SemanticPreDispatchTreatment) providerOutcome(snapshot semantic.StreamingPreDispatchSnapshot) (uint32, uint64, uint64, PhysicalDispositions, uint32, error) {
+	dispositions := controllerDispositions(snapshot)
+	if t.config.ProviderObservation == nil {
+		return snapshot.PhysicalIssues, snapshot.PhysicalResultBytes, snapshot.ProviderCostUnits, dispositions, 0, nil
+	}
+	provider := t.config.ProviderObservation()
+	if provider.Attempts < snapshot.PhysicalIssues || provider.ResultBytes < snapshot.PhysicalResultBytes || provider.CostUnits < snapshot.ProviderCostUnits {
+		return 0, 0, 0, PhysicalDispositions{}, 0, errors.New("provider observation is behind semantic pre-dispatch controller")
+	}
+	// Attempts not issued by the pre-dispatch controller are ordinary live
+	// fallback calls consumed by the original logical call.
+	liveFallbackCalls := provider.Attempts - snapshot.PhysicalIssues
+	dispositions.Consumed += liveFallbackCalls
+	return provider.Attempts, provider.ResultBytes, provider.CostUnits, dispositions, liveFallbackCalls, nil
 }
 
 // exactSourceInvalid confirms an analyzer decode failure with the exact target

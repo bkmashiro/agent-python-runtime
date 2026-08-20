@@ -52,8 +52,11 @@ func RunMatchedCaseCampaign(
 			return MatchedCampaignResult{}, errors.Join(ErrInvalidMatchedCampaign, err)
 		}
 		record, err := BuildScheduledTrialRecord(fixture, treatmentName, trialIndex, bindings, result)
-		if err != nil || !recordMatchesFrozenExpectation(record, fixture) {
-			return MatchedCampaignResult{}, errors.Join(ErrInvalidMatchedCampaign, err)
+		if err != nil {
+			return MatchedCampaignResult{}, fmt.Errorf("%w: seal treatment %s: %v", ErrInvalidMatchedCampaign, treatmentName, err)
+		}
+		if !recordMatchesFrozenExpectation(record, fixture) {
+			return MatchedCampaignResult{}, fmt.Errorf("%w: treatment %s outcome=%s logical_calls=%d authority=%s workspace=%s", ErrInvalidMatchedCampaign, treatmentName, record.FinalProgramOutcome, record.LogicalCalls, record.AuthorityDisposition, record.WorkspaceDisposition)
 		}
 		records = append(records, record)
 	}

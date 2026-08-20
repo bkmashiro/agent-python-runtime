@@ -16,6 +16,15 @@ import (
 )
 
 func TestExactGuestMatchedExternalReadCampaignPersistsSeededEvidence(t *testing.T) {
+	runExactGuestMatchedExternalCase(t, 2, "external_read_valid_suffix")
+}
+
+func TestExactGuestMatchedUnknownWrapperAccountsLiveFallback(t *testing.T) {
+	runExactGuestMatchedExternalCase(t, 6, "unknown_wrapper")
+}
+
+func runExactGuestMatchedExternalCase(t *testing.T, caseIndex int, caseID string) {
+	t.Helper()
 	artifactPath := guestArtifact(t)
 	artifact, err := os.ReadFile(artifactPath)
 	if err != nil {
@@ -97,14 +106,15 @@ func TestExactGuestMatchedExternalReadCampaignPersistsSeededEvidence(t *testing.
 			})
 		case "semantic_pre_dispatch":
 			return semanticspeculation.NewSemanticPreDispatchTreatment(semanticspeculation.SemanticPreDispatchTreatmentConfig{
-				Artifact: artifact, RunConfig: baseConfig, Plan: plan, ImportClosureSHA256: testDigestBytes(imports), PhysicalReadBudget: 1,
+				Artifact: artifact, RunConfig: baseConfig, Plan: plan, ProviderObservation: observation,
+				ImportClosureSHA256: testDigestBytes(imports), PhysicalReadBudget: 1,
 				RunID: runID, WorkspaceRoot: t.TempDir(), WorkspaceOwner: runID,
 			})
 		default:
 			return nil, fmt.Errorf("unexpected treatment %q", treatment)
 		}
 	}
-	result, err := semanticspeculation.RunMatchedCaseCampaign(context.Background(), semanticspeculation.Phase3SyntheticCases()[2], 1, bindings, factory,
+	result, err := semanticspeculation.RunMatchedCaseCampaign(context.Background(), semanticspeculation.Phase3SyntheticCases()[caseIndex], 1, bindings, factory,
 		func(serial semanticspeculation.TrialRecord) (uint64, error) {
 			elapsed := serial.EndedNanos - serial.StartedNanos
 			latency := uint64(250 * time.Millisecond)
@@ -116,7 +126,7 @@ func TestExactGuestMatchedExternalReadCampaignPersistsSeededEvidence(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Records) != 3 || physicalTotal.Load() != 3 || result.Aggregate.CaseID != "external_read_valid_suffix" || !result.Aggregate.OracleExcludedFromAchievedSpeedup {
+	if len(result.Records) != 3 || physicalTotal.Load() != 3 || result.Aggregate.CaseID != caseID || !result.Aggregate.OracleExcludedFromAchievedSpeedup {
 		t.Fatalf("result=%+v physical_total=%d", result, physicalTotal.Load())
 	}
 	for _, record := range result.Records {
@@ -133,7 +143,7 @@ func TestExactGuestMatchedExternalReadCampaignPersistsSeededEvidence(t *testing.
 		t.Fatal(err)
 	}
 	ref, err := semanticspeculation.WriteMatchedCaseEvidenceFile(root, evidence)
-	if err != nil || ref.Identity != evidence.Identity || ref.CaseID != "external_read_valid_suffix" {
+	if err != nil || ref.Identity != evidence.Identity || ref.CaseID != caseID {
 		t.Fatalf("ref=%+v err=%v", ref, err)
 	}
 }

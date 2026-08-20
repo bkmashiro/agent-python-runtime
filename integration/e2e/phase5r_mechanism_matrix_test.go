@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 	config.ExecutionProfile = &profile
 	// Keep every Guest operation bounded while allowing the preregistered
 	// 120-second case envelope to survive a loaded Linux workstation.
-	config.Timeout = 60 * time.Second
+	config.Timeout = 100 * time.Second
 	for _, candidate := range semanticspeculation.Phase5Cases() {
 		candidate := candidate
 		t.Run(candidate.ID, func(t *testing.T) {
@@ -46,6 +47,9 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 			if candidate.ID == "scalar_unsafe_call" {
 				if analyzeErr == nil {
 					t.Fatal("unsafe RHS admitted")
+				}
+				if strings.Contains(analyzeErr.Error(), "session limit exceeded") || errors.Is(analyzeErr, context.DeadlineExceeded) {
+					t.Fatalf("unsafe RHS was not semantically rejected: %v", analyzeErr)
 				}
 				phase5RAssertTerminalControl(t, ctx, derived, 0, 0, 0)
 				return

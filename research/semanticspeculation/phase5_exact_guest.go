@@ -95,7 +95,7 @@ func (operations *Phase5ExactGuestOperations) Provision(ctx context.Context, kin
 		if err != nil {
 			return err
 		}
-		session, err := engine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 2, MaxCumulativeRequestBytes: 32 * 1024, MaxDuration: 20 * time.Second})
+		session, err := engine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 2, MaxCumulativeRequestBytes: 32 * 1024, MaxDuration: operations.config.Timeout})
 		if err != nil {
 			_ = engine.Close(context.Background())
 			return err

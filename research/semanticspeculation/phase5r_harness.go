@@ -1,4 +1,4 @@
 package semanticspeculation
 
-// Phase5RHarnessIdentity binds the final independent remediation mechanism harness.
-const Phase5RHarnessIdentity = "sha256:56e0725fe8831fd7f5ed4e6b5c16faed391caad60177ef6f4ffd2d715781826e"
+// Phase5RHarnessIdentity binds the final P5R mechanism-remediation source set.
+const Phase5RHarnessIdentity = "sha256:28bf534099b1ace3d5bd8a5018e0b709a4377c05385c2ca248d5b6d8ae19b127"

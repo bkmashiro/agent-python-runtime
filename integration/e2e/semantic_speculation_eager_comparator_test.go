@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/research/semanticspeculation"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -113,6 +114,47 @@ func TestExactGuestScheduledEagerTreatmentUsesFrozenCaseWithoutHints(t *testing.
 	}
 	if result.Outcome.FinalProgramOutcome != "success" || !result.Outcome.FinalPythonStarted ||
 		result.Outcome.PrefixPythonExecutions != 1 || result.Outcome.LogicalCalls != 0 || calls.Load() != 0 {
+		t.Fatalf("result=%+v calls=%d", result, calls.Load())
+	}
+}
+
+func TestExactGuestScheduledEagerTreatmentExecutesDeniedExternalReadOnlyAfterFinalSource(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Uint32
+	handler := capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+		calls.Add(1)
+		return json.RawMessage(`{"value":"weather"}`), nil
+	})
+	plan := eagerComparatorCapabilityPlan(t, handler)
+	factory := func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "eager-scheduled-external-read", Plan: plan})
+	}
+	runConfig := runtimeconfig.DefaultRunConfig()
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	treatment, err := semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{
+		Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: factory,
+		RunID: "eager-scheduled-external-read", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "eager-scheduled-external-read",
+		ProviderObservation: func() semanticspeculation.ProviderObservation {
+			return semanticspeculation.ProviderObservation{Attempts: calls.Load(), ResultBytes: uint64(len(`{"value":"weather"}`)), CostUnits: uint64(calls.Load()), Dispositions: semanticspeculation.PhysicalDispositions{Consumed: calls.Load()}}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := semanticspeculation.Phase3SyntheticCases()[2]
+	result, err := semanticspeculation.RunScheduledTreatment(context.Background(), fixture, treatment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome.FinalProgramOutcome != "success" || result.Outcome.PrefixPythonExecutions != 0 || result.Outcome.LogicalCalls != 1 || calls.Load() != 1 || result.Outcome.ResultSHA256 == "" || result.Outcome.AuthorityDisposition != "read_consumed" {
 		t.Fatalf("result=%+v calls=%d", result, calls.Load())
 	}
 }

@@ -222,6 +222,8 @@ Report:
 
 The v0 census rejected all 69 candidate regions, partly because static materialisability requires an effect-free whole-module summary. Improve analysis only enough to obtain sound region-local top-level effect coverage. Preserve `may_raise`, heap mutation, unknown call and opaque-control barriers.
 
+**2026-08-20 region-local slice:** The target-Guest analyzer now recognizes only exact `bool`/`int` constants and `+`/`-`/`*` chains over names previously proven by the same top-level scan. This lets a scalar assignment remain locally eligible even when a later independent statement performs a Host effect. Input-derived unknown types, division, calls, heap mutation and opaque control remain rejected. Exact source spans, canonical live-ins/live-outs, producer dependencies, effects, barriers and analyzer/source/AST bindings remain explicit; local eligibility carries no Host execution or materialisation authority. Exact Guest `sha256:cdb440e794b5865878e602eeebf4fe8198a20b33a140f7d4e87a679b1fa89191` passed the positive and adjacent negative controls. The next step remains freezing the multi-region census matrix before measuring eligibility or cost shape.
+
 Run a fixed natural-agent corpus census. Report:
 
 - candidate and admitted regions;

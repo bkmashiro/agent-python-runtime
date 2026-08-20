@@ -2,9 +2,34 @@ package semanticspeculation
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"testing"
 )
+
+func TestPhase4CampaignCoordinatesAreCompleteSeededAndDeterministic(t *testing.T) {
+	first := Phase4CampaignCoordinates()
+	second := Phase4CampaignCoordinates()
+	if len(first) != 360 || len(second) != 360 {
+		t.Fatalf("coordinates=%d/%d", len(first), len(second))
+	}
+	left, _ := json.Marshal(first)
+	right, _ := json.Marshal(second)
+	if !bytes.Equal(left, right) {
+		t.Fatal("phase 4 coordinate order is not deterministic")
+	}
+	seen := map[Phase4CampaignCoordinate]bool{}
+	for _, coordinate := range first {
+		if seen[coordinate] {
+			t.Fatalf("duplicate coordinate %+v", coordinate)
+		}
+		seen[coordinate] = true
+	}
+	unshuffledFirst := Phase4CampaignCoordinate{Profile: "cold_end_to_end", CaseID: "direct_read_short_control", Treatment: "eager_style_gate", TrialIndex: 1}
+	if first[0] == unshuffledFirst {
+		t.Fatal("campaign coordinates were not shuffled")
+	}
+}
 
 func TestPhase4ExtensionMatrixIsFrozenAndBodyFree(t *testing.T) {
 	sealed, err := SealPhase4ExtensionMatrix(NewPhase4ExtensionMatrix())

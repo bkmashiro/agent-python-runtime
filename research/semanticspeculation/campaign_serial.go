@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -33,16 +34,17 @@ type SerialGuestTreatmentConfig struct {
 }
 
 type SerialGuestTreatment struct {
-	config    SerialGuestTreatmentConfig
-	inputs    json.RawMessage
-	source    strings.Builder
-	runner    enginecontract.Runner
-	broker    *capability.Broker
-	manager   *workspace.Manager
-	attempt   *workspace.Attempt
-	begun     bool
-	finalized bool
-	once      sync.Once
+	config               SerialGuestTreatmentConfig
+	inputs               json.RawMessage
+	source               strings.Builder
+	runner               enginecontract.Runner
+	broker               *capability.Broker
+	manager              *workspace.Manager
+	attempt              *workspace.Attempt
+	begun                bool
+	finalized            bool
+	formalExecutionNanos uint64
+	once                 sync.Once
 }
 
 func NewSerialGuestTreatment(config SerialGuestTreatmentConfig) (*SerialGuestTreatment, error) {
@@ -132,7 +134,9 @@ func (t *SerialGuestTreatment) Finalize(ctx context.Context) (TreatmentOutcome, 
 	if err != nil {
 		return TreatmentOutcome{}, err
 	}
+	formalStarted := time.Now()
 	responseBytes, runErr := t.runner.Run(ctx, request, t.config.Plan.PythonPrelude())
+	t.formalExecutionNanos = uint64(time.Since(formalStarted))
 	closeErr := t.runner.Close(ctx)
 	if runErr != nil {
 		if errors.Is(runErr, runtimeconfig.ErrAgentSourceInvalid) {
@@ -225,6 +229,13 @@ func (t *SerialGuestTreatment) Finalize(ctx context.Context) (TreatmentOutcome, 
 		return TreatmentOutcome{}, err
 	}
 	return outcome, nil
+}
+
+func (t *SerialGuestTreatment) FormalExecutionNanos() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.formalExecutionNanos
 }
 
 func (t *SerialGuestTreatment) Cancel(ctx context.Context) error {

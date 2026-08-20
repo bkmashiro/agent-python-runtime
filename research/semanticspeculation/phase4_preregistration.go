@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/rand"
 )
 
 const Phase4ExtensionMatrixSchemaVersion = "pysolate.semantic-speculation-phase4-extension-matrix.v1"
@@ -80,6 +81,32 @@ type Phase4SyntheticCoordinate struct {
 	CandidatePrefixIndices []uint32
 	PhysicalDelayMillis    uint32
 	Fixture                SyntheticCase
+}
+
+type Phase4CampaignCoordinate struct {
+	Profile    string `json:"profile"`
+	CaseID     string `json:"case_id"`
+	Treatment  string `json:"treatment"`
+	TrialIndex uint32 `json:"trial_index"`
+}
+
+// Phase4CampaignCoordinates expands the frozen matrix in canonical order before
+// applying its seeded shuffle. Go map iteration cannot affect measurement order.
+func Phase4CampaignCoordinates() []Phase4CampaignCoordinate {
+	matrix := NewPhase4ExtensionMatrix()
+	coordinates := make([]Phase4CampaignCoordinate, 0, len(matrix.Profiles)*len(matrix.Coordinates)*len(matrix.Treatments)*int(matrix.TrialsPerTreatment))
+	for _, profile := range matrix.Profiles {
+		for _, candidate := range matrix.Coordinates {
+			for _, treatment := range matrix.Treatments {
+				for trial := uint32(1); trial <= matrix.TrialsPerTreatment; trial++ {
+					coordinates = append(coordinates, Phase4CampaignCoordinate{Profile: profile, CaseID: candidate.ID, Treatment: treatment, TrialIndex: trial})
+				}
+			}
+		}
+	}
+	random := rand.New(rand.NewSource(int64(matrix.ShuffleSeed)))
+	random.Shuffle(len(coordinates), func(i, j int) { coordinates[i], coordinates[j] = coordinates[j], coordinates[i] })
+	return coordinates
 }
 
 func Phase4SyntheticCoordinates() []Phase4SyntheticCoordinate {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -42,16 +44,17 @@ type eagerGuestRunResult struct {
 }
 
 type EagerGuestTreatment struct {
-	config    EagerGuestTreatmentConfig
-	ctx       context.Context
-	cancel    context.CancelFunc
-	runner    streaming.StreamRunner
-	broker    *capability.Broker
-	prepares  chan string
-	completed chan eagerGuestRunResult
-	once      sync.Once
-	manager   *workspace.Manager
-	attempt   *workspace.Attempt
+	config               EagerGuestTreatmentConfig
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	runner               streaming.StreamRunner
+	broker               *capability.Broker
+	prepares             chan string
+	completed            chan eagerGuestRunResult
+	formalExecutionNanos atomic.Uint64
+	once                 sync.Once
+	manager              *workspace.Manager
+	attempt              *workspace.Attempt
 }
 
 func NewEagerGuestTreatment(config EagerGuestTreatmentConfig) (*EagerGuestTreatment, error) {
@@ -121,7 +124,9 @@ func (t *EagerGuestTreatment) Begin(ctx context.Context, inputs json.RawMessage)
 	t.completed = make(chan eagerGuestRunResult, 1)
 	request, _ := json.Marshal(runtimeconfig.RunRequest{RunID: t.config.RunID, Code: "result = comparator_final", Inputs: json.RawMessage(`{}`)})
 	go func() {
+		formalStarted := time.Now()
 		response, runErr := t.runner.RunStream(t.ctx, request, t.prepares)
+		t.formalExecutionNanos.Store(uint64(time.Since(formalStarted)))
 		t.completed <- eagerGuestRunResult{response: response, err: runErr}
 	}()
 	t.prepares <- begin
@@ -231,6 +236,13 @@ func (t *EagerGuestTreatment) Finalize(ctx context.Context) (TreatmentOutcome, e
 		return TreatmentOutcome{}, err
 	}
 	return outcome, nil
+}
+
+func (t *EagerGuestTreatment) FormalExecutionNanos() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.formalExecutionNanos.Load()
 }
 
 func (t *EagerGuestTreatment) Cancel(ctx context.Context) error {

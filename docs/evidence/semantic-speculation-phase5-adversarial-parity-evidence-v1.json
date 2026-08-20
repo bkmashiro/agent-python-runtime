@@ -1,0 +1,121 @@
+{
+  "boundary": {
+    "analyzer_executes_agent_source": false,
+    "broker_available": false,
+    "final_execution_is_fresh": true,
+    "final_run_source_unchanged": true,
+    "runtime_fallback_or_replay": false,
+    "scratch_is_separate_fresh_guest": true,
+    "workspace_mounted": false
+  },
+  "implementation": {
+    "harness_commit": "6efa2cf40ab84e2936a79242e6ae0cd69a19690b",
+    "linux_test_binary_sha256": "sha256:1236c3f65d08e5685d7f4d237b617ef246ffe977a9ca23fa4060e262eca3fa98",
+    "manifest_sha256": "sha256:ad1affb32a14f0feababcf5c3c6fd614aa699ac71a97b9ec44278bdf6098ad9c",
+    "source_commit": "fa5dd8351a31672741e5054df2773f3caf476f44",
+    "wasm_sha256": "sha256:621f5fcec3f4bc7fc3550aa8fd1a275e7a6c09017518f535395c5bae84a297cb"
+  },
+  "linux_exact_guest": {
+    "cases": {
+      "exception_after_region": {
+        "baseline_derived_failure_equal": true,
+        "claims": 1,
+        "consumed": 1,
+        "discarded": 0,
+        "elapsed_seconds": 19.97,
+        "error_type": "LookupError",
+        "message": "after region",
+        "traceback_line": 3
+      },
+      "exception_before_region": {
+        "baseline_derived_failure_equal": true,
+        "claims": 0,
+        "consumed": 0,
+        "discarded": 1,
+        "elapsed_seconds": 20.0,
+        "error_type": "ValueError",
+        "message": "before region",
+        "traceback_line": 3
+      },
+      "pre_cancelled": {
+        "claims": 0,
+        "consumed": 0,
+        "discarded": 1,
+        "elapsed_seconds": 11.13,
+        "guest_response": false,
+        "host_error": true
+      }
+    },
+    "elapsed_seconds": 51.16,
+    "host": "gpu31",
+    "status": "pass"
+  },
+  "macos_exact_guest": {
+    "cases": {
+      "exception_after_region": {
+        "baseline_derived_failure_equal": true,
+        "claims": 1,
+        "consumed": 1,
+        "discarded": 0,
+        "elapsed_seconds": 12.96,
+        "error_type": "LookupError",
+        "message": "after region",
+        "traceback_line": 3
+      },
+      "exception_before_region": {
+        "baseline_derived_failure_equal": true,
+        "claims": 0,
+        "consumed": 0,
+        "discarded": 1,
+        "elapsed_seconds": 12.93,
+        "error_type": "ValueError",
+        "message": "before region",
+        "traceback_line": 3
+      },
+      "pre_cancelled": {
+        "claims": 0,
+        "consumed": 0,
+        "discarded": 1,
+        "elapsed_seconds": 7.22,
+        "guest_response": false,
+        "host_error": true
+      }
+    },
+    "elapsed_seconds": 33.14,
+    "status": "pass"
+  },
+  "open_work": [
+    "freeze Phase 5 mechanism/economics preregistration before timing campaign",
+    "measure analysis, scratch, transport, validation, compile/load, and final execution in cold and pre-provisioned profiles",
+    "run independent aggregate and evidence gates"
+  ],
+  "parity_claim": {
+    "authority_state": "no Broker and no workspace in both lanes",
+    "exception_class_message_traceback_logs_parity": "pass",
+    "logical_capability_calls": 0,
+    "result_parity": "pass in prior positive selection evidence",
+    "scope": "authored authority-free scalar mechanism controls only",
+    "unclaimed_paths": "invalid suffix, pre-region exception, and cancellation consume zero regions"
+  },
+  "phase3_negative_baseline_modified": false,
+  "phase5_gate_passed": false,
+  "prior_invalid_suffix_control": {
+    "claims": 0,
+    "consumed": 0,
+    "evidence": "docs/evidence/semantic-speculation-phase5-selection-evidence-v1.json",
+    "rejected_before_execution": true
+  },
+  "recorded_date": "2026-08-20",
+  "schema_version": "pysolate.semantic-speculation-phase5-adversarial-parity-evidence.v1",
+  "verification": {
+    "artifact_verifier": "pass",
+    "git_diff_check": "pass",
+    "go_runtime_tests": "pass",
+    "go_vet_runtime": "pass",
+    "python_guest_tests": 135,
+    "race_packages": [
+      "./runtime/preparedregion",
+      "./runtime/engine/wazero"
+    ]
+  }
+}

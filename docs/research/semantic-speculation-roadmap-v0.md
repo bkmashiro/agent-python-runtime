@@ -94,23 +94,23 @@ Keep three identities separate:
 
 The first executable spike should implement only (1). Current corpus evidence found no exact materialisable cross-program repeats, so a durable region cache is not yet justified.
 
-## Large result transport and shared backing
+## Large result transport and Host ownership
 
-A large prepared result does not imply that arbitrary Python heap pages should move between Guests. Ordinary CPython allocations mix object headers, allocator metadata, unrelated objects and interpreter-local pointers on the same pages. Promoting those dirty pages would transfer hidden heap state and usually requires identical virtual addresses. A read-only `PyObject*` is still interpreter-owned and is not a transferable value.
+A large prepared result does not imply that arbitrary Python heap pages should move between Guests. Ordinary CPython allocations mix object headers, allocator metadata, unrelated objects and interpreter-local pointers on the same pages. A read-only `PyObject*` is still interpreter-owned and is not a transferable value.
 
-The bounded alternative is a dedicated pointer-free arena allocated for transfer from the beginning:
+The bounded design keeps one canonical typed body outside every Guest:
 
 ```text
-Host-owned sealed backing
-  -> Guest A local wrapper + SHARED_RO view
-  -> Guest B local wrapper + SHARED_RO or SHARED_COW view
+producer Guest payload
+  -> one bounded copy into Host-owned immutable blob storage
+  -> one canonical Host body and typed descriptor
+  -> one bounded copy into each consuming Guest
+  -> local bytes/NumPy/DataFrame wrappers
 ```
 
-Only payload bytes are shared. Each Guest constructs its own `memoryview`, NumPy array or other allowlisted wrapper, while the Host owns the backing FD, lease, generation, privacy partition and teardown. `SHARED_RW` is excluded.
+The Host owns the blob handle, generation, body, computation/content identity, privacy partition, quota, expiry and teardown. Each Guest owns its reconstructed Python wrapper and private local bytes. A dedicated bounded binary Host/Guest copy ABI may avoid JSON/base64 and redundant serialisation, but it does not expose Host pointers or FDs.
 
-On Linux the existing wazero backend already supplies a custom `experimental.MemoryAllocator` and maps a sealed `memfd` as whole-linear-memory `MAP_PRIVATE` views. A measured spike may reserve a fixed page-aligned arena inside that owned mapping and test quiescent same-address subrange remapping without replacing the CPython allocator or forking wazero. Producer-created data must use the arena from allocation time; anonymous dirty CPython pages cannot generally be promoted to shared backing without copying.
-
-This branch is justified only when measured encode/copy/load cost dominates. It must retain typed copy transport as fallback and prove sealed backing, fresh generation-bound handles, cross-Guest write isolation, physical sharing, deterministic teardown and no raw FD or Host pointer in Guest-visible state.
+This intentionally trades zero-copy fan-out for a smaller and clearer authority boundary. It needs no transferable linear-memory arena, subrange remapping, general CPython allocator change, shared mutable memory or engine fork. NumPy and DataFrame support remains typed: pointer-bearing `dtype=object`, arbitrary extension arrays, pickle and generic Python object graphs are rejected. The implementation must measure producer-to-Host copy, Host-to-Guest copy per consumer, reconstruction, peak memory and recomputation before retaining a large type.
 
 ## Computation identity for a prepared region
 

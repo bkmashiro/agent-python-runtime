@@ -404,31 +404,40 @@ Tasks:
 
 Subphases in order:
 
-1. bytes/text/JSON structures with ordinary typed copy transport;
-2. a measurement-triggered Linux-only immutable shared-backing feasibility spike;
-3. NumPy array only under an exact profile containing NumPy;
-4. Arrow/Parquet table only if the selected Guest profile already contains the required package and a natural workload justifies it.
+1. bytes/text/JSON structures with Host-owned immutable blob storage;
+2. NumPy array only under an exact profile containing NumPy;
+3. DataFrame/Arrow/Parquet only if the selected Guest profile contains the required package and a natural workload justifies it.
 
-Tasks for each copied type:
+Transport boundary:
+
+```text
+producer Guest typed payload
+  -> one bounded copy into a Host-owned immutable blob
+  -> Host retains one canonical body plus typed descriptor
+  -> each consuming Guest performs one bounded copy into its private local object
+  -> Python/NumPy/pandas wrappers remain interpreter-local
+```
+
+Tasks for each type:
 
 - [ ] Freeze schema/codec/version/size bounds and semantic limitations.
 - [ ] RED-test malformed data, decompression/shape/size bombs, version/profile mismatch, object-identity assumptions and unsafe path access.
-- [ ] Implement canonical encode/hash/store/load with no generic executable deserialization.
-- [ ] Measure early compute, serialize, hash/store, final load, peak memory and recompute baseline across predeclared sizes.
+- [ ] Implement a generation-bound Host blob handle and typed descriptor. The Host owns body lifetime, privacy partition, computation identity, quota, expiry and teardown; raw pointers, FDs and Host paths never enter Guest-visible state.
+- [ ] Add a bounded binary Host/Guest copy seam if the existing JSON tool response would require base64 or redundant whole-body encodings. Producer publication copies Guest bytes once into Host-owned storage; consumer materialisation copies Host bytes once into a newly allocated Guest-local destination.
+- [ ] Reconstruct local `bytes`/buffer/NumPy/DataFrame wrappers only after bounds, dtype, shape, strides, profile and exact computation identity validate.
+- [ ] Keep pointer-bearing `dtype=object`, arbitrary extension arrays, pickle and generic Python object graphs rejected.
+- [ ] RED-test stale/cross-project handles, eviction during claim, producer/consumer cancellation, body tampering, partial reads/writes, concurrent claims, quota exhaustion and instance teardown.
+- [ ] Measure early compute, producer-to-Host copy, hash/store, Host-to-Guest copy, wrapper reconstruction, peak Host/Guest memory and recompute baseline across predeclared sizes and fan-out counts.
 - [ ] Retain a type only over a measured profitable range and document fallback.
 - [ ] Keep result bodies private; commit body-safe aggregates.
 
-Shared-backing branch, only when measured copy/serialization cost dominates:
+Explicitly deferred:
 
-- [ ] Freeze the boundary as Host-owned immutable value storage with per-Guest local wrappers; never share `PyObject*`, CPython allocator metadata, interpreter heap, capability tables or arbitrary mutable memory.
-- [ ] Compare three bounded transports for the same pointer-free bytes/array payload: ordinary copy, `SHARED_RO`, and `SHARED_COW`; do not implement `SHARED_RW`.
-- [ ] Start from the existing Linux `experimental.MemoryAllocator` and sealed-`memfd` COW path. Reserve a fixed page-aligned transferable arena and test same-address subrange remapping only at a quiescent boundary. Do not fork wazero or replace the general CPython allocator in this goal.
-- [ ] Give each Guest a fresh generation-bound opaque handle and local buffer-protocol wrapper. A Host-owned lease owns the backing FD, mapping lifetime, refcount, privacy partition and content/computation identity; raw FDs and Host pointers never enter Guest-visible state.
-- [ ] For producer-created data, require a dedicated arena from allocation time. Quiesce the producer, remove writable shared mappings, seal the backing, then map consumers read-only or private-COW. Do not attempt to promote arbitrary dirty CPython heap pages after allocation.
-- [ ] RED-test stale handles, cross-project claims, unsealed/mutable backing, producer or consumer teardown, failed remap, concurrent access, consumer write isolation, source/object identity drift, `memory.grow`, and partial publication.
-- [ ] Prove A and B observe identical initial bytes, B writes cannot affect A or the sealed backing, and every teardown releases Host leases without relying on Python finalizers.
-- [ ] Measure physical sharing with Linux mapping/PSS evidence and active dirty bytes; do not infer zero-copy from equal values or refcounts.
-- [ ] Stop before an engine fork, arbitrary Python-object sharing, movable backing, shared mutable memory or broad allocator replacement. Preserve typed copy transport as fallback.
+- no transferable arena inside linear memory;
+- no `MAP_FIXED` subrange remapping;
+- no zero-copy Host buffer exposed as a Python buffer;
+- no arbitrary dirty-page promotion or Python heap transfer;
+- no shared mutable memory, raw FD transfer, general CPython allocator replacement or wazero fork.
 
 Cache branch:
 
@@ -438,7 +447,7 @@ Cache branch:
 - [ ] Never use overlay digest, natural-language task text or equal arguments alone as cache identity.
 - [ ] Add expiry/invalidation/quota/body-size and corrupted-entry tests before enabling any completed-result reuse.
 
-**Gate P7:** Each retained codec/cache/backing mode has positive measured economics and strict identity. `SHARED_RO`/`SHARED_COW` additionally require a dedicated pointer-free arena, local wrappers, quiescent publication, sealed Host backing, cross-instance write isolation and deterministic teardown. If scalar succeeds but every large type loses to recomputation, record scalar-only support and continue. If safe transport requires arbitrary heap transfer, general CPython allocator replacement, shared mutable authority, generic pickle semantics or a wazero fork, stop.
+**Gate P7:** Each retained codec/cache mode has positive measured economics and strict identity. The Host owns one immutable canonical body; every consuming Guest receives one bounded private copy and reconstructs interpreter-local wrappers. If scalar succeeds but every large type loses to recomputation, record scalar-only support and continue. If safe transport requires arbitrary heap transfer, pointer-bearing values, generic pickle semantics, shared mappings, broad allocator replacement or a wazero fork, stop.
 
 ### Phase 8: Private-workspace file preparation
 

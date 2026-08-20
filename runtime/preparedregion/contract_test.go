@@ -143,6 +143,41 @@ func TestPreparedRegionPatchBindsFinalSourceAndCarriesNoPayload(t *testing.T) {
 	}
 }
 
+func TestPreparedRegionPatchBindingDecoderAcceptsOnlyCanonicalGuestEmission(t *testing.T) {
+	_, decision, err := SealPreparedRegionDecision(validPreparedRegionBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := PreparedRegionPatchBinding{DecisionSHA256: decision.IdentitySHA256, FinalSourceSHA256: testDigestA, FinalASTSHA256: testDigestA, DerivedASTSHA256: testDigestB, RegionID: decision.RegionID, RegionSpan: decision.RegionSpan, OutputName: decision.OutputName}
+	encoded, err := json.Marshal(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generic any
+	if err := json.Unmarshal(encoded, &generic); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(generic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodePreparedRegionPatchBinding(raw)
+	if err != nil || decoded != binding {
+		t.Fatalf("decode=(%+v,%v) want=%+v", decoded, err, binding)
+	}
+	for name, candidate := range map[string][]byte{
+		"unknown":  append(append([]byte(nil), raw[:len(raw)-1]...), []byte(`,"extra":true}`)...),
+		"trailing": append(append([]byte(nil), raw...), ' '),
+		"tamper":   bytes.Replace(raw, []byte(testDigestB), []byte(`"bad"`), 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, decodeErr := DecodePreparedRegionPatchBinding(candidate); decodeErr == nil {
+				t.Fatalf("accepted %s binding", name)
+			}
+		})
+	}
+}
+
 func TestPreparedRegionCapsuleAndPatchDecodersRejectTamperAndNoncanonicalData(t *testing.T) {
 	_, decision, err := SealPreparedRegionDecision(validPreparedRegionBinding())
 	if err != nil {

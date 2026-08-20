@@ -103,6 +103,17 @@ func (session *SemanticAnalysisSession) Run(context.Context, []byte, string) ([]
 }
 
 func (session *SemanticAnalysisSession) AnalyzeSemantic(ctx context.Context, request []byte) (payload []byte, analysisErr error) {
+	return session.callQualificationGuest(ctx, request, "runtime_analyze_source")
+}
+
+// EmitPreparedRegionPatch asks the same private authority-free target Guest to
+// validate one source-bound decision and emit only the derived-AST identity
+// binding. It cannot execute Agent source or access Broker/workspace state.
+func (session *SemanticAnalysisSession) EmitPreparedRegionPatch(ctx context.Context, request []byte) ([]byte, error) {
+	return session.callQualificationGuest(ctx, request, "runtime_emit_prepared_region_patch")
+}
+
+func (session *SemanticAnalysisSession) callQualificationGuest(ctx context.Context, request []byte, export string) (payload []byte, analysisErr error) {
 	if session == nil || ctx == nil {
 		return nil, ErrSemanticAnalysisSessionClosed
 	}
@@ -137,7 +148,7 @@ func (session *SemanticAnalysisSession) AnalyzeSemantic(ctx context.Context, req
 		return nil, err
 	}
 	started := time.Now()
-	payload, err := callGuestResponse(callContext, session.module, "runtime_analyze_source", request, session.engine.config.MaxResponseBytes)
+	payload, err := callGuestResponse(callContext, session.module, export, request, session.engine.config.MaxResponseBytes)
 	session.lifecycle.AnalyzeNanos += uint64(time.Since(started))
 	if err != nil {
 		session.lifecycle.Failures++

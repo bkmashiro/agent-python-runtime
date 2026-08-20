@@ -213,6 +213,28 @@ type PreparedRegionPatchBinding struct {
 	OutputName        string     `json:"output_name"`
 }
 
+// DecodePreparedRegionPatchBinding validates the canonical, payload-free
+// binding emitted by the target Guest before the Host seals a patch identity.
+func DecodePreparedRegionPatchBinding(raw []byte) (PreparedRegionPatchBinding, error) {
+	var binding PreparedRegionPatchBinding
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&binding) != nil || decoder.Decode(&struct{}{}) != io.EOF || !validPreparedRegionPatchBinding(binding) {
+		return PreparedRegionPatchBinding{}, ErrInvalidPreparedRegion
+	}
+	var generic any
+	canonicalDecoder := json.NewDecoder(bytes.NewReader(raw))
+	canonicalDecoder.UseNumber()
+	if canonicalDecoder.Decode(&generic) != nil {
+		return PreparedRegionPatchBinding{}, ErrInvalidPreparedRegion
+	}
+	canonical, err := json.Marshal(generic)
+	if err != nil || !bytes.Equal(raw, canonical) {
+		return PreparedRegionPatchBinding{}, ErrInvalidPreparedRegion
+	}
+	return binding, nil
+}
+
 type PreparedRegionPatch struct {
 	SchemaVersion string `json:"schema_version"`
 	PassSchema    string `json:"pass_schema"`

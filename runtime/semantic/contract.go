@@ -61,14 +61,15 @@ const (
 	CandidateRegionOpaqueControl CandidateRegionKind = "opaque_control"
 	CandidateRegionDeclaration   CandidateRegionKind = "declaration"
 
-	CandidateRejectOpaqueControl       CandidateRejection = "opaque_control"
-	CandidateRejectDeclaration         CandidateRejection = "declaration"
-	CandidateRejectHeapMutation        CandidateRejection = "heap_mutation"
-	CandidateRejectIdentityAlias       CandidateRejection = "identity_alias"
-	CandidateRejectMayRaise            CandidateRejection = "may_raise"
-	CandidateRejectUnknownEffect       CandidateRejection = "unknown_effect"
-	CandidateRejectLiveInNotCanonical  CandidateRejection = "live_in_not_canonical"
-	CandidateRejectLiveOutNotCanonical CandidateRejection = "live_out_not_canonical"
+	CandidateRejectOpaqueControl         CandidateRejection = "opaque_control"
+	CandidateRejectDeclaration           CandidateRejection = "declaration"
+	CandidateRejectHeapMutation          CandidateRejection = "heap_mutation"
+	CandidateRejectIdentityAlias         CandidateRejection = "identity_alias"
+	CandidateRejectReservedHelperBinding CandidateRejection = "reserved_helper_binding"
+	CandidateRejectMayRaise              CandidateRejection = "may_raise"
+	CandidateRejectUnknownEffect         CandidateRejection = "unknown_effect"
+	CandidateRejectLiveInNotCanonical    CandidateRejection = "live_in_not_canonical"
+	CandidateRejectLiveOutNotCanonical   CandidateRejection = "live_out_not_canonical"
 )
 
 type EffectSummary struct {
@@ -528,7 +529,7 @@ func validCandidateRejections(values []CandidateRejection) bool {
 
 func validCandidateRejection(value CandidateRejection) bool {
 	switch value {
-	case CandidateRejectOpaqueControl, CandidateRejectDeclaration, CandidateRejectHeapMutation, CandidateRejectIdentityAlias, CandidateRejectMayRaise,
+	case CandidateRejectOpaqueControl, CandidateRejectDeclaration, CandidateRejectHeapMutation, CandidateRejectIdentityAlias, CandidateRejectReservedHelperBinding, CandidateRejectMayRaise,
 		CandidateRejectUnknownEffect, CandidateRejectLiveInNotCanonical, CandidateRejectLiveOutNotCanonical:
 		return true
 	default:

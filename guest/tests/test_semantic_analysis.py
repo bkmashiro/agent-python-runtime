@@ -182,6 +182,29 @@ class SemanticAnalysisTests(unittest.TestCase):
         self.assertEqual(["alias"], alias["live_outs"])
         self.assertEqual("items", alias["data_dependencies"][0]["name"])
 
+    def test_prepared_region_helper_binding_is_reserved_for_the_whole_source(self):
+        helper = "__pysolate_materialize_value__"
+        unsafe_sources = (
+            f"{helper} = lambda value: value\nresult = 1\n",
+            f"def {helper}(value):\n    return value\nresult = 1\n",
+            f"def f({helper}):\n    return 1\nresult = f(None)\n",
+            f"del {helper}\nresult = 1\n",
+            f"import json as {helper}\nresult = 1\n",
+            f"result = {helper}('sha256:' + 'a' * 64)\n",
+            "globals()['__pysolate_materialize_value__'] = lambda value: value\nresult = 1\n",
+            "exec('__pysolate_materialize_value__ = None')\nresult = 1\n",
+        )
+        for source in unsafe_sources:
+            with self.subTest(source=source):
+                report = self.analyze(source)
+                self.assertTrue(report["candidate_regions"])
+                for region in report["candidate_regions"]:
+                    self.assertIn("reserved_helper_binding", region["rejection_reasons"])
+
+    def test_prepared_region_helper_name_inside_literal_does_not_reserve_binding(self):
+        report = self.analyze("note = '__pysolate_materialize_value__'\nresult = 1\n")
+        self.assertNotIn("reserved_helper_binding", report["candidate_regions"][1]["rejection_reasons"])
+
     def test_candidate_regions_reject_explicit_and_expression_exception_paths(self):
         for source in (
             "assert inputs['ok']\n",

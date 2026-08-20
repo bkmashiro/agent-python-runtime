@@ -16,6 +16,7 @@ REQUIRED_EXPORTS = {
     "runtime_init",
     "runtime_validate_source",
     "runtime_analyze_source",
+    "runtime_emit_prepared_region_patch",
     "runtime_prepare",
     "alloc",
     "dealloc",

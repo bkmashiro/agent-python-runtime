@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
@@ -80,7 +81,71 @@ func TestExactGuestPreparedRegionHelperClaimsHostTableWithoutBrokerOrWorkspace(t
 	}
 }
 
+func TestExactGuestEmitsCanonicalPreparedRegionPatchBindingInPrivateSession(t *testing.T) {
+	artifact, profile := loadPreparedRegionArtifact(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	config.ExecutionProfile = &profile
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	analyzer, err := wazeroengine.New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer analyzer.Close(context.Background())
+	if properties := analyzer.Properties(); properties.CapabilityBrokerAvailable || properties.WorkspaceMounted {
+		t.Fatalf("patch emitter gained authority: %+v", properties)
+	}
+	source := "seed = 40\nvalue = seed + 2\nresult = value\n"
+	span := preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}
+	sourceSHA := preparedRegionDigest([]byte(source))
+	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x001\x002:0:2:16", sourceSHA)
+	binding := preparedregion.PreparedRegionBinding{
+		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
+		RegionSourceSHA256: preparedRegionDigest([]byte("value = seed + 2")), LiveInsSHA256: digestA,
+		EnvironmentSHA256: digestA, ExecutionProfileSHA256: digestA, ImportClosureSHA256: digestA,
+		CapabilityPlanSHA256: digestA, PassConfigSHA256: digestA,
+		Codec: preparedregion.PreparedRegionCodecJSONScalarV1, OutputName: "value",
+	}
+	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := analyzer.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: uint64(len(request)), MaxDuration: 20 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := session.EmitPreparedRegionPatch(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitted, err := preparedregion.DecodePreparedRegionPatchBinding(payload)
+	if err != nil {
+		t.Fatalf("binding=%s err=%v", payload, err)
+	}
+	if emitted.DecisionSHA256 != decision.IdentitySHA256 || emitted.FinalSourceSHA256 != sourceSHA || emitted.RegionID != decision.RegionID || emitted.RegionSpan != span || emitted.OutputName != "value" || emitted.FinalASTSHA256 == emitted.DerivedASTSHA256 {
+		t.Fatalf("emitted=%+v", emitted)
+	}
+	_, patch, err := preparedregion.SealPreparedRegionPatch(emitted)
+	if err != nil || patch.ValidateDecision(decision) != nil {
+		t.Fatalf("patch=%+v err=%v", patch, err)
+	}
+	if err := session.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 const digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+func preparedRegionDigest(value []byte) string {
+	digest := sha256.Sum256(value)
+	return fmt.Sprintf("sha256:%x", digest[:])
+}
 
 func runPreparedRegionExact(t *testing.T, artifact []byte, config runtimeconfig.RunConfig, table *preparedregion.PreparedRegionTable, runID string, code string) []byte {
 	t.Helper()

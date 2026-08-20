@@ -7,7 +7,7 @@ import re
 
 
 ANALYSIS_SCHEMA_VERSION = "pysolate.semantic-analysis.v3"
-ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v6").hexdigest()
+ANALYZER_IDENTITY_SHA256 = "sha256:" + hashlib.sha256(b"pysolate.semantic-analyzer.v7").hexdigest()
 MAX_SOURCE_BYTES = 1 << 20
 MAX_CAPABILITIES = 128
 MAX_FUNCTIONS = 256
@@ -32,6 +32,8 @@ _KEY_CALLBACK_BUILTINS = {"max", "min", "sorted"}
 _LOCAL_MUTATIONS = {"add", "append", "clear", "discard", "extend", "insert", "pop", "remove", "reverse", "sort", "update"}
 _CLOCK_RANDOM_ROOTS = {"datetime", "random", "secrets", "time"}
 _SAFE_IMPORT_ROOTS = _CLOCK_RANDOM_ROOTS | {"math", "os", "sys"}
+_PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
+_DYNAMIC_NAMESPACE_CALLS = {"compile", "eval", "exec", "globals", "locals", "vars"}
 
 
 def _digest(value):
@@ -504,6 +506,57 @@ class _RegionNames(ast.NodeVisitor):
                 self.stores.add(alias.asname or alias.name)
 
 
+class _ReservedHelperUse(ast.NodeVisitor):
+    def __init__(self):
+        self.unsafe = False
+
+    def visit_Name(self, node):
+        if node.id == _PREPARED_REGION_HELPER:
+            self.unsafe = True
+
+    def visit_arg(self, node):
+        if node.arg == _PREPARED_REGION_HELPER:
+            self.unsafe = True
+
+    def visit_alias(self, node):
+        if (node.asname or node.name.split(".", 1)[0]) == _PREPARED_REGION_HELPER:
+            self.unsafe = True
+
+    def visit_FunctionDef(self, node):
+        if node.name == _PREPARED_REGION_HELPER:
+            self.unsafe = True
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node):
+        if node.name == _PREPARED_REGION_HELPER:
+            self.unsafe = True
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node):
+        if node.name == _PREPARED_REGION_HELPER:
+            self.unsafe = True
+        self.generic_visit(node)
+
+    def visit_Global(self, node):
+        if _PREPARED_REGION_HELPER in node.names:
+            self.unsafe = True
+
+    def visit_Nonlocal(self, node):
+        if _PREPARED_REGION_HELPER in node.names:
+            self.unsafe = True
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name) and node.func.id in _DYNAMIC_NAMESPACE_CALLS:
+            self.unsafe = True
+        self.generic_visit(node)
+
+
+def _uses_reserved_helper_binding(tree):
+    visitor = _ReservedHelperUse()
+    visitor.visit(tree)
+    return visitor.unsafe
+
+
 def _safe_scalar_expression(node, scalar_names):
     if isinstance(node, ast.Constant):
         if type(node.value) is bool:
@@ -616,7 +669,7 @@ def _span_contains(parent, child):
     return starts_before and ends_after
 
 
-def _candidate_regions(tree, source_sha256, function_ids, capability_index, call_sites, function_rows):
+def _candidate_regions(tree, source_sha256, function_ids, capability_index, call_sites, function_rows, reserved_helper_unsafe):
     if len(tree.body) > MAX_CANDIDATE_REGIONS:
         raise ValueError("semantic candidate region bound exceeded")
     ignored_names = set(_KNOWN_BUILTINS) | set(function_ids) | set(capability_index["tool_roots"])
@@ -670,6 +723,8 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
         live_ins_canonical = all(name in canonical_names for name in region_live_ins)
         live_outs_canonical = all(name in canonical_outputs for name in region_live_outs)
         rejections = set()
+        if reserved_helper_unsafe:
+            rejections.add("reserved_helper_binding")
         if kind == "opaque_control":
             rejections.add("opaque_control")
         if kind == "declaration":
@@ -848,7 +903,10 @@ def analyze_source(source, bindings, capabilities):
     )
     if len(all_barriers) > MAX_BARRIERS:
         raise ValueError("semantic barrier bound exceeded")
-    candidate_regions = _candidate_regions(tree, source_sha256, function_ids, capability_index, call_sites, rows)
+    candidate_regions = _candidate_regions(
+        tree, source_sha256, function_ids, capability_index, call_sites, rows,
+        _uses_reserved_helper_binding(tree),
+    )
     return {
         "schema_version": ANALYSIS_SCHEMA_VERSION,
         "source_sha256": source_sha256,

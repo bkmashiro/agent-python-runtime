@@ -358,13 +358,29 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if err != nil {
 		t.Fatal(err)
 	}
-	baselineEngine, err := wazeroengine.New(ctx, artifact, config)
+	originalConfig := config
+	originalConfig.Mechanisms.PreparedRuntime = true
+	originalConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	baselineEngine, err := wazeroengine.New(ctx, artifact, originalConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseline, err := baselineEngine.Run(ctx, runRequest, "")
+	originalCapacity, originalProvision, err := baselineEngine.PreparePreparedRegionFinal(ctx)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !originalProvision.NeverServed || (runtime.GOOS == "linux" && !originalProvision.COWHit) {
+		t.Fatalf("original final capacity not treatment-equivalent: %+v", originalProvision)
+	}
+	baseline, originalExecution, err := originalCapacity.ExecuteOriginal(ctx, runRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !originalExecution.PreparedCapacity || originalExecution.FormalGuestExecutions != 1 || originalExecution.SourceValidations != 1 || originalExecution.ModuleInstantiations != 0 || originalExecution.RuntimeInitCalls != 0 {
+		t.Fatalf("unexpected original execution lifecycle: %+v", originalExecution)
+	}
+	if response, _, err := originalCapacity.ExecuteOriginal(ctx, runRequest); response != nil || !errors.Is(err, wazeroengine.ErrPreparedRegionDerivedCapacityConsumed) {
+		t.Fatalf("second original execution response=%s err=%v", response, err)
 	}
 	if err := baselineEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)

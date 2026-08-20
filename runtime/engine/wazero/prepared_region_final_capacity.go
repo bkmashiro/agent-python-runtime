@@ -46,6 +46,7 @@ type PreparedRegionDerivedExecutionEvidence struct {
 	ModuleInstantiations  uint32 `json:"module_instantiations"`
 	RuntimeInitCalls      uint32 `json:"runtime_init_calls"`
 	FormalGuestExecutions uint32 `json:"formal_guest_executions"`
+	SourceValidations     uint32 `json:"source_validations"`
 	BrokerAvailable       bool   `json:"broker_available"`
 	WorkspaceMounted      bool   `json:"workspace_mounted"`
 }
@@ -77,7 +78,7 @@ func (engine *Engine) PreparePreparedRegionFinal(ctx context.Context) (_ *Prepar
 	properties := engine.Properties()
 	evidence.BrokerAvailable = properties.CapabilityBrokerAvailable
 	evidence.WorkspaceMounted = properties.WorkspaceMounted
-	if properties.CapabilityBrokerAvailable || properties.WorkspaceMounted || engine.preparedRegions == nil || engine.config.DeterministicVerification != nil {
+	if properties.CapabilityBrokerAvailable || properties.WorkspaceMounted || engine.config.DeterministicVerification != nil {
 		return nil, evidence, ErrPreparedRegionScratchAuthority
 	}
 	if err := engine.acquireSemanticSession(); err != nil {
@@ -245,6 +246,57 @@ func (capacity *PreparedRegionFinalCapacity) Execute(ctx context.Context, reques
 	return payload, evidence, nil
 }
 
+// ExecuteOriginal runs unchanged source once on an initialized, never-served
+// final capacity. It has no materialisation table, derived compile, or fallback.
+func (capacity *PreparedRegionFinalCapacity) ExecuteOriginal(ctx context.Context, request []byte) (payload []byte, evidence PreparedRegionDerivedExecutionEvidence, executionErr error) {
+	if capacity == nil || ctx == nil {
+		return nil, evidence, ErrPreparedRegionDerivedCapacityConsumed
+	}
+	capacity.mu.Lock()
+	defer capacity.mu.Unlock()
+	if capacity.closed || capacity.compiled || capacity.consumed || capacity.module == nil {
+		return nil, evidence, ErrPreparedRegionDerivedCapacityConsumed
+	}
+	capacity.consumed = true
+	evidence.PreparedCapacity = true
+	defer func() { executionErr = errors.Join(executionErr, capacity.closeLocked()) }()
+	if _, ok := enginecontract.InvocationRefFromContext(ctx); ok {
+		return nil, evidence, preparedregion.ErrInvalidPreparedRegion
+	}
+	if _, ok := enginecontract.ObservationSessionFromContext(ctx); ok {
+		return nil, evidence, preparedregion.ErrInvalidPreparedRegion
+	}
+	runRequest, err := validatePreparedRegionFinalRequest(capacity.engine, request)
+	if err != nil {
+		return nil, evidence, err
+	}
+	runContext, cancel := context.WithTimeout(ctx, capacity.engine.config.Timeout)
+	capacity.cancel = cancel
+	if err := callSourceValidation(runContext, capacity.module, request); err != nil {
+		return nil, evidence, withGuestDiagnostic(err, capacity.stderr.String())
+	}
+	evidence.SourceValidations = 1
+	payload, err = callExecute(runContext, capacity.module, request, capacity.engine.config.MaxResponseBytes)
+	if err != nil {
+		return nil, evidence, withGuestDiagnostic(err, capacity.stderr.String())
+	}
+	evidence.FormalGuestExecutions = 1
+	if capacity.stdout.Used() {
+		return payload, evidence, ErrGuestStdoutBypass
+	}
+	if _, err := runtimeconfig.DecodeAndValidateGuestRunResponse(runRequest, payload); err != nil && !errors.Is(err, runtimeconfig.ErrRunResultSchemaMismatch) {
+		return payload, evidence, err
+	}
+	payload, err = projectHostEvidence(payload, nil, 0, "", nil, capacity.engine.config.MaxResponseBytes)
+	if err != nil {
+		return nil, evidence, err
+	}
+	if _, err := runtimeconfig.DecodeAndValidateRunResponse(runRequest, payload); err != nil {
+		return payload, evidence, err
+	}
+	return payload, evidence, nil
+}
+
 func (capacity *PreparedRegionFinalCapacity) Close(context.Context) error {
 	if capacity == nil {
 		return nil
@@ -280,17 +332,8 @@ func (capacity *PreparedRegionFinalCapacity) closeLocked() error {
 }
 
 func validatePreparedRegionDerivedSelection(engine *Engine, request []byte, selection preparedregion.PreparedRegionExecutionSelection, decision preparedregion.PreparedRegionDecision, capsule preparedregion.PreparedRegionCapsule, patch preparedregion.PreparedRegionPatch) error {
-	if len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
-		return errors.New("request exceeds configured bounds")
-	}
-	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	runRequest, err := validatePreparedRegionFinalRequest(engine, request)
 	if err != nil {
-		return err
-	}
-	if err := runtimeconfig.AdmitRunRequirements(runRequest); err != nil {
-		return err
-	}
-	if err := runtimeconfig.EvaluateRunCompatibility(runRequest, engine.config.ExecutionProfile); err != nil {
 		return err
 	}
 	if selection.Validate(decision, capsule, patch) != nil || engine.preparedRegions.ValidateReady(decision, capsule) != nil {
@@ -305,6 +348,23 @@ func validatePreparedRegionDerivedSelection(engine *Engine, request []byte, sele
 		return preparedregion.ErrInvalidPreparedRegion
 	}
 	return nil
+}
+
+func validatePreparedRegionFinalRequest(engine *Engine, request []byte) (runtimeconfig.RunRequest, error) {
+	if engine == nil || len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
+		return runtimeconfig.RunRequest{}, errors.New("request exceeds configured bounds")
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return runtimeconfig.RunRequest{}, err
+	}
+	if err := runtimeconfig.AdmitRunRequirements(runRequest); err != nil {
+		return runtimeconfig.RunRequest{}, err
+	}
+	if err := runtimeconfig.EvaluateRunCompatibility(runRequest, engine.config.ExecutionProfile); err != nil {
+		return runtimeconfig.RunRequest{}, err
+	}
+	return runRequest, nil
 }
 
 func preparedRegionSelectionRequest(selection preparedregion.PreparedRegionExecutionSelection, decision preparedregion.PreparedRegionDecision, capsule preparedregion.PreparedRegionCapsule, patch preparedregion.PreparedRegionPatch) ([]byte, error) {

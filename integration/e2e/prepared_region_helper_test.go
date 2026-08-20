@@ -281,6 +281,8 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	artifact, profile := loadPreparedRegionArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.SemanticAnalysis = true
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
 	config.ExecutionProfile = &profile
 	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
 	if err != nil {
@@ -326,6 +328,19 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	session, err := qualificationEngine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: 16 * 1024, MaxDuration: 20 * time.Second})
 	if err != nil {
 		t.Fatal(err)
+	}
+	analyzerProvision, err := session.Prepare(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !analyzerProvision.NeverServed || analyzerProvision.ModuleInstantiations == 0 || analyzerProvision.RuntimeInitCalls == 0 || (runtime.GOOS == "linux" && !analyzerProvision.COWHit) {
+		t.Fatalf("analyzer capacity not initialized before first request: %+v", analyzerProvision)
+	}
+	if repeated, err := session.Prepare(ctx); !errors.Is(err, wazeroengine.ErrSemanticAnalysisCapacityReady) || repeated.NeverServed {
+		t.Fatalf("repeated analyzer preparation evidence=%+v err=%v", repeated, err)
+	}
+	if payload, err := session.Run(ctx, []byte(`{}`), ""); payload != nil || !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+		t.Fatalf("prepared analyzer executed Agent source payload=%s err=%v", payload, err)
 	}
 	emitRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source})
 	if err != nil {
@@ -504,6 +519,8 @@ func qualifyPreparedDerivedFixture(t *testing.T, ctx context.Context, artifact [
 	t.Helper()
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.SemanticAnalysis = true
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
 	config.ExecutionProfile = &profile
 	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
 	if err != nil {
@@ -546,6 +563,19 @@ func qualifyPreparedDerivedFixture(t *testing.T, ctx context.Context, artifact [
 	session, err := qualificationEngine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: 16 * 1024, MaxDuration: 20 * time.Second})
 	if err != nil {
 		t.Fatal(err)
+	}
+	analyzerProvision, err := session.Prepare(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !analyzerProvision.NeverServed || analyzerProvision.ModuleInstantiations == 0 || analyzerProvision.RuntimeInitCalls == 0 || (runtime.GOOS == "linux" && !analyzerProvision.COWHit) {
+		t.Fatalf("analyzer capacity not initialized before first request: %+v", analyzerProvision)
+	}
+	if repeated, err := session.Prepare(ctx); !errors.Is(err, wazeroengine.ErrSemanticAnalysisCapacityReady) || repeated.NeverServed {
+		t.Fatalf("repeated analyzer preparation evidence=%+v err=%v", repeated, err)
+	}
+	if payload, err := session.Run(ctx, []byte(`{}`), ""); payload != nil || !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+		t.Fatalf("prepared analyzer executed Agent source payload=%s err=%v", payload, err)
 	}
 	emitRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source})
 	if err != nil {

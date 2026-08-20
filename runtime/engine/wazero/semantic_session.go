@@ -13,11 +13,13 @@ import (
 )
 
 var (
-	ErrSemanticAnalysisSessionClosed    = errors.New("semantic analysis session closed")
-	ErrSemanticAnalysisSessionLimit     = errors.New("semantic analysis session limit exceeded")
-	ErrSemanticAnalysisSessionAuthority = errors.New("semantic analysis session cannot carry workspace or Broker authority")
-	ErrSemanticAnalysisEngineClosing    = errors.New("semantic analysis engine is closing")
-	ErrSemanticAnalysisSessionsActive   = errors.New("semantic analysis engine still has active sessions")
+	ErrSemanticAnalysisSessionClosed       = errors.New("semantic analysis session closed")
+	ErrSemanticAnalysisSessionLimit        = errors.New("semantic analysis session limit exceeded")
+	ErrSemanticAnalysisSessionAuthority    = errors.New("semantic analysis session cannot carry workspace or Broker authority")
+	ErrSemanticAnalysisEngineClosing       = errors.New("semantic analysis engine is closing")
+	ErrSemanticAnalysisSessionsActive      = errors.New("semantic analysis engine still has active sessions")
+	ErrSemanticAnalysisCapacityReady       = errors.New("semantic analysis capacity already prepared or served")
+	ErrSemanticAnalysisCapacityUnavailable = errors.New("semantic analysis prepared capacity unavailable")
 )
 
 // SemanticAnalysisSessionLimits bound all mutable analyzer state to one source-generation Run.
@@ -25,6 +27,17 @@ type SemanticAnalysisSessionLimits struct {
 	MaxRequests               uint32
 	MaxCumulativeRequestBytes uint64
 	MaxDuration               time.Duration
+}
+
+type SemanticAnalysisSessionProvisionEvidence struct {
+	ModuleInstantiations uint32 `json:"module_instantiations"`
+	InitializeCalls      uint32 `json:"initialize_calls"`
+	RuntimeInitCalls     uint32 `json:"runtime_init_calls"`
+	PreparedHit          bool   `json:"prepared_hit"`
+	COWHit               bool   `json:"cow_hit"`
+	NeverServed          bool   `json:"never_served"`
+	BrokerAvailable      bool   `json:"broker_available"`
+	WorkspaceMounted     bool   `json:"workspace_mounted"`
 }
 
 func (limits SemanticAnalysisSessionLimits) validate(engine *Engine) error {
@@ -100,6 +113,45 @@ func (session *SemanticAnalysisSession) Properties() enginecontract.Properties {
 // Run is deliberately unavailable: an analyzer session cannot execute Agent source.
 func (session *SemanticAnalysisSession) Run(context.Context, []byte, string) ([]byte, error) {
 	return nil, runtimeconfig.ErrMechanismDisabled
+}
+
+// Prepare initializes this session's private capacity without issuing an
+// analyzer request. Explicit benchmark capacities fail closed rather than
+// falling back to a request-time fresh Guest.
+func (session *SemanticAnalysisSession) Prepare(ctx context.Context) (evidence SemanticAnalysisSessionProvisionEvidence, prepareErr error) {
+	if session == nil || ctx == nil || session.engine == nil || !session.engine.config.Mechanisms.PreparedRuntime {
+		return evidence, runtimeconfig.ErrMechanismDisabled
+	}
+	properties := session.engine.Properties()
+	evidence.BrokerAvailable = properties.CapabilityBrokerAvailable
+	evidence.WorkspaceMounted = properties.WorkspaceMounted
+	if properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
+		return evidence, ErrSemanticAnalysisSessionAuthority
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.closed || session.context.Err() != nil {
+		return evidence, ErrSemanticAnalysisSessionClosed
+	}
+	if session.module != nil || session.requests != 0 {
+		return evidence, ErrSemanticAnalysisCapacityReady
+	}
+	if err := session.ensureModuleLocked(ctx); err != nil {
+		session.lifecycle.Failures++
+		_ = session.closeLocked()
+		return evidence, err
+	}
+	evidence.ModuleInstantiations = session.lifecycle.ModuleInstantiations
+	evidence.InitializeCalls = session.lifecycle.InitializeCalls
+	evidence.RuntimeInitCalls = session.lifecycle.RuntimeInitCalls
+	evidence.PreparedHit = session.lifecycle.PreparedHits == 1
+	evidence.COWHit = session.lifecycle.COWHits == 1
+	evidence.NeverServed = session.requests == 0 && session.lifecycle.Invocations == 0
+	if session.lifecycle.FreshFallbacks != 0 || !evidence.NeverServed || (!evidence.PreparedHit && !evidence.COWHit) {
+		_ = session.closeLocked()
+		return evidence, ErrSemanticAnalysisCapacityUnavailable
+	}
+	return evidence, nil
 }
 
 func (session *SemanticAnalysisSession) AnalyzeSemantic(ctx context.Context, request []byte) (payload []byte, analysisErr error) {

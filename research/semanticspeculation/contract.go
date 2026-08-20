@@ -14,6 +14,7 @@ import (
 )
 
 const PreregistrationSchemaVersion = "pysolate.semantic-speculation-preregistration.v1"
+const PreregistrationIdentity = "sha256:5c0ec80ded86f07784d51d74aa503108fbd4a587918bc483bd564b35bdc18a47"
 
 const maxPreregistrationBytes = 256 << 10
 

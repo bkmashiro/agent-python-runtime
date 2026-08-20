@@ -61,6 +61,7 @@ type TrialRecord struct {
 	AuthorityDisposition     string               `json:"authority_disposition"`
 	WorkspaceDisposition     string               `json:"workspace_disposition"`
 	StartedNanos             uint64               `json:"started_nanos"`
+	FinalizedNanos           uint64               `json:"finalized_nanos"`
 	EndedNanos               uint64               `json:"ended_nanos"`
 	Identity                 string               `json:"identity"`
 }
@@ -118,7 +119,8 @@ func validateTrialRecord(value TrialRecord, sealed bool) error {
 		!digestPattern.MatchString(value.ManifestSHA256) || !digestPattern.MatchString(value.ImportInventorySHA256) ||
 		!digestPattern.MatchString(value.ExecutionProfileSHA256) || !digestPattern.MatchString(value.CapabilityPlanSHA256) ||
 		!digestPattern.MatchString(value.PrivacySHA256) ||
-		value.StartedNanos == 0 || value.EndedNanos < value.StartedNanos || value.PhysicalDispositions.total() != value.PhysicalAttempts ||
+		value.StartedNanos == 0 || value.FinalizedNanos < value.StartedNanos || value.EndedNanos < value.FinalizedNanos ||
+		value.PhysicalDispositions.total() != value.PhysicalAttempts ||
 		value.ReadyBeforeFinalize > value.PhysicalAttempts || !validAuthorityDisposition(value.AuthorityDisposition) ||
 		!validWorkspaceDisposition(value.WorkspaceDisposition) || sealed != digestPattern.MatchString(value.Identity) {
 		return ErrInvalidTrialRecord

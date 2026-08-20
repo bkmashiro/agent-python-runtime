@@ -142,6 +142,18 @@ func (fixture SyntheticCase) Source() []byte {
 	return joined
 }
 
+func (fixture SyntheticCase) SourceSHA256() string {
+	return fixture.Projection().SourceSHA256
+}
+
+func (fixture SyntheticCase) SourceScheduleSHA256() string {
+	return fixture.Projection().SourceScheduleSHA256
+}
+
+func (fixture SyntheticCase) InputsSHA256() string {
+	return fixture.Projection().InputsSHA256
+}
+
 func (fixture SyntheticCase) ChunkBodies() [][]byte {
 	bodies := make([][]byte, len(fixture.Chunks))
 	for index, chunk := range fixture.Chunks {

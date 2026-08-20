@@ -38,6 +38,7 @@ func validTrialRecord() TrialRecord {
 		AuthorityDisposition:   "unchanged",
 		WorkspaceDisposition:   "untouched",
 		StartedNanos:           1,
+		FinalizedNanos:         5,
 		EndedNanos:             10,
 	}
 }
@@ -72,9 +73,11 @@ func TestTrialRecordRejectsImpossibleLifecycle(t *testing.T) {
 		"result on syntax error": func(value *TrialRecord) {
 			value.ResultSHA256 = "sha256:5555555555555555555555555555555555555555555555555555555555555555"
 		},
-		"time reversed":       func(value *TrialRecord) { value.EndedNanos = value.StartedNanos - 1 },
-		"too many ready":      func(value *TrialRecord) { value.ReadyBeforeFinalize = value.PhysicalAttempts + 1 },
-		"authority published": func(value *TrialRecord) { value.AuthorityDisposition = "write_committed" },
+		"time reversed":         func(value *TrialRecord) { value.EndedNanos = value.StartedNanos - 1 },
+		"finalize before start": func(value *TrialRecord) { value.FinalizedNanos = value.StartedNanos - 1 },
+		"end before finalize":   func(value *TrialRecord) { value.EndedNanos = value.FinalizedNanos - 1 },
+		"too many ready":        func(value *TrialRecord) { value.ReadyBeforeFinalize = value.PhysicalAttempts + 1 },
+		"authority published":   func(value *TrialRecord) { value.AuthorityDisposition = "write_committed" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			value := validTrialRecord()

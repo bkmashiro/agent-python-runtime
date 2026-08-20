@@ -762,6 +762,39 @@ def _validate_request_source(request_json: str) -> int:
     return _SOURCE_CONTRACT_OK
 
 
+def _prepare_prepared_region_execution(selection_request_json: str) -> None:
+    global _validated_code, _validated_effective_ast_sha256
+    if _validated_request_json is None or _validated_code is None:
+        raise RuntimeError("original agent source must be validated before derived selection")
+    request, error = _decode_request(_validated_request_json)
+    if error is not None or request is None:
+        raise RuntimeError("validated original request is unavailable")
+    from .prepared_region import validate_prepared_region_execution_request
+    tree = validate_prepared_region_execution_request(request["code"], selection_request_json)
+    compatibility = request.get("compatibility")
+    if compatibility is None:
+        preamble: list[ast.stmt] = []
+        body: list[ast.stmt] = []
+        future_open = True
+        for index, node in enumerate(tree.body):
+            if index == 0 and _module_docstring(node):
+                preamble.append(node)
+                continue
+            if future_open and isinstance(node, ast.ImportFrom) and node.module == "__future__":
+                preamble.append(node)
+                continue
+            future_open = False
+            body.append(node)
+    else:
+        import_nodes = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
+        import_ids = {id(node) for node in import_nodes}
+        body = [node for node in tree.body if id(node) not in import_ids]
+        preamble = [node for node in import_nodes if isinstance(node, ast.ImportFrom) and node.module == "__future__"]
+    code, digest = _compile_agent_wrapper(body, preamble)
+    _validated_code = code
+    _validated_effective_ast_sha256 = digest
+
+
 def _encode(response: dict[str, Any]) -> str:
     try:
         return json.dumps(response, ensure_ascii=False, separators=(",", ":"), allow_nan=False)

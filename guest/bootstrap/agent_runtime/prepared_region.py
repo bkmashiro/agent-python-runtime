@@ -15,6 +15,7 @@ CODEC = "canonical_json_bool_or_int64.v1"
 HELPER_BINDING = "__pysolate_materialize_value__"
 LIVE_INS_SCHEMA_VERSION = "pysolate.prepared-region-live-ins.v1"
 SCRATCH_RESULT_SCHEMA_VERSION = "pysolate.prepared-region-scratch-result.v1"
+EXECUTION_SELECTION_SCHEMA_VERSION = "pysolate.prepared-region-execution-selection.v1"
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _SPAN_KEYS = {"start_line", "start_column", "end_line", "end_column"}
@@ -33,6 +34,11 @@ _PATCH_KEYS = {
 _EMIT_REQUEST_KEYS = {"decision", "final_source"}
 _LIVE_INS_KEYS = {"schema_version", "values"}
 _SCRATCH_REQUEST_KEYS = {"decision", "final_source", "live_ins"}
+_EXECUTION_REQUEST_KEYS = {"decision", "patch", "selection"}
+_SELECTION_KEYS = {
+    "schema_version", "mode", "decision_sha256", "capsule_sha256", "patch_sha256",
+    "final_source_sha256", "derived_ast_sha256", "identity_sha256",
+}
 
 
 def _digest(value):
@@ -137,6 +143,56 @@ def _decode_patch(raw):
 
 def _valid_scalar(value):
     return type(value) is bool or (type(value) is int and -(2**63) <= value < 2**63)
+
+
+def _decode_selection(raw):
+    selection = _decode(raw, _SELECTION_KEYS, contract=True)
+    identity = dict(selection)
+    claimed = identity.pop("identity_sha256")
+    if (
+        selection["schema_version"] != EXECUTION_SELECTION_SCHEMA_VERSION
+        or selection["mode"] != "derived"
+        or any(not isinstance(selection[key], str) or not _DIGEST.fullmatch(selection[key]) for key in (
+            "decision_sha256", "capsule_sha256", "patch_sha256", "final_source_sha256",
+            "derived_ast_sha256", "identity_sha256",
+        ))
+        or claimed != _digest(_contract_canonical(identity).encode("utf-8"))
+    ):
+        raise ValueError("invalid prepared region execution selection")
+    return selection
+
+
+def validate_prepared_region_execution_selection(final_source, decision_json, patch_json, selection_json):
+    decision = _decode_decision(decision_json)
+    patch = _decode_patch(patch_json)
+    selection = _decode_selection(selection_json)
+    expected_tree, expected_binding = _derive(final_source, decision)
+    expected_patch = dict(expected_binding)
+    expected_patch.update({
+        "schema_version": PATCH_SCHEMA_VERSION,
+        "pass_schema": PASS_SCHEMA_VERSION,
+        "helper_binding": HELPER_BINDING,
+    })
+    expected_patch["identity_sha256"] = _digest(_contract_canonical(expected_patch).encode("utf-8"))
+    if patch != expected_patch:
+        raise ValueError("prepared region patch does not match the decision and final source")
+    if (
+        selection["decision_sha256"] != decision["identity_sha256"]
+        or selection["patch_sha256"] != patch["identity_sha256"]
+        or selection["final_source_sha256"] != patch["final_source_sha256"]
+        or selection["derived_ast_sha256"] != patch["derived_ast_sha256"]
+    ):
+        raise ValueError("prepared region execution selection binding mismatch")
+    return expected_tree
+
+
+def validate_prepared_region_execution_request(final_source, request_json):
+    request = _decode(request_json, _EXECUTION_REQUEST_KEYS)
+    if any(not isinstance(request[key], str) for key in _EXECUTION_REQUEST_KEYS):
+        raise ValueError("invalid prepared region execution request")
+    return validate_prepared_region_execution_selection(
+        final_source, request["decision"], request["patch"], request["selection"],
+    )
 
 
 def encode_prepared_region_live_ins(values):

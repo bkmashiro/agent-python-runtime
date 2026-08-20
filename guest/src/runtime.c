@@ -424,6 +424,22 @@ uint32_t runtime_execute_prepared_region_scratch(const char *request, int32_t re
 }
 
 
+int32_t runtime_select_prepared_region_execution(const char *request, int32_t request_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL || request == NULL ||
+        request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
+        return -1;
+    }
+    PyObject *result = call_with_utf8("_prepare_prepared_region_execution", request,
+                                      request_len);
+    if (result == NULL) {
+        PyErr_Print();
+        return -1;
+    }
+    Py_DECREF(result);
+    return 0;
+}
+
+
 int32_t runtime_prepare(const char *source, int32_t source_len) {
     if (!Py_IsInitialized() || runtime_module == NULL) {
         return -1;

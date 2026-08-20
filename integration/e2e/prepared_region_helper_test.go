@@ -212,6 +212,157 @@ func TestExactGuestScratchExecutesOneScalarRegionAndPublishesBoundCapsule(t *tes
 	}
 }
 
+func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecution(t *testing.T) {
+	artifact, profile := loadPreparedRegionArtifact(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	config.ExecutionProfile = &profile
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := "seed = 40\nvalue = seed + 2\nresult = value\n"
+	liveInsRaw, liveInsSHA, err := preparedregion.SealPreparedRegionLiveIns(map[string]json.RawMessage{"seed": json.RawMessage(`40`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	span := preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}
+	sourceSHA := preparedRegionDigest([]byte(source))
+	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x001\x002:0:2:16", sourceSHA)
+	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(preparedregion.PreparedRegionBinding{
+		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
+		RegionSourceSHA256: preparedRegionDigest([]byte("value = seed + 2")), LiveInsSHA256: liveInsSHA,
+		EnvironmentSHA256: digestA, ExecutionProfileSHA256: profileSHA256, ImportClosureSHA256: digestA,
+		CapabilityPlanSHA256: digestA, PassConfigSHA256: digestA,
+		Codec: preparedregion.PreparedRegionCodecJSONScalarV1, OutputName: "value",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	qualificationEngine, err := wazeroengine.New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratchRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source, "live_ins": string(liveInsRaw)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratchResult, _, err := qualificationEngine.ExecutePreparedRegionScratch(ctx, scratchRequest, decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, capsule, err := preparedregion.PublishPreparedRegionScratchResult(decision, scratchResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := qualificationEngine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: 16 * 1024, MaxDuration: 20 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindingRaw, err := session.EmitPreparedRegionPatch(ctx, emitRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := preparedregion.DecodePreparedRegionPatchBinding(bindingRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, patch, err := preparedregion.SealPreparedRegionPatch(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, selection, err := preparedregion.SealPreparedRegionExecutionSelection(decision, capsule, patch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := qualificationEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	runRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-derived-selection", Code: source, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineEngine, err := wazeroengine.New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := baselineEngine.Run(ctx, runRequest, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := baselineEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derivedEngine, ok := runner.(*wazeroengine.Engine)
+	if !ok {
+		t.Fatalf("unexpected runner type %T", runner)
+	}
+	derived, err := derivedEngine.RunPreparedRegionDerived(ctx, runRequest, "", selection, decision, capsule, patch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var baselineEnvelope, derivedEnvelope struct {
+		Status string          `json:"status"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+		Logs   []string        `json:"logs"`
+	}
+	if json.Unmarshal(baseline, &baselineEnvelope) != nil || json.Unmarshal(derived, &derivedEnvelope) != nil ||
+		baselineEnvelope.Status != "ok" || derivedEnvelope.Status != baselineEnvelope.Status ||
+		string(derivedEnvelope.Result) != string(baselineEnvelope.Result) || string(derivedEnvelope.Result) != "42" ||
+		string(derivedEnvelope.Error) != string(baselineEnvelope.Error) || len(derivedEnvelope.Logs) != len(baselineEnvelope.Logs) {
+		t.Fatalf("baseline=%s derived=%s", baseline, derived)
+	}
+	if evidence := table.Evidence(); evidence.Consumed != 1 || evidence.Claims != 1 || evidence.RejectedClaims != 0 {
+		t.Fatalf("table evidence=%+v", evidence)
+	}
+	if err := derivedEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	driftTable, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	driftRunner, err := (wazeroengine.Factory{PreparedRegions: driftTable}).New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driftEngine := driftRunner.(*wazeroengine.Engine)
+	driftRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-invalid-suffix", Code: source + "suffix = 1\n", Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response, err := driftEngine.RunPreparedRegionDerived(ctx, driftRequest, "", selection, decision, capsule, patch); err == nil || response != nil {
+		t.Fatalf("invalid suffix response=%s err=%v", response, err)
+	}
+	if evidence := driftTable.Evidence(); evidence.Ready != 1 || evidence.Claims != 0 || evidence.Consumed != 0 {
+		t.Fatalf("invalid suffix consumed region: %+v", evidence)
+	}
+	if err := driftEngine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 const digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 func preparedRegionDigest(value []byte) string {

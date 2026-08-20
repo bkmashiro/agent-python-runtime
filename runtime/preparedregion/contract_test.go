@@ -178,6 +178,50 @@ func TestPreparedRegionPatchBindingDecoderAcceptsOnlyCanonicalGuestEmission(t *t
 	}
 }
 
+func TestPreparedRegionExecutionSelectionBindsDecisionCapsulePatchAndDerivedProgram(t *testing.T) {
+	_, decision, err := SealPreparedRegionDecision(validPreparedRegionBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, capsule, err := SealPreparedRegionCapsule(decision.IdentitySHA256, json.RawMessage(`42`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, patch, err := SealPreparedRegionPatch(PreparedRegionPatchBinding{
+		DecisionSHA256: decision.IdentitySHA256, FinalSourceSHA256: testDigestA,
+		FinalASTSHA256: testDigestA, DerivedASTSHA256: testDigestB, RegionID: decision.RegionID,
+		RegionSpan: decision.RegionSpan, OutputName: decision.OutputName,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, selection, err := SealPreparedRegionExecutionSelection(decision, capsule, patch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodePreparedRegionExecutionSelection(raw)
+	if err != nil || decoded != selection || decoded.Validate(decision, capsule, patch) != nil {
+		t.Fatalf("decoded=%+v selection=%+v err=%v", decoded, selection, err)
+	}
+	if _, _, err := SealPreparedRegionExecutionSelection(decision, PreparedRegionCapsule{}, patch); err == nil {
+		t.Fatal("unready capsule must not produce a derived execution selection")
+	}
+	drifted := patch
+	drifted.DerivedASTSHA256 = testDigestA
+	if selection.Validate(decision, capsule, drifted) == nil {
+		t.Fatal("selection accepted derived AST drift")
+	}
+	for _, invalid := range [][]byte{
+		append(bytes.TrimSuffix(raw, []byte("\n")), []byte(" trailing")...),
+		bytes.Replace(raw, []byte(`"mode":"derived"`), []byte(`"mode":"original"`), 1),
+		bytes.Replace(raw, []byte(selection.IdentitySHA256), []byte(testDigestA), 1),
+	} {
+		if _, err := DecodePreparedRegionExecutionSelection(invalid); err == nil {
+			t.Fatalf("accepted invalid selection %q", invalid)
+		}
+	}
+}
+
 func TestPreparedRegionCapsuleAndPatchDecodersRejectTamperAndNoncanonicalData(t *testing.T) {
 	_, decision, err := SealPreparedRegionDecision(validPreparedRegionBinding())
 	if err != nil {

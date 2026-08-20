@@ -113,6 +113,30 @@ func (table *PreparedRegionTable) Claim(decisionSHA256 string) ([]byte, error) {
 	return payload, nil
 }
 
+// ValidateReady verifies the exact selected capsule without consuming it. The
+// final Guest remains the only consumer through Claim.
+func (table *PreparedRegionTable) ValidateReady(decision PreparedRegionDecision, capsule PreparedRegionCapsule) error {
+	if table == nil || capsule.ValidateDecision(decision) != nil {
+		return ErrPreparedRegionMissing
+	}
+	table.mu.Lock()
+	defer table.mu.Unlock()
+	if table.closed {
+		return ErrPreparedRegionClosed
+	}
+	entry, ok := table.entries[decision.IdentitySHA256]
+	if !ok {
+		return ErrPreparedRegionMissing
+	}
+	if entry.state != preparedRegionReady {
+		return ErrPreparedRegionUnready
+	}
+	if entry.decision != decision || entry.capsule.IdentitySHA256 != capsule.IdentitySHA256 {
+		return ErrInvalidPreparedRegion
+	}
+	return nil
+}
+
 func (table *PreparedRegionTable) Close() error {
 	if table == nil {
 		return nil

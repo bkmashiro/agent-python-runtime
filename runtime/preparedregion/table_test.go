@@ -73,6 +73,31 @@ func TestPreparedRegionTableRejectsMissingMismatchedAndUnreadyClaims(t *testing.
 	}
 }
 
+func TestPreparedRegionTableValidateReadyDoesNotConsumeAndBindsExactCapsule(t *testing.T) {
+	decision, capsule := preparedRegionFixture(t, `42`)
+	table, err := NewPreparedRegionTable([]PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := table.ValidateReady(decision, capsule); err != nil {
+		t.Fatal(err)
+	}
+	if evidence := table.Evidence(); evidence.Ready != 1 || evidence.Consumed != 0 || evidence.Claims != 0 {
+		t.Fatalf("preselection consumed capsule: %+v", evidence)
+	}
+	_, otherCapsule, err := SealPreparedRegionCapsule(decision.IdentitySHA256, json.RawMessage(`43`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := table.ValidateReady(decision, otherCapsule); err == nil {
+		t.Fatal("preselection accepted a different capsule")
+	}
+	payload, err := table.Claim(decision.IdentitySHA256)
+	if err != nil || string(payload) != "42" {
+		t.Fatalf("payload=%s err=%v", payload, err)
+	}
+}
+
 func TestPreparedRegionTableCloseDiscardsReadyEntries(t *testing.T) {
 	decision, capsule := preparedRegionFixture(t, `-7`)
 	table, err := NewPreparedRegionTable([]PreparedRegionEntry{{Decision: decision, Capsule: capsule}})

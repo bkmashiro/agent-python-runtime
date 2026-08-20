@@ -1,3 +1,4 @@
+import ast
 import copy
 import hashlib
 import json
@@ -5,12 +6,14 @@ import traceback
 import unittest
 
 from agent_runtime.prepared_region import (
+    EXECUTION_SELECTION_SCHEMA_VERSION,
     PATCH_SCHEMA_VERSION,
     derive_prepared_region_tree,
     emit_prepared_region_patch_binding,
     emit_prepared_region_patch_request_json,
     encode_prepared_region_live_ins,
     execute_prepared_region_scratch_request_json,
+    validate_prepared_region_execution_selection,
 )
 from agent_runtime.semantic import analyze_source
 
@@ -184,6 +187,42 @@ class PreparedRegionPatchTests(unittest.TestCase):
         self.assertEqual(response["error_type"], "result_out_of_range")
         self.assertIsNone(response["payload"])
         self.assertEqual(response["payload_sha256"], "")
+
+    def test_execution_selection_is_sealed_before_derived_tree_creation(self):
+        source = "seed = 40\nvalue = seed + 2\nresult = value\n"
+        decision = self.decision(source)
+        patch_binding = emit_prepared_region_patch_binding(source, decision)
+        patch = {
+            **patch_binding,
+            "schema_version": PATCH_SCHEMA_VERSION,
+            "pass_schema": "pysolate.prepared-pure-region-pass.v1",
+            "helper_binding": "__pysolate_materialize_value__",
+        }
+        patch["identity_sha256"] = digest_bytes(contract_canonical(patch).encode())
+        selection = {
+            "schema_version": EXECUTION_SELECTION_SCHEMA_VERSION,
+            "mode": "derived",
+            "decision_sha256": json.loads(decision)["identity_sha256"],
+            "capsule_sha256": digest_bytes(b"capsule"),
+            "patch_sha256": patch["identity_sha256"],
+            "final_source_sha256": patch["final_source_sha256"],
+            "derived_ast_sha256": patch["derived_ast_sha256"],
+        }
+        selection["identity_sha256"] = digest_bytes(contract_canonical(selection).encode())
+        tree = validate_prepared_region_execution_selection(
+            source, decision, contract_canonical(patch), contract_canonical(selection),
+        )
+        replacement = tree.body[1]
+        self.assertIsInstance(replacement.value, ast.Call)
+        self.assertEqual(replacement.value.lineno, 2)
+        for key in ("patch_sha256", "final_source_sha256", "derived_ast_sha256"):
+            drifted = dict(selection)
+            drifted[key] = digest_bytes(key.encode())
+            drifted["identity_sha256"] = digest_bytes(contract_canonical({k: v for k, v in drifted.items() if k != "identity_sha256"}).encode())
+            with self.assertRaises(ValueError, msg=key):
+                validate_prepared_region_execution_selection(
+                    source, decision, contract_canonical(patch), contract_canonical(drifted),
+                )
 
 
 if __name__ == "__main__":

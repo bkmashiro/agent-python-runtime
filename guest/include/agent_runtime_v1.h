@@ -39,6 +39,9 @@ uint32_t runtime_emit_prepared_region_patch(const char *request, int32_t request
 AGENT_RUNTIME_EXPORT("runtime_execute_prepared_region_scratch")
 uint32_t runtime_execute_prepared_region_scratch(const char *request, int32_t request_len);
 
+AGENT_RUNTIME_EXPORT("runtime_select_prepared_region_execution")
+int32_t runtime_select_prepared_region_execution(const char *request, int32_t request_len);
+
 AGENT_RUNTIME_EXPORT("runtime_prepare")
 int32_t runtime_prepare(const char *source, int32_t source_len);
 

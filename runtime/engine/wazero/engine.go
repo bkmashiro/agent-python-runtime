@@ -700,7 +700,60 @@ func (engine *Engine) Run(ctx context.Context, request []byte, trustedPrepare st
 		prepares <- trustedPrepare
 	}
 	close(prepares)
-	return engine.runWithPrepares(ctx, request, prepares, false)
+	return engine.runWithPrepares(ctx, request, prepares, false, nil)
+}
+
+// RunPreparedRegionDerived commits one sealed derived selection before the
+// fresh final Guest executes. It is deliberately outside the generic Runner
+// interface and permits neither authority-bearing execution nor runtime
+// fallback to the original program.
+func (engine *Engine) RunPreparedRegionDerived(ctx context.Context, request []byte, trustedPrepare string, selection preparedregion.PreparedRegionExecutionSelection, decision preparedregion.PreparedRegionDecision, capsule preparedregion.PreparedRegionCapsule, patch preparedregion.PreparedRegionPatch) ([]byte, error) {
+	if !engine.config.Mechanisms.SemanticAnalysis {
+		return nil, runtimeconfig.ErrMechanismDisabled
+	}
+	properties := engine.Properties()
+	if properties.CapabilityBrokerAvailable || properties.WorkspaceMounted {
+		return nil, ErrPreparedRegionScratchAuthority
+	}
+	if selection.Validate(decision, capsule, patch) != nil || engine.preparedRegions.ValidateReady(decision, capsule) != nil {
+		return nil, preparedregion.ErrInvalidPreparedRegion
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	sourceDigest := sha256.Sum256([]byte(runRequest.Code))
+	if selection.FinalSourceSHA256 != fmt.Sprintf("sha256:%x", sourceDigest[:]) {
+		return nil, preparedregion.ErrInvalidPreparedRegion
+	}
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
+	if err != nil || decision.ExecutionProfileSHA256 != profileSHA256 {
+		return nil, preparedregion.ErrInvalidPreparedRegion
+	}
+	decisionRaw, sealedDecision, err := preparedregion.SealPreparedRegionDecision(decision.PreparedRegionBinding)
+	if err != nil || sealedDecision != decision {
+		return nil, preparedregion.ErrInvalidPreparedRegion
+	}
+	patchRaw, sealedPatch, err := preparedregion.SealPreparedRegionPatch(patch.PreparedRegionPatchBinding)
+	if err != nil || sealedPatch != patch {
+		return nil, preparedregion.ErrInvalidPreparedRegion
+	}
+	selectionRaw, sealedSelection, err := preparedregion.SealPreparedRegionExecutionSelection(decision, capsule, patch)
+	if err != nil || sealedSelection != selection {
+		return nil, preparedregion.ErrInvalidPreparedRegion
+	}
+	selectionRequest, err := json.Marshal(map[string]string{
+		"decision": string(decisionRaw), "patch": string(patchRaw), "selection": string(selectionRaw),
+	})
+	if err != nil {
+		return nil, err
+	}
+	prepares := make(chan string, 1)
+	if trustedPrepare != "" {
+		prepares <- trustedPrepare
+	}
+	close(prepares)
+	return engine.runWithPrepares(ctx, request, prepares, false, selectionRequest)
 }
 
 // RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
@@ -710,10 +763,10 @@ func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-
 	if !engine.config.Mechanisms.Streaming {
 		return nil, runtimeconfig.ErrMechanismDisabled
 	}
-	return engine.runWithPrepares(ctx, request, prepares, true)
+	return engine.runWithPrepares(ctx, request, prepares, true, nil)
 }
 
-func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool) (payload []byte, runErr error) {
+func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, preparedRegionSelection []byte) (payload []byte, runErr error) {
 	if len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
 		return nil, errors.New("request exceeds configured bounds")
 	}
@@ -871,6 +924,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	}
 	if err := callSourceValidation(runContext, module, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	if len(preparedRegionSelection) != 0 {
+		if err := callStatusWithBytes(runContext, module, "runtime_select_prepared_region_execution", preparedRegionSelection); err != nil {
+			return nil, withGuestDiagnostic(err, stderr.String())
+		}
 	}
 	brokerFinalized := false
 	if engine.brokerFactory != nil {

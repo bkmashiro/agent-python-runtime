@@ -14,8 +14,9 @@ var (
 )
 
 type StagedCapabilityOutcome struct {
-	Result    json.RawMessage `json:"result,omitempty"`
-	ErrorCode string          `json:"error_code,omitempty"`
+	Result              json.RawMessage `json:"result,omitempty"`
+	ErrorCode           string          `json:"error_code,omitempty"`
+	PhysicalResultBytes uint64          `json:"-"`
 }
 
 func (outcome StagedCapabilityOutcome) Validate() error {
@@ -88,19 +89,20 @@ func (prepared *PreparedPreDispatch) Call(ctx context.Context) (StagedCapability
 	} else {
 		result, err = registered.handler.Call(ctx, arguments)
 	}
+	physicalResultBytes := uint64(len(result))
 	if err != nil {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
-			return StagedCapabilityOutcome{}, err
+			return StagedCapabilityOutcome{PhysicalResultBytes: physicalResultBytes}, err
 		}
-		return StagedCapabilityOutcome{ErrorCode: "handler_error"}, nil
+		return StagedCapabilityOutcome{ErrorCode: "handler_error", PhysicalResultBytes: physicalResultBytes}, nil
 	}
 	canonical, err := canonicalForSchema(registered.outputSchema, result)
 	if err == nil {
 		err = validateSpecResultSemantics(registered.spec, canonical)
 	}
-	if err != nil || len(canonical) > maxCallBytes ||
+	if err != nil || len(canonical) > maxCallBytes || len(canonical) > int(registered.spec.PreDispatch.MaxResultBytes) ||
 		(registered.spec.Playback == PlaybackCaptured && !validLiveTransportEvidence(evidence)) {
-		return StagedCapabilityOutcome{ErrorCode: "invalid_result"}, nil
+		return StagedCapabilityOutcome{ErrorCode: "invalid_result", PhysicalResultBytes: physicalResultBytes}, nil
 	}
-	return StagedCapabilityOutcome{Result: append(json.RawMessage(nil), canonical...)}, nil
+	return StagedCapabilityOutcome{Result: append(json.RawMessage(nil), canonical...), PhysicalResultBytes: physicalResultBytes}, nil
 }

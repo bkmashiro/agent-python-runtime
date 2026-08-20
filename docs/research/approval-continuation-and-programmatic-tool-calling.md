@@ -12,7 +12,7 @@ The first bounded slice is implemented and evidenced by
 - `ProgramSurface.mode = direct | programmatic | both` is Host-owned and
   programmatic exposure is independently default-off;
 - direct schemas and parent-bound Python projection are generated from the same
-  sealed `pysolate.capability-plan.v6`;
+  sealed `pysolate.capability-plan.v7`;
 - programmatic child IDs are exactly `parent:program:<n>` and near-match IDs are
   denied before call-budget consumption;
 - `both` keeps ordinary direct IDs and parent-bound programmatic IDs on separate

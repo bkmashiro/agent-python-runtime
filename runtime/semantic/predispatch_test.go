@@ -52,6 +52,73 @@ func TestSemanticPreDispatchClaimsExactlyOnceAtUnchangedBrokerBoundary(t *testin
 	}
 }
 
+func TestSemanticPreDispatchReservesHostCostAndResultBudgets(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	firstContext := legalityContext()
+	firstDecision := CanPreissue(verified, plan, site.ID, firstContext)
+	firstCall, ok := firstDecision.QualifiedCall()
+	if !ok {
+		t.Fatalf("first decision=%+v", firstDecision)
+	}
+	secondContext := firstContext
+	secondContext.BudgetReservationSHA256 = legalityDigest("second-budget-reservation")
+	secondDecision := CanPreissue(verified, plan, site.ID, secondContext)
+	secondCall, ok := secondDecision.QualifiedCall()
+	if !ok {
+		t.Fatalf("second decision=%+v", secondDecision)
+	}
+	budget, err := NewPreDispatchBudgetWithLimits(2, 1, 2<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := NewSemanticPreDispatch(firstCall, plan, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewSemanticPreDispatch(secondCall, plan, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	launcher := &queuedLauncher{}
+	if err := first.Start(context.Background(), launcher); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Start(context.Background(), launcher); !errors.Is(err, ErrPreDispatchBudgetExhausted) {
+		t.Fatalf("second start error=%v", err)
+	}
+	firstSnapshot := first.Snapshot()
+	if firstSnapshot.ReservedCostUnits != 1 || firstSnapshot.ProviderCostUnits != 0 || firstSnapshot.ReservedResultBytes != 1<<20 {
+		t.Fatalf("snapshot before launch=%+v", firstSnapshot)
+	}
+	launcher.RunAll()
+	firstSnapshot = first.Snapshot()
+	if firstSnapshot.ProviderCostUnits != 1 || firstSnapshot.PhysicalResultBytes == 0 {
+		t.Fatalf("snapshot after launch=%+v", firstSnapshot)
+	}
+
+	resultBudget, err := NewPreDispatchBudgetWithLimits(2, 2, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultFirst, err := NewSemanticPreDispatch(firstCall, plan, resultBudget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultSecond, err := NewSemanticPreDispatch(secondCall, plan, resultBudget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultLauncher := &queuedLauncher{}
+	if err := resultFirst.Start(context.Background(), resultLauncher); err != nil {
+		t.Fatal(err)
+	}
+	if err := resultSecond.Start(context.Background(), resultLauncher); !errors.Is(err, ErrPreDispatchBudgetExhausted) {
+		t.Fatalf("second result reservation error=%v", err)
+	}
+	resultLauncher.RunAll()
+}
+
 func TestSemanticPreDispatchBudgetAndMismatchFailClosed(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, plan, true)

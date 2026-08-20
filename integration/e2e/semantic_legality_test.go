@@ -57,6 +57,8 @@ func TestRealGuestSharedLegalityQualifiesOnlyExactMustReachCall(t *testing.T) {
 		PreDispatch: &capability.PreDispatchContract{
 			Resource:  capability.ResourceReference{Namespace: "sources", Argument: "key"},
 			Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+			Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden,
+			MaxResultBytes: 1 << 20, CostUnits: 1,
 		},
 	}
 	registry := capability.NewRegistry()

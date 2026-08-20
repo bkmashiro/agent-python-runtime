@@ -96,7 +96,8 @@ func TestSemanticPreDispatchRecordsCancelledPhysicalWithoutLogicalCallForLaterSy
 	}
 	snapshot := controller.Snapshot()
 	if physical.Load() != 1 || snapshot.PhysicalIssues != 1 || snapshot.PhysicalStarts != 1 || snapshot.PhysicalFinishes != 1 ||
-		snapshot.LogicalClaims != 0 || snapshot.Consumed != 0 || snapshot.Cancelled != 1 || snapshot.Orphaned != 0 {
+		snapshot.LogicalClaims != 0 || snapshot.Consumed != 0 || snapshot.Cancelled != 1 || snapshot.Orphaned != 0 ||
+		snapshot.ReservedCostUnits != 1 || snapshot.ProviderCostUnits != 1 || snapshot.ReservedResultBytes != 1<<20 || snapshot.PhysicalResultBytes == 0 {
 		t.Fatalf("physical=%d snapshot=%+v", physical.Load(), snapshot)
 	}
 }

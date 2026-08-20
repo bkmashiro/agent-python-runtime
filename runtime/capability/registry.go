@@ -25,9 +25,10 @@ var (
 )
 
 const (
-	capabilityPlanSchemaVersion = "pysolate.capability-plan.v6"
+	capabilityPlanSchemaVersion = "pysolate.capability-plan.v7"
 	maxCapabilitySchemaBytes    = 64 << 10
 	maxCapabilityJSONNodes      = 16384
+	maxPreDispatchCostUnits     = 1 << 20
 
 	EffectPure           = "pure"
 	EffectWorkspaceRead  = "workspace_read"
@@ -37,9 +38,11 @@ const (
 	PlaybackLiveOnly = "live_only"
 	PlaybackCaptured = "captured"
 
-	FreshnessPlanEpoch              = "plan_epoch"
-	UnclaimedDiscardWithDisposition = "discard_with_disposition"
-	ApprovalLease                   = "lease"
+	FreshnessPlanEpoch               = "plan_epoch"
+	UnclaimedDiscardWithDisposition  = "discard_with_disposition"
+	PreDispatchPrivacyExactPartition = "exact_partition"
+	PreDispatchCoalescingForbidden   = "forbidden"
+	ApprovalLease                    = "lease"
 )
 
 // Handler is the entire Host-tool execution contract. Authority and schema
@@ -72,12 +75,17 @@ type ResourceReference struct {
 	Constant  string `json:"constant,omitempty"`
 }
 
-// PreDispatchContract is the minimal v0 contract for starting one exact read
-// before unchanged Python reaches and claims its original call boundary.
+// PreDispatchContract is the minimal v1 contract for starting one exact read
+// before unchanged Python reaches and claims its original call boundary. Every
+// field is Host-authored and positive: omission is ineligible, never a default.
 type PreDispatchContract struct {
-	Resource  ResourceReference `json:"resource"`
-	Freshness string            `json:"freshness"`
-	Unclaimed string            `json:"unclaimed"`
+	Resource       ResourceReference `json:"resource"`
+	Freshness      string            `json:"freshness"`
+	Unclaimed      string            `json:"unclaimed"`
+	Privacy        string            `json:"privacy"`
+	Coalescing     string            `json:"coalescing"`
+	MaxResultBytes uint64            `json:"max_result_bytes"`
+	CostUnits      uint32            `json:"cost_units"`
 }
 
 // ApprovalRequirement is Plan-bound policy for one live capability. Waiting is
@@ -514,7 +522,9 @@ func validPreDispatchQualification(spec Spec) bool {
 
 func validPreDispatchContract(projection *PythonProjection, contract *PreDispatchContract) bool {
 	if contract == nil || contract.Freshness != FreshnessPlanEpoch ||
-		contract.Unclaimed != UnclaimedDiscardWithDisposition || !validHandlerIdentity(contract.Resource.Namespace) ||
+		contract.Unclaimed != UnclaimedDiscardWithDisposition || contract.Privacy != PreDispatchPrivacyExactPartition ||
+		contract.Coalescing != PreDispatchCoalescingForbidden || contract.MaxResultBytes == 0 || contract.MaxResultBytes > maxCallBytes ||
+		contract.CostUnits == 0 || contract.CostUnits > maxPreDispatchCostUnits || !validHandlerIdentity(contract.Resource.Namespace) ||
 		(contract.Resource.Argument == "") == (contract.Resource.Constant == "") {
 		return false
 	}

@@ -30,9 +30,9 @@ class Tau2T2ReportTests(unittest.TestCase):
         plan = {
             "grants": [{"policy_sha256": "sha256:p", "capability": "cap"}],
             "capabilities": [{"version": "v", "capability": "cap", "output_schema": {}, "input_schema": {}, "handler_identity": "h", "playback": "live_only", "effect_class": "read", "description": "d"}],
-            "max_calls": 1, "schema_version": "pysolate.capability-plan.v6",
+            "max_calls": 1, "schema_version": "pysolate.capability-plan.v7",
         }
-        expected = b'{"schema_version":"pysolate.capability-plan.v6","max_calls":1,"capabilities":[{"capability":"cap","version":"v","description":"d","effect_class":"read","playback":"live_only","handler_identity":"h","input_schema":{},"output_schema":{}}],"grants":[{"capability":"cap","policy_sha256":"sha256:p"}]}'
+        expected = b'{"schema_version":"pysolate.capability-plan.v7","max_calls":1,"capabilities":[{"capability":"cap","version":"v","description":"d","effect_class":"read","playback":"live_only","handler_identity":"h","input_schema":{},"output_schema":{}}],"grants":[{"capability":"cap","policy_sha256":"sha256:p"}]}'
         self.assertEqual(reporter.plan_document_bytes(plan), expected)
 
     def test_not_recorded_requires_unknown_provider_calls_and_no_scores(self):

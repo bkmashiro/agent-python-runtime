@@ -19,17 +19,21 @@ import (
 // StreamingPreDispatchSnapshot is body-free causal evidence for one Run-private
 // dynamic controller. Counts are derived from its child physical operations.
 type StreamingPreDispatchSnapshot struct {
-	PhysicalIssues    uint32
-	PhysicalStarts    uint32
-	PhysicalFinishes  uint32
-	LogicalClaims     uint32
-	RejectedClaims    uint32
-	Consumed          uint32
-	Orphaned          uint32
-	Cancelled         uint32
-	Failed            uint32
-	SourceSealed      bool
-	FinalSourceSHA256 string
+	PhysicalIssues      uint32
+	PhysicalStarts      uint32
+	PhysicalFinishes    uint32
+	LogicalClaims       uint32
+	RejectedClaims      uint32
+	Consumed            uint32
+	Orphaned            uint32
+	Cancelled           uint32
+	Failed              uint32
+	ReservedCostUnits   uint64
+	ProviderCostUnits   uint64
+	ReservedResultBytes uint64
+	PhysicalResultBytes uint64
+	SourceSealed        bool
+	FinalSourceSHA256   string
 }
 
 type StreamingPrefixAdmissionSnapshot struct {
@@ -203,6 +207,10 @@ func (controller *StreamingSemanticPreDispatch) Snapshot() StreamingPreDispatchS
 		snapshot.PhysicalFinishes += child.PhysicalFinishes
 		snapshot.LogicalClaims += child.LogicalClaims
 		snapshot.RejectedClaims += child.RejectedClaims
+		snapshot.ReservedCostUnits += child.ReservedCostUnits
+		snapshot.ProviderCostUnits += child.ProviderCostUnits
+		snapshot.ReservedResultBytes += child.ReservedResultBytes
+		snapshot.PhysicalResultBytes += child.PhysicalResultBytes
 		switch child.Disposition {
 		case streaming.ObservationConsumed:
 			snapshot.Consumed++

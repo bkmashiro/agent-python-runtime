@@ -17,7 +17,7 @@ import (
 func testPlanDocument(t *testing.T) []byte {
 	t.Helper()
 	raw, err := json.Marshal(planDocument{
-		SchemaVersion: "pysolate.capability-plan.v6", MaxCalls: 1,
+		SchemaVersion: "pysolate.capability-plan.v7", MaxCalls: 1,
 		Capabilities: []capability.Spec{{
 			Name: "fixture.read", Version: "v1", Description: "fixture", EffectClass: capability.EffectExternalRead,
 			Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-handler",

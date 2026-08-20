@@ -157,7 +157,7 @@ def validate_plan(plan_body: bytes, lane_name: str, grant_sha: str) -> str:
     plan_sha = digest_bytes(plan_body)
     plan = load_json(plan_body, "Plan")
     require_keys(plan, {"schema_version", "max_calls", "capabilities", "grants"}, "Plan")
-    if plan["schema_version"] != "pysolate.capability-plan.v6" or plan["max_calls"] != 1:
+    if plan["schema_version"] != "pysolate.capability-plan.v7" or plan["max_calls"] != 1:
         raise ValueError("Plan header mismatch")
     if not isinstance(plan["capabilities"], list) or len(plan["capabilities"]) != 1:
         raise ValueError("Plan must contain one capability")

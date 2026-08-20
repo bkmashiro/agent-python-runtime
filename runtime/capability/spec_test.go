@@ -77,6 +77,31 @@ func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	}
 }
 
+func TestPreDispatchV1LimitsBindPlanIdentity(t *testing.T) {
+	identity := func(maxResultBytes uint64, costUnits uint32) string {
+		t.Helper()
+		registry := capability.NewRegistry()
+		spec := testSpec()
+		spec.EffectClass = capability.EffectExternalRead
+		spec.ReadOnly, spec.Idempotent = true, true
+		spec.PreDispatch = preDispatchArgument("path")
+		spec.PreDispatch.MaxResultBytes = maxResultBytes
+		spec.PreDispatch.CostUnits = costUnits
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+			t.Fatal(err)
+		}
+		plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return plan.Identity()
+	}
+	base := identity(1024, 1)
+	if base == identity(2048, 1) || base == identity(1024, 2) {
+		t.Fatal("pre-dispatch v1 limit did not change Plan identity")
+	}
+}
+
 func TestCapabilityPlanIdentityBindsApprovalLease(t *testing.T) {
 	identity := func(lease uint64) string {
 		registry := capability.NewRegistry()
@@ -193,8 +218,19 @@ func TestCapabilitySpecRequiresHostQualifiedPreDispatchConjunction(t *testing.T)
 
 func TestCapabilitySpecRejectsIncompletePreDispatchContracts(t *testing.T) {
 	mutations := map[string]func(*capability.Spec){
-		"freshness":          func(spec *capability.Spec) { spec.PreDispatch.Freshness = "latest" },
-		"unclaimed":          func(spec *capability.Spec) { spec.PreDispatch.Unclaimed = "ignore" },
+		"freshness":         func(spec *capability.Spec) { spec.PreDispatch.Freshness = "latest" },
+		"unclaimed":         func(spec *capability.Spec) { spec.PreDispatch.Unclaimed = "ignore" },
+		"privacy absent":    func(spec *capability.Spec) { spec.PreDispatch.Privacy = "" },
+		"privacy unknown":   func(spec *capability.Spec) { spec.PreDispatch.Privacy = "global" },
+		"coalescing absent": func(spec *capability.Spec) { spec.PreDispatch.Coalescing = "" },
+		"coalescing inferred": func(spec *capability.Spec) {
+			spec.PreDispatch.Coalescing = "infer_from_idempotency"
+		},
+		"result budget absent": func(spec *capability.Spec) { spec.PreDispatch.MaxResultBytes = 0 },
+		"result budget too large": func(spec *capability.Spec) {
+			spec.PreDispatch.MaxResultBytes = (1 << 20) + 1
+		},
+		"cost absent":        func(spec *capability.Spec) { spec.PreDispatch.CostUnits = 0 },
 		"namespace":          func(spec *capability.Spec) { spec.PreDispatch.Resource.Namespace = "" },
 		"missing key":        func(spec *capability.Spec) { spec.PreDispatch.Resource.Argument = "" },
 		"two keys":           func(spec *capability.Spec) { spec.PreDispatch.Resource.Constant = "fixed" },
@@ -423,9 +459,13 @@ func sealedPlanWithSpecs(t *testing.T, maxCalls uint32, specs []capability.Spec,
 
 func preDispatchArgument(argument string) *capability.PreDispatchContract {
 	return &capability.PreDispatchContract{
-		Resource:  capability.ResourceReference{Namespace: "workspace", Argument: argument},
-		Freshness: capability.FreshnessPlanEpoch,
-		Unclaimed: capability.UnclaimedDiscardWithDisposition,
+		Resource:       capability.ResourceReference{Namespace: "workspace", Argument: argument},
+		Freshness:      capability.FreshnessPlanEpoch,
+		Unclaimed:      capability.UnclaimedDiscardWithDisposition,
+		Privacy:        capability.PreDispatchPrivacyExactPartition,
+		Coalescing:     capability.PreDispatchCoalescingForbidden,
+		MaxResultBytes: 1 << 20,
+		CostUnits:      1,
 	}
 }
 

@@ -27,28 +27,42 @@ type PreDispatchLauncher interface {
 	Launch(func())
 }
 
+const defaultPreDispatchResultBytesPerRead = uint64(1 << 20)
+
 // PreDispatchBudget atomically consumes distinct Host-authored reservation
-// identities. It is private to one Run and is not a durable quota store.
+// identities and frozen worst-case cost/result bounds. It is private to one
+// Run and is not a durable quota store.
 type PreDispatchBudget struct {
-	mu           sync.Mutex
-	remaining    uint32
-	reservations map[string]struct{}
+	mu                   sync.Mutex
+	remaining            uint32
+	remainingCostUnits   uint64
+	remainingResultBytes uint64
+	reservations         map[string]struct{}
 }
 
 func NewPreDispatchBudget(maxPhysicalReads uint32) (*PreDispatchBudget, error) {
-	if maxPhysicalReads == 0 {
-		return nil, ErrPreDispatchBudgetExhausted
-	}
-	return &PreDispatchBudget{remaining: maxPhysicalReads, reservations: make(map[string]struct{})}, nil
+	return NewPreDispatchBudgetWithLimits(maxPhysicalReads, uint64(maxPhysicalReads), uint64(maxPhysicalReads)*defaultPreDispatchResultBytesPerRead)
 }
 
-func (budget *PreDispatchBudget) reserve(identity string) error {
-	if budget == nil || !digestPattern.MatchString(identity) {
+// NewPreDispatchBudgetWithLimits freezes independent per-Run ceilings for
+// physical attempts, declared provider cost and worst-case result bytes.
+func NewPreDispatchBudgetWithLimits(maxPhysicalReads uint32, maxCostUnits, maxResultBytes uint64) (*PreDispatchBudget, error) {
+	if maxPhysicalReads == 0 || maxCostUnits == 0 || maxResultBytes == 0 {
+		return nil, ErrPreDispatchBudgetExhausted
+	}
+	return &PreDispatchBudget{
+		remaining: maxPhysicalReads, remainingCostUnits: maxCostUnits, remainingResultBytes: maxResultBytes,
+		reservations: make(map[string]struct{}),
+	}, nil
+}
+
+func (budget *PreDispatchBudget) reserve(identity string, costUnits uint32, resultBytes uint64) error {
+	if budget == nil || !digestPattern.MatchString(identity) || costUnits == 0 || resultBytes == 0 {
 		return ErrPreDispatchBudgetExhausted
 	}
 	budget.mu.Lock()
 	defer budget.mu.Unlock()
-	if budget.remaining == 0 {
+	if budget.remaining == 0 || budget.remainingCostUnits < uint64(costUnits) || budget.remainingResultBytes < resultBytes {
 		return ErrPreDispatchBudgetExhausted
 	}
 	if _, exists := budget.reservations[identity]; exists {
@@ -56,40 +70,52 @@ func (budget *PreDispatchBudget) reserve(identity string) error {
 	}
 	budget.reservations[identity] = struct{}{}
 	budget.remaining--
+	budget.remainingCostUnits -= uint64(costUnits)
+	budget.remainingResultBytes -= resultBytes
 	return nil
 }
 
 type PreDispatchSnapshot struct {
-	PhysicalIssues   uint32
-	PhysicalStarts   uint32
-	PhysicalFinishes uint32
-	LogicalClaims    uint32
-	RejectedClaims   uint32
-	Disposition      streaming.ObservationDisposition
+	PhysicalIssues      uint32
+	PhysicalStarts      uint32
+	PhysicalFinishes    uint32
+	LogicalClaims       uint32
+	RejectedClaims      uint32
+	ReservedCostUnits   uint64
+	ProviderCostUnits   uint64
+	ReservedResultBytes uint64
+	PhysicalResultBytes uint64
+	Disposition         streaming.ObservationDisposition
 }
 
 // SemanticPreDispatch is a Run-private, one-call controller. It is both the
 // explicit physical-start target and the Broker's exact dynamic-boundary
 // claimer. Original Python remains unchanged.
 type SemanticPreDispatch struct {
-	mu          sync.Mutex
-	call        QualifiedCall
-	claim       ObservationClaim
-	identity    streaming.ObservationIdentity
-	prepared    *capability.PreparedPreDispatch
-	budget      *PreDispatchBudget
-	done        chan struct{}
-	cancel      context.CancelFunc
-	started     bool
-	closed      bool
-	record      *streaming.StagedObservation
-	runErr      error
-	issues      uint32
-	physical    uint32
-	finished    uint32
-	logical     uint32
-	rejected    uint32
-	disposition streaming.ObservationDisposition
+	mu                  sync.Mutex
+	call                QualifiedCall
+	claim               ObservationClaim
+	identity            streaming.ObservationIdentity
+	prepared            *capability.PreparedPreDispatch
+	budget              *PreDispatchBudget
+	done                chan struct{}
+	cancel              context.CancelFunc
+	started             bool
+	closed              bool
+	record              *streaming.StagedObservation
+	runErr              error
+	issues              uint32
+	physical            uint32
+	finished            uint32
+	logical             uint32
+	rejected            uint32
+	costUnits           uint64
+	reservedCostUnits   uint64
+	providerCostUnits   uint64
+	maxResultBytes      uint64
+	reservedResultBytes uint64
+	physicalResultBytes uint64
+	disposition         streaming.ObservationDisposition
 }
 
 func NewSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *PreDispatchBudget) (*SemanticPreDispatch, error) {
@@ -100,6 +126,11 @@ func newSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *P
 	if !call.valid() || requireExclusive && !call.exclusiveDynamicCall || plan == nil || budget == nil || call.binding.PlanSHA256 != plan.Identity() {
 		return nil, ErrPreDispatchInvalid
 	}
+	qualification, ok := plan.PreDispatch(call.capability)
+	if !ok || !qualification.Eligible() {
+		return nil, ErrPreDispatchInvalid
+	}
+	contract := qualification.Contract()
 	prepared, err := plan.PreparePreDispatch(call.capability, call.CanonicalArguments())
 	if err != nil || !bytes.Equal(prepared.Arguments(), call.canonicalArguments) {
 		return nil, ErrPreDispatchInvalid
@@ -122,7 +153,7 @@ func newSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *P
 	}
 	return &SemanticPreDispatch{
 		call: call.clone(), claim: claim, identity: identity, prepared: prepared,
-		budget: budget, done: make(chan struct{}),
+		budget: budget, done: make(chan struct{}), costUnits: uint64(contract.CostUnits), maxResultBytes: contract.MaxResultBytes,
 	}, nil
 }
 
@@ -135,10 +166,12 @@ func (controller *SemanticPreDispatch) Start(ctx context.Context, launcher PreDi
 		controller.mu.Unlock()
 		return ErrPreDispatchAlreadyStarted
 	}
-	if err := controller.budget.reserve(controller.claim.BudgetReservationSHA256); err != nil {
+	if err := controller.budget.reserve(controller.claim.BudgetReservationSHA256, uint32(controller.costUnits), controller.maxResultBytes); err != nil {
 		controller.mu.Unlock()
 		return err
 	}
+	controller.reservedCostUnits = controller.costUnits
+	controller.reservedResultBytes = controller.maxResultBytes
 	operationContext, cancel := context.WithCancel(ctx)
 	controller.started = true
 	controller.cancel = cancel
@@ -152,11 +185,13 @@ func (controller *SemanticPreDispatch) Start(ctx context.Context, launcher PreDi
 func (controller *SemanticPreDispatch) execute(ctx context.Context) {
 	controller.mu.Lock()
 	controller.physical++
+	controller.providerCostUnits = controller.costUnits
 	controller.mu.Unlock()
 	result, err := controller.prepared.Call(ctx)
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
 	controller.finished++
+	controller.physicalResultBytes = result.PhysicalResultBytes
 	if err != nil {
 		controller.runErr = err
 		controller.disposition = streaming.ObservationFailed
@@ -349,7 +384,10 @@ func (controller *SemanticPreDispatch) Snapshot() PreDispatchSnapshot {
 	defer controller.mu.Unlock()
 	return PreDispatchSnapshot{
 		PhysicalIssues: controller.issues, PhysicalStarts: controller.physical, PhysicalFinishes: controller.finished,
-		LogicalClaims: controller.logical, RejectedClaims: controller.rejected, Disposition: controller.disposition,
+		LogicalClaims: controller.logical, RejectedClaims: controller.rejected,
+		ReservedCostUnits: controller.reservedCostUnits, ProviderCostUnits: controller.providerCostUnits,
+		ReservedResultBytes: controller.reservedResultBytes,
+		PhysicalResultBytes: controller.physicalResultBytes, Disposition: controller.disposition,
 	}
 }
 

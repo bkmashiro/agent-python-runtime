@@ -300,7 +300,7 @@ func travelCapabilitySpec(method string, input, output json.RawMessage, argument
 		Name: "travel." + method, Version: "pysolate.day-trip-travel-api.v1", Description: "Deterministic delayed public day-trip API fixture.",
 		EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "pysolate.day-trip-travel-api.v1-" + method,
 		InputSchema: input, OutputSchema: output, Python: &capability.PythonProjection{Module: "travel", Method: method, Arguments: arguments}, ReadOnly: true, Idempotent: true,
-		PreDispatch: &capability.PreDispatchContract{Resource: capability.ResourceReference{Namespace: "travel-" + method, Argument: "destination"}, Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition},
+		PreDispatch: &capability.PreDispatchContract{Resource: capability.ResourceReference{Namespace: "travel-" + method, Argument: "destination"}, Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1 << 20, CostUnits: 1},
 	}
 }
 

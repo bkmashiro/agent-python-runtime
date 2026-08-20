@@ -55,6 +55,8 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			spec.PreDispatch = &capability.PreDispatchContract{
 				Resource:  capability.ResourceReference{Namespace: "fixture", Argument: "value"},
 				Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+				Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden,
+				MaxResultBytes: 1 << 20, CostUnits: 1,
 			}
 		}
 		if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, arguments json.RawMessage) (json.RawMessage, error) {

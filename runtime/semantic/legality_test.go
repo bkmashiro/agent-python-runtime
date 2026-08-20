@@ -270,6 +270,8 @@ func legalityTestPlanWithHandler(t *testing.T, qualified bool, handler capabilit
 		spec.PreDispatch = &capability.PreDispatchContract{
 			Resource:  capability.ResourceReference{Namespace: "source", Argument: "key"},
 			Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+			Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden,
+			MaxResultBytes: 1 << 20, CostUnits: 1,
 		}
 	}
 	if err := registry.Register(spec, grant, handler); err != nil {

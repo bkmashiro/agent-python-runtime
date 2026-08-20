@@ -54,7 +54,7 @@ class Tau2WriteReportTests(unittest.TestCase):
             if injected:
                 handler += ".injected-failure"
             plan = {
-                "schema_version": "pysolate.capability-plan.v6", "max_calls": 1,
+                "schema_version": "pysolate.capability-plan.v7", "max_calls": 1,
                 "capabilities": [{
                     "capability": reporter.CAPABILITY, "version": "v1", "description": "exact",
                     "effect_class": "workspace_write", "playback": "live_only", "handler_identity": handler,

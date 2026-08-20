@@ -13,6 +13,7 @@ import (
 
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
 func testSHA(value []byte) string {
@@ -85,6 +86,25 @@ func TestResolveVCSIdentityRequiresCleanEmbeddedRevision(t *testing.T) {
 	}
 }
 
+func legacyPlanIdentity(t *testing.T, plan *capability.Plan) string {
+	t.Helper()
+	raw, err := json.Marshal(struct {
+		SchemaVersion string                    `json:"schema_version"`
+		MaxCalls      uint32                    `json:"max_calls"`
+		Capabilities  []capability.Spec         `json:"capabilities"`
+		Grants        []capability.GrantBinding `json:"grants"`
+	}{
+		SchemaVersion: "pysolate.capability-plan.v6",
+		MaxCalls:      1,
+		Capabilities:  plan.Specs(),
+		Grants:        plan.Grants(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return digestBytes(raw)
+}
+
 func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "docs", "evidence")
 	contractRaw, err := os.ReadFile(filepath.Join(root, "source-prefix-overlap-contract-v1.json"))
@@ -117,7 +137,8 @@ func TestCheckedInEvidenceValidatesRemediationAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.CapabilityPlanSHA256 != plan.Identity() || evidence.CapabilitySpecSHA256 != digestBytes(specJSON) || evidence.ExecutionProfileSHA256 != digestBytes(profileJSON) || evidence.HandlerSHA256 != digestBytes([]byte(legacyFixtureHandlerContract)) {
+	legacyPlanSHA := legacyPlanIdentity(t, plan)
+	if evidence.CapabilityPlanSHA256 != legacyPlanSHA || evidence.CapabilitySpecSHA256 != digestBytes(specJSON) || evidence.ExecutionProfileSHA256 != digestBytes(profileJSON) || evidence.HandlerSHA256 != digestBytes([]byte(legacyFixtureHandlerContract)) {
 		t.Fatalf("checked-in runtime identities do not match executable definitions: %+v", evidence)
 	}
 	for _, row := range evidence.Rows {

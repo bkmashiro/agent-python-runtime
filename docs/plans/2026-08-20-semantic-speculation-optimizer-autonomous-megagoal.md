@@ -289,13 +289,13 @@ Design a minimal orthogonal contract rather than a universal effect lattice. Reu
 
 Tasks:
 
-- [ ] Write RED registration/plan/legality tests for absent, inconsistent and tampered contract fields.
-- [ ] Extend the canonical capability/plan identity minimally.
-- [ ] Thread verified fields through legality, pre-dispatch, Broker/observation and evidence without widening Guest authority.
-- [ ] Enforce positive admission; name-based absence from a denylist never admits a Host operation.
-- [ ] Add the motivating invalid-suffix real path: physical read may be authorised and orphaned, logical call stays absent, official workspace remains unchanged.
-- [ ] Prove read-only/idempotent alone is insufficient when speculative-safe/freshness/privacy contracts are absent.
-- [ ] Run focused/race and exact Guest tests, update roadmap, signed commit, push, continue.
+- [x] Write RED registration/plan/legality tests for absent, inconsistent and tampered contract fields.
+- [x] Extend the canonical capability/plan identity minimally.
+- [x] Thread verified fields through legality, pre-dispatch, Broker/observation and evidence without widening Guest authority.
+- [x] Enforce positive admission; name-based absence from a denylist never admits a Host operation.
+- [x] Add the motivating invalid-suffix real path: a physical read may be authorised, the failed Run records it as cancelled, logical call stays absent, and no official workspace is touched. A successful Run with a ready unclaimed result remains orphaned.
+- [x] Prove read-only/idempotent alone is insufficient when speculative-safe/freshness/privacy contracts are absent.
+- [x] Run focused/race and exact Guest tests, update roadmap, signed commit, push, continue.
 
 **Gate P2:** No missing/unknown Host metadata can fail open. The added contract remains small enough to review and canonicalise.
 
@@ -553,10 +553,11 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 
 ### Current execution pointer
 
-`Phase 2: Host speculative-preparation contract.`
+`Phase 3: matched EAGER comparison.`
 
 ## Completion log
 
+- 2026-08-20 Phase 2 contract slice: capability Plan v7 now requires positive pre-dispatch v1 declarations for exact partition privacy, forbidden coalescing, result-byte ceiling and provider cost units in addition to the existing resource/freshness/unclaimed-safety contract. Run-private admission reserves attempt count, cost units and worst-case result bytes atomically; evidence separates reservations, physical starts and returned physical bytes. Oversized Host results become typed `invalid_result` outcomes without exposing bodies. Historical source-prefix v6 evidence is recomputed with its frozen canonical document rather than rewritten. Full `go test ./...` (including 543.931 s integration/e2e), all 105 script tests, focused gates, targeted race, vet and exact Guest adversarial/pre-dispatch tests passed.
 - 2026-08-20 Phase 1 complete: Gate P1 passed with every preregistered adversarial row mapped to a typed outcome and direct test. Exact source commit `1c07fc2b9a012abab9071abb777e9ba80f18ee66`; base CPython 3.14 WASI artifact `sha256:7be7bc7ea15951364427764d36fa6ac40b6f2ed68e71a5a6c639492a2f21df79`; private body-free evidence manifest `sha256:d2902898091a95c71da9214e6643673dfbb8d6289a6b1ec95a49bb8f2e675d35`. Three exact-Guest oracle tests passed in 27.024 s, 14-package focused gate passed, three-package race gate passed, vet and artifact/supply-chain verification passed.
 - 2026-08-20 Phase 1 qualification slice: target-Guest analysis of a custom wrapper records the inner direct capability only in the function summary, emits no positive call-site occurrence for pre-dispatch, and marks the dynamic wrapper invocation region `unknown_effect`; the planner emits no decision and no physical work.
 - 2026-08-20 Phase 1 outcome-contract slice: added strict body-free `pysolate.semantic-speculation-trial.v1` projections for final-program, prefix-Python, logical-call, physical-attempt, provider-cost, terminal-disposition, authority and workspace outcomes. Exact-Guest oracle tests cover whole-file syntax rejection, reached and unreached runtime errors, untaken control, ordinary success, and separately recorded pre-dispatch physical work on an invalid final suffix. The initial RED exposed two real semantics: full-file syntax rejection occurs as `ErrAgentSourceInvalid` before Broker creation, and invalid streamed suffix finalisation classifies an already issued pre-dispatch as cancelled rather than a logical call.

@@ -412,6 +412,29 @@ func TestBrokerRejectsStagedClaimerForUnqualifiedCapability(t *testing.T) {
 	}
 }
 
+func TestPreparedPreDispatchEnforcesHostResultByteLimit(t *testing.T) {
+	registry := capability.NewRegistry()
+	spec := stagedTestSpec()
+	spec.PreDispatch.MaxResultBytes = 16
+	if err := registry.Register(spec, basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"this result is too large"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := plan.PreparePreDispatch(spec.Name, json.RawMessage(`{"path":"note.txt"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := prepared.Call(context.Background())
+	if err != nil || outcome.ErrorCode != "invalid_result" || len(outcome.Result) != 0 || outcome.PhysicalResultBytes <= 16 {
+		t.Fatalf("outcome=%+v err=%v", outcome, err)
+	}
+}
+
 func TestPreparedPreDispatchExecutesEligibleHandlerExactlyOnce(t *testing.T) {
 	var calls atomic.Uint32
 	registry := capability.NewRegistry()
@@ -424,6 +447,8 @@ func TestPreparedPreDispatchExecutesEligibleHandlerExactlyOnce(t *testing.T) {
 	spec.PreDispatch = &capability.PreDispatchContract{
 		Resource:  capability.ResourceReference{Namespace: "source", Argument: "key"},
 		Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+		Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden,
+		MaxResultBytes: 1 << 20, CostUnits: 1,
 	}
 	if err := registry.Register(spec, basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		calls.Add(1)
@@ -468,6 +493,8 @@ func stagedTestSpec() capability.Spec {
 	spec.PreDispatch = &capability.PreDispatchContract{
 		Resource:  capability.ResourceReference{Namespace: "workspace", Argument: "path"},
 		Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition,
+		Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden,
+		MaxResultBytes: 1 << 20, CostUnits: 1,
 	}
 	return spec
 }

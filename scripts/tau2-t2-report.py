@@ -152,7 +152,7 @@ def validate_turn(event: dict[str, Any], root: pathlib.Path, task_id: str, allow
     plan = turn.get("plan_document")
     if not isinstance(plan, dict) or sha(plan_document_bytes(plan)) != turn.get("capability_plan_sha256"):
         raise ValueError("Plan identity mismatch")
-    if plan.get("schema_version") != "pysolate.capability-plan.v6" or plan.get("max_calls") != 1 or len(plan.get("capabilities", [])) != 1 or len(plan.get("grants", [])) != 1:
+    if plan.get("schema_version") != "pysolate.capability-plan.v7" or plan.get("max_calls") != 1 or len(plan.get("capabilities", [])) != 1 or len(plan.get("grants", [])) != 1:
         raise ValueError("Plan shape mismatch")
     capability_name = "tau2.airline." + event["tool"]
     spec = plan["capabilities"][0]

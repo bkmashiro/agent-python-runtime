@@ -27,6 +27,8 @@ func TestBrokerFallsBackToOneLiveCallWhenDynamicStageDidNotTargetOccurrence(t *t
 		PreDispatch: &capability.PreDispatchContract{
 			Resource: capability.ResourceReference{Namespace: "workspace", Argument: "path"}, Freshness: capability.FreshnessPlanEpoch,
 			Unclaimed: capability.UnclaimedDiscardWithDisposition,
+			Privacy:   capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden,
+			MaxResultBytes: 1 << 20, CostUnits: 1,
 		},
 	}
 	if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {

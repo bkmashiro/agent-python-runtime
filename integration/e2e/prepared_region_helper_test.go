@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -361,6 +363,233 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	if err := driftEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+type preparedDerivedFixture struct {
+	decision  preparedregion.PreparedRegionDecision
+	capsule   preparedregion.PreparedRegionCapsule
+	patch     preparedregion.PreparedRegionPatch
+	selection preparedregion.PreparedRegionExecutionSelection
+}
+
+func qualifyPreparedDerivedFixture(t *testing.T, ctx context.Context, artifact []byte, profile runtimeconfig.ExecutionProfile, source string, statementIndex int, span preparedregion.SourceSpan, regionSource string, liveIns map[string]json.RawMessage) preparedDerivedFixture {
+	t.Helper()
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	config.ExecutionProfile = &profile
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveInsRaw, liveInsSHA, err := preparedregion.SealPreparedRegionLiveIns(liveIns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceSHA := preparedRegionDigest([]byte(source))
+	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x00%d\x00%d:%d:%d:%d", sourceSHA, statementIndex, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn)
+	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(preparedregion.PreparedRegionBinding{
+		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
+		RegionSourceSHA256: preparedRegionDigest([]byte(regionSource)), LiveInsSHA256: liveInsSHA,
+		EnvironmentSHA256: digestA, ExecutionProfileSHA256: profileSHA256, ImportClosureSHA256: digestA,
+		CapabilityPlanSHA256: digestA, PassConfigSHA256: digestA,
+		Codec: preparedregion.PreparedRegionCodecJSONScalarV1, OutputName: "value",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualificationEngine, err := wazeroengine.New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = qualificationEngine.Close(context.Background()) })
+	scratchRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source, "live_ins": string(liveInsRaw)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratchResult, _, err := qualificationEngine.ExecutePreparedRegionScratch(ctx, scratchRequest, decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, capsule, err := preparedregion.PublishPreparedRegionScratchResult(decision, scratchResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := qualificationEngine.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{MaxRequests: 1, MaxCumulativeRequestBytes: 16 * 1024, MaxDuration: 20 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitRequest, err := json.Marshal(map[string]string{"decision": string(decisionRaw), "final_source": source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindingRaw, err := session.EmitPreparedRegionPatch(ctx, emitRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	binding, err := preparedregion.DecodePreparedRegionPatchBinding(bindingRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, patch, err := preparedregion.SealPreparedRegionPatch(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, selection, err := preparedregion.SealPreparedRegionExecutionSelection(decision, capsule, patch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return preparedDerivedFixture{decision: decision, capsule: capsule, patch: patch, selection: selection}
+}
+
+type preparedFailureEnvelope struct {
+	Status string `json:"status"`
+	Error  struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		ErrorType string `json:"error_type"`
+		Trace     string `json:"traceback"`
+	} `json:"error"`
+	Logs []string `json:"logs"`
+}
+
+func decodePreparedFailure(t *testing.T, raw []byte) preparedFailureEnvelope {
+	t.Helper()
+	var envelope preparedFailureEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Status != "error" || envelope.Error.Code != "python_exception" {
+		t.Fatalf("failure envelope=%s err=%v", raw, err)
+	}
+	return envelope
+}
+
+func TestExactGuestPreparedRegionAdversarialPathsPreserveFailureAndConsumption(t *testing.T) {
+	artifact, profile := loadPreparedRegionArtifact(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	config.ExecutionProfile = &profile
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	t.Run("exception before region leaves capsule unclaimed", func(t *testing.T) {
+		source := "seed = 40\nif inputs[\"fail\"]:\n    raise ValueError(\"before region\")\nvalue = seed + 2\nresult = value\n"
+		fixture := qualifyPreparedDerivedFixture(t, ctx, artifact, profile, source, 2, preparedregion.SourceSpan{StartLine: 4, StartColumn: 0, EndLine: 4, EndColumn: 16}, "value = seed + 2", map[string]json.RawMessage{"seed": json.RawMessage(`40`)})
+		request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-before-exception", Code: source, Inputs: json.RawMessage(`{"fail":true}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineEngine, err := wazeroengine.New(ctx, artifact, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineRaw, err := baselineEngine.Run(ctx, request, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := baselineEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: fixture.decision, Capsule: fixture.capsule}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		derivedEngine := runner.(*wazeroengine.Engine)
+		derivedRaw, err := derivedEngine.RunPreparedRegionDerived(ctx, request, "", fixture.selection, fixture.decision, fixture.capsule, fixture.patch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineFailure, derivedFailure := decodePreparedFailure(t, baselineRaw), decodePreparedFailure(t, derivedRaw)
+		if !reflect.DeepEqual(baselineFailure, derivedFailure) || derivedFailure.Error.ErrorType != "ValueError" || derivedFailure.Error.Message != "before region" || !strings.Contains(derivedFailure.Error.Trace, `line 3, in _pysolate_agent_main`) {
+			t.Fatalf("baseline=%s derived=%s", baselineRaw, derivedRaw)
+		}
+		if evidence := table.Evidence(); evidence.Claims != 0 || evidence.Consumed != 0 || evidence.Discarded != 1 {
+			t.Fatalf("pre-region exception table evidence=%+v", evidence)
+		}
+		if err := derivedEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("exception after region preserves traceback and consumes once", func(t *testing.T) {
+		source := "seed = 40\nvalue = seed + 2\nraise LookupError(\"after region\")\nresult = value\n"
+		fixture := qualifyPreparedDerivedFixture(t, ctx, artifact, profile, source, 1, preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}, "value = seed + 2", map[string]json.RawMessage{"seed": json.RawMessage(`40`)})
+		request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-after-exception", Code: source, Inputs: json.RawMessage(`{}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineEngine, err := wazeroengine.New(ctx, artifact, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineRaw, err := baselineEngine.Run(ctx, request, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := baselineEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: fixture.decision, Capsule: fixture.capsule}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		derivedEngine := runner.(*wazeroengine.Engine)
+		derivedRaw, err := derivedEngine.RunPreparedRegionDerived(ctx, request, "", fixture.selection, fixture.decision, fixture.capsule, fixture.patch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineFailure, derivedFailure := decodePreparedFailure(t, baselineRaw), decodePreparedFailure(t, derivedRaw)
+		if !reflect.DeepEqual(baselineFailure, derivedFailure) || derivedFailure.Error.ErrorType != "LookupError" || derivedFailure.Error.Message != "after region" || !strings.Contains(derivedFailure.Error.Trace, `line 3, in _pysolate_agent_main`) {
+			t.Fatalf("baseline=%s derived=%s", baselineRaw, derivedRaw)
+		}
+		if evidence := table.Evidence(); evidence.Claims != 1 || evidence.Consumed != 1 || evidence.RejectedClaims != 0 || evidence.Discarded != 0 {
+			t.Fatalf("post-region exception table evidence=%+v", evidence)
+		}
+		if err := derivedEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("pre-cancelled execution leaves capsule unclaimed", func(t *testing.T) {
+		source := "seed = 40\nvalue = seed + 2\nresult = value\n"
+		fixture := qualifyPreparedDerivedFixture(t, ctx, artifact, profile, source, 1, preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}, "value = seed + 2", map[string]json.RawMessage{"seed": json.RawMessage(`40`)})
+		table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: fixture.decision, Capsule: fixture.capsule}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		derivedEngine := runner.(*wazeroengine.Engine)
+		request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-region-cancelled", Code: source, Inputs: json.RawMessage(`{}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancelled, cancelNow := context.WithCancel(ctx)
+		cancelNow()
+		if raw, err := derivedEngine.RunPreparedRegionDerived(cancelled, request, "", fixture.selection, fixture.decision, fixture.capsule, fixture.patch); err == nil || raw != nil {
+			t.Fatalf("pre-cancelled response=%s err=%v", raw, err)
+		}
+		if evidence := table.Evidence(); evidence.Ready != 0 || evidence.Claims != 0 || evidence.Consumed != 0 || evidence.Discarded != 1 {
+			t.Fatalf("cancelled execution consumed capsule: %+v", evidence)
+		}
+		if err := derivedEngine.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if evidence := table.Evidence(); evidence.Discarded != 1 {
+			t.Fatalf("cancelled close evidence=%+v", evidence)
+		}
+	})
 }
 
 const digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

@@ -3,9 +3,14 @@ package wazero
 import "context"
 
 type cowPreparedRuntime interface {
-	prepare(context.Context, *Engine) (*preparedInstance, error)
+	prepare(context.Context, *Engine) (*preparedInstance, cowCloneLifecycle, error)
 	close() error
 	imageState() PreparedImageState
+}
+
+type cowCloneLifecycle struct {
+	ModuleInstantiations uint32
+	InitializeCalls      uint32
 }
 
 // PreparedImageState is bounded, body-free evidence about the sealed linear-memory baseline.

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	wazerort "github.com/tetratelabs/wazero"
 )
 
 func TestSemanticAnalysisLifecycleStoreAggregatesBodyFreeEvidence(t *testing.T) {
@@ -73,5 +74,41 @@ func TestSemanticAnalysisSessionRejectsAuthorityBearingEngine(t *testing.T) {
 	})
 	if !errors.Is(err, ErrSemanticAnalysisSessionAuthority) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestSemanticAnalysisSessionLeasesEngineClose(t *testing.T) {
+	ctx := context.Background()
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SemanticAnalysis = true
+	engine := &Engine{runtime: wazerort.NewRuntime(ctx), config: config}
+	session, err := engine.NewSemanticAnalysisSession(ctx, SemanticAnalysisSessionLimits{
+		MaxRequests: 1, MaxCumulativeRequestBytes: uint64(engine.config.MaxRequestBytes), MaxDuration: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Close(ctx); !errors.Is(err, ErrSemanticAnalysisSessionsActive) {
+		t.Fatalf("close with active session err=%v", err)
+	}
+	if _, err := engine.NewSemanticAnalysisSession(ctx, SemanticAnalysisSessionLimits{
+		MaxRequests: 1, MaxCumulativeRequestBytes: uint64(engine.config.MaxRequestBytes), MaxDuration: time.Second,
+	}); !errors.Is(err, ErrSemanticAnalysisEngineClosing) {
+		t.Fatalf("new session after close began err=%v", err)
+	}
+	if err := session.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrepareSemanticRuntimeRejectsAuthorityBearingEngine(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
+	engine := &Engine{config: config, workspaceBinding: &workspaceBinding{}}
+	if err := engine.PrepareSemanticRuntime(context.Background()); !errors.Is(err, ErrSemanticAnalysisSessionAuthority) {
+		t.Fatalf("authority-bearing preprovision err=%v", err)
 	}
 }

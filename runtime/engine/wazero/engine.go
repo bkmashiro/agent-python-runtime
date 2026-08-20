@@ -200,6 +200,9 @@ type Engine struct {
 	cowRuntime          cowPreparedRuntime
 	cowActive           uint64
 	cowClosing          bool
+	semanticSessionMu   sync.Mutex
+	semanticSessionRuns uint64
+	semanticClosing     bool
 	coldEvidence        coldEvidenceStore
 	semanticLifecycle   semanticAnalysisLifecycleStore
 }
@@ -319,14 +322,47 @@ func (engine *Engine) ensurePrepared(ctx context.Context) error {
 	return err
 }
 
-// PrepareRuntime provisions the configured single-use prepared slot or Linux
-// COW baseline without serving it. Capacity profiles use this before a Run;
-// consumers still acquire only private single-use modules.
-func (engine *Engine) PrepareRuntime(ctx context.Context) error {
+// PrepareSemanticRuntime provisions an authority-free analyzer's configured
+// single-use prepared slot or Linux COW baseline without serving it. Capacity
+// profiles use this before a Run; consumers still acquire only private
+// single-use modules.
+func (engine *Engine) PrepareSemanticRuntime(ctx context.Context) error {
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime {
 		return runtimeconfig.ErrMechanismDisabled
 	}
+	properties := engine.Properties()
+	if properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
+		return ErrSemanticAnalysisSessionAuthority
+	}
 	return engine.ensurePrepared(ctx)
+}
+
+func (engine *Engine) acquireSemanticSession() error {
+	engine.semanticSessionMu.Lock()
+	defer engine.semanticSessionMu.Unlock()
+	if engine.semanticClosing {
+		return ErrSemanticAnalysisEngineClosing
+	}
+	engine.semanticSessionRuns++
+	return nil
+}
+
+func (engine *Engine) releaseSemanticSession() {
+	engine.semanticSessionMu.Lock()
+	if engine.semanticSessionRuns > 0 {
+		engine.semanticSessionRuns--
+	}
+	engine.semanticSessionMu.Unlock()
+}
+
+func (engine *Engine) beginSemanticClose() error {
+	engine.semanticSessionMu.Lock()
+	defer engine.semanticSessionMu.Unlock()
+	engine.semanticClosing = true
+	if engine.semanticSessionRuns != 0 {
+		return ErrSemanticAnalysisSessionsActive
+	}
+	return nil
 }
 
 func (engine *Engine) ensurePreparedWithResult(ctx context.Context) (bool, error) {
@@ -418,6 +454,9 @@ func (engine *Engine) closeCOWRuntime() error {
 func (engine *Engine) Close(ctx context.Context) error {
 	if engine == nil || engine.runtime == nil {
 		return nil
+	}
+	if err := engine.beginSemanticClose(); err != nil {
+		return err
 	}
 	engine.preparedInitMu.Lock()
 	defer engine.preparedInitMu.Unlock()
@@ -760,7 +799,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		return nil, acquireErr
 	}
 	if cowSelected {
-		prepared, err = cowRuntime.prepare(runContext, engine)
+		prepared, _, err = cowRuntime.prepare(runContext, engine)
 		if err != nil {
 			releaseCOW()
 			return nil, fmt.Errorf("prepare single-use COW slot: %w", err)

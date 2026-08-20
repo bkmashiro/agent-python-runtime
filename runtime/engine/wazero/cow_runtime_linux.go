@@ -71,23 +71,25 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	return &linuxCOWPreparedRuntime{image: image}, nil
 }
 
-func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Engine) (*preparedInstance, error) {
+func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Engine) (*preparedInstance, cowCloneLifecycle, error) {
+	lifecycle := cowCloneLifecycle{}
 	if runtime == nil || runtime.image == nil {
-		return nil, errors.New("COW baseline is unavailable")
+		return nil, lifecycle, errors.New("COW baseline is unavailable")
 	}
 	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
 	allocator := runtime.image.newAllocator()
 	moduleConfig, temporary, err := engine.moduleConfig(stderr, stdout)
 	if err != nil {
-		return nil, err
+		return nil, lifecycle, err
 	}
+	lifecycle.ModuleInstantiations++
 	module, err := instantiateCOWModule(ctx, engine.runtime, engine.compiled, moduleConfig, allocator)
 	if err != nil {
 		if temporary != nil {
 			_ = temporary.Close()
 		}
-		return nil, fmt.Errorf("instantiate COW guest: %w", err)
+		return nil, lifecycle, fmt.Errorf("instantiate COW guest: %w", err)
 	}
 	failed := true
 	defer func() {
@@ -98,31 +100,32 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 			}
 		}
 	}()
+	lifecycle.InitializeCalls++
 	if err := callNoArgs(ctx, module, "_initialize"); err != nil {
-		return nil, withGuestDiagnostic(err, stderr.String())
+		return nil, lifecycle, withGuestDiagnostic(err, stderr.String())
 	}
 	allocation, err := allocator.Allocation()
 	if err != nil {
-		return nil, fmt.Errorf("resolve COW allocation: %w", err)
+		return nil, lifecycle, fmt.Errorf("resolve COW allocation: %w", err)
 	}
 	if err := allocation.restoreBaselineBeforeServe(); err != nil {
-		return nil, fmt.Errorf("attach COW baseline: %w", err)
+		return nil, lifecycle, fmt.Errorf("attach COW baseline: %w", err)
 	}
 	memory := module.Memory()
 	if memory == nil || uint64(memory.Size()) != runtime.image.baselineSize {
-		return nil, errors.New("COW slot memory shape drifted")
+		return nil, lifecycle, errors.New("COW slot memory shape drifted")
 	}
 	stderr.Reset()
 	var cold coldIOContinuation
 	if engine.config.Mechanisms.ColdIOContinuation {
 		continuation, continuationErr := newColdIOContinuation(allocation, *engine.config.ColdIO)
 		if continuationErr != nil {
-			return nil, fmt.Errorf("create cold I/O continuation: %w", continuationErr)
+			return nil, lifecycle, fmt.Errorf("create cold I/O continuation: %w", continuationErr)
 		}
 		cold = continuation
 	}
 	failed = false
-	return &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary, cold: cold}, nil
+	return &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary, cold: cold}, lifecycle, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) close() error {

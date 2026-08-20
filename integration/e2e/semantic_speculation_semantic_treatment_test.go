@@ -69,7 +69,7 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 			if newErr != nil {
 				return nil, newErr
 			}
-			if prepareErr := analyzer.PrepareRuntime(ctx); prepareErr != nil {
+			if prepareErr := analyzer.PrepareSemanticRuntime(ctx); prepareErr != nil {
 				_ = analyzer.Close(context.Background())
 				return nil, prepareErr
 			}

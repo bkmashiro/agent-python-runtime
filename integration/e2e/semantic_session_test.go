@@ -160,7 +160,7 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 			}
 		}()
 		if preprovision {
-			if prepareErr := analyzer.PrepareRuntime(ctx); prepareErr != nil {
+			if prepareErr := analyzer.PrepareSemanticRuntime(ctx); prepareErr != nil {
 				t.Fatal(prepareErr)
 			}
 			if state := analyzer.PreparedState(); !state.Ready || state.PreparedRuns != 0 {
@@ -231,9 +231,9 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 	if goruntime.GOOS != "linux" {
 		cowConfig := config
 		cowConfig.Mechanisms.MemoryCOW = true
-		fallbackState, _, fallbackEvidence, fallbackIdentity := run(cowConfig, false, false)
-		if fallbackState.FreshFallbackRuns != 1 || fallbackEvidence.PreparedProvisionFailures != 1 ||
-			fallbackEvidence.FreshFallbacks != 1 || fallbackEvidence.Successes != 1 || fallbackEvidence.COWHits != 0 {
+		fallbackState, _, fallbackEvidence, fallbackIdentity := run(cowConfig, false, true)
+		if fallbackState.FreshFallbackRuns != 2 || fallbackEvidence.PreparedProvisionFailures != 1 ||
+			fallbackEvidence.FreshFallbacks != 2 || fallbackEvidence.Successes != 2 || fallbackEvidence.COWHits != 0 {
 			t.Fatalf("unsupported COW fallback prepared=%+v lifecycle=%+v", fallbackState, fallbackEvidence)
 		}
 		if fallbackIdentity != coldIdentity {

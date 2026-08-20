@@ -78,6 +78,7 @@ type SemanticPreDispatchTreatment struct {
 	source                strings.Builder
 	chunks                chan string
 	generated             chan semanticGenerationResult
+	generationDone        chan struct{}
 	lifecycleMu           sync.Mutex
 	generationStarted     time.Time
 	beginNanos            uint64
@@ -95,6 +96,8 @@ type SemanticPreDispatchTreatment struct {
 	analyzerPrepared      wazeroengine.PreparedState
 	analyzerPreparedImage wazeroengine.PreparedImageState
 	analyzerSnapshotted   bool
+	analyzerCloseMu       sync.Mutex
+	analyzerClosed        bool
 	begun                 bool
 	finalized             bool
 	once                  sync.Once
@@ -219,6 +222,7 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	t.inputs = append(json.RawMessage(nil), inputs...)
 	t.chunks = make(chan string, 32)
 	t.generated = make(chan semanticGenerationResult, 1)
+	t.generationDone = make(chan struct{})
 	t.generationStarted = time.Now()
 	artifactDigest := sha256.Sum256(t.config.Artifact)
 	bindings := semantic.Bindings{
@@ -244,6 +248,7 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	t.analyzerSessions++
 	t.lifecycleMu.Unlock()
 	go func() {
+		defer close(t.generationDone)
 		generated, generationErr := semantic.GenerateVerifiedSourceWithPreDispatch(runContext, semantic.VerifiedSourceGenerationConfig{
 			Plan: t.config.Plan, Bindings: bindings, Admission: admission, SourceChunks: t.chunks,
 			ShouldAnalyzePrefix: readiness.ShouldAnalyzePrefix,
@@ -438,21 +443,28 @@ func (t *SemanticPreDispatchTreatment) LifecycleEvidence() SemanticTreatmentLife
 	return result
 }
 
-func (t *SemanticPreDispatchTreatment) closeAnalyzer(ctx context.Context) {
+func (t *SemanticPreDispatchTreatment) closeAnalyzer(ctx context.Context) error {
 	if t == nil || t.analyzer == nil {
-		return
+		return nil
+	}
+	t.analyzerCloseMu.Lock()
+	defer t.analyzerCloseMu.Unlock()
+	if t.analyzerClosed {
+		return nil
 	}
 	t.lifecycleMu.Lock()
-	if t.analyzerSnapshotted {
-		t.lifecycleMu.Unlock()
-		return
+	if !t.analyzerSnapshotted {
+		t.analyzerEvidence = t.analyzer.SemanticAnalysisLifecycleEvidence()
+		t.analyzerPrepared = t.analyzer.PreparedState()
+		t.analyzerPreparedImage = t.analyzer.PreparedImageState()
+		t.analyzerSnapshotted = true
 	}
-	t.analyzerEvidence = t.analyzer.SemanticAnalysisLifecycleEvidence()
-	t.analyzerPrepared = t.analyzer.PreparedState()
-	t.analyzerPreparedImage = t.analyzer.PreparedImageState()
-	t.analyzerSnapshotted = true
 	t.lifecycleMu.Unlock()
-	_ = t.analyzer.Close(ctx)
+	err := t.analyzer.Close(ctx)
+	if err == nil {
+		t.analyzerClosed = true
+	}
+	return err
 }
 
 func (t *SemanticPreDispatchTreatment) providerOutcome(snapshot semantic.StreamingPreDispatchSnapshot) (uint32, uint64, uint64, PhysicalDispositions, uint32, error) {
@@ -517,6 +529,29 @@ func (t *SemanticPreDispatchTreatment) Cancel(ctx context.Context) error {
 		if t.cancel != nil {
 			t.cancel()
 		}
+		if t.generationDone != nil {
+			wait := t.config.RunConfig.Timeout
+			if wait <= 0 {
+				wait = time.Second
+			}
+			timer := time.NewTimer(wait)
+			select {
+			case <-t.generationDone:
+			case <-timer.C:
+				closeErr = errors.Join(closeErr, errors.New("semantic analyzer generation cleanup timed out"))
+				done := t.generationDone
+				go func() {
+					<-done
+					_ = t.closeAnalyzer(context.Background())
+				}()
+			}
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		}
 		if t.runner != nil {
 			closeErr = t.runner.Close(ctx)
 		}
@@ -527,7 +562,7 @@ func (t *SemanticPreDispatchTreatment) Cancel(ctx context.Context) error {
 			_ = t.manager.Close()
 		}
 		if t.analyzer != nil {
-			t.closeAnalyzer(ctx)
+			closeErr = errors.Join(closeErr, t.closeAnalyzer(ctx))
 		}
 	})
 	return closeErr

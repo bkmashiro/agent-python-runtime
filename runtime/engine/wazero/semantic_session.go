@@ -16,6 +16,8 @@ var (
 	ErrSemanticAnalysisSessionClosed    = errors.New("semantic analysis session closed")
 	ErrSemanticAnalysisSessionLimit     = errors.New("semantic analysis session limit exceeded")
 	ErrSemanticAnalysisSessionAuthority = errors.New("semantic analysis session cannot carry workspace or Broker authority")
+	ErrSemanticAnalysisEngineClosing    = errors.New("semantic analysis engine is closing")
+	ErrSemanticAnalysisSessionsActive   = errors.New("semantic analysis engine still has active sessions")
 )
 
 // SemanticAnalysisSessionLimits bound all mutable analyzer state to one source-generation Run.
@@ -54,6 +56,7 @@ type SemanticAnalysisSession struct {
 	module          api.Module
 	prepared        *preparedInstance
 	releaseCOW      func()
+	engineLease     bool
 	stderr          *boundedDiagnostic
 	stdout          *forbiddenStdout
 	lifecycle       SemanticAnalysisLifecycleEvidence
@@ -75,10 +78,13 @@ func (engine *Engine) NewSemanticAnalysisSession(ctx context.Context, limits Sem
 	if err := limits.validate(engine); err != nil {
 		return nil, err
 	}
+	if err := engine.acquireSemanticSession(); err != nil {
+		return nil, err
+	}
 	sessionContext, cancel := context.WithCancel(ctx)
 	session := &SemanticAnalysisSession{
 		engine: engine, limits: limits, context: sessionContext, cancel: cancel, started: time.Now(),
-		stderr: &boundedDiagnostic{}, stdout: &forbiddenStdout{},
+		stderr: &boundedDiagnostic{}, stdout: &forbiddenStdout{}, engineLease: true,
 	}
 	session.stopContext = context.AfterFunc(sessionContext, func() { _ = session.Close(context.Background()) })
 	return session, nil
@@ -160,8 +166,10 @@ func (session *SemanticAnalysisSession) ensureModuleLocked(ctx context.Context) 
 			if ctx.Err() != nil || errors.Is(err, errCOWEngineClosing) {
 				return err
 			}
-			session.lifecycle.PreparedProvisionFailures++
-			session.lifecycle.PreparedProvisionNanos += provisionNanos
+			if provisioned {
+				session.lifecycle.PreparedProvisionFailures++
+				session.lifecycle.PreparedProvisionNanos += provisionNanos
+			}
 			session.recordFreshFallback(true)
 			return session.ensureFreshModuleLocked(ctx)
 		}
@@ -178,8 +186,10 @@ func (session *SemanticAnalysisSession) ensureModuleLocked(ctx context.Context) 
 		}
 		if cowSelected {
 			cloneStarted := time.Now()
-			prepared, prepareErr := cowRuntime.prepare(ctx, session.engine)
+			prepared, cloneLifecycle, prepareErr := cowRuntime.prepare(ctx, session.engine)
 			session.lifecycle.COWCloneNanos += uint64(time.Since(cloneStarted))
+			session.lifecycle.ModuleInstantiations += cloneLifecycle.ModuleInstantiations
+			session.lifecycle.InitializeCalls += cloneLifecycle.InitializeCalls
 			if prepareErr != nil {
 				release()
 				if ctx.Err() != nil {
@@ -191,8 +201,6 @@ func (session *SemanticAnalysisSession) ensureModuleLocked(ctx context.Context) 
 			session.prepared = prepared
 			session.releaseCOW = release
 			session.lifecycle.COWHits++
-			session.lifecycle.ModuleInstantiations++
-			session.lifecycle.InitializeCalls++
 			session.engine.preparedMu.Lock()
 			session.engine.preparedState.PreparedRuns++
 			session.engine.preparedMu.Unlock()
@@ -289,6 +297,10 @@ func (session *SemanticAnalysisSession) closeLocked() error {
 	if !session.recorded {
 		session.engine.semanticLifecycle.add(session.lifecycle)
 		session.recorded = true
+	}
+	if session.engineLease {
+		session.engine.releaseSemanticSession()
+		session.engineLease = false
 	}
 	return err
 }

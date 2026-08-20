@@ -14,6 +14,9 @@ func TestExactGuestPhase5RMechanismMatrix(t *testing.T) {
 	artifact, profile := loadPreparedRegionArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
+	// Keep every Guest operation bounded while allowing the preregistered
+	// 120-second case envelope to survive a loaded Linux workstation.
+	config.Timeout = 60 * time.Second
 	for _, candidate := range semanticspeculation.Phase5Cases() {
 		candidate := candidate
 		t.Run(candidate.ID, func(t *testing.T) {

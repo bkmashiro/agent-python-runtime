@@ -392,7 +392,7 @@ Architecture constraints:
 
 Tasks:
 
-- [ ] Freeze a source-bound `prepared_region` decision/capsule/patch identity and strict decoder.
+- [x] Freeze a source-bound `prepared_region` decision/capsule/patch identity and strict decoder.
 - [ ] RED-test positive scalar materialisation plus every source/input/environment/codec/pass mismatch.
 - [ ] Add one trusted Guest helper, conceptually `__pysolate_materialize_value__(opaque_decision)`, backed by a Host-owned per-Run materialisation table. The AST embeds no blob handle, cache key, Host path, body or authority-bearing credential.
 - [ ] Make the helper claim only an already pinned exact decision and reconstruct a typed local value. Missing, stale, consumed, mismatched or unready decisions fail closed; derived execution never turns a claim failure into recomputation or another physical attempt.

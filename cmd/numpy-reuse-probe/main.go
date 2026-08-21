@@ -15,6 +15,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
@@ -176,7 +177,7 @@ func main() {
 		fail(err)
 	}
 	descriptor, blobDescriptor, publicationEvidence, err := numpycodec.Publish(ctx, store, "numpy-reuse-probe", producerResponse.Result, bindings,
-		resultblob.PublicationGuard{Completed: true, Succeeded: true, EffectFree: true, TerminalCertain: true}, numpycodec.MaxBodyBytes)
+		resultblob.NewPublicationGuard(publicationauth.Mint()), numpycodec.MaxBodyBytes)
 	if err != nil {
 		fail(err)
 	}

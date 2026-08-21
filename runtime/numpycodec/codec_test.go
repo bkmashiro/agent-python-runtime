@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
 )
 
@@ -144,9 +145,7 @@ func TestPublishAndFreshMaterializationRequestUseImmutableLeaseCopies(t *testing
 	store, _ := resultblob.NewStore("run-1", resultblob.Limits{
 		MaxEntries: 1, MaxBodyBytes: 1024, MaxRetainedBytes: 2048, MaxMetadataBytes: 4096, MaxLeases: 2,
 	})
-	descriptor, blobDescriptor, publicationEvidence, err := Publish(context.Background(), store, "run-1", producer, testBindings(), resultblob.PublicationGuard{
-		Completed: true, Succeeded: true, EffectFree: true, TerminalCertain: true,
-	}, 1024)
+	descriptor, blobDescriptor, publicationEvidence, err := Publish(context.Background(), store, "run-1", producer, testBindings(), resultblob.NewPublicationGuard(publicationauth.Mint()), 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,9 +191,7 @@ func TestMaterializationRequestRejectsBadOutputAndClaimJoins(t *testing.T) {
 	store, _ := resultblob.NewStore("run-1", resultblob.Limits{
 		MaxEntries: 1, MaxBodyBytes: 1024, MaxRetainedBytes: 2048, MaxMetadataBytes: 4096, MaxLeases: 6,
 	})
-	descriptor, blobDescriptor, _, err := Publish(context.Background(), store, "run-1", testProducerValue("<i8", []uint64{1}, body), testBindings(), resultblob.PublicationGuard{
-		Completed: true, Succeeded: true, EffectFree: true, TerminalCertain: true,
-	}, 1024)
+	descriptor, blobDescriptor, _, err := Publish(context.Background(), store, "run-1", testProducerValue("<i8", []uint64{1}, body), testBindings(), resultblob.NewPublicationGuard(publicationauth.Mint()), 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +230,7 @@ func TestMaterializationRequestRejectsBadOutputAndClaimJoins(t *testing.T) {
 	forgedBlob, err := forgedStore.Publish(context.Background(), resultblob.Publication{
 		RunID: "run-forged", Codec: CodecV1, Metadata: forgedMetadata, BindingSHA256: forged.IdentitySHA256,
 		ExpectedBodySHA256: resultblob.BytesDigest(body),
-		Guard:              resultblob.PublicationGuard{Completed: true, Succeeded: true, EffectFree: true, TerminalCertain: true},
+		Guard:              resultblob.NewPublicationGuard(publicationauth.Mint()),
 	}, body)
 	if err != nil {
 		t.Fatal(err)

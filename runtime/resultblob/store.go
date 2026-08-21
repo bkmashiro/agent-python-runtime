@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 )
 
 const (
@@ -44,10 +46,15 @@ type Limits struct {
 }
 
 type PublicationGuard struct {
-	Completed       bool
-	Succeeded       bool
-	EffectFree      bool
-	TerminalCertain bool
+	token publicationauth.Token
+}
+
+func NewPublicationGuard(token publicationauth.Token) PublicationGuard {
+	return PublicationGuard{token: token}
+}
+
+func (guard PublicationGuard) valid() bool {
+	return guard.token.Valid()
 }
 
 type Publication struct {
@@ -214,7 +221,7 @@ func (store *Store) Publish(ctx context.Context, publication Publication, body [
 	if err := ctx.Err(); err != nil {
 		return Descriptor{}, err
 	}
-	if !publication.Guard.Completed || !publication.Guard.Succeeded || !publication.Guard.EffectFree || !publication.Guard.TerminalCertain {
+	if !publication.Guard.valid() {
 		return Descriptor{}, ErrPublicationUnsafe
 	}
 	if publication.RunID != store.runID || len(publication.Codec) > maxCodecBytes || !codecPattern.MatchString(publication.Codec) ||

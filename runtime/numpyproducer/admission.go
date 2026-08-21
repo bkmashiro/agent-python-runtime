@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"regexp"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
 	passregistration "github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
@@ -378,7 +379,7 @@ func validateExecutionResponse(raw []byte, admission Admission, authorityBound b
 		response.Metrics.CapabilityCalls != 0 || response.SourceContract.ModelSourceSHA256 != admission.SourceSHA256 {
 		return nil, PublicationGuard{}, ErrExecution
 	}
-	return append(json.RawMessage(nil), response.Result...), PublicationGuard{Completed: true, Succeeded: true, EffectFree: true, TerminalCertain: true}, nil
+	return append(json.RawMessage(nil), response.Result...), resultblob.NewPublicationGuard(publicationauth.Mint()), nil
 }
 
 func Digest(raw []byte) string {

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 )
 
 const (
@@ -22,7 +24,7 @@ func testPublication(body []byte) Publication {
 	return Publication{
 		RunID: "run-1", Codec: "opaque_test_v1", Metadata: []byte(`{"kind":"test","shape":[2,2]}`),
 		BindingSHA256: digestA, ExpectedBodySHA256: BytesDigest(body),
-		Guard: PublicationGuard{Completed: true, Succeeded: true, EffectFree: true, TerminalCertain: true},
+		Guard: NewPublicationGuard(publicationauth.Mint()),
 	}
 }
 
@@ -75,10 +77,7 @@ func TestPublishIsAtomicAndFailClosed(t *testing.T) {
 		mutate func(*Publication)
 		ctx    context.Context
 	}{
-		{"incomplete", func(p *Publication) { p.Guard.Completed = false }, context.Background()},
-		{"failed", func(p *Publication) { p.Guard.Succeeded = false }, context.Background()},
-		{"effect", func(p *Publication) { p.Guard.EffectFree = false }, context.Background()},
-		{"ambiguous", func(p *Publication) { p.Guard.TerminalCertain = false }, context.Background()},
+		{"missing_internal_authority", func(p *Publication) { p.Guard = PublicationGuard{} }, context.Background()},
 		{"hash", func(p *Publication) { p.ExpectedBodySHA256 = digestA }, context.Background()},
 		{"cancelled", func(*Publication) {}, cancelledContext()},
 	}

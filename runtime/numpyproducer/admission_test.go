@@ -219,7 +219,7 @@ func TestExecutionResponseMustBeSuccessfulEffectFreeAndSourceBound(t *testing.T)
 		t.Fatalf("unbound execution guard=%+v err=%v", guard, err)
 	}
 	result, guard, err := validateExecutionResponse(encoded, admission, true)
-	if err != nil || len(result) == 0 || !guard.Completed || !guard.Succeeded || !guard.EffectFree || !guard.TerminalCertain {
+	if err != nil || len(result) == 0 || guard == (PublicationGuard{}) {
 		t.Fatalf("result=%s guard=%+v err=%v", result, guard, err)
 	}
 	for name, mutate := range map[string]func(map[string]any){

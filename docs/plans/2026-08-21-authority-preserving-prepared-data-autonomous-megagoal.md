@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Active on 2026-08-21; Phases 0–1 complete, Phase 2 next.
+**Status:** Active on 2026-08-21; Phases 0–2 complete, Phase 3 active; P4 two-stage correctness slice measured.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -269,12 +269,12 @@ Tasks:
 
 Tasks:
 
-- [ ] RED-test a `PreparedDataContract v1` embedded in or cryptographically joined to the sealed capability plan.
-- [ ] Bind exact projected function/call occurrence, argument/resource selector, immutable source policy, freshness, unclaimed disposition, loader kind/options, artifact/profile/import closure, body budget and privacy partition.
-- [ ] Let target-Guest analysis emit only authority-free syntax/occurrence facts for the narrow `np.load(..., allow_pickle=False)` form.
-- [ ] Join overlay facts with the Host contract and reject absent contract, alias ambiguity, dynamic path/options, wrong profile, mutable source, unknown fields and any identity drift.
-- [ ] Prove Python/tool schema/Guest metadata cannot add the contract.
-- [ ] Preserve ordinary execution when no exact prepared decision exists before final execution selection.
+- [x] RED-test a `PreparedDataContract v1` embedded in or cryptographically joined to the sealed capability plan.
+- [x] Bind exact projected function/call occurrence, argument/resource selector, immutable source policy, freshness, unclaimed disposition, loader kind/options, artifact/profile/import closure, body budget and privacy partition.
+- [x] Let target-Guest analysis emit only authority-free syntax/occurrence facts for the narrow `np.load(..., allow_pickle=False)` form.
+- [x] Join overlay facts with the Host contract and reject absent contract, alias ambiguity, dynamic path/options, wrong profile, mutable source, unknown fields and any identity drift.
+- [x] Prove Python/tool schema/Guest metadata cannot add the contract.
+- [x] Preserve ordinary execution when no exact prepared decision exists before final execution selection.
 
 **Gate P2:** Positive exact declaration prepares one candidate; identical source with no Host declaration starts zero physical work; every one-field authority/source/profile/freshness mutation fails before physical start.
 
@@ -474,6 +474,8 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 - 2026-08-21: Phase 1 is complete at mechanism target `d99c182ac37825b8ae95d99960e1b7401cc9c8d7` (`tree 71d87ea7090d4efe6fbc742efcb4e186d3387963`). A bounded Host-trusted fragment is applied before the existing Linux COW image seal; default preparation is unchanged, authority-bearing engines are rejected, and an already-bound engine rejects different non-empty source identity. Focused unit/race/vet, Linux cross-compilation and base/default shard tests pass. The clean `vcs.modified=false` probe `sha256:d02f2ddc1fb166fe99c1163c8a63e31db2e4584935351abd5b82695b42b65161` ran on gpu31 against artifact `sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad`: both fresh Guests used baseline alias `np` and NumPy `1.26.0b1` without source import, A's module mutation was absent from B, private COW was selected with zero fallback, and prepare/clone times are recorded separately. Body-free evidence identity is `sha256:e17dbfaa68004a60bb68430da84fecf9029b0337d4aec83edda56aec9e44981a`.
 - 2026-08-21: A bounded P3 control-plane pilot reused the existing Host `materialize_value` token and per-Run table while a private trusted prepare monkeypatched only the admitted fresh Guest's `np.load`. The final Agent source remained unchanged. On gpu31 the reached case returned shape `[2,3]` and sum `15` with one claim/consumption; branch-not-taken and earlier-exception made zero claims and each discarded the unconsumed token at teardown. This validates dynamic claim timing only; it is not 8 MiB decode, authority or economics evidence.
 - 2026-08-21: The P4 full-derived-image correctness mechanism first passed at `4368d80fb541b011fd8c15982744871a5e94aa10`; its v1 9.66 s observation combined package and dataset preparation and is retained only as a corrected pilot. The two-stage mechanism at `c4820d15b14c1608cbb006f710aeb4eb1a8b1177` retains one immutable package parent and derives each dataset image from a fresh parent clone, never from a prior dataset image. Clean gpu31 v2 evidence separates one-time package-shard prepare (**7.286 s**, excluded from per-load critical path) from 8 MiB dataset derivation (**2.233 s**), then records fresh consumers at **64.7 ms / 51.0 ms**, zero body transfer per consumer, private-COW page faults, independent parent/dataset identities and A→B mutation isolation. Body-safe v2 evidence identity is `sha256:f79ec931ef87f6945817c1be3c1ba8e1a09e11866c71d5a7e548c05416f560b7`. P4 remains open until the 1/2/4 harness and private-copy/recompute controls join in P5; no generic allocator or page-composed path was added.
+
+- 2026-08-21: Phase 2 is complete at `a960a5cc27537d072d86a7f5338a307ab0bfb8c8`. The target-Guest analyzer consumes a deterministic import-line-neutral analysis overlay while the original prefix/final source digests remain Host-bound; candidate `numpy.load` and physical `sources.read` are distinct identities. The clean macOS probe records zero starts without a Host contract, one start after exact sealed join, and a final-source claim identity. Every authority/source/profile/freshness/result-budget mutation fails before physical start in focused regressions. Body-safe evidence identity is `sha256:ed350dc700b58d821c48344ebdd02e1791bf995ed38aa361e336a6b7be52489d`.
 
 ## Short prompt to start this mega-goal
 

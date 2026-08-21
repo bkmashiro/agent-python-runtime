@@ -40,7 +40,24 @@ The first qualified implementation target is pinned gVisor/runsc on Linux. gViso
 - optional prepared/COW baseline identity;
 - idle policy.
 
-The first instantiated shard is `plain` / `base`. Static imports choose the smallest Host-qualified shard. A future `numpy` / `numpy-core` shard has a separate artifact and COW pool and is created lazily. Unknown imports, dynamic package installation and unavailable shards route native or fail typed-unavailable; they never mutate a served Pysolate instance.
+The first instantiated shard is `plain` / `base`. Static imports choose the smallest Host-qualified shard. The repository now declares a separate `numpy` / `numpy-core` artifact; a placement layer may give it a distinct lazy COW pool only after profile-specific COW qualification. Unknown imports, dynamic package installation and unavailable shards route native or fail typed-unavailable; they never mutate a served Pysolate instance.
+
+### Repository-declared WASM package profiles
+
+The `wasm32-wasip1` distribution has a closed profile registry. `base` remains the default; `attrs-770` is the pinned pure-Python package example; `numpy-core` is the first static-native package profile. Profiles are build-time repository declarations, never runtime package resolution.
+
+`numpy-core` binds NumPy `1.26.0b1` source commit/archive, build-only Cython and setuptools sources, Pysolate CPython `3.14.0`, wasi-sdk `33`, the adapted reference-recipe identities, 19 `PyInit_*` module archives, two support archives, the `c-printscan-long-double` WASI libc opt-in, installed tree, import inventory, exact-Guest qualification and final artifact identity. The archives are linked into the same reactor as `guest/src/runtime.c`; Python package files enter the same wasi-vfs image. External prebuilt WASM or wheels are not distribution inputs.
+
+The supported build is explicit:
+
+```bash
+scripts/build-guest-workstation.sh \
+  --artifact-profile numpy-core \
+  --cache-mode auto \
+  --output /absolute/evidence/path
+```
+
+A consumer must bind `ExecutionProfile{id: "numpy-core"}` and the matching manifest. Substituting `base`, changing an archive/source/profile field, or requesting an unqualified import fails before Guest execution. This qualification proves the recorded NumPy operations under the existing WASI/Host-call boundary; it does not claim instruction-level DBI or arbitrary NumPy purity.
 
 ### Growable COW memory
 

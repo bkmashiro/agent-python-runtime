@@ -1,0 +1,82 @@
+{
+  "schema_version": "pysolate.numpy-core-phase2-mechanism-evidence.v1",
+  "recorded_at_utc": "2026-08-21T09:49:47Z",
+  "status": "mechanism_gate_passed",
+  "scope": "repository-declared static-native package profile and exact Guest qualification",
+  "source": {
+    "commit": "47070b1e2ae09e6292f2a5ce0dd9f8c4ee9f6a6c",
+    "tree": "7fa3d93dbae011207a82f4998925d23033aed8c9",
+    "signed": true
+  },
+  "artifact": {
+    "profile": "numpy-core",
+    "filename": "agent-python-runtime-numpy-core.wasm",
+    "sha256": "1b759febddb9dd0d65760c74b21b07c4f04fa992ce761639fbb9baef155926aa",
+    "size_bytes": 68174432,
+    "manifest_sha256": "eea4e8ead6be395c02612f3dc803ab61a0b409caf78189c1bbf4596cc4f2d055",
+    "selection_identity": "sha256:59e38f7a510d03f7570d9dd01001c4c2678e522a419ec4faf2793303b45683df",
+    "canonical_local_bundle": "/Users/yuzhe/.local/share/pysolate/artifacts/numpy-core-47070b1e2ae0",
+    "checksums_verified": true
+  },
+  "build": {
+    "builder": "gpu31.doc.ic.ac.uk",
+    "target": "wasm32-wasip1",
+    "cpython": "3.14.0",
+    "wasi_sdk": "33",
+    "build_millis": 518548,
+    "base_layer_cache_disposition": "hit",
+    "final_cache_disposition": "miss",
+    "native_module_count": 19,
+    "support_archive_count": 2,
+    "wasi_link_libraries": ["c-printscan-long-double"],
+    "external_prebuilt_artifact_used": false
+  },
+  "qualification": {
+    "inventory_sha256": "f7d142acc8c8980812a6beb215a755997a6eb422d158aa4b46f447502d15dc2c",
+    "qualification_sha256": "53b0b3cd996d1bcf1aaa566811d51c19628d96dcaf86fa9984d253d477238dc0",
+    "numpy_version": "1.26.0b1",
+    "numpy_core_oracle": "qualified",
+    "fresh_process_runs": 2,
+    "fresh_results_equal": true,
+    "result_sha256": "c8cd791e8944d2cf972d1a6a7ee1f9a7fbd59205ed73a9ea32586f6541aa76e8",
+    "capability_calls": [0, 0],
+    "c_contiguous": true
+  },
+  "negative_controls": {
+    "filesystem_write": {
+      "status": "error",
+      "error_type": "FileNotFoundError",
+      "result_published": false,
+      "capability_calls": 0,
+      "host_file_created": false
+    },
+    "base_profile_substitution": {
+      "rejected_before_guest_execution": true,
+      "diagnostic": "execution profile artifact mismatch"
+    }
+  },
+  "boundary": {
+    "host_filesystem_preopened": false,
+    "workspace_mounted": false,
+    "broker_available": false,
+    "runtime_package_installation": false,
+    "dynamic_native_loading": false,
+    "instruction_level_dbi_claimed": false,
+    "actual_enforcement": "WASM/WASI capability absence, explicit Host-call boundary, source/import admission and fresh Guest lifecycle"
+  },
+  "historical_p5_unchanged": {
+    "phase5_gate_passed": false,
+    "pass_count": 6,
+    "fail_count": 5,
+    "timing_samples_observed": 0
+  },
+  "independent_review": {
+    "status": "passed",
+    "unresolved_blockers": 0,
+    "fixed_target_commit": "47070b1e2ae09e6292f2a5ce0dd9f8c4ee9f6a6c",
+    "fixed_target_tree": "7fa3d93dbae011207a82f4998925d23033aed8c9",
+    "focused_python_tests_passed": 54,
+    "artifact_checksums_verified": true,
+    "final": "PASS blockers=0"
+  }
+}

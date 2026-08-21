@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Active on 2026-08-21; Phases 0–5 complete, Phase 6 next.
+**Status:** Active on 2026-08-21; Phases 0–6 complete, Phase 7 active.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -346,8 +346,8 @@ prepared_data_data_local_compute
 Required dimensions, kept sparse:
 
 ```text
-payload       8 MiB | 64 MiB | 256 MiB within proven bound
-lead gap      0 | partial | sufficient-to-hide
+payload       8 MiB core; 64/256 MiB extension not entered
+lead gap      0 | 250 ms | 1000 ms; 1000 ms remains partial for COW derive
 consumers     1 | 2 | 4 where applicable
 platform      macOS mechanism/control | Linux private-COW
 ```
@@ -355,11 +355,11 @@ platform      macOS mechanism/control | Linux private-COW
 Tasks:
 
 - [x] Freeze exact artifact, harness, fixture bodies/digests, schedule, trial count, platform and environment contract before formal observation.
-- [ ] Record source-generation release/finalization, read, decode, seal, claim, mapping/copy, compute, execution, teardown and critical-path interval union.
-- [ ] Record RSS/PSS where available, bytes copied, mapped bytes, page faults/COW signals, wasted orphan bytes/work and physical/logical operation counts.
-- [ ] Preserve bodies privately; commit canonical identities and body-safe aggregates only.
-- [ ] Regenerate the report from raw records and fail closed on truncation, duplicates, missing coordinates, identity drift or impossible economics.
-- [ ] Compare mechanism correctness separately from economics and EAGER comparison separately from fresh-Guest authority claims.
+- [x] Record the joined lifecycle: P2/P3 release/read/decode/seal/exact claim/teardown evidence plus P4/P5/P6 mapping, copy, compute and same-trial critical-path interval unions.
+- [x] Record process max RSS, copy/encoded/mapped bytes, page faults/COW signals, N=0 orphan bytes/work and physical/logical counts; explicitly record that short-process PSS was not sampled.
+- [x] Preserve raw records privately and commit canonical identities plus body-safe aggregates only.
+- [x] Regenerate 162 records / 54 aggregates from raw reports with strict JSON decoding and fail-closed coordinate, identity, parity and economics checks.
+- [x] Compare mechanism correctness separately from economics and mark all 27 EAGER records as weaker-authority controls rather than fresh authority.
 
 **Gate P6:** Every retained treatment has exact parity and complete lifecycle evidence. Report observed positive, mixed or negative cells without interpolation. If no prepared-data treatment wins, close the prototype with the measured cause rather than adding cache/optimizer machinery.
 
@@ -482,6 +482,8 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 - 2026-08-21: Phases 4–5 are complete as mechanism slices at runner `a36398b4a945371a414e35ccda6e2278bf93074c` and checker `09a0bb12e5d0ffc160dd526b737c378db17bb77e`. One immutable NumPy package shard and one dataset image serve fixed N=0/1/2/4 schedules. The 16-coordinate Linux report proves fresh Guests, exact sum parity, COW mutation isolation, zero per-consumer body copy for COW, 8/16/32 MiB private-copy growth, mapped-byte accounting, N=0 orphan bytes, and a data-local reduction followed by fresh scalar consumers. The dedicated object-extent allocator was not built: the allowed bounded full-derived-image path answered the question. Evidence identity is `sha256:d403fa73f54997eb051878657a18659cbe011091910a746697920f4ae6f982e3`. Economics remain explicitly unentered because this single ordered run contains first-observation warmup confounding.
 
 - 2026-08-21: Phase 6 formal manifest was frozen before retained observation at `docs/evidence/prepared-data-phase6-manifest-v1.json` (`sha256:7e6644b73e569ebcd503259dd8356e1e5cee133cfc9eb25602011ebe9e1065f0`). It fixes harness `ccef2d9875ab2f289434012bbdfb4015b99db6b1`, the canonical artifact/fixture, Linux gpu31 and Darwin mechanism environment contracts, 3 trials, N=1/2/4, gaps 0/250/1000 ms, warmed component records, and no 64/256 MiB extension.
+
+- 2026-08-21: Phase 6 closed with body-safe evidence `docs/evidence/prepared-data-phase6-linux-v1.json` (`sha256:673ee697c50892bc3e07951377ed46e42e50f9e72bc93e68cadb8a8945794fd7`). The pinned builder regenerated 162/162 parity-and-cleanup records and 54 medians from six private raw files. Private COW and data-local beat serial at N=2/4 for every gap; at N=1 they require the 1000 ms coordinate. EAGER is fast at fanout but explicitly weaker-authority. Cheap canonical recompute remains 61.8/123.6/245.8 ms for N=1/2/4, so no production optimizer or 64/256 MiB extension is justified.
 
 ## Short prompt to start this mega-goal
 

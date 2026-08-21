@@ -65,7 +65,7 @@ for platform, path in FILES.items():
     assert lineage["patch"]["decision_sha256"] == lineage["decision"]["identity_sha256"]
     assert lineage["patch"]["final_source_sha256"] == evidence["materialization_plan"]["final_source_sha256"]
     assert lineage["selection"]["patch_sha256"] == lineage["patch"]["identity_sha256"]
-    for key in ("consumer_binding_sha256", "final_source_sha256", "inputs_sha256", "request_sha256"):
+    for key in ("consumer_binding_sha256", "consumer_source_sha256", "final_source_sha256", "inputs_sha256", "request_sha256"):
         assert lineage[key] == evidence["materialization_plan"][key]
     assert lineage["decision"]["source_sha256"] == admission["source_sha256"]
     assert lineage["decision"]["ast_sha256"] == admission["ast_sha256"]

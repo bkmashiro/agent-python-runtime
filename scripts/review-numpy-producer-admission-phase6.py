@@ -4,8 +4,8 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "5d7a6d7dc8a5ad50017748e1158a086305345b09"
-TREE = "d05fb659f5d989ced879c015d8b4b5f6e0a04f45"
+COMMIT = "1d788057d3c183dbdafb28030a95967863ba63cd"
+TREE = "c4518d7ff6cbdc7b14f39722a08d3b7b3ed0ca82"
 ARTIFACT = "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad"
 FILES = {
     "darwin_arm64": ROOT / "docs/evidence/numpy-producer-admission-phase6-darwin-arm64-v1.json",

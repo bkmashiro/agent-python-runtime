@@ -318,6 +318,8 @@ Never use generic pickle as a cross-Guest cache format. Measure serialization, s
 
 **Gate R6:** Add a type only when `early compute + serialize + final load` beats final recomputation at a predeclared size/cost range. Do not claim generic object caching.
 
+**2026-08-21 bounded NumPy lane:** R6 now has one closed candidate rather than a generic codec: the Pysolate-owned, source-locked `numpy-core` CPython/WASI artifact and `numpy_ndarray_c_v1` transport accept only bounded little-endian numeric C-contiguous arrays. A verified concrete-Wazero producer execution yields authority bound to the exact raw result, run, artifact/profile/source/input/pass joins and body budget; the sole Host decode then seals the exact run/codec/canonical-metadata/descriptor/body identity before Store publication. A copied authority cannot authorize different raw bytes, bindings, run, budget, metadata, body or descriptor. Each consumer receives one private materialisation copy in a fresh Guest; no Python heap, pointer, allocator, workspace or capability state crosses the boundary. Native NumPy calls remain conservatively unknown because this is Host-side WASI/runtime/capability/lifecycle evidence, not instruction-level DBI or a purity certificate. macOS and Linux private-COW mechanism evidence pass locally, but the final fixed-target independent review and the preregistered economics campaign remain open; no break-even claim is made here.
+
 ### R7: isolated workspace preparation
 
 **Goal:** Explore private file-producing work without importing Shimmy claims.

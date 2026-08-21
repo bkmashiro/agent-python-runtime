@@ -1,13 +1,13 @@
 {
   "schema_version": "pysolate.numpy-reuse-adversarial-controls.v1",
   "controls": [
-    {"id":"reject_object_dtype","passed":true,"evidence_sha256":"sha256:f9840f4e9be0127d85446e200b70d0ea03868a0e56b9d437148711aee1d15330"},
-    {"id":"reject_noncontiguous_view","passed":true,"evidence_sha256":"sha256:c3b43aa740f86765aa53d60f153858b7543f5eb050854418aa7d58f92f8307a5"},
-    {"id":"reject_fortran_order","passed":true,"evidence_sha256":"sha256:c3b43aa740f86765aa53d60f153858b7543f5eb050854418aa7d58f92f8307a5"},
-    {"id":"reject_random_api","passed":true,"evidence_sha256":"sha256:f9840f4e9be0127d85446e200b70d0ea03868a0e56b9d437148711aee1d15330"},
-    {"id":"reject_source_drift","passed":true,"evidence_sha256":"sha256:f9840f4e9be0127d85446e200b70d0ea03868a0e56b9d437148711aee1d15330"},
-    {"id":"reject_corrupt_descriptor","passed":true,"evidence_sha256":"sha256:29955d362411a30535f78a36684ec57b1c0639163d79ba20130988aab2d7a76d"},
-    {"id":"reject_cross_profile","passed":true,"evidence_sha256":"sha256:29955d362411a30535f78a36684ec57b1c0639163d79ba20130988aab2d7a76d"},
+    {"id":"reject_object_dtype","passed":true,"evidence_sha256":"sha256:8e683d9cda2635b782e91eef41f80e6861d0c5151b067e6b1327a5bbb0ffe120"},
+    {"id":"reject_noncontiguous_view","passed":true,"evidence_sha256":"sha256:109ec01acf78bf727a15637be34362d7133f80d56160fc54732d7464b286cc2c"},
+    {"id":"reject_fortran_order","passed":true,"evidence_sha256":"sha256:109ec01acf78bf727a15637be34362d7133f80d56160fc54732d7464b286cc2c"},
+    {"id":"reject_random_api","passed":true,"evidence_sha256":"sha256:8e683d9cda2635b782e91eef41f80e6861d0c5151b067e6b1327a5bbb0ffe120"},
+    {"id":"reject_source_drift","passed":true,"evidence_sha256":"sha256:8e683d9cda2635b782e91eef41f80e6861d0c5151b067e6b1327a5bbb0ffe120"},
+    {"id":"reject_corrupt_descriptor","passed":true,"evidence_sha256":"sha256:00bd8d61c9ef04e9ae9dd36d9e5bccd210bf3dacb8fab4e445c68e24a80735d0"},
+    {"id":"reject_cross_profile","passed":true,"evidence_sha256":"sha256:00bd8d61c9ef04e9ae9dd36d9e5bccd210bf3dacb8fab4e445c68e24a80735d0"},
     {"id":"consumer_mutation_is_private","passed":true,"evidence_sha256":"sha256:a974a959964a24e7e20d9f0aa7f6d278907c074b738f9f51c7afbcdc83dfcd38"}
   ],
   "claim": "All frozen controls reject before publication/materialization or prove private-copy isolation; no control admits authority, replay, pointer sharing, object dtype or mutable aliasing."

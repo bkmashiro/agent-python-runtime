@@ -24,25 +24,28 @@ const (
 )
 
 type report struct {
-	SchemaVersion            string                          `json:"schema_version"`
-	ArtifactSHA256           string                          `json:"artifact_sha256"`
-	BodyBytes                uint64                          `json:"body_bytes"`
-	BodySHA256               string                          `json:"body_sha256"`
-	TrustedPrepareSHA256     string                          `json:"trusted_prepare_sha256"`
-	Image                    wazeroengine.PreparedImageState `json:"image"`
-	PrepareNanos             uint64                          `json:"prepare_nanos"`
-	FirstRunNanos            uint64                          `json:"first_run_nanos"`
-	SecondRunNanos           uint64                          `json:"second_run_nanos"`
-	BodyCopyBytesPerConsumer uint64                          `json:"body_copy_bytes_per_consumer"`
-	FirstMinorFaults         int64                           `json:"first_minor_faults"`
-	FirstMajorFaults         int64                           `json:"first_major_faults"`
-	SecondMinorFaults        int64                           `json:"second_minor_faults"`
-	SecondMajorFaults        int64                           `json:"second_major_faults"`
-	FirstResult              json.RawMessage                 `json:"first_result"`
-	SecondResult             json.RawMessage                 `json:"second_result"`
-	ConsumerMutationIsolated bool                            `json:"consumer_mutation_isolated"`
-	PrivateCOWSelected       bool                            `json:"private_cow_selected"`
-	Fallback                 bool                            `json:"fallback"`
+	SchemaVersion              string                          `json:"schema_version"`
+	ArtifactSHA256             string                          `json:"artifact_sha256"`
+	BodyBytes                  uint64                          `json:"body_bytes"`
+	BodySHA256                 string                          `json:"body_sha256"`
+	TrustedPrepareSHA256       string                          `json:"trusted_prepare_sha256"`
+	ParentTrustedPrepareSHA256 string                          `json:"parent_trusted_prepare_sha256"`
+	PackageImage               wazeroengine.PreparedImageState `json:"package_image"`
+	Image                      wazeroengine.PreparedImageState `json:"image"`
+	PackagePrepareNanos        uint64                          `json:"package_prepare_nanos"`
+	DatasetDeriveNanos         uint64                          `json:"dataset_derive_nanos"`
+	FirstRunNanos              uint64                          `json:"first_run_nanos"`
+	SecondRunNanos             uint64                          `json:"second_run_nanos"`
+	BodyCopyBytesPerConsumer   uint64                          `json:"body_copy_bytes_per_consumer"`
+	FirstMinorFaults           int64                           `json:"first_minor_faults"`
+	FirstMajorFaults           int64                           `json:"first_major_faults"`
+	SecondMinorFaults          int64                           `json:"second_minor_faults"`
+	SecondMajorFaults          int64                           `json:"second_major_faults"`
+	FirstResult                json.RawMessage                 `json:"first_result"`
+	SecondResult               json.RawMessage                 `json:"second_result"`
+	ConsumerMutationIsolated   bool                            `json:"consumer_mutation_isolated"`
+	PrivateCOWSelected         bool                            `json:"private_cow_selected"`
+	Fallback                   bool                            `json:"fallback"`
 }
 
 func main() {
@@ -71,11 +74,19 @@ func main() {
 		fail(err)
 	}
 	defer engine.Close(context.Background())
+	packageSource := "import numpy as np\n"
+	packageDigest := digest([]byte(packageSource))
 	started := time.Now()
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), prepareSource); err != nil {
+	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), packageSource); err != nil {
 		fail(err)
 	}
-	prepareNanos := uint64(time.Since(started))
+	packagePrepareNanos := uint64(time.Since(started))
+	packageImage := engine.PreparedImageState()
+	started = time.Now()
+	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), prepareSource); err != nil {
+		fail(err)
+	}
+	datasetDeriveNanos := uint64(time.Since(started))
 	beforeFirst := sampleUsage()
 	started = time.Now()
 	first, err := run(engine, "cow-data-a", "import numpy as np\ndataset[0, 0] = 999\nresult = {'first': int(dataset[0, 0]), 'sum': int(dataset.sum())}\n")
@@ -100,16 +111,17 @@ func main() {
 	}
 	probe := engine.COWProbe()
 	out := report{
-		SchemaVersion: "pysolate.prepared-data-derived-cow-probe.v1", ArtifactSHA256: artifactSHA,
+		SchemaVersion: "pysolate.prepared-data-derived-cow-probe.v2", ArtifactSHA256: artifactSHA,
 		BodyBytes: uint64(len(body)), BodySHA256: bodyDigest, TrustedPrepareSHA256: prepareDigest,
-		Image: engine.PreparedImageState(), PrepareNanos: prepareNanos, FirstRunNanos: firstNanos, SecondRunNanos: secondNanos,
+		ParentTrustedPrepareSHA256: packageDigest, PackageImage: packageImage,
+		Image: engine.PreparedImageState(), PackagePrepareNanos: packagePrepareNanos, DatasetDeriveNanos: datasetDeriveNanos, FirstRunNanos: firstNanos, SecondRunNanos: secondNanos,
 		BodyCopyBytesPerConsumer: 0,
 		FirstMinorFaults:         afterFirst.minor - beforeFirst.minor, FirstMajorFaults: afterFirst.major - beforeFirst.major,
 		SecondMinorFaults: afterSecond.minor - afterFirst.minor, SecondMajorFaults: afterSecond.major - afterFirst.major,
 		FirstResult: first, SecondResult: second, ConsumerMutationIsolated: secondValue.First == 0 && secondValue.Sum == 549755289600,
 		PrivateCOWSelected: probe.COWSelected, Fallback: probe.Fallback,
 	}
-	if !out.ConsumerMutationIsolated || !out.PrivateCOWSelected || out.Fallback || out.Image.TrustedPrepareSHA256 != prepareDigest {
+	if !out.ConsumerMutationIsolated || !out.PrivateCOWSelected || out.Fallback || out.PackageImage.TrustedPrepareSHA256 != packageDigest || out.Image.TrustedPrepareSHA256 != prepareDigest || out.Image.ParentTrustedPrepareSHA256 != packageDigest {
 		fail(errors.New("derived COW invariants failed"))
 	}
 	encoded, _ := json.Marshal(out)

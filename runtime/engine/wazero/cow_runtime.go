@@ -45,6 +45,11 @@ type cowPreparedRuntime interface {
 	imageState() PreparedImageState
 }
 
+type derivableCOWPreparedRuntime interface {
+	cowPreparedRuntime
+	derive(context.Context, *Engine, string, string) (cowPreparedRuntime, error)
+}
+
 type cowCloneLifecycle struct {
 	ModuleInstantiations uint32
 	InitializeCalls      uint32
@@ -52,15 +57,16 @@ type cowCloneLifecycle struct {
 
 // PreparedImageState is bounded, body-free evidence about the sealed linear-memory baseline.
 type PreparedImageState struct {
-	Available            bool   `json:"available"`
-	BaselineBytes        uint64 `json:"baseline_bytes"`
-	VirtualBytes         uint64 `json:"virtual_bytes"`
-	AllocatedBytes       uint64 `json:"allocated_bytes"`
-	PageSizeBytes        uint64 `json:"page_size_bytes"`
-	ZeroPages            uint64 `json:"zero_pages"`
-	NonZeroPages         uint64 `json:"non_zero_pages"`
-	SparsePotentialBytes uint64 `json:"sparse_potential_bytes"`
-	TrustedPrepareSHA256 string `json:"trusted_prepare_sha256,omitempty"`
+	Available                  bool   `json:"available"`
+	BaselineBytes              uint64 `json:"baseline_bytes"`
+	VirtualBytes               uint64 `json:"virtual_bytes"`
+	AllocatedBytes             uint64 `json:"allocated_bytes"`
+	PageSizeBytes              uint64 `json:"page_size_bytes"`
+	ZeroPages                  uint64 `json:"zero_pages"`
+	NonZeroPages               uint64 `json:"non_zero_pages"`
+	SparsePotentialBytes       uint64 `json:"sparse_potential_bytes"`
+	TrustedPrepareSHA256       string `json:"trusted_prepare_sha256,omitempty"`
+	ParentTrustedPrepareSHA256 string `json:"parent_trusted_prepare_sha256,omitempty"`
 }
 
 func (engine *Engine) PreparedImageState() PreparedImageState {

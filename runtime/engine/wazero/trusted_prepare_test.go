@@ -72,3 +72,50 @@ func TestCOWBaselineGrowthPages(t *testing.T) {
 		}
 	}
 }
+
+type fakeDerivableCOWRuntime struct {
+	identity string
+	parent   string
+	closed   int
+	derived  int
+}
+
+func (runtime *fakeDerivableCOWRuntime) prepare(context.Context, *Engine) (*preparedInstance, cowCloneLifecycle, error) {
+	return nil, cowCloneLifecycle{}, errors.New("not used")
+}
+func (runtime *fakeDerivableCOWRuntime) close() error { runtime.closed++; return nil }
+func (runtime *fakeDerivableCOWRuntime) imageState() PreparedImageState {
+	return PreparedImageState{Available: true, TrustedPrepareSHA256: runtime.identity, ParentTrustedPrepareSHA256: runtime.parent}
+}
+func (runtime *fakeDerivableCOWRuntime) derive(_ context.Context, _ *Engine, _ string, identity string) (cowPreparedRuntime, error) {
+	runtime.derived++
+	return &fakeDerivableCOWRuntime{identity: identity, parent: runtime.identity}, nil
+}
+
+func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {
+	packageIdentity, _ := trustedCOWPrepareIdentity("import numpy as np\n")
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
+	parent := &fakeDerivableCOWRuntime{identity: packageIdentity}
+	engine := &Engine{config: config, preparedInitialized: true, preparedTrustedSHA: packageIdentity, cowRuntime: parent}
+	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), "dataset = 1\n"); err != nil {
+		t.Fatal(err)
+	}
+	first := engine.cowRuntime.(*fakeDerivableCOWRuntime)
+	if engine.cowParentRuntime != parent || first.parent != packageIdentity || parent.derived != 1 {
+		t.Fatalf("parent=%p first=%+v parent_state=%+v", engine.cowParentRuntime, first, parent)
+	}
+	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), "dataset = 2\n"); err != nil {
+		t.Fatal(err)
+	}
+	if parent.derived != 2 || first.closed != 1 || engine.cowParentRuntime != parent {
+		t.Fatalf("parent=%+v first=%+v", parent, first)
+	}
+	if err := engine.closeCOWRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	if parent.closed != 1 {
+		t.Fatalf("parent closed=%d", parent.closed)
+	}
+}

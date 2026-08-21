@@ -13,8 +13,9 @@ import (
 )
 
 type linuxCOWPreparedRuntime struct {
-	image                *cowImage
-	trustedPrepareSHA256 string
+	image                      *cowImage
+	trustedPrepareSHA256       string
+	parentTrustedPrepareSHA256 string
 }
 
 func cowMaximumMemoryBytes(engine *Engine) (uint64, error) {
@@ -52,10 +53,6 @@ func newCOWPreparedRuntimeWithTrustedSource(ctx context.Context, engine *Engine,
 	if !probe.MemoryCOWCandidate {
 		return nil, errors.New("artifact linear memory is not a bounded private COW candidate")
 	}
-	maximumBytes, err := cowMaximumMemoryBytes(engine)
-	if err != nil {
-		return nil, err
-	}
 	canonical, err := engine.newPrepared(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("prepare canonical COW image: %w", err)
@@ -70,6 +67,30 @@ func newCOWPreparedRuntimeWithTrustedSource(ctx context.Context, engine *Engine,
 			return nil, withGuestDiagnostic(err, canonical.stderr.String())
 		}
 	}
+	return sealCOWPreparedRuntime(engine, canonical, trustedIdentity, "")
+}
+
+func (runtime *linuxCOWPreparedRuntime) derive(ctx context.Context, engine *Engine, trustedSource, trustedIdentity string) (cowPreparedRuntime, error) {
+	identity, err := trustedCOWPrepareIdentity(trustedSource)
+	if err != nil || identity != trustedIdentity {
+		return nil, ErrTrustedCOWPrepareBinding
+	}
+	canonical, _, err := runtime.prepare(ctx, engine)
+	if err != nil {
+		return nil, fmt.Errorf("clone package COW baseline: %w", err)
+	}
+	defer closePreparedInstance(canonical)
+	if err := callStatusWithBytes(ctx, canonical.module, "runtime_prepare", []byte(trustedSource)); err != nil {
+		return nil, withGuestDiagnostic(err, canonical.stderr.String())
+	}
+	return sealCOWPreparedRuntime(engine, canonical, trustedIdentity, runtime.trustedPrepareSHA256)
+}
+
+func sealCOWPreparedRuntime(engine *Engine, canonical *preparedInstance, trustedIdentity, parentIdentity string) (cowPreparedRuntime, error) {
+	maximumBytes, err := cowMaximumMemoryBytes(engine)
+	if err != nil {
+		return nil, err
+	}
 	memory := canonical.module.Memory()
 	if memory == nil || memory.Size() == 0 {
 		return nil, errors.New("canonical COW image has no linear memory")
@@ -82,7 +103,7 @@ func newCOWPreparedRuntimeWithTrustedSource(ctx context.Context, engine *Engine,
 	if err != nil {
 		return nil, err
 	}
-	return &linuxCOWPreparedRuntime{image: image, trustedPrepareSHA256: trustedIdentity}, nil
+	return &linuxCOWPreparedRuntime{image: image, trustedPrepareSHA256: trustedIdentity, parentTrustedPrepareSHA256: parentIdentity}, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Engine) (*preparedInstance, cowCloneLifecycle, error) {
@@ -169,6 +190,7 @@ func (runtime *linuxCOWPreparedRuntime) imageState() PreparedImageState {
 	}
 	state := runtime.image.preparedImageState()
 	state.TrustedPrepareSHA256 = runtime.trustedPrepareSHA256
+	state.ParentTrustedPrepareSHA256 = runtime.parentTrustedPrepareSHA256
 	return state
 }
 

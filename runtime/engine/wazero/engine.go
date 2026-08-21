@@ -204,6 +204,7 @@ type Engine struct {
 	preparedState       PreparedState
 	cowMu               sync.Mutex
 	cowRuntime          cowPreparedRuntime
+	cowParentRuntime    cowPreparedRuntime
 	cowActive           uint64
 	cowClosing          bool
 	semanticSessionMu   sync.Mutex
@@ -364,6 +365,59 @@ func (engine *Engine) PrepareSemanticRuntimeWithTrustedSource(ctx context.Contex
 	return err
 }
 
+// DeriveSemanticRuntimeWithTrustedSource builds a research-only active image
+// from the already-prepared package baseline. The immutable package parent is
+// retained so another dataset derivation does not inherit the prior dataset.
+func (engine *Engine) DeriveSemanticRuntimeWithTrustedSource(ctx context.Context, source string) error {
+	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
+		return runtimeconfig.ErrMechanismDisabled
+	}
+	identity, err := trustedCOWPrepareIdentity(source)
+	if err != nil {
+		return err
+	}
+	properties := engine.Properties()
+	if properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
+		return ErrSemanticAnalysisSessionAuthority
+	}
+	engine.preparedInitMu.Lock()
+	defer engine.preparedInitMu.Unlock()
+	if !engine.preparedInitialized || engine.preparedInitErr != nil || engine.preparedTrustedSHA == "" {
+		return ErrTrustedCOWPrepareBinding
+	}
+	engine.cowMu.Lock()
+	defer engine.cowMu.Unlock()
+	if engine.cowClosing {
+		return errCOWEngineClosing
+	}
+	if engine.cowActive != 0 {
+		return errCOWRunsActive
+	}
+	parent := engine.cowParentRuntime
+	if parent == nil {
+		parent = engine.cowRuntime
+	}
+	deriver, ok := parent.(derivableCOWPreparedRuntime)
+	if !ok {
+		return runtimeconfig.ErrMechanismDisabled
+	}
+	derived, err := deriver.derive(ctx, engine, source, identity)
+	if err != nil {
+		return err
+	}
+	oldActive := engine.cowRuntime
+	if engine.cowParentRuntime == nil {
+		engine.cowParentRuntime = oldActive
+	} else if oldActive != nil {
+		if err := oldActive.close(); err != nil {
+			_ = derived.close()
+			return err
+		}
+	}
+	engine.cowRuntime = derived
+	return nil
+}
+
 func (engine *Engine) acquireSemanticSession() error {
 	engine.semanticSessionMu.Lock()
 	defer engine.semanticSessionMu.Unlock()
@@ -482,14 +536,16 @@ func (engine *Engine) closeCOWRuntime() error {
 	if engine.cowActive != 0 {
 		return errCOWRunsActive
 	}
-	if engine.cowRuntime == nil {
-		return nil
+	var activeErr, parentErr error
+	if engine.cowRuntime != nil {
+		activeErr = engine.cowRuntime.close()
 	}
-	if err := engine.cowRuntime.close(); err != nil {
-		return err
+	if engine.cowParentRuntime != nil {
+		parentErr = engine.cowParentRuntime.close()
 	}
 	engine.cowRuntime = nil
-	return nil
+	engine.cowParentRuntime = nil
+	return errors.Join(activeErr, parentErr)
 }
 
 func (engine *Engine) Close(ctx context.Context) error {

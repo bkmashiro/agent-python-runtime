@@ -36,7 +36,7 @@ func (facts NumpyLoadFacts) Validate() error {
 		!validIdentity(facts.StreamEpoch) || !validDigest(facts.AdmittedPrefixSHA256) ||
 		!hasPrefixDigest(facts.SourcePrefix, facts.AdmittedPrefixSHA256) ||
 		facts.CallSite.Capability != PreparedCall || facts.CallSite.DynamicOccurrence != 1 ||
-		!facts.CallSite.NecessarilyReached || !facts.CallSite.ArgumentsCanonical || !validSpan(facts.CallSite.Span) ||
+		!facts.CallSite.ArgumentsCanonical || !validSpan(facts.CallSite.Span) ||
 		!validDigest(facts.CallSite.ID) || !validDigest(facts.CallSite.ControlRegionID) ||
 		!canonicalArgumentsMatch(facts.CallSite.CanonicalArguments, PreparedResourcePath) {
 		return ErrNoEligiblePeephole

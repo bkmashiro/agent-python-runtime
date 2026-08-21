@@ -47,6 +47,8 @@ Existing owners remain authoritative for:
 
 Prepared data adds a research-only joined contract and typed transform. It must reuse these owners rather than duplicate their validators.
 
+The P3 prototype keeps the 8 MiB body out of the Broker response. The qualified `sources.read` handler reads the exact immutable file into Run-private Host staging and returns only a bounded digest/byte-count receipt. The authority-free decoder consumes that Host staging; the existing prepared-region scalar token records the later dynamic claim. Thus the physical body never widens the 1 MiB capability transport boundary.
+
 ## Authority equation
 
 ```text
@@ -87,6 +89,7 @@ artifact/profile/import         exact numpy-core bindings
 codec                           numpy_ndarray_c_v1
 max_file_bytes                  8,388,736
 max_body_bytes                  8,388,608
+max_result_bytes                4,096 (body-free receipt only)
 cost_units                      positive Host budget
 ```
 

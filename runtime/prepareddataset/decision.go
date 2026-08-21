@@ -132,6 +132,20 @@ func digestDeclaration(declaration HostPreparedDataDeclaration) string {
 	return digestBytes(encoded)
 }
 
+func (decision PreparationDecision) PhysicalCallSite() (semantic.CallSite, error) {
+	if !decision.Allowed || decision.PreparationIdentity == "" || decision.contract.Identity() == "" {
+		return semantic.CallSite{}, ErrDecisionRejected
+	}
+	callSite := decision.facts.CallSite
+	callSite.Capability = decision.contract.declaration.Capability
+	arguments, err := json.Marshal(map[string]any{"path": decision.contract.declaration.ResourcePath})
+	if err != nil {
+		return semantic.CallSite{}, ErrDecisionRejected
+	}
+	callSite.CanonicalArguments = arguments
+	return callSite, nil
+}
+
 func (decision PreparationDecision) Claim(finalSource string, verified semantic.VerifiedAnalysis) (ClaimDecision, error) {
 	analysis, err := verified.Analysis()
 	overlay, overlayErr := analysisOverlay(finalSource)

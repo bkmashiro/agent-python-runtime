@@ -29,6 +29,11 @@ func TestStagedObjectLifecycleAndCounters(t *testing.T) {
 	if err := object.Seal(); err != nil {
 		t.Fatal(err)
 	}
+	materialized, err := object.MaterializeStaging()
+	if err != nil || len(materialized.Body) != CanonicalBodyBytes || object.State() != StateSealed {
+		t.Fatalf("materialized body=%d state=%s err=%v", len(materialized.Body), object.State(), err)
+	}
+	materialized.Body[0] ^= 1
 	claimed, err := object.Claim()
 	if err != nil {
 		t.Fatal(err)
@@ -55,8 +60,53 @@ func TestStagedObjectLifecycleAndCounters(t *testing.T) {
 	if got, want := snapshot.Counters.PhysicalSeals, uint64(1); got != want {
 		t.Fatalf("physical seals = %d, want %d", got, want)
 	}
+	if snapshot.Counters.PhysicalMaterializations != 1 || snapshot.Counters.PhysicalMaterializedBytes != CanonicalBodyBytes {
+		t.Fatalf("materialization counters = %+v", snapshot.Counters)
+	}
 	if got, want := snapshot.Counters.LogicalClaims, uint64(1); got != want {
 		t.Fatalf("logical claims = %d, want %d", got, want)
+	}
+}
+
+func TestStagedObjectLateCompletionPublishesOnlyAfterSeal(t *testing.T) {
+	object, err := NewStagedObject("run-late")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := object.IssueRead(CanonicalFileBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.VerifySource("source-v1"); err != nil {
+		t.Fatal(err)
+	}
+	gate := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		<-gate
+		if err := object.Decode(CanonicalFixture()); err != nil {
+			done <- err
+			return
+		}
+		done <- object.Seal()
+	}()
+	if _, err := object.MaterializeStaging(); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("partial materialization error=%v", err)
+	}
+	if snapshot := object.Snapshot(); snapshot.BodyBytes != 0 || snapshot.State != StateSourceVerified {
+		t.Fatalf("partial state leaked: %+v", snapshot)
+	}
+	close(gate)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := object.MaterializeStaging(); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Orphan(); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := object.Snapshot(); snapshot.BodyBytes != 0 || snapshot.State != StateOrphaned {
+		t.Fatalf("orphan cleanup failed: %+v", snapshot)
 	}
 }
 

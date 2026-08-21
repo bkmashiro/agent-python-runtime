@@ -37,6 +37,8 @@ type Counters struct {
 	PhysicalDecodedBytes        uint64
 	PhysicalSeals               uint64
 	PhysicalSealedBytes         uint64
+	PhysicalMaterializations    uint64
+	PhysicalMaterializedBytes   uint64
 	PhysicalCancellations       uint64
 	PhysicalOrphans             uint64
 	PhysicalRejections          uint64
@@ -171,6 +173,23 @@ func (object *StagedObject) Seal() error {
 	object.counters.PhysicalSeals++
 	object.counters.PhysicalSealedBytes = uint64(len(object.sealed.Body))
 	return nil
+}
+
+// MaterializeStaging makes one owned physical copy for a fresh Guest without
+// advancing the logical state. Dynamic execution must still claim or orphan it.
+func (object *StagedObject) MaterializeStaging() (DecodedArray, error) {
+	if object == nil {
+		return DecodedArray{}, ErrInvalidTransition
+	}
+	object.mu.Lock()
+	defer object.mu.Unlock()
+	if object.state != StateSealed {
+		return DecodedArray{}, invalidTransition(object.state, StateSealed)
+	}
+	materialized := DecodedArray{Metadata: object.sealed.Metadata, Body: append([]byte(nil), object.sealed.Body...)}
+	object.counters.PhysicalMaterializations++
+	object.counters.PhysicalMaterializedBytes += uint64(len(materialized.Body))
+	return materialized, nil
 }
 
 // Claim returns an owned copy and consumes the staged object's body. A later

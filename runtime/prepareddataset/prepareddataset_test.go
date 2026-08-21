@@ -26,6 +26,10 @@ func TestPreparedDataContractRequiresExplicitHostJoin(t *testing.T) {
 	if err != nil || !decision.Allowed || decision.PreparationIdentity == "" {
 		t.Fatalf("decision=%+v err=%v", decision, err)
 	}
+	physical, err := decision.PhysicalCallSite()
+	if err != nil || physical.Capability != PreparedCapability || string(physical.CanonicalArguments) != `{"path":"/workspace/input.npy"}` {
+		t.Fatalf("physical=%+v err=%v", physical, err)
+	}
 	withoutContract, err := Decide(nil, facts, plan, validContext(declaration))
 	if !errors.Is(err, ErrNoPreparedContract) || withoutContract.Allowed || withoutContract.PreparationIdentity != "" {
 		t.Fatalf("without contract decision=%+v err=%v", withoutContract, err)
@@ -162,10 +166,14 @@ func TestNumpyLoadFactsRejectUnverifiedDynamicAndDuplicateOccurrences(t *testing
 	source := baseSource()
 	declaration := validDeclaration(digest('1'))
 	base := testCallSite()
+	mayNotReach := base
+	mayNotReach.NecessarilyReached = false
+	if _, err := factsFromCallSites(baseSource(), declaration.StreamEpoch, declaration.AdmittedPrefixSHA256, []semantic.CallSite{mayNotReach}); err != nil {
+		t.Fatalf("branch candidate must remain preparable: %v", err)
+	}
 	cases := map[string][]semantic.CallSite{
 		"absent":            nil,
 		"dynamic arguments": {func() semantic.CallSite { value := base; value.ArgumentsCanonical = false; return value }()},
-		"may not reach":     {func() semantic.CallSite { value := base; value.NecessarilyReached = false; return value }()},
 		"wrong surface":     {func() semantic.CallSite { value := base; value.Capability = PreparedCapability; return value }()},
 		"duplicate":         {base, base},
 	}

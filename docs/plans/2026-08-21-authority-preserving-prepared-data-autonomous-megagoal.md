@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Active on 2026-08-21; Phases 0–3 complete, P4/P5 unified harness next.
+**Status:** Active on 2026-08-21; Phases 0–5 complete, Phase 6 next.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -301,15 +301,15 @@ Tasks:
 
 Tasks:
 
-- [ ] Decompose current bytes copied, encoded/decoded, allocated, hashed and materialized for the prepared-data path.
-- [ ] Add one page-aligned, bounded, exclusive object extent with zeroed tail/padding and exact descriptor identity.
-- [ ] Ensure Host owns backing; producer/loader receives only temporary exclusive write authority and no backing handle.
-- [ ] Seal only after terminal writer state and complete Host validation.
-- [ ] Map the same sealed body privately into 1/2/4 fresh Linux consumer Guests.
-- [ ] Construct a supported ndarray view/copy surface without exposing Host pointer/FD or permitting shared mutation.
-- [ ] Mutate pages in consumer A and prove Host canonical body and consumer B remain unchanged; record private page faults/COW evidence.
-- [ ] Compare against existing private-copy materialization and recompute.
-- [ ] Keep a full-derived-image or fixed-arena implementation research-only; do not generalize unless required to answer the experiment.
+- [x] Decompose current bytes copied, encoded, mapped and materialized for the prepared-data path; retain RSS/PSS, allocation and hashing as formal Phase 6 metrics.
+- [x] Resolve the fixed-extent question through the allowed bounded full-derived-image path; do not add a generic or dedicated object allocator when whole-image private COW already answers the experiment.
+- [x] Ensure Host owns backing; producer/loader receives only temporary exclusive write authority and no backing handle.
+- [x] Seal only after terminal writer state and complete Host validation.
+- [x] Map the same sealed body privately into 1/2/4 fresh Linux consumer Guests.
+- [x] Construct a supported ndarray view/copy surface without exposing Host pointer/FD or permitting shared mutation.
+- [x] Mutate pages in consumer A and prove Host canonical body and consumer B remain unchanged; record private page faults/COW evidence.
+- [x] Compare against existing private-copy materialization and recompute.
+- [x] Keep a full-derived-image or fixed-arena implementation research-only; do not generalize unless required to answer the experiment.
 
 **Gate P4:** Either one dynamic body is physically shared read-only and privately COWed on writes across fresh Guests with complete cleanup, or the spike produces a precise engine/ABI blocker and measured copy baseline. A generic allocator is not required for goal completion.
 
@@ -319,12 +319,12 @@ Tasks:
 
 Tasks:
 
-- [ ] Build a research harness with fixed 1/2/4 consumer schedules over one exact prepared object.
-- [ ] Keep every consumer a fresh Guest with independent authority and terminal lease.
-- [ ] Add one narrow data-local operation such as exact numeric reduction that returns a small typed scalar while the large object stays in one authority-free Guest.
-- [ ] Compare `recompute`, `private_copy`, `private_cow_pages`, and `data_local_compute` under identical artifact/profile/source/input/result oracles.
-- [ ] Record N=0/orphan, N=1 and N>1 lifecycle without adding a public `pysolate.fanout` API.
-- [ ] Measure physical producer count separately from logical consumers; do not add single-flight coalescing.
+- [x] Build a research harness with fixed 1/2/4 consumer schedules over one exact prepared object.
+- [x] Keep every consumer a fresh Guest with independent authority and terminal lease.
+- [x] Add one narrow data-local operation such as exact numeric reduction that returns a small typed scalar while the large object stays in one authority-free Guest.
+- [x] Compare `recompute`, `private_copy`, `private_cow_pages`, and `data_local_compute` under identical artifact/profile/source/input/result oracles.
+- [x] Record N=0/orphan, N=1 and N>1 lifecycle without adding a public `pysolate.fanout` API.
+- [x] Measure physical producer count separately from logical consumers; do not add single-flight coalescing.
 
 **Gate P5:** All controls have result/error/logical-call/authority parity and complete cleanup. The harness can reveal when moving compute is cheaper than moving or mapping data.
 
@@ -478,6 +478,8 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 - 2026-08-21: Phase 2 is complete at `a960a5cc27537d072d86a7f5338a307ab0bfb8c8`. The target-Guest analyzer consumes a deterministic import-line-neutral analysis overlay while the original prefix/final source digests remain Host-bound; candidate `numpy.load` and physical `sources.read` are distinct identities. The clean macOS probe records zero starts without a Host contract, one start after exact sealed join, and a final-source claim identity. Every authority/source/profile/freshness/result-budget mutation fails before physical start in focused regressions. Body-safe evidence identity is `sha256:ed350dc700b58d821c48344ebdd02e1791bf995ed38aa361e336a6b7be52489d`.
 
 - 2026-08-21: Phase 3 is complete at `b05a94d58937fda5c39126cd60a34471da3ac414`. A real macOS Guest run begins the exact Host-authorized immutable file read and strict 8 MiB decode before final-source release, keeps the body out of the Broker response, seals Run-private typed staging, and dynamically claims once at unchanged `np.load`; shape `[1024,1024]` and sum `549755289600` match the serial oracle. Clean gpu31 controls prove reached `1/1/0`, branch-not-taken `0/0/1`, and earlier-exception `0/0/1` claim/consume/discard dispositions. Focused tests cover later syntax error, cancellation before/after read issue, late completion, source replacement, corruption, replay and orphan cleanup. Evidence identity is `sha256:172317c7bbfcf51f7a90087718f7a4c5c54bfec3fb4145084f4be2399a12e543`.
+
+- 2026-08-21: Phases 4–5 are complete as mechanism slices at runner `a36398b4a945371a414e35ccda6e2278bf93074c` and checker `09a0bb12e5d0ffc160dd526b737c378db17bb77e`. One immutable NumPy package shard and one dataset image serve fixed N=0/1/2/4 schedules. The 16-coordinate Linux report proves fresh Guests, exact sum parity, COW mutation isolation, zero per-consumer body copy for COW, 8/16/32 MiB private-copy growth, mapped-byte accounting, N=0 orphan bytes, and a data-local reduction followed by fresh scalar consumers. The dedicated object-extent allocator was not built: the allowed bounded full-derived-image path answered the question. Evidence identity is `sha256:d403fa73f54997eb051878657a18659cbe011091910a746697920f4ae6f982e3`. Economics remain explicitly unentered because this single ordered run contains first-observation warmup confounding.
 
 ## Short prompt to start this mega-goal
 

@@ -372,16 +372,15 @@ func monkeypatchSource(decision string, bodySHA256 string, body []byte) string {
 	payload := base64.StdEncoding.EncodeToString(body)
 	return strings.Join([]string{
 		"import base64 as _pd_base64, hashlib as _pd_hashlib, json as _pd_json, numpy as np, _agent_runtime_host as _pd_host",
-		"_pd_body = bytearray(_pd_base64.b64decode(" + fmt.Sprintf("%q", payload) + "))",
-		"_pd_body_sha256 = 'sha256:' + _pd_hashlib.sha256(_pd_body).hexdigest()",
-		"def _pd_load(path, *, allow_pickle=False):",
+		"_pd_body = bytes(_pd_base64.b64decode(" + fmt.Sprintf("%q", payload) + "))",
+		"def _pd_load(path, *, allow_pickle=False, _body=_pd_body, _hashlib=_pd_hashlib, _host=_pd_host):",
 		"    if path != '/workspace/input.npy' or allow_pickle is not False:",
 		"        raise RuntimeError('prepared data call mismatch')",
-		"    if _pd_body_sha256 != " + fmt.Sprintf("%q", bodySHA256) + ":",
+		"    if 'sha256:' + _hashlib.sha256(_body).hexdigest() != " + fmt.Sprintf("%q", bodySHA256) + ":",
 		"        raise RuntimeError('prepared data body identity mismatch')",
-		"    if _pd_json.loads(_pd_host.materialize_value(" + fmt.Sprintf("%q", decision) + ")) is not True:",
+		"    if _pd_json.loads(_host.materialize_value(" + fmt.Sprintf("%q", decision) + ")) is not True:",
 		"        raise RuntimeError('prepared data claim token mismatch')",
-		"    return np.frombuffer(_pd_body, dtype=np.dtype('<i8')).reshape((1024, 1024))",
+		"    return np.frombuffer(_body, dtype=np.dtype('<i8')).reshape((1024, 1024))",
 		"np.load = _pd_load",
 	}, "\n") + "\n"
 }

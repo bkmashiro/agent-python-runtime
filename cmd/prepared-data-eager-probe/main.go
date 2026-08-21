@@ -64,7 +64,7 @@ func main() {
 	}
 	defer engine.Close(context.Background())
 	started = time.Now()
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), "import numpy as np\n"); err != nil {
+	if err := engine.PrepareNumpyCOWShard(context.Background()); err != nil {
 		fail(err)
 	}
 	shard := uint64(time.Since(started))

@@ -36,16 +36,16 @@ func TestTrustedCOWPrepareSourceValidation(t *testing.T) {
 	}
 }
 
-func TestPrepareSemanticRuntimeWithTrustedSourceRequiresCOW(t *testing.T) {
+func TestPrepareNumpyCOWShardRequiresCOW(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.PreparedRuntime = true
 	engine := &Engine{config: config}
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), "import numpy as np\n"); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+	if err := engine.PrepareNumpyCOWShard(context.Background()); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
 		t.Fatalf("err=%v", err)
 	}
 }
 
-func TestPrepareSemanticRuntimeWithTrustedSourceRejectsBaselineDrift(t *testing.T) {
+func TestPrepareNumpyCOWShardRejectsBaselineDrift(t *testing.T) {
 	source := "import numpy as np\n"
 	identity, err := trustedCOWPrepareIdentity(source)
 	if err != nil {
@@ -58,10 +58,10 @@ func TestPrepareSemanticRuntimeWithTrustedSourceRejectsBaselineDrift(t *testing.
 	if _, err := engine.ensurePreparedWithResult(context.Background()); err != nil {
 		t.Fatalf("ordinary consumer err=%v", err)
 	}
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), source); err != nil {
+	if err := engine.PrepareNumpyCOWShard(context.Background()); err != nil {
 		t.Fatalf("same source err=%v", err)
 	}
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), "import numpy\n"); !errors.Is(err, ErrTrustedCOWPrepareSource) {
+	if _, err := engine.ensurePreparedWithResultAndTrustedSource(context.Background(), "import numpy\n", identity+"-drift"); !errors.Is(err, ErrTrustedCOWPrepareBinding) {
 		t.Fatalf("drift err=%v", err)
 	}
 }
@@ -101,21 +101,22 @@ func (runtime *fakeDerivableCOWRuntime) derive(_ context.Context, _ *Engine, _ s
 
 func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {
 	packageIdentity, _ := trustedCOWPrepareIdentity("import numpy as np\n")
-	firstSource := testTrustedDerivedSource()
-	secondSource := strings.Replace(firstSource, trustedCOWDerivedPrefix+"A", trustedCOWDerivedPrefix+"Q", 1)
+	firstBody := make([]byte, trustedCOWDerivedBodyBytes)
+	secondBody := append([]byte(nil), firstBody...)
+	secondBody[0] = 1
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.PreparedRuntime = true
 	config.Mechanisms.MemoryCOW = true
 	parent := &fakeDerivableCOWRuntime{identity: packageIdentity}
 	engine := &Engine{config: config, preparedInitialized: true, preparedTrustedSHA: packageIdentity, cowRuntime: parent}
-	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), firstSource); err != nil {
+	if err := engine.DeriveNumpyI64COWDataset(context.Background(), firstBody); err != nil {
 		t.Fatal(err)
 	}
 	first := engine.cowRuntime.(*fakeDerivableCOWRuntime)
 	if engine.cowParentRuntime != parent || first.parent != packageIdentity || parent.derived != 1 {
 		t.Fatalf("parent=%p first=%+v parent_state=%+v", engine.cowParentRuntime, first, parent)
 	}
-	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), secondSource); err != nil {
+	if err := engine.DeriveNumpyI64COWDataset(context.Background(), secondBody); err != nil {
 		t.Fatal(err)
 	}
 	if parent.derived != 2 || first.closed != 1 || engine.cowParentRuntime != parent {

@@ -85,7 +85,7 @@ func main() {
 	cow, cowShard := newPackageEngine(wasm, profile)
 	defer cow.Close(context.Background())
 	deriveStart := time.Now()
-	if err := cow.DeriveSemanticRuntimeWithTrustedSource(context.Background(), renderPrepare(decoded.Body)); err != nil {
+	if err := cow.DeriveNumpyI64COWDataset(context.Background(), decoded.Body); err != nil {
 		fail(err)
 	}
 	cowPrepare := readNanos + decodeNanos + uint64(time.Since(deriveStart))
@@ -108,7 +108,7 @@ func main() {
 	local, localShard := newPackageEngine(wasm, profile)
 	defer local.Close(context.Background())
 	localStart := time.Now()
-	if err := local.DeriveSemanticRuntimeWithTrustedSource(context.Background(), renderPrepare(decoded.Body)); err != nil {
+	if err := local.DeriveNumpyI64COWDataset(context.Background(), decoded.Body); err != nil {
 		fail(err)
 	}
 	localPrepare := readNanos + decodeNanos + uint64(time.Since(localStart))
@@ -142,7 +142,7 @@ func newPackageEngine(wasm []byte, profile runtimeconfig.ExecutionProfile) (*waz
 		fail(err)
 	}
 	started := time.Now()
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), "import numpy as np\n"); err != nil {
+	if err := engine.PrepareNumpyCOWShard(context.Background()); err != nil {
 		fail(err)
 	}
 	return engine, uint64(time.Since(started))

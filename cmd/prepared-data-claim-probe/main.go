@@ -94,7 +94,7 @@ func runCase(wasm []byte, profile runtimeconfig.ExecutionProfile, id, code strin
 	if !ok {
 		return probeCase{}, errors.New("wazero factory did not return concrete engine")
 	}
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), trustedPrepare); err != nil {
+	if err := engine.PrepareNumpyCOWShard(context.Background()); err != nil {
 		return probeCase{}, err
 	}
 	prepare := monkeypatchSource(decision.IdentitySHA256)

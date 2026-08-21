@@ -45,6 +45,15 @@ func trustedCOWDerivedIdentity(source string) (string, error) {
 	return trustedCOWSourceIdentity(source), nil
 }
 
+func trustedCOWDerivedSource(body []byte) (string, string, error) {
+	if len(body) != trustedCOWDerivedBodyBytes {
+		return "", "", ErrTrustedCOWPrepareSource
+	}
+	source := trustedCOWDerivedPrefix + base64.StdEncoding.EncodeToString(body) + trustedCOWDerivedSuffix
+	identity, err := trustedCOWDerivedIdentity(source)
+	return source, identity, err
+}
+
 func trustedCOWSourceIdentity(source string) string {
 	digest := sha256.Sum256([]byte(source))
 	return fmt.Sprintf("sha256:%x", digest[:])

@@ -65,7 +65,7 @@ func main() {
 	}
 	defer engine.Close(ctx)
 	started := time.Now()
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(ctx, trustedPrepare); err != nil {
+	if err := engine.PrepareNumpyCOWShard(ctx); err != nil {
 		fail(err)
 	}
 	prepareNanos := uint64(time.Since(started))

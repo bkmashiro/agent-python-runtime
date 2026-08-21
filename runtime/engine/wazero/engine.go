@@ -345,14 +345,13 @@ func (engine *Engine) PrepareSemanticRuntime(ctx context.Context) error {
 	return engine.ensurePrepared(ctx)
 }
 
-// PrepareSemanticRuntimeWithTrustedSource provisions the one Linux private-COW
-// NumPy package baseline after applying the exact authority-free import fragment.
-// Engines with workspace or Broker authority are rejected, and the fragment
-// identity is bound to the engine's one-time baseline.
-func (engine *Engine) PrepareSemanticRuntimeWithTrustedSource(ctx context.Context, source string) error {
+// PrepareNumpyCOWShard provisions the one Linux private-COW NumPy package
+// baseline. Engines with workspace or Broker authority are rejected.
+func (engine *Engine) PrepareNumpyCOWShard(ctx context.Context) error {
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
 		return runtimeconfig.ErrMechanismDisabled
 	}
+	source := trustedCOWPackageSource
 	identity, err := trustedCOWPrepareIdentity(source)
 	if err != nil {
 		return err
@@ -365,15 +364,15 @@ func (engine *Engine) PrepareSemanticRuntimeWithTrustedSource(ctx context.Contex
 	return err
 }
 
-// DeriveSemanticRuntimeWithTrustedSource builds the research-only fixed
+// DeriveNumpyI64COWDataset builds the research-only fixed
 // <i8 (1024,1024) active image from the prepared NumPy package baseline. The
 // immutable package parent is retained so another derivation does not inherit
 // the prior dataset.
-func (engine *Engine) DeriveSemanticRuntimeWithTrustedSource(ctx context.Context, source string) error {
+func (engine *Engine) DeriveNumpyI64COWDataset(ctx context.Context, body []byte) error {
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
 		return runtimeconfig.ErrMechanismDisabled
 	}
-	identity, err := trustedCOWDerivedIdentity(source)
+	source, identity, err := trustedCOWDerivedSource(body)
 	if err != nil {
 		return err
 	}

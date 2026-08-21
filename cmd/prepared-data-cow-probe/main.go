@@ -60,8 +60,7 @@ func main() {
 	if bodyDigest != "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0" {
 		fail(errors.New("fixture body identity drifted"))
 	}
-	prepareSource := renderPrepare(body)
-	prepareDigest := digest([]byte(prepareSource))
+	prepareDigest := digest([]byte(renderPrepare(body)))
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 180 * time.Second
 	config.MaxRequestBytes = 16 << 20
@@ -77,13 +76,13 @@ func main() {
 	packageSource := "import numpy as np\n"
 	packageDigest := digest([]byte(packageSource))
 	started := time.Now()
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), packageSource); err != nil {
+	if err := engine.PrepareNumpyCOWShard(context.Background()); err != nil {
 		fail(err)
 	}
 	packagePrepareNanos := uint64(time.Since(started))
 	packageImage := engine.PreparedImageState()
 	started = time.Now()
-	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), prepareSource); err != nil {
+	if err := engine.DeriveNumpyI64COWDataset(context.Background(), body); err != nil {
 		fail(err)
 	}
 	datasetDeriveNanos := uint64(time.Since(started))

@@ -34,6 +34,9 @@ type report struct {
 	ConsumerMutationIsolated bool                            `json:"consumer_mutation_isolated"`
 	PrivateCOWSelected       bool                            `json:"private_cow_selected"`
 	Fallback                 bool                            `json:"fallback"`
+	PrepareNanos             uint64                          `json:"prepare_nanos"`
+	FirstRunNanos            uint64                          `json:"first_run_nanos"`
+	SecondRunNanos           uint64                          `json:"second_run_nanos"`
 }
 
 func main() {
@@ -61,17 +64,23 @@ func main() {
 		fail(err)
 	}
 	defer engine.Close(ctx)
+	started := time.Now()
 	if err := engine.PrepareSemanticRuntimeWithTrustedSource(ctx, trustedPrepare); err != nil {
 		fail(err)
 	}
+	prepareNanos := uint64(time.Since(started))
+	started = time.Now()
 	first, err := run(ctx, engine, "np._pysolate_private_probe = 1\nresult = {'version': np.__version__, 'alias_visible': True}")
 	if err != nil {
 		fail(err)
 	}
+	firstRunNanos := uint64(time.Since(started))
+	started = time.Now()
 	second, err := run(ctx, engine, "result = {'version': np.__version__, 'alias_visible': True, 'mutation_visible': hasattr(np, '_pysolate_private_probe')}")
 	if err != nil {
 		fail(err)
 	}
+	secondRunNanos := uint64(time.Since(started))
 	var firstValue struct {
 		AliasVisible bool `json:"alias_visible"`
 	}
@@ -90,6 +99,7 @@ func main() {
 		TrustedPrepareSHA256: fmt.Sprintf("sha256:%x", digest[:]), Image: state,
 		FirstResult: first, SecondResult: second, PreparedAliasVisible: firstValue.AliasVisible && secondValue.AliasVisible,
 		ConsumerMutationIsolated: !secondValue.MutationVisible, PrivateCOWSelected: probe.COWSelected, Fallback: probe.Fallback,
+		PrepareNanos: prepareNanos, FirstRunNanos: firstRunNanos, SecondRunNanos: secondRunNanos,
 	}
 	if !out.PreparedAliasVisible || !out.ConsumerMutationIsolated || !out.PrivateCOWSelected || out.Fallback || state.TrustedPrepareSHA256 != out.TrustedPrepareSHA256 {
 		fail(errors.New("package-ready private-COW invariants failed"))

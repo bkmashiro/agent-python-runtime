@@ -176,13 +176,13 @@ If the full suite has a known bounded timeout, preserve exact partial/targeted o
 
 Tasks:
 
-- [ ] Re-read this plan, live Git status/history, P5R closure, `docs/unified-execution-profiles.md`, attrs profile evidence and the semantic-speculation roadmap.
-- [ ] Trace the base reactor from source locks through patched CPython, `guest/src/runtime.c`, static link, VFS pack, manifest, import qualification and wazero execution.
-- [ ] Identify every concrete Pysolate DBI/effect observation or denial point relevant to native package execution. Record what is observed at Host/WASI boundaries and what is unavailable; do not claim arbitrary native memory instruction tracing unless it exists.
-- [ ] Inspect `bkmashiro/wasi-wheels@184cce0...` read-only and map only the NumPy/WASI build facts needed for a Pysolate-native recipe.
-- [ ] Verify upstream NumPy source commit/version/license and all host build dependencies. Pin URLs and SHA-256 values through the existing locked-source machinery.
-- [ ] Define the package-profile schema, `numpy-core` qualification oracle and build acceptance matrix before seeing final artifact results.
-- [ ] Preregister the ndarray capsule mechanism/economics matrix before formal timing.
+- [x] Re-read this plan, live Git status/history, P5R closure, `docs/unified-execution-profiles.md`, attrs profile evidence and the semantic-speculation roadmap.
+- [x] Trace the base reactor from source locks through patched CPython, `guest/src/runtime.c`, static link, VFS pack, manifest, import qualification and wazero execution.
+- [x] Identify every concrete Pysolate DBI/effect observation or denial point relevant to native package execution. Record what is observed at Host/WASI boundaries and what is unavailable; do not claim arbitrary native memory instruction tracing unless it exists.
+- [x] Inspect `bkmashiro/wasi-wheels@184cce0...` read-only and map only the NumPy/WASI build facts needed for a Pysolate-native recipe.
+- [x] Verify upstream NumPy source commit/version/license and all host build dependencies. Pin URLs and SHA-256 values through the existing locked-source machinery.
+- [x] Define the package-profile schema, `numpy-core` qualification oracle and build acceptance matrix before seeing final artifact results.
+- [x] Preregister the ndarray capsule mechanism/economics matrix before formal timing.
 
 The preregistration must vary at least:
 
@@ -219,13 +219,13 @@ scripts/tests/
 
 Tasks:
 
-- [ ] RED-test exact profile schema, canonical identity, unknown fields, duplicate keys, source/recipe/patch/module/qualification drift and path/symlink attacks.
-- [ ] Define explicit profile kinds for `base`, pure-Python package and statically linked native package without creating an arbitrary plugin API.
-- [ ] Make profile selection table-driven enough that `build-guest.sh` does not grow package-name conditionals for each new supported package.
-- [ ] Bind profile recipe identity into CPython/final cache keys and distribution evidence.
-- [ ] Preserve final-cache verification, effective source lock, SBOM, notices, import inventory and qualification.
-- [ ] Migrate `attrs-770` to the shared contract with byte/identity-equivalent behavior where practical; retain its private patch requirement and existing oracle.
-- [ ] Prove `base` build inputs, default workflow and output naming remain unchanged and contain no package bytes.
+- [x] RED-test exact profile schema, canonical identity, unknown fields, duplicate keys, source/recipe/patch/module/qualification drift and path/symlink attacks.
+- [x] Define explicit profile kinds for `base`, pure-Python package and statically linked native package without creating an arbitrary plugin API.
+- [x] Make profile selection table-driven enough that `build-guest.sh` does not grow package-name conditionals for each new supported package.
+- [x] Bind profile recipe identity into CPython/final cache keys and distribution evidence.
+- [x] Preserve final-cache verification, effective source lock, SBOM, notices, import inventory and qualification.
+- [x] Migrate `attrs-770` to the shared contract with byte/identity-equivalent behavior where practical; retain its private patch requirement and existing oracle.
+- [x] Prove `base` build inputs, default workflow and output naming remain unchanged and contain no package bytes.
 
 **Gate P1:** Base and attrs profile contract tests PASS; one real cached or fresh attrs build verifies under the new path; base/attrs mismatches fail before execution. Signed commit and push, then continue.
 
@@ -235,13 +235,13 @@ Tasks:
 
 Tasks:
 
-- [ ] Add a locked `numpy-core` profile and recipe using the exact Pysolate CPython 3.14 WASI sysconfig and wasi-sdk.
-- [ ] Adapt only necessary reference-build facts: target flags, `NPY_NO_SIGNAL`, disabled SVML/BLAS/LAPACK, deterministic native archive production and stale-build cleanup.
-- [ ] Build NumPy native module archives reproducibly and link the exact required archives into the final Pysolate reactor at the existing static link stage.
-- [ ] Pack verified NumPy Python files into `/usr/lib/python3.14/site-packages/numpy` and reject placeholder `.so` files or unlinked native modules that only appear importable by path.
-- [ ] Extend manifests/SBOM/notices with upstream source, build recipe, patches, archive/module inventory and installed tree identities.
-- [ ] Add bounded profile-specific memory values only if measured NumPy import/operation requires them; bind them into artifact identity and do not raise base defaults.
-- [ ] Verify the final module imports inside the exact `apyrun` Pysolate Guest, not componentize-py.
+- [x] Add a locked `numpy-core` profile and recipe using the exact Pysolate CPython 3.14 WASI sysconfig and wasi-sdk.
+- [x] Adapt only necessary reference-build facts: target flags, `NPY_NO_SIGNAL`, disabled SVML/BLAS/LAPACK, deterministic native archive production and stale-build cleanup.
+- [x] Build NumPy native module archives reproducibly and link the exact required archives into the final Pysolate reactor at the existing static link stage.
+- [x] Pack verified NumPy Python files into `/usr/lib/python3.14/site-packages/numpy` and reject placeholder `.so` files or unlinked native modules that only appear importable by path.
+- [x] Extend manifests/SBOM/notices with upstream source, build recipe, patches, archive/module inventory and installed tree identities.
+- [x] Add bounded profile-specific memory values only if measured NumPy import/operation requires them; bind them into artifact identity and do not raise base defaults.
+- [x] Verify the final module imports inside the exact `apyrun` Pysolate Guest, not componentize-py.
 
 Required qualification operations include:
 
@@ -269,12 +269,12 @@ prepared_pure_region   execution_patch
 
 Tasks:
 
-- [ ] RED-test exact pass schema/version/config/consumer registration and unknown-combination rejection.
-- [ ] Introduce one immutable registration shape carrying pass identity, analyzer identity, config identity, consumer kind and required bindings.
-- [ ] Keep verified analysis/decision handles opaque; never expose mutable AST or authority handles through a generic registry.
-- [ ] Preserve consumer-specific legality, launch, final-source validation, claim and teardown code.
-- [ ] Migrate both consumers without changing frozen P5 evidence or existing observable behavior.
-- [ ] Reject duplicate registration, version/config drift, consumer-kind confusion and overlay/patch substitution.
+- [x] RED-test exact pass schema/version/config/consumer registration and unknown-combination rejection.
+- [x] Introduce one immutable registration shape carrying pass identity, analyzer identity, config identity, consumer kind and required bindings.
+- [x] Keep verified analysis/decision handles opaque; never expose mutable AST or authority handles through a generic registry.
+- [x] Preserve consumer-specific legality, launch, final-source validation, claim and teardown code.
+- [x] Migrate both consumers without changing frozen P5 evidence or existing observable behavior.
+- [x] Reject duplicate registration, version/config drift, consumer-kind confusion and overlay/patch substitution.
 
 **Gate P3:** Both consumers pass focused/adversarial tests through the shared seam; old direct bypasses are removed or explicitly internal; no generic plugin loader, IR or pass scheduler exists. Run full Go/vet/race gates, sign, push and continue.
 
@@ -284,14 +284,14 @@ Tasks:
 
 Tasks:
 
-- [ ] RED-test canonical blob descriptor, byte/entry/count bounds, SHA-256 verification, immutable copy ownership and exact identity joins.
-- [ ] Implement a Host-owned in-memory run-scoped blob store with one canonical body and typed metadata.
-- [ ] Producer publication is atomic: failure, cancellation, timeout, forbidden effect, incomplete copy or hash mismatch publishes nothing.
-- [ ] Create one-shot consumer leases with `ready → claimed → consumed` and `ready/claimed → rejected/discarded` terminal states.
-- [ ] Prove sibling leases cannot consume each other and teardown projects every terminal disposition.
-- [ ] Prove returned/caller-provided byte slices cannot mutate stored content.
-- [ ] Add explicit resource cleanup and bounded aggregate retained bytes; no durable cache yet.
-- [ ] Attach body-safe observation records without logging payloads.
+- [x] RED-test canonical blob descriptor, byte/entry/count bounds, SHA-256 verification, immutable copy ownership and exact identity joins.
+- [x] Implement a Host-owned in-memory run-scoped blob store with one canonical body and typed metadata.
+- [x] Producer publication is atomic: failure, cancellation, timeout, forbidden effect, incomplete copy or hash mismatch publishes nothing.
+- [x] Create one-shot consumer leases with `ready → claimed → consumed` and `ready/claimed → rejected/discarded` terminal states.
+- [x] Prove sibling leases cannot consume each other and teardown projects every terminal disposition.
+- [x] Prove returned/caller-provided byte slices cannot mutate stored content.
+- [x] Add explicit resource cleanup and bounded aggregate retained bytes; no durable cache yet.
+- [x] Attach body-safe observation records without logging payloads.
 
 **Gate P4:** Unit/race/adversarial lifecycle tests PASS, including cancellation and concurrent claim; Host blob and Guest/caller buffers do not alias. Signed commit and push.
 
@@ -301,15 +301,15 @@ Tasks:
 
 Tasks:
 
-- [ ] Define `numpy_ndarray_c_v1` descriptor and exact dtype/shape/order/endianness rules.
-- [ ] Add producer-side validation and canonical bytes extraction under `numpy-core`.
-- [ ] Copy producer bytes across the existing bounded Guest/Host ABI; do not expose Guest addresses or raw memory mappings.
-- [ ] Seal descriptor/body/profile/source/input/pass bindings in the Host.
-- [ ] In each fresh consumer, copy bytes into private local storage and construct a C-contiguous ndarray with correct dtype/shape.
-- [ ] Make consumer mutation isolation executable: mutate consumer A, then prove Host hash and consumer B remain unchanged.
-- [ ] Reject object dtype, views/strides outside v1, dtype/shape/nbytes overflow, body corruption, wrong profile/artifact/import closure and stale source.
-- [ ] Preserve original-vs-derived result/error/traceback/log parity and exact final-source patch binding.
-- [ ] Extend body-free evidence with copy bytes/durations, materialization duration, lease lifecycle and fresh Guest identities.
+- [x] Define `numpy_ndarray_c_v1` descriptor and exact dtype/shape/order/endianness rules.
+- [x] Add producer-side validation and canonical bytes extraction under `numpy-core`.
+- [x] Copy producer bytes across the existing bounded Guest/Host ABI; do not expose Guest addresses or raw memory mappings.
+- [x] Seal descriptor/body/profile/source/input/pass bindings in the Host.
+- [x] In each fresh consumer, copy bytes into private local storage and construct a C-contiguous ndarray with correct dtype/shape.
+- [x] Make consumer mutation isolation executable: mutate consumer A, then prove Host hash and consumer B remain unchanged.
+- [x] Reject object dtype, views/strides outside v1, dtype/shape/nbytes overflow, body corruption, wrong profile/artifact/import closure and stale source.
+- [x] Preserve original-vs-derived result/error/traceback/log parity and exact final-source patch binding.
+- [x] Extend body-free evidence with copy bytes/durations, materialization duration, lease lifecycle and fresh Guest identities.
 
 **Gate P5:** A non-skipping real `numpy-core` producer→Host→fresh consumer test passes on macOS and Linux private-COW where supported, plus all adversarial cases. No shared Python/linear-memory state and no authority expansion.
 
@@ -319,12 +319,12 @@ Tasks:
 
 Tasks:
 
-- [ ] Start from the existing prepared-region decision/patch contract and exact final-source validation.
-- [ ] Define a tiny explicit/allowlisted NumPy producer subset or an equally narrow source-bound declaration whose legality can be validated soundly by exact-Guest analysis and Host policy.
-- [ ] Bind imported module/version, operation, canonical inputs, dtype/shape limits, immutable roots, execution profile and capability plan.
-- [ ] Reject unknown calls, random/time, mutation of external inputs, file/network/process access, dynamic import, callbacks, object dtype and unsupported NumPy APIs.
-- [ ] Execute producer in a fresh authority-free `numpy-core` Guest, publish only after successful DBI/effect and output validation, and execute final derived code in another fresh Guest.
-- [ ] Preserve unchanged original lane and prove no fallback/replay after producer effects or ambiguous terminal state.
+- [x] Start from the existing prepared-region decision/patch contract and exact final-source validation.
+- [x] Define a tiny explicit/allowlisted NumPy producer subset or an equally narrow source-bound declaration whose legality can be validated soundly by exact-Guest analysis and Host policy.
+- [x] Bind imported module/version, operation, canonical inputs, dtype/shape limits, immutable roots, execution profile and capability plan.
+- [x] Reject unknown calls, random/time, mutation of external inputs, file/network/process access, dynamic import, callbacks, object dtype and unsupported NumPy APIs.
+- [x] Execute producer in a fresh authority-free `numpy-core` Guest, publish only after successful DBI/effect and output validation, and execute final derived code in another fresh Guest.
+- [x] Preserve unchanged original lane and prove no fallback/replay after producer effects or ambiguous terminal state.
 
 Do not grow an allowlist merely to make the benchmark pass. A small honest producer subset is sufficient.
 
@@ -374,14 +374,14 @@ If no repeated opportunity is observed, record `not entered`; do not manufacture
 
 Tasks:
 
-- [ ] Run an independent bounded review of build trust, native archive/module completeness, DBI/effect preservation, profile isolation, blob ownership, ndarray codec bounds, source/AST/profile/input binding, lease lifecycle, replay, timing fairness and evidence privacy.
-- [ ] Reproduce every valid finding in the main controller, fix it, add a regression and rerun proportional gates.
-- [ ] Run global verification and exact artifact reviewers.
-- [ ] Verify `base` default and frozen P5 historical files are unchanged.
-- [ ] Write concise Current / Measured / Rejected / Deferred documentation.
-- [ ] Update the active roadmap and this completion log with exact artifact/harness/evidence identities.
-- [ ] Keep large/private evidence local and commit body-safe summaries only.
-- [ ] Sign final coherent commits, push, verify `main == origin/main`, clean local/remote staging and report clean status.
+- [x] Run an independent bounded review of build trust, native archive/module completeness, DBI/effect preservation, profile isolation, blob ownership, ndarray codec bounds, source/AST/profile/input binding, lease lifecycle, replay, timing fairness and evidence privacy.
+- [x] Reproduce every valid finding in the main controller, fix it, add a regression and rerun proportional gates.
+- [x] Run global verification and exact artifact reviewers.
+- [x] Verify `base` default and frozen P5 historical files are unchanged.
+- [x] Write concise Current / Measured / Rejected / Deferred documentation.
+- [x] Update the active roadmap and this completion log with exact artifact/harness/evidence identities.
+- [x] Keep large/private evidence local and commit body-safe summaries only.
+- [x] Sign final coherent commits, push, verify `main == origin/main`, clean local/remote staging and report clean status.
 
 Final report must distinguish:
 
@@ -425,4 +425,5 @@ Do **not** stop because:
 - **P5, complete:** `16c141d051c43a2a89383336b3c4ca11fe9bb0c5` (`tree c9bd3255325b12c6ad54b1a78772b439ddb0d9dd`) seals bounded `numpy_ndarray_c_v1` bodies and exact producer/consumer joins. macOS evidence is `sha256:e22a5db558c250877475c648a93734b325f92f689392c5bdc6df67c4beac7ae9`; Linux private-COW evidence is `sha256:a974a959964a24e7e20d9f0aa7f6d278907c074b738f9f51c7afbcdc83dfcd38`. Matched result and error/log lanes pass, consumer mutation is isolated, every Guest records zero capability calls, all seven Linux Guests select private-COW without fallback, and teardown retains zero bytes.
 - **P6, complete:** `1d788057d3c183dbdafb28030a95967863ba63cd` (`tree c4518d7ff6cbdc7b14f39722a08d3b7b3ed0ca82`) closes the Host-generated producer declarations and binds opaque Exact Guest analysis, admission provenance, concrete-Wazero execution, prepared-lineage identity, and exact publication identity. The prior `7147b14` review correctly failed forged publication/admission, `EffectFree` overclaim, mutable request/consumer lineage, and body-safe checking. The later fixed-target review of `e87f774` found that a copied valid publication guard was still bound only to a constant and could authorize a different self-consistent blob. `1d78805` replaces that path with a raw-result/run/bindings/budget-bound producer authority, followed by the sole ndarray decode and an exact final guard over run, codec, canonical metadata, descriptor binding, body length, and body digest; Store recomputes that identity before any state write. Admission and lineage tokens remain identity-bound internal seals; lineage stores `ConsumerSourceSHA256`, recomputes `Digest(plan.Request)`, and rejects copied-token mutations. `EffectFree` representation is absent; native-call unknown remains unknown and no DBI/purity claim is made. The immutable `numpy-core` artifact remains `sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad`. Clean-source `1d78805` probes produced macOS evidence `sha256:c554f8fc6ebe30aa2e51c593c650329b8f3565067dd40800df3b1a5d1b18cd18` and Linux private-COW evidence `sha256:8e683d9cda2635b782e91eef41f80e6861d0c5151b067e6b1327a5bbb0ffe120`. Independent fixed-target review `deleg_91eeea75` returned `FINAL: PASS blockers=0` after replay, substitution, body-safety, evidence, unit, race and vet probes.
 - **P7, complete; P8 not entered:** harness `1a6596d2cd238e6c441b7ffa798ecb9b1c01c5e9` (`tree d98612fa162c9eded44e4d6cf82f52f471cc5cd4`) completed the frozen 240-record campaign: 120 records per platform, 80 treatment cells and 40 economic comparisons. All parity, freshness, authority, replay, blob/lease lifecycle and Linux private-COW/no-fallback checks pass. No observed cell reached break-even; all independent threshold fields remain `not_identified_from_coupled_sparse_grid`. Canonical macOS JSONL is `sha256:01eb1a864760a1fbf732b20f3f31972dc5f0c6f9fb54484413f45894771df9f3`, Linux JSONL is `sha256:cfc87552b05ab4122c7aad0fdb3ea4ad31e95ae6f003f7988734e57e39222374`, local sealed report is `sha256:e807b23840d6b9183bcb72b157e40e46d49b9f1f04a0f68af06bf0d972eb6a3e`, and report identity is `sha256:fa6fa1a8b68df5eb0fc5070660609a9800062769789fcd5f9c0a107680184e1e`. P8 is not entered because the complete negative surface provides no economic basis for more fan-out/single-flight machinery.
-- **Next:** obtain an independent fixed-target Phase 7 review of the body-safe summary and canonical private artifacts, then run Phase 9 global verification, cleanup and final closeout.
+- **P9, complete:** Phase 7 evidence/docs commit `5a4d15dd1cabc5adbc32f1c04b3b6398f2b31386` (`tree eaec966554dddfe716ab828e6f63426027b625f6`) is signed and pushed. Independent fixed-target review `deleg_429fb43f` returned `FINAL: PASS blockers=0` after archive provenance, canonical byte/hash, independent 240-record/economics, exact-join, mutation fail-closed, body-safety, focused test/vet and authority-clean checks. Main-controller verification passed `go test ./... -count=1`, `go vet ./...`, `go test -race ./... -count=1`, artifact root/dist checksum verification, P5/P6/P7 checkers, 21 base/profile tests, and frozen-P5 zero-diff. Reproducible local campaign/reviewer binaries and archives plus the gpu31 campaign stage were removed; the qualified artifact and private canonical local evidence remain retained.
+- **Final state:** all executable phases are closed. `numpy-core` remains opt-in, the `base` default and P5 history remain unchanged, P8 remains explicitly `not entered`, and no broader package/type/cache/DBI claim is implied.

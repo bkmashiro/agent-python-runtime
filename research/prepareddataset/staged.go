@@ -19,7 +19,7 @@ const (
 	StatePlanned        State = "Planned"
 	StateReadIssued     State = "ReadIssued"
 	StateSourceVerified State = "SourceVerified"
-	StateDecoded        State = "Decoded"
+	StateTypedStaging   State = "TypedStaging"
 	StateSealed         State = "Sealed"
 	StateClaimed        State = "Claimed"
 	StateOrphaned       State = "Orphaned"
@@ -96,12 +96,8 @@ func (object *StagedObject) State() State {
 	return object.state
 }
 
-// IssueRead records the physical read issue. The optional byte count is an
-// accounting hint from the bounded source reader; omitting it is permitted.
-func (object *StagedObject) IssueRead(readBytes ...uint64) error {
-	if len(readBytes) > 1 {
-		return ErrInvalidLifecycleArgument
-	}
+// IssueRead records the physical read issue and its exact bounded byte count.
+func (object *StagedObject) IssueRead(readBytes uint64) error {
 	if object == nil {
 		return ErrInvalidTransition
 	}
@@ -111,23 +107,16 @@ func (object *StagedObject) IssueRead(readBytes ...uint64) error {
 		return err
 	}
 	object.counters.PhysicalReads++
-	if len(readBytes) == 1 {
-		object.counters.PhysicalReadBytes = readBytes[0]
-	}
+	object.counters.PhysicalReadBytes = readBytes
 	return nil
 }
 
-// VerifySource joins the physical attempt to a source identity. The optional
-// value is intentionally opaque and body-free; an omitted value records the
-// narrow local verification event without inventing a source digest.
-func (object *StagedObject) VerifySource(sourceIdentity ...string) error {
-	if len(sourceIdentity) > 1 {
-		return ErrInvalidLifecycleArgument
-	}
+// VerifySource joins the physical attempt to one exact body-free source identity.
+func (object *StagedObject) VerifySource(sourceIdentity string) error {
 	if object == nil {
 		return ErrInvalidTransition
 	}
-	if len(sourceIdentity) == 1 && sourceIdentity[0] == "" {
+	if sourceIdentity == "" {
 		return ErrInvalidLifecycleArgument
 	}
 	object.mu.Lock()
@@ -135,9 +124,7 @@ func (object *StagedObject) VerifySource(sourceIdentity ...string) error {
 	if err := object.transitionLocked(StateSourceVerified); err != nil {
 		return err
 	}
-	if len(sourceIdentity) == 1 {
-		object.sourceIdentity = sourceIdentity[0]
-	}
+	object.sourceIdentity = sourceIdentity
 	object.counters.PhysicalSourceVerifications++
 	return nil
 }
@@ -151,7 +138,7 @@ func (object *StagedObject) Decode(data []byte) error {
 	object.mu.Lock()
 	defer object.mu.Unlock()
 	if object.state != StateSourceVerified {
-		return invalidTransition(object.state, StateDecoded)
+		return invalidTransition(object.state, StateTypedStaging)
 	}
 	object.counters.PhysicalDecodes++
 	decoded, err := Decode(data)
@@ -161,7 +148,7 @@ func (object *StagedObject) Decode(data []byte) error {
 	}
 	object.pending = decoded
 	object.counters.PhysicalDecodedBytes = uint64(len(decoded.Body))
-	if err := object.transitionLocked(StateDecoded); err != nil {
+	if err := object.transitionLocked(StateTypedStaging); err != nil {
 		object.pending = DecodedArray{}
 		object.rejectLocked(err)
 		return err
@@ -232,12 +219,8 @@ func (object *StagedObject) Cancel() error {
 	return nil
 }
 
-// Reject records a body-free terminal reason. The reason is optional so callers
-// can preserve a typed error without forcing it into an evidence body.
-func (object *StagedObject) Reject(reason ...error) error {
-	if len(reason) > 1 {
-		return ErrInvalidLifecycleArgument
-	}
+// Reject records a body-free terminal reason.
+func (object *StagedObject) Reject(reason error) error {
 	if object == nil {
 		return ErrInvalidTransition
 	}
@@ -246,8 +229,8 @@ func (object *StagedObject) Reject(reason ...error) error {
 	if err := object.transitionLocked(StateRejected); err != nil {
 		return err
 	}
-	if len(reason) == 1 && reason[0] != nil {
-		object.disposition = reason[0].Error()
+	if reason != nil {
+		object.disposition = reason.Error()
 	}
 	object.clearBodyLocked()
 	object.counters.PhysicalRejections++
@@ -306,8 +289,8 @@ func validTransition(from, to State) bool {
 	case StateReadIssued:
 		return to == StateSourceVerified || to == StateCancelled || to == StateRejected
 	case StateSourceVerified:
-		return to == StateDecoded || to == StateCancelled || to == StateRejected
-	case StateDecoded:
+		return to == StateTypedStaging || to == StateCancelled || to == StateRejected
+	case StateTypedStaging:
 		return to == StateSealed || to == StateCancelled || to == StateRejected
 	case StateSealed:
 		return to == StateClaimed || to == StateOrphaned || to == StateCancelled || to == StateRejected

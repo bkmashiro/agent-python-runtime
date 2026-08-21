@@ -108,7 +108,7 @@ func TestStagedObjectTerminalControlsAreOneWay(t *testing.T) {
 			if object.State() != terminal.want {
 				t.Fatalf("state = %s, want %s", object.State(), terminal.want)
 			}
-			if err := object.IssueRead(); !errors.Is(err, ErrInvalidTransition) {
+			if err := object.IssueRead(0); !errors.Is(err, ErrInvalidTransition) {
 				t.Fatalf("transition after terminal = %v", err)
 			}
 		})

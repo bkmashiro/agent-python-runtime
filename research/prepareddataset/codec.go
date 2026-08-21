@@ -88,9 +88,6 @@ type DecodedArray struct {
 	Body     []byte
 }
 
-// Array is a short compatibility name for the typed decoder result.
-type Array = DecodedArray
-
 // DecodeLimits are hard upper bounds applied before publication. Larger limits
 // do not widen the codec's fixed canonical shape; they only leave room for the
 // fixed fixture's exact sizes.
@@ -119,9 +116,6 @@ func CanonicalFixture() []byte {
 	}
 	return fixture
 }
-
-// GenerateFixture is the explicit generator spelling used by harnesses.
-func GenerateFixture() []byte { return CanonicalFixture() }
 
 // WriteCanonicalFixture writes one complete fixture and reports short writes.
 func WriteCanonicalFixture(writer io.Writer) error {
@@ -153,9 +147,6 @@ func canonicalHeader() []byte {
 func Decode(data []byte) (DecodedArray, error) {
 	return DecodeWithLimits(data, DefaultDecodeLimits())
 }
-
-// DecodeBytes makes the byte-oriented API explicit for callers that prefer it.
-func DecodeBytes(data []byte) (DecodedArray, error) { return Decode(data) }
 
 // DecodeReader is bounded to one canonical file plus one byte, which is enough
 // to distinguish a valid file from a file with trailing data without reading an

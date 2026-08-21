@@ -162,12 +162,15 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertIn("AGENT_RUNTIME_TOOL_RESPONSE_MAX", source)
         self.assertIn("AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX", source)
 
-    def test_response_buffer_has_explicit_bound(self):
+    def test_response_buffer_matches_host_hard_bound_without_expanding_other_channels(self):
         text = SOURCE.read_text()
-        match = re.search(r"#define AGENT_RUNTIME_RESPONSE_MAX \((\d+) \* 1024\)", text)
+        match = re.search(r"#define AGENT_RUNTIME_RESPONSE_MAX \((\d+) \* 1024 \* 1024\)", text)
         if match is None:
             self.fail("AGENT_RUNTIME_RESPONSE_MAX is missing")
-        self.assertLessEqual(int(match.group(1)), 1024)
+        self.assertEqual(int(match.group(1)), 16)
+        self.assertIn("#define AGENT_RUNTIME_REQUEST_MAX (1024 * 1024)", text)
+        self.assertIn("#define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)", text)
+        self.assertIn("#define AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX 256", text)
 
 
 

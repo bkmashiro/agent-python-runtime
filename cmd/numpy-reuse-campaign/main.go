@@ -13,7 +13,6 @@ import (
 	goruntime "runtime"
 	"runtime/debug"
 	"sort"
-	"syscall"
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/research/numpyreuse"
@@ -136,6 +135,8 @@ func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyprodu
 	if err != nil {
 		return numpyreuse.TrialRecord{}, err
 	}
+	sampler := startRSSSampler()
+	defer sampler.Stop()
 	started := time.Now()
 	stages := numpyreuse.StageMetrics{UnavailableStageReason: "NumPy import, compute and producer encode are one authority-preserving Guest execution interval; splitting them would instrument or observe the admitted source"}
 	placements := placementCounts{}
@@ -306,7 +307,7 @@ func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyprodu
 		physical = 2 + 2*candidate.Consumers
 	}
 	stages.CriticalWallNanos = uint64(time.Since(started))
-	stages.PeakResidentMemoryBytes = peakRSSBytes()
+	stages.PeakResidentMemoryBytes = sampler.Stop()
 	if stages.PeakResidentMemoryBytes == 0 {
 		stages.PeakResidentMemoryBytes = 1
 	}
@@ -403,17 +404,6 @@ func canonicalResult(raw []byte) ([]byte, error) {
 		return nil, errors.New("result JSON invalid")
 	}
 	return json.Marshal(value)
-}
-func peakRSSBytes() uint64 {
-	var usage syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) != nil {
-		return 0
-	}
-	value := uint64(usage.Maxrss)
-	if goruntime.GOOS == "linux" {
-		value *= 1024
-	}
-	return value
 }
 func verifyBuildIdentity(expected string) (string, error) {
 	info, ok := debug.ReadBuildInfo()

@@ -1,0 +1,14 @@
+{
+  "schema_version": "pysolate.numpy-reuse-adversarial-controls.v1",
+  "controls": [
+    {"id":"reject_object_dtype","passed":true,"evidence_sha256":"sha256:918ac686bb5b1f683e68f226293ef9e2f8fad5743dedda9b5f4e165a70c56548"},
+    {"id":"reject_noncontiguous_view","passed":true,"evidence_sha256":"sha256:eba7574ecd0ae19dcd5a75d5149eb940af54af86ff291a6951f9677cea46fbcd"},
+    {"id":"reject_fortran_order","passed":true,"evidence_sha256":"sha256:eba7574ecd0ae19dcd5a75d5149eb940af54af86ff291a6951f9677cea46fbcd"},
+    {"id":"reject_random_api","passed":true,"evidence_sha256":"sha256:918ac686bb5b1f683e68f226293ef9e2f8fad5743dedda9b5f4e165a70c56548"},
+    {"id":"reject_source_drift","passed":true,"evidence_sha256":"sha256:918ac686bb5b1f683e68f226293ef9e2f8fad5743dedda9b5f4e165a70c56548"},
+    {"id":"reject_corrupt_descriptor","passed":true,"evidence_sha256":"sha256:df5b1b0ba071fbc5bea6081b27a14afef90b97c196eca07f581cf3325339125f"},
+    {"id":"reject_cross_profile","passed":true,"evidence_sha256":"sha256:df5b1b0ba071fbc5bea6081b27a14afef90b97c196eca07f581cf3325339125f"},
+    {"id":"consumer_mutation_is_private","passed":true,"evidence_sha256":"sha256:a974a959964a24e7e20d9f0aa7f6d278907c074b738f9f51c7afbcdc83dfcd38"}
+  ],
+  "claim": "All frozen controls reject before publication/materialization or prove private-copy isolation; no control admits authority, replay, pointer sharing, object dtype or mutable aliasing."
+}

@@ -59,6 +59,7 @@ type report struct {
 	Result                   json.RawMessage       `json:"result"`
 	LogicalParity            bool                  `json:"logical_parity"`
 	VerifiedTargetGuest      bool                  `json:"verified_target_guest"`
+	LaterSyntaxRejected      bool                  `json:"later_syntax_rejected"`
 }
 
 type readHandler struct {
@@ -236,6 +237,15 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	syntaxRejected := false
+	invalidRequest, invalidErr := prepareddataset.NewAnalysisRequest(prefix+"result = (\n", bindings, plan)
+	if invalidErr == nil {
+		_, analyzeErr := semantic.AnalyzeVerified(context.Background(), analyzer, invalidRequest)
+		syntaxRejected = analyzeErr != nil
+	}
+	if !syntaxRejected {
+		fail(errors.New("later syntax error was not rejected"))
+	}
 	preparedResult := <-preparedCh
 	if preparedResult.err != nil {
 		fail(preparedResult.err)
@@ -284,7 +294,7 @@ func main() {
 		FinalSourceReleasedNanos: finalReleased, ReadBeforeFinal: readStarted < finalReleased, DecodeBeforeFinal: preparedResult.decodeCompleted < finalReleased,
 		PhysicalOutcomeBytes: preparedResult.outcome.PhysicalResultBytes, TypedMetadata: materialized.Metadata, Staged: snapshot,
 		TokenClaims: uint64(tokenEvidence.Claims), TokenConsumed: uint64(tokenEvidence.Consumed), TokenDiscarded: uint64(tokenEvidence.Discarded),
-		Result: guestResult, LogicalParity: parity, VerifiedTargetGuest: true,
+		Result: guestResult, LogicalParity: parity, VerifiedTargetGuest: true, LaterSyntaxRejected: syntaxRejected,
 	}
 	if out.AuthorizedStarts != 1 || !out.ReadBeforeFinal || !out.DecodeBeforeFinal || snapshot.State != researchdata.StateClaimed || snapshot.Counters.LogicalClaims != 1 {
 		fail(errors.New("P3 invariants failed"))

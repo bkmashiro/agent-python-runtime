@@ -138,6 +138,20 @@ func TestStagedObjectRejectsDecodeWithoutPartialPublication(t *testing.T) {
 	}
 }
 
+func TestStagedObjectCancelBeforePhysicalStart(t *testing.T) {
+	object, err := NewStagedObject("run-cancel-before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := object.Snapshot()
+	if snapshot.State != StateCancelled || snapshot.BodyBytes != 0 || snapshot.Counters.PhysicalReads != 0 || snapshot.Counters.PhysicalCancellations != 1 {
+		t.Fatalf("cancel-before snapshot=%+v", snapshot)
+	}
+}
+
 func TestStagedObjectTerminalControlsAreOneWay(t *testing.T) {
 	for _, terminal := range []struct {
 		name string

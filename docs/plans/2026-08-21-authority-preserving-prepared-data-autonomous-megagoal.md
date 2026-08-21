@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Active on 2026-08-21; Phases 0–6 complete, Phase 7 active.
+**Status:** Closed on 2026-08-21; mechanism prototype complete, promotion rejected at Phase 7.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -369,13 +369,13 @@ Tasks:
 
 Tasks:
 
-- [ ] Run one independent fixed-target review covering Host declaration authority, physical/logical side effects, source/freshness/profile joins, loader isolation, sealed extent ownership, private mutation, replay, cleanup, timing and evidence privacy.
-- [ ] Reproduce valid findings in the controller, add minimal regressions and fix blockers.
-- [ ] Remove prototype scaffolding, duplicate validators, pass-through wrappers and unsupported branches that do not contribute to mechanism/evidence.
-- [ ] Run final full Go/vet/race, relevant Guest Python/profile tests, exact artifact verification, macOS controls, Linux private-COW campaign/checker and `git diff --check`.
-- [ ] Update `docs/research/semantic-speculation-roadmap-v0.md` with Current / Measured / Rejected / Deferred conclusions.
-- [ ] Preserve the predecessor P5/P6/P7 files and canonical local evidence unchanged.
-- [ ] Sign and push final commits; verify signature, branch/upstream alignment, clean worktree, no runner processes and no stale remote stage.
+- [x] Run independent fixed-target reviews covering Host declaration authority, physical/logical side effects, source/freshness/profile joins, loader isolation, sealed extent ownership, private mutation, replay, cleanup, timing and evidence privacy. The exact-target verdict was not certifiable and is retained as the closeout basis.
+- [x] Reproduce valid findings in the controller, add minimal regressions, fix narrow source gaps and convert unresolved join/timing gaps into explicit promotion blockers.
+- [x] Remove generic Host-source COW APIs, bind staging to a Host receipt and stop reporting an unjoined staged-object Claim.
+- [x] Run final full Go/vet/race, NumPy profile/artifact verification, macOS control, replay the frozen Linux raw campaign through the checker and run `git diff --check`; do not rerun the historical campaign.
+- [x] Update `docs/research/semantic-speculation-roadmap-v0.md` with Current / Measured / Rejected / Deferred conclusions.
+- [x] Preserve the predecessor P5/P6/P7 files and canonical local evidence unchanged.
+- [x] Sign and push final source commits; verify signature, branch/upstream alignment, clean worktree, no runner processes and no stale remote stage.
 
 Final report must distinguish:
 

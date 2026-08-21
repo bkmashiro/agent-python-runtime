@@ -1,0 +1,107 @@
+{
+ "cleanup": {
+  "frozen_predecessor_campaign_unchanged": true,
+  "remote_stage_removed": true,
+  "research_branches_removed": true,
+  "temporary_worktrees_removed": true
+ },
+ "identity": "sha256:dd683171c724b9bf4531166adeed919a937cdc9c41d94ca94b5fc29e08f5c8dd",
+ "independent_review": {
+  "post_review_actions": [
+   "downgraded_cpython_preparation_claim",
+   "bound_physical_staging_to_host_receipt",
+   "orphaned_unjoined_staging_instead_of_logical_claim",
+   "froze_producer_identities",
+   "downgraded_phase6_to_schedule_model",
+   "rejected_promotion"
+  ],
+  "rejected_suggestion": "CallSite.ID and ControlRegionID change with final-source digest and cannot bind a legal streaming occurrence; macOS vertical smoke rejected that attempted mutation.",
+  "reproduced_findings": [
+   "ambient_wasi_clock_and_entropy_in_cpython_preparation",
+   "p3_scalar_token_not_bound_to_staged_object_body",
+   "campaign_provenance_placeholders",
+   "projected_not_observed_timing"
+  ],
+  "reviewed_target": "17dec479dcf08853f21617578ee0f93968942ea6",
+  "reviewed_tree": "11c624ed7ff3b0ccb71bd6ebea59b15f457afe8c",
+  "verdict": "not_certifiable"
+ },
+ "private_artifacts": {
+  "macos_p3_v2_sha256": "sha256:ad1ad3ef7bc784de297acffb2cece0c2c6d9b20d4d228deca6cf6e5edf3ed139",
+  "phase6_campaign_root": "~/.local/share/pysolate/campaigns/prepared-data-phase6-7e6644b7"
+ },
+ "promotion": {
+  "p8_entered": false,
+  "productionized": false,
+  "reason": [
+   "no_object_bound_host_materialization_join",
+   "cpython_preparation_retains_wasi_clock_random",
+   "phase6_critical_paths_are_projected_not_observed"
+  ],
+  "status": "rejected"
+ },
+ "repository_evidence": {
+  "docs/evidence/prepared-data-phase0-preregistration-v1.json": {
+   "bytes": 2930,
+   "sha256": "sha256:238f07b43e7b9c087cfd8d62bf6229574aa7b7ac4d3d9ff1494973e5fda43edb"
+  },
+  "docs/evidence/prepared-data-phase1-linux-amd64-v1.json": {
+   "bytes": 1500,
+   "sha256": "sha256:fd2394a9da1474222bbae412083f7b734d08007c61a5548a72009d7e5137fabd"
+  },
+  "docs/evidence/prepared-data-phase2-v1.json": {
+   "bytes": 1125,
+   "sha256": "sha256:27a814c92ab20868c2a4ece753411b3976caea4fc68e831c422b6d0a13b72264"
+  },
+  "docs/evidence/prepared-data-phase3-v1.json": {
+   "bytes": 5038,
+   "sha256": "sha256:5fba3df518de1453c0c2d77014c63a5f7e123be66153aad1438c9f4fd056a70e"
+  },
+  "docs/evidence/prepared-data-phase4-linux-amd64-v1.json": {
+   "bytes": 1780,
+   "sha256": "sha256:bc08485c07782cfdc7331ba91c155f1b51f92653a1d95c19bfe92bb341f388e0"
+  },
+  "docs/evidence/prepared-data-phase4-linux-amd64-v2.json": {
+   "bytes": 2536,
+   "sha256": "sha256:e8f3c7bdb541a1038936c3afc44cb36ff1485b6ea1db41bc95b20e47fd477292"
+  },
+  "docs/evidence/prepared-data-phase4-phase5-linux-v1.json": {
+   "bytes": 9532,
+   "sha256": "sha256:952fa634d9d3bd2bc74657aaa621b4ef47cef0748d94ce25cbab968539c98e65"
+  },
+  "docs/evidence/prepared-data-phase6-linux-v1.json": {
+   "bytes": 11508,
+   "sha256": "sha256:94f9bf46c3c0296e4b09f5ae3a022a3dda1e86eb1b12b9b5959c3067384cf3d8"
+  },
+  "docs/evidence/prepared-data-phase6-manifest-v1.json": {
+   "bytes": 1164,
+   "sha256": "sha256:7e6644b73e569ebcd503259dd8356e1e5cee133cfc9eb25602011ebe9e1065f0"
+  }
+ },
+ "retained_mechanisms": [
+  "explicit_host_prepared_data_contract",
+  "bounded_strict_npy_decoder",
+  "host_receipt_bound_private_staging",
+  "typed_verified_numpy_cow_api",
+  "fixed_private_cow_and_data_local_controls"
+ ],
+ "schema_version": "pysolate.prepared-data-phase7-closeout.v1",
+ "source_target": {
+  "commit": "db1824feb57bff7c182617451d7c0fe40d923f07",
+  "signature": "good_ed25519",
+  "tree": "08306efa86c9a8d83de472ea649972b838a8720e"
+ },
+ "validation": {
+  "artifact_sha256sum": "pass",
+  "diff_check": "pass",
+  "full_go_race": "pass",
+  "full_go_test": "pass",
+  "full_go_vet": "pass",
+  "linux_cow": "historical_mechanism_smoke_only_not_final_target_certification",
+  "macos_p3_v2": "pass_with_staged_object_claim_joined_false",
+  "numpy_profile_lock": "pass",
+  "phase6_aggregates": 54,
+  "phase6_coordinates": 162,
+  "phase6_raw_rebuild_sha256": "sha256:82f97a56c1a8b830ab5a96ab6040afb5bdaa8792b435c347667555e6fc8372ca"
+ }
+}

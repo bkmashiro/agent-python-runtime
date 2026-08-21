@@ -35,25 +35,51 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	body := researchdata.CanonicalFixture()[researchdata.CanonicalBodyOffset:]
+	fixture := researchdata.CanonicalFixture()
+	file, err := os.CreateTemp("", "pysolate-prepared-data-*.npy")
+	if err != nil {
+		fail(err)
+	}
+	fixturePath := file.Name()
+	defer os.Remove(fixturePath)
+	if _, err := file.Write(fixture); err != nil {
+		fail(err)
+	}
+	if err := file.Close(); err != nil {
+		fail(err)
+	}
+	readStart := time.Now()
+	readFixture, err := os.ReadFile(fixturePath)
+	if err != nil {
+		fail(err)
+	}
+	readNanos := uint64(time.Since(readStart))
+	decodeStart := time.Now()
+	decoded, err := researchdata.Decode(readFixture)
+	if err != nil {
+		fail(err)
+	}
+	decodeNanos := uint64(time.Since(decodeStart))
+	body := decoded.Body
 	if digest(body) != researchdata.CanonicalBodySHA256 {
 		fail(errors.New("fixture body drift"))
 	}
-	out := report{SchemaVersion: fanout.SchemaVersion, ArtifactSHA256: artifactSHA, FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: uint64(len(body)), PackagePrepareOnce: true}
+	out := report{SchemaVersion: fanout.SchemaVersion, ArtifactSHA256: artifactSHA, FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: uint64(len(body)), PackagePrepareOnce: true, HostReadNanos: readNanos, HostDecodeNanos: decodeNanos, WarmupFreshGuests: 4}
 
 	recompute, recomputeShard := newPackageEngine(wasm, profile)
 	defer recompute.Close(context.Background())
+	if _, err := run(recompute, "warmup-recompute", "import numpy as np\nresult={'sum':int(np.arange(1048576,dtype=np.int64).sum())}\n", ""); err != nil {
+		fail(err)
+	}
 	out.Records = append(out.Records, runSchedules(recompute, "recompute", recomputeShard, 0, 0, 0, 0, "import numpy as np\nresult = {'sum': int(np.arange(1048576, dtype=np.int64).sum())}\n", "")...)
 
 	privateCopy, privateShard := newPackageEngine(wasm, profile)
 	defer privateCopy.Close(context.Background())
-	decodeStart := time.Now()
-	decoded, err := researchdata.Decode(researchdata.CanonicalFixture())
-	if err != nil {
+	privatePrepare := readNanos + decodeNanos
+	copyPrepare := renderPrepare(decoded.Body)
+	if _, err := run(privateCopy, "warmup-private-copy", "import numpy as np\nresult={'sum':int(dataset.sum())}\n", copyPrepare); err != nil {
 		fail(err)
 	}
-	privatePrepare := uint64(time.Since(decodeStart))
-	copyPrepare := renderPrepare(decoded.Body)
 	out.Records = append(out.Records, runSchedules(privateCopy, "private_copy", privateShard, privatePrepare, uint64(len(decoded.Body)), uint64(len(copyPrepare)), 0, "import numpy as np\nresult = {'sum': int(dataset.sum())}\n", copyPrepare)...)
 
 	cow, cowShard := newPackageEngine(wasm, profile)
@@ -62,7 +88,10 @@ func main() {
 	if err := cow.DeriveSemanticRuntimeWithTrustedSource(context.Background(), renderPrepare(decoded.Body)); err != nil {
 		fail(err)
 	}
-	cowPrepare := uint64(time.Since(deriveStart))
+	cowPrepare := readNanos + decodeNanos + uint64(time.Since(deriveStart))
+	if _, err := run(cow, "warmup-cow", "import numpy as np\nresult={'sum':int(dataset.sum())}\n", ""); err != nil {
+		fail(err)
+	}
 	out.Records = append(out.Records, runSchedules(cow, "private_cow_pages", cowShard, cowPrepare, 0, 0, uint64(len(decoded.Body)), "import numpy as np\nresult = {'sum': int(dataset.sum())}\n", "")...)
 	if _, err := run(cow, "cow-mutate", "import numpy as np\ndataset[0,0]=999\nresult={'sum':int(dataset.sum())}\n", ""); err != nil {
 		fail(err)
@@ -82,7 +111,10 @@ func main() {
 	if err := local.DeriveSemanticRuntimeWithTrustedSource(context.Background(), renderPrepare(decoded.Body)); err != nil {
 		fail(err)
 	}
-	localPrepare := uint64(time.Since(localStart))
+	localPrepare := readNanos + decodeNanos + uint64(time.Since(localStart))
+	if _, err := run(local, "warmup-data-local", "import numpy as np\nresult={'sum':int(dataset.sum())}\n", ""); err != nil {
+		fail(err)
+	}
 	out.Records = append(out.Records, dataLocalSchedules(local, recompute, localShard, localPrepare, uint64(len(decoded.Body)))...)
 
 	for _, item := range out.Records {

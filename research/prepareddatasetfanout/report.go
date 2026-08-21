@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	SchemaVersion        = "pysolate.prepared-data-fanout.v1"
-	ExpectedSum   uint64 = 549755289600
+	SchemaVersionV1        = "pysolate.prepared-data-fanout.v1"
+	SchemaVersion          = "pysolate.prepared-data-fanout.v2"
+	ExpectedSum     uint64 = 549755289600
 )
 
 var ErrInvalidReport = errors.New("invalid prepared-data fanout report")
@@ -42,14 +43,24 @@ type Report struct {
 	FixtureBodySHA256  string   `json:"fixture_body_sha256"`
 	FixtureBodyBytes   uint64   `json:"fixture_body_bytes"`
 	PackagePrepareOnce bool     `json:"package_prepare_once_per_treatment"`
+	HostReadNanos      uint64   `json:"host_read_nanos"`
+	HostDecodeNanos    uint64   `json:"host_decode_nanos"`
+	WarmupFreshGuests  uint64   `json:"warmup_fresh_guests"`
 	MutationIsolated   bool     `json:"mutation_isolated"`
 	Records            []Record `json:"records"`
 }
 
 func Validate(report Report) error {
-	if report.SchemaVersion != SchemaVersion || report.ArtifactSHA256 == "" ||
+	validVersion := report.SchemaVersion == SchemaVersion || report.SchemaVersion == SchemaVersionV1
+	if !validVersion || report.ArtifactSHA256 == "" ||
 		report.FixtureBodySHA256 != researchdata.CanonicalBodySHA256 || report.FixtureBodyBytes != researchdata.CanonicalBodyBytes ||
 		!report.PackagePrepareOnce || !report.MutationIsolated || len(report.Records) != 16 {
+		return ErrInvalidReport
+	}
+	if report.SchemaVersion == SchemaVersion && (report.HostReadNanos == 0 || report.HostDecodeNanos == 0 || report.WarmupFreshGuests != 4) {
+		return ErrInvalidReport
+	}
+	if report.SchemaVersion == SchemaVersionV1 && (report.HostReadNanos != 0 || report.HostDecodeNanos != 0 || report.WarmupFreshGuests != 0) {
 		return ErrInvalidReport
 	}
 	expected := map[string]bool{}

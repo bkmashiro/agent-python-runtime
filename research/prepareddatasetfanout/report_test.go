@@ -12,6 +12,12 @@ func TestValidateAndSummaries(t *testing.T) {
 	if err := Validate(report); err != nil {
 		t.Fatal(err)
 	}
+	legacy := report
+	legacy.SchemaVersion = SchemaVersionV1
+	legacy.HostReadNanos, legacy.HostDecodeNanos, legacy.WarmupFreshGuests = 0, 0, 0
+	if err := Validate(legacy); err != nil {
+		t.Fatalf("legacy v1: %v", err)
+	}
 	summaries, err := Summaries(report)
 	if err != nil || len(summaries) != 16 {
 		t.Fatalf("summaries=%d err=%v", len(summaries), err)
@@ -50,7 +56,7 @@ func TestValidateFailsClosed(t *testing.T) {
 }
 
 func validReport() Report {
-	report := Report{SchemaVersion: SchemaVersion, ArtifactSHA256: "sha256:artifact", FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: researchdata.CanonicalBodyBytes, PackagePrepareOnce: true, MutationIsolated: true}
+	report := Report{SchemaVersion: SchemaVersion, ArtifactSHA256: "sha256:artifact", FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: researchdata.CanonicalBodyBytes, PackagePrepareOnce: true, HostReadNanos: 1, HostDecodeNanos: 1, WarmupFreshGuests: 4, MutationIsolated: true}
 	body := uint64(researchdata.CanonicalBodyBytes)
 	for _, treatment := range []string{"recompute", "private_copy", "private_cow_pages", "data_local_compute"} {
 		for _, consumers := range []int{0, 1, 2, 4} {

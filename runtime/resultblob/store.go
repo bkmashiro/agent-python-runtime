@@ -54,7 +54,7 @@ func NewPublicationGuard(token publicationauth.Token) PublicationGuard {
 }
 
 func (guard PublicationGuard) valid() bool {
-	return guard.token.Valid()
+	return guard.token.Valid(publicationauth.ResultPublicationBinding)
 }
 
 type Publication struct {

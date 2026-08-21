@@ -1,16 +1,22 @@
 package publicationauth
 
-// Token is an opaque Host-internal authority to publish one fully validated
-// result body. Go's internal-package rule prevents consumers outside the
-// Pysolate repository from minting it.
+const ResultPublicationBinding = "pysolate.result-publication-authority.v1"
+
+// Token is an opaque Host-internal seal over one validated identity. Go's
+// internal-package rule prevents consumers outside the Pysolate repository
+// from minting it, while binding prevents a copied token from authorizing a
+// mutated Host value.
 type Token struct {
-	valid bool
+	binding string
 }
 
-func Mint() Token {
-	return Token{valid: true}
+func Mint(binding string) Token {
+	if binding == "" {
+		return Token{}
+	}
+	return Token{binding: binding}
 }
 
-func (token Token) Valid() bool {
-	return token.valid
+func (token Token) Valid(binding string) bool {
+	return binding != "" && token.binding == binding
 }

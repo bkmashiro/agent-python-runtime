@@ -315,12 +315,12 @@ func admitAnalysis(declarationRaw []byte, source string, analysis semantic.Analy
 	identity := admission
 	identity.IdentitySHA256 = ""
 	admission.IdentitySHA256 = digestJSON(admissionIdentity(identity))
-	admission.provenance = publicationauth.Mint()
+	admission.provenance = publicationauth.Mint(admission.IdentitySHA256)
 	return admission, nil
 }
 
 func (admission Admission) Validate() error {
-	if !admission.provenance.Valid() || !validOperation(admission.Operation) || admission.SchemaVersion != AdmissionSchemaVersion ||
+	if !admission.provenance.Valid(admission.IdentitySHA256) || !validOperation(admission.Operation) || admission.SchemaVersion != AdmissionSchemaVersion ||
 		admission.ExecutionProfileID != "numpy-core" || admission.OutputName != "array" || !admission.NoExternalInputs ||
 		!admission.AnalyzerUnknownObserved || len(admission.AllowedImports) != 3 || admission.AllowedImports[0] != "base64" ||
 		admission.AllowedImports[1] != "hashlib" || admission.AllowedImports[2] != "numpy" ||
@@ -381,7 +381,7 @@ func validateExecutionResponse(raw []byte, admission Admission, authorityBound b
 		response.Metrics.CapabilityCalls != 0 || response.SourceContract.ModelSourceSHA256 != admission.SourceSHA256 {
 		return nil, PublicationGuard{}, ErrExecution
 	}
-	return append(json.RawMessage(nil), response.Result...), resultblob.NewPublicationGuard(publicationauth.Mint()), nil
+	return append(json.RawMessage(nil), response.Result...), resultblob.NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)), nil
 }
 
 func Digest(raw []byte) string {

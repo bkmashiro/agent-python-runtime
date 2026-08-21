@@ -24,7 +24,7 @@ func testPublication(body []byte) Publication {
 	return Publication{
 		RunID: "run-1", Codec: "opaque_test_v1", Metadata: []byte(`{"kind":"test","shape":[2,2]}`),
 		BindingSHA256: digestA, ExpectedBodySHA256: BytesDigest(body),
-		Guard: NewPublicationGuard(publicationauth.Mint()),
+		Guard: NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)),
 	}
 }
 

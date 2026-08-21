@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
@@ -17,6 +18,7 @@ type PreparedLineage struct {
 	SchemaVersion         string                                          `json:"schema_version"`
 	AdmissionSHA256       string                                          `json:"admission_sha256"`
 	ConsumerBindingSHA256 string                                          `json:"consumer_binding_sha256"`
+	ConsumerSourceSHA256  string                                          `json:"consumer_source_sha256"`
 	FinalSourceSHA256     string                                          `json:"final_source_sha256"`
 	InputsSHA256          string                                          `json:"inputs_sha256"`
 	RequestSHA256         string                                          `json:"request_sha256"`
@@ -25,12 +27,14 @@ type PreparedLineage struct {
 	Patch                 preparedregion.PreparedRegionPatch              `json:"patch"`
 	Selection             preparedregion.PreparedRegionExecutionSelection `json:"selection"`
 	IdentitySHA256        string                                          `json:"identity_sha256"`
+	provenance            publicationauth.Token
 }
 
 type lineageIdentity struct {
 	SchemaVersion         string `json:"schema_version"`
 	AdmissionSHA256       string `json:"admission_sha256"`
 	ConsumerBindingSHA256 string `json:"consumer_binding_sha256"`
+	ConsumerSourceSHA256  string `json:"consumer_source_sha256"`
 	FinalSourceSHA256     string `json:"final_source_sha256"`
 	InputsSHA256          string `json:"inputs_sha256"`
 	RequestSHA256         string `json:"request_sha256"`
@@ -50,7 +54,8 @@ func SealPreparedLineage(admission Admission, declaration Declaration, plan nump
 
 func sealPreparedLineageAnalysis(admission Admission, declaration Declaration, plan numpycodec.MaterializationPlan, finalAnalysis semantic.Analysis) ([]byte, PreparedLineage, error) {
 	if admission.Validate() != nil || !declaration.valid() || admission.DeclarationSHA256 != declaration.IdentitySHA256 ||
-		plan.FinalSourceSHA256 == "" || plan.ConsumerBindingSHA256 == "" || plan.InputsSHA256 == "" || plan.RequestSHA256 == "" ||
+		plan.FinalSourceSHA256 == "" || plan.ConsumerBindingSHA256 == "" || plan.ConsumerSourceSHA256 == "" || plan.InputsSHA256 == "" ||
+		plan.RequestSHA256 == "" || Digest(plan.Request) != plan.RequestSHA256 ||
 		finalAnalysis.Validate() != nil || finalAnalysis.SourceSHA256 != plan.FinalSourceSHA256 ||
 		finalAnalysis.ArtifactSHA256 != admission.ArtifactSHA256 || finalAnalysis.ExecutionProfileSHA256 != admission.ExecutionProfileSHA256 ||
 		finalAnalysis.ImportClosureSHA256 != admission.ImportClosureSHA256 || finalAnalysis.CapabilityPlanSHA256 != admission.CapabilityPlanSHA256 {
@@ -83,24 +88,26 @@ func sealPreparedLineageAnalysis(admission Admission, declaration Declaration, p
 	}
 	identity := lineageIdentity{
 		SchemaVersion: LineageSchemaVersion, AdmissionSHA256: admission.IdentitySHA256,
-		ConsumerBindingSHA256: plan.ConsumerBindingSHA256, FinalSourceSHA256: plan.FinalSourceSHA256,
+		ConsumerBindingSHA256: plan.ConsumerBindingSHA256, ConsumerSourceSHA256: plan.ConsumerSourceSHA256, FinalSourceSHA256: plan.FinalSourceSHA256,
 		InputsSHA256: plan.InputsSHA256, RequestSHA256: plan.RequestSHA256,
 		DecisionSHA256: decision.IdentitySHA256, CapsuleSHA256: capsule.IdentitySHA256,
 		PatchSHA256: patch.IdentitySHA256, SelectionSHA256: selection.IdentitySHA256,
 	}
 	lineage := PreparedLineage{
 		SchemaVersion: identity.SchemaVersion, AdmissionSHA256: identity.AdmissionSHA256,
-		ConsumerBindingSHA256: identity.ConsumerBindingSHA256, FinalSourceSHA256: identity.FinalSourceSHA256,
+		ConsumerBindingSHA256: identity.ConsumerBindingSHA256, ConsumerSourceSHA256: identity.ConsumerSourceSHA256, FinalSourceSHA256: identity.FinalSourceSHA256,
 		InputsSHA256: identity.InputsSHA256, RequestSHA256: identity.RequestSHA256,
 		Decision: decision, Capsule: capsule, Patch: patch, Selection: selection, IdentitySHA256: digestJSON(identity),
 	}
+	lineage.provenance = publicationauth.Mint(lineage.IdentitySHA256)
 	raw, err := json.Marshal(lineage)
 	return raw, lineage, err
 }
 
 func (lineage PreparedLineage) Validate(admission Admission, plan numpycodec.MaterializationPlan) error {
-	if admission.Validate() != nil || lineage.SchemaVersion != LineageSchemaVersion || lineage.AdmissionSHA256 != admission.IdentitySHA256 ||
-		lineage.ConsumerBindingSHA256 != plan.ConsumerBindingSHA256 || lineage.FinalSourceSHA256 != plan.FinalSourceSHA256 ||
+	if admission.Validate() != nil || !lineage.provenance.Valid(lineage.IdentitySHA256) || lineage.SchemaVersion != LineageSchemaVersion || lineage.AdmissionSHA256 != admission.IdentitySHA256 ||
+		lineage.ConsumerBindingSHA256 != plan.ConsumerBindingSHA256 || lineage.ConsumerSourceSHA256 != plan.ConsumerSourceSHA256 ||
+		lineage.FinalSourceSHA256 != plan.FinalSourceSHA256 || Digest(plan.Request) != plan.RequestSHA256 ||
 		lineage.InputsSHA256 != plan.InputsSHA256 || lineage.RequestSHA256 != plan.RequestSHA256 ||
 		lineage.Capsule.ValidateDecision(lineage.Decision) != nil || lineage.Patch.ValidateDecision(lineage.Decision) != nil ||
 		lineage.Selection.Validate(lineage.Decision, lineage.Capsule, lineage.Patch) != nil {
@@ -113,7 +120,7 @@ func (lineage PreparedLineage) Validate(admission Admission, plan numpycodec.Mat
 	}
 	identity := lineageIdentity{
 		SchemaVersion: lineage.SchemaVersion, AdmissionSHA256: lineage.AdmissionSHA256,
-		ConsumerBindingSHA256: lineage.ConsumerBindingSHA256, FinalSourceSHA256: lineage.FinalSourceSHA256,
+		ConsumerBindingSHA256: lineage.ConsumerBindingSHA256, ConsumerSourceSHA256: lineage.ConsumerSourceSHA256, FinalSourceSHA256: lineage.FinalSourceSHA256,
 		InputsSHA256: lineage.InputsSHA256, RequestSHA256: lineage.RequestSHA256,
 		DecisionSHA256: lineage.Decision.IdentitySHA256, CapsuleSHA256: lineage.Capsule.IdentitySHA256,
 		PatchSHA256: lineage.Patch.IdentitySHA256, SelectionSHA256: lineage.Selection.IdentitySHA256,

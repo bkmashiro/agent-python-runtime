@@ -177,7 +177,7 @@ func main() {
 		fail(err)
 	}
 	descriptor, blobDescriptor, publicationEvidence, err := numpycodec.Publish(ctx, store, "numpy-reuse-probe", producerResponse.Result, bindings,
-		resultblob.NewPublicationGuard(publicationauth.Mint()), numpycodec.MaxBodyBytes)
+		resultblob.NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)), numpycodec.MaxBodyBytes)
 	if err != nil {
 		fail(err)
 	}

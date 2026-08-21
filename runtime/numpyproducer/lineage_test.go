@@ -16,10 +16,12 @@ func TestPreparedLineageBindsOriginalAdmissionAndFinalSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := numpycodec.MaterializationPlan{
+		Request: []byte("materialize request"),
 		LeaseID: digestA, ConsumerBindingSHA256: digestB, ConsumerSourceSHA256: digestA,
-		FinalSourceSHA256: digestB, InputsSHA256: digestA, RequestSHA256: digestB,
+		FinalSourceSHA256: digestB, InputsSHA256: digestA,
 		HostToGuestCopyBytes: 48, RequestBytes: 1024,
 	}
+	plan.RequestSHA256 = Digest(plan.Request)
 	finalAnalysis := testAnalysis("final source placeholder", bindings)
 	finalAnalysis.SourceSHA256 = plan.FinalSourceSHA256
 	finalAnalysis.ASTSHA256 = digestB
@@ -54,5 +56,15 @@ func TestPreparedLineageBindsOriginalAdmissionAndFinalSource(t *testing.T) {
 	changed.InputsSHA256 = digestB
 	if lineage.Validate(admission, changed) == nil {
 		t.Fatal("plan inputs substitution accepted")
+	}
+	changed = plan
+	changed.Request = append(append([]byte(nil), plan.Request...), '!')
+	if lineage.Validate(admission, changed) == nil {
+		t.Fatal("request bytes substitution accepted")
+	}
+	changed = plan
+	changed.ConsumerSourceSHA256 = digestB
+	if lineage.Validate(admission, changed) == nil {
+		t.Fatal("consumer source substitution accepted")
 	}
 }

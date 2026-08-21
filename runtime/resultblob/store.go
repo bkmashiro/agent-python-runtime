@@ -49,12 +49,24 @@ type PublicationGuard struct {
 	token publicationauth.Token
 }
 
+type ProducerAuthority struct {
+	token publicationauth.Token
+}
+
 func NewPublicationGuard(token publicationauth.Token) PublicationGuard {
 	return PublicationGuard{token: token}
 }
 
-func (guard PublicationGuard) valid() bool {
-	return guard.token.Valid(publicationauth.ResultPublicationBinding)
+func NewProducerAuthority(token publicationauth.Token) ProducerAuthority {
+	return ProducerAuthority{token: token}
+}
+
+func (authority ProducerAuthority) Valid(binding string) bool {
+	return authority.token.Valid(binding)
+}
+
+func (guard PublicationGuard) valid(binding string) bool {
+	return guard.token.Valid(binding)
 }
 
 type Publication struct {
@@ -92,6 +104,23 @@ type descriptorIdentity struct {
 func BytesDigest(body []byte) string {
 	digest := sha256.Sum256(body)
 	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
+func PublicationIdentitySHA256(runID, codec string, metadata []byte, bindingSHA256 string, body []byte) (string, error) {
+	if !idPattern.MatchString(runID) || len(codec) > maxCodecBytes || !codecPattern.MatchString(codec) ||
+		!digestPattern.MatchString(bindingSHA256) || len(metadata) == 0 || len(body) == 0 {
+		return "", ErrInvalidDescriptor
+	}
+	canonical, err := canonicalMetadata(metadata)
+	if err != nil || !bytes.Equal(canonical, metadata) || uint64(len(metadata)) > uint64(^uint32(0)) {
+		return "", ErrInvalidDescriptor
+	}
+	identity := descriptorIdentity{
+		SchemaVersion: DescriptorSchemaVersion, RunID: runID, Codec: codec,
+		MetadataBytes: uint32(len(metadata)), MetadataSHA256: BytesDigest(metadata),
+		BodyBytes: uint64(len(body)), BodySHA256: BytesDigest(body), BindingSHA256: bindingSHA256,
+	}
+	return digestJSON(identity), nil
 }
 
 func (descriptor Descriptor) CanonicalJSON() ([]byte, error) {
@@ -221,9 +250,6 @@ func (store *Store) Publish(ctx context.Context, publication Publication, body [
 	if err := ctx.Err(); err != nil {
 		return Descriptor{}, err
 	}
-	if !publication.Guard.valid() {
-		return Descriptor{}, ErrPublicationUnsafe
-	}
 	if publication.RunID != store.runID || len(publication.Codec) > maxCodecBytes || !codecPattern.MatchString(publication.Codec) ||
 		!digestPattern.MatchString(publication.BindingSHA256) || !digestPattern.MatchString(publication.ExpectedBodySHA256) || len(body) == 0 {
 		return Descriptor{}, ErrInvalidDescriptor
@@ -257,6 +283,9 @@ func (store *Store) Publish(ctx context.Context, publication Publication, body [
 	}
 	if !descriptor.valid() {
 		return Descriptor{}, ErrInvalidDescriptor
+	}
+	if !publication.Guard.valid(descriptor.IdentitySHA256) {
+		return Descriptor{}, ErrPublicationUnsafe
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()

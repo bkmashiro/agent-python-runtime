@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
 )
 
@@ -120,6 +121,28 @@ type descriptorIdentity struct {
 	Bindings      Bindings `json:"bindings"`
 }
 
+type producerAuthorityIdentity struct {
+	SchemaVersion string   `json:"schema_version"`
+	RunID         string   `json:"run_id"`
+	RawSHA256     string   `json:"raw_sha256"`
+	Bindings      Bindings `json:"bindings"`
+	MaxBodyBytes  uint64   `json:"max_body_bytes"`
+}
+
+func ProducerAuthorityBinding(runID string, raw []byte, bindings Bindings, maxBodyBytes uint64) (string, error) {
+	if !runIDPattern.MatchString(runID) || !validBindings(bindings) || maxBodyBytes == 0 || maxBodyBytes > MaxBodyBytes {
+		return "", ErrBinding
+	}
+	maxEncodedBodyBytes := ((maxBodyBytes + 2) / 3) * 4
+	if len(raw) == 0 || uint64(len(raw)) > maxEncodedBodyBytes+maxProducerEnvelopeOverhead {
+		return "", ErrInvalidProducer
+	}
+	return digestJSON(producerAuthorityIdentity{
+		SchemaVersion: "pysolate.numpy-producer-publication-authority.v1", RunID: runID,
+		RawSHA256: resultblob.BytesDigest(raw), Bindings: bindings, MaxBodyBytes: maxBodyBytes,
+	}), nil
+}
+
 func DecodeProducerValue(raw []byte, bindings Bindings, maxBodyBytes uint64) (Descriptor, []byte, error) {
 	if !validBindings(bindings) {
 		return Descriptor{}, nil, ErrBinding
@@ -212,9 +235,13 @@ func (descriptor Descriptor) valid() bool {
 	return descriptor.IdentitySHA256 == digestJSON(identity)
 }
 
-func Publish(ctx context.Context, store *resultblob.Store, runID string, producerRaw []byte, bindings Bindings, guard resultblob.PublicationGuard, maxBodyBytes uint64) (Descriptor, resultblob.Descriptor, PublicationEvidence, error) {
+func Publish(ctx context.Context, store *resultblob.Store, runID string, producerRaw []byte, bindings Bindings, authority resultblob.ProducerAuthority, maxBodyBytes uint64) (Descriptor, resultblob.Descriptor, PublicationEvidence, error) {
 	started := time.Now()
 	if store == nil {
+		return Descriptor{}, resultblob.Descriptor{}, PublicationEvidence{}, ErrMaterialization
+	}
+	authorityBinding, err := ProducerAuthorityBinding(runID, producerRaw, bindings, maxBodyBytes)
+	if err != nil || !authority.Valid(authorityBinding) {
 		return Descriptor{}, resultblob.Descriptor{}, PublicationEvidence{}, ErrMaterialization
 	}
 	descriptor, body, err := DecodeProducerValue(producerRaw, bindings, maxBodyBytes)
@@ -225,9 +252,14 @@ func Publish(ctx context.Context, store *resultblob.Store, runID string, produce
 	if err != nil {
 		return Descriptor{}, resultblob.Descriptor{}, PublicationEvidence{}, err
 	}
+	publicationIdentity, err := resultblob.PublicationIdentitySHA256(runID, CodecV1, metadata, descriptor.IdentitySHA256, body)
+	if err != nil {
+		return Descriptor{}, resultblob.Descriptor{}, PublicationEvidence{}, err
+	}
 	blob, err := store.Publish(ctx, resultblob.Publication{
 		RunID: runID, Codec: CodecV1, Metadata: metadata, BindingSHA256: descriptor.IdentitySHA256,
-		ExpectedBodySHA256: descriptor.BodySHA256, Guard: guard,
+		ExpectedBodySHA256: descriptor.BodySHA256,
+		Guard:              resultblob.NewPublicationGuard(publicationauth.Mint(publicationIdentity)),
 	}, body)
 	if err != nil {
 		return Descriptor{}, resultblob.Descriptor{}, PublicationEvidence{}, err

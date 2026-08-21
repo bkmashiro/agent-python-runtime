@@ -21,10 +21,39 @@ func testLimits() Limits {
 }
 
 func testPublication(body []byte) Publication {
-	return Publication{
+	publication := Publication{
 		RunID: "run-1", Codec: "opaque_test_v1", Metadata: []byte(`{"kind":"test","shape":[2,2]}`),
 		BindingSHA256: digestA, ExpectedBodySHA256: BytesDigest(body),
-		Guard: NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)),
+	}
+	identity, err := PublicationIdentitySHA256(publication.RunID, publication.Codec, publication.Metadata, publication.BindingSHA256, body)
+	if err != nil {
+		panic(err)
+	}
+	publication.Guard = NewPublicationGuard(publicationauth.Mint(identity))
+	return publication
+}
+
+func TestPublicationGuardIsBoundToExactPublicationIdentity(t *testing.T) {
+	body := []byte("payload")
+	valid := testPublication(body)
+	for name, mutate := range map[string]func(*Publication, *[]byte){
+		"metadata": func(p *Publication, _ *[]byte) { p.Metadata = []byte(`{"kind":"other"}`) },
+		"binding":  func(p *Publication, _ *[]byte) { p.BindingSHA256 = digestB },
+		"body":     func(p *Publication, b *[]byte) { *b = []byte("other!!"); p.ExpectedBodySHA256 = BytesDigest(*b) },
+		"codec":    func(p *Publication, _ *[]byte) { p.Codec = "other_test_v1" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, _ := NewStore("run-1", testLimits())
+			candidate, candidateBody := valid, append([]byte(nil), body...)
+			candidate.Metadata = append([]byte(nil), valid.Metadata...)
+			mutate(&candidate, &candidateBody)
+			if _, err := store.Publish(context.Background(), candidate, candidateBody); !errors.Is(err, ErrPublicationUnsafe) {
+				t.Fatalf("copied authority accepted different publication: %v", err)
+			}
+			if snapshot := store.Snapshot(); snapshot.EntryCount != 0 || snapshot.RetainedBytes != 0 {
+				t.Fatalf("failed publication leaked state: %+v", snapshot)
+			}
+		})
 	}
 }
 
@@ -203,6 +232,11 @@ func TestAggregateLimitIncludesMetadata(t *testing.T) {
 	}
 	second := testPublication(body)
 	second.BindingSHA256 = digestB
+	secondIdentity, err := PublicationIdentitySHA256(second.RunID, second.Codec, second.Metadata, second.BindingSHA256, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Guard = NewPublicationGuard(publicationauth.Mint(secondIdentity))
 	if _, err := store.Publish(context.Background(), second, body); !errors.Is(err, ErrLimitExceeded) {
 		t.Fatalf("aggregate limit err=%v", err)
 	}

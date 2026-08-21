@@ -208,16 +208,17 @@ func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyprodu
 		stages.ProducerGuestProvisionNanos += timing.ProvisionNanos
 		stages.ProducerExecutionNanos += timing.ExecutionNanos
 		addPlacement(&placements, timing)
-		producerValue, guard, err := numpyproducer.ValidateExecutionResponse(producerExecution, admission)
+		publicationRunID := "campaign-" + trialID
+		producerValue, authority, err := numpyproducer.ValidateExecutionResponse(producerExecution, admission, publicationRunID)
 		if err != nil {
 			return numpyreuse.TrialRecord{}, err
 		}
-		store, err := resultblob.NewStore("campaign-"+trialID, resultblob.Limits{MaxEntries: 1, MaxBodyBytes: numpycodec.MaxBodyBytes, MaxRetainedBytes: numpycodec.MaxBodyBytes + 65536, MaxMetadataBytes: 65536, MaxLeases: candidate.Consumers})
+		store, err := resultblob.NewStore(publicationRunID, resultblob.Limits{MaxEntries: 1, MaxBodyBytes: numpycodec.MaxBodyBytes, MaxRetainedBytes: numpycodec.MaxBodyBytes + 65536, MaxMetadataBytes: 65536, MaxLeases: candidate.Consumers})
 		if err != nil {
 			return numpyreuse.TrialRecord{}, err
 		}
 		codecBindings := numpycodec.Bindings{ArtifactSHA256: admission.ArtifactSHA256, ExecutionProfileID: admission.ExecutionProfileID, ExecutionProfileSHA256: admission.ExecutionProfileSHA256, ImportClosureSHA256: admission.ImportClosureSHA256, SourceSHA256: admission.SourceSHA256, InputsSHA256: admission.InputsSHA256, PassRegistrationSHA256: admission.PassRegistrationSHA256}
-		ndarrayDescriptor, blob, publication, err := numpycodec.Publish(ctx, store, "campaign-"+trialID, producerValue, codecBindings, guard, numpycodec.MaxBodyBytes)
+		ndarrayDescriptor, blob, publication, err := numpycodec.Publish(ctx, store, publicationRunID, producerValue, codecBindings, authority, numpycodec.MaxBodyBytes)
 		if err != nil {
 			return numpyreuse.TrialRecord{}, err
 		}

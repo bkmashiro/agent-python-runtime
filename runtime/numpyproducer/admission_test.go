@@ -221,7 +221,7 @@ func TestFabricatedAdmissionWithoutOpaqueProvenanceIsRejected(t *testing.T) {
 		"source_contract": map[string]any{"model_source_sha256": admission.SourceSHA256},
 	}
 	encoded, _ := json.Marshal(response)
-	if _, guard, err := validateExecutionResponse(encoded, admission, true); !errors.Is(err, ErrExecution) || guard != (PublicationGuard{}) {
+	if _, guard, err := validateExecutionResponse(encoded, admission, "run-1", true); !errors.Is(err, ErrExecution) || guard != (ProducerAuthority{}) {
 		t.Fatalf("fabricated admission guard=%+v err=%v", guard, err)
 	}
 }
@@ -239,11 +239,11 @@ func TestExecutionResponseMustBeSuccessfulAuthorityBoundAndSourceBound(t *testin
 		"source_contract": map[string]any{"model_source_sha256": admission.SourceSHA256},
 	}
 	encoded, _ := json.Marshal(response)
-	if _, guard, err := validateExecutionResponse(encoded, admission, false); !errors.Is(err, ErrExecution) || guard != (PublicationGuard{}) {
+	if _, guard, err := validateExecutionResponse(encoded, admission, "run-1", false); !errors.Is(err, ErrExecution) || guard != (ProducerAuthority{}) {
 		t.Fatalf("unbound execution guard=%+v err=%v", guard, err)
 	}
-	result, guard, err := validateExecutionResponse(encoded, admission, true)
-	if err != nil || len(result) == 0 || guard == (PublicationGuard{}) {
+	result, guard, err := validateExecutionResponse(encoded, admission, "run-1", true)
+	if err != nil || len(result) == 0 || guard == (ProducerAuthority{}) {
 		t.Fatalf("result=%s guard=%+v err=%v", result, guard, err)
 	}
 	for name, mutate := range map[string]func(map[string]any){
@@ -259,7 +259,7 @@ func TestExecutionResponseMustBeSuccessfulAuthorityBoundAndSourceBound(t *testin
 			}
 			mutate(copyValue)
 			encoded, _ := json.Marshal(copyValue)
-			if _, guard, err := validateExecutionResponse(encoded, admission, true); err == nil || guard != (PublicationGuard{}) {
+			if _, guard, err := validateExecutionResponse(encoded, admission, "run-1", true); err == nil || guard != (ProducerAuthority{}) {
 				t.Fatalf("guard=%+v err=%v", guard, err)
 			}
 		})

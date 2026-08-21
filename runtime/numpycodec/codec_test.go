@@ -36,6 +36,15 @@ func testProducerValue(dtype string, shape []uint64, body []byte) []byte {
 	return raw
 }
 
+func testProducerAuthority(t *testing.T, runID string, raw []byte, bindings Bindings, maxBodyBytes uint64) resultblob.ProducerAuthority {
+	t.Helper()
+	binding, err := ProducerAuthorityBinding(runID, raw, bindings, maxBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resultblob.NewProducerAuthority(publicationauth.Mint(binding))
+}
+
 func TestDecodeProducerValueSealsExactTypedDescriptor(t *testing.T) {
 	body := make([]byte, 48)
 	for index := range body {
@@ -145,7 +154,7 @@ func TestPublishAndFreshMaterializationRequestUseImmutableLeaseCopies(t *testing
 	store, _ := resultblob.NewStore("run-1", resultblob.Limits{
 		MaxEntries: 1, MaxBodyBytes: 1024, MaxRetainedBytes: 2048, MaxMetadataBytes: 4096, MaxLeases: 2,
 	})
-	descriptor, blobDescriptor, publicationEvidence, err := Publish(context.Background(), store, "run-1", producer, testBindings(), resultblob.NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)), 1024)
+	descriptor, blobDescriptor, publicationEvidence, err := Publish(context.Background(), store, "run-1", producer, testBindings(), testProducerAuthority(t, "run-1", producer, testBindings(), 1024), 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,12 +195,43 @@ func TestPublishAndFreshMaterializationRequestUseImmutableLeaseCopies(t *testing
 	}
 }
 
+func TestProducerAuthorityIsBoundToExactRawResultRunBindingsAndLimit(t *testing.T) {
+	body := make([]byte, 8)
+	raw := testProducerValue("<i8", []uint64{1}, body)
+	bindings := testBindings()
+	authority := testProducerAuthority(t, "run-1", raw, bindings, 1024)
+	tests := []struct {
+		name     string
+		runID    string
+		raw      []byte
+		bindings Bindings
+		limit    uint64
+	}{
+		{name: "run", runID: "run-2", raw: raw, bindings: bindings, limit: 1024},
+		{name: "raw", runID: "run-1", raw: testProducerValue("<i8", []uint64{1}, []byte("different")), bindings: bindings, limit: 1024},
+		{name: "bindings", runID: "run-1", raw: raw, bindings: func() Bindings { changed := bindings; changed.SourceSHA256 = testDigestB; return changed }(), limit: 1024},
+		{name: "limit", runID: "run-1", raw: raw, bindings: bindings, limit: 512},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store, _ := resultblob.NewStore(test.runID, resultblob.Limits{MaxEntries: 1, MaxBodyBytes: 1024, MaxRetainedBytes: 2048, MaxMetadataBytes: 4096, MaxLeases: 1})
+			if _, _, _, err := Publish(context.Background(), store, test.runID, test.raw, test.bindings, authority, test.limit); !errors.Is(err, ErrMaterialization) {
+				t.Fatalf("copied producer authority accepted substitution: %v", err)
+			}
+			if snapshot := store.Snapshot(); snapshot.EntryCount != 0 || snapshot.RetainedBytes != 0 {
+				t.Fatalf("failed publication leaked state: %+v", snapshot)
+			}
+		})
+	}
+}
+
 func TestMaterializationRequestRejectsBadOutputAndClaimJoins(t *testing.T) {
 	body := make([]byte, 8)
 	store, _ := resultblob.NewStore("run-1", resultblob.Limits{
 		MaxEntries: 1, MaxBodyBytes: 1024, MaxRetainedBytes: 2048, MaxMetadataBytes: 4096, MaxLeases: 6,
 	})
-	descriptor, blobDescriptor, _, err := Publish(context.Background(), store, "run-1", testProducerValue("<i8", []uint64{1}, body), testBindings(), resultblob.NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)), 1024)
+	producer := testProducerValue("<i8", []uint64{1}, body)
+	descriptor, blobDescriptor, _, err := Publish(context.Background(), store, "run-1", producer, testBindings(), testProducerAuthority(t, "run-1", producer, testBindings(), 1024), 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,10 +267,14 @@ func TestMaterializationRequestRejectsBadOutputAndClaimJoins(t *testing.T) {
 	forgedStore, _ := resultblob.NewStore("run-forged", resultblob.Limits{
 		MaxEntries: 1, MaxBodyBytes: 1024, MaxRetainedBytes: 2048, MaxMetadataBytes: 4096, MaxLeases: 1,
 	})
+	publicationIdentity, err := resultblob.PublicationIdentitySHA256("run-forged", CodecV1, forgedMetadata, forged.IdentitySHA256, body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	forgedBlob, err := forgedStore.Publish(context.Background(), resultblob.Publication{
 		RunID: "run-forged", Codec: CodecV1, Metadata: forgedMetadata, BindingSHA256: forged.IdentitySHA256,
 		ExpectedBodySHA256: resultblob.BytesDigest(body),
-		Guard:              resultblob.NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)),
+		Guard:              resultblob.NewPublicationGuard(publicationauth.Mint(publicationIdentity)),
 	}, body)
 	if err != nil {
 		t.Fatal(err)

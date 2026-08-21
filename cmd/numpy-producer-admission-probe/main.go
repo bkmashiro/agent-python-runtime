@@ -169,7 +169,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	producerResult, guard, err := numpyproducer.ValidateExecutionResponse(producerExecution, admission)
+	producerResult, authority, err := numpyproducer.ValidateExecutionResponse(producerExecution, admission, "numpy-admission-probe")
 	if err != nil {
 		fail(err)
 	}
@@ -186,7 +186,7 @@ func main() {
 		SourceSHA256: admission.SourceSHA256, InputsSHA256: admission.InputsSHA256,
 		PassRegistrationSHA256: admission.PassRegistrationSHA256,
 	}
-	descriptor, blobDescriptor, publication, err := numpycodec.Publish(ctx, store, "numpy-admission-probe", producerResult, codecBindings, guard, numpycodec.MaxBodyBytes)
+	descriptor, blobDescriptor, publication, err := numpycodec.Publish(ctx, store, "numpy-admission-probe", producerResult, codecBindings, authority, numpycodec.MaxBodyBytes)
 	if err != nil {
 		fail(err)
 	}
@@ -286,7 +286,7 @@ func runSupportedProducers(ctx context.Context, b bundle, privateCOW bool, bindi
 		if err != nil {
 			fail(err)
 		}
-		producerValue, _, err := numpyproducer.ValidateExecutionResponse(execution, admission)
+		producerValue, _, err := numpyproducer.ValidateExecutionResponse(execution, admission, "supported-"+declaration.Operation)
 		if err != nil {
 			fail(fmt.Errorf("supported producer %s execution: %w", declaration.Operation, err))
 		}

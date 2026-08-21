@@ -38,7 +38,7 @@ var (
 	digestPattern   = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
-type PublicationGuard = resultblob.PublicationGuard
+type ProducerAuthority = resultblob.ProducerAuthority
 
 type DeclarationInput struct {
 	Operation     string
@@ -364,24 +364,34 @@ type executionResponse struct {
 	} `json:"source_contract"`
 }
 
-func ValidateExecutionResponse(execution VerifiedExecution, admission Admission) (json.RawMessage, PublicationGuard, error) {
+func ValidateExecutionResponse(execution VerifiedExecution, admission Admission, runID string) (json.RawMessage, ProducerAuthority, error) {
 	if len(execution.response) == 0 || !executionPropertiesMatch(execution.properties, admission) {
-		return nil, PublicationGuard{}, ErrExecution
+		return nil, ProducerAuthority{}, ErrExecution
 	}
-	return validateExecutionResponse(execution.response, admission, true)
+	return validateExecutionResponse(execution.response, admission, runID, true)
 }
 
-func validateExecutionResponse(raw []byte, admission Admission, authorityBound bool) (json.RawMessage, PublicationGuard, error) {
+func validateExecutionResponse(raw []byte, admission Admission, runID string, authorityBound bool) (json.RawMessage, ProducerAuthority, error) {
 	if !authorityBound || len(raw) == 0 || len(raw) > MaxExecutionResponseBytes || admission.Validate() != nil {
-		return nil, PublicationGuard{}, ErrExecution
+		return nil, ProducerAuthority{}, ErrExecution
 	}
 	var response executionResponse
 	if json.Unmarshal(raw, &response) != nil || response.Status != "ok" || !bytes.Equal(response.Error, []byte("null")) ||
 		!response.ResultPresent || len(response.Result) == 0 || bytes.Equal(response.Result, []byte("null")) ||
 		response.Metrics.CapabilityCalls != 0 || response.SourceContract.ModelSourceSHA256 != admission.SourceSHA256 {
-		return nil, PublicationGuard{}, ErrExecution
+		return nil, ProducerAuthority{}, ErrExecution
 	}
-	return append(json.RawMessage(nil), response.Result...), resultblob.NewPublicationGuard(publicationauth.Mint(publicationauth.ResultPublicationBinding)), nil
+	bindings := numpycodec.Bindings{
+		ArtifactSHA256: admission.ArtifactSHA256, ExecutionProfileID: admission.ExecutionProfileID,
+		ExecutionProfileSHA256: admission.ExecutionProfileSHA256, ImportClosureSHA256: admission.ImportClosureSHA256,
+		SourceSHA256: admission.SourceSHA256, InputsSHA256: admission.InputsSHA256,
+		PassRegistrationSHA256: admission.PassRegistrationSHA256,
+	}
+	binding, err := numpycodec.ProducerAuthorityBinding(runID, response.Result, bindings, numpycodec.MaxBodyBytes)
+	if err != nil {
+		return nil, ProducerAuthority{}, ErrExecution
+	}
+	return append(json.RawMessage(nil), response.Result...), resultblob.NewProducerAuthority(publicationauth.Mint(binding)), nil
 }
 
 func Digest(raw []byte) string {

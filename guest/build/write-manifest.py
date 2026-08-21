@@ -16,11 +16,6 @@ from typing import Any
 IMPORT_RE = re.compile(r'\(import\s+"([^"]+)"\s+"([^"]+)"')
 EXPORT_RE = re.compile(r'\(export\s+"([^"]+)"')
 MEMORY_RE = re.compile(r'^\s*\(memory(?:\s+\(;\d+;\))?\s+(\d+)\s+(\d+)\s*\)', re.MULTILINE)
-ARTIFACT_FILENAMES = {
-    "base": "agent-python-runtime.wasm",
-    "attrs-770": "agent-python-runtime-attrs-770.wasm",
-}
-
 
 def load_import_inventory_module():
     path = pathlib.Path(__file__).with_name("import_inventory.py")
@@ -52,9 +47,25 @@ def load_extension_profile_module():
     return module
 
 
+def load_package_profile_module():
+    path = pathlib.Path(__file__).with_name("package_profile.py")
+    spec = importlib.util.spec_from_file_location("artifact_package_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load package profile registry")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
 EXTENSION_PROFILE = load_extension_profile_module()
+PACKAGE_PROFILE = load_package_profile_module()
+PROFILE_REGISTRY = PACKAGE_PROFILE.load_registry()
+ARTIFACT_FILENAMES = {
+    profile_id: PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile_id)["artifact_filename"]
+    for profile_id in PACKAGE_PROFILE.profile_ids(PROFILE_REGISTRY)
+}
 
 
 def sha256(path: pathlib.Path) -> str:

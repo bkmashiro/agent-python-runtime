@@ -77,7 +77,7 @@ class ImportInventoryTests(unittest.TestCase):
             "probe": "guest-importlib-find-spec-v1",
             "implementation": "cpython",
             "python_version": "3.14.0",
-            "discoverable_roots": ["agent_runtime", "attr", "json", "sys"],
+            "discoverable_roots": ["agent_runtime", "attr", "json", "sys", "types", "typing"],
             "failures": [],
         }
         self.tool.validate_inventory(value, "attrs-770")

@@ -4,13 +4,28 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import pathlib
 from typing import Any
 
 PROBE_ID = "guest-importlib-find-spec-v1"
-PROFILES = {"base", "attrs-770"}
 MAX_ROOTS = 1024
+
+
+def _load_package_profile_module():
+    path = pathlib.Path(__file__).with_name("package_profile.py")
+    spec = importlib.util.spec_from_file_location("package_profile_inventory", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load package profile registry")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+PACKAGE_PROFILE = _load_package_profile_module()
+PROFILE_REGISTRY = PACKAGE_PROFILE.load_registry()
+PROFILES = set(PACKAGE_PROFILE.profile_ids(PROFILE_REGISTRY))
 
 PROBE_CODE = r'''import importlib.util
 import pkgutil
@@ -107,9 +122,7 @@ def validate_inventory(value: Any, profile: str) -> dict[str, Any]:
         or roots != sorted(set(roots))
     ):
         raise ValueError("discoverable roots must be sorted unique import names")
-    required = {"agent_runtime", "json", "sys"}
-    if profile == "attrs-770":
-        required.add("attr")
+    required = set(PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile)["required_import_roots"])
     if not required.issubset(roots):
         raise ValueError("required profile import root is not discoverable")
 

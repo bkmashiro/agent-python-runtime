@@ -8,32 +8,29 @@ DOWNLOAD_DIR="${WORK_DIR}/downloads"
 TOOLS_DIR="${WORK_DIR}/tools"
 CPYTHON_DIR="${WORK_DIR}/cpython"
 SOURCE_LOCK="${ROOT_DIR}/guest/build/sources.lock.json"
-ATTRS_PROFILE_LOCK="${ROOT_DIR}/guest/build/profiles/attrs-770.lock.json"
+PACKAGE_PROFILE_TOOL="${ROOT_DIR}/guest/build/package_profile.py"
 BUILD_CACHE_ROOT=${AGENT_RUNTIME_BUILD_CACHE_ROOT:-}
 BUILD_CACHE_MODE=${AGENT_RUNTIME_BUILD_CACHE_MODE:-off}
 SOURCE_TREE_ID=${AGENT_RUNTIME_SOURCE_TREE:-}
 ARTIFACT_PROFILE=${AGENT_RUNTIME_ARTIFACT_PROFILE:-base}
-ARTIFACT_FILENAME=""
+ARTIFACT_FILENAME=$(python3 "${PACKAGE_PROFILE_TOOL}" field --profile "${ARTIFACT_PROFILE}" --name artifact_filename)
+PACKAGE_PROFILE_KIND=$(python3 "${PACKAGE_PROFILE_TOOL}" field --profile "${ARTIFACT_PROFILE}" --name kind)
+PACKAGE_PROFILE_LOCK_NAME=$(python3 "${PACKAGE_PROFILE_TOOL}" field --profile "${ARTIFACT_PROFILE}" --name lock)
+PACKAGE_PROFILE_RECIPE=$(python3 "${PACKAGE_PROFILE_TOOL}" field --profile "${ARTIFACT_PROFILE}" --name recipe)
+PACKAGE_PROFILE_LOCK=""
 EXTENSIONS_LOCK=""
 EXTENSION_PATCH=""
-case "${ARTIFACT_PROFILE}" in
-  base)
-    ARTIFACT_FILENAME="agent-python-runtime.wasm"
-    ;;
-  attrs-770)
-    ARTIFACT_FILENAME="agent-python-runtime-attrs-770.wasm"
-    EXTENSIONS_LOCK="${ATTRS_PROFILE_LOCK}"
-    EXTENSION_PATCH=${AGENT_RUNTIME_EXTENSION_PATCH:-}
-    if [[ -z ${EXTENSION_PATCH} || ! -f ${EXTENSION_PATCH} ]]; then
-      echo "attrs-770 profile requires AGENT_RUNTIME_EXTENSION_PATCH" >&2
-      exit 1
-    fi
-    ;;
-  *)
-    echo "unsupported artifact profile: ${ARTIFACT_PROFILE}" >&2
+if [[ -n ${PACKAGE_PROFILE_LOCK_NAME} ]]; then
+  PACKAGE_PROFILE_LOCK="${ROOT_DIR}/guest/build/profiles/${PACKAGE_PROFILE_LOCK_NAME}"
+  EXTENSIONS_LOCK="${PACKAGE_PROFILE_LOCK}"
+fi
+if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
+  EXTENSION_PATCH=${AGENT_RUNTIME_EXTENSION_PATCH:-}
+  if [[ -z ${EXTENSION_PATCH} || ! -f ${EXTENSION_PATCH} ]]; then
+    echo "attrs-770 profile requires AGENT_RUNTIME_EXTENSION_PATCH" >&2
     exit 1
-    ;;
-esac
+  fi
+fi
 INITIAL_MEMORY_BYTES=134217728
 MAX_MEMORY_BYTES=536870912
 if [[ -z ${AGENT_RUNTIME_MEMORY_MODEL+x} ]]; then
@@ -57,9 +54,9 @@ if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
   echo "build-guest.sh currently requires Linux x86_64" >&2
   exit 2
 fi
-if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-patch \
-    --lock "${ATTRS_PROFILE_LOCK}" --patch "${EXTENSION_PATCH}"
+    --lock "${PACKAGE_PROFILE_LOCK}" --patch "${EXTENSION_PATCH}"
 fi
 case "${BUILD_CACHE_MODE}" in
   off|auto|refresh) ;;
@@ -297,9 +294,9 @@ if [[ ! -x ${PROBE_RUNNER} ]]; then
 fi
 PROBE_RUNNER_SHA256="sha256:$(sha256sum "${PROBE_RUNNER}" | cut -d' ' -f1)"
 EFFECTIVE_SOURCE_LOCK="${WORK_DIR}/effective-sources.lock.json"
-if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" effective-source-lock \
-    --lock "${ATTRS_PROFILE_LOCK}" --source-lock "${SOURCE_LOCK}" --output "${EFFECTIVE_SOURCE_LOCK}"
+    --lock "${PACKAGE_PROFILE_LOCK}" --source-lock "${SOURCE_LOCK}" --output "${EFFECTIVE_SOURCE_LOCK}"
 else
   cp "${SOURCE_LOCK}" "${EFFECTIVE_SOURCE_LOCK}"
 fi
@@ -384,9 +381,9 @@ fi
 EXTENSION_SELECTION="${WORK_DIR}/extension-profile.json"
 EXTENSION_SOURCE_LOCK="${WORK_DIR}/extension-sources.lock.json"
 ATTRS_SOURCE_DIR="${WORK_DIR}/attrs-source"
-if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" source-lock \
-    --lock "${ATTRS_PROFILE_LOCK}" --output "${EXTENSION_SOURCE_LOCK}"
+    --lock "${PACKAGE_PROFILE_LOCK}" --output "${EXTENSION_SOURCE_LOCK}"
   fetch attrs-source attrs-source.tar.gz "${EXTENSION_SOURCE_LOCK}"
   rm -rf "${ATTRS_SOURCE_DIR}"
   mkdir -p "${ATTRS_SOURCE_DIR}"
@@ -397,7 +394,7 @@ if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
     git apply --directory=attrs-source "${EXTENSION_PATCH}"
   )
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" prepare \
-    --lock "${ATTRS_PROFILE_LOCK}" --package-root "${ATTRS_SOURCE_DIR}/src/attr" \
+    --lock "${PACKAGE_PROFILE_LOCK}" --package-root "${ATTRS_SOURCE_DIR}/src/attr" \
     --source-lock "${SOURCE_LOCK}" --selection-output "${EXTENSION_SELECTION}" \
     --effective-source-lock-output "${EFFECTIVE_SOURCE_LOCK}"
 fi
@@ -479,13 +476,13 @@ python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
   "${ROOT_DIR}/guest/bootstrap/agent_runtime" \
   "${VFS_PYTHON_DIR}/site-packages/agent_runtime" \
   --epoch "${SOURCE_DATE_EPOCH}"
-if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
     "${ATTRS_SOURCE_DIR}/src/attr" \
     "${VFS_PYTHON_DIR}/site-packages/attr" \
     --epoch "${SOURCE_DATE_EPOCH}"
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-tree \
-    --lock "${ATTRS_PROFILE_LOCK}" --package-root "${VFS_PYTHON_DIR}/site-packages/attr"
+    --lock "${PACKAGE_PROFILE_LOCK}" --package-root "${VFS_PYTHON_DIR}/site-packages/attr"
 fi
 
 pack_guest() {
@@ -549,7 +546,7 @@ run_import_qualification \
   "${WORK_DIR}/import-qualification" \
   "${IMPORT_QUALIFICATION}"
 MANIFEST_EXTENSION_ARGS=()
-if [[ ${ARTIFACT_PROFILE} == attrs-770 ]]; then
+if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   MANIFEST_EXTENSION_ARGS=(--extension-selection "${EXTENSION_SELECTION}")
 fi
 python3 "${ROOT_DIR}/guest/build/write-manifest.py" \

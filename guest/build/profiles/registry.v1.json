@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "target": "wasm32-wasip1",
+  "profiles": [
+    {
+      "id": "base",
+      "artifact_filename": "agent-python-runtime.wasm",
+      "kind": "base",
+      "lock": null,
+      "recipe": null,
+      "required_import_roots": [
+        "agent_runtime",
+        "json",
+        "sys"
+      ],
+      "private_inputs": []
+    },
+    {
+      "id": "attrs-770",
+      "artifact_filename": "agent-python-runtime-attrs-770.wasm",
+      "kind": "pure-python-package",
+      "lock": "attrs-770.lock.json",
+      "recipe": "attrs-770-v1",
+      "required_import_roots": [
+        "agent_runtime",
+        "attr",
+        "json",
+        "sys",
+        "types",
+        "typing"
+      ],
+      "private_inputs": [
+        "extension_patch"
+      ]
+    }
+  ]
+}

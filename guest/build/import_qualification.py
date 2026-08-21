@@ -4,14 +4,29 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import pathlib
 from typing import Any
 
 PROBE_ID = "guest-import-exec-v1"
-PROFILES = {"base", "attrs-770"}
 STATUSES = {"qualified", "import_failed", "operation_failed"}
 MAX_RESULTS = 64
+
+
+def _load_package_profile_module():
+    path = pathlib.Path(__file__).with_name("package_profile.py")
+    spec = importlib.util.spec_from_file_location("package_profile_qualification", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load package profile registry")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+PACKAGE_PROFILE = _load_package_profile_module()
+PROFILE_REGISTRY = PACKAGE_PROFILE.load_registry()
+PROFILES = set(PACKAGE_PROFILE.profile_ids(PROFILE_REGISTRY))
 
 _BASE_PROBES = (
     ("agent_runtime", "import"),
@@ -182,19 +197,13 @@ def strict_json_loads(value: str) -> Any:
 
 
 def required_roots(profile: str) -> set[str]:
-    if profile not in PROFILES:
-        raise ValueError("unsupported artifact profile")
-    roots = {"agent_runtime", "json", "sys"}
-    if profile == "attrs-770":
-        roots.update({"attr", "types", "typing"})
-    return roots
+    return set(PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile)["required_import_roots"])
 
 
 def probe_specs(profile: str) -> list[dict[str, str]]:
-    if profile not in PROFILES:
-        raise ValueError("unsupported artifact profile")
+    resolved = PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile)
     probes = _BASE_PROBES
-    if profile == "attrs-770":
+    if resolved["recipe"] == "attrs-770-v1":
         probes += _ATTRS_770_PROBES
     return [{"name": name, "operation": operation} for name, operation in sorted(probes)]
 

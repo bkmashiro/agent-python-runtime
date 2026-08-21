@@ -35,10 +35,6 @@ REQUIRED_CUSTOM_IMPORTS = {
     ("agent_runtime_v1", "host_call"),
     ("agent_runtime_v1", "materialize_value"),
 }
-ARTIFACT_FILENAMES = {
-    "base": "agent-python-runtime.wasm",
-    "attrs-770": "agent-python-runtime-attrs-770.wasm",
-}
 MAX_JSON_BYTES = 1 << 20
 MANIFEST_FIELDS = {
     "schema_version", "abi_version", "artifact_profile", "target", "artifact", "build", "sources", "wasm",
@@ -122,9 +118,25 @@ def load_extension_profile_module():
     return module
 
 
+def load_package_profile_module():
+    path = pathlib.Path(__file__).with_name("package_profile.py")
+    spec = importlib.util.spec_from_file_location("artifact_package_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load package profile registry")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
 EXTENSION_PROFILE = load_extension_profile_module()
+PACKAGE_PROFILE = load_package_profile_module()
+PROFILE_REGISTRY = PACKAGE_PROFILE.load_registry()
+ARTIFACT_FILENAMES = {
+    profile_id: PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile_id)["artifact_filename"]
+    for profile_id in PACKAGE_PROFILE.profile_ids(PROFILE_REGISTRY)
+}
 ATTRS_LOCK = EXTENSION_PROFILE.load_lock(EXTENSION_PROFILE.PROFILE_LOCK)
 BASE_SOURCE_LOCK = EXTENSION_PROFILE.strict_json_loads((pathlib.Path(__file__).with_name("sources.lock.json")).read_text())
 ATTRS_SOURCES = EXTENSION_PROFILE.merge_source_lock(BASE_SOURCE_LOCK, ATTRS_LOCK)["sources"]

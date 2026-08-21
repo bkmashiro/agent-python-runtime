@@ -111,7 +111,8 @@ class GuestSourceContractTests(unittest.TestCase):
     def test_attrs_profile_requires_private_patch_before_cache_lookup(self):
         text = BUILD_SCRIPT.read_text()
         self.assertIn("AGENT_RUNTIME_ARTIFACT_PROFILE", text)
-        self.assertIn("attrs-770)", text)
+        self.assertIn("PACKAGE_PROFILE_RECIPE} == attrs-770-v1", text)
+        self.assertIn('PACKAGE_PROFILE_TOOL="${ROOT_DIR}/guest/build/package_profile.py"', text)
         self.assertIn("attrs-770 profile requires AGENT_RUNTIME_EXTENSION_PATCH", text)
         self.assertEqual(1, text.count("extension_profile.py\" verify-patch"))
         self.assertLess(text.index("extension_profile.py\" verify-patch"), text.index("FINAL_CACHE_KEY="))

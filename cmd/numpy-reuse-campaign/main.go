@@ -49,7 +49,8 @@ func main() {
 		*platform != goruntime.GOOS+"_"+goruntime.GOARCH || *maxRecords < 0 {
 		fail(errors.New("invalid campaign flags"))
 	}
-	if _, err := verifyBuildIdentity(*sourceCommit); err != nil {
+	binarySHA256, err := verifyBuildIdentity(*sourceCommit)
+	if err != nil {
 		fail(err)
 	}
 	bundle, err := loadArtifactBundle(*artifactRoot)
@@ -108,7 +109,7 @@ func main() {
 		if !ok {
 			fail(errors.New("frozen case missing"))
 		}
-		record, err := executeTrial(ctx, runners[coordinate.Profile], bindings[coordinate.Profile], bundle, coordinate, candidate, *platform)
+		record, err := executeTrial(ctx, runners[coordinate.Profile], bindings[coordinate.Profile], bundle, coordinate, candidate, *platform, *sourceCommit, *sourceTree, binarySHA256)
 		if err != nil {
 			fail(fmt.Errorf("coordinate %+v: %w", coordinate, err))
 		}
@@ -130,7 +131,7 @@ func main() {
 	}
 }
 
-func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyproducer.Bindings, bundle artifactBundle, coordinate numpyreuse.CampaignCoordinate, candidate numpyreuse.Case, platform string) (numpyreuse.TrialRecord, error) {
+func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyproducer.Bindings, bundle artifactBundle, coordinate numpyreuse.CampaignCoordinate, candidate numpyreuse.Case, platform, harnessCommit, harnessTree, binarySHA256 string) (numpyreuse.TrialRecord, error) {
 	spec, err := executionSpec(candidate)
 	if err != nil {
 		return numpyreuse.TrialRecord{}, err
@@ -311,7 +312,8 @@ func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyprodu
 	}
 	record := numpyreuse.TrialRecord{
 		SchemaVersion: numpyreuse.TrialRecordSchemaVersion, Coordinate: coordinate, CaseSourceSHA256: candidate.SourceSHA256,
-		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: profileSHA, PassRegistrationSHA256: passSHA,
+		ArtifactSHA256: artifactSHA, HarnessSourceCommit: harnessCommit, HarnessSourceTree: harnessTree, HarnessBinarySHA256: binarySHA256,
+		ExecutionProfileSHA256: profileSHA, PassRegistrationSHA256: passSHA,
 		DeclarationSHA256: declarationSHA, SourceSHA256: sourceSHA, InputsSHA256: inputsSHA,
 		ProcessExit: "success", ProtocolStatus: "ok", ResultSHA256: resultSHA, ResultParity: true,
 		PhysicalGuests: physical, RuntimeInitializations: physical, PreparedCOWGuests: placements.prepared, OrdinaryFreshGuests: placements.ordinary, PlacementFallbacks: placements.fallback,

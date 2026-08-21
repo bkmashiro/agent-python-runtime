@@ -41,6 +41,9 @@ type TrialRecord struct {
 	Coordinate             CampaignCoordinate `json:"coordinate"`
 	CaseSourceSHA256       string             `json:"case_source_sha256"`
 	ArtifactSHA256         string             `json:"artifact_sha256"`
+	HarnessSourceCommit    string             `json:"harness_source_commit"`
+	HarnessSourceTree      string             `json:"harness_source_tree"`
+	HarnessBinarySHA256    string             `json:"harness_binary_sha256"`
 	ExecutionProfileSHA256 string             `json:"execution_profile_sha256"`
 	PassRegistrationSHA256 string             `json:"pass_registration_sha256"`
 	DeclarationSHA256      string             `json:"declaration_sha256"`
@@ -177,10 +180,13 @@ func validTrialRecord(record TrialRecord, sealed bool) bool {
 		record.Stages.CriticalWallNanos == 0 || record.Stages.PeakResidentMemoryBytes == 0 {
 		return false
 	}
-	for _, value := range []string{record.CaseSourceSHA256, record.ArtifactSHA256, record.ExecutionProfileSHA256, record.PassRegistrationSHA256, record.DeclarationSHA256, record.SourceSHA256, record.InputsSHA256, record.ResultSHA256} {
+	for _, value := range []string{record.CaseSourceSHA256, record.ArtifactSHA256, record.HarnessBinarySHA256, record.ExecutionProfileSHA256, record.PassRegistrationSHA256, record.DeclarationSHA256, record.SourceSHA256, record.InputsSHA256, record.ResultSHA256} {
 		if !campaignDigestPattern(value) {
 			return false
 		}
+	}
+	if !campaignCommitPattern(record.HarnessSourceCommit) || !campaignCommitPattern(record.HarnessSourceTree) {
+		return false
 	}
 	if record.Coordinate.Treatment == "original_recompute" {
 		if record.PhysicalGuests != candidate.Consumers || record.RuntimeInitializations != candidate.Consumers || record.HostBlobBytes != 0 || record.BlobDisposition != "not_applicable" || len(record.LeaseDispositions) != 0 {
@@ -356,6 +362,14 @@ func campaignDigest(value any) string {
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
+func campaignCommitPattern(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
 func campaignDigestPattern(value string) bool {
 	if len(value) != 71 || value[:7] != "sha256:" {
 		return false

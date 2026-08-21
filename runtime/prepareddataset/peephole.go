@@ -3,6 +3,7 @@ package prepareddataset
 import (
 	"errors"
 	"sort"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -16,7 +17,7 @@ var ErrNoEligiblePeephole = errors.New("no eligible numpy.load peephole")
 // the separate Host-authorized physical effect.
 var NumpyLoadProjection = semantic.CapabilityProjection{
 	Name: PreparedCall, EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly,
-	Module: "numpy", Method: "load", Arguments: []string{"path", "allow_pickle"},
+	Module: "np", Method: "load", Arguments: []string{"path", "allow_pickle"},
 }
 
 // NumpyLoadFacts are authority-free, target-Guest-verified syntax facts.
@@ -46,7 +47,11 @@ func (facts NumpyLoadFacts) Validate() error {
 // NewAnalysisRequest adds the closed syntax-only projection to the normal
 // Plan-bound semantic request. The Plan still carries only real Host tools.
 func NewAnalysisRequest(source string, bindings semantic.Bindings, plan *capability.Plan) (semantic.Request, error) {
-	request, err := semantic.NewRequest(source, bindings, plan)
+	overlay, err := analysisOverlay(source)
+	if err != nil {
+		return semantic.Request{}, err
+	}
+	request, err := semantic.NewRequest(overlay, bindings, plan)
 	if err != nil {
 		return semantic.Request{}, err
 	}
@@ -62,10 +67,19 @@ func NewAnalysisRequest(source string, bindings semantic.Bindings, plan *capabil
 // target-Guest analyzer and selects one canonical numpy.load occurrence.
 func FactsFromVerifiedAnalysis(source, streamEpoch, admittedPrefixSHA256 string, verified semantic.VerifiedAnalysis) (NumpyLoadFacts, error) {
 	analysis, err := verified.Analysis()
-	if err != nil || analysis.SourceSHA256 != admittedPrefixSHA256 {
+	overlay, overlayErr := analysisOverlay(source)
+	if err != nil || overlayErr != nil || analysis.SourceSHA256 != digestText(overlay) {
 		return NumpyLoadFacts{}, ErrNoEligiblePeephole
 	}
 	return factsFromCallSites(source, streamEpoch, admittedPrefixSHA256, analysis.CallSites)
+}
+
+func analysisOverlay(source string) (string, error) {
+	const importLine = "import numpy as np\n"
+	if !strings.HasPrefix(source, importLine) {
+		return "", ErrNoEligiblePeephole
+	}
+	return strings.Repeat(" ", len(importLine)-1) + "\n" + source[len(importLine):], nil
 }
 
 func factsFromCallSites(source, streamEpoch, admittedPrefixSHA256 string, callSites []semantic.CallSite) (NumpyLoadFacts, error) {

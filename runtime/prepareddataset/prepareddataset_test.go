@@ -112,6 +112,7 @@ func TestPreparedDataContractRejectsEveryAuthoritySourceProfileFreshnessMutation
 		"run":            func(v *HostPreparedDataDeclaration) { v.RunIdentity = "other-run" },
 		"privacy":        func(v *HostPreparedDataDeclaration) { v.PrivacyPartition = "other-partition" },
 		"body budget":    func(v *HostPreparedDataDeclaration) { v.MaxBodyBytes = 1 << 20 },
+		"result budget":  func(v *HostPreparedDataDeclaration) { v.MaxResultBytes = 1 << 20 },
 		"file budget":    func(v *HostPreparedDataDeclaration) { v.MaxFileBytes = 1 << 20 },
 		"cost budget":    func(v *HostPreparedDataDeclaration) { v.CostUnits = 2 },
 		"reservation":    func(v *HostPreparedDataDeclaration) { v.BudgetReservationSHA256 = digest('a') },
@@ -211,7 +212,7 @@ func TestPreparedDataClaimRequiresPrefixExtensionAndExactOccurrence(t *testing.T
 
 func TestNumpyLoadProjectionIsClosedAndAuthorityFree(t *testing.T) {
 	projection := NumpyLoadProjection
-	if projection.Name != PreparedCall || projection.Module != "numpy" || projection.Method != "load" ||
+	if projection.Name != PreparedCall || projection.Module != "np" || projection.Method != "load" ||
 		projection.EffectClass != capability.EffectExternalRead || projection.Arguments == nil {
 		t.Fatalf("projection=%+v", projection)
 	}
@@ -267,7 +268,7 @@ func validDeclaration(planIdentity string) HostPreparedDataDeclaration {
 		Order: "C", Endianness: "little", HeaderBytes: PreparedHeaderBytes, ElementBytes: PreparedElementBytes, CodecKind: CodecNumpyNDArrayCV1,
 		ArtifactSHA256: digest('4'), ExecutionProfileSHA256: digest('5'), ImportClosureSHA256: digest('6'),
 		RunIdentity: "run-1", PrivacyPartition: "run-1-private", BudgetReservationSHA256: digest('7'),
-		MaxFileBytes: 8_388_736, MaxBodyBytes: 8_388_608, CostUnits: 1,
+		MaxFileBytes: 8_388_736, MaxBodyBytes: 8_388_608, MaxResultBytes: 4 << 10, CostUnits: 1,
 	}
 }
 
@@ -293,7 +294,7 @@ func testPlan(t *testing.T) *capability.Plan {
 		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"body":{"type":"string"}},"required":["body"],"additionalProperties":false}`),
 		Python:       &capability.PythonProjection{Module: "sources", Method: "read", Arguments: []string{"path"}}, ReadOnly: true, Idempotent: true,
-		PreDispatch: &capability.PreDispatchContract{Resource: capability.ResourceReference{Namespace: "workspace", Argument: "path"}, Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1 << 20, CostUnits: 1},
+		PreDispatch: &capability.PreDispatchContract{Resource: capability.ResourceReference{Namespace: "workspace", Argument: "path"}, Freshness: capability.FreshnessPlanEpoch, Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition, Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 4 << 10, CostUnits: 1},
 	}
 	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"body":""}`), nil

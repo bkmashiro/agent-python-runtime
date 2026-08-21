@@ -31,6 +31,7 @@ const (
 	PreparedHeaderBytes       = uint64(128)
 	PreparedBodyBytes         = uint64(8 << 20)
 	PreparedFileBytes         = uint64((8 << 20) + 128)
+	PreparedMaxResultBytes    = uint64(4 << 10)
 	PreparedElementBytes      = uint32(8)
 	PreparedCostUnits         = uint32(1)
 )
@@ -81,6 +82,7 @@ type HostPreparedDataDeclaration struct {
 	BudgetReservationSHA256 string              `json:"budget_reservation_sha256"`
 	MaxFileBytes            uint64              `json:"max_file_bytes"`
 	MaxBodyBytes            uint64              `json:"max_body_bytes"`
+	MaxResultBytes          uint64              `json:"max_result_bytes"`
 	CostUnits               uint32              `json:"cost_units"`
 }
 
@@ -170,7 +172,7 @@ func (declaration HostPreparedDataDeclaration) validate() error {
 		!validDigest(declaration.ExecutionProfileSHA256) || !validDigest(declaration.ImportClosureSHA256) ||
 		!validIdentity(declaration.RunIdentity) || !validIdentity(declaration.PrivacyPartition) ||
 		!validDigest(declaration.BudgetReservationSHA256) || declaration.MaxFileBytes != PreparedFileBytes ||
-		declaration.MaxBodyBytes != PreparedBodyBytes || declaration.CostUnits != PreparedCostUnits {
+		declaration.MaxBodyBytes != PreparedBodyBytes || declaration.MaxResultBytes != PreparedMaxResultBytes || declaration.CostUnits != PreparedCostUnits {
 		return ErrInvalidContract
 	}
 	canonical, err := canonicalArguments(declaration.ResourcePath)
@@ -226,7 +228,7 @@ var requiredContractFields = []string{
 	"workspace_root_sha256", "file_sha256", "body_sha256", "freshness", "unclaimed", "loader_kind", "allow_pickle",
 	"mmap_mode", "dtype", "shape", "order", "endianness", "header_bytes", "element_bytes", "codec_kind",
 	"artifact_sha256", "execution_profile_sha256", "import_closure_sha256", "run_identity", "privacy_partition",
-	"budget_reservation_sha256", "max_file_bytes", "max_body_bytes", "cost_units",
+	"budget_reservation_sha256", "max_file_bytes", "max_body_bytes", "max_result_bytes", "cost_units",
 }
 
 func canonicalArgumentsMatch(value json.RawMessage, path string) bool {

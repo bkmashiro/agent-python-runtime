@@ -78,7 +78,7 @@ func Decide(contract *PreparedDataContract, facts NumpyLoadFacts, plan *capabili
 	if preDispatch.Resource.Namespace != PreparedResourceNamespace || preDispatch.Resource.Argument != "path" || preDispatch.Resource.Constant != "" ||
 		preDispatch.Freshness != declaration.Freshness || preDispatch.Unclaimed != declaration.Unclaimed ||
 		preDispatch.Privacy != capability.PreDispatchPrivacyExactPartition || preDispatch.Coalescing != capability.PreDispatchCoalescingForbidden ||
-		preDispatch.MaxResultBytes > declaration.MaxBodyBytes || preDispatch.MaxResultBytes == 0 || preDispatch.CostUnits != declaration.CostUnits {
+		preDispatch.MaxResultBytes != declaration.MaxResultBytes || preDispatch.CostUnits != declaration.CostUnits {
 		return PreparationDecision{}, ErrDecisionRejected
 	}
 	identity, err := preparationIdentity(declaration, facts.CallSite)
@@ -134,7 +134,8 @@ func digestDeclaration(declaration HostPreparedDataDeclaration) string {
 
 func (decision PreparationDecision) Claim(finalSource string, verified semantic.VerifiedAnalysis) (ClaimDecision, error) {
 	analysis, err := verified.Analysis()
-	if err != nil || analysis.SourceSHA256 != digestText(finalSource) {
+	overlay, overlayErr := analysisOverlay(finalSource)
+	if err != nil || overlayErr != nil || analysis.SourceSHA256 != digestText(overlay) {
 		return ClaimDecision{}, ErrClaimMismatch
 	}
 	return decision.claimWithCallSites(finalSource, analysis.CallSites)

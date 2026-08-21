@@ -13,7 +13,8 @@ import (
 )
 
 type linuxCOWPreparedRuntime struct {
-	image *cowImage
+	image                *cowImage
+	trustedPrepareSHA256 string
 }
 
 func cowMaximumMemoryBytes(engine *Engine) (uint64, error) {
@@ -40,6 +41,10 @@ func instantiateCOWModule(ctx context.Context, runtime wazero.Runtime, compiled 
 }
 
 func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRuntime, error) {
+	return newCOWPreparedRuntimeWithTrustedSource(ctx, engine, "", "")
+}
+
+func newCOWPreparedRuntimeWithTrustedSource(ctx context.Context, engine *Engine, trustedSource, trustedIdentity string) (cowPreparedRuntime, error) {
 	if engine == nil {
 		return nil, errors.New("COW prepared runtime requires an engine")
 	}
@@ -56,6 +61,15 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 		return nil, fmt.Errorf("prepare canonical COW image: %w", err)
 	}
 	defer closePreparedInstance(canonical)
+	if trustedSource != "" {
+		identity, identityErr := trustedCOWPrepareIdentity(trustedSource)
+		if identityErr != nil || identity != trustedIdentity {
+			return nil, ErrTrustedCOWPrepareBinding
+		}
+		if err := callStatusWithBytes(ctx, canonical.module, "runtime_prepare", []byte(trustedSource)); err != nil {
+			return nil, withGuestDiagnostic(err, canonical.stderr.String())
+		}
+	}
 	memory := canonical.module.Memory()
 	if memory == nil || memory.Size() == 0 {
 		return nil, errors.New("canonical COW image has no linear memory")
@@ -68,7 +82,7 @@ func newCOWPreparedRuntime(ctx context.Context, engine *Engine) (cowPreparedRunt
 	if err != nil {
 		return nil, err
 	}
-	return &linuxCOWPreparedRuntime{image: image}, nil
+	return &linuxCOWPreparedRuntime{image: image, trustedPrepareSHA256: trustedIdentity}, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Engine) (*preparedInstance, cowCloneLifecycle, error) {
@@ -139,7 +153,9 @@ func (runtime *linuxCOWPreparedRuntime) imageState() PreparedImageState {
 	if runtime == nil || runtime.image == nil {
 		return PreparedImageState{}
 	}
-	return runtime.image.preparedImageState()
+	state := runtime.image.preparedImageState()
+	state.TrustedPrepareSHA256 = runtime.trustedPrepareSHA256
+	return state
 }
 
 func closePreparedInstance(instance *preparedInstance) error {

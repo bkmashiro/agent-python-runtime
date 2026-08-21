@@ -199,6 +199,7 @@ type Engine struct {
 	preparedInitMu      sync.Mutex
 	preparedInitialized bool
 	preparedInitErr     error
+	preparedTrustedSHA  string
 	prepared            *preparedInstance
 	preparedState       PreparedState
 	cowMu               sync.Mutex
@@ -343,6 +344,26 @@ func (engine *Engine) PrepareSemanticRuntime(ctx context.Context) error {
 	return engine.ensurePrepared(ctx)
 }
 
+// PrepareSemanticRuntimeWithTrustedSource provisions a Linux private-COW
+// baseline after applying one bounded Host-authored preparation fragment. It
+// is authority-free: engines with workspace or Broker authority are rejected,
+// and the exact fragment identity is bound to the engine's one-time baseline.
+func (engine *Engine) PrepareSemanticRuntimeWithTrustedSource(ctx context.Context, source string) error {
+	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
+		return runtimeconfig.ErrMechanismDisabled
+	}
+	identity, err := trustedCOWPrepareIdentity(source)
+	if err != nil {
+		return err
+	}
+	properties := engine.Properties()
+	if properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
+		return ErrSemanticAnalysisSessionAuthority
+	}
+	_, err = engine.ensurePreparedWithResultAndTrustedSource(ctx, source, identity)
+	return err
+}
+
 func (engine *Engine) acquireSemanticSession() error {
 	engine.semanticSessionMu.Lock()
 	defer engine.semanticSessionMu.Unlock()
@@ -372,18 +393,32 @@ func (engine *Engine) beginSemanticClose() error {
 }
 
 func (engine *Engine) ensurePreparedWithResult(ctx context.Context) (bool, error) {
+	return engine.ensurePreparedWithResultAndTrustedSource(ctx, "", "")
+}
+
+func (engine *Engine) ensurePreparedWithResultAndTrustedSource(ctx context.Context, trustedSource, trustedIdentity string) (bool, error) {
 	engine.preparedInitMu.Lock()
 	defer engine.preparedInitMu.Unlock()
 	if engine.cowIsClosing() {
 		return false, errCOWEngineClosing
 	}
 	if engine.preparedInitialized {
+		if trustedIdentity != "" && engine.preparedTrustedSHA != trustedIdentity {
+			return false, ErrTrustedCOWPrepareBinding
+		}
 		return false, engine.preparedInitErr
 	}
 	engine.preparedInitialized = true
+	engine.preparedTrustedSHA = trustedIdentity
 	if engine.config.Mechanisms.MemoryCOW {
 		started := time.Now()
-		cowRuntime, err := newCOWPreparedRuntime(ctx, engine)
+		var cowRuntime cowPreparedRuntime
+		var err error
+		if trustedSource == "" {
+			cowRuntime, err = newCOWPreparedRuntime(ctx, engine)
+		} else {
+			cowRuntime, err = newCOWPreparedRuntimeWithTrustedSource(ctx, engine, trustedSource, trustedIdentity)
+		}
 		prepareMS := float64(time.Since(started)) / float64(time.Millisecond)
 		engine.preparedMu.Lock()
 		engine.preparedState.PrepareMS = prepareMS

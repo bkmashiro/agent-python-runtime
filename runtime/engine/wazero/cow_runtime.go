@@ -1,6 +1,28 @@
 package wazero
 
-import "context"
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"strings"
+	"unicode/utf8"
+)
+
+const maxTrustedCOWPrepareBytes = 64 << 10
+
+var (
+	ErrTrustedCOWPrepareSource  = errors.New("trusted COW prepare source is invalid")
+	ErrTrustedCOWPrepareBinding = errors.New("trusted COW prepare source does not match the initialized baseline")
+)
+
+func trustedCOWPrepareIdentity(source string) (string, error) {
+	if source == "" || len([]byte(source)) > maxTrustedCOWPrepareBytes || !utf8.ValidString(source) || strings.ContainsRune(source, '\x00') {
+		return "", ErrTrustedCOWPrepareSource
+	}
+	digest := sha256.Sum256([]byte(source))
+	return fmt.Sprintf("sha256:%x", digest[:]), nil
+}
 
 type cowPreparedRuntime interface {
 	prepare(context.Context, *Engine) (*preparedInstance, cowCloneLifecycle, error)
@@ -23,6 +45,7 @@ type PreparedImageState struct {
 	ZeroPages            uint64 `json:"zero_pages"`
 	NonZeroPages         uint64 `json:"non_zero_pages"`
 	SparsePotentialBytes uint64 `json:"sparse_potential_bytes"`
+	TrustedPrepareSHA256 string `json:"trusted_prepare_sha256,omitempty"`
 }
 
 func (engine *Engine) PreparedImageState() PreparedImageState {

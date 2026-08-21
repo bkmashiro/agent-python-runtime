@@ -1,7 +1,7 @@
 import ast
 import unittest
 
-from agent_runtime.ast_support import MAX_AST_DEPTH, MAX_AST_NODES, ast_digest_bounded, fix_missing_locations_bounded, validate_ast_recursion_shape_bounded, walk_ast_bounded
+from agent_runtime.ast_support import MAX_AST_DEPTH, MAX_AST_NODES, _structural_ast_digest, ast_digest_bounded, fix_missing_locations_bounded, validate_ast_recursion_shape_bounded, walk_ast_bounded
 
 
 class BoundedASTSupportTests(unittest.TestCase):
@@ -28,6 +28,11 @@ class BoundedASTSupportTests(unittest.TestCase):
         candidate, body = tree()
         with self.assertRaisesRegex(ValueError, "AST node bound exceeded"):
             ast_digest_bounded(candidate, max_nodes=2)
+        self.assertLessEqual(body.yielded, 2)
+
+        candidate, body = tree()
+        with self.assertRaisesRegex(ValueError, "AST node bound exceeded"):
+            _structural_ast_digest(candidate, max_nodes=2)
         self.assertLessEqual(body.yielded, 2)
 
         candidate, body = tree()

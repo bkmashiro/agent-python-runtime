@@ -147,6 +147,23 @@ func TestDeclarationAndSourcePolicyRejectsDrift(t *testing.T) {
 	}
 }
 
+func TestFrozenAdversarialProducerSourcesRemainOutsideClosedLanguage(t *testing.T) {
+	raw, _, _ := validDeclaration(t)
+	bindings := testBindings()
+	sources := []string{
+		"import numpy as np\nvalue = np.asarray([object()], dtype=object)\nresult = 1\n",
+		"import numpy as np\nbase = np.arange(64, dtype=np.float64).reshape((8, 8))\nvalue = base[:, ::2]\nresult = int(value.size)\n",
+		"import numpy as np\nvalue = np.asfortranarray(np.arange(64, dtype=np.float64).reshape((8, 8)))\nresult = int(value.size)\n",
+		"import numpy as np\nvalue = np.random.default_rng().random(8)\nresult = float(value[0])\n",
+	}
+	for _, source := range sources {
+		analysis := testAnalysis(source, bindings)
+		if _, err := Admit(raw, source, analysis, bindings); !errors.Is(err, ErrSourcePolicy) {
+			t.Fatalf("frozen adversarial producer admitted: %v", err)
+		}
+	}
+}
+
 func TestAdmissionRejectsAnalysisAndBindingDrift(t *testing.T) {
 	raw, _, source := validDeclaration(t)
 	bindings := testBindings()

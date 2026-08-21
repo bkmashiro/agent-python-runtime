@@ -349,7 +349,7 @@ func executionSpec(candidate numpyreuse.Case) (caseExecutionSpec, error) {
 	case "numpy_matrix_medium_gap0_c1", "numpy_matrix_medium_gap10000_c2", "numpy_matrix_medium_gap45000_c4":
 		input = numpyproducer.DeclarationInput{Operation: numpyproducer.OperationMatmulF64, Rows: 256, Cols: 256}
 		consumer = "result = float(array[0, 0])"
-		expected = 5559680
+		return caseExecutionSpec{Declaration: input, Consumer: consumer, Expected: json.RawMessage("5559680.0")}, nil
 	default:
 		return caseExecutionSpec{}, errors.New("unsupported frozen case")
 	}

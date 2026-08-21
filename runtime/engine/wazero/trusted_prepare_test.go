@@ -45,6 +45,23 @@ func TestPrepareNumpyCOWShardRequiresCOW(t *testing.T) {
 	}
 }
 
+func TestPrepareNumpyCOWShardRequiresBoundNumpyProfile(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
+	if err := (&Engine{config: config}).PrepareNumpyCOWShard(context.Background()); !errors.Is(err, ErrTrustedCOWPrepareBinding) {
+		t.Fatalf("nil profile err=%v", err)
+	}
+	unbound, err := runtimeconfig.NewExecutionProfile("numpy-core", []string{"numpy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ExecutionProfile = &unbound
+	if err := (&Engine{config: config}).PrepareNumpyCOWShard(context.Background()); !errors.Is(err, ErrTrustedCOWPrepareBinding) {
+		t.Fatalf("unbound profile err=%v", err)
+	}
+}
+
 func TestPrepareNumpyCOWShardRejectsBaselineDrift(t *testing.T) {
 	source := "import numpy as np\n"
 	identity, err := trustedCOWPrepareIdentity(source)
@@ -54,6 +71,7 @@ func TestPrepareNumpyCOWShardRejectsBaselineDrift(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.PreparedRuntime = true
 	config.Mechanisms.MemoryCOW = true
+	config.ExecutionProfile = testBoundNumpyProfile(t)
 	engine := &Engine{config: config, preparedInitialized: true, preparedTrustedSHA: identity}
 	if _, err := engine.ensurePreparedWithResult(context.Background()); err != nil {
 		t.Fatalf("ordinary consumer err=%v", err)
@@ -107,6 +125,7 @@ func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.PreparedRuntime = true
 	config.Mechanisms.MemoryCOW = true
+	config.ExecutionProfile = testBoundNumpyProfile(t)
 	parent := &fakeDerivableCOWRuntime{identity: packageIdentity}
 	engine := &Engine{config: config, preparedInitialized: true, preparedTrustedSHA: packageIdentity, cowRuntime: parent}
 	if err := engine.DeriveNumpyI64COWDataset(context.Background(), firstBody); err != nil {
@@ -133,4 +152,20 @@ func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {
 func testTrustedDerivedSource() string {
 	encoded := base64.StdEncoding.EncodeToString(make([]byte, trustedCOWDerivedBodyBytes))
 	return fmt.Sprintf("%s%s%s", trustedCOWDerivedPrefix, encoded, trustedCOWDerivedSuffix)
+}
+
+func testBoundNumpyProfile(t *testing.T) *runtimeconfig.ExecutionProfile {
+	t.Helper()
+	profile, err := runtimeconfig.NewExecutionProfile("numpy-core", []string{"numpy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "numpy-core", ArtifactSHA256: "sha256:" + strings.Repeat("a", 64), ManifestSHA256: "sha256:" + strings.Repeat("b", 64),
+		ImportRoots: []string{"numpy"}, QualifiedImportRoots: []string{"numpy"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &profile
 }

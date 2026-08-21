@@ -351,6 +351,9 @@ func (engine *Engine) PrepareNumpyCOWShard(ctx context.Context) error {
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
 		return runtimeconfig.ErrMechanismDisabled
 	}
+	if err := engine.validateNumpyCOWProfile(); err != nil {
+		return err
+	}
 	source := trustedCOWPackageSource
 	identity, err := trustedCOWPrepareIdentity(source)
 	if err != nil {
@@ -371,6 +374,9 @@ func (engine *Engine) PrepareNumpyCOWShard(ctx context.Context) error {
 func (engine *Engine) DeriveNumpyI64COWDataset(ctx context.Context, body []byte) error {
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
 		return runtimeconfig.ErrMechanismDisabled
+	}
+	if err := engine.validateNumpyCOWProfile(); err != nil {
+		return err
 	}
 	source, identity, err := trustedCOWDerivedSource(body)
 	if err != nil {
@@ -416,6 +422,19 @@ func (engine *Engine) DeriveNumpyI64COWDataset(ctx context.Context, body []byte)
 	}
 	engine.cowRuntime = derived
 	return nil
+}
+
+func (engine *Engine) validateNumpyCOWProfile() error {
+	profile := engine.config.ExecutionProfile
+	if profile == nil || profile.Validate() != nil || profile.ID() != "numpy-core" || profile.ArtifactSHA256() == "" || profile.ManifestSHA256() == "" {
+		return ErrTrustedCOWPrepareBinding
+	}
+	for _, qualified := range profile.QualifiedImports() {
+		if qualified == "numpy" {
+			return nil
+		}
+	}
+	return ErrTrustedCOWPrepareBinding
 }
 
 func (engine *Engine) acquireSemanticSession() error {

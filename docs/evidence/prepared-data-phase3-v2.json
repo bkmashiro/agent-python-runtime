@@ -1,0 +1,268 @@
+{
+ "artifact_sha256": "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad",
+ "claim_contract": {
+  "body_transport": "fixed_host_authored_guest_copy_bridge",
+  "generic_blob_materialization": false,
+  "guard_rejection_preserves_both_ready_states": true,
+  "guest_body_digest_rechecked_immediately_before_claim": true,
+  "guest_body_immutable": true,
+  "one_shot": true,
+  "scope": "fixed_numpy_npy_c_v1_research_lane",
+  "token_and_object_claim_atomic": true
+ },
+ "claim_strength": "end_to_end_identity_join_for_fixed_copy_bridge_not_generic_zero_copy_materialization",
+ "fixture": {
+  "body_bytes": 8388608,
+  "body_sha256": "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0",
+  "dtype": "<i8",
+  "shape": [
+   1024,
+   1024
+  ]
+ },
+ "identity": "sha256:42ad6ebfc57932e3de568d4259732383647893233f53deb663f1ddf30d700649",
+ "object_join_commit": "1fa7f99cfbc5145a6873af58795707e85618d28e",
+ "platforms": {
+  "linux": {
+   "arch": "x86_64",
+   "binary_sha256": "sha256:c4343baf223e35233337699fa2dadabc0ace8a49868bb0f5c5f2d7bb8a49f2e4",
+   "cpu": "AMD Ryzen 7 5700X 8-Core Processor",
+   "memory_bytes": 67341795328,
+   "os": "Linux 6.17.0-35-generic",
+   "raw_report_sha256": "sha256:0e6745256847c6bc885cd80b45c0ef0c99521e47e3aeee4cac9d0c8b042a4f32",
+   "report": {
+    "artifact_sha256": "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad",
+    "artificial_read_delay_nanos": 200000000,
+    "authorized_starts": 1,
+    "candidate_call": "numpy.load",
+    "claim_sha256": "sha256:d3a07779f6789c6c2e46e5ffe6b5340cb539173c72a4fa7039e13a69c9e8f582",
+    "contract_sha256": "sha256:7d5dc74cfb5bb70f3af806ba817c391d2477bc8c4a689c26e006784265ec382b",
+    "decode_before_final": true,
+    "decode_completed_nanos": 238713071,
+    "final_source_released_nanos": 500462319,
+    "later_syntax_rejected": true,
+    "logical_parity": true,
+    "no_contract_starts": 0,
+    "physical_capability": "sources.read",
+    "physical_outcome_bytes": 105,
+    "plan_sha256": "sha256:155b46a29b6acadacdeb34e5753676d656e96f7d64641fd86e3e15b3807f71a1",
+    "preparation_sha256": "sha256:c6deee8a6f103cfcc7ef70b9bfc853a778022802979f3072e0a20622d552428b",
+    "read_before_final": true,
+    "read_completed_nanos": 223013027,
+    "read_started_nanos": 10712873,
+    "result": {
+     "shape": [
+      1024,
+      1024
+     ],
+     "sum": 549755289600
+    },
+    "schema_version": "pysolate.prepared-data-probe.v3",
+    "staged": {
+     "BodyBytes": 0,
+     "Counters": {
+      "LogicalClaimBytes": 8388608,
+      "LogicalClaims": 1,
+      "PhysicalCancellations": 0,
+      "PhysicalDecodedBytes": 8388608,
+      "PhysicalDecodes": 1,
+      "PhysicalMaterializations": 1,
+      "PhysicalMaterializedBytes": 8388608,
+      "PhysicalOrphans": 0,
+      "PhysicalReadBytes": 8388736,
+      "PhysicalReads": 1,
+      "PhysicalRejections": 0,
+      "PhysicalSealedBytes": 8388608,
+      "PhysicalSeals": 1,
+      "PhysicalSourceVerifications": 1
+     },
+     "Disposition": "",
+     "ID": "sha256:c6deee8a6f103cfcc7ef70b9bfc853a778022802979f3072e0a20622d552428b",
+     "Metadata": {
+      "BodyBytes": 0,
+      "BodySHA256": "",
+      "DType": "",
+      "FileBytes": 0,
+      "FileSHA256": "",
+      "First": 0,
+      "FortranOrder": false,
+      "HeaderBytes": 0,
+      "Last": 0,
+      "Order": "",
+      "Shape": [
+       0,
+       0
+      ],
+      "Sum": 0,
+      "VersionMajor": 0,
+      "VersionMinor": 0
+     },
+     "Receipt": {
+      "BodySHA256": "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0",
+      "BudgetReservationSHA256": "sha256:32b06aa01bfeeb8881f0d206dc3755b533d11997e1e113ee9fa78bbfa0e6fd1b",
+      "ContractSHA256": "sha256:7d5dc74cfb5bb70f3af806ba817c391d2477bc8c4a689c26e006784265ec382b",
+      "ExecutionProfileSHA256": "sha256:83cb46ad80e62cc87b72da238975235bb04d080dbce309bc81d2127120e8cfb6",
+      "FileSHA256": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+      "Freshness": "plan_epoch:stream-p3-1",
+      "MaxBodyBytes": 8388608,
+      "MaxFileBytes": 8388736,
+      "PreparationSHA256": "sha256:c6deee8a6f103cfcc7ef70b9bfc853a778022802979f3072e0a20622d552428b",
+      "PrivacyPartition": "run-p3-private"
+     },
+     "SourceIdentity": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+     "State": "Claimed"
+    },
+    "staged_object_claim_joined": true,
+    "token_claims": 1,
+    "token_consumed": 1,
+    "token_discarded": 0,
+    "typed_metadata": {
+     "BodyBytes": 8388608,
+     "BodySHA256": "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0",
+     "DType": "<i8",
+     "FileBytes": 8388736,
+     "FileSHA256": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+     "First": 0,
+     "FortranOrder": false,
+     "HeaderBytes": 128,
+     "Last": 1048575,
+     "Order": "C",
+     "Shape": [
+      1024,
+      1024
+     ],
+     "Sum": 549755289600,
+     "VersionMajor": 1,
+     "VersionMinor": 0
+    },
+    "verified_target_guest": true
+   }
+  },
+  "macos": {
+   "arch": "arm64",
+   "binary_sha256": "sha256:ab8d5597bc8dca9bff19ad4e56eec86fd2c2b4dba8ae44ccf51f7e3eeff5f5f1",
+   "cpu": "Apple M4",
+   "memory_bytes": 17179869184,
+   "os": "Darwin 25.4.0",
+   "raw_report_sha256": "sha256:3567f887e435f7e1861d094a27cc6b34efb3cb14dfd279e819f6c282a8549438",
+   "report": {
+    "artifact_sha256": "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad",
+    "artificial_read_delay_nanos": 200000000,
+    "authorized_starts": 1,
+    "candidate_call": "numpy.load",
+    "claim_sha256": "sha256:d3a07779f6789c6c2e46e5ffe6b5340cb539173c72a4fa7039e13a69c9e8f582",
+    "contract_sha256": "sha256:7d5dc74cfb5bb70f3af806ba817c391d2477bc8c4a689c26e006784265ec382b",
+    "decode_before_final": true,
+    "decode_completed_nanos": 228684167,
+    "final_source_released_nanos": 502089083,
+    "later_syntax_rejected": true,
+    "logical_parity": true,
+    "no_contract_starts": 0,
+    "physical_capability": "sources.read",
+    "physical_outcome_bytes": 105,
+    "plan_sha256": "sha256:155b46a29b6acadacdeb34e5753676d656e96f7d64641fd86e3e15b3807f71a1",
+    "preparation_sha256": "sha256:c6deee8a6f103cfcc7ef70b9bfc853a778022802979f3072e0a20622d552428b",
+    "read_before_final": true,
+    "read_completed_nanos": 215412417,
+    "read_started_nanos": 99875,
+    "result": {
+     "shape": [
+      1024,
+      1024
+     ],
+     "sum": 549755289600
+    },
+    "schema_version": "pysolate.prepared-data-probe.v3",
+    "staged": {
+     "BodyBytes": 0,
+     "Counters": {
+      "LogicalClaimBytes": 8388608,
+      "LogicalClaims": 1,
+      "PhysicalCancellations": 0,
+      "PhysicalDecodedBytes": 8388608,
+      "PhysicalDecodes": 1,
+      "PhysicalMaterializations": 1,
+      "PhysicalMaterializedBytes": 8388608,
+      "PhysicalOrphans": 0,
+      "PhysicalReadBytes": 8388736,
+      "PhysicalReads": 1,
+      "PhysicalRejections": 0,
+      "PhysicalSealedBytes": 8388608,
+      "PhysicalSeals": 1,
+      "PhysicalSourceVerifications": 1
+     },
+     "Disposition": "",
+     "ID": "sha256:c6deee8a6f103cfcc7ef70b9bfc853a778022802979f3072e0a20622d552428b",
+     "Metadata": {
+      "BodyBytes": 0,
+      "BodySHA256": "",
+      "DType": "",
+      "FileBytes": 0,
+      "FileSHA256": "",
+      "First": 0,
+      "FortranOrder": false,
+      "HeaderBytes": 0,
+      "Last": 0,
+      "Order": "",
+      "Shape": [
+       0,
+       0
+      ],
+      "Sum": 0,
+      "VersionMajor": 0,
+      "VersionMinor": 0
+     },
+     "Receipt": {
+      "BodySHA256": "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0",
+      "BudgetReservationSHA256": "sha256:32b06aa01bfeeb8881f0d206dc3755b533d11997e1e113ee9fa78bbfa0e6fd1b",
+      "ContractSHA256": "sha256:7d5dc74cfb5bb70f3af806ba817c391d2477bc8c4a689c26e006784265ec382b",
+      "ExecutionProfileSHA256": "sha256:83cb46ad80e62cc87b72da238975235bb04d080dbce309bc81d2127120e8cfb6",
+      "FileSHA256": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+      "Freshness": "plan_epoch:stream-p3-1",
+      "MaxBodyBytes": 8388608,
+      "MaxFileBytes": 8388736,
+      "PreparationSHA256": "sha256:c6deee8a6f103cfcc7ef70b9bfc853a778022802979f3072e0a20622d552428b",
+      "PrivacyPartition": "run-p3-private"
+     },
+     "SourceIdentity": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+     "State": "Claimed"
+    },
+    "staged_object_claim_joined": true,
+    "token_claims": 1,
+    "token_consumed": 1,
+    "token_discarded": 0,
+    "typed_metadata": {
+     "BodyBytes": 8388608,
+     "BodySHA256": "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0",
+     "DType": "<i8",
+     "FileBytes": 8388736,
+     "FileSHA256": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+     "First": 0,
+     "FortranOrder": false,
+     "HeaderBytes": 128,
+     "Last": 1048575,
+     "Order": "C",
+     "Shape": [
+      1024,
+      1024
+     ],
+     "Sum": 549755289600,
+     "VersionMajor": 1,
+     "VersionMinor": 0
+    },
+    "verified_target_guest": true
+   }
+  }
+ },
+ "schema_version": "pysolate.prepared-data-phase3-object-join-evidence.v2",
+ "source_commit": "c671284fc8b2457baeed5385232a5b37489fe7e7",
+ "source_tree": "5952b1f6412ddb3205ace2b99a6c67489fde71a3",
+ "validation": {
+  "focused_race": "pass",
+  "focused_test": "pass",
+  "focused_vet": "pass",
+  "real_numpy_guest_linux": "pass",
+  "real_numpy_guest_macos": "pass",
+  "remote_stage_removed": true
+ }
+}

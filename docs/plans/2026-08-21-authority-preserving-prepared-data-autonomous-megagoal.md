@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Closed on 2026-08-21; mechanism prototype complete, promotion rejected at Phase 7.
+**Status:** Closed on 2026-08-21; fixed mechanism prototype complete, including the post-closeout object/token join. No production optimizer/API promotion.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -390,6 +390,19 @@ observed economics
 prototype-only limitations
 deferred production/generalization claims
 ```
+
+### Post-closeout fixed object join
+
+The Phase 7 review correctly rejected the old probe's independent scalar-token and staged-object claims. Commits `1fa7f99cfbc5145a6873af58795707e85618d28e` and `c671284fc8b2457baeed5385232a5b37489fe7e7` close that fixed-lane gap and harden the immutable body check without reopening the campaign or adding a generic materialization API:
+
+- the prepared-region decision binds preparation, contract, exact body, execution profile, import closure and capability Plan;
+- one Host claim guard consumes the ready token and exact sealed `StagedObject` atomically;
+- guard rejection leaves both token and object unconsumed;
+- the Guest checks the copied body's SHA-256 before invoking the claim;
+- successful claim clears the Host body and records exactly one logical claim with no orphan;
+- macOS arm64 and Linux amd64 real-NumPy probes pass under `docs/evidence/prepared-data-phase3-v2.json`.
+
+Private-COW remains prior execution substrate rather than a prepared-data novelty. The paper-facing contribution is the authority-preserving split between qualified early physical work and exact dynamic logical effect, including safe discard/fallback when speculation is invalid. Observed interval tracing is not required for that claim and is intentionally outside scope.
 
 ---
 

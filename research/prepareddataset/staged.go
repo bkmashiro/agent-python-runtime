@@ -12,6 +12,7 @@ var (
 	ErrInvalidTransition        = errors.New("invalid staged-object transition")
 	ErrInvalidObjectID          = errors.New("invalid staged-object identity")
 	ErrInvalidLifecycleArgument = errors.New("invalid staged-object lifecycle argument")
+	ErrClaimBindingMismatch     = errors.New("staged-object claim binding mismatch")
 )
 
 // State is the physical/logical lifecycle of one Run-private staged object.
@@ -259,6 +260,31 @@ func (object *StagedObject) Claim() (DecodedArray, error) {
 	object.counters.LogicalClaims++
 	object.counters.LogicalClaimBytes += uint64(len(claimed.Body))
 	return claimed, nil
+}
+
+// ClaimBoundMaterialization consumes the exact sealed object after a separate
+// Guest transfer has proved the same body identity. It avoids creating a second
+// body copy solely to advance the logical lifecycle.
+func (object *StagedObject) ClaimBoundMaterialization(bodySHA256 string, bodyBytes uint64) error {
+	if object == nil {
+		return ErrInvalidTransition
+	}
+	object.mu.Lock()
+	defer object.mu.Unlock()
+	if object.state != StateSealed {
+		return invalidTransition(object.state, StateClaimed)
+	}
+	if bodySHA256 != object.receipt.BodySHA256 || bodyBytes != object.receipt.MaxBodyBytes ||
+		object.sealed.Metadata.BodySHA256 != bodySHA256 || uint64(len(object.sealed.Body)) != bodyBytes {
+		return ErrClaimBindingMismatch
+	}
+	if err := object.transitionLocked(StateClaimed); err != nil {
+		return err
+	}
+	object.clearBodyLocked()
+	object.counters.LogicalClaims++
+	object.counters.LogicalClaimBytes += bodyBytes
+	return nil
 }
 
 func (object *StagedObject) Orphan() error {

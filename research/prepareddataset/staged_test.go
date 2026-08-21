@@ -57,6 +57,38 @@ func TestStagedObjectRejectsUnboundHostReceipt(t *testing.T) {
 	}
 }
 
+func TestStagedObjectClaimBoundMaterializationRejectsDriftBeforeAtomicClaim(t *testing.T) {
+	object, err := newTestStagedObject("bound-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := object.IssueRead(CanonicalFileBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.VerifySource(CanonicalFileSHA256); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Decode(CanonicalFixture()); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Seal(); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.ClaimBoundMaterialization(CanonicalFileSHA256, CanonicalBodyBytes); !errors.Is(err, ErrClaimBindingMismatch) {
+		t.Fatalf("drifted binding=%v", err)
+	}
+	if object.State() != StateSealed {
+		t.Fatalf("drift consumed object: %s", object.State())
+	}
+	if err := object.ClaimBoundMaterialization(CanonicalBodySHA256, CanonicalBodyBytes); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := object.Snapshot()
+	if snapshot.State != StateClaimed || snapshot.BodyBytes != 0 || snapshot.Counters.LogicalClaims != 1 || snapshot.Counters.LogicalClaimBytes != CanonicalBodyBytes {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func TestStagedObjectLifecycleAndCounters(t *testing.T) {
 	object, err := newTestStagedObject("run-1")
 	if err != nil {

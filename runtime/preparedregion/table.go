@@ -20,6 +20,12 @@ type PreparedRegionEntry struct {
 	Capsule  PreparedRegionCapsule
 }
 
+// PreparedRegionClaimGuard atomically joins a ready scalar token to an
+// additional Host-owned claim before either side is consumed.
+type PreparedRegionClaimGuard interface {
+	ClaimPreparedRegion(PreparedRegionDecision, PreparedRegionCapsule) error
+}
+
 type PreparedRegionTableEvidence struct {
 	SchemaVersion  string `json:"schema_version"`
 	Ready          uint32 `json:"ready"`
@@ -47,15 +53,20 @@ type preparedRegionTableEntry struct {
 }
 
 type PreparedRegionTable struct {
-	mu       sync.Mutex
-	entries  map[string]*preparedRegionTableEntry
-	closed   bool
-	claims   uint32
-	rejected uint32
+	mu         sync.Mutex
+	entries    map[string]*preparedRegionTableEntry
+	claimGuard PreparedRegionClaimGuard
+	closed     bool
+	claims     uint32
+	rejected   uint32
 }
 
 func NewPreparedRegionTable(entries []PreparedRegionEntry) (*PreparedRegionTable, error) {
-	table := &PreparedRegionTable{entries: make(map[string]*preparedRegionTableEntry, len(entries))}
+	return NewPreparedRegionTableWithClaimGuard(entries, nil)
+}
+
+func NewPreparedRegionTableWithClaimGuard(entries []PreparedRegionEntry, claimGuard PreparedRegionClaimGuard) (*PreparedRegionTable, error) {
+	table := &PreparedRegionTable{entries: make(map[string]*preparedRegionTableEntry, len(entries)), claimGuard: claimGuard}
 	for _, candidate := range entries {
 		if !candidate.Decision.valid() {
 			return nil, ErrInvalidPreparedRegion
@@ -137,6 +148,12 @@ func (table *PreparedRegionTable) Claim(decisionSHA256 string) ([]byte, error) {
 	default:
 		table.rejected++
 		return nil, ErrInvalidPreparedRegion
+	}
+	if table.claimGuard != nil {
+		if err := table.claimGuard.ClaimPreparedRegion(entry.decision, entry.capsule); err != nil {
+			table.rejected++
+			return nil, err
+		}
 	}
 	payload := append([]byte(nil), entry.capsule.Payload...)
 	entry.capsule.Payload = nil

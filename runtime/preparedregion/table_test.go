@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+type testPreparedRegionClaimGuard struct {
+	calls    int
+	decision string
+	capsule  string
+	err      error
+}
+
+func (guard *testPreparedRegionClaimGuard) ClaimPreparedRegion(decision PreparedRegionDecision, capsule PreparedRegionCapsule) error {
+	guard.calls++
+	guard.decision = decision.IdentitySHA256
+	guard.capsule = capsule.IdentitySHA256
+	return guard.err
+}
+
 func preparedRegionFixture(t *testing.T, payload string) (PreparedRegionDecision, PreparedRegionCapsule) {
 	t.Helper()
 	_, decision, err := SealPreparedRegionDecision(validPreparedRegionBinding())
@@ -17,6 +31,36 @@ func preparedRegionFixture(t *testing.T, payload string) (PreparedRegionDecision
 		t.Fatal(err)
 	}
 	return decision, capsule
+}
+
+func TestPreparedRegionTableClaimGuardIsAtomicWithTokenConsumption(t *testing.T) {
+	decision, capsule := preparedRegionFixture(t, `true`)
+	guardErr := errors.New("object binding rejected")
+	guard := &testPreparedRegionClaimGuard{err: guardErr}
+	table, err := NewPreparedRegionTableWithClaimGuard([]PreparedRegionEntry{{Decision: decision, Capsule: capsule}}, guard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := table.Claim(decision.IdentitySHA256); !errors.Is(err, guardErr) {
+		t.Fatalf("guard rejection=%v", err)
+	}
+	if evidence := table.Evidence(); evidence.Ready != 1 || evidence.Consumed != 0 || evidence.Claims != 0 || evidence.RejectedClaims != 1 {
+		t.Fatalf("guard rejection consumed token: %+v", evidence)
+	}
+	guard.err = nil
+	payload, err := table.Claim(decision.IdentitySHA256)
+	if err != nil || string(payload) != `true` {
+		t.Fatalf("guarded claim=(%s,%v)", payload, err)
+	}
+	if guard.calls != 2 || guard.decision != decision.IdentitySHA256 || guard.capsule != capsule.IdentitySHA256 {
+		t.Fatalf("guard=%+v", guard)
+	}
+	if _, err := table.Claim(decision.IdentitySHA256); !errors.Is(err, ErrPreparedRegionConsumed) {
+		t.Fatalf("second claim error=%v", err)
+	}
+	if guard.calls != 2 {
+		t.Fatalf("guard reran after consumption: calls=%d", guard.calls)
+	}
 }
 
 func TestPreparedRegionTableClaimsPinnedCapsuleExactlyOnce(t *testing.T) {

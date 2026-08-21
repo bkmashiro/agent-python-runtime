@@ -112,6 +112,7 @@ type Admission struct {
 	NoExternalInputs        bool                `json:"no_external_inputs"`
 	AnalyzerUnknownObserved bool                `json:"analyzer_unknown_observed"`
 	IdentitySHA256          string              `json:"identity_sha256"`
+	provenance              publicationauth.Token
 }
 
 type admissionIdentity Admission
@@ -314,11 +315,12 @@ func admitAnalysis(declarationRaw []byte, source string, analysis semantic.Analy
 	identity := admission
 	identity.IdentitySHA256 = ""
 	admission.IdentitySHA256 = digestJSON(admissionIdentity(identity))
+	admission.provenance = publicationauth.Mint()
 	return admission, nil
 }
 
 func (admission Admission) Validate() error {
-	if !validOperation(admission.Operation) || admission.SchemaVersion != AdmissionSchemaVersion ||
+	if !admission.provenance.Valid() || !validOperation(admission.Operation) || admission.SchemaVersion != AdmissionSchemaVersion ||
 		admission.ExecutionProfileID != "numpy-core" || admission.OutputName != "array" || !admission.NoExternalInputs ||
 		!admission.AnalyzerUnknownObserved || len(admission.AllowedImports) != 3 || admission.AllowedImports[0] != "base64" ||
 		admission.AllowedImports[1] != "hashlib" || admission.AllowedImports[2] != "numpy" ||

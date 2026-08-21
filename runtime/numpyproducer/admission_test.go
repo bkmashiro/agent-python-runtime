@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/publicationauth"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -202,7 +203,30 @@ func TestExportedAdmitRejectsZeroVerifiedAnalysis(t *testing.T) {
 	}
 }
 
-func TestExecutionResponseMustBeSuccessfulEffectFreeAndSourceBound(t *testing.T) {
+func TestFabricatedAdmissionWithoutOpaqueProvenanceIsRejected(t *testing.T) {
+	raw, _, source := validDeclaration(t)
+	bindings := testBindings()
+	admission, err := admitAnalysis(raw, source, testAnalysis(source, bindings), bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission.provenance = publicationauth.Token{}
+	if !errors.Is(admission.Validate(), ErrBinding) {
+		t.Fatal("fabricated admission validated")
+	}
+	response := map[string]any{
+		"schema_version": "pysolate.agent-response.v1", "status": "ok", "result_present": true,
+		"result": map[string]any{"ok": true}, "error": nil,
+		"metrics":         map[string]any{"capability_calls": 0},
+		"source_contract": map[string]any{"model_source_sha256": admission.SourceSHA256},
+	}
+	encoded, _ := json.Marshal(response)
+	if _, guard, err := validateExecutionResponse(encoded, admission, true); !errors.Is(err, ErrExecution) || guard != (PublicationGuard{}) {
+		t.Fatalf("fabricated admission guard=%+v err=%v", guard, err)
+	}
+}
+
+func TestExecutionResponseMustBeSuccessfulAuthorityBoundAndSourceBound(t *testing.T) {
 	raw, _, source := validDeclaration(t)
 	bindings := testBindings()
 	admission, err := admitAnalysis(raw, source, testAnalysis(source, bindings), bindings)

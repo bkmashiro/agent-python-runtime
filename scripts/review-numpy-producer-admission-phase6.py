@@ -11,12 +11,39 @@ FILES = {
     "darwin_arm64": ROOT / "docs/evidence/numpy-producer-admission-phase6-darwin-arm64-v1.json",
     "linux_amd64": ROOT / "docs/evidence/numpy-producer-admission-phase6-linux-amd64-private-cow-v1.json",
 }
+TOP_LEVEL_KEYS = {
+    "schema_version", "platform", "private_cow_required", "source_commit", "source_tree",
+    "probe_binary_sha256", "artifact_sha256", "declaration", "admission",
+    "producer_analysis_sha256", "final_analysis_sha256", "lineage", "ndarray_descriptor",
+    "blob_descriptor", "publication", "materialization_plan", "producer_analysis", "producer_run",
+    "final_analysis", "consumer_run", "original_run", "consumer_result", "original_result",
+    "result_parity", "supported_producers", "adversarial", "store",
+}
+ALLOWED_BODY_KEYS = {"body_bytes", "body_sha256"}
+
+
+def assert_body_safe(value):
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            lowered = key.lower()
+            assert not ("body" in lowered and lowered not in ALLOWED_BODY_KEYS), key
+            assert lowered not in {"raw", "request", "producer_raw", "raw_body", "body_base64"}, key
+            if lowered == "payload":
+                assert isinstance(nested, bool), key
+            assert_body_safe(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            assert_body_safe(nested)
+    elif isinstance(value, str):
+        assert len(value) <= 256
 subprocess.run(["git", "verify-commit", COMMIT], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 assert subprocess.check_output(["git", "show", "-s", "--format=%T", COMMIT], cwd=ROOT, text=True).strip() == TREE
 for platform, path in FILES.items():
     raw = path.read_bytes()
     assert b"body_base64" not in raw and b"ndarray_body" not in raw and b"result_payload" not in raw
     evidence = json.loads(raw)
+    assert set(evidence) == TOP_LEVEL_KEYS
+    assert_body_safe(evidence)
     assert evidence["schema_version"] == "pysolate.numpy-producer-admission-probe.v1"
     assert evidence["platform"] == platform and evidence["source_commit"] == COMMIT and evidence["source_tree"] == TREE
     assert evidence["artifact_sha256"] == ARTIFACT and evidence["result_parity"] is True

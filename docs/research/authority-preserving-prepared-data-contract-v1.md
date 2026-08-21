@@ -72,7 +72,7 @@ schema_version                  pysolate.prepared-data-contract.v1
 capability                      sources.read
 capability_plan_sha256          exact sealed Plan
 call                            numpy.load
-occurrence                      final source digest + exact span + occurrence 1
+occurrence                      stream epoch + admitted-prefix digest + exact span + canonical arguments + occurrence 1
 resource                        workspace / literal /workspace/input.npy
 source_policy                   immutable_workspace_root
 workspace_root_sha256           exact immutable root
@@ -91,6 +91,15 @@ cost_units                      positive Host budget
 ```
 
 Changing one field changes contract identity. Unknown or omitted fields fail validation. A contract is valid only when its referenced capability is independently eligible for existing read pre-dispatch.
+
+The Host declaration cannot bind a final-source digest before streaming generation has produced it. Its occurrence selector therefore binds the stream epoch, admitted-prefix digest, exact span, canonical call arguments and dynamic occurrence `1`. The later claim adds the sealed final-source digest and proves that the final source extends the admitted prefix without changing the occurrence:
+
+```text
+PreparationIdentity = stream epoch + prefix source + span + arguments + Host contract
+ClaimIdentity       = PreparationIdentity + sealed final source + exact unchanged occurrence
+```
+
+The final-source digest is claim authority, not speculative-start authority.
 
 ## Narrow source form
 

@@ -463,14 +463,16 @@ Frozen history and non-goals:
 
 Tasks:
 
-- [ ] RED-test every recursive stage on the unchanged 256-multiply and 512-add sources: source validation, assigned-name collection, reserved-helper scan, patch copy/transform/location/digest, scratch evaluation and final compile.
-- [ ] Replace only demonstrated recursive bottlenecks with bounded iterative traversal/evaluation, preserving exact source, AST identities, helper reservation and fail-closed limits.
-- [ ] Project prepared-region table claim/consume/reject/discard evidence after teardown into the body-free adapter snapshot.
-- [ ] Build a new remediation artifact and bind it append-only to the original P5 failure lineage without changing frozen P5 inputs.
-- [ ] Execute the unchanged 11-case matrix on macOS and Linux private COW; require exact result/error/traceback/log parity, fresh-Guest counts, one-shot selection and complete terminal capsule lifecycle.
-- [ ] Run targeted/race/static gates and an independent post-fix review before accepting evidence.
-- [ ] Record a body-free P5R mechanism report and stage-cost characterization. Do not require positive savings or collect the original campaign.
-- [ ] Update the roadmap, sign, push and stop for a Phase 6 decision.
+- [x] RED-test every recursive stage on the unchanged 256-multiply and 512-add sources: source validation, assigned-name collection, reserved-helper scan, patch copy/transform/location/digest, scratch evaluation and final compile.
+- [x] Replace only demonstrated recursive bottlenecks with bounded iterative traversal/evaluation, preserving exact source, AST identities, helper reservation and fail-closed limits.
+- [x] Project prepared-region table claim/consume/reject/discard evidence after teardown into the body-free adapter snapshot.
+- [x] Build a new remediation artifact and bind it append-only to the original P5 failure lineage without changing frozen P5 inputs.
+- [x] Execute the unchanged 11-case matrix on macOS and Linux private COW; require exact result/error/traceback/log parity, fresh-Guest counts, one-shot selection and complete terminal capsule lifecycle.
+- [x] Run targeted/race/static gates and an independent post-fix review before accepting evidence.
+- [x] Record a body-free P5R mechanism report and stage-cost characterization. Do not require positive savings or collect the original campaign.
+- [x] Update the roadmap, sign, push and stop for a Phase 6 decision.
+
+**Observed P5R closure (2026-08-21): passed.** Analyzer v10 now uses deterministic iterator-framed AST traversal, digest and location repair with explicit 8,192-node, 1,024-depth, 256 recursive-visitor-depth and 1,024 scalar-operator limits. Unsupported deep shapes fail closed before recursive visitors; the admitted scalar lane uses iterative post-order analysis and scratch evaluation. Patch emission reparses byte-identical source instead of deep-copying the AST, binds the final AST to the analyzed decision, and teardown re-projects terminal table evidence after close. Final artifact `sha256:62454f9689ae4a11e45d51398e1d605be91b58b472eaafc26a994cb5669f62e9` and harness `sha256:ea88c6f2de16e5932c5211158b94c9d1efaa5d598096a0643def9276e153d042` passed all 11 unchanged cases on macOS (160.30 s) and Linux private COW (842.10 s). Independent review findings on recursion-dependent digests, high-fanout working sets, unsupported deep shapes and final-AST binding were reproduced and fixed. Four body-free diagnostic cost records show fresh-Guest provisioning dominates wall time; economics remains characterization only. The original P5 no-go, immutable matrix/preregistration/artifact and `timing_samples_observed=0` remain unchanged, and its 80-record campaign was not started.
 
 **Gate P5R-M:** All unchanged 11 cases pass under the new remediation artifact with no semantic, freshness, replay, authority or lifecycle-evidence drift. If CPython compilation itself cannot admit a frozen deep source without prohibited global/runtime broadening, retain the exact blocker and close P5R honestly. Economics cannot override a mechanism failure and cannot block a mechanism success.
 

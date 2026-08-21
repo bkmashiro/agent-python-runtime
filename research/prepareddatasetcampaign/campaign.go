@@ -68,7 +68,18 @@ type Manifest struct {
 	Trials                        int    `json:"trials"`
 	Consumers                     []int  `json:"consumers"`
 	LeadGapMS                     []int  `json:"lead_gap_ms"`
+	TrialOrder                    string `json:"trial_order"`
+	FanoutWarmupFreshGuests       uint64 `json:"fanout_warmup_fresh_guests"`
+	EagerWarmupFreshGuests        uint64 `json:"eager_warmup_fresh_guests"`
+	PayloadExtensionsEntered      bool   `json:"payload_extensions_entered"`
 	LinuxPlatform                 string `json:"linux_platform"`
+	LinuxKernel                   string `json:"linux_kernel"`
+	LinuxCPU                      string `json:"linux_cpu"`
+	LinuxMemoryKiB                uint64 `json:"linux_memory_kib"`
+	DarwinPlatform                string `json:"darwin_platform"`
+	DarwinOS                      string `json:"darwin_os"`
+	DarwinCPU                     string `json:"darwin_cpu"`
+	DarwinMemoryBytes             uint64 `json:"darwin_memory_bytes"`
 	DarwinMechanismEvidenceSHA256 string `json:"darwin_mechanism_evidence_sha256"`
 }
 
@@ -142,7 +153,15 @@ func Build(manifest Manifest, trials []Trial) (Report, error) {
 }
 
 func validManifest(m Manifest) bool {
-	return m.SchemaVersion == "pysolate.prepared-data-campaign-manifest.v1" && m.PreregistrationSHA256 != "" && m.SourceCommit != "" && m.SourceTree != "" && m.ArtifactSHA256 != "" && m.FixtureFileSHA256 == researchdata.CanonicalFileSHA256 && m.FixtureBodySHA256 == researchdata.CanonicalBodySHA256 && m.PayloadBytes == researchdata.CanonicalBodyBytes && m.Trials == 3 && equalInts(m.Consumers, []int{1, 2, 4}) && equalInts(m.LeadGapMS, []int{0, 250, 1000}) && m.LinuxPlatform == "linux_amd64" && m.DarwinMechanismEvidenceSHA256 != ""
+	return m.SchemaVersion == "pysolate.prepared-data-campaign-manifest.v1" && m.PreregistrationSHA256 != "" &&
+		m.SourceCommit != "" && m.SourceTree != "" && m.ArtifactSHA256 != "" &&
+		m.FixtureFileSHA256 == researchdata.CanonicalFileSHA256 && m.FixtureBodySHA256 == researchdata.CanonicalBodySHA256 &&
+		m.PayloadBytes == researchdata.CanonicalBodyBytes && m.Trials == 3 && equalInts(m.Consumers, []int{1, 2, 4}) &&
+		equalInts(m.LeadGapMS, []int{0, 250, 1000}) && m.TrialOrder == "deterministic_alternating" &&
+		m.FanoutWarmupFreshGuests == 4 && m.EagerWarmupFreshGuests == 1 && !m.PayloadExtensionsEntered &&
+		m.LinuxPlatform == "linux_amd64" && m.LinuxKernel != "" && m.LinuxCPU != "" && m.LinuxMemoryKiB > 0 &&
+		m.DarwinPlatform == "darwin_arm64" && m.DarwinOS != "" && m.DarwinCPU != "" && m.DarwinMemoryBytes > 0 &&
+		m.DarwinMechanismEvidenceSHA256 != ""
 }
 
 func recordsFor(trial Trial, n, gapMS int) ([]Record, error) {

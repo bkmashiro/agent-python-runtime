@@ -44,7 +44,7 @@ func TestBuildCampaignFailsClosed(t *testing.T) {
 }
 
 func validManifestForTest() Manifest {
-	return Manifest{SchemaVersion: "pysolate.prepared-data-campaign-manifest.v1", PreregistrationSHA256: "sha256:pre", SourceCommit: "commit", SourceTree: "tree", ArtifactSHA256: "sha256:artifact", FixtureFileSHA256: researchdata.CanonicalFileSHA256, FixtureBodySHA256: researchdata.CanonicalBodySHA256, PayloadBytes: researchdata.CanonicalBodyBytes, Trials: 3, Consumers: []int{1, 2, 4}, LeadGapMS: []int{0, 250, 1000}, LinuxPlatform: "linux_amd64", DarwinMechanismEvidenceSHA256: "sha256:darwin"}
+	return Manifest{SchemaVersion: "pysolate.prepared-data-campaign-manifest.v1", PreregistrationSHA256: "sha256:pre", SourceCommit: "commit", SourceTree: "tree", ArtifactSHA256: "sha256:artifact", FixtureFileSHA256: researchdata.CanonicalFileSHA256, FixtureBodySHA256: researchdata.CanonicalBodySHA256, PayloadBytes: researchdata.CanonicalBodyBytes, Trials: 3, Consumers: []int{1, 2, 4}, LeadGapMS: []int{0, 250, 1000}, TrialOrder: "deterministic_alternating", FanoutWarmupFreshGuests: 4, EagerWarmupFreshGuests: 1, PayloadExtensionsEntered: false, LinuxPlatform: "linux_amd64", LinuxKernel: "kernel", LinuxCPU: "cpu", LinuxMemoryKiB: 1, DarwinPlatform: "darwin_arm64", DarwinOS: "os", DarwinCPU: "cpu", DarwinMemoryBytes: 1, DarwinMechanismEvidenceSHA256: "sha256:darwin"}
 }
 func fanoutForTest(trial int) fanout.Report {
 	r := fanout.Report{SchemaVersion: fanout.SchemaVersion, ArtifactSHA256: "sha256:artifact", FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: researchdata.CanonicalBodyBytes, PackagePrepareOnce: true, HostReadNanos: uint64(10 + trial), HostDecodeNanos: uint64(20 + trial), WarmupFreshGuests: 4, MutationIsolated: true}

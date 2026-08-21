@@ -56,13 +56,13 @@ func TestExactDeclarationSourceAndAnalysisAreAdmitted(t *testing.T) {
 		t.Fatalf("decoded=%+v err=%v", decoded, err)
 	}
 	bindings := testBindings()
-	admission, err := Admit(raw, source, testAnalysis(source, bindings), bindings)
+	admission, err := admitAnalysis(raw, source, testAnalysis(source, bindings), bindings)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if admission.DeclarationSHA256 != declaration.IdentitySHA256 || admission.SourceSHA256 != Digest([]byte(source)) ||
 		admission.Operation != OperationArangeAffineI64 || admission.OutputName != "array" || !admission.NoExternalInputs ||
-		admission.AnalyzerUnknownAccepted != true || admission.ExecutionProfileID != "numpy-core" {
+		admission.AnalyzerUnknownObserved != true || admission.ExecutionProfileID != "numpy-core" {
 		t.Fatalf("admission=%+v", admission)
 	}
 	for _, required := range []string{"np.__version__ == '1.26.0b1'", "dtype=np.int64", ".reshape((2, 3))", ".copy(order='C')", "body_base64"} {
@@ -121,7 +121,7 @@ func TestDeclarationAndSourcePolicyRejectsDrift(t *testing.T) {
 		"unknown_call": source + "\ncallback(array)", "external_input": strings.Replace(source, "stop = 13", "stop = inputs['stop']", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Admit(raw, changed, analysis, bindings); !errors.Is(err, ErrSourcePolicy) {
+			if _, err := admitAnalysis(raw, changed, analysis, bindings); !errors.Is(err, ErrSourcePolicy) {
 				t.Fatalf("err=%v", err)
 			}
 		})
@@ -158,7 +158,7 @@ func TestFrozenAdversarialProducerSourcesRemainOutsideClosedLanguage(t *testing.
 	}
 	for _, source := range sources {
 		analysis := testAnalysis(source, bindings)
-		if _, err := Admit(raw, source, analysis, bindings); !errors.Is(err, ErrSourcePolicy) {
+		if _, err := admitAnalysis(raw, source, analysis, bindings); !errors.Is(err, ErrSourcePolicy) {
 			t.Fatalf("frozen adversarial producer admitted: %v", err)
 		}
 	}
@@ -183,21 +183,29 @@ func TestAdmissionRejectsAnalysisAndBindingDrift(t *testing.T) {
 	for index, mutate := range mutations {
 		analysis := base
 		mutate(&analysis)
-		if _, err := Admit(raw, source, analysis, bindings); err == nil {
+		if _, err := admitAnalysis(raw, source, analysis, bindings); err == nil {
 			t.Fatalf("mutation %d admitted", index)
 		}
 	}
 	profileDrift := bindings
 	profileDrift.ExecutionProfileID = "base"
-	if _, err := Admit(raw, source, base, profileDrift); !errors.Is(err, ErrBinding) {
+	if _, err := admitAnalysis(raw, source, base, profileDrift); !errors.Is(err, ErrBinding) {
 		t.Fatalf("profile drift err=%v", err)
+	}
+}
+
+func TestExportedAdmitRejectsZeroVerifiedAnalysis(t *testing.T) {
+	raw, declaration, _ := validDeclaration(t)
+	source, _ := RenderSource(declaration)
+	if _, err := Admit(raw, source, semantic.VerifiedAnalysis{}, testBindings()); !errors.Is(err, ErrAnalysis) {
+		t.Fatalf("zero verified analysis err=%v", err)
 	}
 }
 
 func TestExecutionResponseMustBeSuccessfulEffectFreeAndSourceBound(t *testing.T) {
 	raw, _, source := validDeclaration(t)
 	bindings := testBindings()
-	admission, err := Admit(raw, source, testAnalysis(source, bindings), bindings)
+	admission, err := admitAnalysis(raw, source, testAnalysis(source, bindings), bindings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +215,10 @@ func TestExecutionResponseMustBeSuccessfulEffectFreeAndSourceBound(t *testing.T)
 		"source_contract": map[string]any{"model_source_sha256": admission.SourceSHA256},
 	}
 	encoded, _ := json.Marshal(response)
-	result, guard, err := ValidateExecutionResponse(encoded, admission)
+	if _, guard, err := validateExecutionResponse(encoded, admission, false); !errors.Is(err, ErrExecution) || guard != (PublicationGuard{}) {
+		t.Fatalf("unbound execution guard=%+v err=%v", guard, err)
+	}
+	result, guard, err := validateExecutionResponse(encoded, admission, true)
 	if err != nil || len(result) == 0 || !guard.Completed || !guard.Succeeded || !guard.EffectFree || !guard.TerminalCertain {
 		t.Fatalf("result=%s guard=%+v err=%v", result, guard, err)
 	}
@@ -224,7 +235,7 @@ func TestExecutionResponseMustBeSuccessfulEffectFreeAndSourceBound(t *testing.T)
 			}
 			mutate(copyValue)
 			encoded, _ := json.Marshal(copyValue)
-			if _, guard, err := ValidateExecutionResponse(encoded, admission); err == nil || guard != (PublicationGuard{}) {
+			if _, guard, err := validateExecutionResponse(encoded, admission, true); err == nil || guard != (PublicationGuard{}) {
 				t.Fatalf("guard=%+v err=%v", guard, err)
 			}
 		})

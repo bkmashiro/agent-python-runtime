@@ -195,20 +195,20 @@ func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyprodu
 		stages.AnalysisNanos += timing.ExecutionNanos
 		stages.ProducerGuestProvisionNanos += timing.ProvisionNanos
 		addPlacement(&placements, timing)
-		admission, err := numpyproducer.Admit(declarationRaw, producerSource, analysis, bindings)
+		admission, err := numpyproducer.Admit(declarationRaw, producerSource, analysis.Verified, bindings)
 		if err != nil {
 			return numpyreuse.TrialRecord{}, err
 		}
 		declarationSHA, sourceSHA, inputsSHA, passSHA = declaration.IdentitySHA256, admission.SourceSHA256, admission.InputsSHA256, admission.PassRegistrationSHA256
 		producerRequest := buildRunRequest("producer-"+trialID, producerSource, []string{"base64", "hashlib", "numpy"})
-		producerRaw, _, timing, err := runner.Run(producerRequest)
+		producerExecution, _, timing, err := runner.RunProducer(producerRequest, admission)
 		if err != nil {
 			return numpyreuse.TrialRecord{}, err
 		}
 		stages.ProducerGuestProvisionNanos += timing.ProvisionNanos
 		stages.ProducerExecutionNanos += timing.ExecutionNanos
 		addPlacement(&placements, timing)
-		producerValue, guard, err := numpyproducer.ValidateExecutionResponse(producerRaw, admission)
+		producerValue, guard, err := numpyproducer.ValidateExecutionResponse(producerExecution, admission)
 		if err != nil {
 			return numpyreuse.TrialRecord{}, err
 		}
@@ -258,8 +258,8 @@ func executeTrial(ctx context.Context, runner *engineRunner, bindings numpyprodu
 			stages.AnalysisNanos += timing.ExecutionNanos
 			stages.ConsumerGuestProvisionNanos += timing.ProvisionNanos
 			addPlacement(&placements, timing)
-			_, lineage, err := numpyproducer.SealPreparedLineage(admission, declaration, plan, finalAnalysis)
-			if err != nil || lineage.Validate(admission) != nil {
+			_, lineage, err := numpyproducer.SealPreparedLineage(admission, declaration, plan, finalAnalysis.Verified)
+			if err != nil || lineage.Validate(admission, plan) != nil {
 				return numpyreuse.TrialRecord{}, errors.New("prepared lineage rejected")
 			}
 			_, envelope, timing, err := runner.Run(plan.Request)

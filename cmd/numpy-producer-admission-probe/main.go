@@ -59,6 +59,11 @@ type supportedProducerEvidence struct {
 	Execution      runEvidence    `json:"execution"`
 }
 
+type exactAnalysis struct {
+	Verified semantic.VerifiedAnalysis
+	Analysis semantic.Analysis
+}
+
 type consumerValue struct {
 	First       int64 `json:"first"`
 	Sum         int64 `json:"sum"`
@@ -150,20 +155,21 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	producerAnalysis, producerAnalysisEvidence, err := analyzeFresh(ctx, b, *privateCOW, "producer-analysis", producerSource, bindings)
+	producerExact, producerAnalysisEvidence, err := analyzeFresh(ctx, b, *privateCOW, "producer-analysis", producerSource, bindings)
 	if err != nil {
 		fail(err)
 	}
-	admission, err := numpyproducer.Admit(declarationRaw, producerSource, producerAnalysis, bindings)
+	producerAnalysis := producerExact.Analysis
+	admission, err := numpyproducer.Admit(declarationRaw, producerSource, producerExact.Verified, bindings)
 	if err != nil {
 		fail(err)
 	}
 	producerRequest := buildRequest("producer-run", producerSource, []string{"base64", "hashlib", "numpy"})
-	producerRaw, producerRunEvidence, err := runFresh(ctx, b, *privateCOW, "producer-run", producerRequest)
+	producerExecution, producerRunEvidence, err := runVerifiedProducerFresh(ctx, b, *privateCOW, "producer-run", producerRequest, admission)
 	if err != nil {
 		fail(err)
 	}
-	producerResult, guard, err := numpyproducer.ValidateExecutionResponse(producerRaw, admission)
+	producerResult, guard, err := numpyproducer.ValidateExecutionResponse(producerExecution, admission)
 	if err != nil {
 		fail(err)
 	}
@@ -201,12 +207,13 @@ func main() {
 		fail(err)
 	}
 	finalSource := requestSource(plan.Request)
-	finalAnalysis, finalAnalysisEvidence, err := analyzeFresh(ctx, b, *privateCOW, "final-analysis", finalSource, bindings)
+	finalExact, finalAnalysisEvidence, err := analyzeFresh(ctx, b, *privateCOW, "final-analysis", finalSource, bindings)
 	if err != nil {
 		fail(err)
 	}
-	_, lineage, err := numpyproducer.SealPreparedLineage(admission, declaration, plan, finalAnalysis)
-	if err != nil || lineage.Validate(admission) != nil {
+	finalAnalysis := finalExact.Analysis
+	_, lineage, err := numpyproducer.SealPreparedLineage(admission, declaration, plan, finalExact.Verified)
+	if err != nil || lineage.Validate(admission, plan) != nil {
 		fail(errors.Join(err, numpyproducer.ErrLineage))
 	}
 	consumerRaw, consumerRunEvidence, err := runFresh(ctx, b, *privateCOW, "consumer-run", plan.Request)
@@ -233,7 +240,7 @@ func main() {
 		fail(fmt.Errorf("result parity failed original=%+v consumer=%+v", originalResult, materialized.Value))
 	}
 	supported := runSupportedProducers(ctx, b, *privateCOW, bindings)
-	adversarial := runAdversarial(ctx, b, *privateCOW, declarationRaw, producerSource, producerAnalysis, bindings)
+	adversarial := runAdversarial(ctx, b, *privateCOW, declarationRaw, producerSource, producerExact, bindings)
 	if err := store.Close(); err != nil {
 		fail(err)
 	}
@@ -266,21 +273,22 @@ func runSupportedProducers(ctx context.Context, b bundle, privateCOW bool, bindi
 			fail(err)
 		}
 		source, _ := numpyproducer.RenderSource(declaration)
-		analysis, analysisEvidence, err := analyzeFresh(ctx, b, privateCOW, "supported-analysis-"+declaration.Operation, source, bindings)
+		exact, analysisEvidence, err := analyzeFresh(ctx, b, privateCOW, "supported-analysis-"+declaration.Operation, source, bindings)
 		if err != nil {
 			fail(err)
 		}
-		admission, err := numpyproducer.Admit(raw, source, analysis, bindings)
+		analysis := exact.Analysis
+		admission, err := numpyproducer.Admit(raw, source, exact.Verified, bindings)
 		if err != nil {
 			fail(err)
 		}
-		responseRaw, executionEvidence, err := runFresh(ctx, b, privateCOW, "supported-run-"+declaration.Operation, buildRequest("supported-run-"+declaration.Operation, source, []string{"base64", "hashlib", "numpy"}))
+		execution, executionEvidence, err := runVerifiedProducerFresh(ctx, b, privateCOW, "supported-run-"+declaration.Operation, buildRequest("supported-run-"+declaration.Operation, source, []string{"base64", "hashlib", "numpy"}), admission)
 		if err != nil {
 			fail(err)
 		}
-		producerValue, _, err := numpyproducer.ValidateExecutionResponse(responseRaw, admission)
+		producerValue, _, err := numpyproducer.ValidateExecutionResponse(execution, admission)
 		if err != nil {
-			fail(fmt.Errorf("supported producer %s execution: %w response=%s", declaration.Operation, err, responseRaw))
+			fail(fmt.Errorf("supported producer %s execution: %w", declaration.Operation, err))
 		}
 		codecBindings := numpycodec.Bindings{
 			ArtifactSHA256: admission.ArtifactSHA256, ExecutionProfileID: admission.ExecutionProfileID,
@@ -301,7 +309,7 @@ func runSupportedProducers(ctx context.Context, b bundle, privateCOW bool, bindi
 	return rows
 }
 
-func runAdversarial(ctx context.Context, b bundle, privateCOW bool, declarationRaw []byte, source string, base semantic.Analysis, bindings numpyproducer.Bindings) []adversarialEvidence {
+func runAdversarial(ctx context.Context, b bundle, privateCOW bool, declarationRaw []byte, source string, base exactAnalysis, bindings numpyproducer.Bindings) []adversarialEvidence {
 	variants := []struct{ name, source string }{
 		{"random", source + "\nnp.random.rand()"},
 		{"time", source + "\nimport datetime\ndatetime.datetime.now()"},
@@ -312,12 +320,13 @@ func runAdversarial(ctx context.Context, b bundle, privateCOW bool, declarationR
 	}
 	rows := make([]adversarialEvidence, 0, len(variants)+3)
 	for _, variant := range variants {
-		analysis, engine, err := analyzeFresh(ctx, b, privateCOW, "adversarial-"+variant.name, variant.source, bindings)
+		exact, engine, err := analyzeFresh(ctx, b, privateCOW, "adversarial-"+variant.name, variant.source, bindings)
+		analysis := exact.Analysis
 		analysisSHA := ""
 		if err == nil {
 			analysisSHA, _, _ = analysis.Identity()
 		}
-		_, admitErr := numpyproducer.Admit(declarationRaw, variant.source, analysis, bindings)
+		_, admitErr := numpyproducer.Admit(declarationRaw, variant.source, exact.Verified, bindings)
 		if admitErr == nil {
 			fail(fmt.Errorf("adversarial source admitted: %s", variant.name))
 		}
@@ -325,16 +334,14 @@ func runAdversarial(ctx context.Context, b bundle, privateCOW bool, declarationR
 	}
 	profileDrift := bindings
 	profileDrift.ExecutionProfileID = "base"
-	_, profileErr := numpyproducer.Admit(declarationRaw, source, base, profileDrift)
-	rows = append(rows, adversarialEvidence{Name: "profile", SourceSHA256: base.SourceSHA256, Rejected: profileErr != nil})
-	analysisDrift := base
-	analysisDrift.SourceSHA256 = digest("stale-source")
-	_, staleErr := numpyproducer.Admit(declarationRaw, source, analysisDrift, bindings)
-	rows = append(rows, adversarialEvidence{Name: "stale_source", SourceSHA256: analysisDrift.SourceSHA256, Rejected: staleErr != nil})
+	_, profileErr := numpyproducer.Admit(declarationRaw, source, base.Verified, profileDrift)
+	rows = append(rows, adversarialEvidence{Name: "profile", SourceSHA256: base.Analysis.SourceSHA256, Rejected: profileErr != nil})
+	_, staleErr := numpyproducer.Admit(declarationRaw, source+"\n# drift", base.Verified, bindings)
+	rows = append(rows, adversarialEvidence{Name: "stale_source", SourceSHA256: digest("stale-source"), Rejected: staleErr != nil})
 	inputDrift := append([]byte(nil), declarationRaw...)
 	inputDrift[0] = ' '
-	_, inputErr := numpyproducer.Admit(inputDrift, source, base, bindings)
-	rows = append(rows, adversarialEvidence{Name: "inputs", SourceSHA256: base.SourceSHA256, Rejected: inputErr != nil})
+	_, inputErr := numpyproducer.Admit(inputDrift, source, base.Verified, bindings)
+	rows = append(rows, adversarialEvidence{Name: "inputs", SourceSHA256: base.Analysis.SourceSHA256, Rejected: inputErr != nil})
 	for _, row := range rows {
 		if !row.Rejected {
 			fail(fmt.Errorf("adversarial case not rejected: %s", row.Name))
@@ -343,15 +350,15 @@ func runAdversarial(ctx context.Context, b bundle, privateCOW bool, declarationR
 	return rows
 }
 
-func analyzeFresh(ctx context.Context, b bundle, privateCOW bool, runID, source string, bindings numpyproducer.Bindings) (semantic.Analysis, engineEvidence, error) {
+func analyzeFresh(ctx context.Context, b bundle, privateCOW bool, runID, source string, bindings numpyproducer.Bindings) (exactAnalysis, engineEvidence, error) {
 	engine, err := newEngine(ctx, b, privateCOW)
 	if err != nil {
-		return semantic.Analysis{}, engineEvidence{}, err
+		return exactAnalysis{}, engineEvidence{}, err
 	}
 	defer engine.Close(context.Background())
 	if privateCOW {
 		if err := requirePrepared(ctx, engine); err != nil {
-			return semantic.Analysis{}, engineEvidence{}, err
+			return exactAnalysis{}, engineEvidence{}, err
 		}
 	}
 	request, err := semantic.NewRequest(source, semantic.Bindings{
@@ -359,11 +366,43 @@ func analyzeFresh(ctx context.Context, b bundle, privateCOW bool, runID, source 
 		ImportClosureSHA256: bindings.ImportClosureSHA256, CapabilityPlanSHA256: bindings.CapabilityPlanSHA256,
 	}, nil)
 	if err != nil {
-		return semantic.Analysis{}, engineEvidence{}, err
+		return exactAnalysis{}, engineEvidence{}, err
 	}
-	analysis, err := semantic.Analyze(ctx, engine, request)
+	verified, err := semantic.AnalyzeVerified(ctx, engine, request)
+	analysis, analysisErr := verified.Analysis()
+	if err == nil {
+		err = analysisErr
+	}
 	evidence := engineEvidence{RunID: runID, COWProbe: engine.COWProbe(), Prepared: engine.PreparedState(), Image: engine.PreparedImageState()}
-	return analysis, evidence, err
+	return exactAnalysis{Verified: verified, Analysis: analysis}, evidence, err
+}
+
+func runVerifiedProducerFresh(ctx context.Context, b bundle, privateCOW bool, runID string, request []byte, admission numpyproducer.Admission) (numpyproducer.VerifiedExecution, runEvidence, error) {
+	engine, err := newEngine(ctx, b, privateCOW)
+	if err != nil {
+		return numpyproducer.VerifiedExecution{}, runEvidence{}, err
+	}
+	defer engine.Close(context.Background())
+	if privateCOW {
+		if err := requirePrepared(ctx, engine); err != nil {
+			return numpyproducer.VerifiedExecution{}, runEvidence{}, err
+		}
+	}
+	execution, err := numpyproducer.RunVerifiedExecution(ctx, engine, request, "", admission)
+	evidence := runEvidence{engineEvidence: engineEvidence{RunID: runID, COWProbe: engine.COWProbe(), Prepared: engine.PreparedState(), Image: engine.PreparedImageState()}}
+	if err != nil {
+		return numpyproducer.VerifiedExecution{}, evidence, err
+	}
+	response, err := execution.Response()
+	if err != nil {
+		return numpyproducer.VerifiedExecution{}, evidence, err
+	}
+	decoded := decodeEnvelope(response)
+	evidence.CapabilityCalls = decoded.Metrics.CapabilityCalls
+	if decoded.Metrics.CapabilityCalls != 0 {
+		return numpyproducer.VerifiedExecution{}, evidence, errors.New("unexpected capability call")
+	}
+	return execution, evidence, nil
 }
 
 func runFresh(ctx context.Context, b bundle, privateCOW bool, runID string, request []byte) ([]byte, runEvidence, error) {

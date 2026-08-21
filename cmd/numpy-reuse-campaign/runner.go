@@ -37,6 +37,11 @@ type callTiming struct {
 	COWRequired    bool
 }
 
+type exactAnalysis struct {
+	Verified semantic.VerifiedAnalysis
+	Analysis semantic.Analysis
+}
+
 type guestEnvelope struct {
 	Status        string          `json:"status"`
 	Error         json.RawMessage `json:"error"`
@@ -131,10 +136,40 @@ func (runner *engineRunner) Run(request []byte) ([]byte, guestEnvelope, callTimi
 	return response, envelope, timing, nil
 }
 
-func (runner *engineRunner) Analyze(source string, bindings numpyproducer.Bindings) (semantic.Analysis, callTiming, error) {
+func (runner *engineRunner) RunProducer(request []byte, admission numpyproducer.Admission) (numpyproducer.VerifiedExecution, guestEnvelope, callTiming, error) {
 	engine, provision, closeAfter, err := runner.acquire()
 	if err != nil {
-		return semantic.Analysis{}, callTiming{}, err
+		return numpyproducer.VerifiedExecution{}, guestEnvelope{}, callTiming{}, err
+	}
+	if closeAfter {
+		defer engine.Close(runner.ctx)
+	}
+	started := time.Now()
+	execution, err := numpyproducer.RunVerifiedExecution(runner.ctx, engine, request, "", admission)
+	timing := callTiming{ProvisionNanos: provision, ExecutionNanos: uint64(time.Since(started)), COWRequired: runner.linuxCOW}
+	probe := engine.COWProbe()
+	timing.COWSelected, timing.Fallback = probe.COWSelected, probe.Fallback
+	if err != nil {
+		return numpyproducer.VerifiedExecution{}, guestEnvelope{}, timing, err
+	}
+	response, err := execution.Response()
+	if err != nil {
+		return numpyproducer.VerifiedExecution{}, guestEnvelope{}, timing, err
+	}
+	var envelope guestEnvelope
+	if json.Unmarshal(response, &envelope) != nil || envelope.Status != "ok" || !envelope.ResultPresent || envelope.Metrics.CapabilityCalls != 0 {
+		return numpyproducer.VerifiedExecution{}, envelope, timing, errors.New("Guest response rejected")
+	}
+	if envelope.Metrics.GuestTimeMS > 0 {
+		timing.GuestNanos = uint64(envelope.Metrics.GuestTimeMS * 1e6)
+	}
+	return execution, envelope, timing, nil
+}
+
+func (runner *engineRunner) Analyze(source string, bindings numpyproducer.Bindings) (exactAnalysis, callTiming, error) {
+	engine, provision, closeAfter, err := runner.acquire()
+	if err != nil {
+		return exactAnalysis{}, callTiming{}, err
 	}
 	if closeAfter {
 		defer engine.Close(runner.ctx)
@@ -144,14 +179,18 @@ func (runner *engineRunner) Analyze(source string, bindings numpyproducer.Bindin
 		ImportClosureSHA256: bindings.ImportClosureSHA256, CapabilityPlanSHA256: bindings.CapabilityPlanSHA256,
 	}, nil)
 	if err != nil {
-		return semantic.Analysis{}, callTiming{}, err
+		return exactAnalysis{}, callTiming{}, err
 	}
 	started := time.Now()
-	analysis, err := semantic.Analyze(runner.ctx, engine, request)
+	verified, err := semantic.AnalyzeVerified(runner.ctx, engine, request)
+	analysis, analysisErr := verified.Analysis()
+	if err == nil {
+		err = analysisErr
+	}
 	timing := callTiming{ProvisionNanos: provision, ExecutionNanos: uint64(time.Since(started)), COWRequired: runner.linuxCOW}
 	probe := engine.COWProbe()
 	timing.COWSelected, timing.Fallback = probe.COWSelected, probe.Fallback
-	return analysis, timing, err
+	return exactAnalysis{Verified: verified, Analysis: analysis}, timing, err
 }
 
 func loadArtifactBundle(root string) (artifactBundle, error) {

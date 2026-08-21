@@ -109,7 +109,7 @@ type Admission struct {
 	RegionSpan              semantic.SourceSpan `json:"region_span"`
 	AllowedImports          []string            `json:"allowed_imports"`
 	NoExternalInputs        bool                `json:"no_external_inputs"`
-	AnalyzerUnknownAccepted bool                `json:"analyzer_unknown_accepted"`
+	AnalyzerUnknownObserved bool                `json:"analyzer_unknown_observed"`
 	IdentitySHA256          string              `json:"identity_sha256"`
 }
 
@@ -260,7 +260,18 @@ result = {
 }`, producer, declaration.DType), nil
 }
 
-func Admit(declarationRaw []byte, source string, analysis semantic.Analysis, bindings Bindings) (Admission, error) {
+// Admit requires an opaque analysis minted by the concrete exact-Guest analyzer.
+// The analysis may conservatively report unknown native effects; that fact is
+// recorded, never upgraded into a purity certificate.
+func Admit(declarationRaw []byte, source string, verified semantic.VerifiedAnalysis, bindings Bindings) (Admission, error) {
+	analysis, err := verified.Analysis()
+	if err != nil {
+		return Admission{}, ErrAnalysis
+	}
+	return admitAnalysis(declarationRaw, source, analysis, bindings)
+}
+
+func admitAnalysis(declarationRaw []byte, source string, analysis semantic.Analysis, bindings Bindings) (Admission, error) {
 	if !validBindings(bindings) {
 		return Admission{}, ErrBinding
 	}
@@ -297,7 +308,7 @@ func Admit(declarationRaw []byte, source string, analysis semantic.Analysis, bin
 		PassConfigSHA256: passConfigSHA256, PassRegistrationSHA256: registration.IdentitySHA256(),
 		OutputName: "array", RegionSpan: analysis.ModuleSpan,
 		AllowedImports: []string{"base64", "hashlib", "numpy"}, NoExternalInputs: true,
-		AnalyzerUnknownAccepted: analysis.ModuleEffects.MayBeUnknown,
+		AnalyzerUnknownObserved: analysis.ModuleEffects.MayBeUnknown,
 	}
 	identity := admission
 	identity.IdentitySHA256 = ""
@@ -308,7 +319,7 @@ func Admit(declarationRaw []byte, source string, analysis semantic.Analysis, bin
 func (admission Admission) Validate() error {
 	if !validOperation(admission.Operation) || admission.SchemaVersion != AdmissionSchemaVersion ||
 		admission.ExecutionProfileID != "numpy-core" || admission.OutputName != "array" || !admission.NoExternalInputs ||
-		!admission.AnalyzerUnknownAccepted || len(admission.AllowedImports) != 3 || admission.AllowedImports[0] != "base64" ||
+		!admission.AnalyzerUnknownObserved || len(admission.AllowedImports) != 3 || admission.AllowedImports[0] != "base64" ||
 		admission.AllowedImports[1] != "hashlib" || admission.AllowedImports[2] != "numpy" ||
 		admission.RegionSpan.StartLine == 0 || admission.RegionSpan.EndLine < admission.RegionSpan.StartLine {
 		return ErrBinding
@@ -350,8 +361,15 @@ type executionResponse struct {
 	} `json:"source_contract"`
 }
 
-func ValidateExecutionResponse(raw []byte, admission Admission) (json.RawMessage, PublicationGuard, error) {
-	if len(raw) == 0 || len(raw) > MaxExecutionResponseBytes || admission.Validate() != nil {
+func ValidateExecutionResponse(execution VerifiedExecution, admission Admission) (json.RawMessage, PublicationGuard, error) {
+	if len(execution.response) == 0 || !executionPropertiesMatch(execution.properties, admission) {
+		return nil, PublicationGuard{}, ErrExecution
+	}
+	return validateExecutionResponse(execution.response, admission, true)
+}
+
+func validateExecutionResponse(raw []byte, admission Admission, authorityBound bool) (json.RawMessage, PublicationGuard, error) {
+	if !authorityBound || len(raw) == 0 || len(raw) > MaxExecutionResponseBytes || admission.Validate() != nil {
 		return nil, PublicationGuard{}, ErrExecution
 	}
 	var response executionResponse

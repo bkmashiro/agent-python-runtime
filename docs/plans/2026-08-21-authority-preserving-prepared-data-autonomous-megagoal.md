@@ -354,7 +354,7 @@ platform      macOS mechanism/control | Linux private-COW
 
 Tasks:
 
-- [ ] Freeze exact artifact, harness, fixture bodies/digests, schedule, trial count, platform and environment contract before formal observation.
+- [x] Freeze exact artifact, harness, fixture bodies/digests, schedule, trial count, platform and environment contract before formal observation.
 - [ ] Record source-generation release/finalization, read, decode, seal, claim, mapping/copy, compute, execution, teardown and critical-path interval union.
 - [ ] Record RSS/PSS where available, bytes copied, mapped bytes, page faults/COW signals, wasted orphan bytes/work and physical/logical operation counts.
 - [ ] Preserve bodies privately; commit canonical identities and body-safe aggregates only.
@@ -480,6 +480,8 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 - 2026-08-21: Phase 3 is complete at `b05a94d58937fda5c39126cd60a34471da3ac414`. A real macOS Guest run begins the exact Host-authorized immutable file read and strict 8 MiB decode before final-source release, keeps the body out of the Broker response, seals Run-private typed staging, and dynamically claims once at unchanged `np.load`; shape `[1024,1024]` and sum `549755289600` match the serial oracle. Clean gpu31 controls prove reached `1/1/0`, branch-not-taken `0/0/1`, and earlier-exception `0/0/1` claim/consume/discard dispositions. Focused tests cover later syntax error, cancellation before/after read issue, late completion, source replacement, corruption, replay and orphan cleanup. Evidence identity is `sha256:172317c7bbfcf51f7a90087718f7a4c5c54bfec3fb4145084f4be2399a12e543`.
 
 - 2026-08-21: Phases 4–5 are complete as mechanism slices at runner `a36398b4a945371a414e35ccda6e2278bf93074c` and checker `09a0bb12e5d0ffc160dd526b737c378db17bb77e`. One immutable NumPy package shard and one dataset image serve fixed N=0/1/2/4 schedules. The 16-coordinate Linux report proves fresh Guests, exact sum parity, COW mutation isolation, zero per-consumer body copy for COW, 8/16/32 MiB private-copy growth, mapped-byte accounting, N=0 orphan bytes, and a data-local reduction followed by fresh scalar consumers. The dedicated object-extent allocator was not built: the allowed bounded full-derived-image path answered the question. Evidence identity is `sha256:d403fa73f54997eb051878657a18659cbe011091910a746697920f4ae6f982e3`. Economics remain explicitly unentered because this single ordered run contains first-observation warmup confounding.
+
+- 2026-08-21: Phase 6 formal manifest was frozen before retained observation at `docs/evidence/prepared-data-phase6-manifest-v1.json` (`sha256:7e6644b73e569ebcd503259dd8356e1e5cee133cfc9eb25602011ebe9e1065f0`). It fixes harness `ccef2d9875ab2f289434012bbdfb4015b99db6b1`, the canonical artifact/fixture, Linux gpu31 and Darwin mechanism environment contracts, 3 trials, N=1/2/4, gaps 0/250/1000 ms, warmed component records, and no 64/256 MiB extension.
 
 ## Short prompt to start this mega-goal
 

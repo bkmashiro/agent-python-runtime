@@ -56,6 +56,7 @@ type report struct {
 	TokenClaims              uint64                `json:"token_claims"`
 	TokenConsumed            uint64                `json:"token_consumed"`
 	TokenDiscarded           uint64                `json:"token_discarded"`
+	StagedObjectClaimJoined  bool                  `json:"staged_object_claim_joined"`
 	Result                   json.RawMessage       `json:"result"`
 	LogicalParity            bool                  `json:"logical_parity"`
 	VerifiedTargetGuest      bool                  `json:"verified_target_guest"`
@@ -189,7 +190,15 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	object, err := researchdata.NewStagedObject(decision.PreparationIdentity)
+	declared := contract.Declaration()
+	object, err := researchdata.NewStagedObject(researchdata.HostReceipt{
+		ContractSHA256: contract.Identity(), PreparationSHA256: decision.PreparationIdentity,
+		FileSHA256: declared.FileSHA256, BodySHA256: declared.BodySHA256,
+		ExecutionProfileSHA256: declared.ExecutionProfileSHA256, PrivacyPartition: declared.PrivacyPartition,
+		Freshness:               declared.Freshness + ":" + declared.StreamEpoch,
+		BudgetReservationSHA256: declared.BudgetReservationSHA256,
+		MaxFileBytes:            declared.MaxFileBytes, MaxBodyBytes: declared.MaxBodyBytes,
+	})
 	if err != nil {
 		fail(err)
 	}
@@ -204,19 +213,23 @@ func main() {
 	go func() {
 		outcome, callErr := prepared.Call(context.Background())
 		if callErr != nil {
+			_ = object.Reject(callErr)
 			preparedCh <- prepareResult{object: object, outcome: outcome, err: callErr}
 			return
 		}
 		_, _, _, body := handler.snapshot()
 		if err := object.VerifySource(researchdata.CanonicalFileSHA256); err != nil {
+			_ = object.Reject(err)
 			preparedCh <- prepareResult{object: object, outcome: outcome, err: err}
 			return
 		}
 		if err := object.Decode(body); err != nil {
+			_ = object.Reject(err)
 			preparedCh <- prepareResult{object: object, outcome: outcome, err: err}
 			return
 		}
 		if err := object.Seal(); err != nil {
+			_ = object.Reject(err)
 			preparedCh <- prepareResult{object: object, outcome: outcome, err: err}
 			return
 		}
@@ -273,7 +286,10 @@ func main() {
 	if tokenEvidence.Claims != 1 || tokenEvidence.Consumed != 1 || tokenEvidence.Discarded != 0 {
 		fail(errors.New("dynamic claim token mismatch"))
 	}
-	if _, err := object.Claim(); err != nil {
+	// The scalar token proves dynamic reach, but the current Guest body-copy
+	// transport is not object-bound. Retire the physical staging as orphaned
+	// rather than misreporting an exact staged-object logical claim.
+	if err := object.Orphan(); err != nil {
 		fail(err)
 	}
 	var oracle struct {
@@ -286,7 +302,7 @@ func main() {
 	starts, readStarted, readCompleted, _ := handler.snapshot()
 	snapshot := object.Snapshot()
 	out := report{
-		SchemaVersion: "pysolate.prepared-data-probe.v1", ArtifactSHA256: profile.ArtifactSHA256(), PlanSHA256: plan.Identity(),
+		SchemaVersion: "pysolate.prepared-data-probe.v2", ArtifactSHA256: profile.ArtifactSHA256(), PlanSHA256: plan.Identity(),
 		ContractSHA256: contract.Identity(), PreparationSHA256: decision.PreparationIdentity, ClaimSHA256: claim.ClaimIdentity,
 		CandidateCall: prepareddataset.PreparedCall, PhysicalCapability: prepareddataset.PreparedCapability,
 		NoContractStarts: 0, AuthorizedStarts: starts, ArtificialReadDelayNanos: uint64(readDelay),
@@ -294,9 +310,10 @@ func main() {
 		FinalSourceReleasedNanos: finalReleased, ReadBeforeFinal: readStarted < finalReleased, DecodeBeforeFinal: preparedResult.decodeCompleted < finalReleased,
 		PhysicalOutcomeBytes: preparedResult.outcome.PhysicalResultBytes, TypedMetadata: materialized.Metadata, Staged: snapshot,
 		TokenClaims: uint64(tokenEvidence.Claims), TokenConsumed: uint64(tokenEvidence.Consumed), TokenDiscarded: uint64(tokenEvidence.Discarded),
-		Result: guestResult, LogicalParity: parity, VerifiedTargetGuest: true, LaterSyntaxRejected: syntaxRejected,
+		StagedObjectClaimJoined: false,
+		Result:                  guestResult, LogicalParity: parity, VerifiedTargetGuest: true, LaterSyntaxRejected: syntaxRejected,
 	}
-	if out.AuthorizedStarts != 1 || !out.ReadBeforeFinal || !out.DecodeBeforeFinal || snapshot.State != researchdata.StateClaimed || snapshot.Counters.LogicalClaims != 1 {
+	if out.AuthorizedStarts != 1 || !out.ReadBeforeFinal || !out.DecodeBeforeFinal || snapshot.State != researchdata.StateOrphaned || snapshot.Counters.LogicalClaims != 0 || snapshot.Counters.PhysicalOrphans != 1 {
 		fail(errors.New("P3 invariants failed"))
 	}
 	encoded, _ := json.Marshal(out)

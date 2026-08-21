@@ -11,8 +11,12 @@ import (
 )
 
 const (
-	EagerSchemaVersion    = "pysolate.prepared-data-eager.v1"
-	CampaignSchemaVersion = "pysolate.prepared-data-campaign.v1"
+	EagerSchemaVersion          = "pysolate.prepared-data-eager.v1"
+	CampaignSchemaVersion       = "pysolate.prepared-data-campaign.v1"
+	frozenPreregistrationSHA256 = "sha256:9f7baa064eff8e19c93651b41decf4f855673fcc5ae767716f023d3de4702bd6"
+	frozenSourceCommit          = "ccef2d9875ab2f289434012bbdfb4015b99db6b1"
+	frozenSourceTree            = "6ecc38d09d37be9eaaab51d2765ca8930592faa9"
+	frozenArtifactSHA256        = "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad"
 )
 
 var ErrInvalidCampaign = errors.New("invalid prepared-data campaign")
@@ -153,8 +157,8 @@ func Build(manifest Manifest, trials []Trial) (Report, error) {
 }
 
 func validManifest(m Manifest) bool {
-	return m.SchemaVersion == "pysolate.prepared-data-campaign-manifest.v1" && m.PreregistrationSHA256 != "" &&
-		m.SourceCommit != "" && m.SourceTree != "" && m.ArtifactSHA256 != "" &&
+	return m.SchemaVersion == "pysolate.prepared-data-campaign-manifest.v1" && m.PreregistrationSHA256 == frozenPreregistrationSHA256 &&
+		m.SourceCommit == frozenSourceCommit && m.SourceTree == frozenSourceTree && m.ArtifactSHA256 == frozenArtifactSHA256 &&
 		m.FixtureFileSHA256 == researchdata.CanonicalFileSHA256 && m.FixtureBodySHA256 == researchdata.CanonicalBodySHA256 &&
 		m.PayloadBytes == researchdata.CanonicalBodyBytes && m.Trials == 3 && equalInts(m.Consumers, []int{1, 2, 4}) &&
 		equalInts(m.LeadGapMS, []int{0, 250, 1000}) && m.TrialOrder == "deterministic_alternating" &&

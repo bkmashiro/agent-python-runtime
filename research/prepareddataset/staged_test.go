@@ -1,13 +1,64 @@
 package prepareddataset
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 )
 
+func newTestStagedObject(label string) (*StagedObject, error) {
+	digest := func(value string) string { return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(value))) }
+	return NewStagedObject(HostReceipt{
+		ContractSHA256: digest("contract:" + label), PreparationSHA256: digest("prepare:" + label),
+		FileSHA256: CanonicalFileSHA256, BodySHA256: CanonicalBodySHA256,
+		ExecutionProfileSHA256: digest("profile"), PrivacyPartition: "run-private", Freshness: "plan_epoch",
+		BudgetReservationSHA256: digest("budget:" + label), MaxFileBytes: CanonicalFileBytes, MaxBodyBytes: CanonicalBodyBytes,
+	})
+}
+
+func TestStagedObjectRejectsUnboundHostReceipt(t *testing.T) {
+	digest := func(value string) string { return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(value))) }
+	valid := HostReceipt{
+		ContractSHA256: digest("contract"), PreparationSHA256: digest("prepare"),
+		FileSHA256: CanonicalFileSHA256, BodySHA256: CanonicalBodySHA256,
+		ExecutionProfileSHA256: digest("profile"), PrivacyPartition: "run-private", Freshness: "plan_epoch:stream-1",
+		BudgetReservationSHA256: digest("budget"), MaxFileBytes: CanonicalFileBytes, MaxBodyBytes: CanonicalBodyBytes,
+	}
+	for name, mutate := range map[string]func(*HostReceipt){
+		"contract":  func(value *HostReceipt) { value.ContractSHA256 = "" },
+		"file":      func(value *HostReceipt) { value.FileSHA256 = digest("other-file") },
+		"profile":   func(value *HostReceipt) { value.ExecutionProfileSHA256 = "" },
+		"privacy":   func(value *HostReceipt) { value.PrivacyPartition = "" },
+		"freshness": func(value *HostReceipt) { value.Freshness = "" },
+		"budget":    func(value *HostReceipt) { value.MaxBodyBytes-- },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			mutate(&candidate)
+			if _, err := NewStagedObject(candidate); !errors.Is(err, ErrInvalidObjectID) {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+	object, err := NewStagedObject(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := object.IssueRead(CanonicalFileBytes - 1); !errors.Is(err, ErrInvalidLifecycleArgument) {
+		t.Fatalf("read err=%v", err)
+	}
+	if err := object.IssueRead(CanonicalFileBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.VerifySource(digest("other-file")); !errors.Is(err, ErrInvalidLifecycleArgument) {
+		t.Fatalf("source err=%v", err)
+	}
+}
+
 func TestStagedObjectLifecycleAndCounters(t *testing.T) {
-	object, err := NewStagedObject("run-1")
+	object, err := newTestStagedObject("run-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +71,7 @@ func TestStagedObjectLifecycleAndCounters(t *testing.T) {
 	if err := object.IssueRead(CanonicalFileBytes); err != nil {
 		t.Fatal(err)
 	}
-	if err := object.VerifySource("source-v1"); err != nil {
+	if err := object.VerifySource(CanonicalFileSHA256); err != nil {
 		t.Fatal(err)
 	}
 	if err := object.Decode(CanonicalFixture()); err != nil {
@@ -69,14 +120,14 @@ func TestStagedObjectLifecycleAndCounters(t *testing.T) {
 }
 
 func TestStagedObjectLateCompletionPublishesOnlyAfterSeal(t *testing.T) {
-	object, err := NewStagedObject("run-late")
+	object, err := newTestStagedObject("run-late")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := object.IssueRead(CanonicalFileBytes); err != nil {
 		t.Fatal(err)
 	}
-	if err := object.VerifySource("source-v1"); err != nil {
+	if err := object.VerifySource(CanonicalFileSHA256); err != nil {
 		t.Fatal(err)
 	}
 	gate := make(chan struct{})
@@ -111,14 +162,14 @@ func TestStagedObjectLateCompletionPublishesOnlyAfterSeal(t *testing.T) {
 }
 
 func TestStagedObjectRejectsDecodeWithoutPartialPublication(t *testing.T) {
-	object, err := NewStagedObject("run-corrupt")
+	object, err := newTestStagedObject("run-corrupt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := object.IssueRead(CanonicalFileBytes); err != nil {
 		t.Fatal(err)
 	}
-	if err := object.VerifySource("source-v1"); err != nil {
+	if err := object.VerifySource(CanonicalFileSHA256); err != nil {
 		t.Fatal(err)
 	}
 	corrupt := CanonicalFixture()
@@ -139,7 +190,7 @@ func TestStagedObjectRejectsDecodeWithoutPartialPublication(t *testing.T) {
 }
 
 func TestStagedObjectCancelBeforePhysicalStart(t *testing.T) {
-	object, err := NewStagedObject("run-cancel-before")
+	object, err := newTestStagedObject("run-cancel-before")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +213,7 @@ func TestStagedObjectTerminalControlsAreOneWay(t *testing.T) {
 		{"reject", func(object *StagedObject) error { return object.Reject(errors.New("source drift")) }, StateRejected},
 	} {
 		t.Run(terminal.name, func(t *testing.T) {
-			object, err := NewStagedObject(terminal.name)
+			object, err := newTestStagedObject(terminal.name)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -180,14 +231,14 @@ func TestStagedObjectTerminalControlsAreOneWay(t *testing.T) {
 }
 
 func TestStagedObjectClaimIsSingleWinnerUnderRace(t *testing.T) {
-	object, err := NewStagedObject("run-race")
+	object, err := newTestStagedObject("run-race")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := object.IssueRead(CanonicalFileBytes); err != nil {
 		t.Fatal(err)
 	}
-	if err := object.VerifySource("source-v1"); err != nil {
+	if err := object.VerifySource(CanonicalFileSHA256); err != nil {
 		t.Fatal(err)
 	}
 	if err := object.Decode(CanonicalFixture()); err != nil {

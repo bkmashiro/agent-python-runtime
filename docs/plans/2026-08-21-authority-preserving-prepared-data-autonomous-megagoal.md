@@ -355,13 +355,13 @@ platform      macOS mechanism/control | Linux private-COW
 Tasks:
 
 - [x] Freeze exact artifact, harness, fixture bodies/digests, schedule, trial count, platform and environment contract before formal observation.
-- [x] Record the joined lifecycle: P2/P3 release/read/decode/seal/exact claim/teardown evidence plus P4/P5/P6 mapping, copy, compute and same-trial critical-path interval unions.
+- [x] Record P2/P3 release/read/decode/seal and exact dynamic-token evidence plus P4/P5/P6 mapping, copy and compute components. The P3 body materialization is not joined to the scalar token.
 - [x] Record process max RSS, copy/encoded/mapped bytes, page faults/COW signals, N=0 orphan bytes/work and physical/logical counts; explicitly record that short-process PSS was not sampled.
 - [x] Preserve raw records privately and commit canonical identities plus body-safe aggregates only.
-- [x] Regenerate 162 records / 54 aggregates from raw reports with strict JSON decoding and fail-closed coordinate, identity, parity and economics checks.
+- [x] Regenerate 162 records / 54 aggregates from raw reports with strict JSON decoding and fail-closed coordinate, frozen producer identity and parity checks. Critical paths are derived from component durations and scheduled lead gaps, not observed interval unions.
 - [x] Compare mechanism correctness separately from economics and mark all 27 EAGER records as weaker-authority controls rather than fresh authority.
 
-**Gate P6:** Every retained treatment has exact parity and complete lifecycle evidence. Report observed positive, mixed or negative cells without interpolation. If no prepared-data treatment wins, close the prototype with the measured cause rather than adding cache/optimizer machinery.
+**Gate P6:** Exact numerical parity passed, but the promotion gate failed: P3 lacks an object-bound token/body join and P6 timing uses a derived schedule model rather than observed intervals. The measurements remain research controls; no production optimizer or universal economics claim is admitted.
 
 ## Phase 7 — Independent review, simplification and closeout
 

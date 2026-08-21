@@ -330,10 +330,10 @@ func (engine *Engine) ensurePrepared(ctx context.Context) error {
 	return err
 }
 
-// PrepareSemanticRuntime provisions an authority-free analyzer's configured
-// single-use prepared slot or Linux COW baseline without serving it. Capacity
-// profiles use this before a Run; consumers still acquire only private
-// single-use modules.
+// PrepareSemanticRuntime provisions a workspace/Broker-free analyzer's configured
+// single-use prepared slot or Linux COW baseline without serving it. The Guest
+// still has the configured WASI clock/random substrate; this is not an
+// authority-free interpreter snapshot.
 func (engine *Engine) PrepareSemanticRuntime(ctx context.Context) error {
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime {
 		return runtimeconfig.ErrMechanismDisabled

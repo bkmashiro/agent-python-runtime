@@ -1,8 +1,10 @@
 package prepareddataset
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -50,12 +52,43 @@ type Counters struct {
 // gaining a second path to the staged bytes.
 type Snapshot struct {
 	ID             string
+	Receipt        HostReceipt
 	State          State
 	SourceIdentity string
 	Metadata       Metadata
 	BodyBytes      uint64
 	Counters       Counters
 	Disposition    string
+}
+
+// HostReceipt is the body-free authority envelope for one physical staging
+// attempt. Syntax discovery cannot mint it.
+type HostReceipt struct {
+	ContractSHA256          string
+	PreparationSHA256       string
+	FileSHA256              string
+	BodySHA256              string
+	ExecutionProfileSHA256  string
+	PrivacyPartition        string
+	Freshness               string
+	BudgetReservationSHA256 string
+	MaxFileBytes            uint64
+	MaxBodyBytes            uint64
+}
+
+func (receipt HostReceipt) valid() bool {
+	return validSHA256(receipt.ContractSHA256) && validSHA256(receipt.PreparationSHA256) &&
+		receipt.FileSHA256 == CanonicalFileSHA256 && receipt.BodySHA256 == CanonicalBodySHA256 &&
+		validSHA256(receipt.ExecutionProfileSHA256) && receipt.PrivacyPartition != "" && receipt.Freshness != "" &&
+		validSHA256(receipt.BudgetReservationSHA256) && receipt.MaxFileBytes == CanonicalFileBytes && receipt.MaxBodyBytes == CanonicalBodyBytes
+}
+
+func validSHA256(value string) bool {
+	if len(value) != 71 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	_, err := hex.DecodeString(value[len("sha256:"):])
+	return err == nil
 }
 
 // StagedObject owns one bounded, Run-private decoded array. Its body is held
@@ -65,6 +98,7 @@ type StagedObject struct {
 	mu sync.Mutex
 
 	id             string
+	receipt        HostReceipt
 	state          State
 	sourceIdentity string
 	pending        DecodedArray
@@ -73,11 +107,11 @@ type StagedObject struct {
 	counters       Counters
 }
 
-func NewStagedObject(id string) (*StagedObject, error) {
-	if id == "" {
+func NewStagedObject(receipt HostReceipt) (*StagedObject, error) {
+	if !receipt.valid() {
 		return nil, ErrInvalidObjectID
 	}
-	return &StagedObject{id: id, state: StatePlanned}, nil
+	return &StagedObject{id: receipt.PreparationSHA256, receipt: receipt, state: StatePlanned}, nil
 }
 
 func (object *StagedObject) ID() string {
@@ -105,6 +139,12 @@ func (object *StagedObject) IssueRead(readBytes uint64) error {
 	}
 	object.mu.Lock()
 	defer object.mu.Unlock()
+	if object.state != StatePlanned {
+		return invalidTransition(object.state, StateReadIssued)
+	}
+	if readBytes != object.receipt.MaxFileBytes {
+		return ErrInvalidLifecycleArgument
+	}
 	if err := object.transitionLocked(StateReadIssued); err != nil {
 		return err
 	}
@@ -123,6 +163,12 @@ func (object *StagedObject) VerifySource(sourceIdentity string) error {
 	}
 	object.mu.Lock()
 	defer object.mu.Unlock()
+	if object.state != StateReadIssued {
+		return invalidTransition(object.state, StateSourceVerified)
+	}
+	if sourceIdentity != object.receipt.FileSHA256 {
+		return ErrInvalidLifecycleArgument
+	}
 	if err := object.transitionLocked(StateSourceVerified); err != nil {
 		return err
 	}
@@ -145,6 +191,11 @@ func (object *StagedObject) Decode(data []byte) error {
 	object.counters.PhysicalDecodes++
 	decoded, err := Decode(data)
 	if err != nil {
+		object.rejectLocked(err)
+		return err
+	}
+	if decoded.Metadata.FileSHA256 != object.receipt.FileSHA256 || decoded.Metadata.BodySHA256 != object.receipt.BodySHA256 || uint64(len(decoded.Body)) != object.receipt.MaxBodyBytes {
+		err := ErrInvalidLifecycleArgument
 		object.rejectLocked(err)
 		return err
 	}
@@ -268,7 +319,7 @@ func (object *StagedObject) Snapshot() Snapshot {
 		metadata = object.sealed.Metadata
 	}
 	return Snapshot{
-		ID: object.id, State: object.state, SourceIdentity: object.sourceIdentity,
+		ID: object.id, Receipt: object.receipt, State: object.state, SourceIdentity: object.sourceIdentity,
 		Metadata: metadata, BodyBytes: bodyBytes, Counters: object.counters,
 		Disposition: object.disposition,
 	}

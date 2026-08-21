@@ -15,7 +15,7 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 )
 
-const trustedPrepare = "import numpy as np\n"
+const trustedPrepareSHA256 = "sha256:d34aea06c990aeedd2f8f5ff809c1180b92fccca0381269b7c18654043b9a374"
 
 type envelope struct {
 	Status        string          `json:"status"`
@@ -93,10 +93,9 @@ func main() {
 	}
 	probe := engine.COWProbe()
 	state := engine.PreparedImageState()
-	digest := sha256.Sum256([]byte(trustedPrepare))
 	out := report{
 		SchemaVersion: "pysolate.prepared-data-shard-probe.v1", ArtifactSHA256: profile.ArtifactSHA256(),
-		TrustedPrepareSHA256: fmt.Sprintf("sha256:%x", digest[:]), Image: state,
+		TrustedPrepareSHA256: trustedPrepareSHA256, Image: state,
 		FirstResult: first, SecondResult: second, PreparedAliasVisible: firstValue.AliasVisible && secondValue.AliasVisible,
 		ConsumerMutationIsolated: !secondValue.MutationVisible, PrivateCOWSelected: probe.COWSelected, Fallback: probe.Fallback,
 		PrepareNanos: prepareNanos, FirstRunNanos: firstRunNanos, SecondRunNanos: secondRunNanos,

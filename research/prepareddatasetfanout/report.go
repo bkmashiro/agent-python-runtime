@@ -11,6 +11,7 @@ import (
 const (
 	SchemaVersionV1        = "pysolate.prepared-data-fanout.v1"
 	SchemaVersion          = "pysolate.prepared-data-fanout.v2"
+	ArtifactSHA256         = "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad"
 	ExpectedSum     uint64 = 549755289600
 )
 
@@ -52,7 +53,7 @@ type Report struct {
 
 func Validate(report Report) error {
 	validVersion := report.SchemaVersion == SchemaVersion || report.SchemaVersion == SchemaVersionV1
-	if !validVersion || report.ArtifactSHA256 == "" ||
+	if !validVersion || report.ArtifactSHA256 != ArtifactSHA256 ||
 		report.FixtureBodySHA256 != researchdata.CanonicalBodySHA256 || report.FixtureBodyBytes != researchdata.CanonicalBodyBytes ||
 		!report.PackagePrepareOnce || !report.MutationIsolated || len(report.Records) != 16 {
 		return ErrInvalidReport

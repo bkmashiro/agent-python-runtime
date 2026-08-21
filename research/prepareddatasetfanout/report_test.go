@@ -56,7 +56,7 @@ func TestValidateFailsClosed(t *testing.T) {
 }
 
 func validReport() Report {
-	report := Report{SchemaVersion: SchemaVersion, ArtifactSHA256: "sha256:artifact", FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: researchdata.CanonicalBodyBytes, PackagePrepareOnce: true, HostReadNanos: 1, HostDecodeNanos: 1, WarmupFreshGuests: 4, MutationIsolated: true}
+	report := Report{SchemaVersion: SchemaVersion, ArtifactSHA256: ArtifactSHA256, FixtureBodySHA256: researchdata.CanonicalBodySHA256, FixtureBodyBytes: researchdata.CanonicalBodyBytes, PackagePrepareOnce: true, HostReadNanos: 1, HostDecodeNanos: 1, WarmupFreshGuests: 4, MutationIsolated: true}
 	body := uint64(researchdata.CanonicalBodyBytes)
 	for _, treatment := range []string{"recompute", "private_copy", "private_cow_pages", "data_local_compute"} {
 		for _, consumers := range []int{0, 1, 2, 4} {

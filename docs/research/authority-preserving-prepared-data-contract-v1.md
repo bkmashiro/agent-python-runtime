@@ -1,6 +1,6 @@
 # Authority-preserving prepared data contract v1
 
-Status: **Phase 0 frozen; implementation not started**
+Status: **Phase 0 frozen; research prototype completed and not promoted**
 
 Parent source: `a75987eaa8a7fbef33cc0cee48d076eb4c3f2769`
 
@@ -47,7 +47,9 @@ Existing owners remain authoritative for:
 
 Prepared data adds a research-only joined contract and typed transform. It must reuse these owners rather than duplicate their validators.
 
-The P3 prototype keeps the 8 MiB body out of the Broker response. The qualified `sources.read` handler reads the exact immutable file into Run-private Host staging and returns only a bounded digest/byte-count receipt. The authority-free decoder consumes that Host staging; the existing prepared-region scalar token records the later dynamic claim. Thus the physical body never widens the 1 MiB capability transport boundary.
+The P3 probe keeps the 8 MiB body out of the Broker response. The qualified `sources.read` handler reads the exact immutable file into Run-private Host staging and returns only a bounded digest/byte-count receipt. The pure Go decoder consumes that Host staging. The probe's existing prepared-region scalar token records later dynamic reach, but its body-copy monkeypatch is not cryptographically joined to that token; therefore P3 is mechanism evidence, not a promoted end-to-end typed materialization claim.
+
+The Linux COW package import and fixed-array derivation run inside CPython/WASI without workspace or Broker authority, but retain the runtime's clock and random imports. They are constrained Guest preparation, not authority-free decoding. The authority-free claim applies only to candidate analysis and the bounded Go NPY decoder.
 
 ## Authority equation
 

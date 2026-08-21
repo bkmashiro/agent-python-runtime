@@ -15,11 +15,8 @@ import (
 var (
 	errCOWImageClosed       = errors.New("COW image is closed")
 	errCOWImageInUse        = errors.New("COW image still has live mappings")
-	errCOWAllocationShape   = errors.New("COW allocation shape does not match image")
 	errCOWAllocatorConsumed = errors.New("COW allocator already allocated memory")
 )
-
-const wasmLinearPageSize = 64 * 1024
 
 type cowImage struct {
 	mu             sync.Mutex

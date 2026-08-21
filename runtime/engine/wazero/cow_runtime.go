@@ -9,11 +9,15 @@ import (
 	"unicode/utf8"
 )
 
-const maxTrustedCOWPrepareBytes = 64 << 10
+const (
+	maxTrustedCOWPrepareBytes = 16 << 20
+	wasmLinearPageSize        = 64 * 1024
+)
 
 var (
 	ErrTrustedCOWPrepareSource  = errors.New("trusted COW prepare source is invalid")
 	ErrTrustedCOWPrepareBinding = errors.New("trusted COW prepare source does not match the initialized baseline")
+	errCOWAllocationShape       = errors.New("COW allocation shape does not match image")
 )
 
 func trustedCOWPrepareIdentity(source string) (string, error) {
@@ -22,6 +26,17 @@ func trustedCOWPrepareIdentity(source string) (string, error) {
 	}
 	digest := sha256.Sum256([]byte(source))
 	return fmt.Sprintf("sha256:%x", digest[:]), nil
+}
+
+func cowBaselineGrowthPages(currentBytes, baselineBytes uint64) (uint32, error) {
+	if currentBytes == 0 || baselineBytes == 0 || currentBytes%wasmLinearPageSize != 0 || baselineBytes%wasmLinearPageSize != 0 || currentBytes > baselineBytes {
+		return 0, errCOWAllocationShape
+	}
+	pages := (baselineBytes - currentBytes) / wasmLinearPageSize
+	if pages > uint64(^uint32(0)) {
+		return 0, errCOWAllocationShape
+	}
+	return uint32(pages), nil
 }
 
 type cowPreparedRuntime interface {

@@ -114,6 +114,21 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 			}
 		}
 	}()
+	memory := module.Memory()
+	if memory == nil {
+		return nil, lifecycle, errors.New("COW slot has no linear memory")
+	}
+	currentBytes := uint64(memory.Size())
+	growthPages, err := cowBaselineGrowthPages(currentBytes, runtime.image.baselineSize)
+	if err != nil {
+		return nil, lifecycle, errors.New("COW slot memory shape drifted")
+	}
+	if growthPages != 0 {
+		previousPages, ok := memory.Grow(growthPages)
+		if !ok || uint64(previousPages)*wasmLinearPageSize != currentBytes {
+			return nil, lifecycle, errors.New("grow COW slot to sealed baseline")
+		}
+	}
 	lifecycle.InitializeCalls++
 	if err := callNoArgs(ctx, module, "_initialize"); err != nil {
 		return nil, lifecycle, withGuestDiagnostic(err, stderr.String())
@@ -125,7 +140,6 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	if err := allocation.restoreBaselineBeforeServe(); err != nil {
 		return nil, lifecycle, fmt.Errorf("attach COW baseline: %w", err)
 	}
-	memory := module.Memory()
 	if memory == nil || uint64(memory.Size()) != runtime.image.baselineSize {
 		return nil, lifecycle, errors.New("COW slot memory shape drifted")
 	}

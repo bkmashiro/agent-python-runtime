@@ -3,6 +3,7 @@ package wazero
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,8 +11,12 @@ import (
 )
 
 const (
-	maxTrustedCOWPrepareBytes = 16 << 20
-	wasmLinearPageSize        = 64 * 1024
+	maxTrustedCOWPrepareBytes  = 16 << 20
+	wasmLinearPageSize         = 64 * 1024
+	trustedCOWPackageSource    = "import numpy as np\n"
+	trustedCOWDerivedPrefix    = "import base64 as _pd_base64, numpy as np\n_pd_body = bytearray(_pd_base64.b64decode(\""
+	trustedCOWDerivedSuffix    = "\"))\ndataset = np.frombuffer(_pd_body, dtype=np.dtype('<i8')).reshape((1024, 1024))\n"
+	trustedCOWDerivedBodyBytes = 8 << 20
 )
 
 var (
@@ -21,11 +26,28 @@ var (
 )
 
 func trustedCOWPrepareIdentity(source string) (string, error) {
-	if source == "" || len([]byte(source)) > maxTrustedCOWPrepareBytes || !utf8.ValidString(source) || strings.ContainsRune(source, '\x00') {
+	if source != trustedCOWPackageSource {
 		return "", ErrTrustedCOWPrepareSource
 	}
+	return trustedCOWSourceIdentity(source), nil
+}
+
+func trustedCOWDerivedIdentity(source string) (string, error) {
+	if source == "" || len(source) > maxTrustedCOWPrepareBytes || !utf8.ValidString(source) || strings.ContainsRune(source, '\x00') ||
+		!strings.HasPrefix(source, trustedCOWDerivedPrefix) || !strings.HasSuffix(source, trustedCOWDerivedSuffix) {
+		return "", ErrTrustedCOWPrepareSource
+	}
+	encoded := strings.TrimSuffix(strings.TrimPrefix(source, trustedCOWDerivedPrefix), trustedCOWDerivedSuffix)
+	body, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(body) != trustedCOWDerivedBodyBytes {
+		return "", ErrTrustedCOWPrepareSource
+	}
+	return trustedCOWSourceIdentity(source), nil
+}
+
+func trustedCOWSourceIdentity(source string) string {
 	digest := sha256.Sum256([]byte(source))
-	return fmt.Sprintf("sha256:%x", digest[:]), nil
+	return fmt.Sprintf("sha256:%x", digest[:])
 }
 
 func cowBaselineGrowthPages(currentBytes, baselineBytes uint64) (uint32, error) {

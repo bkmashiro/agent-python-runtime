@@ -12,12 +12,14 @@ import (
 
 var ErrNoEligiblePeephole = errors.New("no eligible numpy.load peephole")
 
-// NumpyLoadProjection asks the target-Guest analyzer for syntax facts about the
+// numpyLoadProjection asks the target-Guest analyzer for syntax facts about the
 // closed NumPy call surface. It is not a capability grant; sources.read remains
 // the separate Host-authorized physical effect.
-var NumpyLoadProjection = semantic.CapabilityProjection{
-	Name: PreparedCall, EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly,
-	Module: "np", Method: "load", Arguments: []string{"path", "allow_pickle"},
+func numpyLoadProjection() semantic.CapabilityProjection {
+	return semantic.CapabilityProjection{
+		Name: PreparedCall, EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly,
+		Module: "np", Method: "load", Arguments: []string{"path", "allow_pickle"},
+	}
 }
 
 // NumpyLoadFacts are authority-free, target-Guest-verified syntax facts.
@@ -55,7 +57,7 @@ func NewAnalysisRequest(source string, bindings semantic.Bindings, plan *capabil
 	if err != nil {
 		return semantic.Request{}, err
 	}
-	request.Capabilities = append(request.Capabilities, NumpyLoadProjection)
+	request.Capabilities = append(request.Capabilities, numpyLoadProjection())
 	sort.Slice(request.Capabilities, func(i, j int) bool { return request.Capabilities[i].Name < request.Capabilities[j].Name })
 	if err := request.Validate(); err != nil {
 		return semantic.Request{}, err

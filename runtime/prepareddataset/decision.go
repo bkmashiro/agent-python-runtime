@@ -179,6 +179,6 @@ func (decision PreparationDecision) claimWithCallSites(finalSource string, callS
 
 func sameOccurrence(left, right semantic.CallSite) bool {
 	return left.Span == right.Span && left.Capability == right.Capability &&
-		left.DynamicOccurrence == right.DynamicOccurrence && left.NecessarilyReached && right.NecessarilyReached &&
+		left.DynamicOccurrence == right.DynamicOccurrence && left.NecessarilyReached == right.NecessarilyReached &&
 		left.ArgumentsCanonical && right.ArgumentsCanonical && bytes.Equal(left.CanonicalArguments, right.CanonicalArguments)
 }

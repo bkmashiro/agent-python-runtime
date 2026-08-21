@@ -372,7 +372,7 @@ func (engine *Engine) DeriveSemanticRuntimeWithTrustedSource(ctx context.Context
 	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
 		return runtimeconfig.ErrMechanismDisabled
 	}
-	identity, err := trustedCOWPrepareIdentity(source)
+	identity, err := trustedCOWDerivedIdentity(source)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,9 @@ package wazero
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -18,14 +20,19 @@ func TestTrustedCOWPrepareSourceValidation(t *testing.T) {
 	if identity != "sha256:d34aea06c990aeedd2f8f5ff809c1180b92fccca0381269b7c18654043b9a374" {
 		t.Fatalf("identity=%s", identity)
 	}
-	for _, invalid := range []string{"", "import numpy as np\x00", strings.Repeat("x", maxTrustedCOWPrepareBytes+1)} {
+	for _, invalid := range []string{"", "import numpy as np\x00", "import numpy\n", strings.Repeat("x", maxTrustedCOWPrepareBytes+1)} {
 		if _, err := trustedCOWPrepareIdentity(invalid); !errors.Is(err, ErrTrustedCOWPrepareSource) {
 			t.Fatalf("invalid source len=%d err=%v", len(invalid), err)
 		}
 	}
-	large := "import base64\n" + strings.Repeat("#", (64<<10)+1) + "\n"
-	if _, err := trustedCOWPrepareIdentity(large); err != nil {
-		t.Fatalf("bounded derived image source err=%v", err)
+	derived := testTrustedDerivedSource()
+	if _, err := trustedCOWDerivedIdentity(derived); err != nil {
+		t.Fatalf("derived source err=%v", err)
+	}
+	for _, invalid := range []string{"dataset = 1\n", derived + "result = 1\n", strings.Replace(derived, "<i8", "<f8", 1)} {
+		if _, err := trustedCOWDerivedIdentity(invalid); !errors.Is(err, ErrTrustedCOWPrepareSource) {
+			t.Fatalf("arbitrary derived source accepted err=%v", err)
+		}
 	}
 }
 
@@ -54,7 +61,7 @@ func TestPrepareSemanticRuntimeWithTrustedSourceRejectsBaselineDrift(t *testing.
 	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), source); err != nil {
 		t.Fatalf("same source err=%v", err)
 	}
-	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), "import numpy\n"); !errors.Is(err, ErrTrustedCOWPrepareBinding) {
+	if err := engine.PrepareSemanticRuntimeWithTrustedSource(context.Background(), "import numpy\n"); !errors.Is(err, ErrTrustedCOWPrepareSource) {
 		t.Fatalf("drift err=%v", err)
 	}
 }
@@ -94,19 +101,21 @@ func (runtime *fakeDerivableCOWRuntime) derive(_ context.Context, _ *Engine, _ s
 
 func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {
 	packageIdentity, _ := trustedCOWPrepareIdentity("import numpy as np\n")
+	firstSource := testTrustedDerivedSource()
+	secondSource := strings.Replace(firstSource, trustedCOWDerivedPrefix+"A", trustedCOWDerivedPrefix+"Q", 1)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.PreparedRuntime = true
 	config.Mechanisms.MemoryCOW = true
 	parent := &fakeDerivableCOWRuntime{identity: packageIdentity}
 	engine := &Engine{config: config, preparedInitialized: true, preparedTrustedSHA: packageIdentity, cowRuntime: parent}
-	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), "dataset = 1\n"); err != nil {
+	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), firstSource); err != nil {
 		t.Fatal(err)
 	}
 	first := engine.cowRuntime.(*fakeDerivableCOWRuntime)
 	if engine.cowParentRuntime != parent || first.parent != packageIdentity || parent.derived != 1 {
 		t.Fatalf("parent=%p first=%+v parent_state=%+v", engine.cowParentRuntime, first, parent)
 	}
-	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), "dataset = 2\n"); err != nil {
+	if err := engine.DeriveSemanticRuntimeWithTrustedSource(context.Background(), secondSource); err != nil {
 		t.Fatal(err)
 	}
 	if parent.derived != 2 || first.closed != 1 || engine.cowParentRuntime != parent {
@@ -118,4 +127,9 @@ func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {
 	if parent.closed != 1 {
 		t.Fatalf("parent closed=%d", parent.closed)
 	}
+}
+
+func testTrustedDerivedSource() string {
+	encoded := base64.StdEncoding.EncodeToString(make([]byte, trustedCOWDerivedBodyBytes))
+	return fmt.Sprintf("%s%s%s", trustedCOWDerivedPrefix, encoded, trustedCOWDerivedSuffix)
 }

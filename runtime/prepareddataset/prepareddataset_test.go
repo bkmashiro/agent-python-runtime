@@ -219,7 +219,7 @@ func TestPreparedDataClaimRequiresPrefixExtensionAndExactOccurrence(t *testing.T
 }
 
 func TestNumpyLoadProjectionIsClosedAndAuthorityFree(t *testing.T) {
-	projection := NumpyLoadProjection
+	projection := numpyLoadProjection()
 	if projection.Name != PreparedCall || projection.Module != "np" || projection.Method != "load" ||
 		projection.EffectClass != capability.EffectExternalRead || projection.Arguments == nil {
 		t.Fatalf("projection=%+v", projection)
@@ -260,6 +260,19 @@ func testCallSite() semantic.CallSite {
 
 func factsForSource(source string, declaration HostPreparedDataDeclaration) (NumpyLoadFacts, error) {
 	return factsFromCallSites(source, declaration.StreamEpoch, declaration.AdmittedPrefixSHA256, []semantic.CallSite{testCallSite()})
+}
+
+func TestSameOccurrencePreservesConditionalReachability(t *testing.T) {
+	left := testCallSite()
+	left.NecessarilyReached = false
+	right := left
+	if !sameOccurrence(left, right) {
+		t.Fatal("unchanged conditional occurrence rejected")
+	}
+	right.NecessarilyReached = true
+	if sameOccurrence(left, right) {
+		t.Fatal("reachability drift accepted")
+	}
 }
 
 func validDeclaration(planIdentity string) HostPreparedDataDeclaration {

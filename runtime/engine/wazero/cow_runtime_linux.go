@@ -71,7 +71,7 @@ func newCOWPreparedRuntimeWithTrustedSource(ctx context.Context, engine *Engine,
 }
 
 func (runtime *linuxCOWPreparedRuntime) derive(ctx context.Context, engine *Engine, trustedSource, trustedIdentity string) (cowPreparedRuntime, error) {
-	identity, err := trustedCOWPrepareIdentity(trustedSource)
+	identity, err := trustedCOWDerivedIdentity(trustedSource)
 	if err != nil || identity != trustedIdentity {
 		return nil, ErrTrustedCOWPrepareBinding
 	}

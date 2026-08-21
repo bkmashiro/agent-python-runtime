@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	researchdata "github.com/bkmashiro/agent-python-runtime/research/prepareddataset"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
@@ -23,12 +24,16 @@ const (
 )
 
 type probeCase struct {
-	ID        string `json:"id"`
-	Status    string `json:"status"`
-	Result    any    `json:"result,omitempty"`
-	Claims    uint32 `json:"claims"`
-	Consumed  uint32 `json:"consumed"`
-	Discarded uint32 `json:"discarded"`
+	ID              string `json:"id"`
+	Status          string `json:"status"`
+	Result          any    `json:"result,omitempty"`
+	Claims          uint32 `json:"claims"`
+	Consumed        uint32 `json:"consumed"`
+	Discarded       uint32 `json:"discarded"`
+	ObjectState     string `json:"object_state"`
+	LogicalClaims   uint64 `json:"logical_claims"`
+	PhysicalOrphans uint64 `json:"physical_orphans"`
+	ObjectBodyBytes uint64 `json:"object_body_bytes"`
 }
 
 type report struct {
@@ -53,13 +58,19 @@ func main() {
 		{"branch_not_taken", "import numpy as np\nif False:\n    dataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = 'unreached'\n", "ok", 0, 0, 1},
 		{"earlier_exception", "import numpy as np\nraise ValueError('before load')\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\n", "error", 0, 0, 1},
 	}
-	out := report{SchemaVersion: "pysolate.prepared-data-claim-probe.v1", ArtifactSHA256: artifactSHA}
+	out := report{SchemaVersion: "pysolate.prepared-data-claim-probe.v2", ArtifactSHA256: artifactSHA}
 	for _, candidate := range cases {
 		observed, err := runCase(wasm, profile, candidate.id, candidate.code)
 		if err != nil {
 			fail(fmt.Errorf("%s: %w", candidate.id, err))
 		}
-		if observed.Status != candidate.wantStatus || observed.Claims != candidate.wantClaims || observed.Consumed != candidate.wantConsumed || observed.Discarded != candidate.wantDiscarded {
+		wantState := string(researchdata.StateOrphaned)
+		wantLogicalClaims, wantPhysicalOrphans := uint64(0), uint64(1)
+		if candidate.wantClaims == 1 {
+			wantState, wantLogicalClaims, wantPhysicalOrphans = string(researchdata.StateClaimed), 1, 0
+		}
+		if observed.Status != candidate.wantStatus || observed.Claims != candidate.wantClaims || observed.Consumed != candidate.wantConsumed || observed.Discarded != candidate.wantDiscarded ||
+			observed.ObjectState != wantState || observed.LogicalClaims != wantLogicalClaims || observed.PhysicalOrphans != wantPhysicalOrphans || observed.ObjectBodyBytes != 0 {
 			fail(fmt.Errorf("%s invariant mismatch: %+v", candidate.id, observed))
 		}
 		out.Cases = append(out.Cases, observed)
@@ -69,11 +80,20 @@ func main() {
 }
 
 func runCase(wasm []byte, profile runtimeconfig.ExecutionProfile, id, code string) (probeCase, error) {
-	decision, capsule, err := token()
+	object, body, err := stagedObject(profile)
 	if err != nil {
 		return probeCase{}, err
 	}
-	table, err := preparedregion.NewPreparedRegionTable([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}})
+	receipt := object.Snapshot().Receipt
+	decision, capsule, err := token(receipt)
+	if err != nil {
+		return probeCase{}, err
+	}
+	guard, err := researchdata.NewPreparedDataClaimGuard(object, decision, capsule)
+	if err != nil {
+		return probeCase{}, err
+	}
+	table, err := preparedregion.NewPreparedRegionTableWithClaimGuard([]preparedregion.PreparedRegionEntry{{Decision: decision, Capsule: capsule}}, guard)
 	if err != nil {
 		return probeCase{}, err
 	}
@@ -97,7 +117,7 @@ func runCase(wasm []byte, profile runtimeconfig.ExecutionProfile, id, code strin
 	if err := engine.PrepareNumpyCOWShard(context.Background()); err != nil {
 		return probeCase{}, err
 	}
-	prepare := monkeypatchSource(decision.IdentitySHA256)
+	prepare := monkeypatchSource(decision.IdentitySHA256, receipt.BodySHA256, body)
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "prepared-data-claim-" + id, Code: code, Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"numpy"}}})
 	if err != nil {
 		return probeCase{}, err
@@ -114,15 +134,58 @@ func runCase(wasm []byte, profile runtimeconfig.ExecutionProfile, id, code strin
 		return probeCase{}, errors.New("invalid Guest response")
 	}
 	evidence := table.Evidence()
-	return probeCase{ID: id, Status: envelope.Status, Result: envelope.Result, Claims: evidence.Claims, Consumed: evidence.Consumed, Discarded: evidence.Discarded}, nil
+	if evidence.Claims == 0 {
+		if err := object.Orphan(); err != nil {
+			return probeCase{}, err
+		}
+	}
+	snapshot := object.Snapshot()
+	return probeCase{
+		ID: id, Status: envelope.Status, Result: envelope.Result,
+		Claims: evidence.Claims, Consumed: evidence.Consumed, Discarded: evidence.Discarded,
+		ObjectState: string(snapshot.State), LogicalClaims: snapshot.Counters.LogicalClaims,
+		PhysicalOrphans: snapshot.Counters.PhysicalOrphans, ObjectBodyBytes: snapshot.BodyBytes,
+	}, nil
 }
 
-func token() (preparedregion.PreparedRegionDecision, preparedregion.PreparedRegionCapsule, error) {
+func stagedObject(profile runtimeconfig.ExecutionProfile) (*researchdata.StagedObject, []byte, error) {
+	profileConfig := runtimeconfig.DefaultRunConfig()
+	profileConfig.ExecutionProfile = &profile
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(profileConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	object, err := researchdata.NewStagedObject(researchdata.HostReceipt{
+		ContractSHA256: digestA, PreparationSHA256: digestA,
+		FileSHA256: researchdata.CanonicalFileSHA256, BodySHA256: researchdata.CanonicalBodySHA256,
+		ExecutionProfileSHA256: profileSHA256, PrivacyPartition: "prepared-data-claim-private", Freshness: "plan_epoch:claim-probe",
+		BudgetReservationSHA256: digestA, MaxFileBytes: researchdata.CanonicalFileBytes, MaxBodyBytes: researchdata.CanonicalBodyBytes,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := object.IssueRead(researchdata.CanonicalFileBytes); err != nil {
+		return nil, nil, err
+	}
+	if err := object.VerifySource(researchdata.CanonicalFileSHA256); err != nil {
+		return nil, nil, err
+	}
+	if err := object.Decode(researchdata.CanonicalFixture()); err != nil {
+		return nil, nil, err
+	}
+	if err := object.Seal(); err != nil {
+		return nil, nil, err
+	}
+	materialized, err := object.MaterializeStaging()
+	return object, materialized.Body, err
+}
+
+func token(receipt researchdata.HostReceipt) (preparedregion.PreparedRegionDecision, preparedregion.PreparedRegionCapsule, error) {
 	_, decision, err := preparedregion.SealPreparedRegionDecision(preparedregion.PreparedRegionBinding{
 		SourceSHA256: digestA, ASTSHA256: digestA, AnalysisSHA256: digestA, RegionID: digestA,
 		RegionSpan:         preparedregion.SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 1},
-		RegionSourceSHA256: digestA, LiveInsSHA256: digestA, EnvironmentSHA256: digestA,
-		ExecutionProfileSHA256: digestA, ImportClosureSHA256: digestA, CapabilityPlanSHA256: digestA,
+		RegionSourceSHA256: receipt.BodySHA256, LiveInsSHA256: receipt.PreparationSHA256, EnvironmentSHA256: receipt.ContractSHA256,
+		ExecutionProfileSHA256: receipt.ExecutionProfileSHA256, ImportClosureSHA256: digestA, CapabilityPlanSHA256: digestA,
 		PassConfigSHA256: digestA, Codec: preparedregion.PreparedRegionCodecJSONScalarV1, OutputName: "dataset",
 	})
 	if err != nil {
@@ -132,23 +195,19 @@ func token() (preparedregion.PreparedRegionDecision, preparedregion.PreparedRegi
 	return decision, capsule, err
 }
 
-func monkeypatchSource(decision string) string {
-	body := make([]byte, 6*8)
-	for index := uint64(0); index < 6; index++ {
-		for byteIndex := uint(0); byteIndex < 8; byteIndex++ {
-			body[index*8+uint64(byteIndex)] = byte(index >> (8 * byteIndex))
-		}
-	}
+func monkeypatchSource(decision, bodySHA256 string, body []byte) string {
 	payload := base64.StdEncoding.EncodeToString(body)
 	return strings.Join([]string{
-		"import base64 as _pd_base64, json as _pd_json, numpy as np, _agent_runtime_host as _pd_host",
-		"_pd_body = _pd_base64.b64decode(" + fmt.Sprintf("%q", payload) + ")",
-		"def _pd_load(path, *, allow_pickle=False):",
+		"import base64 as _pd_base64, hashlib as _pd_hashlib, json as _pd_json, numpy as np, _agent_runtime_host as _pd_host",
+		"_pd_body = bytes(_pd_base64.b64decode(" + fmt.Sprintf("%q", payload) + "))",
+		"def _pd_load(path, *, allow_pickle=False, _body=_pd_body, _hashlib=_pd_hashlib, _host=_pd_host):",
 		"    if path != '/workspace/input.npy' or allow_pickle is not False:",
 		"        raise RuntimeError('prepared data call mismatch')",
-		"    if _pd_json.loads(_pd_host.materialize_value(" + fmt.Sprintf("%q", decision) + ")) is not True:",
+		"    if 'sha256:' + _hashlib.sha256(_body).hexdigest() != " + fmt.Sprintf("%q", bodySHA256) + ":",
+		"        raise RuntimeError('prepared data body identity mismatch')",
+		"    if _pd_json.loads(_host.materialize_value(" + fmt.Sprintf("%q", decision) + ")) is not True:",
 		"        raise RuntimeError('prepared data claim token mismatch')",
-		"    return np.frombuffer(_pd_body, dtype=np.dtype('<i8')).reshape((2, 3)).copy(order='C')",
+		"    return np.frombuffer(_body, dtype=np.dtype('<i8')).reshape((1024, 1024))",
 		"np.load = _pd_load",
 	}, "\n") + "\n"
 }

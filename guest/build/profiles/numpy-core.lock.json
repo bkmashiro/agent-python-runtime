@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "kind": "static-native-package",
+  "artifact_profile": "numpy-core",
+  "artifact_filename": "agent-python-runtime-numpy-core.wasm",
+  "target": "wasm32-wasip1",
+  "sources": [
+    {
+      "id": "cython-source",
+      "version": "3.0.12",
+      "url": "https://files.pythonhosted.org/packages/5a/25/886e197c97a4b8e254173002cdc141441e878ff29aaa7d9ba560cd6e4866/cython-3.0.12.tar.gz",
+      "sha256": "b988bb297ce76c671e28c97d017b95411010f7c77fa6623dd0bb47eed1aee1bc",
+      "license": "Apache-2.0",
+      "role": "build-tool",
+      "artifact_relation": "build-only"
+    },
+    {
+      "id": "numpy-source",
+      "version": "1.26.0b1@7bc18034031f32e5d03bb646c472dabd1623e9d5",
+      "url": "https://codeload.github.com/numpy/numpy/tar.gz/7bc18034031f32e5d03bb646c472dabd1623e9d5",
+      "sha256": "9a34aaef957033ff8a3a865e8f0172eb7de4cf4c2891195a56c13e915fb86014",
+      "license": "BSD-3-Clause",
+      "role": "python-native-package",
+      "artifact_relation": "linked"
+    },
+    {
+      "id": "setuptools-wheel",
+      "version": "71.1.0",
+      "url": "https://files.pythonhosted.org/packages/51/a0/ee460cc54e68afcf33190d198299c9579a5eafeadef0016ae8563237ccb6/setuptools-71.1.0-py3-none-any.whl",
+      "sha256": "33874fdc59b3188304b2e7c80d9029097ea31627180896fb549c578ceb8a0855",
+      "license": "MIT",
+      "role": "build-tool",
+      "artifact_relation": "build-only"
+    }
+  ],
+  "package": {
+    "name": "numpy",
+    "version": "1.26.0b1",
+    "source_commit": "7bc18034031f32e5d03bb646c472dabd1623e9d5",
+    "source_archive_sha256": "9a34aaef957033ff8a3a865e8f0172eb7de4cf4c2891195a56c13e915fb86014",
+    "repository_license_id": "BSD-3-Clause",
+    "import_root": "numpy",
+    "status": "selected-static-native",
+    "max_packaged_tree_bytes": 134217728
+  },
+  "build": {
+    "recipe": "numpy-static-v1",
+    "reference_repository": "https://github.com/bkmashiro/wasi-wheels",
+    "reference_commit": "184cce0b537088be76e1e8a06d6fe742e2f29ff4",
+    "reference_build_sha256": "5c6f9b675e4ba5c2027779136c6422cf22a36683a2f37a776e9a38c5985832d7",
+    "reference_static_build_sha256": "d6c1401dc8a1f55e73c48099b26bc6942d49c1f872c678d43b33b640be4540f0",
+    "cpython_version": "3.14.0",
+    "wasi_sdk_version": "33",
+    "build_parallelism": 4,
+    "blas_order": "",
+    "lapack_order": "",
+    "disable_svml": true,
+    "disable_optimization": true,
+    "link_libraries": ["c-printscan-long-double"]
+  },
+  "native_modules": [
+    {"name": "numpy.core._multiarray_tests", "archive": "numpy/core/_multiarray_tests.a", "init_symbol": "PyInit__multiarray_tests"},
+    {"name": "numpy.core._multiarray_umath", "archive": "numpy/core/_multiarray_umath.a", "init_symbol": "PyInit__multiarray_umath"},
+    {"name": "numpy.core._operand_flag_tests", "archive": "numpy/core/_operand_flag_tests.a", "init_symbol": "PyInit__operand_flag_tests"},
+    {"name": "numpy.core._rational_tests", "archive": "numpy/core/_rational_tests.a", "init_symbol": "PyInit__rational_tests"},
+    {"name": "numpy.core._simd", "archive": "numpy/core/_simd.a", "init_symbol": "PyInit__simd"},
+    {"name": "numpy.core._struct_ufunc_tests", "archive": "numpy/core/_struct_ufunc_tests.a", "init_symbol": "PyInit__struct_ufunc_tests"},
+    {"name": "numpy.core._umath_tests", "archive": "numpy/core/_umath_tests.a", "init_symbol": "PyInit__umath_tests"},
+    {"name": "numpy.fft._pocketfft_internal", "archive": "numpy/fft/_pocketfft_internal.a", "init_symbol": "PyInit__pocketfft_internal"},
+    {"name": "numpy.linalg._umath_linalg", "archive": "numpy/linalg/_umath_linalg.a", "init_symbol": "PyInit__umath_linalg"},
+    {"name": "numpy.linalg.lapack_lite", "archive": "numpy/linalg/lapack_lite.a", "init_symbol": "PyInit_lapack_lite"},
+    {"name": "numpy.random._bounded_integers", "archive": "numpy/random/_bounded_integers.a", "init_symbol": "PyInit__bounded_integers"},
+    {"name": "numpy.random._common", "archive": "numpy/random/_common.a", "init_symbol": "PyInit__common"},
+    {"name": "numpy.random._generator", "archive": "numpy/random/_generator.a", "init_symbol": "PyInit__generator"},
+    {"name": "numpy.random._mt19937", "archive": "numpy/random/_mt19937.a", "init_symbol": "PyInit__mt19937"},
+    {"name": "numpy.random._pcg64", "archive": "numpy/random/_pcg64.a", "init_symbol": "PyInit__pcg64"},
+    {"name": "numpy.random._philox", "archive": "numpy/random/_philox.a", "init_symbol": "PyInit__philox"},
+    {"name": "numpy.random._sfc64", "archive": "numpy/random/_sfc64.a", "init_symbol": "PyInit__sfc64"},
+    {"name": "numpy.random.bit_generator", "archive": "numpy/random/bit_generator.a", "init_symbol": "PyInit_bit_generator"},
+    {"name": "numpy.random.mtrand", "archive": "numpy/random/mtrand.a", "init_symbol": "PyInit_mtrand"}
+  ],
+  "support_libraries": [
+    {"name": "npymath", "archive": "numpy/lib/libnpymath.a"},
+    {"name": "npyrandom", "archive": "numpy/lib/libnpyrandom.a"}
+  ],
+  "policy": {
+    "runtime_package_installation": false,
+    "dynamic_native_loading": false,
+    "external_prebuilt_artifact": false,
+    "pysolate_runtime_integration": true
+  },
+  "qualification": [
+    {"name": "numpy", "operation": "numpy_core_oracle"}
+  ]
+}

@@ -57,10 +57,21 @@ def load_package_profile_module():
     return module
 
 
+def load_native_package_profile_module():
+    path = pathlib.Path(__file__).with_name("native_package_profile.py")
+    spec = importlib.util.spec_from_file_location("artifact_native_package_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load native package profile validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
 EXTENSION_PROFILE = load_extension_profile_module()
 PACKAGE_PROFILE = load_package_profile_module()
+NATIVE_PACKAGE_PROFILE = load_native_package_profile_module()
 PROFILE_REGISTRY = PACKAGE_PROFILE.load_registry()
 ARTIFACT_FILENAMES = {
     profile_id: PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile_id)["artifact_filename"]
@@ -163,6 +174,15 @@ def build_manifest(
         if extension_selection is None:
             raise ValueError("attrs-770 artifact profile requires extension selection")
         extension_profile = EXTENSION_PROFILE.load_selection(extension_selection)
+    elif artifact_profile == "numpy-core":
+        if extension_selection is None:
+            raise ValueError("numpy-core artifact profile requires native package selection")
+        native_lock = NATIVE_PACKAGE_PROFILE.load_lock(
+            pathlib.Path(__file__).with_name("profiles") / "numpy-core.lock.json"
+        )
+        extension_profile = NATIVE_PACKAGE_PROFILE.validate_selection(
+            NATIVE_PACKAGE_PROFILE.strict_json_loads(extension_selection.read_text()), native_lock
+        )
     else:
         raise ValueError("unsupported artifact profile")
 
@@ -190,6 +210,17 @@ def build_manifest(
             "version": attrs_version,
             "status": "selected-pure-python",
         })
+    elif artifact_profile == "numpy-core":
+        assert extension_profile is not None
+        numpy_source_version = locked_source_version(lock, "numpy-source")
+        numpy_package = extension_profile["package"]
+        if not numpy_source_version.startswith(numpy_package["version"] + "@"):
+            raise ValueError("native package version does not match source lock")
+        packages.append({
+            "name": "numpy",
+            "version": numpy_package["version"],
+            "status": "selected-static-native",
+        })
     limitations = [
         "import qualification covers only the named guest-import-exec-v1 operations and is not transitive closure or arbitrary behavior proof",
         "Host tools are explicitly registered and call-bounded",
@@ -197,6 +228,8 @@ def build_manifest(
     ]
     if artifact_profile == "attrs-770":
         limitations[-1] = "the profile provides one pinned pure-Python package and no runtime package installation or native extensions"
+    elif artifact_profile == "numpy-core":
+        limitations[-1] = "the profile provides one pinned statically linked NumPy package and no runtime package installation or dynamic native loading"
 
     detected_memory = parse_memory_bounds(wat_text)
     if (memory_initial_pages is None) != (memory_maximum_pages is None):

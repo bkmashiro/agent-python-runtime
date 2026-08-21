@@ -57,6 +57,9 @@ fi
 if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-patch \
     --lock "${PACKAGE_PROFILE_LOCK}" --patch "${EXTENSION_PATCH}"
+elif [[ ${PACKAGE_PROFILE_RECIPE} == numpy-static-v1 ]]; then
+  python3 "${ROOT_DIR}/guest/build/native_package_profile.py" validate-lock \
+    --lock "${PACKAGE_PROFILE_LOCK}"
 fi
 case "${BUILD_CACHE_MODE}" in
   off|auto|refresh) ;;
@@ -297,6 +300,9 @@ EFFECTIVE_SOURCE_LOCK="${WORK_DIR}/effective-sources.lock.json"
 if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" effective-source-lock \
     --lock "${PACKAGE_PROFILE_LOCK}" --source-lock "${SOURCE_LOCK}" --output "${EFFECTIVE_SOURCE_LOCK}"
+elif [[ ${PACKAGE_PROFILE_RECIPE} == numpy-static-v1 ]]; then
+  python3 "${ROOT_DIR}/guest/build/native_package_profile.py" effective-source-lock \
+    --lock "${PACKAGE_PROFILE_LOCK}" --source-lock "${SOURCE_LOCK}" --output "${EFFECTIVE_SOURCE_LOCK}"
 else
   cp "${SOURCE_LOCK}" "${EFFECTIVE_SOURCE_LOCK}"
 fi
@@ -397,6 +403,17 @@ if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
     --lock "${PACKAGE_PROFILE_LOCK}" --package-root "${ATTRS_SOURCE_DIR}/src/attr" \
     --source-lock "${SOURCE_LOCK}" --selection-output "${EXTENSION_SELECTION}" \
     --effective-source-lock-output "${EFFECTIVE_SOURCE_LOCK}"
+elif [[ ${PACKAGE_PROFILE_RECIPE} == numpy-static-v1 ]]; then
+  python3 "${ROOT_DIR}/guest/build/native_package_profile.py" source-lock \
+    --lock "${PACKAGE_PROFILE_LOCK}" --output "${EXTENSION_SOURCE_LOCK}"
+  fetch numpy-source numpy-source.tar.gz "${EXTENSION_SOURCE_LOCK}"
+  fetch cython-source cython-source.tar.gz "${EXTENSION_SOURCE_LOCK}"
+  fetch setuptools-wheel setuptools-71.1.0-py3-none-any.whl "${EXTENSION_SOURCE_LOCK}"
+  ROOT_DIR="${ROOT_DIR}" WORK_DIR="${WORK_DIR}" DOWNLOAD_DIR="${DOWNLOAD_DIR}" \
+    CPYTHON_DIR="${CPYTHON_DIR}" WASI_SDK_PATH="${WASI_SDK_PATH}" \
+    WASI_BUILD_DIR="${WASI_BUILD_DIR}" SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
+    PACKAGE_PROFILE_LOCK="${PACKAGE_PROFILE_LOCK}" \
+    bash "${ROOT_DIR}/guest/build/recipes/numpy-static-v1.sh"
 fi
 
 CLANG="${WASI_SDK_PATH}/bin/clang"
@@ -431,9 +448,29 @@ fi
 RUNTIME_OBJECT="${WORK_DIR}/runtime.o"
 RAW_GUEST="${WORK_DIR}/agent-python-runtime.raw.wasm"
 FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
+RUNTIME_PROFILE_COMPILE_ARGS=()
+PACKAGE_LINK_ARGS=()
+if [[ ${PACKAGE_PROFILE_RECIPE} == numpy-static-v1 ]]; then
+  RUNTIME_PROFILE_COMPILE_ARGS=(-DAGENT_RUNTIME_EXTENSION_PROFILE=1 -I"${WORK_DIR}/generated")
+  mapfile -t NUMPY_ARCHIVES < <(python3 "${ROOT_DIR}/guest/build/native_package_profile.py" archive-paths \
+    --lock "${PACKAGE_PROFILE_LOCK}" --archive-root "${WORK_DIR}/numpy-native")
+  mapfile -t NUMPY_INIT_SYMBOLS < <(python3 "${ROOT_DIR}/guest/build/native_package_profile.py" init-symbols \
+    --lock "${PACKAGE_PROFILE_LOCK}")
+  mapfile -t NUMPY_LINK_LIBRARIES < <(python3 "${ROOT_DIR}/guest/build/native_package_profile.py" link-libraries \
+    --lock "${PACKAGE_PROFILE_LOCK}")
+  if [[ ${#NUMPY_ARCHIVES[@]} -ne 21 || ${#NUMPY_INIT_SYMBOLS[@]} -ne 19 || ${#NUMPY_LINK_LIBRARIES[@]} -ne 1 ]]; then
+    echo "numpy-core requires exactly 19 locked native modules and 2 support archives" >&2
+    exit 35
+  fi
+  for init_symbol in "${NUMPY_INIT_SYMBOLS[@]}"; do
+    PACKAGE_LINK_ARGS+=("-Wl,-u,${init_symbol}")
+  done
+  PACKAGE_LINK_ARGS+=("${NUMPY_ARCHIVES[@]}" "${NUMPY_LINK_LIBRARIES[@]}")
+fi
 
 "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
   -ffile-prefix-map="${ROOT_DIR}"=. -fdebug-prefix-map="${ROOT_DIR}"=. \
+  "${RUNTIME_PROFILE_COMPILE_ARGS[@]}" \
   -I"${ROOT_DIR}/guest/include" \
   -I"${CPYTHON_DIR}/Include" \
   -I"${WASI_BUILD_DIR}" \
@@ -441,7 +478,7 @@ FINAL_GUEST="${DIST_DIR}/${ARTIFACT_FILENAME}"
 
 "${CLANG}" --target=wasm32-wasip1 --sysroot="${SYSROOT}" -O2 \
   -mexec-model=reactor \
-  "${RUNTIME_OBJECT}" "${PYTHON_LIB}" \
+  "${RUNTIME_OBJECT}" "${PACKAGE_LINK_ARGS[@]}" "${PYTHON_LIB}" \
   "${MPDEC_LIB}" "${HACL_LIBS[@]}" "${EXPAT_LIB}" "${WASI_VFS_LIB}" \
   -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
   -lpthread -lm \
@@ -483,6 +520,11 @@ if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
     --epoch "${SOURCE_DATE_EPOCH}"
   python3 "${ROOT_DIR}/guest/build/extension_profile.py" verify-tree \
     --lock "${PACKAGE_PROFILE_LOCK}" --package-root "${VFS_PYTHON_DIR}/site-packages/attr"
+elif [[ ${PACKAGE_PROFILE_RECIPE} == numpy-static-v1 ]]; then
+  python3 "${ROOT_DIR}/tools/copy_tree_deterministic.py" \
+    "${WORK_DIR}/numpy-package/numpy" \
+    "${VFS_PYTHON_DIR}/site-packages/numpy" \
+    --epoch "${SOURCE_DATE_EPOCH}"
 fi
 
 pack_guest() {
@@ -546,7 +588,7 @@ run_import_qualification \
   "${WORK_DIR}/import-qualification" \
   "${IMPORT_QUALIFICATION}"
 MANIFEST_EXTENSION_ARGS=()
-if [[ ${PACKAGE_PROFILE_RECIPE} == attrs-770-v1 ]]; then
+if [[ ${PACKAGE_PROFILE_KIND} != base ]]; then
   MANIFEST_EXTENSION_ARGS=(--extension-selection "${EXTENSION_SELECTION}")
 fi
 python3 "${ROOT_DIR}/guest/build/write-manifest.py" \

@@ -128,18 +128,31 @@ def load_package_profile_module():
     return module
 
 
+def load_native_package_profile_module():
+    path = pathlib.Path(__file__).with_name("native_package_profile.py")
+    spec = importlib.util.spec_from_file_location("artifact_native_package_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load native package profile validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMPORT_INVENTORY = load_import_inventory_module()
 IMPORT_QUALIFICATION = load_import_qualification_module()
 EXTENSION_PROFILE = load_extension_profile_module()
 PACKAGE_PROFILE = load_package_profile_module()
+NATIVE_PACKAGE_PROFILE = load_native_package_profile_module()
 PROFILE_REGISTRY = PACKAGE_PROFILE.load_registry()
 ARTIFACT_FILENAMES = {
     profile_id: PACKAGE_PROFILE.resolve_profile(PROFILE_REGISTRY, profile_id)["artifact_filename"]
     for profile_id in PACKAGE_PROFILE.profile_ids(PROFILE_REGISTRY)
 }
 ATTRS_LOCK = EXTENSION_PROFILE.load_lock(EXTENSION_PROFILE.PROFILE_LOCK)
+NUMPY_LOCK = NATIVE_PACKAGE_PROFILE.load_lock(pathlib.Path(__file__).with_name("profiles") / "numpy-core.lock.json")
 BASE_SOURCE_LOCK = EXTENSION_PROFILE.strict_json_loads((pathlib.Path(__file__).with_name("sources.lock.json")).read_text())
 ATTRS_SOURCES = EXTENSION_PROFILE.merge_source_lock(BASE_SOURCE_LOCK, ATTRS_LOCK)["sources"]
+NUMPY_SOURCES = NATIVE_PACKAGE_PROFILE.merge_source_lock(BASE_SOURCE_LOCK, NUMPY_LOCK)["sources"]
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -260,6 +273,28 @@ def verify(
         source = attrs_sources[0]
         if source.get("version") != package["version"] or source.get("sha256") != package["source_archive_sha256"] or source.get("license") != package["repository_license_id"] or source.get("role") != "python-package" or source.get("artifact_relation") != "packaged":
             raise ValueError("attrs extension source does not match package profile")
+    elif profile == "numpy-core":
+        if schema_version != 4:
+            raise ValueError("numpy-core artifact profile requires schema v4")
+        if not isinstance(extension_profile, dict):
+            raise ValueError("numpy-core artifact profile requires native package selection")
+        extension_profile = NATIVE_PACKAGE_PROFILE.validate_selection(extension_profile, NUMPY_LOCK)
+        if extension_selection is not None:
+            sidecar = NATIVE_PACKAGE_PROFILE.validate_selection(
+                NATIVE_PACKAGE_PROFILE.strict_json_loads(extension_selection.read_text()), NUMPY_LOCK
+            )
+            if sidecar != extension_profile:
+                raise ValueError("native package selection does not match manifest")
+        package = extension_profile["package"]
+        sources = manifest.get("sources")
+        if not isinstance(sources, list) or sources != NUMPY_SOURCES:
+            raise ValueError("numpy artifact source set is invalid")
+        numpy_sources = [row for row in sources if isinstance(row, dict) and row.get("id") == "numpy-source"]
+        if len(numpy_sources) != 1:
+            raise ValueError("numpy source is missing")
+        source = numpy_sources[0]
+        if not str(source.get("version", "")).startswith(package["version"] + "@") or source.get("sha256") != package["source_archive_sha256"] or source.get("license") != package["repository_license_id"] or source.get("role") != "python-native-package" or source.get("artifact_relation") != "linked":
+            raise ValueError("numpy source does not match native package profile")
     else:
         raise ValueError("unsupported artifact profile")
 
@@ -278,6 +313,21 @@ def verify(
             or packages[1] != {"name": "attrs", "version": package["version"], "status": "selected-pure-python"}
         ):
             raise ValueError("attrs artifact package set is invalid")
+    elif profile == "numpy-core":
+        assert isinstance(extension_profile, dict)
+        packages = manifest.get("packages")
+        package = extension_profile["package"]
+        if (
+            not isinstance(packages, list)
+            or len(packages) != 2
+            or not isinstance(packages[0], dict)
+            or packages[0].get("name") != "cpython"
+            or packages[0].get("status") != "core"
+            or not isinstance(packages[0].get("version"), str)
+            or not packages[0]["version"]
+            or packages[1] != {"name": "numpy", "version": package["version"], "status": "selected-static-native"}
+        ):
+            raise ValueError("numpy artifact package set is invalid")
     else:
         packages = manifest.get("packages")
         if not isinstance(packages, list) or not packages:

@@ -88,6 +88,17 @@ func TestVerifyDistributionArtifactFailsClosed(t *testing.T) {
 			value["packages"] = []any{map[string]any{"name": "cpython", "version": "3.14.0", "status": "core"}}
 		},
 		"extension profile missing": func(value map[string]any) { value["extension_profile"] = nil },
+		"resealed native module drift": func(value map[string]any) {
+			extension := value["extension_profile"].(map[string]any)
+			extension["native_modules"].([]any)[0].(map[string]any)["archive"] = "numpy/core/forged.a"
+			delete(extension, "identity")
+			encoded, _ := json.Marshal(extension)
+			digest := sha256.Sum256(encoded)
+			extension["identity"] = "sha256:" + hex.EncodeToString(digest[:])
+		},
+		"numpy source drift": func(value map[string]any) {
+			value["sources"].([]any)[0].(map[string]any)["sha256"] = strings.Repeat("0", 64)
+		},
 		"import inventory drift": func(value map[string]any) {
 			value["python_import_inventory"].(map[string]any)["discoverable_roots"] = []any{"numpy", "json"}
 		},
@@ -251,6 +262,55 @@ func distributionImportQualificationRecordFixture(t *testing.T, encoded []byte) 
 	return record
 }
 
+func numpyExtensionProfileFixture(t *testing.T) map[string]any {
+	t.Helper()
+	modules := []any{
+		map[string]any{"name": "numpy.core._multiarray_tests", "archive": "numpy/core/_multiarray_tests.a", "init_symbol": "PyInit__multiarray_tests", "archive_sha256": strings.Repeat("1", 64), "archive_size": 1},
+		map[string]any{"name": "numpy.core._multiarray_umath", "archive": "numpy/core/_multiarray_umath.a", "init_symbol": "PyInit__multiarray_umath", "archive_sha256": strings.Repeat("2", 64), "archive_size": 2},
+		map[string]any{"name": "numpy.core._operand_flag_tests", "archive": "numpy/core/_operand_flag_tests.a", "init_symbol": "PyInit__operand_flag_tests", "archive_sha256": strings.Repeat("3", 64), "archive_size": 3},
+		map[string]any{"name": "numpy.core._rational_tests", "archive": "numpy/core/_rational_tests.a", "init_symbol": "PyInit__rational_tests", "archive_sha256": strings.Repeat("4", 64), "archive_size": 4},
+		map[string]any{"name": "numpy.core._simd", "archive": "numpy/core/_simd.a", "init_symbol": "PyInit__simd", "archive_sha256": strings.Repeat("5", 64), "archive_size": 5},
+		map[string]any{"name": "numpy.core._struct_ufunc_tests", "archive": "numpy/core/_struct_ufunc_tests.a", "init_symbol": "PyInit__struct_ufunc_tests", "archive_sha256": strings.Repeat("6", 64), "archive_size": 6},
+		map[string]any{"name": "numpy.core._umath_tests", "archive": "numpy/core/_umath_tests.a", "init_symbol": "PyInit__umath_tests", "archive_sha256": strings.Repeat("7", 64), "archive_size": 7},
+		map[string]any{"name": "numpy.fft._pocketfft_internal", "archive": "numpy/fft/_pocketfft_internal.a", "init_symbol": "PyInit__pocketfft_internal", "archive_sha256": strings.Repeat("8", 64), "archive_size": 8},
+		map[string]any{"name": "numpy.linalg._umath_linalg", "archive": "numpy/linalg/_umath_linalg.a", "init_symbol": "PyInit__umath_linalg", "archive_sha256": strings.Repeat("9", 64), "archive_size": 9},
+		map[string]any{"name": "numpy.linalg.lapack_lite", "archive": "numpy/linalg/lapack_lite.a", "init_symbol": "PyInit_lapack_lite", "archive_sha256": strings.Repeat("a", 64), "archive_size": 10},
+		map[string]any{"name": "numpy.random._bounded_integers", "archive": "numpy/random/_bounded_integers.a", "init_symbol": "PyInit__bounded_integers", "archive_sha256": strings.Repeat("b", 64), "archive_size": 11},
+		map[string]any{"name": "numpy.random._common", "archive": "numpy/random/_common.a", "init_symbol": "PyInit__common", "archive_sha256": strings.Repeat("c", 64), "archive_size": 12},
+		map[string]any{"name": "numpy.random._generator", "archive": "numpy/random/_generator.a", "init_symbol": "PyInit__generator", "archive_sha256": strings.Repeat("d", 64), "archive_size": 13},
+		map[string]any{"name": "numpy.random._mt19937", "archive": "numpy/random/_mt19937.a", "init_symbol": "PyInit__mt19937", "archive_sha256": strings.Repeat("e", 64), "archive_size": 14},
+		map[string]any{"name": "numpy.random._pcg64", "archive": "numpy/random/_pcg64.a", "init_symbol": "PyInit__pcg64", "archive_sha256": strings.Repeat("f", 64), "archive_size": 15},
+		map[string]any{"name": "numpy.random._philox", "archive": "numpy/random/_philox.a", "init_symbol": "PyInit__philox", "archive_sha256": strings.Repeat("1", 64), "archive_size": 16},
+		map[string]any{"name": "numpy.random._sfc64", "archive": "numpy/random/_sfc64.a", "init_symbol": "PyInit__sfc64", "archive_sha256": strings.Repeat("2", 64), "archive_size": 17},
+		map[string]any{"name": "numpy.random.bit_generator", "archive": "numpy/random/bit_generator.a", "init_symbol": "PyInit_bit_generator", "archive_sha256": strings.Repeat("3", 64), "archive_size": 18},
+		map[string]any{"name": "numpy.random.mtrand", "archive": "numpy/random/mtrand.a", "init_symbol": "PyInit_mtrand", "archive_sha256": strings.Repeat("4", 64), "archive_size": 19},
+	}
+	support := []any{
+		map[string]any{"name": "npymath", "archive": "numpy/lib/libnpymath.a", "archive_sha256": strings.Repeat("6", 64), "archive_size": 20},
+		map[string]any{"name": "npyrandom", "archive": "numpy/lib/libnpyrandom.a", "archive_sha256": strings.Repeat("7", 64), "archive_size": 21},
+	}
+	profile := map[string]any{
+		"schema_version": 1, "kind": "static-native-package", "profile": "numpy-core",
+		"package": map[string]any{
+			"name": "numpy", "version": "1.26.0b1", "status": "selected-static-native", "import_root": "numpy", "install_path": "site-packages/numpy", "repository_license_id": "BSD-3-Clause",
+			"source_commit": "7bc18034031f32e5d03bb646c472dabd1623e9d5", "source_archive_sha256": "9a34aaef957033ff8a3a865e8f0172eb7de4cf4c2891195a56c13e915fb86014",
+			"tree_sha256": strings.Repeat("5", 64), "file_count": 1, "total_bytes": 1,
+		},
+		"build": map[string]any{
+			"recipe": "numpy-static-v1", "cpython_version": "3.14.0", "wasi_sdk_version": "33", "link_libraries": []any{"c-printscan-long-double"}, "reference_repository": "https://github.com/bkmashiro/wasi-wheels",
+			"reference_commit": "184cce0b537088be76e1e8a06d6fe742e2f29ff4", "reference_build_sha256": "5c6f9b675e4ba5c2027779136c6422cf22a36683a2f37a776e9a38c5985832d7", "reference_static_sha256": "d6c1401dc8a1f55e73c48099b26bc6942d49c1f872c678d43b33b640be4540f0",
+		},
+		"native_modules": modules, "support_libraries": support, "link_input_count": len(modules) + len(support), "identity": "",
+	}
+	encoded, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(encoded)
+	profile["identity"] = "sha256:" + hex.EncodeToString(digest[:])
+	return profile
+}
+
 func distributionManifestFixture(t *testing.T, artifact []byte, profile string) map[string]any {
 	t.Helper()
 	artifactSum := sha256.Sum256(artifact)
@@ -261,8 +321,8 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 	var extension any
 	if profile == "numpy-core" {
 		filename = "agent-python-runtime-numpy-core.wasm"
-		packages = append(packages, map[string]any{"name": "numpy", "version": "2.3.0", "status": "selected-core"})
-		extension = map[string]any{"filename": "extension-selection.json", "manifest_sha256": strings.Repeat("3", 64), "profile": "core", "modules": []any{"numpy._core._multiarray_umath", "numpy.linalg._umath_linalg"}, "link_input_count": 2}
+		packages = append(packages, map[string]any{"name": "numpy", "version": "1.26.0b1", "status": "selected-static-native"})
+		extension = numpyExtensionProfileFixture(t)
 	} else if profile == "attrs-770" {
 		filename = "agent-python-runtime-attrs-770.wasm"
 		packages = append(packages, map[string]any{"name": "attrs", "version": "20.3.0-39-g58d2adc", "status": "selected-pure-python"})
@@ -319,7 +379,7 @@ func qualificationRoots(profile string) []string {
 }
 
 func qualificationResults(profile string) []any {
-	operations := map[string]string{"agent_runtime": "import", "attr": "generic_dynamic_class", "json": "roundtrip", "numpy": "array_sum", "sys": "version_info", "types": "new_class", "typing": "generic_alias"}
+	operations := map[string]string{"agent_runtime": "import", "attr": "generic_dynamic_class", "json": "roundtrip", "numpy": "numpy_core_oracle", "sys": "version_info", "types": "new_class", "typing": "generic_alias"}
 	results := make([]any, 0, len(qualificationRoots(profile)))
 	for _, root := range qualificationRoots(profile) {
 		results = append(results, map[string]any{"name": root, "operation": operations[root], "status": "qualified", "error": ""})
@@ -359,6 +419,13 @@ func distributionImportQualificationFixture(t *testing.T, profile string) []byte
 }
 
 func distributionSources(profile string) []any {
+	if profile == "numpy-core" {
+		return []any{map[string]any{
+			"id": "numpy-source", "version": "1.26.0b1@7bc18034031f32e5d03bb646c472dabd1623e9d5",
+			"url": "https://codeload.github.com/numpy/numpy/tar.gz/7bc18034031f32e5d03bb646c472dabd1623e9d5", "sha256": "9a34aaef957033ff8a3a865e8f0172eb7de4cf4c2891195a56c13e915fb86014",
+			"license": "BSD-3-Clause", "role": "python-native-package", "artifact_relation": "linked",
+		}}
+	}
 	if profile != "attrs-770" {
 		return []any{}
 	}

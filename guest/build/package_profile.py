@@ -118,6 +118,16 @@ def _load_extension_profile_module():
     return module
 
 
+def _load_native_package_profile_module():
+    path = ROOT / "native_package_profile.py"
+    spec = importlib.util.spec_from_file_location("static_native_package_profile", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load native package profile validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_package_contract(profile: dict[str, Any]) -> dict[str, Any] | None:
     registry = load_registry()
     profile_id = profile.get("id") if isinstance(profile, dict) else None
@@ -131,6 +141,8 @@ def load_package_contract(profile: dict[str, Any]) -> dict[str, Any] | None:
     lock_path = ROOT / "profiles" / resolved["lock"]
     if resolved["recipe"] == "attrs-770-v1":
         return _load_extension_profile_module().load_lock(lock_path)
+    if resolved["recipe"] == "numpy-static-v1":
+        return _load_native_package_profile_module().load_lock(lock_path)
     raise ValueError("package profile recipe is unsupported")
 
 
@@ -141,6 +153,8 @@ def source_lock_projection(profile: dict[str, Any], contract: dict[str, Any] | N
         return {"schema_version": 1, "target": "wasm32-wasip1", "sources": []}
     if profile["recipe"] == "attrs-770-v1" and contract is not None:
         return _load_extension_profile_module().source_lock_projection(contract)
+    if profile["recipe"] == "numpy-static-v1" and contract is not None:
+        return _load_native_package_profile_module().source_lock_projection(contract)
     raise ValueError("package source projection is unsupported")
 
 

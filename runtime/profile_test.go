@@ -67,7 +67,7 @@ func TestExecutionProfileAdmissionIsHostOwned(t *testing.T) {
 }
 
 func TestExecutionProfileAcceptsOnlyNamedArtifactProfiles(t *testing.T) {
-	for _, id := range []string{"base", "attrs-770"} {
+	for _, id := range []string{"base", "attrs-770", "numpy-core"} {
 		if _, err := NewExecutionProfile(id, []string{"json"}); err != nil {
 			t.Fatalf("profile %q rejected: %v", id, err)
 		}

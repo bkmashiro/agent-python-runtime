@@ -16,6 +16,7 @@ SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
 ARTIFACT_FILES = {
     "base": "agent-python-runtime.wasm",
     "attrs-770": "agent-python-runtime-attrs-770.wasm",
+    "numpy-core": "agent-python-runtime-numpy-core.wasm",
 }
 
 

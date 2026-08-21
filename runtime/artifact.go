@@ -126,11 +126,55 @@ type distributionArtifactManifest struct {
 }
 
 type numpyExtensionProfile struct {
-	Filename       string   `json:"filename"`
-	ManifestSHA256 string   `json:"manifest_sha256"`
-	Profile        string   `json:"profile"`
-	Modules        []string `json:"modules"`
-	LinkInputCount int      `json:"link_input_count"`
+	SchemaVersion    int                            `json:"schema_version"`
+	Kind             string                         `json:"kind"`
+	Profile          string                         `json:"profile"`
+	Package          numpyExtensionPackage          `json:"package"`
+	Build            numpyExtensionBuild            `json:"build"`
+	NativeModules    []numpyExtensionNativeModule   `json:"native_modules"`
+	SupportLibraries []numpyExtensionSupportLibrary `json:"support_libraries"`
+	LinkInputCount   int                            `json:"link_input_count"`
+	Identity         string                         `json:"identity"`
+}
+
+type numpyExtensionPackage struct {
+	Name                string `json:"name"`
+	Version             string `json:"version"`
+	Status              string `json:"status"`
+	ImportRoot          string `json:"import_root"`
+	InstallPath         string `json:"install_path"`
+	RepositoryLicenseID string `json:"repository_license_id"`
+	SourceCommit        string `json:"source_commit"`
+	SourceArchiveSHA256 string `json:"source_archive_sha256"`
+	TreeSHA256          string `json:"tree_sha256"`
+	FileCount           int    `json:"file_count"`
+	TotalBytes          int    `json:"total_bytes"`
+}
+
+type numpyExtensionBuild struct {
+	Recipe                string   `json:"recipe"`
+	CPythonVersion        string   `json:"cpython_version"`
+	WASISDKVersion        string   `json:"wasi_sdk_version"`
+	LinkLibraries         []string `json:"link_libraries"`
+	ReferenceRepository   string   `json:"reference_repository"`
+	ReferenceCommit       string   `json:"reference_commit"`
+	ReferenceBuildSHA256  string   `json:"reference_build_sha256"`
+	ReferenceStaticSHA256 string   `json:"reference_static_sha256"`
+}
+
+type numpyExtensionNativeModule struct {
+	Name          string `json:"name"`
+	Archive       string `json:"archive"`
+	InitSymbol    string `json:"init_symbol"`
+	ArchiveSHA256 string `json:"archive_sha256"`
+	ArchiveSize   int64  `json:"archive_size"`
+}
+
+type numpyExtensionSupportLibrary struct {
+	Name          string `json:"name"`
+	Archive       string `json:"archive"`
+	ArchiveSHA256 string `json:"archive_sha256"`
+	ArchiveSize   int64  `json:"archive_size"`
 }
 
 type attrsExtensionProfile struct {
@@ -265,8 +309,8 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 		len(manifest.Sources) == 0 || len(manifest.Wasm) == 0 || manifest.Packages == nil || manifest.ExtensionProfile == nil || manifest.Limitations == nil {
 		return errors.New("manifest identity is incomplete")
 	}
-	if manifest.ArtifactProfile == "attrs-770" && manifest.SchemaVersion != 4 {
-		return errors.New("attrs-770 profile requires schema v4")
+	if (manifest.ArtifactProfile == "attrs-770" || manifest.ArtifactProfile == "numpy-core") && manifest.SchemaVersion != 4 {
+		return errors.New("package artifact profile requires schema v4")
 	}
 	artifactSum := sha256.Sum256(artifact)
 	if manifest.Artifact.SHA256 != hex.EncodeToString(artifactSum[:]) {
@@ -305,13 +349,8 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 			return errors.New("base profile contains extension metadata")
 		}
 	case "numpy-core":
-		var extension numpyExtensionProfile
-		extensionDecoder := json.NewDecoder(bytes.NewReader(manifest.ExtensionProfile))
-		extensionDecoder.DisallowUnknownFields()
-		if err := extensionDecoder.Decode(&extension); err != nil || !errors.Is(extensionDecoder.Decode(&struct{}{}), io.EOF) ||
-			extension.Filename != "extension-selection.json" || !artifactHexDigestPattern.MatchString(extension.ManifestSHA256) || extension.Profile != "core" ||
-			len(extension.Modules) != 2 || extension.Modules[0] != "numpy._core._multiarray_umath" || extension.Modules[1] != "numpy.linalg._umath_linalg" || extension.LinkInputCount <= 0 {
-			return errors.New("numpy extension profile is invalid")
+		if err := validateNumpyExtensionProfile(manifest.ExtensionProfile, manifest.Sources); err != nil {
+			return err
 		}
 	case "attrs-770":
 		if err := validateAttrsExtensionProfile(manifest.ExtensionProfile, manifest.Sources); err != nil {
@@ -319,6 +358,92 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 		}
 	default:
 		return errors.New("artifact extension profile is unsupported")
+	}
+	return nil
+}
+
+func validateNumpyExtensionProfile(encoded, sourcesJSON []byte) error {
+	var extension numpyExtensionProfile
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&extension); err != nil || !errors.Is(decoder.Decode(&struct{}{}), io.EOF) {
+		return errors.New("numpy extension profile is invalid")
+	}
+	expectedModules := []struct{ name, archive, init string }{
+		{"numpy.core._multiarray_tests", "numpy/core/_multiarray_tests.a", "PyInit__multiarray_tests"},
+		{"numpy.core._multiarray_umath", "numpy/core/_multiarray_umath.a", "PyInit__multiarray_umath"},
+		{"numpy.core._operand_flag_tests", "numpy/core/_operand_flag_tests.a", "PyInit__operand_flag_tests"},
+		{"numpy.core._rational_tests", "numpy/core/_rational_tests.a", "PyInit__rational_tests"},
+		{"numpy.core._simd", "numpy/core/_simd.a", "PyInit__simd"},
+		{"numpy.core._struct_ufunc_tests", "numpy/core/_struct_ufunc_tests.a", "PyInit__struct_ufunc_tests"},
+		{"numpy.core._umath_tests", "numpy/core/_umath_tests.a", "PyInit__umath_tests"},
+		{"numpy.fft._pocketfft_internal", "numpy/fft/_pocketfft_internal.a", "PyInit__pocketfft_internal"},
+		{"numpy.linalg._umath_linalg", "numpy/linalg/_umath_linalg.a", "PyInit__umath_linalg"},
+		{"numpy.linalg.lapack_lite", "numpy/linalg/lapack_lite.a", "PyInit_lapack_lite"},
+		{"numpy.random._bounded_integers", "numpy/random/_bounded_integers.a", "PyInit__bounded_integers"},
+		{"numpy.random._common", "numpy/random/_common.a", "PyInit__common"},
+		{"numpy.random._generator", "numpy/random/_generator.a", "PyInit__generator"},
+		{"numpy.random._mt19937", "numpy/random/_mt19937.a", "PyInit__mt19937"},
+		{"numpy.random._pcg64", "numpy/random/_pcg64.a", "PyInit__pcg64"},
+		{"numpy.random._philox", "numpy/random/_philox.a", "PyInit__philox"},
+		{"numpy.random._sfc64", "numpy/random/_sfc64.a", "PyInit__sfc64"},
+		{"numpy.random.bit_generator", "numpy/random/bit_generator.a", "PyInit_bit_generator"},
+		{"numpy.random.mtrand", "numpy/random/mtrand.a", "PyInit_mtrand"},
+	}
+	packageRecord := extension.Package
+	build := extension.Build
+	if extension.SchemaVersion != 1 || extension.Kind != "static-native-package" || extension.Profile != "numpy-core" || extension.LinkInputCount != len(expectedModules)+2 || len(extension.NativeModules) != len(expectedModules) || len(extension.SupportLibraries) != 2 ||
+		packageRecord.Name != "numpy" || packageRecord.Version != "1.26.0b1" || packageRecord.Status != "selected-static-native" || packageRecord.ImportRoot != "numpy" || packageRecord.InstallPath != "site-packages/numpy" ||
+		packageRecord.RepositoryLicenseID != "BSD-3-Clause" || packageRecord.SourceCommit != "7bc18034031f32e5d03bb646c472dabd1623e9d5" || packageRecord.SourceArchiveSHA256 != "9a34aaef957033ff8a3a865e8f0172eb7de4cf4c2891195a56c13e915fb86014" ||
+		!artifactHexDigestPattern.MatchString(packageRecord.TreeSHA256) || packageRecord.FileCount <= 0 || packageRecord.FileCount > 8192 || packageRecord.TotalBytes <= 0 || packageRecord.TotalBytes > 134217728 ||
+		build.Recipe != "numpy-static-v1" || build.CPythonVersion != "3.14.0" || build.WASISDKVersion != "33" || len(build.LinkLibraries) != 1 || build.LinkLibraries[0] != "c-printscan-long-double" || build.ReferenceRepository != "https://github.com/bkmashiro/wasi-wheels" ||
+		build.ReferenceCommit != "184cce0b537088be76e1e8a06d6fe742e2f29ff4" || build.ReferenceBuildSHA256 != "5c6f9b675e4ba5c2027779136c6422cf22a36683a2f37a776e9a38c5985832d7" || build.ReferenceStaticSHA256 != "d6c1401dc8a1f55e73c48099b26bc6942d49c1f872c678d43b33b640be4540f0" {
+		return errors.New("numpy extension profile identity is invalid")
+	}
+	for index, expected := range expectedModules {
+		module := extension.NativeModules[index]
+		if module.Name != expected.name || module.Archive != expected.archive || module.InitSymbol != expected.init || !artifactHexDigestPattern.MatchString(module.ArchiveSHA256) || module.ArchiveSize <= 0 || module.ArchiveSize > 67108864 {
+			return errors.New("numpy native module inventory is invalid")
+		}
+	}
+	expectedSupport := []struct{ name, archive string }{
+		{"npymath", "numpy/lib/libnpymath.a"},
+		{"npyrandom", "numpy/lib/libnpyrandom.a"},
+	}
+	for index, expected := range expectedSupport {
+		library := extension.SupportLibraries[index]
+		if library.Name != expected.name || library.Archive != expected.archive || !artifactHexDigestPattern.MatchString(library.ArchiveSHA256) || library.ArchiveSize <= 0 || library.ArchiveSize > 67108864 {
+			return errors.New("numpy support library inventory is invalid")
+		}
+	}
+	var generic map[string]any
+	if rejectDuplicateBoundedJSON(encoded) != nil || json.Unmarshal(encoded, &generic) != nil {
+		return errors.New("numpy extension profile identity is invalid")
+	}
+	identity, ok := generic["identity"].(string)
+	generic["identity"] = ""
+	canonical, err := json.Marshal(generic)
+	sum := sha256.Sum256(canonical)
+	if !ok || err != nil || identity != "sha256:"+hex.EncodeToString(sum[:]) || identity != extension.Identity {
+		return errors.New("numpy extension profile digest is invalid")
+	}
+	var sources []distributionSource
+	sourceDecoder := json.NewDecoder(bytes.NewReader(sourcesJSON))
+	sourceDecoder.DisallowUnknownFields()
+	if err := sourceDecoder.Decode(&sources); err != nil || !errors.Is(sourceDecoder.Decode(&struct{}{}), io.EOF) {
+		return errors.New("numpy source set is invalid")
+	}
+	matches := 0
+	for _, source := range sources {
+		if source.ID == "numpy-source" {
+			matches++
+			if source.Version != "1.26.0b1@7bc18034031f32e5d03bb646c472dabd1623e9d5" || source.SHA256 != packageRecord.SourceArchiveSHA256 || source.License != packageRecord.RepositoryLicenseID || source.Role != "python-native-package" || source.ArtifactRelation != "linked" {
+				return errors.New("numpy source identity is invalid")
+			}
+		}
+	}
+	if matches != 1 {
+		return errors.New("numpy source identity is missing")
 	}
 	return nil
 }
@@ -487,7 +612,7 @@ func validatePythonImportQualification(profile string, inventory *pythonImportIn
 		"types": "new_class", "typing": "generic_alias", "urllib": "parse", "xml": "etree_roundtrip",
 	}
 	if profile == "numpy-core" {
-		expectedOperations["numpy"] = "array_sum"
+		expectedOperations["numpy"] = "numpy_core_oracle"
 	}
 	previous = ""
 	for _, result := range qualification.Results {
@@ -547,7 +672,7 @@ func validatePythonImportQualificationSidecar(profile string, qualification *pyt
 func validateArtifactPackages(profile string, packages []ArtifactPackage) error {
 	expected := []struct{ name, status string }{{"cpython", "core"}}
 	if profile == "numpy-core" {
-		expected = append(expected, struct{ name, status string }{"numpy", "selected-core"})
+		expected = append(expected, struct{ name, status string }{"numpy", "selected-static-native"})
 	} else if profile == "attrs-770" {
 		expected = append(expected, struct{ name, status string }{"attrs", "selected-pure-python"})
 	}

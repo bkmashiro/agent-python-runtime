@@ -86,6 +86,24 @@ class GuestSourceContractTests(unittest.TestCase):
         self.assertNotIn("latest", text.lower())
         self.assertNotIn("wasi-wheels", text.lower())
 
+    def test_numpy_profile_is_locked_static_and_uses_pysolate_runtime(self):
+        build = BUILD_SCRIPT.read_text()
+        recipe = (ROOT / "guest" / "build" / "recipes" / "numpy-static-v1.sh").read_text()
+        runtime = (ROOT / "guest" / "src" / "runtime.c").read_text()
+        lock = (ROOT / "guest" / "build" / "profiles" / "numpy-core.lock.json").read_text()
+        self.assertIn("native_package_profile.py", build)
+        self.assertIn("-DAGENT_RUNTIME_EXTENSION_PROFILE=1", build)
+        self.assertIn('PACKAGE_LINK_ARGS+=("-Wl,-u,${init_symbol}")', build)
+        self.assertIn("-lc-printscan-long-double", (ROOT / "guest" / "build" / "native_package_profile.py").read_text())
+        self.assertNotIn("-Wl,--whole-archive", build)
+        self.assertIn("--no-index", recipe)
+        self.assertNotIn("curl ", recipe)
+        self.assertNotIn("wget ", recipe)
+        self.assertIn("register_selected_builtins", runtime)
+        self.assertIn("AGENT_RUNTIME_WASM_EXTENSION_FINDER_SCRIPT", runtime)
+        self.assertIn('"runtime_package_installation": false', lock)
+        self.assertNotIn("pickle", recipe + lock)
+
     def test_workflow_builds_only_the_base_profile(self):
         workflow = ARTIFACT_WORKFLOW.read_text()
         self.assertIn("AGENT_RUNTIME_ARTIFACT_PROFILE: base", workflow)

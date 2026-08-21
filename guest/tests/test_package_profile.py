@@ -23,9 +23,9 @@ class PackageProfileTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tool = load_tool()
 
-    def test_registry_resolves_base_and_attrs_as_closed_profiles(self):
+    def test_registry_resolves_base_and_package_profiles_as_closed_profiles(self):
         registry = self.tool.load_registry(REGISTRY_PATH)
-        self.assertEqual(("base", "attrs-770"), self.tool.profile_ids(registry))
+        self.assertEqual(("base", "attrs-770", "numpy-core"), self.tool.profile_ids(registry))
         base = self.tool.resolve_profile(registry, "base")
         self.assertEqual("base", base["kind"])
         self.assertIsNone(base["lock"])
@@ -35,8 +35,13 @@ class PackageProfileTests(unittest.TestCase):
         self.assertEqual("attrs-770.lock.json", attrs["lock"])
         self.assertEqual("attrs-770-v1", attrs["recipe"])
         self.assertEqual(["extension_patch"], attrs["private_inputs"])
+        numpy = self.tool.resolve_profile(registry, "numpy-core")
+        self.assertEqual("static-native-package", numpy["kind"])
+        self.assertEqual("numpy-core.lock.json", numpy["lock"])
+        self.assertEqual("numpy-static-v1", numpy["recipe"])
+        self.assertEqual(["agent_runtime", "json", "numpy", "sys"], numpy["required_import_roots"])
         with self.assertRaisesRegex(ValueError, "unsupported package profile"):
-            self.tool.resolve_profile(registry, "numpy-core")
+            self.tool.resolve_profile(registry, "pandas")
 
     def test_registry_is_strict_and_rejects_paths_or_duplicate_profiles(self):
         registry = json.loads(REGISTRY_PATH.read_text())
@@ -62,6 +67,13 @@ class PackageProfileTests(unittest.TestCase):
         self.assertEqual("f1e3b25ec86f639a4ce256f5c1216fd585527142a08a284cc5fd9c9de603229f", contract["package"]["tree_sha256"])
         source_lock = self.tool.source_lock_projection(attrs, contract)
         self.assertEqual(["attrs-source"], [row["id"] for row in source_lock["sources"]])
+
+        numpy = self.tool.resolve_profile(registry, "numpy-core")
+        numpy_contract = self.tool.load_package_contract(numpy)
+        self.assertEqual("static-native-package", numpy_contract["kind"])
+        self.assertEqual(19, len(numpy_contract["native_modules"]))
+        numpy_sources = self.tool.source_lock_projection(numpy, numpy_contract)
+        self.assertEqual(["cython-source", "numpy-source", "setuptools-wheel"], [row["id"] for row in numpy_sources["sources"]])
 
     def test_build_script_resolves_registry_before_cache_and_keeps_base_default(self):
         text = BUILD_SCRIPT.read_text()

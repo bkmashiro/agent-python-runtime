@@ -55,6 +55,10 @@ _ATTRS_770_PROBES = (
     ("typing", "generic_alias"),
 )
 
+_NUMPY_CORE_PROBES = (
+    ("numpy", "numpy_core_oracle"),
+)
+
 PROBE_CODE = r'''import builtins
 import importlib
 import sys
@@ -161,6 +165,18 @@ candidate = parent[int]
                 ["types", "typing"],
             )
             assert namespace["candidate"].__origin__ is namespace["parent"]
+        elif operation == "numpy_core_oracle":
+            assert module.__version__ == "1.26.0b1"
+            value = module.arange(6, dtype=module.int64).reshape((2, 3))
+            assert (value * 2 + 1).tolist() == [[1, 3, 5], [7, 9, 11]]
+            assert value.flags.c_contiguous
+            value = module.asarray([0.5, -1.25, 3.0], dtype=module.dtype("<f8"))
+            restored = module.frombuffer(value.tobytes(order="C"), dtype=module.dtype("<f8"))
+            assert restored.dtype.str == "<f8"
+            assert restored.tolist() == [0.5, -1.25, 3.0]
+            left = module.arange(6, dtype=module.int64).reshape((2, 3))
+            right = module.arange(6, dtype=module.int64).reshape((3, 2))
+            assert (left @ right).tolist() == [[10, 13], [28, 40]]
         else:
             raise ValueError("unknown qualification operation")
     except Exception as exc:
@@ -205,6 +221,8 @@ def probe_specs(profile: str) -> list[dict[str, str]]:
     probes = _BASE_PROBES
     if resolved["recipe"] == "attrs-770-v1":
         probes += _ATTRS_770_PROBES
+    elif resolved["recipe"] == "numpy-static-v1":
+        probes += _NUMPY_CORE_PROBES
     return [{"name": name, "operation": operation} for name, operation in sorted(probes)]
 
 

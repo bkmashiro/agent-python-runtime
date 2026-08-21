@@ -63,6 +63,17 @@ class ImportQualificationTests(unittest.TestCase):
         catalog = self.tool.extract_qualification(self.qualified_responses("attrs-770"), "attrs-770")
         self.assertTrue({"attr", "types", "typing"}.issubset(catalog["qualified_roots"]))
 
+    def test_numpy_profile_uses_one_bounded_numeric_oracle(self):
+        specs = self.tool.probe_specs("numpy-core")
+        numpy_specs = [row for row in specs if row["name"] == "numpy"]
+        self.assertEqual([{"name": "numpy", "operation": "numpy_core_oracle"}], numpy_specs)
+        self.assertIn('module.__version__ == "1.26.0b1"', self.tool.PROBE_CODE)
+        self.assertIn("value.tobytes", self.tool.PROBE_CODE)
+        self.assertIn("left @ right", self.tool.PROBE_CODE)
+        self.assertNotIn("pickle", self.tool.PROBE_CODE)
+        catalog = self.tool.extract_qualification(self.qualified_responses("numpy-core"), "numpy-core")
+        self.assertIn("numpy", catalog["qualified_roots"])
+
     def test_extract_builds_sorted_qualified_catalog(self):
         catalog = self.tool.extract_qualification(self.qualified_responses(), "base")
         self.assertEqual(1, catalog["schema_version"])

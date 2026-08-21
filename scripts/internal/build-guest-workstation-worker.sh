@@ -69,6 +69,18 @@ build_status=$?
 set -e
 finished_ns=$(date +%s%N)
 if [[ $build_status -ne 0 ]]; then
+  rm -rf "$output/failed-debug"
+  mkdir -p "$output/failed-debug"
+  if [[ -d dist ]]; then
+    cp -a dist "$output/failed-debug/dist"
+  fi
+  if [[ -d build/guest/import-inventory ]]; then
+    cp -a build/guest/import-inventory "$output/failed-debug/import-inventory"
+  fi
+  if [[ -d build/guest/import-qualification ]]; then
+    cp -a build/guest/import-qualification "$output/failed-debug/import-qualification"
+  fi
+  printf '{"schema_version":"pysolate.failed-workstation-build.v1","publishable":false,"build_status":%d}\n' "$build_status" > "$output/failed-debug/FAILURE.json"
   printf 'build failed with status %d\n' "$build_status" >&2
   exit "$build_status"
 fi

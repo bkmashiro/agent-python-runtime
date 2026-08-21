@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 usage: scripts/build-guest-workstation.sh --output ABSOLUTE_DIR [--cache-mode auto|refresh|off]
-       [--artifact-profile base|attrs-770] [--extension-patch ABSOLUTE_FILE]
+       [--artifact-profile base|attrs-770|numpy-core] [--extension-patch ABSOLUTE_FILE]
        [--gateway shell2|shell3]
 
 Build the exact clean HEAD on gpu31 via an explicit shell gateway, retrieve a complete evidence bundle,
@@ -37,6 +37,9 @@ case "$artifact_profile" in
     ;;
   attrs-770)
     if [[ $extension_patch != /* || ! -f $extension_patch || -L $extension_patch ]]; then usage >&2; exit 2; fi
+    ;;
+  numpy-core)
+    if [[ -n $extension_patch ]]; then usage >&2; exit 2; fi
     ;;
   *) usage >&2; exit 2 ;;
 esac

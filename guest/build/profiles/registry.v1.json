@@ -32,6 +32,20 @@
       "private_inputs": [
         "extension_patch"
       ]
+    },
+    {
+      "id": "numpy-core",
+      "artifact_filename": "agent-python-runtime-numpy-core.wasm",
+      "kind": "static-native-package",
+      "lock": "numpy-core.lock.json",
+      "recipe": "numpy-static-v1",
+      "required_import_roots": [
+        "agent_runtime",
+        "json",
+        "numpy",
+        "sys"
+      ],
+      "private_inputs": []
     }
   ]
 }

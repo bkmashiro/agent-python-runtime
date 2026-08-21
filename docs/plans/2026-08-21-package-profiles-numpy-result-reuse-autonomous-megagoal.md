@@ -417,4 +417,8 @@ Do **not** stop because:
 
 ## Completion log
 
-Append verified phase summaries here during execution. Include exact gate, commit, artifact/evidence identity and next pointer; do not paste raw logs or private bodies.
+- **P0–P2, complete:** preregistration and package/effect boundary freeze landed in `f091186`; the closed profile registry landed in `5e82cb7`; the locked `numpy-core` producer and mechanism closeout landed in `47070b1` and `a51ce3a`. The canonical artifact is `sha256:1b759febddb9dd0d65760c74b21b07c4f04fa992ce761639fbb9baef155926aa`.
+- **P3, complete:** `fc39f0e` added the closed shared registration contract for `semantic_pre_dispatch` and `prepared_pure_region` without changing either consumer's projection or authority.
+- **P4, complete:** `2db7b8f` added the Host-owned run-scoped blob/lease lifecycle. Follow-up boundedness fixes are included in the P5 mechanism commit; full unit/race gates and the Linux/386 max-`uint32` runtime regression pass.
+- **P5, complete:** `16c141d051c43a2a89383336b3c4ca11fe9bb0c5` (`tree c9bd3255325b12c6ad54b1a78772b439ddb0d9dd`) seals bounded `numpy_ndarray_c_v1` bodies and exact producer/consumer joins. macOS evidence is `sha256:e22a5db558c250877475c648a93734b325f92f689392c5bdc6df67c4beac7ae9`; Linux private-COW evidence is `sha256:a974a959964a24e7e20d9f0aa7f6d278907c074b738f9f51c7afbcdc83dfcd38`. Matched result and error/log lanes pass, consumer mutation is isolated, every Guest records zero capability calls, all seven Linux Guests select private-COW without fallback, and teardown retains zero bytes.
+- **Next:** P6 narrow source-bound NumPy producer admission. No timing in P2/P5 is admitted into the frozen economics campaign.

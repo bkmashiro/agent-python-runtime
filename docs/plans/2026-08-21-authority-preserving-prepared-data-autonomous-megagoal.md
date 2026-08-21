@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Prepared on 2026-08-21; implementation not started.
+**Status:** Active on 2026-08-21; Phase 0 contract frozen, Phase 1 next.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -238,13 +238,13 @@ If a seam spans Host authority, Guest ABI and memory lifecycle together, the con
 
 Tasks:
 
-- [ ] Re-read live Git, this file, the closed predecessor, `docs/research/effect-aware-contract-v0.md`, `docs/research/semantic-speculation-roadmap-v0.md`, `runtime/capability`, `runtime/semantic`, `runtime/resultblob`, `runtime/numpycodec`, `runtime/numpyproducer`, `runtime/engine/wazero`, and package-profile placement.
-- [ ] Map the current exact source-stream → verified overlay → Host pre-dispatch → staged observation → logical claim path.
-- [ ] Map current `numpy-core` artifact selection and prove whether NumPy is imported before the reusable COW baseline snapshot.
-- [ ] Freeze `PreparedDataContract v1`, occurrence/input/root/freshness/profile/codec bindings, lifecycle statuses and body limits.
-- [ ] Freeze one deterministic `.npy` fixture family and expected result/error/logical/physical oracles.
-- [ ] Freeze matched treatments, metrics, trial counts and promotion thresholds before formal timings.
-- [ ] Record exact parallel worktree/file ownership before dispatching workers.
+- [x] Re-read live Git, this file, the closed predecessor, `docs/research/effect-aware-contract-v0.md`, `docs/research/semantic-speculation-roadmap-v0.md`, `runtime/capability`, `runtime/semantic`, `runtime/resultblob`, `runtime/numpycodec`, `runtime/numpyproducer`, `runtime/engine/wazero`, and package-profile placement.
+- [x] Map the current exact source-stream → verified overlay → Host pre-dispatch → staged observation → logical claim path.
+- [x] Map current `numpy-core` artifact selection and prove whether NumPy is imported before the reusable COW baseline snapshot.
+- [x] Freeze `PreparedDataContract v1`, occurrence/input/root/freshness/profile/codec bindings, lifecycle statuses and body limits.
+- [x] Freeze one deterministic `.npy` fixture family and expected result/error/logical/physical oracles.
+- [x] Freeze matched treatments, metrics, trial counts and promotion thresholds before formal timings.
+- [x] Record exact parallel worktree/file ownership before dispatching workers.
 
 **Gate P0:** Contract permits exactly one explicit Host-declared immutable `.npy` preparation lane; source syntax alone remains powerless; the experiment can falsify authority, overlap, memory and economics claims. Commit and push, then continue.
 
@@ -469,6 +469,7 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 ## Completion log
 
 - 2026-08-21: Goal prepared from clean `main` at `eeacf5bf4bccb1e62131db84eb741925da6808cf`. Predecessor NumPy result-reuse goal remains complete; P8 remains `not entered`. No implementation or formal observation has started.
+- 2026-08-21: Phase 0 froze `docs/research/authority-preserving-prepared-data-contract-v1.md` and canonical preregistration `sha256:0c16f1668d1de09c21d95748e66bd5dc5241169f5be982ab8427c6cc7b2bdcdf`. The exact current lifecycle is verified-prefix analysis → sealed Plan join → one-shot physical read → staged observation → unchanged Broker claim. Static source archaeology also proved the generic Wazero COW canonical image calls `_initialize` and `runtime_init({})` but does not explicitly import NumPy; P7 warm-engine capacity is not evidence of a package-imported baseline. The matched core is one deterministic 8 MiB `<i8` `.npy`; larger payloads require a pre-observation extension. P1 owns `runtime/engine/wazero` package-ready preparation, P2 owns the authority/peephole contract, and the later harness owns only `research/prepareddataset` plus `cmd/prepared-data-*`.
 
 ## Short prompt to start this mega-goal
 

@@ -275,6 +275,12 @@ func TestSameOccurrencePreservesConditionalReachability(t *testing.T) {
 	}
 }
 
+func TestFrozenPreparedDataIdentifiers(t *testing.T) {
+	if LoaderNumpyNPYV1 != "numpy_npy_c_v1" || CodecNumpyNDArrayCV1 != "numpy_ndarray_c_v1" {
+		t.Fatalf("loader=%q codec=%q", LoaderNumpyNPYV1, CodecNumpyNDArrayCV1)
+	}
+}
+
 func validDeclaration(planIdentity string) HostPreparedDataDeclaration {
 	source := baseSource()
 	return HostPreparedDataDeclaration{

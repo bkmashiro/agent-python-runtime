@@ -18,7 +18,7 @@ const (
 	ContractSchemaVersion = "pysolate.prepared-data-contract.v1"
 
 	SourcePolicyImmutableWorkspaceRoot = "immutable_workspace_root"
-	LoaderNumpyNPYV1                   = "numpy_npy_v1"
+	LoaderNumpyNPYV1                   = "numpy_npy_c_v1"
 	CodecNumpyNDArrayCV1               = "numpy_ndarray_c_v1"
 
 	PreparedCapability        = "sources.read"

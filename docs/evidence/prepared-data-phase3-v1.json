@@ -1,0 +1,158 @@
+{
+  "artifacts": {
+    "linux_binary": "sha256:e1d48adec59182183f3b14ad4c688263a3951be33bb957d17bdffdb71b1e93ce",
+    "linux_report": "sha256:e03197b108c555f45c986dabe83c11f8f2d3d04fd54bfae1997fc26a66846211",
+    "macos_binary": "sha256:c36ee9a64cbb7c0d71aad3a0dbbb7e464612a3ecba7f5a6798b27d095b89a425",
+    "macos_report": "sha256:0387658629b1c0d2c999ed705b1b90c50c140252c062d9d8bc8d8b0472d1ad94"
+  },
+  "focused_controls": [
+    "later syntax rejected by target analyzer",
+    "earlier exception zero claim/discard one",
+    "branch not taken zero claim/discard one",
+    "cancel before read",
+    "cancel after read issue",
+    "late completion no partial body",
+    "source replacement claim mismatch",
+    "body corruption rejection",
+    "claim replay rejection",
+    "unconsumed orphan cleanup"
+  ],
+  "identity": "sha256:172317c7bbfcf51f7a90087718f7a4c5c54bfec3fb4145084f4be2399a12e543",
+  "linux_dynamic_controls": {
+    "artifact_sha256": "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad",
+    "cases": [
+      {
+        "claims": 1,
+        "consumed": 1,
+        "discarded": 0,
+        "id": "reached",
+        "result": {
+          "shape": [
+            2,
+            3
+          ],
+          "sum": 15
+        },
+        "status": "ok"
+      },
+      {
+        "claims": 0,
+        "consumed": 0,
+        "discarded": 1,
+        "id": "branch_not_taken",
+        "result": "unreached",
+        "status": "ok"
+      },
+      {
+        "claims": 0,
+        "consumed": 0,
+        "discarded": 1,
+        "id": "earlier_exception",
+        "status": "error"
+      }
+    ],
+    "schema_version": "pysolate.prepared-data-claim-probe.v1"
+  },
+  "macos_vertical": {
+    "artifact_sha256": "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad",
+    "artificial_read_delay_nanos": 200000000,
+    "authorized_starts": 1,
+    "candidate_call": "numpy.load",
+    "claim_sha256": "sha256:d885974951e33fc17ba84897c8687cb36496403074d642aff0c9db95f8287c5a",
+    "contract_sha256": "sha256:e3f552f85b97d785606f659b794f9f906ae6d3719e174bb4f3a476ca9a4e3f89",
+    "decode_before_final": true,
+    "decode_completed_nanos": 233900542,
+    "final_source_released_nanos": 502061709,
+    "later_syntax_rejected": true,
+    "logical_parity": true,
+    "no_contract_starts": 0,
+    "physical_capability": "sources.read",
+    "physical_outcome_bytes": 105,
+    "plan_sha256": "sha256:155b46a29b6acadacdeb34e5753676d656e96f7d64641fd86e3e15b3807f71a1",
+    "preparation_sha256": "sha256:b4d368b45c3212d0371cab043ae29d3fee579d98d7d9debda77cc2d703684780",
+    "read_before_final": true,
+    "read_completed_nanos": 219974625,
+    "read_started_nanos": 109459,
+    "result": {
+      "shape": [
+        1024,
+        1024
+      ],
+      "sum": 549755289600
+    },
+    "schema_version": "pysolate.prepared-data-probe.v1",
+    "staged": {
+      "BodyBytes": 0,
+      "Counters": {
+        "LogicalClaimBytes": 8388608,
+        "LogicalClaims": 1,
+        "PhysicalCancellations": 0,
+        "PhysicalDecodedBytes": 8388608,
+        "PhysicalDecodes": 1,
+        "PhysicalMaterializations": 1,
+        "PhysicalMaterializedBytes": 8388608,
+        "PhysicalOrphans": 0,
+        "PhysicalReadBytes": 8388736,
+        "PhysicalReads": 1,
+        "PhysicalRejections": 0,
+        "PhysicalSealedBytes": 8388608,
+        "PhysicalSeals": 1,
+        "PhysicalSourceVerifications": 1
+      },
+      "Disposition": "",
+      "ID": "sha256:b4d368b45c3212d0371cab043ae29d3fee579d98d7d9debda77cc2d703684780",
+      "Metadata": {
+        "BodyBytes": 0,
+        "BodySHA256": "",
+        "DType": "",
+        "FileBytes": 0,
+        "FileSHA256": "",
+        "First": 0,
+        "FortranOrder": false,
+        "HeaderBytes": 0,
+        "Last": 0,
+        "Order": "",
+        "Shape": [
+          0,
+          0
+        ],
+        "Sum": 0,
+        "VersionMajor": 0,
+        "VersionMinor": 0
+      },
+      "SourceIdentity": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+      "State": "Claimed"
+    },
+    "token_claims": 1,
+    "token_consumed": 1,
+    "token_discarded": 0,
+    "typed_metadata": {
+      "BodyBytes": 8388608,
+      "BodySHA256": "sha256:a78cee677876b925402c15818acd3fc020a47754d9d1c26688914ea09070f8d0",
+      "DType": "<i8",
+      "FileBytes": 8388736,
+      "FileSHA256": "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e",
+      "First": 0,
+      "FortranOrder": false,
+      "HeaderBytes": 128,
+      "Last": 1048575,
+      "Order": "C",
+      "Shape": [
+        1024,
+        1024
+      ],
+      "Sum": 549755289600,
+      "VersionMajor": 1,
+      "VersionMinor": 0
+    },
+    "verified_target_guest": true
+  },
+  "notes": [
+    "Broker carries only small receipt",
+    "8 MiB body remains Run-private Host staging",
+    "200 ms delay is explicit mechanism stimulus, not economics"
+  ],
+  "schema_version": "pysolate.pd.p3.evidence.v1",
+  "source_commit": "b05a94d58937fda5c39126cd60a34471da3ac414",
+  "source_tree": "b6ea4eb3c2ef71586e68e9f41eac4b57f9dd205c"
+}

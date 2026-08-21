@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Active on 2026-08-21; Phases 0–2 complete, Phase 3 active; P4 two-stage correctness slice measured.
+**Status:** Active on 2026-08-21; Phases 0–3 complete, P4/P5 unified harness next.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -284,14 +284,14 @@ Tasks:
 
 Tasks:
 
-- [ ] Reuse the existing read pre-dispatch/Broker path for the exact immutable source rather than giving the loader arbitrary filesystem authority.
-- [ ] Implement one authority-free loader Guest or narrow trusted `.npy` codec; choose the smaller path after a bounded spike and document the semantic claim.
-- [ ] Parse and validate `.npy` header/body under fixed dtype/shape/size/endianness/order rules.
-- [ ] Publish only an exact Run-private typed staging identity after successful read/decode/verification; no durable cache.
-- [ ] Make unchanged final Python claim only at the original dynamic occurrence through an exact source/argument/freshness/object join.
-- [ ] Record read/decode overlap against source-generation release times.
-- [ ] RED-test later syntax error, earlier exception, branch not taken, cancellation before/after physical start, late completion, source replacement, body corruption, claim replay and unconsumed orphan cleanup.
-- [ ] Prove every physical attempt and logical call has a typed terminal disposition and no partial publication.
+- [x] Reuse the existing read pre-dispatch/Broker path for the exact immutable source rather than giving the loader arbitrary filesystem authority.
+- [x] Implement one authority-free loader Guest or narrow trusted `.npy` codec; choose the smaller path after a bounded spike and document the semantic claim.
+- [x] Parse and validate `.npy` header/body under fixed dtype/shape/size/endianness/order rules.
+- [x] Publish only an exact Run-private typed staging identity after successful read/decode/verification; no durable cache.
+- [x] Make unchanged final Python claim only at the original dynamic occurrence through an exact source/argument/freshness/object join.
+- [x] Record read/decode overlap against source-generation release times.
+- [x] RED-test later syntax error, earlier exception, branch not taken, cancellation before/after physical start, late completion, source replacement, body corruption, claim replay and unconsumed orphan cleanup.
+- [x] Prove every physical attempt and logical call has a typed terminal disposition and no partial publication.
 
 **Gate P3:** A real Guest run starts authorized read/decode before finalization, returns baseline-equivalent result at exact claim, and all unreached/invalid/cancelled controls preserve logical-call and authority semantics.
 
@@ -476,6 +476,8 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 - 2026-08-21: The P4 full-derived-image correctness mechanism first passed at `4368d80fb541b011fd8c15982744871a5e94aa10`; its v1 9.66 s observation combined package and dataset preparation and is retained only as a corrected pilot. The two-stage mechanism at `c4820d15b14c1608cbb006f710aeb4eb1a8b1177` retains one immutable package parent and derives each dataset image from a fresh parent clone, never from a prior dataset image. Clean gpu31 v2 evidence separates one-time package-shard prepare (**7.286 s**, excluded from per-load critical path) from 8 MiB dataset derivation (**2.233 s**), then records fresh consumers at **64.7 ms / 51.0 ms**, zero body transfer per consumer, private-COW page faults, independent parent/dataset identities and A→B mutation isolation. Body-safe v2 evidence identity is `sha256:f79ec931ef87f6945817c1be3c1ba8e1a09e11866c71d5a7e548c05416f560b7`. P4 remains open until the 1/2/4 harness and private-copy/recompute controls join in P5; no generic allocator or page-composed path was added.
 
 - 2026-08-21: Phase 2 is complete at `a960a5cc27537d072d86a7f5338a307ab0bfb8c8`. The target-Guest analyzer consumes a deterministic import-line-neutral analysis overlay while the original prefix/final source digests remain Host-bound; candidate `numpy.load` and physical `sources.read` are distinct identities. The clean macOS probe records zero starts without a Host contract, one start after exact sealed join, and a final-source claim identity. Every authority/source/profile/freshness/result-budget mutation fails before physical start in focused regressions. Body-safe evidence identity is `sha256:ed350dc700b58d821c48344ebdd02e1791bf995ed38aa361e336a6b7be52489d`.
+
+- 2026-08-21: Phase 3 is complete at `b05a94d58937fda5c39126cd60a34471da3ac414`. A real macOS Guest run begins the exact Host-authorized immutable file read and strict 8 MiB decode before final-source release, keeps the body out of the Broker response, seals Run-private typed staging, and dynamically claims once at unchanged `np.load`; shape `[1024,1024]` and sum `549755289600` match the serial oracle. Clean gpu31 controls prove reached `1/1/0`, branch-not-taken `0/0/1`, and earlier-exception `0/0/1` claim/consume/discard dispositions. Focused tests cover later syntax error, cancellation before/after read issue, late completion, source replacement, corruption, replay and orphan cleanup. Evidence identity is `sha256:172317c7bbfcf51f7a90087718f7a4c5c54bfec3fb4145084f4be2399a12e543`.
 
 ## Short prompt to start this mega-goal
 

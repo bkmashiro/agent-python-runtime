@@ -52,6 +52,9 @@ type TrialRecord struct {
 	ResultParity           bool               `json:"result_parity"`
 	PhysicalGuests         uint32             `json:"physical_guests"`
 	RuntimeInitializations uint32             `json:"runtime_initializations"`
+	PreparedCOWGuests      uint32             `json:"prepared_cow_guests"`
+	OrdinaryFreshGuests    uint32             `json:"ordinary_fresh_guests"`
+	PlacementFallbacks     uint32             `json:"placement_fallbacks"`
 	HostBlobBytes          uint64             `json:"host_blob_bytes"`
 	BlobDisposition        string             `json:"blob_disposition"`
 	LeaseDispositions      []string           `json:"lease_dispositions"`
@@ -166,9 +169,11 @@ func DecodeTrialJSONL(raw []byte) ([]TrialRecord, error) {
 func validTrialRecord(record TrialRecord, sealed bool) bool {
 	candidate, ok := CaseByID(record.Coordinate.CaseID)
 	if !ok || !candidate.EconomicsEligible || record.SchemaVersion != TrialRecordSchemaVersion || record.CaseSourceSHA256 != candidate.SourceSHA256 ||
-		record.Coordinate.Platform == "" || record.Coordinate.Profile == "" || record.Coordinate.TrialIndex == 0 || record.Coordinate.TrialIndex > TrialsPerTreatment ||
+		record.Coordinate.Platform == "" || record.Coordinate.Profile == "" || !containsString(platforms, record.Coordinate.Platform) || !containsString(profiles, record.Coordinate.Profile) ||
+		record.Coordinate.TrialIndex == 0 || record.Coordinate.TrialIndex > TrialsPerTreatment ||
 		(record.Coordinate.Treatment != "original_recompute" && record.Coordinate.Treatment != "prepared_ndarray_reuse") ||
 		record.ProcessExit != "success" || record.ProtocolStatus != "ok" || !record.ResultParity || !record.NoAuthorityExpansion || !record.NoReplay || !record.FreshGuests ||
+		record.PlacementFallbacks != 0 || record.PreparedCOWGuests+record.OrdinaryFreshGuests != record.PhysicalGuests ||
 		record.Stages.CriticalWallNanos == 0 || record.Stages.PeakResidentMemoryBytes == 0 {
 		return false
 	}
@@ -182,7 +187,7 @@ func validTrialRecord(record TrialRecord, sealed bool) bool {
 			return false
 		}
 	} else {
-		if record.PhysicalGuests != candidate.Consumers+1 || record.RuntimeInitializations != candidate.Consumers+1 || record.HostBlobBytes != candidate.ExpectedNBytes || record.BlobDisposition != "consumed" || len(record.LeaseDispositions) != int(candidate.Consumers) {
+		if record.PhysicalGuests != 2+2*candidate.Consumers || record.RuntimeInitializations != 2+2*candidate.Consumers || record.HostBlobBytes != candidate.ExpectedNBytes || record.BlobDisposition != "consumed" || len(record.LeaseDispositions) != int(candidate.Consumers) {
 			return false
 		}
 		for _, disposition := range record.LeaseDispositions {
@@ -337,6 +342,15 @@ func signedDifference(left, right uint64) int64 {
 	}
 	return -int64(d)
 }
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func campaignDigest(value any) string {
 	raw, _ := json.Marshal(value)
 	sum := sha256.Sum256(raw)

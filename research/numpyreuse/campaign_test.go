@@ -24,9 +24,20 @@ func syntheticRecord(coordinate CampaignCoordinate, nanos uint64) TrialRecord {
 		NoAuthorityExpansion: true, NoReplay: true, FreshGuests: true,
 		Stages: StageMetrics{CriticalWallNanos: nanos, PeakResidentMemoryBytes: 1000},
 	}
+	if coordinate.Platform == "linux_amd64" && coordinate.Profile == "preprovisioned_numpy_ready_equivalent_capacity" {
+		record.PreparedCOWGuests = record.PhysicalGuests
+	} else {
+		record.OrdinaryFreshGuests = record.PhysicalGuests
+	}
 	if coordinate.Treatment == "prepared_ndarray_reuse" {
-		record.PhysicalGuests++
-		record.RuntimeInitializations++
+		record.PhysicalGuests = 2 + 2*candidate.Consumers
+		record.RuntimeInitializations = 2 + 2*candidate.Consumers
+		if coordinate.Platform == "linux_amd64" && coordinate.Profile == "preprovisioned_numpy_ready_equivalent_capacity" {
+			record.PreparedCOWGuests = record.PhysicalGuests
+			record.OrdinaryFreshGuests = 0
+		} else {
+			record.OrdinaryFreshGuests = record.PhysicalGuests
+		}
 		record.BlobDisposition = "consumed"
 		record.LeaseDispositions = make([]string, candidate.Consumers)
 		for index := range record.LeaseDispositions {

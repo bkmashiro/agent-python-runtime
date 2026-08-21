@@ -93,10 +93,11 @@ type SourceBoundPlanProjection struct {
 }
 
 type SourceBoundPlan struct {
-	projection SourceBoundPlanProjection
-	identity   string
-	qualified  map[string]QualifiedCall
-	candidates []sourceBindingCandidate
+	projection    SourceBoundPlanProjection
+	identity      string
+	qualified     map[string]QualifiedCall
+	registrations PassRegistry
+	candidates    []sourceBindingCandidate
 }
 
 type sourceBindingCandidate struct {
@@ -134,6 +135,21 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 		if err != nil {
 			return SourceBoundPlan{}, ErrInvalidPlannerInput
 		}
+	}
+	registrations := make([]PassRegistration, 0, len(passes))
+	for _, pass := range passes {
+		registration, registrationErr := NewPassRegistration(
+			pass.Name, pass.Version, analysis.AnalyzerSHA256, pass.ConfigSHA256,
+			PassConsumerOverlayOnly, SemanticPreDispatchBindings(),
+		)
+		if registrationErr != nil {
+			return SourceBoundPlan{}, ErrInvalidPlannerConfig
+		}
+		registrations = append(registrations, registration)
+	}
+	registry, err := NewPassRegistry(registrations...)
+	if err != nil {
+		return SourceBoundPlan{}, ErrInvalidPlannerConfig
 	}
 	document := SourceDocument{
 		ID: SourceDocumentIdentity(analysis.SourceSHA256), Language: "python",
@@ -189,7 +205,7 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 	if err != nil {
 		return SourceBoundPlan{}, ErrInvalidPlannerInput
 	}
-	return SourceBoundPlan{projection: projection, identity: identityValue, qualified: qualified, candidates: candidates}, nil
+	return SourceBoundPlan{projection: projection, identity: identityValue, qualified: qualified, registrations: registry, candidates: candidates}, nil
 }
 
 func NewSourceBindingResolver(plan SourceBoundPlan) (*capability.SourceBindingResolver, error) {
@@ -253,6 +269,12 @@ func (plan SourceBoundPlan) Projection() SourceBoundPlanProjection {
 func (plan SourceBoundPlan) QualifiedCall(pass PassName, occurrenceID string) (QualifiedCall, bool) {
 	call, ok := plan.qualified[qualifiedKey(pass, occurrenceID)]
 	return call, ok
+}
+
+// PassRegistration returns provenance metadata only. Consumer-specific decisions
+// and authority remain behind their existing opaque accessors.
+func (plan SourceBoundPlan) PassRegistration(pass PassName) (PassRegistration, bool) {
+	return plan.registrations.Lookup(pass)
 }
 
 func validatePassConfig(config []PassConfig) ([]PassSelection, error) {

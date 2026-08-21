@@ -11,6 +11,7 @@ import (
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	passregistration "github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 var (
@@ -145,10 +146,14 @@ func Analyze(ctx context.Context, runner enginecontract.Runner, request Request)
 	return analysis, nil
 }
 
+func AnalyzerIdentity() string {
+	return passregistration.SemanticAnalyzerSHA256
+}
+
 func analysisMatchesRequest(analysis Analysis, request Request) bool {
 	sourceDigest := sha256.Sum256([]byte(request.Source))
 	sourceSHA := fmt.Sprintf("sha256:%x", sourceDigest[:])
-	if analysis.AnalyzerSHA256 != semanticDigest("pysolate.semantic-analyzer.v10") ||
+	if analysis.AnalyzerSHA256 != AnalyzerIdentity() ||
 		analysis.SourceSHA256 != sourceSHA ||
 		analysis.ArtifactSHA256 != request.Bindings.ArtifactSHA256 ||
 		analysis.ExecutionProfileSHA256 != request.Bindings.ExecutionProfileSHA256 ||

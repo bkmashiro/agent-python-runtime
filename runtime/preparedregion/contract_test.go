@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	passregistration "github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 const (
@@ -44,6 +46,14 @@ func TestPreparedRegionDecisionSealDecodeAndExactBinding(t *testing.T) {
 	}
 	if err := decoded.ValidateBinding(binding); err != nil {
 		t.Fatal(err)
+	}
+	registration, err := decoded.PassRegistration()
+	if err != nil || registration.Name() != passregistration.PreparedPureRegion ||
+		registration.Consumer() != passregistration.ExecutionPatch ||
+		registration.AnalyzerSHA256() != passregistration.SemanticAnalyzerSHA256 ||
+		registration.ConfigSHA256() != binding.PassConfigSHA256 ||
+		!reflect.DeepEqual(registration.RequiredBindings(), passregistration.PatchBindings()) {
+		t.Fatalf("registration=%+v err=%v", registration, err)
 	}
 	mutations := map[string]func(*PreparedRegionBinding){
 		"source":      func(v *PreparedRegionBinding) { v.SourceSHA256 = testDigestB },

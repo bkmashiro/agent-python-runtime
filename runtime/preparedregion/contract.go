@@ -9,6 +9,8 @@ import (
 	"io"
 	"regexp"
 	"strconv"
+
+	passregistration "github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 const (
@@ -79,6 +81,9 @@ func SealPreparedRegionDecision(binding PreparedRegionBinding) ([]byte, Prepared
 	if !isValidPreparedRegionBinding(binding) {
 		return nil, PreparedRegionDecision{}, ErrInvalidPreparedRegion
 	}
+	if _, err := preparedRegionPassRegistration(binding.PassConfigSHA256); err != nil {
+		return nil, PreparedRegionDecision{}, ErrInvalidPreparedRegion
+	}
 	identity := preparedRegionDecisionIdentity{SchemaVersion: PreparedRegionDecisionSchemaVersion, Consumer: PreparedRegionConsumer, PassSchema: PreparedRegionPassSchemaVersion, MaxPayloadBytes: PreparedRegionMaxPayloadBytes, PreparedRegionBinding: binding}
 	decision := PreparedRegionDecision{SchemaVersion: identity.SchemaVersion, Consumer: identity.Consumer, PassSchema: identity.PassSchema, MaxPayloadBytes: identity.MaxPayloadBytes, PreparedRegionBinding: binding, IdentitySHA256: preparedRegionDigest(identity)}
 	raw, err := preparedRegionCanonicalJSON(decision)
@@ -104,8 +109,32 @@ func (decision PreparedRegionDecision) valid() bool {
 	if decision.SchemaVersion != PreparedRegionDecisionSchemaVersion || decision.Consumer != PreparedRegionConsumer || decision.PassSchema != PreparedRegionPassSchemaVersion || decision.MaxPayloadBytes != PreparedRegionMaxPayloadBytes || !isValidPreparedRegionBinding(decision.PreparedRegionBinding) {
 		return false
 	}
+	if _, err := preparedRegionPassRegistration(decision.PassConfigSHA256); err != nil {
+		return false
+	}
 	identity := preparedRegionDecisionIdentity{SchemaVersion: decision.SchemaVersion, Consumer: decision.Consumer, PassSchema: decision.PassSchema, MaxPayloadBytes: decision.MaxPayloadBytes, PreparedRegionBinding: decision.PreparedRegionBinding}
 	return decision.IdentitySHA256 == preparedRegionDigest(identity)
+}
+
+// PassRegistration exposes provenance metadata only; patch, capsule, claim,
+// and teardown authority remain in their prepared-region contracts.
+func (decision PreparedRegionDecision) PassRegistration() (passregistration.Registration, error) {
+	if !decision.valid() {
+		return passregistration.Registration{}, ErrInvalidPreparedRegion
+	}
+	registration, err := preparedRegionPassRegistration(decision.PassConfigSHA256)
+	if err != nil {
+		return passregistration.Registration{}, ErrInvalidPreparedRegion
+	}
+	return registration, nil
+}
+
+func preparedRegionPassRegistration(configSHA256 string) (passregistration.Registration, error) {
+	return passregistration.New(
+		passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion,
+		passregistration.SemanticAnalyzerSHA256, configSHA256, passregistration.ExecutionPatch,
+		passregistration.PatchBindings(),
+	)
 }
 
 func isValidPreparedRegionBinding(binding PreparedRegionBinding) bool {

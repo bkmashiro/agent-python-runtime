@@ -68,6 +68,14 @@ func TestSemanticPreDispatchPassReusesExistingLegalityDecision(t *testing.T) {
 	if !ok {
 		t.Fatal("pass did not retain opaque qualified call")
 	}
+	registration, ok := planned.PassRegistration(PassSemanticPreDispatch)
+	if !ok || registration.Consumer() != PassConsumerOverlayOnly || registration.AnalyzerSHA256() != legalityDigest("analyzer") ||
+		registration.ConfigSHA256() != projection.Passes[0].ConfigSHA256 {
+		t.Fatalf("registration=%+v ok=%v", registration, ok)
+	}
+	if _, ok := planned.PassRegistration(PassPreparedPureRegion); ok {
+		t.Fatal("unconfigured consumer registration exposed")
+	}
 	directDecision := CanPreissue(verified, capabilityPlan, site.ID, legalityContext())
 	direct, ok := directDecision.QualifiedCall()
 	if !ok || fromPass.ClaimIdentitySHA256() != direct.ClaimIdentitySHA256() || fromPass.CallSiteID() != direct.CallSiteID() {

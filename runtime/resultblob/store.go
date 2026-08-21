@@ -14,7 +14,10 @@ import (
 	"sync"
 )
 
-const DescriptorSchemaVersion = "pysolate.result-blob-descriptor.v1"
+const (
+	DescriptorSchemaVersion = "pysolate.result-blob-descriptor.v1"
+	maxCodecBytes           = 80
+)
 
 var (
 	ErrInvalidLimits     = errors.New("invalid result blob limits")
@@ -107,7 +110,7 @@ func DecodeDescriptor(raw []byte) (Descriptor, error) {
 
 func (descriptor Descriptor) valid() bool {
 	if descriptor.SchemaVersion != DescriptorSchemaVersion || !idPattern.MatchString(descriptor.RunID) ||
-		!codecPattern.MatchString(descriptor.Codec) || descriptor.MetadataBytes == 0 || descriptor.BodyBytes == 0 ||
+		len(descriptor.Codec) > maxCodecBytes || !codecPattern.MatchString(descriptor.Codec) || descriptor.MetadataBytes == 0 || descriptor.BodyBytes == 0 ||
 		!digestPattern.MatchString(descriptor.MetadataSHA256) || !digestPattern.MatchString(descriptor.BodySHA256) ||
 		!digestPattern.MatchString(descriptor.BindingSHA256) || !digestPattern.MatchString(descriptor.IdentitySHA256) {
 		return false
@@ -138,9 +141,12 @@ type Lease struct {
 func (lease Lease) ID() string { return lease.id }
 
 type Claim struct {
-	Descriptor Descriptor
-	Metadata   []byte
-	Body       []byte
+	LeaseID        string
+	BlobID         string
+	ConsumerSHA256 string
+	Descriptor     Descriptor
+	Metadata       []byte
+	Body           []byte
 }
 
 type BlobObservation struct {
@@ -211,15 +217,18 @@ func (store *Store) Publish(ctx context.Context, publication Publication, body [
 	if !publication.Guard.Completed || !publication.Guard.Succeeded || !publication.Guard.EffectFree || !publication.Guard.TerminalCertain {
 		return Descriptor{}, ErrPublicationUnsafe
 	}
-	if publication.RunID != store.runID || !codecPattern.MatchString(publication.Codec) ||
+	if publication.RunID != store.runID || len(publication.Codec) > maxCodecBytes || !codecPattern.MatchString(publication.Codec) ||
 		!digestPattern.MatchString(publication.BindingSHA256) || !digestPattern.MatchString(publication.ExpectedBodySHA256) || len(body) == 0 {
 		return Descriptor{}, ErrInvalidDescriptor
+	}
+	if uint64(len(body)) > store.limits.MaxBodyBytes || uint64(len(publication.Metadata)) > uint64(store.limits.MaxMetadataBytes) {
+		return Descriptor{}, ErrLimitExceeded
 	}
 	metadata, err := canonicalMetadata(publication.Metadata)
 	if err != nil {
 		return Descriptor{}, ErrInvalidDescriptor
 	}
-	if uint64(len(body)) > store.limits.MaxBodyBytes || len(metadata) > int(store.limits.MaxMetadataBytes) {
+	if uint64(len(metadata)) > uint64(store.limits.MaxMetadataBytes) {
 		return Descriptor{}, ErrLimitExceeded
 	}
 	bodyCopy := append([]byte(nil), body...)
@@ -257,7 +266,7 @@ func (store *Store) Publish(ctx context.Context, publication Publication, body [
 		return Descriptor{}, ErrLimitExceeded
 	}
 	entryBytes := descriptor.BodyBytes + uint64(descriptor.MetadataBytes)
-	if len(store.entries) >= int(store.limits.MaxEntries) || store.retainedBytes > store.limits.MaxRetainedBytes || entryBytes > store.limits.MaxRetainedBytes-store.retainedBytes {
+	if uint64(len(store.entries)) >= uint64(store.limits.MaxEntries) || store.retainedBytes > store.limits.MaxRetainedBytes || entryBytes > store.limits.MaxRetainedBytes-store.retainedBytes {
 		return Descriptor{}, ErrLimitExceeded
 	}
 	store.entries[descriptor.IdentitySHA256] = &entry{descriptor: descriptor, metadata: metadataCopy, body: bodyCopy}
@@ -278,7 +287,7 @@ func (store *Store) NewLease(blobID, consumerSHA256 string) (Lease, error) {
 	if _, exists := store.entries[blobID]; !exists {
 		return Lease{}, ErrBlobMissing
 	}
-	if len(store.leases) >= int(store.limits.MaxLeases) {
+	if uint64(len(store.leases)) >= uint64(store.limits.MaxLeases) {
 		return Lease{}, ErrLimitExceeded
 	}
 	store.leaseOrdinal++
@@ -308,6 +317,7 @@ func (store *Store) Claim(lease Lease) (Claim, error) {
 	}
 	record.state = LeaseClaimed
 	return Claim{
+		LeaseID: record.id, BlobID: record.blobID, ConsumerSHA256: record.consumerSHA256,
 		Descriptor: blob.descriptor,
 		Metadata:   append([]byte(nil), blob.metadata...), Body: append([]byte(nil), blob.body...),
 	}, nil

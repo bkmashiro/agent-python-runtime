@@ -47,6 +47,9 @@ func TestPublishOwnsImmutableBodyAndMetadataCopies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if claim.LeaseID != lease.ID() || claim.BlobID != descriptor.IdentitySHA256 || claim.ConsumerSHA256 != digestB {
+		t.Fatalf("claim identity mismatch: %+v", claim)
+	}
 	if string(claim.Body) != "immutable-body" || string(claim.Metadata) != `{"kind":"test","shape":[2,2]}` {
 		t.Fatalf("claim body=%q metadata=%s", claim.Body, claim.Metadata)
 	}
@@ -112,6 +115,47 @@ func TestStoreBoundsAndCanonicalMetadata(t *testing.T) {
 	wrongRun.RunID = "run-2"
 	if _, err := store.Publish(context.Background(), wrongRun, body); !errors.Is(err, ErrInvalidDescriptor) {
 		t.Fatalf("cross-run publication err=%v", err)
+	}
+}
+
+func TestPublicationRejectsOversizedCodecAndMetadataBeforeCanonicalization(t *testing.T) {
+	limits := testLimits()
+	limits.MaxMetadataBytes = 16
+	store, err := NewStore("run-1", limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("body")
+	publication := testPublication(body)
+	publication.Codec = "a" + string(bytes.Repeat([]byte("x"), 1024*1024)) + "_v1"
+	if _, err := store.Publish(context.Background(), publication, body); !errors.Is(err, ErrInvalidDescriptor) {
+		t.Fatalf("oversized codec err=%v", err)
+	}
+	publication = testPublication(body)
+	publication.Metadata = bytes.Repeat([]byte("{"), 1024*1024)
+	if _, err := store.Publish(context.Background(), publication, body); !errors.Is(err, ErrLimitExceeded) {
+		t.Fatalf("oversized metadata should fail before JSON parse, err=%v", err)
+	}
+	if snapshot := store.Snapshot(); snapshot.EntryCount != 0 || snapshot.RetainedBytes != 0 {
+		t.Fatalf("failed publications leaked state: %+v", snapshot)
+	}
+}
+
+func TestMaxUint32EntryAndLeaseLimitsDoNotConvertThroughInt(t *testing.T) {
+	limits := testLimits()
+	limits.MaxEntries = ^uint32(0)
+	limits.MaxLeases = ^uint32(0)
+	store, err := NewStore("run-1", limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("body")
+	descriptor, err := store.Publish(context.Background(), testPublication(body), body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.NewLease(descriptor.IdentitySHA256, digestB); err != nil {
+		t.Fatal(err)
 	}
 }
 

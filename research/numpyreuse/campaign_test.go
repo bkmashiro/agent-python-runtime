@@ -78,6 +78,16 @@ func TestTrialRecordsAreCanonicalBodyFreeAndIdentityBound(t *testing.T) {
 	}
 }
 
+func syntheticControls() []AdversarialControl {
+	controls := []AdversarialControl{}
+	for _, candidate := range Cases() {
+		if candidate.Class == "adversarial" {
+			controls = append(controls, AdversarialControl{ID: candidate.ID, Passed: true, EvidenceSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+		}
+	}
+	return controls
+}
+
 func TestCampaignAggregationRequiresExactFrozenScheduleAndReportsMixedEconomics(t *testing.T) {
 	coordinates := CampaignCoordinates()
 	records := make([]TrialRecord, 0, len(coordinates))
@@ -92,7 +102,7 @@ func TestCampaignAggregationRequiresExactFrozenScheduleAndReportsMixedEconomics(
 		}
 		records = append(records, syntheticRecord(coordinate, nanos))
 	}
-	report, err := SealCampaignReport(records, []AdversarialControl{{ID: "all", Passed: true, EvidenceSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}})
+	report, err := SealCampaignReport(records, syntheticControls())
 	if err != nil {
 		t.Fatal(err)
 	}

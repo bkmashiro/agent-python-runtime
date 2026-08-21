@@ -91,6 +91,10 @@ type EconomicSummary struct {
 	NetSavedNanos            int64    `json:"net_saved_nanos"`
 	SpeedupRatio             float64  `json:"speedup_ratio"`
 	BytesPerSavedComputeNano *float64 `json:"bytes_copied_per_saved_compute_nano"`
+	BreakEvenComputeNanos    *uint64  `json:"break_even_compute_nanos"`
+	BreakEvenConsumerCount   *uint32  `json:"break_even_consumer_count"`
+	BreakEvenLeadGapNanos    *uint64  `json:"break_even_lead_gap_nanos"`
+	BreakEvenIdentification  string   `json:"break_even_identification"`
 	ObservedBreakEven        bool     `json:"observed_break_even"`
 }
 
@@ -218,9 +222,23 @@ func SealCampaignReport(records []TrialRecord, controls []AdversarialControl) (C
 	if len(records) != len(coordinates) || len(controls) == 0 {
 		return CampaignReport{}, ErrCampaignRecord
 	}
-	byCoordinate := map[CampaignCoordinate]TrialRecord{}
+	byCoordinate := make(map[CampaignCoordinate]TrialRecord, len(records))
+	artifactSHA, harnessCommit, harnessTree := "", "", ""
+	platformBinaries := map[string]string{}
 	for _, record := range records {
 		if !validTrialRecord(record, true) || byCoordinate[record.Coordinate].IdentitySHA256 != "" {
+			return CampaignReport{}, ErrCampaignRecord
+		}
+		if artifactSHA == "" {
+			artifactSHA = record.ArtifactSHA256
+			harnessCommit = record.HarnessSourceCommit
+			harnessTree = record.HarnessSourceTree
+		} else if artifactSHA != record.ArtifactSHA256 || harnessCommit != record.HarnessSourceCommit || harnessTree != record.HarnessSourceTree {
+			return CampaignReport{}, ErrCampaignRecord
+		}
+		if binary := platformBinaries[record.Coordinate.Platform]; binary == "" {
+			platformBinaries[record.Coordinate.Platform] = record.HarnessBinarySHA256
+		} else if binary != record.HarnessBinarySHA256 {
 			return CampaignReport{}, ErrCampaignRecord
 		}
 		byCoordinate[record.Coordinate] = record
@@ -233,10 +251,21 @@ func SealCampaignReport(records []TrialRecord, controls []AdversarialControl) (C
 		}
 		ordered = append(ordered, record)
 	}
+	expectedControls := map[string]bool{}
+	for _, candidate := range Cases() {
+		if candidate.Class == "adversarial" {
+			expectedControls[candidate.ID] = true
+		}
+	}
+	seenControls := map[string]bool{}
 	for _, control := range controls {
-		if control.ID == "" || !control.Passed || !campaignDigestPattern(control.EvidenceSHA256) {
+		if !expectedControls[control.ID] || seenControls[control.ID] || !control.Passed || !campaignDigestPattern(control.EvidenceSHA256) {
 			return CampaignReport{}, ErrCampaignRecord
 		}
+		seenControls[control.ID] = true
+	}
+	if len(seenControls) != len(expectedControls) {
+		return CampaignReport{}, ErrCampaignRecord
 	}
 	cells := summarizeCells(ordered)
 	economics := summarizeEconomics(cells)
@@ -324,7 +353,13 @@ func summarizeEconomics(cells []CellSummary) []EconomicSummary {
 			value := float64(candidate.ExpectedNBytes) / float64(net)
 			bytesPer = &value
 		}
-		out = append(out, EconomicSummary{k.platform, k.profile, k.caseID, candidate.Consumers, candidate.LeadGapMillis, candidate.ExpectedNBytes, original.MedianCriticalWallNanos, shared.MedianCriticalWallNanos, net, ratio, bytesPer, net >= 0})
+		out = append(out, EconomicSummary{
+			Platform: k.platform, Profile: k.profile, CaseID: k.caseID,
+			Consumers: candidate.Consumers, LeadGapMillis: candidate.LeadGapMillis, PayloadBytes: candidate.ExpectedNBytes,
+			OriginalMedianNanos: original.MedianCriticalWallNanos, SharedMedianNanos: shared.MedianCriticalWallNanos,
+			NetSavedNanos: net, SpeedupRatio: ratio, BytesPerSavedComputeNano: bytesPer,
+			BreakEvenIdentification: "not_identified_from_coupled_sparse_grid", ObservedBreakEven: net >= 0,
+		})
 	}
 	return out
 }

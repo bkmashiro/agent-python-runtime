@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this research-prototype goal continuously in `/Users/yuzhe/projects/agent-python-runtime`. Read this file, the closed predecessor goal, the canonical pre-dispatch contract, and live Git/code before editing. Build the smallest falsifiable mechanism, not a production framework. Use focused tests per slice, parallelize file-disjoint work where it has independent value, integrate and verify centrally, make coherent signed commits, push, and continue. Stop only at the gates below, not after one test, commit, negative result, worker return, or context compaction.
 
-**Status:** Active on 2026-08-21; Phase 0 contract frozen, Phase 1 next.
+**Status:** Active on 2026-08-21; Phases 0–1 complete, Phase 2 next.
 
 **Goal:** Prototype authority-preserving temporal offload for one explicitly Host-declared immutable NumPy dataset load: begin its physical read and bounded decode before final code generation completes, retain the result as one typed Host-owned staged object, let unchanged final Python claim it only at the original dynamic occurrence, and evaluate fresh-Guest private-COW/data-local consumption against serial execution, EAGER-style persistent execution, raw-read-only pre-dispatch, and the existing private-copy path.
 
@@ -254,12 +254,12 @@ Tasks:
 
 Tasks:
 
-- [ ] RED-test the current prepared-baseline state for exact `numpy-core` artifact/profile/import identity and imported module readiness.
-- [ ] If the baseline lacks imported NumPy state, add one minimal profile-owned or research-only trusted preparation step before COW image seal.
-- [ ] Prove two fresh clones start NumPy-ready without a second cold import.
-- [ ] Mutate supported module/array state in clone A and prove baseline and clone B are unchanged.
-- [ ] Prove `base` remains default and contains no NumPy package state.
-- [ ] Record initialization/import/image-seal costs outside per-Run critical time and clone costs inside the correct treatment interval.
+- [x] RED-test the current prepared-baseline state for exact `numpy-core` artifact/profile/import identity and imported module readiness.
+- [x] If the baseline lacks imported NumPy state, add one minimal profile-owned or research-only trusted preparation step before COW image seal.
+- [x] Prove two fresh clones start NumPy-ready without a second cold import.
+- [x] Mutate supported module/array state in clone A and prove baseline and clone B are unchanged.
+- [x] Prove `base` remains default and contains no NumPy package state.
+- [x] Record initialization/import/image-seal costs outside per-Run critical time and clone costs inside the correct treatment interval.
 
 **Gate P1:** Exact Linux evidence proves a sealed NumPy-ready baseline, fresh private clones, no state leakage, and no request-time full NumPy import. If this requires a broad CPython import-state fork, keep existing artifact initialization and record the measured limitation rather than broadening the prototype.
 
@@ -471,6 +471,7 @@ If blocked, report the exact blocker, modified files, tests run, Git status and 
 - 2026-08-21: Goal prepared from clean `main` at `eeacf5bf4bccb1e62131db84eb741925da6808cf`. Predecessor NumPy result-reuse goal remains complete; P8 remains `not entered`. No implementation or formal observation has started.
 - 2026-08-21: Phase 0 froze `docs/research/authority-preserving-prepared-data-contract-v1.md` and canonical preregistration `sha256:9f7baa064eff8e19c93651b41decf4f855673fcc5ae767716f023d3de4702bd6`. The exact current lifecycle is verified-prefix analysis → sealed Plan join → one-shot physical read → staged observation → unchanged Broker claim. Static source archaeology also proved the generic Wazero COW canonical image calls `_initialize` and `runtime_init({})` but does not explicitly import NumPy; P7 warm-engine capacity is not evidence of a package-imported baseline. The matched core is one deterministic 8 MiB `<i8` `.npy`; larger payloads require a pre-observation extension. P1 owns `runtime/engine/wazero` package-ready preparation, P2 owns the authority/peephole contract, and the later harness owns only `research/prepareddataset` plus `cmd/prepared-data-*`.
 - 2026-08-21: Before implementation or observation, P2 seam review corrected the streaming identity split: speculative preparation binds stream epoch, admitted-prefix digest, exact span, canonical arguments and Host contract; only the later claim adds the sealed final-source digest and proves the occurrence remained unchanged. The earlier draft incorrectly placed a not-yet-known final digest in speculative-start authority; no code or data depended on it.
+- 2026-08-21: Phase 1 is complete at mechanism target `d99c182ac37825b8ae95d99960e1b7401cc9c8d7` (`tree 71d87ea7090d4efe6fbc742efcb4e186d3387963`). A bounded Host-trusted fragment is applied before the existing Linux COW image seal; default preparation is unchanged, authority-bearing engines are rejected, and an already-bound engine rejects different non-empty source identity. Focused unit/race/vet, Linux cross-compilation and base/default shard tests pass. The clean `vcs.modified=false` probe `sha256:d02f2ddc1fb166fe99c1163c8a63e31db2e4584935351abd5b82695b42b65161` ran on gpu31 against artifact `sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad`: both fresh Guests used baseline alias `np` and NumPy `1.26.0b1` without source import, A's module mutation was absent from B, private COW was selected with zero fallback, and prepare/clone times are recorded separately. Body-free evidence identity is `sha256:e17dbfaa68004a60bb68430da84fecf9029b0337d4aec83edda56aec9e44981a`.
 
 ## Short prompt to start this mega-goal
 

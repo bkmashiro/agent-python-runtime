@@ -4,9 +4,9 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "0bbad2c26d68acb9d946302bd33e3ca387b4765f"
-TREE = "a81608268ffbde70847b9c3feac6784b45df7cb0"
-ARTIFACT = "sha256:95aac1e279f5e52399c44161af7a20d2ded380321dc28f18869991af5cbf7eef"
+COMMIT = "7147b142d2d1eda79f4ef34d017510098406118c"
+TREE = "0fee7ad1b8fa6be3ec865188bfb5f8fd095565b4"
+ARTIFACT = "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad"
 FILES = {
     "darwin_arm64": ROOT / "docs/evidence/numpy-producer-admission-phase6-darwin-arm64-v1.json",
     "linux_amd64": ROOT / "docs/evidence/numpy-producer-admission-phase6-linux-amd64-private-cow-v1.json",
@@ -26,7 +26,7 @@ for platform, path in FILES.items():
     lineage = evidence["lineage"]
     assert admission["operation"] == "arange_affine_i64_v1"
     assert admission["execution_profile_id"] == "numpy-core" and admission["no_external_inputs"] is True
-    assert admission["analyzer_unknown_accepted"] is True and admission["allowed_imports"] == ["base64", "hashlib", "numpy"]
+    assert admission["analyzer_unknown_observed"] is True and admission["allowed_imports"] == ["base64", "hashlib", "numpy"]
     assert admission["analysis_sha256"] == evidence["producer_analysis_sha256"]
     assert descriptor["schema_version"] == "pysolate.numpy-ndarray-c.v1" and descriptor["dtype"] == "<i8"
     assert descriptor["shape"] == [2, 3] and descriptor["nbytes"] == 48
@@ -38,6 +38,11 @@ for platform, path in FILES.items():
     assert lineage["patch"]["decision_sha256"] == lineage["decision"]["identity_sha256"]
     assert lineage["patch"]["final_source_sha256"] == evidence["materialization_plan"]["final_source_sha256"]
     assert lineage["selection"]["patch_sha256"] == lineage["patch"]["identity_sha256"]
+    for key in ("consumer_binding_sha256", "final_source_sha256", "inputs_sha256", "request_sha256"):
+        assert lineage[key] == evidence["materialization_plan"][key]
+    assert lineage["decision"]["source_sha256"] == admission["source_sha256"]
+    assert lineage["decision"]["ast_sha256"] == admission["ast_sha256"]
+    assert lineage["decision"]["execution_profile_sha256"] == admission["execution_profile_sha256"]
     assert evidence["publication"]["guest_to_host_copy_bytes"] == 48
     assert evidence["materialization_plan"]["host_to_guest_copy_bytes"] == 48
     assert evidence["consumer_result"] == evidence["original_result"] == {"first": 6, "sum": 66, "c_contiguous": True}

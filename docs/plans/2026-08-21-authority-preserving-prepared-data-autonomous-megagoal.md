@@ -400,7 +400,7 @@ The Phase 7 review correctly rejected the old probe's independent scalar-token a
 - guard rejection leaves both token and object unconsumed;
 - the Guest checks the copied body's SHA-256 before invoking the claim;
 - successful claim clears the Host body and records exactly one logical claim with no orphan;
-- macOS arm64 and Linux amd64 real-NumPy probes pass under `docs/evidence/prepared-data-phase3-v2.json`.
+- macOS arm64 and Linux amd64 real-NumPy positive probes pass; a Linux object-bound negative probe also shows branch-not-taken and earlier-exception paths consuming no token, orphaning the exact object and publishing zero logical claims under `docs/evidence/prepared-data-phase3-v2.json`.
 
 Private-COW remains prior execution substrate rather than a prepared-data novelty. The paper-facing contribution is the authority-preserving split between qualified early physical work and exact dynamic logical effect, including safe discard/fallback when speculation is invalid. Observed interval tracing is not required for that claim and is intentionally outside scope.
 

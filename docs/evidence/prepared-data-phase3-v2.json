@@ -20,7 +20,60 @@
    1024
   ]
  },
- "identity": "sha256:42ad6ebfc57932e3de568d4259732383647893233f53deb663f1ddf30d700649",
+ "identity": "sha256:f00b70f58e6b44d9bf444661dba18ba859645b8079ad16f46bf68c77e1e63a93",
+ "negative_control": {
+  "binary_sha256": "sha256:04a2658df2f401b2b3428255e35a9ac84e152cf6744941206ec3262585af10ec",
+  "interpretation": "branch_not_taken_and_earlier_exception_discard_token_orphan_exact_object_and_publish_zero_logical_claims",
+  "raw_report_sha256": "sha256:545c8119314a9e2d8ff1ad3fa073345a409654029e6b554e9426cdbf5392fcb3",
+  "report": {
+   "artifact_sha256": "sha256:2753cde560f3961a483df53aec334c8fdbb084934e5a62a56d436aea1ae557ad",
+   "cases": [
+    {
+     "claims": 1,
+     "consumed": 1,
+     "discarded": 0,
+     "id": "reached",
+     "logical_claims": 1,
+     "object_body_bytes": 0,
+     "object_state": "Claimed",
+     "physical_orphans": 0,
+     "result": {
+      "shape": [
+       1024,
+       1024
+      ],
+      "sum": 549755289600
+     },
+     "status": "ok"
+    },
+    {
+     "claims": 0,
+     "consumed": 0,
+     "discarded": 1,
+     "id": "branch_not_taken",
+     "logical_claims": 0,
+     "object_body_bytes": 0,
+     "object_state": "Orphaned",
+     "physical_orphans": 1,
+     "result": "unreached",
+     "status": "ok"
+    },
+    {
+     "claims": 0,
+     "consumed": 0,
+     "discarded": 1,
+     "id": "earlier_exception",
+     "logical_claims": 0,
+     "object_body_bytes": 0,
+     "object_state": "Orphaned",
+     "physical_orphans": 1,
+     "status": "error"
+    }
+   ],
+   "schema_version": "pysolate.prepared-data-claim-probe.v2"
+  },
+  "source_commit": "3eb304097edae1af20fcb8af0a22032ceffaf195"
+ },
  "object_join_commit": "1fa7f99cfbc5145a6873af58795707e85618d28e",
  "platforms": {
   "linux": {
@@ -254,13 +307,15 @@
    }
   }
  },
+ "positive_probe_commit": "c671284fc8b2457baeed5385232a5b37489fe7e7",
  "schema_version": "pysolate.prepared-data-phase3-object-join-evidence.v2",
- "source_commit": "c671284fc8b2457baeed5385232a5b37489fe7e7",
- "source_tree": "5952b1f6412ddb3205ace2b99a6c67489fde71a3",
+ "source_commit": "3eb304097edae1af20fcb8af0a22032ceffaf195",
+ "source_tree": "a818c7e0057ce9a1b46f65c48e61b66ab61aab5f",
  "validation": {
   "focused_race": "pass",
   "focused_test": "pass",
   "focused_vet": "pass",
+  "object_bound_negative_linux": "pass",
   "real_numpy_guest_linux": "pass",
   "real_numpy_guest_macos": "pass",
   "remote_stage_removed": true

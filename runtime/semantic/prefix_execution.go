@@ -96,6 +96,8 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 	sourceChannel := config.SourceChunks
 	completed := false
 	committed := make(map[uint32]analysisResult)
+	var finalVerified VerifiedAnalysis
+	var finalVerifiedSource string
 	for sourceChannel != nil || pending > 0 {
 		select {
 		case <-runContext.Done():
@@ -117,6 +119,9 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 			}
 			if chunk == "" {
 				return GeneratedSource{}, errors.New("verified source chunk is empty")
+			}
+			if len(source) > streaming.MaxSourceBytes || len(chunk) > streaming.MaxSourceBytes-len(source) {
+				return GeneratedSource{}, streaming.ErrSourceTooLarge
 			}
 			source += chunk
 			visible++
@@ -165,6 +170,8 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 				if err != nil {
 					return GeneratedSource{}, err
 				}
+				finalVerified = ready.verified
+				finalVerifiedSource = ready.source
 				delete(committed, nextCommit)
 				if config.Observe != nil {
 					config.Observe(VerifiedSourceGenerationEvent{
@@ -179,7 +186,14 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 	if !completed || nextCommit != scheduled+1 {
 		return GeneratedSource{}, ErrPreDispatchInvalid
 	}
-	if err := config.Admission.SealFinalSource(source); err != nil {
+	if finalVerifiedSource != source {
+		verified, err := analyze(runContext, source, config.Bindings, config.Plan)
+		if err != nil {
+			return GeneratedSource{}, err
+		}
+		finalVerified = verified
+	}
+	if err := config.Admission.SealFinalSource(source, finalVerified); err != nil {
 		return GeneratedSource{}, err
 	}
 	snapshot := config.Admission.Snapshot()

@@ -14,7 +14,8 @@ const (
 	// SourceDigestPrefix is used for all source and suite digests emitted by the
 	// stream. Digests are over the exact UTF-8/source bytes supplied in chunks.
 	SourceDigestPrefix = "sha256:"
-	maxSourceBytes     = 1 << 20
+	// MaxSourceBytes is the shared aggregate source and staged-result bound.
+	MaxSourceBytes = 1 << 20
 )
 
 var (
@@ -188,7 +189,7 @@ func (stream *SourceStream) Chunk(chunk []byte) error {
 	if len(chunk) == 0 {
 		return nil
 	}
-	if len(stream.source) > maxSourceBytes || len(chunk) > maxSourceBytes-len(stream.source) {
+	if len(stream.source) > MaxSourceBytes || len(chunk) > MaxSourceBytes-len(stream.source) {
 		stream.state = streamFailed
 		return ErrSourceTooLarge
 	}

@@ -8,11 +8,13 @@ import (
 	"errors"
 	"runtime"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 )
 
 func TestStreamingSemanticPreDispatchStartsVisibleCallsConcurrentlyAndClaimsExactlyOnce(t *testing.T) {
@@ -75,6 +77,178 @@ func TestStreamingSemanticPreDispatchStartsVisibleCallsConcurrentlyAndClaimsExac
 	}
 }
 
+func TestVerifiedSourceGenerationRejectsAggregateOversizeBeforeAnalysis(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	budget, _ := NewPreDispatchBudget(1)
+	controller, _ := NewStreamingSemanticPreDispatch(plan, budget, &queuedLauncher{})
+	admission, _ := NewStreamingPrefixAdmission(plan, controller, legalityContext())
+	chunks := make(chan string, 2)
+	chunks <- strings.Repeat("x", 1<<20)
+	chunks <- "x"
+	close(chunks)
+	var analyses atomic.Uint32
+	_, err := GenerateVerifiedSourceWithPreDispatch(context.Background(), VerifiedSourceGenerationConfig{
+		Analyze: func(context.Context, string, Bindings, *capability.Plan) (VerifiedAnalysis, error) {
+			analyses.Add(1)
+			return VerifiedAnalysis{}, ErrUnverifiedAnalysis
+		},
+		Plan: plan, Admission: admission, SourceChunks: chunks,
+		Bindings:            Bindings{ArtifactSHA256: legalityDigest("artifact"), ExecutionProfileSHA256: legalityDigest("profile"), ImportClosureSHA256: legalityDigest("imports"), CapabilityPlanSHA256: plan.Identity()},
+		ShouldAnalyzePrefix: func(uint32, string) bool { return false },
+	})
+	if !errors.Is(err, streaming.ErrSourceTooLarge) || analyses.Load() != 0 {
+		t.Fatalf("error=%v analyses=%d", err, analyses.Load())
+	}
+	if snapshot := admission.Snapshot(); snapshot.Complete || snapshot.PrefixCount != 0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestStreamingPrefixSealPromotesChildToFinalSourceIdentity(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	prefixSource := "result = sources.read(\"profile\")\n"
+	prefixVerified, finalVerified, finalSiteID := streamingPromotionAnalyses(t, plan, prefixSource, prefixSource+"answer = result\n")
+	budget, _ := NewPreDispatchBudget(1)
+	launcher := &queuedLauncher{}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission, err := NewStreamingPrefixAdmission(plan, controller, legalityContext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added, err := admission.AdmitVerifiedPrefix(context.Background(), prefixSource, prefixVerified); err != nil || added != 1 {
+		t.Fatalf("admit added=%d err=%v", added, err)
+	}
+	launcher.RunAll()
+	finalSource := prefixSource + "answer = result\n"
+	finalAnalysis, err := finalVerified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := promoteStreamingCall(controller.entries[0].call, finalAnalysis); err != nil {
+		t.Fatalf("pure promotion mapping: %v prefix=%+v final=%+v", err, controller.entries[0].call, finalAnalysis.CallSites)
+	}
+	if err := admission.SealFinalSource(finalSource, finalVerified); err != nil {
+		t.Fatal(err)
+	}
+	entry := controller.entries[0]
+	if entry.call.SourceSHA256() != digestText(finalSource) || entry.call.CallSiteID() != finalSiteID ||
+		entry.controller.claim.SourceSHA256 != digestText(finalSource) ||
+		entry.controller.identity.SourceSHA256 != digestText(finalSource) ||
+		entry.controller.identity.ClaimIdentitySHA256 != entry.call.ClaimIdentitySHA256() {
+		t.Fatalf("call=%+v claim=%+v identity=%+v", entry.call, entry.controller.claim, entry.controller.identity)
+	}
+	outcome, err := controller.Claim(context.Background(), "sources.read", json.RawMessage(`{"key":"profile"}`))
+	if err != nil || outcome.Validate() != nil {
+		t.Fatalf("claim outcome=%+v err=%v", outcome, err)
+	}
+}
+
+func TestStreamingPrefixSealRejectsMissingFinalOccurrence(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	prefixSource := "result = sources.read(\"profile\")\n"
+	prefixVerified, finalVerified, _ := streamingPromotionAnalyses(t, plan, prefixSource, prefixSource+"answer = result\n")
+	analysis, err := finalVerified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis.CallSites[0].CanonicalArguments = json.RawMessage(`{"key":"other"}`)
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalVerified = VerifiedAnalysis{analysisJSON: encoded}
+	budget, _ := NewPreDispatchBudget(1)
+	launcher := &queuedLauncher{}
+	controller, _ := NewStreamingSemanticPreDispatch(plan, budget, launcher)
+	admission, _ := NewStreamingPrefixAdmission(plan, controller, legalityContext())
+	if added, err := admission.AdmitVerifiedPrefix(context.Background(), prefixSource, prefixVerified); err != nil || added != 1 {
+		t.Fatalf("admit added=%d err=%v", added, err)
+	}
+	launcher.RunAll()
+	if err := admission.SealFinalSource(prefixSource+"answer = result\n", finalVerified); !errors.Is(err, ErrAnalysisBinding) {
+		t.Fatalf("seal error=%v", err)
+	}
+	if snapshot := controller.Snapshot(); snapshot.SourceSealed || snapshot.LogicalClaims != 0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func streamingPromotionAnalyses(t *testing.T, plan *capability.Plan, prefixSource, finalSource string) (VerifiedAnalysis, VerifiedAnalysis, string) {
+	t.Helper()
+	verified, _ := legalityVerifiedAnalysis(t, plan, true)
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefixSiteID := analysis.CallSites[0].ID
+	analysis.SourceSHA256 = digestText(prefixSource)
+	_, prefixJSON, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefixVerified := VerifiedAnalysis{analysisJSON: prefixJSON}
+	finalSiteID := legalityDigest("final-source-site")
+	analysis.SourceSHA256 = digestText(finalSource)
+	analysis.CallSites[0].ID = finalSiteID
+	for index := range analysis.CandidateRegions {
+		for occurrence := range analysis.CandidateRegions[index].CapabilityOccurrences {
+			if analysis.CandidateRegions[index].CapabilityOccurrences[occurrence] == prefixSiteID {
+				analysis.CandidateRegions[index].CapabilityOccurrences[occurrence] = finalSiteID
+			}
+		}
+	}
+	_, finalJSON, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prefixVerified, VerifiedAnalysis{analysisJSON: finalJSON}, finalSiteID
+}
+
+func TestStreamingSemanticPreDispatchClaimsIdenticalArgumentsInVerifiedSourceOrder(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	base, _ := CanPreissue(verified, plan, site.ID, legalityContext()).QualifiedCall()
+	base.exclusiveDynamicCall = false
+	first := base
+	first.callSiteID = legalityDigest("identical-first")
+	first.startLine, first.endLine = 1, 1
+	first.budgetReservationSHA256 = legalityDigest("identical-first-reservation")
+	second := base
+	second.callSiteID = legalityDigest("identical-second")
+	second.startLine, second.endLine = 2, 2
+	second.budgetReservationSHA256 = legalityDigest("identical-second-reservation")
+	budget, _ := NewPreDispatchBudget(2)
+	launcher := &queuedLauncher{}
+	controller, err := NewStreamingSemanticPreDispatch(plan, budget, launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, call := range []QualifiedCall{first, second} {
+		if added, err := controller.Add(context.Background(), call); err != nil || !added {
+			t.Fatalf("add %d=%t err=%v", index, added, err)
+		}
+	}
+	launcher.RunAll()
+	for index := 0; index < 2; index++ {
+		outcome, err := controller.Claim(context.Background(), base.Capability(), base.CanonicalArguments())
+		if err != nil || outcome.Validate() != nil {
+			t.Fatalf("claim %d outcome=%+v err=%v", index, outcome, err)
+		}
+		if !controller.entries[index].claimed || controller.entries[index].controller.Snapshot().LogicalClaims != 1 {
+			t.Fatalf("entry %d=%+v child=%+v", index, controller.entries[index], controller.entries[index].controller.Snapshot())
+		}
+	}
+	if _, err := controller.Claim(context.Background(), base.Capability(), base.CanonicalArguments()); !errors.Is(err, capability.ErrStagedObservationNotTargeted) {
+		t.Fatalf("third claim error=%v", err)
+	}
+	if snapshot := controller.Snapshot(); snapshot.LogicalClaims != 2 || snapshot.Consumed != 2 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func TestStreamingSemanticPreDispatchDeduplicatesSameVisiblePrefixOccurrence(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, plan, true)
@@ -87,16 +261,16 @@ func TestStreamingSemanticPreDispatchDeduplicatesSameVisiblePrefixOccurrence(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := controller.Add(context.Background(), call)
-	if err != nil || !first {
-		t.Fatalf("first add=%t err=%v", first, err)
+	firstAdded, err := controller.Add(context.Background(), call)
+	if err != nil || !firstAdded {
+		t.Fatalf("first add=%t err=%v", firstAdded, err)
 	}
 	extended := call
 	extended.sourceSHA256 = legalityDigest("same prefix plus later source")
 	extended.callSiteID = legalityDigest("same occurrence in extended source")
-	second, err := controller.Add(context.Background(), extended)
-	if err != nil || second || launcher.Count() != 1 {
-		t.Fatalf("second add=%t launches=%d err=%v", second, launcher.Count(), err)
+	secondAdded, err := controller.Add(context.Background(), extended)
+	if err != nil || secondAdded || launcher.Count() != 1 {
+		t.Fatalf("second add=%t launches=%d err=%v", secondAdded, launcher.Count(), err)
 	}
 }
 

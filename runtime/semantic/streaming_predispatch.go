@@ -376,9 +376,13 @@ func (admission *StreamingPrefixAdmission) RecordSkippedPrefix(source string) er
 	return nil
 }
 
-func (admission *StreamingPrefixAdmission) SealFinalSource(source string) error {
+func (admission *StreamingPrefixAdmission) SealFinalSource(source string, verified VerifiedAnalysis) error {
 	if admission == nil || source == "" {
 		return ErrPreDispatchInvalid
+	}
+	analysis, err := verified.Analysis()
+	if err != nil || analysis.SourceSHA256 != digestText(source) || analysis.CapabilityPlanSHA256 != admission.plan.Identity() {
+		return ErrAnalysisBinding
 	}
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
@@ -389,18 +393,58 @@ func (admission *StreamingPrefixAdmission) SealFinalSource(source string) error 
 	if admission.snapshot.Complete || base == "" || !strings.HasSuffix(base, "\n") || !strings.HasPrefix(source, base) {
 		return ErrAnalysisBinding
 	}
-	digest := sha256.Sum256([]byte(source))
-	finalSHA := "sha256:" + hex.EncodeToString(digest[:])
+	finalSHA := analysis.SourceSHA256
 	admission.controller.mu.Lock()
 	defer admission.controller.mu.Unlock()
 	if admission.controller.finalized || admission.controller.sourceSealed {
 		return ErrPreDispatchInvalid
+	}
+	promoted := make([]QualifiedCall, len(admission.controller.entries))
+	for index, entry := range admission.controller.entries {
+		call, err := promoteStreamingCall(entry.call, analysis)
+		if err != nil {
+			return err
+		}
+		promoted[index] = call
+	}
+	for index, entry := range admission.controller.entries {
+		if err := entry.controller.promoteFinalCall(promoted[index]); err != nil {
+			return err
+		}
+		entry.call = promoted[index]
 	}
 	admission.controller.sourceSealed = true
 	admission.controller.finalSourceSHA256 = finalSHA
 	admission.snapshot.LastSourceSHA256 = finalSHA
 	admission.snapshot.Complete = true
 	return nil
+}
+
+func promoteStreamingCall(prefix QualifiedCall, final Analysis) (QualifiedCall, error) {
+	var matched *CallSite
+	for index := range final.CallSites {
+		site := &final.CallSites[index]
+		if site.Capability != prefix.capability || site.DynamicOccurrence != prefix.dynamicOccurrence ||
+			site.Span.StartLine != prefix.startLine || site.Span.StartColumn != prefix.startColumn ||
+			site.Span.EndLine != prefix.endLine || site.Span.EndColumn != prefix.endColumn ||
+			!site.ArgumentsCanonical || !bytes.Equal(site.CanonicalArguments, prefix.canonicalArguments) {
+			continue
+		}
+		if matched != nil {
+			return QualifiedCall{}, ErrAnalysisBinding
+		}
+		matched = site
+	}
+	if matched == nil {
+		return QualifiedCall{}, ErrAnalysisBinding
+	}
+	promoted := prefix.clone()
+	promoted.callSiteID = matched.ID
+	promoted.sourceSHA256 = final.SourceSHA256
+	if !promoted.valid() {
+		return QualifiedCall{}, ErrAnalysisBinding
+	}
+	return promoted, nil
 }
 
 func prefixBudgetReservation(streamEpoch string, site CallSite) string {

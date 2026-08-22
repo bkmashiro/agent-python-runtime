@@ -127,7 +127,7 @@ type StagedObservation struct {
 
 func NewStagedObservation(identity ObservationIdentity, result []byte) (*StagedObservation, error) {
 	sealed := identity.SourceSHA256 != ""
-	if identity.Validate(sealed) != nil || len(result) == 0 || len(result) > maxSourceBytes {
+	if identity.Validate(sealed) != nil || len(result) == 0 || len(result) > MaxSourceBytes {
 		return nil, ErrInvalidObservationIdentity
 	}
 	return &StagedObservation{
@@ -158,6 +158,33 @@ func (record *StagedObservation) BindSource(sourceSHA256 string) (*StagedObserva
 		return nil, err
 	}
 	return record, nil
+}
+
+// PromoteSemanticIdentity atomically replaces the prefix-derived identity of a
+// ready semantic-call record with the exact final-source identity. Only the
+// source, final call-site ID, and their derived claim digest may change.
+func (record *StagedObservation) PromoteSemanticIdentity(expected, promoted ObservationIdentity) error {
+	if record == nil || expected.Validate(true) != nil || promoted.Validate(true) != nil ||
+		expected.BindingKind != ObservationBindingSemanticCall || promoted.BindingKind != ObservationBindingSemanticCall {
+		return ErrInvalidObservationIdentity
+	}
+	comparable := expected
+	comparable.SourceSHA256 = promoted.SourceSHA256
+	comparable.CallSiteID = promoted.CallSiteID
+	comparable.ClaimIdentitySHA256 = promoted.ClaimIdentitySHA256
+	if comparable != promoted {
+		return ErrStagedObservationMismatch
+	}
+	record.mu.Lock()
+	defer record.mu.Unlock()
+	if record.disposition != ObservationReady {
+		return ErrStagedObservationTerminal
+	}
+	if record.identity != expected {
+		return ErrStagedObservationMismatch
+	}
+	record.identity = promoted
+	return nil
 }
 
 func (record *StagedObservation) Consume(identity ObservationIdentity) ([]byte, error) {

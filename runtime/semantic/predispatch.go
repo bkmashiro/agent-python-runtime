@@ -136,7 +136,18 @@ func newSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *P
 		return nil, ErrPreDispatchInvalid
 	}
 	claim := call.ExpectedObservationClaim()
-	identity := streaming.ObservationIdentity{
+	identity := semanticObservationIdentity(call, claim)
+	if identity.Validate(true) != nil {
+		return nil, ErrPreDispatchInvalid
+	}
+	return &SemanticPreDispatch{
+		call: call.clone(), claim: claim, identity: identity, prepared: prepared,
+		budget: budget, done: make(chan struct{}), costUnits: uint64(contract.CostUnits), maxResultBytes: contract.MaxResultBytes,
+	}, nil
+}
+
+func semanticObservationIdentity(call QualifiedCall, claim ObservationClaim) streaming.ObservationIdentity {
+	return streaming.ObservationIdentity{
 		SchemaVersion: streaming.ObservationIdentitySchemaVersion,
 		BindingKind:   streaming.ObservationBindingSemanticCall,
 		StreamEpoch:   claim.StreamEpoch, WorkflowEpoch: claim.WorkflowEpoch,
@@ -148,13 +159,43 @@ func newSemanticPreDispatch(call QualifiedCall, plan *capability.Plan, budget *P
 		FreshnessEpoch: claim.FreshnessEpoch, ExpiryEpoch: claim.ExpiryEpoch,
 		PrivacyPartition: claim.PrivacyPartition, ParentLineageSHA256: claim.ParentLineageSHA256,
 	}
-	if identity.Validate(true) != nil {
-		return nil, ErrPreDispatchInvalid
+}
+
+// promoteFinalCall closes a streaming prefix identity over the exact final
+// source occurrence before the final Guest can claim it.
+func (controller *SemanticPreDispatch) promoteFinalCall(promoted QualifiedCall) error {
+	if controller == nil || !promoted.valid() {
+		return ErrAnalysisBinding
 	}
-	return &SemanticPreDispatch{
-		call: call.clone(), claim: claim, identity: identity, prepared: prepared,
-		budget: budget, done: make(chan struct{}), costUnits: uint64(contract.CostUnits), maxResultBytes: contract.MaxResultBytes,
-	}, nil
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	current := controller.call
+	if controller.logical != 0 || current.capability != promoted.capability ||
+		!bytes.Equal(current.canonicalArguments, promoted.canonicalArguments) ||
+		current.argumentsSHA256 != promoted.argumentsSHA256 || current.resourceSHA256 != promoted.resourceSHA256 ||
+		current.dynamicOccurrence != promoted.dynamicOccurrence || current.binding != promoted.binding ||
+		current.streamEpoch != promoted.streamEpoch || current.workflowEpoch != promoted.workflowEpoch ||
+		current.freshnessEpoch != promoted.freshnessEpoch || current.expiryEpoch != promoted.expiryEpoch ||
+		current.privacyPartition != promoted.privacyPartition || current.parentLineageSHA256 != promoted.parentLineageSHA256 ||
+		current.budgetReservationSHA256 != promoted.budgetReservationSHA256 ||
+		current.startLine != promoted.startLine || current.startColumn != promoted.startColumn ||
+		current.endLine != promoted.endLine || current.endColumn != promoted.endColumn {
+		return ErrAnalysisBinding
+	}
+	claim := promoted.ExpectedObservationClaim()
+	identity := semanticObservationIdentity(promoted, claim)
+	if identity.Validate(true) != nil {
+		return ErrAnalysisBinding
+	}
+	if controller.record != nil {
+		if err := controller.record.PromoteSemanticIdentity(controller.identity, identity); err != nil {
+			return err
+		}
+	}
+	controller.call = promoted.clone()
+	controller.claim = claim
+	controller.identity = identity
+	return nil
 }
 
 func (controller *SemanticPreDispatch) Start(ctx context.Context, launcher PreDispatchLauncher) error {

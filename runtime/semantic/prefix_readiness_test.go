@@ -81,7 +81,7 @@ func TestConservativePrefixReadinessFilterSkipsPureLocalPrefixes(t *testing.T) {
 	}
 }
 
-func TestGenerateVerifiedSourceAllowsAllPureLocalPrefixesToSkipExactAnalysis(t *testing.T) {
+func TestGenerateVerifiedSourceSkipsPureLocalPrefixesButVerifiesFinalSource(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	filter, err := NewConservativePrefixReadinessFilter(plan)
 	if err != nil {
@@ -100,15 +100,16 @@ func TestGenerateVerifiedSourceAllowsAllPureLocalPrefixesToSkipExactAnalysis(t *
 	chunks <- "value = inputs['n'] + 1\n"
 	chunks <- "result = value * 2\n"
 	close(chunks)
+	verified, _ := legalityVerifiedAnalysis(t, plan, true)
 	var analyses atomic.Uint32
 	var skipped atomic.Uint32
 	generated, err := GenerateVerifiedSourceWithPreDispatch(context.Background(), VerifiedSourceGenerationConfig{
 		Plan: plan, Admission: admission, SourceChunks: chunks,
 		Bindings:            Bindings{ArtifactSHA256: legalityDigest("artifact"), ExecutionProfileSHA256: legalityDigest("profile"), ImportClosureSHA256: legalityDigest("imports"), CapabilityPlanSHA256: plan.Identity()},
 		ShouldAnalyzePrefix: filter.ShouldAnalyzePrefix,
-		Analyze: func(context.Context, string, Bindings, *capability.Plan) (VerifiedAnalysis, error) {
+		Analyze: func(_ context.Context, source string, _ Bindings, _ *capability.Plan) (VerifiedAnalysis, error) {
 			analyses.Add(1)
-			return VerifiedAnalysis{}, ErrUnverifiedAnalysis
+			return rebindVerifiedSource(verified, source)
 		},
 		Observe: func(event VerifiedSourceGenerationEvent) {
 			if event.Phase == "prefix_skipped" {
@@ -119,7 +120,7 @@ func TestGenerateVerifiedSourceAllowsAllPureLocalPrefixesToSkipExactAnalysis(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if analyses.Load() != 0 || skipped.Load() != 2 || generated.Source() != "value = inputs['n'] + 1\nresult = value * 2\n" {
+	if analyses.Load() != 1 || skipped.Load() != 2 || generated.Source() != "value = inputs['n'] + 1\nresult = value * 2\n" {
 		t.Fatalf("analyses=%d skipped=%d source=%q", analyses.Load(), skipped.Load(), generated.Source())
 	}
 }
@@ -148,15 +149,18 @@ func TestSkippedSuffixDoesNotInvalidateDelayedExactPrefixAnalysis(t *testing.T) 
 	releaseAnalysis := make(chan struct{})
 	skipped := make(chan struct{})
 	result := make(chan error, 1)
+	var analyses atomic.Uint32
 	go func() {
 		_, generationErr := GenerateVerifiedSourceWithPreDispatch(context.Background(), VerifiedSourceGenerationConfig{
 			Plan: plan, Admission: admission, SourceChunks: chunks,
 			Bindings:            Bindings{ArtifactSHA256: legalityDigest("artifact"), ExecutionProfileSHA256: legalityDigest("profile"), ImportClosureSHA256: legalityDigest("imports"), CapabilityPlanSHA256: plan.Identity()},
 			ShouldAnalyzePrefix: filter.ShouldAnalyzePrefix,
-			Analyze: func(context.Context, string, Bindings, *capability.Plan) (VerifiedAnalysis, error) {
-				close(analysisStarted)
-				<-releaseAnalysis
-				return verified, nil
+			Analyze: func(_ context.Context, source string, _ Bindings, _ *capability.Plan) (VerifiedAnalysis, error) {
+				if analyses.Add(1) == 1 {
+					close(analysisStarted)
+					<-releaseAnalysis
+				}
+				return rebindVerifiedSource(verified, source)
 			},
 			Observe: func(event VerifiedSourceGenerationEvent) {
 				if event.Phase == "prefix_skipped" {
@@ -172,7 +176,20 @@ func TestSkippedSuffixDoesNotInvalidateDelayedExactPrefixAnalysis(t *testing.T) 
 	if err := <-result; err != nil {
 		t.Fatal(err)
 	}
-	if snapshot := admission.Snapshot(); snapshot.PrefixCount != 1 || snapshot.SkippedPrefixCount != 1 || !snapshot.Complete {
-		t.Fatalf("snapshot=%+v", snapshot)
+	if snapshot := admission.Snapshot(); snapshot.PrefixCount != 1 || snapshot.SkippedPrefixCount != 1 || !snapshot.Complete || analyses.Load() != 2 {
+		t.Fatalf("snapshot=%+v analyses=%d", snapshot, analyses.Load())
 	}
+}
+
+func rebindVerifiedSource(verified VerifiedAnalysis, source string) (VerifiedAnalysis, error) {
+	analysis, err := verified.Analysis()
+	if err != nil {
+		return VerifiedAnalysis{}, err
+	}
+	analysis.SourceSHA256 = digestText(source)
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		return VerifiedAnalysis{}, err
+	}
+	return VerifiedAnalysis{analysisJSON: encoded}, nil
 }

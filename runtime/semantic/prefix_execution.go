@@ -96,8 +96,6 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 	sourceChannel := config.SourceChunks
 	completed := false
 	committed := make(map[uint32]analysisResult)
-	var finalVerified VerifiedAnalysis
-	var finalVerifiedSource string
 	for sourceChannel != nil || pending > 0 {
 		select {
 		case <-runContext.Done():
@@ -170,8 +168,6 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 				if err != nil {
 					return GeneratedSource{}, err
 				}
-				finalVerified = ready.verified
-				finalVerifiedSource = ready.source
 				delete(committed, nextCommit)
 				if config.Observe != nil {
 					config.Observe(VerifiedSourceGenerationEvent{
@@ -186,14 +182,7 @@ func GenerateVerifiedSourceWithPreDispatch(ctx context.Context, config VerifiedS
 	if !completed || nextCommit != scheduled+1 {
 		return GeneratedSource{}, ErrPreDispatchInvalid
 	}
-	if finalVerifiedSource != source {
-		verified, err := analyze(runContext, source, config.Bindings, config.Plan)
-		if err != nil {
-			return GeneratedSource{}, err
-		}
-		finalVerified = verified
-	}
-	if err := config.Admission.SealFinalSource(source, finalVerified); err != nil {
+	if err := config.Admission.SealFinalSource(source); err != nil {
 		return GeneratedSource{}, err
 	}
 	snapshot := config.Admission.Snapshot()

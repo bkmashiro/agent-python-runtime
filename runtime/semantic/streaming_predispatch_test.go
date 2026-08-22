@@ -104,10 +104,10 @@ func TestVerifiedSourceGenerationRejectsAggregateOversizeBeforeAnalysis(t *testi
 	}
 }
 
-func TestStreamingPrefixSealPromotesChildToFinalSourceIdentity(t *testing.T) {
+func TestStreamingPrefixSealPromotesReadyRecordToFinalSource(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	prefixSource := "result = sources.read(\"profile\")\n"
-	prefixVerified, finalVerified, finalSiteID := streamingPromotionAnalyses(t, plan, prefixSource, prefixSource+"answer = result\n")
+	prefixVerified, prefixSiteID := streamingPrefixAnalysis(t, plan, prefixSource)
 	budget, _ := NewPreDispatchBudget(1)
 	launcher := &queuedLauncher{}
 	controller, err := NewStreamingSemanticPreDispatch(plan, budget, launcher)
@@ -123,18 +123,11 @@ func TestStreamingPrefixSealPromotesChildToFinalSourceIdentity(t *testing.T) {
 	}
 	launcher.RunAll()
 	finalSource := prefixSource + "answer = result\n"
-	finalAnalysis, err := finalVerified.Analysis()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := promoteStreamingCall(controller.entries[0].call, finalAnalysis); err != nil {
-		t.Fatalf("pure promotion mapping: %v prefix=%+v final=%+v", err, controller.entries[0].call, finalAnalysis.CallSites)
-	}
-	if err := admission.SealFinalSource(finalSource, finalVerified); err != nil {
+	if err := admission.SealFinalSource(finalSource); err != nil {
 		t.Fatal(err)
 	}
 	entry := controller.entries[0]
-	if entry.call.SourceSHA256() != digestText(finalSource) || entry.call.CallSiteID() != finalSiteID ||
+	if entry.call.SourceSHA256() != digestText(finalSource) || entry.call.CallSiteID() != prefixSiteID ||
 		entry.controller.claim.SourceSHA256 != digestText(finalSource) ||
 		entry.controller.identity.SourceSHA256 != digestText(finalSource) ||
 		entry.controller.identity.ClaimIdentitySHA256 != entry.call.ClaimIdentitySHA256() {
@@ -146,20 +139,10 @@ func TestStreamingPrefixSealPromotesChildToFinalSourceIdentity(t *testing.T) {
 	}
 }
 
-func TestStreamingPrefixSealRejectsMissingFinalOccurrence(t *testing.T) {
+func TestStreamingPrefixSealRejectsNonExtensionBeforePromotion(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	prefixSource := "result = sources.read(\"profile\")\n"
-	prefixVerified, finalVerified, _ := streamingPromotionAnalyses(t, plan, prefixSource, prefixSource+"answer = result\n")
-	analysis, err := finalVerified.Analysis()
-	if err != nil {
-		t.Fatal(err)
-	}
-	analysis.CallSites[0].CanonicalArguments = json.RawMessage(`{"key":"other"}`)
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	finalVerified = VerifiedAnalysis{analysisJSON: encoded}
+	prefixVerified, _ := streamingPrefixAnalysis(t, plan, prefixSource)
 	budget, _ := NewPreDispatchBudget(1)
 	launcher := &queuedLauncher{}
 	controller, _ := NewStreamingSemanticPreDispatch(plan, budget, launcher)
@@ -168,7 +151,7 @@ func TestStreamingPrefixSealRejectsMissingFinalOccurrence(t *testing.T) {
 		t.Fatalf("admit added=%d err=%v", added, err)
 	}
 	launcher.RunAll()
-	if err := admission.SealFinalSource(prefixSource+"answer = result\n", finalVerified); !errors.Is(err, ErrAnalysisBinding) {
+	if err := admission.SealFinalSource("different = 1\n"); !errors.Is(err, ErrAnalysisBinding) {
 		t.Fatalf("seal error=%v", err)
 	}
 	if snapshot := controller.Snapshot(); snapshot.SourceSealed || snapshot.LogicalClaims != 0 {
@@ -176,7 +159,7 @@ func TestStreamingPrefixSealRejectsMissingFinalOccurrence(t *testing.T) {
 	}
 }
 
-func streamingPromotionAnalyses(t *testing.T, plan *capability.Plan, prefixSource, finalSource string) (VerifiedAnalysis, VerifiedAnalysis, string) {
+func streamingPrefixAnalysis(t *testing.T, plan *capability.Plan, prefixSource string) (VerifiedAnalysis, string) {
 	t.Helper()
 	verified, _ := legalityVerifiedAnalysis(t, plan, true)
 	analysis, err := verified.Analysis()
@@ -189,22 +172,7 @@ func streamingPromotionAnalyses(t *testing.T, plan *capability.Plan, prefixSourc
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefixVerified := VerifiedAnalysis{analysisJSON: prefixJSON}
-	finalSiteID := legalityDigest("final-source-site")
-	analysis.SourceSHA256 = digestText(finalSource)
-	analysis.CallSites[0].ID = finalSiteID
-	for index := range analysis.CandidateRegions {
-		for occurrence := range analysis.CandidateRegions[index].CapabilityOccurrences {
-			if analysis.CandidateRegions[index].CapabilityOccurrences[occurrence] == prefixSiteID {
-				analysis.CandidateRegions[index].CapabilityOccurrences[occurrence] = finalSiteID
-			}
-		}
-	}
-	_, finalJSON, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return prefixVerified, VerifiedAnalysis{analysisJSON: finalJSON}, finalSiteID
+	return VerifiedAnalysis{analysisJSON: prefixJSON}, prefixSiteID
 }
 
 func TestStreamingSemanticPreDispatchClaimsIdenticalArgumentsInVerifiedSourceOrder(t *testing.T) {

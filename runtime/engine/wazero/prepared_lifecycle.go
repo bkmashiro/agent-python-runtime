@@ -19,12 +19,14 @@ var (
 	ErrPreparedInvocationMismatch  = errors.New("prepared family invocation identity mismatch")
 )
 
+// PreparedMemberDisposition classifies one member's terminal outcome.
 type PreparedMemberDisposition string
 
 const (
 	PreparedMemberOK          PreparedMemberDisposition = "ok"
 	PreparedMemberGuestError  PreparedMemberDisposition = "guest_error"
 	PreparedMemberCancelled   PreparedMemberDisposition = "cancelled"
+	PreparedMemberTimeout     PreparedMemberDisposition = "timeout"
 	PreparedMemberClosedUnrun PreparedMemberDisposition = "closed_unrun"
 )
 
@@ -253,7 +255,9 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 		}
 	} else {
 		disposition = PreparedMemberGuestError
-		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) || ctx.Err() != nil {
+		if errors.Is(runErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			disposition = PreparedMemberTimeout
+		} else if errors.Is(runErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			disposition = PreparedMemberCancelled
 		}
 	}

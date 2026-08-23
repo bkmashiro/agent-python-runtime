@@ -34,7 +34,7 @@ var (
 
 // PreparedFamilyConfig binds an authority-free image config and finite member bounds.
 type PreparedFamilyConfig struct {
-	RunConfig    runtimeconfig.RunConfig
+	ImageConfig  runtimeconfig.RunConfig
 	MaxConsumers uint32
 	MaxActive    uint32
 	Mode         PreparedFamilyMode
@@ -63,7 +63,7 @@ func (record PreparedMemberRecord) Validate() error {
 		return ErrPreparedFamilyConfig
 	}
 	switch record.Outcome {
-	case PreparedMemberOK, PreparedMemberGuestError, PreparedMemberCancelled:
+	case PreparedMemberOK, PreparedMemberGuestError, PreparedMemberCancelled, PreparedMemberTimeout:
 		if record.RunID == "" {
 			return ErrPreparedFamilyConfig
 		}
@@ -99,16 +99,16 @@ type PreparedFamily struct {
 
 // PrepareNumpyFamily seals one bounded ndarray input for later fresh consumers.
 func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyConfig, input PreparedNumpyInput) (*PreparedFamily, error) {
-	if ctx == nil || len(wasm) < 8 || config.RunConfig.Validate() != nil ||
-		config.RunConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect || len(config.RunConfig.CapabilityGrants) != 0 || config.RunConfig.ColdIO != nil ||
+	if ctx == nil || len(wasm) < 8 || config.ImageConfig.Validate() != nil ||
+		config.ImageConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect || len(config.ImageConfig.CapabilityGrants) != 0 || config.ImageConfig.ColdIO != nil ||
 		(config.Mode != PreparedFamilyAuto && config.Mode != PreparedFamilyPrivateCopy && config.Mode != PreparedFamilyPrivateCOW) {
 		return nil, ErrPreparedFamilyConfig
 	}
 	lifecycle, err := newPreparedFamilyLifecycle(config.MaxConsumers, config.MaxActive)
-	if err != nil || input.validateForConfig(config.RunConfig) != nil {
+	if err != nil || input.validateForConfig(config.ImageConfig) != nil {
 		return nil, ErrPreparedFamilyConfig
 	}
-	imageConfig := cloneFamilyRunConfig(config.RunConfig)
+	imageConfig := cloneFamilyRunConfig(config.ImageConfig)
 	imageConfig.Mechanisms = runtimeconfig.MechanismSet{}
 	disposition := PreparedDispositionPrivateCopy
 	if config.Mode == PreparedFamilyPrivateCOW || (config.Mode == PreparedFamilyAuto && runtime.GOOS == "linux") {

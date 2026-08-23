@@ -1,10 +1,10 @@
 # Prepared family v1 contract
 
-**Status:** Phase 0 implementation contract. This document governs the post-paper prepared-family lane and does not change the frozen prepared-data paper contracts.
+**Status:** Implemented through the bounded prepared-family runner slice; workspace/subagent acceptance remains gated by the active megagoal. This document governs the post-paper lane and does not change frozen paper contracts.
 
 ## Scope
 
-A `numpy-core` Host may seal one bounded ndarray and create fresh single-use runners from it. Consumers may use different source, Run identity, capability plan and private workspace. Runtime executes one runner at a time and owns no scheduling, retry, selection or publication policy.
+A `numpy-core` Host may seal one bounded ndarray and create fresh single-use runners from it. Consumers may use different source, Run identity, capability plan and private workspace. The family creates individual runners; Host/Harness owns concurrency, scheduling, retry, selection and publication.
 
 The v1 implementation owner is `runtime/engine/wazero`. It reuses `runtime/numpycodec`, `runtime/workspace`, `runtime/subagent` and the ordinary response contract. It does not add a Cohort field to `RunRequest` or `MechanismSet`.
 
@@ -183,11 +183,10 @@ Qualification runs on the real artifact for every promoted dtype and binds the a
 `runtime/engine/wazero` owns a bounded `pysolate.prepared-family-member.v1` record containing only:
 
 - family/image identity;
-- member identity and Host execution identity;
+- member, Run, Invocation and execution identity;
 - physical disposition;
 - terminal state (`ok`, `guest_error`, `cancelled`, `timeout`, `closed_unrun`);
-- optional initial/final workspace root identities;
-- counters and bounded timings.
+- optional final workspace content identity.
 
 It contains no body, source text, response body, credential, Host path or raw native handle. Existing response, workspace receipts and subagent join records remain authoritative in their domains; this record joins identities rather than replacing them.
 

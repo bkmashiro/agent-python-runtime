@@ -274,8 +274,9 @@ func TestPreparedFamilyRunnerCloseWaitsForActiveRun(t *testing.T) {
 }
 
 type familyFakeRunner struct {
-	runs int
-	ref  runtimeconfig.InvocationRef
+	runs     int
+	ref      runtimeconfig.InvocationRef
+	runError error
 }
 
 func (runner *familyFakeRunner) Run(ctx context.Context, _ []byte, trustedPrepare string) ([]byte, error) {
@@ -284,10 +285,27 @@ func (runner *familyFakeRunner) Run(ctx context.Context, _ []byte, trustedPrepar
 	if trustedPrepare != "" {
 		return nil, errors.New("trusted prepare reached delegate")
 	}
-	return []byte(`{"status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1}}`), nil
+	if runner.runError != nil {
+		return nil, runner.runError
+	}
+	return []byte(`{"schema_version":"pysolate.run-response.v1","run_id":"execution","status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1}}`), nil
 }
 func (*familyFakeRunner) Close(context.Context) error   { return nil }
 func (*familyFakeRunner) Properties() engine.Properties { return engine.Properties{Backend: "fake"} }
+
+func TestPreparedFamilyRunnerRecordsTimeoutSeparately(t *testing.T) {
+	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+	member, _ := lifecycle.reserve()
+	delegate := &familyFakeRunner{runError: context.DeadlineExceeded}
+	ref := runtimeconfig.InvocationRef{AgentRunID: "agent", InvocationID: "invocation", InvocationAttempt: 1, ExecutionID: "execution"}
+	runner := newPreparedFamilyRunner(delegate, ref, lifecycle, member)
+	var disposition PreparedMemberDisposition
+	runner.onTerminal = func(_ uint64, _ string, value PreparedMemberDisposition, _ []byte) { disposition = value }
+	request := []byte(`{"run_id":"execution","code":"result=1","inputs":{}}`)
+	if _, err := runner.Run(context.Background(), request, ""); !errors.Is(err, context.DeadlineExceeded) || disposition != PreparedMemberTimeout {
+		t.Fatalf("run err=%v disposition=%s", err, disposition)
+	}
+}
 
 func TestPreparedFamilyRunnerRejectsTrustedPrepareAndIsSingleUse(t *testing.T) {
 	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)

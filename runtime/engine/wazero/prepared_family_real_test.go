@@ -38,7 +38,7 @@ func TestPreparedFamilyRealGuestSingleUseBoundsAndRecords(t *testing.T) {
 	imageConfig.ExecutionProfile = profile
 	input := realPreparedInput(t, profile, []uint64{2, 2}, []uint64{1, 2, 3, 4})
 	family, err := PrepareNumpyFamily(context.Background(), artifact, PreparedFamilyConfig{
-		RunConfig: imageConfig, MaxConsumers: 2, MaxActive: 1, Mode: PreparedFamilyAuto,
+		ImageConfig: imageConfig, MaxConsumers: 2, MaxActive: 1, Mode: PreparedFamilyAuto,
 	}, input)
 	if err != nil {
 		t.Fatal(err)

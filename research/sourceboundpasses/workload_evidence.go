@@ -5,10 +5,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"regexp"
 )
 
 const AuthoredWorkloadEvidenceSchemaVersion = "pysolate.source-bound-pass-authored-workload-evidence.v1"
+const authoredWorkloadEvidenceClassification = "AUTHORED_EXACT_GUEST_STRUCTURAL_CENSUS_NOT_END_TO_END_PERFORMANCE_EVIDENCE"
+const authoredPreparedStatus = "candidate_census_only_not_formally_executed"
+const authoredAllAdmittedStatus = "not_applicable_without_shared_fixture"
 
 var ErrInvalidAuthoredWorkloadEvidence = errors.New("invalid authored source-bound pass workload evidence")
 
@@ -110,8 +114,8 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 			ASTSHA256: input.ASTSHA256, AnalyzerSHA256: input.AnalyzerSHA256,
 			CandidateRegions: input.CandidateRegions, LocallyReusableRegions: input.LocallyReusableRegions,
 			CallSites: input.CallSites, SemanticAdmitted: input.SemanticAdmitted, SemanticRejected: input.SemanticRejected,
-			PreparedStatus:    "candidate_census_only_not_formally_executed",
-			AllAdmittedStatus: "not_applicable_without_shared_fixture",
+			PreparedStatus:    authoredPreparedStatus,
+			AllAdmittedStatus: authoredAllAdmittedStatus,
 		}
 		counts.CandidateRegions += input.CandidateRegions
 		counts.LocallyReusableRegions += input.LocallyReusableRegions
@@ -121,21 +125,14 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 	}
 	value := AuthoredWorkloadEvidence{
 		SchemaVersion:         AuthoredWorkloadEvidenceSchemaVersion,
-		Classification:        "AUTHORED_EXACT_GUEST_STRUCTURAL_CENSUS_NOT_END_TO_END_PERFORMANCE_EVIDENCE",
+		Classification:        authoredWorkloadEvidenceClassification,
 		PreregistrationSHA256: build.PreregistrationSHA256,
 		ArtifactSourceCommit:  build.ArtifactSourceCommit, ArtifactSHA256: build.ArtifactSHA256,
 		ArtifactManifestSHA256: build.ArtifactManifestSHA256, HarnessSourceCommit: build.HarnessSourceCommit,
 		CapabilityPlanSHA256: build.CapabilityPlanSHA256, ExecutionProfileSHA256: build.ExecutionProfileSHA256,
 		PerformanceComparisonSupported: false, Counts: counts, Rows: rows,
-		NaturalCorpus: NaturalSourcePrefixAnchor{
-			EvidenceIdentity: "sha256:13120c7ec8565fe7599c0c3f362a0ae90deeb67cafdd986dafa4a8cac70d714a",
-			Events:           36, UniqueSources: 30, StructurallyEligible: 0, TimingRecorded: false,
-		},
-		ClaimBoundary: []string{
-			"exact Guest structural analysis of six preregistered authored cases",
-			"semantic_pre_dispatch admission census", "prepared_pure_region candidate census only",
-			"no authored timing or speedup", "no deferred-pass implementation", "no natural prevalence beyond anchored census",
-		},
+		NaturalCorpus: authoredExpectedNaturalCorpus(),
+		ClaimBoundary: authoredExpectedClaimBoundary(),
 	}
 	value.IdentitySHA256 = authoredEvidenceIdentity(value)
 	if err := value.Validate(); err != nil {
@@ -145,16 +142,21 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 }
 
 func (value AuthoredWorkloadEvidence) Validate() error {
-	if value.SchemaVersion != AuthoredWorkloadEvidenceSchemaVersion || !validWorkloadDigest(value.IdentitySHA256) ||
-		value.IdentitySHA256 != authoredEvidenceIdentity(value) || value.PerformanceComparisonSupported ||
-		value.Counts.Cases != uint32(len(value.Rows)) || value.NaturalCorpus.Events != 36 ||
-		value.NaturalCorpus.StructurallyEligible != 0 || value.NaturalCorpus.TimingRecorded {
+	expectedCases := AuthoredWorkloadPreregistrationV1().Cases
+	if value.SchemaVersion != AuthoredWorkloadEvidenceSchemaVersion || value.Classification != authoredWorkloadEvidenceClassification ||
+		!validWorkloadDigest(value.IdentitySHA256) || value.IdentitySHA256 != authoredEvidenceIdentity(value) ||
+		value.PreregistrationSHA256 != authoredExpectedPreregistrationSHA256() || value.PerformanceComparisonSupported ||
+		value.Counts.Cases != uint32(len(value.Rows)) || len(value.Rows) != len(expectedCases) ||
+		value.NaturalCorpus != authoredExpectedNaturalCorpus() || !reflect.DeepEqual(value.ClaimBoundary, authoredExpectedClaimBoundary()) {
 		return ErrInvalidAuthoredWorkloadEvidence
 	}
 	counts := AuthoredWorkloadEvidenceCounts{Cases: uint32(len(value.Rows))}
-	for _, row := range value.Rows {
-		if !validWorkloadDigest(row.SourceSHA256) || !validWorkloadDigest(row.ASTSHA256) || !validWorkloadDigest(row.AnalyzerSHA256) ||
-			row.LocallyReusableRegions > row.CandidateRegions || row.SemanticAdmitted+row.SemanticRejected != row.CallSites {
+	for index, row := range value.Rows {
+		expected := expectedCases[index]
+		if row.ID != expected.ID || row.Category != expected.Category || row.SourceSHA256 != expected.SourceSHA256 ||
+			!validWorkloadDigest(row.ASTSHA256) || !validWorkloadDigest(row.AnalyzerSHA256) ||
+			row.LocallyReusableRegions > row.CandidateRegions || row.SemanticAdmitted+row.SemanticRejected != row.CallSites ||
+			row.PreparedStatus != authoredPreparedStatus || row.AllAdmittedStatus != authoredAllAdmittedStatus {
 			return ErrInvalidAuthoredWorkloadEvidence
 		}
 		counts.CandidateRegions += row.CandidateRegions
@@ -167,6 +169,29 @@ func (value AuthoredWorkloadEvidence) Validate() error {
 		return ErrInvalidAuthoredWorkloadEvidence
 	}
 	return nil
+}
+
+func authoredExpectedNaturalCorpus() NaturalSourcePrefixAnchor {
+	return NaturalSourcePrefixAnchor{
+		EvidenceIdentity: "sha256:13120c7ec8565fe7599c0c3f362a0ae90deeb67cafdd986dafa4a8cac70d714a",
+		Events:           36, UniqueSources: 30, StructurallyEligible: 0, TimingRecorded: false,
+	}
+}
+
+func authoredExpectedClaimBoundary() []string {
+	return []string{
+		"exact Guest structural analysis of six preregistered authored cases",
+		"semantic_pre_dispatch admission census", "prepared_pure_region candidate census only",
+		"no authored timing or speedup", "no deferred-pass implementation", "no natural prevalence beyond anchored census",
+	}
+}
+
+func authoredExpectedPreregistrationSHA256() string {
+	raw, err := EncodeAuthoredWorkloadPreregistration(AuthoredWorkloadPreregistrationV1())
+	if err != nil {
+		return ""
+	}
+	return digestWorkloadSource(string(raw) + "\n")
 }
 
 func EncodeAuthoredWorkloadEvidence(value AuthoredWorkloadEvidence) ([]byte, error) {

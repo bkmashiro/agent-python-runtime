@@ -17,7 +17,7 @@ func TestBuildAuthoredWorkloadEvidenceIsBodyFreeAndCountsFrozenCases(t *testing.
 		}
 	}
 	evidence, err := BuildAuthoredWorkloadEvidence(AuthoredWorkloadEvidenceBuild{
-		Preregistration: preregistration, PreregistrationSHA256: digestWorkloadSource("preregistration"),
+		Preregistration: preregistration, PreregistrationSHA256: expectedAuthoredWorkloadPreregistrationSHA256(t),
 		ArtifactSourceCommit: "0123456789abcdef0123456789abcdef01234567",
 		ArtifactSHA256:       digestWorkloadSource("artifact"), ArtifactManifestSHA256: digestWorkloadSource("manifest"),
 		HarnessSourceCommit: "89abcdef0123456789abcdef0123456789abcdef", CapabilityPlanSHA256: digestWorkloadSource("plan"),
@@ -44,4 +44,55 @@ func TestBuildAuthoredWorkloadEvidenceIsBodyFreeAndCountsFrozenCases(t *testing.
 	if _, err := EncodeAuthoredWorkloadEvidence(mutated); err == nil {
 		t.Fatal("accepted source identity drift")
 	}
+}
+
+func TestAuthoredWorkloadEvidenceRejectsSelfConsistentFrozenFieldDrift(t *testing.T) {
+	preregistration := AuthoredWorkloadPreregistrationV1()
+	rows := make([]AuthoredWorkloadEvidenceInput, len(preregistration.Cases))
+	for index, item := range preregistration.Cases {
+		rows[index] = AuthoredWorkloadEvidenceInput{
+			ID: item.ID, SourceSHA256: item.SourceSHA256,
+			ASTSHA256: digestWorkloadSource(item.ID + "-ast"), AnalyzerSHA256: digestWorkloadSource("analyzer"),
+		}
+	}
+	base, err := BuildAuthoredWorkloadEvidence(AuthoredWorkloadEvidenceBuild{
+		Preregistration: preregistration, PreregistrationSHA256: expectedAuthoredWorkloadPreregistrationSHA256(t),
+		ArtifactSourceCommit: "0123456789abcdef0123456789abcdef01234567",
+		ArtifactSHA256:       digestWorkloadSource("artifact"), ArtifactManifestSHA256: digestWorkloadSource("manifest"),
+		HarnessSourceCommit: "89abcdef0123456789abcdef0123456789abcdef", CapabilityPlanSHA256: digestWorkloadSource("plan"),
+		ExecutionProfileSHA256: digestWorkloadSource("profile"), Rows: rows,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*AuthoredWorkloadEvidence){
+		"classification": func(value *AuthoredWorkloadEvidence) { value.Classification = "OTHER" },
+		"natural census": func(value *AuthoredWorkloadEvidence) { value.NaturalCorpus.StructurallyEligible = 1 },
+		"claim boundary": func(value *AuthoredWorkloadEvidence) { value.ClaimBoundary = []string{"speedup"} },
+		"prepared status": func(value *AuthoredWorkloadEvidence) {
+			value.Rows = append([]AuthoredWorkloadEvidenceRow(nil), value.Rows...)
+			value.Rows[0].PreparedStatus = "executed"
+		},
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			value := base
+			value.ClaimBoundary = append([]string(nil), base.ClaimBoundary...)
+			value.Rows = append([]AuthoredWorkloadEvidenceRow(nil), base.Rows...)
+			mutate(&value)
+			value.IdentitySHA256 = authoredEvidenceIdentity(value)
+			if _, err := EncodeAuthoredWorkloadEvidence(value); err == nil {
+				t.Fatal("accepted self-consistent frozen-field drift")
+			}
+		})
+	}
+}
+
+func expectedAuthoredWorkloadPreregistrationSHA256(t *testing.T) string {
+	t.Helper()
+	raw, err := EncodeAuthoredWorkloadPreregistration(AuthoredWorkloadPreregistrationV1())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return digestWorkloadSource(string(raw) + "\n")
 }

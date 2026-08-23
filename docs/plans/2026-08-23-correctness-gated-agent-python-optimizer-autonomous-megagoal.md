@@ -144,19 +144,19 @@ its named gate and the retained suite composes under one verified contract.
 **Promise:** Start from a stable claim and test surface rather than retrofitting
 correctness after performance work.
 
-- [ ] Re-read the primary contract, current semantic/pass docs and exact source owners.
-- [ ] Freeze a versioned preregistration for pass identities, outcome classes,
+- [x] Re-read the primary contract, current semantic/pass docs and exact source owners.
+- [x] Freeze a versioned preregistration for pass identities, outcome classes,
   pass-off/pass-on comparator fields and forbidden claims.
-- [ ] Freeze pass-stage identities for `prefix_overlay`, `hybrid_prepare_patch`,
+- [x] Freeze pass-stage identities for `prefix_overlay`, `hybrid_prepare_patch`,
   `whole_program_patch` and `multi_program_patch`. Do not force them through one
   transform callback.
-- [ ] Include invalid final suffix, earlier exception, branch not taken, zero iteration,
+- [x] Include invalid final suffix, earlier exception, branch not taken, zero iteration,
   cancellation, Plan drift, freshness drift, privacy/workspace drift, mutable alias,
   unsupported syntax and external-write controls.
-- [ ] Define body-safe evidence for original/derived source and AST digests, pass order,
+- [x] Define body-safe evidence for original/derived source and AST digests, pass order,
   logical/physical events, result/exception, workspace disposition and rejection reason.
-- [ ] Preserve all existing pass registrations and default-off product behavior.
-- [ ] Record paper-derived kernels and non-pass mechanisms without claiming
+- [x] Preserve all existing pass registrations and default-off product behavior.
+- [x] Record paper-derived kernels and non-pass mechanisms without claiming
   implementation.
 
 **Gate P0:** Frozen contract and matrices validate canonically; focused source/semantic
@@ -467,7 +467,7 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 0: verify live baseline and freeze the source-bound pass stages and correctness study before implementation.`
+`Phase 0 gate: run independent read-only review of the frozen preregistration and current safety boundary; fix findings before Phase 0M.`
 
 ## Short `/goal`
 

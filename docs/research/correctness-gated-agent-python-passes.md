@@ -2,6 +2,11 @@
 
 Status: **design contract for the next optimizer lane**
 
+The body-free v1 study is frozen by
+[`source-bound-pass-preregistration-v1.json`](../evidence/source-bound-pass-preregistration-v1.json).
+It binds the four stage identities, four outcome classes, pipeline bounds and 14
+positive/adversarial controls without storing source, result or workspace bodies.
+
 This note defines what Pysolate may call an optimization pass and how that pass
 inherits the runtime's existing source, effect, authority, workspace and terminal
 boundaries. The optimizer has both streaming-prefix overlays and complete-source

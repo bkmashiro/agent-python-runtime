@@ -252,6 +252,17 @@ func validateInput(registration passregistration.Registration, input RecordInput
 	} else if !reasonPattern.MatchString(string(input.RejectionReason)) {
 		return ErrInvalidRecord
 	}
+	if registration.Consumer() == passregistration.OverlayOnly && (input.DerivedSourceSHA256 != "" || input.DerivedASTSHA256 != "") {
+		return ErrInvalidRecord
+	}
+	if input.Outcome == OutcomeRejected && (input.DerivedSourceSHA256 != "" || input.DerivedASTSHA256 != "" ||
+		input.LogicalEvents != 0 || input.PhysicalEvents != 0 || input.ResultSHA256 != "" || input.ExceptionClass != "" ||
+		input.ExceptionOrder != 0 || input.Usage.PreparationBytes != 0) {
+		return ErrInvalidRecord
+	}
+	if (input.Outcome == OutcomeDiscarded || input.Outcome == OutcomePreparedAwaitingFinal) && input.LogicalEvents != 0 {
+		return ErrInvalidRecord
+	}
 	if registration.Consumer() == passregistration.ExecutionPatch && input.Outcome == OutcomeApplied {
 		if !digestPattern.MatchString(input.DerivedSourceSHA256) || !digestPattern.MatchString(input.DerivedASTSHA256) {
 			return ErrInvalidRecord

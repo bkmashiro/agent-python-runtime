@@ -71,7 +71,10 @@ memory or capability admission.
 - source/AST growth, preparation bytes and reanalysis counts.
 
 The pipeline defensively copies binding maps and records. It stores no source,
-result, workspace or prepared-data body.
+result, workspace or prepared-data body. Overlay-only records cannot name derived
+source or AST identities. Rejected records cannot claim derived identities, results,
+logical/physical work or preparation, and discarded or awaiting-final work cannot
+claim a logical event.
 
 ## Preserved boundaries
 

@@ -110,6 +110,52 @@ func TestStageSpecificEntryPointsRejectConsumerAndOutcomeConfusion(t *testing.T)
 	}
 }
 
+func TestPipelineRejectsOutcomeFieldsThatContradictDisposition(t *testing.T) {
+	overlay := registration(t, passregistration.SemanticPreDispatch, passregistration.SemanticPreDispatchVersion, passregistration.OverlayOnly, passregistration.OverlayBindings())
+	patch := registration(t, passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion, passregistration.ExecutionPatch, passregistration.PatchBindings())
+	pipeline, err := passpipeline.New([]passpipeline.Entry{
+		{Registration: overlay, Stage: passpipeline.StagePrefixOverlay, Enabled: true},
+		{Registration: patch, Stage: passpipeline.StageWholeProgramPatch, Enabled: true},
+	}, passpipeline.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	overlayDerived := input(overlay, passpipeline.OutcomeApplied, "")
+	overlayDerived.DerivedSourceSHA256 = digest('d')
+	overlayDerived.DerivedASTSHA256 = digest('e')
+	if _, err := pipeline.RecordPrefixOverlay(overlayDerived); !errors.Is(err, passpipeline.ErrInvalidRecord) {
+		t.Fatalf("overlay derived source err=%v", err)
+	}
+
+	for name, mutate := range map[string]func(*passpipeline.RecordInput){
+		"rejected result": func(value *passpipeline.RecordInput) {
+			value.ResultSHA256 = digest('f')
+		},
+		"rejected logical work": func(value *passpipeline.RecordInput) {
+			value.LogicalEvents = 7
+			value.PhysicalEvents = 9
+		},
+		"rejected preparation": func(value *passpipeline.RecordInput) {
+			value.Usage.PreparationBytes = 1
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value := input(patch, passpipeline.OutcomeRejected, "not_admitted")
+			mutate(&value)
+			if _, err := pipeline.RecordWholeProgramPatch(value); !errors.Is(err, passpipeline.ErrInvalidRecord) {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+
+	discarded := input(overlay, passpipeline.OutcomeDiscarded, "orphaned")
+	discarded.LogicalEvents = 1
+	if _, err := pipeline.RecordPrefixOverlay(discarded); !errors.Is(err, passpipeline.ErrInvalidRecord) {
+		t.Fatalf("discarded logical claim err=%v", err)
+	}
+}
+
 func TestPipelineBoundsRejectBeforeRecording(t *testing.T) {
 	patch := registration(t, passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion, passregistration.ExecutionPatch, passregistration.PatchBindings())
 	limits := passpipeline.DefaultLimits()

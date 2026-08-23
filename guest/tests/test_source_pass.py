@@ -1,0 +1,67 @@
+import hashlib
+import json
+import unittest
+
+from agent_runtime.source_pass import (
+    emit_source_pass_patch_request_json,
+    validate_source_pass_execution_request,
+)
+
+
+def digest(character):
+    return "sha256:" + character * 64
+
+
+def request(source):
+    return json.dumps(
+        {
+            "pass_name": "pure_scalar_cse",
+            "pass_version": "pysolate.pure-scalar-cse-pass.v1",
+            "registration_sha256": digest("a"),
+            "source": source,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+class SourcePassTests(unittest.TestCase):
+    def test_pure_scalar_cse_reuses_adjacent_expression_without_shifting_lines(self):
+        source = "seed = 7\nleft = seed * seed + 3\nright = seed * seed + 3\nresult = [left, right]\n"
+        raw = emit_source_pass_patch_request_json(request(source))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(1, patch["replacement_count"])
+        self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+        self.assertEqual(len(source.encode()), len(patch["derived_source"].encode()))
+        self.assertIn("right = left", patch["derived_source"])
+        tree = validate_source_pass_execution_request(source, raw)
+        namespace = {}
+        exec(compile(tree, "<agent-run>", "exec"), namespace, namespace)
+        self.assertEqual([52, 52], namespace["result"])
+
+    def test_non_scalar_or_non_adjacent_repetition_is_not_applicable(self):
+        cases = [
+            "left = work()\nright = work()\nresult = right\n",
+            "seed = 7\nleft = seed * seed\nmarker = 1\nright = seed * seed\nresult = right\n",
+            "seed = 7\nleft = seed * seed\nseed = 8\nright = seed * seed\nresult = right\n",
+        ]
+        for source in cases:
+            with self.subTest(source=source):
+                patch = json.loads(emit_source_pass_patch_request_json(request(source)))
+                self.assertEqual("not_applicable", patch["status"])
+                self.assertEqual(0, patch["replacement_count"])
+                self.assertEqual("", patch["derived_source"])
+
+    def test_execution_rederives_patch_from_original_source(self):
+        source = "seed = 7\nleft = seed * seed\nright = seed * seed\nresult = right\n"
+        patch = json.loads(emit_source_pass_patch_request_json(request(source)))
+        patch["derived_source"] = patch["derived_source"].replace("right = left", "right = seed")
+        patch["derived_source_sha256"] = "sha256:" + hashlib.sha256(patch["derived_source"].encode()).hexdigest()
+        tampered = json.dumps(patch, sort_keys=True, separators=(",", ":")) + "\n"
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            validate_source_pass_execution_request(source, tampered)
+
+
+if __name__ == "__main__":
+    unittest.main()

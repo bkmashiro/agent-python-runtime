@@ -870,15 +870,8 @@ def _validate_request_source(request_json: str) -> int:
     return _SOURCE_CONTRACT_OK
 
 
-def _prepare_prepared_region_execution(selection_request_json: str) -> None:
+def _install_derived_tree(tree: ast.Module, request: dict[str, Any]) -> None:
     global _validated_code, _validated_effective_ast_sha256
-    if _validated_request_json is None or _validated_code is None:
-        raise RuntimeError("original agent source must be validated before derived selection")
-    request, error = _decode_request(_validated_request_json)
-    if error is not None or request is None:
-        raise RuntimeError("validated original request is unavailable")
-    from .prepared_region import validate_prepared_region_execution_request
-    tree = validate_prepared_region_execution_request(request["code"], selection_request_json)
     compatibility = request.get("compatibility")
     if compatibility is None:
         preamble: list[ast.stmt] = []
@@ -901,6 +894,28 @@ def _prepare_prepared_region_execution(selection_request_json: str) -> None:
     code, digest = _compile_agent_wrapper(body, preamble)
     _validated_code = code
     _validated_effective_ast_sha256 = digest
+
+
+def _prepare_prepared_region_execution(selection_request_json: str) -> None:
+    if _validated_request_json is None or _validated_code is None:
+        raise RuntimeError("original agent source must be validated before derived selection")
+    request, error = _decode_request(_validated_request_json)
+    if error is not None or request is None:
+        raise RuntimeError("validated original request is unavailable")
+    from .prepared_region import validate_prepared_region_execution_request
+    tree = validate_prepared_region_execution_request(request["code"], selection_request_json)
+    _install_derived_tree(tree, request)
+
+
+def _prepare_source_pass_execution(patch_json: str) -> None:
+    if _validated_request_json is None or _validated_code is None:
+        raise RuntimeError("original agent source must be validated before source pass selection")
+    request, error = _decode_request(_validated_request_json)
+    if error is not None or request is None:
+        raise RuntimeError("validated original request is unavailable")
+    from .source_pass import validate_source_pass_execution_request
+    tree = validate_source_pass_execution_request(request["code"], patch_json)
+    _install_derived_tree(tree, request)
 
 
 def _encode(response: dict[str, Any]) -> str:

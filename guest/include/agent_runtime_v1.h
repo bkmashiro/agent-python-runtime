@@ -33,6 +33,12 @@ int32_t runtime_validate_source(const char *request, int32_t request_len);
 AGENT_RUNTIME_EXPORT("runtime_analyze_source")
 uint32_t runtime_analyze_source(const char *request, int32_t request_len);
 
+AGENT_RUNTIME_EXPORT("runtime_transform_source_pass")
+uint32_t runtime_transform_source_pass(const char *request, int32_t request_len);
+
+AGENT_RUNTIME_EXPORT("runtime_select_source_pass_execution")
+int32_t runtime_select_source_pass_execution(const char *request, int32_t request_len);
+
 AGENT_RUNTIME_EXPORT("runtime_emit_prepared_region_patch")
 uint32_t runtime_emit_prepared_region_patch(const char *request, int32_t request_len);
 

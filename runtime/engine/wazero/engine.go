@@ -20,9 +20,11 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
+	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -933,7 +935,34 @@ func (engine *Engine) RunPreparedRegionDerived(ctx context.Context, request []by
 		prepares <- trustedPrepare
 	}
 	close(prepares)
-	return engine.runWithPrepares(ctx, request, prepares, false, selectionRequest)
+	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_prepared_region_execution", payload: selectionRequest})
+}
+
+// RunSourcePatchDerived executes one exact-Guest-produced source patch against
+// the unchanged original RunRequest. The first plugin seam is intentionally
+// authority-free; effect-owning passes require their own typed stage adapter.
+func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) ([]byte, error) {
+	if !engine.config.Mechanisms.SemanticAnalysis {
+		return nil, runtimeconfig.ErrMechanismDisabled
+	}
+	properties := engine.Properties()
+	if properties.CapabilityBrokerAvailable || properties.WorkspaceMounted {
+		return nil, ErrPreparedRegionScratchAuthority
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	if registration.Stage() != passregistration.StageWholeProgramPatch || patch.Validate(runRequest.Code, registration) != nil {
+		return nil, sourcepatch.ErrInvalidPatch
+	}
+	patchRaw, err := json.Marshal(patch)
+	if err != nil {
+		return nil, err
+	}
+	prepares := make(chan string)
+	close(prepares)
+	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
 }
 
 // RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
@@ -946,7 +975,12 @@ func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-
 	return engine.runWithPrepares(ctx, request, prepares, true, nil)
 }
 
-func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, preparedRegionSelection []byte) (payload []byte, runErr error) {
+type derivedSelection struct {
+	export  string
+	payload []byte
+}
+
+func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, selection *derivedSelection) (payload []byte, runErr error) {
 	if len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
 		return nil, errors.New("request exceeds configured bounds")
 	}
@@ -1110,8 +1144,8 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	if err := callSourceValidation(runContext, module, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
-	if len(preparedRegionSelection) != 0 {
-		if err := callStatusWithBytes(runContext, module, "runtime_select_prepared_region_execution", preparedRegionSelection); err != nil {
+	if selection != nil {
+		if err := callStatusWithBytes(runContext, module, selection.export, selection.payload); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}
 	}

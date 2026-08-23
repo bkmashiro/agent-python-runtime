@@ -16,6 +16,8 @@ REQUIRED_EXPORTS = {
     "runtime_init",
     "runtime_validate_source",
     "runtime_analyze_source",
+    "runtime_transform_source_pass",
+    "runtime_select_source_pass_execution",
     "runtime_emit_prepared_region_patch",
     "runtime_execute_prepared_region_scratch",
     "runtime_select_prepared_region_execution",

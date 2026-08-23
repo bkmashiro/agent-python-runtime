@@ -158,6 +158,12 @@ func (session *SemanticAnalysisSession) AnalyzeSemantic(ctx context.Context, req
 	return session.callQualificationGuest(ctx, request, "runtime_analyze_source")
 }
 
+// TransformSourcePass runs a registered source transform inside the same
+// authority-free exact Guest used for semantic analysis.
+func (session *SemanticAnalysisSession) TransformSourcePass(ctx context.Context, request []byte) ([]byte, error) {
+	return session.callQualificationGuest(ctx, request, "runtime_transform_source_pass")
+}
+
 // EmitPreparedRegionPatch asks the same private authority-free target Guest to
 // validate one source-bound decision and emit only the derived-AST identity
 // binding. It cannot execute Agent source or access Broker/workspace state.

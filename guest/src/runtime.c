@@ -372,6 +372,49 @@ uint32_t runtime_analyze_source(const char *request, int32_t request_len) {
 }
 
 
+uint32_t runtime_transform_source_pass(const char *request, int32_t request_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL || request == NULL ||
+        request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
+        return write_internal_error();
+    }
+    PyObject *module = PyImport_ImportModule("agent_runtime.source_pass");
+    if (module == NULL) {
+        return write_python_unicode(NULL);
+    }
+    PyObject *function = PyObject_GetAttrString(module, "emit_source_pass_patch_request_json");
+    Py_DECREF(module);
+    if (function == NULL) {
+        return write_python_unicode(NULL);
+    }
+    PyObject *argument = PyUnicode_DecodeUTF8(request, (Py_ssize_t)request_len,
+                                              "strict");
+    if (argument == NULL) {
+        Py_DECREF(function);
+        return write_python_unicode(NULL);
+    }
+    PyObject *result = PyObject_CallOneArg(function, argument);
+    Py_DECREF(argument);
+    Py_DECREF(function);
+    return write_python_unicode(result);
+}
+
+
+int32_t runtime_select_source_pass_execution(const char *request, int32_t request_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL || request == NULL ||
+        request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
+        return -1;
+    }
+    PyObject *result = call_with_utf8("_prepare_source_pass_execution", request,
+                                      request_len);
+    if (result == NULL) {
+        PyErr_Print();
+        return -1;
+    }
+    Py_DECREF(result);
+    return 0;
+}
+
+
 uint32_t runtime_emit_prepared_region_patch(const char *request, int32_t request_len) {
     if (!Py_IsInitialized() || runtime_module == NULL || request == NULL ||
         request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {

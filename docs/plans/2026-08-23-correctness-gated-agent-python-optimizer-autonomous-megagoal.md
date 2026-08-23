@@ -449,9 +449,10 @@ manager surface.
 - [x] If a natural coding-agent corpus is available, freeze source/privacy/license and
   pass-opportunity census before timing. Otherwise report authored mechanism evidence
   only.
-- [x] Run matched pass-off and each-retained-pass mechanism controls. Record
-  all-admitted treatment as not applicable when no frozen fixture qualifies for both
-  passes; do not invent a synthetic row.
+- [x] Run matched pass-off and each-retained-pass mechanism controls. Author explicit
+  synthetic positive controls for mechanism capacity; keep them separate from natural
+  prevalence. Record all-admitted treatment as not applicable when no one fixture
+  qualifies for both passes.
 - [x] Report result/error parity, logical effects, physical calls, exact-Guest census,
   rejected candidates and applicable historical timing without promoting structural
   candidates to executed passes.
@@ -463,12 +464,14 @@ claims name exact workloads, artifacts, platforms and treatments. A pass with no
 opportunity or negative net value is documented as limited/rejected rather than kept for
 story count.
 
-**P8 closeout:** The exact-Guest authored census found 0 admitted streaming passes
-across six cases and the natural census remains 0/36 eligible events. Retained streaming
-and prepared-region mechanism controls passed, but no fixture qualified for both.
-[`source-bound-pass-workload-evidence-v1.md`](../research/source-bound-pass-workload-evidence-v1.md)
-records the negative opportunity result and the limited historical synthetic timing
-claim.
+**P8 closeout:** The six coding-shaped cases and the natural 36-event sample contain no
+admitted streaming opportunity. That is a prevalence result, not a gate on synthetic
+mechanism evaluation. The v2 exact-Guest corpus adds one deliberately eligible control;
+its single call is admitted with no rejection. Two matched synthetic timing fixtures show
+1.914x-1.923x speedup in their fixed 1.5-second-read/1.4-second-tail coordinate. Retained
+prepared-region controls also pass, but no fixture qualifies for both mechanisms.
+[`source-bound-pass-workload-evidence-v2.md`](../research/source-bound-pass-workload-evidence-v2.md)
+separates positive mechanism capacity from sampled prevalence.
 
 ## Phase 9: Independent review and truthful closeout
 

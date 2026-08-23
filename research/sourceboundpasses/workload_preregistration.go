@@ -68,8 +68,9 @@ func AuthoredWorkloadSourcesV2() []AuthoredWorkloadSource {
 			RequiredImports: []string{"numpy"},
 		},
 		{
-			ID: "S01", Category: "synthetic_predispatch_positive",
-			Source: "weather = sources.read(\"weather\")\nrail = sources.read(\"rail\")\nattractions = sources.read(\"attractions\")\nresult = {\"weather\": weather[\"value\"], \"rail\": rail[\"value\"], \"attractions\": attractions[\"value\"]}\n",
+			ID:       "S01",
+			Category: "synthetic_predispatch_positive",
+			Source:   "weather = sources.read(\"weather\")\nresult = weather[\"value\"]\n",
 		},
 	}
 }

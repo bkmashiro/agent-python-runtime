@@ -75,7 +75,7 @@ func run(ctx context.Context, artifactPath, manifestPath, preregistrationPath st
 	if err != nil {
 		return nil, err
 	}
-	canonicalPreregistration, err := sourceboundpasses.EncodeAuthoredWorkloadPreregistration(sourceboundpasses.AuthoredWorkloadPreregistrationV1())
+	canonicalPreregistration, err := sourceboundpasses.EncodeAuthoredWorkloadPreregistration(sourceboundpasses.AuthoredWorkloadPreregistrationV2())
 	if err != nil || !bytes.Equal(preregistrationRaw, append(canonicalPreregistration, '\n')) {
 		return nil, errors.New("authored workload preregistration drift")
 	}
@@ -91,7 +91,10 @@ func run(ctx context.Context, artifactPath, manifestPath, preregistrationPath st
 	if err := capability.RegisterWorkspaceTools(registry, workspace); err != nil {
 		return nil, err
 	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 8})
+	if err := registerSyntheticSourceReads(registry); err != nil {
+		return nil, err
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 12})
 	if err != nil {
 		return nil, err
 	}
@@ -126,12 +129,12 @@ func run(ctx context.Context, artifactPath, manifestPath, preregistrationPath st
 		CapabilityPlanSHA256:   plan.Identity(),
 	}
 	contextBinding := semantic.PreissueContext{
-		StreamEpoch: "authored-v1", WorkflowEpoch: "authored-v1", FreshnessEpoch: "workspace-v1",
+		StreamEpoch: "authored-v2", WorkflowEpoch: "authored-v2", FreshnessEpoch: "workspace-v1",
 		ExpiryEpoch: "run-end", PrivacyPartition: "authored-public", ParentLineageSHA256: digestBytes([]byte("authored-parent-v1")),
 		BudgetReservationSHA256: digestBytes([]byte("authored-budget-v1")), RemainingPhysicalReads: 8,
 	}
-	preregistration := sourceboundpasses.AuthoredWorkloadPreregistrationV1()
-	sources := sourceboundpasses.AuthoredWorkloadSourcesV1()
+	preregistration := sourceboundpasses.AuthoredWorkloadPreregistrationV2()
+	sources := sourceboundpasses.AuthoredWorkloadSourcesV2()
 	rows := make([]sourceboundpasses.AuthoredWorkloadEvidenceInput, len(sources))
 	for index, item := range sources {
 		request, requestErr := semantic.NewRequest(item.Source, bindings, plan)
@@ -196,6 +199,29 @@ func run(ctx context.Context, artifactPath, manifestPath, preregistrationPath st
 		return nil, err
 	}
 	return append(encoded, '\n'), nil
+}
+
+func registerSyntheticSourceReads(registry *capability.Registry) error {
+	grant, err := capability.NewGrant(json.RawMessage(`{"fixture":"synthetic-predispatch-positive","network":false}`))
+	if err != nil {
+		return err
+	}
+	spec := capability.Spec{
+		Name: "sources.read", Version: "sources.read.synthetic.v1", Description: "Deterministic synthetic read used to exercise positive pre-dispatch admission.",
+		EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "sources-read-synthetic-v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"key":{"type":"string","enum":["weather","rail","attractions"]}},"required":["key"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "sources", Method: "read", Arguments: []string{"key"}},
+		ReadOnly:     true, Idempotent: true,
+		PreDispatch: &capability.PreDispatchContract{
+			Resource: capability.ResourceReference{Namespace: "synthetic-source", Argument: "key"}, Freshness: capability.FreshnessPlanEpoch,
+			Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition,
+			Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1 << 20, CostUnits: 1,
+		},
+	}
+	return registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"value":"synthetic"}`), nil
+	}))
 }
 
 func main() {

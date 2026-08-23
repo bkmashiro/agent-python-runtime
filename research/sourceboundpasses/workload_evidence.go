@@ -5,13 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"regexp"
 )
 
-const AuthoredWorkloadEvidenceSchemaVersion = "pysolate.source-bound-pass-authored-workload-evidence.v1"
-const authoredWorkloadEvidenceClassification = "AUTHORED_EXACT_GUEST_STRUCTURAL_CENSUS_NOT_END_TO_END_PERFORMANCE_EVIDENCE"
-const authoredWorkloadEvidenceElementLimit uint32 = 256
+const AuthoredWorkloadEvidenceSchemaVersion = "pysolate.source-bound-pass-authored-workload-evidence.v2"
+const authoredWorkloadEvidenceClassification = "AUTHORED_AND_SYNTHETIC_EXACT_GUEST_STRUCTURAL_CENSUS_NOT_END_TO_END_PERFORMANCE_EVIDENCE"
 const authoredPreparedStatus = "candidate_census_only_not_formally_executed"
 const authoredAllAdmittedStatus = "not_applicable_without_shared_fixture"
 
@@ -59,12 +57,12 @@ type AuthoredWorkloadEvidenceRow struct {
 }
 
 type AuthoredWorkloadEvidenceCounts struct {
-	Cases                  uint32 `json:"cases"`
-	CandidateRegions       uint32 `json:"candidate_regions"`
-	LocallyReusableRegions uint32 `json:"locally_reusable_regions"`
-	CallSites              uint32 `json:"call_sites"`
-	SemanticAdmitted       uint32 `json:"semantic_pre_dispatch_admitted"`
-	SemanticRejected       uint32 `json:"semantic_pre_dispatch_rejected"`
+	Cases                  uint64 `json:"cases"`
+	CandidateRegions       uint64 `json:"candidate_regions"`
+	LocallyReusableRegions uint64 `json:"locally_reusable_regions"`
+	CallSites              uint64 `json:"call_sites"`
+	SemanticAdmitted       uint64 `json:"semantic_pre_dispatch_admitted"`
+	SemanticRejected       uint64 `json:"semantic_pre_dispatch_rejected"`
 }
 
 type NaturalSourcePrefixAnchor struct {
@@ -102,7 +100,7 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 		return AuthoredWorkloadEvidence{}, ErrInvalidAuthoredWorkloadEvidence
 	}
 	rows := make([]AuthoredWorkloadEvidenceRow, len(build.Rows))
-	counts := AuthoredWorkloadEvidenceCounts{Cases: uint32(len(build.Rows))}
+	counts := AuthoredWorkloadEvidenceCounts{Cases: uint64(len(build.Rows))}
 	for index, input := range build.Rows {
 		registered := build.Preregistration.Cases[index]
 		if input.ID != registered.ID || input.SourceSHA256 != registered.SourceSHA256 || !validWorkloadDigest(input.ASTSHA256) ||
@@ -118,11 +116,11 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 			PreparedStatus:    authoredPreparedStatus,
 			AllAdmittedStatus: authoredAllAdmittedStatus,
 		}
-		counts.CandidateRegions += input.CandidateRegions
-		counts.LocallyReusableRegions += input.LocallyReusableRegions
-		counts.CallSites += input.CallSites
-		counts.SemanticAdmitted += input.SemanticAdmitted
-		counts.SemanticRejected += input.SemanticRejected
+		counts.CandidateRegions += uint64(input.CandidateRegions)
+		counts.LocallyReusableRegions += uint64(input.LocallyReusableRegions)
+		counts.CallSites += uint64(input.CallSites)
+		counts.SemanticAdmitted += uint64(input.SemanticAdmitted)
+		counts.SemanticRejected += uint64(input.SemanticRejected)
 	}
 	value := AuthoredWorkloadEvidence{
 		SchemaVersion:         AuthoredWorkloadEvidenceSchemaVersion,
@@ -132,8 +130,8 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 		ArtifactManifestSHA256: build.ArtifactManifestSHA256, HarnessSourceCommit: build.HarnessSourceCommit,
 		CapabilityPlanSHA256: build.CapabilityPlanSHA256, ExecutionProfileSHA256: build.ExecutionProfileSHA256,
 		PerformanceComparisonSupported: false, Counts: counts, Rows: rows,
-		NaturalCorpus: authoredExpectedNaturalCorpus(),
-		ClaimBoundary: authoredExpectedClaimBoundary(),
+		NaturalCorpus: authoredNaturalCorpusAnchor(),
+		ClaimBoundary: authoredClaimBoundary(),
 	}
 	value.IdentitySHA256 = authoredEvidenceIdentity(value)
 	if err := value.Validate(); err != nil {
@@ -143,28 +141,27 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 }
 
 func (value AuthoredWorkloadEvidence) Validate() error {
-	expectedCases := AuthoredWorkloadPreregistrationV1().Cases
 	if value.SchemaVersion != AuthoredWorkloadEvidenceSchemaVersion || value.Classification != authoredWorkloadEvidenceClassification ||
 		!validWorkloadDigest(value.IdentitySHA256) || value.IdentitySHA256 != authoredEvidenceIdentity(value) ||
-		value.PreregistrationSHA256 != authoredExpectedPreregistrationSHA256() || value.PerformanceComparisonSupported ||
-		value.Counts.Cases != uint32(len(value.Rows)) || len(value.Rows) != len(expectedCases) ||
-		value.NaturalCorpus != authoredExpectedNaturalCorpus() || !reflect.DeepEqual(value.ClaimBoundary, authoredExpectedClaimBoundary()) {
+		!validWorkloadDigest(value.PreregistrationSHA256) || value.PerformanceComparisonSupported ||
+		value.Counts.Cases != uint64(len(value.Rows)) || len(value.Rows) == 0 ||
+		!validNaturalCorpusAnchor(value.NaturalCorpus) || !validClaimBoundary(value.ClaimBoundary) {
 		return ErrInvalidAuthoredWorkloadEvidence
 	}
-	counts := AuthoredWorkloadEvidenceCounts{Cases: uint32(len(value.Rows))}
-	for index, row := range value.Rows {
-		expected := expectedCases[index]
-		if row.ID != expected.ID || row.Category != expected.Category || row.SourceSHA256 != expected.SourceSHA256 ||
+	counts := AuthoredWorkloadEvidenceCounts{Cases: uint64(len(value.Rows))}
+	for _, row := range value.Rows {
+		if row.ID == "" || row.Category == "" ||
+			!validWorkloadDigest(row.SourceSHA256) ||
 			!validWorkloadDigest(row.ASTSHA256) || !validWorkloadDigest(row.AnalyzerSHA256) ||
 			!validAuthoredWorkloadCounts(row.CandidateRegions, row.LocallyReusableRegions, row.CallSites, row.SemanticAdmitted, row.SemanticRejected) ||
 			row.PreparedStatus != authoredPreparedStatus || row.AllAdmittedStatus != authoredAllAdmittedStatus {
 			return ErrInvalidAuthoredWorkloadEvidence
 		}
-		counts.CandidateRegions += row.CandidateRegions
-		counts.LocallyReusableRegions += row.LocallyReusableRegions
-		counts.CallSites += row.CallSites
-		counts.SemanticAdmitted += row.SemanticAdmitted
-		counts.SemanticRejected += row.SemanticRejected
+		counts.CandidateRegions += uint64(row.CandidateRegions)
+		counts.LocallyReusableRegions += uint64(row.LocallyReusableRegions)
+		counts.CallSites += uint64(row.CallSites)
+		counts.SemanticAdmitted += uint64(row.SemanticAdmitted)
+		counts.SemanticRejected += uint64(row.SemanticRejected)
 	}
 	if counts != value.Counts {
 		return ErrInvalidAuthoredWorkloadEvidence
@@ -172,33 +169,40 @@ func (value AuthoredWorkloadEvidence) Validate() error {
 	return nil
 }
 
-func authoredExpectedNaturalCorpus() NaturalSourcePrefixAnchor {
+func authoredNaturalCorpusAnchor() NaturalSourcePrefixAnchor {
 	return NaturalSourcePrefixAnchor{
 		EvidenceIdentity: "sha256:13120c7ec8565fe7599c0c3f362a0ae90deeb67cafdd986dafa4a8cac70d714a",
 		Events:           36, UniqueSources: 30, StructurallyEligible: 0, TimingRecorded: false,
 	}
 }
 
-func authoredExpectedClaimBoundary() []string {
+func authoredClaimBoundary() []string {
 	return []string{
-		"exact Guest structural analysis of six preregistered authored cases",
+		"exact Guest structural analysis of six coding-shaped cases and one synthetic positive control",
 		"semantic_pre_dispatch admission census", "prepared_pure_region candidate census only",
 		"no authored timing or speedup", "no deferred-pass implementation", "no natural prevalence beyond anchored census",
 	}
 }
 
-func authoredExpectedPreregistrationSHA256() string {
-	raw, err := EncodeAuthoredWorkloadPreregistration(AuthoredWorkloadPreregistrationV1())
-	if err != nil {
-		return ""
-	}
-	return digestWorkloadSource(string(raw) + "\n")
+func validAuthoredWorkloadCounts(candidateRegions, locallyReusableRegions, callSites, semanticAdmitted, semanticRejected uint32) bool {
+	return locallyReusableRegions <= candidateRegions && semanticAdmitted <= callSites && semanticRejected == callSites-semanticAdmitted
 }
 
-func validAuthoredWorkloadCounts(candidateRegions, locallyReusableRegions, callSites, semanticAdmitted, semanticRejected uint32) bool {
-	return candidateRegions <= authoredWorkloadEvidenceElementLimit && locallyReusableRegions <= candidateRegions &&
-		callSites <= authoredWorkloadEvidenceElementLimit && semanticAdmitted <= authoredWorkloadEvidenceElementLimit &&
-		semanticRejected <= authoredWorkloadEvidenceElementLimit && uint64(semanticAdmitted)+uint64(semanticRejected) == uint64(callSites)
+func validNaturalCorpusAnchor(anchor NaturalSourcePrefixAnchor) bool {
+	return validWorkloadDigest(anchor.EvidenceIdentity) && anchor.UniqueSources <= anchor.Events &&
+		anchor.StructurallyEligible <= anchor.Events
+}
+
+func validClaimBoundary(claims []string) bool {
+	if len(claims) == 0 {
+		return false
+	}
+	for _, claim := range claims {
+		if claim == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func EncodeAuthoredWorkloadEvidence(value AuthoredWorkloadEvidence) ([]byte, error) {

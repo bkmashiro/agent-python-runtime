@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	raw, err := sourceboundpasses.EncodeAuthoredWorkloadPreregistration(sourceboundpasses.AuthoredWorkloadPreregistrationV1())
+	raw, err := sourceboundpasses.EncodeAuthoredWorkloadPreregistration(sourceboundpasses.AuthoredWorkloadPreregistrationV2())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

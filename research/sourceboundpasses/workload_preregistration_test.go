@@ -8,13 +8,13 @@ import (
 )
 
 func TestAuthoredWorkloadPreregistrationIsFrozenBodyFreeAndCanonical(t *testing.T) {
-	value := AuthoredWorkloadPreregistrationV1()
+	value := AuthoredWorkloadPreregistrationV2()
 	if err := value.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	wantCategories := []string{
 		"repeated_repository_reads", "bounded_projection", "batch_reads",
-		"independent_reads", "pure_parsing", "prepared_array_setup",
+		"independent_reads", "pure_parsing", "prepared_array_setup", "synthetic_predispatch_positive",
 	}
 	gotCategories := make([]string, len(value.Cases))
 	for index, item := range value.Cases {
@@ -35,7 +35,7 @@ func TestAuthoredWorkloadPreregistrationIsFrozenBodyFreeAndCanonical(t *testing.
 			t.Fatalf("preregistration leaked body marker %q", forbidden)
 		}
 	}
-	checked, err := os.ReadFile("../../docs/evidence/source-bound-pass-authored-workload-preregistration-v1.json")
+	checked, err := os.ReadFile("../../docs/evidence/source-bound-pass-authored-workload-preregistration-v2.json")
 	if err != nil {
 		t.Fatal(err)
 	}

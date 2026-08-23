@@ -8,7 +8,7 @@ import (
 	"reflect"
 )
 
-const AuthoredWorkloadPreregistrationSchemaVersion = "pysolate.source-bound-pass-authored-workload-preregistration.v1"
+const AuthoredWorkloadPreregistrationSchemaVersion = "pysolate.source-bound-pass-authored-workload-preregistration.v2"
 
 var ErrInvalidAuthoredWorkloadPreregistration = errors.New("invalid authored source-bound pass workload preregistration")
 
@@ -40,7 +40,7 @@ type AuthoredWorkloadPreregistration struct {
 	ClaimBoundary       []string               `json:"claim_boundary"`
 }
 
-func AuthoredWorkloadSourcesV1() []AuthoredWorkloadSource {
+func AuthoredWorkloadSourcesV2() []AuthoredWorkloadSource {
 	return []AuthoredWorkloadSource{
 		{
 			ID: "A01", Category: "repeated_repository_reads",
@@ -67,11 +67,15 @@ func AuthoredWorkloadSourcesV1() []AuthoredWorkloadSource {
 			Source:          "import numpy as np\ndataset = np.array([[1, 2], [3, 4]], dtype=np.int64)\nresult = {\"sum\": int(dataset.sum())}\n",
 			RequiredImports: []string{"numpy"},
 		},
+		{
+			ID: "S01", Category: "synthetic_predispatch_positive",
+			Source: "weather = sources.read(\"weather\")\nrail = sources.read(\"rail\")\nattractions = sources.read(\"attractions\")\nresult = {\"weather\": weather[\"value\"], \"rail\": rail[\"value\"], \"attractions\": attractions[\"value\"]}\n",
+		},
 	}
 }
 
-func AuthoredWorkloadPreregistrationV1() AuthoredWorkloadPreregistration {
-	sources := AuthoredWorkloadSourcesV1()
+func AuthoredWorkloadPreregistrationV2() AuthoredWorkloadPreregistration {
+	sources := AuthoredWorkloadSourcesV2()
 	cases := make([]AuthoredWorkloadCase, len(sources))
 	for index, item := range sources {
 		cases[index] = AuthoredWorkloadCase{
@@ -81,7 +85,7 @@ func AuthoredWorkloadPreregistrationV1() AuthoredWorkloadPreregistration {
 	}
 	value := AuthoredWorkloadPreregistration{
 		SchemaVersion:  AuthoredWorkloadPreregistrationSchemaVersion,
-		Classification: "AUTHORED_MECHANISM_CORPUS_NOT_NATURAL_PREVALENCE_OR_PERFORMANCE_EVIDENCE",
+		Classification: "AUTHORED_AND_SYNTHETIC_MECHANISM_CORPUS_NOT_NATURAL_PREVALENCE_OR_PERFORMANCE_EVIDENCE",
 		Cases:          cases,
 		Treatments:     []string{"pass_off", "semantic_pre_dispatch_only", "prepared_pure_region_only", "all_admitted"},
 		MatchedDimensions: []string{
@@ -94,7 +98,7 @@ func AuthoredWorkloadPreregistrationV1() AuthoredWorkloadPreregistration {
 		NaturalCorpusAnchor: "docs/evidence/source-prefix-opportunity-census-v1.json",
 		PrivateBodies:       false,
 		ClaimBoundary: []string{
-			"authored structural pass opportunity", "retained mechanism parity", "no deferred-pass speedup",
+			"authored structural pass opportunity", "synthetic retained-mechanism capacity", "retained mechanism parity", "no deferred-pass speedup",
 			"no natural prevalence inference", "no production performance inference",
 		},
 	}
@@ -103,7 +107,7 @@ func AuthoredWorkloadPreregistrationV1() AuthoredWorkloadPreregistration {
 }
 
 func (value AuthoredWorkloadPreregistration) Validate() error {
-	expected := AuthoredWorkloadPreregistrationV1()
+	expected := AuthoredWorkloadPreregistrationV2()
 	if !reflect.DeepEqual(value, expected) || value.IdentitySHA256 != authoredWorkloadIdentity(value) {
 		return ErrInvalidAuthoredWorkloadPreregistration
 	}

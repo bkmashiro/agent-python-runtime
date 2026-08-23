@@ -214,12 +214,13 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 		runner.mu.Unlock()
 		return nil, ErrPreparedRunnerConsumed
 	}
+	runner.running = true
+	runner.done = make(chan struct{})
+	runner.mu.Unlock()
 	if err := runner.lifecycle.begin(runner.memberID); err != nil {
-		runner.mu.Unlock()
+		runner.finishRun()
 		return nil, err
 	}
-	runner.running = true
-	runner.mu.Unlock()
 
 	runContext, err := enginecontract.WithInvocationRef(ctx, runner.invocation)
 	if err != nil {

@@ -20,8 +20,9 @@ const (
 	PreparedFamilyPrivateCopy PreparedFamilyMode = "private_copy"
 	PreparedFamilyPrivateCOW  PreparedFamilyMode = "private_cow"
 
-	PreparedDispositionPrivateCopy PreparedPhysicalDisposition = "private_copy"
-	PreparedDispositionPrivateCOW  PreparedPhysicalDisposition = "private_cow"
+	PreparedDispositionPrivateCopy   PreparedPhysicalDisposition = "private_copy"
+	PreparedDispositionPrivateCOW    PreparedPhysicalDisposition = "private_cow"
+	PreparedDispositionOrdinaryFresh PreparedPhysicalDisposition = "ordinary_fresh"
 )
 
 var (
@@ -53,7 +54,7 @@ func (record PreparedMemberRecord) Validate() error {
 	if record.SchemaVersion != "pysolate.prepared-family-member.v1" ||
 		!validPreparedDigest(record.FamilySHA256) || !validPreparedDigest(record.InputSHA256) ||
 		record.MemberID == 0 || record.InvocationID == "" || record.ExecutionID == "" ||
-		(record.PhysicalDisposition != PreparedDispositionPrivateCopy && record.PhysicalDisposition != PreparedDispositionPrivateCOW) {
+		(record.PhysicalDisposition != PreparedDispositionPrivateCopy && record.PhysicalDisposition != PreparedDispositionPrivateCOW && record.PhysicalDisposition != PreparedDispositionOrdinaryFresh) {
 		return ErrPreparedFamilyConfig
 	}
 	switch record.Outcome {

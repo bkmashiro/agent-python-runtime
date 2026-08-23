@@ -214,6 +214,47 @@ func TestPreparedGuestTransferReleasesBothAllocationsOnEveryTerminalPath(t *test
 	}
 }
 
+type blockingFamilyRunner struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (runner *blockingFamilyRunner) Run(context.Context, []byte, string) ([]byte, error) {
+	close(runner.started)
+	<-runner.release
+	return []byte(`{"schema_version":"pysolate.run-response.v1","run_id":"run","status":"ok","result":1,"metrics":{}}`), nil
+}
+func (*blockingFamilyRunner) Close(context.Context) error   { return nil }
+func (*blockingFamilyRunner) Properties() engine.Properties { return engine.Properties{} }
+
+func TestPreparedFamilyRunnerCloseWaitsForActiveRun(t *testing.T) {
+	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+	member, _ := lifecycle.reserve()
+	delegate := &blockingFamilyRunner{started: make(chan struct{}), release: make(chan struct{})}
+	ref := runtimeconfig.InvocationRef{AgentRunID: "agent", InvocationID: "inv", InvocationAttempt: 1, ExecutionID: "run"}
+	runner := newPreparedFamilyRunner(delegate, ref, lifecycle, member)
+	request := []byte(`{"run_id":"run","code":"result=1","inputs":{}}`)
+	runDone := make(chan error, 1)
+	go func() { _, err := runner.Run(context.Background(), request, ""); runDone <- err }()
+	<-delegate.started
+	closeContext, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	if err := runner.Close(closeContext); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("active Close err=%v", err)
+	}
+	close(delegate.release)
+	if err := <-runDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state := lifecycle.state()
+	if state.Active != 0 || state.Terminal != 1 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 type familyFakeRunner struct {
 	runs int
 	ref  runtimeconfig.InvocationRef

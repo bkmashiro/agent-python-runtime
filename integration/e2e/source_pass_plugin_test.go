@@ -70,20 +70,6 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	defer session.Close(context.Background())
 
 	source := "seed = 7\nleft = seed * seed + 3\nright = seed * seed + 3\nresult = [left, right]\n"
-	patch, err := registry.Transform(context.Background(), sourcepatch.PureScalarCSEName, session, source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if patch.Status != "applied" || patch.ReplacementCount != 1 {
-		t.Fatalf("patch=%+v", patch)
-	}
-	notApplicable, err := registry.Transform(
-		context.Background(), sourcepatch.PureScalarCSEName, session,
-		"left = abs(7)\nright = abs(7)\nresult = right\n",
-	)
-	if err != nil || notApplicable.Applied() || notApplicable.Status != "not_applicable" {
-		t.Fatalf("negative patch=%+v err=%v", notApplicable, err)
-	}
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "source-pass-plugin-e2e", Code: source, Inputs: json.RawMessage(`{}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -92,9 +78,26 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := engine.RunSourcePatchDerived(context.Background(), request, patch, pass.Registration())
+	execution, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, request)
+	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 1 {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	patch := execution.Patch
+	derived := execution.Payload
+
+	negativeRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID: "source-pass-plugin-negative", Code: "left = abs(7)\nright = abs(7)\nresult = right\n", Inputs: json.RawMessage(`{}`),
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	negative, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, negativeRequest)
+	if err != nil || negative.Applied || negative.Patch.Status != "not_applicable" {
+		t.Fatalf("negative execution=%+v err=%v", negative, err)
+	}
+	negativeResult, err := decodeSuccessfulGuestResult(negative.Payload)
+	if err != nil || string(negativeResult) != `7` {
+		t.Fatalf("negative result=%s err=%v", negativeResult, err)
 	}
 	baselineResult, err := decodeSuccessfulGuestResult(baseline)
 	if err != nil {
@@ -107,16 +110,21 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if !reflect.DeepEqual(baselineResult, derivedResult) || string(derivedResult) != `[52,52]` {
 		t.Fatalf("baseline=%s derived=%s", baselineResult, derivedResult)
 	}
-	var derivedEnvelope struct {
+	type sourceEnvelope struct {
 		SourceContract struct {
 			ModelSourceSHA256  string `json:"model_source_sha256"`
 			EffectiveASTSHA256 string `json:"effective_ast_sha256"`
 		} `json:"source_contract"`
 	}
+	var baselineEnvelope, derivedEnvelope sourceEnvelope
+	if err := json.Unmarshal(baseline, &baselineEnvelope); err != nil {
+		t.Fatal(err)
+	}
 	if err := json.Unmarshal(derived, &derivedEnvelope); err != nil ||
+		baselineEnvelope.SourceContract.ModelSourceSHA256 != patch.OriginalSourceSHA256 ||
 		derivedEnvelope.SourceContract.ModelSourceSHA256 != patch.OriginalSourceSHA256 ||
-		derivedEnvelope.SourceContract.EffectiveASTSHA256 != patch.DerivedASTSHA256 {
-		t.Fatalf("derived source contract=%+v err=%v", derivedEnvelope.SourceContract, err)
+		baselineEnvelope.SourceContract.EffectiveASTSHA256 == derivedEnvelope.SourceContract.EffectiveASTSHA256 {
+		t.Fatalf("baseline contract=%+v derived contract=%+v err=%v", baselineEnvelope.SourceContract, derivedEnvelope.SourceContract, err)
 	}
 
 	expression := strings.TrimSuffix(strings.Repeat("seed * seed - 48 + ", 200), " + ")

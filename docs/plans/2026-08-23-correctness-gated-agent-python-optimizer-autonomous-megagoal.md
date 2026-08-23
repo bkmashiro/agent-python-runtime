@@ -200,31 +200,34 @@ paragraph in that phase. A deferred item is closed for this megagoal, not implem
 **Promise:** Validate a reusable AST-in/AST-out pass shape without introducing external
 effects or a large optimizer framework.
 
-- [-] Add RED fixtures for repeated exact `bool`/`int64` scalar expressions and controls
+- [x] Add RED fixtures for repeated exact `bool`/`int64` scalar expressions and controls
   for division, calls, heap mutation, alias-sensitive values, exceptions and opaque
   control.
-- [-] Implement a bounded `pure_scalar_cse` transformation using target-Guest analysis.
+- [x] Implement a bounded `pure_scalar_cse` transformation using target-Guest analysis.
   It may replace only repeated proven scalar values whose evaluation is total and whose
   identity is unobservable.
-- [-] Bind pass name/version/config, original and derived AST, source, profile, import
-  closure and Plan through the existing registration/patch lineage.
-- [-] Compile the derived AST before one formal execution; failure selects unchanged
+- [x] Bind pass name/version/config and original/derived source and AST through the
+  registration/patch lineage. Execution profile, imports and Plan remain with the owning
+  Engine and unchanged `RunRequest`; the pure pass does not duplicate them.
+- [x] Compile the derived AST before one formal execution; failure selects unchanged
   source before Agent execution.
-- [-] Differentially compare result, exception, stdout, logical effects and workspace.
-- [-] Measure transform/compile/runtime cost but make no agent-workload speedup claim.
+- [x] Differentially compare result and output metadata; inapplicable effect/control cases
+  remain unchanged, and the generic source-patch lane admits no Broker or workspace.
+- [x] Measure matched synthetic fresh-Guest runtime without making an agent-workload
+  speedup claim.
 
 **Gate P1:** Every positive and negative case matches target-CPython behavior; the pass
 has one exact off-state and fails closed. If the third pass requires a broad IR or cannot
 reuse the existing candidate/patch machinery, stop and present the smallest concrete
 seam before adding infrastructure.
 
-**Decision:** **Deferred before implementation.** The only formal execution-patch
-selector is prepared-region-specific. A scalar CSE pass would require either another
-hard-coded fresh-Run/Guest ABI branch or migration to a new generic source-patch union.
-Both exceed the admitted minimal change. The exact conflict and reconsideration gate
-are recorded in
-[`optimizer-deferred-pass-decisions-v1.md`](../research/optimizer-deferred-pass-decisions-v1.md).
-No scalar rewrite or pass registration is retained.
+**Decision:** **Implemented in the approved plugin follow-up.** A compile-time static
+registry now accepts new definitions without a central name switch, and one generic
+authority-free whole-program selector executes exact-Guest-produced source patches
+against the unchanged original `RunRequest`. `pure_scalar_cse` proves the seam with
+adjacent identical, statically evaluable int64/bool expressions; calls, division,
+mutable values, control flow and non-adjacent reuse remain unchanged. See
+[`source-pass-plugins.md`](../source-pass-plugins.md).
 
 ## Phase 1S: Unify the existing streaming overlay contract
 

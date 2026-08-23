@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
@@ -22,6 +23,18 @@ type Plugin interface {
 type SourcePatchPlugin interface {
 	Plugin
 	Transform(context.Context, sourcepatch.Transformer, string) (sourcepatch.Patch, error)
+}
+
+type SourcePatchRunner interface {
+	Run(context.Context, []byte, string) ([]byte, error)
+	RunSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
+}
+
+type Execution struct {
+	Payload   []byte
+	Patch     sourcepatch.Patch
+	Applied   bool
+	PassError error
 }
 
 type ExistingAdapter struct {
@@ -107,4 +120,36 @@ func (registry *Registry) Transform(ctx context.Context, name passregistration.N
 		return sourcepatch.Patch{}, ErrUnsupportedStage
 	}
 	return patchPlugin.Transform(ctx, transformer, source)
+}
+
+// Execute runs one enabled source-patch plugin. Disabled, inapplicable or failed
+// transforms execute the unchanged original request because no Agent execution or
+// authority-bearing work has started at that point.
+func (registry *Registry) Execute(ctx context.Context, name passregistration.Name, transformer sourcepatch.Transformer, runner SourcePatchRunner, request []byte) (Execution, error) {
+	if runner == nil {
+		return Execution{}, ErrInvalidPlugin
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return Execution{}, err
+	}
+	plugin, exists := registry.Lookup(name)
+	if !exists {
+		return Execution{}, ErrInvalidPlugin
+	}
+	patchPlugin, sourcePatch := plugin.(SourcePatchPlugin)
+	if !sourcePatch || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
+		return Execution{}, ErrUnsupportedStage
+	}
+	if !registry.enabled[name] {
+		payload, runErr := runner.Run(ctx, request, "")
+		return Execution{Payload: payload}, runErr
+	}
+	patch, passErr := patchPlugin.Transform(ctx, transformer, runRequest.Code)
+	if passErr != nil || !patch.Applied() {
+		payload, runErr := runner.Run(ctx, request, "")
+		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
+	}
+	payload, runErr := runner.RunSourcePatchDerived(ctx, request, patch, plugin.Registration())
+	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
 }

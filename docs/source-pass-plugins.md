@@ -15,7 +15,7 @@ type SourcePatchPlugin interface {
 }
 ```
 
-`passregistration.Define` creates a new name, version, stage, consumer and binding set without editing a central pass-name switch. `passplugin.Registry` stores plugins by name, starts all of them disabled and dispatches explicitly enabled source-patch transforms. Body-free terminal outcomes remain in `runtime/passpipeline`.
+`passregistration.Define` creates a new name, version, stage, consumer and binding set without editing a central pass-name switch. `passplugin.Registry` stores plugins by name, starts all of them disabled and dispatches explicitly enabled source-patch transforms. Its `Execute` method runs the unchanged original request when a pass is disabled, fails before execution or returns not-applicable. Body-free terminal outcomes remain in `runtime/passpipeline`.
 
 This is deliberately compile-time extensibility. It has no dynamic loader, generic IR, dependency solver, cost model, automatic reordering or fixed-point loop.
 

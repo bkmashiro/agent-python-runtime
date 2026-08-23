@@ -2,7 +2,7 @@
 
 > **For Hermes:** Execute this plan continuously in `/Users/yuzhe/projects/agent-python-runtime` only after Yuzhe starts it with `/goal`. Read the whole file and live Git/code first. Prefer the thinnest executable vertical slice, use RED -> GREEN -> refactor for behavior, keep the Runtime free of scheduling policy, make coherent signed commits, push after verified phases, and continue without waiting after ordinary checkpoints. Stop only at a named architecture, resource, permission or safety gate below.
 
-**Status:** Prepared on 2026-08-23; implementation not started.
+**Status:** Prepared on 2026-08-23; implementation not started. Phase 0 architecture and Linux-gate work is startable, but Runtime/COW implementation is forbidden until Gate P0 freezes the binary preparation ABI, per-consumer adapter, lifecycle state machine and compatibility identity below.
 
 **Goal:** Turn Pysolate's completed fixed prepared-NumPy/private-COW research prototype into a small reusable Host-owned prepared runtime family. One sealed package/data image may create many fresh single-use Python runners with different program source, Run identity, authority and private workspace while preserving mutation, failure and teardown isolation. Prove the product contract with deterministic acceptance fixtures on macOS and Linux. Do not invent a real evaluation dataset or reopen paper economics.
 
@@ -106,6 +106,32 @@ The existing [`scripts/build-guest-workstation.sh`](../../scripts/build-guest-wo
 [`authority-preserving-prepared-data-contract-v1.md`](../research/authority-preserving-prepared-data-contract-v1.md) and its probes prove speculative `np.load`, exact dynamic claim and one fixed ndarray schedule. They explicitly say the mechanism is not a production API. Do not silently loosen or repurpose that contract.
 
 The product path starts from a Host-provided already-authorized prepared value. It does not require prefix speculation, `np.load` source recognition, a staged filesystem read or a dynamic logical claim. Reuse lower-level codec/COW owners where appropriate, but keep research source-effect semantics intact.
+
+### Pre-implementation gaps confirmed by independent review
+
+The current code does **not** yet provide four product seams that later phases assume:
+
+1. `runtime_prepare` accepts UTF-8 Python source only. There is no binary Host-to-Guest preparation ABI, and the research COW path embeds the 8 MiB body as base64 source.
+2. `engine.Runner` is reusable and accepts public `trustedPrepare`; `subagent.RunnerFactory` does not carry a complete per-consumer `RunConfig`, grants or `InvocationRef`.
+3. Ordinary `Engine.Close` has no prepared-family `new -> running -> terminal -> closed` admission contract.
+4. Existing profile binding does not by itself identify every image-affecting property, and target-Guest dtype reconstruction has not been qualified beyond the fixed historical fixture.
+
+Phase 0 must close these as written contracts and RED tests before product implementation. The preferred minimal binary preparation shape to test is:
+
+```text
+Host validates and copies bounded descriptor + body
+  -> instantiate authority-free canonical Guest
+  -> Guest allocates bounded staging memory
+  -> Host writes descriptor and raw body into that private memory
+  -> one dedicated Guest preparation export consumes both exactly once
+  -> Guest constructs the private ndarray in the prepared namespace
+  -> Host and Guest release staging, verify terminal preparation state
+  -> only then seal the canonical image
+```
+
+The exact export name and ownership mechanics are a Phase 0 outcome, not a preselected API. It must use no workspace, Broker, Host path, JSON body, filesystem handoff or network authority. Adding the export requires target-Guest ABI/version, export-manifest and qualification updates plus an exact `numpy-core` rebuild. If a smaller existing binary ingress can satisfy the same ownership and teardown rules, prefer it and document why.
+
+The preferred consumer boundary is a narrow family-owned single-use runner adapter. Construction receives a frozen copy of Host `RunConfig`, workspace binding and invocation identity; `Run` accepts only the ordinary request and internally supplies the sealed preparation. Do not return the raw prepared Engine, retain caller-owned maps/slices or let `ChildProgram.TrustedPrepare` reach this runner.
 
 ---
 
@@ -296,13 +322,21 @@ Tasks:
 - [ ] Freeze the product prepared-input identity fields, variable-name policy, family lifecycle and copy/COW disposition vocabulary.
 - [ ] Freeze the data-plane rule: descriptor/identity may be encoded, but the body uses a bounded Host-internal preparation transfer and is released after seal; do not promote the historical base64-in-trusted-source probe into the product API.
 - [ ] Specify per-consumer bindings and terminal dispositions separately from the shared family identity. Do not reuse a Run-scoped `PreparedDataContract` across consumers.
+- [ ] Write a focused binary preparation ABI note and RED tests covering allocation/write/consume/release, short write, oversized body, descriptor/body mismatch, repeat consumption, preparation error, cancellation and cleanup. Include required Guest export/ABI/version/manifest/qualification changes and the `_initialize`/`runtime_init` ordering for canonical, copy and COW lanes.
+- [ ] Freeze the family-backed runner adapter: the construction inputs, where `engine.WithInvocationRef` is installed, how per-consumer `RunConfig`/Plan/grants/Broker/workspace are created, and how public non-empty `trustedPrepare` is made unrepresentable or rejected before Guest execution. Do not treat `Descriptor.ChildPlanSHA256` as a Plan.
+- [ ] Freeze `family: open -> closing -> closed` and `consumer: new -> running -> terminal -> closed` transitions, including duplicate Run, close-before-run, close-during-run, whether close waits or rejects, which failures consume total quota, and how active/total counters are released.
+- [ ] Define one family-image compatibility identity over exact artifact/manifest, allowed/available/qualified imports, deterministic profile, memory/image-affecting config, preparation ABI/version, dtype/layout/name and body digest. Do not overload `ExecutionProfileBindingSHA256` unless the extended identity remains valid for all existing consumers.
+- [ ] Freeze macOS semantics before implementation: prefer the same bounded binary preparation ABI with `private_copy`; if unavailable, expose an explicit unsupported physical disposition while keeping descriptor/lifecycle contract tests portable. The old RunRequest-base64 lane is not a product fallback.
+- [ ] Freeze a small v1 target-Guest dtype allowlist from real `numpy-core` qualification (`np.dtype(...).str`, endianness, shape and exact reconstruction). Host arithmetic support alone is insufficient.
+- [ ] Deep-copy/freeze every mutable field accepted at family/runner construction, especially `RunConfig.CapabilityGrants`, profile/import collections and mechanism/config values; RED-test caller mutation after construction.
+- [ ] Assign the minimal family/member terminal record owner and validator. Prefer a small product contract adjacent to the family lifecycle and reuse existing Run/workspace identities; do not expand capability receipts or build another evidence store.
 - [ ] Decide the narrow package owner. Prefer one lifecycle-owning package or an extension to `runtime/engine`; do not create parallel `prepared`, `cohort`, `family` and `scheduler` packages.
 - [ ] RED-test the public Host contract before implementation: unknown codec/dtype, bad shape/size/digest/name, body mutation after seal, profile/artifact mismatch, zero/over-bound consumers, close with active runners and use after close.
-- [ ] Add one minimal `scripts/test-host-workstation.sh` plus tested internal worker only if no existing script can express exact candidate Host tests. It must stage the current candidate, record base commit and candidate tree/patch identity, use only approved shared Go/cache/config roots, retrieve bounded logs and clean its run-specific remote path.
+- [ ] Add one minimal `scripts/test-host-workstation.sh` plus tested internal worker only if no existing script can express exact candidate Host tests. Freeze its contract first: exact candidate identity (`HEAD` plus clean tree, or base commit plus deterministic patch digest), allowlisted package/test command, shared environment roots, bounded JSON/text result manifest, local verification and unconditional run-directory cleanup. It must stage the current candidate, retrieve bounded logs and never turn into a general remote command runner.
 - [ ] Keep `build-guest-workstation.sh` unchanged unless an exact missing Guest-build capability is proved.
 - [ ] Run the new host-test path against current focused packages on gpu31 before runtime edits.
 
-**Gate P0:** Green local baseline and one clean bounded gpu31 focused run. The API/ownership note is specific enough to write RED tests and adds no scheduler, generic cache or paper mechanism. If candidate-source staging cannot be made exact without a broad deployment system, use coherent local commits as remote test inputs instead of expanding scope.
+**Gate P0:** Green local baseline and one clean bounded gpu31 focused Host run. Binary preparation ABI/ownership and initialization ordering, family/consumer state machines, adapter/authority construction, compatibility identity, macOS disposition, target-Guest dtype allowlist and terminal-record owner are each written and backed by RED tests. `RunConfig` mutable authority is frozen at construction. The design adds no scheduler, generic cache or paper mechanism. Until every item passes, remain in Phase 0 and do not edit the COW product lifecycle. If candidate-source staging cannot be made exact without a broad deployment system, use coherent local commits as remote test inputs instead of expanding scope.
 
 ## Phase 1: Host-owned prepared ndarray contract and portable reference
 
@@ -507,7 +541,8 @@ Stop and ask Yuzhe only when one is demonstrated:
 6. gpu31 or the exact `numpy-core` toolchain is unavailable and Linux private-COW behavior cannot be verified;
 7. repeated resource/leak/race failures require a product trade-off rather than a local fix;
 8. work would require Docker, paid cloud, production resources, external writes, package release or manual CI;
-9. all executable phases are complete.
+9. no bounded binary preparation ingress can be added without exposing a Host handle/path to Guest, retaining the body after seal, changing frozen paper behavior or broadly redesigning the Guest ABI;
+10. all executable phases are complete.
 
 Do not stop merely because:
 
@@ -536,9 +571,10 @@ When stopped, record the exact blocker, modified files, tests, Git status and sm
 
 - 2026-08-23: Goal prepared from live code and Linux-path archaeology. Current fixed prepared-data/COW, `numpycodec`, `engine.Runner`, workspace and subagent seams were mapped. Local full Go/vet/Guest gates pass. A pre-existing split-bootstrap script-test regression was fixed and pushed at `0eb79b59`. Exact-HEAD focused Host tests passed on gpu31 using the shared Go 1.25 toolchain/caches. No Cohort implementation, real dataset, performance observation or paper change has started.
 - 2026-08-23: Independent read-only implementation audits confirmed that the current 8 MiB body is base64-embedded in research trusted source while `PreparedRegionTable` carries only a scalar claim, and that `PreparedDataContract` is Run-scoped. The prepared goal now requires a body-free promoted source, bounded Host-internal preparation transfer, per-consumer Run bindings, Host-owned cohort joins, unchanged `RunRequest`, and no `MechanismSet.Cohort`.
+- 2026-08-23: Independent launch review found that product implementation was still underspecified at the Guest ABI, runner authority adapter, lifecycle, compatibility identity, portable fallback, Host Linux gate, initialization parity, terminal record, dtype qualification and mutable `RunConfig` seams. Phase 0 now owns explicit contracts and RED gates for all ten; later Runtime/COW phases may not start before Gate P0.
 
 ## Short prompt to start this mega-goal
 
 ```text
-Read docs/plans/2026-08-23-prepared-runtime-families-private-cohorts-autonomous-megagoal.md fully and execute it in /Users/yuzhe/projects/agent-python-runtime. Start at Phase 0, keep the Runtime free of scheduling policy, turn the fixed prepared NumPy/private-COW probe into the smallest reusable Host-owned prepared runner family, compose existing workspace/subagent primitives, use local macOS plus exact bounded gpu31 Linux gates, update the roadmap, signed commit and push after coherent verified phases, and continue until complete or a named architecture/safety gate. Do not invent a real evaluation dataset, reopen paper economics, trigger CI or build an external-effect plane.
+Read docs/plans/2026-08-23-prepared-runtime-families-private-cohorts-autonomous-megagoal.md fully and execute it in /Users/yuzhe/projects/agent-python-runtime. Start at Phase 0 and do not edit the product COW lifecycle until Gate P0 freezes and RED-tests the binary preparation ABI, family-backed authority adapter, state machine, compatibility identity and Linux Host gate. Then turn the fixed prepared NumPy/private-COW probe into the smallest reusable Host-owned prepared runner family, keep the Runtime free of scheduling policy, compose existing workspace/subagent primitives, use local macOS plus exact bounded gpu31 Linux gates, update the roadmap, signed commit and push after coherent verified phases, and continue until complete or a named architecture/safety gate. Do not invent a real evaluation dataset, reopen paper economics, trigger CI or build an external-effect plane.
 ```

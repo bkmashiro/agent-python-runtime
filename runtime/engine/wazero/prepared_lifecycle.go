@@ -43,6 +43,7 @@ type preparedFamilyMember struct {
 	terminal    bool
 }
 
+// PreparedFamilyState is a detached lifecycle and physical-disposition snapshot.
 type PreparedFamilyState struct {
 	Created      uint32
 	Active       uint32
@@ -88,6 +89,18 @@ func (lifecycle *preparedFamilyLifecycle) reserve() (uint64, error) {
 	lifecycle.total++
 	lifecycle.members[lifecycle.nextID] = preparedFamilyMember{phase: preparedMemberNew}
 	return lifecycle.nextID, nil
+}
+
+func (lifecycle *preparedFamilyLifecycle) release(id uint64) error {
+	lifecycle.mu.Lock()
+	defer lifecycle.mu.Unlock()
+	member, ok := lifecycle.members[id]
+	if !ok || member.phase != preparedMemberNew {
+		return ErrPreparedRunnerConsumed
+	}
+	delete(lifecycle.members, id)
+	lifecycle.total--
+	return nil
 }
 
 func (lifecycle *preparedFamilyLifecycle) begin(id uint64) error {

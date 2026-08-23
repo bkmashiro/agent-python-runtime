@@ -11,8 +11,10 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
+// PreparedFamilyMode selects the Host-side physical preparation strategy.
 type PreparedFamilyMode string
 
+// PreparedPhysicalDisposition records the strategy actually used for a member.
 type PreparedPhysicalDisposition string
 
 const (
@@ -30,6 +32,7 @@ var (
 	ErrPreparedFamilyDrift  = errors.New("prepared family runner is incompatible with its image")
 )
 
+// PreparedFamilyConfig binds an authority-free image config and finite member bounds.
 type PreparedFamilyConfig struct {
 	RunConfig    runtimeconfig.RunConfig
 	MaxConsumers uint32
@@ -37,6 +40,7 @@ type PreparedFamilyConfig struct {
 	Mode         PreparedFamilyMode
 }
 
+// PreparedMemberRecord is the body-free terminal join between a family and one Run.
 type PreparedMemberRecord struct {
 	SchemaVersion        string                      `json:"schema_version"`
 	FamilySHA256         string                      `json:"family_sha256"`
@@ -50,6 +54,7 @@ type PreparedMemberRecord struct {
 	FinalWorkspaceSHA256 string                      `json:"final_workspace_sha256,omitempty"`
 }
 
+// Validate rejects incomplete or body-bearing-by-extension terminal identities.
 func (record PreparedMemberRecord) Validate() error {
 	if record.SchemaVersion != "pysolate.prepared-family-member.v1" ||
 		!validPreparedDigest(record.FamilySHA256) || !validPreparedDigest(record.InputSHA256) ||
@@ -75,6 +80,8 @@ func (record PreparedMemberRecord) Validate() error {
 	return nil
 }
 
+// PreparedFamily owns one immutable input image and creates bounded single-use runners.
+// It does not schedule, retry, select, or publish member work.
 type PreparedFamily struct {
 	mu          sync.Mutex
 	wasm        []byte
@@ -90,6 +97,7 @@ type PreparedFamily struct {
 	closed      bool
 }
 
+// PrepareNumpyFamily seals one bounded ndarray input for later fresh consumers.
 func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyConfig, input PreparedNumpyInput) (*PreparedFamily, error) {
 	if ctx == nil || len(wasm) < 8 || config.RunConfig.Validate() != nil ||
 		config.RunConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect || len(config.RunConfig.CapabilityGrants) != 0 || config.RunConfig.ColdIO != nil ||
@@ -132,6 +140,7 @@ func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyC
 	return family, nil
 }
 
+// State returns a detached body-free lifecycle snapshot.
 func (family *PreparedFamily) State() PreparedFamilyState {
 	if family == nil || family.lifecycle == nil {
 		return PreparedFamilyState{}
@@ -145,6 +154,7 @@ func (family *PreparedFamily) State() PreparedFamilyState {
 	return state
 }
 
+// Records returns detached terminal records ordered by member ID.
 func (family *PreparedFamily) Records() []PreparedMemberRecord {
 	if family == nil {
 		return nil

@@ -112,6 +112,24 @@ func TestPreparedInputBindingRejectsProfileDrift(t *testing.T) {
 	}
 }
 
+func TestPreparedFamilyLifecycleReleasesFailedCreationReservation(t *testing.T) {
+	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+	member, err := lifecycle.reserve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lifecycle.release(member); err != nil {
+		t.Fatal(err)
+	}
+	state := lifecycle.state()
+	if state.Created != 0 || state.Terminal != 0 {
+		t.Fatalf("state=%+v", state)
+	}
+	if _, err := lifecycle.reserve(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPreparedFamilyLifecycleBoundsAndClose(t *testing.T) {
 	lifecycle, err := newPreparedFamilyLifecycle(2, 1)
 	if err != nil {

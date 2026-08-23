@@ -9,6 +9,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
+// PreparedRunnerConfig supplies one member's independent logical authority and workspace.
 type PreparedRunnerConfig struct {
 	RunConfig        runtimeconfig.RunConfig
 	BrokerFactory    BrokerFactory
@@ -30,6 +31,7 @@ func (runtime borrowedCOWPreparedRuntime) imageState() PreparedImageState {
 	return runtime.delegate.imageState()
 }
 
+// NewRunner reserves one member and returns an ordinary single-use Runner surface.
 func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunnerConfig) (enginecontract.Runner, error) {
 	if family == nil || ctx == nil || config.InvocationRef.Validate() != nil || config.RunConfig.Validate() != nil || config.RunConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
 		return nil, ErrPreparedFamilyConfig
@@ -73,7 +75,7 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 		delegate, err = family.newCOWChildEngine(ctx, childConfig, config.BrokerFactory, binding)
 	}
 	if err != nil {
-		_ = family.lifecycle.retire(memberID)
+		_ = family.lifecycle.release(memberID)
 		return nil, err
 	}
 	runner := newPreparedFamilyRunner(delegate, config.InvocationRef, family.lifecycle, memberID)
@@ -149,6 +151,7 @@ func (family *PreparedFamily) recordClose(memberID uint64) {
 	delete(family.runners, memberID)
 }
 
+// Close rejects active members, retires inactive runners, and then releases the image.
 func (family *PreparedFamily) Close(ctx context.Context) error {
 	if family == nil || family.lifecycle == nil {
 		return nil

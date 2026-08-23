@@ -33,6 +33,7 @@ type preparedNumpyDescriptor struct {
 	InputSHA256   string   `json:"input_sha256"`
 }
 
+// PreparedNumpyInput is an immutable Host-owned descriptor and copied ndarray body.
 type PreparedNumpyInput struct {
 	name           string
 	descriptor     numpycodec.Descriptor
@@ -41,16 +42,20 @@ type PreparedNumpyInput struct {
 	identity       string
 }
 
+// Name returns the validated Guest global name.
 func (input PreparedNumpyInput) Name() string { return input.name }
 
+// IdentitySHA256 returns the descriptor/name join identity, never the body.
 func (input PreparedNumpyInput) IdentitySHA256() string { return input.identity }
 
+// Descriptor returns a detached descriptor copy.
 func (input PreparedNumpyInput) Descriptor() numpycodec.Descriptor {
 	descriptor := input.descriptor
 	descriptor.Shape = append([]uint64(nil), descriptor.Shape...)
 	return descriptor
 }
 
+// NewPreparedNumpyInput validates the descriptor/body join and copies mutable input bytes.
 func NewPreparedNumpyInput(name string, descriptor numpycodec.Descriptor, body []byte) (PreparedNumpyInput, error) {
 	if !validPreparedName(name) || len(body) == 0 || len(body) > numpycodec.MaxBodyBytes {
 		return PreparedNumpyInput{}, ErrPreparedNumpyInput

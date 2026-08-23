@@ -62,7 +62,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 5, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 6, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +128,22 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	unknownCallResult, err := decodeSuccessfulGuestResult(unknownCall.Payload)
 	if err != nil || string(unknownCallResult) != `[4,16]` {
 		t.Fatalf("unknown-call result=%s err=%v", unknownCallResult, err)
+	}
+	identityRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID:  "source-pass-plugin-identity",
+		Code:   "a = 1000\nleft = a * a + 0\nright = a * a + 0\nresult = left is right\n",
+		Inputs: json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, identityRequest)
+	if err != nil || identity.Applied || identity.Patch.Status != "not_applicable" {
+		t.Fatalf("identity execution=%+v err=%v", identity, err)
+	}
+	identityResult, err := decodeSuccessfulGuestResult(identity.Payload)
+	if err != nil || string(identityResult) != `false` {
+		t.Fatalf("identity result=%s err=%v", identityResult, err)
 	}
 	baselineResult, err := decodeSuccessfulGuestResult(baseline)
 	if err != nil {
@@ -239,7 +255,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 3, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -280,6 +296,19 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 	negativeResult, err := decodeSuccessfulGuestResult(negative.Payload)
 	if err != nil || string(negativeResult) != `3` {
 		t.Fatalf("negative result=%s err=%v", negativeResult, err)
+	}
+	identitySource := "a = 1000\nliteral = 1000000\nfolded = a * a + 0\nresult = folded is literal\n"
+	identityRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "pure-scalar-fold-identity", Code: identitySource, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := registry.Execute(context.Background(), sourcepatch.PureScalarFoldName, session, engine, identityRequest)
+	if err != nil || identity.Applied || identity.Patch.Status != "not_applicable" {
+		t.Fatalf("identity execution=%+v err=%v", identity, err)
+	}
+	identityResult, err := decodeSuccessfulGuestResult(identity.Payload)
+	if err != nil || string(identityResult) != `false` {
+		t.Fatalf("identity result=%s err=%v", identityResult, err)
 	}
 
 	expression := strings.TrimSuffix(strings.Repeat("1 + ", 200), " + ")

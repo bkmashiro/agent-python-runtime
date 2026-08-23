@@ -41,6 +41,24 @@ class SourcePassTests(unittest.TestCase):
                 raw = emit_source_pass_patch_request_json(request(source, pass_name, pass_version))
                 self.assertEqual("not_applicable", json.loads(raw)["status"])
 
+    def test_scalar_passes_reject_integer_identity_observation(self):
+        cases = [
+            (
+                "pure_scalar_cse",
+                "pysolate.pure-scalar-cse-pass.v1",
+                "a = 1000\nleft = a * a + 0\nright = a * a + 0\nresult = left is right\n",
+            ),
+            (
+                "pure_scalar_fold",
+                "pysolate.pure-scalar-fold-pass.v1",
+                "a = 1000\nliteral = 1000000\nfolded = a * a + 0\nresult = folded is literal\n",
+            ),
+        ]
+        for pass_name, pass_version, source in cases:
+            with self.subTest(pass_name=pass_name):
+                raw = emit_source_pass_patch_request_json(request(source, pass_name, pass_version))
+                self.assertEqual("not_applicable", json.loads(raw)["status"])
+
     def test_pure_scalar_fold_replaces_known_total_expression(self):
         source = "seed = 7\nfolded = seed * seed + 3\nresult = folded\n"
         raw = emit_source_pass_patch_request_json(request(

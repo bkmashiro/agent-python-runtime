@@ -11,6 +11,7 @@ import (
 var (
 	ErrInvalidPlugin    = errors.New("invalid source pass plugin")
 	ErrDuplicatePlugin  = errors.New("duplicate source pass plugin")
+	ErrPluginDisabled   = errors.New("source pass plugin is disabled")
 	ErrUnsupportedStage = errors.New("source pass plugin does not implement its registered stage")
 )
 
@@ -40,10 +41,14 @@ func (adapter ExistingAdapter) Registration() passregistration.Registration {
 
 type Registry struct {
 	plugins map[passregistration.Name]Plugin
+	enabled map[passregistration.Name]bool
 }
 
 func New(plugins ...Plugin) (*Registry, error) {
-	registry := &Registry{plugins: make(map[passregistration.Name]Plugin, len(plugins))}
+	registry := &Registry{
+		plugins: make(map[passregistration.Name]Plugin, len(plugins)),
+		enabled: make(map[passregistration.Name]bool, len(plugins)),
+	}
 	for _, plugin := range plugins {
 		if plugin == nil {
 			return nil, ErrInvalidPlugin
@@ -60,6 +65,27 @@ func New(plugins ...Plugin) (*Registry, error) {
 	return registry, nil
 }
 
+// Enable returns a configured registry copy. New registries are all-off.
+func (registry *Registry) Enable(names ...passregistration.Name) (*Registry, error) {
+	if registry == nil {
+		return nil, ErrInvalidPlugin
+	}
+	configured := &Registry{
+		plugins: make(map[passregistration.Name]Plugin, len(registry.plugins)),
+		enabled: make(map[passregistration.Name]bool, len(registry.plugins)),
+	}
+	for name, plugin := range registry.plugins {
+		configured.plugins[name] = plugin
+	}
+	for _, name := range names {
+		if _, exists := configured.plugins[name]; !exists {
+			return nil, ErrInvalidPlugin
+		}
+		configured.enabled[name] = true
+	}
+	return configured, nil
+}
+
 func (registry *Registry) Lookup(name passregistration.Name) (Plugin, bool) {
 	if registry == nil {
 		return nil, false
@@ -72,6 +98,9 @@ func (registry *Registry) Transform(ctx context.Context, name passregistration.N
 	plugin, ok := registry.Lookup(name)
 	if !ok {
 		return sourcepatch.Patch{}, ErrInvalidPlugin
+	}
+	if !registry.enabled[name] {
+		return sourcepatch.Patch{}, ErrPluginDisabled
 	}
 	patchPlugin, ok := plugin.(SourcePatchPlugin)
 	if !ok || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {

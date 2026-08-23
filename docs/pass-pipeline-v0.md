@@ -1,24 +1,25 @@
 # Source-bound pass pipeline v0
 
-Status: **implemented infrastructure; no transform semantics**
+Status: **implemented outcome shell; companion compile-time plugin registry**
 
 `runtime/passpipeline` is the minimum Host-owned shell shared by source-bound
 optimization lanes. It does not execute Agent Python, invoke transforms, schedule
 work, choose a fallback after external effects, or replace the existing semantic
 and prepared-region contracts.
 
-## Closed current routes
+## Current routes
 
 | pass registration | existing consumer | v0 stage |
 |---|---|---|
 | `semantic_pre_dispatch` | `overlay_only` | `prefix_overlay` |
 | `prepared_pure_region` | `execution_patch` | `whole_program_patch` |
+| `pure_scalar_cse` | `execution_patch` | `whole_program_patch` |
 
-The registration object and its identity are retained unchanged. `CurrentEntry`
-looks up this closed route. `New` rejects moving either registration to another
-stage, even when that stage has a compatible consumer kind. A future hybrid or
-multi-program pass therefore needs its own closed registration and route rather
-than reinterpreting an existing pass.
+The registration definition owns its stage. `CurrentEntry` projects that stage into
+the outcome shell, and `New` rejects a caller-supplied stage that differs from the
+registration. `passregistration.Define` and `runtime/passplugin` allow another
+compile-time pass to register without editing a central name switch. Existing pass
+names cannot be reinterpreted at another stage.
 
 ## Stage-specific entry points
 
@@ -29,7 +30,9 @@ The pipeline has four distinct outcome entry points:
 - `RecordWholeProgramPatch`
 - `RecordMultiProgramPatch`
 
-There is no exported universal transform callback. The shell validates stage,
+There is no transform callback in this outcome shell. `runtime/passplugin` dispatches
+stage-specific implementations; `runtime/sourcepatch` supplies the first generic
+whole-program transform seam. The shell validates stage,
 registration, required binding keys, outcome class, body-free identities and
 resource use, then appends an immutable outcome record. Transformation,
 preparation, final-source sealing, target-Guest compilation and execution stay

@@ -24,13 +24,14 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	}
 	artifactDigest := sha256.Sum256(artifact)
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
-	profile, err := runtimeconfig.NewExecutionProfile("base", []string{})
+	allowedImports := []string{"json"}
+	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)
 	if err != nil {
 		t.Fatal(err)
 	}
 	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
 		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: semanticTestDigest('7'),
-		ImportRoots: []string{}, QualifiedImportRoots: []string{},
+		ImportRoots: allowedImports, QualifiedImportRoots: allowedImports,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +52,10 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 		t.Fatal(err)
 	}
 	registry, err := passplugin.New(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(sourcepatch.PureScalarCSEName)
 	if err != nil {
 		t.Fatal(err)
 	}

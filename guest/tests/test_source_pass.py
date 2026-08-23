@@ -43,8 +43,12 @@ class SourcePassTests(unittest.TestCase):
     def test_non_scalar_or_non_adjacent_repetition_is_not_applicable(self):
         cases = [
             "left = work()\nright = work()\nresult = right\n",
+            "seed = 7\nleft = seed // 2\nright = seed // 2\nresult = right\n",
+            "seed = 7\nleft = seed + 'x'\nright = seed + 'x'\nresult = right\n",
+            "seed = []\nleft = seed\nright = seed\nresult = right\n",
             "seed = 7\nleft = seed * seed\nmarker = 1\nright = seed * seed\nresult = right\n",
             "seed = 7\nleft = seed * seed\nseed = 8\nright = seed * seed\nresult = right\n",
+            "seed = 7\nleft = seed * seed\nif True:\n    pass\nright = seed * seed\nresult = right\n",
         ]
         for source in cases:
             with self.subTest(source=source):

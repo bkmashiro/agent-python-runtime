@@ -9,39 +9,23 @@ semantics unchanged.
 
 ## Phase 1: `pure_scalar_cse`
 
-Decision: **Deferred before implementation.**
+Decision: **Implemented after the plugin-seam follow-up.**
 
-The semantic analyzer can identify a deliberately narrow total scalar subset,
-but the existing executable patch seam is not generic. The current formal patch
-path is specifically owned by `PreparedRegionDecision`, its capsule/table
-lifecycle and `Engine.RunPreparedRegionDerived`. The fresh Guest accepts that
-selection through the prepared-region-specific
-`runtime_select_prepared_region_execution` ABI after validating the unchanged
-original `RunRequest` source.
+The original deferral was correct for the then-current prepared-region-only patch
+ABI. A later, explicitly approved refactor added a small compile-time plugin registry
+and a generic authority-free whole-program source-patch selector. The first
+`pure_scalar_cse` implementation is deliberately narrow: adjacent single-name
+assignments with identical `+`, `-` or `*` bool/int expressions over known scalar
+names and literals.
 
-A third AST execution patch would therefore require one of two changes:
+The exact Guest emits the patch, and a fresh final Guest receives the unchanged
+original `RunRequest`, validates it, re-derives the patch and selects the derived
+program before execution. Calls, attributes, subscripts, control flow and
+non-adjacent reuse remain unchanged. See [`source-pass-plugins.md`](../source-pass-plugins.md).
 
-1. add another pass-specific branch and Guest selector to the central fresh-Run
-   path; or
-2. replace the prepared-region selector with a generic source-patch union and
-   migrate the already-closed prepared-region lifecycle onto it.
-
-The first contradicts the minimum pipeline's purpose and does not establish a
-reusable seam. The second changes a security-sensitive, artifact-visible ABI
-and a working ownership model before another retained pass proves that the
-abstraction is correct. Sending derived source as ordinary `RunRequest.code`
-is not an acceptable shortcut because it loses the exact generated-source
-binding and bypasses the existing original-source/derived-AST selection gate.
-
-No scalar rewrite, pass registration or speedup claim is retained. Reconsider
-only after a separately reviewed source-patch selection design preserves:
-
-- original complete-source seal and target-Guest validation;
-- one formal execution;
-- closed pass kind and registration identity;
-- compile-before-execute behavior;
-- unchanged authority, workspace and no-post-effect-replay semantics; and
-- byte/trace compatibility for the prepared-region path.
+This supersedes only the Phase 1 deferral. It does not supply the Broker, batching,
+parallel-call, workspace-projection or multi-program contracts required by later
+passes.
 
 ## Phase 2: `frozen_observation_cse`
 
@@ -130,8 +114,9 @@ Using authored residual programs with prepared globals would demonstrate the exi
 Prepared Family API, not an optimizer pass. Sharing mutable Python state, Plan/Broker
 objects or workspace publication remains prohibited.
 
-The retained pipeline has only the existing `semantic_pre_dispatch` overlay and
-`prepared_pure_region` patch. The Phase 7 gate requires at least three retained passes
-to expose a real composition seam. `PassPipeline` already freezes current stage
-routing, deterministic outcome order, per-pass disable and all-off behavior; no larger
-ordering, reanalysis or conflict manager is added for two passes.
+The retained registry now has the existing `semantic_pre_dispatch` overlay,
+`prepared_pure_region` patch and the narrow `pure_scalar_cse` source-patch plugin.
+This proves compile-time registration and one-pass dispatch, but not automatic
+composition: no current fixture needs overlapping transforms, reanalysis or conflict
+resolution. `PassPipeline` keeps deterministic outcome order, per-pass disable and
+all-off behavior; a larger ordering or fixed-point manager remains unnecessary.

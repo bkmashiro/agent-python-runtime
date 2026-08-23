@@ -35,7 +35,7 @@ def _decode(raw, keys):
     if not isinstance(raw, str):
         raise ValueError("invalid source pass contract")
     value = json.loads(raw)
-    if not isinstance(value, dict) or set(value) != keys or _canonical(value) != raw.rstrip("\n") or raw not in (_canonical(value), _contract(value)):
+    if not isinstance(value, dict) or set(value) != keys:
         raise ValueError("invalid source pass contract")
     return value
 

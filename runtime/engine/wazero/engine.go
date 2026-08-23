@@ -953,7 +953,7 @@ func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte,
 	if err != nil {
 		return nil, err
 	}
-	if registration.Stage() != passregistration.StageWholeProgramPatch || patch.Validate(runRequest.Code, registration) != nil {
+	if registration.Stage() != passregistration.StageWholeProgramPatch || !patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
 		return nil, sourcepatch.ErrInvalidPatch
 	}
 	patchRaw, err := json.Marshal(patch)

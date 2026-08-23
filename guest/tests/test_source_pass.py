@@ -36,6 +36,13 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual(len(source.encode()), len(patch["derived_source"].encode()))
         self.assertIn("right = left", patch["derived_source"])
         tree = validate_source_pass_execution_request(source, raw)
+        host_order = [
+            "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
+            "original_source_sha256", "original_ast_sha256", "derived_source",
+            "derived_source_sha256", "derived_ast_sha256", "replacement_count",
+        ]
+        host_raw = json.dumps({key: patch[key] for key in host_order}, separators=(",", ":")) + "\n"
+        validate_source_pass_execution_request(source, host_raw)
         namespace = {}
         exec(compile(tree, "<agent-run>", "exec"), namespace, namespace)
         self.assertEqual([52, 52], namespace["result"])

@@ -4,7 +4,7 @@ import json
 import re
 
 from .ast_support import ast_digest_bounded
-from .semantic import MAX_SOURCE_BYTES, _safe_scalar_expression
+from .semantic import MAX_SCALAR_OPERATORS, MAX_SOURCE_BYTES
 
 
 PATCH_SCHEMA_VERSION = "pysolate.source-pass-patch.v1"
@@ -60,46 +60,77 @@ def _simple_assignment(statement):
     return statement.targets[0].id, statement.value
 
 
+_MISSING = object()
+
+
+def _int64_value(node, scalar_values, operators=None):
+    if operators is None:
+        operators = [0]
+    if isinstance(node, ast.Constant) and type(node.value) in (bool, int):
+        value = node.value
+    elif isinstance(node, ast.Name):
+        return scalar_values.get(node.id, _MISSING)
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        operators[0] += 1
+        if operators[0] > MAX_SCALAR_OPERATORS:
+            return _MISSING
+        left = _int64_value(node.left, scalar_values, operators)
+        right = _int64_value(node.right, scalar_values, operators)
+        if left is _MISSING or right is _MISSING:
+            return _MISSING
+        if isinstance(node.op, ast.Add):
+            value = left + right
+        elif isinstance(node.op, ast.Sub):
+            value = left - right
+        else:
+            value = left * right
+    else:
+        return _MISSING
+    if type(value) not in (bool, int) or value < -(1 << 63) or value >= (1 << 63):
+        return _MISSING
+    return value
+
+
 def _pure_scalar_cse(source):
     if not isinstance(source, str) or not source or len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ValueError("invalid source pass input")
     tree = ast.parse(source, filename="<agent-run>", mode="exec")
-    scalar_names = {}
+    scalar_values = {}
     replacements = []
     index = 0
     while index < len(tree.body):
         first = _simple_assignment(tree.body[index])
         if first is None:
-            scalar_names.clear()
+            scalar_values.clear()
             index += 1
             continue
         first_name, first_value = first
-        first_type = _safe_scalar_expression(first_value, scalar_names)
-        if first_type is None:
-            scalar_names.pop(first_name, None)
+        first_result = _int64_value(first_value, scalar_values)
+        if first_result is _MISSING:
+            scalar_values.pop(first_name, None)
             index += 1
             continue
-        after_first = dict(scalar_names)
-        after_first[first_name] = first_type
+        after_first = dict(scalar_values)
+        after_first[first_name] = first_result
         if index + 1 < len(tree.body):
             second = _simple_assignment(tree.body[index + 1])
             if second is not None:
                 second_name, second_value = second
-                second_type = _safe_scalar_expression(second_value, after_first)
+                second_result = _int64_value(second_value, after_first)
                 if (
                     second_name != first_name
-                    and second_type == first_type
+                    and second_result is not _MISSING
                     and ast.dump(first_value, include_attributes=False) == ast.dump(second_value, include_attributes=False)
                 ):
                     start, end = _span_offsets(source, second_value)
                     encoded_name = first_name.encode("ascii")
                     if len(encoded_name) <= end - start:
                         replacements.append((start, end, encoded_name + b" " * (end - start - len(encoded_name))))
-                        scalar_names = after_first
-                        scalar_names[second_name] = second_type
+                        scalar_values = after_first
+                        scalar_values[second_name] = second_result
                         index += 2
                         continue
-        scalar_names = after_first
+        scalar_values = after_first
         index += 1
 
     if not replacements:
@@ -151,7 +182,7 @@ def validate_source_pass_execution_request(final_source, patch_json):
         "registration_sha256": patch["registration_sha256"],
         "source": final_source,
     })
-    expected = emit_source_pass_patch_request_json(request)
-    if expected != patch_json:
+    expected = _decode(emit_source_pass_patch_request_json(request), _PATCH_KEYS)
+    if expected != patch:
         raise ValueError("source pass patch does not match the original source")
     return ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")

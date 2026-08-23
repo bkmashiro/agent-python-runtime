@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,7 +62,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 1, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 3, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +76,13 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	}
 	if patch.Status != "applied" || patch.ReplacementCount != 1 {
 		t.Fatalf("patch=%+v", patch)
+	}
+	notApplicable, err := registry.Transform(
+		context.Background(), sourcepatch.PureScalarCSEName, session,
+		"left = abs(7)\nright = abs(7)\nresult = right\n",
+	)
+	if err != nil || notApplicable.Applied() || notApplicable.Status != "not_applicable" {
+		t.Fatalf("negative patch=%+v err=%v", notApplicable, err)
 	}
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "source-pass-plugin-e2e", Code: source, Inputs: json.RawMessage(`{}`)})
 	if err != nil {
@@ -98,4 +107,53 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if !reflect.DeepEqual(baselineResult, derivedResult) || string(derivedResult) != `[52,52]` {
 		t.Fatalf("baseline=%s derived=%s", baselineResult, derivedResult)
 	}
+	var derivedEnvelope struct {
+		SourceContract struct {
+			ModelSourceSHA256  string `json:"model_source_sha256"`
+			EffectiveASTSHA256 string `json:"effective_ast_sha256"`
+		} `json:"source_contract"`
+	}
+	if err := json.Unmarshal(derived, &derivedEnvelope); err != nil ||
+		derivedEnvelope.SourceContract.ModelSourceSHA256 != patch.OriginalSourceSHA256 ||
+		derivedEnvelope.SourceContract.EffectiveASTSHA256 != patch.DerivedASTSHA256 {
+		t.Fatalf("derived source contract=%+v err=%v", derivedEnvelope.SourceContract, err)
+	}
+
+	expression := strings.TrimSuffix(strings.Repeat("seed * seed - 48 + ", 200), " + ")
+	benchmarkSource := "seed = 7\nleft = " + expression + "\nright = " + expression + "\nresult = left == right\n"
+	benchmarkPatch, err := registry.Transform(context.Background(), sourcepatch.PureScalarCSEName, session, benchmarkSource)
+	if err != nil || !benchmarkPatch.Applied() {
+		t.Fatalf("benchmark patch=%+v err=%v", benchmarkPatch, err)
+	}
+	benchmarkRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "source-pass-plugin-benchmark", Code: benchmarkSource, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineNanos := make([]int64, 3)
+	treatmentNanos := make([]int64, 3)
+	for index := range baselineNanos {
+		started := time.Now()
+		baseline, err = runner.Run(context.Background(), benchmarkRequest, "")
+		baselineNanos[index] = time.Since(started).Nanoseconds()
+		if err != nil {
+			t.Fatal(err)
+		}
+		started = time.Now()
+		derived, err = engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, pass.Registration())
+		treatmentNanos[index] = time.Since(started).Nanoseconds()
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselineResult, err = decodeSuccessfulGuestResult(baseline)
+		if err != nil {
+			t.Fatal(err)
+		}
+		derivedResult, err = decodeSuccessfulGuestResult(derived)
+		if err != nil || !reflect.DeepEqual(baselineResult, derivedResult) {
+			t.Fatalf("benchmark baseline=%s derived=%s err=%v", baselineResult, derivedResult, err)
+		}
+	}
+	sort.Slice(baselineNanos, func(i, j int) bool { return baselineNanos[i] < baselineNanos[j] })
+	sort.Slice(treatmentNanos, func(i, j int) bool { return treatmentNanos[i] < treatmentNanos[j] })
+	t.Logf("synthetic pure_scalar_cse nanos: baseline=%v treatment=%v medians=%d/%d", baselineNanos, treatmentNanos, baselineNanos[1], treatmentNanos[1])
 }

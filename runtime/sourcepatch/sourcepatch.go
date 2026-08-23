@@ -126,6 +126,10 @@ func (patch Patch) Validate(source string, registration passregistration.Registr
 	return nil
 }
 
+func (patch Patch) Applied() bool {
+	return patch.Status == "applied"
+}
+
 func digest(value []byte) string {
 	digest := sha256.Sum256(value)
 	return "sha256:" + hex.EncodeToString(digest[:])

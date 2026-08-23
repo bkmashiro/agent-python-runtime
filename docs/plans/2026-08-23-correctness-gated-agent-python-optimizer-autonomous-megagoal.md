@@ -441,22 +441,31 @@ manager surface.
 
 **Promise:** Separate mechanism correctness from prevalence and economics.
 
-- [ ] Freeze a deterministic authored corpus covering repeated repository reads, bounded
+- [x] Freeze a deterministic authored corpus covering repeated repository reads, bounded
   projections, batch reads, independent reads, pure parsing and prepared array setup.
-- [ ] If a natural coding-agent corpus is available, freeze source/privacy/license and
+- [x] If a natural coding-agent corpus is available, freeze source/privacy/license and
   pass-opportunity census before timing. Otherwise report authored mechanism evidence
   only.
-- [ ] Run pass-off, each-pass-only and all-admitted-passes treatments under matched Guest,
-  Plan, workspace, inputs and Host delays.
-- [ ] Report result/error parity, logical effects, physical calls, bytes, pass/analyzer
-  time, Guest time, Host critical path, rejected candidates and orphaned work.
-- [ ] Do not aggregate unrelated workloads into one universal speedup.
-- [ ] Independently recalculate every headline metric from raw evidence.
+- [x] Run matched pass-off and each-retained-pass mechanism controls. Record
+  all-admitted treatment as not applicable when no frozen fixture qualifies for both
+  passes; do not invent a synthetic row.
+- [x] Report result/error parity, logical effects, physical calls, exact-Guest census,
+  rejected candidates and applicable historical timing without promoting structural
+  candidates to executed passes.
+- [x] Do not aggregate unrelated workloads into one universal speedup.
+- [x] Independently recalculate every quoted historical median from raw evidence.
 
 **Gate P8:** All retained passes preserve the frozen observable contract. Performance
 claims name exact workloads, artifacts, platforms and treatments. A pass with no observed
 opportunity or negative net value is documented as limited/rejected rather than kept for
 story count.
+
+**P8 closeout:** The exact-Guest authored census found 0 admitted streaming passes
+across six cases and the natural census remains 0/36 eligible events. Retained streaming
+and prepared-region mechanism controls passed, but no fixture qualified for both.
+[`source-bound-pass-workload-evidence-v1.md`](../research/source-bound-pass-workload-evidence-v1.md)
+records the negative opportunity result and the limited historical synthetic timing
+claim.
 
 ## Phase 9: Independent review and truthful closeout
 
@@ -516,7 +525,7 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 8: freeze and run evidence only for the retained semantic_pre_dispatch and prepared_pure_region mechanisms; record authored opportunity/prevalence and exact parity without attributing deferred-pass speedups.`
+`Phase 9: review the exact P8 target and prepared-region test correction independently, rerun full local and exact-Guest gates, then close documentation, signatures and upstream state.`
 
 ## Short `/goal`
 

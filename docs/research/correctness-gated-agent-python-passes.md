@@ -11,6 +11,10 @@ positive/adversarial controls without storing source, result or workspace bodies
 The minimum Host routing and outcome shell is specified by
 [`pass-pipeline-v0.md`](../pass-pipeline-v0.md). It preserves the existing pass
 registrations and stage-specific execution owners; it is not a transform engine.
+The existing `semantic_pre_dispatch` controller now projects each terminal
+occurrence into this shell only after final-source seal and controller
+finalization. Consumed work is `applied`; cancelled, failed, late and orphaned
+physical work is `discarded` with zero invented logical calls.
 
 This note defines what Pysolate may call an optimization pass and how that pass
 inherits the runtime's existing source, effect, authority, workspace and terminal

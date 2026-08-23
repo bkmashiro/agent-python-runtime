@@ -103,6 +103,12 @@ type RecordInput struct {
 	DerivedASTSHA256     string
 	Bindings             map[passregistration.Binding]string
 	Usage                Usage
+	LogicalEvents        uint32
+	PhysicalEvents       uint32
+	ResultSHA256         string
+	ExceptionClass       string
+	ExceptionOrder       uint32
+	WorkspaceDisposition string
 }
 
 type OutcomeRecord struct {
@@ -119,6 +125,12 @@ type OutcomeRecord struct {
 	DerivedASTSHA256     string                              `json:"derived_ast_sha256"`
 	Bindings             map[passregistration.Binding]string `json:"bindings"`
 	Usage                Usage                               `json:"usage"`
+	LogicalEvents        uint32                              `json:"logical_events"`
+	PhysicalEvents       uint32                              `json:"physical_events"`
+	ResultSHA256         string                              `json:"result_sha256"`
+	ExceptionClass       string                              `json:"exception_class"`
+	ExceptionOrder       uint32                              `json:"exception_order"`
+	WorkspaceDisposition string                              `json:"workspace_disposition"`
 }
 
 type Pipeline struct {
@@ -218,6 +230,9 @@ func (pipeline *Pipeline) record(stage Stage, input RecordInput) (OutcomeRecord,
 		OriginalSourceSHA256: input.OriginalSourceSHA256, DerivedSourceSHA256: input.DerivedSourceSHA256,
 		OriginalASTSHA256: input.OriginalASTSHA256, DerivedASTSHA256: input.DerivedASTSHA256,
 		Bindings: cloneBindings(input.Bindings), Usage: input.Usage,
+		LogicalEvents: input.LogicalEvents, PhysicalEvents: input.PhysicalEvents,
+		ResultSHA256: input.ResultSHA256, ExceptionClass: input.ExceptionClass,
+		ExceptionOrder: input.ExceptionOrder, WorkspaceDisposition: input.WorkspaceDisposition,
 	}
 	pipeline.mu.Lock()
 	defer pipeline.mu.Unlock()
@@ -245,8 +260,21 @@ func validateInput(registration passregistration.Registration, input RecordInput
 		(input.DerivedASTSHA256 != "" && !digestPattern.MatchString(input.DerivedASTSHA256)) {
 		return ErrInvalidRecord
 	}
+	if input.ResultSHA256 != "" && !digestPattern.MatchString(input.ResultSHA256) ||
+		input.ResultSHA256 != "" && input.ExceptionClass != "" ||
+		input.ExceptionClass == "" && input.ExceptionOrder != 0 ||
+		input.ExceptionClass != "" && (!tokenPattern.MatchString(input.ExceptionClass) || input.ExceptionOrder == 0) ||
+		input.WorkspaceDisposition != "" && !tokenPattern.MatchString(input.WorkspaceDisposition) {
+		return ErrInvalidRecord
+	}
 	if err := validateBindings(registration, input.Bindings); err != nil {
 		return err
+	}
+	if input.Bindings[passregistration.SourceSHA256] != input.OriginalSourceSHA256 ||
+		input.Bindings[passregistration.ASTSHA256] != input.OriginalASTSHA256 ||
+		input.Bindings[passregistration.AnalyzerSHA256] != registration.AnalyzerSHA256() ||
+		input.Bindings[passregistration.PassConfigSHA256] != registration.ConfigSHA256() {
+		return ErrBindingMismatch
 	}
 	if input.Usage.DerivedSourceBytes > input.Usage.OriginalSourceBytes &&
 		input.Usage.DerivedSourceBytes-input.Usage.OriginalSourceBytes > limits.MaxSourceGrowthBytes {

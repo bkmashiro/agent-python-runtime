@@ -163,6 +163,12 @@ correctness after performance work.
 and current exact-Guest controls pass; independent review finds no authority or effect
 hole in the proposed study.
 
+**P0 closeout:** Exact commit `02ec31ef5e02a07186a9b4fa8fe3d2fd9ef0dba1`
+(tree `c72b5bf741c1d6dd543053fce55db0cc42322ee6`) passed independent
+post-fix review after exact matrix equality and recursive duplicate-key rejection closed
+the predecessor findings. Focused, race, vet, canonical generator/artifact and independent
+identity probes passed.
+
 ## Phase 0M: Minimum pass-pipeline substrate
 
 **Promise:** Remove the next obvious hard-coded seams before the third pass without
@@ -209,20 +215,28 @@ has one exact off-state and fails closed. If the third pass requires a broad IR 
 reuse the existing candidate/patch machinery, stop and present the smallest concrete
 seam before adding infrastructure.
 
+**Decision:** **Deferred before implementation.** The only formal execution-patch
+selector is prepared-region-specific. A scalar CSE pass would require either another
+hard-coded fresh-Run/Guest ABI branch or migration to a new generic source-patch union.
+Both exceed the admitted minimal change. The exact conflict and reconsideration gate
+are recorded in
+[`optimizer-deferred-pass-decisions-v1.md`](../research/optimizer-deferred-pass-decisions-v1.md).
+No scalar rewrite or pass registration is retained.
+
 ## Phase 1S: Unify the existing streaming overlay contract
 
 **Promise:** Make the already implemented semantic pre-dispatch lane a first-class pass
 stage without rewriting unchanged final Python or reviving historical prefix execution.
 
-- [ ] Bind `semantic_pre_dispatch` explicitly to `prefix_overlay` in the pass evidence
+- [x] Bind `semantic_pre_dispatch` explicitly to `prefix_overlay` in the pass evidence
   model while preserving the existing `overlay_only` consumer identity.
-- [ ] Prove that only exact parser-accepted complete-prefix AST snapshots reach semantic
+- [x] Prove that only exact parser-accepted complete-prefix AST snapshots reach semantic
   admission; incomplete chunks and suites produce no pass decision.
-- [ ] Preserve the current prefix-readiness filter, bounded analyzer session and
+- [x] Preserve the current prefix-readiness filter, bounded analyzer session and
   prepared/COW analyzer capacity as compiler-service optimizations, not counted passes.
-- [ ] Re-run invalid-suffix, earlier-exception, branch-not-taken, cancellation,
+- [x] Re-run invalid-suffix, earlier-exception, branch-not-taken, cancellation,
   freshness/Plan drift and orphan accounting controls.
-- [ ] Verify the formal Guest starts only after final source seal and executes unchanged
+- [x] Verify the formal Guest starts only after final source seal and executes unchanged
   source once.
 
 **Gate P1S:** The unified pass report represents both the current prefix overlay and
@@ -467,7 +481,7 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 1: implement the narrow pure-scalar CSE pass with target-Guest differential controls; defer rather than widen the runtime if the existing patch seam is insufficient.`
+`Phase 2: inspect the frozen-observation substrate against the no-architecture-change rule; implement only if detached per-occurrence materialization and logical receipts already have a narrow owner, otherwise record a precise deferral and continue.`
 
 ## Short `/goal`
 

@@ -66,6 +66,8 @@ memory or capability admission.
 - rejection reason and deterministic outcome order;
 - original/derived source and AST digests;
 - the exact registration-required binding map;
+- logical/physical event counts, result digest or exception class/order;
+- workspace disposition;
 - source/AST growth, preparation bytes and reanalysis counts.
 
 The pipeline defensively copies binding maps and records. It stores no source,

@@ -31,7 +31,11 @@ func TestCurrentPassesRouteThroughTypedStagesWithoutChangingRegistrationIdentity
 	if pipeline.AllOff() {
 		t.Fatal("enabled current passes reported all-off")
 	}
-	first, err := pipeline.RecordPrefixOverlay(input(overlay, passpipeline.OutcomeApplied, ""))
+	firstInput := input(overlay, passpipeline.OutcomeApplied, "")
+	firstInput.LogicalEvents = 1
+	firstInput.PhysicalEvents = 1
+	firstInput.WorkspaceDisposition = "not_owned"
+	first, err := pipeline.RecordPrefixOverlay(firstInput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +55,8 @@ func TestCurrentPassesRouteThroughTypedStagesWithoutChangingRegistrationIdentity
 	}
 	raw, err := json.Marshal(pipeline.Records())
 	if err != nil || !bytes.Contains(raw, []byte(`"schema_version":"pysolate.source-bound-pass-outcome.v1"`)) ||
-		!bytes.Contains(raw, []byte(`"registration_sha256"`)) || bytes.Contains(raw, []byte("source_body")) || bytes.Contains(raw, []byte("workspace_body")) {
+		!bytes.Contains(raw, []byte(`"registration_sha256"`)) || !bytes.Contains(raw, []byte(`"logical_events":1`)) ||
+		!bytes.Contains(raw, []byte(`"workspace_disposition":"not_owned"`)) || bytes.Contains(raw, []byte("source_body")) || bytes.Contains(raw, []byte("workspace_body")) {
 		t.Fatalf("body-safe outcome encoding=%s err=%v", raw, err)
 	}
 }
@@ -165,9 +170,14 @@ func TestPipelineRejectsPassCountOverflowDuplicateBindingDriftAndLimitWidening(t
 		t.Fatal(err)
 	}
 	value := input(overlay, passpipeline.OutcomeApplied, "")
-	delete(value.Bindings, passregistration.OccurrenceID)
+	delete(value.Bindings, passregistration.AnalysisSHA256)
 	if _, err := pipeline.RecordPrefixOverlay(value); !errors.Is(err, passpipeline.ErrBindingMismatch) {
-		t.Fatalf("binding err=%v", err)
+		t.Fatalf("binding drift err=%v", err)
+	}
+	value = input(overlay, passpipeline.OutcomeApplied, "")
+	value.Bindings[passregistration.PassConfigSHA256] = digest('c')
+	if _, err := pipeline.RecordPrefixOverlay(value); !errors.Is(err, passpipeline.ErrBindingMismatch) {
+		t.Fatalf("registration binding drift err=%v", err)
 	}
 }
 
@@ -225,6 +235,14 @@ func input(registration passregistration.Registration, outcome passpipeline.Outc
 	bindings := make(map[passregistration.Binding]string)
 	for index, binding := range registration.RequiredBindings() {
 		switch binding {
+		case passregistration.SourceSHA256:
+			bindings[binding] = digest('1')
+		case passregistration.ASTSHA256:
+			bindings[binding] = digest('2')
+		case passregistration.AnalyzerSHA256:
+			bindings[binding] = registration.AnalyzerSHA256()
+		case passregistration.PassConfigSHA256:
+			bindings[binding] = registration.ConfigSHA256()
 		case passregistration.OccurrenceID:
 			bindings[binding] = "occurrence-0000000000000001"
 		case passregistration.RegionID:

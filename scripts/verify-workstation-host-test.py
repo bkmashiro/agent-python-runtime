@@ -131,11 +131,20 @@ def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: st
             raise ValueError(f"checksum mismatch: {relative}")
 
     result = json.loads(ready_path.read_text())
-    exact_keys = {
+    v1_keys = {
         "schema_version", "source_commit", "source_tree", "builder", "target",
         "suite", "passed", "go_version", "duration_millis",
     }
-    if set(result) != exact_keys or result.get("schema_version") != "pysolate.workstation-host-test.v1":
+    version = result.get("schema_version")
+    if version == "pysolate.workstation-host-test.v1":
+        if set(result) != v1_keys:
+            raise ValueError("invalid Host-test result schema")
+        acceptance_report = False
+    elif version == "pysolate.workstation-host-test.v2":
+        if set(result) != v1_keys | {"acceptance_report"} or not isinstance(result.get("acceptance_report"), bool):
+            raise ValueError("invalid Host-test result schema")
+        acceptance_report = result["acceptance_report"]
+    else:
         raise ValueError("invalid Host-test result schema")
     if not HEX40.fullmatch(str(result.get("source_commit", ""))) or not HEX40.fullmatch(str(result.get("source_tree", ""))):
         raise ValueError("invalid source identity")
@@ -149,7 +158,9 @@ def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: st
         raise ValueError("suite mismatch")
 
     report_path = root / "acceptance-report.json"
-    if result["suite"] == "prepared-family":
+    if acceptance_report != (version == "pysolate.workstation-host-test.v2" and result["suite"] == "prepared-family"):
+        raise ValueError("acceptance-report declaration mismatch")
+    if acceptance_report:
         if not report_path.is_file() or report_path.is_symlink():
             raise ValueError("missing prepared-family acceptance report")
         verify_acceptance_report(report_path, result["source_commit"], result["source_tree"])

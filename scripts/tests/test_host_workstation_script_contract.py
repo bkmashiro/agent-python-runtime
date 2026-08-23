@@ -71,7 +71,8 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
             commit, tree = "a" * 40, "b" * 40
             digest = lambda character: "sha256:" + character * 64
             result = {
-                "schema_version": "pysolate.workstation-host-test.v1",
+                "schema_version": "pysolate.workstation-host-test.v2",
+                "acceptance_report": True,
                 "source_commit": commit,
                 "source_tree": tree,
                 "builder": "gpu31.doc.ic.ac.uk",

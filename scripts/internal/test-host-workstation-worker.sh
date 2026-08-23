@@ -99,7 +99,7 @@ import sys
 output, source_commit, source_tree, suite, passed, duration_millis, go = sys.argv[1:]
 go_version = subprocess.check_output([go, "env", "GOVERSION"], text=True).strip()
 payload = {
-    "schema_version": "pysolate.workstation-host-test.v1",
+    "schema_version": "pysolate.workstation-host-test.v2",
     "source_commit": source_commit,
     "source_tree": source_tree,
     "builder": socket.gethostname(),
@@ -108,6 +108,7 @@ payload = {
     "passed": passed == "true",
     "go_version": go_version,
     "duration_millis": int(duration_millis),
+    "acceptance_report": suite == "prepared-family",
 }
 pathlib.Path(output).write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
 PY

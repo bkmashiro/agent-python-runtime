@@ -1,4 +1,4 @@
-# Correctness-Gated Agent Python Optimizer Autonomous Mega-Goal
+# Correctness-Gated Source-Bound Agent Python Optimizer Autonomous Mega-Goal
 
 > **For Hermes:** This is the execution handoff for the next Pysolate optimizer lane.
 > Read this file and the linked correctness contract fully, inspect live Git state, and
@@ -7,12 +7,13 @@
 > named architecture/evidence gate that requires Yuzhe's decision, an unavailable
 > resource/permission, an unsafe effect boundary, or complete closeout.
 
-**Goal:** Turn Pysolate's existing source-bound semantic analysis, effect-aware Host
-legality, execution-patch path and prepared/private runtime primitives into a small suite
-of real, correctness-gated AST passes for ordinary Agent Python. Reproduce several
-paper-derived optimization kernels as bounded passes while preserving complete-source
-validation, target-CPython behavior, sealed authority, logical effects, workspace
-semantics and fail-closed fallback.
+**Goal:** Turn Pysolate's existing source-bound semantic analysis, streaming-prefix
+overlay, effect-aware Host legality, execution-patch path and prepared/private runtime
+primitives into a small suite of real correctness-gated passes for ordinary Agent
+Python. Reproduce several paper-derived optimization kernels as bounded prefix overlays
+or AST transformations while preserving complete-source validation, target-CPython
+behavior, sealed authority, logical effects, workspace semantics and fail-closed
+fallback.
 
 **Prepared:** 2026-08-23
 
@@ -30,9 +31,9 @@ transformation or source-bound occurrence overlay.
 
 The intended claim is:
 
-> Pysolate expresses several point optimization kernels as guarded transformations over
-> ordinary Agent Python under one source, effect, authority, freshness, workspace,
-> failure and fallback contract.
+> Pysolate expresses several point optimization kernels as guarded source-bound passes
+> over ordinary Agent Python. Prefix overlays and complete-source transformations share
+> one effect, authority, freshness, workspace, failure and fallback contract.
 
 The lane does not claim that schedulers, KV caches, learned planners, model selectors or
 workflow induction are compiler passes.
@@ -67,6 +68,9 @@ workflow induction are compiler passes.
 12. **Performance claims follow correctness.** Deterministic fixtures may establish
     mechanism behavior. Natural-workload speedup requires a frozen workload, baseline,
     metric and matched artifact-backed evidence.
+13. **Streaming and final transforms are distinct stages.** A complete-prefix AST may
+    authorize an overlay or safe physical preparation. Only the sealed complete AST may
+    authorize formal execution or a derived execution patch.
 
 ## Starting facts to verify from live source
 
@@ -118,6 +122,8 @@ Resolve any live drift before freezing new evidence.
 - `canonical_input_specialization`
 - `unreachable_import_elimination`
 - `repository_projection_pushdown`
+- `streaming_pure_region_prepare`
+- `streaming_literal_array_prepare`
 - `literal_array_hoisting`
 - `pure_function_memoization`
 - `loop_invariant_observation`
@@ -136,6 +142,9 @@ correctness after performance work.
 - [ ] Re-read the primary contract, current semantic/pass docs and exact source owners.
 - [ ] Freeze a versioned preregistration for pass identities, outcome classes,
   pass-off/pass-on comparator fields and forbidden claims.
+- [ ] Freeze pass-stage identities for `prefix_overlay`, `hybrid_prepare_patch`,
+  `whole_program_patch` and `multi_program_patch`. Do not force them through one
+  transform callback.
 - [ ] Include invalid final suffix, earlier exception, branch not taken, zero iteration,
   cancellation, Plan drift, freshness drift, privacy/workspace drift, mutable alias,
   unsupported syntax and external-write controls.
@@ -171,6 +180,26 @@ effects or a large optimizer framework.
 has one exact off-state and fails closed. If the third pass requires a broad IR or cannot
 reuse the existing candidate/patch machinery, stop and present the smallest concrete
 seam before adding infrastructure.
+
+## Phase 1S: Unify the existing streaming overlay contract
+
+**Promise:** Make the already implemented semantic pre-dispatch lane a first-class pass
+stage without rewriting unchanged final Python or reviving historical prefix execution.
+
+- [ ] Bind `semantic_pre_dispatch` explicitly to `prefix_overlay` in the pass evidence
+  model while preserving the existing `overlay_only` consumer identity.
+- [ ] Prove that only exact parser-accepted complete-prefix AST snapshots reach semantic
+  admission; incomplete chunks and suites produce no pass decision.
+- [ ] Preserve the current prefix-readiness filter, bounded analyzer session and
+  prepared/COW analyzer capacity as compiler-service optimizations, not counted passes.
+- [ ] Re-run invalid-suffix, earlier-exception, branch-not-taken, cancellation,
+  freshness/Plan drift and orphan accounting controls.
+- [ ] Verify the formal Guest starts only after final source seal and executes unchanged
+  source once.
+
+**Gate P1S:** The unified pass report represents both the current prefix overlay and
+whole-program patch without weakening either contract. No Agent Python prefix executes,
+no write is preissued and no analysis-service optimization is mislabeled as a pass.
 
 ## Phase 2: Effectful CSE for frozen observations
 
@@ -269,6 +298,28 @@ substrate.
 **Gate P6:** Real-Guest fixtures match values and mutation isolation; lifecycle/body
 release gates pass; exact Linux evidence is bound to one source commit/tree before any
 private-COW claim.
+
+## Phase 6S: Streaming preparation promotion
+
+**Promise:** Determine whether an authority-free pure region or bounded literal/array
+construction can be prepared after its complete prefix arrives and consumed only after
+the complete final AST admits the normal execution patch.
+
+- [ ] Freeze positive and negative chunk schedules before timing. Include suffix drift,
+  invalid final syntax, later mutation/dependency, profile/Plan drift, cancellation and
+  preparation completing after finalization.
+- [ ] Reuse the final-source region/array patch contract. Prefix analysis may start
+  physical pure/private work but cannot pre-authorize the final patch.
+- [ ] Invalid, abandoned or changed final source discards preparation and records its
+  physical cost without a logical claim.
+- [ ] Do not execute the visible prefix as Agent Python. Scratch execution, if needed,
+  remains authority-free, output-bounded and separate from the formal Guest.
+- [ ] Measure whether remaining source-generation time overlaps enough preparation cost
+  to justify retaining the hybrid pass.
+
+**Gate P6S:** Retain a hybrid streaming pass only if every semantic/identity/lifecycle
+control passes and at least one preregistered fixture obtains real overlap after analyzer
+and preparation overhead. A negative result leaves complete-source hoisting unchanged.
 
 ## Architecture decision gate: cohort common-prefix factoring
 
@@ -387,10 +438,10 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 0: verify live baseline and freeze the correctness/pass study before implementation.`
+`Phase 0: verify live baseline and freeze the source-bound pass stages and correctness study before implementation.`
 
 ## Short `/goal`
 
 ```text
-/goal Read docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md fully and execute it from live Git state in /Users/yuzhe/projects/agent-python-runtime. Continue through verified AST-pass, exact-Guest, evidence, independent-review, signed-commit and push slices; stop only at a named architecture/safety/resource decision gate or complete closeout. Preserve complete-source validation, Host-owned authority/effect truth, private workspace semantics and no post-effect replay. Do not modify thesis/slides, use paid cloud or Docker, or manually trigger CI.
+/goal Read docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md fully and execute it from live Git state in /Users/yuzhe/projects/agent-python-runtime. Continue through verified source-bound-pass, exact-Guest, evidence, independent-review, signed-commit and push slices; stop only at a named architecture/safety/resource decision gate or complete closeout. Preserve complete-source validation, Host-owned authority/effect truth, private workspace semantics and no post-effect replay. Do not modify thesis/slides, use paid cloud or Docker, or manually trigger CI.
 ```

@@ -1,10 +1,11 @@
-# Correctness-gated Agent Python passes
+# Correctness-gated source-bound Agent Python passes
 
 Status: **design contract for the next optimizer lane**
 
 This note defines what Pysolate may call an optimization pass and how that pass
 inherits the runtime's existing source, effect, authority, workspace and terminal
-boundaries. It does not claim that the candidate passes below are implemented.
+boundaries. The optimizer has both streaming-prefix overlays and complete-source
+execution patches. It does not claim that the candidate passes below are implemented.
 
 ## Current safety boundary
 
@@ -72,9 +73,10 @@ pretending it can roll them back later.
 ## What counts as a pass
 
 A Pysolate optimization pass must transform one or more bounded target-CPython ASTs,
-or produce a source-bound overlay that changes how exact AST occurrences are lowered.
-A pass is not a scheduler, cache-retention policy, model selector, learned planner or
-backend placement rule.
+or produce a source-bound overlay that changes how exact AST occurrences are prepared
+or lowered. Complete-source execution patches are one pass kind, not the definition of
+the whole optimizer. A pass is not a scheduler, cache-retention policy, model selector,
+learned planner or backend placement rule.
 
 Every registered pass needs:
 
@@ -93,11 +95,46 @@ The current registry has two concrete consumers:
 
 | Pass | Consumer | Current role |
 |---|---|---|
-| `semantic_pre_dispatch` | `overlay_only` | Wraps an exact occurrence so it may claim one qualified Host-prepared observation. |
+| `semantic_pre_dispatch` | `overlay_only` | Uses a verified complete-prefix AST to prepare one qualified Host observation; the unchanged final source may claim it only at the exact occurrence. |
 | `prepared_pure_region` | `execution_patch` | Replaces one admitted scalar region with a one-shot materialization helper. |
 
 The registry is intentionally not yet a general pass manager. A third real
 transformation should validate the shared shape before the project generalizes it.
+
+## Stage model
+
+Streaming does not require Pysolate to choose between “compiler pass” and “runtime
+optimization.” It introduces a second compiler stage:
+
+```text
+append-only source stream
+  -> complete-prefix AST snapshots
+  -> prefix overlay / safe physical preparation
+  -> final source seal and complete AST
+  -> execution-patch passes
+  -> exact target-Guest compile
+  -> one formal execution that claims admitted overlays
+```
+
+An arbitrary chunk or syntactically incomplete suite is not an AST snapshot and cannot
+admit a pass. The prefix analyzer sees only source that the exact target parser accepts
+as the visible prefix. A prefix overlay may start qualified physical work, but it does
+not execute the prefix as the Agent program or commit a logical effect. The complete AST
+remains mandatory before formal execution and before any derived execution patch.
+
+This yields four pass forms:
+
+| Pass form | Input | Output | Example |
+|---|---|---|---|
+| prefix overlay | one verified complete-prefix AST plus Host contracts | occurrence-bound preparation decision | `semantic_pre_dispatch` |
+| hybrid preparation pass | prefix AST prepares pure/private work; final AST revalidates it | final execution patch or discard | future streaming pure-region/array preparation |
+| whole-program execution patch | validated complete AST | bounded derived AST | `prepared_pure_region` |
+| multi-program execution patch | several validated complete ASTs | shared pure prefix plus private residual ASTs | future `cohort_common_prefix` |
+
+The current prefix readiness filter, bounded analyzer session and prepared/COW analyzer
+capacity reduce compiler-analysis overhead. They do not change or overlay Agent AST
+occurrences, so they are compiler-service optimizations rather than passes in the paper
+count.
 
 ## Correctness obligations
 
@@ -184,6 +221,8 @@ pass, not the complete paper system.
 | `literal_array_hoisting` | Replace admitted immutable literal/array construction with bounded prepared materialization. |
 | `pure_function_memoization` | Lower admitted direct pure calls to content-addressed one-shot materialization. |
 | `loop_invariant_observation` | Preserve zero-iteration and first-exception timing while avoiding repeated frozen-root reads. |
+| `streaming_pure_region_prepare` | Prepare an authority-free pure region after its prefix closes, then admit or discard it against the complete final AST. |
+| `streaming_literal_array_prepare` | Begin bounded literal/array preparation from a closed prefix and consume it only through a final-source-bound patch. |
 | `sibling_observation_cse` | Rewrite several sibling ASTs to consume one immutable physical observation under separate logical identities. |
 | `cohort_common_prefix` | Factor a shared pure prefix from several ASTs and lower residual programs to private Prepared Family consumers. |
 
@@ -233,8 +272,9 @@ The useful claim is not that every agent-system optimization is a compiler pass.
 
 > Several point systems optimize repeated observations, independent calls, batched
 > operations and reusable computation. Pysolate expresses the semantics-preserving
-> kernels as guarded transformations over ordinary Agent Python, under one source,
-> effect, authority, freshness, workspace, failure and fallback contract.
+> kernels as guarded source-bound passes over ordinary Agent Python, spanning prefix
+> overlays and complete-source transformations under one effect, authority, freshness,
+> workspace, failure and fallback contract.
 
 The distinguishing problem is not discovering parallelism or reuse. It is deciding when
 that physical optimization is allowed to occur without changing the original program's

@@ -12,15 +12,15 @@ import (
 
 const OutcomeRecordSchemaVersion = "pysolate.source-bound-pass-outcome.v1"
 
-type Stage string
+type Stage = passregistration.Stage
 type Outcome string
 type RejectionReason string
 
 const (
-	StagePrefixOverlay      Stage = "prefix_overlay"
-	StageHybridPreparePatch Stage = "hybrid_prepare_patch"
-	StageWholeProgramPatch  Stage = "whole_program_patch"
-	StageMultiProgramPatch  Stage = "multi_program_patch"
+	StagePrefixOverlay      = passregistration.StagePrefixOverlay
+	StageHybridPreparePatch = passregistration.StageHybridPreparePatch
+	StageWholeProgramPatch  = passregistration.StageWholeProgramPatch
+	StageMultiProgramPatch  = passregistration.StageMultiProgramPatch
 
 	OutcomeApplied               Outcome = "applied"
 	OutcomeDiscarded             Outcome = "discarded"
@@ -45,11 +45,6 @@ var (
 	reasonPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	tokenPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$`)
 )
-
-var currentStages = map[passregistration.Name]Stage{
-	passregistration.SemanticPreDispatch: StagePrefixOverlay,
-	passregistration.PreparedPureRegion:  StageWholeProgramPatch,
-}
 
 type Limits struct {
 	MaxPasses            uint32 `json:"max_passes"`
@@ -81,14 +76,13 @@ type Entry struct {
 	Enabled      bool
 }
 
-// CurrentEntry maps a closed pass registration onto its source-bound stage
-// without changing registration identity.
+// CurrentEntry maps a registered pass definition onto its source-bound stage.
 func CurrentEntry(registration passregistration.Registration, enabled bool) (Entry, error) {
 	if registration.IdentitySHA256() == "" {
 		return Entry{}, ErrInvalidConfig
 	}
-	stage, ok := currentStages[registration.Name()]
-	if !ok || !validStageForConsumer(stage, registration.Consumer()) {
+	stage := registration.Stage()
+	if !validStageForConsumer(stage, registration.Consumer()) {
 		return Entry{}, ErrInvalidConfig
 	}
 	return Entry{Registration: registration, Stage: stage, Enabled: enabled}, nil
@@ -162,8 +156,7 @@ func New(entries []Entry, limits Limits) (*Pipeline, error) {
 	}
 	for _, entry := range entries {
 		name := entry.Registration.Name()
-		expectedStage, known := currentStages[name]
-		if name == "" || entry.Registration.IdentitySHA256() == "" || !known || entry.Stage != expectedStage ||
+		if name == "" || entry.Registration.IdentitySHA256() == "" || entry.Stage != entry.Registration.Stage() ||
 			!validStageForConsumer(entry.Stage, entry.Registration.Consumer()) {
 			return nil, ErrStageMismatch
 		}

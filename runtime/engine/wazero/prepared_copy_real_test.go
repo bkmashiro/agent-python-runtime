@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -110,22 +111,33 @@ func runPreparedCopy(t *testing.T, artifact []byte, profile *runtimeconfig.Execu
 	return decoded.Result
 }
 
-func runPreparedEngine(t *testing.T, runner *Engine, runID, code string) json.RawMessage {
-	t.Helper()
+func executePreparedEngine(runner *Engine, runID, code string) (json.RawMessage, error) {
 	request := runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}}}
 	raw, err := runtimeconfig.EncodeRunRequest(request)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	response, err := runner.Run(context.Background(), raw, "")
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	decoded, err := runtimeconfig.DecodeAndValidateRunResponse(request, response)
-	if err != nil || decoded.Status != runtimeconfig.RunResponseOK {
-		t.Fatalf("response=%s err=%v", response, err)
+	if err != nil {
+		return nil, err
 	}
-	return decoded.Result
+	if decoded.Status != runtimeconfig.RunResponseOK {
+		return nil, fmt.Errorf("Guest status is %s", decoded.Status)
+	}
+	return decoded.Result, nil
+}
+
+func runPreparedEngine(t *testing.T, runner *Engine, runID, code string) json.RawMessage {
+	t.Helper()
+	result, err := executePreparedEngine(runner, runID, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 func TestPreparedNumpyPrivateCOWSupportsMultipleLayoutsAndIsolatesMutation(t *testing.T) {
@@ -166,6 +178,34 @@ func TestPreparedNumpyPrivateCOWSupportsMultipleLayoutsAndIsolatesMutation(t *te
 		}
 	}
 
+	for _, fanout := range []int{0, 1, 2, 4} {
+		values := []uint64{uint64(fanout + 1), 20, 30, 40}
+		input := realPreparedInput(t, profile, []uint64{2, 2}, values)
+		if err := runner.PrepareNumpyCOWInput(context.Background(), input); err != nil {
+			t.Fatalf("prepare fanout %d: %v", fanout, err)
+		}
+		var wait sync.WaitGroup
+		errorsByConsumer := make(chan error, fanout)
+		for consumer := 0; consumer < fanout; consumer++ {
+			wait.Add(1)
+			go func(consumer int) {
+				defer wait.Done()
+				result, err := executePreparedEngine(runner, fmt.Sprintf("cow-fanout-%d-%d", fanout, consumer), "result = int(dataset.flat[0])\n")
+				if err == nil && string(result) != fmt.Sprintf("%d", fanout+1) {
+					err = fmt.Errorf("unexpected result %s", result)
+				}
+				errorsByConsumer <- err
+			}(consumer)
+		}
+		wait.Wait()
+		close(errorsByConsumer)
+		for err := range errorsByConsumer {
+			if err != nil {
+				t.Fatalf("fanout %d: %v", fanout, err)
+			}
+		}
+	}
+
 	failedRequest := runtimeconfig.RunRequest{RunID: "cow-error", Code: "raise RuntimeError('fixture')\n", Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}}}
 	raw, err := runtimeconfig.EncodeRunRequest(failedRequest)
 	if err != nil {
@@ -179,7 +219,7 @@ func TestPreparedNumpyPrivateCOWSupportsMultipleLayoutsAndIsolatesMutation(t *te
 	if err != nil || decoded.Status != runtimeconfig.RunResponseError {
 		t.Fatalf("error response=%s err=%v", response, err)
 	}
-	if got := runPreparedEngine(t, runner, "cow-after-error", "result = int(dataset.flat[0])\n"); string(got) != "7" {
+	if got := runPreparedEngine(t, runner, "cow-after-error", "result = int(dataset.flat[0])\n"); string(got) != "5" {
 		t.Fatalf("post-error state=%s", got)
 	}
 }

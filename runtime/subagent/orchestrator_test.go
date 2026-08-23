@@ -308,6 +308,32 @@ func TestAuthorityAdmissionRejectsWideningAndAggregateOvercommitBeforeExecution(
 	}
 }
 
+func TestOrchestratorFreezesChildPlanMap(t *testing.T) {
+	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
+	parentPlan := subagentPlan(t, 4, "workspace.read")
+	childPlan := subagentPlan(t, 2, "workspace.read")
+	widerPlan := subagentPlan(t, 3, "workspace.read", "network.read")
+	plans := map[string]*capability.Plan{childPlan.Identity(): childPlan}
+	orchestrator, err := subagent.New(subagent.Config{
+		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: parentWorkspaceSHA,
+		ParentLineage: parentLineage, MaxFanout: 1, MaxDepth: 1,
+		ParentPlan: parentPlan, ChildPlans: plans, MaxDelegatedCalls: 2,
+		Executor: subagent.ExecutorFunc(func(context.Context, subagent.Invocation) error { return nil }),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plans[childPlan.Identity()] = widerPlan
+	descriptor := childDescriptor("frozen-plan", parentLineage)
+	descriptor.ChildPlanSHA256 = childPlan.Identity()
+	if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
+		t.Fatalf("caller map mutation changed admitted plan: %v", err)
+	}
+	if err := orchestrator.Abort(context.Background(), subagent.ParentCancelled); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAuthorityChildFailureDiscardsReservedPrivateBranch(t *testing.T) {
 	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
 	parentPlan := subagentPlan(t, 1, "workspace.read")

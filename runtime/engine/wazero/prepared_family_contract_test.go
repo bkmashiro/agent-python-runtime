@@ -382,6 +382,45 @@ func TestPreparedFamilyRunnerCloseRetriesDelegateFailure(t *testing.T) {
 	}
 }
 
+func TestPreparedFamilyStateDoesNotAcquireLifecycleBeforeFamilyLock(t *testing.T) {
+	lifecycle, err := newPreparedFamilyLifecycle(1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	family := &PreparedFamily{lifecycle: lifecycle, input: PreparedNumpyInput{identity: digestHex('a')}}
+	family.mu.Lock()
+	started := make(chan struct{})
+	stateDone := make(chan struct{})
+	go func() {
+		close(started)
+		_ = family.State()
+		close(stateDone)
+	}()
+	<-started
+	time.Sleep(10 * time.Millisecond)
+	lifecycleAcquired := make(chan struct{})
+	go func() {
+		lifecycle.mu.Lock()
+		close(lifecycleAcquired)
+	}()
+	select {
+	case <-lifecycleAcquired:
+		lifecycle.mu.Unlock()
+		family.mu.Unlock()
+	case <-time.After(250 * time.Millisecond):
+		family.mu.Unlock()
+		<-lifecycleAcquired
+		lifecycle.mu.Unlock()
+		<-stateDone
+		t.Fatal("State acquired lifecycle before family lock")
+	}
+	select {
+	case <-stateDone:
+	case <-time.After(time.Second):
+		t.Fatal("State did not complete")
+	}
+}
+
 func TestPreparedFamilyCloseRetriesAndRetainsOwnedBytesUntilSuccess(t *testing.T) {
 	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
 	member, _ := lifecycle.reserve()

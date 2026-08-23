@@ -20,7 +20,7 @@ type PreparedRunnerConfig struct {
 	WorkspaceRef     workspace.Ref
 	WorkspaceOwner   string
 	InvocationRef    runtimeconfig.InvocationRef
-	PlanSHA256       string
+	Plan             *capability.Plan
 }
 
 type borrowedCOWPreparedRuntime struct {
@@ -57,36 +57,57 @@ func preparedGrantsSHA256(config runtimeconfig.RunConfig) (string, error) {
 	return digestPreparedBytes(encoded), nil
 }
 
-func (family *PreparedFamily) distinctBrokerFactory(factory BrokerFactory, planSHA256 string) BrokerFactory {
+func prepareFamilyBroker(ctx context.Context, factory BrokerFactory, plan *capability.Plan, executionID string) (*capability.Broker, error) {
 	if factory == nil {
+		return nil, nil
+	}
+	broker, err := factory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if broker == nil || plan == nil || broker.CapabilityPlan() != plan || broker.CapabilityPlanSHA256() != plan.Identity() || broker.RunIdentity() != executionID {
+		return nil, ErrPreparedFamilyDrift
+	}
+	return broker, nil
+}
+
+func (family *PreparedFamily) bindPreparedBroker(broker *capability.Broker, plan *capability.Plan) error {
+	if broker == nil {
 		return nil
 	}
-	return func(ctx context.Context) (*capability.Broker, error) {
-		broker, err := factory(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if broker == nil {
-			return nil, ErrPreparedFamilyConfig
-		}
-		if broker.CapabilityPlanSHA256() != planSHA256 {
-			return nil, ErrPreparedFamilyDrift
-		}
-		family.mu.Lock()
-		defer family.mu.Unlock()
-		if _, exists := family.brokers[broker]; exists {
-			return nil, ErrPreparedFamilyBrokerReuse
-		}
-		family.brokers[broker] = struct{}{}
-		return broker, nil
+	if _, exists := family.brokers[broker]; exists {
+		return ErrPreparedFamilyBrokerReuse
 	}
+	if _, exists := family.plans[plan]; exists {
+		return ErrPreparedFamilyPlanReuse
+	}
+	if family.brokers == nil {
+		family.brokers = make(map[*capability.Broker]struct{})
+	}
+	if family.plans == nil {
+		family.plans = make(map[*capability.Plan]struct{})
+	}
+	family.brokers[broker] = struct{}{}
+	family.plans[plan] = struct{}{}
+	return nil
 }
 
 // NewRunner reserves one member and returns an ordinary single-use Runner surface.
 func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunnerConfig) (enginecontract.Runner, error) {
 	if family == nil || ctx == nil || config.InvocationRef.Validate() != nil || config.RunConfig.Validate() != nil || config.RunConfig.ProgramSurface != runtimeconfig.ProgramSurfaceDirect ||
-		(config.PlanSHA256 != "" && !validPreparedDigest(config.PlanSHA256)) || (config.BrokerFactory != nil) != (config.PlanSHA256 != "") {
+		(config.BrokerFactory != nil) != (config.Plan != nil) {
 		return nil, ErrPreparedFamilyConfig
+	}
+	planSHA256 := ""
+	if config.Plan != nil {
+		planSHA256 = config.Plan.Identity()
+		if !validPreparedDigest(planSHA256) {
+			return nil, ErrPreparedFamilyConfig
+		}
+	}
+	broker, err := prepareFamilyBroker(ctx, config.BrokerFactory, config.Plan, config.InvocationRef.ExecutionID)
+	if err != nil {
+		return nil, err
 	}
 	family.mu.Lock()
 	defer family.mu.Unlock()
@@ -127,7 +148,10 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 	if err != nil || identity != family.identity {
 		return nil, ErrPreparedFamilyDrift
 	}
-	brokerFactory := family.distinctBrokerFactory(config.BrokerFactory, config.PlanSHA256)
+	var brokerFactory BrokerFactory
+	if broker != nil {
+		brokerFactory = func(context.Context) (*capability.Broker, error) { return broker, nil }
+	}
 	factory := Factory{
 		BrokerFactory: brokerFactory, WorkspaceManager: config.WorkspaceManager,
 		WorkspaceRef: config.WorkspaceRef, WorkspaceOwner: config.WorkspaceOwner,
@@ -136,8 +160,13 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 	if err != nil {
 		return nil, err
 	}
+	if err := family.bindPreparedBroker(broker, config.Plan); err != nil {
+		return nil, err
+	}
 	memberID, err := family.lifecycle.reserve()
 	if err != nil {
+		delete(family.brokers, broker)
+		delete(family.plans, config.Plan)
 		return nil, err
 	}
 	var delegate *Engine
@@ -148,14 +177,16 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 	}
 	if err != nil {
 		_ = family.lifecycle.release(memberID)
+		delete(family.brokers, broker)
+		delete(family.plans, config.Plan)
 		return nil, err
 	}
 	runner := newPreparedFamilyRunner(delegate, config.InvocationRef, family.lifecycle, memberID)
 	runner.onTerminal = func(id uint64, runID string, outcome PreparedMemberDisposition, response []byte) {
-		family.recordTerminal(id, runID, outcome, config.PlanSHA256, grantsSHA256, decodeWorkspaceRoot(response))
+		family.recordTerminal(id, runID, outcome, planSHA256, grantsSHA256, decodeWorkspaceRoot(response))
 	}
 	runner.onClose = func(id uint64) {
-		family.recordClose(id, config.PlanSHA256, grantsSHA256)
+		family.recordClose(id, planSHA256, grantsSHA256)
 		if config.WorkspaceManager != nil && config.WorkspaceRef != "" {
 			if info, inspectErr := config.WorkspaceManager.Inspect(config.WorkspaceRef); inspectErr == nil {
 				family.recordWorkspace(id, info.WorkspaceSHA256)
@@ -305,6 +336,7 @@ func (family *PreparedFamily) Close(ctx context.Context) error {
 	family.executionIDs = nil
 	family.workspaceRefs = nil
 	family.brokers = nil
+	family.plans = nil
 	family.closeComplete = true
 	family.mu.Unlock()
 	return nil

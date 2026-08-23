@@ -146,6 +146,11 @@ func New(config Config) (*Orchestrator, error) {
 				return nil, ErrInvalidOrchestrator
 			}
 		}
+		childPlans := make(map[string]*capability.Plan, len(config.ChildPlans))
+		for identity, plan := range config.ChildPlans {
+			childPlans[identity] = plan
+		}
+		config.ChildPlans = childPlans
 	}
 	info, err := config.Manager.Inspect(config.ParentRef)
 	if err != nil || info.WorkspaceSHA256 != config.ParentWorkspaceSHA256 {
@@ -180,6 +185,9 @@ func (orchestrator *Orchestrator) Stage(ctx context.Context, descriptor Descript
 	var reservedCalls uint32
 	if orchestrator.config.ParentPlan != nil {
 		childPlan := orchestrator.config.ChildPlans[descriptor.ChildPlanSHA256]
+		if childPlan == nil || childPlan.Identity() != descriptor.ChildPlanSHA256 {
+			return ErrInvalidDescriptor
+		}
 		decision := capability.CompareDelegation(orchestrator.config.ParentPlan, childPlan)
 		if !decision.Allowed {
 			return errors.Join(ErrAuthorityWidening, errors.New(string(decision.Reason)))

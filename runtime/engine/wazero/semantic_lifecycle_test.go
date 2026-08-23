@@ -77,6 +77,18 @@ func TestSemanticAnalysisSessionRejectsAuthorityBearingEngine(t *testing.T) {
 	}
 }
 
+func TestEngineCloseReleasesPreparedNumpyInput(t *testing.T) {
+	ctx := context.Background()
+	input := &PreparedNumpyInput{descriptorJSON: []byte("descriptor"), body: []byte("prepared-body")}
+	engine := &Engine{runtime: wazerort.NewRuntime(ctx), preparedNumpyInput: input}
+	if err := engine.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if engine.preparedNumpyInput != nil || input.body != nil || input.descriptorJSON != nil {
+		t.Fatalf("prepared input retained after close: engine=%p body=%d descriptor=%d", engine.preparedNumpyInput, len(input.body), len(input.descriptorJSON))
+	}
+}
+
 func TestSemanticAnalysisSessionLeasesEngineClose(t *testing.T) {
 	ctx := context.Background()
 	config := runtimeconfig.DefaultRunConfig()

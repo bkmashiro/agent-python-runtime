@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -36,24 +35,97 @@ func preparedChildDescriptor(id, parentLineage, planSHA256, artifactSHA256, prof
 	}
 }
 
-func TestPreparedFamilyBrokerBindingRejectsPlanDriftAndReuse(t *testing.T) {
-	planA := emptyPreparedPlan(t, 1)
-	planB := emptyPreparedPlan(t, 2)
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "broker-binding", Plan: planA})
+func TestPreparedFamilyRunnerFactoryFreezesAuthorityAndRejectsDescriptorDrift(t *testing.T) {
+	profile := testBoundNumpyProfile(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = profile
+	input := realPreparedInputRaw(t, profile, "<i8", []uint64{1}, make([]byte, 8))
+	identity, err := preparedImageIdentity(config, input, PreparedNumpyABIV1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	family := &PreparedFamily{brokers: make(map[*capability.Broker]struct{})}
-	factory := func(context.Context) (*capability.Broker, error) { return broker, nil }
-	if _, err := family.distinctBrokerFactory(factory, planB.Identity())(context.Background()); !errors.Is(err, ErrPreparedFamilyDrift) {
-		t.Fatalf("plan drift err=%v", err)
-	}
-	bound := family.distinctBrokerFactory(factory, planA.Identity())
-	if _, err := bound(context.Background()); err != nil {
+	lifecycle, err := newPreparedFamilyLifecycle(2, 2)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bound(context.Background()); !errors.Is(err, ErrPreparedFamilyBrokerReuse) {
-		t.Fatalf("reuse err=%v", err)
+	family := &PreparedFamily{
+		imageConfig: config, input: input, identity: identity, lifecycle: lifecycle,
+		brokers: make(map[*capability.Broker]struct{}), plans: make(map[*capability.Plan]struct{}),
+	}
+	managerBase := t.TempDir()
+	if err := os.Chmod(managerBase, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(managerBase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	leftPlan := emptyPreparedPlan(t, 1)
+	leftConfig := cloneFamilyRunConfig(config)
+	leftConfig.CapabilityGrants = map[string]runtimeconfig.CapabilityGrant{"left": {Name: "left"}}
+	left := PreparedChildAuthority{
+		RunConfig: leftConfig, Plan: leftPlan, PrivacyPartition: "private-left",
+		InvocationRef: runtimeconfig.InvocationRef{AgentRunID: "cohort", InvocationID: "inv-left", InvocationAttempt: 1, ExecutionID: "left"},
+	}
+	if _, err := NewPreparedFamilyRunnerFactory(family, manager, "cohort", map[string]PreparedChildAuthority{"left": left, "right": {
+		RunConfig: leftConfig, Plan: leftPlan, PrivacyPartition: "private-right",
+		InvocationRef: runtimeconfig.InvocationRef{AgentRunID: "cohort", InvocationID: "inv-right", InvocationAttempt: 1, ExecutionID: "right"},
+	}}); !errors.Is(err, ErrPreparedFamilyPlanReuse) {
+		t.Fatalf("shared Plan err=%v", err)
+	}
+	factory, err := NewPreparedFamilyRunnerFactory(family, manager, "cohort", map[string]PreparedChildAuthority{"left": left})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leftConfig.CapabilityGrants["left"] = runtimeconfig.CapabilityGrant{Name: "mutated"}
+	if factory.children["left"].RunConfig.CapabilityGrants["left"].Name != "left" {
+		t.Fatal("factory retained caller-owned grants map")
+	}
+	ref := workspace.Ref("workspace-fixture")
+	descriptor := preparedChildDescriptor("left", digestPreparedBytes([]byte("lineage")), leftPlan.Identity(), profile.ArtifactSHA256(), factory.profile)
+	descriptor.PrivacyPartition = "wrong-private"
+	if _, err := factory.NewChildRunner(context.Background(), descriptor, ref); !errors.Is(err, ErrPreparedFamilyDrift) {
+		t.Fatalf("privacy drift err=%v", err)
+	}
+	descriptor.PrivacyPartition = "private-left"
+	descriptor.ChildPlanSHA256 = digestPreparedBytes([]byte("wrong-plan"))
+	if _, err := factory.NewChildRunner(context.Background(), descriptor, ref); !errors.Is(err, ErrPreparedFamilyDrift) {
+		t.Fatalf("Plan drift err=%v", err)
+	}
+}
+
+func TestPreparedFamilyBrokerBindingRejectsPlanDriftAndReuse(t *testing.T) {
+	planA := emptyPreparedPlan(t, 1)
+	planB := emptyPreparedPlan(t, 2)
+	brokerA, err := capability.NewBroker(capability.Config{RunIdentity: "broker-binding", Plan: planA})
+	if err != nil {
+		t.Fatal(err)
+	}
+	factoryA := func(context.Context) (*capability.Broker, error) { return brokerA, nil }
+	if _, err := prepareFamilyBroker(context.Background(), factoryA, planB, "broker-binding"); !errors.Is(err, ErrPreparedFamilyDrift) {
+		t.Fatalf("plan drift err=%v", err)
+	}
+	if _, err := prepareFamilyBroker(context.Background(), factoryA, planA, "other-execution"); !errors.Is(err, ErrPreparedFamilyDrift) {
+		t.Fatalf("run identity drift err=%v", err)
+	}
+	bound, err := prepareFamilyBroker(context.Background(), factoryA, planA, "broker-binding")
+	if err != nil || bound != brokerA {
+		t.Fatalf("bound=%p err=%v", bound, err)
+	}
+	brokerB, err := capability.NewBroker(capability.Config{RunIdentity: "broker-binding-2", Plan: planA})
+	if err != nil {
+		t.Fatal(err)
+	}
+	family := &PreparedFamily{brokers: make(map[*capability.Broker]struct{}), plans: make(map[*capability.Plan]struct{})}
+	if err := family.bindPreparedBroker(brokerA, planA); err != nil {
+		t.Fatal(err)
+	}
+	if err := family.bindPreparedBroker(brokerA, planB); !errors.Is(err, ErrPreparedFamilyBrokerReuse) {
+		t.Fatalf("Broker reuse err=%v", err)
+	}
+	if err := family.bindPreparedBroker(brokerB, planA); !errors.Is(err, ErrPreparedFamilyPlanReuse) {
+		t.Fatalf("Plan reuse err=%v", err)
 	}
 }
 
@@ -215,33 +287,23 @@ func TestPreparedFamilyComposesWithPrivateSubagentBranchesAndAttenuatedPlans(t *
 		t.Fatal(err)
 	}
 
-	var bindingsMu sync.Mutex
-	workspaceBindings := make(map[string]workspace.Ref)
-	brokerBindings := make(map[string]*capability.Broker)
-	factory := subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
-		plan := plans[descriptor.ChildPlanSHA256]
-		memberConfig := imageConfig
-		memberConfig.CapabilityGrants = map[string]runtimeconfig.CapabilityGrant{
-			"grant-" + descriptor.ChildID: {Name: "grant-" + descriptor.ChildID},
-		}
-		broker, brokerErr := capability.NewBroker(capability.Config{RunIdentity: descriptor.ChildID, Plan: plan})
-		if brokerErr != nil {
-			return nil, brokerErr
-		}
-		runner, runnerErr := family.NewRunner(ctx, PreparedRunnerConfig{
-			RunConfig: memberConfig, BrokerFactory: func(context.Context) (*capability.Broker, error) { return broker, nil },
-			WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "cohort-" + descriptor.ChildID,
-			InvocationRef: runtimeconfig.InvocationRef{AgentRunID: "cohort", InvocationID: "inv-" + descriptor.ChildID, InvocationAttempt: 1, ExecutionID: descriptor.ChildID},
-			PlanSHA256:    descriptor.ChildPlanSHA256,
-		})
-		if runnerErr == nil {
-			bindingsMu.Lock()
-			workspaceBindings[descriptor.ChildID] = ref
-			brokerBindings[descriptor.ChildID] = broker
-			bindingsMu.Unlock()
-		}
-		return runner, runnerErr
+	leftConfig := cloneFamilyRunConfig(imageConfig)
+	leftConfig.CapabilityGrants = map[string]runtimeconfig.CapabilityGrant{"grant-left": {Name: "grant-left"}}
+	rightConfig := cloneFamilyRunConfig(imageConfig)
+	rightConfig.CapabilityGrants = map[string]runtimeconfig.CapabilityGrant{"grant-right": {Name: "grant-right"}}
+	factory, err := NewPreparedFamilyRunnerFactory(family, manager, "cohort", map[string]PreparedChildAuthority{
+		"left": {
+			RunConfig: leftConfig, Plan: leftPlan, PrivacyPartition: "private-left",
+			InvocationRef: runtimeconfig.InvocationRef{AgentRunID: "cohort", InvocationID: "inv-left", InvocationAttempt: 1, ExecutionID: "left"},
+		},
+		"right": {
+			RunConfig: rightConfig, Plan: rightPlan, PrivacyPartition: "private-right",
+			InvocationRef: runtimeconfig.InvocationRef{AgentRunID: "cohort", InvocationID: "inv-right", InvocationAttempt: 1, ExecutionID: "right"},
+		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	builder := subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
 		request, err := json.Marshal(runtimeconfig.RunRequest{
 			RunID:  descriptor.ChildID,
@@ -270,13 +332,14 @@ func TestPreparedFamilyComposesWithPrivateSubagentBranchesAndAttenuatedPlans(t *
 	if err != nil || awaited.Completed != 2 {
 		t.Fatalf("awaited=%+v err=%v", awaited, err)
 	}
-	bindingsMu.Lock()
-	leftRef, rightRef := workspaceBindings["left"], workspaceBindings["right"]
-	leftBroker, rightBroker := brokerBindings["left"], brokerBindings["right"]
-	bindingsMu.Unlock()
-	if leftRef == "" || rightRef == "" || leftRef == rightRef || leftBroker == nil || rightBroker == nil || leftBroker == rightBroker {
-		t.Fatalf("workspace/broker bindings left=%q right=%q brokers=%p/%p", leftRef, rightRef, leftBroker, rightBroker)
+	refs := orchestrator.PrivateRefs()
+	family.mu.Lock()
+	brokerCount, planCount := len(family.brokers), len(family.plans)
+	family.mu.Unlock()
+	if len(refs) != 2 || refs[0] == "" || refs[1] == "" || refs[0] == refs[1] || brokerCount != 2 || planCount != 2 {
+		t.Fatalf("workspace/authority bindings refs=%v brokers=%d plans=%d", refs, brokerCount, planCount)
 	}
+	leftRef := refs[0]
 	if _, err := family.NewRunner(context.Background(), PreparedRunnerConfig{
 		RunConfig: imageConfig, InvocationRef: runtimeconfig.InvocationRef{AgentRunID: "cohort", InvocationID: "inv-left", InvocationAttempt: 2, ExecutionID: "new-execution"},
 	}); !errors.Is(err, ErrPreparedFamilyIdentityReuse) {

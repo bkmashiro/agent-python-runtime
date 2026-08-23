@@ -645,6 +645,11 @@ func (engine *Engine) Close(ctx context.Context) error {
 		return err
 	}
 	preparedErr := engine.closePrepared()
+	if engine.preparedNumpyInput != nil {
+		engine.preparedNumpyInput.body = nil
+		engine.preparedNumpyInput.descriptorJSON = nil
+		engine.preparedNumpyInput = nil
+	}
 	runtimeErr := engine.runtime.Close(ctx)
 	var workspaceErr error
 	if engine.workspaceLease != nil {

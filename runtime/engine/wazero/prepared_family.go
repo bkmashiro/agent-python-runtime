@@ -33,6 +33,7 @@ var (
 	ErrPreparedFamilyDrift         = errors.New("prepared family runner is incompatible with its image")
 	ErrPreparedFamilyIdentityReuse = errors.New("prepared family member identity is already bound")
 	ErrPreparedFamilyBrokerReuse   = errors.New("prepared family Broker was reused across members")
+	ErrPreparedFamilyPlanReuse     = errors.New("prepared family Plan object was reused across members")
 )
 
 // PreparedFamilyConfig binds an authority-free image config and finite member bounds.
@@ -117,6 +118,7 @@ type PreparedFamily struct {
 	executionIDs  map[string]struct{}
 	workspaceRefs map[string]struct{}
 	brokers       map[*capability.Broker]struct{}
+	plans         map[*capability.Plan]struct{}
 	closed        bool
 }
 
@@ -147,7 +149,8 @@ func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyC
 		wasm: append([]byte(nil), wasm...), imageConfig: imageConfig, input: input, identity: identity,
 		disposition: disposition, lifecycle: lifecycle, runners: make(map[uint64]*preparedFamilyRunner),
 		invocations: make(map[uint64]runtimeconfig.InvocationRef), records: make(map[uint64]PreparedMemberRecord),
-		invocationIDs: make(map[string]struct{}), executionIDs: make(map[string]struct{}), workspaceRefs: make(map[string]struct{}), brokers: make(map[*capability.Broker]struct{}),
+		invocationIDs: make(map[string]struct{}), executionIDs: make(map[string]struct{}), workspaceRefs: make(map[string]struct{}),
+		brokers: make(map[*capability.Broker]struct{}), plans: make(map[*capability.Plan]struct{}),
 	}
 	if disposition == PreparedDispositionPrivateCOW {
 		parent, err := New(ctx, family.wasm, imageConfig)
@@ -175,13 +178,13 @@ func (family *PreparedFamily) State() PreparedFamilyState {
 	if family == nil || family.lifecycle == nil {
 		return PreparedFamilyState{}
 	}
-	state := family.lifecycle.state()
 	family.mu.Lock()
+	defer family.mu.Unlock()
+	state := family.lifecycle.state()
 	state.FamilySHA256 = family.identity
 	state.InputSHA256 = family.input.identity
 	state.Disposition = family.disposition
 	state.Closed = family.closeComplete
-	family.mu.Unlock()
 	return state
 }
 

@@ -87,11 +87,19 @@ type PreparedRunnerConfig struct {
     WorkspaceRef workspace.Ref
     WorkspaceOwner string
     InvocationRef runtime.InvocationRef
-    PlanSHA256 string
+    Plan *capability.Plan
+}
+
+type PreparedChildAuthority struct {
+    RunConfig runtime.RunConfig
+    InvocationRef runtime.InvocationRef
+    Plan *capability.Plan
+    PrivacyPartition string
 }
 
 func PrepareNumpyFamily(context.Context, []byte, PreparedFamilyConfig, PreparedNumpyInput) (*PreparedFamily, error)
 func (*PreparedFamily) NewRunner(context.Context, PreparedRunnerConfig) (engine.Runner, error)
+func NewPreparedFamilyRunnerFactory(*PreparedFamily, *workspace.Manager, string, map[string]PreparedChildAuthority) (*PreparedFamilyRunnerFactory, error)
 func (*PreparedFamily) State() PreparedFamilyState
 func (*PreparedFamily) Close(context.Context) error
 ```
@@ -101,8 +109,10 @@ The exact exported names may change during implementation, but not these ownersh
 - `PreparedNumpyInput` stores a copied body and copied shape; callers cannot mutate admitted bytes.
 - The canonical preparation engine has no Broker, grants or workspace.
 - `NewRunner` validates compatibility before creating the runner and deep-copies mutable RunConfig members, especially `CapabilityGrants`.
-- Each call receives a fresh Broker factory result and private workspace binding through the existing Engine path.
-- A non-nil Broker factory requires `PlanSHA256`; the produced Broker must report that exact plan identity and must not have appeared in another family member.
+- Each call receives a fresh Broker and private workspace binding through the existing Engine path.
+- A non-nil Broker factory requires the exact sealed `Plan` object. Broker admission occurs before Guest setup and requires that exact Plan pointer, its digest and the member execution identity.
+- Broker and Plan pointers are both unique for the family lifetime. A sealed Plan may be logically equivalent to another member's Plan, but mutable authority is never shared: each member receives a distinct Plan object and Broker.
+- `PreparedFamilyRunnerFactory` is the fail-closed subagent composition seam. It freezes the complete child RunConfig/Invocation/Plan/privacy tuple and rechecks descriptor artifact, profile, Plan and privacy identities before creating a runner.
 - Invocation IDs, execution IDs and non-empty workspace refs are unique for the family lifetime. Closing a member does not make an authority or workspace identity reusable.
 - Terminal records carry only body-free plan/grant/workspace digests. The grant digest is computed from the frozen `CapabilityGrants` snapshot.
 - The wrapper applies its Host-owned `InvocationRef` to the Run context, requires request `run_id == InvocationRef.ExecutionID`, and rejects caller-supplied trusted preparation.
@@ -136,6 +146,8 @@ consumer: new → running → terminal → closed
 - A second or concurrent `Run` returns a stable consumed/busy error and does not enter Guest execution.
 - Runner `Close` before Run retires it; Close during Run waits for that run to terminate through context cancellation rules and is idempotent afterward.
 - Family Close transitions to closing. It rejects while a run is active, invalidates unstarted runners, then releases image/body/runtime resources exactly once.
+- `State`, `NewRunner` and family `Close` use one family-before-lifecycle lock order.
+- Private-copy member close releases the member-owned descriptor/body copy even if the caller retains the closed runner.
 - Failed constructor or attachment paths release every acquired module, temporary workspace, mapping and counter.
 
 ## Physical dispositions

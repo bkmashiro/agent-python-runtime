@@ -164,6 +164,14 @@ func NewBroker(config Config) (*Broker, error) {
 	return broker, nil
 }
 
+// CapabilityPlan returns the immutable sealed Plan bound at Broker construction.
+func (broker *Broker) CapabilityPlan() *Plan {
+	if broker == nil {
+		return nil
+	}
+	return broker.config.Plan
+}
+
 func (broker *Broker) AttachCallLifecycleObserver(observer CallLifecycleObserver) error {
 	if broker == nil || observer == nil {
 		return ErrInvalidBroker

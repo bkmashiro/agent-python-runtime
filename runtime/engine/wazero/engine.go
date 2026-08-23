@@ -45,6 +45,14 @@ type Factory struct {
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
+	binding, err := factory.validatedBinding(config)
+	if err != nil {
+		return nil, err
+	}
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions)
+}
+
+func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*workspaceBinding, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -77,7 +85,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if factory.PreparedRegions != nil && (!config.Mechanisms.SemanticAnalysis || config.Mechanisms.Streaming) {
 		return nil, errors.New("prepared region table requires non-streaming semantic analysis")
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions)
+	return binding, nil
 }
 
 var _ enginecontract.Factory = Factory{}

@@ -2,9 +2,9 @@
 
 > **For Hermes:** Execute this plan continuously in `/Users/yuzhe/projects/agent-python-runtime` only after Yuzhe starts it with `/goal`. Read the whole file and live Git/code first. Prefer the thinnest executable vertical slice, use RED -> GREEN -> refactor for behavior, keep the Runtime free of scheduling policy, make coherent signed commits, push after verified phases, and continue without waiting after ordinary checkpoints. Stop only at a named architecture, resource, permission or safety gate below.
 
-**Status:** Active since 2026-08-23. Gates P0 and P1 passed; Phase 2 implementation is active.
+**Status:** Active since 2026-08-23. Gates P0 through P2 passed; Phase 3 implementation is active.
 
-**Current execution pointer:** Phase 2, replacing the fixed base64-derived Linux dataset image with the descriptor-bound binary preparation path.
+**Current execution pointer:** Phase 3, implementing the bounded Host-owned prepared family and single-use runner factory from the observed RED test.
 
 **Goal:** Turn Pysolate's completed fixed prepared-NumPy/private-COW research prototype into a small reusable Host-owned prepared runtime family. One sealed package/data image may create many fresh single-use Python runners with different program source, Run identity, authority and private workspace while preserving mutation, failure and teardown isolation. Prove the product contract with deterministic acceptance fixtures on macOS and Linux. Do not invent a real evaluation dataset or reopen paper economics.
 
@@ -373,16 +373,16 @@ Tasks:
 
 Tasks:
 
-- [ ] RED-test at least three supported layout/body identities and two distinct bodies with the same layout.
-- [ ] Generalize the bounded trusted loader logic from validated Host layout/name, but move the body itself through a one-shot Host-internal preparation transfer rather than embedding multi-MiB base64 in the promoted trusted source. Never concatenate unvalidated model source into trusted preparation.
-- [ ] Keep `PreparedRegionTable` as its existing scalar one-Run claim table; do not repurpose its 256-byte payload as the family data plane or a cross-Run store.
-- [ ] Bind the sealed image to exact artifact, profile/import closure, layout, body digest, variable name and preparation implementation version.
-- [ ] Retain one immutable package parent, derive each data image from a fresh parent clone and never derive input B from input A's data image.
-- [ ] Create N=0/1/2/4 fresh private consumers from one data image.
-- [ ] Verify module-global, ndarray mutation, `/tmp`, stdout/stderr and response isolation.
-- [ ] Verify concurrent clone creation, child cancellation, failed instantiate/restore, close during active run and complete final unmap/FD cleanup.
-- [ ] Record body-free mapped/private-copy counters and family/consumer dispositions. Do not run or report a performance campaign.
-- [ ] Keep the historical fixed prepared-data probes passing or adapt them through an exact compatibility wrapper without changing retained evidence files.
+- [x] RED-test at least three supported layout/body identities and two distinct bodies with the same layout.
+- [x] Generalize the bounded trusted loader logic from validated Host layout/name, but move the body itself through a one-shot Host-internal preparation transfer rather than embedding multi-MiB base64 in the promoted trusted source. Never concatenate unvalidated model source into trusted preparation.
+- [x] Keep `PreparedRegionTable` as its existing scalar one-Run claim table; do not repurpose its 256-byte payload as the family data plane or a cross-Run store.
+- [x] Bind the sealed image to exact artifact, profile/import closure, layout, body digest, variable name and preparation implementation version.
+- [x] Retain one immutable package parent, derive each data image from a fresh parent clone and never derive input B from input A's data image.
+- [x] Create N=0/1/2/4 fresh private consumers from one data image.
+- [x] Verify module-global, ndarray mutation, `/tmp`, stdout/stderr and response isolation.
+- [x] Verify concurrent clone creation, child cancellation, failed instantiate/restore, close during active run and complete final unmap/FD cleanup.
+- [x] Record body-free mapped/private-copy counters and family/consumer dispositions. Do not run or report a performance campaign.
+- [x] Keep the historical fixed prepared-data probes passing or adapt them through an exact compatibility wrapper without changing retained evidence files.
 
 **Gate P2:** On gpu31, more than one shape/dtype/body works through the same bounded implementation; all consumers are fresh and private; the promoted prepare source and all response/evidence documents are body-free; staging is released after seal; no per-consumer body copy is reported for the COW lane; copy-reference results match. If safe generalization requires a generic allocator, mutable shared handle, Wazero fork or Python heap transfer, stop and present a compute-only fixed-profile alternative rather than building it automatically.
 
@@ -577,6 +577,8 @@ When stopped, record the exact blocker, modified files, tests, Git status and sm
 - 2026-08-23: Phase 0 passed. `docs/prepared-family-v1.md` freezes the copy-or-broker binary ingress, Wazero-owned family API, per-consumer authority adapter, lifecycle, compatibility identity, portable/COW dispositions and terminal-record owner. Commit `81c941e3` added the bounded clean-HEAD gpu31 Host gate; its baseline suite passed on gpu31 with Go 1.25. The exact `numpy-core` artifact qualified all fourteen bounded dtype strings by reconstruction. Guest ABI and family/config/lifecycle tests were observed RED before implementation (`PYTHONPATH=guest/bootstrap python3.13 -m unittest guest.tests.test_prepared_numpy_input guest.tests.test_source_contract`; `go test ./runtime/engine/wazero -run TestPrepared -count=1`).
 
 - 2026-08-23: Phase 1 passed. Commit `7cc7139f` added the bounded Guest binary ndarray ingress, immutable copied Host input, config freezing, single-use lifecycle/adapter tests and portable private-copy real-Guest oracle. Local Go/vet and 272 Python tests passed. The exact clean-HEAD gpu31 `prepared-family` suite built `numpy-core`, ran the real three-layout private-copy/mutation-isolation test plus focused race/vet gates, and returned `passed=true` in 531651 ms. Multi-MiB bodies remained outside Run/Broker/evidence JSON.
+
+- 2026-08-23: Phase 2 passed. Commits `4b0bf7dd` and `5ae60911` replaced the fixed base64-derived dataset path with generic descriptor-bound binary preparation over one immutable package parent. Local full Go/vet, focused race and Python gates passed. Two exact clean-HEAD gpu31 suites built the new Guest and proved three dtypes/layouts, same-layout different bodies, mutation/error isolation and N=0/1/2/4 fanout; the final run returned `passed=true` in 578088 ms. Existing fixed probes and body-free image state remained intact; no performance campaign ran.
 
 ## Short prompt to start this mega-goal
 

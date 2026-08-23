@@ -43,10 +43,13 @@ type preparedFamilyMember struct {
 }
 
 type PreparedFamilyState struct {
-	Created  uint32
-	Active   uint32
-	Terminal uint32
-	Closed   bool
+	Created      uint32
+	Active       uint32
+	Terminal     uint32
+	Closed       bool
+	FamilySHA256 string
+	InputSHA256  string
+	Disposition  PreparedPhysicalDisposition
 }
 
 type preparedFamilyLifecycle struct {
@@ -179,10 +182,12 @@ type preparedFamilyRunner struct {
 	lifecycle  *preparedFamilyLifecycle
 	memberID   uint64
 
-	mu      sync.Mutex
-	closed  bool
-	running bool
-	done    chan struct{}
+	mu         sync.Mutex
+	closed     bool
+	running    bool
+	done       chan struct{}
+	onTerminal func(uint64, string, PreparedMemberDisposition, []byte)
+	onClose    func(uint64)
 }
 
 func newPreparedFamilyRunner(delegate enginecontract.Runner, invocation runtimeconfig.InvocationRef, lifecycle *preparedFamilyLifecycle, memberID uint64) *preparedFamilyRunner {
@@ -220,13 +225,21 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 	}
 	response, runErr := runner.delegate.Run(runContext, request, "")
 	disposition := PreparedMemberOK
-	if runErr != nil {
+	if runErr == nil {
+		decodedResponse, responseErr := runtimeconfig.DecodeAndValidateRunResponse(decoded, response)
+		if responseErr != nil || decodedResponse.Status == runtimeconfig.RunResponseError {
+			disposition = PreparedMemberGuestError
+		}
+	} else {
 		disposition = PreparedMemberGuestError
 		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) || ctx.Err() != nil {
 			disposition = PreparedMemberCancelled
 		}
 	}
 	_ = runner.lifecycle.finish(runner.memberID, disposition)
+	if runner.onTerminal != nil {
+		runner.onTerminal(runner.memberID, decoded.RunID, disposition, response)
+	}
 	runner.finishRun()
 	return response, runErr
 }
@@ -267,6 +280,9 @@ func (runner *preparedFamilyRunner) Close(ctx context.Context) error {
 	runner.mu.Unlock()
 	retireErr := runner.lifecycle.retire(runner.memberID)
 	closeErr := runner.delegate.Close(ctx)
+	if runner.onClose != nil {
+		runner.onClose(runner.memberID)
+	}
 	return errors.Join(retireErr, closeErr)
 }
 

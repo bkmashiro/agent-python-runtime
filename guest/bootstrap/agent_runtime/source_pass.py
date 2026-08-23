@@ -107,7 +107,7 @@ def _pure_scalar_cse(source):
         first_name, first_value = first
         first_result = _int64_value(first_value, scalar_values)
         if first_result is _MISSING:
-            scalar_values.pop(first_name, None)
+            scalar_values.clear()
             index += 1
             continue
         after_first = dict(scalar_values)

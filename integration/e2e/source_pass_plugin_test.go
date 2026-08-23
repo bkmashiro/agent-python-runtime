@@ -62,7 +62,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 5, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +112,22 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	selfReferenceResult, err := decodeSuccessfulGuestResult(selfReference.Payload)
 	if err != nil || string(selfReferenceResult) != `[2,3]` {
 		t.Fatalf("self-reference result=%s err=%v", selfReferenceResult, err)
+	}
+	unknownCallRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID:  "source-pass-plugin-unknown-call",
+		Code:   "def mutate():\n    global seed\n    seed = 2\nseed = 1\nx = mutate()\nseed = seed * seed\nb = seed * seed\nresult = [seed, b]\n",
+		Inputs: json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknownCall, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, unknownCallRequest)
+	if err != nil || unknownCall.Applied || unknownCall.Patch.Status != "not_applicable" {
+		t.Fatalf("unknown-call execution=%+v err=%v", unknownCall, err)
+	}
+	unknownCallResult, err := decodeSuccessfulGuestResult(unknownCall.Payload)
+	if err != nil || string(unknownCallResult) != `[4,16]` {
+		t.Fatalf("unknown-call result=%s err=%v", unknownCallResult, err)
 	}
 	baselineResult, err := decodeSuccessfulGuestResult(baseline)
 	if err != nil {

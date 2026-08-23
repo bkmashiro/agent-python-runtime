@@ -69,6 +69,20 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(emit_source_pass_patch_request_json(request(source)))
         self.assertEqual("not_applicable", patch["status"])
 
+    def test_unknown_call_clears_known_dependency_values(self):
+        source = (
+            "def mutate():\n"
+            "    global seed\n"
+            "    seed = 2\n"
+            "seed = 1\n"
+            "x = mutate()\n"
+            "seed = seed * seed\n"
+            "b = seed * seed\n"
+            "result = [seed, b]\n"
+        )
+        patch = json.loads(emit_source_pass_patch_request_json(request(source)))
+        self.assertEqual("not_applicable", patch["status"])
+
     def test_utf8_identifier_is_a_valid_reuse_target(self):
         source = "seed = 1\né = seed + 1\nê = seed + 1\nresult = [é, ê]\n"
         raw = emit_source_pass_patch_request_json(request(source))

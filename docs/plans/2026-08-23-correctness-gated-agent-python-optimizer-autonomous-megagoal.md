@@ -265,6 +265,12 @@ no write is preissued and no analysis-service optimization is mislabeled as a pa
 trace and terminal/workspace state. Every adversarial row rejects or matches unchanged
 source. No external write path can construct a qualified CSE decision.
 
+**Decision:** **Deferred.** The sealed capability contract fixes coalescing to
+`forbidden`, live workspace reads have no frozen-root identity and the Broker has no
+per-occurrence logical/physical split. Implementing the pass would change the
+capability lifecycle; see
+[`optimizer-deferred-pass-decisions-v1.md`](../research/optimizer-deferred-pass-decisions-v1.md).
+
 ## Phase 3: Repository projection pushdown
 
 **Promise:** Reduce Host-to-Guest bytes for a coding-agent read pattern under one exact,
@@ -282,6 +288,10 @@ versioned rewrite law.
 **Gate P3:** One real coding fixture reduces transferred bytes under exact semantic
 parity. If the existing capability surface cannot express an exact law without a broad
 new API, record the no-go and continue without projection pushdown.
+
+**Decision:** **Deferred.** The workspace surface has no versioned range/line law and
+the source rewrite requires the same deferred execution-patch selector as Phase 1.
+Adding an unused projection capability would only widen the product surface.
 
 ## Phase 4: Ordered read-only batch fusion
 
@@ -302,6 +312,10 @@ physical batch while retaining per-item logical behavior.
 **Gate P4:** Batch-positive fixtures reduce Host crossings and preserve complete logical
 trace. Partial-failure evidence is typed and no stateful capability is admitted.
 
+**Decision:** **Deferred.** One Broker call currently owns one operation index and one
+receipt. A physical batch cannot represent the original ordered logical calls without
+a new Broker item lifecycle and source-patch lowering.
+
 ## Phase 5: Independent read parallelization
 
 **Promise:** Parallelize only calls whose external execution is safe even when an earlier
@@ -320,6 +334,10 @@ source-order call later fails.
 read-only coordinate shows reduced critical path after pass/analyzer/Host overhead. A
 negative economics result retains the semantic mechanism only if it has independent
 value and low maintenance cost.
+
+**Decision:** **Deferred.** The synchronous Guest/Broker path has no bounded helper for
+source-order exception selection, sibling cancellation and late/orphan accounting.
+Adding it would create an intra-program concurrent execution subsystem.
 
 ## Phase 6: Prepared literal and array hoisting
 
@@ -340,6 +358,10 @@ substrate.
 **Gate P6:** Real-Guest fixtures match values and mutation isolation; lifecycle/body
 release gates pass; exact Linux evidence is bound to one source commit/tree before any
 private-COW claim.
+
+**Decision:** **Deferred.** Prepared NumPy ingress installs a private global, but
+removing the original constructor still requires the deferred final-source patch seam.
+The closed Prepared Family data plane and COW claims remain unchanged.
 
 ## Phase 6S: Streaming preparation promotion
 
@@ -363,6 +385,10 @@ the complete final AST admits the normal execution patch.
 control passes and at least one preregistered fixture obtains real overlap after analyzer
 and preparation overhead. A negative result leaves complete-source hoisting unchanged.
 
+**Decision:** **Deferred with Phase 6.** Streaming preparation cannot be promoted
+without an admitted complete-source array patch. Starting speculative work now would
+add lifecycle without a legal final consumer.
+
 ## Architecture decision gate: cohort common-prefix factoring
 
 After P6, inspect whether several sibling ASTs expose a useful common pure prefix that
@@ -383,6 +409,10 @@ If none is required, proceed with one bounded multi-AST `cohort_common_prefix` f
 Otherwise record `Deferred` with the exact incompatible assumption, leave Prepared
 Family unchanged and continue to Phase 7.
 
+**Decision:** **Deferred.** Existing authored residual programs can consume Prepared
+Family globals, but factoring arbitrary sibling sources requires a multi-program patch.
+No shared heap, Plan/Broker reuse, scheduler or workspace publication is introduced.
+
 ## Phase 7: Thin pass composition
 
 **Promise:** Compose proven passes without building a second compiler.
@@ -401,6 +431,11 @@ Family unchanged and continue to Phase 7.
 **Gate P7:** Pass order is deterministic; stale-analysis, authority-widening and
 pass-order mutation tests fail closed; all-off execution remains byte/trace compatible
 with the ordinary path.
+
+**Decision:** **Deferred beyond the v0 shell.** Only two passes are retained, so the
+three-pass abstraction gate is not met. Current closed stage routing, deterministic
+outcome order, stage-confusion rejection and all-off behavior remain the complete
+manager surface.
 
 ## Phase 8: Agentic coding workload evidence
 
@@ -481,7 +516,7 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 2: inspect the frozen-observation substrate against the no-architecture-change rule; implement only if detached per-occurrence materialization and logical receipts already have a narrow owner, otherwise record a precise deferral and continue.`
+`Phase 8: freeze and run evidence only for the retained semantic_pre_dispatch and prepared_pure_region mechanisms; record authored opportunity/prevalence and exact parity without attributing deferred-pass speedups.`
 
 ## Short `/goal`
 

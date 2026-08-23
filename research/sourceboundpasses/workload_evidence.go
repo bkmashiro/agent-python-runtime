@@ -11,6 +11,7 @@ import (
 
 const AuthoredWorkloadEvidenceSchemaVersion = "pysolate.source-bound-pass-authored-workload-evidence.v1"
 const authoredWorkloadEvidenceClassification = "AUTHORED_EXACT_GUEST_STRUCTURAL_CENSUS_NOT_END_TO_END_PERFORMANCE_EVIDENCE"
+const authoredWorkloadEvidenceElementLimit uint32 = 256
 const authoredPreparedStatus = "candidate_census_only_not_formally_executed"
 const authoredAllAdmittedStatus = "not_applicable_without_shared_fixture"
 
@@ -105,8 +106,8 @@ func BuildAuthoredWorkloadEvidence(build AuthoredWorkloadEvidenceBuild) (Authore
 	for index, input := range build.Rows {
 		registered := build.Preregistration.Cases[index]
 		if input.ID != registered.ID || input.SourceSHA256 != registered.SourceSHA256 || !validWorkloadDigest(input.ASTSHA256) ||
-			!validWorkloadDigest(input.AnalyzerSHA256) || input.LocallyReusableRegions > input.CandidateRegions ||
-			input.SemanticAdmitted+input.SemanticRejected != input.CallSites {
+			!validWorkloadDigest(input.AnalyzerSHA256) || !validAuthoredWorkloadCounts(input.CandidateRegions, input.LocallyReusableRegions,
+			input.CallSites, input.SemanticAdmitted, input.SemanticRejected) {
 			return AuthoredWorkloadEvidence{}, ErrInvalidAuthoredWorkloadEvidence
 		}
 		rows[index] = AuthoredWorkloadEvidenceRow{
@@ -155,7 +156,7 @@ func (value AuthoredWorkloadEvidence) Validate() error {
 		expected := expectedCases[index]
 		if row.ID != expected.ID || row.Category != expected.Category || row.SourceSHA256 != expected.SourceSHA256 ||
 			!validWorkloadDigest(row.ASTSHA256) || !validWorkloadDigest(row.AnalyzerSHA256) ||
-			row.LocallyReusableRegions > row.CandidateRegions || row.SemanticAdmitted+row.SemanticRejected != row.CallSites ||
+			!validAuthoredWorkloadCounts(row.CandidateRegions, row.LocallyReusableRegions, row.CallSites, row.SemanticAdmitted, row.SemanticRejected) ||
 			row.PreparedStatus != authoredPreparedStatus || row.AllAdmittedStatus != authoredAllAdmittedStatus {
 			return ErrInvalidAuthoredWorkloadEvidence
 		}
@@ -192,6 +193,12 @@ func authoredExpectedPreregistrationSHA256() string {
 		return ""
 	}
 	return digestWorkloadSource(string(raw) + "\n")
+}
+
+func validAuthoredWorkloadCounts(candidateRegions, locallyReusableRegions, callSites, semanticAdmitted, semanticRejected uint32) bool {
+	return candidateRegions <= authoredWorkloadEvidenceElementLimit && locallyReusableRegions <= candidateRegions &&
+		callSites <= authoredWorkloadEvidenceElementLimit && semanticAdmitted <= authoredWorkloadEvidenceElementLimit &&
+		semanticRejected <= authoredWorkloadEvidenceElementLimit && uint64(semanticAdmitted)+uint64(semanticRejected) == uint64(callSites)
 }
 
 func EncodeAuthoredWorkloadEvidence(value AuthoredWorkloadEvidence) ([]byte, error) {

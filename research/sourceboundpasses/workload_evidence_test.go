@@ -88,6 +88,35 @@ func TestAuthoredWorkloadEvidenceRejectsSelfConsistentFrozenFieldDrift(t *testin
 	}
 }
 
+func TestBuildAuthoredWorkloadEvidenceRejectsOverflowAndAnalyzerBoundDrift(t *testing.T) {
+	preregistration := AuthoredWorkloadPreregistrationV1()
+	rows := make([]AuthoredWorkloadEvidenceInput, len(preregistration.Cases))
+	for index, item := range preregistration.Cases {
+		rows[index] = AuthoredWorkloadEvidenceInput{ID: item.ID, SourceSHA256: item.SourceSHA256, ASTSHA256: digestWorkloadSource(item.ID + "-ast"), AnalyzerSHA256: digestWorkloadSource("analyzer")}
+	}
+	build := AuthoredWorkloadEvidenceBuild{
+		Preregistration: preregistration, PreregistrationSHA256: expectedAuthoredWorkloadPreregistrationSHA256(t),
+		ArtifactSourceCommit: "0123456789abcdef0123456789abcdef01234567",
+		ArtifactSHA256:       digestWorkloadSource("artifact"), ArtifactManifestSHA256: digestWorkloadSource("manifest"),
+		HarnessSourceCommit: "89abcdef0123456789abcdef0123456789abcdef", CapabilityPlanSHA256: digestWorkloadSource("plan"),
+		ExecutionProfileSHA256: digestWorkloadSource("profile"), Rows: rows,
+	}
+
+	build.Rows[0].SemanticAdmitted = ^uint32(0)
+	build.Rows[0].SemanticRejected = 1
+	if _, err := BuildAuthoredWorkloadEvidence(build); err == nil {
+		t.Fatal("accepted overflowing semantic decision counts")
+	}
+
+	build.Rows[0] = AuthoredWorkloadEvidenceInput{
+		ID: preregistration.Cases[0].ID, SourceSHA256: preregistration.Cases[0].SourceSHA256,
+		ASTSHA256: digestWorkloadSource("A01-ast"), AnalyzerSHA256: digestWorkloadSource("analyzer"), CandidateRegions: 257,
+	}
+	if _, err := BuildAuthoredWorkloadEvidence(build); err == nil {
+		t.Fatal("accepted analyzer-bound drift")
+	}
+}
+
 func expectedAuthoredWorkloadPreregistrationSHA256(t *testing.T) string {
 	t.Helper()
 	raw, err := EncodeAuthoredWorkloadPreregistration(AuthoredWorkloadPreregistrationV1())

@@ -33,7 +33,7 @@ with:
 - artifact source tree: `0a87b3ac43cb9b12093a0b512fe513f811250606`;
 - NumPy-core artifact: `sha256:5381f601e88c8d196d1069de15629267a783372fe5ee7bb8ae786fdf48e2210e`;
 - artifact manifest: `sha256:060182e507a69ac38a1b148a377f03366edb1a7cac7d5e81f77783e522f456b6`;
-- harness source: `7114598360b192d7e669b93cc3237e79d073e936`;
+- harness source: `5b8329cf32a1320f17df185de32205391072da4d`;
 - one sealed Plan, execution profile and in-memory workspace for all six cases.
 
 The bounded gpu31 build completed in 474,863 ms. The census found:

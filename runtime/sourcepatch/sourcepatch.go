@@ -13,10 +13,13 @@ import (
 )
 
 const (
-	SchemaVersion                                   = "pysolate.source-pass-patch.v1"
-	PureScalarCSEName         passregistration.Name = "pure_scalar_cse"
-	PureScalarCSEVersion                            = "pysolate.pure-scalar-cse-pass.v1"
-	PureScalarCSEConfigSHA256                       = "sha256:b5bf35fb21f37dabf3b63a92026ce9192d7f7106e73c5533744bc5653df9c48e"
+	SchemaVersion                                    = "pysolate.source-pass-patch.v1"
+	PureScalarCSEName          passregistration.Name = "pure_scalar_cse"
+	PureScalarCSEVersion                             = "pysolate.pure-scalar-cse-pass.v1"
+	PureScalarCSEConfigSHA256                        = "sha256:b5bf35fb21f37dabf3b63a92026ce9192d7f7106e73c5533744bc5653df9c48e"
+	PureScalarFoldName         passregistration.Name = "pure_scalar_fold"
+	PureScalarFoldVersion                            = "pysolate.pure-scalar-fold-pass.v1"
+	PureScalarFoldConfigSHA256                       = "sha256:21fd8ed45356fe42c788e176fd0a5bdd61fe14c6375091bf030857e031403ebd"
 )
 
 var (
@@ -53,6 +56,10 @@ type PureScalarCSE struct {
 	registration passregistration.Registration
 }
 
+type PureScalarFold struct {
+	registration passregistration.Registration
+}
+
 func NewPureScalarCSE(analyzerSHA256 string) (PureScalarCSE, error) {
 	definition, err := passregistration.Define(
 		PureScalarCSEName, PureScalarCSEVersion, passregistration.StageWholeProgramPatch,
@@ -72,13 +79,40 @@ func (pass PureScalarCSE) Registration() passregistration.Registration {
 	return pass.registration
 }
 
+func NewPureScalarFold(analyzerSHA256 string) (PureScalarFold, error) {
+	definition, err := passregistration.Define(
+		PureScalarFoldName, PureScalarFoldVersion, passregistration.StageWholeProgramPatch,
+		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+	)
+	if err != nil {
+		return PureScalarFold{}, err
+	}
+	registration, err := definition.Register(analyzerSHA256, PureScalarFoldConfigSHA256)
+	if err != nil {
+		return PureScalarFold{}, err
+	}
+	return PureScalarFold{registration: registration}, nil
+}
+
+func (pass PureScalarFold) Registration() passregistration.Registration {
+	return pass.registration
+}
+
+func (pass PureScalarFold) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
+	return transform(ctx, transformer, source, pass.registration, PureScalarFoldName)
+}
+
 func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
-	if ctx == nil || transformer == nil || source == "" || pass.registration.Name() != PureScalarCSEName {
+	return transform(ctx, transformer, source, pass.registration, PureScalarCSEName)
+}
+
+func transform(ctx context.Context, transformer Transformer, source string, registration passregistration.Registration, expectedName passregistration.Name) (Patch, error) {
+	if ctx == nil || transformer == nil || source == "" || registration.Name() != expectedName {
 		return Patch{}, ErrInvalidPatch
 	}
 	request, err := json.Marshal(Request{
-		PassName: pass.registration.Name(), PassVersion: pass.registration.Version(),
-		RegistrationSHA256: pass.registration.IdentitySHA256(), Source: source,
+		PassName: registration.Name(), PassVersion: registration.Version(),
+		RegistrationSHA256: registration.IdentitySHA256(), Source: source,
 	})
 	if err != nil {
 		return Patch{}, err
@@ -88,7 +122,7 @@ func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer
 		return Patch{}, err
 	}
 	patch, err := Decode(payload)
-	if err != nil || patch.Validate(source, pass.registration) != nil {
+	if err != nil || patch.Validate(source, registration) != nil {
 		return Patch{}, ErrInvalidPatch
 	}
 	return patch, nil

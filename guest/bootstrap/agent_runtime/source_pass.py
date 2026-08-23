@@ -10,6 +10,8 @@ from .semantic import MAX_SCALAR_OPERATORS, MAX_SOURCE_BYTES
 PATCH_SCHEMA_VERSION = "pysolate.source-pass-patch.v1"
 PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
+PURE_SCALAR_FOLD = "pure_scalar_fold"
+PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _PATCH_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
@@ -144,17 +146,57 @@ def _pure_scalar_cse(source):
     return tree, derived_source, len(replacements)
 
 
+def _pure_scalar_fold(source):
+    if not isinstance(source, str) or not source or len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
+        raise ValueError("invalid source pass input")
+    tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    scalar_values = {}
+    replacements = []
+    for statement in tree.body:
+        assignment = _simple_assignment(statement)
+        if assignment is None:
+            scalar_values.clear()
+            continue
+        name, value = assignment
+        result = _int64_value(value, scalar_values)
+        if result is _MISSING:
+            scalar_values.clear()
+            continue
+        scalar_values[name] = result
+        if not isinstance(value, ast.BinOp):
+            continue
+        start, end = _span_offsets(source, value)
+        replacement = repr(result).encode("ascii")
+        if len(replacement) <= end - start:
+            replacements.append((start, end, replacement + b" " * (end - start - len(replacement))))
+
+    if not replacements:
+        return tree, "", 0
+    derived = bytearray(source.encode("utf-8"))
+    for start, end, replacement in reversed(replacements):
+        derived[start:end] = replacement
+    derived_source = derived.decode("utf-8")
+    ast.parse(derived_source, filename="<agent-run>", mode="exec")
+    return tree, derived_source, len(replacements)
+
+
+_TRANSFORMS = {
+    (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
+    (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
+}
+
+
 def emit_source_pass_patch_request_json(request_json):
     request = _decode(request_json, _REQUEST_KEYS)
+    transform = _TRANSFORMS.get((request["pass_name"], request["pass_version"]))
     if (
-        request["pass_name"] != PURE_SCALAR_CSE
-        or request["pass_version"] != PURE_SCALAR_CSE_VERSION
+        transform is None
         or not isinstance(request["registration_sha256"], str)
         or _DIGEST.fullmatch(request["registration_sha256"]) is None
         or not isinstance(request["source"], str)
     ):
         raise ValueError("unsupported source pass")
-    original_tree, derived_source, replacement_count = _pure_scalar_cse(request["source"])
+    original_tree, derived_source, replacement_count = transform(request["source"])
     applied = replacement_count > 0
     derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec") if applied else None
     patch = {

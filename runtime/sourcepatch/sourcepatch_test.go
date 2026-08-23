@@ -49,3 +49,15 @@ func TestPureScalarCSEIsAStaticWholeProgramPlugin(t *testing.T) {
 		t.Fatalf("request=%+v patch=%+v", transformer.request, patch)
 	}
 }
+
+func TestPureScalarFoldIsAStaticWholeProgramPlugin(t *testing.T) {
+	pass, err := NewPureScalarFold(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := pass.Registration()
+	if registration.Name() != PureScalarFoldName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		registration.Consumer() != passregistration.ExecutionPatch {
+		t.Fatalf("registration=%+v", registration)
+	}
+}

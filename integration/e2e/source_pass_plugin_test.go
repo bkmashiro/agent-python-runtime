@@ -195,3 +195,128 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	sort.Slice(treatmentNanos, func(i, j int) bool { return treatmentNanos[i] < treatmentNanos[j] })
 	t.Logf("synthetic pure_scalar_cse nanos: baseline=%v treatment=%v medians=%d/%d", baselineNanos, treatmentNanos, baselineNanos[1], treatmentNanos[1])
 }
+
+func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactDigest := sha256.Sum256(artifact)
+	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
+	allowedImports := []string{"json"}
+	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: semanticTestDigest('8'),
+		ImportRoots: allowedImports, QualifiedImportRoots: allowedImports,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.ExecutionProfile = &profile
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	engine := trustedSemanticRunner(t, runner)
+
+	pass, err := sourcepatch.NewPureScalarFold(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := passplugin.New(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(sourcepatch.PureScalarFoldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
+		MaxRequests: 3, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close(context.Background())
+
+	source := "seed = 7\nfolded = seed * seed + 3\nresult = folded\n"
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "pure-scalar-fold-e2e", Code: source, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := runner.Run(context.Background(), request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, err := registry.Execute(context.Background(), sourcepatch.PureScalarFoldName, session, engine, request)
+	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 1 {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	baselineResult, err := decodeSuccessfulGuestResult(baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derivedResult, err := decodeSuccessfulGuestResult(execution.Payload)
+	if err != nil || string(derivedResult) != `52` || !reflect.DeepEqual(baselineResult, derivedResult) {
+		t.Fatalf("baseline=%s derived=%s err=%v", baselineResult, derivedResult, err)
+	}
+
+	negativeSource := "def mutate():\n    global seed\n    seed = 2\nseed = 1\nmutate()\nfolded = seed + 1\nresult = folded\n"
+	negativeRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "pure-scalar-fold-negative", Code: negativeSource, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	negative, err := registry.Execute(context.Background(), sourcepatch.PureScalarFoldName, session, engine, negativeRequest)
+	if err != nil || negative.Applied || negative.Patch.Status != "not_applicable" {
+		t.Fatalf("negative execution=%+v err=%v", negative, err)
+	}
+	negativeResult, err := decodeSuccessfulGuestResult(negative.Payload)
+	if err != nil || string(negativeResult) != `3` {
+		t.Fatalf("negative result=%s err=%v", negativeResult, err)
+	}
+
+	expression := strings.TrimSuffix(strings.Repeat("1 + ", 200), " + ")
+	benchmarkSource := "folded = " + expression + "\nresult = folded\n"
+	benchmarkPatch, err := registry.Transform(context.Background(), sourcepatch.PureScalarFoldName, session, benchmarkSource)
+	if err != nil || !benchmarkPatch.Applied() {
+		t.Fatalf("benchmark patch=%+v err=%v", benchmarkPatch, err)
+	}
+	benchmarkRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "pure-scalar-fold-benchmark", Code: benchmarkSource, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineNanos := make([]int64, 3)
+	treatmentNanos := make([]int64, 3)
+	for index := range baselineNanos {
+		started := time.Now()
+		baseline, err = runner.Run(context.Background(), benchmarkRequest, "")
+		baselineNanos[index] = time.Since(started).Nanoseconds()
+		if err != nil {
+			t.Fatal(err)
+		}
+		started = time.Now()
+		derived, runErr := engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, pass.Registration())
+		treatmentNanos[index] = time.Since(started).Nanoseconds()
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		baselineResult, err = decodeSuccessfulGuestResult(baseline)
+		if err != nil {
+			t.Fatal(err)
+		}
+		derivedResult, err = decodeSuccessfulGuestResult(derived)
+		if err != nil || !reflect.DeepEqual(baselineResult, derivedResult) {
+			t.Fatalf("benchmark baseline=%s derived=%s err=%v", baselineResult, derivedResult, err)
+		}
+	}
+	sort.Slice(baselineNanos, func(i, j int) bool { return baselineNanos[i] < baselineNanos[j] })
+	sort.Slice(treatmentNanos, func(i, j int) bool { return treatmentNanos[i] < treatmentNanos[j] })
+	t.Logf("synthetic pure_scalar_fold nanos: baseline=%v treatment=%v medians=%d/%d", baselineNanos, treatmentNanos, baselineNanos[1], treatmentNanos[1])
+}

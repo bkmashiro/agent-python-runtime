@@ -37,7 +37,11 @@ func TestRegistryDispatchesSourcePatchAndKeepsExistingAdapters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := New(semanticAdapter, preparedAdapter, cse)
+	fold, err := sourcepatch.NewPureScalarFold(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := New(semanticAdapter, preparedAdapter, cse, fold)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +57,9 @@ func TestRegistryDispatchesSourcePatchAndKeepsExistingAdapters(t *testing.T) {
 	}
 	if plugin, ok := registry.Lookup(passregistration.PreparedPureRegion); !ok || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
 		t.Fatalf("prepared plugin=%v ok=%v", plugin, ok)
+	}
+	if plugin, ok := registry.Lookup(sourcepatch.PureScalarFoldName); !ok || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
+		t.Fatalf("fold plugin=%v ok=%v", plugin, ok)
 	}
 	if _, err := registry.Transform(context.Background(), passregistration.SemanticPreDispatch, nil, "result = 1\n"); err != ErrUnsupportedStage {
 		t.Fatalf("semantic transform error=%v", err)

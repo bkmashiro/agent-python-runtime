@@ -12,11 +12,11 @@ def digest(character):
     return "sha256:" + character * 64
 
 
-def request(source):
+def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-scalar-cse-pass.v1"):
     return json.dumps(
         {
-            "pass_name": "pure_scalar_cse",
-            "pass_version": "pysolate.pure-scalar-cse-pass.v1",
+            "pass_name": pass_name,
+            "pass_version": pass_version,
             "registration_sha256": digest("a"),
             "source": source,
         },
@@ -26,6 +26,58 @@ def request(source):
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_pure_scalar_fold_replaces_known_total_expression(self):
+        source = "seed = 7\nfolded = seed * seed + 3\nresult = folded\n"
+        raw = emit_source_pass_patch_request_json(request(
+            source,
+            "pure_scalar_fold",
+            "pysolate.pure-scalar-fold-pass.v1",
+        ))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(1, patch["replacement_count"])
+        self.assertEqual(len(source.encode()), len(patch["derived_source"].encode()))
+        self.assertIn("folded = 52", patch["derived_source"])
+        tree = validate_source_pass_execution_request(source, raw)
+        namespace = {}
+        exec(compile(tree, "<agent-run>", "exec"), namespace, namespace)
+        self.assertEqual(52, namespace["result"])
+
+    def test_pure_scalar_fold_preserves_self_reassignment_values(self):
+        source = "a = 1\na = a + 1\nb = a + 1\nresult = [a, b]\n"
+        raw = emit_source_pass_patch_request_json(request(
+            source,
+            "pure_scalar_fold",
+            "pysolate.pure-scalar-fold-pass.v1",
+        ))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(2, patch["replacement_count"])
+        tree = validate_source_pass_execution_request(source, raw)
+        original_namespace = {}
+        derived_namespace = {}
+        exec(source, original_namespace, original_namespace)
+        exec(compile(tree, "<agent-run>", "exec"), derived_namespace, derived_namespace)
+        self.assertEqual([2, 3], original_namespace["result"])
+        self.assertEqual(original_namespace["result"], derived_namespace["result"])
+
+    def test_pure_scalar_fold_rejects_partial_or_effectful_expression(self):
+        cases = [
+            "value = 1 // 0\nresult = value\n",
+            "value = work()\nresult = value\n",
+            "seed = []\nvalue = seed + seed\nresult = value\n",
+            "seed = 1\nmutate()\nvalue = seed + 1\nresult = value\n",
+            "value = 9223372036854775807 + 1\nresult = value\n",
+        ]
+        for source in cases:
+            with self.subTest(source=source):
+                patch = json.loads(emit_source_pass_patch_request_json(request(
+                    source,
+                    "pure_scalar_fold",
+                    "pysolate.pure-scalar-fold-pass.v1",
+                )))
+                self.assertEqual("not_applicable", patch["status"])
+
     def test_pure_scalar_cse_reuses_adjacent_expression_without_shifting_lines(self):
         source = "seed = 7\nleft = seed * seed + 3\nright = seed * seed + 3\nresult = [left, right]\n"
         raw = emit_source_pass_patch_request_json(request(source))

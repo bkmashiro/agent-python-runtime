@@ -305,11 +305,22 @@ func TestPreparedFamilyComposesWithPrivateSubagentBranchesAndAttenuatedPlans(t *
 	if err := family.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	report, err := family.AcceptanceReport(
-		"cccccccccccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddddddddd", joined.SelectedRoot.WorkspaceSHA256,
-	)
+	sourceCommit := os.Getenv("PYSOLATE_PREPARED_FAMILY_SOURCE_COMMIT")
+	if sourceCommit == "" {
+		sourceCommit = "cccccccccccccccccccccccccccccccccccccccc"
+	}
+	sourceTree := os.Getenv("PYSOLATE_PREPARED_FAMILY_SOURCE_TREE")
+	if sourceTree == "" {
+		sourceTree = "dddddddddddddddddddddddddddddddddddddddd"
+	}
+	report, err := family.AcceptanceReport(sourceCommit, sourceTree, joined.SelectedRoot.WorkspaceSHA256)
 	if err != nil || bytes.Contains(report, []byte(`"body"`)) || bytes.Contains(report, []byte(`"response"`)) {
 		t.Fatalf("acceptance report=%s err=%v", report, err)
+	}
+	if output := os.Getenv("PYSOLATE_PREPARED_FAMILY_REPORT"); output != "" {
+		if err := os.WriteFile(output, append(report, '\n'), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	selectedInfo, err := manager.Inspect(joined.SelectedRoot.Ref())
 	if err != nil || selectedInfo.WorkspaceSHA256 != joined.SelectedRoot.WorkspaceSHA256 {

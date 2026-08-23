@@ -73,6 +73,9 @@ set +e
       AGENT_RUNTIME_SOURCE_TREE="$source_tree" \
       ./guest/build/build-guest.sh
       export AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime-numpy-core.wasm"
+      export PYSOLATE_PREPARED_FAMILY_SOURCE_COMMIT="$source_commit"
+      export PYSOLATE_PREPARED_FAMILY_SOURCE_TREE="$source_tree"
+      export PYSOLATE_PREPARED_FAMILY_REPORT="$output/acceptance-report.json"
       "$GOROOT/bin/go" test ./runtime/engine/... ./runtime/numpycodec ./runtime/workspace ./runtime/subagent -count=1
       "$GOROOT/bin/go" test -race ./runtime/engine/... ./runtime/workspace ./runtime/subagent -count=1
       "$GOROOT/bin/go" vet ./runtime/engine/... ./runtime/numpycodec ./runtime/workspace ./runtime/subagent
@@ -110,6 +113,8 @@ pathlib.Path(output).write_text(json.dumps(payload, sort_keys=True, separators=(
 PY
 (
   cd "$output"
-  sha256sum RESULT.READY test.log > SHA256SUMS
+  evidence=(RESULT.READY test.log)
+  if [[ -f acceptance-report.json ]]; then evidence+=(acceptance-report.json); fi
+  sha256sum "${evidence[@]}" > SHA256SUMS
 )
 exit "$test_status"

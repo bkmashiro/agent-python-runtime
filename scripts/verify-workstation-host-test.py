@@ -11,6 +11,8 @@ import pathlib
 import re
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
 SUITES = {"baseline", "prepared-family"}
 
@@ -44,6 +46,57 @@ def write_checksums(root: pathlib.Path) -> None:
     files = sorted(evidence_files(root))
     lines = [f"{file_digest(root / relative)}  {relative}" for relative in files]
     (root / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+
+
+def verify_acceptance_report(path: pathlib.Path, source_commit: str, source_tree: str) -> None:
+    report = json.loads(path.read_text())
+    exact_keys = {
+        "schema_version", "source_commit", "source_tree", "artifact_sha256",
+        "execution_profile_sha256", "input_sha256", "family_sha256",
+        "physical_disposition", "created", "terminal", "selected_root_sha256", "members",
+    }
+    if set(report) != exact_keys or report.get("schema_version") != "pysolate.prepared-family-acceptance.v1":
+        raise ValueError("invalid prepared-family acceptance report schema")
+    if report.get("source_commit") != source_commit or report.get("source_tree") != source_tree:
+        raise ValueError("prepared-family report source mismatch")
+    for key in ("artifact_sha256", "execution_profile_sha256", "input_sha256", "family_sha256", "selected_root_sha256"):
+        if not DIGEST.fullmatch(str(report.get(key, ""))):
+            raise ValueError(f"invalid prepared-family report digest: {key}")
+    if report.get("physical_disposition") not in {"private_copy", "private_cow", "ordinary_fresh"}:
+        raise ValueError("invalid prepared-family report disposition")
+    members = report.get("members")
+    if not isinstance(members, list) or report.get("created") != len(members) or report.get("terminal") != len(members):
+        raise ValueError("invalid prepared-family report member counts")
+    member_keys = {
+        "schema_version", "family_sha256", "input_sha256", "member_id", "run_id",
+        "agent_run_id", "turn_seq", "output_item_seq", "segment_seq", "invocation_id",
+        "invocation_attempt", "execution_id", "plan_sha256", "grants_sha256",
+        "physical_disposition", "outcome", "final_workspace_sha256",
+    }
+    observed_roots: set[str] = set()
+    observed_members: set[int] = set()
+    for member in members:
+        if not isinstance(member, dict) or set(member) != member_keys:
+            raise ValueError("invalid prepared-family member schema")
+        if member.get("schema_version") != "pysolate.prepared-family-member.v1" or member.get("family_sha256") != report["family_sha256"] or member.get("input_sha256") != report["input_sha256"] or member.get("physical_disposition") != report["physical_disposition"]:
+            raise ValueError("prepared-family member identity drift")
+        member_id = member.get("member_id")
+        if not isinstance(member_id, int) or member_id <= 0 or member_id in observed_members:
+            raise ValueError("invalid or duplicate prepared-family member")
+        observed_members.add(member_id)
+        for key in ("agent_run_id", "invocation_id", "execution_id"):
+            if not IDENTIFIER.fullmatch(str(member.get(key, ""))):
+                raise ValueError(f"invalid prepared-family member identifier: {key}")
+        if member.get("run_id") != member.get("execution_id") or not isinstance(member.get("invocation_attempt"), int) or member["invocation_attempt"] <= 0:
+            raise ValueError("invalid prepared-family execution join")
+        for key in ("plan_sha256", "grants_sha256", "final_workspace_sha256"):
+            if not DIGEST.fullmatch(str(member.get(key, ""))):
+                raise ValueError(f"invalid prepared-family member digest: {key}")
+        if member.get("outcome") != "ok":
+            raise ValueError("Host acceptance report contains non-success member")
+        observed_roots.add(member["final_workspace_sha256"])
+    if report["selected_root_sha256"] not in observed_roots:
+        raise ValueError("prepared-family selected root was not observed")
 
 
 def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: str | None = None, suite: str | None = None) -> dict[str, object]:
@@ -94,6 +147,14 @@ def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: st
         raise ValueError("unexpected builder or target")
     if result.get("suite") not in SUITES or (suite is not None and result["suite"] != suite):
         raise ValueError("suite mismatch")
+
+    report_path = root / "acceptance-report.json"
+    if result["suite"] == "prepared-family":
+        if not report_path.is_file() or report_path.is_symlink():
+            raise ValueError("missing prepared-family acceptance report")
+        verify_acceptance_report(report_path, result["source_commit"], result["source_tree"])
+    elif report_path.exists():
+        raise ValueError("unexpected prepared-family acceptance report")
     if result.get("passed") is not True:
         raise ValueError("Host-test suite did not pass")
     if not isinstance(result.get("go_version"), str) or not re.fullmatch(r"go1\.25(?:\.[0-9]+)?", result["go_version"]):

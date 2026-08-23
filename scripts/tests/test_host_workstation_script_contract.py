@@ -64,6 +64,49 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
             (root / "extra").write_text("not covered\n")
             with self.assertRaisesRegex(ValueError, "exact evidence file set"):
                 verifier.verify(root, commit, tree, "baseline")
+    def test_verifier_accepts_prepared_family_report_and_rejects_source_drift(self) -> None:
+        verifier = load_verifier()
+        with tempfile.TemporaryDirectory() as raw:
+            root = pathlib.Path(raw)
+            commit, tree = "a" * 40, "b" * 40
+            digest = lambda character: "sha256:" + character * 64
+            result = {
+                "schema_version": "pysolate.workstation-host-test.v1",
+                "source_commit": commit,
+                "source_tree": tree,
+                "builder": "gpu31.doc.ic.ac.uk",
+                "target": "linux/amd64",
+                "suite": "prepared-family",
+                "passed": True,
+                "go_version": "go1.25.0",
+                "duration_millis": 1,
+            }
+            member = {
+                "schema_version": "pysolate.prepared-family-member.v1",
+                "family_sha256": digest("f"), "input_sha256": digest("b"), "member_id": 1,
+                "run_id": "child", "agent_run_id": "parent", "turn_seq": 0,
+                "output_item_seq": 0, "segment_seq": 0, "invocation_id": "invocation",
+                "invocation_attempt": 1, "execution_id": "child", "plan_sha256": digest("c"),
+                "grants_sha256": digest("d"), "physical_disposition": "private_copy",
+                "outcome": "ok", "final_workspace_sha256": digest("e"),
+            }
+            report = {
+                "schema_version": "pysolate.prepared-family-acceptance.v1",
+                "source_commit": commit, "source_tree": tree, "artifact_sha256": digest("a"),
+                "execution_profile_sha256": digest("1"), "input_sha256": digest("b"),
+                "family_sha256": digest("f"), "physical_disposition": "private_copy",
+                "created": 1, "terminal": 1, "selected_root_sha256": digest("e"), "members": [member],
+            }
+            (root / "RESULT.READY").write_text(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")
+            (root / "test.log").write_text("ok\n")
+            (root / "acceptance-report.json").write_text(json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n")
+            verifier.write_checksums(root)
+            verifier.verify(root, commit, tree, "prepared-family")
+            report["source_tree"] = "c" * 40
+            (root / "acceptance-report.json").write_text(json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n")
+            verifier.write_checksums(root)
+            with self.assertRaisesRegex(ValueError, "report source mismatch"):
+                verifier.verify(root, commit, tree, "prepared-family")
 
 
 if __name__ == "__main__":

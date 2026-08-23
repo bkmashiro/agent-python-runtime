@@ -50,7 +50,12 @@ type PreparedMemberRecord struct {
 	InputSHA256          string                      `json:"input_sha256"`
 	MemberID             uint64                      `json:"member_id"`
 	RunID                string                      `json:"run_id,omitempty"`
+	AgentRunID           string                      `json:"agent_run_id"`
+	TurnSeq              uint32                      `json:"turn_seq"`
+	OutputItemSeq        uint32                      `json:"output_item_seq"`
+	SegmentSeq           uint32                      `json:"segment_seq"`
 	InvocationID         string                      `json:"invocation_id"`
+	InvocationAttempt    uint32                      `json:"invocation_attempt"`
 	ExecutionID          string                      `json:"execution_id"`
 	PlanSHA256           string                      `json:"plan_sha256,omitempty"`
 	GrantsSHA256         string                      `json:"grants_sha256"`
@@ -61,15 +66,19 @@ type PreparedMemberRecord struct {
 
 // Validate rejects incomplete or body-bearing-by-extension terminal identities.
 func (record PreparedMemberRecord) Validate() error {
+	invocation := runtimeconfig.InvocationRef{
+		AgentRunID: record.AgentRunID, TurnSeq: record.TurnSeq, OutputItemSeq: record.OutputItemSeq, SegmentSeq: record.SegmentSeq,
+		InvocationID: record.InvocationID, InvocationAttempt: record.InvocationAttempt, ExecutionID: record.ExecutionID,
+	}
 	if record.SchemaVersion != "pysolate.prepared-family-member.v1" ||
 		!validPreparedDigest(record.FamilySHA256) || !validPreparedDigest(record.InputSHA256) ||
-		record.MemberID == 0 || record.InvocationID == "" || record.ExecutionID == "" || !validPreparedDigest(record.GrantsSHA256) ||
+		record.MemberID == 0 || invocation.Validate() != nil || !validPreparedDigest(record.GrantsSHA256) ||
 		(record.PhysicalDisposition != PreparedDispositionPrivateCopy && record.PhysicalDisposition != PreparedDispositionPrivateCOW && record.PhysicalDisposition != PreparedDispositionOrdinaryFresh) {
 		return ErrPreparedFamilyConfig
 	}
 	switch record.Outcome {
 	case PreparedMemberOK, PreparedMemberGuestError, PreparedMemberCancelled, PreparedMemberTimeout:
-		if record.RunID == "" {
+		if record.RunID == "" || record.RunID != record.ExecutionID {
 			return ErrPreparedFamilyConfig
 		}
 	case PreparedMemberClosedUnrun:

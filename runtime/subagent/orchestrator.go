@@ -264,13 +264,11 @@ func (orchestrator *Orchestrator) Await(ctx context.Context) (AwaitResult, error
 	children := orderedChildren(orchestrator.children)
 	orchestrator.mu.Unlock()
 	if err := waitChildren(ctx, children); err != nil {
-		orchestrator.failAwait(children)
-		return AwaitResult{}, err
+		return AwaitResult{}, errors.Join(err, orchestrator.failAwait(children))
 	}
 	for _, work := range children {
 		if work.err != nil {
-			orchestrator.failAwait(children)
-			return AwaitResult{}, errors.Join(ErrChildExecution, work.err)
+			return AwaitResult{}, errors.Join(ErrChildExecution, work.err, orchestrator.failAwait(children))
 		}
 	}
 	orchestrator.mu.Lock()
@@ -279,11 +277,11 @@ func (orchestrator *Orchestrator) Await(ctx context.Context) (AwaitResult, error
 	return AwaitResult{ChildCount: uint32(len(children)), Completed: uint32(len(children)), Timeline: timeline(children)}, nil
 }
 
-func (orchestrator *Orchestrator) failAwait(children []*child) {
+func (orchestrator *Orchestrator) failAwait(children []*child) error {
 	orchestrator.mu.Lock()
 	orchestrator.terminal = true
 	orchestrator.mu.Unlock()
-	orchestrator.cancelAndDiscard(children)
+	return orchestrator.cancelAndDiscard(children)
 }
 
 func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID string) (JoinResult, error) {
@@ -292,24 +290,18 @@ func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID stri
 		return JoinResult{}, err
 	}
 	if err := waitChildren(ctx, children); err != nil {
-		orchestrator.cancelAndDiscard(children)
-		return JoinResult{}, err
+		return JoinResult{}, errors.Join(err, orchestrator.cancelAndDiscard(children))
 	}
 	for _, work := range children {
 		if work.err != nil {
-			orchestrator.cancelAndDiscard(children)
-			return JoinResult{}, ErrChildExecution
+			return JoinResult{}, errors.Join(ErrChildExecution, work.err, orchestrator.cancelAndDiscard(children))
 		}
 	}
 	roots := make(map[string]workspace.Root, len(children))
 	for _, work := range children {
 		root, sealErr := work.branch.Seal(orchestrator.config.ParentWorkspaceSHA256)
 		if sealErr != nil {
-			for _, sealed := range roots {
-				_ = orchestrator.config.Manager.Destroy(sealed.Ref())
-			}
-			orchestrator.cancelAndDiscard(children)
-			return JoinResult{}, sealErr
+			return JoinResult{}, errors.Join(sealErr, destroyRoots(orchestrator.config.Manager, roots), orchestrator.cancelAndDiscard(children))
 		}
 		roots[work.descriptor.ChildID] = root
 	}
@@ -317,7 +309,7 @@ func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID stri
 	result := JoinResult{
 		SelectedChildID: selectedChildID, SelectedRoot: selected,
 		ChildCount: uint32(len(children)), Completed: uint32(len(children)), Timeline: timeline(children),
-		ReachableRoots: 1, DiscardedRoots: uint32(len(children) - 1), ReservedCalls: orchestrator.reservedCalls,
+		ReachableRoots: 1, ReservedCalls: orchestrator.reservedCalls,
 	}
 	for _, root := range roots {
 		result.ChangedBytes += root.ChangedBytes
@@ -326,10 +318,7 @@ func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID stri
 		}
 		info, inspectErr := orchestrator.config.Manager.Inspect(root.Ref())
 		if inspectErr != nil {
-			for _, sealed := range roots {
-				_ = orchestrator.config.Manager.Destroy(sealed.Ref())
-			}
-			return JoinResult{}, inspectErr
+			return JoinResult{}, errors.Join(inspectErr, destroyRoots(orchestrator.config.Manager, roots))
 		}
 		result.MaterializedBytes += info.TotalBytes
 	}
@@ -337,9 +326,12 @@ func (orchestrator *Orchestrator) Seal(ctx context.Context, selectedChildID stri
 		if childID == selectedChildID {
 			continue
 		}
+		if err := orchestrator.config.Manager.Destroy(root.Ref()); err != nil {
+			return JoinResult{}, errors.Join(err, destroyRoots(orchestrator.config.Manager, roots))
+		}
 		result.DiscardedRefs = append(result.DiscardedRefs, root.Ref())
-		_ = orchestrator.config.Manager.Destroy(root.Ref())
 	}
+	result.DiscardedRoots = uint32(len(result.DiscardedRefs))
 	sort.Slice(result.DiscardedRefs, func(left, right int) bool { return result.DiscardedRefs[left] < result.DiscardedRefs[right] })
 	return result, nil
 }
@@ -372,7 +364,7 @@ const (
 )
 
 func (orchestrator *Orchestrator) Abort(ctx context.Context, disposition ParentDisposition) error {
-	if orchestrator == nil || (disposition != ParentInvalid && disposition != ParentCancelled && disposition != ParentTimeout) {
+	if orchestrator == nil || ctx == nil || (disposition != ParentInvalid && disposition != ParentCancelled && disposition != ParentTimeout) {
 		return ErrInvalidOrchestrator
 	}
 	orchestrator.mu.Lock()
@@ -383,16 +375,7 @@ func (orchestrator *Orchestrator) Abort(ctx context.Context, disposition ParentD
 	orchestrator.terminal = true
 	children := orderedChildren(orchestrator.children)
 	orchestrator.mu.Unlock()
-	for _, work := range children {
-		work.cancel()
-	}
-	if err := waitChildren(ctx, children); err != nil {
-		return err
-	}
-	for _, work := range children {
-		_ = work.branch.Discard()
-	}
-	return nil
+	return orchestrator.cancelAndDiscard(children)
 }
 
 func (orchestrator *Orchestrator) PrivateRefs() []workspace.Ref {
@@ -433,14 +416,24 @@ func waitChildren(ctx context.Context, children []*child) error {
 	return nil
 }
 
-func (orchestrator *Orchestrator) cancelAndDiscard(children []*child) {
+func (orchestrator *Orchestrator) cancelAndDiscard(children []*child) error {
 	for _, work := range children {
 		work.cancel()
 	}
+	var cleanupErrors []error
 	for _, work := range children {
 		<-work.done
-		_ = work.branch.Discard()
+		cleanupErrors = append(cleanupErrors, work.branch.Discard())
 	}
+	return errors.Join(cleanupErrors...)
+}
+
+func destroyRoots(manager *workspace.Manager, roots map[string]workspace.Root) error {
+	var cleanupErrors []error
+	for _, root := range roots {
+		cleanupErrors = append(cleanupErrors, manager.Destroy(root.Ref()))
+	}
+	return errors.Join(cleanupErrors...)
 }
 
 func elapsedMS(started time.Time) float64 {

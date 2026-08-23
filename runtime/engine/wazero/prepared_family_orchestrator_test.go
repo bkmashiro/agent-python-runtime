@@ -302,15 +302,14 @@ func TestPreparedFamilyComposesWithPrivateSubagentBranchesAndAttenuatedPlans(t *
 			t.Fatalf("record=%+v err=%v", record, err)
 		}
 	}
-	report, err := EncodePreparedFamilyAcceptanceReport(
-		"cccccccccccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddddddddd",
-		profile.ArtifactSHA256(), profileSHA256, family.State(), records, joined.SelectedRoot.WorkspaceSHA256,
+	if err := family.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	report, err := family.AcceptanceReport(
+		"cccccccccccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddddddddd", joined.SelectedRoot.WorkspaceSHA256,
 	)
 	if err != nil || bytes.Contains(report, []byte(`"body"`)) || bytes.Contains(report, []byte(`"response"`)) {
 		t.Fatalf("acceptance report=%s err=%v", report, err)
-	}
-	if err := family.Close(context.Background()); err != nil {
-		t.Fatal(err)
 	}
 	selectedInfo, err := manager.Inspect(joined.SelectedRoot.Ref())
 	if err != nil || selectedInfo.WorkspaceSHA256 != joined.SelectedRoot.WorkspaceSHA256 {

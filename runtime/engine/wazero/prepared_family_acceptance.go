@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
 const PreparedFamilyAcceptanceReportV1 = "pysolate.prepared-family-acceptance.v1"
@@ -28,10 +30,8 @@ type PreparedFamilyAcceptanceReport struct {
 	Members                []PreparedMemberRecord      `json:"members"`
 }
 
-// EncodePreparedFamilyAcceptanceReport validates and canonically encodes one
-// family snapshot. The caller supplies source/artifact/profile identities from
-// its verified Host build and may omit selectedRootSHA256 before selection.
-func EncodePreparedFamilyAcceptanceReport(
+// encodePreparedFamilyAcceptanceReport canonically encodes one validated family snapshot.
+func encodePreparedFamilyAcceptanceReport(
 	sourceCommit string,
 	sourceTree string,
 	artifactSHA256 string,
@@ -41,7 +41,7 @@ func EncodePreparedFamilyAcceptanceReport(
 	selectedRootSHA256 string,
 ) ([]byte, error) {
 	if !validSourceObjectID(sourceCommit) || !validSourceObjectID(sourceTree) || !validPreparedDigest(artifactSHA256) || !validPreparedDigest(executionProfileSHA256) ||
-		!validPreparedDigest(state.InputSHA256) || !validPreparedDigest(state.FamilySHA256) || state.Active != 0 || state.Created != uint32(len(records)) || state.Terminal != uint32(len(records)) ||
+		!validPreparedDigest(state.InputSHA256) || !validPreparedDigest(state.FamilySHA256) || !state.Closed || state.Active != 0 || state.Created != uint32(len(records)) || state.Terminal != uint32(len(records)) ||
 		(state.Disposition != PreparedDispositionPrivateCopy && state.Disposition != PreparedDispositionPrivateCOW && state.Disposition != PreparedDispositionOrdinaryFresh) ||
 		(selectedRootSHA256 != "" && !validPreparedDigest(selectedRootSHA256)) {
 		return nil, ErrPreparedFamilyAcceptanceReport
@@ -76,6 +76,32 @@ func EncodePreparedFamilyAcceptanceReport(
 		return nil, ErrPreparedFamilyAcceptanceReport
 	}
 	return encoded, nil
+}
+
+// AcceptanceReport emits one final body-free correctness report after Close
+// has released the family image. sourceCommit and sourceTree are Host-asserted
+// Git object identities; this method does not access a repository or attest
+// them independently. Artifact/profile identities come from the sealed family.
+func (family *PreparedFamily) AcceptanceReport(sourceCommit, sourceTree, selectedRootSHA256 string) ([]byte, error) {
+	if family == nil {
+		return nil, ErrPreparedFamilyAcceptanceReport
+	}
+	state := family.State()
+	records := family.Records()
+	family.mu.Lock()
+	config := cloneFamilyRunConfig(family.imageConfig)
+	family.mu.Unlock()
+	if config.ExecutionProfile == nil {
+		return nil, ErrPreparedFamilyAcceptanceReport
+	}
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	if err != nil {
+		return nil, ErrPreparedFamilyAcceptanceReport
+	}
+	return encodePreparedFamilyAcceptanceReport(
+		sourceCommit, sourceTree, config.ExecutionProfile.ArtifactSHA256(),
+		profileSHA256, state, records, selectedRootSHA256,
+	)
 }
 
 func validSourceObjectID(value string) bool {

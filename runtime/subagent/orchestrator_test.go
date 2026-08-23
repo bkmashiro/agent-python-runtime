@@ -443,6 +443,31 @@ func subagentPlan(t *testing.T, maxCalls uint32, names ...string) *capability.Pl
 	return plan
 }
 
+func TestOrchestratorAbortSurfacesWorkspaceCleanupFailure(t *testing.T) {
+	manager, base, parentWorkspaceSHA, parentLineage := subagentWorkspace(t)
+	orchestrator, err := subagent.New(subagent.Config{
+		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: parentWorkspaceSHA,
+		ParentLineage: parentLineage, MaxFanout: 1, MaxDepth: 1,
+		Executor: subagent.ExecutorFunc(func(context.Context, subagent.Invocation) error { return nil }),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := orchestrator.Stage(context.Background(), childDescriptor("cleanup", parentLineage)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := orchestrator.Await(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ref := orchestrator.PrivateRefs()[0]
+	if err := manager.Destroy(ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := orchestrator.Abort(context.Background(), subagent.ParentInvalid); err == nil {
+		t.Fatal("cleanup failure was hidden")
+	}
+}
+
 func subagentWorkspace(t *testing.T) (*workspace.Manager, workspace.Ref, string, string) {
 	t.Helper()
 	baseDir := t.TempDir()

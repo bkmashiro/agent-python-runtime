@@ -216,7 +216,8 @@ func (family *PreparedFamily) recordTerminal(memberID uint64, runID string, outc
 	family.records[memberID] = PreparedMemberRecord{
 		SchemaVersion: "pysolate.prepared-family-member.v1", FamilySHA256: family.identity,
 		InputSHA256: family.input.identity, MemberID: memberID, RunID: runID,
-		InvocationID: invocation.InvocationID, ExecutionID: invocation.ExecutionID,
+		AgentRunID: invocation.AgentRunID, TurnSeq: invocation.TurnSeq, OutputItemSeq: invocation.OutputItemSeq, SegmentSeq: invocation.SegmentSeq,
+		InvocationID: invocation.InvocationID, InvocationAttempt: invocation.InvocationAttempt, ExecutionID: invocation.ExecutionID,
 		PlanSHA256: planSHA256, GrantsSHA256: grantsSHA256,
 		PhysicalDisposition: family.disposition, Outcome: outcome,
 		FinalWorkspaceSHA256: workspaceSHA256,
@@ -231,7 +232,8 @@ func (family *PreparedFamily) recordClose(memberID uint64, planSHA256, grantsSHA
 		family.records[memberID] = PreparedMemberRecord{
 			SchemaVersion: "pysolate.prepared-family-member.v1", FamilySHA256: family.identity,
 			InputSHA256: family.input.identity, MemberID: memberID,
-			InvocationID: invocation.InvocationID, ExecutionID: invocation.ExecutionID,
+			AgentRunID: invocation.AgentRunID, TurnSeq: invocation.TurnSeq, OutputItemSeq: invocation.OutputItemSeq, SegmentSeq: invocation.SegmentSeq,
+			InvocationID: invocation.InvocationID, InvocationAttempt: invocation.InvocationAttempt, ExecutionID: invocation.ExecutionID,
 			PlanSHA256: planSHA256, GrantsSHA256: grantsSHA256,
 			PhysicalDisposition: family.disposition, Outcome: PreparedMemberClosedUnrun,
 		}

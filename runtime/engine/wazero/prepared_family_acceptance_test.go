@@ -59,20 +59,30 @@ func TestPreparedFamilyAcceptanceReportIsBodyFreeAndRejectsDrift(t *testing.T) {
 	digest := func(character byte) string { return "sha256:" + strings.Repeat(string(character), 64) }
 	record := PreparedMemberRecord{
 		SchemaVersion: "pysolate.prepared-family-member.v1", FamilySHA256: digest('a'), InputSHA256: digest('b'), MemberID: 1,
-		RunID: "run", InvocationID: "invocation", ExecutionID: "run", PlanSHA256: digest('c'), GrantsSHA256: digest('d'),
+		RunID: "run", AgentRunID: "agent-run", InvocationID: "invocation", InvocationAttempt: 1, ExecutionID: "run", PlanSHA256: digest('c'), GrantsSHA256: digest('d'),
 		PhysicalDisposition: PreparedDispositionPrivateCopy, Outcome: PreparedMemberOK, FinalWorkspaceSHA256: digest('e'),
 	}
-	state := PreparedFamilyState{Created: 1, Terminal: 1, FamilySHA256: digest('a'), InputSHA256: digest('b'), Disposition: PreparedDispositionPrivateCopy}
+	state := PreparedFamilyState{Created: 1, Terminal: 1, Closed: true, FamilySHA256: digest('a'), InputSHA256: digest('b'), Disposition: PreparedDispositionPrivateCopy}
 	sourceCommit, sourceTree := strings.Repeat("c", 40), strings.Repeat("d", 40)
-	encoded, err := EncodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('e'))
+	encoded, err := encodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('e'))
 	if err != nil || strings.Contains(string(encoded), "body") || strings.Contains(string(encoded), "response") {
 		t.Fatalf("report=%s err=%v", encoded, err)
 	}
-	if _, err := EncodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('9')); err == nil {
+	if _, err := encodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('9')); err == nil {
 		t.Fatal("accepted unobserved selected root")
 	}
-	zero := PreparedFamilyState{FamilySHA256: digest('a'), InputSHA256: digest('b'), Disposition: PreparedDispositionPrivateCopy}
-	if _, err := EncodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), zero, nil, ""); err != nil {
+	openState := state
+	openState.Closed = false
+	if _, err := encodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), openState, []PreparedMemberRecord{record}, digest('e')); err == nil {
+		t.Fatal("accepted report before family close")
+	}
+	invalidIdentity := record
+	invalidIdentity.InvocationID = strings.Repeat("x", 129)
+	if _, err := encodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{invalidIdentity}, digest('e')); err == nil {
+		t.Fatal("accepted unbounded member identity")
+	}
+	zero := PreparedFamilyState{Closed: true, FamilySHA256: digest('a'), InputSHA256: digest('b'), Disposition: PreparedDispositionPrivateCopy}
+	if _, err := encodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), zero, nil, ""); err != nil {
 		t.Fatalf("zero fanout: %v", err)
 	}
 }

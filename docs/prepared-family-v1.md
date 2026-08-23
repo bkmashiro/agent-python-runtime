@@ -195,10 +195,13 @@ Qualification runs on the real artifact for every promoted dtype and binds the a
 
 It contains no body, source text, response body, credential, Host path or raw native handle. Existing response, workspace receipts and subagent join records remain authoritative in their domains; this record joins identities rather than replacing them.
 
-`EncodePreparedFamilyAcceptanceReport` joins verified source-tree, artifact,
-profile, family, input, member and optional selected-root identities into a
-canonical body-free correctness report. It rejects mixed-family records,
+`PreparedFamily.AcceptanceReport` joins Host-asserted source commit/tree and the
+sealed family's artifact, profile, family, input, member and optional
+selected-root identities into a canonical body-free correctness report. It
+runs only after successful family close and rejects mixed-family records,
 duplicate members and selected roots that were not observed in a member record.
+It does not access Git or independently attest the two Host-supplied source
+object IDs; the bounded Host gate remains authoritative for those IDs.
 
 ## Running the bounded example
 

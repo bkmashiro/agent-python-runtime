@@ -74,7 +74,8 @@ The pipeline defensively copies binding maps and records. It stores no source,
 result, workspace or prepared-data body. Overlay-only records cannot name derived
 source or AST identities. Rejected records cannot claim derived identities, results,
 logical/physical work or preparation, and discarded or awaiting-final work cannot
-claim a logical event.
+claim a logical event. A current pass can record at most one terminal outcome per
+bound occurrence or region; duplicate projection is rejected before append.
 
 ## Preserved boundaries
 

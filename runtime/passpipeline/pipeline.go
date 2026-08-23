@@ -31,14 +31,15 @@ const (
 )
 
 var (
-	ErrInvalidConfig   = errors.New("invalid pass pipeline configuration")
-	ErrDuplicatePass   = errors.New("duplicate pass pipeline registration")
-	ErrAllOff          = errors.New("pass pipeline is all-off")
-	ErrStageMismatch   = errors.New("pass pipeline stage mismatch")
-	ErrInvalidOutcome  = errors.New("invalid pass pipeline outcome")
-	ErrInvalidRecord   = errors.New("invalid pass pipeline record")
-	ErrBindingMismatch = errors.New("pass pipeline binding mismatch")
-	ErrBoundsExceeded  = errors.New("pass pipeline bounds exceeded")
+	ErrInvalidConfig    = errors.New("invalid pass pipeline configuration")
+	ErrDuplicatePass    = errors.New("duplicate pass pipeline registration")
+	ErrAllOff           = errors.New("pass pipeline is all-off")
+	ErrStageMismatch    = errors.New("pass pipeline stage mismatch")
+	ErrInvalidOutcome   = errors.New("invalid pass pipeline outcome")
+	ErrInvalidRecord    = errors.New("invalid pass pipeline record")
+	ErrDuplicateOutcome = errors.New("duplicate pass pipeline outcome")
+	ErrBindingMismatch  = errors.New("pass pipeline binding mismatch")
+	ErrBoundsExceeded   = errors.New("pass pipeline bounds exceeded")
 
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	reasonPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -134,11 +135,12 @@ type OutcomeRecord struct {
 }
 
 type Pipeline struct {
-	entries map[passregistration.Name]Entry
-	limits  Limits
-	allOff  bool
-	mu      sync.Mutex
-	records []OutcomeRecord
+	entries      map[passregistration.Name]Entry
+	limits       Limits
+	allOff       bool
+	mu           sync.Mutex
+	records      []OutcomeRecord
+	seenOutcomes map[string]struct{}
 }
 
 func New(entries []Entry, limits Limits) (*Pipeline, error) {
@@ -154,7 +156,10 @@ func New(entries []Entry, limits Limits) (*Pipeline, error) {
 	if uint64(len(entries)) > uint64(limits.MaxPasses) {
 		return nil, ErrBoundsExceeded
 	}
-	pipeline := &Pipeline{entries: make(map[passregistration.Name]Entry, len(entries)), limits: limits, allOff: true, records: []OutcomeRecord{}}
+	pipeline := &Pipeline{
+		entries: make(map[passregistration.Name]Entry, len(entries)), limits: limits, allOff: true,
+		records: []OutcomeRecord{}, seenOutcomes: make(map[string]struct{}),
+	}
 	for _, entry := range entries {
 		name := entry.Registration.Name()
 		expectedStage, known := currentStages[name]
@@ -223,6 +228,10 @@ func (pipeline *Pipeline) record(stage Stage, input RecordInput) (OutcomeRecord,
 	if err := validateInput(entry.Registration, input, pipeline.limits); err != nil {
 		return OutcomeRecord{}, err
 	}
+	outcomeKey, err := recordOutcomeKey(entry, input)
+	if err != nil {
+		return OutcomeRecord{}, err
+	}
 	record := OutcomeRecord{
 		SchemaVersion: OutcomeRecordSchemaVersion, PassName: input.PassName,
 		RegistrationSHA256: entry.Registration.IdentitySHA256(), Stage: stage,
@@ -236,9 +245,22 @@ func (pipeline *Pipeline) record(stage Stage, input RecordInput) (OutcomeRecord,
 	}
 	pipeline.mu.Lock()
 	defer pipeline.mu.Unlock()
+	if _, exists := pipeline.seenOutcomes[outcomeKey]; exists {
+		return OutcomeRecord{}, ErrDuplicateOutcome
+	}
 	record.PassOrder = uint32(len(pipeline.records) + 1)
 	pipeline.records = append(pipeline.records, record)
+	pipeline.seenOutcomes[outcomeKey] = struct{}{}
 	return cloneRecord(record), nil
+}
+
+func recordOutcomeKey(entry Entry, input RecordInput) (string, error) {
+	occurrenceID := input.Bindings[passregistration.OccurrenceID]
+	regionID := input.Bindings[passregistration.RegionID]
+	if occurrenceID == "" && regionID == "" {
+		return "", ErrInvalidRecord
+	}
+	return string(entry.Registration.Name()) + "\x00" + string(entry.Stage) + "\x00" + occurrenceID + "\x00" + regionID, nil
 }
 
 func validateInput(registration passregistration.Registration, input RecordInput, limits Limits) error {

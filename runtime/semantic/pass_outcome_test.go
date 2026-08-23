@@ -39,6 +39,12 @@ func TestRecordSemanticPreDispatchPassOutcomesMapsConsumedAndOrphanedPhysicalWor
 			} else if record.Outcome != passpipeline.OutcomeDiscarded || record.LogicalEvents != 0 || record.RejectionReason != "orphaned" {
 				t.Fatalf("orphan record=%+v", record)
 			}
+			if _, err := RecordSemanticPreDispatchPassOutcomes(pipeline, registration, verified, controller, uint64(len(finalSource)), 2); !errors.Is(err, passpipeline.ErrDuplicateOutcome) {
+				t.Fatalf("duplicate projection err=%v", err)
+			}
+			if len(pipeline.Records()) != 1 {
+				t.Fatalf("duplicate projection records=%d", len(pipeline.Records()))
+			}
 		})
 	}
 }

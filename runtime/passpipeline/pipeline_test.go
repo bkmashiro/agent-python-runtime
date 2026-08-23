@@ -154,6 +154,17 @@ func TestPipelineRejectsOutcomeFieldsThatContradictDisposition(t *testing.T) {
 	if _, err := pipeline.RecordPrefixOverlay(discarded); !errors.Is(err, passpipeline.ErrInvalidRecord) {
 		t.Fatalf("discarded logical claim err=%v", err)
 	}
+
+	valid := input(overlay, passpipeline.OutcomeApplied, "")
+	if _, err := pipeline.RecordPrefixOverlay(valid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pipeline.RecordPrefixOverlay(valid); !errors.Is(err, passpipeline.ErrDuplicateOutcome) {
+		t.Fatalf("duplicate outcome err=%v", err)
+	}
+	if len(pipeline.Records()) != 1 {
+		t.Fatalf("duplicate outcome appended records=%d", len(pipeline.Records()))
+	}
 }
 
 func TestPipelineBoundsRejectBeforeRecording(t *testing.T) {
